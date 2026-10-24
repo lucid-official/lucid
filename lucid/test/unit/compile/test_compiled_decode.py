@@ -188,3 +188,41 @@ def test_a_step_under_grad_mode_answers_as_eager(frozen: bool) -> None:
     assert [t.requires_grad for t in want] == [not frozen] * 4
     worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want))
     assert worst < 1e-4
+
+
+class _GainedDecoder(_MaskedDecoder):
+    """Reads a buffer of its own on the host — a value the trace would bake."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("gain", lucid.tensor(2.0))
+
+    def forward(
+        self, hidden: lucid.Tensor, cache: StaticCache, cache_position: lucid.Tensor
+    ) -> lucid.Tensor:
+        return super().forward(hidden, cache, cache_position) * self.gain.item()
+
+
+def test_a_host_read_of_the_models_state_runs_the_step_eagerly() -> None:
+    """The step's trace watches the model ``forward_fn`` reaches, as a
+    compiled module's does: the gain read on the first step stayed baked in."""
+    runs = []
+    for compiled in (True, False):
+        lucid.manual_seed(0)
+        model = _GainedDecoder().to(COMPILE_DEVICE).eval()
+        cache = StaticCache(_L)
+
+        def fwd(h: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+            return model(h, cache, cp)
+
+        step = compiled_decode_step(fwd, cache) if compiled else fwd
+        outs = []
+        for pos in range(4):
+            if pos == 2:
+                model.get_buffer("gain").fill_(5.0)
+            h = lucid.ones(_B, 1, _D, device=COMPILE_DEVICE) * ((pos + 1) * 0.1)
+            outs.append(step(h, lucid.tensor([pos], device=COMPILE_DEVICE).long()))
+        runs.append(outs)
+    got, want = runs
+    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want))
+    assert worst < 1e-4

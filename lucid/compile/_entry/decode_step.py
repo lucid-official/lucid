@@ -187,11 +187,11 @@ def compiled_decode_step(
             static_cache._seen_tokens,
         )
         orig_key, orig_val = snap[0], snap[1]
-
+        call = (input_ids, cache_position)
         _tls.tracing = True
         try:
-            with no_grad(), _tracing(watch=(input_ids, cache_position)) as tracer:
-                out = forward_fn(input_ids, cache_position)
+            with no_grad(), _tracing(watch=call, module=adapter) as tracer:
+                out = forward_fn(*call)
         finally:
             _tls.tracing = False
 

@@ -403,8 +403,10 @@ def _tracing(
         The traced model, whose parameters and buffers are watched the
         same way: a compiled executable feeds them on every run, so a
         value read from one would go stale once it changes (an optimizer
-        step, ``load_state_dict``). Core ML export leaves it out — its
-        weights are constants of the package anyway.
+        step, ``load_state_dict``). So are those of the modules a wrapped
+        function is bound to, closes over or reads as a global. Core ML
+        export leaves it out — its weights are constants of the package
+        anyway.
     fold_constants : bool, optional, keyword-only, default=False
         Leave out of the recording every op that reads nothing the trace
         sees, so a constant built on the spot (``lucid.tensor([...])
@@ -447,11 +449,11 @@ def _tracing(
         for node in tracer.graph.ops:
             print(node)
     """
-    from lucid.compile._core.signature import leaf_tensors
+    from lucid.compile._core.signature import leaf_tensors, tree_tensors
 
     tracer = _C_engine.compile.Tracer()
     tracer.fold_constants = fold_constants
-    state = () if module is None else (*module.parameters(), *module.buffers())
+    state = () if module is None else tree_tensors(module)
     for argument in leaf_tensors((watch, state), {}):
         tracer.watch(argument._impl)
     _C_engine.compile.set_current_tracer(tracer)

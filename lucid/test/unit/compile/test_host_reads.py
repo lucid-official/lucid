@@ -89,6 +89,41 @@ def test_a_host_read_runs_eagerly_and_follows_the_input(name: str) -> None:
     assert compiled.cache_info()["eager_only"]
 
 
+_HELD = Apply(HOST_READS["buffer-item"])
+
+
+def _reads_a_global_model(x: lucid.Tensor) -> lucid.Tensor:
+    return _HELD(x)
+
+
+@pytest.mark.usefixtures("inference")
+@pytest.mark.parametrize("reach", ["bound-method", "closure", "global"])
+@pytest.mark.parametrize("name", sorted(STATE_READS))
+def test_a_host_read_of_a_reached_modules_state_runs_eagerly(
+    name: str, reach: str
+) -> None:
+    """The weights of a module the compiled function reaches are watched as
+    a compiled module's are: the trace watched only the wrapper's own, none,
+    so the first call's value was baked in (5.35 off eager)."""
+    global _HELD
+    model = Apply(HOST_READS[name]).eval().to(COMPILE_DEVICE)
+    if reach == "global":
+        _HELD = model
+        compiled = lucid.compile.compile(_reads_a_global_model)
+    elif reach == "closure":
+        compiled = lucid.compile.compile(lambda t: model(t))
+    else:
+        compiled = lucid.compile.compile(model.forward)
+    first, second = (t.to(COMPILE_DEVICE) for t in inputs())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", fallback.CompileFallbackWarning)
+        compiled(first)
+        model.change_state()
+        got = compiled(second)
+    assert float((got - model(second)).abs().max().item()) <= 1e-5
+    assert compiled.cache_info()["eager_only"]
+
+
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", list(CONSTANT_READS))
 def test_a_read_that_feeds_nothing_stays_compiled(name: str) -> None:

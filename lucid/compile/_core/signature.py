@@ -541,6 +541,15 @@ def _tree_walk(model: object) -> _TreeWalk:
     return walk
 
 
+def tree_tensors(model: object) -> tuple[Tensor, ...]:
+    """Every parameter and buffer of ``model``'s tree, from the cached walk.
+
+    The tree takes in the modules a wrapped function is bound to, closes over
+    or reads as a global, and the containers of a reparametrisation.
+    """
+    return _tree_walk(model).tensors
+
+
 def tree_requires_grad(model: object) -> bool:
     """Whether a parameter or buffer of ``model``'s tree requires grad.
 
@@ -548,7 +557,7 @@ def tree_requires_grad(model: object) -> bool:
     the tree.  The walk is the one kept per tree version; the flags are read
     from it on every call, as freezing a parameter moves no version.
     """
-    return any(t.requires_grad for t in _tree_walk(model).tensors)
+    return any(t.requires_grad for t in tree_tensors(model))
 
 
 def model_has_active_hooks(model: object) -> bool:
