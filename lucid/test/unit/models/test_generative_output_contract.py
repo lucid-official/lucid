@@ -272,6 +272,36 @@ def test_tvm_averages_restart_from_weights_loaded_into_the_network(
         assert _max_abs(slow - resumed[name]) == 0.0, f"eval: {name}"
 
 
+def test_tvm_network_copies_and_pickles_without_the_wrapper() -> None:
+    """LCD-552: the network notices loads by counting them, not by holding a
+    callback into the wrapper.  A hook bound to the wrapper made ``model.tvm``
+    hold it, so ``copy.deepcopy(model.tvm)`` cloned the wrapper and both
+    averages too (5 GB at the paper's size) and ``pickle.dumps(model.tvm)``
+    was three times the size of a network built on its own."""
+    import copy
+    import pickle
+
+    lucid.manual_seed(0)
+    model = _build("tvm_imagenet256_gen", "cpu")
+    assert isinstance(model, TVMForImageGeneration)
+    averages = [network for _, network in _tvm_averages(model)]
+
+    memo: dict[int, object] = {}
+    copied = copy.deepcopy(model.tvm, memo)
+    assert id(model) not in memo, "deep-copying the network copied the wrapper"
+    assert not any(id(a) in memo for a in averages), "and the averages with it"
+    lone = M.create_model("tvm_imagenet256", **_TRANSFORMER)
+    assert len(pickle.dumps(model.tvm)) <= 1.05 * len(pickle.dumps(lone))
+
+    # The copy still counts its own loads, and the wrapper still sees its own.
+    copied.load_state_dict(copied.state_dict())
+    loaded = {n: lucid.randn(tuple(p.shape)) for n, p in model.tvm.state_dict().items()}
+    model.tvm.load_state_dict(loaded)
+    for key, network in _tvm_averages(model):
+        for name, slow in network.named_parameters():
+            assert _max_abs(slow - loaded[name]) == 0.0, f"{key}: {name}"
+
+
 def test_tvm_averages_copy_the_network_without_reinitialising(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -35,7 +35,6 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.special
 from lucid import Tensor
-from lucid._C import engine as _C_engine
 from lucid._engine_scope import untraced
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
@@ -75,6 +74,13 @@ def _spectral_(weight: Tensor) -> None:
     nn.init.normal_(weight)
     sigma = lucid.linalg.svdvals(weight.reshape(int(weight.shape[0]), -1))[0]
     weight.div_(sigma)
+
+
+def _count_load(network: nn.Module, incompatible: object) -> None:
+    """Load-state-dict post-hook: count one more load into a ``TVMModel``."""
+    del incompatible  # the hook's signature; which keys matched is not needed
+    assert isinstance(network, TVMModel), "registered by TVMModel only"
+    network._loads += 1
 
 
 def _zero_projection(head: nn.Module) -> None:
@@ -435,6 +441,13 @@ class TVMModel(PretrainedModel):
             width, config.patch_size, config.out_channels, config.modulation_norm
         )
         self._init_weights()
+        # How many state dicts have been loaded into this network — what
+        # TVMForImageGeneration's averages compare against to know they are
+        # stale.  A count, not a callback into the wrapper: a hook bound to
+        # the wrapper made the network hold it, so pickling or deep-copying
+        # the network alone dragged the wrapper and both averages along.
+        self._loads = 0
+        self.register_load_state_dict_post_hook(_count_load)
 
     def _init_weights(self) -> None:
         r"""Lipschitz initialisation, then adaLN-Zero (Table 6).
@@ -656,24 +669,10 @@ class TVMForImageGeneration(ImageGenerationModel):
         # registered as a child, adding the parameter count and the
         # checkpoint of a network no optimiser may touch — twice over.
         self._averages: dict[str, TVMModel] = {}
-        # On the network rather than here: ``model.tvm.load_state_dict``
-        # never passes through this module, and ``model.load_state_dict``
-        # reaches the network's hooks too.
-        self.tvm.register_load_state_dict_post_hook(self._restart_averages)
+        # The network's load count when the averages were built.
+        self._averages_at_load = 0
 
     # ── the two EMAs of Algorithm 1 ──────────────────────────────────────
-
-    def _restart_averages(self, network: nn.Module, incompatible: object) -> None:
-        """Drop both averages once new weights are loaded into the network.
-
-        Loading weights is initialising them, so the averages restart from
-        them the next time either is read, as at Algorithm 1's start.  Kept,
-        they averaged toward the loaded weights from whatever was there
-        before — a fine-tune from a checkpoint read its first targets off
-        the random initialisation.
-        """
-        del network, incompatible  # the hook's signature; nothing to inspect
-        self._averages.clear()
 
     def _decays(self) -> dict[str, float]:
         """The averages this configuration keeps, by name, with their rates."""
@@ -700,6 +699,13 @@ class TVMForImageGeneration(ImageGenerationModel):
         # lazily in float32, they ran a half model's targets in float32.
         live = next(iter(self.tvm.parameters()))
         with untraced():
+            # Weights loaded into the network since the averages were built
+            # initialise it again, so the averages restart from them, as at
+            # Algorithm 1's start.  Kept, a fine-tune from a checkpoint read
+            # its first targets off the random initialisation.
+            if self._averages_at_load != self.tvm._loads:
+                self._averages.clear()
+                self._averages_at_load = self.tvm._loads
             if not self._averages:
                 weights = self.tvm.state_dict()
                 for key in self._decays():
@@ -776,7 +782,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         # and deleting a child or a parameter and assigning it back moves
         # it to the end of its registry.
         live = dict(self.tvm.named_parameters())
-        written: list[_C_engine.TensorImpl] = []
+        written: list[Tensor] = []
         with lucid.no_grad():
             for key, decay in decays.items():
                 average = self._average(key)
@@ -784,13 +790,12 @@ class TVMForImageGeneration(ImageGenerationModel):
                     # `slow[:] = ...`, not `slow.data[:] = ...`: the latter
                     # writes to a copy and silently does nothing.
                     slow[:] = decay * slow + (1.0 - decay) * live[name]
-                    written.append(slow._impl)
+                    written.append(slow)
         # The writes are lazy on Metal, and θ** is not read until sampling:
         # unevaluated, each step would chain onto the last and keep every
-        # past copy of the live weights.  One batched evaluation, as the
-        # optimiser flushes its parameters: one per parameter cost a Metal
-        # sync per tensor, several times slower.
-        _C_engine.eval_tensors(written)
+        # past copy of the live weights.  One batched evaluation: one per
+        # parameter cost a Metal sync per tensor, several times slower.
+        lucid.eval(*written)
 
     # ── sampling the training variables ──────────────────────────────────
 

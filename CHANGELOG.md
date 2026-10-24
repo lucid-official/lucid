@@ -1298,6 +1298,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - RealNVP running stats reach a compiled step
 
+- TVM counts its loads instead of holding the wrapper
+
 ### Changed
 
 - `Tensor` gains the out-of-place twin of every in-place method: 37 names such as `expm1`, `lgamma`, `xlogy`, `addbmm` and `frexp`, plus `Tensor.real` / `Tensor.imag` (views with setters; `x.real is x` for a real tensor), `Tensor.normal_` / `Tensor.uniform_(from_=0, /, to=1)`, and `lucid.randint_like`. `lucid.eval` is public and raises `TypeError` for an argument that is not a Tensor (LCD-547, LCD-613).

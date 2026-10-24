@@ -198,14 +198,10 @@ _TABLE_BUILDERS: dict[str, tuple[str, ...]] = {
 }
 
 #: Families whose first traced call still records what a later one feeds,
-#: each waiting on the card that may edit its model file.
-_COLD_TRACE_DIFFERS: dict[str, str] = {
-    "tvm": (
-        "LCD-552: TVM builds its EMA networks on the first forward that reads "
-        "the target (tvm/_model.py _average), so a cold trace records their "
-        "construction: 1349 ops cold, 889 warm"
-    ),
-}
+#: each waiting on the card that may edit its model file — a strict xfail
+#: with that card's ID as the reason.  Empty since TVM built its EMA networks
+#: outside the trace (LCD-552); kept so the next such family has a home.
+_COLD_TRACE_DIFFERS: dict[str, str] = {}
 
 
 def _trace_cases() -> list[Any]:
