@@ -276,10 +276,22 @@ class TestItActuallyHelps:
     Two bits, because that is where the compression costs something.
     Both arms get the same number of steps — the first version of this
     measurement did not, and credited the extra fine-tuning to the
-    feature.
+    feature — and the same batches: the control's draws are replayed for
+    the compression-aware arm, so compression is the only difference.
+    Drawn afresh, the batch order alone moved the result from 14 % of the
+    cost recovered to 65 %.
+
+    The arms are compared by held-out cross-entropy, not accuracy.  All
+    three sit at 0.99–1.0 on 360 images, where one image is 0.003 and is
+    the whole difference between them: ``accuracy(tuned) >=
+    accuracy(snapped)`` held at one seed by one image and failed on CI
+    hardware by one image the other way.  The loss resolves what accuracy
+    cannot — across four seeds two-bit snapping raised it 1.4–1.8x over
+    the control, and training against the palette on the same batches
+    took back 65–71 % of that.
     """
 
-    def test_two_bit_accuracy_is_recovered(self) -> None:
+    def test_what_two_bits_cost_is_recovered(self) -> None:
         lucid.manual_seed(1)
         prototypes = lucid.randn(10, 3, 16, 16)
 
@@ -298,15 +310,19 @@ class TestItActuallyHelps:
                 if isinstance(module, cml.CompressionAware) and step % 150 == 149:
                     module.refit()
 
-        def accuracy(module: nn.Module) -> float:
+        def measure(module: nn.Module) -> tuple[float, float]:
+            # Accuracy and cross-entropy on the same held-out draws.
             lucid.manual_seed(7)
-            hits = 0.0
-            for _ in range(6):
-                x, y = batch()
-                hits += float(
-                    (module(x).argmax(dim=1) == y).to(lucid.float32).mean().item()
-                )
-            return hits / 6
+            hits = loss = 0.0
+            with lucid.no_grad():
+                for _ in range(6):
+                    x, y = batch()
+                    out = module(x)
+                    hits += float(
+                        (out.argmax(dim=1) == y).to(lucid.float32).mean().item()
+                    )
+                    loss += float(F.cross_entropy(out, y).item())
+            return hits / 6, loss / 6
 
         def copy_of(source: nn.Module) -> nn.Module:
             fresh = _Net().eval()
@@ -316,16 +332,29 @@ class TestItActuallyHelps:
         lucid.manual_seed(0)
         base = _Net().eval()
         train(base, 500, 3e-3)
-        assert accuracy(base) > 0.9, "the task has to be learnable to say anything"
+        assert measure(base)[0] > 0.9, "the task has to be learnable to say anything"
 
         control = copy_of(base)
+        draws = lucid.get_rng_state()
         train(control, 400, 1e-3)
         snapped = cml.CompressionAware(
             copy_of(control), weights=cml.Palettize(bits=2)
         ).settle()
 
         aware = cml.CompressionAware(copy_of(base), weights=cml.Palettize(bits=2))
+        lucid.set_rng_state(draws)  # the 400 batches the control trained on
         train(aware, 400, 1e-3)
         tuned = aware.settle()
 
-        assert accuracy(tuned) >= accuracy(snapped)
+        control_acc, control_loss = measure(control)
+        _, snapped_loss = measure(snapped)
+        tuned_acc, tuned_loss = measure(tuned)
+        cost = snapped_loss - control_loss
+        assert cost > 0.25 * control_loss, "two bits has to cost something to recover"
+        assert snapped_loss - tuned_loss > cost / 3, (
+            control_loss,
+            snapped_loss,
+            tuned_loss,
+        )
+        # Six images of 360: the settled model classifies like the control.
+        assert tuned_acc >= control_acc - 1 / 60, (control_acc, tuned_acc)
