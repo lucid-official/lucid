@@ -112,6 +112,19 @@ def _set_requires_grad(t: Tensor, requires_grad: bool, *, setter: bool) -> None:
     impl._set_requires_grad(requires_grad)
 
 
+def _write_part(part: Tensor, value: Tensor | float) -> None:
+    """Assign ``value`` to ``part`` — the view ``Tensor.real`` or
+    ``Tensor.imag`` returned — in place, broadcast to its shape.
+
+    The view shares the complex tensor's storage, so the write lands in it;
+    a real tensor's real part is the tensor itself.
+    """
+    if isinstance(value, Tensor):
+        part.copy_(value)
+    else:
+        part.fill_(value)
+
+
 class Tensor:
     """Multi-dimensional array with automatic differentiation support.
 
@@ -498,6 +511,86 @@ class Tensor:
         (4, 5, 3)
         """
         return Tensor.__new_from_impl__(_C_engine.mT(self._impl))
+
+    @property
+    def real(self) -> Tensor:
+        r"""The real part of ``self``: a view of a complex tensor, or ``self``.
+
+        For a complex tensor the result is real, of the matching precision
+        (``float32`` for ``complex64``), and reads and writes ``self``'s
+        own storage — on Metal as on the CPU — so writing into it changes
+        ``self``.  A real tensor is its own real part: ``x.real is x``.
+        Assigning to the attribute writes the real part in place.
+
+        Returns
+        -------
+        Tensor
+            :func:`lucid.real` of ``self``.
+
+        Notes
+        -----
+        For :math:`z = a + ib`, ``z.real`` is :math:`a`; the setter keeps
+        :math:`b` and replaces :math:`a` with the assigned value, broadcast
+        to ``self``'s shape.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> z = lucid.tensor([1 + 2j, 3 - 1j])
+        >>> z.real
+        tensor([1., 3.])
+        >>> z.real = lucid.tensor([5.0, 6.0])
+        >>> z
+        tensor([(5.+2.j), (6.-1.j)], dtype=lucid.complex64)
+        >>> x = lucid.ones(2)
+        >>> x.real is x
+        True
+        """
+        from lucid._ops import real as _real
+
+        return _real(self)
+
+    @real.setter
+    def real(self, value: Tensor | float) -> None:
+        _write_part(self.real, value)
+
+    @property
+    def imag(self) -> Tensor:
+        r"""The imaginary part of a complex ``self``, as a view of its storage.
+
+        The result is real, of the matching precision (``float32`` for
+        ``complex64``), and reads and writes ``self``'s own storage — on
+        Metal as on the CPU — so writing into it changes ``self``.
+        Assigning to the attribute writes the imaginary part in place.
+
+        Returns
+        -------
+        Tensor
+            :func:`lucid.imag` of ``self``.
+
+        Raises
+        ------
+        NotImplementedError
+            ``self`` is not complex: a real tensor has no imaginary part to
+            view (a ``RuntimeError`` too, as the reference raises).
+
+        Examples
+        --------
+        >>> import lucid
+        >>> z = lucid.tensor([1 + 2j, 3 - 1j])
+        >>> z.imag
+        tensor([2., -1.])
+        >>> z.imag = 0.0
+        >>> z
+        tensor([(1.+0.j), (3.+0.j)], dtype=lucid.complex64)
+        """
+        from lucid._ops import imag as _imag
+
+        return _imag(self)
+
+    @imag.setter
+    def imag(self, value: Tensor | float) -> None:
+        _write_part(self.imag, value)
 
     @property
     def is_metal(self) -> bool:
