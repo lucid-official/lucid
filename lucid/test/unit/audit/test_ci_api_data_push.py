@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,11 @@ ROOT = Path(__file__).resolve().parents[4]
 API = "web/public/api-data"
 
 _GENERATOR = '''\
-"""Stand-in for build-api-data.py: one page per slug, naming its source."""
+"""Stand-in for build-api-data.py: one page per slug, naming its source.
+
+Like the real one, a page lists a factory, ``<leaf>_small``, carrying its
+entry of ``_summaries.json``.
+"""
 import json
 import os
 import subprocess
@@ -32,7 +37,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "web" / "public" / "api-data"
-MODULE_MANIFEST = {"lucid.alpha": "lucid.alpha", "lucid.beta": "lucid.beta"}
+MODULE_MANIFEST = {
+    "lucid.alpha": "lucid.alpha",
+    "lucid.beta": "lucid.beta",
+    "lucid.models.gamma": "lucid.models.gamma",
+}
 SYNTH = ("lucid.ops",)
 
 
@@ -44,14 +53,28 @@ def main() -> None:
     sha = subprocess.check_output(
         ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True
     ).strip()
+    summaries = json.loads((OUT / "_summaries.json").read_text())
     for slug in slugs:
+        parts = slug.split(".")[1:]
         if slug in MODULE_MANIFEST:
-            src = (ROOT / "lucid" / slug.split(".")[1] / "__init__.py").read_text()
+            src = ROOT.joinpath("lucid", *parts, "__init__.py").read_text()
         elif slug in SYNTH:
             src = "".join(p.read_text() for p in sorted((ROOT / "lucid").rglob("*.py")))
         else:
             continue
-        page = {"slug": slug, "source": src, "sha": sha}
+        factory = f"{parts[-1]}_small"
+        page = {
+            "slug": slug,
+            "source": src,
+            "sha": sha,
+            "functions": [
+                {
+                    "name": factory,
+                    "signature": "()",
+                    "model_summary": summaries.get(factory),
+                }
+            ],
+        }
         (OUT / f"{slug}.json").write_text(json.dumps(page, indent=2) + "\\n")
     if os.environ.get("STUB_ON_BUILD"):
         subprocess.run(os.environ["STUB_ON_BUILD"], shell=True, check=True)
@@ -59,6 +82,14 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+'''
+
+_META = '''\
+"""Stand-in post-processor that can be told to fail."""
+import os
+import sys
+
+sys.exit(3 if os.environ.get("STUB_POST_FAIL") else 0)
 '''
 
 _CROSS_LINKS = '''\
@@ -71,7 +102,8 @@ pages = sorted(p.stem for p in OUT.glob("lucid*.json"))
 (OUT / "_cross_links.json").write_text(json.dumps(pages, indent=2) + "\\n")
 '''
 
-_POST_PROCESSORS = ("build-usedby", "link-citations", "build-bibtex", "build-meta")
+_POST_PROCESSORS = ("build-usedby", "link-citations", "build-bibtex")
+_SUMMARIES = '{"gamma_small": {"params": 1}}\n'
 
 
 def _env(tmp_path: Path) -> dict[str, str]:
@@ -80,9 +112,12 @@ def _env(tmp_path: Path) -> dict[str, str]:
     # repository.
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     config = tmp_path / "gitconfig"
+    # No automatic gc: a push's background repack of the origin raced a
+    # local clone copying the same objects ("failed to copy file").
     config.write_text(
         "[user]\n\tname = ci\n\temail = ci@example.invalid\n"
         "[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n"
+        "[gc]\n\tauto = 0\n[receive]\n\tautogc = false\n"
     )
     env.update(
         GIT_CONFIG_GLOBAL=str(config),
@@ -130,8 +165,10 @@ class _Fixture:
         _git(d, self.env, "init", "-q")
         _write(d, "lucid/alpha/__init__.py", "ALPHA = 1\n")
         _write(d, "lucid/beta/__init__.py", "BETA = 1\n")
+        _write(d, "lucid/models/gamma/__init__.py", "GAMMA = 1\n")
         _write(d, "web/scripts/build-api-data.py", _GENERATOR)
         _write(d, "web/scripts/build-cross-links.py", _CROSS_LINKS)
+        _write(d, "web/scripts/build-meta.py", _META)
         for name in _POST_PROCESSORS:
             _write(d, f"web/scripts/{name}.py", "")
         shutil.copy(
@@ -142,7 +179,7 @@ class _Fixture:
         shutil.copy(
             ROOT / "scripts/ci_api_data_push.sh", d / "scripts/ci_api_data_push.sh"
         )
-        _write(d, f"{API}/_summaries.json", '{"factories": 1}\n')
+        _write(d, f"{API}/_summaries.json", _SUMMARIES)
         _git(d, self.env, "add", "-A")
         _git(d, self.env, "commit", "-qm", "init")
         _build(d, self.env)
@@ -166,6 +203,21 @@ class _Fixture:
         _git(self.dev, self.env, "push", "-q", "origin", "HEAD:refs/heads/main")
         return _git(self.dev, self.env, "rev-parse", "HEAD")
 
+    def land_with_pages(self, changes: dict[str, str], *slugs: str) -> str:
+        """A land that carries api-data: source, its pages and the baseline.
+
+        No ``slugs`` regenerates every page, as a manual full build does.
+        """
+        _git(self.dev, self.env, "pull", "-q", "--ff-only", "origin", "main")
+        for rel, text in changes.items():
+            _write(self.dev, rel, text)
+        _build(self.dev, self.env, *(("--slugs", *slugs) if slugs else ()))
+        self.check(self.dev, write=True)
+        _git(self.dev, self.env, "add", "-A")
+        _git(self.dev, self.env, "commit", "-qm", "land with api-data")
+        _git(self.dev, self.env, "push", "-q", "origin", "HEAD:refs/heads/main")
+        return _git(self.dev, self.env, "rev-parse", "HEAD")
+
     def nightly_build(self) -> None:
         """Check out as actions/checkout does — depth 1 — and rebuild."""
         subprocess.run(
@@ -185,11 +237,14 @@ class _Fixture:
 
     def push(self, **env: str) -> subprocess.CompletedProcess[str]:
         out = self.runner.parent / "github_output"
+        summary = self.runner.parent / "step_summary"
         out.write_text("")
+        summary.write_text("")
+        github = {"GITHUB_OUTPUT": str(out), "GITHUB_STEP_SUMMARY": str(summary)}
         return subprocess.run(
             ["scripts/ci_api_data_push.sh"],
             cwd=self.runner,
-            env={**self.env, "GITHUB_OUTPUT": str(out), **env},
+            env={**self.env, **github, **env},
             capture_output=True,
             text=True,
             check=False,
@@ -197,6 +252,9 @@ class _Fixture:
 
     def pushed(self) -> str:
         return (self.runner.parent / "github_output").read_text()
+
+    def summary(self) -> str:
+        return (self.runner.parent / "step_summary").read_text()
 
     def check(
         self, root: Path, write: bool = False
@@ -221,7 +279,7 @@ class _Fixture:
         )
         return where
 
-    def page(self, root: Path, slug: str) -> dict[str, str]:
+    def page(self, root: Path, slug: str) -> dict[str, Any]:
         return dict(json.loads((root / API / f"{slug}.json").read_text()))
 
 
@@ -250,7 +308,9 @@ def test_a_main_that_moved_gets_the_refresh_with_its_moved_pages_rebuilt(
 ) -> None:
     repo.nightly_build()
     moved = repo.land("lucid/beta/__init__.py", "BETA = 2\n")
-    repo.land(f"{API}/_summaries.json", '{"factories": 2}\n')
+    # A summary for a factory no page lists: no page to rebuild for it.
+    summaries = '{"gamma_small": {"params": 1}, "zeta_small": {"params": 9}}\n'
+    repo.land(f"{API}/_summaries.json", summaries)
 
     result = repo.push()
     assert result.returncode == 0, result.stdout + result.stderr
@@ -275,8 +335,110 @@ def test_a_main_that_moved_gets_the_refresh_with_its_moved_pages_rebuilt(
     assert repo.page(after, "lucid.alpha")["source"] == "ALPHA = 2\n"
     assert "BETA = 2" in repo.page(after, "lucid.ops")["source"]
     # A file the refresh does not own keeps what main gave it.
-    assert (after / API / "_summaries.json").read_text() == '{"factories": 2}\n'
+    assert (after / API / "_summaries.json").read_text() == summaries
     assert repo.check(after).returncode == 0, repo.check(after).stdout
+
+
+def test_a_page_both_sides_regenerated_is_rebuilt_at_the_tip(
+    repo: _Fixture, tmp_path: Path
+) -> None:
+    """The 10-23 shape: a land carrying api-data for a page the refresh owns.
+
+    Both commits rewrote the alpha page and the drift baseline, so the pick
+    conflicts on both, and the refresh's side wins them.  Its alpha page
+    describes ALPHA = 2 while main's source says 3, so the drift check
+    against the refresh's own baseline names it, and it is rebuilt.
+    """
+    repo.nightly_build()
+    moved = repo.land_with_pages(
+        {"lucid/alpha/__init__.py": "ALPHA = 3\n"}, "lucid.alpha", "lucid.ops"
+    )
+
+    result = repo.push()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "rebuilding 2 page(s) there" in result.stdout, result.stdout
+    after = repo.main_tree(tmp_path)
+    alpha = repo.page(after, "lucid.alpha")
+    assert alpha["source"] == "ALPHA = 3\n"
+    assert alpha["sha"] == moved[:7]
+    assert "ALPHA = 3" in repo.page(after, "lucid.ops")["source"]
+    assert repo.check(after).returncode == 0, repo.check(after).stdout
+
+
+def test_a_full_regeneration_on_main_does_not_rebuild_anything(
+    repo: _Fixture, tmp_path: Path
+) -> None:
+    """A manual full build landing in the window (ba8610cc5, 10-23).
+
+    Built after an unrelated land, so every page conflicts — the two builds
+    name different commits — and no source moved, so the refresh's pages
+    stand; each names a commit on main either way.
+    """
+    repo.nightly_build()
+    repo.land("README.md", "unrelated\n")
+    repo.land_with_pages({})
+
+    result = repo.push()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "rebuilding 0 page(s) there" in result.stdout, result.stdout
+    after = repo.main_tree(tmp_path)
+    for slug in ("lucid.alpha", "lucid.beta", "lucid.models.gamma", "lucid.ops"):
+        _git(
+            after,
+            repo.env,
+            "merge-base",
+            "--is-ancestor",
+            repo.page(after, slug)["sha"],
+            "HEAD",
+        )
+    assert repo.page(after, "lucid.alpha")["source"] == "ALPHA = 2\n"
+    assert repo.check(after).returncode == 0, repo.check(after).stdout
+
+
+def test_a_summary_that_moved_rebuilds_the_page_embedding_it(
+    repo: _Fixture, tmp_path: Path
+) -> None:
+    """No source hash sees _summaries.json, which model pages embed."""
+    repo.nightly_build()
+    moved = repo.land(f"{API}/_summaries.json", '{"gamma_small": {"params": 2}}\n')
+
+    result = repo.push()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "rebuilding 1 page(s) there" in result.stdout, result.stdout
+    after = repo.main_tree(tmp_path)
+    gamma = repo.page(after, "lucid.models.gamma")
+    assert gamma["functions"][0]["model_summary"] == {"params": 2}
+    assert gamma["sha"] == moved[:7]
+    assert repo.check(after).returncode == 0, repo.check(after).stdout
+
+
+@pytest.mark.parametrize(
+    ("env", "command"),
+    [
+        # In a subshell, inside a function.
+        (
+            {"STUB_POST_FAIL": "1"},
+            '`"$PYTHON_BIN" "scripts/$step.py"` failed with exit 3',
+        ),
+        # In the main loop.
+        (
+            {"LUCID_API_DATA_REMOTE": "nowhere"},
+            '`git fetch -q "$REMOTE" "$BRANCH"` failed',
+        ),
+    ],
+    ids=["post-processor", "fetch"],
+)
+def test_a_failing_command_still_reports_as_a_failed_push(
+    repo: _Fixture, env: dict[str, str], command: str
+) -> None:
+    repo.nightly_build()
+    result = repo.push(**env)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"::error::api-data was not pushed: {command}" in result.stderr
+    # Reported once, though the failure fails its callers too.
+    assert result.stderr.count("::error::") == 1, result.stderr
+    assert "pushed=false" in repo.pushed()
+    assert "### api-data was not pushed" in repo.summary()
 
 
 def test_a_module_main_deleted_stays_deleted(repo: _Fixture, tmp_path: Path) -> None:
@@ -310,6 +472,7 @@ def test_a_main_that_keeps_moving_fails_loudly_naming_the_stale_slugs(
         "::error::api-data was not pushed: the push was refused 2 times"
         in result.stderr
     )
+    assert "  moved on main during the rebuild:\n" in result.stderr
     assert "    - lucid.beta" in result.stderr
     assert "    - lucid.ops" in result.stderr
     assert "    - lucid.alpha" not in result.stderr
@@ -326,7 +489,7 @@ def test_a_generator_that_moved_fails_loudly(repo: _Fixture) -> None:
     result = repo.push()
     assert result.returncode == 1, result.stdout + result.stderr
     assert "build-api-data.py changed on main during the rebuild" in result.stderr
-    assert "    - every page" in result.stderr
+    assert "    - every page (the generator moved)" in result.stderr
     assert "pushed=false" in repo.pushed()
 
 

@@ -15,17 +15,20 @@
 #      a three-way merge, the refresh winning a hunk both sides changed.
 #      Then rebuild, at that tip, only the pages its new commits made
 #      stale: the slugs whose sources moved, by the drift check run
-#      against the refresh's own baseline, and the synthesised pages,
-#      which read the whole tree, when anything under lucid/ moved.
-#      Building at the tip keeps every permalink on a commit that stays
-#      on main.  Post-process, re-baseline, commit, and push again.
+#      against the refresh's own baseline; the synthesised pages, which
+#      read the whole tree, when anything under lucid/ moved; and the
+#      model pages embedding a factory summary that _summaries.json
+#      changed, which no source hash sees.  Building at the tip keeps
+#      every permalink on a commit that stays on main.  Post-process,
+#      re-baseline, commit, and push again.
 #
 # The push is tried LUCID_API_DATA_PUSH_ATTEMPTS times (default 3).  It
 # fails loudly — an ::error:: line and the step summary, naming the slugs
-# that are stale against main — when the attempts run out, when the
-# generator itself changed on main (every page is then stale), when the
-# merge leaves a conflict it cannot settle, and when a push is refused
-# while main has not moved, since that is no race.
+# that moved on main during the rebuild — when the attempts run out, when
+# the generator itself changed on main (every page is then stale), when
+# the merge leaves a conflict it cannot settle, when a push is refused
+# while main has not moved, since that is no race, and when any command
+# fails (the ERR trap).
 #
 # Exit 0: pushed, or nothing to push.  Exit 1: not pushed.
 #
@@ -33,7 +36,8 @@
 # arrays that may be empty: the slug list is a newline-separated string,
 # word-split where it is passed on.
 
-set -euo pipefail
+# -E: the ERR trap reaches functions, subshells and command substitutions.
+set -eEuo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -49,18 +53,24 @@ GENERATOR=web/scripts/build-api-data.py
 SYNTH="lucid.ops lucid.creation lucid.ops.composite"
 MESSAGE="docs(api-data): nightly refresh against the current source"
 
+# A failure is reported once.  It can be raised in a subshell — a command
+# substitution — and then fails its caller too, so the mark is a file.
+REPORTED="$(mktemp -d "${TMPDIR:-/tmp}/api-data-push.XXXXXX")"
+trap 'rm -rf "$REPORTED"' EXIT
+
 output() {
     if [ -n "${GITHUB_OUTPUT:-}" ]; then
         echo "$1" >>"$GITHUB_OUTPUT"
     fi
 }
 
-fail() { # <why> [stale slug ...]
+fail() { # <why> [moved slug ...]
     local why="$1"
     shift
+    touch "$REPORTED/done"
     echo "::error::api-data was not pushed: $why" >&2
     if [ "$#" -gt 0 ]; then
-        echo "  stale against $REMOTE/$BRANCH:" >&2
+        echo "  moved on $BRANCH during the rebuild:" >&2
         printf '    - %s\n' "$@" >&2
     fi
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
@@ -69,7 +79,7 @@ fail() { # <why> [stale slug ...]
             echo "$why"
             if [ "$#" -gt 0 ]; then
                 echo
-                echo "Stale against \`$REMOTE/$BRANCH\`:"
+                echo "Moved on \`$BRANCH\` during the rebuild:"
                 printf -- '- `%s`\n' "$@"
             fi
         } >>"$GITHUB_STEP_SUMMARY"
@@ -77,6 +87,14 @@ fail() { # <why> [stale slug ...]
     output "pushed=false"
     exit 1
 }
+
+on_error() { # <status> <line> <command>
+    if [ -e "$REPORTED/done" ]; then
+        exit "$1"
+    fi
+    fail "\`$3\` failed with exit $1 (scripts/ci_api_data_push.sh:$2)"
+}
+trap 'on_error $? $LINENO "$BASH_COMMAND"' ERR
 
 count() { echo "$#"; }
 
@@ -90,12 +108,18 @@ finish() {
     )
 }
 
-commit() {
-    git add -A -- "$API"
-    if git diff --cached --quiet; then
-        return 1
-    fi
-    git commit -q -m "$MESSAGE"
+commit() { # 0 committed, 1 nothing to commit
+    # Called as a condition, where neither set -e nor the ERR trap acts,
+    # so each failure is raised here: a failed commit is not "nothing new".
+    local status=0
+    git add -A -- "$API" || fail "git add of $API failed"
+    git diff --cached --quiet || status=$?
+    case "$status" in
+        0) return 1 ;;
+        1) ;;
+        *) fail "git diff --cached failed with exit $status" ;;
+    esac
+    git commit -q -m "$MESSAGE" || fail "git commit failed"
 }
 
 carry() { # <ours> <tip> — the work tree becomes <tip> with <ours> applied
@@ -111,14 +135,60 @@ carry() { # <ours> <tip> — the work tree becomes <tip> with <ours> applied
     # -X theirs settles every hunk; what is left is a page one side
     # deleted.  Main deleting it means the module is gone, so it stays gone.
     while IFS= read -r path; do
-        if git cat-file -e "$tip:$path" 2>/dev/null; then
+        if ! git cat-file -e "$tip:$path" 2>/dev/null; then
+            git rm -q -- "$path"
+        elif git cat-file -e "$ours:$path" 2>/dev/null; then
+            fail "$path: a conflict -X theirs did not settle"
+        else
             fail "$path: the refresh deleted a page $BRANCH still has"
         fi
-        git rm -q -- "$path"
     done <<<"$unmerged"
     # A pick stopped on a conflict stays "in progress"; commit() makes the
     # commit, not the pick.
     git cherry-pick --quit
+}
+
+summary_pages() { # <base> <tip> — model pages embedding a summary that moved
+    if git diff --quiet "$1" "$2" -- "$API/_summaries.json"; then
+        return 0
+    fi
+    # build-api-data.py copies _summaries.json[<factory>] into the page
+    # entry of the factory of that name, so a page is stale when it lists
+    # a factory whose summary differs between the two commits.
+    "$PYTHON_BIN" - "$API" "$1" "$2" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+api, base, tip = sys.argv[1:]
+
+
+def summaries(rev):
+    blob = f"{rev}:{api}/_summaries.json"
+    if subprocess.run(["git", "cat-file", "-e", blob], capture_output=True).returncode:
+        return {}
+    shown = subprocess.run(["git", "show", blob], capture_output=True, text=True, check=True)
+    return json.loads(shown.stdout)
+
+
+def factories(node):
+    if isinstance(node, dict):
+        if "signature" in node and isinstance(node.get("name"), str):
+            yield node["name"]
+        for value in node.values():
+            yield from factories(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from factories(value)
+
+
+old, new = summaries(base), summaries(tip)
+moved = {name for name in old.keys() | new.keys() if old.get(name) != new.get(name)}
+for page in sorted(Path(api).glob("lucid.models*.json")):
+    if moved & set(factories(json.loads(page.read_text()))):
+        print(page.stem)
+PY
 }
 
 stale_slugs() { # <base> <tip> <ours> — the pages to rebuild, one per line
@@ -127,10 +197,12 @@ stale_slugs() { # <base> <tip> <ours> — the pages to rebuild, one per line
     # against the source at <tip>, it names exactly the slugs that moved.
     git show "$ours:$API/.cache/drift-hashes.json" >"$API/.cache/drift-hashes.json" ||
         fail "the refresh commit $ours carries no drift baseline"
-    set +e
-    report="$(cd web && "$PYTHON_BIN" scripts/build-api-data-cached.py --check)"
-    status=$?
-    set -e
+    # A condition, so the exit 1 that means "stale" trips no trap.
+    if report="$(cd web && "$PYTHON_BIN" scripts/build-api-data-cached.py --check)"; then
+        status=0
+    else
+        status=$?
+    fi
     slugs="$(printf '%s\n' "$report" | sed -n 's/^    - \([^ ]*\)  (.*)$/\1/p')"
     if [ "$status" -ne 0 ] && [ -z "$slugs" ]; then
         printf '%s\n' "$report" >&2
@@ -146,6 +218,8 @@ stale_slugs() { # <base> <tip> <ours> — the pages to rebuild, one per line
             fi
         done
     fi
+    summary_pages "$base" "$tip" ||
+        fail "could not tell which model pages embed a summary that moved"
 }
 
 finish
@@ -169,7 +243,7 @@ until git push -q "$REMOTE" "HEAD:refs/heads/$BRANCH"; do
     fi
     if ! git diff --quiet "$base" "$tip" -- "$GENERATOR"; then
         fail "$GENERATOR changed on $BRANCH during the rebuild ($(git log --format=%h "$base..$tip" -- "$GENERATOR" | tr '\n' ' ')) — every page is stale; run the workflow again" \
-            "every page"
+            "every page (the generator moved)"
     fi
     carry "$ours" "$tip"
     stale="$(stale_slugs "$base" "$tip" "$ours" | sort -u)"
