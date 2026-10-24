@@ -51,6 +51,7 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._tasks import SemanticSegmentationModel
 from lucid.models._output import SemanticSegmentationOutput
+from lucid.models.vision._common._position import SinePositionEmbedding
 from lucid.models.vision.maskformer._config import MaskFormerConfig
 
 # Relative weight of the "no object" class in the classification loss —
@@ -357,60 +358,6 @@ class _FPNPixelDecoder(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Sine 2-D positional encoding (reference MaskFormerSinePositionEmbedding)
-# ---------------------------------------------------------------------------
-
-
-class _SinePositionEmbedding(nn.Module):
-    """Normalised 2-D sinusoidal positional encoding (reference-exact).
-
-    Inference always runs on a single, unpadded image, so the mask is
-    all-ones and reduces to plain row / column cumulative sums.
-
-    Reference defaults: ``num_position_features = d_model/2``,
-    ``temperature = 10000``, ``normalize = True``, ``scale = 2π``.
-    """
-
-    def __init__(
-        self,
-        num_position_features: int,
-        temperature: float = 10000.0,
-        scale: float = 6.283185307179586,
-        eps: float = 1e-6,
-    ) -> None:
-        super().__init__()
-        self.num_position_features = num_position_features
-        self.temperature = temperature
-        self.scale = scale
-        self.eps = eps
-
-    @override
-    def forward(self, batch: int, height: int, width: int, device: str) -> Tensor:
-        npf = self.num_position_features
-        ones = lucid.ones(1, height, width, dtype=lucid.float32, device=device)
-        y_embed = ones.cumsum(dim=1)
-        x_embed = ones.cumsum(dim=2)
-        y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
-        x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
-
-        dim_t = lucid.arange(0, npf, dtype=lucid.float32, device=device)
-        dim_t = self.temperature ** (2.0 * lucid.floor(dim_t / 2.0) / npf)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = lucid.stack(
-            [lucid.sin(pos_x[:, :, :, 0::2]), lucid.cos(pos_x[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos_y = lucid.stack(
-            [lucid.sin(pos_y[:, :, :, 0::2]), lucid.cos(pos_y[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos = lucid.cat([pos_y, pos_x], dim=3).permute(0, 3, 1, 2)  # (1, d, H, W)
-        if batch > 1:
-            pos = pos.repeat(batch, 1, 1, 1)
-        return pos
-
-
-# ---------------------------------------------------------------------------
 # DETR-style decoder with separate q/k/v/o projections (reference-exact)
 # ---------------------------------------------------------------------------
 
@@ -598,7 +545,7 @@ class _TransformerModule(nn.Module):
         encoder_depth: int = 0,
     ) -> None:
         super().__init__()
-        self._pos_embed = _SinePositionEmbedding(num_position_features=d_model // 2)
+        self._pos_embed = SinePositionEmbedding(num_position_features=d_model // 2)
         self.queries_embedder = nn.Embedding(num_queries, d_model)
         self.input_projection = nn.Conv2d(in_features, d_model, 1)
         # ``encoder_depth = 0`` (the reference semantic setting) leaves this
@@ -632,7 +579,7 @@ class _TransformerModule(nn.Module):
         hidden = lucid.zeros(query_pos.shape, device=device)
 
         # Spatial positions + flattened memory: (B, S, d)
-        pos = self._pos_embed(B, h, w, device)  # (B, d, h, w)
+        pos = self._pos_embed(feat)  # (B, d, h, w)
         spatial_pos = pos.reshape(B, c, h * w).permute(0, 2, 1)
         memory = feat.reshape(B, c, h * w).permute(0, 2, 1)
         for enc in self.encoder:

@@ -72,6 +72,7 @@ from lucid.models._utils._detection_results import (
     detection_result,
     empty_detection_result,
 )
+from lucid.models.vision._common._position import SinePositionEmbedding
 from lucid.models.vision.detr._config import DETRConfig
 
 # The reference DETR backbone freezes its BatchNorm with eps = 1e-5, where
@@ -111,63 +112,6 @@ class _ResNetC5(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         return self.layer4(x)
-
-
-# ---------------------------------------------------------------------------
-# DETR-exact 2-D sinusoidal positional encoding (PositionEmbeddingSine)
-# ---------------------------------------------------------------------------
-
-
-@final
-class _PositionEmbeddingSine(nn.Module):
-    """Reference ``PositionEmbeddingSine`` for an unpadded feature map.
-
-    Builds the sinusoidal 2-D positional encoding the reference DETR feeds
-    into every attention layer.  Inference always runs on a single,
-    unpadded image, so the "not-mask" is all-ones and reduces to plain
-    row / column cumulative sums.
-
-    Parameters mirror the reference defaults: ``num_pos_feats = d_model/2``,
-    ``temperature = 10000``, ``normalize = True``, ``scale = 2π``.
-    """
-
-    def __init__(
-        self,
-        num_pos_feats: int,
-        temperature: float = 10000.0,
-        scale: float = 6.283185307179586,
-        eps: float = 1e-6,
-    ) -> None:
-        super().__init__()
-        self.num_pos_feats = num_pos_feats
-        self.temperature = temperature
-        self.scale = scale
-        self.eps = eps
-
-    @override
-    def forward(self, batch: int, height: int, width: int, device: str) -> Tensor:
-        npf = self.num_pos_feats
-        ones = lucid.ones(1, height, width, dtype=lucid.float32, device=device)
-        y_embed = ones.cumsum(dim=1)
-        x_embed = ones.cumsum(dim=2)
-        y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
-        x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
-
-        dim_t = lucid.arange(0, npf, dtype=lucid.float32, device=device)
-        dim_t = self.temperature ** (2.0 * lucid.floor(dim_t / 2.0) / npf)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = lucid.stack(
-            [lucid.sin(pos_x[:, :, :, 0::2]), lucid.cos(pos_x[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos_y = lucid.stack(
-            [lucid.sin(pos_y[:, :, :, 0::2]), lucid.cos(pos_y[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos = lucid.cat([pos_y, pos_x], dim=3).permute(0, 3, 1, 2)  # (1, d, H, W)
-        if batch > 1:
-            pos = pos.repeat(batch, 1, 1, 1)
-        return pos
 
 
 # ---------------------------------------------------------------------------
@@ -649,7 +593,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
         )
 
         # Positional encoding (reference PositionEmbeddingSine)
-        self._pos_embed = _PositionEmbeddingSine(num_pos_feats=d // 2)
+        self._pos_embed = SinePositionEmbedding(num_position_features=d // 2)
 
         # Prediction heads
         self.class_embed = nn.Linear(d, config.num_classes + 1)
@@ -701,10 +645,9 @@ class DETRForObjectDetection(ObjectDetectionModel):
 
         fH = int(feat.shape[2])
         fW = int(feat.shape[3])
-        device = feat.device.type
 
         # 2. 2-D positional encoding (B, d, H', W')
-        pos_embed = self._pos_embed(B, fH, fW, device)
+        pos_embed = self._pos_embed(feat)
 
         # 3. Transformer — returns (B, N, d)
         queries: Tensor = self.query_embed.weight  # (N, d)

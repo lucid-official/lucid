@@ -52,6 +52,7 @@ from lucid.models._utils._segmentation import (
     sigmoid_ce_loss,
     uncertain_point_coords,
 )
+from lucid.models.vision._common._position import SinePositionEmbedding
 from lucid.models.vision.mask2former._config import Mask2FormerConfig
 
 # ---------------------------------------------------------------------------
@@ -549,57 +550,6 @@ class _SwinBackbone(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Sine positional embedding (reference Mask2FormerSinePositionEmbedding)
-# ---------------------------------------------------------------------------
-
-
-class _SinePositionEmbedding(nn.Module):
-    """Normalised 2-D sinusoidal positional encoding (reference-exact).
-
-    Inference runs on a single, unpadded image, so the mask is all-ones and
-    reduces to plain row / column cumulative sums.
-    """
-
-    def __init__(
-        self,
-        num_position_features: int,
-        temperature: float = 10000.0,
-        scale: float = 2.0 * math.pi,
-        eps: float = 1e-6,
-    ) -> None:
-        super().__init__()
-        self.num_position_features = num_position_features
-        self.temperature = temperature
-        self.scale = scale
-        self.eps = eps
-
-    @override
-    def forward(self, batch: int, height: int, width: int, device: str) -> Tensor:
-        npf = self.num_position_features
-        ones = lucid.ones(1, height, width, dtype=lucid.float32, device=device)
-        y_embed = ones.cumsum(dim=1)
-        x_embed = ones.cumsum(dim=2)
-        y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
-        x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
-
-        dim_t = lucid.arange(0, npf, dtype=lucid.float32, device=device)
-        dim_t = self.temperature ** (2.0 * lucid.floor(dim_t / 2.0) / npf)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = lucid.stack(
-            [lucid.sin(pos_x[:, :, :, 0::2]), lucid.cos(pos_x[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos_y = lucid.stack(
-            [lucid.sin(pos_y[:, :, :, 0::2]), lucid.cos(pos_y[:, :, :, 1::2])], dim=4
-        ).flatten(3)
-        pos = lucid.cat([pos_y, pos_x], dim=3).permute(0, 3, 1, 2)
-        if batch > 1:
-            pos = pos.repeat(batch, 1, 1, 1)
-        return pos
-
-
-# ---------------------------------------------------------------------------
 # MSDeformAttn pixel decoder (reference Mask2FormerPixelDecoder)
 # ---------------------------------------------------------------------------
 
@@ -825,7 +775,7 @@ class _PixelDecoder(nn.Module):
     ) -> None:
         super().__init__()
         self.num_feature_levels = 3
-        self.position_embedding = _SinePositionEmbedding(
+        self.position_embedding = SinePositionEmbedding(
             num_position_features=feature_dim // 2
         )
         self.level_embed = nn.Parameter(
@@ -881,7 +831,6 @@ class _PixelDecoder(nn.Module):
     @override
     def forward(self, features: list[Tensor]) -> tuple[Tensor, list[Tensor]]:
         b = int(features[0].shape[0])
-        device = features[0].device.type
 
         # Reverse last 3 levels (highest stride first), project + pos embed
         inputs_embeds: list[Tensor] = []
@@ -892,7 +841,7 @@ class _PixelDecoder(nn.Module):
             inputs_embeds.append(proj(x))
             h = int(x.shape[2])
             w = int(x.shape[3])
-            position_embeddings.append(self.position_embedding(b, h, w, device))
+            position_embeddings.append(self.position_embedding(x))
 
         spatial_shapes: list[tuple[int, int]] = [
             (int(e.shape[2]), int(e.shape[3])) for e in inputs_embeds
@@ -1237,7 +1186,7 @@ class _TransformerModule(nn.Module):
         super().__init__()
         d = config.d_model
         self.num_feature_levels = config.num_feature_levels
-        self.position_embedder = _SinePositionEmbedding(num_position_features=d // 2)
+        self.position_embedder = SinePositionEmbedding(num_position_features=d // 2)
         self.queries_embedder = nn.Embedding(config.num_queries, d)
         self.queries_features = nn.Embedding(config.num_queries, d)
         self.decoder = _MaskedAttentionDecoder(config)
@@ -1250,7 +1199,6 @@ class _TransformerModule(nn.Module):
         mask_features: Tensor,  # (B, C, H, W)
     ) -> tuple[list[Tensor], list[Tensor]]:
         b = int(multi_scale_features[0].shape[0])
-        device = multi_scale_features[0].device.type
 
         multi_stage_features: list[Tensor] = []
         multi_stage_pos: list[Tensor] = []
@@ -1263,7 +1211,7 @@ class _TransformerModule(nn.Module):
             h = int(feat.shape[2])
             w = int(feat.shape[3])
             size_list.append((h, w))
-            pos = self.position_embedder(b, h, w, device)  # (B, C, H, W)
+            pos = self.position_embedder(feat)  # (B, C, H, W)
             pos_flat = pos.reshape(b, c, h * w)  # (B, C, S)
             feat_flat = feat.reshape(b, c, h * w)  # (B, C, S)
             lvl = level_w[i].reshape(1, c, 1)

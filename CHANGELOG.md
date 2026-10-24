@@ -1348,6 +1348,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - share the operand load of binary Metal kernels
 
+- share one sine position table across the DETR lineage
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings
