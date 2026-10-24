@@ -685,21 +685,6 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module 'lucid' has no attribute '{name}'")
 
 
-def _attach_free_fn_methods() -> None:
-    """Give ``Tensor`` the method form of the free functions that lacked one.
-
-    ``x.expm1()`` is ``lucid.expm1(x)`` (:mod:`lucid._tensor._free_fn_methods`).
-    The methods are bound to what ``lucid.<name>`` resolves to, which it
-    does only from here on — after ``Tensor`` and the lazy loaders above.
-    """
-    from lucid._tensor._free_fn_methods import inject_free_fn_methods
-
-    inject_free_fn_methods(Tensor)
-
-
-_attach_free_fn_methods()
-
-
 def _bind_annotation_names() -> None:
     """Give every module the names its annotations mention.
 
@@ -709,7 +694,7 @@ def _bind_annotation_names() -> None:
     what ``help()``, an editor's tooltip and the docs build all call.
     :mod:`lucid._annotations` binds those names once their
     sources exist, here for what ``import lucid`` loaded and for every
-    ``lucid`` module imported after it.  Called last, when everything this
+    ``lucid`` module imported after it.  Called when everything this
     package defines is in place.
     """
     from lucid._annotations import install
@@ -718,3 +703,19 @@ def _bind_annotation_names() -> None:
 
 
 _bind_annotation_names()
+
+
+def _attach_free_fn_methods() -> None:
+    """Give ``Tensor`` the method form of the free functions that lacked one.
+
+    ``x.expm1()`` is ``lucid.expm1(x)`` (:mod:`lucid._tensor._free_fn_methods`).
+    The methods are bound to what ``lucid.<name>`` resolves to and take its
+    signature with the annotations evaluated, which holds only from here on:
+    after ``Tensor``, the lazy loaders and the annotation names above.
+    """
+    from lucid._tensor._free_fn_methods import inject_free_fn_methods
+
+    inject_free_fn_methods(Tensor)
+
+
+_attach_free_fn_methods()

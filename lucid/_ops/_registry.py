@@ -374,12 +374,14 @@ _REGISTRY: list[OpEntry] = [
             extra_kwargs=["offset", "dim1", "dim2"]),
 
     # ── comparison ────────────────────────────────────────────────────────
+    # No ``Tensor.equal``: the reference's method of that name answers one
+    # bool for the whole tensor, not this elementwise ``eq``.
     OpEntry("equal",         A._make_arith_adapter(_R.equal),         2, method_name=None, free_fn_name="equal"),
-    OpEntry("not_equal",     A._make_arith_adapter(_R.not_equal),     2, method_name=None, free_fn_name="not_equal"),
-    OpEntry("greater",       A._make_arith_adapter(_R.greater),       2, method_name=None, free_fn_name="greater"),
-    OpEntry("greater_equal", A._make_arith_adapter(_R.greater_equal), 2, method_name=None, free_fn_name="greater_equal"),
-    OpEntry("less",          A._make_arith_adapter(_R.less),          2, method_name=None, free_fn_name="less"),
-    OpEntry("less_equal",    A._make_arith_adapter(_R.less_equal),    2, method_name=None, free_fn_name="less_equal"),
+    OpEntry("not_equal",     A._make_arith_adapter(_R.not_equal),     2, method_name="not_equal",     free_fn_name="not_equal"),
+    OpEntry("greater",       A._make_arith_adapter(_R.greater),       2, method_name="greater",       free_fn_name="greater"),
+    OpEntry("greater_equal", A._make_arith_adapter(_R.greater_equal), 2, method_name="greater_equal", free_fn_name="greater_equal"),
+    OpEntry("less",          A._make_arith_adapter(_R.less),          2, method_name="less",          free_fn_name="less"),
+    OpEntry("less_equal",    A._make_arith_adapter(_R.less_equal),    2, method_name="less_equal",    free_fn_name="less_equal"),
 
     # ── masking ────────────────────────────────────────────────────────────
     # ``where`` and ``masked_fill`` auto-cast their condition/mask to bool to

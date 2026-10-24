@@ -30,7 +30,9 @@ _REPLACED_ON_PURPOSE: frozenset[str] = frozenset()
 
 def _class_members() -> dict[str, int]:
     tree = ast.parse(_SOURCE.read_text(encoding="utf-8"))
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor")
+    cls = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor"
+    )
     members: dict[str, int] = {}
     for node in cls.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -44,14 +46,28 @@ def _class_members() -> dict[str, int]:
     return members
 
 
+def _attached_by(inject: Callable[[type], None]) -> set[str]:
+    blank = type("Blank", (), {})
+    before = set(vars(blank))
+    inject(blank)
+    return set(vars(blank)) - before
+
+
 def _injected() -> set[str]:
-    names: set[str] = set()
-    for inject in _INJECTORS:
-        blank = type("Blank", (), {})
-        before = set(vars(blank))
-        inject(blank)
-        names |= set(vars(blank)) - before
-    return names
+    return set().union(*(_attached_by(inject) for inject in _INJECTORS))
+
+
+def test_no_two_injectors_attach_one_name() -> None:
+    # They run one after another, so a name two of them set is the later
+    # one's, and the earlier body is dead the same way tensor.py's were.
+    sets = {inject.__qualname__: _attached_by(inject) for inject in _INJECTORS}
+    overlaps = sorted(
+        f"{a} & {b}: {sorted(sets[a] & sets[b])}"
+        for i, a in enumerate(sets)
+        for b in list(sets)[i + 1 :]
+        if sets[a] & sets[b]
+    )
+    assert overlaps == []
 
 
 def test_no_injector_overwrites_a_member_tensor_py_defines() -> None:
@@ -66,6 +82,14 @@ def test_no_injector_overwrites_a_member_tensor_py_defines() -> None:
 
 def test_the_injectors_are_read_not_restated() -> None:
     injected = _injected()
-    for name in ("index_select", "clone", "eval", "masked_fill_", "__add__", "to", "expm1"):
+    for name in (
+        "index_select",
+        "clone",
+        "eval",
+        "masked_fill_",
+        "__add__",
+        "to",
+        "expm1",
+    ):
         assert name in injected, name
     assert sorted(_REPLACED_ON_PURPOSE - _class_members().keys()) == []

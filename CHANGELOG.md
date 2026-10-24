@@ -1478,6 +1478,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - drop seven method bodies the injectors overwrote
 
+- registry twins from their entries; signatures evaluated
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

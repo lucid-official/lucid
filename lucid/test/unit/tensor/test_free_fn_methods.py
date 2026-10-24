@@ -3,11 +3,13 @@
 ``x.expm1_()`` existed and ``x.expm1()`` raised ``AttributeError``; so did
 36 more — ``ldexp``, ``put``, ``xlogy``, ``greater`` … — each with a
 ``lucid.<name>`` free function and a reference method of the same name.
-``lucid._tensor._free_fn_methods`` makes each one ``lucid.<name>`` as a
+A registry op takes its method from its entry; the composites are
+``lucid._tensor._free_fn_methods``'s table, each ``lucid.<name>`` as a
 method.  Held here: the method is the free function (same values, same
-refusals, on either device), its signature is the free function's after the
-first parameter, the reference has it and binds the same keywords to the
-same values, and the class as a whole — no public ``X_`` without its ``X``.
+refusals, on either device), a table method's signature is the free
+function's after the first parameter, the reference has it and binds the
+same keywords to the same values, and the class as a whole — no public
+``X_`` without its ``X``.
 """
 
 import inspect
@@ -17,6 +19,7 @@ from types import ModuleType
 import pytest
 
 import lucid
+from lucid._ops._registry import _REGISTRY
 from lucid._tensor._free_fn_methods import FREE_FN_METHODS
 
 
@@ -31,7 +34,10 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "acosh": (_t([1.5, 3.0]), (), {}),
     "addbmm": (
         _t([[0.5, 1.0, -1.0], [2.0, 0.0, 1.0]]),
-        (_t([[[1.0, 2.0], [0.5, -1.0]]] * 2), _t([[[1.0, 0.0, 2.0], [3.0, 1.0, -1.0]]] * 2)),
+        (
+            _t([[[1.0, 2.0], [0.5, -1.0]]] * 2),
+            _t([[[1.0, 0.0, 2.0], [3.0, 1.0, -1.0]]] * 2),
+        ),
         {"beta": 0.5, "alpha": 2.0},
     ),
     "addmv": (
@@ -52,7 +58,10 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "atanh": (_t([-0.5, 0.25]), (), {}),
     "baddbmm": (
         _t([[[1.0, 0.0], [0.0, 1.0]]] * 2),
-        (_t([[[1.0, 2.0, 0.5], [0.0, -1.0, 1.0]]] * 2), _t([[[1.0, 0.0], [2.0, 1.0], [0.5, 0.5]]] * 2)),
+        (
+            _t([[[1.0, 2.0, 0.5], [0.0, -1.0, 1.0]]] * 2),
+            _t([[[1.0, 0.0], [2.0, 1.0], [0.5, 0.5]]] * 2),
+        ),
         {"beta": 0.5, "alpha": 2.0},
     ),
     "conj_physical": (_t([1 + 2j, -3j], "complex64"), (), {}),
@@ -124,7 +133,9 @@ def _close(a: object, b: object) -> bool:
         return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=True))
     if isinstance(a, bool) or isinstance(b, bool):
         return a == b
-    if not isinstance(a, int | float | complex) or not isinstance(b, int | float | complex):
+    if not isinstance(a, int | float | complex) or not isinstance(
+        b, int | float | complex
+    ):
         return False
     if isinstance(a, complex) or isinstance(b, complex):
         return abs(complex(a) - complex(b)) <= 1e-5 * max(1.0, abs(complex(b)))
@@ -133,13 +144,20 @@ def _close(a: object, b: object) -> bool:
     return math.isclose(a, b, rel_tol=1e-5, abs_tol=1e-6)
 
 
-def test_every_table_name_has_a_case_and_a_free_function() -> None:
-    assert sorted(_CASES) == sorted(FREE_FN_METHODS)
-    for name in FREE_FN_METHODS:
+#: Twins a registry entry gives their method (``OpEntry.method_name``).
+_REGISTRY_TWINS = ("greater", "greater_equal", "less", "less_equal", "not_equal")
+
+
+def test_every_twin_has_a_case_and_one_owner() -> None:
+    assert sorted(_CASES) == sorted(FREE_FN_METHODS + _REGISTRY_TWINS)
+    registry = {e.method_name for e in _REGISTRY}
+    assert sorted(set(FREE_FN_METHODS) & registry) == []
+    assert sorted(set(_REGISTRY_TWINS) - registry) == []
+    for name in _CASES:
         assert callable(getattr(lucid, name)), name
 
 
-@pytest.mark.parametrize("name", FREE_FN_METHODS)
+@pytest.mark.parametrize("name", sorted(_CASES))
 def test_the_method_is_the_free_function(name: str, device: str) -> None:
     try:
         expected = _call(lucid, name, device, method=False)
@@ -155,19 +173,27 @@ def test_the_method_is_the_free_function(name: str, device: str) -> None:
     assert _close(_values(out), _values(expected))
 
 
+def _described(param: inspect.Parameter) -> tuple[object, ...]:
+    return (param.name, param.kind, param.default, param.annotation)
+
+
 @pytest.mark.parametrize("name", FREE_FN_METHODS)
 def test_the_signature_is_the_free_functions_after_its_first(name: str) -> None:
+    # Annotations included, evaluated: a snapshot taken before the package
+    # bound its annotation names kept ``ForwardRef('Tensor')`` for good.
     method = inspect.signature(getattr(lucid.Tensor, name))
     free = inspect.signature(getattr(lucid, name))
     self_param, *rest = method.parameters.values()
     assert self_param.name == "self"
-    assert [(p.name, p.kind, p.default) for p in rest] == [
-        (p.name, p.kind, p.default) for p in list(free.parameters.values())[1:]
+    assert [_described(p) for p in rest] == [
+        _described(p) for p in list(free.parameters.values())[1:]
     ]
+    assert method.return_annotation == free.return_annotation
+    assert "ForwardRef" not in repr(method)
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize("name", FREE_FN_METHODS)
+@pytest.mark.parametrize("name", sorted(_CASES))
 def test_the_reference_method_binds_our_keywords_to_our_values(
     ref: ModuleType, name: str
 ) -> None:
@@ -175,7 +201,7 @@ def test_the_reference_method_binds_our_keywords_to_our_values(
     missing keyword fails here, a different answer below."""
     assert hasattr(ref.Tensor, name)
     self_spec, args, kwargs = _CASES[name]
-    params = list(inspect.signature(getattr(lucid.Tensor, name)).parameters.values())[1:]
+    params = list(inspect.signature(getattr(lucid, name)).parameters.values())[1:]
     named = {p.name: _build(a, ref, None) for p, a in zip(params, args, strict=False)}
     named.update(kwargs)
     theirs = getattr(_build(self_spec, ref, None), name)(**named)
@@ -209,7 +235,9 @@ def _inplace_methods() -> list[str]:
     return sorted(
         n
         for n in dir(lucid.Tensor)
-        if n.endswith("_") and not n.startswith("_") and callable(getattr(lucid.Tensor, n))
+        if n.endswith("_")
+        and not n.startswith("_")
+        and callable(getattr(lucid.Tensor, n))
     )
 
 
