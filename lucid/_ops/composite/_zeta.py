@@ -8,11 +8,12 @@ and ``zeta(2, 1)`` answered NaN there.
 import math
 
 import lucid
-from lucid._ops.composite._opmath import _in_float32, _real
+from lucid._ops.composite._opmath import _in_float32, _real_pair
 from lucid._tensor.tensor import Tensor
+from lucid._types import TensorOrScalar
 
 
-def zeta(input: Tensor, other: Tensor) -> Tensor:
+def zeta(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     r"""Hurwitz zeta function :math:`\zeta(x, q)`.
 
     Computes the Hurwitz zeta function, a two-argument generalisation
@@ -22,12 +23,13 @@ def zeta(input: Tensor, other: Tensor) -> Tensor:
 
     Parameters
     ----------
-    input : Tensor
+    input : Tensor | Scalar
         Exponent; must satisfy :math:`\Re(x) > 1` for the series to
-        converge.  Any floating-point dtype.
-    other : Tensor
+        converge.  Any real dtype.
+    other : Tensor | Scalar
         Shift parameter; broadcast-compatible with ``input``.  The
-        non-positive integers are poles.
+        non-positive integers are poles.  Either operand may be a Python
+        number, which follows the other's device and dtype; not both.
 
     Returns
     -------
@@ -70,8 +72,10 @@ def zeta(input: Tensor, other: Tensor) -> Tensor:
     >>> q = lucid.tensor([1.0, 1.0])
     >>> zeta(x, q)
     tensor([1.645, 1.202])
+    >>> zeta(x, 1.0)
+    tensor([1.645, 1.202])
     """
-    return _in_float32(_zeta, _real(input), _real(other))
+    return _in_float32(_zeta, *_real_pair("zeta", input, other))
 
 
 def _zeta(x: Tensor, q: Tensor) -> Tensor:

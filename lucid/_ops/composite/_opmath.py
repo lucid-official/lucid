@@ -20,8 +20,9 @@ operands arrive in, and two kinds of operand are not fit for that:
 from collections.abc import Callable
 
 import lucid
-from lucid._dispatch import _float_input
+from lucid._dispatch import _binary_operands, _float_input, _wrap
 from lucid._tensor.tensor import Tensor
+from lucid._types import TensorOrScalar
 
 
 def _real(x: Tensor) -> Tensor:
@@ -53,6 +54,35 @@ def _real(x: Tensor) -> Tensor:
             f"expected a real input to a function of a real variable, got {x.dtype}"
         )
     return x
+
+
+def _real_pair(op: str, a: TensorOrScalar, b: TensorOrScalar) -> tuple[Tensor, Tensor]:
+    """``a`` and ``b`` as the operands of a function of two real variables.
+
+    Either may be a Python number, as the reference's ``Scalar`` overloads
+    take one: it follows the tensor's device and is weak in dtype, so
+    ``zeta(x, 2.0)`` answers in ``x``'s dtype.  The pair is brought to its
+    common dtype, an integral one lifted to the default float, and each
+    operand checked by :func:`_real`.  Two Python numbers are refused, as
+    the reference refuses them: there is no tensor to take a device from.
+
+    Raises
+    ------
+    TypeError
+        If neither operand is a tensor, or either is complex.
+    """
+    if not (isinstance(a, Tensor) or isinstance(b, Tensor)):
+        raise TypeError(
+            f"{op}: expected a Tensor for at least one operand, got "
+            f"{type(a).__name__} and {type(b).__name__}"
+        )
+    ai, bi = _binary_operands(a, b, true_div=True)
+    # An operand already at the common dtype is handed on as the tensor the
+    # caller holds, not a second wrapper of its storage.
+    return (
+        _real(a if isinstance(a, Tensor) and a._impl is ai else _wrap(ai)),
+        _real(b if isinstance(b, Tensor) and b._impl is bi else _wrap(bi)),
+    )
 
 
 def _in_float32(fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:

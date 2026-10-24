@@ -1046,7 +1046,7 @@
     "lucid/nn/modules/pooling.py": 769,
     "lucid/nn/modules/rnn.py": 58,
     "lucid/optim/lr_scheduler.py": 285,
-    "lucid/special/__init__.py": 894,
+    "lucid/special/__init__.py": 365,
     "lucid/utils/transforms/_color.py": 274
    },
    "noqa[BLE001]": {
@@ -1585,7 +1585,7 @@
     "lucid/quantization/fuse_modules.py": 2,
     "lucid/quantization/observer.py": 1,
     "lucid/signal/windows.py": 19,
-    "lucid/special/__init__.py": 4,
+    "lucid/special/__init__.py": 2,
     "lucid/utils/cache/_base.py": 3,
     "lucid/utils/cache/_dynamic.py": 6,
     "lucid/utils/cache/_static.py": 5,
