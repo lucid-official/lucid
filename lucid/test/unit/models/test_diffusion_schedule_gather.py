@@ -18,6 +18,7 @@ import lucid
 import lucid.models as M
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.compile import _tracing
 from lucid.models._utils._generative import extract_into_tensor
 from lucid.models.generative import DDPMScheduler
 from lucid.models.generative.stable_diffusion import (
@@ -201,6 +202,33 @@ def test_ddpm_hybrid_training_step(device: str) -> None:
     opt.step()
     assert out.loss_vlb is not None
     assert bool(lucid.isfinite(out.loss).item())
+
+
+@pytest.mark.skipif(not metal_available(), reason="metal unavailable")
+def test_ddpm_add_noise_traces_the_same_cold_or_warm() -> None:
+    """A CPU scheduler noising Metal samples records one graph (LCD-627).
+
+    ``add_noise`` moves the tables to the sample's device on first use and
+    keeps them there.  Inside a trace the first call recorded that move — a
+    copy of every table — and a later one fed the moved tables, so a
+    recorded training step depended on what the scheduler had served.
+    """
+    scheduler = DDPMScheduler(STEPS)
+    lucid.manual_seed(6)
+    x0 = lucid.randn((2, 3, 4, 4)).to("metal")
+    eps = lucid.randn((2, 3, 4, 4)).to("metal")
+    steps = lucid.tensor([0, 61]).long().to("metal")
+
+    def recorded() -> tuple[list[str], Tensor]:
+        with _tracing(watch=[x0, eps, steps]) as tracer, lucid.no_grad():
+            noised = scheduler.add_noise(x0, eps, steps)
+        return [op.name for op in tracer.graph.ops], noised
+
+    (cold, first), (warm, second) = recorded(), recorded()
+    assert cold == warm
+    assert "to_device" not in cold
+    assert scheduler.timesteps.device.type == "metal"
+    assert first.tolist() == second.tolist()
 
 
 # ── compile: no host read left in a training forward ─────────────────────────

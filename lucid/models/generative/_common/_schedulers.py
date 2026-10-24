@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Self, override
 
 import lucid
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike
 from lucid.models._utils._generative import extract_into_tensor, make_beta_schedule
@@ -88,10 +89,14 @@ class DiffusionScheduler(ABC):
 
         A scheduler built on the CPU and handed Metal samples used to copy
         its whole table across on every call; now the first such call moves
-        it and the rest find it in place.
+        it and the rest find it in place.  The move runs outside any active
+        trace: inside, the first traced call recorded a copy of every table
+        and a later one fed the moved tables, so the recording depended on
+        what the scheduler had served before (LCD-627).
         """
         if self.timesteps.device != sample.device:
-            self.to(sample.device)
+            with untraced():
+                self.to(sample.device)
 
     @abstractmethod
     def set_timesteps(

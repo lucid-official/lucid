@@ -1288,6 +1288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - swin builds its shifted-window mask outside any trace
 
+- DDPMScheduler moves its tables outside any trace
+
 ### Changed
 
 - `TVMConfig` and `MeanFlowConfig` raise `ValueError` when `out_channels != in_channels`, instead of failing later with a shape mismatch in forward or generate (LCD-620).
