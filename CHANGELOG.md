@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `lucid.nn.utils.parametrize.ParametrizationContainer` is removed. `module.parametrizations` is now a registered `ModuleDict` of `ParametrizationList` (a `ModuleList` of the steps that holds `original`, or `original0..n` for a tuple `right_inverse`), as in the reference. Use `len(chain)` / `chain[i]` instead of `container.parametrizations` / `container.parametrization` (LCD-624)
+- `register_parametrization` registers the trainable original under `parametrizations.<name>.original`, so `parameters()`, `state_dict()`, `.to()`, `zero_grad()` and optimizers see it. Before this, training through a parametrization silently left the weight unchanged, and checkpoints dropped it. `module.<name>` is computed on every read, so it is never stale after `opt.step()`. Assigning to it writes the originals through `right_inverse`. A shape or dtype change and a missing name raise `ValueError`. Buffers can be parametrized. The module's class becomes `Parametrized<Cls>`. Added `ParametrizationList`, `cached()` and `type_before_parametrizations()` (LCD-624)
 
 ### Fixed
 
