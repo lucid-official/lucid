@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - stub each binary in-place twin by what it actually accepts
 - check loss operands' devices at the boundary (LCD-638)
 - drop dead pre-LCD-624 parametrize helpers in signature.py
+- correct the RNG claim and keep activations grouped (LCD-628)
 
 ---
 

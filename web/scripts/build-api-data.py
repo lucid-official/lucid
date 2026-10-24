@@ -193,9 +193,13 @@ _SYNTH_SUMMARIES: dict[str, tuple[str, str]] = {
         "Every constructor takes `device=`, and passing it is what keeps a "
         "pipeline on one device: a helper built without it lands on the CPU "
         "and forces a round trip the moment it meets Metal data.\n\n"
-        "CPU and Metal draw from separate generators, so one seed does not "
-        "reproduce one stream across both — comparing devices means "
-        "comparing deterministic ops, or `eval()` for anything stochastic."
+        "CPU and Metal share one default generator but consume it "
+        "differently per draw — a CPU `rand(4)` advances its counter by 4, "
+        "a Metal `rand(4)` by one block — so the same seed does not "
+        "reproduce the same stream across devices; comparing them means "
+        "comparing deterministic ops, replaying state with "
+        "`get_rng_state()` / `set_rng_state()`, or `eval()` for anything "
+        "stochastic."
     ),
     "lucid.ops": (
         "The engine-bound primitive ops, grouped by arity.",
@@ -333,6 +337,15 @@ _SUBCATEGORY_RULES: list[tuple[str, str]] = [
 # File stems split out for size that belong to the same docs subcategory group.
 _STEM_ALIASES: dict[str, str] = {
     "conv_transpose": "conv",
+    # LCD-614 split ``nn/functional/activations.py``'s softmax / distance /
+    # shrinkage families into their own private modules for size, but they
+    # re-export through ``activations.py`` and are still documented as one
+    # family — without this, the sidebar would grow three new one-function
+    # groups ("Softmax", "Distance", "Shrinkage") instead of staying under
+    # "Activations" (LCD-628).
+    "softmax": "activations",
+    "distance": "activations",
+    "shrinkage": "activations",
 }
 
 
