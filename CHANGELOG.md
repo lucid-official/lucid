@@ -142,6 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add Terminal Velocity Matching (Zhou et al., ICLR 2026)
 
+- pin the TVM upstream parity probe as a script
+
 ### Performance
 
 - strided views copy by runs; contiguous() is 11-35x faster
