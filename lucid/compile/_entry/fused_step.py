@@ -80,7 +80,7 @@ from lucid.compile._core.custom_backward import (
     CustomBackwardInTrace,
     refuse_custom_backward,
 )
-from lucid.compile._core.signature import ParamFingerprint
+from lucid.compile._core.signature import ParamFingerprint, outside_feeds
 
 # Thread-local flag flipped on while ``_FusedStep._build_plan``
 # is actively tracing.  ``lucid.nn.functional.dropout`` checks it to
@@ -702,12 +702,26 @@ class _FusedStep:
         flags: tuple[_Flags, ...],
         args: tuple[Tensor, ...] = (),
     ) -> tuple[object, ...]:
-        """Plan key: participants, structural flags, per-parameter classes, inputs, params."""
+        """Plan key: participants, structural flags, per-parameter classes, inputs, params.
+
+        The inputs by how they bind to the trace's feeds too: ``step(x, x)``
+        reads one feed where ``step(a, b)`` reads two, and a buffer passed as
+        the input shares the buffer's (``ParamFingerprint.binding``).
+        """
         arg_sig = tuple((tuple(a.shape), a.dtype, a.device) for a in args)
         amp_active = _C_engine.amp_is_active()
         amp_sig = (amp_active, _C_engine.amp_active_dtype() if amp_active else None)
         partition = self._copt._partition(members)
-        return (members, flags, partition, arg_sig, amp_sig, self._fingerprint.get())
+        binding = self._fingerprint.binding(args, {})
+        return (
+            members,
+            flags,
+            partition,
+            arg_sig,
+            amp_sig,
+            self._fingerprint.get(),
+            binding,
+        )
 
     def _members(self) -> tuple[int, ...]:
         """Parameters that step: reach the loss and require grad (eager's rule)."""
@@ -1099,7 +1113,7 @@ class _FusedStep:
 
         scaler_enabled = self._ensure_scaler_holders()
         traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
-        self._fingerprint.settle()
+        self._fingerprint.settle(outside_feeds(traced.tracer))
         bn_counters = bn_counter_targets(self._model, traced.graph, traced.ext)
         if not traced.graph.ops:
             raise RuntimeError("fused_step: empty trace")

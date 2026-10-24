@@ -62,10 +62,12 @@ from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
+from lucid.compile._core.signature import outside_feeds
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
     from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.signature import ParamFingerprint, _Slot
     from lucid.nn.module import Module
     from lucid.nn.modules.container import Sequential
 
@@ -109,24 +111,29 @@ class _SegCompiled:
     # ``grad_input`` (the cotangent to feed the previous segment, or the eager
     # trunk before the first); the rest are per-parameter grads.  Set when
     # the segment's input requires grad — a first segment fed a data batch
-    # skips it.
+    # skips it — and is not one of its parameters (``_grad_targets``).
     produce_input_grad: bool
     n_params: int
+    # Every tensor the traces were fed from outside, for ``ParamFingerprint.settle``.
+    fed: tuple[_C_engine.TensorImpl, ...] = ()
 
 
-_SegKey = tuple[tuple[int, ...], str, bool]
+type _SegKey = tuple[tuple[int, ...], str, bool, tuple[tuple[int, _Slot], ...]]
 
 
-def _sig(x: Tensor) -> _SegKey:
+def _sig(x: Tensor, fingerprint: ParamFingerprint) -> _SegKey:
     """Compile-cache key for a segment: its input shape, dtype and grad need.
 
     Batch size is fixed across a training run, so one entry is compiled per
     segment.  Parameters never change shape during training, so they are not
     part of the key.  Whether the input requires grad is: the first segment
     returned no gradient to an input that did — an eager trunk before a
-    compiled model trained nothing (LCD-617).
+    compiled model trained nothing (LCD-617).  So is whether the input is a
+    tensor the model holds: a parameter passed as the input shares that
+    parameter's feed, and another input ran in its place (LCD-629).
     """
-    return (tuple(x.shape), str(x.dtype), bool(x.requires_grad))
+    held = fingerprint.tree_alias((x,), {})
+    return (tuple(x.shape), str(x.dtype), bool(x.requires_grad), held)
 
 
 def _match_param_ids(
@@ -227,6 +234,19 @@ def _trace_segment_fn(
     maybe_probe_for_graph(tracer.graph)
     refuse(tracer)
     return tracer, out
+
+
+def _grad_targets(x: Tensor, x_id: int, param_ids: list[int]) -> list[int]:
+    """The ids a segment's backward returns gradients for: [input?] + params.
+
+    The input's makes the executable also return the cotangent fed to whatever
+    computed the input, exactly when eager would compute one.  An input that
+    is one of the segment's parameters is that parameter's feed: its gradient
+    is the whole of it, and returned twice it was added twice (LCD-629).
+    """
+    if x.requires_grad and x_id not in param_ids:
+        return [x_id, *param_ids]
+    return param_ids
 
 
 def _lower_segment_backward(
@@ -334,12 +354,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     if bwd_param_ids is None:
         return None
 
-    # param_ids for the backward = [input?] + segment params.  Including the
-    # input id makes the executable also return grad_input (the cotangent fed to
-    # whatever computed the input), exactly when eager would compute one.
-    grad_target_ids = bwd_param_ids
-    if x.requires_grad:
-        grad_target_ids = [x_id_bwd, *bwd_param_ids]
+    grad_target_ids = _grad_targets(x, x_id_bwd, bwd_param_ids)
     bwd_exe = _lower_segment_backward(t_bwd, int(loss_id), grad_target_ids)
     if bwd_exe is None:
         return None
@@ -354,8 +369,9 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     return _SegCompiled(
         fwd=_SegExe(exe=fwd_exe, feed_plan=fwd_plan),
         bwd=_SegExe(exe=bwd_exe, feed_plan=bwd_plan),
-        produce_input_grad=bool(x.requires_grad),
+        produce_input_grad=len(grad_target_ids) > len(bwd_param_ids),
         n_params=len(seg.params),
+        fed=outside_feeds(t_fwd) + outside_feeds(t_bwd),
     )
 
 
@@ -563,14 +579,13 @@ def make_segmented_step(
         cur = x_args[0]
         try:
             for seg in seg_objs:
-                key = _sig(cur)
-                compiled = seg.cache.get(key)
+                compiled = seg.cache.get(_sig(cur, fingerprint))
                 if compiled is None:
                     compiled = _compile_segment(seg, cur)
-                    fingerprint.settle()
+                    fingerprint.settle(() if compiled is None else compiled.fed)
                     if compiled is None:
                         raise _SegmentCompileError(seg.index)
-                    seg.cache[key] = compiled
+                    seg.cache[_sig(cur, fingerprint)] = compiled
                 holder: list[object] = [compiled]
                 cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
         except _SegmentCompileError:

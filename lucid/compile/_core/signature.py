@@ -13,6 +13,8 @@ same executable iff their keys compare equal:
     Phase 1.6).
   * Same parameter dtype (so ``.half()`` / ``.float()`` triggers a
     recompile).
+  * Same binding of the call's tensors: which of them are one tensor, and
+    which are a tensor the model holds (a parameter passed as the input).
 
 The key intentionally does NOT capture:
 
@@ -30,11 +32,12 @@ for ``forward(self, x, training=True)`` style guard arguments).
 
 import struct
 import weakref
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
-from types import MethodType
-from typing import TYPE_CHECKING, final, override
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from types import CodeType, MethodType
+from typing import TYPE_CHECKING, Protocol, final, override
 
+from lucid._C import engine as _C_engine
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
 
 if TYPE_CHECKING:
@@ -42,6 +45,23 @@ if TYPE_CHECKING:
     from lucid.nn.module import Module
 
 __all__ = ["TensorSig", "CacheKey", "signature_of"]
+
+# Where a tensor sits that a compiled call reads: the position of its module
+# in the tree walk, the registry or attribute it is under, and its name.  The
+# wrapped callable's own closure cells and globals sit at position -1.
+type _Slot = tuple[int, str, str]
+
+
+class _Recording(Protocol):
+    """What a finished trace says about the tensors it read."""
+
+    @property
+    def external_feeds(self) -> Mapping[int, _C_engine.TensorImpl]: ...
+
+    @property
+    def retained_values(self) -> Mapping[int, _C_engine.TensorImpl]: ...
+
+    def made_here(self, impl: object) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +176,15 @@ class CacheKey:
         non-tensor.  ``f(x, x)`` traces to one feed read twice and
         ``f(a, b)`` to two, at identical shapes — without this they
         shared an entry and ``f(a, b)`` ran the one-feed executable.
+    tree_alias : tuple of (int, slot)
+        For each of the call's tensors that is one the model holds — a
+        parameter, a buffer, a tensor attribute a trace read — its position
+        among the call's tensors and the slot it sits in (module position,
+        registry, name).  Empty when no argument is.  ``m(m.weight)``
+        traces to one feed the weight and the input share, so another
+        tensor of the same signature ran with the weight replaced by it
+        (LCD-629); ``alias`` cannot see this, since it compares the
+        arguments only with each other.
     grad : bool
         Whether the call needs a differentiable result: grad mode was on
         and a tensor it reads requires grad.  Such a call runs eagerly, so
@@ -195,28 +224,88 @@ class CacheKey:
     param_fingerprint: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     # Which arguments are the same tensor; see ``alias`` above.
     alias: tuple[int, ...] = field(default_factory=tuple)
+    # Which arguments are a tensor the model holds; see ``tree_alias`` above.
+    tree_alias: tuple[tuple[int, _Slot], ...] = field(default_factory=tuple)
     # Per-submodule ``(training, scalar_attrs)`` snapshot across ``model.modules()``.
     module_state: tuple[object, ...] = field(default_factory=tuple)
     # The call needs gradients and runs eagerly; see ``grad`` above.
     grad: bool = False
 
 
+def _wrapped_callable(model: object) -> object | None:
+    """The function a ``lucid.compile(fn)`` wrapper runs; ``None`` for a module.
+
+    Read from ``__dict__``: on a module, ``getattr`` of a missing name goes
+    through ``Module.__getattr__`` on every call.
+    """
+    attrs = getattr(model, "__dict__", None)
+    return attrs.get("_fn") if isinstance(attrs, dict) else None
+
+
+_GLOBAL_NAMES: weakref.WeakKeyDictionary[CodeType, tuple[str, ...]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _global_names(code: CodeType) -> tuple[str, ...]:
+    """The names ``code`` and the code nested in it may read as globals, sorted.
+
+    ``co_names`` holds attribute names too: a global that only shares a name
+    with an attribute is watched for nothing worse than an extra trace.
+    """
+    names = _GLOBAL_NAMES.get(code)
+    if names is None:
+        found = set(code.co_names)
+        for const in code.co_consts:
+            if isinstance(const, CodeType):
+                found.update(_global_names(const))
+        names = _GLOBAL_NAMES[code] = tuple(sorted(found))
+    return names
+
+
+def _cell_value(cell: object) -> object:
+    """A closure cell's contents; ``None`` while its variable is unbound."""
+    try:
+        return getattr(cell, "cell_contents", None)
+    except ValueError:  # an empty cell: the variable is assigned later
+        return None
+
+
+def _callable_slots(fn: object) -> Iterator[tuple[tuple[str, str], object]]:
+    """What ``fn`` reads that no argument hands it: its closure cells and globals.
+
+    A global counts when ``fn``'s code names it (LCD-599): a module-level
+    model is as much the function's state as one it closes over.  What a
+    function ``fn`` calls reads in its own globals is not followed.
+    """
+    for i, cell in enumerate(getattr(fn, "__closure__", None) or ()):
+        yield ("cell", str(i)), _cell_value(cell)
+    code = getattr(fn, "__code__", None)
+    space = getattr(fn, "__globals__", None)
+    if isinstance(code, CodeType) and isinstance(space, dict):
+        for name in _global_names(code):
+            if name in space:
+                yield ("global", name), space[name]
+
+
 def _closure_modules(model: object) -> list[Module]:
-    """The :class:`Module` objects ``model._fn`` is bound to or closes over."""
+    """The modules ``model._fn`` is bound to, closes over or reads as a global.
+
+    Only a module held directly counts, not one inside a list or a dict —
+    walking a container held as a global would cost its length on every call.
+    """
     from lucid.nn.module import Module
 
-    fn = getattr(model, "_fn", None)
-    closure = getattr(fn, "__closure__", None) or ()
+    fn = _wrapped_callable(model)
+    if fn is None:
+        return []
     out: list[Module] = []
     # A bound method — ``lucid.compile(model.forward)`` — runs its module's
     # tree as a closure would.
     owner = getattr(fn, "__self__", None)
     if isinstance(owner, Module):
         out.append(owner)
-    for cell in closure:
-        contents = getattr(cell, "cell_contents", None)
-        if isinstance(contents, Module):
-            out.append(contents)
+    out.extend(v for _, v in _callable_slots(fn) if isinstance(v, Module))
     return out
 
 
@@ -356,11 +445,39 @@ class _TreeWalk:
     # Every parameter and buffer of the tree.  Their ``requires_grad`` moves
     # no version, so it is read from these each time it is asked.
     tensors: tuple[Tensor, ...]
+    # The slot each of them sits in, by ``TensorImpl`` identity.
+    slot_of: Mapping[int, _Slot]
 
     def walked_from(self, roots: Sequence[Module]) -> bool:
-        return len(roots) == len(self.roots) and all(
-            ref() is root for ref, root in zip(self.roots, roots, strict=True)
-        )
+        return _same_roots(self.roots, roots)
+
+
+def _same_roots(refs: Sequence[weakref.ref[Module]], roots: Sequence[Module]) -> bool:
+    """Whether ``roots`` are the modules ``refs`` were taken of, in order."""
+    return len(roots) == len(refs) and all(
+        ref() is root for ref, root in zip(refs, roots, strict=True)
+    )
+
+
+def _registry_slots(subs: Sequence[Module]) -> Iterator[tuple[_Slot, Tensor | None]]:
+    """Every parameter and buffer slot of ``subs``, with what it holds."""
+    for pos, sub in enumerate(subs):
+        for kind, registry in (
+            ("parameter", sub._parameters),
+            ("buffer", sub._buffers),
+        ):
+            for name, tensor in registry.items():
+                yield (pos, kind, name), tensor
+
+
+def _slot_map(slots: Iterable[tuple[_Slot, Tensor | None]]) -> dict[int, _Slot]:
+    """The first slot each tensor sits in, by ``TensorImpl`` identity — the
+    identity the feed binding merges a trace's reads by."""
+    out: dict[int, _Slot] = {}
+    for slot, tensor in slots:
+        if tensor is not None:
+            out.setdefault(id(tensor._impl), slot)
+    return out
 
 
 _WALKS: weakref.WeakKeyDictionary[Module, _TreeWalk] = weakref.WeakKeyDictionary()
@@ -385,6 +502,7 @@ def _tree_walk(model: object) -> _TreeWalk:
     if cached is not None and cached.version == version and cached.walked_from(roots):
         return cached
     subs = _iter_modules(roots)
+    slots = tuple(_registry_slots(subs))
     walk = _TreeWalk(
         version=version,
         roots=tuple(weakref.ref(root) for root in roots),
@@ -393,13 +511,8 @@ def _tree_walk(model: object) -> _TreeWalk:
             for sub in subs
         ),
         hooked=any(_sub_has_active_hooks(sub) for sub in subs),
-        tensors=tuple(
-            t
-            for sub in subs
-            for registry in (sub._parameters, sub._buffers)
-            for t in registry.values()
-            if t is not None
-        ),
+        tensors=tuple(t for _, t in slots if t is not None),
+        slot_of=_slot_map(slots),
     )
     if isinstance(model, Module):
         _WALKS[model] = walk
@@ -487,20 +600,110 @@ def leaf_tensors(args: Iterable[object], kwargs: dict[str, object]) -> list[Tens
     return out
 
 
-def _alias_pattern(
-    args: tuple[object, ...], kwargs: dict[str, object]
-) -> tuple[int, ...]:
-    """First-occurrence index of each tensor in :func:`leaf_tensors` order.
+def _alias_pattern(leaves: Sequence[Tensor]) -> tuple[int, ...]:
+    """First-occurrence index of each of the call's tensors (:func:`leaf_tensors`).
 
     Identity is the ``TensorImpl`` — the test the feed binding uses to
     map a trace's external feeds back to the call's tensors, so two keys
     differ exactly when the binding would.
     """
     seen: dict[int, int] = {}
+    return tuple(seen.setdefault(id(t._impl), i) for i, t in enumerate(leaves))
+
+
+def _tree_alias(
+    leaves: Sequence[Tensor], slot_of: Mapping[int, _Slot]
+) -> tuple[tuple[int, _Slot], ...]:
+    """The call's tensors that are tensors the model holds, with their slots.
+
+    A trace reads such a tensor once, through one feed the argument and the
+    model share: the binding sends that feed to the argument, so the
+    executable is the same only for calls that pass the same slot there.
+    """
+    if not slot_of:
+        return ()
     return tuple(
-        seen.setdefault(id(t._impl), i)
-        for i, t in enumerate(leaf_tensors(args, kwargs))
+        (i, slot)
+        for i, t in enumerate(leaves)
+        if (slot := slot_of.get(id(t._impl))) is not None
     )
+
+
+def outside_feeds(tracer: _Recording) -> tuple[_C_engine.TensorImpl, ...]:
+    """Every tensor a finished trace was fed from outside — none it made itself.
+
+    A constant the trace built and folded is a feed too, but no slot of the
+    model held it before the call.
+    """
+    return tuple(
+        impl for impl in tracer.external_feeds.values() if not tracer.made_here(impl)
+    )
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class TraceReads:
+    """What a traced executable reads that its call does not hand it.
+
+    Under grad mode, a call that reads a tensor requiring grad runs eagerly:
+    its result must require grad (LCD-582).  The arguments are checked on each
+    call; this covers the rest — the tensors the executable is fed from its
+    own record (parameters, buffers, a closure's or a global's tensors), and
+    one the call makes requiring grad itself.  And what the trace was fed from
+    outside goes to :meth:`ParamFingerprint.settle` (LCD-606).
+
+    Attributes
+    ----------
+    pinned : tuple of TensorImpl
+        The feeds no argument supplies.
+    grad_leaf : bool
+        The trace made a tensor that requires grad from no feed — a factory
+        given ``requires_grad=True`` inside the forward, which eager hands to
+        autograd as a leaf.  Every call of the signature makes it again, so
+        this is decided once.
+    fed : tuple of TensorImpl
+        Every feed from outside the trace (:func:`outside_feeds`).
+    """
+
+    pinned: tuple[_C_engine.TensorImpl, ...] = ()
+    grad_leaf: bool = False
+    fed: tuple[_C_engine.TensorImpl, ...] = ()
+
+    @classmethod
+    def of(
+        cls, tracer: _Recording, input_ids: Iterable[int], sources: Iterable[object]
+    ) -> TraceReads:
+        """Read them off a finished trace.
+
+        Parameters
+        ----------
+        tracer : Tracer
+            The trace the executable was lowered from.
+        input_ids : iterable of int
+            The executable's inputs, by trace id.
+        sources : iterable of object
+            For each of ``input_ids``, where a call takes it from — ``None``
+            for a feed the executable's own record supplies.
+
+        Returns
+        -------
+        TraceReads
+            What the executable reads besides the call.
+        """
+        feeds = tracer.external_feeds
+        ids = {id(impl) for impl in feeds.values()}
+        held = tracer.retained_values.values()
+        pairs = zip(input_ids, sources, strict=True)
+        return cls(
+            pinned=tuple(feeds[tid] for tid, src in pairs if src is None),
+            grad_leaf=any(impl.requires_grad and id(impl) not in ids for impl in held),
+            fed=outside_feeds(tracer),
+        )
+
+    def require_grad(self) -> bool:
+        """Whether one of them requires grad — read now, as freezing one moves
+        no version."""
+        return self.grad_leaf or any(impl.requires_grad for impl in self.pinned)
 
 
 def _arg_sig(value: object, *, dynamic_batch: bool = False) -> object:
@@ -585,30 +788,81 @@ class _TreeTensors:
     The record is the addresses, with the tensors behind them held, so no
     new tensor can be given one; the modules are held weakly, and one that
     died has left the tree.
+
+    Besides the registries it records the slots a trace was seen to read
+    (:meth:`ParamFingerprint.settle`): a module's plain tensor attributes,
+    by name, and the wrapped callable's closure cells and globals (LCD-606).
+    Rebinding a cell or a global moves no tree version, so what the callable
+    reaches is checked on every call (:meth:`reads_the_same`).
     """
 
-    __slots__ = ("_record", "_modules")
+    __slots__ = ("_record", "_modules", "_roots", "_callable", "slot_of")
 
-    def __init__(self, model: object) -> None:
-        subs = _iter_modules(_root_modules(model))
-        ids: list[object] = []
+    def __init__(
+        self,
+        model: object,
+        attributes: Mapping[Module, tuple[str, ...]] | None = None,
+        callable_slots: Sequence[tuple[str, str]] = (),
+    ) -> None:
+        roots = _root_modules(model)
+        subs = _iter_modules(roots)
+        slots = list(_registry_slots(subs))
+        if attributes:
+            slots.extend(
+                ((pos, "attribute", name), _as_tensor(sub.__dict__.get(name)))
+                for pos, sub in enumerate(subs)
+                for name in attributes.get(sub, ())
+            )
+        fn = _wrapped_callable(model)
+        values = dict(_callable_slots(fn)) if callable_slots and fn else {}
+        reads = [(key, _as_tensor(values.get(key))) for key in callable_slots]
+        slots.extend(((-1, *key), tensor) for key, tensor in reads)
+        ids: list[object] = [id(sub) for sub in subs]
         held: list[object] = []
-        for sub in subs:
-            ids.append(id(sub))
-            for registry in (sub._parameters, sub._buffers):
-                ids.append(len(registry))
-                for name, tensor in registry.items():
-                    impl = None if tensor is None else tensor._impl
-                    ids += (name, id(tensor), id(impl))
-                    held += (tensor, impl)
+        for slot, tensor in slots:
+            impl = None if tensor is None else tensor._impl
+            ids += (slot, id(tensor), id(impl))
+            held += (tensor, impl)
         self._record = (tuple(ids), tuple(held))
         self._modules = tuple(weakref.ref(sub) for sub in subs)
+        self._roots = tuple(weakref.ref(root) for root in roots)
+        self._callable = tuple(
+            (key, tensor, None if tensor is None else tensor._impl)
+            for key, tensor in reads
+        )
+        # Where each recorded tensor sits, for the key (``CacheKey.tree_alias``).
+        self.slot_of = _slot_map(slots)
 
     def same_as(self, now: _TreeTensors) -> bool:
         """Whether ``now`` holds the modules and tensors this record does."""
         return self._record[0] == now._record[0] and all(
             ref() is not None for ref in self._modules
         )
+
+    def reads_the_same(self, model: object) -> bool:
+        """Whether the wrapped callable reaches the modules and recorded tensors
+        it did — a module's tree moves the version when it changes, a rebound
+        closure cell or global does not."""
+        fn = _wrapped_callable(model)
+        if fn is None:
+            return True
+        if not _same_roots(self._roots, _root_modules(model)):
+            return False
+        if not self._callable:
+            return True
+        values = dict(_callable_slots(fn))
+        return all(
+            _as_tensor(values.get(key)) is tensor
+            and (tensor is None or tensor._impl is impl)
+            for key, tensor, impl in self._callable
+        )
+
+
+def _as_tensor(value: object) -> Tensor | None:
+    """``value`` if it is a tensor, else ``None``."""
+    from lucid._tensor.tensor import Tensor
+
+    return value if isinstance(value, Tensor) else None
 
 
 @final
@@ -638,6 +892,9 @@ class ParamFingerprint(_ModuleWrapper):
     Settling after the trace, not before, takes in what a forward does to its
     own state while traced — a lazy layer materialising, a statistic kept by
     assignment — which would otherwise read as a replacement on every call.
+    A wrapped callable whose closure cell or global names another module, or
+    another tensor where a trace read one, is a replacement too; that moves
+    no version, so it is checked on every call.
 
     Parameters
     ----------
@@ -663,9 +920,23 @@ class ParamFingerprint(_ModuleWrapper):
             else lambda: on_replaced
         )
         self._watch(model)
+        # The tensors outside the registries that a trace was fed (LCD-606):
+        # a module's plain tensor attribute (``self.mask = ...`` lives in
+        # ``__dict__``), a closure cell's or a global's.  Only those a trace
+        # read are recorded — weight_norm, prune and spectral_norm rewrite
+        # ``module.weight`` as a plain attribute on every eager forward, and
+        # recording every attribute would trace again after each.  They only
+        # grow, so a record and the one compared with it name the same slots.
+        self._attributes: weakref.WeakKeyDictionary[Module, tuple[str, ...]] = (
+            weakref.WeakKeyDictionary()
+        )
+        self._callable_slots: tuple[tuple[str, str], ...] = ()
         # The tree as the owner last took it.  ``None`` after the owner was
         # told of a replacement: it took the tree again at ``_retaken_at``.
-        self._settled: _TreeTensors | None = _TreeTensors(model)
+        self._settled: _TreeTensors | None = None
+        # Where each tensor of the last record sits, for the key.
+        self._slot_of: Mapping[int, _Slot] = {}
+        self._keep(_TreeTensors(model))
         self._retaken_at = -1
 
     @override
@@ -703,7 +974,12 @@ class ParamFingerprint(_ModuleWrapper):
 
         version = _tree_version()
         value = self._value
-        if value is None or version != self._version:
+        settled = self._settled
+        if (
+            value is None
+            or version != self._version
+            or (settled is not None and not settled.reads_the_same(self.model))
+        ):
             model = self.model
             # A submodule added since the last walk is watched from now on.
             self._watch(model)
@@ -714,9 +990,16 @@ class ParamFingerprint(_ModuleWrapper):
             value = self._value = _param_fingerprint(model)
         return value
 
+    def _record_of(self, model: Module) -> _TreeTensors:
+        return _TreeTensors(model, self._attributes, self._callable_slots)
+
+    def _keep(self, record: _TreeTensors) -> None:
+        self._settled = record
+        self._slot_of = record.slot_of
+
     def _compare_tree(self, model: Module, version: int) -> None:
         """Tell the owner of a replacement since it took the tree; record it."""
-        now = _TreeTensors(model)
+        now = self._record_of(model)
         settled = self._settled
         if settled is not None and settled.same_as(now):
             return
@@ -726,16 +1009,118 @@ class ParamFingerprint(_ModuleWrapper):
         # and a walk per notice is a walk per module.
         if settled is not None or version != self._retaken_at:
             self._tensors_replaced()
-        self._settled = now
+        self._keep(now)
 
-    def settle(self) -> None:
+    def settle(self, fed: Iterable[_C_engine.TensorImpl] = ()) -> None:
         """Record the tree as the owner's executables read it: it just traced.
 
         Call it after every trace, whether or not an executable came of it:
         the trace ran the forward, and what that did to the module's own
         state is not a replacement.
+
+        Parameters
+        ----------
+        fed : iterable of TensorImpl, optional
+            What the executable the trace became was fed from outside it
+            (:func:`outside_feeds`); empty when none came of it.  A module's
+            plain tensor attribute, a closure cell or a global holding one of
+            them is recorded from now on: put another tensor there and the
+            executable is a replacement's.
         """
-        self._settled = _TreeTensors(self.model)
+        model = self.model
+        self._learn(model, {id(impl) for impl in fed})
+        self._keep(self._record_of(model))
+
+    def _learn(self, model: Module, fed: set[int]) -> None:
+        """Add the slots outside the registries that hold one of ``fed``."""
+        from lucid._tensor.tensor import Tensor
+
+        if not fed:
+            return
+        for sub in _iter_modules(_root_modules(model)):
+            names = {
+                name
+                for name, value in vars(sub).items()
+                if isinstance(value, Tensor) and id(value._impl) in fed
+            }
+            known = self._attributes.get(sub, ())
+            if not names.issubset(known):
+                self._attributes[sub] = tuple(sorted(names.union(known)))
+        fn = _wrapped_callable(model)
+        found = {
+            key
+            for key, value in (_callable_slots(fn) if fn is not None else ())
+            if isinstance(value, Tensor) and id(value._impl) in fed
+        }
+        if not found.issubset(self._callable_slots):
+            self._callable_slots = tuple(sorted(found.union(self._callable_slots)))
+
+    def tree_alias(
+        self, args: Iterable[object], kwargs: dict[str, object]
+    ) -> tuple[tuple[int, _Slot], ...]:
+        """:attr:`CacheKey.tree_alias` of a call, from the tree as last
+        recorded — by :meth:`get`, or by :meth:`settle` after a trace.
+
+        Parameters
+        ----------
+        args : iterable
+            The call's positional arguments.
+        kwargs : dict
+            The call's keyword arguments.
+
+        Returns
+        -------
+        tuple of (int, slot)
+            Each of the call's tensors that the model holds, with its slot.
+        """
+        return _tree_alias(leaf_tensors(args, kwargs), self._slot_of)
+
+    def binding(
+        self, args: Iterable[object], kwargs: dict[str, object]
+    ) -> tuple[tuple[int, ...], tuple[tuple[int, _Slot], ...]]:
+        """How a call's tensors bind to a trace's feeds, for an owner with a
+        key of its own.
+
+        Parameters
+        ----------
+        args : iterable
+            The call's positional arguments.
+        kwargs : dict
+            The call's keyword arguments.
+
+        Returns
+        -------
+        tuple
+            :attr:`CacheKey.alias` and :attr:`CacheKey.tree_alias` of the call.
+        """
+        self.get()
+        leaves = leaf_tensors(args, kwargs)
+        return _alias_pattern(leaves), _tree_alias(leaves, self._slot_of)
+
+    def rekey(
+        self, key: CacheKey, args: Iterable[object], kwargs: dict[str, object]
+    ) -> CacheKey:
+        """``key`` with the slots :meth:`settle` just learnt the trace reads.
+
+        An argument that is a tensor attribute the trace read shares that
+        attribute's feed, and only the trace shows the attribute is read.
+        The rest of the key stays as the call keyed it before the trace.
+
+        Parameters
+        ----------
+        key : CacheKey
+            The call's key, taken before the trace.
+        args : iterable
+            The call's positional arguments.
+        kwargs : dict
+            The call's keyword arguments.
+
+        Returns
+        -------
+        CacheKey
+            ``key`` with :attr:`CacheKey.tree_alias` read again.
+        """
+        return replace(key, tree_alias=self.tree_alias(args, kwargs))
 
     def key_of(
         self, args: Iterable[object], kwargs: dict[str, object], *, dynamic: bool
@@ -757,8 +1142,14 @@ class ParamFingerprint(_ModuleWrapper):
         CacheKey
             The call's key.
         """
+        fingerprint = self.get()
         return signature_of(
-            self.model, args, kwargs, dynamic=dynamic, param_fingerprint=self.get()
+            self.model,
+            args,
+            kwargs,
+            dynamic=dynamic,
+            param_fingerprint=fingerprint,
+            slots=self._slot_of,
         )
 
     def invalidate(self) -> None:
@@ -788,6 +1179,7 @@ def signature_of(
     *,
     dynamic: bool,
     param_fingerprint: tuple[tuple[str, str], ...] | None = None,
+    slots: Mapping[int, _Slot] | None = None,
 ) -> CacheKey:
     """Compute the :class:`CacheKey` for this ``model(*args, **kwargs)`` call.
 
@@ -819,6 +1211,9 @@ def signature_of(
         :func:`_param_fingerprint(model)`.  Callers that walk parameters
         once per call pass it in to avoid the second walk inside this
         function.
+    slots : mapping of int to slot, optional
+        Where each tensor the model holds sits, by ``TensorImpl`` identity
+        (:attr:`CacheKey.tree_alias`); by default its parameters and buffers.
 
     Returns
     -------
@@ -853,6 +1248,7 @@ def signature_of(
     """
 
     arg_list = tuple(args)
+    leaves = leaf_tensors(arg_list, kwargs)
     arg_sigs = tuple(_arg_sig(a, dynamic_batch=dynamic) for a in arg_list)
     kwarg_sigs = tuple(
         sorted((str(k), _arg_sig(v, dynamic_batch=dynamic)) for k, v in kwargs.items())
@@ -869,6 +1265,9 @@ def signature_of(
         training=bool(getattr(model, "training", False)),
         dynamic=bool(dynamic),
         param_fingerprint=fp,
-        alias=_alias_pattern(arg_list, kwargs),
+        alias=_alias_pattern(leaves),
+        tree_alias=_tree_alias(
+            leaves, _tree_walk(model).slot_of if slots is None else slots
+        ),
         module_state=module_state,
     )

@@ -154,12 +154,28 @@ def _replace[M: nn.Module](
     changes[change](model, device)
 
 
-def _compiled(model: _Net, entry: str) -> CompiledModule[[lucid.Tensor], lucid.Tensor]:
-    """``lucid.compile`` of the model, of its bound forward, or of a closure."""
+# A module the compiled function reaches through a module-level name, not a
+# closure cell or a bound ``self`` (LCD-599).
+_GLOBAL_NET: nn.Module = nn.Identity()
+
+
+def _global_net_call(x: lucid.Tensor) -> lucid.Tensor:
+    return _GLOBAL_NET(x)
+
+
+def _compiled(
+    model: nn.Module, entry: str
+) -> CompiledModule[[lucid.Tensor], lucid.Tensor]:
+    """``lucid.compile`` of the model, of its bound forward, of a closure, or
+    of a function that reads it as a global."""
+    global _GLOBAL_NET
     if entry == "module":
         return lucid.compile(model)
     if entry == "bound-method":
         return lucid.compile(model.forward)
+    if entry == "global":
+        _GLOBAL_NET = model
+        return lucid.compile(_global_net_call)
 
     def call(x: lucid.Tensor) -> lucid.Tensor:
         return model(x)
@@ -167,10 +183,13 @@ def _compiled(model: _Net, entry: str) -> CompiledModule[[lucid.Tensor], lucid.T
     return lucid.compile(call)
 
 
+_ENTRIES = ["module", "bound-method", "closure", "global"]
+
+
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("when", list(_WHEN))
-@pytest.mark.parametrize("entry", ["module", "bound-method", "closure"])
+@pytest.mark.parametrize("entry", _ENTRIES)
 @pytest.mark.parametrize("change", list(_CHANGES))
 def test_a_compiled_module_answers_with_what_the_model_holds_now(
     change: str, entry: str, when: str, device: str
@@ -371,6 +390,7 @@ def _decode_fn(
     return fwd
 
 
+@pytest.mark.usefixtures("inference")
 @_METAL
 def test_a_compiled_decode_step_reads_a_replaced_parameter() -> None:
     outs: list[list[np.ndarray]] = []
@@ -394,7 +414,22 @@ def test_a_compiled_decode_step_reads_a_replaced_parameter() -> None:
         np.testing.assert_allclose(got, want, rtol=1e-4, atol=1e-4)
 
 
-# ── What is still not seen — each its own card ─────────────────────────────
+# ── What a wrapped function reaches, and plain tensor attributes ───────────
+
+
+@pytest.mark.usefixtures("inference")
+@_METAL
+@pytest.mark.parametrize("entry", ["module", "bound-method", "closure", "global"])
+def test_the_training_flag_of_a_module_reached_any_way_is_keyed(entry: str) -> None:
+    # Dropout is on until the change turns it off.
+    lucid.manual_seed(0)
+    model = nn.Sequential(nn.Linear(4, 4), nn.Tanh(), nn.Dropout(0.5)).to("metal")
+    x, _ = _data("metal")
+    compiled = _compiled(model, entry)
+    compiled(x)
+    model.eval()
+    _close(compiled(x), model(x))
+    assert compiled.cache_info()["entries"] == 2
 
 
 class _Masked(nn.Module):
@@ -410,21 +445,154 @@ class _Masked(nn.Module):
 
 @pytest.mark.usefixtures("inference")
 @_METAL
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-606: a plain tensor attribute the forward reads is "
-    "not in the tree record (only the ones the trace fed may go in: the "
-    "reparametrisations rewrite theirs on every eager forward)",
-)
-def test_a_plain_tensor_attribute_put_in_anothers_place() -> None:
+@pytest.mark.parametrize("entry", _ENTRIES)
+def test_a_plain_tensor_attribute_put_in_anothers_place(entry: str) -> None:
+    # The trace was fed it from outside, so the tree record holds its slot
+    # (LCD-606); setting another moves the tree version, as any setattr does.
     lucid.manual_seed(0)
     model = _Masked().to("metal")
     model.mask = model.mask.to("metal")
     x, _ = _data("metal")
-    compiled = lucid.compile(model)
+    compiled = _compiled(model, entry)
     compiled(x)
     model.mask = _values((4,), 0.9, "metal")
     _close(compiled(x), model(x))
+    info = compiled.cache_info()
+    assert info["entries"] == 1 and not info["eager_only"], info
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_make_step_reads_a_plain_tensor_attribute_put_in_anothers_place(
+    device: str,
+) -> None:
+    runs = []
+    for compiled in (True, False):
+        lucid.manual_seed(0)
+        model = _Masked().to(device)
+        model.mask = model.mask.to(device)
+        x, t = _data(device)
+        step = make_step(model, F.mse_loss) if compiled else None
+        losses = []
+        for k in range(3):
+            if k == 1:
+                model.mask = _values((4,), 0.9, device)
+            model.lin.weight.grad = None
+            loss = step(x, t) if step is not None else F.mse_loss(model(x), t)
+            loss.backward()
+            losses.append(float(loss.item()))
+        assert model.lin.weight.grad is not None
+        runs.append((losses, model.lin.weight.grad.numpy()))
+    (losses, grad), (ref_losses, ref_grad) = runs
+    np.testing.assert_allclose(losses, ref_losses, rtol=_TOL, atol=_TOL)
+    np.testing.assert_allclose(grad, ref_grad, rtol=_TOL, atol=_TOL)
+
+
+_REBOUND = nn.Identity()
+_REBOUND_TENSOR = lucid.zeros(4)
+
+
+def _reads_rebound(x: lucid.Tensor) -> lucid.Tensor:
+    return _REBOUND(x) * _REBOUND_TENSOR
+
+
+@pytest.mark.usefixtures("inference")
+@_METAL
+@pytest.mark.parametrize("reach", ["closure", "global"])
+@pytest.mark.parametrize("rebound", ["module", "tensor"])
+def test_a_function_whose_name_is_bound_to_another_one(
+    rebound: str, reach: str
+) -> None:
+    """A closure cell or a global given another module or tensor moves no tree
+    version; what the function reaches is compared on every call instead.
+    The two modules have the same structure and so the same key."""
+    global _REBOUND, _REBOUND_TENSOR
+    first, second = _linear(1, "metal"), _linear(2, "metal")
+    scale, other = _values((4,), 0.3, "metal"), _values((4,), 0.8, "metal")
+    x, _ = _data("metal")
+    if reach == "global":
+        _REBOUND, _REBOUND_TENSOR = first, scale
+        compiled = lucid.compile(_reads_rebound)
+        compiled(x)
+        if rebound == "module":
+            _REBOUND = second
+        else:
+            _REBOUND_TENSOR = other
+        _close(compiled(x), _reads_rebound(x))
+    else:
+        module, tensor = first, scale
+
+        def reads(x: lucid.Tensor) -> lucid.Tensor:
+            return module(x) * tensor
+
+        compiled = lucid.compile(reads)
+        compiled(x)
+        if rebound == "module":
+            module = second
+        else:
+            tensor = other
+        _close(compiled(x), reads(x))
+    info = compiled.cache_info()
+    assert info["entries"] == 1 and not info["eager_only"], info
+
+
+def _traces(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+    """Every trace a CompiledModule takes from now on."""
+    seen: list[object] = []
+    real = CompiledModule._compile_for
+
+    def counted(
+        self: CompiledModule[..., object],
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> object:
+        seen.append(self)
+        return real(self, args, kwargs)
+
+    monkeypatch.setattr(CompiledModule, "_compile_for", counted)
+    return seen
+
+
+def _weight_norm(m: nn.Linear) -> nn.Module:
+    return nn.utils.weight_norm(m)
+
+
+def _pruned(m: nn.Linear) -> nn.Module:
+    nn.utils.prune.l1_unstructured(m, "weight", amount=0.5)
+    return m
+
+
+def _spectral_norm(m: nn.Linear) -> nn.Module:
+    return nn.utils.spectral_norm(m).eval()
+
+
+_REPARAMETRISED = {
+    "weight_norm": _weight_norm,
+    "prune": _pruned,
+    "spectral_norm-eval": _spectral_norm,
+}
+
+
+@pytest.mark.usefixtures("inference")
+@_METAL
+@pytest.mark.parametrize("kind", list(_REPARAMETRISED))
+def test_a_reparametrised_module_called_eagerly_in_between_is_not_traced_again(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its pre-hook sets ``module.weight`` as a plain attribute on every
+    eager forward, but a trace makes that tensor itself and is never fed it:
+    the record leaves it out (LCD-606), so an eager call in between retraces
+    nothing.  The version is one for every tree, and any setattr moves it —
+    here on a module of no concern — so the record is compared each time."""
+    lucid.manual_seed(0)
+    model = _REPARAMETRISED[kind](nn.Linear(4, 4).to("metal"))
+    elsewhere = nn.Identity()
+    x, _ = _data("metal")
+    traces = _traces(monkeypatch)
+    compiled = lucid.compile(model)
+    for k in range(3):
+        _close(compiled(x), model(x))
+        elsewhere.flag = k
+    assert len(traces) == 1
 
 
 @pytest.mark.usefixtures("inference")
@@ -440,43 +608,4 @@ def test_a_parameter_given_new_storage_through_data() -> None:
     compiled = lucid.compile(model)
     compiled(x)
     model.inp.weight.data = _values((4, 4), 0.3, "metal")
-    _close(compiled(x), model(x))
-
-
-# A module the compiled function reaches through a module-level name, not a
-# closure cell or a bound ``self``: nothing names it to the compiled wrapper.
-_GLOBALS: dict[str, nn.Sequential] = {}
-
-
-def _global_forward(x: lucid.Tensor) -> lucid.Tensor:
-    return _GLOBALS["model"](x)
-
-
-_GLOBAL_CHANGES: dict[str, Callable[[nn.Sequential], object]] = {
-    "parameter-setattr": lambda m: setattr(
-        m[0], "weight", nn.Parameter(_values((4, 4), 0.3, "metal"))
-    ),
-    "submodule": lambda m: m.__setitem__(1, nn.Sigmoid()),
-    "eval": lambda m: m.eval(),
-}
-
-
-@pytest.mark.usefixtures("inference")
-@_METAL
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-599: a module reached through a module-level global is not "
-    "watched — not by the key, not by the tree record",
-)
-@pytest.mark.parametrize("change", list(_GLOBAL_CHANGES))
-def test_a_module_reached_through_a_global(change: str) -> None:
-    lucid.manual_seed(0)
-    model = nn.Sequential(nn.Linear(4, 4), nn.Tanh(), nn.Dropout(0.5)).to("metal")
-    # Dropout is on only for the change that turns it off.
-    model.train(change == "eval")
-    _GLOBALS["model"] = model
-    x, _ = _data("metal")
-    compiled = lucid.compile(_global_forward)
-    compiled(x)
-    _GLOBAL_CHANGES[change](model)
     _close(compiled(x), model(x))

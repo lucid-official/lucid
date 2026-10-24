@@ -99,6 +99,8 @@ class _StepEntry:
     # position among the call's tensors, or None where the loss does not
     # depend on it.  Without these a compiled head trained no trunk (LCD-617).
     input_grads: tuple[int | None, ...] = ()
+    # Every tensor the trace was fed from outside, for ``ParamFingerprint.settle``.
+    fed: tuple[_C_engine.TensorImpl, ...] = ()
 
 
 def _match_param_ids(
@@ -247,7 +249,7 @@ def _compile_step_entry(
     )
     from lucid.compile._core.buffer_writes import outside_writes
     from lucid.compile._core.fallback import _fallback_notice
-    from lucid.compile._core.signature import leaf_tensors
+    from lucid.compile._core.signature import leaf_tensors, outside_feeds
     from lucid.compile._debug.trace_dump import trace_to_json
 
     t0 = time.perf_counter()
@@ -309,6 +311,7 @@ def _compile_step_entry(
         bn_stat_out_count=len(bn_stat_out_ids),
         written=written,
         bn_counters=bn_counter_targets(model, graph, ext),
+        fed=outside_feeds(tracer),
     )
 
 
@@ -455,7 +458,9 @@ def _make_monolithic_step(
             entry = _compile_step_entry(
                 model, loss_fn, params, x_args, use_dynamic=use_dynamic
             )
-            fingerprint.settle()
+            fingerprint.settle(() if entry is None else entry.fed)
+            if key is not None:
+                key = fingerprint.rekey(key, x_args, {})
             if entry is None:
                 if key is not None:
                     eager_only.add(key)

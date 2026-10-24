@@ -69,6 +69,7 @@ from lucid.compile._core.fallback import (
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
+    TraceReads,
     leaf_tensors,
     model_has_active_hooks,
     tensors_have_active_hooks,
@@ -211,21 +212,6 @@ _AUTOGRAD_FALLBACK = (
 )
 
 
-def _makes_grad_leaf(
-    tracer: _TracerLike, feeds: Mapping[int, _C_engine.TensorImpl]
-) -> bool:
-    """Whether the traced call made a tensor that requires grad of its own.
-
-    A factory given ``requires_grad=True`` inside the forward: on Metal the
-    graph builds it, so it is no feed, while eager hands it to autograd as a
-    leaf.  Every call of the signature makes it again, so this is decided
-    once, from what the trace held that came from no feed.
-    """
-    fed = {id(impl) for impl in feeds.values()}
-    held = tracer.retained_values.values()
-    return any(impl.requires_grad and id(impl) not in fed for impl in held)
-
-
 __all__ = ["CompiledModule"]
 
 
@@ -269,21 +255,15 @@ class _CacheEntry:
     # buffer's EMA, a counter).  Their new values trail the returned ones;
     # each run copies them back.  See ``_core/buffer_writes``.
     written: list[object] = field(default_factory=list)
-    # The pinned feeds: every tensor the executable reads besides the call's
-    # own — parameters, buffers, and tensors a closure or a global holds.
-    # Under grad mode one that requires grad makes the call eager.
-    pinned: tuple[_C_engine.TensorImpl, ...] = field(init=False, default=())
-    # The call makes a tensor that requires grad itself (``_makes_grad_leaf``).
-    grad_leaf: bool = False
-
-    def __post_init__(self) -> None:
-        sources = zip(self.exe.input_ids, self.input_source, strict=True)
-        self.pinned = tuple(self.external_feeds[t] for t, s in sources if s is None)
+    # What the executable reads besides the call's tensors — parameters,
+    # buffers, a closure's or a global's tensors — and whether the call makes
+    # a grad leaf itself.  Under grad mode one requiring grad makes it eager.
+    reads: TraceReads = TraceReads()
 
     def reads_grad(self) -> bool:
         """Whether, besides its arguments, the call reads or makes a tensor
         that requires grad — read now, as freezing one moves no version."""
-        return self.grad_leaf or any(impl.requires_grad for impl in self.pinned)
+        return self.reads.require_grad()
 
 
 class CompiledModule[**P, R](_ModuleWrapper):
@@ -974,10 +954,12 @@ class CompiledModule[**P, R](_ModuleWrapper):
         A signature that does not compile is remembered as eager-only.
         """
         entry = self._compile_for(args, kwargs)
-        self._param_fp.settle()
+        self._param_fp.settle(() if entry is None else entry.reads.fed)
         resolved = self._symbolic_resolved
         if resolved is not None and resolved != symbolic:
             key = self._param_fp.key_of(args, kwargs, dynamic=resolved)
+        # An argument that is a tensor attribute the trace read shares its feed.
+        key = self._param_fp.rekey(key, args, kwargs)
         if entry is None:
             self._eager_only.add(key)
         else:
@@ -1330,7 +1312,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             graph_json=trace_to_json(graph),
             compile_ms=(time.perf_counter() - t_compile_start) * 1000.0,
             written=written,
-            grad_leaf=_makes_grad_leaf(tracer, ext),
+            reads=TraceReads.of(tracer, exe.input_ids, input_source),
         )
 
     def _run(
