@@ -41,6 +41,7 @@ from lucid.models._tasks import ImageGenerationModel
 from lucid.models._utils._generative import resolve_generation_device, start_noise
 from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
+    check_latent_size,
     sincos_position_embedding,
     timestep_embedding,
     unpatchify,
@@ -528,6 +529,13 @@ class TVMModel(PretrainedModel):
             average velocity, :math:`w\,F_\theta` under the scaled
             parameterisation and :math:`F_\theta` otherwise.
         """
+        check_latent_size(
+            int(x.shape[-2]),
+            int(x.shape[-1]),
+            self.grid,
+            self.config.patch_size,
+            "TVM",
+        )
         batch = int(x.shape[0])
         device = x.device.type
         guidance = self.resolve_guidance(guidance_scale, labels)

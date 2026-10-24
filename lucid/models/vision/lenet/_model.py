@@ -67,6 +67,47 @@ def _pool(name: str) -> nn.MaxPool2d | nn.AvgPool2d:
 
 
 # ---------------------------------------------------------------------------
+# Input geometry
+# ---------------------------------------------------------------------------
+
+#: The input side the paper builds LeNet-5 for (MNIST's 28 px, padded by 2).
+_PAPER_SIDE = 32
+
+
+def _c5_side(side: int) -> int:
+    """C5's output side for an input side: three valid 5x5 convs, two 2x pools."""
+    return ((side - 4) // 2 - 4) // 2 - 4
+
+
+def _check_input_size(height: int, width: int, *, classifier: bool) -> None:
+    """Refuse an input side the trunk, or the head after it, cannot take.
+
+    The trunk's convolutions are unpadded, so a side under 32 px leaves C5
+    nothing to convolve over.  The classifier needs more: F6 is a Linear
+    over C5's 120 channels, so C5 has to come out 1x1, which holds for a
+    side of 32 to 35 px (the pools floor, so 33-35 drop their last rows).
+    Before this check both failed inside the engine (a convolution larger
+    than its input, or ``W.shape[1] != x.last_dim`` at F6), naming
+    neither the input size nor the rule.
+    """
+    sides = (_c5_side(height), _c5_side(width))
+    if classifier and sides == (1, 1):
+        return
+    if not classifier and min(sides) >= 1:
+        return
+    needs = (
+        "a side of 32 to 35 px, which leaves C5 at the 1x1 map F6's 120 inputs need"
+        if classifier
+        else "at least 32 px per side for its three unpadded 5x5 convolutions"
+    )
+    raise ValueError(
+        f"LeNet-5 is built for {_PAPER_SIDE}x{_PAPER_SIDE} inputs and takes "
+        f"{needs}.  Got {height}x{width}.  Pad or resize the input to "
+        f"{_PAPER_SIDE}x{_PAPER_SIDE}, the way the paper pads MNIST's 28x28 digits."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Shared feature extractor (C1→S2→C3→S4→C5)
 # ---------------------------------------------------------------------------
 
@@ -197,6 +238,7 @@ class LeNet(PretrainedModel, BackboneMixin):
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:
+        _check_input_size(int(x.shape[-2]), int(x.shape[-1]), classifier=False)
         return self.features(x)
 
     @override
@@ -300,6 +342,7 @@ class LeNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         x: Tensor,
         labels: Tensor | None = None,
     ) -> ImageClassificationOutput:
+        _check_input_size(int(x.shape[-2]), int(x.shape[-1]), classifier=True)
         x = self.features(x)
         # C5 output is (B, 120, 1, 1) — flatten spatial dims
         x = x.flatten(1)

@@ -35,6 +35,7 @@ from lucid.models._utils._generative import (
 from lucid.models.generative._common._transformers import (
     DiTBlock,
     DiTFinalLayer,
+    check_latent_size,
     sincos_position_embedding,
     timestep_embedding,
     unpatchify,
@@ -383,6 +384,13 @@ class DiTModel(PretrainedModel):
             ``None``: the objective lives in
             :class:`DiTForImageGeneration`.
         """
+        check_latent_size(
+            int(latent.shape[-2]),
+            int(latent.shape[-1]),
+            self.grid,
+            self.config.patch_size,
+            "DiT",
+        )
         tokens = self.patch_embed(latent)
         tokens = tokens.reshape(tokens.shape[0], tokens.shape[1], -1).permute(0, 2, 1)
         tokens = tokens + self.pos_embed

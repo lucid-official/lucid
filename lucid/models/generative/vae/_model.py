@@ -82,7 +82,9 @@ class _VAEEncoder(nn.Module):
         super().__init__()
         self._act_name = config.act_fn
         self._hier = config.is_hierarchical
-        h_top, w_top, c_top, _L = _resolve_hw(config)
+        h_top, w_top, c_top, levels = _resolve_hw(config)
+        self._factor = 2**levels
+        self._sample_hw = (h_top * self._factor, w_top * self._factor)
         self._h_top = h_top
         self._w_top = w_top
         self._c_top = c_top
@@ -115,10 +117,38 @@ class _VAEEncoder(nn.Module):
         """Global average pool over (H, W) → (B, C)."""
         return h.mean(dim=(-1, -2))
 
+    def _check_input_size(self, height: int, width: int) -> None:
+        """Refuse an image of a size other than the one the VAE models.
+
+        The likelihood p(x | z) is over images of one size: the decoder
+        starts from a fixed ``c_top x h_top x w_top`` map and up-samples it,
+        so its reconstruction is ``sample_size`` whatever went in.  Before
+        this check another size failed late, as a reshape into the
+        encoder's flattened head or as the reconstruction loss broadcasting
+        32x32 against 33x33, and a side the stride-2 convolutions round
+        away (33 against a 32 build) answered ``VAEModel.forward`` silently
+        with a 32x32 reconstruction.
+        """
+        built_h, built_w = self._sample_hw
+        if (height, width) == (built_h, built_w):
+            return
+        rebuild = (
+            f", or build the model with sample_size={height}"
+            if height == width and height % self._factor == 0
+            else ""
+        )
+        raise ValueError(
+            f"VAE is built for {built_h}x{built_w} images: its decoder "
+            f"reconstructs from a fixed {self._h_top}x{self._w_top} map, so a "
+            f"reconstruction is always {built_h}x{built_w}.  Got "
+            f"{height}x{width}.  Resize the input to {built_h}x{built_w}{rebuild}."
+        )
+
     @override
     def forward(
         self, x: Tensor
     ) -> tuple[Tensor, Tensor] | tuple[list[Tensor], list[Tensor]]:
+        self._check_input_size(int(x.shape[-2]), int(x.shape[-1]))
         h = x
         if self._hier:
             mus: list[Tensor] = []

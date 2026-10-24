@@ -31,6 +31,7 @@ from lucid._tensor.tensor import Tensor
 __all__ = [
     "timestep_embedding",
     "sincos_position_embedding",
+    "check_latent_size",
     "unpatchify",
     "DiTBlock",
     "DiTFinalLayer",
@@ -162,6 +163,58 @@ def sincos_position_embedding(dim: int, side: int) -> Tensor:
     # Columns lead — see the note above.  Row-major flattening makes this
     # the half that changes between adjacent tokens.
     return lucid.cat([cols, rows], dim=-1).reshape(1, side * side, -1)
+
+
+def check_latent_size(
+    height: int, width: int, grid: int, patch: int, family: str
+) -> None:
+    """Refuse a latent of a size the patch grid was not built for.
+
+    The position table holds one entry per patch of a ``grid x grid`` grid
+    and :func:`unpatchify` folds the tokens back into a square of side
+    ``grid * patch``, so the network takes that one size.  Before this
+    check another size failed at ``tokens + pos_embed`` as an engine
+    broadcast that named neither size, and a side the patch embedding
+    rounds down onto the built grid (9 against an 8 build of 2 px patches)
+    answered silently, with an output of the built size rather than the
+    input's.
+
+    Parameters
+    ----------
+    height, width : int
+        The latent's spatial size.
+    grid : int
+        Tokens per side of the built grid.
+    patch : int
+        Side of a patch.
+    family : str
+        The family's name, for the message.
+
+    Raises
+    ------
+    ValueError
+        If ``(height, width)`` is not ``(grid * patch, grid * patch)``.
+
+    Examples
+    --------
+    >>> from lucid.models.generative._common._transformers import (
+    ...     check_latent_size)
+    >>> check_latent_size(8, 8, 4, 2, "DiT")
+    """
+    side = grid * patch
+    if (height, width) == (side, side):
+        return
+    rebuild = (
+        f", or build the model with sample_size={height}"
+        if height == width and height % patch == 0
+        else ""
+    )
+    raise ValueError(
+        f"{family} is built for {side}x{side} latents: its position table "
+        f"holds one entry per patch of a {grid}x{grid} grid of {patch} px "
+        f"patches.  Got {height}x{width}.  Resize the latent to "
+        f"{side}x{side}{rebuild}."
+    )
 
 
 def unpatchify(x: Tensor, grid: int, patch: int, channels: int) -> Tensor:

@@ -41,6 +41,7 @@ from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
     DiTBlock,
     DiTFinalLayer,
+    check_latent_size,
     sincos_position_embedding,
     timestep_embedding,
     unpatchify,
@@ -277,6 +278,13 @@ class MeanFlowModel(PretrainedModel):
             :math:`u_\theta(z, r, t)`.  ``loss`` stays ``None``: the
             objective lives in :class:`MeanFlowForImageGeneration`.
         """
+        check_latent_size(
+            int(z.shape[-2]),
+            int(z.shape[-1]),
+            self.grid,
+            self.config.patch_size,
+            "MeanFlow",
+        )
         tokens = self.patch_embed(z)
         tokens = tokens.reshape(tokens.shape[0], tokens.shape[1], -1).permute(0, 2, 1)
         tokens = tokens + self.pos_embed
