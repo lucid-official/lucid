@@ -116,6 +116,11 @@
    "date": "2026-10-24",
    "reason": "user's editor formatting (black 88, standing instruction 2026-10-17): re-wrapped check_patch_grid(...) call reads as a jscpd clone pair between dit/_config.py and mean_flow/_config.py; AST unchanged",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-10-24",
+   "reason": "engine unbound engine.pyi 17->18: LCD-583 (one default RNG stream) removed the last Python caller of the _set_default_override binding; deleting the binding is C++/ABI work tracked as LCD-594 (batched with the next ABI bump; no MacBook builds per the user, 2026-10-24)",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -1164,7 +1169,7 @@
   },
   "engine": {
    "unbound": {
-    "lucid/_C/engine.pyi": 17
+    "lucid/_C/engine.pyi": 18
    }
   },
   "jscpd": {
