@@ -94,12 +94,9 @@ def manual_seed(seed: int) -> None:
 
     Notes
     -----
-    Delegates rather than writing ``_C_engine.default_generator()``
-    directly.  Doing that reached only the engine singleton, while the
-    factories sample from the Python-side override whenever one exists —
-    so after any call that installed one (``lucid.manual_seed``, and at
-    one point ``get_rng_state``) this seeded a generator that nothing
-    read, and reported success while changing nothing.
+    Delegates to :func:`lucid.manual_seed`, which owns the one default
+    stream: seeding it from two places once left this function seeding a
+    generator nothing read any more.
     """
     _random.manual_seed(seed)
 

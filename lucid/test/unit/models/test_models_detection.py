@@ -1797,7 +1797,11 @@ class TestYOLOV2MultiScale:
             assert out.loss is not None
             per_cell.append(float(out.loss.item()) / ((side // 32) ** 2 * 5))
 
-        assert max(per_cell) / min(per_cell) > 3.0, per_cell
+        # Proportional puts this near 1 (the defect measured 1.05).  A loss
+        # that ignores the grid puts it near the cell ratio 3.61, less what
+        # a random network's loss varies between resolutions — seen as low
+        # as 2.6 across seeds, so 3.0 only held for some of them.
+        assert max(per_cell) / min(per_cell) > 2.0, per_cell
 
     def test_training_path_is_live_off_the_default_resolution(self) -> None:
         import lucid.nn.functional as F

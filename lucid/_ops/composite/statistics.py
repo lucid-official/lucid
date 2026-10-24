@@ -828,11 +828,9 @@ def poisson(
       for ``rate >= 30`` — bias < 0.05 standard deviations, orders of
       magnitude faster than Knuth in the tail.
     """
-    from lucid._factories.random import _active_default_gen
+    from lucid._factories.random import _default_stream
 
-    g: _C_engine.Generator = (
-        generator if generator is not None else _active_default_gen()
-    )
+    g: _C_engine.Generator = generator if generator is not None else _default_stream()
 
     flat: Tensor = input.reshape(-1)
     n: int = int(flat.numel())

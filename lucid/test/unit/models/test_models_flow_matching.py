@@ -541,7 +541,14 @@ class TestFlowMatchingForImageGeneration:
             assert param.grad is not None, f"{name} received no gradient"
 
     def test_training_reduces_the_objective(self) -> None:
-        """A regression that never converges is not a regression."""
+        """A regression that never converges is not a regression.
+
+        Each step draws its own time and noise, so two steps' losses differ
+        by more than twelve steps of training move them, and comparing them
+        was a coin flip on the seed.  The first step's draws are replayed
+        after training instead: the same sample of the objective, before and
+        after.
+        """
         import lucid.optim as optim
 
         lucid.manual_seed(0)
@@ -549,17 +556,20 @@ class TestFlowMatchingForImageGeneration:
         opt = optim.Adam(model.parameters(), lr=3e-3)
         target = lucid.randn((4, 3, 8, 8))
 
-        first = last = 0.0
+        draws = lucid.get_rng_state()
+        first = 0.0
         for step in range(12):
             opt.zero_grad()
             out = model(target)
             assert out.loss is not None
             out.loss.backward()
             opt.step()
-            value = float(out.loss.tolist())
-            first = value if step == 0 else first
-            last = value
-        assert last < first
+            first = float(out.loss.tolist()) if step == 0 else first
+        lucid.set_rng_state(draws)
+        with lucid.no_grad():
+            after = model(target).loss
+        assert after is not None
+        assert float(after.tolist()) < first
 
 
 # ─────────────────────────────────────────────────────────────────────────────

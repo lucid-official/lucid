@@ -1176,6 +1176,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - hold scatter_reduce's result weakly so a forward frees it
 
+- one default stream for every draw that names no generator
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:

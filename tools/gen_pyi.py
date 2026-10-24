@@ -1540,6 +1540,7 @@ def normal(
 def rand_like(
     input: Tensor,
     *,
+    generator: _C_engine.Generator | None = None,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
     requires_grad: _bool = False,
@@ -1547,6 +1548,7 @@ def rand_like(
 def randn_like(
     input: Tensor,
     *,
+    generator: _C_engine.Generator | None = None,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
     requires_grad: _bool = False,

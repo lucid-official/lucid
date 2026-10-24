@@ -24,28 +24,18 @@ if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-_default_generator: _C_engine.Generator | None = None
+def _default_stream() -> _C_engine.Generator:
+    r"""The one stream every draw that names no generator reads.
 
-
-def _active_default_gen() -> _C_engine.Generator:
-    r"""Return the generator that random ops *actually* read from.
-
-    ``_default_generator`` is an *override*, not a cache.  While it is
-    ``None`` the factories pass no generator and the engine samples from
-    its own singleton, so the singleton is what "actually reads" means —
-    and this must report it rather than manufacture a rival.
-
-    It used to lazily install ``Generator(0)`` here, which made reading
-    the state change the stream: :func:`get_rng_state` and
-    :func:`initial_seed` are pure queries, but the first call to either
-    replaced the engine's singleton with a fresh seed-0 generator for
-    every draw afterwards.  The visible symptom was
-    ``lucid.metal.manual_seed`` going quietly dead, because it seeds the
-    singleton that nothing consulted any more.
+    It is the engine's process-wide generator, the one its ops fall back
+    to when handed ``None``.  :func:`manual_seed` and :func:`set_rng_state`
+    rewrite it in place rather than install a generator of their own.  An
+    installed one is read only by the callers that remember to fetch it:
+    ``rand`` / ``randn`` did, while ``rand_like``, ``nn.init`` and the
+    dropout masks passed ``None`` and kept reading this one, seeded alike,
+    so the two streams repeated each other's numbers.
     """
-    if _default_generator is None:
-        return _C_engine.default_generator()
-    return _default_generator
+    return _C_engine.default_generator()
 
 
 def manual_seed(seed: int) -> None:
@@ -79,6 +69,18 @@ def manual_seed(seed: int) -> None:
     updating the key $k$.  Two calls with the same ``seed`` produce
     identical streams regardless of how many samples were drawn in between.
 
+    There is one default stream, and it is device-independent.  Every
+    draw that names no ``generator`` reads and advances it, whatever
+    spells the draw: the factories (``rand``, ``randn_like``, ``randint``,
+    ``bernoulli``, ``randperm``, …), the ``nn.init`` initialisers, the
+    dropout masks and the samplers built on them, on CPU and Metal alike.
+    A seed therefore fixes their *interleaving*, not each spelling's own
+    sequence: ``randn`` then ``randn_like`` gives two different draws.
+    :func:`get_rng_state` / :func:`set_rng_state` read and write the same
+    stream, and :func:`lucid.metal.manual_seed` seeds it too.  A
+    :class:`Generator` passed as ``generator=`` is a stream of its own and
+    leaves this one where it was.
+
     For multi-process reproducibility, seed each worker with a distinct
     derived seed, e.g. ``manual_seed(base_seed + worker_id)``, to avoid
     correlated streams across processes.
@@ -92,17 +94,17 @@ def manual_seed(seed: int) -> None:
     >>> b = lucid.rand(3)
     >>> (a - b).abs().max().item()
     0.0
+
+    Every spelling draws from the one stream, so they do not repeat each
+    other:
+
+    >>> lucid.manual_seed(42)
+    >>> x = lucid.randn(3)
+    >>> y = lucid.randn_like(x)
+    >>> bool((x == y).all())
+    False
     """
-    global _default_generator
-    seed = _seed_value(int(seed), "manual_seed")
-    g = Generator(seed)
-    # Registered before it replaces the old one, which the engine may
-    # otherwise be left pointing at once it is freed.
-    _C_engine._set_default_override(g)
-    _default_generator = g
-    # Keep the C++ singleton in sync — used by engine code paths that don't
-    # take an explicit ``generator`` arg.
-    _C_engine.default_generator().set_seed(seed)
+    _default_stream().set_seed(_seed_value(int(seed), "manual_seed"))
 
 
 def seed() -> int:
@@ -196,7 +198,7 @@ def initial_seed() -> int:
     >>> lucid.initial_seed()
     1337
     """
-    return _key(_active_default_gen())
+    return _key(_default_stream())
 
 
 def get_rng_state() -> Tensor:
@@ -243,7 +245,7 @@ def get_rng_state() -> Tensor:
     >>> (a - b).abs().max().item()
     0.0
     """
-    return _state_tensor(_active_default_gen())
+    return _state_tensor(_default_stream())
 
 
 def set_rng_state(new_state: Tensor) -> None:
@@ -305,24 +307,10 @@ def set_rng_state(new_state: Tensor) -> None:
     >>> (x - y).abs().max().item()
     0.0
     """
-    global _default_generator
     s_seed, s_counter = _unpack_state(new_state, "set_rng_state")
-    # Build a fresh generator at the captured (seed, counter) pair — Philox is
-    # counter-based so this exactly recovers the prior sampling stream.
-    g = Generator(s_seed)
+    g = _default_stream()
+    g.set_seed(s_seed)
     _set_counter(g, s_counter)
-    _C_engine._set_default_override(g)
-    _default_generator = g
-    # Mirror to the C++ singleton.
-    cg = _C_engine.default_generator()
-    cg.set_seed(s_seed)
-    _set_counter(cg, s_counter)
-
-
-def _get_gen(
-    generator: _C_engine.Generator | None,
-) -> _C_engine.Generator | None:
-    return generator if generator is not None else _default_generator
 
 
 def rand(
@@ -402,7 +390,7 @@ def rand(
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
     shape = _size_to_list(*size)
-    impl = _C_engine.rand(shape, _dt, _dev, _get_gen(generator))
+    impl = _C_engine.rand(shape, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
@@ -488,7 +476,7 @@ def randn(
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
     shape = _size_to_list(*size)
-    impl = _C_engine.randn(shape, _dt, _dev, _get_gen(generator))
+    impl = _C_engine.randn(shape, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
@@ -583,7 +571,7 @@ def randint(
         dtype if dtype is not None else int64, device
     )
     shape = list(size)
-    impl = _C_engine.randint(shape, low, high, _dt, _dev, _get_gen(generator))
+    impl = _C_engine.randint(shape, low, high, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
@@ -646,7 +634,7 @@ def bernoulli(
         raise _C_engine.NotImplementedError(
             f'"bernoulli" not implemented for {input.dtype}'
         )
-    dt, dev, gen = impl.dtype, impl.device, _get_gen(generator)
+    dt, dev, gen = impl.dtype, impl.device, generator
     if p is not None:
         p_num = _promotion.as_number(p)
         if isinstance(p_num, bool) or not isinstance(p_num, (int, float)):
@@ -764,13 +752,14 @@ def normal(
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
     shape = list(size)
-    impl = _C_engine.normal(shape, mean, std, _dt, _dev, _get_gen(generator))
+    impl = _C_engine.normal(shape, mean, std, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
 def rand_like(
     input: Tensor,
     *,
+    generator: _C_engine.Generator | None = None,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
     requires_grad: bool = False,
@@ -792,6 +781,9 @@ def rand_like(
     input : Tensor
         Reference tensor.  Its ``shape``, ``dtype``, and ``device`` are
         inherited by the output unless overridden.
+    generator : lucid._C.engine.Generator, optional
+        Explicit generator.  Defaults to the default stream that
+        :func:`manual_seed` controls — the one :func:`rand` reads.
     dtype : lucid.dtype, optional
         Override the data type.  Defaults to ``t.dtype``.
     device : str or lucid.device, optional
@@ -826,13 +818,14 @@ def rand_like(
         dtype if dtype is not None else input.dtype,
         device if device is not None else input.device,
     )
-    impl = _C_engine.rand(list(input.shape), _dt, _dev, None)
+    impl = _C_engine.rand(list(input.shape), _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
 def randn_like(
     input: Tensor,
     *,
+    generator: _C_engine.Generator | None = None,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
     requires_grad: bool = False,
@@ -854,6 +847,9 @@ def randn_like(
     input : Tensor
         Reference tensor whose ``shape``, ``dtype``, and ``device`` are
         inherited unless overridden.
+    generator : lucid._C.engine.Generator, optional
+        Explicit generator.  Defaults to the default stream that
+        :func:`manual_seed` controls — the one :func:`randn` reads.
     dtype : lucid.dtype, optional
         Override the data type.  Defaults to ``t.dtype``.
     device : str or lucid.device, optional
@@ -895,7 +891,7 @@ def randn_like(
         dtype if dtype is not None else input.dtype,
         device if device is not None else input.device,
     )
-    impl = _C_engine.randn(list(input.shape), _dt, _dev, None)
+    impl = _C_engine.randn(list(input.shape), _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
 
 
@@ -994,7 +990,7 @@ def randperm(
         impl = _C_engine.zeros([0], _dt, _dev)
         return _wrap(_leaf(impl, requires_grad))
     keys_impl = _C_engine.randint(
-        [n], -(2**63), 2**63 - 1, _C_engine.I64, _dev, _get_gen(generator)
+        [n], -(2**63), 2**63 - 1, _C_engine.I64, _dev, generator
     )
     perm_impl = _C_engine.argsort(keys_impl, -1)
     if perm_impl.dtype != _dt:

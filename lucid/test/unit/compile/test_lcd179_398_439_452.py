@@ -45,12 +45,15 @@ class TestFusedStepAutocastScalerAndBatchChange:
     — ``mul`` was LOWER.  It has no row in the policy table now (LCD-500),
     so the scaled loss is float32 and the overflow happens where the
     reference's does, when the float32 gradient reaches the float16 linear
-    layers.  From 2**19 this seed's steps skip, skip and go through."""
+    layers.  From 2**19 this seed's steps skip, skip and go through, so the
+    changed batch is the one that updates.  The seed was 42 until the
+    model's initialisers and ``lucid.randn`` drew from one stream (LCD-583):
+    the batches now follow the init's draws, and 42's batch change skipped."""
 
     def test_grad_scaler_overflowing_init_scale_autocast_f16_and_batch_change(
         self,
     ) -> None:
-        lucid.manual_seed(42)
+        lucid.manual_seed(12)
         eager_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(
             COMPILE_DEVICE
         )

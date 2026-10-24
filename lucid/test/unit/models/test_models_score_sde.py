@@ -222,6 +222,10 @@ class TestModel:
         assert abs(float(out.loss.item()) - float(expected.item())) < 1e-4
 
     def test_the_loss_falls(self) -> None:
+        # Each step draws its own time and noise, and two steps' losses
+        # differ by more than ten steps of training move them.  The first
+        # step's draws are replayed after training, so both numbers are the
+        # same sample of the objective.
         import lucid.optim as optim
 
         lucid.manual_seed(0)
@@ -229,7 +233,8 @@ class TestModel:
         model.train()
         optimiser = optim.Adam(model.parameters(), lr=1e-3)
         x = lucid.randn((2, 3, 8, 8))
-        first = last = 0.0
+        draws = lucid.get_rng_state()
+        first = 0.0
         for i in range(10):
             out = model(x)
             optimiser.zero_grad()
@@ -237,8 +242,10 @@ class TestModel:
             optimiser.step()
             if i == 0:
                 first = float(out.loss.item())
-            last = float(out.loss.item())
-        assert last < first
+        lucid.set_rng_state(draws)
+        with lucid.no_grad():
+            after = float(model(x).loss.item())
+        assert after < first
 
     @pytest.mark.parametrize("method", ["euler", "pc", "ode"])
     def test_every_sampler_runs(self, method: str) -> None:
