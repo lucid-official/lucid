@@ -1248,17 +1248,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - type the autoseg probe's arguments as what they are
 
-- write a changed gradient into the held one, not a new one
+- `Optimizer.zero_grad(set_to_none=False)` and `Module.zero_grad(set_to_none=False)` zero each existing gradient in place, so a tensor read from `p.grad` earlier reads zeros too. A gradient from `backward(create_graph=True)`, or an assigned tensor that requires grad, is replaced by new zeros instead, and the tensor it came from is left untouched (LCD-546).
 
-- keep a tensor _apply hands back unchanged in its slot
+- `clip_grad_norm_`, `clip_grad_value_` and `GradScaler.unscale_` write into the existing gradient instead of replacing it. A gradient from `backward(create_graph=True)` is still replaced, so the next optimizer step reads it (LCD-546).
 
-- a step still reads a written graph-mode gradient
-
-- zeroing replaces a held-apart gradient, never writes it
-
-- read backward-hook inputs and outputs as what they are
+- `Module.to()` / `.float()` / `.type()` that change nothing keep every parameter, gradient and buffer as the same tensor, and no longer make a compiled module trace again on its next call (LCD-601).
 
 ### Changed
+
+- `LBFGS.zero_grad` honours `set_to_none` like every other optimizer: `set_to_none=False` now zeroes the gradients in place instead of dropping them (LCD-546).
 
 - `lucid.compile.fused_step` raises `RuntimeError` when given an input that requires grad, on every path including its eager fallback. Its loss has no `grad_fn`, so no gradient could reach the input. Detach the input, or train a compiled head on an eager trunk with `make_step`, which now returns input gradients. `compiled_step` now adds into `.grad` as `loss.backward()` does: frozen parameters get no gradient, unreached ones get `None`, and the input gets its gradient (LCD-617).
 
