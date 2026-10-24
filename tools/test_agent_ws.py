@@ -492,22 +492,70 @@ def test_land_check_with_nothing_to_measure_from_passes_with_a_note(
     assert "no coverage.xml or touched tests to measure" in out
 
 
+#: A pytest config that, like Lucid's, deselects a marker by default.
+_DESELECTING_PYPROJECT = (
+    "[tool.pytest.ini_options]\n"
+    'markers = ["parity: needs the reference framework"]\n'
+    "addopts = \"-m 'not parity'\"\n"
+)
+
+
+def commit_test_files(scratch: Scratch, files: dict[str, str]) -> None:
+    """Branch A also changes ``lucid/test/`` files, with a pytest config."""
+    (scratch.a / "pyproject.toml").write_text(_DESELECTING_PYPROJECT)
+    for rel, text in files.items():
+        path = scratch.a / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    assert scratch.git(scratch.a, "add", "pyproject.toml", *files).returncode == 0
+    assert scratch.git(scratch.a, "commit", "-q", "-m", "tests").returncode == 0
+
+
 def test_land_check_whose_touched_test_fails_under_coverage_cannot_measure(
     scratch: Scratch,
 ) -> None:
     """LCD-561: a coverage run that fails is an attempt that did not measure
-    (exit 9), not the "nothing to measure" pass it used to fold into."""
-    pytest.importorskip("diff_cover")
+    (exit 9), not the "nothing to measure" pass it used to fold into — with
+    or without diff-cover or coverage installed."""
     commit_a_measured_lucid_change(scratch)
-    (scratch.a / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
-    test = scratch.a / "lucid" / "test" / "test_mod.py"
-    test.parent.mkdir(parents=True)
-    test.write_text("def test_mod() -> None:\n    assert False\n")
-    paths = ("pyproject.toml", "lucid/test/test_mod.py")
-    assert scratch.git(scratch.a, "add", *paths).returncode == 0
-    assert scratch.git(scratch.a, "commit", "-q", "-m", "a test").returncode == 0
+    commit_test_files(
+        scratch, {"lucid/test/test_mod.py": "def test_mod() -> None:\n    assert False\n"}
+    )
 
     result = land(scratch, "--check")
     out = result.stdout + result.stderr
     assert result.returncode == 9, out
     assert "diff-cover cannot measure: coverage run exited" in out
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {
+            "lucid/test/conftest.py": "import pytest\n",
+            "lucid/test/_fixtures/helper.py": "VALUE = 1\n",
+        },
+        {
+            "lucid/test/test_mod.py": (
+                "import pytest\n\n\n@pytest.mark.parity\n"
+                "def test_mod() -> None:\n    assert False\n"
+            )
+        },
+    ],
+    ids=["helpers-only", "all-deselected"],
+)
+def test_land_check_whose_touched_files_run_no_test_has_nothing_to_measure(
+    scratch: Scratch, files: dict[str, str]
+) -> None:
+    """LCD-561: when the touched ``lucid/test/`` files run no test — helpers
+    only, or every test deselected by a marker — pytest exits 5, and that is
+    nothing to measure from (exit 0 with the note), not a failed run."""
+    # Asking pytest needs `coverage`; without it the run is a "cannot measure".
+    pytest.importorskip("coverage")
+    commit_a_measured_lucid_change(scratch)
+    commit_test_files(scratch, files)
+
+    result = land(scratch, "--check")
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "no coverage.xml or touched tests to measure" in out

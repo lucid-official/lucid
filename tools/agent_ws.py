@@ -1228,8 +1228,18 @@ def _measurable_lucid_py(touched: set[str]) -> list[str]:
     )
 
 
-def _coverage(py: str, wt: Path, *argv: str, env: dict[str, str] | None = None) -> str:
-    """Run ``coverage <argv>`` in *wt*: empty on success, else why, in one line."""
+#: pytest's exit status when it collected no test to run.
+PYTEST_NO_TESTS_COLLECTED = 5
+
+
+def _coverage(
+    py: str, wt: Path, *argv: str, env: dict[str, str] | None = None
+) -> tuple[int, str]:
+    """Run ``coverage <argv>`` in *wt*: ``(exit status, why)``, *why* empty on success.
+
+    ``coverage run`` exits with the program's own status, so a ``run`` of
+    pytest hands back pytest's.
+    """
     proc = subprocess.run(
         [py, "-m", "coverage", *argv],
         cwd=wt,
@@ -1239,9 +1249,9 @@ def _coverage(py: str, wt: Path, *argv: str, env: dict[str, str] | None = None) 
         check=False,
     )
     if proc.returncode == 0:
-        return ""
+        return 0, ""
     lines = (proc.stderr or proc.stdout).strip().splitlines()
-    return f"coverage {argv[0]} exited {proc.returncode}" + (
+    return proc.returncode, f"coverage {argv[0]} exited {proc.returncode}" + (
         f": {lines[-1]}" if lines else ""
     )
 
@@ -1254,7 +1264,15 @@ def _has_coverage_data(wt: Path) -> bool:
 
 
 def _touched_tests(wt: Path, touched: set[str]) -> list[str]:
-    """The changed test files a coverage run of *wt* would execute."""
+    """The changed ``lucid/test/`` files a coverage run of *wt* hands pytest.
+
+    Test modules and helpers alike (``conftest.py``, ``_fixtures/``,
+    ``audit/_specs.py``): which of them hold a test that runs is pytest's
+    to say, with its own collection rules and markers.  When it runs none
+    (only helpers changed, or every touched test is deselected by a
+    marker) :func:`_resolve_coverage_xml` counts that as nothing to measure
+    from, not as a failure.
+    """
     if not (wt / "pyproject.toml").is_file():
         return []
     return sorted(
@@ -1278,9 +1296,10 @@ def _resolve_coverage_xml(
 ) -> tuple[Path | None, str]:
     """Locate or generate a Cobertura ``coverage.xml`` for *wt*.
 
-    ``(xml, "")``, or ``(None, why)`` naming the step that could not
-    measure.  Called once :func:`_nothing_to_measure_from` said there is a
-    source to measure from.
+    ``(xml, "")``; ``(None, why)`` naming the step that could not measure;
+    or ``(None, "")`` when the touched files hold no test that runs — the
+    same "nothing to measure from" :func:`_nothing_to_measure_from` decides
+    for everything that can be told without running pytest.
     """
     for rel in _COVERAGE_XMLS:
         cand = wt / rel
@@ -1292,7 +1311,7 @@ def _resolve_coverage_xml(
     if _has_coverage_data(wt):
         if any(wt.glob(".coverage.*")):
             _coverage(py, wt, "combine")  # a failure shows in the xml step
-        why = _coverage(py, wt, "xml", "-o", str(out_xml))
+        _, why = _coverage(py, wt, "xml", "-o", str(out_xml))
         if not why and out_xml.is_file():
             return out_xml, ""
     tests = _touched_tests(wt, touched)
@@ -1302,9 +1321,13 @@ def _resolve_coverage_xml(
     data_file.unlink(missing_ok=True)
     env = {**repo_env(), "COVERAGE_FILE": str(data_file)}
     try:
-        why = _coverage(py, wt, "run", "--source=lucid", "-m", "pytest", "-q", *tests, env=env)
+        status, why = _coverage(
+            py, wt, "run", "--source=lucid", "-m", "pytest", "-q", *tests, env=env
+        )
+        if status == PYTEST_NO_TESTS_COLLECTED:
+            return None, ""
         if not why:
-            why = _coverage(py, wt, "xml", "-o", str(out_xml), env=env)
+            _, why = _coverage(py, wt, "xml", "-o", str(out_xml), env=env)
     finally:
         data_file.unlink(missing_ok=True)
     if not why and out_xml.is_file():
@@ -1333,33 +1356,36 @@ def diff_coverage_report(
     """Run ``diff-cover`` on *wt* against *base* when ``lucid/*.py`` changed (LCD-269).
 
     Exit 0 when there is nothing to measure: no changed ``lucid/*.py``, or no
-    coverage data and no touched test to produce it — a property of the
-    branch, reported as a note.  An attempt that could not measure (a tool
-    missing, the coverage run or diff-cover failing) is
-    DIFF_COVER_UNMEASURED_EXIT, never a pass and never "coverage below the
-    threshold"; only diff-cover's own verdict is DIFF_COVER_EXIT.
+    coverage data and no touched test that runs to produce it — a property
+    of the branch, reported as a note, and decided before any tool is asked
+    for.  An attempt that could not measure (a tool missing, the coverage
+    run or diff-cover failing) is DIFF_COVER_UNMEASURED_EXIT, never a pass
+    and never "coverage below the threshold"; only diff-cover's own verdict
+    is DIFF_COVER_EXIT.
     """
     measured = _measurable_lucid_py(touched)
     if not measured:
         return 0, "(no covered lucid/*.py changes — diff-cover skipped)"
+    nothing = (
+        0,
+        f"(diff-cover: {len(measured)} lucid/*.py file(s) changed; no coverage.xml or touched tests to measure)",
+    )
     if _nothing_to_measure_from(wt, touched):
+        return nothing
+    xml_path, failed = _resolve_coverage_xml(wt, py, touched)
+    if xml_path is None and not failed:
+        return nothing
+    if xml_path is None:
         return (
-            0,
-            f"(diff-cover: {len(measured)} lucid/*.py file(s) changed; no coverage.xml or touched tests to measure)",
+            DIFF_COVER_UNMEASURED_EXIT,
+            f"✗ diff-cover cannot measure: {failed}; this is not a coverage verdict.",
         )
-    # Checked before the XML, which may mean a coverage run of the touched tests.
     why = _diff_cover_unimportable(py)
     if why:
         return (
             DIFF_COVER_UNMEASURED_EXIT,
             f"✗ diff-cover cannot measure: {py} cannot import it ({why}). It is in "
             "the `quality` dependency group; this is not a coverage verdict.",
-        )
-    xml_path, failed = _resolve_coverage_xml(wt, py, touched)
-    if xml_path is None:
-        return (
-            DIFF_COVER_UNMEASURED_EXIT,
-            f"✗ diff-cover cannot measure: {failed}; this is not a coverage verdict.",
         )
     proc = subprocess.run(
         [
