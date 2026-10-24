@@ -101,9 +101,9 @@ def save_compiled(cm: object, path: str) -> bool:
     native MPSGraphExecutable archive, macOS 14+) and ``<path>.meta``
     (Lucid's I/O plan + dtype / shape / ABI metadata).  A
     :class:`CompiledModule` may hold multiple cached executables (one
-    per input signature); this entry point currently serialises the
-    most-recently-compiled signature only — sufficient for AOT
-    deployment where the production input shape is fixed.
+    per input signature); this entry point serialises the most recently
+    compiled one that has run — sufficient for AOT deployment where the
+    production input shape is fixed.
 
     The on-disk artifact is identical to the per-process cache used
     when ``LUCID_COMPILE_DISK_CACHE=1`` is set — so calls
@@ -127,8 +127,10 @@ def save_compiled(cm: object, path: str) -> bool:
     Parameters
     ----------
     cm : CompiledModule
-        A model wrapper returned by :func:`lucid.compile`.  Must have
-        been invoked at least once so an executable exists to save.
+        A model wrapper returned by :func:`lucid.compile`, called at least
+        once on Metal under :class:`lucid.no_grad` (or
+        :func:`lucid.inference_mode`): a call that needs gradients runs
+        eagerly and compiles nothing to save.
     path : str
         Filesystem prefix.  Two files are written:
         ``f"{path}.mpsgraphpackage"`` and ``f"{path}.meta"``.
@@ -136,9 +138,8 @@ def save_compiled(cm: object, path: str) -> bool:
     Returns
     -------
     bool
-        ``True`` on success.  Raises :class:`RuntimeError` if ``cm``
-        has no compiled entries (call the module once with the
-        target input first).
+        ``True`` on success.  Raises :class:`RuntimeError` if no
+        executable of ``cm`` has run yet.
 
     Examples
     --------
@@ -158,17 +159,20 @@ def save_compiled(cm: object, path: str) -> bool:
     """
     from lucid._C import engine as _C_engine
 
-    # The CompiledModule cache is a dict[CacheKey, _CacheEntry];
-    # ``_CacheEntry`` holds an opaque ``exe`` PyCompiledExecutable.
-    if not hasattr(cm, "_cache") or not cm._cache:
+    # An entry is cached before its first run, which MPSGraph may still
+    # refuse; one that has run is known to work.  Newest first.
+    cache = getattr(cm, "_cache", None) or {}
+    ran = [entry for entry in reversed(cache.values()) if entry.n_hits]
+    if not ran:
         raise RuntimeError(
-            "save_compiled: the CompiledModule has no compiled entries "
-            "yet.  Call the module once on the target input before "
-            "saving so the cache is populated."
+            "save_compiled: no executable of this CompiledModule has run yet. "
+            "Call it once on the target input, on Metal, under lucid.no_grad() "
+            "(or lucid.inference_mode()) before saving: a call that needs "
+            "gradients - grad mode on and a tensor it reads, such as a "
+            "trainable parameter, requiring grad - runs eagerly and compiles "
+            "nothing."
         )
-    # Pick the most-recently-inserted entry (dict insertion order).
-    entry = next(reversed(cm._cache.values()))
-    return bool(_C_engine.compile.save_executable(entry.exe, path))
+    return bool(_C_engine.compile.save_executable(ran[0].exe, path))
 
 
 def load_compiled(path: str) -> object:
@@ -409,8 +413,8 @@ def _tracing(
         those made the trace mixed-device and the call eager. Only for a
         caller whose ``watch`` and ``module`` cover every live tensor the
         call reads: anything left unwatched would be folded into its
-        trace-time value. Tensors from outside the trace that a folded
-        value was computed from are listed in ``tracer.folded_roots``.
+        trace-time value. Only an op whose every input the trace made itself
+        is left out; a tensor from outside the trace is always a feed.
 
     Yields
     ------

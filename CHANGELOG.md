@@ -1224,6 +1224,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - see a factory's grad leaf; skip the check on eager calls
 
+- save_compiled says why there is nothing to save
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:
