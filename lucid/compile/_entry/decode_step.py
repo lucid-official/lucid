@@ -126,7 +126,7 @@ def compiled_decode_step(
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
-    adapter = _CallableModule(forward_fn)  # names forward_fn's modules; held on step
+    adapter = _CallableModule(forward_fn)  # names forward_fn's modules
     fingerprint = ParamFingerprint(adapter, cache.clear)
 
     def _restore(snap: tuple[Any, ...]) -> None:
@@ -298,8 +298,9 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         try:
+            # The fingerprint holds the adapter weakly; the step keeps it alive.
             key = signature_of(
-                cast(Any, None),
+                adapter,
                 (input_ids, cache_position),
                 {},
                 dynamic=False,
@@ -323,6 +324,5 @@ def compiled_decode_step(
                 cache[key] = entry
         return _run(entry, input_ids, cache_position)
 
-    # The fingerprint holds the adapter weakly; the step keeps it alive.
-    step.cache, step.watched = cache, adapter  # type: ignore[attr-defined]
+    step.cache = cache  # type: ignore[attr-defined]
     return step
