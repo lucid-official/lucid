@@ -240,7 +240,7 @@ class MeanFlowConfig(GenerativeModelConfig):
 
     @property
     def num_patches(self) -> int:
-        """Tokens the field is cut into — ``(sample_size / patch_size)ˆ2``."""
+        """Tokens the field is cut into — ``(sample_size / patch_size)^2``."""
         return (patch_grid_side(self.sample_size) // self.patch_size) ** 2
 
     @override
