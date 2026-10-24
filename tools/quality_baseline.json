@@ -1029,7 +1029,7 @@
     "lucid/_ops/composite/elementwise.py": 48,
     "lucid/_tensor/_dunders.py": 228,
     "lucid/_tensor/tensor.py": 2740,
-    "lucid/compile/_optim/compiler.py": 781,
+    "lucid/compile/_optim/compiler.py": 779,
     "lucid/coreml/_build.py": 1734,
     "lucid/coreml/_emit.py": 1167,
     "lucid/distributions/transforms.py": 37,

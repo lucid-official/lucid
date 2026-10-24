@@ -4,8 +4,36 @@ The learning-rate scheduler base classes and the rules the schedulers share.
 
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from typing import ClassVar
+import warnings
 
+from lucid.optim._step_counter import _STEP_MARK, _STEPPED, _watch_steps
 from lucid.optim.optimizer import Optimizer, _group_float
+
+_STEPPED_FIRST = (
+    "Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+    "You should call them in the opposite order: `optimizer.step()` before "
+    "`lr_scheduler.step()`.  Failure to do this will result in skipping the "
+    "first value of the learning rate schedule."
+)
+
+_STEP_REPLACED = (
+    "Seems like `optimizer.step()` has been overridden after learning rate "
+    "scheduler initialization. Please, make sure to call `optimizer.step()` "
+    "before `lr_scheduler.step()`."
+)
+
+
+def _check_step_order(optimizer: Optimizer) -> None:
+    """Warn when a scheduler's first step comes before an optimizer step.
+
+    Stepping the scheduler first skips the schedule's first value.  The
+    warning points at the caller of the scheduler's ``step()``.
+    """
+    if not hasattr(optimizer.step, _STEP_MARK):
+        warnings.warn(_STEP_REPLACED, UserWarning, stacklevel=3)
+    elif not getattr(optimizer, _STEPPED, False):
+        warnings.warn(_STEPPED_FIRST, UserWarning, stacklevel=3)
 
 
 def _holds_a_callable(value: object) -> bool:
@@ -129,6 +157,14 @@ class _LRScheduler(_CheckpointState):
             optimizer.step()
             scheduler.step()
 
+    Stepping the scheduler first skips the schedule's first value.  So the
+    scheduler's first :meth:`step` issues a ``UserWarning`` when the
+    optimizer has not stepped since the first scheduler on it was built,
+    as the reference does.  To see the optimizer step, the constructor
+    replaces ``optimizer.step`` with a counter that forwards every call.
+    If ``optimizer.step`` is replaced again after that, the first
+    :meth:`step` warns that it can no longer tell.
+
     Examples
     --------
     This class is not instantiated directly.  Use a concrete subclass such
@@ -141,10 +177,16 @@ class _LRScheduler(_CheckpointState):
     #: first's, and a resumed one (``last_epoch >= 0``) not a step twice.
     _is_initial: bool = False
 
+    #: Whether the first :meth:`step` checks that the optimizer stepped
+    #: before it.  :class:`CosineAnnealingWarmRestarts` does not check,
+    #: because the reference's does not.
+    _checks_step_order: ClassVar[bool] = True
+
     def __init__(
         self, optimizer: Optimizer, last_epoch: int = -1, verbose: bool = False
     ) -> None:
         self.optimizer = optimizer
+        _watch_steps(optimizer)
         # After N step() calls, last_epoch == N (the constructor's initial
         # step takes it from -1 to 0).
         self.last_epoch = last_epoch
@@ -170,7 +212,10 @@ class _LRScheduler(_CheckpointState):
 
     def _initial_step(self) -> None:
         """Write step 0's rates, in force before the first ``step()``."""
-        self._step_count = 0
+        # This step is counted, as the reference counts it, so the first
+        # ``step()`` finds 1 and checks the order.  A checkpoint carries the
+        # count, so a resumed scheduler does not check again.
+        self._step_count = 1
         self._is_initial = True
         try:
             self._update_lr()
@@ -243,6 +288,13 @@ class _LRScheduler(_CheckpointState):
 
         Should be called **once per epoch**, after ``optimizer.step()``.
 
+        Warns
+        -----
+        UserWarning
+            On the first call, when the optimizer has not stepped since the
+            first scheduler on it was built, or when ``optimizer.step`` was
+            replaced after that.
+
         Examples
         --------
         >>> import lucid
@@ -255,6 +307,11 @@ class _LRScheduler(_CheckpointState):
         ...     optimizer.step()
         ...     scheduler.step()
         """
+        # Checked before the update, so a refused first step still warns, as
+        # the reference's does.  The count moves only with a step that is
+        # taken: a refused step changes nothing.
+        if self._step_count == 1 and self._checks_step_order:
+            _check_step_order(self.optimizer)
         self._update_lr()
         self._step_count += 1
         if self.verbose:

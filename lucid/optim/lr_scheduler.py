@@ -161,12 +161,9 @@ class ExponentialLR(_LRScheduler):
     >>> import lucid.optim as optim
     >>> optimizer = optim.SGD(model.parameters(), lr=0.1)
     >>> scheduler = optim.ExponentialLR(optimizer, gamma=0.95)
-    >>> import lucid.nn as nn
-    >>> import lucid.optim as optim
-    >>> model = nn.Linear(4, 2)
-    >>> optimizer = optim.SGD(model.parameters(), lr=0.1)
     >>> for epoch in range(100):
     ...     optimizer.step()
+    ...     scheduler.step()
     """
 
     def __init__(
@@ -1321,6 +1318,9 @@ class CosineAnnealingWarmRestarts(_LRScheduler):
     ...     optimizer.step()
     ...     scheduler.step()
     """
+
+    # The reference's step for this schedule skips the step-order check.
+    _checks_step_order = False
 
     def __init__(
         self,

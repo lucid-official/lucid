@@ -533,6 +533,15 @@ class _FusedStep:
             Scalar loss tensor freshly allocated for this step.  All
             parameter and optimizer-state buffers have already been
             updated **in-place** before this returns.
+
+        Notes
+        -----
+        Each call counts as an optimizer step for the LR schedulers built on
+        the optimizer or on ``self.optimizer``, as an eager
+        ``optimizer.step()`` does.  It counts even when ``grad_scaler``
+        skips the update for a gradient that overflowed.  An eager
+        ``GradScaler.step`` that skips does not call ``optimizer.step``, so
+        there the skipped step does not count.
         """
         from lucid.compile._core.signature import (
             leaf_tensors,
@@ -541,6 +550,7 @@ class _FusedStep:
         )
 
         copt = self._copt
+        copt._count_step()  # the fused update never calls ``optimizer.step``
         copt._sync_params()
         if copt._params is not self._params_seen:
             # ``add_param_group`` re-flattened the parameters.

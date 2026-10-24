@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.compile._optim.spec import _hp
+from lucid.optim._step_counter import _counts_as_step, _record_step
 
 if TYPE_CHECKING:
     from lucid.optim.optimizer import Optimizer
@@ -689,26 +690,23 @@ class _CompiledStepBase:
 
     # ── Public step() ────────────────────────────────────────────
 
+    def _count_step(self) -> None:
+        """Count a step that skips ``opt.step``, for the schedulers on either handle."""
+        _record_step(self)
+        _record_step(self._opt)
+
+    @_counts_as_step  # so ``opt.step = self.step`` is no override to a scheduler
     def step(self, closure: Callable[..., Tensor] | None = None) -> Tensor | None:
-        """Run one compiled update step; returns the (optional) closure loss.
+        """Run one compiled update step, in place; returns ``closure()``'s loss or ``None``.
 
         Parameters
         ----------
         closure : callable, optional
-            Match the eager-optim signature — invoked once before the
-            update and its return value is bubbled back to the
-            caller.
-
-        Returns
-        -------
-        Tensor or None
-            Whatever ``closure()`` returned, or ``None`` when no
-            closure was supplied.  Parameter and optimizer-state
-            buffers are mutated in-place by the cached executable
-            before this returns.
+            Called once before the update, as the eager optimizers call it.
         """
         from lucid._dispatch import _unwrap
 
+        self._count_step()
         loss: Tensor | None = closure() if closure is not None else None
         self._sync_params()
         active = tuple(i for i, p in enumerate(self._params) if p.grad is not None)

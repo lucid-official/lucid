@@ -12,6 +12,7 @@ import lucid as _lucid
 from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
 from lucid.nn.parameter import Parameter
+from lucid.optim._step_counter import _CountedStep
 
 from lucid._C import engine as _C_engine
 
@@ -1484,3 +1485,8 @@ class Optimizer:
     def __setstate__(self, state: dict[str, object]) -> None:
         """Restore pickled or deep-copied optimizer state; engines rebuild lazily."""
         self.__dict__.update(state)
+        # The scheduler's step counter counts one optimizer: every copy —
+        # shallow, deep or unpickled — gets one of its own.
+        step = state.get("step")
+        if isinstance(step, _CountedStep):
+            self.__dict__["step"] = step.on(self)

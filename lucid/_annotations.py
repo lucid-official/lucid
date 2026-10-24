@@ -504,6 +504,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     ),
     "lucid.nn.utils.fusion": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.skip_init": (("Module", "lucid.nn.module", "Module"),),
+    "lucid.optim._step_counter": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),
     "lucid.quantization._fake_quantize": (
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),
