@@ -21,6 +21,7 @@ leading tensor operands are the wrapper's to bind: their advertised names
 import annotationlib
 import ast
 import inspect
+import keyword
 import re
 from pathlib import Path
 from types import ModuleType
@@ -327,6 +328,16 @@ def _reference_overloads(
     return out
 
 
+def _unspellable(want: _Param, got: _Param) -> bool:
+    """``want`` is named by a Python keyword (``from``), which a call can pass
+    only by position, and ``got`` is that slot, positional-only, as ``from_``."""
+    return (
+        keyword.iskeyword(want.name)
+        and got.kind == "po"
+        and got.name == f"{want.name}_"
+    )
+
+
 def _mismatches(ours: list[_Param], theirs: list[_Param], method: bool) -> list[str]:
     """How ``ours`` binds a call differently from ``theirs``; empty if it does not."""
     have = {p.name for p in ours}
@@ -347,6 +358,8 @@ def _mismatches(ours: list[_Param], theirs: list[_Param], method: bool) -> list[
             got = slots[i]
             if want.kind == "po" and got.kind != "po":
                 problems.append(f"{got.name} is positional-only there")
+            elif _unspellable(want, got):
+                continue  # ``uniform_(from=...)``: no Python call can name it
             elif want.kind == "pk" and got.name != want.name:
                 problems.append(f"slot {i} is {want.name}, not {got.name}")
             elif want.kind == "pk" and got.kind == "po":

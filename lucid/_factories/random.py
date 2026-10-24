@@ -1,8 +1,12 @@
 r"""
-Random tensor creation: rand, randn, randint, bernoulli, normal, manual_seed.
+Random tensor creation: rand, randn, randint, bernoulli, normal, manual_seed,
+the ``*_like`` forms, and the draws behind ``Tensor.normal_`` / ``uniform_``.
 """
 
+import math
+import operator
 import os
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 from lucid._ctx import check_random_allowed as _check_random
 
@@ -893,6 +897,185 @@ def randn_like(
     )
     impl = _C_engine.randn(list(input.shape), _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
+
+
+def randint_like(
+    input: Tensor,
+    low: int = 0,
+    high: int | None = None,
+    *,
+    generator: _C_engine.Generator | None = None,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
+) -> Tensor:
+    r"""Return random integers in $[\text{low}, \text{high})$ shaped like ``input``.
+
+    Each element is drawn independently and uniformly from
+    $\{l, l+1, \ldots, h-1\}$, as :func:`randint` draws them, in ``input``'s
+    shape, dtype and device unless overridden.  Called with one bound,
+    ``randint_like(x, 10)``, the bound is ``high`` and ``low`` is ``0``.
+
+    Parameters
+    ----------
+    input : Tensor
+        Reference tensor whose ``shape``, ``dtype`` and ``device`` the
+        result takes.
+    low : int, optional
+        Lowest integer drawn (inclusive).  Default ``0``; the one bound
+        when ``high`` is not given.
+    high : int
+        One above the highest integer drawn (exclusive).
+    generator : lucid._C.engine.Generator, optional
+        Explicit generator.  Defaults to the default stream that
+        :func:`manual_seed` controls — the one :func:`randint` reads.
+    dtype : lucid.dtype, optional
+        Override the data type.  Defaults to ``input.dtype``: a floating
+        ``input`` gets floating values that are whole numbers.
+    device : str or lucid.device, optional
+        Override the device.  Defaults to ``input.device``.
+    requires_grad : bool, optional
+        Enable autograd tracking — floating dtypes only.  Default ``False``.
+
+    Returns
+    -------
+    Tensor
+        Tensor of ``input``'s shape with whole-number values in
+        $[\text{low}, \text{high})$.
+
+    Raises
+    ------
+    TypeError
+        A bound is not an integer, or no bound is given.
+    lucid._C.engine.InvalidArgument
+        ``low >= high`` (a ``RuntimeError`` and a ``ValueError``).
+
+    Notes
+    -----
+    The integers are drawn as ``int64`` and cast to the result's dtype, so
+    the draw is the same on either device whatever that dtype is.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.manual_seed(0)
+    >>> x = lucid.zeros(2, 3)
+    >>> r = lucid.randint_like(x, 10)
+    >>> r.shape, r.dtype
+    ((2, 3), lucid.float32)
+    >>> bool(((r >= 0) & (r < 10)).all())
+    True
+    >>> lucid.randint_like(x, 3, 4, dtype=lucid.int64).tolist()
+    [[3, 3, 3], [3, 3, 3]]
+    """
+    _check_random()
+    if high is None:
+        low, high = 0, low
+    bounds = []
+    for what, bound in (("low", low), ("high", high)):
+        if isinstance(bound, bool):
+            raise TypeError(f"randint_like(): {what} must be an int, got bool")
+        try:
+            bounds.append(operator.index(bound))
+        except TypeError:
+            raise TypeError(
+                f"randint_like(): {what} must be an int, got {type(bound).__name__}"
+            ) from None
+    lo, hi = bounds
+    if lo >= hi:
+        raise _C_engine.InvalidArgument(
+            f"randint_like(): low must be less than high, got low={lo} >= high={hi}"
+        )
+    _dt, _dev, _ = normalize_factory_kwargs(
+        dtype if dtype is not None else input.dtype,
+        device if device is not None else input.device,
+    )
+    impl = _C_engine.randint(list(input.shape), lo, hi, _C_engine.I64, _dev, generator)
+    if _dt != _C_engine.I64:
+        impl = _C_engine.astype(impl, _dt)
+    return _wrap(_leaf(impl, requires_grad))
+
+
+#: A complex tensor's real dtype: its two parts are drawn in it, pairwise.
+_PART_DTYPE = {_C_engine.C64: _C_engine.F32, _C_engine.C128: _C_engine.F64}
+
+
+def _draw_like(
+    input: Tensor,
+    name: str,
+    draw: Callable[[list[int], _C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl],
+) -> Tensor:
+    """``draw``'s samples in ``input``'s shape, dtype and device.
+
+    The draw behind ``Tensor.normal_`` / ``Tensor.uniform_``.  A complex
+    ``input`` takes its samples in pairs, as its real and imaginary parts,
+    which is how the reference fills one.  An integer or bool ``input``
+    has no continuous values to take, and is refused under ``name``.
+    """
+    _check_random()
+    impl = input._impl
+    part = _PART_DTYPE.get(impl.dtype)
+    if part is not None:
+        pairs = draw([*impl.shape, 2], part, impl.device)
+        return _wrap(_C_engine.view_as_complex(pairs))
+    if impl.dtype not in (
+        _C_engine.F16,
+        _C_engine.BF16,
+        _C_engine.F32,
+        _C_engine.F64,
+    ):
+        raise _C_engine.NotImplementedError(
+            f'"{name}" not implemented for {input.dtype}'
+        )
+    return _wrap(draw(list(impl.shape), impl.dtype, impl.device))
+
+
+def _normal_like(
+    input: Tensor,
+    mean: float,
+    std: float,
+    generator: _C_engine.Generator | None,
+) -> Tensor:
+    r"""Samples of $\mathcal{N}(\text{mean}, \text{std}^2)$ shaped like ``input``.
+
+    A complex ``input`` draws each part with standard deviation
+    $\text{std} / \sqrt{2}$, so the complex value has variance
+    $\text{std}^2$; both parts take ``mean``, as the reference's do.
+    """
+    if not std >= 0.0:
+        raise _C_engine.InvalidArgument(f"normal_: std must be >= 0, got {std}")
+    scale = std / math.sqrt(2.0) if input.is_complex() else std
+    return _draw_like(
+        input,
+        "normal_",
+        lambda shape, dt, dev: _C_engine.normal(shape, mean, scale, dt, dev, generator),
+    )
+
+
+def _uniform_like(
+    input: Tensor,
+    low: float,
+    high: float,
+    generator: _C_engine.Generator | None,
+) -> Tensor:
+    r"""Samples of $U[\text{low}, \text{high})$ shaped like ``input``.
+
+    ``low == high`` is every sample ``low``, as the reference allows; a
+    complex ``input`` draws both parts from the interval.
+    """
+    if not low <= high:
+        raise _C_engine.InvalidArgument(
+            f"uniform_: expects a [from, to) range, got from={low} > to={high}"
+        )
+
+    def draw(
+        shape: list[int], dt: _C_engine.Dtype, dev: _C_engine.Device
+    ) -> _C_engine.TensorImpl:
+        if low == high:
+            return _C_engine.full(shape, low, dt, dev)
+        return _C_engine.uniform(shape, low, high, dt, dev, generator)
+
+    return _draw_like(input, "uniform_", draw)
 
 
 from lucid._factories.creation import _size_to_list

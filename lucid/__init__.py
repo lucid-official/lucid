@@ -143,7 +143,7 @@ __all__ = [
     "zeros_like", "ones_like", "empty_like", "full_like",
     # ── factory — random ──────────────────────────────────────────────────
     "rand", "randn", "randint", "bernoulli", "normal",
-    "rand_like", "randn_like", "manual_seed", "randperm",
+    "rand_like", "randn_like", "randint_like", "manual_seed", "randperm",
     "Generator", "seed", "initial_seed", "get_rng_state", "set_rng_state",
     # ── ops — unary ───────────────────────────────────────────────────────
     "neg", "sign",
@@ -250,7 +250,7 @@ _FACTORY_NAMES: frozenset[str] = frozenset([
     "zeros_like", "ones_like", "empty_like", "full_like",
     # ── random ────────────────────────────────────────────────────────────
     "rand", "randn", "randint", "bernoulli", "normal",
-    "rand_like", "randn_like", "manual_seed", "randperm",
+    "rand_like", "randn_like", "randint_like", "manual_seed", "randperm",
     "Generator", "seed", "initial_seed", "get_rng_state", "set_rng_state",
 ])
 

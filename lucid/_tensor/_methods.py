@@ -1083,6 +1083,26 @@ def _bernoulli(
     return lucid.bernoulli(self, p, generator=generator)
 
 
+def _fill_drawn(self: Tensor, name: str, draw: Callable[[Tensor], Tensor]) -> Tensor:
+    """Make ``draw(self)`` — random values shaped like ``self`` — ``self``'s values.
+
+    The values do not depend on what ``self`` held: a tensor that requires
+    grad keeps requiring it, as after the reference's in-place draws, and
+    passes no gradient back through them.  ``self``'s old values are never
+    read — ``self * 0 + out`` made an infinite or NaN entry NaN.
+    """
+    import lucid
+
+    def result_of(base: Tensor) -> Tensor:
+        out = draw(base)
+        if not base.requires_grad:
+            return out
+        keep_none = lucid.zeros(base.shape, dtype=lucid.bool, device=base.device)
+        return lucid.where(keep_none, base, out)
+
+    return _write(self, name, result_of)
+
+
 def _bernoulli_(
     self: Tensor,
     p: Tensor | float = 0.5,
@@ -1093,16 +1113,97 @@ def _bernoulli_(
     import lucid
 
     def _draw(base: Tensor) -> Tensor:
-        out = (
-            lucid.bernoulli(p.expand(base.shape), generator=generator).to(base.dtype)
-            if isinstance(p, lucid.Tensor)
-            else lucid.bernoulli(base, p, generator=generator)
-        )
-        return (
-            base * 0 + out if base.requires_grad and base.is_floating_point() else out
-        )
+        if isinstance(p, lucid.Tensor):
+            return lucid.bernoulli(p.expand(base.shape), generator=generator).to(
+                base.dtype
+            )
+        return lucid.bernoulli(base, p, generator=generator)
 
-    return _write(self, "bernoulli_", _draw)
+    return _fill_drawn(self, "bernoulli_", _draw)
+
+
+def _normal_(
+    self: Tensor,
+    mean: float = 0.0,
+    std: float = 1.0,
+    *,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor:
+    r"""Fill ``self`` with samples of :math:`\mathcal{N}(\text{mean}, \text{std}^2)` and return it.
+
+    Parameters
+    ----------
+    mean : float, optional
+        Mean of the distribution.  Default ``0.0``.
+    std : float, optional
+        Standard deviation; a negative one is refused
+        (``lucid._C.engine.InvalidArgument``).  Default ``1.0``.
+    generator : lucid._C.engine.Generator, optional
+        The stream drawn from — when ``None``, the default stream
+        :func:`lucid.manual_seed` controls.
+
+    Notes
+    -----
+    A complex ``self`` draws each part with standard deviation
+    :math:`\text{std}/\sqrt{2}` around ``mean``.  An integer or bool one
+    has no such values (``NotImplementedError``); a leaf that requires
+    grad is refused while autograd records, as every in-place op is.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.manual_seed(0)
+    >>> w = lucid.empty(1000).normal_(2.0, 0.5)
+    >>> abs(float(w.mean()) - 2.0) < 0.1
+    True
+    """
+    from lucid._factories.random import _normal_like
+
+    return _fill_drawn(
+        self, "normal_", lambda base: _normal_like(base, mean, std, generator)
+    )
+
+
+def _uniform_(
+    self: Tensor,
+    from_: float = 0.0,
+    /,
+    to: float = 1.0,
+    *,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor:
+    r"""Fill ``self`` with samples of :math:`U[\text{from}, \text{to})` and return it.
+
+    The reference names the lower bound ``from``, a Python keyword no call
+    can spell, so it goes by position — ``x.uniform_(-1, 1)`` — and ``to``
+    by either.  A complex ``self`` draws both parts from the interval; an
+    integer or bool one is refused, and so is a leaf that requires grad
+    while autograd records.
+
+    Parameters
+    ----------
+    from_ : float, optional
+        Lower bound (inclusive), positional only.  Default ``0.0``.
+    to : float, optional
+        Upper bound (exclusive).  Equal bounds fill with ``from_``; a lower
+        one is refused (``lucid._C.engine.InvalidArgument``).  Default
+        ``1.0``.
+    generator : lucid._C.engine.Generator, optional
+        Which stream to read; ``None`` reads the default one.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.manual_seed(0)
+    >>> w = lucid.empty(2, 3).uniform_(-1.0, 1.0)
+    >>> bool(((w >= -1.0) & (w < 1.0)).all())
+    True
+    """
+    from lucid._factories.random import _uniform_like
+
+    return _fill_drawn(
+        self, "uniform_", lambda base: _uniform_like(base, from_, to, generator)
+    )
 
 
 _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
@@ -1122,6 +1223,8 @@ _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
     ("addmv_", _addmv_),
     ("addr_", _addr_),
     ("bernoulli_", _bernoulli_),
+    ("normal_", _normal_),
+    ("uniform_", _uniform_),
 )
 
 

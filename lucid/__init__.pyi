@@ -389,6 +389,16 @@ def randn_like(
     device: DeviceLike = None,
     requires_grad: _bool = False,
 ) -> Tensor: ...
+def randint_like(
+    input: Tensor,
+    low: _int = 0,
+    high: _int | None = None,
+    *,
+    generator: _C_engine.Generator | None = None,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
+) -> Tensor: ...
 def randperm(
     n: _int,
     *,
