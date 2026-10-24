@@ -1264,6 +1264,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `TVMConfig` and `MeanFlowConfig` raise `ValueError` when `out_channels != in_channels`, instead of failing later with a shape mismatch in forward or generate (LCD-620).
+
+- `tools/convert_weights`: the TVM converter now reads the published checkpoints, which are compiled `OptimizedModule` pickles; before, it recovered 0 tensors. It refuses any pickle global outside an exact allowlist, loads nested storages weights-only, and refuses to run on a reference framework older than 2.6 (CVE-2025-32434). The conversion engine refuses source keys a recipe raises `UnknownSourceKey` for, instead of dropping them (LCD-619).
+
 - `LBFGS.zero_grad` honours `set_to_none` like every other optimizer: `set_to_none=False` now zeroes the gradients in place instead of dropping them (LCD-546).
 
 - `lucid.compile.fused_step` raises `RuntimeError` when given an input that requires grad, on every path including its eager fallback. Its loss has no `grad_fn`, so no gradient could reach the input. Detach the input, or train a compiled head on an eager trunk with `make_step`, which now returns input gradients. `compiled_step` now adds into `.grad` as `loss.backward()` does: frozen parameters get no gradient, unreached ones get `None`, and the input gets its gradient (LCD-617).
