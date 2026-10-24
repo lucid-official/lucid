@@ -47,15 +47,15 @@ _GROWTH = 32
 #: judged after the round-trip checks, and it is the check expected to fail.
 _ENGINE_REFUSALS: dict[str, str] = {
     "lenet": (
-        "LCD-554 FOUND: LeNet-5's first Linear is sized for 32 px and refuses "
+        "LCD-625: LeNet-5's first Linear is sized for 32 px and refuses "
         "64 px as a linear ShapeMismatch"
     ),
     "tvm": (
-        "LCD-554: tvm/_model.py is held by LCD-597; 96 px fails as a broadcast "
+        "LCD-625: tvm/_model.py is held by LCD-597; 96 px fails as a broadcast "
         "ShapeMismatch against the position table"
     ),
     "vae": (
-        "LCD-554 FOUND: generative/vae/_model.py (held by LCD-597) refuses "
+        "LCD-625: generative/vae/_model.py (held by LCD-597) refuses "
         "64 px as a reshape ShapeMismatch"
     ),
 }
