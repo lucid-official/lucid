@@ -1302,6 +1302,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- DiT, MeanFlow, TVM, LeNet-5 and the VAE raise `ValueError`, naming the built and received sizes, for an input size they were not built for, instead of an engine `ShapeMismatch`. This includes off-by-one sizes that used to answer silently with an output of the built size (e.g. 9×9 into an 8×8 DiT, 33 px into a 32 px VAE). HVAE `encode` refuses another size too (LCD-625).
+
+- `TVMForImageGeneration`: the EMA networks restart from weights loaded into the network, pair with it by name, are built without re-running the spectral init (6.4 s → 0.2 s on a 33M config) and outside any active trace, and `update_ema` evaluates once per call (about 5× faster on Metal). A compiled RealNVP training step updates its flow batch-norm running statistics (LCD-552, LCD-600).
+
 - `Tensor` gains the out-of-place twin of every in-place method: 37 names such as `expm1`, `lgamma`, `xlogy`, `addbmm` and `frexp`, plus `Tensor.real` / `Tensor.imag` (views with setters; `x.real is x` for a real tensor), `Tensor.normal_` / `Tensor.uniform_(from_=0, /, to=1)`, and `lucid.randint_like`. `lucid.eval` is public and raises `TypeError` for an argument that is not a Tensor (LCD-547, LCD-613).
 
 - `inspect.signature` of the registry free functions (`lucid.contiguous`, `lucid.detach` and 68 more) shows `Tensor`, not the engine type. `x.expand(-1, n)` raises for a `-1` in a new leading dim, as the reference does. An int8/int16 index raises `IndexError` naming `x[i]` / `index_put`, where it used to raise a `LucidError` naming `index_select` (LCD-547, LCD-611).
