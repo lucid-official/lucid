@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - accept a device object in lucid.device()'s constructor
 - stub each binary in-place twin by what it actually accepts
 - check loss operands' devices at the boundary (LCD-638)
+- drop dead pre-LCD-624 parametrize helpers in signature.py
 
 ---
 

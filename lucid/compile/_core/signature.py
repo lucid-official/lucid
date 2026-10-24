@@ -321,16 +321,6 @@ def _closure_modules(model: object) -> list[Module]:
     return [v for v in held if isinstance(v, Module)]
 
 
-def _parametrization_modules(mod: Module) -> list[Module]:
-    """Return any :class:`Module` containers stored in ``mod.parametrizations``."""
-    from lucid.nn.module import Module
-
-    param_d = getattr(mod, "parametrizations", None)
-    if not isinstance(param_d, dict):
-        return []
-    return [c for c in param_d.values() if isinstance(c, Module)]
-
-
 def _root_modules(model: object) -> list[Module]:
     """``model`` if it is a module, then the modules its ``_fn`` closes over."""
     from lucid.nn.module import Module
@@ -341,7 +331,12 @@ def _root_modules(model: object) -> list[Module]:
 
 
 def _iter_modules(roots: Sequence[Module]) -> list[Module]:
-    """Every module reachable from ``roots``, each once, in deterministic order."""
+    """Every module reachable from ``roots``, each once, in deterministic order.
+
+    A registered parametrization's :class:`~lucid.nn.utils.parametrize.ParametrizationList`
+    sits in ``parametrizations`` as a plain submodule (LCD-624), so ``root.modules()``
+    already walks into it — nothing extra is needed to reach the originals it holds.
+    """
     seen: set[int] = set()
     out: list[Module] = []
     for root in roots:
@@ -349,11 +344,6 @@ def _iter_modules(roots: Sequence[Module]) -> list[Module]:
             if id(sub) not in seen:
                 seen.add(id(sub))
                 out.append(sub)
-            for pmod in _parametrization_modules(sub):
-                for psub in pmod.modules():
-                    if id(psub) not in seen:
-                        seen.add(id(psub))
-                        out.append(psub)
     return out
 
 
@@ -407,7 +397,12 @@ def _handle_key(handle: object) -> int | None:
 
 
 def _internal_pre_hook_keys(mod: Module) -> set[int]:
-    """Hook ids installed by ``nn.utils`` reparametrisations (traced in-graph)."""
+    """Hook ids installed by ``nn.utils`` reparametrisations (traced in-graph).
+
+    ``nn.utils.parametrize`` installs no forward pre-hook since LCD-624 — the
+    reparametrised tensor is read through a property on a generated subclass,
+    not recomputed by a hook — so it contributes nothing here.
+    """
     handles: list[object] = []
     for attr in ("_weight_norm_hooks", "_spectral_norm_hooks"):
         d = getattr(mod, attr, None)
@@ -416,9 +411,6 @@ def _internal_pre_hook_keys(mod: Module) -> set[int]:
     prune_d = getattr(mod, "_prune_hooks", None)
     if isinstance(prune_d, dict):
         handles.extend(prune_d.values())
-    param_d = getattr(mod, "parametrizations", None)
-    if isinstance(param_d, dict):
-        handles.extend(getattr(c, "_hook_handle", None) for c in param_d.values())
     return {k for h in handles if (k := _handle_key(h)) is not None}
 
 
