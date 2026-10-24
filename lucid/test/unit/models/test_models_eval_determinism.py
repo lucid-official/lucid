@@ -25,15 +25,29 @@ Dropout is turned *on* where the config exposes it. With the default
 0.0 the branch under test never runs, so a test at defaults would pass
 against the broken code — which is why the original defect survived
 every gate the zoo had.
+
+The same holds one level down, for the graph a trace records (LCD-627).
+A Core ML export, ``lucid.compile`` and ``make_step`` all record the
+model's first traced call.  Swin built its shifted-window mask, and
+CoAtNet its relative index, on first use inside the forward and kept it,
+so a cold call recorded the ops that build the table and a warm one fed
+the kept tensor: Swin's cold trace held 831 ops and its warm one 551.
+The values agreed, so the eager check above could not see it.  Two
+traces of one call must record one graph, and a table a family keeps
+must reach it as a feed.
 """
 
+import collections
 import dataclasses
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
 import lucid
 import lucid.models as models
+from lucid.compile import _tracing
+from lucid.models.vision.coatnet import _model as _coatnet
 from lucid.test.unit.models.test_models_train_step import CASES, _family_of
 
 
@@ -166,3 +180,92 @@ def test_the_dropout_really_was_turned_on() -> None:
         if _with_dropout_on(factory, overrides) != overrides:
             raised.append(factory)
     assert raised, "no case in CASES exposes a dropout field; this file proves nothing"
+
+
+# -- the recorded graph ---------------------------------------------------------
+
+#: Families whose kept tables outlive the model, by the call that drops them:
+#: a fresh model alone does not make its first trace a cold one.
+_SHARED_TABLES: dict[str, Callable[[], None]] = {
+    "coatnet": _coatnet._INDEX_CACHE.clear,
+}
+
+#: Families that build a derived constant table on first use and keep it,
+#: with the ops that build it.  None of them may enter a recording.
+_TABLE_BUILDERS: dict[str, tuple[str, ...]] = {
+    "coatnet": ("arange",),  # the relative-offset index
+    "swin": ("arange", "scatter_set"),  # the shifted-window region mask
+}
+
+#: Families whose first traced call still records what a later one feeds,
+#: each waiting on the card that may edit its model file.
+_COLD_TRACE_DIFFERS: dict[str, str] = {
+    "tvm": (
+        "LCD-552: TVM builds its EMA networks on the first forward that reads "
+        "the target (tvm/_model.py _average), so a cold trace records their "
+        "construction: 1349 ops cold, 889 warm"
+    ),
+}
+
+
+def _trace_cases() -> list[Any]:
+    picked = []
+    for case in CASES:
+        family = _family_of(case)
+        marks = list(getattr(case, "marks", ()))
+        if family in _COLD_TRACE_DIFFERS:
+            reason = _COLD_TRACE_DIFFERS[family]
+            marks.append(
+                pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
+            )
+        picked.append(pytest.param(*_values_of(case), id=family, marks=marks))
+    return picked
+
+
+def _recorded(model: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> list[str]:
+    # Seeded alike, so a family that draws in its forward draws the same way
+    # both times and any difference is the model's kept state.
+    lucid.manual_seed(1)
+    with _tracing(watch=[list(args), kwargs]) as tracer, lucid.no_grad():
+        model(*args, **kwargs)
+    return [op.name for op in tracer.graph.ops]
+
+
+def _only_in(cold: list[str], warm: list[str]) -> str:
+    extra = collections.Counter(cold) - collections.Counter(warm)
+    return (
+        f"the first trace recorded {len(cold)} ops and the second {len(warm)}; "
+        f"only the first holds {dict(extra.most_common(8))}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("family", "factory", "overrides", "make_inputs"), _trace_cases()
+)
+def test_a_trace_records_the_same_graph_cold_or_warm(
+    family: str,
+    factory: str,
+    overrides: dict[str, Any],
+    make_inputs: Any,
+) -> None:
+    """A recording does not depend on what the model ran before (LCD-627)."""
+    drop = _SHARED_TABLES.get(family)
+    if drop is not None:
+        drop()
+    lucid.manual_seed(0)
+    model = models.create_model(factory, **overrides).eval()
+    args, kwargs = make_inputs()
+
+    cold = _recorded(model, args, kwargs)
+    warm = _recorded(model, args, kwargs)
+
+    assert cold == warm, f"{factory}: {_only_in(cold, warm)}"
+    built = sorted(set(_TABLE_BUILDERS.get(family, ())) & set(cold))
+    assert not built, f"{factory}: the trace builds a kept table with {built}"
+
+
+def test_every_family_with_a_kept_table_is_traced() -> None:
+    """Guards the test above: a name it lists must be a family it runs."""
+    traced = {_family_of(case) for case in CASES}
+    listed = set(_SHARED_TABLES) | set(_TABLE_BUILDERS) | set(_COLD_TRACE_DIFFERS)
+    assert listed <= traced, f"not in CASES, so never traced: {listed - traced}"

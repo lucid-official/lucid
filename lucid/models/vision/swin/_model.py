@@ -28,6 +28,7 @@ from typing import ClassVar, final, override
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._common import init_transformer_trunc_normal
 from lucid.models._base import PretrainedModel
@@ -279,29 +280,37 @@ class _SwinBlock(nn.Module):
 
         Additive to the attention scores, so it takes their dtype; its
         values (region ids, ``-100``) are exact in half precision.
+
+        Built outside any active trace, so a recording always holds the mask
+        as a constant feed and never the ops that make it.  Built inside, a
+        block's first call put them in the graph and every later call found
+        the cached mask, so an export depended on what the block had run
+        before (LCD-627).
         """
         if shift_size == 0:
             return None
         ws = self.ws if ws is None else ws
         ss = shift_size
         device, dtype = like.device.type, like.dtype
-        img_mask = lucid.zeros(1, H, W, 1, dtype=dtype, device=device)
-        slices_h = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
-        slices_w = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
-        cnt = 0
-        for sh in slices_h:
-            for sw in slices_w:
-                img_mask[0, sh, sw, 0] = cnt
-                cnt += 1
-        mask_windows, nH, nW = _window_partition(img_mask, ws)  # (nW, ws, ws, 1)
-        mask_windows = mask_windows.reshape(-1, ws * ws)  # (nW, ws^2)
-        mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)  # (nW, ws^2, ws^2)
-        # Replace non-zero with -100
-        return lucid.where(
-            mask != 0,
-            lucid.full(mask.shape, -100.0, dtype=dtype, device=device),
-            lucid.zeros(mask.shape, dtype=dtype, device=device),
-        )
+        with untraced():
+            img_mask = lucid.zeros(1, H, W, 1, dtype=dtype, device=device)
+            slices_h = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
+            slices_w = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
+            cnt = 0
+            for sh in slices_h:
+                for sw in slices_w:
+                    img_mask[0, sh, sw, 0] = cnt
+                    cnt += 1
+            mask_windows, nH, nW = _window_partition(img_mask, ws)  # (nW, ws, ws, 1)
+            mask_windows = mask_windows.reshape(-1, ws * ws)  # (nW, ws^2)
+            # (nW, ws^2, ws^2): non-zero where two tokens come from different
+            # regions, which is where the mask blocks attention with -100.
+            mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+            return lucid.where(
+                mask != 0,
+                lucid.full(mask.shape, -100.0, dtype=dtype, device=device),
+                lucid.zeros(mask.shape, dtype=dtype, device=device),
+            )
 
     @override
     def forward(self, x: Tensor) -> Tensor:
