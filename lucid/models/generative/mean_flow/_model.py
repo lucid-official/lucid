@@ -75,7 +75,7 @@ class _TimeMLP(nn.Module):
     @override
     def forward(self, t: Tensor) -> Tensor:
         """Embed ``(B,)`` times into ``(B, hidden_size)``."""
-        emb = timestep_embedding(t, self.freq_size)
+        emb = timestep_embedding(t, self.freq_size, dtype=self.fc1.weight.dtype)
         return self.fc2(self.act(self.fc1(emb)))
 
 
@@ -391,7 +391,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
             return v
 
         low, high = config.guidance_interval
-        inside = ((t >= low) & (t <= high)).float().reshape(-1, 1, 1, 1)
+        inside = ((t >= low) & (t <= high)).to(z.dtype).reshape(-1, 1, 1, 1)
 
         with lucid.no_grad():
             uncond = self.mean_flow(z, t, t, None).sample
@@ -432,8 +432,9 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
         batch = int(images.shape[0])
         device = images.device.type
 
-        r, t = self._sample_times(batch, device)
-        noise = lucid.randn(images.shape, device=device)
+        # Drawn in float32, as at every dtype, then in the images' dtype.
+        r, t = (v.to(images.dtype) for v in self._sample_times(batch, device))
+        noise = lucid.randn(images.shape, dtype=images.dtype, device=device)
         t_b = t.reshape(-1, 1, 1, 1)
         z = (1.0 - t_b) * images + t_b * noise
 

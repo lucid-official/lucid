@@ -607,7 +607,7 @@ def reparameterize(mu: Tensor, logvar: Tensor) -> Tensor:
     differentiable. Sampling the distribution directly would not.
     """
     std = (0.5 * logvar).exp()
-    eps = lucid.randn(mu.shape, device=mu.device.type)
+    eps = lucid.randn(mu.shape, dtype=mu.dtype, device=mu.device)
     return mu + std * eps
 
 
@@ -852,9 +852,10 @@ def trace_probe(like: Tensor, noise: str) -> Tensor:
     """
     if noise == "rademacher":
         # sign() of a centred uniform: ±1 with equal probability.
-        return lucid.sign(lucid.rand(like.shape, device=like.device) - 0.5)
+        draw = lucid.rand(like.shape, dtype=like.dtype, device=like.device)
+        return lucid.sign(draw - 0.5)
     if noise == "gaussian":
-        return lucid.randn(like.shape, device=like.device)
+        return lucid.randn(like.shape, dtype=like.dtype, device=like.device)
     raise ValueError(
         f"trace_probe: noise must be 'rademacher' or 'gaussian', got {noise!r}"
     )
@@ -1034,3 +1035,25 @@ def resolve_generation_device(model: nn.Module, device: str | None) -> str:
     for param in model.parameters():
         return str(param.device.type)
     return "cpu"
+
+
+def model_dtype(model: nn.Module) -> lucid.dtype:
+    """The floating dtype a model computes in: its first floating parameter's.
+
+    The dtype twin of :func:`resolve_generation_device`.  A tensor a model
+    builds for itself — a recurrent start state, a latent — has to be as
+    wide as the weights it meets: a float32 start state ran a float16 world
+    model's whole unroll in float32.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> import lucid.nn as nn
+    >>> from lucid.models._utils._generative import model_dtype
+    >>> model_dtype(nn.Linear(2, 2).to(lucid.float16))
+    lucid.float16
+    """
+    for param in model.parameters():
+        if param.is_floating_point():
+            return param.dtype
+    return lucid.get_default_dtype()

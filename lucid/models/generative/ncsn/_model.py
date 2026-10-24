@@ -341,7 +341,7 @@ class NCSNForImageGeneration(ImageGenerationModel):
         # (B, 1, 1, 1) for broadcast.
         sigma = self.sigmas[sigma_idx].reshape(B, 1, 1, 1)
 
-        z = lucid.randn(sample.shape, device=dev)
+        z = lucid.randn(sample.shape, dtype=sample.dtype, device=dev)
         x_tilde = sample + sigma * z
         score = self.ncsn(x_tilde, sigma_idx).sample  # ŝ_θ(x̃, i)
 

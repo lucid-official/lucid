@@ -26,6 +26,7 @@ from typing import cast, override
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.models._utils._common import float32_or_wider
 
 __all__ = [
     "timestep_embedding",
@@ -36,7 +37,12 @@ __all__ = [
 ]
 
 
-def timestep_embedding(t: Tensor, dim: int, max_period: float = 10000.0) -> Tensor:
+def timestep_embedding(
+    t: Tensor,
+    dim: int,
+    max_period: float = 10000.0,
+    dtype: lucid.dtype | None = None,
+) -> Tensor:
     r"""Sinusoidal embedding of a scalar, as in the transformer.
 
     Parameters
@@ -48,6 +54,11 @@ def timestep_embedding(t: Tensor, dim: int, max_period: float = 10000.0) -> Tens
         Width of the embedding; the halves hold cosine and sine.
     max_period : float, default=10000.0
         Longest wavelength in the ladder.
+    dtype : lucid.dtype or None, optional
+        Dtype of the embedding — the consuming MLP's.  The angles are
+        computed in float32 at least either way (a diffusion timestep
+        reaches a thousand radians, which float16 cannot carry); ``None``
+        returns them in that working dtype.
 
     Returns
     -------
@@ -81,16 +92,17 @@ def timestep_embedding(t: Tensor, dim: int, max_period: float = 10000.0) -> Tens
     (2, 8)
     """
     half = dim // 2
+    work = float32_or_wider(t.dtype if dtype is None else dtype)
     freqs = lucid.exp(
         -math.log(max_period)
-        * lucid.arange(half, dtype=t.dtype, device=t.device.type)
+        * lucid.arange(half, dtype=work, device=t.device.type)
         / float(half)
     )
-    args = t.reshape(-1, 1) * freqs.reshape(1, -1)
+    args = t.to(work).reshape(-1, 1) * freqs.reshape(1, -1)
     emb = lucid.cat([lucid.cos(args), lucid.sin(args)], dim=-1)
     if dim % 2:
         emb = lucid.cat([emb, lucid.zeros_like(emb[:, :1])], dim=-1)
-    return emb
+    return emb if dtype is None else emb.to(dtype)
 
 
 def sincos_position_embedding(dim: int, side: int) -> Tensor:

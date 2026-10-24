@@ -39,6 +39,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput
+from lucid.models._utils._common import float32_or_wider
 from lucid.models._utils._generative import (
     exact_divergence,
     generative_activation,
@@ -597,17 +598,16 @@ class _VelocityField(nn.Module):
             self.conv_out = _conv3x3(ch, config.in_channels, scale=config.init_scale)
 
     def _time_embedding(self, t: Tensor) -> Tensor:
-        scaled = t * _TIME_SCALE
+        dtype = self.time_mlp_fc1.weight.dtype  # angles reach 999 rad: float32+
+        scaled = t.to(float32_or_wider(dtype)) * _TIME_SCALE
         if self.fourier is not None:
-            # The reference embeds the logarithm here, a habit inherited
-            # from conditioning on a noise level rather than a time.  It
-            # is monotone in ``t`` and so a perfectly good encoding, but
-            # it is singular at ``t = 0``; the floor is the smallest value
-            # training or sampling ever produces, so clamping to it
-            # changes nothing in range and removes the singularity below.
+            # The reference embeds the log of the time, a habit from conditioning
+            # on a noise level: monotone in ``t``, but singular at ``t = 0``.  The
+            # floor is the smallest time training or sampling produces, so the
+            # clamp changes nothing in range and removes the singularity.
             floor = lucid.full_like(scaled, max(self._time_floor, 1e-12))
-            return self.fourier(lucid.log(lucid.maximum(scaled, floor)))
-        return _sinusoidal(scaled, self._config.base_channels)
+            return self.fourier(lucid.log(lucid.maximum(scaled, floor))).to(dtype)
+        return _sinusoidal(scaled, self._config.base_channels).to(dtype)
 
     @override
     def forward(self, sample: Tensor, t: Tensor) -> Tensor:
@@ -1169,7 +1169,7 @@ class RectifiedFlowModel(PretrainedModel):
                     f"pairs of a trained flow; pass noise=, e.g. from "
                     f"reflow_pairs()"
                 )
-            noise = lucid.randn(x1.shape, device=x1.device)
+            noise = lucid.randn(x1.shape, dtype=x1.dtype, device=x1.device)
         else:
             self._check_image(noise, "the noise passed to Rectified Flow")
             if noise.shape != x1.shape:
@@ -1179,7 +1179,7 @@ class RectifiedFlowModel(PretrainedModel):
                 )
 
         batch = int(x1.shape[0])
-        t = self.sample_times(batch, device=str(x1.device.type))
+        t = self.sample_times(batch, device=str(x1.device.type)).to(x1.dtype)
         x_t = self.path_sample(x1, noise, t)
         target = self.conditional_target(x1, noise, t)
         prediction = self.field(x_t, t)

@@ -223,10 +223,11 @@ class ScoreSDEModel(PretrainedModel):
         count = int(x.shape[0])
         if t is None:
             floor = self.sde.t_min
-            t = lucid.rand((count,), device=x.device) * (1.0 - floor) + floor
+            draw = lucid.rand((count,), dtype=x.dtype, device=x.device)
+            t = draw * (1.0 - floor) + floor
         mean, std = self.sde.marginal_prob(x, t)
         shaped = std.reshape(count, *([1] * (x.ndim - 1)))
-        target = lucid.randn(tuple(int(v) for v in x.shape), device=x.device)
+        target = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
         perturbed = mean + shaped * target
         noise = self.predict_noise(perturbed, t)
         return ScoreSDEOutput(

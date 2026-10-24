@@ -1196,6 +1196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CrossViT, EfficientFormer and Swin keep a half input half
 
+- generative forwards draw and embed in the model's dtype
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:

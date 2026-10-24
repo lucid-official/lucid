@@ -125,7 +125,8 @@ class _ScalarEmbedder(nn.Module):
         :math:`[0, 1]` and :math:`1/w` alike, with no rescaling to a
         thousand-step grid.
         """
-        return self.fc2(self.act(self.fc1(timestep_embedding(value, self.freq_size))))
+        emb = timestep_embedding(value, self.freq_size, dtype=self.fc1.weight.dtype)
+        return self.fc2(self.act(self.fc1(emb)))
 
 
 class _Attention(nn.Module):
@@ -635,7 +636,9 @@ class TVMForImageGeneration(ImageGenerationModel):
         first asks for :math:`\theta^*`.  Each is frozen, kept on the live
         network's device, and in evaluation mode.
         """
-        device = next(iter(self.tvm.parameters())).device
+        # The averages follow the live network's device *and* dtype: built
+        # lazily in float32, they ran a half model's targets in float32.
+        live = next(iter(self.tvm.parameters()))
         if not self._averages:
             for key in self._decays():
                 copy = TVMModel(self.config)
@@ -644,8 +647,9 @@ class TVMForImageGeneration(ImageGenerationModel):
                     param.requires_grad_(False)
                 self._averages[key] = copy.eval()
         average = self._averages[name]
-        if next(iter(average.parameters())).device != device:
-            average.to(device)
+        slow = next(iter(average.parameters()))
+        if slow.device != live.device or slow.dtype != live.dtype:
+            average.to(device=live.device, dtype=live.dtype)
         return average
 
     @property
@@ -870,8 +874,9 @@ class TVMForImageGeneration(ImageGenerationModel):
         batch = int(images.shape[0])
         device = images.device.type
 
-        t, s, s_fm = self._sample_times(batch, device)
-        guidance = self._sample_guidance(batch, device)
+        # Drawn in float32 (``ndtri`` wants it), then in the images' dtype.
+        t, s, s_fm = (v.to(images.dtype) for v in self._sample_times(batch, device))
+        guidance = self._sample_guidance(batch, device).to(images.dtype)
         null = lucid.full(
             (batch,), float(config.num_classes), dtype=lucid.int64, device=device
         )
@@ -883,7 +888,7 @@ class TVMForImageGeneration(ImageGenerationModel):
             labels = lucid.where(drop, null.to(labels.dtype), labels)
             guidance = lucid.where(drop, lucid.ones_like(guidance), guidance)
 
-        noise = lucid.randn(images.shape, device=device)
+        noise = lucid.randn(images.shape, dtype=images.dtype, device=device)
         t_b = t.reshape(-1, 1, 1, 1)
         s_b = s_fm.reshape(-1, 1, 1, 1)
         x_t = (1.0 - t_b) * images + t_b * noise
@@ -913,7 +918,7 @@ class TVMForImageGeneration(ImageGenerationModel):
 
         # The released loss zeroes the terminal term wherever ``isclose(s,
         # t)`` — its default tolerances, not exact equality.
-        differs = 1.0 - lucid.isclose(s, t).float()
+        differs = 1.0 - lucid.isclose(s, t).to(images.dtype)
         terminal_term = (((terminal - terminal_target) * beta_b) ** 2).mean(
             dim=(1, 2, 3)
         ) * differs

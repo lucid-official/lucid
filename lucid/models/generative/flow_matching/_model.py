@@ -867,8 +867,8 @@ class FlowMatchingModel(PretrainedModel):
         """
         self._check_image(x1)
         batch = int(x1.shape[0])
-        t = lucid.rand((batch,), device=x1.device)
-        x0 = lucid.randn(x1.shape, device=x1.device)
+        t = lucid.rand((batch,), dtype=x1.dtype, device=x1.device)
+        x0 = lucid.randn(x1.shape, dtype=x1.dtype, device=x1.device)
 
         x_t = self.path_sample(x1, x0, t)
         target = self.conditional_target(x1, x0, t)

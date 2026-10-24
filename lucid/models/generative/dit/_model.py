@@ -295,7 +295,11 @@ class DiTModel(PretrainedModel):
         wants them as two separate tokens, so they are returned unmixed
         and the caller combines.
         """
-        emb = timestep_embedding(timesteps, self.config.frequency_embedding_size)
+        emb = timestep_embedding(
+            timesteps,
+            self.config.frequency_embedding_size,
+            dtype=self.patch_embed.weight.dtype,
+        )
         time = self.time_mlp(emb)
         if labels is None:
             labels = lucid.full(
@@ -449,7 +453,7 @@ class DiTForImageGeneration(ImageGenerationModel):
         steps = lucid.randint(
             0, config.num_train_timesteps, size=(batch,), device=device
         )
-        noise = lucid.randn(images.shape, device=device)
+        noise = lucid.randn(images.shape, dtype=images.dtype, device=device)
         alpha_bar = self.alphas_cumprod[steps].reshape(-1, 1, 1, 1)
         noised = alpha_bar.sqrt() * images + (1.0 - alpha_bar).sqrt() * noise
 
