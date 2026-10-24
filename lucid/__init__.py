@@ -136,7 +136,7 @@ __all__ = [
     # ── determinism ───────────────────────────────────────────────────────
     "use_deterministic_algorithms", "are_deterministic_algorithms_enabled",
     # ── core tensor ───────────────────────────────────────────────────────
-    "Tensor",
+    "Tensor", "eval",
     # ── factory — deterministic ───────────────────────────────────────────
     "tensor", "as_tensor", "from_numpy", "from_dlpack", "to_dlpack",
     "zeros", "ones", "empty", "empty_strided", "full", "eye", "arange", "linspace", "logspace",
@@ -586,35 +586,63 @@ def _load_type_aliases() -> dict[str, object]:
 
 # ── lucid.eval(*tensors) ──────────────────────────────────────────────────────
 
+# Loaded by now — the composite ops above import it — and named by the
+# annotations below, which PEP 649 reads from this module's globals.
+from lucid._tensor.tensor import Tensor
 
-def eval(*tensors: object) -> None:  # type: ignore[override]
-    """Force immediate evaluation of one or more tensors.
 
-    On Metal (MLX backend) this flushes the lazy computation graph for all
-    supplied tensors in a single ``mlx.core.eval()`` call — more efficient
-    than calling ``.eval()`` on each tensor individually because MLX can
-    schedule them together.
+def eval(*tensors: Tensor) -> None:
+    """Compute the values of ``tensors`` now, in one evaluation.
 
-    On CPU this is a no-op.
+    A tensor on Metal holds a lazy computation until something reads it.
+    ``lucid.eval`` runs the pending work of every tensor it is given in a
+    single batched evaluation, which lets the GPU schedule them together —
+    cheaper than calling :meth:`Tensor.eval` on each in turn.  A tensor on
+    the CPU is computed already, and passes through.
 
-    Recommended training-loop pattern on Metal::
+    Parameters
+    ----------
+    *tensors : Tensor
+        The tensors to evaluate, on either device; none at all is a no-op.
 
-        loss.eval()                          # flush forward graph BEFORE backward
+    Raises
+    ------
+    TypeError
+        An argument is not a :class:`Tensor` — an output object or a list
+        of tensors must be unpacked, ``lucid.eval(*outputs)``.
+
+    Notes
+    -----
+    The training-loop pattern on Metal evaluates the forward graph before
+    backward and the updated parameters after the step, keeping each
+    evaluation scope small; deferring both to one call after the step lets
+    forward, backward and the optimizer accumulate into a single graph,
+    which is much slower to schedule::
+
+        loss.eval()
         loss.backward()
         optimizer.step()
-        lucid.eval(*model.parameters())      # flush param updates AFTER step
+        lucid.eval(*model.parameters())
 
-    Flushing the forward graph before backward keeps each MLX evaluation
-    scope small.  Deferring both flushes into one call after the optimizer
-    step causes the forward + backward + optimizer graph to accumulate as a
-    single large graph, which is significantly slower to schedule.
+    :func:`lucid.metal.synchronize` runs every pending tensor instead.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.ones(3, device="metal") * 2
+    >>> b = a + 1
+    >>> lucid.eval(a, b)
+    >>> b.tolist()
+    [3.0, 3.0, 3.0]
     """
-    from lucid._C import engine as _C_engine
-    from lucid._tensor.tensor import Tensor as _T
-
-    impls = [t._impl for t in tensors if isinstance(t, _T)]
-    if impls:
-        _C_engine.eval_tensors(impls)  # C++ batch eval — no mlx import
+    for t in tensors:
+        if not isinstance(t, Tensor):
+            raise TypeError(
+                f"lucid.eval() takes tensors, got {type(t).__name__} — unpack "
+                "a collection of tensors, lucid.eval(*tensors)"
+            )
+    if tensors:
+        _C_engine.eval_tensors([t._impl for t in tensors])
 
 
 # ── Module __getattr__ ────────────────────────────────────────────────────────
@@ -630,14 +658,8 @@ def __getattr__(name: str) -> object:
     """
     _g = globals()
 
-    # Tensor is special-cased: it lives in a TYPE_CHECKING-guarded module.
-    if name == "Tensor":
-        from lucid._tensor.tensor import Tensor
-
-        _g["Tensor"] = Tensor
-        return Tensor
-
-    # All other lazily-imported groups share the same dispatch pattern.
+    # ``Tensor`` is bound above, with ``eval``; the lazily-imported groups
+    # share one dispatch pattern.
     loader = _GROUP_LOADERS.get(name)
     if loader is not None:
         _g.update(loader())

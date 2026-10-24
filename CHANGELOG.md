@@ -144,6 +144,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - pin the TVM upstream parity probe as a script
 
+- publish lucid.eval with a stub entry and a strict signature
+
 ### Performance
 
 - strided views copy by runs; contiguous() is 11-35x faster
