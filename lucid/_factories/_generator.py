@@ -15,6 +15,7 @@ through the helpers here.
 
 import operator
 import os
+import weakref
 from typing import TYPE_CHECKING, Self, override
 
 from lucid._C import engine as _C_engine
@@ -125,6 +126,7 @@ class Generator(_C_engine.Generator):
 
     def __init__(self, seed: int = 0) -> None:
         super().__init__(_seed_value(seed, "Generator"))
+        _LIVE.add(self)
 
     def manual_seed(self, seed: int) -> Self:
         """Set the key to ``seed`` and rewind the stream to its start.
@@ -203,3 +205,43 @@ class Generator(_C_engine.Generator):
     #: the engine's own property, named here so it stays this class's
     #: member as it was when ``lucid.Generator`` was the engine class.
     counter = _ENGINE_COUNTER
+
+
+#: Every :class:`Generator` alive, so a compile can return each stream to
+#: where it was (:func:`_stream_states`).
+_LIVE: weakref.WeakSet[Generator] = weakref.WeakSet()
+
+#: One stream's position: the stream, its key, its counter.
+type _StreamState = tuple[_C_engine.Generator, int, int]
+
+
+def _stream_states() -> tuple[_StreamState, ...]:
+    """The position of the default stream and of every live :class:`Generator`.
+
+    Read from the streams' own fields, with no tensor op, so it is safe
+    inside a compile recording.  :func:`_restore_stream_states` puts them
+    back: a compile that records a call drawing random values advances
+    the streams, and the call's first real run must draw what an eager
+    call would have.
+
+    Returns
+    -------
+    tuple of (Generator, int, int)
+        One ``(stream, key, counter)`` per stream, the default one first.
+    """
+    streams = (_C_engine.default_generator(), *_LIVE)
+    return tuple((g, _key(g), int(g.counter)) for g in streams)
+
+
+def _restore_stream_states(states: tuple[_StreamState, ...]) -> None:
+    """Return each stream to the position :func:`_stream_states` read.
+
+    Parameters
+    ----------
+    states : tuple of (Generator, int, int)
+        What :func:`_stream_states` returned.  A :class:`Generator` made
+        since is left where it is.
+    """
+    for g, key, counter in states:
+        g.set_seed(key)
+        _set_counter(g, counter)
