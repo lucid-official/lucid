@@ -203,7 +203,9 @@ def _bench_forward_eager(
     inputs = _cast_inputs(tuple(t.to(COMPILE_DEVICE) for t in w.mk_input(bs)), dtype)
 
     def call() -> object:
-        y = _unwrap(model(*inputs))
+        # The same grad mode as the compiled call it is compared with.
+        with lucid.no_grad():
+            y = _unwrap(model(*inputs))
         return y
 
     cold = _time_cold(call)
@@ -230,7 +232,10 @@ def _bench_forward_compile(
     # ``.item()`` ensures the result tensor is actually materialised
     # — matches the apples-to-apples convention of the other paths).
     def call() -> object:
-        y = _unwrap(cm(*inputs))
+        # A compiled forward needs no_grad since LCD-582: under grad mode a
+        # trainable model's call runs eagerly, and this would time eager.
+        with lucid.no_grad():
+            y = _unwrap(cm(*inputs))
         return y
 
     cold = _time_cold(call)

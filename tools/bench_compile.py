@@ -100,7 +100,15 @@ def _bench_case(
     model.eval()
     model.to(COMPILE_DEVICE)
     x = mk_input().to(COMPILE_DEVICE)
+    # A compiled forward needs no_grad since LCD-582: under grad mode a
+    # trainable model's call runs eagerly, and this would time eager twice.
+    with lucid.no_grad():
+        return _bench_inference(name, model, x, n_iter)
 
+
+def _bench_inference(
+    name: str, model: nn.Module, x: lucid.Tensor, n_iter: int
+) -> dict[str, str | float]:
     # Parity guard — abort the row if compile diverges materially.
     eager_out = _unwrap(model(x))
     cm = compile_model(model)
