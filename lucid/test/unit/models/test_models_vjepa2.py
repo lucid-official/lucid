@@ -175,11 +175,13 @@ class TestPositionTable:
     """The non-rotary table, which only the ``use_rope=False`` path reads."""
 
     def test_an_odd_axis_width_is_padded_not_truncated(self) -> None:
-        assert tuple(_sincos_3d(12, (2, 2, 2), False).shape) == (1, 8, 12)
+        assert tuple(
+            _sincos_3d(12, (2, 2, 2), False, device="cpu", dtype=lucid.float32).shape
+        ) == (1, 8, 12)
 
     def test_uniform_power_changes_the_split(self) -> None:
-        even = _sincos_3d(24, (2, 2, 2), True)
-        split = _sincos_3d(24, (2, 2, 2), False)
+        even = _sincos_3d(24, (2, 2, 2), True, device="cpu", dtype=lucid.float32)
+        split = _sincos_3d(24, (2, 2, 2), False, device="cpu", dtype=lucid.float32)
         assert float((even - split).abs().max().item()) > 0.0
 
     def test_the_config_chooses_the_split(self) -> None:

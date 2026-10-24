@@ -13,6 +13,8 @@ from typing import ClassVar, TypedDict, override
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._dtype import _float32_or_wider
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike
 from lucid.models._base import PretrainedModel
@@ -477,12 +479,6 @@ class _RoPEVideoEncoder(nn.Module):
             (tubelet_size, patch_size, patch_size),
             stride=(tubelet_size, patch_size, patch_size),
         )
-        if not use_rope:
-            self.register_buffer(
-                "pos_embed",
-                _sincos_3d(dim, (1, self.grid_size, self.grid_size), uniform_power),
-                persistent=False,
-            )
         hidden = int(dim * mlp_ratio)
         rates = [drop_path_rate * i / max(depth - 1, 1) for i in range(depth)]
         blocks = [
@@ -527,7 +523,13 @@ class _RoPEVideoEncoder(nn.Module):
         cols = width // self.patch_size
         tokens = tokens.reshape(batch, self.dim, -1).permute(0, 2, 1)
         if not self.use_rope:
-            positions = _sincos_3d(self.dim, (time, rows, cols), self.uniform_power)
+            positions = _sincos_3d(
+                self.dim,
+                (time, rows, cols),
+                self.uniform_power,
+                device=tokens.device,
+                dtype=tokens.dtype,
+            )
             tokens = tokens + positions
         if indices is not None:
             tokens = _gather_tokens(tokens, indices)
@@ -635,21 +637,17 @@ class _RoPEVideoPredictor(nn.Module):
         batch, context_count = int(context.shape[0]), int(context.shape[1])
         target_count = int(target_indices.shape[1])
         tokens = self.predictor_embed(context)
-        temporal = self.grid_depth
+        queries = self.mask_tokens[mask_index].repeat(batch, target_count, 1)
         if not self.use_rope:
             positions = _sincos_3d(
                 self.predictor_dim,
-                (temporal, self.grid_size, self.grid_size),
+                (self.grid_depth, self.grid_size, self.grid_size),
                 self.uniform_power,
-            )
-            tokens = tokens + _gather_tokens(
-                positions.repeat(batch, 1, 1), context_indices
-            )
-        queries = self.mask_tokens[mask_index].repeat(batch, target_count, 1)
-        if not self.use_rope:
-            queries = queries + _gather_tokens(
-                positions.repeat(batch, 1, 1), target_indices
-            )
+                device=tokens.device,
+                dtype=tokens.dtype,
+            ).repeat(batch, 1, 1)
+            tokens = tokens + _gather_tokens(positions, context_indices)
+            queries = queries + _gather_tokens(positions, target_indices)
         hidden = lucid.cat([tokens, queries], dim=1)
         masks = lucid.cat([context_indices, target_indices], dim=1)
         order = masks.argsort(dim=1)
@@ -667,7 +665,7 @@ class _RoPEVideoPredictor(nn.Module):
             hidden = block(
                 hidden,
                 sorted_masks,
-                temporal=temporal,
+                temporal=self.grid_depth,
                 height=rows,
                 width=rows,
             )
@@ -830,43 +828,54 @@ def _action_attention_mask(
     return mask.to(lucid.bool_)
 
 
-def _sincos_3d(dim: int, grid: tuple[int, int, int], uniform_power: bool) -> Tensor:
-    """Build a fixed 3-D sine/cosine table for the optional non-RoPE path."""
+def _sincos_3d(
+    dim: int,
+    grid: tuple[int, int, int],
+    uniform_power: bool,
+    *,
+    device: DeviceLike,
+    dtype: lucid.dtype,
+) -> Tensor:
+    """Build a fixed 3-D sine/cosine table for the optional non-RoPE path.
+
+    Built where the tokens it is added to live, in float32 or wider and cast
+    once to their dtype: a CPU float64 table met Metal tokens with a device
+    mismatch, and Metal has no float64 to build it in (LCD-639).  It depends
+    on the grid alone, so it is built outside any active trace — a recording
+    holds it as a constant feed, never the ops that make it (LCD-627).
+    """
     time, rows, cols = grid
     if uniform_power:
         each = int(math.ceil(dim / 6) * 2)
         widths = (each, each, each)
     else:
         widths = (dim // 2, dim // 4, dim // 4)
-    zeros = lucid.zeros(time, rows, cols, dtype=lucid.float64)
-    coords = (
-        lucid.arange(time).to(lucid.float64).reshape(time, 1, 1) + zeros,
-        lucid.arange(rows).to(lucid.float64).reshape(1, rows, 1) + zeros,
-        lucid.arange(cols).to(lucid.float64).reshape(1, 1, cols) + zeros,
-    )
-    axes: list[Tensor] = []
-    for coordinate, width in zip(coords, widths, strict=True):
-        flat = coordinate.reshape(-1, 1)
-        omega = 1.0 / (
-            10_000.0 ** (lucid.arange(width // 2).to(lucid.float64) * (2.0 / width))
+    work = _float32_or_wider(dtype)
+    with untraced():
+        zeros = lucid.zeros(time, rows, cols, dtype=work, device=device)
+        coords = (
+            lucid.arange(time, dtype=work, device=device).reshape(time, 1, 1) + zeros,
+            lucid.arange(rows, dtype=work, device=device).reshape(1, rows, 1) + zeros,
+            lucid.arange(cols, dtype=work, device=device).reshape(1, 1, cols) + zeros,
         )
-        angles = flat * omega.reshape(1, -1)
-        encoded = lucid.cat([lucid.sin(angles), lucid.cos(angles)], dim=1)
-        if int(encoded.shape[1]) < width:
-            encoded = lucid.cat(
-                [
-                    encoded,
-                    lucid.zeros(
-                        int(encoded.shape[0]),
-                        width - int(encoded.shape[1]),
-                        dtype=encoded.dtype,
-                    ),
-                ],
-                dim=1,
-            )
-        axes.append(encoded[:, :width])
-    table = lucid.cat(axes, dim=1)[:, :dim]
-    return table.reshape(1, time * rows * cols, dim).to(lucid.float32)
+        axes: list[Tensor] = []
+        for coordinate, width in zip(coords, widths, strict=True):
+            flat = coordinate.reshape(-1, 1)
+            exponent = lucid.arange(width // 2, dtype=work, device=device)
+            omega = 1.0 / (10_000.0 ** (exponent * (2.0 / width)))
+            angles = flat * omega.reshape(1, -1)
+            encoded = lucid.cat([lucid.sin(angles), lucid.cos(angles)], dim=1)
+            if int(encoded.shape[1]) < width:
+                pad = lucid.zeros(
+                    int(encoded.shape[0]),
+                    width - int(encoded.shape[1]),
+                    dtype=work,
+                    device=device,
+                )
+                encoded = lucid.cat([encoded, pad], dim=1)
+            axes.append(encoded[:, :width])
+        table = lucid.cat(axes, dim=1)[:, :dim]
+        return table.reshape(1, time * rows * cols, dim).to(dtype)
 
 
 def _scale_projection(

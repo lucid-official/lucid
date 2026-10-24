@@ -272,6 +272,49 @@ def test_jepa_trains_one_step_on_device(
     assert all(_on(g, device) for g in grads), name
 
 
+_VJEPA2_SMALL: dict[str, object] = {
+    "image_size": 16,
+    "patch_size": 8,
+    "tubelet_size": 2,
+    "num_frames": 4,
+    "dim": 24,
+    "depth": 1,
+    "num_heads": 2,
+    "predictor_dim": 12,
+    "predictor_depth": 1,
+    "predictor_heads": 2,
+    "predictor_num_mask_tokens": 2,
+}
+
+
+@pytest.mark.parametrize("use_rope", [True, False], ids=["rope", "sincos"])
+def test_vjepa2_trains_and_encodes_on_device(use_rope: bool, device: str) -> None:
+    """LCD-639: without RoPE the encoder and the predictor add a sine/cosine
+    table, which was built on the CPU in float64 — a ``DeviceMismatch`` on
+    Metal.  Only the rotary path ran there."""
+    lucid.manual_seed(0)
+    model = M.create_model("vjepa2_vit_large", use_rope=use_rope, **_VJEPA2_SMALL)
+    model = model.to(device).train()
+    optimizer = lucid.optim.Adam(model.trainable_parameters(), lr=1e-3)
+    # A 2-frame-deep 2x2 grid: eight tokens, the last two held out.
+    context = lucid.arange(6, dtype=lucid.int32, device=device).reshape(1, 6)
+    target = lucid.arange(6, 8, dtype=lucid.int32, device=device).reshape(1, 2)
+
+    out = model(lucid.rand(1, 4, 3, 16, 16, device=device), context, target)
+    assert _on(out.loss, device)
+    assert math.isfinite(float(out.loss.item()))
+    optimizer.zero_grad()
+    out.loss.backward()
+    optimizer.step()
+    model.update_target(model.momentum(0, 10))
+
+    grads = [p.grad for p in model.trainable_parameters() if p.grad is not None]
+    assert grads and all(_on(g, device) for g in grads)
+    with lucid.no_grad():
+        features = model.eval().encode(lucid.rand(1, 4, 3, 16, 16, device=device))
+    assert _on(features, device) and tuple(features.shape) == (1, 24)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # DiT (CHA-197)
 # ─────────────────────────────────────────────────────────────────────────────

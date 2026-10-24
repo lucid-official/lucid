@@ -50,6 +50,7 @@ from collections.abc import Callable
 from typing import cast, final
 
 import lucid
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._generative import extract_into_tensor
 from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
@@ -127,6 +128,20 @@ class DDIMScheduler:
         """
         self._signal_scale = fn(self._signal_scale)
         self._noise_scale = fn(self._noise_scale)
+
+    def _follow(self, latent: Tensor) -> None:
+        """Move the noising tables to ``latent``'s device, once, if elsewhere.
+
+        A model moves them through :meth:`_apply`; a scheduler used on its
+        own was handed Metal latents with CPU tables and copied both across
+        on every :meth:`add_noise`.  Moved outside any active trace, as
+        ``DiffusionScheduler._follow`` does, so a recording never holds the
+        copy (LCD-627, LCD-639).
+        """
+        device = latent.device
+        if self._signal_scale.device != device:
+            with untraced():
+                self._apply(lambda table: table.to(device))
 
     def timesteps(self, num_inference_steps: int) -> list[int]:
         """The decreasing subsequence to sample over.
@@ -256,6 +271,7 @@ class DDIMScheduler:
                     f"timestep must lie in [{-total}, {total}), got {timestep}"
                 )
             timestep = lucid.tensor([timestep], device=latent.device.type)
+        self._follow(latent)
         shape = tuple(int(s) for s in latent.shape)
         # Cast at use: a scheduler outside a model keeps float32 tables,
         # which would widen a float16 latent.

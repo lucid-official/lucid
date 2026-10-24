@@ -12,6 +12,8 @@ The old selection is written out inline here and compared bit for bit; the
 compile checks prove no host read is left in a training forward.
 """
 
+from collections.abc import Callable
+
 import pytest
 
 import lucid
@@ -204,16 +206,29 @@ def test_ddpm_hybrid_training_step(device: str) -> None:
     assert bool(lucid.isfinite(out.loss).item())
 
 
+def _ddpm() -> DDPMScheduler:
+    return DDPMScheduler(STEPS)
+
+
+def _ddim() -> DDIMScheduler:
+    return DDIMScheduler(StableDiffusionConfig(num_train_timesteps=STEPS))
+
+
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-def test_ddpm_add_noise_traces_the_same_cold_or_warm() -> None:
+@pytest.mark.parametrize("build", [_ddpm, _ddim], ids=["ddpm", "ddim"])
+def test_add_noise_traces_the_same_cold_or_warm(
+    build: Callable[[], DDPMScheduler | DDIMScheduler],
+) -> None:
     """A CPU scheduler noising Metal samples records one graph (LCD-627).
 
     ``add_noise`` moves the tables to the sample's device on first use and
     keeps them there.  Inside a trace the first call recorded that move — a
     copy of every table — and a later one fed the moved tables, so a
-    recorded training step depended on what the scheduler had served.
+    recorded training step depended on what the scheduler had served.  A
+    standalone DDIM scheduler moved its tables only through a model's
+    ``_apply``, so it copied them on every call (LCD-639).
     """
-    scheduler = DDPMScheduler(STEPS)
+    scheduler = build()
     lucid.manual_seed(6)
     x0 = lucid.randn((2, 3, 4, 4)).to("metal")
     eps = lucid.randn((2, 3, 4, 4)).to("metal")
@@ -227,7 +242,7 @@ def test_ddpm_add_noise_traces_the_same_cold_or_warm() -> None:
     (cold, first), (warm, second) = recorded(), recorded()
     assert cold == warm
     assert "to_device" not in cold
-    assert scheduler.timesteps.device.type == "metal"
+    assert first.device.type == "metal"
     assert first.tolist() == second.tolist()
 
 
