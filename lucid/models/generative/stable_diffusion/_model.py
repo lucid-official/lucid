@@ -44,6 +44,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, ModelOutput
+from lucid.models._utils._generative import model_dtype
 from lucid.models.generative.stable_diffusion._autoencoder import AutoencoderKL
 from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
 from lucid.models.generative.stable_diffusion._scheduler import (
@@ -458,10 +459,8 @@ class StableDiffusionForImageGeneration(ImageGenerationModel):
             )
 
         if latent is None:
-            latent = lucid.randn(
-                (batch, config.latent_channels, side, side),
-                device=context.device.type,
-            )
+            shape = (batch, config.latent_channels, side, side)  # in the model dtype
+            latent = lucid.randn(shape, dtype=model_dtype(inner), device=context.device)
 
         pndm = PNDMScheduler(config) if sampler == "pndm" else None
         scheduler = pndm if pndm is not None else inner.scheduler

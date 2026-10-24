@@ -30,6 +30,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.init as init
 import lucid.nn.functional as F
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import ModelOutput
@@ -1448,15 +1449,13 @@ class DIAMONDModel(PretrainedModel):
         >>> [round(v, 4) for v in schedule.tolist()]
         [5.0, 0.2831, 0.002, 0.0]
         """
-        rho = 7.0
-        sigma_min, sigma_max = 2e-3, 5.0
-        ramp = lucid.arange(steps, dtype=lucid.float32, device=device) / max(
-            steps - 1, 1
-        )
+        rho, sigma_min, sigma_max = 7.0, 2e-3, 5.0
+        work = _float32_or_wider(model_dtype(self))  # float32+, cast per step
+        ramp = lucid.arange(steps, dtype=work, device=device) / max(steps - 1, 1)
         inv = sigma_max ** (1.0 / rho) + ramp * (
             sigma_min ** (1.0 / rho) - sigma_max ** (1.0 / rho)
         )
-        return lucid.cat([inv**rho, lucid.zeros((1,), device=device)], dim=0)
+        return lucid.cat([inv**rho, lucid.zeros((1,), dtype=work, device=device)])
 
     def upsample(
         self,
@@ -1608,7 +1607,7 @@ class DIAMONDModel(PretrainedModel):
             raise ValueError(f"steps must be positive, got {steps}")
 
         factor = self.config.upsampling_factor
-        batch = int(low_res.shape[0])
+        batch, dt = int(low_res.shape[0]), model_dtype(self)
         device = low_res.device.type
         size = (int(low_res.shape[2]) * factor, int(low_res.shape[3]) * factor)
         if previous is None:
@@ -1618,16 +1617,13 @@ class DIAMONDModel(PretrainedModel):
             previous = F.interpolate(low_res, size=size, mode="bicubic")
 
         schedule = self.sigma_schedule(steps, device)
-        x = (
-            lucid.randn((batch, self.config.in_channels, *size), device=device)
-            if noise is None
-            else noise
-        )
+        shape = (batch, self.config.in_channels, *size)
+        x = lucid.randn(shape, dtype=dt, device=device) if noise is None else noise
         for index in range(steps):
-            sigma = schedule[index]
-            level = sigma + lucid.zeros((batch,), device=device)
+            sigma, step = schedule[index], schedule[index + 1] - schedule[index]
+            level = sigma.to(dt) + lucid.zeros((batch,), dtype=dt, device=device)
             denoised = self.upsample(x, level, low_res, previous)
-            x = x + (x - denoised) / sigma * (schedule[index + 1] - sigma)
+            x = x + (x - denoised) / sigma.to(dt) * step.to(dt)
         return x
 
     def imagine_frame(
@@ -1697,7 +1693,7 @@ class DIAMONDModel(PretrainedModel):
         steps = self.config.denoise_steps if steps is None else steps
         if steps < 1:
             raise ValueError(f"steps must be positive, got {steps}")
-        batch = int(frames.shape[0])
+        batch, dt = int(frames.shape[0]), model_dtype(self)
         device = frames.device.type
         schedule = self.sigma_schedule(steps, device)
 
@@ -1705,22 +1701,17 @@ class DIAMONDModel(PretrainedModel):
         # walk at randn() and lets the first Euler step do the scaling.
         # ``noise`` is therefore used as given, which is what makes it
         # usable for reproducing a rollout.
-        x = (
-            lucid.randn(
-                (batch, self.config.in_channels, *frames.shape[3:]), device=device
-            )
-            if noise is None
-            else noise
-        )
+        shape = (batch, self.config.in_channels, *frames.shape[3:])
+        x = lucid.randn(shape, dtype=dt, device=device) if noise is None else noise
         level_cond = None
         if cond_sigma is not None:
-            level_cond = cond_sigma + lucid.zeros((batch,), device=device)
+            level_cond = cond_sigma + lucid.zeros((batch,), dtype=dt, device=device)
         for index in range(steps):
-            sigma = schedule[index]
-            level = sigma + lucid.zeros((batch,), device=device)
+            sigma, step = schedule[index], schedule[index + 1] - schedule[index]
+            level = sigma.to(dt) + lucid.zeros((batch,), dtype=dt, device=device)
             denoised = self.denoise(x, level, frames, actions, level_cond)
-            derivative = (x - denoised) / sigma
-            x = x + derivative * (schedule[index + 1] - sigma)
+            derivative = (x - denoised) / sigma.to(dt)
+            x = x + derivative * step.to(dt)
         return x
 
     @override
@@ -2208,8 +2199,8 @@ class DIAMONDForWorldModeling(WorldModelingModel):
         # The accumulators live with the frames: a CPU zero refuses to add the
         # first loss of a model that has been moved to another device.
         device = frames.device.type
-        reward_loss = lucid.zeros((), device=device)
-        end_loss = lucid.zeros((), device=device)
+        reward_loss = lucid.zeros((), dtype=frames.dtype, device=device)
+        end_loss = lucid.zeros((), dtype=frames.dtype, device=device)
         steps = int(frames.shape[1]) - 1
         if steps < 1:
             raise ValueError(
