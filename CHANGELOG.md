@@ -1170,6 +1170,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make pow exact where the reference is, on Metal and CPU
 
+- give every device the reference's pow formulas
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:

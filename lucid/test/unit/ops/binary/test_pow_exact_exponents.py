@@ -4,25 +4,26 @@ Metal ``pow`` was ``mx::power``, which is ``metal::pow``, for every exponent,
 so the most common power was wrong: ``full(0.5) ** 2`` gave 0.24999997
 (variance, MSE, squared norms, L2 penalties), ``2 ** -1`` 0.49999994, and
 53-61% of float32 squares and reciprocals were not the correctly rounded
-value.  Metal now runs one kernel
-(``lucid/_C/backend/gpu/Pow.h``) for a tensor exponent, a scalar exponent
-and a scalar base, and ``F.normalize`` reaches it too.  The CPU's tensor
-exponent ran vForce's ``pow`` for every element, which is within 1 ulp but
-not exact (``x ** full_like(x, 1.)`` was not ``x`` on 16% of values); it now
-takes the scalar exponent's exact operations too.
+value.  Metal now runs one kernel (``lucid/_C/backend/gpu/Pow.h``) for a
+tensor exponent, a scalar exponent and a scalar base, and ``F.normalize``
+reaches it too.  The CPU's tensor exponent ran vForce's ``pow`` for every
+element, which is within 1 ulp but not exact (``x ** full_like(x, 1.)`` was
+not ``x`` on 16% of values, ``10 ** tensor([3.])`` 1000.0000610); it now
+takes the operations the scalar exponent takes.
 
-``exact`` below is the reference's float64 answer rounded once to the dtype.
-Each exponent is held to:
+``exact`` below is the reference's float64 answer rounded once to the dtype
+(for float64, the reference's own answer).  Each exponent is held to:
 
 * 0, 1, 2, -1, 0.5: one correctly rounded operation (``1``, ``x``,
   ``x * x``, ``1 / x``, ``sqrt``), bit for bit on both devices and in every
   dtype.  0.5 and -0.5 keep IEEE ``pow`` at -0 and -inf (0.5: +0 and +inf;
   -0.5: +inf and +0), where the reference's sqrt and rsqrt answer -0, NaN,
-  -inf and NaN.  The CPU answered IEEE already.
-* 3, -2, -0.5: Metal float32 runs the reference's own formulas for 3 and -2
-  (``x * x * x``, ``1 / (x * x)``), bit for bit its float32 answer, and
-  rsqrt for -0.5.  Measured against ``exact``, ``x * x * x`` and rsqrt are
-  within 1 ulp and ``1 / (x * x)`` within 2.
+  -inf and NaN.
+* 3, -2, -0.5: the reference's own formulas (``x * x * x``, ``1 / (x * x)``,
+  ``1 / sqrt(x)``), bit for bit its float32 / float64 answer on both
+  devices; within 1 ulp of ``exact`` in the 16-bit floats.  Where ``x * x``
+  is subnormal Metal flushes it, so -2 squares ``1 / x`` there instead,
+  within 2 ulp of ``exact``.
 * Every other exponent: ``metal::pow``, as before, which is within 3 ulp of
   ``exact`` on Metal float32 (the measured bound on 6e5 values; LCD-557
   tracks a correctly rounded kernel).  The CPU (vForce) and the 16-bit floats
@@ -55,15 +56,31 @@ from lucid.test._fixtures.devices import device_dtype_params, metal_available
 if TYPE_CHECKING:
     from _pytest.mark import ParameterSet
 
-_DTYPES = [lucid.float32, lucid.float16, lucid.bfloat16]
+_DTYPES = [lucid.float32, lucid.float16, lucid.bfloat16, lucid.float64]
 _EXACT = [0.0, 1.0, 2.0, -1.0, 0.5]
 _FORMULA = [3.0, -2.0, -0.5]
 _GENERAL = [4.0, 1.5, 2.5, 0.3]
 _EXPONENTS = _EXACT + _FORMULA + _GENERAL
 
-_TINY = {lucid.float32: 2.0**-126, lucid.float16: 2.0**-14, lucid.bfloat16: 2.0**-126}
-_BIG = {lucid.float32: 1e30, lucid.float16: 6e4, lucid.bfloat16: 1e30}
-_SPAN = {lucid.float32: 40.0, lucid.float16: 9.0, lucid.bfloat16: 40.0}
+_F32_TINY = 2.0**-126
+_TINY = {
+    lucid.float32: _F32_TINY,
+    lucid.float16: 2.0**-14,
+    lucid.bfloat16: _F32_TINY,
+    lucid.float64: 2.0**-1022,
+}
+_BIG = {
+    lucid.float32: 1e30,
+    lucid.float16: 6e4,
+    lucid.bfloat16: 1e30,
+    lucid.float64: 1e300,
+}
+_SPAN = {
+    lucid.float32: 40.0,
+    lucid.float16: 9.0,
+    lucid.bfloat16: 40.0,
+    lucid.float64: 300.0,
+}
 
 
 # ── values and oracles ───────────────────────────────────────────────────────
@@ -82,8 +99,10 @@ def _round_bf16(v: np.ndarray) -> np.ndarray:
 
 
 def _round_to(v: np.ndarray, dtype: lucid.dtype) -> np.ndarray:
-    """``v`` (float64) rounded once to ``dtype``, held in float32."""
+    """``v`` (float64) rounded once to ``dtype``; held in float32 below 64 bits."""
     with np.errstate(over="ignore"):
+        if dtype is lucid.float64:
+            return v.astype(np.float64)
         if dtype is lucid.float16:
             return v.astype(np.float16).astype(np.float32)
         if dtype is lucid.bfloat16:
@@ -92,21 +111,12 @@ def _round_to(v: np.ndarray, dtype: lucid.dtype) -> np.ndarray:
 
 
 def _bases(dtype: lucid.dtype) -> np.ndarray:
-    """Values of ``dtype`` (held in float32): planted edges, then a spread."""
+    """Values of ``dtype``: planted edges, then a spread."""
     rng = np.random.default_rng(549)
     tiny, big = _TINY[dtype], _BIG[dtype]
     planted = [0.0, -0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -3.0, 0.1, -7.25]
-    planted += [
-        math.inf,
-        -math.inf,
-        math.nan,
-        big,
-        -big,
-        tiny,
-        -tiny,
-        tiny / 16,
-        -tiny / 16,
-    ]
+    planted += [math.inf, -math.inf, math.nan, big, -big, tiny, -tiny]
+    planted += [tiny / 16, -tiny / 16]
     wide = np.exp(rng.uniform(-_SPAN[dtype], _SPAN[dtype], 600))
     spread = np.concatenate([rng.standard_normal(600) * 3, wide, -wide[:200]])
     return _round_to(np.concatenate([planted, spread]).astype(np.float64), dtype)
@@ -120,9 +130,17 @@ def _rounded_exponent(e: float, dtype: lucid.dtype) -> float:
 def _metal_flush(x: np.ndarray, device: str, dtype: lucid.dtype) -> np.ndarray:
     if device != "metal" or dtype is lucid.float16:
         return x
-    return np.where(np.abs(x) < 2.0**-126, np.copysign(np.float32(0), x), x).astype(
-        np.float32
-    )
+    zero = np.copysign(np.float32(0), x)
+    return np.where(np.abs(x) < _F32_TINY, zero, x).astype(np.float32)
+
+
+def _ieee_roots(xin: np.ndarray, r: np.ndarray, e: float) -> np.ndarray:
+    # Lucid answers IEEE pow at -0 and -inf, where sqrt and rsqrt do not.
+    if e == 0.5:
+        return np.where(xin == -math.inf, math.inf, r + 0.0)
+    if e == -0.5:
+        return np.where(xin == 0, math.inf, np.where(xin == -math.inf, 0.0, r))
+    return r
 
 
 def _exact(
@@ -132,16 +150,18 @@ def _exact(
     if e == 1.0:
         return x  # a copy: no arithmetic, so nothing is flushed
     xin = _metal_flush(x, device, dtype).astype(np.float64)
-    r = (ref.tensor(xin, dtype=ref.float64) ** e).numpy()
-    if e == 0.5:
-        r = np.where(xin == -math.inf, math.inf, r + 0.0)
-    elif e == -0.5:
-        r = np.where(xin == 0, math.inf, np.where(xin == -math.inf, 0.0, r))
+    r = _ieee_roots(xin, (ref.tensor(xin, dtype=ref.float64) ** e).numpy(), e)
     return _metal_flush(_round_to(r, dtype), device, dtype)
 
 
-def _reference_f32(ref: ModuleType, x: np.ndarray, e: float) -> np.ndarray:
-    return (ref.tensor(x, dtype=ref.float32) ** e).numpy()
+def _reference_own(
+    ref: ModuleType, x: np.ndarray, e: float, dtype: lucid.dtype, device: str
+) -> np.ndarray:
+    """The reference's answer computed in ``dtype`` (float32 or float64)."""
+    xin = _metal_flush(x, device, dtype)
+    rdt = ref.float64 if dtype is lucid.float64 else ref.float32
+    r = _ieee_roots(xin, (ref.tensor(xin, dtype=rdt) ** e).numpy(), e)
+    return _metal_flush(r, device, dtype)
 
 
 def _ordered(v: np.ndarray, dtype: lucid.dtype) -> np.ndarray:
@@ -149,9 +169,12 @@ def _ordered(v: np.ndarray, dtype: lucid.dtype) -> np.ndarray:
         i, bits = v.astype(np.float16).view(np.int16).astype(np.int64), 15
     elif dtype is lucid.bfloat16:
         i, bits = (v.view(np.int32) >> 16).astype(np.int64), 15
+    elif dtype is lucid.float64:
+        i, bits = v.view(np.int64), 63
     else:
         i, bits = v.view(np.int32).astype(np.int64), 31
-    return np.where(i < 0, -(i & ((1 << bits) - 1)), i)
+    # Python integers: a float64 distance across zero overflows int64.
+    return np.where(i < 0, -(i & ((1 << bits) - 1)), i).astype(object)
 
 
 def _assert_within(
@@ -177,30 +200,64 @@ def _assert_within(
         )
 
 
-def _max_ulp(e: float, dtype: lucid.dtype, device: str) -> int:
+def _assert_power(
+    ref: ModuleType,
+    got: np.ndarray,
+    x: np.ndarray,
+    e: float,
+    dtype: lucid.dtype,
+    device: str,
+    what: str,
+) -> None:
+    """``got`` is ``x ** e`` (``e`` already in ``dtype``) as the module says."""
+    if e in _FORMULA and dtype in (lucid.float32, lucid.float64):
+        flushed_square = np.zeros(x.shape, dtype=bool)
+        if device == "metal" and e == -2.0:
+            flushed_square = np.abs(x.astype(np.float64)) ** 2 < _F32_TINY
+        keep, sq = ~flushed_square, flushed_square
+        own = _reference_own(ref, x, e, dtype, device)
+        _assert_within(got[keep], own[keep], x[keep], dtype, 0, what)
+        exact = _exact(ref, x, e, dtype, device)
+        _assert_within(got[sq], exact[sq], x[sq], dtype, 2, what + " (x*x flushed)")
+        return
     if e in _EXACT:
-        return 0
-    if dtype is not lucid.float32 or device == "cpu":
-        return 1
-    if e == -2.0:
-        return 2
-    return 1 if e in _FORMULA else 3
+        tol = 0
+    elif e in _FORMULA or dtype is not lucid.float32 or device == "cpu":
+        tol = 1
+    else:
+        tol = 3
+    _assert_within(got, _exact(ref, x, e, dtype, device), x, dtype, tol, what)
 
 
 def _values(t: lucid.Tensor) -> np.ndarray:
-    return t.cpu().to(lucid.float32).numpy()
+    held = lucid.float64 if t.dtype is lucid.float64 else lucid.float32
+    return t.cpu().to(held).numpy()
 
 
 def _on(x: np.ndarray, dtype: lucid.dtype, device: str) -> lucid.Tensor:
     return lucid.tensor(x).to(dtype).to(device)
 
 
-# ── the reported value ───────────────────────────────────────────────────────
+def _strict_xfail(broken: bool, reason: str) -> list[pytest.MarkDecorator]:
+    return [pytest.mark.xfail(strict=True, reason=reason)] if broken else []
+
+
+# ── the reported values ──────────────────────────────────────────────────────
 
 
 def test_reported_square_of_a_half_is_a_quarter(device: str) -> None:
     out = lucid.full((16,), 0.5, device=device) ** 2
     assert out.tolist() == [0.25] * 16
+
+
+def test_reported_powers_of_ten_agree_across_devices(
+    ref: ModuleType, device: str
+) -> None:
+    # The CPU's vForce answered 1000.0000610 and 0.0100000007.
+    exps = [3.0, -2.0, -0.5, 2.0, -1.0, 0.5]
+    got = (10.0 ** lucid.tensor(exps, device=device)).tolist()
+    assert got == (10.0 ** ref.tensor(exps)).tolist()
+    assert got[:2] == [1000.0, float(np.float32(0.01))]
 
 
 # ── scalar exponent, tensor exponent, every dtype ────────────────────────────
@@ -213,26 +270,20 @@ def test_scalar_exponent_matches_the_reference(
 ) -> None:
     x = _bases(dtype)
     t = _on(x, dtype, device)
-    want = _exact(ref, x, _rounded_exponent(e, dtype), dtype, device)
+    er = _rounded_exponent(e, dtype)
     for name, out in (
         ("**", t**e),
         ("lucid.pow", lucid.pow(t, e)),
         ("Tensor.pow", t.pow(e)),
     ):
         assert out.dtype == dtype
-        _assert_within(
-            _values(out), want, x, dtype, _max_ulp(e, dtype, device), f"x {name} {e}"
-        )
+        _assert_power(ref, _values(out), x, er, dtype, device, f"x {name} {e}")
 
 
 _F16_TENSOR = (
     "LCD-557: float16 tensor-exponent specials ride MLX's half pow (<=1 ulp on "
     "80/28/46/24/5 of 65536 values for 2/3/-1/-2/0.5)"
 )
-
-
-def _strict_xfail(broken: bool, reason: str) -> list[pytest.MarkDecorator]:
-    return [pytest.mark.xfail(strict=True, reason=reason)] if broken else []
 
 
 def _tensor_exponent_params() -> list[ParameterSet]:
@@ -257,26 +308,40 @@ def test_tensor_exponent_matches_the_scalar_exponent(
     t = _on(x, dtype, device)
     ex = lucid.full_like(t, e)
     got = _values(t**ex)
-    want = _exact(ref, x, float(_values(ex)[0]), dtype, device)
-    _assert_within(got, want, x, dtype, _max_ulp(e, dtype, device), f"x ** tensor({e})")
+    er = float(_values(ex)[0])
+    _assert_power(ref, got, x, er, dtype, device, f"x ** tensor({e})")
     np.testing.assert_array_equal(got, _values(t**e))
     # ``ex`` is evaluated now: on Metal a broadcast of one value, read as one.
     np.testing.assert_array_equal(_values(t**ex), got)
 
 
-@pytest.mark.skipif(not metal_available(), reason="Metal only")
-@pytest.mark.parametrize("e", [3.0, -2.0])
-def test_metal_runs_the_reference_formula_for_three_and_minus_two(
-    ref: ModuleType, e: float
+@pytest.mark.parametrize("e", [2.0, 3.0, -1.0, -2.0, 0.5, -0.5])
+def test_float16_scalar_specials_are_correctly_rounded_on_every_value(
+    ref: ModuleType, device: str, e: float
 ) -> None:
-    # Where ``x * x`` or the answer is subnormal Metal flushes it; the
-    # oracle test above holds those elements.
-    x = _bases(lucid.float32)
-    want = _reference_f32(ref, x, e)
-    with np.errstate(over="ignore"):
-        normal = (np.abs(x * x) >= 2.0**-126) & (np.abs(want) >= 2.0**-126)
-    got = _values(_on(x, lucid.float32, "metal") ** e)
-    np.testing.assert_array_equal(got[normal], want[normal])
+    # Computed in float32 and rounded once, each is the correctly rounded
+    # float16; Metal's -0.5 is float16's own rsqrt, which is too.
+    bits = np.arange(1 << 16, dtype=np.uint32).astype(np.uint16)
+    x = bits.view(np.float16).astype(np.float32)
+    got = _values(_on(x, lucid.float16, device) ** e)
+    want = _exact(ref, x, e, lucid.float16, device)
+    _assert_within(got, want, x, lucid.float16, 0, f"float16 x ** {e}")
+
+
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
+def test_cpu_tensor_exponent_mixing_exact_and_general_elements(
+    ref: ModuleType, dtype: lucid.dtype
+) -> None:
+    # A tile holding both runs vForce, then the exact operations on the
+    # special elements only.
+    rng = np.random.default_rng(3)
+    x = _round_to(np.abs(rng.standard_normal(5000)) + 0.05, dtype)
+    e = _round_to(rng.choice(np.array(_EXPONENTS), 5000), dtype)
+    got = _values(lucid.tensor(x) ** lucid.tensor(e))
+    for v in _EXPONENTS:
+        m = e == _rounded_exponent(v, dtype)
+        er = _rounded_exponent(v, dtype)
+        _assert_power(ref, got[m], x[m], er, dtype, "cpu", f"mixed tile, exponent {v}")
 
 
 # ── signs, zeros, infinities ─────────────────────────────────────────────────
@@ -292,6 +357,7 @@ _IEEE_CASES = [
     (-3.0, 3.0, -27.0),
     (-8.0, 1.0 / 3.0, math.nan),
     (-2.0, 0.5, math.nan),
+    (-4.0, -0.5, math.nan),
     (0.0, 0.0, 1.0),
     (math.nan, 0.0, 1.0),
     (1.0, math.nan, 1.0),
@@ -302,14 +368,18 @@ _IEEE_CASES = [
     (-0.0, 2.0, 0.0),
     (-0.0, 0.5, 0.0),
     (-0.0, -0.5, math.inf),
+    (0.0, -0.5, math.inf),
     (0.0, -3.0, math.inf),
     (-math.inf, 3.0, -math.inf),
     (-math.inf, -3.0, -0.0),
     (-math.inf, 2.0, math.inf),
+    (-math.inf, -2.0, 0.0),
     (-math.inf, 0.5, math.inf),
     (-math.inf, -0.5, 0.0),
+    (math.inf, -0.5, 0.0),
     (math.inf, -1.0, 0.0),
     (math.nan, 2.0, math.nan),
+    (math.nan, -0.5, math.nan),
     (-1.0, math.inf, 1.0),
 ]
 
@@ -408,8 +478,9 @@ def test_strided_and_broadcast_operands_take_the_same_paths(device: str) -> None
         np.arange(1, 25, dtype=np.float32).reshape(4, 6) / 8, device=device
     )
     cpu = x.cpu()
-    # The exact exponents only, so the CPU's answer is the oracle.
-    exps = lucid.tensor([0.0, 1.0, 2.0, -1.0, 0.5, 2.0], device=device)
+    # Exponents both devices answer with the same operations, so the CPU's
+    # answer is the oracle.
+    exps = lucid.tensor([0.0, 2.0, 3.0, -2.0, 0.5, -0.5], device=device)
     cases = {
         "transposed": (lambda t, _e: t.mT**2),
         "sliced": (lambda t, _e: t[:, ::2] ** -1),

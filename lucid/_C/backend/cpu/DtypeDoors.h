@@ -440,13 +440,66 @@ inline void select_fill(const T* in, const std::uint8_t* mask, T value, T* out, 
     });
 }
 
-// IEEE ``pow(v, 0.5)``: sqrt, except at -0 (sqrt keeps the sign, the power
-// is +0) and -inf (sqrt is NaN, the power +inf).
+// IEEE ``pow(v, 0.5)`` from ``s = sqrt(v)``: sqrt, except at -0 (sqrt keeps
+// the sign, the power is +0) and -inf (sqrt is NaN, the power +inf).
+template <typename T>
+inline T sqrt_power_of(T v, T s) {
+    constexpr T kInf = std::numeric_limits<T>::infinity();
+    return v == -kInf ? kInf : s + T(0);
+}
+
 template <typename T>
 inline T sqrt_power(T v) {
+    return sqrt_power_of(v, std::sqrt(v));
+}
+
+// IEEE ``pow(v, -0.5)`` from ``inv = 1 / sqrt(v)``, the reference's formula,
+// except at -0 (that is -inf, the power +inf) and -inf (NaN, the power +0).
+template <typename T>
+inline T rsqrt_power_of(T v, T inv) {
     constexpr T kInf = std::numeric_limits<T>::infinity();
-    const T r = std::sqrt(v) + T(0);
-    return v == -kInf ? kInf : r;
+    return v == T(0) ? kInf : (v == -kInf ? T(0) : inv);
+}
+
+template <typename T>
+inline T rsqrt_power(T v) {
+    return rsqrt_power_of(v, T(1) / std::sqrt(v));
+}
+
+// Calls ``f`` with the element operation of an exponent the reference
+// answers with one or two IEEE operations, and returns false for any other
+// exponent.  0, 1, 2, -1 and 0.5 are one correctly rounded operation, so
+// the exact power; 3, -2 and -0.5 are the reference's own formulas
+// (``x*x*x``, ``1/(x*x)``, ``1/sqrt(x)``), so its bits.
+template <typename T, typename F>
+inline bool with_exact_power(T e, F&& f) {
+    if (e == T(2))
+        f([](T v) { return v * v; });
+    else if (e == T(1))
+        f([](T v) { return v; });
+    else if (e == T(0))
+        f([](T) { return T(1); });
+    else if (e == T(-1))
+        f([](T v) { return T(1) / v; });
+    else if (e == T(0.5))
+        f([](T v) { return sqrt_power(v); });
+    else if (e == T(3))
+        f([](T v) { return v * v * v; });
+    else if (e == T(-2))
+        f([](T v) { return T(1) / (v * v); });
+    else if (e == T(-0.5))
+        f([](T v) { return rsqrt_power(v); });
+    else
+        return false;
+    return true;
+}
+
+template <typename T>
+inline void vpow(const T* x, const T* y, T* out, std::size_t n) {
+    if constexpr (std::is_same_v<T, float>)
+        cpu::vpow_f32(x, y, out, n);
+    else
+        cpu::vpow_f64(x, y, out, n);
 }
 
 // ``out = x ** e`` for a scalar exponent.
@@ -454,10 +507,9 @@ inline T sqrt_power(T v) {
 // vForce's pow is within 1 ulp, not exact (24-30% of float32 answers are 1
 // ulp off, for every exponent: ``x ** 1`` was not ``x``), and ~8 ns an
 // element; backward reaches it for every power (``d/dx x**2`` is
-// ``2 * x**1``).  Exponents whose answer is one correctly rounded operation
-// take that operation instead, so the result is the exact power: x*x, 1/x
-// and sqrt are each a single IEEE rounding.  Any other exponent runs vForce
-// in L1 tiles across cores.
+// ``2 * x**1``).  The exponents of ``with_exact_power`` take their
+// operations instead.  Any other exponent runs vForce in L1 tiles across
+// cores.
 template <typename T>
 inline void pow_by_scalar(const T* in, T e, T* out, std::size_t n) {
     auto each = [&](auto f) {
@@ -468,62 +520,93 @@ inline void pow_by_scalar(const T* in, T e, T* out, std::size_t n) {
                 y[i] = f(x[i]);
         });
     };
-    if (e == T(2)) {
-        each([](T v) { return v * v; });
-    } else if (e == T(1)) {
-        each([](T v) { return v; });
-    } else if (e == T(0)) {
-        each([](T) { return T(1); });
-    } else if (e == T(-1)) {
-        each([](T v) { return T(1) / v; });
-    } else if (e == T(0.5)) {
-        each([](T v) { return sqrt_power(v); });
-    } else {
-        cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-            T expo[kTanhTile];
-            std::fill_n(expo, std::min(kTanhTile, hi - lo), e);
-            for (std::size_t s = lo; s < hi; s += kTanhTile) {
-                const std::size_t m = std::min(kTanhTile, hi - s);
-                if constexpr (std::is_same_v<T, float>)
-                    cpu::vpow_f32(in + s, expo, out + s, m);
-                else
-                    cpu::vpow_f64(in + s, expo, out + s, m);
-            }
-        });
-    }
+    if (with_exact_power(e, each))
+        return;
+    cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
+        T expo[kTanhTile];
+        std::fill_n(expo, std::min(kTanhTile, hi - lo), e);
+        for (std::size_t s = lo; s < hi; s += kTanhTile)
+            vpow(in + s, expo, out + s, std::min(kTanhTile, hi - s));
+    });
 }
 
-// ``out[i] = x[i] ** y[i]`` again for each element whose exponent
-// ``pow_by_scalar`` answers with one correctly rounded operation (0, 1, 2,
-// -1, 0.5); every other element of ``out`` is left as it is.  Run over
-// vForce's answer for a tensor exponent, so ``x ** full_like(x, 2)`` is
-// ``x ** 2``.  Each of those exponents has an all-zero mantissa, so a tile
-// with none (``x ** t`` for a general ``t``) costs one AND and min per
-// element.  The rewrite selects instead of branching, so it vectorises too
-// (a branch per element tripled the time of a mixed exponent tensor).
+// Whether any of ``y[0, n)`` can be an exponent of ``with_exact_power``.
+// Every one of them has a mantissa that is zero below its top bit (3 is
+// 1.5 * 2), so a tile of general exponents costs one AND and min an element.
+template <typename T>
+inline bool may_hold_exact_exponent(const T* y, std::size_t n) {
+    using Bits = std::conditional_t<std::is_same_v<T, float>, std::uint32_t, std::uint64_t>;
+    constexpr Bits kLow = (Bits{1} << (std::numeric_limits<T>::digits - 2)) - 1;
+    const T* __restrict ys = y;
+    Bits low = kLow;
+    for (std::size_t i = 0; i < n; ++i)
+        low = std::min(low, static_cast<Bits>(std::bit_cast<Bits>(ys[i]) & kLow));
+    return low == 0;
+}
+
+template <typename T>
+inline bool all_equal(const T* y, std::size_t n) {
+    const T* __restrict ys = y;
+    const T first = ys[0];
+    bool same = true;
+    for (std::size_t i = 1; i < n; ++i)
+        same &= ys[i] == first;
+    return same;
+}
+
+// ``out[i]`` rewritten with ``with_exact_power``'s operation for each
+// element whose exponent has one; the others keep vForce's answer.  It
+// selects instead of branching, so it vectorises (a branch per element
+// tripled the time of a mixed exponent tensor), and the three reciprocals
+// share one divide: ``1 / d`` with ``d`` the element's ``x``, ``x * x`` or
+// ``sqrt(x)``.
 template <typename T>
 inline void exact_powers(const T* x, const T* y, T* out, std::size_t n) {
-    using Bits = std::conditional_t<std::is_same_v<T, float>, std::uint32_t, std::uint64_t>;
-    constexpr Bits kMantissa = (Bits{1} << (std::numeric_limits<T>::digits - 1)) - 1;
     const T* __restrict xs = x;
     const T* __restrict ys = y;
     T* __restrict o = out;
-    Bits low = kMantissa;
-    for (std::size_t i = 0; i < n; ++i)
-        low = std::min(low, static_cast<Bits>(std::bit_cast<Bits>(ys[i]) & kMantissa));
-    if (low != 0)
-        return;
     for (std::size_t i = 0; i < n; ++i) {
         const T e = ys[i];
         const T v = xs[i];
+        const T sq = v * v;
+        const T s = std::sqrt(v);
+        const T inv = T(1) / ((e == T(-2)) ? sq : ((e == T(-0.5)) ? s : v));
         T r = o[i];
-        r = (e == T(2)) ? v * v : r;
+        r = (e == T(2)) ? sq : r;
         r = (e == T(1)) ? v : r;
         r = (e == T(0)) ? T(1) : r;
-        r = (e == T(-1)) ? T(1) / v : r;
-        r = (e == T(0.5)) ? sqrt_power(v) : r;
+        r = (e == T(-1) || e == T(-2)) ? inv : r;
+        r = (e == T(0.5)) ? sqrt_power_of(v, s) : r;
+        r = (e == T(3)) ? sq * v : r;
+        r = (e == T(-0.5)) ? rsqrt_power_of(v, inv) : r;
         o[i] = r;
     }
+}
+
+// ``out = x ** y`` over one L1 tile of a tensor exponent: vForce, with the
+// exponents of ``with_exact_power`` taking their operations.  A tile of one
+// exponent (``x ** full_like(x, e)``) takes that exponent's operation, or
+// vForce alone, so a uniform 4 or 1.5, which the mantissa test lets through,
+// pays no select pass.
+template <typename T>
+inline void pow_tile(const T* x, const T* y, T* out, std::size_t n) {
+    if (!may_hold_exact_exponent(y, n)) {
+        vpow(x, y, out, n);
+        return;
+    }
+    auto each = [&](auto f) {
+        const T* __restrict xs = x;
+        T* __restrict o = out;
+        for (std::size_t i = 0; i < n; ++i)
+            o[i] = f(xs[i]);
+    };
+    if (all_equal(y, n)) {
+        if (!with_exact_power(y[0], each))
+            vpow(x, y, out, n);
+        return;
+    }
+    vpow(x, y, out, n);
+    exact_powers(x, y, out, n);
 }
 
 }  // namespace detail

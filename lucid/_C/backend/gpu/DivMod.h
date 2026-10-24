@@ -36,6 +36,7 @@
 #include <mlx/fast.h>
 #include <mlx/ops.h>
 
+#include "../../core/ErrorBuilder.h"
 #include "../DivMod.h"
 #include "BinaryKernelLoad.h"
 
@@ -181,6 +182,11 @@ mx::array run(const mx::array& a_in, const mx::array& b_in) {
     const std::size_t n = a.size();
     if (n == 0)
         return mx::zeros(out_shape, dt);
+    // No MLX op answers these exactly, so a tensor past one launch is
+    // refused rather than computed inexactly.
+    if (!fits_one_launch(n))
+        ErrorBuilder("gpu_divmod")
+            .not_implemented("//, % and fmod on Metal take at most 2**31 - 1 elements per call");
     const int mode_int = (M == DivMod::FloorDiv) ? 0 : ((M == DivMod::Remainder) ? 1 : 2);
     const int threads = static_cast<int>(n);
     const int tg = static_cast<int>(std::min<std::size_t>(n, 256));

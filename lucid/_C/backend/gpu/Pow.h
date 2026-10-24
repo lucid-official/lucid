@@ -13,10 +13,11 @@
 //     operations take those operations here, element by element, so a
 //     tensor exponent of 2 is ``x * x`` too:
 //     0 → 1, 1 → x, 2 → x*x, 3 → x*x*x, -1 → 1/x, -2 → 1/(x*x),
-//     0.5 → sqrt, -0.5 → rsqrt.  Metal's ``*``, divide, sqrt and rsqrt are
-//     correctly rounded, so 0, 1, 2, -1 and 0.5 are the exact power.
+//     0.5 → sqrt, -0.5 → 1/sqrt.  Metal's ``*``, divide and sqrt are
+//     correctly rounded, so 0, 1, 2, -1 and 0.5 are the exact power, and
+//     3, -2 and -0.5 are the reference's float32 bits.
 //   * 0.5 and -0.5 keep IEEE ``pow`` at -0 and -inf (+0 / +inf, and
-//     +inf / +0), where sqrt and rsqrt answer -0, NaN and -inf; the CPU
+//     +inf / +0), where sqrt and 1/sqrt answer -0, NaN and -inf; the CPU
 //     backend answers the same.
 //   * -2 squares the reciprocal when ``x * x`` would be subnormal, since Metal
 //     flushes it to zero and ``1 / 0`` is inf where the answer is finite.
@@ -53,6 +54,7 @@
 
 #include "../../core/Half.h"
 #include "BinaryKernelLoad.h"
+#include "MlxBridge.h"
 
 namespace lucid::backend {
 
@@ -68,23 +70,28 @@ inline bool lucid_pow_is_special(float y) {
     return y == 2.0f || y == 3.0f || y == -1.0f || y == -2.0f || y == 0.5f || y == -0.5f;
 }
 
+// The compiler predicates these cases for a per-element exponent, so every
+// element pays for all of them: the reciprocals of -1, -2 and -0.5 share one
+// divide (of ``x``, ``x * x`` or ``sqrt(x)``) and 0.5 and -0.5 one sqrt.
+// Four divides and two sqrts cost a general bfloat16 exponent 17%.
 inline float lucid_pow_special(float x, float y) {
+    float sq = x * x;
+    float s = metal::precise::sqrt(x);
+    bool tiny = (y == -2.0f) && !(sq >= 0x1p-126f);
+    float inv = metal::precise::divide(1.0f, (y == -2.0f) ? (tiny ? x : sq) : ((y == -0.5f) ? s : x));
     if (y == 2.0f)
-        return x * x;
+        return sq;
     if (y == 3.0f)
-        return x * x * x;
+        return sq * x;
     if (y == -1.0f)
-        return metal::precise::divide(1.0f, x);
-    if (y == -2.0f) {
-        float sq = x * x;
-        float inv = metal::precise::divide(1.0f, x);
-        return (sq >= 0x1p-126f) ? metal::precise::divide(1.0f, sq) : inv * inv;
-    }
+        return inv;
+    if (y == -2.0f)
+        return tiny ? inv * inv : inv;
     if (y == 0.5f)
-        return (x == -INFINITY) ? INFINITY : metal::precise::sqrt(x) + 0.0f;
+        return (x == -INFINITY) ? INFINITY : s + 0.0f;
     if (x == 0.0f)
         return INFINITY;
-    return (x == -INFINITY) ? 0.0f : metal::precise::rsqrt(x);
+    return (x == -INFINITY) ? 0.0f : inv;
 }
 )";
 }
@@ -107,6 +114,23 @@ inline bfloat16_t lucid_pow_native(bfloat16_t a, bfloat16_t b) {
 }
 
 template <typename T>
+inline T lucid_pow_special_in(T a, float x, float y) {
+    return static_cast<T>(lucid_pow_special(x, y));
+}
+
+// float16's own rsqrt is correctly rounded on all 65536 values, as the
+// float32 1/sqrt rounded once is, so it gives the same bits at the cost of
+// MLX's half pow; the float32 divide and sqrt cost x ** -0.5 18%.
+template <>
+inline half lucid_pow_special_in<half>(half a, float x, float y) {
+    if (y != -0.5f)
+        return static_cast<half>(lucid_pow_special(x, y));
+    if (x == 0.0f)
+        return half(INFINITY);
+    return (x == -INFINITY) ? half(0.0f) : metal::precise::rsqrt(a);
+}
+
+template <typename T>
 inline T lucid_pow(T a, float y) {
     float x = static_cast<float>(a);
     if (y == 0.0f || x == 1.0f)
@@ -114,7 +138,7 @@ inline T lucid_pow(T a, float y) {
     if (y == 1.0f)
         return a;
     if (lucid_pow_is_special(y))
-        return static_cast<T>(lucid_pow_special(x, y));
+        return lucid_pow_special_in(a, x, y);
     return lucid_pow_native(a, static_cast<T>(y));
 }
 )";
@@ -203,6 +227,8 @@ inline mx::array run(const mx::array& a, const mx::array& b_in, Exponent ex) {
         n *= static_cast<std::size_t>(d);
     if (n == 0)
         return mx::zeros(out_shape, dt);
+    if (!fits_one_launch(n))
+        return mx::power(a, b);
     const int threads = static_cast<int>(n);
     const int tg = static_cast<int>(std::min<std::size_t>(n, 256));
     if (reads_flat(a, out_shape) && reads_flat(b, out_shape)) {
@@ -262,7 +288,7 @@ inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, const ::mlx::core
 inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, double exponent) {
     namespace mx = ::mlx::core;
     const mx::Dtype dt = a.dtype();
-    const mx::array b = mx::astype(mx::array(static_cast<float>(exponent)), dt);
+    const mx::array b = gpu::mlx_scalar(exponent, dt);
     if (!gpu_pow_detail::is_kernel_dtype(dt))
         return mx::power(a, b);
     const float e = gpu_pow_detail::rounded_exponent(exponent, dt);

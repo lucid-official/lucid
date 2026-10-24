@@ -114,25 +114,18 @@ Storage CpuBackend::div(const Storage& a, const Storage& b, const Shape& shape, 
 Storage CpuBackend::pow(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
     return binary_op(
         a, b, shape, dt,
-        // vForce's pow is ~8 ns an element: split it across cores.  It is
-        // also up to 1 ulp off where the power is one IEEE operation, so
-        // those elements are recomputed exactly, an L1 tile at a time.
+        // vForce's pow is ~8 ns an element: split it across cores, an L1
+        // tile at a time (see detail::pow_tile for the exact exponents).
         [](const float* ap, const float* bp, float* op, std::size_t n) {
             cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-                for (std::size_t s = lo; s < hi; s += kTanhTile) {
-                    const std::size_t m = std::min(kTanhTile, hi - s);
-                    cpu::vpow_f32(ap + s, bp + s, op + s, m);
-                    detail::exact_powers(ap + s, bp + s, op + s, m);
-                }
+                for (std::size_t s = lo; s < hi; s += kTanhTile)
+                    detail::pow_tile(ap + s, bp + s, op + s, std::min(kTanhTile, hi - s));
             });
         },
         [](const double* ap, const double* bp, double* op, std::size_t n) {
             cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-                for (std::size_t s = lo; s < hi; s += kTanhTile) {
-                    const std::size_t m = std::min(kTanhTile, hi - s);
-                    cpu::vpow_f64(ap + s, bp + s, op + s, m);
-                    detail::exact_powers(ap + s, bp + s, op + s, m);
-                }
+                for (std::size_t s = lo; s < hi; s += kTanhTile)
+                    detail::pow_tile(ap + s, bp + s, op + s, std::min(kTanhTile, hi - s));
             });
         },
         cpu::ipow_vec<std::int32_t>, cpu::ipow_vec<std::int64_t>);
@@ -459,19 +452,26 @@ Storage CpuBackend::rpow_scalar(const Storage& a, const Shape& shape, Dtype dt, 
     const std::size_t numel = shape_numel(shape);
     std::size_t nb = numel * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+    // The tensor power's tiles, so an exponent element of 2 is ``base * base``
+    // here as in ``pow``.
+    auto run = [&](auto b) {
+        using T = decltype(b);
+        const T* y = reinterpret_cast<const T*>(cs.ptr.get());
+        T* out = reinterpret_cast<T*>(ptr.get());
+        cpu::parallel_for(numel, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
+            T bases[kTanhTile];
+            std::fill_n(bases, std::min(kTanhTile, hi - lo), b);
+            for (std::size_t s = lo; s < hi; s += kTanhTile)
+                detail::pow_tile(bases, y + s, out + s, std::min(kTanhTile, hi - s));
+        });
+    };
     switch (dt) {
-    case Dtype::F32: {
-        std::vector<float> base_buf(numel, static_cast<float>(base));
-        cpu::vpow_f32(base_buf.data(), reinterpret_cast<const float*>(cs.ptr.get()),
-                      reinterpret_cast<float*>(ptr.get()), numel);
+    case Dtype::F32:
+        run(static_cast<float>(base));
         break;
-    }
-    case Dtype::F64: {
-        std::vector<double> base_buf(numel, base);
-        cpu::vpow_f64(base_buf.data(), reinterpret_cast<const double*>(cs.ptr.get()),
-                      reinterpret_cast<double*>(ptr.get()), numel);
+    case Dtype::F64:
+        run(base);
         break;
-    }
     default:
         ErrorBuilder("cpu_backend::rpow_scalar").not_implemented("dtype not supported");
     }

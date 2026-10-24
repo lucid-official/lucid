@@ -12,9 +12,21 @@
 // ``elem_to_loc``, so broadcast (stride-0) and permuted operands need no
 // copy; the kernel is built without ``ensure_row_contiguous`` and receives
 // ``a_shape`` / ``a_strides`` / ``a_ndim`` (and ``b_*``).
+//
+// Either way one thread computes one element, and MLX's grid is ``int`` and
+// ``elem`` a 32-bit thread position, so one launch reaches at most
+// ``INT32_MAX`` elements: ``fits_one_launch``.
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+
 namespace lucid::backend {
+
+inline bool fits_one_launch(std::size_t n) {
+    return n <= static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
+}
 
 inline const char* binary_kernel_load_src(bool strided) {
     return strided ? R"(
