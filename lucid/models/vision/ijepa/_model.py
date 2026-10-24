@@ -30,7 +30,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike
 from lucid.models._base import PretrainedModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
-from lucid.models._utils._common import host_random
+from lucid.models._utils._common import host_random, update_averages
 from lucid.models._output import ImageClassificationOutput, ModelOutput
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models.vision._common._transformers import (
@@ -492,13 +492,7 @@ class IJEPAModel(PretrainedModel, BackboneMixin):
         """
         if not 0.0 <= momentum <= 1.0:
             raise ValueError(f"momentum must lie in [0, 1], got {momentum}")
-        with lucid.no_grad():
-            for live, averaged in zip(
-                self.encoder.parameters(), self.target_encoder.parameters(), strict=True
-            ):
-                # ``averaged[:] = ...``, not ``averaged.data[:] = ...``: the
-                # latter writes to a copy and silently does nothing.
-                averaged[:] = momentum * averaged + (1.0 - momentum) * live
+        update_averages(self.encoder, [(self.target_encoder, momentum)])
 
     # ── representations ──────────────────────────────────────────────────
 

@@ -48,6 +48,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
+from lucid.models._utils._common import update_averages
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
 from lucid.models.generative._common._actor import Actor
@@ -734,13 +735,9 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         something worth regressing toward.
         """
         mix = 1.0 if self._updates == 0 else self._critic_ema
-        live = self.dreamer_v3.value_head.parameters()
-        slow = self.dreamer_v3.slow_value_head.parameters()
-        with lucid.no_grad():
-            for source, destination in zip(live, slow, strict=True):
-                # `destination[:] = ...`, not `destination.data[:] = ...`:
-                # the latter writes to a copy and silently does nothing.
-                destination[:] = mix * source + (1.0 - mix) * destination
+        update_averages(
+            self.dreamer_v3.value_head, [(self.dreamer_v3.slow_value_head, 1.0 - mix)]
+        )
         self._updates += 1
 
     # ── objectives ───────────────────────────────────────────────────────

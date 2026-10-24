@@ -5,7 +5,7 @@ regardless of its output task (classification, detection, segmentation …).
 """
 
 import random
-from collections.abc import Mapping, Sized
+from collections.abc import Mapping, Sequence, Sized
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
@@ -413,6 +413,64 @@ def reject_unavailable_pretrained(factory_name: str, *, alternative: str = "") -
         f"No pretrained weights are published for ``{factory_name}``; "
         f"``{factory_name}(pretrained=True)`` cannot be honoured.{hint}"
     )
+
+
+def update_averages(
+    live: nn.Module, averages: Sequence[tuple[nn.Module, float]]
+) -> None:
+    r"""Move each weight average one step toward the live network.
+
+    :math:`\bar\theta \leftarrow d\,\bar\theta + (1 - d)\,\theta` for every
+    ``(average, d)``, over parameters, under ``no_grad``.  An EMA teacher, a
+    target encoder and a slow critic are all this update; this is the one
+    place the zoo pairs an average's tensors with the live ones.
+
+    Paired by name, not by position: a position holds only while no edit to
+    either tree has moved it, and deleting a child and assigning it back
+    moves it to the end of its registry — where two neighbours agree in
+    shape, a positional pairing averages one into the other without an
+    error.  Every average is written before one batched evaluation: the
+    writes are lazy on Metal, an unread average would chain each step onto
+    the last, and one evaluation per tensor costs a sync per tensor.
+
+    Parameters
+    ----------
+    live : Module
+        The network the optimiser trains.
+    averages : sequence of (Module, float)
+        Each average, with the weight ``d`` kept on its old value.
+
+    Raises
+    ------
+    RuntimeError
+        When an average's parameter names or shapes differ from the live
+        network's, before anything is written.
+    """
+    sources = dict(live.named_parameters())
+    pairs: list[tuple[Tensor, Tensor, float]] = []
+    for average, decay in averages:
+        targets = dict(average.named_parameters())
+        if targets.keys() != sources.keys():
+            missing = sorted(sources.keys() - targets.keys())
+            extra = sorted(targets.keys() - sources.keys())
+            raise RuntimeError(
+                "a weight average must hold the live network's parameters by "
+                f"name; missing from the average: {missing}, not in the live "
+                f"network: {extra}"
+            )
+        for name, target in targets.items():
+            if tuple(target.shape) != tuple(sources[name].shape):
+                raise RuntimeError(
+                    f"weight average {name!r} has shape {tuple(target.shape)}, "
+                    f"the live parameter {tuple(sources[name].shape)}"
+                )
+            pairs.append((target, sources[name], decay))
+    with lucid.no_grad():
+        for slow, fast, keep in pairs:
+            # `slow[:] = ...`, not `slow.data[:] = ...`: the latter writes
+            # to a copy and silently does nothing.
+            slow[:] = keep * slow + (1.0 - keep) * fast
+    lucid.eval(*(slow for slow, _, _ in pairs))
 
 
 # ── host reads ───────────────────────────────────────────────────────────────

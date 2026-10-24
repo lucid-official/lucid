@@ -20,6 +20,7 @@ from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, Feature
 from lucid.models._output import ImageClassificationOutput, ModelOutput
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._utils._classification import DropPath
+from lucid.models._utils._common import update_averages
 from lucid.models.vision.vjepa2._config import VJEPA2Config
 
 __all__ = [
@@ -1145,11 +1146,7 @@ class VJEPA2Model(PretrainedModel, BackboneMixin):
         """Update the non-gradient target encoder after an optimiser step."""
         if not 0.0 <= momentum <= 1.0:
             raise ValueError(f"momentum must lie in [0, 1], got {momentum}")
-        with lucid.no_grad():
-            for live, target in zip(
-                self.encoder.parameters(), self.target_encoder.parameters(), strict=True
-            ):
-                target[:] = momentum * target + (1.0 - momentum) * live
+        update_averages(self.encoder, [(self.target_encoder, momentum)])
 
     def _check_clip(self, x: Tensor) -> None:
         expected = (

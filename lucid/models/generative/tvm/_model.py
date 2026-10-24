@@ -39,6 +39,7 @@ from lucid._engine_scope import untraced
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
+from lucid.models._utils._common import update_averages
 from lucid.models._utils._generative import resolve_generation_device, start_noise
 from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
@@ -773,29 +774,10 @@ class TVMForImageGeneration(ImageGenerationModel):
         outside :meth:`parameters`, so neither the optimiser's flush nor a
         loop's reaches them on Metal.
         """
-        decays = self._decays()
-        if not decays:
-            return
-        # Paired by name, not by position: the averages are separate
-        # networks, and a name is the one key both sides are sure to share —
-        # a position holds only while no edit to either tree has moved it,
-        # and deleting a child or a parameter and assigning it back moves
-        # it to the end of its registry.
-        live = dict(self.tvm.named_parameters())
-        written: list[Tensor] = []
-        with lucid.no_grad():
-            for key, decay in decays.items():
-                average = self._average(key)
-                for name, slow in average.named_parameters():
-                    # `slow[:] = ...`, not `slow.data[:] = ...`: the latter
-                    # writes to a copy and silently does nothing.
-                    slow[:] = decay * slow + (1.0 - decay) * live[name]
-                    written.append(slow)
-        # The writes are lazy on Metal, and θ** is not read until sampling:
-        # unevaluated, each step would chain onto the last and keep every
-        # past copy of the live weights.  One batched evaluation: one per
-        # parameter cost a Metal sync per tensor, several times slower.
-        lucid.eval(*written)
+        averages = [
+            (self._average(key), decay) for key, decay in self._decays().items()
+        ]
+        update_averages(self.tvm, averages)
 
     # ── sampling the training variables ──────────────────────────────────
 
