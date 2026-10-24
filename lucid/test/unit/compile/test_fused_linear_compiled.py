@@ -74,7 +74,8 @@ def test_a_fused_kernel_follows_the_input_compiled(name: str) -> None:
 
     _C_engine.compile.session_cache_clear()
     compiled = lucid.compile.compile(Apply(fn).eval().to("metal"))
-    with warnings.catch_warnings():
+    # Under grad mode a trainable model's call runs eagerly (LCD-582).
+    with warnings.catch_warnings(), lucid.no_grad():
         warnings.simplefilter("error", fallback.CompileFallbackWarning)
         got = [compiled(t.to("metal")).to("cpu") for t in (first, second)]
     assert not compiled.cache_info()["eager_only"]

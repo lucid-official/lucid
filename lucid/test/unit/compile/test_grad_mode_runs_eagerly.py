@@ -180,6 +180,18 @@ def _held_weight(t: lucid.Tensor) -> lucid.Tensor:
     return (t @ _HELD["weight"]).tanh()
 
 
+# A grad leaf the forward makes on the CPU and moves to the input's device.
+# On Metal the CPU factory is no traced value and the move, made under the
+# trace's no_grad, is a pinned feed that does not require grad (LCD-618).
+_CPU_LEAVES: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
+    "cpu-factory-tensor": lambda t: t
+    * lucid.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True).to(t.device),
+    "cpu-factory-parameter": lambda t: t * nn.Parameter(lucid.ones(4)).to(t.device),
+    "cpu-factory-requires_grad_": lambda t: t
+    + lucid.arange(4).float().requires_grad_().to(t.device),
+}
+
+
 def _where(name: str, device: str) -> _Where:
     x = _data((6, 4), device, seed=2)
     grad = _data((6, 4), device, seed=3).requires_grad_(True)
@@ -201,6 +213,8 @@ def _where(name: str, device: str) -> _Where:
     if name == "global":
         _HELD["weight"] = _data((4, 3), device, seed=4).requires_grad_(True)
         return _Where(_held_weight, lambda f: f(x), (_HELD["weight"],))
+    if name in _CPU_LEAVES:
+        return _Where(_CPU_LEAVES[name], lambda f: f(x), ())
     assert name == "factory"
 
     def made_inside(t: lucid.Tensor) -> lucid.Tensor:
@@ -209,10 +223,15 @@ def _where(name: str, device: str) -> _Where:
     return _Where(made_inside, lambda f: f(x), ())
 
 
-@pytest.mark.parametrize("device", _DEVICES)
-@pytest.mark.parametrize(
-    "where",
-    [
+_LCD_618 = pytest.mark.xfail(
+    strict=True,
+    reason="LCD-618: a grad leaf made on the CPU and moved to Metal inside the "
+    "forward is neither a traced value nor a feed that requires grad",
+)
+
+
+def _locations() -> list[object]:
+    names = [
         "buffer",
         "tuple-input",
         "dict-input",
@@ -221,8 +240,17 @@ def _where(name: str, device: str) -> _Where:
         "dynamic",
         "global",
         "factory",
-    ],
-)
+        *_CPU_LEAVES,
+    ]
+    out: list[object] = []
+    for name in names:
+        out.append(pytest.param(name, "cpu", id=f"{name}-cpu"))
+        marks = [_METAL, _LCD_618] if name in _CPU_LEAVES else [_METAL]
+        out.append(pytest.param(name, "metal", marks=marks, id=f"{name}-metal"))
+    return out
+
+
+@pytest.mark.parametrize(("where", "device"), _locations())
 def test_wherever_the_grad_tensor_is(where: str, device: str) -> None:
     """Every place a tensor requiring grad can sit: the result needs gradients."""
     case = _where(where, device)

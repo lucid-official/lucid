@@ -119,7 +119,9 @@ def test_roformer_compiles() -> None:
     ids = lucid.arange(0, b * t, device=COMPILE_DEVICE).reshape(b, t).to(lucid.int64)
     eager = model(ids).last_hidden_state
     cm = lucid.compile(model)
-    out = cm(ids).last_hidden_state
+    # Under grad mode a trainable model's call runs eagerly (LCD-582).
+    with lucid.no_grad():
+        out = cm(ids).last_hidden_state
     info = cm.cache_info()
     assert info["entries"] == 1 and not info["eager_only"], info
     assert _maxdiff(eager, out) < 1e-5
