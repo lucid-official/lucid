@@ -315,6 +315,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
     ),
     "lucid.compile._entry.decode_step": (
+        ("Module", "lucid.nn.module", "Module"),
         ("StaticCache", "lucid.utils.cache", "StaticCache"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),

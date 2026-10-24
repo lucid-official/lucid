@@ -458,7 +458,9 @@ def test_the_decode_tracer_does_not_fold(installed: dict[str, set[bool]]) -> Non
 
     lucid.manual_seed(0)
     model = _MaskedDecoder().to(COMPILE_DEVICE).eval()
-    _decode(model, compiled=True, n_steps=2)
+    # Generation's mode: under grad mode a trainable model's step runs eagerly.
+    with lucid.no_grad():
+        _decode(model, compiled=True, n_steps=2)
     assert installed["decode_step.py"] == {False}
 
 

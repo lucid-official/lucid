@@ -24,6 +24,10 @@ back into the live ``StaticCache`` buffer after each run — the same shape as t
 BatchNorm running-stats write-back, but forward-only (generation is ``no_grad``).
 Because the live buffer is also the executable's pinned feed, the next step reads
 the rolled-forward value.
+
+Under grad mode a step that reads a tensor requiring grad — the model's
+parameters included — runs ``forward_fn`` eagerly, as a :func:`lucid.compile`
+call does: the executable records no autograd graph (LCD-618).
 """
 
 import threading
@@ -32,9 +36,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Protocol, cast, final
 
 from lucid._C import engine as _C_engine
+from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
+    from lucid.nn.module import Module
     from lucid.utils.cache import StaticCache
 
 __all__ = ["compiled_decode_step", "is_compiled_decode_tracing"]
@@ -89,6 +95,32 @@ class _DecodeEntry:
     n_hits: int = 0
     compile_ms: float = 0.0
     last_run_ms: float = 0.0
+    # What it reads besides the call's tensors and the cache buffers: under
+    # grad mode one requiring grad sends the call eager (LCD-618).
+    reads: TraceReads = TraceReads()
+
+
+def _needs_gradients(
+    arguments: tuple[Tensor, Tensor],
+    static_cache: StaticCache,
+    entry: _DecodeEntry | None,
+    adapter: Module,
+) -> bool:
+    """Whether, grad mode on, the eager step would record an autograd graph.
+
+    It does when a tensor it reads requires grad: an argument, a cache buffer,
+    or one the executable reads besides them.  Before the first trace those
+    are not known, and the tree's parameters and buffers stand in for them —
+    ``adapter`` names ``forward_fn``'s modules.
+    """
+    if not _C_engine.grad_enabled():
+        return False
+    buffers = (*static_cache.key_cache, *static_cache.value_cache)
+    if any(t.requires_grad for t in (*arguments, *buffers)):
+        return True
+    if entry is not None:
+        return entry.reads.require_grad()
+    return tree_requires_grad(adapter)
 
 
 def compiled_decode_step(
@@ -115,14 +147,15 @@ def compiled_decode_step(
         token(s); ``cache_position`` is a fixed-shape ``(T,)`` int64 Tensor of
         absolute write indices.  On a signature miss it (re)traces + compiles;
         otherwise it is a pure run + buffer write-back.  Falls back to a plain
-        eager ``forward_fn`` call if the decode graph cannot be compiled.
+        eager ``forward_fn`` call if the decode graph cannot be compiled, and
+        under grad mode when the step needs gradients (see the module notes).
     """
     from lucid._dispatch import _unwrap, _wrap
     from lucid._tensor.tensor import Tensor
     from lucid.autograd._grad_mode import no_grad
     from lucid.compile import _CallableModule, _tracing
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.signature import ParamFingerprint, signature_of
+    from lucid.compile._core.signature import ParamFingerprint
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
@@ -236,6 +269,7 @@ def compiled_decode_step(
             input_source=tuple(input_source),
             n_buffers=2 * n_layers,
             compile_ms=(time.perf_counter() - t0) * 1000.0,
+            reads=TraceReads.of(tracer, exe.input_ids, input_source),
         )
 
     def _run(entry: _DecodeEntry, input_ids: Tensor, cache_position: Tensor) -> Tensor:
@@ -297,31 +331,29 @@ def compiled_decode_step(
         if len(static_cache.key_cache) == 0:
             return forward_fn(input_ids, cache_position)
 
-        try:
-            # The fingerprint holds the adapter weakly; the step keeps it alive.
-            key = signature_of(
-                adapter,
-                (input_ids, cache_position),
-                {},
-                dynamic=False,
-                param_fingerprint=fingerprint.get(),  # drops what read replaced tensors
-            )
+        try:  # ``key_of`` drops what read replaced tensors
+            key = fingerprint.key_of((input_ids, cache_position), {}, dynamic=False)
         except TypeError, AttributeError:
             key = None
 
         if key is not None and key in eager_sigs:
             return forward_fn(input_ids, cache_position)
 
+        call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
-        if entry is None:
+        if entry is None and not _needs_gradients(call, static_cache, None, adapter):
             entry = _compile_for(input_ids, cache_position)
-            fingerprint.settle()
-            if entry is None:
-                if key is not None:
-                    eager_sigs.add(key)
-                return forward_fn(input_ids, cache_position)
+            fingerprint.settle(() if entry is None else entry.reads.fed)
             if key is not None:
-                cache[key] = entry
+                key = fingerprint.rekey(key, call, {})
+                if entry is None:
+                    eager_sigs.add(key)
+                else:
+                    cache[key] = entry
+        # A trace may show it reads a tensor requiring grad; it stays cached
+        # for the steps made under ``no_grad``.
+        if entry is None or _needs_gradients(call, static_cache, entry, adapter):
+            return forward_fn(input_ids, cache_position)
         return _run(entry, input_ids, cache_position)
 
     step.cache = cache  # type: ignore[attr-defined]

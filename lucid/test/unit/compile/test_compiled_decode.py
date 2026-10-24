@@ -8,9 +8,15 @@ shape a real GPT-2 decode compiles into) and assert:
 * the compiled decode is token-identical to the eager decode, and
 * a single executable serves every decode step (stable signature — the
   ``cache_position`` is a fixed-shape ``(1,)`` int64 runtime feed).
+
+They decode under ``no_grad``, as generation does: under grad mode a step
+whose model has trainable parameters runs eagerly, so that its result
+requires grad as eager's does (LCD-618).
 """
 
 import math
+
+import pytest
 
 import lucid
 import lucid.models as M
@@ -20,6 +26,8 @@ from lucid.compile._entry.decode_step import compiled_decode_step
 from lucid.utils.cache import DynamicCache, StaticCache
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+
+pytestmark = pytest.mark.usefixtures("inference")
 
 _B, _H, _DH, _L = 1, 2, 4, 8
 _D = _H * _DH
@@ -143,3 +151,40 @@ def test_gpt2_compiled_decode_matches_eager() -> None:
     worst = max(float((r - c).abs().max().item()) for r, c in zip(ref, comp))
     assert worst < 1e-4, f"GPT-2 compiled decode diverged from eager: {worst:.3e}"
     assert len(getattr(step, "cache", {})) == 1
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_a_step_under_grad_mode_answers_as_eager(frozen: bool) -> None:
+    """A step that needs gradients runs eagerly, and only that one (LCD-618).
+
+    The executable records no autograd graph: from the first compiled step on
+    the decode returned results that did not require grad.  A frozen model
+    needs none and stays compiled; after grad mode, a step under ``no_grad``
+    still compiles.
+    """
+    runs = []
+    for compiled in (True, False):
+        lucid.manual_seed(0)
+        model = _MaskedDecoder().to(COMPILE_DEVICE).eval().requires_grad_(not frozen)
+        cache = StaticCache(_L)
+
+        def fwd(h: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+            return model(h, cache, cp)
+
+        step = compiled_decode_step(fwd, cache) if compiled else fwd
+        outs = []
+        with lucid.enable_grad():
+            for pos in range(4):
+                h = lucid.ones(_B, 1, _D, device=COMPILE_DEVICE) * ((pos + 1) * 0.1)
+                outs.append(step(h, lucid.tensor([pos], device=COMPILE_DEVICE).long()))
+        runs.append(outs)
+        if compiled:
+            assert len(step.cache) == (1 if frozen else 0)  # type: ignore[attr-defined]
+            h = lucid.ones(_B, 1, _D, device=COMPILE_DEVICE)
+            step(h, lucid.tensor([4], device=COMPILE_DEVICE).long())
+            assert len(step.cache) == 1  # type: ignore[attr-defined]
+    got, want = runs
+    assert [t.requires_grad for t in got] == [t.requires_grad for t in want]
+    assert [t.requires_grad for t in want] == [not frozen] * 4
+    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want))
+    assert worst < 1e-4

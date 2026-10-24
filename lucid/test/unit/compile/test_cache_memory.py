@@ -110,7 +110,7 @@ def test_env_var_lru_cap_documented() -> None:
     We can't change it mid-run (it's read on first cache access), but
     we can document the contract — the implementation in
     ``ExecutableCache::session()`` reads ``getenv`` exactly once.
-    The user-guide doc should reference this knob.
+    ``CompiledModule``'s docstring names this knob.
     """
     # The env-var binding is a one-time read; we just check the size
     # API exists so the doc reference doesn't go stale.
