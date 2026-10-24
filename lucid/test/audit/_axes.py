@@ -1415,6 +1415,9 @@ class EntryPointAxis(Axis):
     name = "entry"
     summary = "lucid.f(x) vs x.f() vs F.f(x)"
 
+    #: Re-seeded before every spelling of a stochastic op.
+    _SEED = 1415
+
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         routes = list(_surface.counterparts(symbol))
         if len(routes) < 2:
@@ -1427,6 +1430,11 @@ class EntryPointAxis(Axis):
         # The first route's callable is what the signature tier reads.
         # Every route is the same operation, so any of them describes it.
         probe_fn = routes[0][1]
+        # Each spelling of a sampler is one draw.  Unseeded, two of them
+        # are two independent samples compared as one answer, and
+        # ``lucid.bernoulli`` disagreed with ``Tensor.bernoulli`` for being
+        # random.  Under one seed the same op draws the same numbers.
+        stochastic = "stochastic" in symbol.flags
         for domain in ctx.domains:
             for call in _specs.invocations(
                 symbol.short, domain, symbol.qualname, probe_fn
@@ -1460,6 +1468,8 @@ class EntryPointAxis(Axis):
                         else own.args[:at] + own.args[at + 1 :]
                     )
                     target = own.args[at] if label == "method" else None
+                    if stochastic:
+                        lucid.manual_seed(self._SEED)
                     try:
                         out = (
                             fn(target, *args, **own.kwargs)
@@ -1782,12 +1792,17 @@ class NonFiniteAxis(Axis):
     #: non-NaN operand is what distinguishes them from ``maximum`` and
     #: ``minimum``, which do propagate — and ``sign(nan)`` is 0 in the
     #: reference.  Verified against it rather than assumed.
+    #:
+    #: Out-of-place names: an in-place twin (``ge_``) is the same op
+    #: writing into its receiver, so :meth:`applies` exempts it with its
+    #: base.  A comparison's answer is a truth value whatever dtype holds
+    #: it: ``[nan, 1, -1, 0].ge_(0)`` is ``[0, 1, 0, 1]`` in the reference,
+    #: a float receiver that can carry NaN and has no reason to.
     _CONSUMERS = frozenset(
         {
             "fmax",
             "fmin",
             "sign",
-            "sign_",
             "isnan",
             "isinf",
             "isfinite",
@@ -1804,7 +1819,6 @@ class NonFiniteAxis(Axis):
             "nanvar",
             "nanargmax",
             "nanargmin",
-            "nan_to_num_",
             "logical_not",
             "signbit",
             "argsort",
@@ -1836,7 +1850,6 @@ class NonFiniteAxis(Axis):
             "lt",
             "ge",
             "le",
-            "sign",
             "heaviside",
         }
     )
@@ -1844,7 +1857,10 @@ class NonFiniteAxis(Axis):
     def applies(self, symbol: Symbol) -> bool:
         if not super().applies(symbol):
             return False
-        return symbol.short not in self._CONSUMERS and "stochastic" not in symbol.flags
+        short = symbol.short
+        if short in self._CONSUMERS or short.removesuffix("_") in self._CONSUMERS:
+            return False
+        return "stochastic" not in symbol.flags
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         fn = _surface.resolve(symbol)

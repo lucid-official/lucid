@@ -544,6 +544,7 @@ class DeterminismAxis(Axis):
             return self._finding(symbol, Status.SKIP, "not resolvable")
 
         first: np.ndarray | None = None
+        quiet = False
         for domain in ctx.domains:
             for call in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
                 draws = []
@@ -592,14 +593,21 @@ class DeterminismAxis(Axis):
                     if other is not None and np.allclose(
                         first, np.asarray(other, dtype=np.float64), equal_nan=True
                     ):
-                        return self._finding(
-                            symbol,
-                            Status.VACUOUS,
-                            "a different seed gave identical numbers — this op may not draw",
-                        )
+                        # This call does not draw; a later one may.  The
+                        # default of ``alpha_dropout`` is ``training=False``,
+                        # the identity, and its spec offers ``training=True``
+                        # next (``_specs.invocations``).
+                        quiet = True
+                        continue
                     return self._finding(
                         symbol, Status.PASS, "reproducible and seed-sensitive"
                     )
+        if quiet:
+            return self._finding(
+                symbol,
+                Status.VACUOUS,
+                "a different seed gave identical numbers — this op may not draw",
+            )
         return self._finding(symbol, Status.SKIP, "no candidate invocation ran")
 
 

@@ -226,11 +226,17 @@ def test_empty_is_not_asked_to_respect_a_seed() -> None:
 
 
 def test_rrelu_is_probed_where_it_draws() -> None:
+    # The default first, for the axes that measure the op; its
+    # ``training=True`` twin next, for the determinism axis, which moves on
+    # from a call that does not draw (LCD-561).
     symbol = _by_name("F.rrelu")
     assert symbol is not None
     call = _chosen_call(symbol)
-    assert call is not None
-    assert call.kwargs.get("training") is True
+    assert call is not None and "training" not in call.kwargs
+    fn = _surface.resolve(symbol)
+    calls = list(_specs.invocations(symbol.short, "moderate", symbol.qualname, fn))
+    at = next(i for i, c in enumerate(calls) if c.note == call.note)
+    assert calls[at + 1].kwargs.get("training") is True
 
 
 def test_rrelu_actually_draws_under_that_flag() -> None:

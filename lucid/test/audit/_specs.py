@@ -17,6 +17,8 @@ When every candidate fails, the symbol is reported SKIP with the last
 error, which is honest and is what tells you a spec needs adding.
 """
 
+import annotationlib
+import inspect
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +28,7 @@ import lucid
 import lucid.fft
 import lucid.linalg
 import lucid.nn.utils.rnn
-from lucid.test.audit import _probe
+from lucid.test.audit import _probe, _surface
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -602,10 +604,14 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
     elif name in ("meshgrid",):
         yield Call([_f((3,), domain), _f((4,), domain)], {}, 0, "meshgrid(a, b)")
     elif name in ("bernoulli",):
+        # ``bernoulli(input, p=None)``: the input is the probabilities, or
+        # with a scalar ``p`` only the shape, dtype and device to draw at.
+        # The probabilities are the op's contract, so an axis that rebuilds
+        # them at another dtype keeps them in [0, 1] (``domain``) — moved to
+        # ``|x| + 1`` every dtype was refused for an invalid probability.
         probs = _probe.as_f32(_probe.rng(9).uniform(0.2, 0.8, _probe.SHAPE))
-        yield Call([probs], {}, 0, "bernoulli(probs)")
-        yield Call([_probe.SHAPE, 0.5], {}, 0, "bernoulli(shape, p)")
-        yield Call([0.5], {"size": _probe.SHAPE}, 0, "bernoulli(p, size=)")
+        yield Call([probs], {}, 0, "bernoulli(probs)", domain=(0.0, 1.0))
+        yield Call([_f(_probe.SHAPE, domain), 0.5], {}, 0, "bernoulli(like, p)")
     elif name in ("normal",):
         yield Call([0.0, 1.0, shape], {}, 0, "normal(mean, std, shape)")
         yield Call(
@@ -625,6 +631,67 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
         yield Call([2, 3], {}, 0, "factory(*shape)")
 
 
+#: Ops that write a source at the positions an index names.
+_OVERWRITES = frozenset(
+    {"scatter", "scatter_", "index_copy", "index_copy_", "put", "put_"}
+)
+
+
+def _from_zero(positions: np.ndarray) -> np.ndarray:
+    """The same number of distinct positions, the first of them 0."""
+    return np.concatenate([[0], positions[positions != 0]])[: len(positions)]
+
+
+def _overwrite(name: str, domain: str) -> Iterator[Call]:
+    """Overwrites by index, each naming a position once.
+
+    A position named twice keeps the last write on the CPU and an
+    unspecified one on Metal — the reference documents the order as
+    undefined — so a repeated index made the device axis compare a choice,
+    not an answer: the M4 picks another write than the M1 for
+    ``index_copy``, ``put_`` and ``scatter_``, whose signature-derived
+    index repeated.  The accumulating forms (``scatter_add``,
+    ``index_add``) keep their repeats.
+
+    Fewer positions than the receiver has, so the rest keep ``x``'s value
+    and its gradient: a full permutation overwrote all of ``x`` and left
+    the gradient and NaN axes nothing to see.  The index and the source
+    follow a resized receiver (``same_shape``) — an empty one takes an
+    empty index, a size-1 one position 0, which is why each index starts
+    there.
+    """
+    rng = _probe.rng(3)
+    x = _f((4, 5), domain)
+    if name in ("scatter", "scatter_"):
+        # Three of five columns per row.
+        rows = [rng.permutation(5)[:3] for _ in range(4)]
+        rows[0] = _from_zero(rows[0])
+        yield Call(
+            [x, 1, _probe.as_int(np.stack(rows)), _f((4, 3), domain)],
+            {},
+            0,
+            "scatter(x, dim, index, src)",
+            same_shape=(2, 3),
+        )
+    elif name in ("index_copy", "index_copy_"):
+        index = _probe.as_int(_from_zero(rng.permutation(5)[:3]))
+        yield Call(
+            [_f((5,), domain), 0, index, _f((3,), domain)],
+            {},
+            0,
+            "index_copy(x, dim, index, source)",
+            same_shape=(2, 3),
+        )
+    else:
+        yield Call(
+            [x, _probe.as_int(_from_zero(rng.permutation(20)[:6])), _f((6,), domain)],
+            {},
+            0,
+            "put(x, flat index, source)",
+            same_shape=(1, 2),
+        )
+
+
 def _indexing(name: str, domain: str) -> Iterator[Call]:
     """Gather / scatter shapes, which need an index tensor of the right rank."""
     x = _f((4, 5), domain)
@@ -634,21 +701,8 @@ def _indexing(name: str, domain: str) -> Iterator[Call]:
     if name in ("gather", "take_along_dim", "take_along_axis"):
         yield Call([x, 1, idx_full], {}, 0, "gather(x, dim, index)")
         yield Call([x, idx_full], {"dim": 1}, 0, "gather(x, index, dim=)")
-    elif name == "scatter":
-        # The overwrite names each position once per row: a position named
-        # twice keeps the last write on the CPU and an unspecified one on
-        # Metal, so a repeated index would make the device axis compare a
-        # choice, not an answer.  The accumulating forms keep their repeats.
-        # Three of five columns, so two per row keep ``x``'s value and its
-        # gradient — a full permutation overwrote all of ``x``.
-        rng = _probe.rng(3)
-        distinct = np.stack([rng.permutation(5)[:3] for _ in range(4)])
-        yield Call(
-            [x, 1, _probe.as_int(distinct), _f((4, 3), domain)],
-            {},
-            0,
-            "scatter(x, dim, index, src)",
-        )
+    elif name in _OVERWRITES:
+        yield from _overwrite(name, domain)
     elif name in ("scatter_add", "scatter_reduce"):
         yield Call([x, 1, idx_full, src], {}, 0, "scatter(x, dim, index, src)")
     elif name in ("index_select",):
@@ -1087,9 +1141,9 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
         _factory,
     ),
     (
-        r"^(gather|scatter|scatter_add|scatter_reduce|index_select|index_put_?|take|"
-        r"take_along_dim|take_along_axis|masked_fill_?|searchsorted|bucketize|"
-        r"narrow|where)$",
+        r"^(gather|scatter_?|scatter_add|scatter_reduce|index_select|index_put_?|"
+        r"index_copy_?|put_?|take|take_along_dim|take_along_axis|masked_fill_?|"
+        r"searchsorted|bucketize|narrow|where)$",
         _indexing,
     ),
     (
@@ -1181,27 +1235,6 @@ _EXACT: dict[str, Callable[[str, str], Iterator[Call]]] = {
         )
         for metric in ("accuracy", "correct_count")
     },
-    # ``rrelu`` only draws in training mode; its default is the
-    # *expectation* of the uniform slope, which is deterministic by
-    # design.  Called with the default the determinism axis saw the same
-    # numbers under two seeds and reported, correctly, that it could not
-    # tell whether the op respects a seed — of an op that was not being
-    # asked to draw.  ``dropout`` defaults to ``training=True`` and so
-    # never needed this.
-    "rrelu": lambda n, d: iter(
-        [
-            Call([_f((_N, _CIN), d)], {"training": True}, 0, "rrelu(x, training=True)"),
-            Call([_f((_N, _CIN), d)], {}, 0, "rrelu(x)"),
-        ]
-    ),
-    "rrelu_": lambda n, d: iter(
-        [
-            Call(
-                [_f((_N, _CIN), d)], {"training": True}, 0, "rrelu_(x, training=True)"
-            ),
-            Call([_f((_N, _CIN), d)], {}, 0, "rrelu_(x)"),
-        ]
-    ),
     "linear": lambda n, d: iter(
         [
             Call(
@@ -1499,7 +1532,8 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
 
     An in-place op cannot grow its receiver, so a resized ``x`` against
     peers of the old shape is refused for a result that no longer fits:
-    the probe's refusal, not the op's (LCD-532, LCD-536).
+    the probe's refusal, not the op's (LCD-532, LCD-536).  The peers the
+    call itself declares (``same_shape``) follow it too.
     """
     if not 0 <= call.primary < len(call.args):
         return call.with_primary(array)
@@ -1507,7 +1541,8 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
     bounds = tuple(
         index
         for index, arg in enumerate(call.args)
-        if index != call.primary and tuple(getattr(arg, "shape", (None,))) == shape
+        if index != call.primary
+        and (index in call.same_shape or tuple(getattr(arg, "shape", (None,))) == shape)
     )
     return Call(call.args, call.kwargs, call.primary, call.note, bounds).resized(array)
 
@@ -1578,10 +1613,43 @@ def invocations(
         and name.endswith("_")
     ):
         joint = _bounds_resized
+    drawing = _draws_only_when_training(name, fn)
     for call in _candidates(name, domain, qualname, fn):
         if joint is not None and call.joint is None:
             call.joint = joint
         yield call
+        if drawing and "training" not in call.kwargs:
+            twin = call.fresh()
+            twin.kwargs["training"] = True
+            twin.note = f"{call.note}, training=True"
+            yield twin
+
+
+def _draws_only_when_training(name: str, fn: Any) -> bool:
+    """Whether ``fn`` is a sampler whose default, ``training=False``, does not draw.
+
+    ``rrelu``, ``alpha_dropout`` and ``feature_alpha_dropout`` take
+    ``training=False`` by default, as the reference does, and then answer
+    deterministically (``rrelu`` with the *expectation* of its slope).
+    Called with the default only, the determinism axis saw the same numbers
+    under two seeds and reported, correctly, that it could not tell whether
+    the op respects a seed — of an op that was not being asked to draw.
+    So every candidate is followed by its ``training=True`` twin: the axes
+    that measure the op keep the deterministic default, and the one that
+    measures the draw moves on to the twin.  Read from the signature:
+    ``dropout`` defaults to ``training=True`` and needs nothing, and a mode
+    switch on an op that never draws (``batch_norm``) is not a sampler's.
+    """
+    if fn is None or not re.search(_surface.STOCHASTIC_PATTERN, name):
+        return False
+    try:
+        signature = inspect.signature(
+            fn, annotation_format=annotationlib.Format.FORWARDREF
+        )
+    except TypeError, ValueError:
+        return False
+    training = signature.parameters.get("training")
+    return training is not None and training.default is False
 
 
 def _candidates(

@@ -426,14 +426,17 @@ class DistributionAxis(Axis):
         # built on, not distributions of their own — asking them for a mean
         # gets the base's "subclasses must implement this", which is the
         # base doing its job.  A class that others derive from *and* that
-        # defines no moment of its own is that shape; ``Gamma`` has a
-        # subclass and its own mean, so it is not caught.
-        base_mean = getattr(_dist_base(), "mean", None)
-        if symbol.obj.__subclasses__() and (
-            getattr(symbol.obj, "mean", None) is base_mean
-        ):
-            return False
-        return True
+        # defines none of the probed methods of its own is that shape;
+        # ``Gamma`` has a subclass and its own mean, so it is not caught.
+        # Nor is ``TransformedDistribution``: it has no closed-form mean,
+        # but it samples and scores, and it gained a subclass
+        # (``LogisticNormal``), which a mean-only test took for a base.
+        base = _dist_base()
+        defines = any(
+            getattr(symbol.obj, name, None) is not getattr(base, name, None)
+            for name in ("mean", "sample", "rsample", "log_prob")
+        )
+        return not (symbol.obj.__subclasses__() and not defines)
 
     @staticmethod
     def _is_transform(obj: Any) -> bool:
@@ -681,9 +684,15 @@ class DistributionAxis(Axis):
         if cdf is None:
             return problems, checked
         dist._validate_args = False
-        grid = _probe.as_f64(np.linspace(-2.0, 2.0, 9))
+        # One column of the grid per member of the batch.  A batch-(3,)
+        # distribution refuses a length-9 value — the reference raises the
+        # same broadcast error — so a flat grid asked only the batch-less
+        # ones, and ``GeneralizedPareto`` reported the probe's shape.
+        batch = tuple(getattr(dist, "batch_shape", ()))
+        column = np.linspace(-2.0, 2.0, 9).reshape((9,) + (1,) * len(batch))
+        points = np.broadcast_to(column, (9, *batch)).copy()
         try:
-            probs = _probe.to_numpy(cdf(grid))
+            probs = _probe.to_numpy(cdf(_probe.as_f64(points)))
         except NotImplementedError:
             return problems, checked
         except Exception as exc:  # noqa: BLE001 — any other failure is a finding
@@ -692,11 +701,18 @@ class DistributionAxis(Axis):
         checked.append("cdf")
         if probs is None:
             return problems, checked
-        flat = np.asarray(probs, dtype=np.float64).reshape(-1)
-        if np.any(np.diff(flat) < -1e-9):
+        # A row per grid point, a column per member of the batch: each
+        # column is one distribution's cdf, and only it has to rise.
+        if np.shape(probs) != points.shape:
+            problems.append(f"cdf of a {points.shape} grid has shape {np.shape(probs)}")
+            return problems, checked
+        table = np.asarray(probs, dtype=np.float64).reshape(points.shape[0], -1)
+        if np.any(np.diff(table, axis=0) < -1e-9):
             problems.append("cdf is not monotone")
-        if flat.min() < -1e-9 or flat.max() > 1.0 + 1e-9:
-            problems.append(f"cdf leaves [0, 1]: [{flat.min():.3f}, {flat.max():.3f}]")
+        if table.min() < -1e-9 or table.max() > 1.0 + 1e-9:
+            problems.append(
+                f"cdf leaves [0, 1]: [{table.min():.3f}, {table.max():.3f}]"
+            )
         if icdf is None:
             return problems, checked
         # ``icdf(cdf(x)) == x`` only where the cdf is strictly increasing.
@@ -707,8 +723,8 @@ class DistributionAxis(Axis):
         # were reported as "off by 2.00e+00" — the distance from -2 back to
         # the edge of the support, which is the right answer to the wrong
         # question.
-        rises = np.diff(flat) > 1e-9
-        invertible = np.zeros(flat.shape, dtype=bool)
+        rises = np.diff(table, axis=0) > 1e-9
+        invertible = np.zeros(table.shape, dtype=bool)
         invertible[:-1] |= rises
         invertible[1:] |= rises
         # Only points whose probability the clip below leaves alone: a
@@ -717,10 +733,12 @@ class DistributionAxis(Axis):
         # ``HalfNormal(0.5).cdf(2) = 0.99994`` was clipped to ``0.9999`` and
         # reported as "icdf(cdf(x)) is off by 5.47e-02" the day the family
         # gained an ``icdf``.
-        invertible &= (flat > _ICDF_CLIP) & (flat < 1 - _ICDF_CLIP)
+        invertible &= (table > _ICDF_CLIP) & (table < 1 - _ICDF_CLIP)
         if not invertible.any():
             return problems, checked
-        inside = _probe.as_f64(np.clip(flat, _ICDF_CLIP, 1 - _ICDF_CLIP))
+        inside = _probe.as_f64(
+            np.clip(table, _ICDF_CLIP, 1 - _ICDF_CLIP).reshape(np.shape(probs))
+        )
         try:
             back = _probe.to_numpy(icdf(inside))
         except NotImplementedError:
@@ -731,11 +749,14 @@ class DistributionAxis(Axis):
         checked.append("icdf")
         if back is None:
             return problems, checked
-        ok = np.isfinite(back).reshape(-1) & invertible
+        if np.shape(back) != points.shape:
+            problems.append(f"icdf of a {points.shape} grid has shape {np.shape(back)}")
+            return problems, checked
+        got = np.asarray(back, dtype=np.float64).reshape(table.shape)
+        ok = np.isfinite(got) & invertible
         if ok.any():
-            want = np.asarray(_probe.to_numpy(grid)).reshape(-1)[ok]
-            got = np.asarray(back, dtype=np.float64).reshape(-1)[ok]
-            err = np.abs(got - want).max()
+            want = points.reshape(table.shape)
+            err = np.abs(got[ok] - want[ok]).max()
             if err > 1e-3:
                 problems.append(f"icdf(cdf(x)) is off by {err:.2e}")
         return problems, checked
