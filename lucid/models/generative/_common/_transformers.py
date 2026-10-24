@@ -418,7 +418,7 @@ class DiTFinalLayer(nn.Module):
 
     @override
     def forward(self, x: Tensor, cond: Tensor) -> Tensor:
-        """Project ``(B, N, D)`` tokens to ``(B, N, patchˆ2 * out_channels)``."""
+        """Project ``(B, N, D)`` tokens to ``(B, N, patch^2 * out_channels)``."""
         params = self.ada_ln(cond)
         width = int(x.shape[2])
         shift = params[:, :width].reshape(-1, 1, width)
