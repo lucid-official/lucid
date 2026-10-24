@@ -79962,7 +79962,7 @@
       },
       {
         "name": "_pos_embed",
-        "type": "_PositionEmbeddingSine",
+        "type": "SinePositionEmbedding",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -80742,7 +80742,7 @@
       },
       {
         "name": "_pos_embed",
-        "type": "_PositionEmbeddingSine",
+        "type": "SinePositionEmbedding",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -176055,7 +176055,7 @@
             "children": [
               {
                 "name": "position_embedding",
-                "type": "_SinePositionEmbedding",
+                "type": "SinePositionEmbedding",
                 "params": 0,
                 "own_params": 0,
                 "children": []
@@ -176287,7 +176287,7 @@
         "children": [
           {
             "name": "position_embedder",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
@@ -176965,7 +176965,7 @@
             "children": [
               {
                 "name": "position_embedding",
-                "type": "_SinePositionEmbedding",
+                "type": "SinePositionEmbedding",
                 "params": 0,
                 "own_params": 0,
                 "children": []
@@ -177197,7 +177197,7 @@
         "children": [
           {
             "name": "position_embedder",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
@@ -177875,7 +177875,7 @@
             "children": [
               {
                 "name": "position_embedding",
-                "type": "_SinePositionEmbedding",
+                "type": "SinePositionEmbedding",
                 "params": 0,
                 "own_params": 0,
                 "children": []
@@ -178107,7 +178107,7 @@
         "children": [
           {
             "name": "position_embedder",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
@@ -178785,7 +178785,7 @@
             "children": [
               {
                 "name": "position_embedding",
-                "type": "_SinePositionEmbedding",
+                "type": "SinePositionEmbedding",
                 "params": 0,
                 "own_params": 0,
                 "children": []
@@ -179017,7 +179017,7 @@
         "children": [
           {
             "name": "position_embedder",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
@@ -182013,7 +182013,7 @@
         "children": [
           {
             "name": "_pos_embed",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
@@ -183350,7 +183350,7 @@
         "children": [
           {
             "name": "_pos_embed",
-            "type": "_SinePositionEmbedding",
+            "type": "SinePositionEmbedding",
             "params": 0,
             "own_params": 0,
             "children": []
