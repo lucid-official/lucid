@@ -15,19 +15,27 @@ grid, a weight table, a noise draw, a zero fallback — takes the activations'
 dtype as well as their device.  Position and time tables are computed at
 float32 at least and cast once, the reference's convention.
 
+One narrow and one wide dtype per device, since float16 detects every
+float32 constant a float64 run would and more:
+
 * **eval** — every family of the compiled-training matrix (its smallest
-  factory, shrunk by the matrix's own rules) runs one forward in float64 on
-  the CPU and in float16 and bfloat16 on Metal; every floating tensor it
-  answers with has the input's dtype.
-* **train** — every family of the training-step table takes its step in
-  float64 and float16 on the CPU; the loss and every gradient keep the
-  model's dtype.
+  factory, shrunk by the matrix's rules and further where that is cheap)
+  runs one forward in float64 on the CPU and in float16 on Metal; every
+  floating tensor it answers with has the input's dtype.
+* **rollouts** — Stable Diffusion, DIAMOND and Genie, whose task forward
+  is a rollout the matrix skips, are checked component by component in
+  float64 on the CPU and float16 / bfloat16 on Metal.
+* **train** — every family of the training-step table, and the detection
+  and segmentation losses that table leaves to other files, take their
+  step in float16 on the CPU (the losses in float64 too); the loss and
+  every gradient keep the model's dtype.
 * DETR and MaskFormer, the reported pair, are pinned through their public
-  factories; Score-SDE and Fast R-CNN, whose float64 answers carried
-  float32 values, are held to the float32 model's numbers.
+  factories against the float32 model's numbers; Score-SDE and Fast
+  R-CNN, whose float64 answers carried float32 values, likewise.
 """
 
 import dataclasses
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -41,19 +49,6 @@ from lucid.test.unit.compile import _zoo_matrix as zoo
 from lucid.test.unit.models.test_models_train_step import CASES, _family_of
 
 _F16, _BF16, _F64 = lucid.float16, lucid.bfloat16, lucid.float64
-
-#: Families the eval sweep cannot drive: their forward is a rollout, not one
-#: call (the matrix's own ``skip`` reasons).  Their dtype is not covered.
-_ROLLOUTS = {f for f, spec in zoo.SPECS.items() if spec.skip is not None}
-
-_PAIRS = [
-    (family, task)
-    for task in zoo.TASKS
-    for family in zoo.families(task)
-    if family not in _ROLLOUTS
-]
-
-_EVAL = [("cpu", _F64), ("metal", _F16), ("metal", _BF16)]
 
 
 def _name(dtype: lucid.dtype) -> str:
@@ -98,6 +93,59 @@ def _wrong(answer: Any, dtype: lucid.dtype) -> list[str]:
     return [f"{n}: {_name(t.dtype)}" for n, t in _floating(answer) if t.dtype != dtype]
 
 
+def _step_keeps(model: Any, args: Any, kwargs: Any, dtype: lucid.dtype) -> None:
+    """Loss and every gradient of one training step are in ``dtype``."""
+    loss = model(*_cast(args, "cpu", dtype), **_cast(kwargs, "cpu", dtype)).loss
+    assert loss.dtype == dtype, f"a {_name(dtype)} model has a {loss.dtype} loss"
+    loss.backward()
+    grads = [(n, p.grad) for n, p in model.named_parameters() if p.grad is not None]
+    assert grads, "no parameter received a gradient"
+    wrong = [n for n, g in grads if g.dtype != dtype]
+    assert not wrong, f"gradients not in {_name(dtype)}: {wrong[:6]}"
+
+
+# -- every family of the matrix, one forward -----------------------------------
+
+#: Families whose task forward is a rollout; the matrix skips them and the
+#: component checks below cover them instead.
+_ROLLOUTS = {f for f, spec in zoo.SPECS.items() if spec.skip is not None}
+
+_PAIRS = [
+    (family, task)
+    for task in zoo.TASKS
+    for family in zoo.families(task)
+    if family not in _ROLLOUTS
+]
+
+_DETECTOR = {"backbone_layers": (1, 1, 1, 1), "fpn_out_channels": 32}
+
+#: Cheaper than the matrix's own shrink where a dtype check loses nothing:
+#: the matrix sizes some families for a numerically stable train-mode step.
+_SMALLER: dict[str, dict[str, object]] = {
+    "faster_rcnn": {**_DETECTOR, "rpn_post_nms_top_n": 10},
+    "mask_rcnn": {
+        **_DETECTOR,
+        "rpn_post_nms_top_n": 10,
+        "roi_representation": 64,
+        "mask_hidden_channels": 16,
+        "mask_num_convs": 1,
+        "mask_predictor_hidden": 16,
+    },
+    "mask2former": {
+        "swin_depths": (1, 1, 1, 1),
+        "swin_embed_dim": 24,
+        "swin_num_heads": (1, 1, 1, 1),
+        "mask_feature_size": 32,
+        "encoder_feedforward_dim": 32,
+        "num_queries": 4,
+    },
+}
+#: Image side where the matrix's is the network's native one.
+_SIDE = {"inception": 96, "inception_resnet": 96, "inception_v4": 96, "xception": 96}
+
+_EVAL = [("cpu", _F64), ("metal", _F16)]
+
+
 @pytest.mark.parametrize(
     ("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL]
 )
@@ -111,8 +159,20 @@ def test_a_forward_answers_in_the_dtype_it_is_given(
 ) -> None:
     _need(device)
     monkeypatch.setattr(zoo, "DEV", device)
-    _, model, cfg, _ = zoo.build(family, task)
-    model = model.to(device).to(dtype).eval()
+    if family in _SIDE:
+        spec = dataclasses.replace(zoo.SPECS[family], size=_SIDE[family])
+        monkeypatch.setitem(zoo.SPECS, family, spec)
+    name = zoo.representative(family, task)
+    assert name is not None
+    cfg = _REGISTRY[name].default_config
+    overrides = {
+        **zoo.shrink(cfg),
+        **zoo.SPECS.get(family, zoo.Spec()).overrides,
+        **_SMALLER.get(family, {}),
+    }
+    lucid.manual_seed(0)
+    model = models.create_model(name, **overrides).to(device).to(dtype).eval()
+    cfg = dataclasses.replace(cfg, **overrides)
     args, kwargs = zoo.default_inputs(model, cfg, family, 1)
     with lucid.no_grad():
         answer = model(*_cast(args, device, dtype), **_cast(kwargs, device, dtype))
@@ -121,10 +181,170 @@ def test_a_forward_answers_in_the_dtype_it_is_given(
     assert not wrong, f"a {_name(dtype)} {family} answered with {wrong[:6]}"
 
 
-_TRAIN = [_F64, _F16]
+# -- the rollout families, component by component -------------------------------
+
+_SD = {
+    "sample_size": 32,
+    "downsample_factor": 4,
+    "vae_block_out_channels": (32, 64, 64),
+    "unet_block_out_channels": (32, 64),
+    "attention_head_dim": 32,
+    "cross_attention_dim": 16,
+    "context_length": 4,
+}
+_DIAMOND = {
+    "sample_size": 16,
+    "unet_channels": (8, 8),
+    "unet_layers": (1, 1),
+    "reward_channels": (8, 8),
+    "reward_layers": (1, 1),
+    "actor_channels": (8, 8),
+    "actor_layers": (1, 1),
+    "cond_dim": 16,
+    "reward_cond_dim": 8,
+    "reward_lstm_dim": 16,
+    "actor_lstm_dim": 16,
+    "num_actions": 4,
+}
+_GENIE = {
+    "sample_size": (8, 8),
+    "num_frames": 4,
+    "num_codes": 16,
+    "code_dim": 4,
+    "tokenizer_encoder_layers": 1,
+    "tokenizer_encoder_dim": 16,
+    "tokenizer_encoder_heads": 2,
+    "tokenizer_encoder_head_dim": 8,
+    "tokenizer_decoder_layers": 1,
+    "tokenizer_decoder_dim": 16,
+    "tokenizer_decoder_heads": 2,
+    "tokenizer_decoder_head_dim": 8,
+    "action_patch_size": 4,
+    "action_dim": 4,
+    "action_encoder_layers": 1,
+    "action_encoder_dim": 16,
+    "action_encoder_heads": 2,
+    "action_decoder_layers": 1,
+    "action_decoder_dim": 16,
+    "action_decoder_heads": 2,
+    "dynamics_layers": 1,
+    "dynamics_dim": 16,
+    "dynamics_heads": 2,
+    "dynamics_head_dim": 8,
+}
+
+Component = Callable[[str, lucid.dtype], Callable[[], Any]]
 
 
-@pytest.mark.parametrize("dtype", _TRAIN, ids=[_name(t) for t in _TRAIN])
+def _sd(device: str, dtype: lucid.dtype) -> Any:
+    lucid.manual_seed(0)
+    model = models.create_model("stable_diffusion_gen", **_SD).stable_diffusion
+    return model.to(device).to(dtype).eval()
+
+
+def _diamond(device: str, dtype: lucid.dtype) -> Any:
+    lucid.manual_seed(0)
+    model = models.create_model("diamond_world_model", **_DIAMOND).diamond
+    return model.to(device).to(dtype).eval()
+
+
+def _like(device: str, dtype: lucid.dtype, *shape: int) -> lucid.Tensor:
+    return lucid.randn(*shape).to(device).to(dtype)
+
+
+def _sd_training(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _sd(device, dtype)
+    images, context = _like(device, dtype, 1, 3, 32, 32), _like(device, dtype, 1, 4, 16)
+    return lambda: m(images, context, return_loss=True)
+
+
+def _sd_unet_integer_step(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    """The step a sampler hands the U-Net: an integer tensor."""
+    m = _sd(device, dtype)
+    latent, context = _like(device, dtype, 1, 4, 8, 8), _like(device, dtype, 1, 4, 16)
+    step = lucid.tensor([10]).to(device)
+    return lambda: m.unet(latent, step, context)
+
+
+def _sd_vae(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _sd(device, dtype)
+    images = _like(device, dtype, 1, 3, 32, 32)
+    return lambda: m.decode_latent(m.encode_image(images))
+
+
+def _diamond_denoiser(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _diamond(device, dtype)
+    frames = _like(device, dtype, 2, m.config.conditioning_frames, 3, 16, 16)
+    actions = lucid.ones(2, m.config.conditioning_frames, dtype=lucid.int64)
+    next_frame = _like(device, dtype, 2, 3, 16, 16)
+    return lambda: m(frames, actions.to(device), next_frame)
+
+
+def _diamond_reward_end(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _diamond(device, dtype)
+    frame, next_frame = _like(device, dtype, 2, 3, 16, 16), _like(
+        device, dtype, 2, 3, 16, 16
+    )
+    action = lucid.ones(2, dtype=lucid.int64).to(device)
+    return lambda: m.step_reward_end(frame, next_frame, action)
+
+
+def _diamond_actor_critic(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _diamond(device, dtype)
+    frame = _like(device, dtype, 2, 3, 16, 16)
+    return lambda: m.step_actor_critic(frame)
+
+
+def _genie(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    lucid.manual_seed(0)
+    m = models.create_model("genie_world_model", **_GENIE).genie
+    m = m.to(device).to(dtype).eval()
+    video = lucid.rand(2, 4, 3, 8, 8).to(device).to(dtype)
+    return lambda: m(video)
+
+
+_COMPONENTS: dict[str, tuple[str, Component]] = {
+    "sd-training": ("stable_diffusion", _sd_training),
+    "sd-unet-integer-step": ("stable_diffusion", _sd_unet_integer_step),
+    "sd-vae": ("stable_diffusion", _sd_vae),
+    "diamond-denoiser": ("diamond", _diamond_denoiser),
+    "diamond-reward-end": ("diamond", _diamond_reward_end),
+    "diamond-actor-critic": ("diamond", _diamond_actor_critic),
+    "genie-all-three-losses": ("genie", _genie),
+}
+
+_ROLLOUT_DTYPES = [("cpu", _F64), ("metal", _F16), ("metal", _BF16)]
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+@pytest.mark.parametrize("component", sorted(_COMPONENTS))
+def test_a_rollout_family_component_answers_in_its_dtype(
+    component: str, device: str, dtype: lucid.dtype
+) -> None:
+    _need(device)
+    call = _COMPONENTS[component][1](device, dtype)
+    with lucid.no_grad():
+        answer = call()
+    assert _floating(answer), "the component answered with no floating tensor"
+    wrong = _wrong(answer, dtype)
+    assert not wrong, f"a {_name(dtype)} {component} answered with {wrong[:6]}"
+
+
+def test_every_family_is_swept_or_checked_by_component() -> None:
+    families = {e.family for e in _REGISTRY.values()}
+    swept = {f for f, _ in _PAIRS}
+    by_component = {family for family, _ in _COMPONENTS.values()}
+    assert by_component == _ROLLOUTS, sorted(by_component ^ _ROLLOUTS)
+    assert families - swept == _ROLLOUTS, sorted(families - swept - _ROLLOUTS)
+
+
+# -- a training step --------------------------------------------------------------
+
+
 @pytest.mark.parametrize(
     ("family", "factory", "overrides", "make_inputs"),
     CASES,
@@ -135,25 +355,97 @@ def test_a_training_step_keeps_the_model_dtype(
     factory: str,
     overrides: dict[str, Any],
     make_inputs: Any,
+) -> None:
+    lucid.manual_seed(0)
+    model = models.create_model(factory, **overrides).to(_F16)
+    model.train()
+    args, kwargs = make_inputs()
+    _step_keeps(model, args, kwargs, _F16)
+
+
+def _square(side: int, lo: int, hi: int) -> lucid.Tensor:
+    """A ``(1, side, side)`` binary mask holding one square."""
+    grid = [
+        [1.0 if lo <= r < hi and lo <= c < hi else 0.0 for c in range(side)]
+        for r in range(side)
+    ]
+    return lucid.tensor([grid])
+
+
+def _boxes(side: int, *, masks: bool = False) -> list[dict[str, lucid.Tensor]]:
+    """One pixel-space box per image, and its mask when the head predicts one."""
+    lo, hi = side // 4, 3 * side // 4
+    target = {
+        "boxes": lucid.tensor([[float(lo), float(lo), float(hi), float(hi)]]),
+        "labels": lucid.tensor([1]),
+    }
+    if masks:
+        target["masks"] = _square(side, lo, hi)
+    return [target]
+
+
+def _segments(side: int) -> list[dict[str, lucid.Tensor]]:
+    return [{"labels": lucid.tensor([1]), "masks": _square(side, side // 8, side // 2)}]
+
+
+#: The losses the training-step table leaves to their own files: the RPN /
+#: box / mask heads of the R-CNNs, Mask2Former's matched point loss, and the
+#: YOLO losses other than v3's.
+_LOSSES: list[tuple[str, dict[str, object], int, Callable[[], Any]]] = [
+    (
+        "faster_rcnn_resnet50_fpn",
+        {
+            "num_classes": 3,
+            **_DETECTOR,
+            "rpn_post_nms_top_n": 10,
+            "roi_representation_size": 64,
+        },
+        64,
+        lambda: _boxes(64),
+    ),
+    (
+        "mask_rcnn_resnet50_fpn",
+        {"num_classes": 3, **_SMALLER["mask_rcnn"]},
+        64,
+        lambda: _boxes(64, masks=True),
+    ),
+    (
+        "mask2former_swin_tiny",
+        {
+            "num_classes": 3,
+            **_SMALLER["mask2former"],
+            "d_model": 32,
+            "n_head": 2,
+            "num_encoder_layers": 1,
+            "num_decoder_layers": 3,
+            "dim_feedforward": 32,
+            "train_num_points": 64,
+        },
+        64,
+        lambda: _segments(64),
+    ),
+    ("yolo_tiny", {"num_classes": 4}, 128, lambda: _boxes(128)),
+    ("yolo_v2", {"num_classes": 4}, 64, lambda: _boxes(64)),
+    ("yolo_v4", {"num_classes": 4}, 64, lambda: _boxes(64)),
+]
+
+
+@pytest.mark.parametrize("dtype", [_F64, _F16], ids=_name)
+@pytest.mark.parametrize(
+    ("factory", "overrides", "side", "targets"),
+    _LOSSES,
+    ids=[factory for factory, *_ in _LOSSES],
+)
+def test_a_detection_loss_keeps_the_model_dtype(
+    factory: str,
+    overrides: dict[str, object],
+    side: int,
+    targets: Callable[[], Any],
     dtype: lucid.dtype,
 ) -> None:
     lucid.manual_seed(0)
-    model = models.create_model(factory, **overrides).to(dtype)
-    model.train()
-    args, kwargs = make_inputs()
-    loss = model(*_cast(args, "cpu", dtype), **_cast(kwargs, "cpu", dtype)).loss
-    assert loss.dtype == dtype, f"a {_name(dtype)} {family} has a {loss.dtype} loss"
-    loss.backward()
-    grads = [(n, p.grad) for n, p in model.named_parameters() if p.grad is not None]
-    assert grads, "no parameter received a gradient"
-    wrong = [n for n, g in grads if g.dtype != dtype]
-    assert not wrong, f"gradients not in {_name(dtype)}: {wrong[:6]}"
-
-
-def test_every_family_is_swept_or_named_as_a_rollout() -> None:
-    families = {e.family for e in _REGISTRY.values()}
-    swept = {f for f, _ in _PAIRS}
-    assert families - swept == _ROLLOUTS, sorted(families - swept - _ROLLOUTS)
+    model = models.create_model(factory, **overrides).to(dtype).train()
+    _step_keeps(model, (lucid.randn(1, 3, side, side),), {"targets": targets()}, dtype)
 
 
 # -- the reported pair, through the public factories --------------------------

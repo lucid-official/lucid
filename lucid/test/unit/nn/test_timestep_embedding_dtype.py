@@ -18,13 +18,13 @@ from lucid.test._fixtures.devices import metal_available
 
 _STEPS = [0, 1, 250, 777, 999]
 
-_CASES = [
+_NARROW = [
     ("cpu", lucid.float16),
     ("cpu", lucid.bfloat16),
-    ("cpu", lucid.float64),
     ("metal", lucid.float16),
     ("metal", lucid.bfloat16),
 ]
+_CASES = [*_NARROW, ("cpu", lucid.float64)]
 
 
 def _layer(device: str, dtype: lucid.dtype, flip: bool = True) -> nn.TimestepEmbedding:
@@ -52,13 +52,11 @@ def test_the_embedding_and_the_output_take_the_layer_dtype(
     assert layer(steps).dtype == dtype
 
 
-@pytest.mark.parametrize(("device", "dtype"), _CASES)
+@pytest.mark.parametrize(("device", "dtype"), _NARROW)
 def test_a_narrow_layer_gets_the_float32_sinusoid_rounded_once(
     device: str, dtype: lucid.dtype
 ) -> None:
     """Angles in float32, then one cast: the reference's convention."""
-    if dtype == lucid.float64:
-        pytest.skip("float64 computes its own angles; see the next test")
     narrow = _layer(device, dtype)
     wide = _layer(device, lucid.float32)
     steps = lucid.tensor(_STEPS, device=device)
