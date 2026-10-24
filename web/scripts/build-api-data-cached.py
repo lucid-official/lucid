@@ -25,12 +25,14 @@ Env vars:
 Exit code mirrors the underlying build-api-data.py.
 """
 
+import ast
 import hashlib
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 WEB_ROOT = HERE.parent
@@ -109,8 +111,83 @@ def _slug_to_source_dir(slug: str) -> Path | None:
     return None
 
 
-def _hash_paths(paths: list[Path]) -> str:
-    """sha256 over (rel path, mtime_ns) pairs — same shape as the global key."""
+def _model_factory_names_in_dir(d: Path) -> set[str]:
+    """Names of functions decorated with ``@register_model(...)`` under ``d``.
+
+    Mirrors the decorator-call detection ``build-api-data.py``'s
+    ``_extract_register_model_params`` uses (same AST shape: a ``Call``
+    decorator whose name/attr is ``register_model``), but only needs the
+    function name — and reads raw source with :mod:`ast` so this
+    stdlib-only script (no Griffe on the docs CI runner) can run it too.
+    """
+    names: set[str] = set()
+    files = list(d.rglob("*.py")) if d.is_dir() else [d] if d.is_file() else []
+    for p in files:
+        try:
+            tree = ast.parse(p.read_text())
+        except OSError, SyntaxError, UnicodeDecodeError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dec in node.decorator_list:
+                if not isinstance(dec, ast.Call):
+                    continue
+                func = dec.func
+                fname = (
+                    func.id
+                    if isinstance(func, ast.Name)
+                    else func.attr if isinstance(func, ast.Attribute) else None
+                )
+                if fname == "register_model":
+                    names.add(node.name)
+    return names
+
+
+def _load_summaries_json() -> dict[str, Any]:
+    """Read ``public/api-data/_summaries.json`` fresh (no in-process cache —
+    a cached value would go stale across the ``--write-cache`` / mutate /
+    ``--check`` sequence a single test or CI run performs)."""
+    cache = OUT_DIR / "_summaries.json"
+    if not cache.is_file():
+        return {}
+    try:
+        return json.loads(cache.read_text())
+    except OSError, json.JSONDecodeError:
+        return {}
+
+
+def _model_summary_fingerprint(slug: str, d: Path) -> str:
+    """The ``_summaries.json`` entries this slug's factories embed, as a
+    stable string — ``""`` for slugs with no ``register_model`` factory.
+
+    Model pages embed ``_summaries.json[<factory name>]`` (see
+    ``build-api-data.py:_load_model_summaries`` /
+    ``_serialise_function``), but neither per-slug fingerprint below walks
+    anything but ``*.py`` sources.  A commit that only reruns
+    ``tools/build_model_summaries.py`` therefore left the embedding page's
+    fingerprint — and the committed drift baseline — unchanged, so
+    ``--check`` stayed green over a stale page (LCD-628).  Mixed into both
+    fingerprints below so such a change marks exactly the family slugs
+    whose factories moved, not every slug.
+    """
+    names = _model_factory_names_in_dir(d)
+    if not names:
+        return ""
+    summaries = _load_summaries_json()
+    entries = {n: summaries[n] for n in sorted(names) if n in summaries}
+    if not entries:
+        return ""
+    return json.dumps(entries, sort_keys=True)
+
+
+def _hash_paths(paths: list[Path], extra: str = "") -> str:
+    """sha256 over (rel path, mtime_ns) pairs — same shape as the global key.
+
+    ``extra`` mixes in state that isn't a file under ``paths`` but should
+    still invalidate the fingerprint (the slug's ``_summaries.json``
+    entries — see :func:`_model_summary_fingerprint`).
+    """
     h = hashlib.sha256()
     for p in sorted(paths):
         try:
@@ -120,6 +197,9 @@ def _hash_paths(paths: list[Path]) -> str:
         rel = p.relative_to(REPO_ROOT) if p.is_relative_to(REPO_ROOT) else p
         h.update(f"{rel}:{st.st_mtime_ns}\n".encode())
     h.update(f"build_script:{BUILD_SCRIPT.stat().st_mtime_ns}\n".encode())
+    if extra:
+        h.update(b"\0summaries\0")
+        h.update(extra.encode())
     return h.hexdigest()
 
 
@@ -174,7 +254,7 @@ def _per_module_fingerprints() -> dict[str, str]:
         if d is None:
             continue
         files = list(d.rglob("*.py")) if d.is_dir() else [d]
-        result[slug] = _hash_paths(files)
+        result[slug] = _hash_paths(files, _model_summary_fingerprint(slug, d))
     return result
 
 
@@ -201,6 +281,10 @@ def _content_fingerprints() -> dict[str, str]:
     unaffected.  Synth slugs (``lucid.ops`` / ``lucid.creation`` /
     ``lucid.ops.composite`` / ``lucid._C.engine``) have no isolated source dir
     and are skipped.
+
+    Also mixes in the slug's ``_summaries.json`` entries (see
+    :func:`_model_summary_fingerprint`) — model pages embed those, and no
+    ``*.py`` source hash sees a ``tools/build_model_summaries.py`` rerun.
     """
     result: dict[str, str] = {}
     if not OUT_DIR.is_dir():
@@ -231,6 +315,10 @@ def _content_fingerprints() -> dict[str, str]:
             h.update(b"\0")
             h.update(data)
             h.update(b"\0")
+        extra = _model_summary_fingerprint(slug, d)
+        if extra:
+            h.update(b"\0summaries\0")
+            h.update(extra.encode())
         result[slug] = h.hexdigest()
     return result
 
@@ -356,7 +444,9 @@ def main() -> int:
                 continue
             if not files:
                 continue
-            current_per_module[slug] = _hash_paths(files)
+            current_per_module[slug] = _hash_paths(
+                files, _model_summary_fingerprint(slug, d)
+            )
 
     # ── Orphan cleanup — slugs that used to be in the cache but no
     # longer have a source directory.  Could happen on file deletes /
