@@ -120,7 +120,6 @@ HELD: dict[str, str] = {
     "ScatterReduceNode::saved_base_": GUARDED,
     "ScatterReduceNode::saved_indices_": GUARDED,
     "ScatterReduceNode::saved_src_": GUARDED,
-    "ScatterReduceNode::saved_out_": GUARDED,
     "ScatterAddNode::saved_indices_": GUARDED,
     "ScatterSetNode::saved_indices_": GUARDED,
     "LUSolveBackward::pivots_": GUARDED,

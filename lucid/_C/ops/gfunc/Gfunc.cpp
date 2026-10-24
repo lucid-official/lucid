@@ -788,12 +788,21 @@ std::vector<Storage> cpu_scatter_prod_grads(const Storage& g_s,
 // tensors themselves.  Held as tensors, they are what a write after forward
 // would change under the node, so each one's version is guarded — the
 // reference saves all four and refuses the same writes.
+//
+// The result is held weakly.  It owns this node through its grad_fn, so a
+// strong handle closed a cycle only a backward broke: every forward that ran
+// none kept the node, the result and, through the node's operands and edges,
+// the graph behind them alive.  Nor is a copy of its buffer kept instead: on
+// the CPU an in-place write into bytes a node also holds is refused at the
+// write, where the reference refuses it at backward with the version error.
+// A result that is gone cannot have been written since; the backward that
+// needs its values recomputes them (ScatterExtremumNode::result).
 struct ScatterReduceNode : Node {
     int dim_ = 0;
     TensorImplPtr saved_base_;
     TensorImplPtr saved_indices_;
     TensorImplPtr saved_src_;
-    TensorImplPtr saved_out_;
+    std::weak_ptr<TensorImpl> saved_out_;
     Shape base_shape_;
     Dtype dtype_ = Dtype::F32;
     Device device_ = Device::CPU;
@@ -835,10 +844,69 @@ struct ScatterReduceNode : Node {
     }
 
     void for_each_owned_tensor(const std::function<void(const TensorImplPtr&)>& fn) const override {
-        for (const auto* t : {&saved_base_, &saved_indices_, &saved_src_, &saved_out_}) {
+        for (const auto* t : {&saved_base_, &saved_indices_, &saved_src_}) {
             if (*t)
                 fn(*t);
         }
+    }
+};
+
+// The backend kernel a scatter extremum's forward ran.
+using ScatterKernel = Storage (backend::IBackend::*)(
+    const Storage&, const Storage&, const Storage&, const Shape&, const Shape&, int, Dtype);
+
+// The scatter_amax / scatter_amin backward.  The gradient at each output
+// position is split equally among all tied winners there, base's element
+// included (the reference framework's scatter_reduce convention).
+struct ScatterExtremumNode : ScatterReduceNode {
+    const char* name_;
+    ScatterKernel kernel_;
+
+    ScatterExtremumNode(const char* name, ScatterKernel kernel) : name_(name), kernel_(kernel) {}
+
+    std::string node_name() const override { return name_; }
+
+    // The result's values as forward computed them: the tensor itself while
+    // it lives — :meth:`validate_versions` has just checked it — and once it
+    // is gone, the forward's kernel run again on the operands, whose
+    // versions are checked the same way.  A max or min selects its value, so
+    // the two agree bit for bit.
+    TensorImplPtr result() const {
+        if (auto out = saved_out_.lock())
+            return out;
+        auto& be = backend::Dispatcher::for_device(device_);
+        Storage s =
+            (be.*kernel_)(saved_base_->storage(), saved_indices_->storage(), saved_src_->storage(),
+                          base_shape_, saved_indices_->shape(), dim_, dtype_);
+        return std::make_shared<TensorImpl>(std::move(s), base_shape_, dtype_, device_, false);
+    }
+
+    std::vector<Storage> apply(Storage g) override {
+        auto g_impl = std::make_shared<TensorImpl>(g, base_shape_, dtype_, device_, false);
+        const TensorImplPtr out = result();
+
+        // 1. Winner masks (float 0/1 per element)
+        auto mask_base_f = winner_mask(saved_base_, out);
+        auto gathered_out = gather_op(out, saved_indices_, dim_);
+        auto mask_src_f = winner_mask(saved_src_, gathered_out);
+
+        // 2. Count total tied winners per output position:
+        //    winners_from_src[i] = Σ mask_src_f[j]  (over j where idx[j]==i)
+        auto zeros_out = zeros_like_op(out);
+        auto wins_from_src = scatter_add_op(zeros_out, saved_indices_, mask_src_f, dim_);
+        auto total_wins = add_op(mask_base_f, wins_from_src);  // per-output count
+        // Clamp to avoid divide-by-zero at non-participating positions
+        auto safe_wins = where_op(equal_op(total_wins, zeros_like_op(total_wins)),
+                                  ones_like_op(total_wins), total_wins);
+
+        // 3. grad_base = g * mask_base_f / safe_wins
+        Storage grad_base = div_op(mul_op(g_impl, mask_base_f), safe_wins)->storage();
+
+        // 4. grad_src = gather(g / safe_wins) * mask_src_f
+        auto g_normed = div_op(g_impl, safe_wins);
+        auto gathered_gn = gather_op(g_normed, saved_indices_, dim_);
+        Storage grad_src = mul_op(gathered_gn, mask_src_f)->storage();
+        return {std::move(grad_base), std::move(grad_src)};
     }
 };
 
@@ -923,42 +991,9 @@ TensorImplPtr scatter_amax_op(const TensorImplPtr& base,
     if (!needs_grad)
         return out;
 
-    struct ScatterAmaxNode : ScatterReduceNode {
-        std::string node_name() const override { return "scatter_amax"; }
-
-        // Gradient is split equally among all tied winners at each output
-        // position (matches the reference framework's scatter_reduce
-        // backward convention).
-        std::vector<Storage> apply(Storage g) override {
-            auto g_impl = std::make_shared<TensorImpl>(g, base_shape_, dtype_, device_, false);
-
-            // 1. Winner masks (float 0/1 per element)
-            auto mask_base_f = winner_mask(saved_base_, saved_out_);
-            auto gathered_out = gather_op(saved_out_, saved_indices_, dim_);
-            auto mask_src_f = winner_mask(saved_src_, gathered_out);
-
-            // 2. Count total tied winners per output position:
-            //    winners_from_src[i] = Σ mask_src_f[j]  (over j where idx[j]==i)
-            auto zeros_out = zeros_like_op(saved_out_);
-            auto wins_from_src = scatter_add_op(zeros_out, saved_indices_, mask_src_f, dim_);
-            auto total_wins = add_op(mask_base_f, wins_from_src);  // per-output count
-            // Clamp to avoid divide-by-zero at non-participating positions
-            auto safe_wins = where_op(equal_op(total_wins, zeros_like_op(total_wins)),
-                                      ones_like_op(total_wins), total_wins);
-
-            // 3. grad_base = g * mask_base_f / safe_wins
-            Storage grad_base = div_op(mul_op(g_impl, mask_base_f), safe_wins)->storage();
-
-            // 4. grad_src = gather(g / safe_wins) * mask_src_f
-            auto g_normed = div_op(g_impl, safe_wins);
-            auto gathered_gn = gather_op(g_normed, saved_indices_, dim_);
-            Storage grad_src = mul_op(gathered_gn, mask_src_f)->storage();
-            return {std::move(grad_base), std::move(grad_src)};
-        }
-    };
-
-    return attach_scatter_reduce(std::make_shared<ScatterAmaxNode>(), base, indices, src,
-                                 std::move(out), d);
+    return attach_scatter_reduce(
+        std::make_shared<ScatterExtremumNode>("scatter_amax", &backend::IBackend::scatter_amax),
+        base, indices, src, std::move(out), d);
 }
 
 // ── scatter_amin ──────────────────────────────────────────────────────────────
@@ -990,29 +1025,9 @@ TensorImplPtr scatter_amin_op(const TensorImplPtr& base,
     if (!needs_grad)
         return out;
 
-    struct ScatterAminNode : ScatterReduceNode {
-        std::string node_name() const override { return "scatter_amin"; }
-
-        std::vector<Storage> apply(Storage g) override {
-            auto g_impl = std::make_shared<TensorImpl>(g, base_shape_, dtype_, device_, false);
-            auto mask_base_f = winner_mask(saved_base_, saved_out_);
-            auto gathered_out = gather_op(saved_out_, saved_indices_, dim_);
-            auto mask_src_f = winner_mask(saved_src_, gathered_out);
-            auto zeros_out = zeros_like_op(saved_out_);
-            auto wins_src = scatter_add_op(zeros_out, saved_indices_, mask_src_f, dim_);
-            auto total_wins = add_op(mask_base_f, wins_src);
-            auto safe_wins = where_op(equal_op(total_wins, zeros_like_op(total_wins)),
-                                      ones_like_op(total_wins), total_wins);
-            Storage grad_base = div_op(mul_op(g_impl, mask_base_f), safe_wins)->storage();
-            auto g_normed = div_op(g_impl, safe_wins);
-            auto gathered_gn = gather_op(g_normed, saved_indices_, dim_);
-            Storage grad_src = mul_op(gathered_gn, mask_src_f)->storage();
-            return {std::move(grad_base), std::move(grad_src)};
-        }
-    };
-
-    return attach_scatter_reduce(std::make_shared<ScatterAminNode>(), base, indices, src,
-                                 std::move(out), d);
+    return attach_scatter_reduce(
+        std::make_shared<ScatterExtremumNode>("scatter_amin", &backend::IBackend::scatter_amin),
+        base, indices, src, std::move(out), d);
 }
 
 // ── scatter_prod ──────────────────────────────────────────────────────────────
