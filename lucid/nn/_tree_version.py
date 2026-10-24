@@ -7,12 +7,16 @@ compile side caches it against :func:`_tree_version`.
 
 The version moves after any change the walk can see, anywhere: an attribute
 set or deleted through :meth:`Module.__setattr__` / ``__delattr__``, and
-every write to a module's submodule or hook registry.  Those registries are
-:class:`_TrackedDict`\\ s because they are written directly — by
-``add_module``, the containers, quantization and
-:meth:`~lucid.nn.hooks.RemovableHandle.remove` — rather than through
-``__setattr__``.  A write that bypasses both (``module.__dict__[name] = v``)
-is not seen.
+every write to a module's parameter, buffer, submodule or hook registry.
+Those registries are :class:`_TrackedDict`\\ s because they are written
+directly — by ``register_parameter`` / ``register_buffer`` / ``add_module``,
+an ``assign=True`` load, the containers, the reparametrisations,
+quantization and :meth:`~lucid.nn.hooks.RemovableHandle.remove` — rather
+than through ``__setattr__``.  ``lucid.compile`` reads the tensor registries
+too: an executable is fed the tensors it was traced with, so one put in
+their place has to be seen.  A write that bypasses both
+(``module.__dict__[name] = v``) is not seen, nor is a tensor given new
+storage under the same object (``p.data = v``).
 """
 
 import itertools

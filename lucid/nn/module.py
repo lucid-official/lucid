@@ -59,7 +59,12 @@ _HOOK_ID: int = 0
 # The registries ``lucid.compile`` keys an executable on, held as
 # ``_TrackedDict``s so every write to one moves the tree version
 # (``nn/_tree_version.py``) — they are written directly, not set as attributes.
+# The tensor registries are among them: an executable reads the tensors it was
+# traced with, and ``register_parameter``, an ``assign=True`` load or a
+# ``ParameterList.append`` put new ones there without a ``setattr`` (LCD-560).
 _TRACKED_REGISTRIES = (
+    "_parameters",
+    "_buffers",
     "_modules",
     "_forward_pre_hooks",
     "_forward_hooks",
@@ -190,8 +195,6 @@ class Module:
 
     def __init__(self) -> None:
         """Initialise the instance.  See the class docstring for parameter semantics."""
-        object.__setattr__(self, "_parameters", OrderedDict())
-        object.__setattr__(self, "_buffers", OrderedDict())
         object.__setattr__(self, "_non_persistent_buffers", set())
         object.__setattr__(self, "_forward_pre_hooks_with_kwargs", set())
         object.__setattr__(self, "_forward_hooks_with_kwargs", set())
