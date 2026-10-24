@@ -62,7 +62,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
-from lucid.compile._core.signature import outside_feeds
+from lucid.compile._core.signature import outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
@@ -210,6 +210,9 @@ class _Segment:
     index: int
     forward_fn: Callable[..., Tensor]  # x -> y (traced, not run eagerly)
     params: list[Tensor]
+    # Its modules' parameters and buffers: a trace that reads one on the host
+    # is unsupported, or the value read would be baked in.
+    state: tuple[Tensor, ...] = ()
     cache: dict[_SegKey, _SegCompiled] = field(default_factory=dict)
 
 
@@ -285,7 +288,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     x_impl = _unwrap(x)
 
     # --- Trace 1: forward only (x -> y) -----------------------------------
-    traced_fwd = _trace_segment_fn((x, seg.params), lambda: seg.forward_fn(x))
+    traced_fwd = _trace_segment_fn((x, seg.state), lambda: seg.forward_fn(x))
     if traced_fwd is None:
         return None
     t_fwd, y = traced_fwd
@@ -330,7 +333,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     # upstream cotangent into this slot.
     go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
     traced_bwd = _trace_segment_fn(
-        (x, seg.params), lambda: (seg.forward_fn(x) * go).sum()
+        (x, seg.state), lambda: (seg.forward_fn(x) * go).sum()
     )
     if traced_bwd is None:
         return None
@@ -480,6 +483,7 @@ def _segments_of(model: Sequential, segments: int) -> list[_Segment]:
                 index=gi,
                 forward_fn=_group_fn(mods),
                 params=[p for m in mods for p in m.parameters()],
+                state=tuple(t for m in mods for t in tree_tensors(m)),
             )
         )
     return seg_objs

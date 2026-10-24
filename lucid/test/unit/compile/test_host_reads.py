@@ -329,3 +329,36 @@ def test_a_step_with_a_move_that_copies_nothing_stays_compiled() -> None:
         return out.square().sum()
 
     assert not _step_twice(lambda y: y.to(y.device).float(), loss_fn)
+
+
+class _Gain(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("gain", lucid.tensor(2.0))
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        return x * self.gain.item()
+
+
+def test_a_segment_reading_its_buffer_on_the_host_follows_it() -> None:
+    """A segment's trace watched its parameters only: the gain read on the
+    first step stayed baked in after the buffer changed (1.21 for 3.15)."""
+    runs = []
+    for compiled in (True, False):
+        lucid.manual_seed(0)
+        model = nn.Sequential(nn.Linear(4, 3), _Gain(), nn.Linear(3, 2))
+        model = model.to(COMPILE_DEVICE)
+        x, t = (lucid.randn(2, n).to(COMPILE_DEVICE) for n in (4, 2))
+        step = lucid.compile.make_step(model, nn.functional.mse_loss, segments=3)
+        losses = []
+        for k in range(3):
+            if k == 1:
+                model[1].get_buffer("gain").fill_(5.0)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", fallback.CompileFallbackWarning)
+                loss = step(x, t) if compiled else nn.functional.mse_loss(model(x), t)
+            loss.backward()
+            losses.append(float(loss.item()))
+        runs.append(losses)
+    got, want = runs
+    assert got == pytest.approx(want, rel=1e-5)

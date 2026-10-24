@@ -1328,6 +1328,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - watch the state of every module a trace reaches
 
+- a segment's trace watches its buffers for host reads
+
 ### Changed
 
 - **Breaking:** `lucid.linalg.vander` puts the powers in increasing order by default (`x^0` first), as the reference does. `vander([1, 2, 3])` is now `[[1, 1, 1], [1, 2, 4], [1, 3, 9]]`; pass `increasing=False` for the old order. An integer input returns exact `int64` powers, where it returned `float32`. A `float16`/`bfloat16` input keeps its dtype. A 0-d input is read as a vector of one. A bool input raises `TypeError`. A complex input keeps its imaginary part on Metal, and raises `NotImplementedError` on CPU until the CPU cumprod gains complex support (LCD-431, LCD-637).
