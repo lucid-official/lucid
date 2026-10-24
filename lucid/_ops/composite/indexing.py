@@ -17,6 +17,15 @@ on the CPU and dropping its write on Metal.  Narrowed to ``int32`` first,
 / ``values`` of another dtype than ``input``'s is refused, as the reference
 refuses it.
 
+An op that flattens or broadcasts its index before an engine kernel sees
+it (the ``index_*`` family, ``put``) checks the index here, at the public
+op, before any data is touched (:func:`_positions`, :func:`_require_index`).
+Left to the kernels, a 2-D index for ``index_copy`` was flattened in
+silence, or refused by the ``reshape`` that flattened it.  That refusal,
+like the dtype and device refusals of ``scatter_set`` and ``scatter_add``,
+named an op the caller never called.  ``scatter_reduce`` hands the caller's
+index to the engine unchanged, and the engine's scatter door owns its rules.
+
 The in-place forms (``Tensor.index_add_`` and the rest, and
 :func:`index_put_`) run the out-of-place op and write its result into the
 destination through :func:`_write_inplace`.
@@ -29,7 +38,7 @@ import lucid
 from lucid import _promotion
 from lucid._dispatch import _cannot_cast_inplace, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._dims import _wrap_dim
+from lucid._ops._dims import _dim_size, _wrap_dim
 import lucid._C.engine as _C_engine
 from lucid._tensor._indexing import (
     _broadcast_shape,
@@ -95,17 +104,171 @@ def _scatter_add(base: Tensor, dim: int, index: Tensor, src: Tensor) -> Tensor:
     )
 
 
-def _along(index: Tensor, dim: int, shape: list[int]) -> _C_engine.TensorImpl:
-    """A 1-D ``index`` of positions along ``dim``, broadcast to ``shape``.
+#: The dtypes an index tensor may hold: the ones the engine's gather and
+#: scatter kernels read.
+_INDEX_DTYPES = (_C_engine.I32, _C_engine.I64)
+
+
+def _require_device(name: str, input: Tensor, other: Tensor, what: str) -> None:
+    """Refuse an operand that lives on another device than ``input``.
+
+    The reference refuses it as a ``RuntimeError``, which ``DeviceMismatch``
+    is.
+    """
+    if other._impl.device != input._impl.device:
+        raise _C_engine.DeviceMismatch(
+            f"{name}: {what} must be on input's device "
+            f"{input.device.type}, got {other.device.type}"
+        )
+
+
+def _require_index(name: str, input: Tensor, index: Tensor) -> None:
+    """Refuse an ``index`` that is not an ``int32`` / ``int64`` tensor on ``input``'s device.
+
+    Asked by the composites that flatten or broadcast the index before an
+    engine kernel sees it: the ``index_*`` family and ``put``.  The kernel
+    does refuse a bad index, but under its own name (``scatter_set``,
+    ``scatter_add``, ``scatter``), and only once the index is no longer the
+    caller's.  An op that hands the caller's index to the engine unchanged,
+    as ``scatter_reduce`` does, leaves these checks to the engine's door.
+
+    The dtype refusal is the engine's ``IndexError``, an ``IndexError`` and
+    a ``RuntimeError`` both.  The reference refuses the dtype with the
+    first for ``index_fill`` and with the second for the rest, so either
+    ``except`` catches this.
+    """
+    if not isinstance(index, lucid.Tensor):
+        raise TypeError(f"{name}: index must be a Tensor, got {type(index).__name__}")
+    _require_device(name, input, index, "index")
+    if index._impl.dtype not in _INDEX_DTYPES:
+        raise _C_engine.IndexError(
+            f"{name}: index must be an int32 or int64 tensor, got {index.dtype}"
+        )
+
+
+def _positions(
+    name: str, input: Tensor, dim: int, index: Tensor
+) -> tuple[int, _C_engine.TensorImpl]:
+    """``dim`` resolved against ``input``, and ``index`` as 1-D positions.
+
+    The index argument of ``index_add`` / ``index_copy`` / ``index_fill``,
+    in place or not: a 0-d or 1-D ``int32`` / ``int64`` tensor, a 0-d one
+    naming a single position.  The reference refuses a 2-D index as an
+    ``IndexError`` (``index_add``, ``index_copy``) or a ``RuntimeError``
+    (``index_fill``); the engine's ``IndexError`` is both.  An index into
+    an axis of size 0 is out of range whatever its values, so it is refused
+    from the shapes alone, on Metal as well as on the CPU.
+
+    Raises
+    ------
+    IndexError
+        ``dim`` is out of range for ``input``.
+    TypeError
+        ``index`` is not a Tensor.
+    lucid._C.engine.DeviceMismatch
+        ``index`` is on another device than ``input``.
+    lucid._C.engine.IndexError
+        ``index`` has more than one dim, a dtype other than ``int32`` /
+        ``int64``, or elements while ``input``'s ``dim`` has size 0.
+    """
+    dim = _wrap_dim(dim, input.ndim, name)
+    _require_index(name, input, index)
+    if index.ndim > 1:
+        raise _C_engine.IndexError(
+            f"{name}: index must be 0-D or 1-D, got shape {tuple(index.shape)}"
+        )
+    count = index.numel()
+    if count and _dim_size(list(input.shape), dim) == 0:
+        raise _C_engine.IndexError(
+            f"{name}: index out of range: dim {dim} of input has size 0, got "
+            f"{count} indices"
+        )
+    return dim, _C_engine.reshape(_unwrap(index), [-1])
+
+
+def _require_source_slices(
+    name: str, input: Tensor, dim: int, count: int, source: Tensor, *, same_rank: bool
+) -> None:
+    """Refuse a ``source`` that is not ``count`` slices of ``input`` along ``dim``.
+
+    ``source`` must have ``input``'s shape with ``dim`` sized ``count``, the
+    number of indices.  A 0-d ``input`` or ``source`` reads as a one-element
+    vector, as the reference's ``index_copy`` reads it.  ``same_rank`` adds
+    the reference's ``index_add`` rule: there a 0-d ``source`` goes only with
+    a 0-d ``input``.
+
+    Raises
+    ------
+    lucid._C.engine.DeviceMismatch
+        ``source`` is on another device than ``input``.
+    lucid._C.engine.IndexError
+        ``source`` and ``input`` differ in their number of dims, or
+        ``source.shape[dim]`` is not ``count``.  The reference raises an
+        ``IndexError`` here for ``index_copy`` and a ``RuntimeError`` for
+        ``index_add``.
+    lucid._C.engine.ShapeMismatch
+        ``source`` and ``input`` differ on a dim other than ``dim``.
+    """
+    _require_device(name, input, source, "source")
+    want = list(input.shape) or [1]
+    got = list(source.shape) or [1]
+    if len(got) != len(want) or (same_rank and source.ndim != input.ndim):
+        raise _C_engine.IndexError(
+            f"{name}: source must have as many dims as input "
+            f"{tuple(input.shape)}, got source of shape {tuple(source.shape)}"
+        )
+    if got[dim] != count:
+        raise _C_engine.IndexError(
+            f"{name}: {count} indices need source.shape[{dim}] == {count}, got "
+            f"source of shape {tuple(source.shape)}"
+        )
+    if got[:dim] + got[dim + 1 :] != want[:dim] + want[dim + 1 :]:
+        raise _C_engine.ShapeMismatch(
+            f"{name}: source must match input's shape {tuple(input.shape)} on "
+            f"every dim but {dim}, got {tuple(source.shape)}"
+        )
+
+
+def _as_vector(impl: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
+    """``impl``, or the one-element vector a 0-d ``impl`` is to a slice write."""
+    return _C_engine.reshape(impl, [1]) if not list(impl.shape) else impl
+
+
+def _write_slices(
+    input: Tensor,
+    dim: int,
+    positions: _C_engine.TensorImpl,
+    source: Tensor,
+    write: Callable[
+        [_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl],
+        _C_engine.TensorImpl,
+    ],
+) -> Tensor:
+    """``source``'s slices along ``dim`` written into ``input``'s at ``positions``.
+
+    ``write(base, index, src)`` is the engine scatter, given the 1-D
+    positions broadcast to ``src``'s shape.  A 0-d ``input`` or ``source``
+    is scattered as a one-element vector, and the result has ``input``'s
+    shape.  Their shapes were checked by :func:`_require_source_slices`.
+    """
+    src = _as_vector(_unwrap(source))
+    out = write(
+        _as_vector(_unwrap(input)), _along(positions, dim, list(src.shape)), src
+    )
+    return _wrap(_C_engine.reshape(out, []) if input.ndim == 0 else out)
+
+
+def _along(
+    positions: _C_engine.TensorImpl, dim: int, shape: list[int]
+) -> _C_engine.TensorImpl:
+    """1-D ``positions`` along ``dim``, broadcast to ``shape``.
 
     The index every slice-wise write (``index_add``, ``index_copy``)
-    scatters with: ``shape[dim]`` must be the index's length.
+    scatters with: ``shape[dim]`` must be the number of positions.
     """
-    ndim = len(shape)
-    along = [1] * ndim
+    along = [1] * len(shape)
     along[dim] = shape[dim]
-    flat = _C_engine.reshape(_unwrap(index), [-1])
-    return _C_engine.broadcast_to(_C_engine.reshape(flat, along), shape)
+    return _C_engine.broadcast_to(_C_engine.reshape(positions, along), shape)
 
 
 def _in_place_result(
@@ -242,7 +405,7 @@ def index_fill(
     dim : int
         Axis along which ``index`` addresses slices.
     index : Tensor
-        1-D integer tensor of positions along ``dim``.
+        0-D or 1-D ``int32`` / ``int64`` tensor of positions along ``dim``.
     value : float
         Scalar to write into every indexed position.
 
@@ -251,14 +414,31 @@ def index_fill(
     Tensor
         Same shape and dtype as ``input``; indexed slices replaced by
         ``value``, others unchanged.
+
+    Raises
+    ------
+    IndexError
+        ``dim`` is out of range, or, on the CPU, an ``index`` value lies
+        outside ``[-size, size)`` of ``dim``.  Metal drops such a write.
+    lucid._C.engine.IndexError
+        ``index`` has more than one dim or is not ``int32`` / ``int64``,
+        or has elements while ``input``'s ``dim`` has size 0 (an
+        ``IndexError`` and a ``RuntimeError``).
+    lucid._C.engine.DeviceMismatch
+        ``index`` is not on ``input``'s device.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.index_fill(lucid.zeros(2, 3), 1, lucid.tensor([0, 2]), 1.0)
+    tensor([[1., 0., 1.], [1., 0., 1.]])
     """
     shape = list(input.shape)
     if not shape:
         shape = [1]
-    dim = _wrap_dim(dim, input.ndim, "index_fill")
+    dim, positions = _positions("index_fill", input, dim, index)
     n = shape[dim]
     device = input._impl.device
-    positions = _C_engine.reshape(_unwrap(index), [-1])
     hits = _C_engine.scatter_add(
         _C_engine.zeros([n], _C_engine.I32, device),
         positions,
@@ -294,12 +474,12 @@ def index_add(
     dim : int
         Axis along which ``index`` addresses slices.
     index : Tensor
-        1-D integer tensor of length :math:`m` listing positions along
-        ``dim`` to accumulate into.
+        0-D or 1-D ``int32`` / ``int64`` tensor of :math:`m` positions
+        along ``dim`` to accumulate into.
     source : Tensor
         Per-slice update tensor; same shape as ``input`` except
         ``source.shape[dim] == m`` (matching ``index`` length), and
-        ``input``'s dtype.
+        ``input``'s dtype.  A 0-d ``source`` goes with a 0-d ``input``.
     alpha : float, optional
         Scalar multiplier applied to ``source`` before accumulation.
         Default ``1.0``.
@@ -316,14 +496,37 @@ def index_add(
         ``source``'s dtype is not ``input``'s (a ``RuntimeError`` and a
         ``TypeError``).
     IndexError
-        On the CPU, an ``index`` value outside ``[-size, size)`` of
-        ``dim``; Metal drops such a write.
+        ``dim`` is out of range, or, on the CPU, an ``index`` value lies
+        outside ``[-size, size)`` of ``dim``.  Metal drops such a write.
+    lucid._C.engine.IndexError
+        ``index`` is not a 0-D or 1-D ``int32`` / ``int64`` tensor, it has
+        elements while ``input``'s ``dim`` has size 0 (the reference adds
+        nothing there instead), or ``source`` lacks ``input``'s number of
+        dims or one slice per index along ``dim`` (an ``IndexError`` and a
+        ``RuntimeError``).
+    lucid._C.engine.ShapeMismatch
+        ``source`` and ``input`` differ on a dim other than ``dim``.
+    lucid._C.engine.DeviceMismatch
+        ``index`` or ``source`` lives on another device than ``input``.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.index_add(lucid.ones(4), 0, lucid.tensor([3, 0, 3]), lucid.ones(3))
+    tensor([2., 1., 1., 3.])
     """
     _require_input_dtype("index_add", input, source, "source")
-    dim = _wrap_dim(dim, input.ndim, "index_add")
-    index_t = _wrap(_along(index, dim, list(source.shape)))
+    dim, positions = _positions("index_add", input, dim, index)
+    count = int(positions.shape[0])
+    _require_source_slices("index_add", input, dim, count, source, same_rank=True)
     scaled = source * alpha if alpha != 1 else source
-    return _scatter_add(input, dim, index_t, scaled)
+    return _write_slices(
+        input,
+        dim,
+        positions,
+        scaled,
+        lambda base, at, src: _C_engine.scatter_add(base, at, src, dim),
+    )
 
 
 def index_copy(
@@ -347,11 +550,12 @@ def index_copy(
     dim : int
         Axis along which slices are addressed.
     index : Tensor
-        1-D ``int32`` / ``int64`` tensor of positions along ``dim``.
-        Length must equal ``source.shape[dim]``.
+        0-D or 1-D ``int32`` / ``int64`` tensor of positions along ``dim``.
+        Its number of elements must equal ``source.shape[dim]``.
     source : Tensor
         Replacement slices.  All non-``dim`` dimensions must match
-        ``input``; ``source.shape[dim]`` must equal ``index.shape[0]``.
+        ``input``; ``source.shape[dim]`` must equal ``index.numel()``.
+        A 0-d ``input`` or ``source`` counts as a one-element vector.
         Must have ``input``'s dtype.
 
     Returns
@@ -365,8 +569,24 @@ def index_copy(
     lucid._C.engine.DtypeMismatch
         ``source``'s dtype is not ``input``'s.
     IndexError
-        On the CPU, an ``index`` value outside ``[-size, size)`` of
-        ``dim``; Metal drops such a write.
+        ``dim`` is out of range, or, on the CPU, an ``index`` value lies
+        outside ``[-size, size)`` of ``dim``.  Metal drops such a write.
+    lucid._C.engine.IndexError
+        ``index`` is not a 0-D or 1-D ``int32`` / ``int64`` tensor, points
+        into a ``dim`` of size 0, or ``source``, read as a vector when 0-d,
+        has another number of dims than ``input`` or another number of
+        slices along ``dim`` than ``index`` has elements (an ``IndexError``
+        and a ``RuntimeError``).
+    lucid._C.engine.ShapeMismatch
+        A dim of ``source`` other than ``dim`` differs from ``input``'s.
+    lucid._C.engine.DeviceMismatch
+        ``input``, ``index`` and ``source`` are not all on one device.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.index_copy(lucid.zeros(4), 0, lucid.tensor([3, 0]), lucid.tensor([1.0, 2.0]))
+    tensor([2., 0., 0., 1.])
     """
     with _autocast_entry("index_copy", _unwrap(input), _unwrap(source)) as (
         in_impl,
@@ -374,9 +594,16 @@ def index_copy(
     ):
         input, source = _wrap(in_impl), _wrap(src_impl)
         _require_input_dtype("index_copy", input, source, "source")
-        dim = _wrap_dim(dim, input.ndim, "index_copy")
-        index_impl = _along(index, dim, list(source.shape))
-        return _wrap(_C_engine.scatter_set(in_impl, index_impl, src_impl, dim))
+        dim, positions = _positions("index_copy", input, dim, index)
+        count = int(positions.shape[0])
+        _require_source_slices("index_copy", input, dim, count, source, same_rank=False)
+        return _write_slices(
+            input,
+            dim,
+            positions,
+            source,
+            lambda base, at, src: _C_engine.scatter_set(base, at, src, dim),
+        )
 
 
 def _scatter_into(
@@ -475,8 +702,10 @@ def scatter_reduce(
     dim : int
         Axis along which ``index`` / ``src`` are scattered.
     index : Tensor
-        Integer tensor broadcasting against ``src``; each entry names
-        the position along ``dim`` of ``input`` to update.
+        ``int32`` / ``int64`` tensor of ``input``'s number of dims, no larger
+        than ``src`` on any dim nor than ``input`` on any dim but ``dim``
+        (it does not broadcast).  Each entry names the position along
+        ``dim`` of ``input`` that the matching ``src`` entry updates.
     src : Tensor
         Values to scatter into ``input`` at the positions named by
         ``index``.  Must have ``input``'s dtype.
@@ -714,7 +943,7 @@ def put(
     input : Tensor
         Destination — its shape is preserved in the output.
     index : Tensor
-        Integer tensor of any shape of flat positions in
+        ``int32`` / ``int64`` tensor of any shape of flat positions in
         ``[-input.numel(), input.numel())``.
     source : Tensor
         Values of ``input``'s dtype, as many as ``index`` has.
@@ -731,15 +960,29 @@ def put(
     ------
     lucid._C.engine.DtypeMismatch
         ``source``'s dtype is not ``input``'s.
+    lucid._C.engine.DeviceMismatch
+        ``index`` or ``source`` is on another device than ``input``.
+    lucid._C.engine.IndexError
+        ``index`` is not ``int32`` / ``int64``, or has elements while
+        ``input`` has none.
     IndexError
         ``source`` and ``index`` hold different numbers of elements, or —
         on the CPU — an index is out of range; Metal drops such a write.
     """
     _require_input_dtype("put", input, source, "source")
+    # put flattens the index before the engine sees it, so the engine's
+    # refusals name its ``scatter``; these are asked here, under put's name.
+    _require_index("put", input, index)
+    _require_device("put", input, source, "source")
     if source.numel() != index.numel():
         raise IndexError(
             f"put: source and index must have the same number of elements, "
             f"got {source.numel()} and {index.numel()}"
+        )
+    if index.numel() and input.numel() == 0:
+        raise _C_engine.IndexError(
+            f"put: index out of range: input has no elements, got "
+            f"{index.numel()} indices"
         )
     positions = _C_engine.reshape(_unwrap(index), [-1])
     values = _C_engine.reshape(_C_engine.contiguous(_unwrap(source)), [-1])

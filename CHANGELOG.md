@@ -1208,6 +1208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - pin LCD-602, type the saved record, note the alias gap
 
+- refuse a bad index_* or put index at the op that was called
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:
