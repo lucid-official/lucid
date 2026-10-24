@@ -377,7 +377,7 @@ class _Masked(nn.Module):
 @_METAL
 @pytest.mark.xfail(
     strict=True,
-    reason="LCD-560 follow-up: a plain tensor attribute the forward reads is "
+    reason="LCD-606: a plain tensor attribute the forward reads is "
     "not in the tree record (only the ones the trace fed may go in: the "
     "reparametrisations rewrite theirs on every eager forward)",
 )
