@@ -5,7 +5,7 @@
 # fmt: off
 
 from contextlib import AbstractContextManager
-from typing import IO, Callable, Sequence, overload
+from typing import IO, Callable, Mapping, Sequence, overload
 import builtins
 import os
 
@@ -125,7 +125,7 @@ def load_sharded(
     weights_only: _bool = True,
 ) -> object: ...
 def save_safetensors(
-    state_dict: dict[str, Tensor],
+    state_dict: Mapping[str, Tensor],
     path: str,
     *,
     metadata: dict[str, str] | None = None,
