@@ -150,6 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Tensor.normal_ / uniform_ and lucid.randint_like
 
+- the out-of-place twin of every in-place method
+
 ### Performance
 
 - strided views copy by runs; contiguous() is 11-35x faster

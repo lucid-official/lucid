@@ -1166,10 +1166,59 @@ def gen_tensor_pyi() -> tuple[str, int]:
         lines.append(_tensor_method_sig(entry))
         count += 1
 
+    from lucid._tensor._free_fn_methods import FREE_FN_METHODS
+
     content = _TENSOR_HEADER + "\n".join(lines) + "\n\n"
     content += "    # ── Python-level overrides (_methods.py) ───────────────────────\n"
-    content += "\n".join(python_only) + "\n"
+    content += "\n".join(python_only) + "\n\n"
+    content += "    # ── free functions as methods (_free_fn_methods.py) ────────────\n"
+    content += "\n".join(_free_fn_method_sig(name) for name in FREE_FN_METHODS) + "\n"
     return content, count
+
+
+def _stub_default(value: object) -> str:
+    """`` = <value>`` for a stub parameter's default: the literal, or ``...``."""
+    if value is inspect.Parameter.empty:
+        return ""
+    if value is None or type(value) in (bool, int, float, str):
+        return f" = {value!r}"
+    return " = ..."
+
+
+def _free_fn_method_sig(name: str) -> str:
+    """The stub line of ``Tensor.<name>``, a free function as a method.
+
+    Written from the method's runtime signature — ``lucid.<name>``'s after
+    its first parameter (``lucid._tensor._free_fn_methods``) — so the stub
+    and ``inspect`` agree by construction.  A parameter the free function
+    leaves unannotated takes its type from ``_PARAM_TYPE_MAP``.
+    """
+    import annotationlib
+
+    import lucid
+
+    sig = inspect.signature(
+        getattr(lucid.Tensor, name), annotation_format=annotationlib.Format.FORWARDREF
+    )
+    parts = ["self"]
+    star = False
+    for param in list(sig.parameters.values())[1:]:
+        if param.kind is param.KEYWORD_ONLY and not star:
+            parts.append("*")
+        star = star or param.kind in (param.KEYWORD_ONLY, param.VAR_POSITIONAL)
+        if param.annotation is inspect.Parameter.empty:
+            ptype = _PARAM_TYPE_MAP.get(param.name, "object")
+        else:
+            ptype = _stringify_annotation(param.annotation)
+        prefix = {param.VAR_POSITIONAL: "*", param.VAR_KEYWORD: "**"}.get(param.kind, "")
+        parts.append(f"{prefix}{param.name}: {ptype}{_stub_default(param.default)}")
+    returns = (
+        "Tensor"
+        if sig.return_annotation is inspect.Signature.empty
+        else _stringify_annotation(sig.return_annotation)
+    )
+    line = f"    def {name}({', '.join(parts)}) -> {returns}: ..."
+    return _SHADOWED_BUILTINS.sub(r"_\1", line)
 
 
 # ── 3. __init__.pyi ───────────────────────────────────────────────────────────

@@ -685,6 +685,21 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module 'lucid' has no attribute '{name}'")
 
 
+def _attach_free_fn_methods() -> None:
+    """Give ``Tensor`` the method form of the free functions that lacked one.
+
+    ``x.expm1()`` is ``lucid.expm1(x)`` (:mod:`lucid._tensor._free_fn_methods`).
+    The methods are bound to what ``lucid.<name>`` resolves to, which it
+    does only from here on — after ``Tensor`` and the lazy loaders above.
+    """
+    from lucid._tensor._free_fn_methods import inject_free_fn_methods
+
+    inject_free_fn_methods(Tensor)
+
+
+_attach_free_fn_methods()
+
+
 def _bind_annotation_names() -> None:
     """Give every module the names its annotations mention.
 

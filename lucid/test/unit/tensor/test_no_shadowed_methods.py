@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import lucid
-from lucid._tensor import _dunders, _methods, _to
+from lucid._tensor import _dunders, _free_fn_methods, _methods, _to
 
 _SOURCE = Path(lucid.__file__).parent / "_tensor" / "tensor.py"
 
@@ -21,6 +21,7 @@ _INJECTORS: tuple[Callable[[type], None], ...] = (
     _methods._inject_methods,
     _dunders._inject_dunders,
     _to._inject_to,
+    _free_fn_methods.inject_free_fn_methods,
 )
 
 #: ``tensor.py`` members an injector may replace on purpose.
@@ -65,6 +66,6 @@ def test_no_injector_overwrites_a_member_tensor_py_defines() -> None:
 
 def test_the_injectors_are_read_not_restated() -> None:
     injected = _injected()
-    for name in ("index_select", "clone", "eval", "masked_fill_", "__add__", "to"):
+    for name in ("index_select", "clone", "eval", "masked_fill_", "__add__", "to", "expm1"):
         assert name in injected, name
     assert sorted(_REPLACED_ON_PURPOSE - _class_members().keys()) == []
