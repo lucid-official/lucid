@@ -1312,6 +1312,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** `lucid.linalg.vander` puts the powers in increasing order by default (`x^0` first), as the reference does. `vander([1, 2, 3])` is now `[[1, 1, 1], [1, 2, 4], [1, 3, 9]]`; pass `increasing=False` for the old order. An integer input returns exact `int64` powers, where it returned `float32`. A `float16`/`bfloat16` input keeps its dtype. A 0-d input is read as a vector of one. A bool input raises `TypeError`. A complex input keeps its imaginary part on Metal, and raises `NotImplementedError` on CPU until the CPU cumprod gains complex support (LCD-431, LCD-637).
+
+- **Breaking:** the orthogonal polynomials in `lucid.special` (Chebyshev T/U/V/W and their shifted forms, Hermite H/He, Legendre P, Laguerre L) return the zero polynomial for a negative degree, as the reference does. They take `n` as a tensor of per-element degrees, broadcast against `x`, and accept a Python number for `x`. A float degree is truncated toward zero. They refuse a non-number degree (`TypeError`) and a NaN or infinite one (`ValueError`). `lucid.special.zeta` and `xlog1py` take a Python number for either operand. `lucid.fft.fft2`/`ifft2`/`rfft2`/`irfft2`/`hfft2`/`ihfft2` take a single int `dim` and `s`. `fftfreq`/`rfftfreq` take `requires_grad` (LCD-431).
+
 - DiT, MeanFlow, TVM, LeNet-5 and the VAE raise `ValueError`, naming the built and received sizes, for an input size they were not built for, instead of an engine `ShapeMismatch`. This includes off-by-one sizes that used to answer silently with an output of the built size (e.g. 9×9 into an 8×8 DiT, 33 px into a 32 px VAE). HVAE `encode` refuses another size too (LCD-625).
 
 - `TVMForImageGeneration`: the EMA networks restart from weights loaded into the network, pair with it by name, are built without re-running the spectral init (6.4 s → 0.2 s on a 33M config) and outside any active trace, and `update_ema` evaluates once per call (about 5× faster on Metal). A compiled RealNVP training step updates its flow batch-norm running statistics (LCD-552, LCD-600).
