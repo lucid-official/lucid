@@ -12,6 +12,7 @@ load, safetensors writing with embedded metadata, and ``config.json`` /
 import abc
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -95,7 +96,7 @@ class Architecture(abc.ABC):
     """
 
     @abc.abstractmethod
-    def source_state_dict(self) -> dict[str, object]:
+    def source_state_dict(self) -> Mapping[str, object]:
         """Return the upstream ``state_dict`` as ``{name: numpy.ndarray}``."""
         raise NotImplementedError
 
@@ -132,7 +133,7 @@ class Architecture(abc.ABC):
         raise NotImplementedError
 
 
-def convert(arch: Architecture) -> tuple[dict[str, object], ConversionSpec]:
+def convert(arch: Architecture) -> tuple[dict[str, lucid.Tensor], ConversionSpec]:
     """Remap + verify an architecture's weights into a Lucid state dict.
 
     Performs the full safety gauntlet: key remap, 1:1 key-set check
@@ -204,8 +205,7 @@ def convert(arch: Architecture) -> tuple[dict[str, object], ConversionSpec]:
 
     # Real load — the ultimate correctness gate.
     model.load_state_dict(out, strict=True)
-    converted: dict[str, object] = dict(out)
-    return converted, arch.spec()
+    return out, arch.spec()
 
 
 def _sha256_of(path: Path) -> str:
@@ -218,7 +218,7 @@ def _sha256_of(path: Path) -> str:
 
 
 def write(
-    state_dict: dict[str, object],
+    state_dict: Mapping[str, lucid.Tensor],
     spec: ConversionSpec,
     out_root: str,
 ) -> Path:
@@ -265,7 +265,11 @@ def write(
         "license": spec.license,
         "num_classes": str(spec.num_classes),
     }
-    _serial.save_safetensors(state_dict, str(st_path), metadata=header)
+    # save_safetensors checks each value itself, so it takes a
+    # ``dict[str, object]``, which a dict of tensors is not (dict is
+    # invariant); this copy is that boundary.
+    tensors: dict[str, object] = dict(state_dict)
+    _serial.save_safetensors(tensors, str(st_path), metadata=header)
 
     sha = _sha256_of(st_path)
     file_size_mb = round(st_path.stat().st_size / (1024 * 1024), 2)

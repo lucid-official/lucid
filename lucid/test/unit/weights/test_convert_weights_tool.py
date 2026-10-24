@@ -7,7 +7,6 @@ without running anything the file names.  No download: every checkpoint
 here is built in the test.
 """
 
-import os
 import pickle
 import sys
 from collections import OrderedDict
@@ -17,7 +16,6 @@ from types import ModuleType
 
 import numpy as np
 import pytest
-from numpy.testing._private import utils as numpy_testing_utils
 
 import lucid.nn as nn
 from lucid.models import AutoConfig
@@ -291,24 +289,70 @@ def test_a_tensorless_checkpoint_is_refused_before_its_flags(
         _arch_reading(path, monkeypatch).source_state_dict()
 
 
-_DISALLOWED: dict[str, Callable[[ModuleType], _Call]] = {
-    "eval": lambda ref: _Call(eval, "1 + 1"),
-    "getcwd": lambda ref: _Call(os.getcwd),
-    "numpy runstring": lambda ref: _Call(numpy_testing_utils.runstring, "x = 1", {}),
-    "unrestricted load": lambda ref: _Call(ref.serialization.load, "/nonexistent.pt"),
-    "nested storage naming getcwd": lambda ref: _Call(
-        ref.storage._load_from_bytes, pickle.dumps(_Call(os.getcwd))
-    ),
-}
+def _calling(module: str, name: str, *args: object) -> bytes:
+    """``{"net": module.name(*args)}`` as pickle bytes, importing nothing.
+
+    The GLOBAL opcode names the callable as text, so the test does not
+    depend on the callable existing, or living where it does today.
+    """
+    arguments = pickle.dumps(args, protocol=3)[2:-1]  # the tuple, no PROTO / STOP
+    target = f"{module}\n{name}\n".encode()
+    return b"\x80\x03}X\x03\x00\x00\x00netc" + target + arguments + b"Rs."
 
 
-@pytest.mark.parametrize("name", sorted(_DISALLOWED))
+def _disallowed(ref_name: str) -> dict[str, bytes]:
+    # A nested storage whose own pickle names a global: the weights-only
+    # loader, not the outer table, has to refuse it.
+    nested = b"\x80\x02cos\ngetcwd\n)R."
+    return {
+        "eval": _calling("builtins", "eval", "1 + 1"),
+        "getcwd": _calling("os", "getcwd"),
+        "numpy runstring": _calling(
+            "numpy.testing._private.utils", "runstring", "x = 1", {}
+        ),
+        "unrestricted load": _calling(
+            f"{ref_name}.serialization", "load", "/nonexistent.pt"
+        ),
+        "nested storage naming getcwd": _calling(
+            f"{ref_name}.storage", "_load_from_bytes", nested
+        ),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_disallowed("ref")))
 def test_a_global_outside_the_tables_is_refused(
     ref: ModuleType, tmp_path: Path, name: str
 ) -> None:
-    path = _dump(tmp_path, _DISALLOWED[name](ref))
+    path = tmp_path / "checkpoint.pkl"
+    path.write_bytes(_disallowed(ref.__name__)[name])
     with pytest.raises(pickle.UnpicklingError):
+        convert_tvm._load_ema(str(path))
+
+
+def test_an_old_framework_reads_no_storage(
+    ref: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Before 2.6 the weights-only loader could be bypassed (CVE-2025-32434).
+    path = _dump(tmp_path, ref.nn.Linear(2, 2))
+    monkeypatch.setattr(ref, "__version__", "2.5.1")
+    with pytest.raises(RuntimeError, match="CVE-2025-32434"):
         convert_tvm._load_ema(path)
+
+
+@pytest.mark.parametrize(
+    ("version", "release"),
+    [
+        ("2.5.1", (2, 5)),
+        ("2.6.0+cpu", (2, 6)),
+        ("2.10.0a0+git1234", (2, 10)),
+        ("2.13.0", (2, 13)),
+    ],
+)
+def test_a_release_is_compared_as_numbers(
+    version: str, release: tuple[int, int]
+) -> None:
+    assert convert_tvm._release_of(version) == release
+    assert (convert_tvm._release_of(version) >= (2, 6)) == (release >= (2, 6))
 
 
 def test_the_key_map_refuses_what_the_release_does_not_hold() -> None:

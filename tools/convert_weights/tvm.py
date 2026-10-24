@@ -203,14 +203,32 @@ def _unwrap_compiled(module: object, *context: object) -> object:
     return module
 
 
+# Before 2.6 the weights-only loader could be bypassed through the legacy
+# format a nested storage uses (CVE-2025-32434).
+_WEIGHTS_ONLY_SAFE_SINCE = (2, 6)
+
+
+def _release_of(version: str) -> tuple[int, int]:
+    """``(major, minor)`` of a version string such as ``"2.13.0+cpu"``."""
+    major, minor = version.split("+", 1)[0].split(".")[:2]
+    return int(major), int(minor)
+
+
 def _load_storage(data: object) -> torch.storage.TypedStorage:
     """Replacement for ``torch.storage._load_from_bytes``.
 
     A pickled storage is the bytes of a nested legacy ``torch.save``.  The
     framework's hook reads them with an unrestricted ``torch.load``, which
     would run whatever the nested pickle names; the weights-only loader
-    admits tensor data and plain containers only.
+    admits tensor data and plain containers only, and is refused outright
+    on a framework release old enough to be bypassed.
     """
+    if _release_of(torch.__version__) < _WEIGHTS_ONLY_SAFE_SINCE:
+        raise RuntimeError(
+            f"convert(tvm): framework {torch.__version__} predates 2.6, whose "
+            f"weights-only loader closes CVE-2025-32434; upgrade it to read a "
+            f"checkpoint's storages"
+        )
     if not isinstance(data, bytes):
         raise pickle.UnpicklingError(
             f"convert(tvm): a storage record holds {type(data).__name__}, not bytes"
@@ -417,7 +435,7 @@ class TVMArch(Architecture):
         return apply_overrides(base, self.release.overrides)
 
     @override
-    def source_state_dict(self) -> dict[str, object]:
+    def source_state_dict(self) -> dict[str, npt.NDArray[np.float32]]:
         """Download the pickle, load its EMA, and check what keys cannot.
 
         Returns
@@ -450,8 +468,7 @@ class TVMArch(Architecture):
                     "from Lucid's sincos_position_embedding — the axis order "
                     "or frequency ladder has drifted"
                 )
-        out: dict[str, object] = dict(state)
-        return out
+        return state
 
     def _check_training_flags(
         self, wrapper: dict[str, object], network: dict[str, object], config: TVMConfig

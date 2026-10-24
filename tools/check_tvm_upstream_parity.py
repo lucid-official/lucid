@@ -51,6 +51,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING, TypedDict
 from unittest import mock
 
 import numpy as np
@@ -59,8 +60,21 @@ import numpy.typing as npt
 import lucid
 from lucid.models.generative.tvm import TVMConfig, TVMForImageGeneration
 
+if TYPE_CHECKING:
+    from torch import Tensor as RefTensor
+
+
+class _Network(TypedDict):
+    """The network both implementations are built with."""
+
+    patch_size: int
+    hidden_size: int
+    depth: int
+    num_heads: int
+
+
 _BATCH, _CHANNELS, _SIDE, _CLASSES = 3, 4, 8, 10
-_NETWORK = {"patch_size": 2, "hidden_size": 32, "depth": 2, "num_heads": 4}
+_NETWORK: _Network = {"patch_size": 2, "hidden_size": 32, "depth": 2, "num_heads": 4}
 # max|lucid - ref| / max(1, max|ref|).  The audit measured at most 7.3e-6.
 _TOLERANCE = 5e-5
 
@@ -185,8 +199,9 @@ def _compare(
     upstream.train()
     teacher = copy.deepcopy(upstream).eval().requires_grad_(False)
 
-    def ref(a: _Array) -> object:
-        return torch.from_numpy(np.asarray(a, dtype=np.float32).copy())
+    def ref(a: _Array) -> RefTensor:
+        tensor: RefTensor = torch.from_numpy(np.asarray(a, dtype=np.float32).copy())
+        return tensor
 
     def lu(a: _Array) -> lucid.Tensor:
         return lucid.tensor(np.asarray(a, dtype=np.float32), device=device)
@@ -323,13 +338,13 @@ def _compare(
 def _authors_sampler(
     torch: ModuleType,
     net: object,
-    latents: object,
-    labels: object,
+    latents: RefTensor,
+    labels: RefTensor,
     steps: int,
     cfg_scale: float,
 ) -> _Array:
     """The logic of the authors' ``generate_images.generator_fn``, verbatim."""
-    forward: Callable[..., object] = getattr(net, "forward_model")
+    forward: Callable[..., RefTensor] = getattr(net, "forward_model")
     with torch.no_grad():
         t_steps = torch.linspace(1, 0, steps + 1, dtype=torch.float64)
         x = latents.to(torch.float64)
