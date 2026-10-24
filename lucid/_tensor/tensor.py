@@ -1273,65 +1273,6 @@ class Tensor:
 
         _backward(self, gradient, retain_graph, create_graph, inputs)
 
-    def detach(self) -> Tensor:
-        r"""Return a new tensor that shares data but is detached from the autograd graph.
-
-        The returned tensor has the same values as ``self`` but
-        ``requires_grad=False`` and no ``grad_fn``.  It is treated as a
-        constant by subsequent operations — gradients will not flow through it.
-
-        Unlike :meth:`detach_`, this method does **not** modify ``self``; it
-        returns a new tensor over the same storage.
-
-        On the CPU the result is one of ``self``'s views: an in-place write
-        to either reaches the other, untracked by autograd, and the two share
-        a version counter, so a write to a tensor saved for backward is still
-        caught.  A metal result shares the array too, but metal tensors keep
-        copy semantics: an in-place op gives it an array of its own.
-
-        Returns
-        -------
-        Tensor
-            A detached tensor over ``self``'s storage.
-
-        Notes
-        -----
-        Common use cases:
-
-        * Stopping gradient flow when computing a target value for a loss
-          (e.g. target networks in reinforcement learning).
-        * Safely converting to NumPy without triggering autograd errors.
-        * Logging or visualising intermediate activations without affecting
-          the graph.
-
-        Mathematically, detach is the identity on values but injects a
-        zero Jacobian into the backward pass:
-
-        .. math::
-
-            \text{detach}(\mathbf{x}) = \mathbf{x}, \quad
-            \frac{\partial \text{detach}(\mathbf{x})}{\partial \mathbf{x}} = \mathbf{0}.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> x = lucid.tensor([1.0, 2.0], requires_grad=True)
-        >>> y = x * 3
-        >>> z = y.detach()
-        >>> z.requires_grad
-        False
-        >>> z.grad_fn is None
-        True
-
-        The storage is shared, so a write through the result reaches ``self``:
-
-        >>> w = lucid.zeros(3)
-        >>> _ = w.detach().add_(1.0)
-        >>> w.tolist()
-        [1.0, 1.0, 1.0]
-        """
-        return Tensor.__new_from_impl__(self._impl.data_alias())
-
     def detach_(self) -> Self:
         r"""Detach this tensor from the autograd graph in-place.
 
@@ -1478,46 +1419,6 @@ class Tensor:
         The gradient is the indicator :math:`\mathbf{1}\{x_i < \text{max}\}`.
         """
         return _clamp_inplace(self, None, max, "clamp_max_")
-
-    def clone(self) -> Tensor:
-        r"""Return a deep copy of this tensor, preserving autograd history.
-
-        Unlike :meth:`detach`, the returned tensor **remains connected** to
-        the computation graph.  Gradients flow through :meth:`clone` as if
-        it were the identity operation, so it can be used to safely duplicate
-        a tensor while keeping the backward pass intact.
-
-        Returns
-        -------
-        Tensor
-            A new tensor with a contiguous copy of the same data, connected
-            to the same computation graph.
-
-        Notes
-        -----
-        The clone operation inserts a trivial node into the graph whose
-        backward pass propagates the upstream gradient unchanged:
-
-        .. math::
-
-            \text{clone}(\mathbf{x}) = \mathbf{x}, \quad
-            \frac{\partial \text{clone}(\mathbf{x})}{\partial \mathbf{x}} = \mathbf{I}.
-
-        Use :meth:`detach` (or ``clone().detach()``) when you want a copy
-        that is *not* connected to the graph.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> x = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True)
-        >>> y = x.clone()
-        >>> y.requires_grad
-        True
-        >>> y.data_ptr() != x.data_ptr()   # different storage
-        True
-        """
-        impl = _C_engine.contiguous(self._impl)
-        return _wrap(impl)
 
     # ── conversion ───────────────────────────────────────────────────────────
 
@@ -1861,57 +1762,6 @@ class Tensor:
         """
         return self._impl.tolist()  # type: ignore[no-any-return]
 
-    def contiguous(self) -> Tensor:
-        r"""Return a tensor whose data is stored in contiguous C-order memory.
-
-        If ``self`` is already contiguous (``self.is_contiguous() == True``),
-        this may return a view or a copy depending on the backend; the result
-        is always safe to pass to kernels that require contiguous input.
-
-        On the CPU a transpose, a slice along any axis, :meth:`diagonal`,
-        :meth:`unfold`, ``expand`` and ``broadcast_to`` are views of their
-        input's buffer, and a transposed or column view is not contiguous.
-        Every op reads such a view correctly, so the call is needed only
-        before code that walks the memory itself — through :meth:`data_ptr`,
-        say.  Metal tensors are always packed.  Making a tensor contiguous
-        rewrites the data into a fresh buffer with strides matching C
-        row-major layout:
-
-        .. math::
-
-            \text{stride}[i] = \prod_{j=i+1}^{d-1} \text{shape}[j]
-
-        Returns
-        -------
-        Tensor
-            A contiguous tensor with the same values and shape.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> x = lucid.zeros(3, 4).T    # a view with swapped strides
-        >>> x.is_contiguous()
-        False
-        >>> y = x.contiguous()
-        >>> y.is_contiguous()
-        True
-
-        Notes
-        -----
-        Idempotent: ``x.contiguous().contiguous()`` performs at most one
-        copy. After the call ``is_contiguous() == True`` and strides match
-        the C-order recurrence shown above.
-        """
-        return (
-            self
-            if (
-                self.is_contiguous()
-                and _C_engine.compile.current_tracer() is None
-                and (not self._impl.is_phantom or _C_engine.phantom_mode())
-            )
-            else _wrap(_C_engine.contiguous(self._impl))
-        )
-
     def unfold(self, dimension: int, size: int, step: int) -> Tensor:
         r"""Return a view with an extra dimension containing sliding-window slices.
 
@@ -1956,55 +1806,6 @@ class Tensor:
         >>> # windows: [0,1,2], [2,3,4], [4,5,6]
         """
         return _wrap(_C_engine.unfold_dim(self._impl, dimension, size, step))
-
-    def scatter_add(self, dim: int, index: Tensor, src: Tensor) -> Tensor:
-        r"""Out-of-place scatter-add: add ``src`` values into ``self`` at positions given by ``index``.
-
-        Returns a **new** tensor equal to ``self`` with ``src`` values added
-        at the indices specified by ``index`` along ``dim``.  The original
-        tensor is unchanged.
-
-        Parameters
-        ----------
-        dim : int
-            The axis along which to scatter.
-        index : Tensor
-            Integer tensor of indices, same shape as ``src``.  Each value
-            selects a position along ``dim`` in the output.
-        src : Tensor
-            Values to scatter-add.  Must have the same shape as ``index``.
-
-        Returns
-        -------
-        Tensor
-            A new tensor of the same shape as ``self`` with the accumulated
-            additions applied.
-
-        Notes
-        -----
-        The output satisfies:
-
-        .. math::
-
-            \text{out}[\ldots, \text{index}[i,j,k], \ldots]
-            \mathrel{+}= \text{src}[i, j, k]
-
-        where the free indices iterate over all dimensions other than ``dim``.
-        Multiple ``src`` entries may map to the same output position; their
-        contributions are summed.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> base = lucid.zeros(4)
-        >>> idx  = lucid.tensor([0, 1, 1, 3])
-        >>> src  = lucid.ones(4)
-        >>> base.scatter_add(0, idx, src)
-        tensor([1., 2., 0., 1.])
-        """
-        from lucid._ops import scatter_add as _sa
-
-        return _sa(self, dim, index, src)  # type: ignore[return-value]
 
     @property
     def data(self) -> Tensor:
@@ -3204,56 +3005,6 @@ class Tensor:
             dst.assign_from(src, "copy_")
         return self
 
-    def index_select(self, dim: int, index: Tensor) -> Tensor:
-        r"""Gather values along ``dim`` using an integer index tensor.
-
-        For each position ``i`` along ``dim``, selects ``self[..., index[i], ...]``
-        and concatenates along the same axis. The output has the same
-        number of dimensions as ``self``; only the size along ``dim``
-        changes to ``len(index)``.
-
-        Parameters
-        ----------
-        dim : int
-            Axis along which to select.
-        index : Tensor
-            1-D integer tensor of indices into ``self`` along ``dim``.
-            Values must lie in ``[0, self.shape[dim])``.
-
-        Returns
-        -------
-        Tensor
-            Tensor with shape equal to ``self.shape`` except that
-            ``shape[dim] == len(index)``.
-
-        Notes
-        -----
-        Equivalent to advanced integer indexing:
-
-        .. math::
-
-            \text{out}[\ldots, i, \ldots] = \text{self}[\ldots, \text{index}[i], \ldots]
-
-        Implemented via engine-level ``gather`` after broadcasting the
-        index tensor over the non-selected axes.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> x = lucid.arange(12).reshape(3, 4)
-        >>> idx = lucid.tensor([0, 2], dtype=lucid.int64)
-        >>> x.index_select(0, idx).shape
-        (2, 4)
-        """
-        out_shape = list(self._impl.shape)
-        k = index._impl.shape[0]
-        out_shape[dim] = k
-        bcast_shape = [1] * len(out_shape)
-        bcast_shape[dim] = k
-        idx_rs = _C_engine.reshape(index._impl, bcast_shape)
-        idx_bc = _C_engine.broadcast_to(idx_rs, out_shape)
-        return Tensor.__new_from_impl__(_C_engine.gather(self._impl, idx_bc, dim))
-
     # ── index writes (index_add / index_copy / index_fill / index_put) ────────
     # Each in-place form runs its out-of-place op and writes the result into
     # ``self`` through ``_write_inplace``: into the buffer ``self``'s views
@@ -3673,50 +3424,6 @@ class Tensor:
             values,
         )
 
-    def masked_select(self, mask: Tensor) -> Tensor:
-        r"""Flatten and select elements where ``mask`` is ``True``.
-
-        Returns a 1-D tensor containing the values of ``self`` at positions
-        where ``mask`` is truthy, in row-major (C) order. The output
-        length is data-dependent — equal to ``mask.sum().item()`` — so
-        this op forces a host-side synchronisation on Metal tensors.
-
-        Parameters
-        ----------
-        mask : Tensor
-            Boolean tensor, broadcastable to ``self.shape``. Non-bool
-            dtypes are treated as truthy/falsy element-wise.
-
-        Returns
-        -------
-        Tensor
-            1-D tensor of selected elements; dtype matches ``self``.
-
-        Notes
-        -----
-        Because the output shape depends on the mask's runtime values,
-        this is one of the "data-dependent output" carve-outs that may
-        round-trip through CPU on Metal devices.
-
-        Defines
-
-        .. math::
-
-            \text{out} = (x_i \,:\, i \in \{i \mid \text{mask}_i\})
-
-        in row-major scan order; the output length equals
-        :math:`\sum_i \mathbf{1}\{\text{mask}_i\}`.
-
-        Examples
-        --------
-        >>> import lucid
-        >>> x = lucid.tensor([1.0, 2.0, 3.0, 4.0])
-        >>> mask = lucid.tensor([True, False, True, False])
-        >>> x.masked_select(mask).tolist()
-        [1.0, 3.0]
-        """
-        return Tensor.__new_from_impl__(_C_engine.masked_select(self._impl, mask._impl))
-
     def expand_as(self, other: Tensor) -> Tensor:
         r"""Broadcast ``self`` to match ``other.shape``.
 
@@ -4070,47 +3777,6 @@ class Tensor:
         from lucid._ops.composite.blas import addmm as _addmm
 
         return _addmm(self, mat1, mat2, beta=beta, alpha=alpha)
-
-    def bmm(self, mat2: Tensor) -> Tensor:
-        r"""Batched matrix multiplication.
-
-        Performs a batch of independent matrix multiplications. ``self``
-        must have shape :math:`(B, n, m)` and ``mat2`` shape
-        :math:`(B, m, p)`; the result has shape :math:`(B, n, p)` and is
-        computed slice-wise:
-
-        .. math::
-
-            \text{out}[b] = \text{self}[b] \cdot \text{mat2}[b]
-                \quad \text{for } b \in \{0, \ldots, B-1\}.
-
-        Parameters
-        ----------
-        mat2 : Tensor
-            Right-hand batched matrix of shape :math:`(B, m, p)`. The
-            batch dimension and the contracted dimension :math:`m` must
-            match ``self``.
-
-        Returns
-        -------
-        Tensor
-            Tensor of shape :math:`(B, n, p)`.
-
-        Notes
-        -----
-        Unlike :meth:`matmul`, ``bmm`` does **not** broadcast the batch
-        dimension and requires exactly 3-D inputs. For broadcasted and
-        higher-rank batched matmul use :meth:`matmul` (``@``).
-
-        Examples
-        --------
-        >>> import lucid
-        >>> a = lucid.ones(8, 3, 4)
-        >>> b = lucid.ones(8, 4, 5)
-        >>> a.bmm(b).shape
-        (8, 3, 5)
-        """
-        return Tensor.__new_from_impl__(_C_engine.matmul(self._impl, mat2._impl))
 
     # ── zero_() helper ───────────────────────────────────────────────────────
 
