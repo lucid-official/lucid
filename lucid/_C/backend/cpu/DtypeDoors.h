@@ -6,6 +6,7 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -417,15 +418,6 @@ inline constexpr std::size_t kTanhTile = 1024;
 
 namespace detail {
 
-// ``out = x ** e`` for a scalar exponent.
-//
-// vForce's pow is exact but ~8 ns an element, and backward reaches it for
-// every power (``d/dx x**2`` is ``2 * x**1``).  Exponents whose answer is one
-// correctly rounded operation take that operation instead, so the result is
-// the same bits: x*x, 1/x and sqrt are each a single IEEE rounding, as the
-// exact power is.  sqrt differs from the power only at -0 (sqrt keeps the
-// sign) and -inf (sqrt is NaN, the power +inf); both are set right.
-// Any other exponent runs vForce in L1 tiles across cores.
 // ``out[i] = mask[i] ? value : in[i]``, without a branch.
 //
 // Written as a conditional, the element was loaded only when the mask was
@@ -448,9 +440,26 @@ inline void select_fill(const T* in, const std::uint8_t* mask, T value, T* out, 
     });
 }
 
+// IEEE ``pow(v, 0.5)``: sqrt, except at -0 (sqrt keeps the sign, the power
+// is +0) and -inf (sqrt is NaN, the power +inf).
+template <typename T>
+inline T sqrt_power(T v) {
+    constexpr T kInf = std::numeric_limits<T>::infinity();
+    const T r = std::sqrt(v) + T(0);
+    return v == -kInf ? kInf : r;
+}
+
+// ``out = x ** e`` for a scalar exponent.
+//
+// vForce's pow is within 1 ulp, not exact (24-30% of float32 answers are 1
+// ulp off, for every exponent: ``x ** 1`` was not ``x``), and ~8 ns an
+// element; backward reaches it for every power (``d/dx x**2`` is
+// ``2 * x**1``).  Exponents whose answer is one correctly rounded operation
+// take that operation instead, so the result is the exact power: x*x, 1/x
+// and sqrt are each a single IEEE rounding.  Any other exponent runs vForce
+// in L1 tiles across cores.
 template <typename T>
 inline void pow_by_scalar(const T* in, T e, T* out, std::size_t n) {
-    constexpr T kInf = std::numeric_limits<T>::infinity();
     auto each = [&](auto f) {
         cpu::parallel_for(n, kStreamGrain, [&](std::size_t lo, std::size_t hi) {
             const T* __restrict x = in;
@@ -468,10 +477,7 @@ inline void pow_by_scalar(const T* in, T e, T* out, std::size_t n) {
     } else if (e == T(-1)) {
         each([](T v) { return T(1) / v; });
     } else if (e == T(0.5)) {
-        each([](T v) {
-            const T r = std::sqrt(v) + T(0);
-            return v == -kInf ? kInf : r;
-        });
+        each([](T v) { return sqrt_power(v); });
     } else {
         cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
             T expo[kTanhTile];
@@ -484,6 +490,39 @@ inline void pow_by_scalar(const T* in, T e, T* out, std::size_t n) {
                     cpu::vpow_f64(in + s, expo, out + s, m);
             }
         });
+    }
+}
+
+// ``out[i] = x[i] ** y[i]`` again for each element whose exponent
+// ``pow_by_scalar`` answers with one correctly rounded operation (0, 1, 2,
+// -1, 0.5); every other element of ``out`` is left as it is.  Run over
+// vForce's answer for a tensor exponent, so ``x ** full_like(x, 2)`` is
+// ``x ** 2``.  Each of those exponents has an all-zero mantissa, so a tile
+// with none (``x ** t`` for a general ``t``) costs one AND and min per
+// element.  The rewrite selects instead of branching, so it vectorises too
+// (a branch per element tripled the time of a mixed exponent tensor).
+template <typename T>
+inline void exact_powers(const T* x, const T* y, T* out, std::size_t n) {
+    using Bits = std::conditional_t<std::is_same_v<T, float>, std::uint32_t, std::uint64_t>;
+    constexpr Bits kMantissa = (Bits{1} << (std::numeric_limits<T>::digits - 1)) - 1;
+    const T* __restrict xs = x;
+    const T* __restrict ys = y;
+    T* __restrict o = out;
+    Bits low = kMantissa;
+    for (std::size_t i = 0; i < n; ++i)
+        low = std::min(low, static_cast<Bits>(std::bit_cast<Bits>(ys[i]) & kMantissa));
+    if (low != 0)
+        return;
+    for (std::size_t i = 0; i < n; ++i) {
+        const T e = ys[i];
+        const T v = xs[i];
+        T r = o[i];
+        r = (e == T(2)) ? v * v : r;
+        r = (e == T(1)) ? v : r;
+        r = (e == T(0)) ? T(1) : r;
+        r = (e == T(-1)) ? T(1) / v : r;
+        r = (e == T(0.5)) ? sqrt_power(v) : r;
+        o[i] = r;
     }
 }
 

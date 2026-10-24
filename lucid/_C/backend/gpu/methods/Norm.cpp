@@ -449,10 +449,8 @@ std::vector<Storage> GpuBackend::lp_normalize_forward(
     // ``widen_half``) — a float16 |x|^2 overflows past 256 and the norm
     // came back inf, normalising the row to zeros — and rounded back.
     auto abs_w = widen_half(::mlx::core::abs(*gx.arr));
-    auto ord_arr = gpu::mlx_scalar(ord, abs_w.dtype());
-    auto inv_ord = gpu::mlx_scalar(1.0 / ord, abs_w.dtype());
-    auto sum_p = ::mlx::core::sum(::mlx::core::power(abs_w, ord_arr), std::vector<int>{axis}, true);
-    auto N = narrow_half(::mlx::core::power(sum_p, inv_ord), mlx_dt);
+    auto sum_p = ::mlx::core::sum(gpu_pow(abs_w, ord), std::vector<int>{axis}, true);
+    auto N = narrow_half(gpu_pow(sum_p, 1.0 / ord), mlx_dt);
     auto eps_arr = ::mlx::core::astype(::mlx::core::array(static_cast<float>(eps)), mlx_dt);
     auto N_clip = ::mlx::core::maximum(N, eps_arr);
     auto saved_norm = N_clip;
@@ -477,10 +475,8 @@ Storage GpuBackend::lp_normalize_backward(const Storage& x,
     auto first = ::mlx::core::divide(*gg.arr, *gn.arr);
     auto sign_x = ::mlx::core::sign(*gx.arr);
     auto abs_x = ::mlx::core::abs(*gx.arr);
-    auto ord_m1 = ::mlx::core::astype(::mlx::core::array(static_cast<float>(ord - 1.0)), mlx_dt);
-    auto ord_p1 = ::mlx::core::astype(::mlx::core::array(static_cast<float>(ord + 1.0)), mlx_dt);
-    auto abs_pm1 = ::mlx::core::power(abs_x, ord_m1);
-    auto N_pp1 = ::mlx::core::power(*gn.arr, ord_p1);
+    auto abs_pm1 = gpu_pow(abs_x, ord - 1.0);
+    auto N_pp1 = gpu_pow(*gn.arr, ord + 1.0);
     auto second = ::mlx::core::divide(
         ::mlx::core::multiply(::mlx::core::multiply(sign_x, abs_pm1), proj), N_pp1);
     auto dx = ::mlx::core::subtract(first, second);

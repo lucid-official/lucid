@@ -111,6 +111,7 @@
 #include "MetalAllocator.h"
 #include "MetalKernelRunner.h"
 #include "MlxBridge.h"
+#include "Pow.h"
 #include "SdpaHeadDim.h"
 #include "SortOrder.h"
 

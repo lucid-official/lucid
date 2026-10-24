@@ -114,15 +114,25 @@ Storage CpuBackend::div(const Storage& a, const Storage& b, const Shape& shape, 
 Storage CpuBackend::pow(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
     return binary_op(
         a, b, shape, dt,
-        // vForce's pow is ~8 ns an element: split it across cores.
+        // vForce's pow is ~8 ns an element: split it across cores.  It is
+        // also up to 1 ulp off where the power is one IEEE operation, so
+        // those elements are recomputed exactly, an L1 tile at a time.
         [](const float* ap, const float* bp, float* op, std::size_t n) {
             cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-                cpu::vpow_f32(ap + lo, bp + lo, op + lo, hi - lo);
+                for (std::size_t s = lo; s < hi; s += kTanhTile) {
+                    const std::size_t m = std::min(kTanhTile, hi - s);
+                    cpu::vpow_f32(ap + s, bp + s, op + s, m);
+                    detail::exact_powers(ap + s, bp + s, op + s, m);
+                }
             });
         },
         [](const double* ap, const double* bp, double* op, std::size_t n) {
             cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-                cpu::vpow_f64(ap + lo, bp + lo, op + lo, hi - lo);
+                for (std::size_t s = lo; s < hi; s += kTanhTile) {
+                    const std::size_t m = std::min(kTanhTile, hi - s);
+                    cpu::vpow_f64(ap + s, bp + s, op + s, m);
+                    detail::exact_powers(ap + s, bp + s, op + s, m);
+                }
             });
         },
         cpu::ipow_vec<std::int32_t>, cpu::ipow_vec<std::int64_t>);

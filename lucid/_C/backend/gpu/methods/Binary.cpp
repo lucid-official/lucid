@@ -24,7 +24,7 @@ Storage GpuBackend::div(const Storage& a, const Storage& b, const Shape& shape, 
 }
 
 Storage GpuBackend::pow(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
-    return mlx_binary(a, b, shape, dt, [](auto& x, auto& y) { return ::mlx::core::power(x, y); });
+    return mlx_binary(a, b, shape, dt, [](auto& x, auto& y) { return gpu_pow(x, y); });
 }
 
 Storage GpuBackend::bitwise_binary(
@@ -92,13 +92,13 @@ Storage GpuBackend::masked_fill(
 
 Storage GpuBackend::pow_scalar(const Storage& a, const Shape&, Dtype dt, double exp) {
     const auto& gs = std::get<GpuStorage>(a);
-    auto result = ::mlx::core::power(*gs.arr, gpu::mlx_scalar(exp, gpu::to_mlx_dtype(dt)));
+    auto result = gpu_pow(*gs.arr, exp);
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }
 
 Storage GpuBackend::rpow_scalar(const Storage& a, const Shape&, Dtype dt, double base) {
     const auto& gs = std::get<GpuStorage>(a);
-    auto result = ::mlx::core::power(gpu::mlx_scalar(base, gpu::to_mlx_dtype(dt)), *gs.arr);
+    auto result = gpu_pow(gpu::mlx_scalar(base, gpu::to_mlx_dtype(dt)), *gs.arr);
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }
 
