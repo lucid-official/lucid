@@ -1089,13 +1089,14 @@ def _fill_drawn(self: Tensor, name: str, draw: Callable[[Tensor], Tensor]) -> Te
     The values do not depend on what ``self`` held: a tensor that requires
     grad keeps requiring it, as after the reference's in-place draws, and
     passes no gradient back through them.  ``self``'s old values are never
-    read — ``self * 0 + out`` made an infinite or NaN entry NaN.
+    read — ``self * 0 + out`` made an infinite or NaN entry NaN.  Under
+    :func:`lucid.no_grad` (``nn.init``) the draw is written as it comes.
     """
     import lucid
 
     def result_of(base: Tensor) -> Tensor:
         out = draw(base)
-        if not base.requires_grad:
+        if not (base.requires_grad and _C_engine.grad_enabled()):
             return out
         keep_none = lucid.zeros(base.shape, dtype=lucid.bool, device=base.device)
         return lucid.where(keep_none, base, out)
@@ -1129,7 +1130,7 @@ def _normal_(
     *,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor:
-    r"""Fill ``self`` with samples of :math:`\mathcal{N}(\text{mean}, \text{std}^2)` and return it.
+    r"""Fill ``self`` with :math:`\mathcal{N}(\text{mean}, \text{std}^2)` samples.
 
     Parameters
     ----------
@@ -1172,7 +1173,7 @@ def _uniform_(
     *,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor:
-    r"""Fill ``self`` with samples of :math:`U[\text{from}, \text{to})` and return it.
+    r"""Fill ``self`` with :math:`U[\text{from}, \text{to})` samples.
 
     The reference names the lower bound ``from``, a Python keyword no call
     can spell, so it goes by position — ``x.uniform_(-1, 1)`` — and ``to``

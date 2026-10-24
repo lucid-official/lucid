@@ -3,11 +3,13 @@ Random tensor creation: rand, randn, randint, bernoulli, normal, manual_seed,
 the ``*_like`` forms, and the draws behind ``Tensor.normal_`` / ``uniform_``.
 """
 
+import functools
 import math
 import operator
 import os
+import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, SupportsIndex
 from lucid._ctx import check_random_allowed as _check_random
 
 from lucid._C import engine as _C_engine
@@ -21,7 +23,8 @@ from lucid._factories._generator import (
     _state_tensor,
     _unpack_state,
 )
-from lucid._dtype import int64
+from lucid import _promotion
+from lucid._dtype import _ENGINE_TO_DTYPE, finfo, iinfo, int64
 from lucid._types import DeviceLike, DTypeLike
 
 if TYPE_CHECKING:
@@ -40,6 +43,81 @@ def _default_stream() -> _C_engine.Generator:
     so the two streams repeated each other's numbers.
     """
     return _C_engine.default_generator()
+
+
+def _exact_integers(dt: _C_engine.Dtype) -> int:
+    """The largest ``n`` such that every integer in ``[0, n]`` is exact in ``dt``."""
+    if dt in _PART_DTYPE:
+        dt = _PART_DTYPE[dt]
+    if dt == _C_engine.Bool:
+        return 1
+    if _promotion.is_integer(dt):
+        return int(iinfo(dt).max)
+    return 1 << (round(-math.log2(finfo(dt).eps)) + 1)
+
+
+def _require_holds(
+    op: str, low: int, high: int, dt: _C_engine.Dtype, *, stacklevel: int = 3
+) -> None:
+    """Refuse a draw from ``[low, high)`` whose integers ``dt`` cannot hold.
+
+    The integers land in ``dt`` — drawn there by the engine, or as ``int64``
+    and cast — and outside its range they wrapped or overflowed and were
+    returned as if drawn: ``randint_like(int8, 1000)`` gave ``-106``, a
+    bool result was all ``True``, ``float16`` reached ``inf``.  The reference
+    refuses them as here, a floating dtype up to its largest finite value,
+    and warns, as here, where a floating dtype's integers stop being exact:
+    the draw then rounds onto the ones it holds and is not uniform.
+    """
+    if dt in _PART_DTYPE:
+        raise _C_engine.NotImplementedError(
+            f"{op}: a draw of integers is not implemented for "
+            f"{_ENGINE_TO_DTYPE[dt]}"
+        )
+    floating = dt != _C_engine.Bool and not _promotion.is_integer(dt)
+    if dt == _C_engine.Bool:
+        least, most = 0, 1
+    elif not floating:
+        least, most = int(iinfo(dt).min), int(iinfo(dt).max)
+    else:
+        most = int(finfo(dt).max)
+        least = -most
+    name = _ENGINE_TO_DTYPE[dt]
+    if low < least:
+        raise _C_engine.InvalidArgument(
+            f"{op}: from={low} is out of bounds for {name}, whose least value "
+            f"is {least}"
+        )
+    if high - 1 > most:
+        raise _C_engine.InvalidArgument(
+            f"{op}: to - 1 = {high - 1} is out of bounds for {name}, whose "
+            f"largest value is {most}"
+        )
+    exact = _exact_integers(dt)
+    if floating and max(-low, high - 1) > exact:
+        warnings.warn(
+            f"{op}: {name} holds the integers exactly only in [-{exact}, "
+            f"{exact}]; a draw from [{low}, {high}) rounds onto the ones it "
+            "holds and is not uniform",
+            UserWarning,
+            stacklevel=stacklevel,
+        )
+
+
+def _require_permutable(n: int, dt: _C_engine.Dtype) -> None:
+    """Refuse a permutation of ``n`` that ``dt`` cannot hold exactly.
+
+    Cast past the dtype's exact integers, the permutation wrapped or rounded
+    and repeated values — ``randperm(129, dtype=int8)`` did.  The reference
+    refuses bool outright, and the rest as here.
+    """
+    if dt == _C_engine.Bool:
+        raise _C_engine.NotImplementedError('"randperm" not implemented for lucid.bool')
+    if n - 1 > _exact_integers(dt):
+        raise _C_engine.InvalidArgument(
+            f"randperm: n={n} is too large for {_ENGINE_TO_DTYPE[dt]}, which "
+            f"holds the integers up to {_exact_integers(dt)} exactly"
+        )
 
 
 def manual_seed(seed: int) -> None:
@@ -534,6 +612,12 @@ def randint(
     Tensor
         Integer tensor of shape ``size`` with values in $[l, h)$.
 
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        ``high <= low``, or ``dtype`` cannot hold ``low`` or ``high - 1``
+        (``int8`` past 127): such a draw used to wrap round.
+
     Notes
     -----
     The engine generates the integers via
@@ -574,6 +658,7 @@ def randint(
     _dt, _dev, _ = normalize_factory_kwargs(
         dtype if dtype is not None else int64, device
     )
+    _require_holds("randint", low, high, _dt)
     shape = list(size)
     impl = _C_engine.randint(shape, low, high, _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
@@ -625,8 +710,6 @@ def bernoulli(
     >>> abs(float(x.mean()) - 0.3) < 0.02            # ≈ 30 % ones
     True
     """
-    from lucid import _promotion
-
     _check_random()
     impl = _promotion.try_unwrap(input)
     if impl is None:
@@ -899,6 +982,49 @@ def randn_like(
     return _wrap(_leaf(impl, requires_grad))
 
 
+def _int_bounds(op: str, low: object, high: object) -> tuple[int, int]:
+    """``low`` and ``high`` as ints with ``low < high``, or refused under ``op``."""
+    bounds = []
+    for what, bound in (("low", low), ("high", high)):
+        if isinstance(bound, bool) or not isinstance(bound, SupportsIndex):
+            raise TypeError(
+                f"{op}(): {what} must be an int, got {type(bound).__name__}"
+            )
+        bounds.append(operator.index(bound))
+    lo, hi = bounds
+    if lo >= hi:
+        raise _C_engine.InvalidArgument(
+            f"{op}(): low must be less than high, got low={lo} >= high={hi}"
+        )
+    return lo, hi
+
+
+def _one_bound_is_high(fn: Callable[..., Tensor]) -> Callable[..., Tensor]:
+    """``fn(input, n)`` read as ``high=n``; ``low=`` without ``high`` refused.
+
+    The reference's overloads are ``(input, high)`` and ``(input, low,
+    high)``, which no one Python signature says: ``(input, low=0,
+    high=None)`` would bind ``randint_like(x, low=3)`` as if ``3`` were the
+    one bound, where the reference refuses it.  So the call is read before
+    it binds.
+    """
+
+    @functools.wraps(fn)
+    def call(*args: object, **kwargs: object) -> Tensor:
+        if "high" not in kwargs:
+            if "low" in kwargs and len(args) < 3:
+                raise TypeError(
+                    "randint_like(): low= was given without high= — pass "
+                    "high, or a single bound by position, which is high"
+                )
+            if len(args) == 2:
+                args = (args[0], 0, args[1])
+        return fn(*args, **kwargs)
+
+    return call
+
+
+@_one_bound_is_high
 def randint_like(
     input: Tensor,
     low: int = 0,
@@ -913,8 +1039,9 @@ def randint_like(
 
     Each element is drawn independently and uniformly from
     $\{l, l+1, \ldots, h-1\}$, as :func:`randint` draws them, in ``input``'s
-    shape, dtype and device unless overridden.  Called with one bound,
-    ``randint_like(x, 10)``, the bound is ``high`` and ``low`` is ``0``.
+    shape, dtype and device unless overridden.  Called with one bound by
+    position, ``randint_like(x, 10)``, the bound is ``high`` and ``low`` is
+    ``0``; ``low=`` alone is refused, as by the reference.
 
     Parameters
     ----------
@@ -922,10 +1049,9 @@ def randint_like(
         Reference tensor whose ``shape``, ``dtype`` and ``device`` the
         result takes.
     low : int, optional
-        Lowest integer drawn (inclusive).  Default ``0``; the one bound
-        when ``high`` is not given.
+        Lowest integer drawn (inclusive).  Default ``0``.
     high : int
-        One above the highest integer drawn (exclusive).
+        One above the highest integer drawn (exclusive); required.
     generator : lucid._C.engine.Generator, optional
         Explicit generator.  Defaults to the default stream that
         :func:`manual_seed` controls — the one :func:`randint` reads.
@@ -946,9 +1072,14 @@ def randint_like(
     Raises
     ------
     TypeError
-        A bound is not an integer, or no bound is given.
+        A bound is not an integer, ``high`` is not given, or ``low=`` is
+        given without ``high=``.
     lucid._C.engine.InvalidArgument
-        ``low >= high`` (a ``RuntimeError`` and a ``ValueError``).
+        ``low >= high``, or the result's dtype cannot hold ``low`` or
+        ``high - 1`` — ``int8`` past 127, bool past 1, a floating dtype past
+        its largest finite value (a ``RuntimeError`` and a ``ValueError``).
+    NotImplementedError
+        The result's dtype is complex.
 
     Notes
     -----
@@ -970,27 +1101,15 @@ def randint_like(
     """
     _check_random()
     if high is None:
-        low, high = 0, low
-    bounds = []
-    for what, bound in (("low", low), ("high", high)):
-        if isinstance(bound, bool):
-            raise TypeError(f"randint_like(): {what} must be an int, got bool")
-        try:
-            bounds.append(operator.index(bound))
-        except TypeError:
-            raise TypeError(
-                f"randint_like(): {what} must be an int, got {type(bound).__name__}"
-            ) from None
-    lo, hi = bounds
-    if lo >= hi:
-        raise _C_engine.InvalidArgument(
-            f"randint_like(): low must be less than high, got low={lo} >= high={hi}"
-        )
+        raise TypeError("randint_like() missing 1 required argument: 'high'")
+    lo, hi = _int_bounds("randint_like", low, high)
     _dt, _dev, _ = normalize_factory_kwargs(
         dtype if dtype is not None else input.dtype,
         device if device is not None else input.device,
     )
-    impl = _C_engine.randint(list(input.shape), lo, hi, _C_engine.I64, _dev, generator)
+    _require_holds("randint_like", lo, hi, _dt, stacklevel=4)  # past the bound reader
+    shape = list(input.shape)
+    impl = _C_engine.randint(shape, lo, hi, _C_engine.I64, _dev, generator)
     if _dt != _C_engine.I64:
         impl = _C_engine.astype(impl, _dt)
     return _wrap(_leaf(impl, requires_grad))
@@ -1003,7 +1122,9 @@ _PART_DTYPE = {_C_engine.C64: _C_engine.F32, _C_engine.C128: _C_engine.F64}
 def _draw_like(
     input: Tensor,
     name: str,
-    draw: Callable[[list[int], _C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl],
+    draw: Callable[
+        [list[int], _C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl
+    ],
 ) -> Tensor:
     """``draw``'s samples in ``input``'s shape, dtype and device.
 
@@ -1038,9 +1159,11 @@ def _normal_like(
 ) -> Tensor:
     r"""Samples of $\mathcal{N}(\text{mean}, \text{std}^2)$ shaped like ``input``.
 
-    A complex ``input`` draws each part with standard deviation
-    $\text{std} / \sqrt{2}$, so the complex value has variance
-    $\text{std}^2$; both parts take ``mean``, as the reference's do.
+    The one owner of a normal fill: ``Tensor.normal_`` and
+    ``nn.init.normal_`` both draw here.  A complex ``input`` draws each part
+    with standard deviation $\text{std} / \sqrt{2}$, so the complex value
+    has variance $\text{std}^2$; both parts take ``mean``, as the
+    reference's do — ``nn.init.normal_`` gave it to the real part alone.
     """
     if not std >= 0.0:
         raise _C_engine.InvalidArgument(f"normal_: std must be >= 0, got {std}")
@@ -1060,8 +1183,12 @@ def _uniform_like(
 ) -> Tensor:
     r"""Samples of $U[\text{low}, \text{high})$ shaped like ``input``.
 
-    ``low == high`` is every sample ``low``, as the reference allows; a
-    complex ``input`` draws both parts from the interval.
+    The one owner of a uniform fill: ``Tensor.uniform_`` and
+    ``nn.init.uniform_`` both draw here.  ``low == high`` is every sample
+    ``low``, as the reference allows, after a draw that is thrown away: the
+    stream moves on by the same amount as for any other bounds, as the
+    reference's does.  A complex ``input`` draws both parts from the
+    interval.
     """
     if not low <= high:
         raise _C_engine.InvalidArgument(
@@ -1071,9 +1198,10 @@ def _uniform_like(
     def draw(
         shape: list[int], dt: _C_engine.Dtype, dev: _C_engine.Device
     ) -> _C_engine.TensorImpl:
-        if low == high:
-            return _C_engine.full(shape, low, dt, dev)
-        return _C_engine.uniform(shape, low, high, dt, dev, generator)
+        if low != high:
+            return _C_engine.uniform(shape, low, high, dt, dev, generator)
+        _C_engine.uniform(shape, 0.0, 1.0, dt, dev, generator)
+        return _C_engine.full(shape, low, dt, dev)
 
     return _draw_like(input, "uniform_", draw)
 
@@ -1120,6 +1248,13 @@ def randperm(
         1-D integer tensor of shape ``(n,)`` containing a permutation of
         $\{0, 1, \ldots, n-1\}$.
 
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        ``n`` is negative, or past what ``dtype`` holds exactly (int8: 128).
+    NotImplementedError
+        ``dtype`` is bool.
+
     Notes
     -----
     The implementation uses the **lottery-ticket argsort trick**: assign
@@ -1133,13 +1268,6 @@ def randperm(
     This is equivalent to the Fisher–Yates shuffle in expectation and
     is more cache-friendly on SIMD hardware because the sort can be
     vectorised without branch-dependent swaps.
-
-    ``randperm`` is the standard building block for:
-
-    * **Dataset shuffling** — ``dataset[lucid.randperm(len(dataset))]``
-    * **k-fold cross-validation** — split a shuffled index tensor
-    * **Contrastive learning** — negative-sample mining via permuted
-      indices
 
     Examples
     --------
@@ -1169,6 +1297,7 @@ def randperm(
             f"randperm: Trying to create tensor with negative dimension {n}: [{n}]"
         )
     _dt, _dev, _ = normalize_factory_kwargs(dtype, device)
+    _require_permutable(n, _dt)
     if n == 0:
         impl = _C_engine.zeros([0], _dt, _dev)
         return _wrap(_leaf(impl, requires_grad))

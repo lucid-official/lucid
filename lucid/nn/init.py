@@ -134,6 +134,11 @@ def uniform_(
     :func:`kaiming_uniform_` are thin wrappers over this function with
     bounds computed from the fan factors of ``tensor``.
 
+    The draw is :meth:`Tensor.uniform_`'s under :func:`lucid.no_grad`, as
+    the reference's is, so the two cannot disagree: the same seed gives the
+    same values, ``a == b`` moves the stream on as any other bounds do, and
+    a complex ``tensor`` draws both parts from the interval.
+
     Examples
     --------
     >>> import lucid
@@ -143,16 +148,8 @@ def uniform_(
     >>> bool(((w >= -0.1) & (w <= 0.1)).all().item())
     True
     """
-    shape = list(tensor.shape)
-    dt = tensor._impl.dtype
-    dev = tensor._impl.device
-    if a == b:
-        _C_engine.uniform(shape, 0.0, 1.0, dt, dev, generator)
-        return _fill_from_impl(tensor, _C_engine.full(shape, a, dt, dev))
-    return _fill_from_impl(
-        tensor,
-        _C_engine.uniform(shape, a, b, dt, dev, generator),
-    )
+    with _lucid.no_grad():
+        return tensor.uniform_(a, b, generator=generator)
 
 
 @_skippable
@@ -200,6 +197,11 @@ def normal_(
     truncates extreme draws and is often preferred in transformer
     pre-training recipes.
 
+    The draw is :meth:`Tensor.normal_`'s under :func:`lucid.no_grad`, as the
+    reference's is: the same seed gives the same values, and a complex
+    ``tensor`` takes ``mean`` on both parts (it used to reach the real part
+    alone).
+
     Examples
     --------
     >>> import lucid
@@ -210,17 +212,8 @@ def normal_(
     >>> abs(w.std().item() - 0.02) < 0.002       # sample std close to the target
     True
     """
-    return _fill_from_impl(
-        tensor,
-        _C_engine.normal(
-            list(tensor.shape),
-            mean,
-            std,
-            tensor._impl.dtype,
-            tensor._impl.device,
-            generator,
-        ),
-    )
+    with _lucid.no_grad():
+        return tensor.normal_(mean, std, generator=generator)
 
 
 @_skippable
