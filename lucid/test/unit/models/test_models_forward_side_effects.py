@@ -42,9 +42,18 @@ from lucid.test.unit.models.test_models_train_step import CASES
 #: model does not take another size, not that this one is malformed.
 _GROWTH = 32
 
+
+class _EngineRefusal(AssertionError):
+    """The larger size was refused from inside the engine, not at the boundary.
+
+    Its own class so the strict xfails below expect exactly this failure: a
+    round-trip regression in one of those families is a plain
+    ``AssertionError`` and still fails the run.
+    """
+
+
 #: Families that still refuse the larger size from inside the engine, each
-#: waiting on the card that may edit its model file.  The refusal's form is
-#: judged after the round-trip checks, and it is the check expected to fail.
+#: waiting on the card that may edit its model file.
 _ENGINE_REFUSALS: dict[str, str] = {
     "lenet": (
         "LCD-625: LeNet-5's first Linear is sized for 32 px and refuses "
@@ -72,7 +81,9 @@ def _image_cases() -> list[Any]:
             marks = list(getattr(case, "marks", ()))
             if family in _ENGINE_REFUSALS:
                 reason = _ENGINE_REFUSALS[family]
-                marks.append(pytest.mark.xfail(strict=True, reason=reason))
+                marks.append(
+                    pytest.mark.xfail(strict=True, raises=_EngineRefusal, reason=reason)
+                )
             picked.append(
                 pytest.param(
                     factory,
@@ -131,9 +142,10 @@ def test_another_resolution_leaves_the_model_unchanged(
     if refusal is not None:
         # ``ShapeMismatch`` is a ValueError too, so the class alone does not
         # tell a refusal at the boundary from a crash inside the engine.
-        assert not isinstance(
-            refusal, _C_engine.LucidError
-        ), f"{factory}: refused from inside the engine: {refusal}"
+        if isinstance(refusal, _C_engine.LucidError):
+            raise _EngineRefusal(
+                f"{factory}: refused from inside the engine: {refusal}"
+            )
         assert str(height + _GROWTH) in str(
             refusal
         ), f"{factory}: the refusal does not name the input size: {refusal}"
