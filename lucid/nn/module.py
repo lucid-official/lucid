@@ -118,6 +118,25 @@ def _tensors_replaced(module: Module) -> None:
             wrapper._tensors_replaced()
 
 
+def _apply_to_parameter(param: Parameter, fn: Callable[[Tensor], Tensor]) -> bool:
+    """Apply ``fn`` to ``param`` and its gradient; whether either got a new tensor."""
+    grad = param.grad
+    converted = fn(param)
+    # ``.data =`` keeps the Parameter and its requires_grad and records no
+    # graph, so backward accumulates on the parameter, not through a cast node.
+    # An unchanged tensor stays, or an optimizer would see a replaced parameter
+    # and a held ``p.grad`` would stop being the gradient.
+    replaced = converted._impl is not param._impl
+    if replaced:
+        param.data = converted
+    if grad is not None:
+        g = fn(grad)
+        if g._impl is not grad._impl:
+            param.grad = g if g._impl.is_leaf else g.detach()
+            replaced = True
+    return replaced
+
+
 def _refuse_unless_none(value: object, name: str, kind: str, expected: str) -> None:
     """Reject assigning ``value`` to the registered ``kind`` slot ``name``.
 
@@ -933,31 +952,23 @@ class Module:
         return self._apply_local(fn)
 
     def _apply_local(self, fn: Callable[[Tensor], Tensor]) -> Self:
-        """Apply fn to this module's direct parameters and buffers only."""
-        for key, param in self._parameters.items():
-            if param is None:
-                continue
-            param_grad = param.grad
-            converted = fn(param)
-            # ``.data =`` keeps the Parameter object and its requires_grad and
-            # records no graph, so backward accumulates on the parameter, not
-            # through a cast node.  An unchanged impl stays, or an optimizer
-            # would see a replaced parameter.
-            if converted._impl is not param._impl:
-                param.data = converted
-            if param_grad is not None:
-                grad_conv = fn(param_grad)
-                if not grad_conv._impl.is_leaf:
-                    grad_conv = grad_conv.detach()
-                param.grad = grad_conv
+        """Apply fn to direct params and buffers; unchanged ones stay (LCD-601)."""
+        replaced = False
+        for param in self._parameters.values():
+            if param is not None:
+                replaced = _apply_to_parameter(param, fn) or replaced
         for key, buf in self._buffers.items():
             if buf is None:
                 continue
             converted = fn(buf)
+            if converted._impl is buf._impl:
+                continue
             if not buf._impl.is_phantom and converted._impl.is_phantom:
                 raise _C_engine.LucidError("phantom tensor has no values: _apply")
             self._buffers[key] = converted
-        _tensors_replaced(self)
+            replaced = True
+        if replaced:
+            _tensors_replaced(self)
         return self
 
     def to(self, *args: object, **kwargs: object) -> Self:
@@ -1076,12 +1087,7 @@ class Module:
         return self
 
     def zero_grad(self, set_to_none: bool = True) -> None:
-        """Reset the gradients of all parameters.
-
-        ``set_to_none=True`` (the default) drops each gradient.  ``False``
-        zeroes it in place, out of the graph, as
-        :meth:`lucid.optim.Optimizer.zero_grad` does.
-        """
+        """Reset the gradients of all parameters; see :meth:`lucid.optim.Optimizer.zero_grad`."""
         zero_grads_(self.parameters(), set_to_none=set_to_none)
 
     def requires_grad_(self, requires_grad: bool = True) -> Self:
