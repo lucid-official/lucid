@@ -26,7 +26,7 @@ read off an exponential moving average of the weights.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, override
+from typing import ClassVar, final, override
 
 import lucid
 import lucid.func
@@ -35,6 +35,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.special
 from lucid import Tensor
+from lucid._C import engine as _C_engine
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
@@ -47,6 +48,7 @@ from lucid.models.generative._common._transformers import (
     unpatchify,
 )
 from lucid.models.generative.tvm._config import TVMConfig
+from lucid.nn.utils import skip_init
 
 __all__ = [
     "TVMModel",
@@ -574,6 +576,21 @@ class TVMModel(PretrainedModel):
         return DiffusionModelOutput(sample=out)
 
 
+@final
+class _AveragedTVM(TVMModel):
+    """The network's structure for one of Algorithm 1's averages.
+
+    An average holds the live network's weights from the moment it exists,
+    so the Lipschitz initialisation — an SVD per linear layer — would be
+    computed only to be overwritten.  Built under ``skip_init`` with that
+    step left out, it costs the allocation and draws no random numbers.
+    """
+
+    @override
+    def _init_weights(self) -> None:
+        """Leave the allocation as it is: the live weights are copied in next."""
+
+
 class TVMForImageGeneration(ImageGenerationModel):
     r"""TVM's objective and its one- and few-step sampler.
 
@@ -609,7 +626,10 @@ class TVMForImageGeneration(ImageGenerationModel):
     outside the module tree: not parameters, not in :meth:`state_dict`,
     not counted.  They are training state, like an optimiser's moments;
     :attr:`target_network` and :attr:`ema_network` expose them for
-    checkpointing.
+    checkpointing.  Loading weights into the network — through
+    :meth:`load_state_dict` here or on :attr:`tvm` — restarts both from the
+    loaded weights, so to resume a run load the network first and the
+    averages' own checkpoints after it.
 
     Examples
     --------
@@ -635,8 +655,24 @@ class TVMForImageGeneration(ImageGenerationModel):
         # registered as a child, adding the parameter count and the
         # checkpoint of a network no optimiser may touch — twice over.
         self._averages: dict[str, TVMModel] = {}
+        # On the network rather than here: ``model.tvm.load_state_dict``
+        # never passes through this module, and ``model.load_state_dict``
+        # reaches the network's hooks too.
+        self.tvm.register_load_state_dict_post_hook(self._restart_averages)
 
     # ── the two EMAs of Algorithm 1 ──────────────────────────────────────
+
+    def _restart_averages(self, network: nn.Module, incompatible: object) -> None:
+        """Drop both averages once new weights are loaded into the network.
+
+        Loading weights is initialising them, so the averages restart from
+        them the next time either is read, as at Algorithm 1's start.  Kept,
+        they averaged toward the loaded weights from whatever was there
+        before — a fine-tune from a checkpoint read its first targets off
+        the random initialisation.
+        """
+        del network, incompatible  # the hook's signature; nothing to inspect
+        self._averages.clear()
 
     def _decays(self) -> dict[str, float]:
         """The averages this configuration keeps, by name, with their rates."""
@@ -659,9 +695,11 @@ class TVMForImageGeneration(ImageGenerationModel):
         # lazily in float32, they ran a half model's targets in float32.
         live = next(iter(self.tvm.parameters()))
         if not self._averages:
+            weights = self.tvm.state_dict()
             for key in self._decays():
-                copy = TVMModel(self.config)
-                copy.load_state_dict(self.tvm.state_dict())
+                copy = skip_init(_AveragedTVM, self.config)
+                assert isinstance(copy, _AveragedTVM), "skip_init builds its class"
+                copy.load_state_dict(weights)
                 for param in copy.parameters():
                     param.requires_grad_(False)
                 self._averages[key] = copy.eval()
@@ -719,7 +757,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         training loop averages nothing else, and this network has no
         persistent buffers.  Call it after each optimiser step.
 
-        Each average is evaluated as it is written.  The averages are
+        The averages are evaluated once they are written.  They are
         outside :meth:`parameters`, so neither the optimiser's flush nor a
         loop's reaches them on Metal.
         """
@@ -728,10 +766,11 @@ class TVMForImageGeneration(ImageGenerationModel):
             return
         # Paired by name, not by position: the averages are separate
         # networks, and a name is the one key both sides are sure to share —
-        # a position holds only while no edit to either tree has moved it.
-        # (An in-place ``w += ...`` once moved a parameter to the end of its
-        # registry; since LCD-551 it keeps its slot.)
+        # a position holds only while no edit to either tree has moved it,
+        # and deleting a child or a parameter and assigning it back moves
+        # it to the end of its registry.
         live = dict(self.tvm.named_parameters())
+        written: list[_C_engine.TensorImpl] = []
         with lucid.no_grad():
             for key, decay in decays.items():
                 average = self._average(key)
@@ -739,10 +778,13 @@ class TVMForImageGeneration(ImageGenerationModel):
                     # `slow[:] = ...`, not `slow.data[:] = ...`: the latter
                     # writes to a copy and silently does nothing.
                     slow[:] = decay * slow + (1.0 - decay) * live[name]
-                    # The write is lazy on Metal, and θ** is not read until
-                    # sampling: unevaluated, each step would chain onto the
-                    # last and keep every past copy of the live weights.
-                    slow.eval()
+                    written.append(slow._impl)
+        # The writes are lazy on Metal, and θ** is not read until sampling:
+        # unevaluated, each step would chain onto the last and keep every
+        # past copy of the live weights.  One batched evaluation, as the
+        # optimiser flushes its parameters: one per parameter cost a Metal
+        # sync per tensor, several times slower.
+        _C_engine.eval_tensors(written)
 
     # ── sampling the training variables ──────────────────────────────────
 

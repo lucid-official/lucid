@@ -21,7 +21,7 @@ import lucid
 import lucid.models as M
 from lucid._C import engine as _C_engine
 from lucid.models.generative.ddpm import DDPMConfig, DDPMForImageGeneration
-from lucid.models.generative.tvm import TVMForImageGeneration, TVMOutput
+from lucid.models.generative.tvm import TVMForImageGeneration, TVMModel, TVMOutput
 from lucid.test._fixtures.devices import metal_available
 
 DEVICES = ["cpu", "metal"] if metal_available() else ["cpu"]
@@ -200,6 +200,107 @@ def test_tvm_samples_round_trip_through_the_vae_latent_whitening(device: str) ->
     assert _max_abs(model.from_vae_latent(latent) - samples) <= 1e-5 * max(
         1.0, _max_abs(samples)
     )
+
+
+def _tvm_averages(model: TVMForImageGeneration) -> list[tuple[str, lucid.nn.Module]]:
+    return [("target", model.target_network), ("eval", model.ema_network)]
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_tvm_averages_pair_by_name_after_the_live_order_changes(device: str) -> None:
+    """LCD-552: ``update_ema`` pairs each average's parameter with the live
+    one of the same name.  Deleting a child and assigning it back moves it
+    to the end of its registry, so the live network's parameter order then
+    differs from the averages' — and the time and interval embedders have
+    the same shapes, so a positional pairing would average one into the
+    other without an error."""
+    lucid.manual_seed(0)
+    model = _build("tvm_imagenet256_gen", device).train()
+    assert isinstance(model, TVMForImageGeneration)
+    built_order = [name for name, _ in model.target_network.named_parameters()]
+    embedder = model.tvm.time_embed
+    del model.tvm.time_embed
+    model.tvm.time_embed = embedder
+    live_order = [name for name, _ in model.tvm.named_parameters()]
+    assert live_order != built_order and sorted(live_order) == sorted(built_order)
+
+    initial = {n: p.detach().clone() for n, p in model.tvm.named_parameters()}
+    with lucid.no_grad():
+        for param in model.tvm.parameters():
+            param.add_(lucid.randn(tuple(param.shape), device=device))
+    model.update_ema()
+
+    live = dict(model.tvm.named_parameters())
+    decays = {"target": model.config.target_ema_decay}
+    decays["eval"] = model.config.eval_ema_decay or 0.0
+    for key, network in _tvm_averages(model):
+        for name, slow in network.named_parameters():
+            mixed = decays[key] * initial[name] + (1.0 - decays[key]) * live[name]
+            assert _max_abs(slow - mixed.detach()) <= 1e-5, f"{key}: {name}"
+
+
+@pytest.mark.parametrize("through", ["network", "model"])
+def test_tvm_averages_restart_from_weights_loaded_into_the_network(
+    through: str,
+) -> None:
+    """LCD-552: loading weights into the live network — on ``model.tvm`` or
+    on the model — restarts both averages from them.  They used to stay at
+    whatever the network held before, so a fine-tune from a checkpoint read
+    its first targets off the random initialisation.  An average's own
+    checkpoint, loaded after the network's, is kept."""
+    lucid.manual_seed(0)
+    model = _build("tvm_imagenet256_gen", "cpu").train()
+    assert isinstance(model, TVMForImageGeneration)
+    stale = [n for n, _ in _tvm_averages(model)]
+    assert stale == ["target", "eval"]
+    lucid.manual_seed(1)
+    donor = _build("tvm_imagenet256_gen", "cpu")
+    assert isinstance(donor, TVMForImageGeneration)
+    if through == "network":
+        model.tvm.load_state_dict(donor.tvm.state_dict())
+    else:
+        model.load_state_dict(donor.state_dict())
+
+    loaded = dict(donor.tvm.named_parameters())
+    for key, network in _tvm_averages(model):
+        for name, slow in network.named_parameters():
+            assert _max_abs(slow - loaded[name]) == 0.0, f"{key}: {name}"
+
+    resumed = {k: lucid.randn(tuple(v.shape)) for k, v in loaded.items()}
+    model.ema_network.load_state_dict(resumed)
+    for name, slow in model.ema_network.named_parameters():
+        assert _max_abs(slow - resumed[name]) == 0.0, f"eval: {name}"
+
+
+def test_tvm_averages_copy_the_network_without_reinitialising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LCD-552: an average holds the live weights from the start, so building
+    one does not rerun the Lipschitz initialisation (an SVD per linear layer)
+    or draw from the generator — it used to build a whole ``TVMModel``."""
+    import lucid.models.generative.tvm._model as tvm_model
+
+    lucid.manual_seed(0)
+    model = _build("tvm_imagenet256_gen", "cpu")
+    assert isinstance(model, TVMForImageGeneration)
+
+    def _refuse(weight: lucid.Tensor) -> None:
+        raise AssertionError("building an average reran the spectral init")
+
+    monkeypatch.setattr(tvm_model, "_spectral_", _refuse)
+    lucid.manual_seed(5)
+    untouched = lucid.rand(8)
+    lucid.manual_seed(5)
+    averages = _tvm_averages(model)
+    assert _max_abs(lucid.rand(8) - untouched) == 0.0, "building drew numbers"
+
+    live = dict(model.tvm.named_parameters())
+    for key, network in averages:
+        assert isinstance(network, TVMModel) and not network.training
+        for name, slow in network.named_parameters():
+            assert not slow.requires_grad, f"{key}: {name} is trainable"
+            assert _max_abs(slow - live[name].detach()) == 0.0, f"{key}: {name}"
+        assert _max_abs(network.pos_embed - model.tvm.pos_embed) == 0.0
 
 
 # ── generation from the public factory ─────────────────────────────────────
