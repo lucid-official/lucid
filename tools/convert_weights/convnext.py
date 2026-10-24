@@ -33,7 +33,12 @@ import dataclasses
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _CONVNEXT_CITATION = (
     "@inproceedings{liu2022convnet,\n"
@@ -111,7 +116,7 @@ class ConvNeXtArch(Architecture):
                 rest = src_key[len(prefix) :]
                 parts = rest.split(".", 1)
                 if len(parts) != 2:
-                    return None
+                    raise UnknownSourceKey(src_key)
                 block_idx, inner = parts
                 stage_prefix = f"stages.{luc_stage}.{block_idx}"
                 if inner == "layer_scale":
@@ -124,7 +129,7 @@ class ConvNeXtArch(Architecture):
                     return f"{stage_prefix}.fc1." + inner[len("block.3.") :]
                 if inner.startswith("block.5."):
                     return f"{stage_prefix}.fc2." + inner[len("block.5.") :]
-                return None
+                raise UnknownSourceKey(src_key)
         # Classifier head
         if src_key == "classifier.0.weight":
             return "head_norm.weight"
@@ -134,7 +139,7 @@ class ConvNeXtArch(Architecture):
             return "classifier.weight"
         if src_key == "classifier.2.bias":
             return "classifier.bias"
-        return None
+        raise UnknownSourceKey(src_key)
 
     def transform_value(self, src_key: str, arr: object) -> object:
         # layer_scale ships as (C, 1, 1) for NCHW broadcasting; Lucid keeps
@@ -294,9 +299,9 @@ class ConvNeXtTimmArch(Architecture):
             if kind == "downsample":
                 # timm: stages.S.downsample.0/1 → Lucid: downsamplers.{S-1}.norm/conv
                 # Stage 0 has no downsample (it's after the stem); ds blocks live on
-                # stages 1, 2, 3 in timm.
+                # stages 1, 2, 3 in timm, so a stage-0 key is not one.
                 if stage == "0":
-                    return None
+                    raise UnknownSourceKey(src_key)
                 luc_idx = str(int(stage) - 1)
                 ds_part = parts[3]  # "0" (LN) or "1" (Conv)
                 rest = ".".join(parts[4:])
@@ -304,7 +309,7 @@ class ConvNeXtTimmArch(Architecture):
                     return f"downsamplers.{luc_idx}.norm.{rest}"
                 if ds_part == "1":
                     return f"downsamplers.{luc_idx}.conv.{rest}"
-                return None
+                raise UnknownSourceKey(src_key)
             if kind == "blocks":
                 block = parts[3]
                 inner_parts = parts[4:]
@@ -320,8 +325,7 @@ class ConvNeXtTimmArch(Architecture):
                     return f"{lucid_prefix}.fc1." + inner[len("mlp.fc1.") :]
                 if inner.startswith("mlp.fc2."):
                     return f"{lucid_prefix}.fc2." + inner[len("mlp.fc2.") :]
-                return None
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         factory_name, repo_id, title = _TIMM_VARIANTS[self.arch]

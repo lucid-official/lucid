@@ -32,7 +32,12 @@ import dataclasses
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _MOBILENET_V3_CITATION = (
     "@inproceedings{howard2019searching,\n"
@@ -204,7 +209,10 @@ class MobileNetV3Arch(Architecture):
     def map_key(self, src_key: str) -> str | None:
         if self._key_map is None:
             self._key_map = self._build_key_map()
-        return self._key_map.get(src_key)
+        mapped = self._key_map.get(src_key)
+        if mapped is None:
+            raise UnknownSourceKey(src_key)
+        return mapped
 
     def transform_value(self, src_key: str, arr: object) -> object:
         # torchvision's first classifier projection is a Linear (out, in);

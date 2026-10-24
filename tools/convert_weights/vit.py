@@ -41,7 +41,12 @@ import dataclasses
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _VIT_CITATION = (
     "@inproceedings{dosovitskiy2021image,\n"
@@ -119,7 +124,7 @@ class ViTArch(Architecture):
             rest = src_key[len(_ENCODER_LAYER_PREFIX) :]
             idx, _, inner = rest.partition(".")
             if not inner:
-                return None
+                raise UnknownSourceKey(src_key)
             block = f"blocks.{idx}"
             if inner.startswith("ln_1."):
                 return f"{block}.norm1." + inner[len("ln_1.") :]
@@ -135,8 +140,7 @@ class ViTArch(Architecture):
                 return f"{block}.mlp.fc1." + inner[len("mlp.0.") :]
             if inner.startswith("mlp.3."):
                 return f"{block}.mlp.fc2." + inner[len("mlp.3.") :]
-            return None
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         factory_name, repo_id, title = _VIT_VARIANTS[self.arch]

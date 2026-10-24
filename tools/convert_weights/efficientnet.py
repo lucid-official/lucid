@@ -52,7 +52,12 @@ import dataclasses
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _EFFICIENTNET_CITATION = (
     "@inproceedings{tan2019efficientnet,\n"
@@ -209,7 +214,7 @@ class EfficientNetArch(Architecture):
             return "classifier." + src_key[len("classifier.1.") :]
 
         if not src_key.startswith("features."):
-            return None
+            raise UnknownSourceKey(src_key)
 
         parts = src_key.split(".")
         stage = int(parts[1])
@@ -222,7 +227,7 @@ class EfficientNetArch(Architecture):
                 return f"features.0.{rest}"
             if sub == "1":
                 return f"features.1.{rest}"
-            return None
+            raise UnknownSourceKey(src_key)
 
         # Head: features.8.0 (conv) → features.19 ; features.8.1 (BN) → features.20
         if stage == _TV_HEAD_STAGE:
@@ -237,18 +242,21 @@ class EfficientNetArch(Architecture):
                 return f"features.{head_conv}.{rest}"
             if sub == "1":
                 return f"features.{head_conv + 1}.{rest}"
-            return None
+            raise UnknownSourceKey(src_key)
 
         # MBConv block.
         block = int(parts[2])
         flat = self._flat_index.get((stage, block))
         if flat is None:
-            return None
+            raise UnknownSourceKey(src_key)
         has_expand = self._has_expand[(stage, block)]
         # parts[3] == "block"; parts[4] is the inner block index.
         inner_idx = parts[4]
         rest = ".".join(parts[5:])
-        return self._map_block_inner(flat, has_expand, inner_idx, rest)
+        mapped = self._map_block_inner(flat, has_expand, inner_idx, rest)
+        if mapped is None:
+            raise UnknownSourceKey(src_key)
+        return mapped
 
     @staticmethod
     def _map_block_inner(

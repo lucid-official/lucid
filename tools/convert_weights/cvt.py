@@ -33,7 +33,12 @@ import dataclasses
 import re
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _CVT_CITATION = (
     "@inproceedings{wu2021cvt,\n"
@@ -105,7 +110,7 @@ class CvTArch(Architecture):
             return "head_norm." + src_key[len("layernorm.") :]
         # Strip the ``cvt.encoder.`` prefix used by HF.
         if not src_key.startswith("cvt.encoder."):
-            return None
+            raise UnknownSourceKey(src_key)
         s = src_key[len("cvt.encoder.") :]
         # ``stages.S.cls_token`` → ``stages.S.cls_token`` (carried through;
         # Lucid's last stage owns a matching learnable CLS token).

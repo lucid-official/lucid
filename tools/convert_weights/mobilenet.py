@@ -34,7 +34,12 @@ import dataclasses
 import re
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _MOBILENET_V1_CITATION = (
     "@article{howard2017mobilenets,\n"
@@ -123,7 +128,9 @@ class MobileNetArch(Architecture):
             group = int(match.group(1))
             block = int(match.group(2))
             rest = match.group(3)
-            feat = self._gb_to_feat[(group, block)]
+            feat = self._gb_to_feat.get((group, block))
+            if feat is None:
+                raise UnknownSourceKey(src_key)
             if rest.startswith("conv_dw."):
                 return f"features.{feat}.0." + rest[len("conv_dw.") :]
             if rest.startswith("bn1."):
@@ -132,8 +139,7 @@ class MobileNetArch(Architecture):
                 return f"features.{feat}.3." + rest[len("conv_pw.") :]
             if rest.startswith("bn2."):
                 return f"features.{feat}.4." + rest[len("bn2.") :]
-            return None
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         import lucid.models as models

@@ -44,7 +44,12 @@ import dataclasses
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _SWIN_CITATION = (
     "@inproceedings{liu2021swin,\n"
@@ -146,8 +151,7 @@ class SwinArch(Architecture):
                     return (
                         f"stages.{luc_stage}.downsample.norm." + inner[len("norm.") :]
                     )
-                return None
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         import lucid.models as models
@@ -345,8 +349,7 @@ class SwinTimmArch(Architecture):
                     return (
                         f"stages.{tgt_stage}.downsample.norm." + inner[len("norm.") :]
                     )
-                return None
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         factory_name, repo_id, title = _TIMM_VARIANTS[self.arch]

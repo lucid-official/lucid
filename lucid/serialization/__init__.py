@@ -12,6 +12,7 @@ import io
 import os
 import pickle
 import warnings
+from collections.abc import Mapping
 from typing import Any, Callable, TYPE_CHECKING, cast, final, override
 
 from lucid._tensor.tensor import Tensor as _T
@@ -859,7 +860,7 @@ _ST_UNSIGNED: dict[str, tuple[str, str]] = {
 
 
 def save_safetensors(
-    state_dict: dict[str, object],
+    state_dict: Mapping[str, object],
     path: str,
     *,
     metadata: dict[str, str] | None = None,
@@ -874,9 +875,10 @@ def save_safetensors(
 
     Parameters
     ----------
-    state_dict : dict of str to Tensor
-        Flat mapping from parameter name to :class:`Tensor`. Nested
-        dicts or non-tensor values raise ``TypeError``.
+    state_dict : Mapping of str to Tensor
+        Flat mapping from parameter name to :class:`Tensor` — a ``dict``,
+        or any read-only mapping such as a ``dict[str, Tensor]`` typed as
+        one.  Nested dicts or non-tensor values raise ``TypeError``.
     path : str
         Destination file path; use a ``.safetensors`` suffix by
         convention.

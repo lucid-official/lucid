@@ -65,7 +65,12 @@ from huggingface_hub import hf_hub_download
 
 from lucid.models.multimodal.clip import CLIPModel, CLIPConfig
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _CITATION = (
     "@inproceedings{radford2021learning,\n"
@@ -199,6 +204,11 @@ class CLIPArch(Architecture):
         -------
         str or None
             The Lucid name, or ``None`` to drop.
+
+        Raises
+        ------
+        UnknownSourceKey
+            For a key no rule here covers.
         """
         if src_key.endswith("position_ids"):
             # An ``arange`` buffer, not a weight.
@@ -224,7 +234,7 @@ class CLIPArch(Architecture):
                     return f"{lucid_name}.positional_embedding"
                 if leaf == "token_embedding.weight":
                     return f"{lucid_name}.token_embedding.weight"
-                return None
+                raise UnknownSourceKey(src_key)
             if rest.startswith("pre_layrnorm."):  # upstream's own spelling
                 return f"{lucid_name}.ln_pre.{rest.split('.')[-1]}"
             if rest.startswith("post_layernorm."):
@@ -251,8 +261,10 @@ class CLIPArch(Architecture):
                     "mlp.fc2.bias": "mlp.2.bias",
                 }
                 mapped = table.get(leaf)
-                return f"{block}.{mapped}" if mapped else None
-        return None
+                if mapped is None:
+                    raise UnknownSourceKey(src_key)
+                return f"{block}.{mapped}"
+        raise UnknownSourceKey(src_key)
 
     def transform_value(self, src_key: str, arr: object) -> object:
         """Transpose the two projections and give ``logit_scale`` a shape.

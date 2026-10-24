@@ -32,7 +32,12 @@ import math
 import torchvision.models as tvm
 
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _INCEPTION_CITATION = (
     "@inproceedings{szegedy2016rethinking,\n"
@@ -137,6 +142,14 @@ _STEM_BLOCKS = {
 }
 
 
+def _branch(table: dict[str, str], tv_branch: str, src_key: str) -> str:
+    """The Lucid branch for a torchvision one, refusing a branch no table names."""
+    lucid_branch = table.get(tv_branch)
+    if lucid_branch is None:
+        raise UnknownSourceKey(src_key)
+    return lucid_branch
+
+
 class InceptionArch(Architecture):
     """Converter for one torchvision Inception v3 variant + tag."""
 
@@ -172,23 +185,27 @@ class InceptionArch(Architecture):
         if blk in _STEM_BLOCKS:
             return _BLOCK[blk] + "." + ".".join(parts[1:])
 
-        ltop = _BLOCK[blk]
+        ltop = _BLOCK.get(blk)
+        if ltop is None or len(parts) < 4:
+            raise UnknownSourceKey(src_key)
         tv_br = parts[1]
         sub = parts[2]  # "conv" or "bn"
         rest = ".".join(parts[3:])  # weight / bias / running_mean / running_var / ...
 
         if blk in ("Mixed_5b", "Mixed_5c", "Mixed_5d"):
-            return f"{ltop}.{_A_BR[tv_br]}.{sub}.{rest}"
+            return f"{ltop}.{_branch(_A_BR, tv_br, src_key)}.{sub}.{rest}"
         if blk == "Mixed_6a":
-            return f"{ltop}.{_B_BR[tv_br]}.{sub}.{rest}"
+            return f"{ltop}.{_branch(_B_BR, tv_br, src_key)}.{sub}.{rest}"
         if blk in ("Mixed_6b", "Mixed_6c", "Mixed_6d", "Mixed_6e"):
-            return self._map_factorised(ltop, _C_BR[tv_br], _C_RAW, sub, rest)
+            lbr = _branch(_C_BR, tv_br, src_key)
+            return self._map_factorised(ltop, lbr, _C_RAW, sub, rest)
         if blk == "Mixed_7a":
-            return self._map_factorised(ltop, _D_BR[tv_br], _D_RAW, sub, rest)
+            lbr = _branch(_D_BR, tv_br, src_key)
+            return self._map_factorised(ltop, lbr, _D_RAW, sub, rest)
         if blk in ("Mixed_7b", "Mixed_7c"):
-            return self._map_factorised(ltop, _E_BR[tv_br], _E_RAW, sub, rest)
-
-        raise RuntimeError(f"InceptionArch.map_key: unmapped block {blk!r}")
+            lbr = _branch(_E_BR, tv_br, src_key)
+            return self._map_factorised(ltop, lbr, _E_RAW, sub, rest)
+        raise UnknownSourceKey(src_key)
 
     @staticmethod
     def _map_factorised(

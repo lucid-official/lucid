@@ -41,7 +41,12 @@ from huggingface_hub import hf_hub_download
 
 from lucid.models.generative.dit import DiTConfig, DiTModel
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _CITATION = (
     "@inproceedings{peebles2023scalable,\n"
@@ -195,7 +200,7 @@ class DiTArch(Architecture):
             return "final.proj." + src_key.rsplit(".", 1)[-1]
         if src_key.startswith("transformer_blocks."):
             return _map_block(src_key)
-        return None
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         """Return the static metadata written beside the weights."""
@@ -245,6 +250,7 @@ def _map_block(key: str) -> str | None:
     # every other block's is a duplicate already verified identical.
     if leaf.startswith("norm1.emb."):
         if index != "0":
+            # A duplicate of block zero's, checked identical on load.
             return None
         if "timestep_embedder.linear_1." in leaf:
             return f"time_mlp.0.{tail}"
@@ -252,7 +258,7 @@ def _map_block(key: str) -> str | None:
             return f"time_mlp.2.{tail}"
         if "class_embedder.embedding_table." in leaf:
             return "label_embed.weight"
-        return None
+        raise UnknownSourceKey(key)
 
     if leaf.startswith("norm1.linear."):
         return f"blocks.{index}.ada_ln.1.{tail}"
@@ -264,7 +270,7 @@ def _map_block(key: str) -> str | None:
         return f"blocks.{index}.mlp.0.{tail}"
     if leaf.startswith("ff.net.2."):
         return f"blocks.{index}.mlp.2.{tail}"
-    return None
+    raise UnknownSourceKey(key)
 
 
 @register_arch("dit_xlarge_2")

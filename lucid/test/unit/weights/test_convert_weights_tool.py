@@ -7,7 +7,9 @@ without running anything the file names.  No download: every checkpoint
 here is built in the test.
 """
 
+import importlib
 import pickle
+import pkgutil
 import sys
 from collections import OrderedDict
 from collections.abc import Callable
@@ -97,6 +99,50 @@ def test_every_unknown_source_key_is_refused_together() -> None:
     recipe = _LinearRecipe(_linear_source(zeta=np.ones(1), alpha=np.ones(1)))
     with pytest.raises(RuntimeError, match=r"2 source key\(s\).*'alpha', 'zeta'"):
         convert(recipe)
+
+
+# ── every registered recipe ──────────────────────────────────────────────────
+
+
+def _recipe_classes() -> list[type[Architecture]]:
+    import tools.convert_weights as package
+
+    for info in pkgutil.iter_modules(package.__path__):
+        if not info.name.startswith("_"):
+            importlib.import_module(f"tools.convert_weights.{info.name}")
+    found: list[type[Architecture]] = []
+    pending = list(Architecture.__subclasses__())
+    while pending:
+        cls = pending.pop()
+        pending.extend(cls.__subclasses__())
+        if cls.__module__.startswith("tools.convert_weights."):
+            found.append(cls)
+    return sorted(found, key=lambda c: (c.__module__, c.__name__))
+
+
+# What a recipe's ``map_key`` reads off itself before it decides anything;
+# built for real, each would download its checkpoint.
+_BARE_STATE: dict[str, dict[str, object]] = {
+    "BERTArch": {"_kind": "mlm"},
+    "SENetArch": {"arch": ""},
+    "MobileNetV3Arch": {"_key_map": {}},
+}
+
+
+@pytest.mark.parametrize("recipe", _recipe_classes(), ids=lambda c: c.__name__)
+def test_no_recipe_drops_a_key_it_has_no_rule_for(recipe: type[Architecture]) -> None:
+    """LCD-630: a recipe that fell through to ``return None`` dropped any key
+    it never decided about, and the conversion succeeded without it.  A key
+    no rule covers must raise :class:`UnknownSourceKey`, or carry through
+    under a name that :func:`convert`'s key-set check then refuses."""
+    bare = recipe.__new__(recipe)
+    for name, value in _BARE_STATE.get(recipe.__name__, {}).items():
+        setattr(bare, name, value)
+    try:
+        mapped = bare.map_key("model.unexpected.weight")
+    except UnknownSourceKey:
+        return
+    assert mapped is not None
 
 
 # ── the TVM release format ───────────────────────────────────────────────────

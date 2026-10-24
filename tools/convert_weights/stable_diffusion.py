@@ -40,7 +40,12 @@ from lucid.models.generative.stable_diffusion import (
     StableDiffusionModel,
 )
 from lucid.nn import Module
-from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
+from tools.convert_weights._base import (
+    Architecture,
+    ConversionSpec,
+    UnknownSourceKey,
+    register_arch,
+)
 
 _CITATION = (
     "@inproceedings{rombach2022high,\n"
@@ -136,18 +141,28 @@ class StableDiffusionArch(Architecture):
         Returns
         -------
         str or None
-            The Lucid name, or ``None`` to drop.
+            The Lucid name.  Nothing is dropped: every U-Net and
+            autoencoder tensor has a home.
+
+        Raises
+        ------
+        UnknownSourceKey
+            For a key no rule here covers.
         """
-        config = self._config()
         if src_key.startswith("unet."):
-            mapped = _map_unet(src_key[len("unet.") :], config)
+            mapped = _map_unet(src_key[len("unet.") :], self._config())
             # The U-Net hangs off ``StableDiffusionModel.unet``, so every
             # name it owns is prefixed once here rather than in each of
             # the dozen branches below.
-            return None if mapped is None else f"unet.{mapped}"
+            if mapped is None:
+                raise UnknownSourceKey(src_key)
+            return f"unet.{mapped}"
         if src_key.startswith("vae."):
-            return _map_vae(src_key[len("vae.") :], config)
-        return None
+            mapped = _map_vae(src_key[len("vae.") :], self._config())
+            if mapped is None:
+                raise UnknownSourceKey(src_key)
+            return mapped
+        raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
         """Return the static metadata written beside the weights."""
@@ -220,7 +235,10 @@ def _fuse_attention(state: dict[str, object]) -> dict[str, object]:
 
 
 def _map_unet(key: str, config: StableDiffusionConfig) -> str | None:
-    """Map one U-Net key. See :meth:`StableDiffusionArch.map_key`."""
+    """Map one U-Net key, or ``None`` when no rule covers it.
+
+    See :meth:`StableDiffusionArch.map_key`.
+    """
     layers = config.unet_layers_per_block
     parts = key.split(".")
 
@@ -310,7 +328,10 @@ def _attn_leaf(leaf: str) -> str:
 
 
 def _map_vae(key: str, config: StableDiffusionConfig) -> str | None:
-    """Map one autoencoder key. See :meth:`StableDiffusionArch.map_key`."""
+    """Map one autoencoder key, or ``None`` when no rule covers it.
+
+    See :meth:`StableDiffusionArch.map_key`.
+    """
     layers = config.vae_layers_per_block
     parts = key.split(".")
 

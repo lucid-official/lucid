@@ -265,11 +265,7 @@ def write(
         "license": spec.license,
         "num_classes": str(spec.num_classes),
     }
-    # save_safetensors checks each value itself, so it takes a
-    # ``dict[str, object]``, which a dict of tensors is not (dict is
-    # invariant); this copy is that boundary.
-    tensors: dict[str, object] = dict(state_dict)
-    _serial.save_safetensors(tensors, str(st_path), metadata=header)
+    _serial.save_safetensors(state_dict, str(st_path), metadata=header)
 
     sha = _sha256_of(st_path)
     file_size_mb = round(st_path.stat().st_size / (1024 * 1024), 2)
