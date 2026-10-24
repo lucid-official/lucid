@@ -63,7 +63,10 @@ def test_a_cast_to_a_dtype_lucid_lacks_is_refused(name: str, device: str) -> Non
 
 
 @pytest.mark.parametrize("name", sorted(_CASTS | _REFUSED))
-def test_the_cast_takes_no_arguments(name: str) -> None:
+def test_every_cast_has_the_same_signature(name: str) -> None:
+    # Pinned as it stands, not as it should be: the reference's casts take
+    # ``memory_format=``, which LCD-488 adds to every one of them.  That fix
+    # changes this list for all thirteen at once.
     params = list(inspect.signature(getattr(lucid.Tensor, name)).parameters)
     assert params == ["self"]
 

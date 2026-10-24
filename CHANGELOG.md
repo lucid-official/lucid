@@ -1336,6 +1336,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - gcd/lcm broadcast, and take only integer tensors
 
+- gcd/lcm follow the binary-op device rule, promote, and wrap
+
 ### Changed
 
 - `lucid.compile` keys and watches what a compiled call reads by identity. A call whose input is a tensor the model holds (a parameter or buffer, `m.weight.contiguous()`, an attribute, a closure's or a global's tensor) gets an executable of its own. Before, a later call with another tensor of the same shape silently ran with the model's tensor in its place (LCD-629). Modules reached as module-level globals are watched (LCD-599). A plain tensor attribute the forward reads is seen when it is replaced (LCD-606). `compiled_decode_step` runs eagerly in grad mode when it reads a tensor that requires grad (LCD-618). `make_step(segments=K)` no longer doubles the gradient of an input that is its own parameter, and a forward that keeps its input no longer retraces on every call.

@@ -107,6 +107,9 @@ BITWISE_INT_OPS = [
     ("bitwise_xor", lambda a, b: a ^ b, lambda r, a, b: a ^ b),
     ("left_shift", lambda a, b: a << b, lambda r, a, b: a << b),
     ("right_shift", lambda a, b: a >> b, lambda r, a, b: a >> b),
+    # Composites that compute on the host, off the engine's device check.
+    ("gcd", lambda a, b: lucid.gcd(a, b), lambda r, a, b: r.gcd(a, b)),
+    ("lcm", lambda a, b: lucid.lcm(a, b), lambda r, a, b: r.lcm(a, b)),
 ]
 
 INPLACE_OPS = [
@@ -296,6 +299,39 @@ def test_nondiff_binary_rejects_disallowed_cross_device_pairs(
     b = _make(*b_spec)
     with pytest.raises(DeviceMismatch):
         l_fn(a, b)
+
+
+@pytest.mark.parametrize(
+    "name,l_fn,_", BITWISE_INT_OPS, ids=[x[0] for x in BITWISE_INT_OPS]
+)
+@pytest.mark.parametrize(
+    "a_spec,b_spec",
+    [
+        ((0, "metal"), (1, "cpu")),
+        ((1, "cpu"), (0, "metal")),
+        ((1, "cpu"), (1, "metal")),
+        ((1, "metal"), (1, "cpu")),
+    ],
+    ids=[
+        "0d_metal_shaped_cpu",
+        "shaped_cpu_0d_metal",
+        "shaped_cpu_metal",
+        "shaped_metal_cpu",
+    ],
+)
+def test_bitwise_int_rejects_disallowed_cross_device_pairs(
+    name, l_fn, _, a_spec, b_spec
+):
+    def _make(ndim: int, dev: str) -> lucid.Tensor:
+        arr = (
+            np.array(2, dtype=np.int32)
+            if ndim == 0
+            else np.array([1, 6], dtype=np.int32)
+        )
+        return lucid.tensor(arr, dtype=lucid.int32, device=dev)
+
+    with pytest.raises(DeviceMismatch):
+        l_fn(_make(*a_spec), _make(*b_spec))
 
 
 # ── 3. Ternary ``where`` ────────────────────────────────────────────────────

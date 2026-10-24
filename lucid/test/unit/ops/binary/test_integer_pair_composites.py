@@ -5,9 +5,11 @@ at ``input``'s size: ``gcd([12, 18], [8])`` read past ``other`` and raised
 ``IndexError``, and ``gcd([8], [12, 18])`` answered one element.  They
 also truncated a float operand without a word, and failed with an
 ``AttributeError`` from deep inside the loop on a Python number.  Now
-both operands are refused unless they are integer tensors, as the
-reference refuses them, then brought to their common dtype and broadcast
-shape before the loop.  Held for every binary composite: the broadcast
+the operands are brought to their common dtype first and refused unless
+that is an integer dtype, as the reference refuses them; then broadcast,
+computed, wrapped to the dtype's width as the reference's kernels wrap,
+and put on the device the binary-op rule picks (the 0-d CPU rule is held
+in ``lucid/test/unit/device/test_zero_dim_cpu_device_mixing.py``).  Held for every binary composite: the broadcast
 table below — a scalar, a size-1 axis, trailing and leading dims, an
 empty axis — answers the reference's shape and values, on either device.
 """
@@ -140,9 +142,9 @@ def test_gcd_and_lcm_answer_the_promoted_dtype(name: str, device: str) -> None:
 @pytest.mark.parametrize(
     "a,b,what",
     [
-        (([4.0, 6.0], "float32"), ([6.0, 9.0], "float32"), "integer dtype"),
-        (([4, 6], "int64"), ([6.0, 9.0], "float32"), "integer dtype"),
-        (([True], "bool_"), ([True], "bool_"), "integer dtype"),
+        (([4.0, 6.0], "float32"), ([6.0, 9.0], "float32"), "integer tensors"),
+        (([4, 6], "int64"), ([6.0, 9.0], "float32"), "integer tensors"),
+        (([True], "bool_"), ([True], "bool_"), "integer tensors"),
         (([3], "int64"), 2, "must be a Tensor"),
         (3, ([2], "int64"), "must be a Tensor"),
     ],
@@ -159,6 +161,80 @@ def test_gcd_and_lcm_refuse_what_is_not_an_integer_tensor(
 
     with pytest.raises(TypeError, match=f"lucid.{name}.*{what}"):
         getattr(lucid, name)(build(a), build(b))
+
+
+#: ``(op, input, other, dtype, answer)``: an integer beside a bool promotes
+#: to the integer, and an answer past the dtype's range wraps, two's
+#: complement, as the reference's kernels answer.
+_PROMOTED_AND_WRAPPED: list[tuple[str, list[object], list[object], str, list[int]]] = [
+    ("gcd", [4, 6], [True, False], "int64", [1, 6]),
+    ("lcm", [4, 6], [True, True], "int64", [4, 6]),
+    ("lcm", [100, -100, 120], [99, 99, 7], "int8", [-84, -84, 72]),
+    ("lcm", [2**62, 2**62 + 1], [3, 3], "int64", [2**62, 2**62 - 3]),
+    ("lcm", [-(2**63)], [1], "int64", [-(2**63)]),
+    ("gcd", [-(2**63), -(2**63)], [0, -(2**63)], "int64", [-(2**63)] * 2),
+    ("gcd", [2**31 - 1], [-(2**31)], "int32", [1]),
+    ("gcd", [-128, 117, -120], [0, -128, -128], "int8", [-128, -1, -8]),
+]
+
+#: Every pair of these, per dtype: small values, and the extremes where
+#: the reference's integer arithmetic wraps.
+_SWEEP_VALUES = (0, 1, -1, 2, -3, 6, 12, -18, 100, 99, 117, -120)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64"])
+@pytest.mark.parametrize("name", ["gcd", "lcm"])
+def test_gcd_and_lcm_answer_the_references_values_at_every_width(
+    ref: ModuleType, name: str, dtype: str
+) -> None:
+    bits = int(dtype.removeprefix("int"))
+    extremes = (-(1 << (bits - 1)), (1 << (bits - 1)) - 1, -(1 << (bits - 1)) + 1)
+    values = [v for v in _SWEEP_VALUES if abs(v) < (1 << (bits - 1))] + list(extremes)
+    xs = [x for x in values for _ in values]
+    ys = [y for _ in values for y in values]
+    theirs = getattr(ref, name)(
+        ref.tensor(xs, dtype=getattr(ref, dtype)),
+        ref.tensor(ys, dtype=getattr(ref, dtype)),
+    )
+    ours = getattr(lucid, name)(
+        lucid.tensor(xs, dtype=getattr(lucid, dtype)),
+        lucid.tensor(ys, dtype=getattr(lucid, dtype)),
+    )
+    assert ours.tolist() == theirs.tolist()
+
+
+@pytest.mark.parametrize("name,a,b,dtype,want", _PROMOTED_AND_WRAPPED)
+def test_gcd_and_lcm_promote_and_wrap(
+    name: str,
+    a: list[object],
+    b: list[object],
+    dtype: str,
+    want: list[int],
+    device: str,
+) -> None:
+    x = lucid.tensor(a, dtype=getattr(lucid, dtype), device=device)
+    y_dtype = lucid.bool_ if isinstance(b[0], bool) else getattr(lucid, dtype)
+    y = lucid.tensor(b, dtype=y_dtype, device=device)
+    out = getattr(lucid, name)(x, y)
+    assert out.dtype == getattr(lucid, dtype)
+    assert out.tolist() == want
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("name,a,b,dtype,want", _PROMOTED_AND_WRAPPED)
+def test_the_reference_promotes_and_wraps_the_same(
+    ref: ModuleType,
+    name: str,
+    a: list[object],
+    b: list[object],
+    dtype: str,
+    want: list[int],
+) -> None:
+    x = ref.tensor(a, dtype=getattr(ref, dtype))
+    y_dtype = ref.bool if isinstance(b[0], bool) else getattr(ref, dtype)
+    out = getattr(ref, name)(x, ref.tensor(b, dtype=y_dtype))
+    assert out.tolist() == want
 
 
 @pytest.mark.parity
