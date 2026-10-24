@@ -30,10 +30,13 @@ float32 constant a float64 run would and more:
 * **sampling** (LCD-597) — every image-generation family's ``generate``
   at two steps in float64 on the CPU and float16 / bfloat16 on Metal
   answers finite, in the model's dtype; likewise Score-SDE's three
-  samplers and its likelihood, a DiT schedule whose float16 copy rounds
-  ᾱ_1 to 1, DiT's three non-default conditionings, TVM's latent
-  whitening, PlaNet's planner, and both schedulers' ``add_noise``,
-  whose float32 tables are cast at use.
+  samplers under each of its three SDEs (whose cancelling coefficients
+  are worked out wide), a DiT schedule whose float16 copy rounds ᾱ_1 to
+  1 (training and sampling), DiT's three non-default conditionings,
+  TVM's latent whitening, PlaNet's planner, and both schedulers'
+  ``add_noise``, whose float32 tables are cast at use.  Score-SDE's
+  likelihood sums over every dimension, so it answers finite at float32
+  or wider instead.
 * **train** — every family of the training-step table, and the detection
   and segmentation losses that table leaves to other files, take their
   step in float16 on the CPU (the losses in float64 too); the loss and
@@ -52,7 +55,9 @@ import pytest
 
 import lucid
 import lucid.models as models
+from lucid._dtype import _float32_or_wider
 from lucid.models._registry import _REGISTRY
+from lucid.models.generative.score_sde._sde import make_sde
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile import _zoo_matrix as zoo
 from lucid.test.unit.models.test_models_train_step import CASES, _family_of
@@ -524,12 +529,38 @@ def test_generate_answers_in_the_model_dtype(
     _sampled_in(answer, dtype, f"{family} generate")
 
 
+_SDE_TYPES = ["ve", "vp", "subvp"]
+
+
 @pytest.mark.parametrize("method", ["euler", "pc", "ode"])
-def test_every_score_sde_sampler_answers_in_half(method: str) -> None:
-    model = _generator("score_sde", _HALF_DEVICE, _F16)
+@pytest.mark.parametrize("sde_type", _SDE_TYPES)
+def test_every_score_sde_sampler_answers_in_half(sde_type: str, method: str) -> None:
+    model = _generator("score_sde", _HALF_DEVICE, _F16, sde_type=sde_type)
     with lucid.no_grad():
         answer = model.generate(1, steps=2, method=method)
-    _sampled_in(answer, _F16, f"score_sde {method}")
+    _sampled_in(answer, _F16, f"score_sde {sde_type} {method}")
+
+
+@pytest.mark.parametrize("sde_type", _SDE_TYPES)
+def test_every_sde_works_its_cancelling_coefficients_out_wide(sde_type: str) -> None:
+    """``1 - e^{-z}`` near ``t_min`` is 0 in float16 unless worked out wide.
+
+    VP's and sub-VP's standard deviation and sub-VP's diffusion came out 0
+    there — a relative error of 1 — and the score infinite.
+    """
+    sde = make_sde(sde_type)
+    times = [sde.t_min, 0.01, 0.5, 1.0]
+    t, x = lucid.tensor(times), lucid.ones((len(times), 3, 4, 4))
+    narrow_t, narrow_x = t.to(_HALF_DEVICE).to(_F16), x.to(_HALF_DEVICE).to(_F16)
+    pairs = {
+        "std": (sde.marginal_prob(narrow_x, narrow_t)[1], sde.marginal_prob(x, t)[1]),
+        "diffusion": (sde.diffusion(narrow_t), sde.diffusion(t)),
+    }
+    for what, (got, want) in pairs.items():
+        assert got.dtype == _F16, what
+        a, b = got.to("cpu").to(_F64).numpy(), want.to(_F64).numpy()
+        error = np.abs(a - b) / np.abs(b)
+        assert (error < _TOL[_F16]).all(), f"{sde_type} {what}: {error.tolist()}"
 
 
 @pytest.mark.parametrize(
@@ -537,15 +568,22 @@ def test_every_score_sde_sampler_answers_in_half(method: str) -> None:
     _ROLLOUT_DTYPES,
     ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
 )
-def test_score_sde_log_likelihood_answers_in_the_data_dtype(
-    device: str, dtype: lucid.dtype
+@pytest.mark.parametrize("sde_type", _SDE_TYPES)
+def test_score_sde_log_likelihood_is_finite_at_float32_or_wider(
+    sde_type: str, device: str, dtype: lucid.dtype
 ) -> None:
-    """Its divergence accumulator and times were float32 ``zeros`` / ``ones``."""
+    """Reported at float32 or wider, because it sums over every dimension.
+
+    At a VE prior's scale (sigma_max = 50) the squares add about 2500 per
+    dimension, and a float16 sum overflowed past 27 of them to -inf.
+    """
     _need(device)
-    model = _generator("score_sde", device, dtype)
+    model = _generator("score_sde", device, dtype, sde_type=sde_type)
     side, channels = model.config.sample_size, model.config.in_channels
-    x = lucid.randn(1, channels, side, side).to(device).to(dtype)
-    assert model.log_likelihood(x, steps=2).dtype == dtype
+    scale = model.sde.prior_variance**0.5
+    x = (lucid.randn(1, channels, side, side) * scale).to(device).to(dtype)
+    answer = model.log_likelihood(x, steps=2)
+    _sampled_in(answer, _float32_or_wider(dtype), f"{sde_type} log_likelihood")
 
 
 def test_a_half_dit_samples_where_half_rounds_alpha_bar_to_one() -> None:

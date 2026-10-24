@@ -679,7 +679,7 @@ class PlaNetForWorldModeling(WorldModelingModel):
 
         b = int(state.deter.shape[0])
         action_dim = self.planet.rssm.action_dim
-        device, dt = state.deter.device.type, state.deter.dtype  # dtype too
+        device, dt = state.deter.device.type, state.deter.dtype
 
         mean = lucid.zeros(b, horizon, action_dim, dtype=dt, device=device)
         std = lucid.ones(b, horizon, action_dim, dtype=dt, device=device)

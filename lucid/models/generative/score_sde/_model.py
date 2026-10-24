@@ -536,7 +536,9 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         Returns
         -------
         Tensor
-            ``(N,)`` log-densities.
+            ``(N,)`` log-densities, reported at float32 or wider because it
+            sums over every dimension: a float16 sum of a VE prior's
+            squares overflows past a few dozen pixels.
 
         Notes
         -----
@@ -586,9 +588,10 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             draw = lucid.rand(shape, device=x.device)
             probe = (draw > 0.5).to(x.dtype) * 2.0 - 1.0
 
-        # The accumulator and the times in the data's dtype, as the samplers
-        # keep theirs: float32 ones answered a float16 model in float32.
-        divergence = lucid.zeros((count,), dtype=x.dtype, device=x.device)
+        # The times in the data's dtype, as the samplers keep theirs; the sums
+        # over every dimension at float32 or wider.
+        work = _float32_or_wider(x.dtype)
+        divergence = lucid.zeros((count,), dtype=work, device=x.device)
         current = x
         times = lucid.linspace(self.sde.t_min, 1.0, steps + 1, device=x.device)
         bounds = host_floats(times)
@@ -606,7 +609,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             # eps^T (d drift / d x) eps, by one vector-Jacobian product.
             (drift * probe).sum().backward()
             assert state.grad is not None
-            trace = (state.grad * probe).reshape(count, -1).sum(dim=-1)
+            trace = (state.grad * probe).reshape(count, -1).to(work).sum(dim=-1)
             divergence = divergence + trace.detach() * step
             current = (state + drift * step).detach()
 
@@ -620,14 +623,15 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         -----
         A zero-mean Gaussian in both cases; only the width differs, which
         is exactly the VE/VP distinction and the reason this is asked of
-        the SDE rather than assumed by the caller.
+        the SDE rather than assumed by the caller.  Summed at float32 or
+        wider, as :meth:`log_likelihood` reports.
         """
         count = int(x.shape[0])
         dims = 1
         for size in tuple(int(v) for v in x.shape)[1:]:
             dims *= size
         variance = self.sde.prior_variance
-        flat = x.reshape(count, -1)
+        flat = x.reshape(count, -1).to(_float32_or_wider(x.dtype))
         return -0.5 * (
             dims * math.log(2.0 * math.pi * variance) + (flat**2).sum(dim=-1) / variance
         )

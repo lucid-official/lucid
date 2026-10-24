@@ -29,7 +29,7 @@ __all__ = ["SDE", "VESDE", "VPSDE", "SubVPSDE", "make_sde"]
 
 
 def _expand(scalar: Tensor, like: Tensor) -> Tensor:
-    """Give a per-sample scalar the trailing axes and the dtype of ``like``."""
+    """Give a per-sample coefficient the trailing axes and dtype of the state."""
     shaped = scalar.reshape(int(scalar.shape[0]), *([1] * (like.ndim - 1)))
     return shaped.to(like.dtype)
 
@@ -39,7 +39,7 @@ def _wide(t: Tensor) -> Tensor:
 
     Near ``t_min`` that ``z`` is ~1e-4, and half precision rounds ``e^{-z}``
     to 1: the standard deviation came out 0 and the score infinite.  Such
-    coefficients are worked out here and cast back to ``t``'s dtype once.
+    coefficients are worked out here and cast once, to the state's dtype.
     """
     return t.to(_float32_or_wider(t.dtype))
 
@@ -54,6 +54,10 @@ class SDE(ABC):
     single network evaluation, and the prior the reverse process starts
     from.  Everything else — reverse SDE, probability-flow ODE,
     Predictor-Corrector — is derived from these and lives with the model.
+
+    Every coefficient takes the state's dtype; :meth:`diffusion`, which is
+    given no state, takes ``t``'s — and the samplers build ``t`` in the
+    state's dtype, so the two agree on every real call.
 
     Examples
     --------
@@ -246,7 +250,7 @@ class VESDE(SDE):
     @override
     def marginal_prob(self, x: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
         """Equation 31 — the mean is the sample itself."""
-        return x, self.sigma(t)
+        return x, self.sigma(t).to(x.dtype)
 
     @override
     def prior_sampling(
@@ -337,7 +341,7 @@ class VPSDE(SDE):
         log_coeff = self._log_mean_coeff(_wide(t))
         mean = _expand(log_coeff.exp(), x) * x
         std = (1.0 - (2.0 * log_coeff).exp()) ** 0.5
-        return mean, std.to(t.dtype)
+        return mean, std.to(x.dtype)
 
     @override
     def prior_sampling(
@@ -399,7 +403,7 @@ class SubVPSDE(VPSDE):
         log_coeff = self._log_mean_coeff(_wide(t))
         mean = _expand(log_coeff.exp(), x) * x
         std = 1.0 - (2.0 * log_coeff).exp()
-        return mean, std.to(t.dtype)
+        return mean, std.to(x.dtype)
 
 
 def make_sde(

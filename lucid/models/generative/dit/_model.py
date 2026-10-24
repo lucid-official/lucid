@@ -58,6 +58,11 @@ def _beta_schedule(config: DiTConfig) -> Tensor:
     )
 
 
+def _alpha_bar(betas: Tensor) -> Tensor:
+    r""":math:`\bar\alpha_t = \prod_{s \le t} (1 - \beta_s)`, in ``betas``' dtype."""
+    return lucid.cumprod(1.0 - betas)
+
+
 def _reverse_step(
     alpha_bar: Tensor, alpha_bar_prev: Tensor, eta: float, dtype: lucid.dtype
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -462,20 +467,21 @@ class DiTForImageGeneration(ImageGenerationModel):
         self.dit = DiTModel(config)
         betas = _beta_schedule(config)
         self.register_buffer("betas", betas, persistent=False)
-        alphas = 1.0 - betas
-        self.register_buffer("alphas_cumprod", lucid.cumprod(alphas), persistent=False)
+        self.register_buffer("alphas_cumprod", _alpha_bar(betas), persistent=False)
 
     def _alphas_cumprod_in(self, dtype: lucid.dtype, device: str) -> Tensor:
         r""":math:`\bar\alpha` in ``dtype`` on ``device``, as precise as built.
 
         The buffer follows the model's dtype, and float16 rounds
         :math:`\bar\alpha_0` and :math:`\bar\alpha_1` to exactly 1 — after
-        which the sampler's last step divides 0 by 0.  So a buffer narrower
-        than ``dtype`` is rebuilt from the config rather than widened.
+        which training adds no noise at those steps and the sampler's last
+        step divides 0 by 0.  So a buffer in any dtype other than ``dtype``
+        is rebuilt from the config rather than cast: a narrower one has
+        already lost the values, and a wider one holds the same.
         """
         table = self.alphas_cumprod
         if table.dtype != dtype:
-            table = lucid.cumprod(1.0 - _beta_schedule(self.config)).to(dtype)
+            table = _alpha_bar(_beta_schedule(self.config)).to(dtype)
         return table.to(device)
 
     def _split(self, prediction: Tensor) -> tuple[Tensor, Tensor | None]:
