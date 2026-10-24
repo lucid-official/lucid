@@ -758,12 +758,13 @@ class DiffusionMixin:
         (4, 3, 32, 32)
         """
         from lucid.models._output import GenerationOutput
+        from lucid.models._utils import _generative
         from lucid.models._utils._common import host_ints
-        from lucid.models._utils._generative import resolve_generation_device
 
+        module = cast(nn.Module, self)
         # A hard "cpu" default drew the noise off-device for any model that
         # had been moved to Metal, so the first forward raised.
-        device = resolve_generation_device(cast(nn.Module, self), device)
+        device = _generative.resolve_generation_device(module, device)
 
         if num_inference_steps is not None:
             scheduler.set_timesteps(num_inference_steps, device=device)
@@ -788,15 +789,14 @@ class DiffusionMixin:
                 H = W = int(sample_size)
             generator_shape = (int(in_channels), H, W)
 
-        full_shape = (n_samples, *generator_shape)
-        sample = lucid.randn(full_shape, device=device)
+        sample = _generative.start_noise(module, (n_samples, *generator_shape), device)
 
         intermediates: list[Tensor] = []
         # Schedulers keep their timesteps on the sampling device; read them
         # back once rather than syncing on every step.
         for t_int in host_ints(scheduler.timesteps):
             t_batch = lucid.tensor([t_int] * n_samples, device=device).long()
-            output = cast(nn.Module, self)(sample, t_batch)
+            output = module(sample, t_batch)
             model_pred = output.sample if hasattr(output, "sample") else output
             sample = scheduler.step(cast(Tensor, model_pred), t_int, sample)
             if return_intermediates:

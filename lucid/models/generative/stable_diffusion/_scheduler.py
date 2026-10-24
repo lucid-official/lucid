@@ -257,8 +257,13 @@ class DDIMScheduler:
                 )
             timestep = lucid.tensor([timestep], device=latent.device.type)
         shape = tuple(int(s) for s in latent.shape)
-        signal = extract_into_tensor(self._signal_scale, timestep, shape)
-        noise_scale = extract_into_tensor(self._noise_scale, timestep, shape)
+        # Cast at use: a scheduler outside a model keeps float32 tables,
+        # which would widen a float16 latent.
+        dtype = latent.dtype
+        signal = extract_into_tensor(self._signal_scale, timestep, shape, dtype=dtype)
+        noise_scale = extract_into_tensor(
+            self._noise_scale, timestep, shape, dtype=dtype
+        )
         return signal * latent + noise_scale * noise
 
     def step(

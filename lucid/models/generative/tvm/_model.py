@@ -38,7 +38,7 @@ from lucid import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
-from lucid.models._utils._generative import resolve_generation_device
+from lucid.models._utils._generative import resolve_generation_device, start_noise
 from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
     sincos_position_embedding,
@@ -1006,7 +1006,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         if noise is None:
             side = patch_grid_side(self.config.sample_size)
             shape = (n_samples, self.config.in_channels, side, side)
-            noise = lucid.randn(shape, device=device)
+            noise = start_noise(self, shape, device)
 
         network = self.ema_network if use_ema else self.tvm
         x = noise
@@ -1045,10 +1045,19 @@ class TVMForImageGeneration(ImageGenerationModel):
         >>> model.from_vae_latent(lucid.zeros((1, 4, 8, 8))).shape
         (1, 4, 8, 8)
         """
-        device = latent.device.type
-        mean = lucid.tensor(list(self.config.latent_mean), device=device)
-        std = lucid.tensor(list(self.config.latent_std), device=device)
-        return (latent - mean.reshape(1, -1, 1, 1)) / std.reshape(1, -1, 1, 1)
+        mean, std = self._latent_statistics(latent)
+        return (latent - mean) / std
+
+    def _latent_statistics(self, like: Tensor) -> tuple[Tensor, Tensor]:
+        """The per-channel whitening ``(mean, std)``, shaped ``(1, C, 1, 1)``.
+
+        In ``like``'s dtype as well as on its device: built at the default
+        dtype, they widened a float16 latent to float32.
+        """
+        device, dtype = like.device.type, like.dtype
+        mean = lucid.tensor(list(self.config.latent_mean), dtype=dtype, device=device)
+        std = lucid.tensor(list(self.config.latent_std), dtype=dtype, device=device)
+        return mean.reshape(1, -1, 1, 1), std.reshape(1, -1, 1, 1)
 
     def to_vae_latent(self, samples: Tensor) -> Tensor:
         r"""Undo the per-channel whitening the model's latents carry.
@@ -1081,7 +1090,5 @@ class TVMForImageGeneration(ImageGenerationModel):
         >>> model.to_vae_latent(lucid.zeros((1, 4, 8, 8))).shape
         (1, 4, 8, 8)
         """
-        device = samples.device.type
-        mean = lucid.tensor(list(self.config.latent_mean), device=device)
-        std = lucid.tensor(list(self.config.latent_std), device=device)
-        return samples * std.reshape(1, -1, 1, 1) + mean.reshape(1, -1, 1, 1)
+        mean, std = self._latent_statistics(samples)
+        return samples * std + mean

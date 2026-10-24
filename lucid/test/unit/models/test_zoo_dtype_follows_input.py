@@ -27,9 +27,12 @@ float32 constant a float64 run would and more:
   is a rollout the matrix skips, are driven through that forward, their
   sampler and their parts in float64 on the CPU and float16 / bfloat16
   on Metal.
-* **sampling** — every image-generation family's ``generate`` at two
-  steps in float16; most still draw their start noise in float32, which
-  is pinned as a strict expected failure under LCD-597.
+* **sampling** (LCD-597) — every image-generation family's ``generate``
+  at two steps in float64 on the CPU and float16 / bfloat16 on Metal
+  answers finite, in the model's dtype; likewise Score-SDE's three
+  samplers and its likelihood, a DiT schedule whose float16 copy rounds
+  ᾱ_1 to 1, TVM's latent whitening, and both schedulers' ``add_noise``,
+  whose float32 tables are cast at use.
 * **train** — every family of the training-step table, and the detection
   and segmentation losses that table leaves to other files, take their
   step in float16 on the CPU (the losses in float64 too); the loss and
@@ -412,24 +415,6 @@ def test_every_family_is_swept_or_driven_through_its_own_entry_point() -> None:
 
 # -- sampling -----------------------------------------------------------------
 
-_LCD_597 = "LCD-597: generate() draws its start noise without the model dtype"
-
-#: Families whose ``generate`` still answers float32 on a half model.
-_GENERATE_PENDING = {
-    "ddpm",
-    "dit",
-    "flow_matching",
-    "mean_flow",
-    "ncsn",
-    "neural_ode",
-    "nice",
-    "realnvp",
-    "rectified_flow",
-    "score_sde",
-    "tvm",
-    "vae",
-}
-
 #: On top of the matrix's shrink: a sampler runs the network once per step.
 _GENERATE_SMALLER: dict[str, dict[str, object]] = {
     "ddpm": {
@@ -474,12 +459,12 @@ _GENERATE_SMALLER: dict[str, dict[str, object]] = {
 _STEPPED = {"dit", "flow_matching", "mean_flow", "rectified_flow", "score_sde", "tvm"}
 
 
-def _generate(family: str, model: Any, dtype: lucid.dtype) -> Any:
+def _generate(family: str, model: Any, device: str, dtype: lucid.dtype) -> Any:
     """Two sampling steps through each family's own ``generate`` signature."""
     if family == "ddpm":
         return model.generate(model.make_scheduler(), num_inference_steps=2)
     if family == "stable_diffusion":
-        context = lucid.randn(1, 4, 16).to(_HALF_DEVICE).to(dtype)
+        context = lucid.randn(1, 4, 16).to(device).to(dtype)
         return model.generate(context, num_inference_steps=2, sampler="ddim")
     if family == "ncsn":
         return model.generate(1, langevin_steps=1)
@@ -488,22 +473,8 @@ def _generate(family: str, model: Any, dtype: lucid.dtype) -> Any:
     return model.generate(1)
 
 
-_GENERATORS = [
-    (
-        pytest.param(
-            family,
-            marks=pytest.mark.xfail(strict=True, reason=_LCD_597),
-            id=family,
-        )
-        if family in _GENERATE_PENDING
-        else pytest.param(family, id=family)
-    )
-    for family in zoo.families("image-generation")
-]
-
-
-@pytest.mark.parametrize("family", _GENERATORS)
-def test_generate_answers_in_the_model_dtype(family: str) -> None:
+def _generator(family: str, device: str, dtype: lucid.dtype, **extra: Any) -> Any:
+    """The family's sampler, shrunk, moved and cast."""
     name = zoo.representative(family, "image-generation")
     assert name is not None
     overrides = _GENERATE_SMALLER.get(family, {})
@@ -515,13 +486,141 @@ def test_generate_answers_in_the_model_dtype(family: str) -> None:
             **overrides,
         }
     lucid.manual_seed(0)
-    model = models.create_model(name, **overrides).to(_HALF_DEVICE).to(_F16).eval()
+    model = models.create_model(name, **{**overrides, **extra})
+    return model.to(device).to(dtype).eval()
+
+
+def _sampled_in(answer: Any, dtype: lucid.dtype, what: str) -> None:
+    """Every floating tensor ``answer`` holds is in ``dtype`` and finite."""
+    assert _floating(answer), f"{what} answered with no floating tensor"
+    wrong = _wrong(answer, dtype)
+    assert not wrong, f"a {_name(dtype)} {what}: {wrong}"
+    for path, t in _floating(answer):
+        finite = np.isfinite(t.to("cpu").to(_F64).numpy()).all()
+        assert finite, f"a {_name(dtype)} {what}: {path} is not finite"
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+@pytest.mark.parametrize("family", zoo.families("image-generation"))
+def test_generate_answers_in_the_model_dtype(
+    family: str, device: str, dtype: lucid.dtype
+) -> None:
+    """The start noise, the step's own draws and its coefficients follow it.
+
+    A float32 start widened the whole reverse chain of a half model, and
+    two schedules fed half precision ``1 - e^{-z}`` and ``1 - ᾱ`` near 0:
+    Score-SDE's sub-VP standard deviation came out 0 at ``t_min`` and its
+    samples NaN, so the answer must be finite as well as narrow.
+    """
+    _need(device)
+    model = _generator(family, device, dtype)
     with lucid.no_grad():
-        answer = _generate(family, model, _F16)
-    assert _floating(answer), "generate answered with no floating tensor"
-    assert not _wrong(
-        answer, _F16
-    ), f"a float16 {family} sampled {_wrong(answer, _F16)}"
+        answer = _generate(family, model, device, dtype)
+    _sampled_in(answer, dtype, f"{family} generate")
+
+
+@pytest.mark.parametrize("method", ["euler", "pc", "ode"])
+def test_every_score_sde_sampler_answers_in_half(method: str) -> None:
+    model = _generator("score_sde", _HALF_DEVICE, _F16)
+    with lucid.no_grad():
+        answer = model.generate(1, steps=2, method=method)
+    _sampled_in(answer, _F16, f"score_sde {method}")
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+def test_score_sde_log_likelihood_answers_in_the_data_dtype(
+    device: str, dtype: lucid.dtype
+) -> None:
+    """Its divergence accumulator and times were float32 ``zeros`` / ``ones``."""
+    _need(device)
+    model = _generator("score_sde", device, dtype)
+    side, channels = model.config.sample_size, model.config.in_channels
+    x = lucid.randn(1, channels, side, side).to(device).to(dtype)
+    assert model.log_likelihood(x, steps=2).dtype == dtype
+
+
+def test_a_half_dit_samples_where_half_rounds_alpha_bar_to_one() -> None:
+    """ᾱ_1 = 0.99977 is 1 in float16; the last DDIM step divided 0 by 0.
+
+    The sampler now works its coefficients out at float32 from the config's
+    schedule, not from the float16 buffer the model's cast left behind.
+    """
+    model = _generator("dit", _HALF_DEVICE, _F16, num_train_timesteps=4, beta_end=2e-4)
+    assert float(model.alphas_cumprod[1].item()) == 1.0, "the premise moved"
+    with lucid.no_grad():
+        answer = model.generate(1, steps=4)
+    _sampled_in(answer, _F16, "dit over its whole schedule")
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+def test_tvm_latent_whitening_keeps_the_latent_dtype(
+    device: str, dtype: lucid.dtype
+) -> None:
+    """Its per-channel mean and std were built at the default dtype."""
+    _need(device)
+    model = _generator("tvm", device, dtype)
+    latent = lucid.randn(1, model.config.in_channels, 4, 4).to(device).to(dtype)
+    whitened = model.from_vae_latent(latent)
+    assert whitened.dtype == dtype
+    assert model.to_vae_latent(whitened).dtype == dtype
+
+
+def _ddpm_scheduler() -> Any:
+    from lucid.models.generative import DDPMScheduler
+
+    return DDPMScheduler(num_train_timesteps=50)
+
+
+def _ddim_scheduler() -> Any:
+    from lucid.models.generative.stable_diffusion import (
+        DDIMScheduler,
+        StableDiffusionConfig,
+    )
+
+    return DDIMScheduler(StableDiffusionConfig(num_train_timesteps=50))
+
+
+_SCHEDULERS = {"ddpm": _ddpm_scheduler, "ddim": _ddim_scheduler}
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+@pytest.mark.parametrize("scheduler", sorted(_SCHEDULERS))
+def test_a_scheduler_noises_a_sample_in_its_dtype(
+    scheduler: str, device: str, dtype: lucid.dtype
+) -> None:
+    """``add_noise(x16, …)`` answered float32: the tables are float32.
+
+    The coefficients are cast at use, so the float32 answer is unchanged
+    and a narrow one is the float32 one, rounded.
+    """
+    _need(device)
+    lucid.manual_seed(0)
+    clean, noise = lucid.randn(2, 3, 4, 4), lucid.randn(2, 3, 4, 4)
+    steps = lucid.tensor([3, 41])
+    wide = _SCHEDULERS[scheduler]().add_noise(clean, noise, steps)
+    narrow = _SCHEDULERS[scheduler]().add_noise(
+        clean.to(device).to(dtype), noise.to(device).to(dtype), steps.to(device)
+    )
+    assert narrow.dtype == dtype
+    want = wide.to(_F64).numpy()
+    got = narrow.to("cpu").to(_F64).numpy()
+    assert float(np.abs(got - want).max()) < _TOL[dtype] * float(np.abs(want).max())
 
 
 # -- a training step --------------------------------------------------------------

@@ -27,10 +27,9 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
 from lucid.models._utils._generative import (
-    resolve_generation_device,
     flow_prior_log_prob,
-    flow_prior_sample,
     generative_activation,
+    start_noise,
 )
 from lucid.models.generative.nice._config import NICEConfig
 
@@ -465,6 +464,5 @@ class NICEForImageGeneration(ImageGenerationModel):
         >>> bool(lucid.allclose(first, model.generate(n_samples=2).samples))
         True
         """
-        device = resolve_generation_device(self, device)
-        h = flow_prior_sample(self._prior, (n_samples, self._input_dim), device=device)
+        h = start_noise(self, (n_samples, self._input_dim), device, prior=self._prior)
         return GenerationOutput(samples=self.nice.decode(h))

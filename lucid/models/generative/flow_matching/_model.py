@@ -34,6 +34,7 @@ from lucid.models._utils._generative import (
     exact_divergence,
     generative_activation,
     hutchinson_divergence,
+    start_noise,
     trace_probe,
 )
 from lucid.models.generative.flow_matching._config import FlowMatchingConfig
@@ -948,11 +949,10 @@ class FlowMatchingModel(PretrainedModel):
         >>> model.sample(noise=noise, steps=4).shape  # the batch follows noise
         (3, 3, 8, 8)
         """
-        device = resolve_generation_device(self, device)
         if noise is None:
             if n_samples <= 0:
                 raise ValueError(f"n_samples must be positive, got {n_samples}")
-            noise = lucid.randn((n_samples, *self._image_shape), device=device)
+            noise = start_noise(self, (n_samples, *self._image_shape), device)
         else:
             self._check_image(noise)
 

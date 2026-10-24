@@ -288,12 +288,15 @@ class DDPMScheduler(DiffusionScheduler):
             timesteps: ``(B,)`` int diffusion steps in ``[0, T)``.
 
         Returns:
-            Noisy images ``x_t`` of the same shape as ``original``.
+            Noisy images ``x_t`` of the same shape and dtype as
+            ``original``: the coefficients are cast at use, so the float32
+            tables do not widen a float16 batch.
         """
         self._follow(original)
-        sqrt_ab = extract_into_tensor(self._signal_scale, timesteps, original.shape)
+        shape, dtype = original.shape, original.dtype
+        sqrt_ab = extract_into_tensor(self._signal_scale, timesteps, shape, dtype=dtype)
         sqrt_one_minus_ab = extract_into_tensor(
-            self._noise_scale, timesteps, original.shape
+            self._noise_scale, timesteps, shape, dtype=dtype
         )
         return sqrt_ab * original + sqrt_one_minus_ab * noise
 
@@ -350,6 +353,6 @@ class DDPMScheduler(DiffusionScheduler):
         # Add Gaussian noise with variance σ_t² = β_t — the upper-bound
         # ("fixed-large") choice the class docstring describes.
         sigma = beta_t**0.5
-        z = lucid.randn(sample.shape, device=sample.device.type)
+        z = lucid.randn(sample.shape, dtype=sample.dtype, device=sample.device.type)
         out: Tensor = mean + sigma * z
         return out

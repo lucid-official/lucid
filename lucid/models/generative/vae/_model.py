@@ -39,10 +39,10 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, VAEOutput
 from lucid.models._utils._generative import (
-    resolve_generation_device,
     gaussian_kl_divergence,
     generative_activation,
     reparameterize,
+    start_noise,
 )
 from lucid.models.generative.vae._config import VAEConfig
 
@@ -570,12 +570,11 @@ class VAEForImageGeneration(ImageGenerationModel):
         device: str | None = None,
     ) -> GenerationOutput:
         """Sample ``n_samples`` images from the prior ``N(0, I)``."""
-        device = resolve_generation_device(self, device)
         if self._is_hierarchical:
-            zs = [lucid.randn((n_samples, d), device=device) for d in self._latent_dims]
+            zs = [start_noise(self, (n_samples, d), device) for d in self._latent_dims]
             samples = self.vae.decode(zs)
         else:
-            z = lucid.randn((n_samples, int(self._latent_dims[0])), device=device)
+            z = start_noise(self, (n_samples, int(self._latent_dims[0])), device)
             samples = self.vae.decode(z)
         if self._recon_loss == "bce":
             samples = F.sigmoid(samples)

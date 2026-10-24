@@ -18,6 +18,7 @@ from typing import ClassVar, cast, override
 
 import lucid
 import lucid.nn as nn
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import (
@@ -29,6 +30,7 @@ from lucid.models._tasks import ImageGenerationModel
 from lucid.models._utils._generative import (
     make_beta_schedule,
     resolve_generation_device,
+    start_noise,
 )
 from lucid.models.generative._common._transformers import (
     DiTBlock,
@@ -44,6 +46,46 @@ __all__ = [
     "DiTForImageGeneration",
     "DiTOutput",
 ]
+
+
+def _beta_schedule(config: DiTConfig) -> Tensor:
+    """The config's ``β`` schedule, on the CPU in the default dtype."""
+    return make_beta_schedule(
+        config.num_train_timesteps,
+        config.beta_schedule,
+        beta_start=config.beta_start,
+        beta_end=config.beta_end,
+    )
+
+
+def _reverse_step(
+    alpha_bar: Tensor, alpha_bar_prev: Tensor, eta: float, dtype: lucid.dtype
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    r"""Song et al.'s generalised reverse step, as coefficients in ``dtype``.
+
+    Recover :math:`x_0`, then re-noise it to the previous timestep:
+    ``(signal, noise_scale, keep, direction, sigma)`` with
+    ``x0 = (z - noise_scale * eps) / signal`` and
+    ``z' = keep * x0 + direction * eps + sigma * noise``.  ``eta`` scales
+    how much of that re-noising is random — 0 is DDIM's deterministic
+    step, 1 recovers DDPM's, which is what the paper samples with.
+
+    Worked out in the dtype of the :math:`\bar\alpha` given, and each
+    coefficient cast to ``dtype`` once: :math:`1 - \bar\alpha` is the
+    subtraction half precision cannot do near :math:`\bar\alpha = 1`.
+    """
+    sigma = eta * (
+        ((1.0 - alpha_bar_prev) / (1.0 - alpha_bar)).sqrt()
+        * (1.0 - alpha_bar / alpha_bar_prev).sqrt()
+    )
+    direction = (1.0 - alpha_bar_prev - sigma**2).clip(min=0.0).sqrt()
+    return (
+        alpha_bar.sqrt().to(dtype),
+        (1.0 - alpha_bar).sqrt().to(dtype),
+        alpha_bar_prev.sqrt().to(dtype),
+        direction.to(dtype),
+        sigma.to(dtype),
+    )
 
 
 class _CrossAttentionBlock(nn.Module):
@@ -410,20 +452,31 @@ class DiTForImageGeneration(ImageGenerationModel):
     config_class: ClassVar[type[DiTConfig]] = DiTConfig
     base_model_prefix = "dit"
 
+    betas: Tensor
+    alphas_cumprod: Tensor
+
     def __init__(self, config: DiTConfig) -> None:
         """Initialise the model. See the class docstring for parameters."""
         super().__init__(config)
         self.config: DiTConfig = config
         self.dit = DiTModel(config)
-        betas = make_beta_schedule(
-            config.num_train_timesteps,
-            config.beta_schedule,
-            beta_start=config.beta_start,
-            beta_end=config.beta_end,
-        )
+        betas = _beta_schedule(config)
         self.register_buffer("betas", betas, persistent=False)
         alphas = 1.0 - betas
         self.register_buffer("alphas_cumprod", lucid.cumprod(alphas), persistent=False)
+
+    def _alphas_cumprod_in(self, dtype: lucid.dtype, device: str) -> Tensor:
+        r""":math:`\bar\alpha` in ``dtype`` on ``device``, as precise as built.
+
+        The buffer follows the model's dtype, and float16 rounds
+        :math:`\bar\alpha_0` and :math:`\bar\alpha_1` to exactly 1 — after
+        which the sampler's last step divides 0 by 0.  So a buffer narrower
+        than ``dtype`` is rebuilt from the config rather than widened.
+        """
+        table = self.alphas_cumprod
+        if table.dtype != dtype:
+            table = lucid.cumprod(1.0 - _beta_schedule(self.config)).to(dtype)
+        return table.to(device)
 
     def _split(self, prediction: Tensor) -> tuple[Tensor, Tensor | None]:
         """Separate the noise from the covariance the decoder emits."""
@@ -551,39 +604,34 @@ class DiTForImageGeneration(ImageGenerationModel):
         )
         device = resolve_generation_device(self, device)
         if noise is None:
-            noise = lucid.randn(
-                (n_samples, config.in_channels, side, side), device=device
+            noise = start_noise(
+                self, (n_samples, config.in_channels, side, side), device
             )
 
         z = noise
+        dt = z.dtype
+        alphas_cumprod = self._alphas_cumprod_in(_float32_or_wider(dt), device)
         grid = [int(round(i * total / steps)) for i in range(steps, 0, -1)]
         with lucid.no_grad():
             for index, step in enumerate(grid):
                 t = min(step, total - 1)
-                ts = lucid.full((n_samples,), float(t), device=device, dtype=z.dtype)
+                ts = lucid.full((n_samples,), float(t), device=device, dtype=dt)
                 eps, _ = self._split(self.dit(z, ts, labels).sample)
 
-                alpha_bar = self.alphas_cumprod[t]
+                alpha_bar = alphas_cumprod[t]
                 previous = grid[index + 1] if index + 1 < len(grid) else 0
                 # The final step's alpha_bar_prev = 1 has to sit with the
                 # schedule; a bare CPU scalar broke the last step on Metal.
                 alpha_bar_prev = (
-                    self.alphas_cumprod[previous]
+                    alphas_cumprod[previous]
                     if previous > 0
                     else lucid.ones_like(alpha_bar)
                 )
-                # Song et al.'s generalised reverse step: recover x0,
-                # then re-noise it to the previous timestep.  `eta`
-                # scales how much of that re-noising is random — 0 is
-                # DDIM's deterministic step, 1 recovers DDPM's, which is
-                # what the paper samples with.
-                x0 = (z - (1.0 - alpha_bar).sqrt() * eps) / alpha_bar.sqrt()
-                sigma = eta * (
-                    ((1.0 - alpha_bar_prev) / (1.0 - alpha_bar)).sqrt()
-                    * (1.0 - alpha_bar / alpha_bar_prev).sqrt()
+                signal, noise_scale, keep, direction, sigma = _reverse_step(
+                    alpha_bar, alpha_bar_prev, eta, dt
                 )
-                direction = (1.0 - alpha_bar_prev - sigma**2).clip(min=0.0).sqrt()
-                z = alpha_bar_prev.sqrt() * x0 + direction * eps
+                x0 = (z - noise_scale * eps) / signal
+                z = keep * x0 + direction * eps
                 if eta > 0.0:
-                    z = z + sigma * lucid.randn(z.shape, device=device)
+                    z = z + sigma * lucid.randn(z.shape, dtype=dt, device=device)
         return GenerationOutput(samples=z)

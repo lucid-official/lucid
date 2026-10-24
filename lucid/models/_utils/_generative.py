@@ -23,6 +23,7 @@ import lucid
 import lucid.autograd
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid._types import Reduction
 from lucid.models._utils._common import host_floats
@@ -121,6 +122,8 @@ def extract_into_tensor(
     arr: Tensor,
     timesteps: Tensor,
     broadcast_shape: tuple[int, ...],
+    *,
+    dtype: lucid.dtype | None = None,
 ) -> Tensor:
     """Gather entries of a 1-D schedule at given timesteps and reshape for
     broadcasting against an image batch.
@@ -133,6 +136,11 @@ def extract_into_tensor(
         arr:             ``(T,)`` schedule tensor.
         timesteps:       ``(B,)`` int timesteps to gather.
         broadcast_shape: Target rank.  Usually ``(B, C, H, W)``.
+        dtype:           Dtype of the gathered coefficients; ``None``
+                         keeps ``arr``'s.  A scheduler passes its sample's:
+                         its tables are kept in float32 and cast at use,
+                         since a float32 coefficient widens the float16
+                         batch it multiplies.
 
     Returns:
         ``(B, 1, 1, …)`` (rank == ``len(broadcast_shape)``) so it broadcasts
@@ -171,6 +179,9 @@ def extract_into_tensor(
     # model moved to Metal still holds them there.
     table = arr if arr.device.type == device else arr.to(device)
     picked = lucid.take_along_dim(table, index, dim=0)
+    if dtype is not None:
+        # Cast the B gathered entries, not the T-entry table.
+        picked = picked.to(dtype)
     trailing = [1] * max(len(broadcast_shape) - 1, 0)
     return picked.reshape(int(index.shape[0]), *trailing)
 
@@ -666,6 +677,7 @@ def flow_prior_sample(
     shape: tuple[int, ...],
     *,
     device: str = "cpu",
+    dtype: lucid.dtype | None = None,
 ) -> Tensor:
     r"""Draw i.i.d. samples from a flow's factorised prior :math:`p_H`.
 
@@ -681,6 +693,9 @@ def flow_prior_sample(
         Shape of the requested sample block.
     device : str, optional
         Placement of the result.  Default ``"cpu"``.
+    dtype : lucid.dtype or None, optional
+        Dtype of the result — the flow's own, so a float16 flow decodes a
+        float16 draw.  ``None`` is the default dtype.
 
     Returns
     -------
@@ -694,21 +709,28 @@ def flow_prior_sample(
 
     Examples
     --------
+    >>> import lucid
     >>> from lucid.models._utils._generative import flow_prior_sample
     >>> flow_prior_sample("gaussian", (2, 3)).shape
     (2, 3)
+    >>> flow_prior_sample("logistic", (2, 3), dtype=lucid.float16).dtype
+    lucid.float16
 
     ``"gaussian"`` and ``"logistic"`` are the two a flow can be given;
     anything else is refused rather than silently defaulted.
     """
+    out = lucid.get_default_dtype() if dtype is None else dtype
     if name == "logistic":
         # Clip away the open-interval endpoints — the inverse CDF diverges
-        # at 0 and 1 and ``rand`` samples the half-open [0, 1).
+        # at 0 and 1 and ``rand`` samples the half-open [0, 1).  Drawn and
+        # transformed in float32 at least: float16 rounds 1 - 1e-7 up to 1,
+        # where ``log(1 - u)`` is -inf.
         eps = 1e-7
-        u = lucid.rand(shape, device=device).clip(eps, 1.0 - eps)
-        return u.log() - (1.0 - u).log()
+        u = lucid.rand(shape, dtype=_float32_or_wider(out), device=device)
+        u = u.clip(eps, 1.0 - eps)
+        return (u.log() - (1.0 - u).log()).to(out)
     if name == "gaussian":
-        return lucid.randn(shape, device=device)
+        return lucid.randn(shape, dtype=out, device=device)
     raise ValueError(f"Unsupported flow prior {name!r}")
 
 
@@ -1057,3 +1079,44 @@ def model_dtype(model: nn.Module) -> lucid.dtype:
         if param.is_floating_point():
             return param.dtype
     return lucid.get_default_dtype()
+
+
+def start_noise(
+    model: nn.Module,
+    shape: tuple[int, ...],
+    device: str | None,
+    *,
+    prior: str = "gaussian",
+) -> Tensor:
+    """The draw a sampler starts from, on ``model``'s device and in its dtype.
+
+    A float32 start ran a float16 model's whole reverse chain in float32,
+    as a CPU one once put a Metal model's on the wrong device.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The sampling model; its first parameter decides the device and its
+        first floating parameter the dtype.
+    shape : tuple[int, ...]
+        Shape of the draw.
+    device : str or None
+        Explicit device, which wins; ``None`` follows ``model``.
+    prior : str, default="gaussian"
+        A :func:`flow_prior_sample` name.
+
+    Returns
+    -------
+    Tensor
+        ``shape``-shaped draw from ``prior``.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> import lucid.nn as nn
+    >>> from lucid.models._utils._generative import start_noise
+    >>> start_noise(nn.Linear(2, 2).to(lucid.float16), (3, 2), None).dtype
+    lucid.float16
+    """
+    device = resolve_generation_device(model, device)
+    return flow_prior_sample(prior, shape, device=device, dtype=model_dtype(model))

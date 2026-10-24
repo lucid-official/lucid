@@ -22,6 +22,7 @@ from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput
 from lucid.models._utils._generative import (
     make_sigma_schedule,
+    model_dtype,
     resolve_generation_device,
 )
 from lucid.models.generative.ddpm._config import DDPMConfig
@@ -395,7 +396,8 @@ class NCSNForImageGeneration(ImageGenerationModel):
         # ``rand``.  The Gaussian N(0, sigma_1^2) start belongs to the later
         # VE-SDE formulation, not to NCSN or NCSNv2 — the previous comment
         # attributed it to NCSNv2, which is where the mix-up came from.
-        x = lucid.rand(shape, device=device)
+        dtype = model_dtype(self)
+        x = lucid.rand(shape, dtype=dtype, device=device)
 
         intermediates: list[Tensor] = []
         sigma_min_sq = self._sigma_min**2
@@ -405,7 +407,7 @@ class NCSNForImageGeneration(ImageGenerationModel):
             sqrt_alpha = math.sqrt(alpha_i)
             for _ in range(T):
                 score = self.ncsn(x, sigma_idx).sample  # (B, C, H, W)
-                z = lucid.randn(shape, device=device)
+                z = lucid.randn(shape, dtype=dtype, device=device)
                 x = x + (alpha_i / 2.0) * score + sqrt_alpha * z
             if return_intermediates:
                 intermediates.append(x)

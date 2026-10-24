@@ -19,11 +19,13 @@ from dataclasses import dataclass
 from typing import ClassVar, cast, override
 
 import lucid
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.diffeq import odeint
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, ModelOutput
+from lucid.models._utils._generative import model_dtype, resolve_generation_device
 from lucid.models.generative.ddpm._config import DDPMConfig
 from lucid.models.generative.ddpm._model import _DDPMUNet
 from lucid.models.generative.score_sde._config import ScoreSDEConfig
@@ -355,22 +357,29 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         count = int(x.shape[0])
         g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))
         drift = self.sde.drift(x, t) - g**2 * self._guided_score(x, t, guidance)
-        noise = lucid.randn(tuple(int(v) for v in x.shape), device=x.device)
+        noise = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
         return cast(Tensor, x + drift * (-dt) + g * (dt**0.5) * noise)
 
     def _corrector(
         self, x: Tensor, t: Tensor, guidance: _Guidance | None = None
     ) -> Tensor:
         """Langevin steps at fixed ``t`` — the 'corrector' half."""
+        # The step size is read from two norms, taken at float32 or wider:
+        # a float16 score's squares overflow once summed over an image.
+        work = _float32_or_wider(x.dtype)
         for _ in range(self._corrector_steps):
             score = self._guided_score(x, t, guidance)
-            noise = lucid.randn(tuple(int(v) for v in x.shape), device=x.device)
+            noise = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
             count = int(x.shape[0])
             grad_norm = float(
-                ((score.reshape(count, -1) ** 2).sum(dim=-1) ** 0.5).mean().item()
+                ((score.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5)
+                .mean()
+                .item()
             )
             noise_norm = float(
-                ((noise.reshape(count, -1) ** 2).sum(dim=-1) ** 0.5).mean().item()
+                ((noise.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5)
+                .mean()
+                .item()
             )
             if grad_norm == 0.0:
                 break
@@ -437,7 +446,8 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         if method not in ("pc", "euler", "ode"):
             raise ValueError(f"method must be 'pc', 'euler' or 'ode', got {method!r}")
         config = cast(ScoreSDEConfig, self.config)
-        resolved = device or next(iter(self.score_sde.unet.parameters())).device.type
+        resolved = resolve_generation_device(self, device)
+        dtype = model_dtype(self)
         size = config.sample_size
         assert isinstance(size, int)
         shape: tuple[int, ...] = (n_samples, config.in_channels, size, size)
@@ -446,13 +456,14 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         with lucid.no_grad():
             if method == "ode":
                 return GenerationOutput(
-                    samples=self._solve_ode(shape, resolved, count, guidance)
+                    samples=self._solve_ode(shape, resolved, dtype, count, guidance)
                 )
-            x = self.sde.prior_sampling(shape, resolved)
+            x = self.sde.prior_sampling(shape, resolved, dtype=dtype)
             times = host_floats(self._timesteps(count, resolved))
             dt = (1.0 - self.sde.t_min) / max(count - 1, 1)
             for time in times:
-                t = lucid.ones((n_samples,), device=resolved) * time
+                # In the sample's dtype, as training draws its times.
+                t = lucid.ones((n_samples,), dtype=dtype, device=resolved) * time
                 if method == "pc":
                     x = self._corrector(x, t, guidance)
                 x = self._predictor(x, t, dt, guidance)
@@ -462,6 +473,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         self,
         shape: tuple[int, ...],
         device: str,
+        dtype: lucid.dtype,
         steps: int,
         guidance: _Guidance | None = None,
     ) -> Tensor:
@@ -487,14 +499,16 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
 
         def rhs(t_scalar: Tensor, flat: Tensor) -> Tensor:
             x = flat.reshape(*shape)
-            t = lucid.ones((count,), device=device) * float(t_scalar.item())
+            t = lucid.ones((count,), dtype=flat.dtype, device=device) * float(
+                t_scalar.item()
+            )
             g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))
             drift = self.sde.drift(x, t) - 0.5 * g**2 * self._guided_score(
                 x, t, guidance
             )
             return drift.reshape(-1)
 
-        start = self.sde.prior_sampling(shape, device).reshape(-1)
+        start = self.sde.prior_sampling(shape, device, dtype=dtype).reshape(-1)
         path = odeint(
             rhs,
             start,
@@ -572,7 +586,9 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             draw = lucid.rand(shape, device=x.device)
             probe = (draw > 0.5).to(x.dtype) * 2.0 - 1.0
 
-        divergence = lucid.zeros((count,), device=x.device)
+        # The accumulator and the times in the data's dtype, as the samplers
+        # keep theirs: float32 ones answered a float16 model in float32.
+        divergence = lucid.zeros((count,), dtype=x.dtype, device=x.device)
         current = x
         times = lucid.linspace(self.sde.t_min, 1.0, steps + 1, device=x.device)
         bounds = host_floats(times)
@@ -580,7 +596,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         for i in range(steps):
             start = bounds[i]
             step = bounds[i + 1] - start
-            t = lucid.ones((count,), device=x.device) * start
+            t = lucid.ones((count,), dtype=x.dtype, device=x.device) * start
             state = current.detach()
             state.requires_grad = True
             g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))

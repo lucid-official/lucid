@@ -28,10 +28,9 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
 from lucid.models._utils._generative import (
-    resolve_generation_device,
     flow_prior_log_prob,
-    flow_prior_sample,
     generative_activation,
+    start_noise,
 )
 from lucid.models.generative.realnvp._config import RealNVPConfig
 
@@ -783,8 +782,7 @@ class RealNVPForImageGeneration(ImageGenerationModel):
             ...
         ValueError: temperature must be positive, got 0.0
         """
-        device = resolve_generation_device(self, device)
         if temperature <= 0.0:
             raise ValueError(f"temperature must be positive, got {temperature}")
-        z = flow_prior_sample(self._prior, (n_samples, self._input_dim), device=device)
+        z = start_noise(self, (n_samples, self._input_dim), device, prior=self._prior)
         return GenerationOutput(samples=self.realnvp.decode(z * temperature))

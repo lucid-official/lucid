@@ -45,6 +45,7 @@ from lucid.models._utils._generative import (
     generative_activation,
     hutchinson_divergence,
     resolve_generation_device,
+    start_noise,
     trace_probe,
 )
 from lucid.models.generative.rectified_flow._config import (
@@ -1270,11 +1271,10 @@ class RectifiedFlowModel(PretrainedModel):
         >>> model.nfe  # Euler, so the budget is exactly the step count
         4
         """
-        device = resolve_generation_device(self, device)
         if noise is None:
             if n_samples <= 0:
                 raise ValueError(f"n_samples must be positive, got {n_samples}")
-            noise = lucid.randn((n_samples, *self._image_shape), device=device)
+            noise = start_noise(self, (n_samples, *self._image_shape), device)
         else:
             self._check_image(noise)
 
@@ -1375,11 +1375,10 @@ class RectifiedFlowModel(PretrainedModel):
         >>> bool(lucid.allclose(target, z1 - z0))  # the next round's target
         True
         """
-        device = resolve_generation_device(self, device)
         if noise is None:
             if n_samples <= 0:
                 raise ValueError(f"n_samples must be positive, got {n_samples}")
-            noise = lucid.randn((n_samples, *self._image_shape), device=device)
+            noise = start_noise(self, (n_samples, *self._image_shape), device)
         else:
             self._check_image(noise)
         return noise, self.sample(steps=steps, noise=noise)
@@ -1505,8 +1504,7 @@ class RectifiedFlowModel(PretrainedModel):
         if noise is None:
             if n_samples <= 0:
                 raise ValueError(f"n_samples must be positive, got {n_samples}")
-            device = resolve_generation_device(self, device)
-            noise = lucid.randn((n_samples, *self._image_shape), device=device)
+            noise = start_noise(self, (n_samples, *self._image_shape), device)
         else:
             self._check_image(noise)
 

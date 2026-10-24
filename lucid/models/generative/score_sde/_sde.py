@@ -22,14 +22,26 @@ from abc import ABC, abstractmethod
 from typing import override
 
 import lucid
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 
 __all__ = ["SDE", "VESDE", "VPSDE", "SubVPSDE", "make_sde"]
 
 
 def _expand(scalar: Tensor, like: Tensor) -> Tensor:
-    """Give a per-sample scalar the trailing axes needed to broadcast."""
-    return scalar.reshape(int(scalar.shape[0]), *([1] * (like.ndim - 1)))
+    """Give a per-sample scalar the trailing axes and the dtype of ``like``."""
+    shaped = scalar.reshape(int(scalar.shape[0]), *([1] * (like.ndim - 1)))
+    return shaped.to(like.dtype)
+
+
+def _wide(t: Tensor) -> Tensor:
+    """``t`` at float32 or wider, for a coefficient of the form ``1 - e^{-z}``.
+
+    Near ``t_min`` that ``z`` is ~1e-4, and half precision rounds ``e^{-z}``
+    to 1: the standard deviation came out 0 and the score infinite.  Such
+    coefficients are worked out here and cast back to ``t``'s dtype once.
+    """
+    return t.to(_float32_or_wider(t.dtype))
 
 
 class SDE(ABC):
@@ -115,8 +127,26 @@ class SDE(ABC):
         """
 
     @abstractmethod
-    def prior_sampling(self, shape: tuple[int, ...], device: str) -> Tensor:
-        """Draw from the distribution the reverse process starts at."""
+    def prior_sampling(
+        self, shape: tuple[int, ...], device: str, *, dtype: lucid.dtype | None = None
+    ) -> Tensor:
+        """Draw from the distribution the reverse process starts at.
+
+        Parameters
+        ----------
+        shape : tuple[int, ...]
+            Shape of the draw, ``(N, C, H, W)``.
+        device : str
+            Where to draw.
+        dtype : lucid.dtype or None, optional, keyword-only
+            The sampling model's, so a float16 model starts from a float16
+            draw; ``None`` is the default dtype.
+
+        Returns
+        -------
+        Tensor
+            ``shape``-shaped prior sample.
+        """
 
     @property
     @abstractmethod
@@ -219,9 +249,11 @@ class VESDE(SDE):
         return x, self.sigma(t)
 
     @override
-    def prior_sampling(self, shape: tuple[int, ...], device: str) -> Tensor:
+    def prior_sampling(
+        self, shape: tuple[int, ...], device: str, *, dtype: lucid.dtype | None = None
+    ) -> Tensor:
         """:math:`\\mathcal{N}(0, \\sigma_{\\max}^2 I)`."""
-        return lucid.randn(shape, device=device) * self.sigma_max
+        return lucid.randn(shape, dtype=dtype, device=device) * self.sigma_max
 
 
 class VPSDE(SDE):
@@ -302,15 +334,17 @@ class VPSDE(SDE):
     @override
     def marginal_prob(self, x: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
         """Equation 33."""
-        log_coeff = self._log_mean_coeff(t)
+        log_coeff = self._log_mean_coeff(_wide(t))
         mean = _expand(log_coeff.exp(), x) * x
         std = (1.0 - (2.0 * log_coeff).exp()) ** 0.5
-        return mean, std
+        return mean, std.to(t.dtype)
 
     @override
-    def prior_sampling(self, shape: tuple[int, ...], device: str) -> Tensor:
+    def prior_sampling(
+        self, shape: tuple[int, ...], device: str, *, dtype: lucid.dtype | None = None
+    ) -> Tensor:
         """:math:`\\mathcal{N}(0, I)`."""
-        return lucid.randn(shape, device=device)
+        return lucid.randn(shape, dtype=dtype, device=device)
 
 
 class SubVPSDE(VPSDE):
@@ -355,16 +389,17 @@ class SubVPSDE(VPSDE):
     @override
     def diffusion(self, t: Tensor) -> Tensor:
         """Equation 12's damped coefficient."""
-        discount = 1.0 - (-2.0 * self._integral_beta(t)).exp()
-        return (self.beta(t) * discount) ** 0.5
+        wide = _wide(t)
+        discount = 1.0 - (-2.0 * self._integral_beta(wide)).exp()
+        return ((self.beta(wide) * discount) ** 0.5).to(t.dtype)
 
     @override
     def marginal_prob(self, x: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
         """Equation 29's sub-VP row — note the square, not a square root."""
-        log_coeff = self._log_mean_coeff(t)
+        log_coeff = self._log_mean_coeff(_wide(t))
         mean = _expand(log_coeff.exp(), x) * x
         std = 1.0 - (2.0 * log_coeff).exp()
-        return mean, std
+        return mean, std.to(t.dtype)
 
 
 def make_sde(

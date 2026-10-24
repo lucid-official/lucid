@@ -36,7 +36,7 @@ from lucid.models._output import (
     ModelOutput,
 )
 from lucid.models._tasks import ImageGenerationModel
-from lucid.models._utils._generative import resolve_generation_device
+from lucid.models._utils._generative import resolve_generation_device, start_noise
 from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
     DiTBlock,
@@ -547,8 +547,8 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
         side = patch_grid_side(config.sample_size)
         device = resolve_generation_device(self, device)
         if noise is None:
-            noise = lucid.randn(
-                (n_samples, config.in_channels, side, side), device=device
+            noise = start_noise(
+                self, (n_samples, config.in_channels, side, side), device
             )
 
         z = noise
