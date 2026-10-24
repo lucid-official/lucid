@@ -29,6 +29,7 @@ from lucid._dispatch import (
 from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._ops._dims import (
     _dim_size,
+    _kept_sizes,
     _require_real_axis,
     _to_axes,
     _wrap_dim,
@@ -200,6 +201,7 @@ _complex_parts = _make_arith_adapter(_C_engine.complex)
 def _complex_adapter(real: _Impl, imag: _Impl) -> _Impl:
     """complex(real, imag) — the reference's names for the two parts."""
     return _complex_parts(real, imag)
+
 
 
 def _make_join_adapter(engine_fn: Callable[..., _Impl]) -> Callable[..., _Impl]:
@@ -640,29 +642,18 @@ def _permute_adapter(x_impl: _Impl, dims: int | Sequence[int]) -> _Impl:
 
 
 def _broadcast_to_adapter(x_impl: _Impl, size: int | Sequence[int]) -> _Impl:
-    """broadcast_to(input, size) — ``expand`` without the ``-1``."""
-    return _C_engine.expand(x_impl, _int_list(size, "broadcast_to", "size"))
+    """broadcast_to(input, size) — ``-1`` keeps a dim's size, as in ``expand``."""
+    raw = _int_list(size, "broadcast_to", "size")
+    return _C_engine.expand(x_impl, _kept_sizes(x_impl.shape, raw, "broadcast_to"))
 
 
 def _expand_adapter(
     x_impl: _Impl, size: int | Sequence[int], *, implicit: bool = False
 ) -> _Impl:
-    """expand(input, size, *, implicit=False) — ``x.expand(2, 3)`` is ``x.expand((2, 3))``.
-
-    ``-1`` in any position means *keep the existing size along that dim*,
-    matching the reference framework semantics.
-    """
+    """expand(input, size, *, implicit=False) — ``x.expand(2, 3)`` is ``x.expand((2, 3))``."""
     del implicit
     raw = _int_list(size, "expand", "size")
-    # Resolve -1 entries: replace with the corresponding source dimension.
-    src_shape = list(x_impl.shape)
-    ndim_src = len(src_shape)
-    ndim_dst = len(raw)
-    # If expanding to more dims, prepend 1s to src_shape (implicit broadcast).
-    if ndim_dst > ndim_src:
-        src_shape = [1] * (ndim_dst - ndim_src) + src_shape
-    resolved = [src_shape[i] if d == -1 else d for i, d in enumerate(raw)]
-    return _C_engine.expand(x_impl, resolved)
+    return _C_engine.expand(x_impl, _kept_sizes(x_impl.shape, raw, "expand"))
 
 
 def _flip_adapter(x_impl: _Impl, dims: int | Sequence[int]) -> _Impl:

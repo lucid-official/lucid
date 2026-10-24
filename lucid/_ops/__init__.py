@@ -20,9 +20,13 @@ For static type-checking, the same per-op signatures are emitted into
 """
 
 import builtins
+import functools
 import inspect
+import operator
 import re
 import sys
+import types
+import typing
 from typing import TYPE_CHECKING
 
 from lucid import _promotion
@@ -375,3 +379,40 @@ _populate_free_fns()
 # ``inspect.signature`` raise NameError — which is what help(), an IDE
 # and the docs build all call.
 from lucid._tensor.tensor import Tensor
+
+
+def _tensor_typed(annotation: object) -> object:
+    """``annotation`` with the engine's ``TensorImpl`` read as ``Tensor``, at any depth."""
+    if annotation is _C_engine.TensorImpl:
+        return Tensor
+    args = typing.get_args(annotation)
+    typed = tuple(_tensor_typed(arg) for arg in args)
+    if typed == args:
+        return annotation
+    origin = typing.get_origin(annotation)
+    if origin is types.UnionType:
+        return functools.reduce(operator.or_, typed)
+    return origin[typed]
+
+
+def _publish_signatures() -> None:
+    """Retype each free function's signature as its caller sees it.
+
+    The signatures are read from the adapters, which take and give the
+    engine's ``TensorImpl``; the wrapper unwraps and wraps around them, so
+    ``lucid.contiguous`` takes and returns a ``Tensor``, as the stub says.
+    ``Tensor`` is importable only here, after the wrappers are made.
+    """
+    for name in _FREE_FN_NAMES:
+        fn = globals()[name]
+        sig = inspect.signature(fn)
+        fn.__dict__["__signature__"] = sig.replace(
+            parameters=[
+                p.replace(annotation=_tensor_typed(p.annotation))
+                for p in sig.parameters.values()
+            ],
+            return_annotation=_tensor_typed(sig.return_annotation),
+        )
+
+
+_publish_signatures()

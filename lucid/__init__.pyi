@@ -5054,17 +5054,20 @@ def concat(tensors: list[Tensor], dim: _int = ...) -> Tensor:
 def real(input: Tensor) -> Tensor:
     r"""    Real part of a complex tensor.
     
-    For complex inputs, returns the real component as a real-valued tensor of the same shape; for real inputs it returns the input unchanged.
+    For a complex input, returns its real component as a real tensor of
+    the matching precision that is a view of the input's storage — writing
+    into it changes the input, on Metal as on the CPU.  A real input is its
+    own real part and is returned itself: ``lucid.real(x) is x``.
     
     Parameters
     ----------
     input : Tensor
-        Input tensor.
+        Input tensor, complex or real.
     
     Returns
     -------
     Tensor
-        Element-wise result with the same shape as ``input``.
+        A view with the same shape as ``input``, or ``input`` itself.
     
     Notes
     -----
@@ -5079,25 +5082,36 @@ def real(input: Tensor) -> Tensor:
     Examples
     --------
     >>> import lucid
-    >>> x = lucid.tensor([1.0, 2.0, 3.0])
-    >>> lucid.real(x)
-    Tensor([...])
+    >>> z = lucid.tensor([1 + 2j, 3 - 1j])
+    >>> lucid.real(z)
+    tensor([1., 3.])
+    >>> x = lucid.tensor([1.0, 2.0])
+    >>> lucid.real(x) is x
+    True
     """
     ...
 def imag(input: Tensor) -> Tensor:
     r"""    Imaginary part of a complex tensor.
     
-    For complex inputs, returns the imaginary component as a real-valued tensor of the same shape; for real inputs it returns a zero tensor.
+    Returns the imaginary component of a complex input as a real tensor of
+    the matching precision that is a view of the input's storage — writing
+    into it changes the input, on Metal as on the CPU.
     
     Parameters
     ----------
     input : Tensor
-        Input tensor.
+        Complex input tensor.
     
     Returns
     -------
     Tensor
-        Element-wise result with the same shape as ``input``.
+        A view with the same shape as ``input``.
+    
+    Raises
+    ------
+    NotImplementedError
+        ``input`` is not complex: a real tensor has no imaginary part to
+        view (a ``RuntimeError`` too, as the reference raises).
     
     Notes
     -----
@@ -5112,9 +5126,9 @@ def imag(input: Tensor) -> Tensor:
     Examples
     --------
     >>> import lucid
-    >>> x = lucid.tensor([1.0, 2.0, 3.0])
-    >>> lucid.imag(x)
-    Tensor([...])
+    >>> z = lucid.tensor([1 + 2j, 3 - 1j])
+    >>> lucid.imag(z)
+    tensor([2., -1.])
     """
     ...
 def complex(real: Tensor, imag: Tensor) -> Tensor: ...

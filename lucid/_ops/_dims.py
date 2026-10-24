@@ -9,7 +9,8 @@ used the raw rank indexed past a 0-d shape (``list index out of range``) or
 let an axis past the last one through.  This module owns the rule on the
 Python side: :func:`_to_axes` reads a dim spelling, :func:`_wrap_dim` and
 :func:`_wrap_dims` resolve it, :func:`_dim_size` reads the axis's extent.
-A new Python axis path takes its dims here.
+A new Python axis path takes its dims here.  :func:`_kept_sizes` reads the
+``-1`` of a target size the same way, aligned from the right.
 """
 
 import operator
@@ -99,6 +100,24 @@ def _wrap_dims(dims: Sequence[int], ndim: int, op: str) -> list[int]:
 def _dim_size(shape: Sequence[int], wrapped: int) -> int:
     """The extent of the wrapped axis: 1 for a 0-d tensor's notional one."""
     return int(shape[wrapped]) if shape else 1
+
+
+def _kept_sizes(shape: Sequence[int], size: Sequence[int], op: str) -> list[int]:
+    """``size`` for ``expand`` / ``broadcast_to``, each ``-1`` the size it keeps.
+
+    ``size`` aligns with ``shape`` from the right, so ``-1`` stands for the
+    size of the dim it lines up with.  In a leading dim ``shape`` does not
+    have it keeps nothing and is refused, as the reference refuses it —
+    ``expand`` read it as a 1, and ``broadcast_to`` refused every ``-1``.
+    """
+    lead = len(size) - len(shape)
+    for i, d in enumerate(size[: max(lead, 0)]):
+        if d == -1:
+            raise _C_engine.InvalidArgument(
+                f"{op}: the size -1 isn't allowed in a leading, non-existing "
+                f"dimension {i} (target size {list(size)}, input shape {list(shape)})"
+            )
+    return [int(shape[i - lead]) if d == -1 else d for i, d in enumerate(size)]
 
 
 def _require_real_axis(ndim: int, message: str) -> None:

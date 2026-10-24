@@ -152,6 +152,21 @@ def _float_valued(engine_fn: _Unary, *, engine_promotes: bool = True) -> _Unary:
     return _op
 
 
+def _real(input: _C_engine.TensorImpl, /) -> _C_engine.TensorImpl:
+    """real(input): a complex tensor's real part as a view, a real tensor itself.
+
+    The engine op refuses a real operand, where the reference hands it
+    back — ``real(x) is x`` — so ``x.real`` and ``lucid.real(x)`` take any
+    tensor.  ``imag`` keeps the refusal: a real tensor has no imaginary
+    part to view, and the reference refuses it too.
+    """
+    if input.dtype in (_C_engine.C64, _C_engine.C128):
+        return _C_engine.real(input)
+    return input
+
+
+A._keep_engine_signature(_real, _C_engine.real)
+
 _R = _C_engine  # shorthand
 
 # fmt: off
@@ -584,7 +599,7 @@ _REGISTRY: list[OpEntry] = [
     # Each backend implements these natively: CPU walks the interleaved
     # ``[re, im, ...]`` storage; GPU dispatches to ``mlx::core::real`` /
     # ``imag`` / ``conjugate``.  ``complex`` builds a C64 from two F32 inputs.
-    OpEntry("real",    _R.real,    1, method_name=None, free_fn_name="real"),
+    OpEntry("real",    _real,      1, method_name=None, free_fn_name="real"),
     OpEntry("imag",    _R.imag,    1, method_name=None, free_fn_name="imag"),
     OpEntry("complex", A._complex_adapter, 2, method_name=None, free_fn_name="complex"),
     OpEntry("conj",    _R.conj,    1, method_name=None, free_fn_name="conj"),
