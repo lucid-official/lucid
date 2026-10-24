@@ -6,7 +6,7 @@ Re-exported by :mod:`lucid.nn.functional.activations`.
 import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry
+from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 from lucid._ops._reduce import _require_floating
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional.normalization import normalize
@@ -118,4 +118,7 @@ def pairwise_distance(
     # The shared vector norm, so a zero distance (``eps=0`` at coincident
     # points) has the 0 subgradient rather than a nan one, half inputs
     # reduce in float32, and ``p=0`` counts instead of dividing by zero.
-    return _l.linalg.vector_norm(x1 - x2 + eps, p, -1, keepdim)
+    # No row: the reference's norm has none, where vector_norm's is FP32 on
+    # Metal, so autocast is off for it.
+    with _autocast_suspended(_unwrap(x1).device):
+        return _l.linalg.vector_norm(x1 - x2 + eps, p, -1, keepdim)

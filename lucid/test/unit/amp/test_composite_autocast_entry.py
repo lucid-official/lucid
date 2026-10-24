@@ -32,8 +32,8 @@ bfloat16)`` with a float32 and a half input: no error (the backward too),
 the values of the same call outside autocast on the inputs at the dtype the
 row gives, and the dtype the reference gives (``-m parity`` checks the table
 against the reference).  Every loss is in the table at every reduction.
-The rows still wrong are strict xfails naming their issue — they must
-still run and match their values; only the dtype is pinned.
+``pairwise_distance`` and ``logsigmoid`` have no row, and their parts'
+FP32 Metal rows (``vector_norm``, ``softplus``) widened them (LCD-614).
 
 A composite with a row enters through ``_autocast_entry`` (a loss through
 ``amp_op``, the same entry around its whole call), one without through
@@ -129,11 +129,6 @@ class _Make:
 
 _Fn = Callable[[Any, _Make], Any]
 
-_INNER_ROW = (
-    "LCD-614: a part's FP32 Metal row applies inside (vector_norm, softplus); "
-    "the reference keeps float16"
-)
-
 
 @dataclass(frozen=True)
 class _Case:
@@ -146,10 +141,6 @@ class _Case:
     devices: tuple[str, ...] = ("metal", "cpu")
     # Whether the operands require grad (a backward then runs as well).
     grad: bool = True
-    # Devices where a half input still comes out in another dtype than the
-    # reference's, and why — pinned as strict xfails.
-    pinned: tuple[str, ...] = ()
-    reason: str = ""
     # No row: its parts apply theirs, as the reference's do, so it rounds
     # to half between them and its values are the call outside autocast's
     # to within half precision only.
@@ -278,20 +269,18 @@ _CASES: dict[str, _Case] = {
         "half",
         devices=("metal",),
     ),
+    # No row, as the reference's norm and log_sigmoid have none: the FP32
+    # Metal rows of vector_norm and softplus inside must not apply.
     "pairwise_distance": _Case(
-        lambda F, m: F.pairwise_distance(m(3, 4), m(3, 4, seed=1)),
-        "half",
-        "half",
-        pinned=("metal",),
-        reason=_INNER_ROW,
+        lambda F, m: F.pairwise_distance(m(3, 4), m(3, 4, seed=1)), "half", "half"
     ),
-    "logsigmoid": _Case(
-        lambda F, m: F.logsigmoid(m(4, 4, scale=4.0)),
-        "half",
-        "half",
-        pinned=("metal",),
-        reason=_INNER_ROW,
+    "pairwise_distance_float32_operand": _Case(
+        lambda F, m: F.pairwise_distance(m(3, 4), m(3, 4, seed=1).float()),
+        "float32",
+        "float32",
+        mixed=True,
     ),
+    "logsigmoid": _Case(lambda F, m: F.logsigmoid(m(4, 4, scale=4.0)), "half", "half"),
 }
 
 
@@ -317,8 +306,6 @@ class _Loss:
     cpu: str | dict[str, str] = _F32
     decomposed: bool = False
     mixed: bool = False
-    # (device, reduction) cells still wrong — strict xfails naming the issue.
-    pinned: tuple[tuple[str, str], ...] = ()
 
 
 def _at(spec: str | dict[str, str], reduction: str) -> str:
@@ -438,7 +425,6 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         metal={"none": "half", "mean": "half", "sum": _F32},
         cpu="half",
         decomposed=True,
-        pinned=(("metal", "none"), ("metal", "mean")),
     ),
     ("cosine_embedding_loss", ""): _Loss(
         lambda F, m, r: F.cosine_embedding_loss(
@@ -522,16 +508,13 @@ for (_name, _variant), _loss in _LOSSES.items():
             _bound(_loss.fn, _r),
             _at(_loss.metal, _r),
             _at(_loss.cpu, _r),
-            pinned=tuple(d for d, r in _loss.pinned if r == _r),
-            reason=_INNER_ROW,
             decomposed=_loss.decomposed,
             mixed=_loss.mixed,
         )
 
 
-def _params(*, pin: bool) -> list[ParameterSet]:
-    """Every (case, setting, input) a case is checked on; ``pin`` marks the
-    cells still wrong as strict xfails."""
+def _params() -> list[ParameterSet]:
+    """Every (case, setting, input) a case is checked on."""
     params = []
     for name, case in sorted(_CASES.items()):
         for device, autocast_dt in _SETTINGS:
@@ -539,12 +522,6 @@ def _params(*, pin: bool) -> list[ParameterSet]:
                 continue
             for input_dt in _INPUTS:
                 marks = [_METAL] if device == "metal" else []
-                if pin and input_dt == "half" and device in case.pinned:
-                    marks.append(
-                        pytest.mark.xfail(
-                            strict=True, raises=AssertionError, reason=case.reason
-                        )
-                    )
                 params.append(
                     pytest.param(
                         name,
@@ -582,13 +559,11 @@ def _under_autocast(
         return case.fn(lucid.nn.functional, make), make.made
 
 
-@pytest.mark.parametrize(
-    ("name", "device", "autocast_dt", "input_dt"), _params(pin=False)
-)
+@pytest.mark.parametrize(("name", "device", "autocast_dt", "input_dt"), _params())
 def test_a_composite_under_autocast_runs_and_keeps_its_values(
     name: str, device: str, autocast_dt: str, input_dt: str
 ) -> None:
-    """Every cell, the LCD-614 ones included: forward, backward and values."""
+    """Every cell: forward, backward and values."""
     case = _CASES[name]
     out, made = _under_autocast(case, device, autocast_dt, input_dt, grad=case.grad)
     if case.grad:
@@ -603,8 +578,8 @@ def test_a_composite_under_autocast_runs_and_keeps_its_values(
             lucid.nn.functional, _Make(lucid, device, dtype, compute=out.dtype)
         )
     # A row applied at the entry runs the same ops as the call outside; a
-    # pinned or decomposed case's parts apply theirs, so it rounds between.
-    tol = _TOL[autocast_dt] if case.pinned or case.decomposed else _EXACT
+    # decomposed case's parts apply theirs, so it rounds between them.
+    tol = _TOL[autocast_dt] if case.decomposed else _EXACT
     np.testing.assert_allclose(
         out.detach().float().numpy(),
         want.float().numpy(),
@@ -614,13 +589,11 @@ def test_a_composite_under_autocast_runs_and_keeps_its_values(
     )
 
 
-@pytest.mark.parametrize(
-    ("name", "device", "autocast_dt", "input_dt"), _params(pin=True)
-)
+@pytest.mark.parametrize(("name", "device", "autocast_dt", "input_dt"), _params())
 def test_a_composite_under_autocast_answers_in_its_entry_dtype(
     name: str, device: str, autocast_dt: str, input_dt: str
 ) -> None:
-    """The dtype alone, so a pinned LCD-614 cell hides nothing else."""
+    """The dtype alone, against the static table — no reference needed."""
     case = _CASES[name]
     out, _ = _under_autocast(case, device, autocast_dt, input_dt, grad=False)
     assert _dtype_name(out.dtype) == _want(case, device, autocast_dt, input_dt)
@@ -702,9 +675,7 @@ def _ref_device(ref: ModuleType, device: str) -> str:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    ("name", "device", "autocast_dt", "input_dt"), _params(pin=False)
-)
+@pytest.mark.parametrize(("name", "device", "autocast_dt", "input_dt"), _params())
 def test_the_dtype_matches_the_reference(
     ref: ModuleType, name: str, device: str, autocast_dt: str, input_dt: str
 ) -> None:

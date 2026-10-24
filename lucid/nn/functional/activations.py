@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry
+from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 from lucid._ops._dims import _dim_size, _wrap_dim
 from lucid._types import GeluApproximate
 from lucid.nn.functional._distance import (
@@ -966,7 +966,10 @@ def logsigmoid(input: Tensor) -> Tensor:
     >>> logsigmoid(x)
     tensor([-10., -0.6931, -4.54e-05])
     """
-    return -softplus(-input)
+    # No row, as the reference's log_sigmoid has none; softplus's FP32
+    # Metal row must not apply inside it.
+    with _autocast_suspended(_unwrap(input).device):
+        return -softplus(-input)
 
 
 def softsign(input: Tensor) -> Tensor:

@@ -1264,6 +1264,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - each loss takes its autocast row at its entry
 
+- pairwise_distance and logsigmoid keep a half input's dtype
+
 ### Changed
 
 - `TVMConfig` and `MeanFlowConfig` raise `ValueError` when `out_channels != in_channels`, instead of failing later with a shape mismatch in forward or generate (LCD-620).
