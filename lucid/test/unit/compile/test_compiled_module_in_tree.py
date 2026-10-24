@@ -130,5 +130,8 @@ def test_moving_the_parent_drops_the_cache() -> None:
     parent.body = lucid.compile(parent.body)
     parent(lucid.randn(2, 8, device="metal"))
     assert parent.body.cache_info()["entries"] == 1
+    # Where the parent already is, a move replaces no tensor (LCD-601).
     parent.to("metal")
+    assert parent.body.cache_info()["entries"] == 1
+    parent.to("cpu")
     assert parent.body.cache_info()["entries"] == 0

@@ -121,19 +121,23 @@ def _reload(model: nn.Module, device: str) -> None:
     model.load_state_dict(state, assign=True)
 
 
-def _move(model: nn.Module, device: str) -> None:
-    model.to(device)
+def _round_trip(model: nn.Module, device: str) -> None:
+    # A ``.to()`` to where the model is replaces nothing and tells no one
+    # (LCD-601), so the notice comes from a cast there and back.
+    del device
+    model.half()
+    model.float()
 
 
 # When the replacement comes: before which call, and right after which notice.
 # Before the first call matters — ``make_step`` takes the parameters, and the
 # segmented step its children, when it is built — and so does right after an
-# assign load or a ``.to()``: told of those, the owner takes the tree again.
+# assign load or a conversion: told of those, the owner takes the tree again.
 _WHEN: dict[str, tuple[int, Callable[[nn.Module, str], None] | None]] = {
     "before-the-first-call": (0, None),
     "after-the-first-call": (2, None),
     "right-after-an-assign-load": (0, _reload),
-    "right-after-a-same-device-to": (2, _move),
+    "right-after-a-dtype-round-trip": (2, _round_trip),
 }
 
 
