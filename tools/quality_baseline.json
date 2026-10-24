@@ -1026,7 +1026,7 @@
    },
    "file-loc-over-cap": {
     "lucid/_ops/_adapters.py": 51,
-    "lucid/_ops/composite/elementwise.py": 48,
+    "lucid/_ops/composite/elementwise.py": 33,
     "lucid/_tensor/_dunders.py": 228,
     "lucid/_tensor/tensor.py": 2510,
     "lucid/compile/_optim/compiler.py": 779,

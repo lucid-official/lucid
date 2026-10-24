@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_input, _unwrap, _wrap
-from lucid._ops.composite.elementwise import _promote_pair
+from lucid._ops.composite._opmath import _promote_pair
 from lucid._types import TensorOrScalar
 
 if TYPE_CHECKING:

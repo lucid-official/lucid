@@ -21,6 +21,7 @@ from collections.abc import Callable
 
 import lucid
 from lucid._dispatch import _binary_operands, _float_input, _wrap
+from lucid._ops.composite._shared import _is_tensor
 from lucid._tensor.tensor import Tensor
 from lucid._types import TensorOrScalar
 
@@ -56,33 +57,46 @@ def _real(x: Tensor) -> Tensor:
     return x
 
 
+def _promote_pair(
+    a: TensorOrScalar, b: TensorOrScalar, *, float_valued: bool = False
+) -> tuple[Tensor, Tensor]:
+    """Bring ``a`` and ``b`` to their common tensor dtype through :func:`_binary_operands`.
+
+    ``float_valued=True`` lifts an integral or bool pair to the default float
+    dtype, as ``true_divide``, ``xlogy``, and ``copysign`` do.  An operand
+    already at that dtype is handed on as the tensor the caller holds, not a
+    second wrapper of its storage.
+    """
+    ai, bi = _binary_operands(a, b, true_div=float_valued)
+    return (
+        a if _is_tensor(a) and a._impl is ai else _wrap(ai),
+        b if _is_tensor(b) and b._impl is bi else _wrap(bi),
+    )
+
+
 def _real_pair(op: str, a: TensorOrScalar, b: TensorOrScalar) -> tuple[Tensor, Tensor]:
     """``a`` and ``b`` as the operands of a function of two real variables.
 
     Either may be a Python number, as the reference's ``Scalar`` overloads
     take one: it follows the tensor's device and is weak in dtype, so
     ``zeta(x, 2.0)`` answers in ``x``'s dtype.  The pair is brought to its
-    common dtype, an integral one lifted to the default float, and each
-    operand checked by :func:`_real`.  Two Python numbers are refused, as
-    the reference refuses them: there is no tensor to take a device from.
+    common dtype (:func:`_promote_pair`, an integral one lifted to the
+    default float) and each operand checked by :func:`_real`.  Two Python
+    numbers are refused, as the reference refuses them: there is no tensor
+    to take a device from.
 
     Raises
     ------
     TypeError
         If neither operand is a tensor, or either is complex.
     """
-    if not (isinstance(a, Tensor) or isinstance(b, Tensor)):
+    if not (_is_tensor(a) or _is_tensor(b)):
         raise TypeError(
             f"{op}: expected a Tensor for at least one operand, got "
             f"{type(a).__name__} and {type(b).__name__}"
         )
-    ai, bi = _binary_operands(a, b, true_div=True)
-    # An operand already at the common dtype is handed on as the tensor the
-    # caller holds, not a second wrapper of its storage.
-    return (
-        _real(a if isinstance(a, Tensor) and a._impl is ai else _wrap(ai)),
-        _real(b if isinstance(b, Tensor) and b._impl is bi else _wrap(bi)),
-    )
+    a, b = _promote_pair(a, b, float_valued=True)
+    return _real(a), _real(b)
 
 
 def _in_float32(fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:

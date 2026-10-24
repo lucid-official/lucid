@@ -17,10 +17,10 @@ from typing import TYPE_CHECKING, cast
 
 import lucid
 from lucid import _promotion
-from lucid._dispatch import _binary_operands, _float_input, _wrap
+from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._gamma import _lgamma, _polygamma
-from lucid._ops.composite._opmath import _in_float32, _real
+from lucid._ops.composite._opmath import _in_float32, _promote_pair, _real
 from lucid._ops.composite._pow2 import _frexp, _ldexp
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
@@ -1082,21 +1082,6 @@ def float_power(input: Tensor | Scalar, exponent: Tensor | Scalar) -> Tensor:
     # raised ``NameError`` on **every** call and float_power had never
     # worked.  The string form is what the rest of the codebase uses.
     return lucid.pow(cast("Tensor", input), cast("Tensor", exponent))
-
-
-def _promote_pair(
-    a: TensorOrScalar, b: TensorOrScalar, *, float_valued: bool = False
-) -> tuple[Tensor, Tensor]:
-    """Bring ``a`` and ``b`` to their common tensor dtype through :func:`_binary_operands`.
-
-    ``float_valued=True`` lifts an integral or bool pair to the default float
-    dtype, as ``true_divide``, ``xlogy``, and ``copysign`` do.
-    """
-    ai, bi = _binary_operands(a, b, true_div=float_valued)
-    return (
-        a if _is_tensor(a) and a._impl is ai else _wrap(ai),
-        b if _is_tensor(b) and b._impl is bi else _wrap(bi),
-    )
 
 
 def fmax(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
