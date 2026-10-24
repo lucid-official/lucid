@@ -20,7 +20,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Literal, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 
 @model_family_meta(
@@ -143,6 +146,9 @@ class VAEConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the reconstruction"
+        )
         if not self.down_block_channels:
             raise ValueError("down_block_channels must have at least one stage")
         if any(c <= 0 for c in self.down_block_channels):

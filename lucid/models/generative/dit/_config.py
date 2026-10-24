@@ -19,6 +19,7 @@ from typing import ClassVar, Literal, override
 from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     DiffusionModelConfig,
+    check_noise_prediction_channels,
     check_patch_grid,
     patch_grid_side,
 )
@@ -208,11 +209,6 @@ class DiTConfig(DiffusionModelConfig):
             raise ValueError(
                 f"class_dropout is a probability, got {self.class_dropout}"
             )
-        expected = 2 * self.in_channels if self.learn_sigma else self.in_channels
-        if self.out_channels != expected:
-            raise ValueError(
-                f"out_channels must be {expected} for learn_sigma="
-                f"{self.learn_sigma} with in_channels={self.in_channels}, got "
-                f"{self.out_channels} — the decoder emits a noise and, when "
-                f"the covariance is learned, a variance beside it"
-            )
+        check_noise_prediction_channels(
+            self.in_channels, self.out_channels, self.learn_sigma
+        )

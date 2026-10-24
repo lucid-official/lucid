@@ -125,8 +125,9 @@ class NICEConfig(NormalizingFlowConfig):
         a single dimension count.  ``input_dim`` is therefore the only
         dimensional knob, and the spatial fields inherited from
         :class:`GenerativeModelConfig` (``sample_size``, ``in_channels``,
-        ``out_channels``) are pinned to the equivalent vector encoding
-        rather than to an image shape the sources never state.
+        ``out_channels``) hold the equivalent vector encoding rather than
+        an image shape the sources never state: ``sample_size`` is pinned
+        to ``(1, input_dim)``, and channels other than 1 are refused.
 
     Examples
     --------
@@ -139,6 +140,10 @@ class NICEConfig(NormalizingFlowConfig):
     """
 
     model_type: ClassVar[str] = "nice"
+
+    # The flat-vector encoding: one channel in, one out.
+    in_channels: int = 1
+    out_channels: int = 1
 
     # Paper Figure 3, MNIST column.
     input_dim: int = 784
@@ -159,12 +164,16 @@ class NICEConfig(NormalizingFlowConfig):
         if self.input_dim <= 0:
             raise ValueError(f"input_dim must be positive, got {self.input_dim}")
 
-        # Pin the base tier's spatial fields to the flat-vector encoding.  A
-        # bijection cannot change the sample space, so the channel counts are
-        # forced; the "(1, D)" extent is bookkeeping, not a claim about how
-        # the D values are laid out as an image.
-        object.__setattr__(self, "in_channels", 1)
-        object.__setattr__(self, "out_channels", 1)
+        # The channel counts are refused rather than pinned: a value other
+        # than the flat encoding's was accepted and silently replaced
+        # (LCD-631).  The "(1, D)" extent is still pinned — bookkeeping, not
+        # a claim about how the D values are laid out as an image.
+        if (self.in_channels, self.out_channels) != (1, 1):
+            raise ValueError(
+                "NICE is defined on flat D-vectors, so in_channels and "
+                "out_channels must both be 1 — set input_dim instead; got "
+                f"{self.in_channels} and {self.out_channels}"
+            )
         object.__setattr__(self, "sample_size", (1, self.input_dim))
 
         super().__post_init__()

@@ -1342,6 +1342,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - vjepa2 sincos table and DDIM tables follow the input
 
+- every generative config refuses an output width that misfits
+
 ### Changed
 
 - **Breaking:** `lucid.equal(a, b)` returns a single Python bool, as the reference's does: True only when the shapes match and every element is equal at the promoted dtype (NaN equals nothing). For the elementwise comparison use `lucid.eq` or `==` (LCD-633).

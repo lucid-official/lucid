@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 
 @model_family_meta(
@@ -152,6 +155,7 @@ class ScoreSDEConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
+        check_sample_space_channels(self.in_channels, self.out_channels, "the score")
         if self.sde_type not in ("vp", "ve", "subvp"):
             raise ValueError(
                 f"sde_type must be 'vp', 've' or 'subvp', got {self.sde_type!r}"

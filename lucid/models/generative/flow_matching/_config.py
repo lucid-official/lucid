@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Literal, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 # Which conditional probability path the target vector field is derived
 # from.  ``"ot"`` is the paper's optimal-transport displacement path —
@@ -231,12 +234,9 @@ class FlowMatchingConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.in_channels != self.out_channels:
-            raise ValueError(
-                f"the velocity field lives in the sample's own space, so "
-                f"in_channels must equal out_channels; got {self.in_channels} "
-                f"and {self.out_channels}"
-            )
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the velocity field"
+        )
         if self.base_channels <= 0:
             raise ValueError(
                 f"base_channels must be positive, got {self.base_channels}"

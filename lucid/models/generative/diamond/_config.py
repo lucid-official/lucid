@@ -21,7 +21,10 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 
 @model_family_meta(
@@ -290,6 +293,11 @@ class DIAMONDConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
+        # The denoiser's output is mixed with its noisy input frame by the
+        # EDM preconditioning, so it is a frame of the same channels.
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the denoised frame"
+        )
         # JSON round-trips turn tuples into lists; the frozen dataclass
         # has to put them back or equality and hashing break.
         # ``None`` means "none of them attend", and so does a stale length
@@ -366,6 +374,25 @@ class DIAMONDConfig(GenerativeModelConfig):
                 f"{len(self.upsampler_channels)} stages"
             )
 
+        self._check_world_model_scalars()
+        self._check_agent_scalars()
+
+        # Not a divisibility check.  A stride-2 convolution rounds *up*,
+        # so 30 -> 15 -> 8 -> 4 is fine and the decoder resizes to each
+        # skip rather than assuming a clean doubling — which is what the
+        # CS:GO model at 30x56 needs.  What does have to hold is that
+        # there is something left to downsample.
+        stages = len(self.unet_channels) - 1
+        for axis in self.frame_shape:
+            if axis < 2**stages:
+                raise ValueError(
+                    f"every side of sample_size must survive {stages} "
+                    f"halvings, so at least {2**stages} — got "
+                    f"{self.frame_shape}"
+                )
+
+    def _check_world_model_scalars(self) -> None:
+        """Refuse a denoiser or reward-model knob outside its domain."""
         if self.conditioning_frames < 1:
             raise ValueError(
                 f"conditioning_frames is the history the denoiser sees and "
@@ -389,6 +416,9 @@ class DIAMONDConfig(GenerativeModelConfig):
                 f"sigma_data scales the preconditioners and must be "
                 f"positive, got {self.sigma_data}"
             )
+
+    def _check_agent_scalars(self) -> None:
+        """Refuse an actor-critic knob outside its domain."""
         if self.num_actions < 1:
             raise ValueError(f"num_actions must be positive, got {self.num_actions}")
         if not 0.0 <= self.gamma <= 1.0:
@@ -402,17 +432,3 @@ class DIAMONDConfig(GenerativeModelConfig):
             )
         if self.burn_in < 0:
             raise ValueError(f"burn_in cannot be negative, got {self.burn_in}")
-
-        # Not a divisibility check.  A stride-2 convolution rounds *up*,
-        # so 30 -> 15 -> 8 -> 4 is fine and the decoder resizes to each
-        # skip rather than assuming a clean doubling — which is what the
-        # CS:GO model at 30x56 needs.  What does have to hold is that
-        # there is something left to downsample.
-        stages = len(self.unet_channels) - 1
-        for axis in self.frame_shape:
-            if axis < 2**stages:
-                raise ValueError(
-                    f"every side of sample_size must survive {stages} "
-                    f"halvings, so at least {2**stages} — got "
-                    f"{self.frame_shape}"
-                )

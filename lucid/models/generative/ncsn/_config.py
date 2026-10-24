@@ -19,7 +19,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar, override, Literal
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 
 @model_family_meta(
@@ -161,6 +164,7 @@ class NCSNConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
+        check_sample_space_channels(self.in_channels, self.out_channels, "the score")
         if self.base_channels <= 0:
             raise ValueError(
                 f"base_channels must be positive, got {self.base_channels}"

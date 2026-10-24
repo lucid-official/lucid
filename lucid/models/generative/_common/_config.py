@@ -173,6 +173,7 @@ __all__ = [
     "patch_grid_side",
     "check_patch_grid",
     "check_sample_space_channels",
+    "check_noise_prediction_channels",
 ]
 
 
@@ -267,6 +268,11 @@ class WorldModelConfig(GenerativeModelConfig):
                 f"sample_size={self.sample_size}. Scale the model with "
                 f"cnn_depth / deter_size / stoch_size instead."
             )
+        # The decoder's frame is scored against the observation the encoder
+        # read, in the reconstruction term of every family's bound.
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the decoded frame"
+        )
 
         for name, value in (
             ("action_dim", self.action_dim),
@@ -396,4 +402,38 @@ def check_sample_space_channels(
         raise ValueError(
             f"{quantity} lives in the sample's own space, so in_channels must "
             f"equal out_channels; got {in_channels} and {out_channels}"
+        )
+
+
+def check_noise_prediction_channels(
+    in_channels: int, out_channels: int, learn_sigma: bool
+) -> None:
+    r"""Refuse an output width other than the noise prediction's.
+
+    A noise-predicting network emits :math:`\epsilon_\theta` in the sample's
+    own space (Ho et al., 2020), and with a learned covariance a variance
+    beside it (Nichol & Dhariwal, 2021): ``in_channels``, or twice that.
+    Nothing else is a choice, and the objective and the sampler split the
+    output at ``in_channels``.
+
+    Parameters
+    ----------
+    in_channels : int
+        The config's ``in_channels``.
+    out_channels : int
+        The config's ``out_channels``.
+    learn_sigma : bool
+        Whether the network also predicts the variance.
+
+    Raises
+    ------
+    ValueError
+        If ``out_channels`` is not the width those two fix.
+    """
+    expected = 2 * in_channels if learn_sigma else in_channels
+    if out_channels != expected:
+        raise ValueError(
+            f"out_channels must be {expected} for learn_sigma={learn_sigma} with "
+            f"in_channels={in_channels}, got {out_channels} — the network emits "
+            f"a noise and, when the covariance is learned, a variance beside it"
         )

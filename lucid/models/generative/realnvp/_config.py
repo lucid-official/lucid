@@ -13,6 +13,7 @@ from lucid.models.generative._common._config import (
     FlowPrior,
     GenerativeActivation,
     NormalizingFlowConfig,
+    check_sample_space_channels,
 )
 
 
@@ -184,11 +185,9 @@ class RealNVPConfig(NormalizingFlowConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.out_channels != self.in_channels:
-            raise ValueError(
-                f"RealNVP is a bijection on the sample space — out_channels must "
-                f"equal in_channels, got {self.out_channels} vs {self.in_channels}"
-            )
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "a flow is a bijection: its image"
+        )
         if self.num_scales <= 0:
             raise ValueError(f"num_scales must be positive, got {self.num_scales}")
         if self.residual_blocks <= 0:

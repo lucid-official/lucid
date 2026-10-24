@@ -92,8 +92,18 @@ class TestDDPMConfig:
             DDPMConfig(base_channels=128, resnet_groups=17)
 
     def test_learn_sigma_doubles_output(self) -> None:
-        cfg = DDPMConfig(learn_sigma=True)
+        cfg = DDPMConfig(learn_sigma=True, out_channels=6)
         assert cfg.out_channels_effective == 2 * cfg.in_channels
+
+    @pytest.mark.parametrize("learn_sigma,width", [(True, 3), (False, 6)])
+    def test_an_output_width_the_variance_does_not_fix_is_refused(
+        self, learn_sigma: bool, width: int
+    ) -> None:
+        # The width was accepted and silently replaced by the derived one,
+        # so the config said one thing and the network built another
+        # (LCD-631).
+        with pytest.raises(ValueError, match=f"out_channels must be {9 - width}"):
+            DDPMConfig(learn_sigma=learn_sigma, out_channels=width)
 
     def test_no_learn_sigma_keeps_output(self) -> None:
         cfg = DDPMConfig(learn_sigma=False)
@@ -124,7 +134,7 @@ class TestDDPMUNet:
         assert tuple(out.shape) == (2, 3, 16, 16)
 
     def test_learn_sigma_doubles_channels(self) -> None:
-        cfg = _tiny_cfg(learn_sigma=True)
+        cfg = _tiny_cfg(learn_sigma=True, out_channels=6)
         unet = _DDPMUNet(cfg).eval()
         x = lucid.randn((1, 3, 16, 16))
         out = unet(x, lucid.tensor([0]).long())
@@ -195,7 +205,7 @@ class TestDDPMHybridObjective:
 
     @staticmethod
     def _fixture() -> tuple[DDPMConfig, DDPMForImageGeneration]:
-        cfg = _tiny_cfg(learn_sigma=True)
+        cfg = _tiny_cfg(learn_sigma=True, out_channels=6)
         return cfg, DDPMForImageGeneration(cfg)
 
     @staticmethod

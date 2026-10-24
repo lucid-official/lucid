@@ -80,7 +80,10 @@ def _old_sd_noise(
 
 def _ddpm(device: str, *, learn_sigma: bool = True) -> nn.Module:
     lucid.manual_seed(0)
-    model = M.create_model("ddpm_cifar_gen", learn_sigma=learn_sigma, **DDPM_TINY)
+    width = 6 if learn_sigma else 3
+    model = M.create_model(
+        "ddpm_cifar_gen", learn_sigma=learn_sigma, out_channels=width, **DDPM_TINY
+    )
     return model.to(device)
 
 
@@ -206,16 +209,18 @@ def test_ddpm_hybrid_training_step(device: str) -> None:
     assert bool(lucid.isfinite(out.loss).item())
 
 
-def _ddpm() -> DDPMScheduler:
+def _ddpm_scheduler() -> DDPMScheduler:
     return DDPMScheduler(STEPS)
 
 
-def _ddim() -> DDIMScheduler:
+def _ddim_scheduler() -> DDIMScheduler:
     return DDIMScheduler(StableDiffusionConfig(num_train_timesteps=STEPS))
 
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-@pytest.mark.parametrize("build", [_ddpm, _ddim], ids=["ddpm", "ddim"])
+@pytest.mark.parametrize(
+    "build", [_ddpm_scheduler, _ddim_scheduler], ids=["ddpm", "ddim"]
+)
 def test_add_noise_traces_the_same_cold_or_warm(
     build: Callable[[], DDPMScheduler | DDIMScheduler],
 ) -> None:

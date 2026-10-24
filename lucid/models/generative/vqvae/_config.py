@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeModelConfig
+from lucid.models.generative._common._config import (
+    GenerativeModelConfig,
+    check_sample_space_channels,
+)
 
 
 @model_family_meta(
@@ -100,7 +103,8 @@ class VQVAEConfig(GenerativeModelConfig):
     in_channels : int, default=3
         Input image channels.
     out_channels : int, default=3
-        Reconstruction channels; normally equal to ``in_channels``.
+        Reconstruction channels.  Must equal ``in_channels``: the
+        reconstruction loss compares the decoder's output with the input.
     act_fn : {"silu", "swish", "relu", "gelu"}, default="relu"
         Trunk activation.  The paper uses ReLU throughout, which is why
         this family overrides the generative-domain default of ``"silu"``.
@@ -176,6 +180,9 @@ class VQVAEConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the reconstruction"
+        )
         if self.num_embeddings <= 0:
             raise ValueError(
                 f"num_embeddings must be positive, got {self.num_embeddings}"

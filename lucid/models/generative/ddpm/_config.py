@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import DiffusionModelConfig
+from lucid.models.generative._common._config import (
+    DiffusionModelConfig,
+    check_noise_prediction_channels,
+)
 
 
 @model_family_meta(
@@ -113,9 +116,10 @@ class DDPMConfig(DiffusionModelConfig):
             default: 32).  Must divide every per-stage channel count.
         learn_sigma: Improved-DDPM (Nichol 2021) — when ``True``, the
             network predicts the variance in addition to the mean.  Output
-            channels become ``2 * in_channels``, and training switches to
-            the hybrid objective (see ``vlb_weight``), since the fixed
-            simple loss carries no signal for a variance head.
+            channels become ``2 * in_channels`` — ``out_channels`` must say
+            so — and training switches to the hybrid objective (see
+            ``vlb_weight``), since the fixed simple loss carries no signal
+            for a variance head.
         vlb_weight: The λ on the variational term of
             ``L_simple + λ·L_vlb`` (Nichol & Dhariwal 2021 §4; default
             ``1e-3``).  Only read when ``learn_sigma=True``.
@@ -167,17 +171,11 @@ class DDPMConfig(DiffusionModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        # ``out_channels`` is inherited and set by every factory, but the
-        # U-Net sizes ``conv_out`` from ``out_channels_effective`` — derived
-        # from ``in_channels`` and ``learn_sigma``.  The field was therefore
-        # never read, and the shipped ``learn_sigma=True`` presets left it at
-        # 3 while the network emitted 6.  Derive it so the value on the config
-        # is the one the model actually produces; rejecting the mismatch
-        # instead would have made those presets unconstructible.
-        object.__setattr__(
-            self,
-            "out_channels",
-            2 * self.in_channels if self.learn_sigma else self.in_channels,
+        # Refused rather than derived: a config that names a width must be
+        # the network it builds, and the value it was given is the one a
+        # caller reads back (LCD-631).  DiT holds the same rule.
+        check_noise_prediction_channels(
+            self.in_channels, self.out_channels, self.learn_sigma
         )
         if self.base_channels <= 0:
             raise ValueError(

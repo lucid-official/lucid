@@ -28,25 +28,42 @@ from lucid.models._utils import (
     make_beta_schedule,
     reparameterize,
 )
-from lucid.models.generative.flow_matching import FlowMatchingConfig
-from lucid.models.generative.genie import GenieConfig
-from lucid.models.generative.mean_flow import MeanFlowConfig
-from lucid.models.generative.neural_ode import NeuralODEConfig
-from lucid.models.generative.realnvp import RealNVPConfig
-from lucid.models.generative.rectified_flow import RectifiedFlowConfig
-from lucid.models.generative.tvm import TVMConfig
+import dataclasses
+from pathlib import Path
 
-# Families whose network returns a field in the input's own space — a
-# velocity, a displacement, a bijection's image, the next frame — which
-# the objective or the sampler adds to or compares with the input.
-_SAMPLE_SPACE_CONFIGS: list[type[GenerativeModelConfig]] = [
-    FlowMatchingConfig,
-    GenieConfig,
-    MeanFlowConfig,
-    NeuralODEConfig,
-    RealNVPConfig,
-    RectifiedFlowConfig,
-    TVMConfig,
+import lucid.models.generative as _generative
+from lucid.models._registry import _REGISTRY
+
+# Every generative family's network emits something the objective or the
+# sampler adds to, compares with, or splits at the input's width — a velocity,
+# a score, a noise, a reconstruction, a bijection's image, the next frame — so
+# each config refuses an ``out_channels`` that does not fit (LCD-620,
+# LCD-631).  A family that legitimately accepts another width, or has no
+# channel fields at all, is listed here with the reason.
+_CHANNELS_NOT_CHECKED: dict[str, str] = {
+    "vjepa2_ac": "predicts V-JEPA 2 feature tokens; its config has no "
+    "in_channels / out_channels pair to disagree",
+}
+
+
+def _generative_families() -> list[str]:
+    root = Path(_generative.__file__).parent
+    return sorted(
+        d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith("_")
+    )
+
+
+def _default_config(family: str) -> GenerativeModelConfig:
+    for entry in _REGISTRY.values():
+        if entry.family == family and isinstance(
+            entry.default_config, GenerativeModelConfig
+        ):
+            return entry.default_config
+    raise AssertionError(f"{family}: no registered generative default config")
+
+
+_CHECKED_FAMILIES = [
+    f for f in _generative_families() if f not in _CHANNELS_NOT_CHECKED
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -89,17 +106,19 @@ class TestGenerativeConfigs:
         with pytest.raises(ValueError, match="num_train_timesteps"):
             DiffusionModelConfig(num_train_timesteps=0)
 
-    @pytest.mark.parametrize(
-        "config_class", _SAMPLE_SPACE_CONFIGS, ids=lambda c: c.__name__
-    )
-    def test_a_sample_space_output_refuses_other_channels(
-        self, config_class: type[GenerativeModelConfig]
+    @pytest.mark.parametrize("family", _CHECKED_FAMILIES)
+    def test_every_family_refuses_an_output_width_that_does_not_fit(
+        self, family: str
     ) -> None:
         # Accepted, the mismatch surfaced as a broadcast error deep in the
-        # forward pass or the sampler (LCD-620).
-        wider = config_class().in_channels + 1
+        # forward pass or the sampler (LCD-620), or was silently replaced by
+        # the width the family derived (LCD-631).
+        config = _default_config(family)
         with pytest.raises(ValueError, match="out_channels"):
-            config_class(out_channels=wider)
+            dataclasses.replace(config, out_channels=config.in_channels + 1)
+
+    def test_the_unchecked_list_names_real_families(self) -> None:
+        assert set(_CHANNELS_NOT_CHECKED) <= set(_generative_families())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

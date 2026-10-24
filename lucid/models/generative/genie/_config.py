@@ -34,6 +34,7 @@ from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     GenerativeActivation,
     GenerativeModelConfig,
+    check_sample_space_channels,
 )
 
 
@@ -355,12 +356,9 @@ class GenieConfig(GenerativeModelConfig):
             )
         if self.mlp_ratio <= 0.0:
             raise ValueError(f"mlp_ratio must be positive, got {self.mlp_ratio}")
-        if self.out_channels != self.in_channels:
-            raise ValueError(
-                f"every decoder here emits one frame, so out_channels must "
-                f"equal in_channels; got {self.out_channels} and "
-                f"{self.in_channels}"
-            )
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "every decoder's frame"
+        )
         if self.commitment_cost < 0.0:
             raise ValueError(
                 f"commitment_cost must be non-negative, got {self.commitment_cost}"

@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import BetaSchedule, DiffusionModelConfig
+from lucid.models.generative._common._config import (
+    BetaSchedule,
+    DiffusionModelConfig,
+    check_sample_space_channels,
+)
 
 __all__ = ["StableDiffusionConfig"]
 
@@ -201,6 +205,11 @@ class StableDiffusionConfig(DiffusionModelConfig):
     def __post_init__(self) -> None:
         """Reject configurations that cannot be built."""
         super().__post_init__()
+        # The first stage is an autoencoder: its decoder reconstructs the
+        # image its encoder read (Rombach et al. 2022, §3.1).
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the first stage's reconstruction"
+        )
         object.__setattr__(
             self, "vae_block_out_channels", tuple(self.vae_block_out_channels)
         )

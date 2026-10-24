@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import FlowPrior, NormalizingFlowConfig
+from lucid.models.generative._common._config import (
+    FlowPrior,
+    NormalizingFlowConfig,
+    check_sample_space_channels,
+)
 
 # How the divergence of the vector field is obtained each step.
 #
@@ -209,11 +213,9 @@ class NeuralODEConfig(NormalizingFlowConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.in_channels != self.out_channels:
-            raise ValueError(
-                f"a flow is a bijection, so in_channels must equal out_channels; "
-                f"got {self.in_channels} and {self.out_channels}"
-            )
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "a flow is a bijection: its image"
+        )
         if self.hidden_dim <= 0:
             raise ValueError(f"hidden_dim must be positive, got {self.hidden_dim}")
         if self.num_blocks <= 0:
