@@ -125,6 +125,7 @@ def _x() -> lucid.Tensor:
     return lucid.randn(4, 8).to(COMPILE_DEVICE)
 
 
+@pytest.mark.usefixtures("inference")
 def test_every_call_draws_afresh() -> None:
     model, x = _model(), _x()
     compiled = lucid.compile(model)
@@ -134,6 +135,7 @@ def test_every_call_draws_afresh() -> None:
     assert not np.array_equal(outs[0], outs[1])
 
 
+@pytest.mark.usefixtures("inference")
 def test_compiled_call_is_bit_identical_to_eager() -> None:
     model, x = _model(), _x()
     compiled = lucid.compile(model)

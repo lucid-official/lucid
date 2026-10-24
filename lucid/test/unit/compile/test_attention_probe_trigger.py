@@ -25,6 +25,8 @@ the always-correct setting.  This is purely a performance gate that never
 opened.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
@@ -32,6 +34,9 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile._core import attention_probe
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 class _FusedSdpa(nn.Module):

@@ -75,6 +75,7 @@ def test_a_replayed_make_step_walks_no_parameters(
     assert walks == [], f"{len(walks)} parameter walks over 5 replayed steps"
 
 
+@pytest.mark.usefixtures("inference")
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
 def test_a_replayed_compiled_module_walks_no_parameters(walks: list[object]) -> None:
     model = _model().to("metal")

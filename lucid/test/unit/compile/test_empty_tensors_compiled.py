@@ -38,6 +38,7 @@ class _WithEmpty(nn.Module):
         return self.lin(lucid.cat([x, none], dim=0))
 
 
+@pytest.mark.usefixtures("inference")
 def test_forward_with_an_empty_tensor_runs_eager() -> None:
     lucid.manual_seed(0)
     model = _WithEmpty().to(COMPILE_DEVICE).eval()

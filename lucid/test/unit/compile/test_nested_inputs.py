@@ -53,6 +53,7 @@ class _DictIn(nn.Module):
         return self.lin(x) * extra["scale"] + extra["shift"]
 
 
+@pytest.mark.usefixtures("inference")
 def test_list_argument_is_fresh_every_call() -> None:
     lucid.manual_seed(0)
     model = _ListIn().to(COMPILE_DEVICE).eval()
@@ -64,6 +65,7 @@ def test_list_argument_is_fresh_every_call() -> None:
     assert not cm.cache_info()["eager_only"]
 
 
+@pytest.mark.usefixtures("inference")
 def test_dict_keyword_argument_is_fresh_every_call() -> None:
     lucid.manual_seed(0)
     model = _DictIn().to(COMPILE_DEVICE).eval()
@@ -75,6 +77,7 @@ def test_dict_keyword_argument_is_fresh_every_call() -> None:
     )
 
 
+@pytest.mark.usefixtures("inference")
 def test_nested_alias_is_part_of_the_key() -> None:
     """One tensor at two nested positions at trace time, two tensors later."""
     lucid.manual_seed(0)

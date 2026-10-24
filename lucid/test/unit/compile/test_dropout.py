@@ -44,6 +44,7 @@ def _dropout_model(p: float) -> nn.Module:
     return _M().to(COMPILE_DEVICE)
 
 
+@pytest.mark.usefixtures("inference")
 def test_dropout_eval_mode_compiles_clean() -> None:
     """In ``.eval()`` dropout is identity; trace must compile fully."""
     model = _dropout_model(p=0.5)
@@ -67,6 +68,7 @@ def test_dropout_zero_prob_compiles_clean() -> None:
     assert_compile_parity(model, x, atol=1e-4, rtol=1e-5)
 
 
+@pytest.mark.usefixtures("inference")
 def test_dropout_training_lucid_compile_draws_eagers_masks() -> None:
     """Training-mode dropout compiles, and draws exactly eager's mask."""
     model = _dropout_model(p=0.5)
@@ -115,6 +117,7 @@ def test_dropout_training_make_step_matches_eager() -> None:
             assert np.allclose(g, p.grad.numpy(), rtol=1e-4, atol=1e-5)
 
 
+@pytest.mark.usefixtures("inference")
 def test_dropout_training_produces_random_outputs() -> None:
     """Training-mode dropout must still randomise (even on eager path).
 

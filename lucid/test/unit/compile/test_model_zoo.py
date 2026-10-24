@@ -29,6 +29,9 @@ from lucid.test.unit.compile._helpers import (
     metal_tensor,
 )
 
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
+
 
 class _LstmHead(nn.Module):
     """Single-layer LSTM + Linear classifier — exercises the LSTM

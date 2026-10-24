@@ -30,10 +30,14 @@ def _metal_ok() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not (backends.quantized.available and _metal_ok()),
-    reason="engine lacks quantized ops or Metal unavailable",
-)
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = [
+    pytest.mark.skipif(
+        not (backends.quantized.available and _metal_ok()),
+        reason="engine lacks quantized ops or Metal unavailable",
+    ),
+    pytest.mark.usefixtures("inference"),
+]
 
 
 def _maxdiff(a: object, b: object) -> float:

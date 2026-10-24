@@ -1561,7 +1561,10 @@ class CompiledAxis(Axis):
         model = lucid.nn.Linear(8, 4).to("metal")
         compiled = lucid.compile.compile(model)
         x = _probe.as_f32(_probe.sample("moderate", (2, 8)), "metal")
-        want = _probe.to_numpy(compiled(x))
+        # Under grad mode a trainable model's call runs eagerly and builds no
+        # executable to save (LCD-582).
+        with lucid.no_grad():
+            want = _probe.to_numpy(compiled(x))
         with tempfile.TemporaryDirectory() as folder:
             path = str(Path(folder) / "module.lcc")
             if not lucid.compile.save_compiled(compiled, path):

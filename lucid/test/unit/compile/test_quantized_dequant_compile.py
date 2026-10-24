@@ -35,7 +35,11 @@ def _metal_ok() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = [
+    pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable"),
+    pytest.mark.usefixtures("inference"),
+]
 
 
 def _prep_convert(model: nn.Module, x: lucid.Tensor) -> nn.Module:

@@ -28,6 +28,9 @@ from lucid.test.unit.compile._helpers import (
     to_metal,
 )
 
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
+
 
 def _img(c: int = 3, hw: int = 64) -> lucid.Tensor:
     return metal_tensor(2, c, hw, hw)

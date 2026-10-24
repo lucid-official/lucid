@@ -57,6 +57,7 @@ def _fresh_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
 
+@pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", list(HOST_READS))
 def test_a_host_read_runs_eagerly_and_follows_the_input(name: str) -> None:
     """Between the calls both the input and the weights change."""
@@ -88,6 +89,7 @@ def test_a_host_read_runs_eagerly_and_follows_the_input(name: str) -> None:
     assert compiled.cache_info()["eager_only"]
 
 
+@pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", list(CONSTANT_READS))
 def test_a_read_that_feeds_nothing_stays_compiled(name: str) -> None:
     model = Apply(CONSTANT_READS[name]).eval()
@@ -114,7 +116,7 @@ def _follows_the_input(
     assert float((want[0] - want[1]).abs().max().item()) > 1e-3
 
     compiled = lucid.compile.compile(Apply(fn).eval().to(device))
-    with warnings.catch_warnings(record=True) as caught:
+    with warnings.catch_warnings(record=True) as caught, lucid.no_grad():
         warnings.simplefilter("always")
         got = [compiled(t.to(device)).to("cpu") for t in (first, second)]
     for g, w in zip(got, want, strict=True):

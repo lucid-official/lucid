@@ -53,6 +53,7 @@ def _setup() -> tuple[nn.Module, lucid.Tensor, lucid.Tensor]:
     )
 
 
+@pytest.mark.usefixtures("inference")
 def test_forward_runs_eager_with_fresh_values() -> None:
     model, x1, x2 = _setup()
     cm = lucid.compile(model)

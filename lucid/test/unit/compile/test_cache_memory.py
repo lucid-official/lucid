@@ -15,11 +15,16 @@ on a shape-variable input stream will OOM on the cumulative MPSGraph
 executables.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 def _mlp() -> nn.Module:

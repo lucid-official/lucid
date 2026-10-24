@@ -85,7 +85,9 @@ def assert_compile_parity(
     eager = unwrap(model(*inputs))
 
     compiled_model = lucid.compile(model)
-    compiled = unwrap(compiled_model(*inputs))
+    # Under grad mode a model with trainable parameters runs eagerly (LCD-582).
+    with lucid.no_grad():
+        compiled = unwrap(compiled_model(*inputs))
 
     diff = float((eager - compiled).abs().max().item())
     max_eager = float(eager.abs().max().item())
@@ -142,7 +144,9 @@ def assert_compiles(
     eager = unwrap(model(*inputs))
 
     cm = lucid.compile(model)
-    compiled = unwrap(cm(*inputs))
+    # Under grad mode a model with trainable parameters runs eagerly (LCD-582).
+    with lucid.no_grad():
+        compiled = unwrap(cm(*inputs))
     compiled.eval()
 
     info = cm.cache_info()

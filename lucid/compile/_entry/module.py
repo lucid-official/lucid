@@ -9,13 +9,13 @@ state_dict / training mode, and assigned onto a parent module it
 registers the inner model in the parent's tree while the attribute
 keeps answering with the wrapper (``lucid.nn.module._ModuleWrapper``).
 
-Phase 1.4 ships **forward-only graph caching**: the cached executable
-captures the forward pass only, and the result tensor is returned
-without a backward graph (``requires_grad=False``).  Training-step
-compile — the autograd-integrated path that runs ``loss.backward()``
-against a cached fwd+bwd executable — is the dedicated
-:func:`lucid.compile.compiled_step` entrypoint until Phase 1.5 lands
-the autograd-integrated :class:`CompiledStepBackward` node.
+The cached executable captures the forward pass only and records no
+autograd graph.  A call that needs one — grad mode on and a tensor it
+reads requiring grad — therefore runs eagerly, so ``backward`` reaches
+what it would reach without ``lucid.compile``; inference compiles under
+``no_grad`` / ``inference_mode`` or when nothing requires grad.  Compiled
+training — one executable for forward and backward — is
+:func:`lucid.compile.make_step` / :func:`lucid.compile.fused_step`.
 
 Acceptance gate (Plan §1.4):
 
@@ -26,7 +26,7 @@ Acceptance gate (Plan §1.4):
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import (
     TYPE_CHECKING,
     Callable,
@@ -68,6 +68,7 @@ from lucid.compile._core.fallback import (
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
+    _root_modules,
     leaf_tensors,
     model_has_active_hooks,
     tensors_have_active_hooks,
@@ -200,6 +201,38 @@ def _repack_outputs(spec: object, outs_wrapped: list[object]) -> object:
     raise RuntimeError(f"_repack_outputs: unknown spec tag {tag!r}")
 
 
+#: What a call that needs gradients is told, once per process.
+_AUTOGRAD_FALLBACK = (
+    "the call needs gradients (grad mode is on and a tensor it reads requires "
+    "grad), and a compiled forward records no autograd graph. Wrap inference in "
+    "lucid.no_grad() (or lucid.inference_mode()) to use the compiled path; use "
+    "lucid.compile.make_step or lucid.compile.fused_step for compiled training"
+)
+
+
+def _any_requires_grad(impls: tuple[_C_engine.TensorImpl, ...]) -> bool:
+    """Whether one of ``impls`` requires grad."""
+    return any(impl.requires_grad for impl in impls)
+
+
+def _tree_requires_grad(model: Module) -> bool:
+    """Whether a parameter or buffer of ``model``'s tree requires grad.
+
+    The modules a wrapped callable is bound to or closes over count as the
+    tree.  The walk stops at the first one that does — in a model being
+    trained, its first parameter.  It walks ``named_parameters``, as
+    ``parameters`` warns about a lazy layer that has not seen an input yet.
+    """
+    for root in _root_modules(model):
+        for _, param in root.named_parameters():
+            if param.requires_grad:
+                return True
+        for _, buffer in root.named_buffers():
+            if buffer.requires_grad:
+                return True
+    return False
+
+
 __all__ = ["CompiledModule"]
 
 
@@ -217,8 +250,8 @@ class _CacheEntry:
         ``kwargs`` that supplies the feed at call time.
     """
 
-    exe: object  # _C_engine.compile.PyCompiledExecutable
-    external_feeds: dict[int, object]  # TensorId -> TensorImpl
+    exe: _ExecutableLike  # _C_engine.compile.PyCompiledExecutable
+    external_feeds: dict[int, _C_engine.TensorImpl]  # TensorId -> TensorImpl
     # For each ``exe.input_ids[i]`` slot: an index into the call's tensors
     # in :func:`leaf_tensors` order — positional, keyword and nested alike
     # — OR ``None`` meaning "use the pinned external_feeds entry"
@@ -243,6 +276,14 @@ class _CacheEntry:
     # buffer's EMA, a counter).  Their new values trail the returned ones;
     # each run copies them back.  See ``_core/buffer_writes``.
     written: list[object] = field(default_factory=list)
+    # The pinned feeds: every tensor the executable reads besides the call's
+    # own — parameters, buffers, and tensors a closure or a global holds.
+    # Under grad mode one that requires grad makes the call eager.
+    pinned: tuple[_C_engine.TensorImpl, ...] = field(init=False, default=())
+
+    def __post_init__(self) -> None:
+        sources = zip(self.exe.input_ids, self.input_source, strict=True)
+        self.pinned = tuple(self.external_feeds[t] for t, s in sources if s is None)
 
 
 class CompiledModule[**P, R](_ModuleWrapper):
@@ -330,6 +371,17 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     Notes
     -----
+    * **A call that needs gradients runs eagerly.**  The executable is a
+      forward pass with no autograd graph.  Under grad mode, a call that
+      reads a tensor requiring grad — an argument, a parameter or buffer,
+      a tensor a closure holds — runs the model eagerly instead, so its
+      result requires grad and ``backward`` reaches what it would reach
+      uncompiled, in eval mode too.  A one-time ``UserWarning`` says so.
+      Wrap inference in :class:`lucid.no_grad` (or
+      :func:`lucid.inference_mode`) to use the compiled path; train with
+      :func:`make_step` / :func:`fused_step` (or :meth:`step`), which
+      compile the backward too.  A call made under ``no_grad`` keeps its
+      own cache entry, so alternating the two retraces nothing.
     * **Metal-only.**  Compile is meaningful only when both the model
       and its inputs live on the ``metal`` device.  On CPU every call
       silently routes through eager — the cache stays empty and
@@ -353,10 +405,12 @@ class CompiledModule[**P, R](_ModuleWrapper):
     Inference path::
 
         cm = lucid.compile(model.to('metal').eval())
-        for batch in loader:
-            y = cm(batch.to('metal'))
+        with lucid.no_grad():
+            for batch in loader:
+                y = cm(batch.to('metal'))
 
-    Training step compile (forward only — backward stays eager)::
+    A plain training loop works unchanged — it needs gradients, so each
+    call runs eagerly (correct, not faster)::
 
         cm = lucid.compile(model.to('metal'))
         opt = lucid.optim.Adam(cm.parameters(), lr=1e-3)
@@ -609,7 +663,8 @@ class CompiledModule[**P, R](_ModuleWrapper):
         >>> compiled = lucid.compile(model)
         >>> x1 = lucid.randn(2, 8, device="metal")
         >>> x2 = lucid.randn(5, 8, device="metal")
-        >>> _ = compiled(x1); _ = compiled(x2)
+        >>> with lucid.no_grad():
+        ...     _ = compiled(x1); _ = compiled(x2)
         >>> info = compiled.cache_info()
         >>> info["entries"]                 # one slot per unique signature
         2
@@ -629,7 +684,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
               currently has a compiled executable.
             * ``eager_only`` (tuple[CacheKey]) — signatures that
               failed to compile and were blacklisted; future calls
-              with these signatures route straight to eager.
+              with these signatures route straight to eager.  A call
+              that needed gradients is here too, under its key with
+              ``grad=True``.
             * ``n_calls`` (dict[CacheKey, int]) — per-signature call
               counter, useful for spotting hot signatures.
         """
@@ -810,7 +867,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
         list into the user's return structure (Tensor / tuple / dict
         / dataclass).  On miss: trace, compile, store, run — and on
         compile failure mark the signature ``eager_only`` so future
-        calls skip the recompile attempt.
+        calls skip the recompile attempt.  Under grad mode, a call
+        that reads a tensor requiring grad runs eagerly, so its result
+        is differentiable (see the class Notes).
 
         Typing
         ------
@@ -873,49 +932,122 @@ class CompiledModule[**P, R](_ModuleWrapper):
         except (TypeError, AttributeError):  # fmt: skip
             return run_eager(self._model, args, kwargs)
 
-        self._call_counter[key] = self._call_counter.get(key, 0) + 1
+        leaves = leaf_tensors(args, kwargs)
+        grad_mode = _C_engine.grad_enabled()
+        if grad_mode and self._needs_gradients(leaves, self._cache.get(key)):
+            return self._run_differentiable(key, args, kwargs)
 
         if (
             key in self._eager_only
             or model_has_active_hooks(self._model)
-            or tensors_have_active_hooks(leaf_tensors(args, kwargs))
+            or tensors_have_active_hooks(leaves)
         ):
+            self._count(key)
             return run_eager(self._model, args, kwargs)
 
         entry = self._cache.get(key)
         if entry is None:
-            entry = self._compile_for(args, kwargs)
-            self._param_fp.settle()
-            # The first trace may have downgraded symbolic → static (gate
-            # rejected the graph, or the symbolic lowering failed): the
-            # wildcarded key above is then wrong, so re-key on the resolved
-            # decision before caching.
-            if self._symbolic_resolved is not None and self._symbolic_resolved != eff:
-                key = self._param_fp.key_of(
-                    args, kwargs, dynamic=self._symbolic_resolved
-                )
-            if entry is None:
-                # Compile aborted — remember this signature is
-                # eager-only and route to eager.
-                self._eager_only.add(key)
-                return run_eager(self._model, args, kwargs)
-            # MPSGraph resolves some kernels only on the first run and has
-            # gaps there that compiling does not reveal — an int64
-            # ``x * x`` is simplified into an int64 ``square`` it has no
-            # kernel for.  A first run that fails that way is the same
-            # verdict as a compile that declines: nothing was written yet,
-            # so answer with eager and remember the signature.
-            try:
-                result = self._run(entry, args, kwargs)
-            except RuntimeError as why:
-                if "MPSGraph failed" not in str(why):
-                    raise
-                _fallback_notice("first-run", str(why))
-                self._eager_only.add(key)
-                return run_eager(self._model, args, kwargs)
+            key, entry = self._compile_and_cache(key, eff, args, kwargs)
+            # A tensor no module holds — a closure's, a global — is seen
+            # only once the trace has read it.  The executable stays cached
+            # for the calls made under ``no_grad``.
+            if entry is not None and grad_mode and _any_requires_grad(entry.pinned):
+                return self._run_differentiable(key, args, kwargs)
+        self._count(key)
+        if entry is None:
+            return run_eager(self._model, args, kwargs)
+        return self._execute(key, entry, args, kwargs)
+
+    def _compile_and_cache(
+        self,
+        key: CacheKey,
+        symbolic: bool,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> tuple[CacheKey, _CacheEntry | None]:
+        """Trace and compile a signature not cached yet; ``None`` if it cannot be.
+
+        Returns the key the entry is cached under: the first trace may have
+        downgraded symbolic → static (the gate rejected the graph, or the
+        symbolic lowering failed), and the wildcarded key is then wrong.
+        A signature that does not compile is remembered as eager-only.
+        """
+        entry = self._compile_for(args, kwargs)
+        self._param_fp.settle()
+        resolved = self._symbolic_resolved
+        if resolved is not None and resolved != symbolic:
+            key = self._param_fp.key_of(args, kwargs, dynamic=resolved)
+        if entry is None:
+            self._eager_only.add(key)
+        else:
             self._cache[key] = entry
-            return result
-        return self._run(entry, args, kwargs)
+        return key, entry
+
+    def _count(self, key: CacheKey) -> None:
+        """Count one call that ran as ``key``."""
+        self._call_counter[key] = self._call_counter.get(key, 0) + 1
+
+    def _needs_gradients(self, leaves: list[Tensor], entry: _CacheEntry | None) -> bool:
+        """Whether, grad mode on, the eager call would record an autograd graph.
+
+        It does when a tensor it reads requires grad: an argument, or a
+        tensor the executable is fed besides them.  Before the first trace
+        those are not known yet, and the model tree's parameters and buffers
+        stand in for them — a call that trains its model is then never
+        traced; a closure tensor is found once the trace has read it.
+        """
+        if any(t.requires_grad for t in leaves):
+            return True
+        if entry is not None:
+            return _any_requires_grad(entry.pinned)
+        return _tree_requires_grad(self._model)
+
+    def _run_differentiable(
+        self, key: CacheKey, args: tuple[object, ...], kwargs: dict[str, object]
+    ) -> object:
+        """Run a call that needs gradients eagerly, under a key of its own.
+
+        A compiled forward records no autograd graph, so its result would
+        not require grad and ``backward`` would stop at it.  The verdict is
+        recorded as eager-only under ``key`` with ``grad=True``: the same
+        call under ``no_grad`` keeps its own key and its executable, so a
+        model alternating between the two is neither traced again nor sent
+        eager when it need not be.
+        """
+        grad_key = replace(key, grad=True)
+        self._count(grad_key)
+        if grad_key not in self._eager_only:
+            self._eager_only.add(grad_key)
+            _fallback_notice("autograd", _AUTOGRAD_FALLBACK)
+        return run_eager(self._model, args, kwargs)
+
+    def _execute(
+        self,
+        key: CacheKey,
+        entry: _CacheEntry,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> object:
+        """Run ``entry``; on its first run, answer eagerly if MPSGraph fails.
+
+        MPSGraph resolves some kernels only on the first run and has gaps
+        there that compiling does not reveal — an int64 ``x * x`` is
+        simplified into an int64 ``square`` it has no kernel for.  A first
+        run that fails that way is the same verdict as a compile that
+        declines: nothing was written yet, so the call is answered eagerly
+        and the signature remembered.
+        """
+        if entry.n_hits:
+            return self._run(entry, args, kwargs)
+        try:
+            return self._run(entry, args, kwargs)
+        except RuntimeError as why:
+            if "MPSGraph failed" not in str(why):
+                raise
+            _fallback_notice("first-run", str(why))
+        self._cache.pop(key, None)
+        self._eager_only.add(key)
+        return run_eager(self._model, args, kwargs)
 
     # ── Internals ────────────────────────────────────────────────
 
@@ -1231,7 +1363,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         # into the call's tensors (``leaf_tensors`` order) or None (a pinned
         # parameter / constant).
         feed_impls: list[object] = []
-        exe = cast(_ExecutableLike, entry.exe)
+        exe = entry.exe
         leaves = leaf_tensors(args, kwargs)
         for tid, src in zip(exe.input_ids, entry.input_source, strict=True):
             if src is None:

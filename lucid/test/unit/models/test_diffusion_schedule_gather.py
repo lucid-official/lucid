@@ -238,9 +238,11 @@ def _ddpm_batch(seed: int, steps: list[int]) -> tuple[Tensor, ...]:
 def test_ddpm_hybrid_loss_compiles() -> None:
     model = _DDPMLoss(_ddpm("metal").eval())
     compiled = lucid.compile.compile(model)
-    compiled(*_ddpm_batch(1, [0, 61]))
-    fresh = _ddpm_batch(2, [99, 7])
-    got = compiled(*fresh)
+    # Under grad mode a trainable model's compiled call runs eagerly (LCD-582).
+    with lucid.no_grad():
+        compiled(*_ddpm_batch(1, [0, 61]))
+        fresh = _ddpm_batch(2, [99, 7])
+        got = compiled(*fresh)
     info = compiled.cache_info()
     assert not info["eager_only"], info
     assert info["entries"] == 1, info
@@ -254,8 +256,9 @@ def test_sd_training_loss_compiles() -> None:
     lucid.manual_seed(6)
     images = lucid.randn((2, 3, 32, 32)).to("metal")
     context = lucid.randn((2, 4, 16)).to("metal")
-    compiled(images, context, lucid.tensor([3, 870]).long().to("metal"))
-    got = compiled(images, context, lucid.tensor([500, 17]).long().to("metal"))
+    with lucid.no_grad():
+        compiled(images, context, lucid.tensor([3, 870]).long().to("metal"))
+        got = compiled(images, context, lucid.tensor([500, 17]).long().to("metal"))
     info = compiled.cache_info()
     assert not info["eager_only"], info
     assert info["entries"] == 1, info

@@ -21,12 +21,17 @@ Two correctness properties are pinned here:
      one mask form for the emitter to handle.
 """
 
+import pytest
+
 import lucid
 import lucid.models as M
 import lucid.nn as nn
 import lucid.nn.functional as F
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 def _qkv(B: int, H: int, Lq: int, Lk: int, D: int) -> tuple[lucid.Tensor, ...]:

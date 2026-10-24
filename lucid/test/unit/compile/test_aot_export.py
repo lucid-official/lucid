@@ -32,10 +32,14 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor, to_metal
 
-pytestmark = pytest.mark.skipif(
-    not lucid.metal.is_available(),
-    reason="the compile path emits MPSGraph; there is no CPU equivalent",
-)
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = [
+    pytest.mark.skipif(
+        not lucid.metal.is_available(),
+        reason="the compile path emits MPSGraph; there is no CPU equivalent",
+    ),
+    pytest.mark.usefixtures("inference"),
+]
 
 
 def _saved(tmp_path: object, compiled: object, name: str) -> str:

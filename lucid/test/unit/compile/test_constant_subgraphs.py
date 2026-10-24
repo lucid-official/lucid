@@ -224,6 +224,7 @@ class _PlainAttribute(nn.Module):
         return self.lin(x) * self.scale.exp()
 
 
+@pytest.mark.usefixtures("inference")
 def test_a_module_attribute_that_is_not_state_is_followed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

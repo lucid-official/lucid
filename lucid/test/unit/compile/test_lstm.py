@@ -19,10 +19,15 @@ still outside the envelope and must fall back to eager with a correct
 result.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 def _compile_and_check(

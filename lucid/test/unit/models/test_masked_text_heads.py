@@ -189,8 +189,10 @@ def test_compile_does_not_fall_back_to_eager(name: str) -> None:
     ids, mask_a = _ids_and_mask(name, _masks()["fixed"], "metal")
     _ids, mask_b = _ids_and_mask(name, _masks()["random"], "metal")
     mask_b = mask_b[: int(mask_a.shape[0])]
-    compiled(ids, mask_a)
-    got = compiled(ids, mask_b)
+    # Under grad mode a trainable model's compiled call runs eagerly (LCD-582).
+    with lucid.no_grad():
+        compiled(ids, mask_a)
+        got = compiled(ids, mask_b)
     info = compiled.cache_info()
     assert not info["eager_only"], info
     assert info["entries"] == 1, info
@@ -213,8 +215,9 @@ def test_double_heads_compile_without_eager_fallback(
     ids = lucid.randint(0, 100, (2, 3, L)).to("metal")
     first = lucid.tensor([[0, 7, 3], [5, 1, 7]]).long().to("metal")
     fresh = lucid.tensor([[7, 2, 0], [1, 6, 4]]).long().to("metal")
-    compiled(ids, first)
-    got = compiled(ids, fresh)
+    with lucid.no_grad():
+        compiled(ids, first)
+        got = compiled(ids, fresh)
     info = compiled.cache_info()
     assert not info["eager_only"], info
     want = model(ids, mc_token_ids=fresh).mc_logits

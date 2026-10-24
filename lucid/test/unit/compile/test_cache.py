@@ -17,10 +17,15 @@ production-safe on long-running services / data-aug pipelines:
      compiled against.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 def _mlp() -> nn.Module:

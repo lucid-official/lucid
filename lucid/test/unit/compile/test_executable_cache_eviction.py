@@ -26,13 +26,15 @@ _SCRIPT = textwrap.dedent("""
     model = model.to("metal").eval()
     compiled = lucid.compile(model)
     xs = [lucid.randn(b, 8, device="metal") for b in (1, 2, 3, 4, 5)]
-    for x in xs:
-        compiled(x)
-    assert compiled.cache_info()["entries"] == 5
-    for x in xs:
-        np.testing.assert_allclose(
-            compiled(x).numpy(), model(x).numpy(), atol=1e-5
-        )
+    # Under grad mode a trainable model's call runs eagerly (LCD-582).
+    with lucid.no_grad():
+        for x in xs:
+            compiled(x)
+        assert compiled.cache_info()["entries"] == 5
+        for x in xs:
+            np.testing.assert_allclose(
+                compiled(x).numpy(), model(x).numpy(), atol=1e-5
+            )
     print("ok")
     """)
 

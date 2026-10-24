@@ -19,7 +19,11 @@ import lucid.nn.functional as F
 from lucid.compile._core import attention_cost
 from lucid.test._fixtures.devices import metal_available
 
-pytestmark = pytest.mark.skipif(not metal_available(), reason="compile needs metal")
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = [
+    pytest.mark.skipif(not metal_available(), reason="compile needs metal"),
+    pytest.mark.usefixtures("inference"),
+]
 
 
 class _Attend(nn.Module):

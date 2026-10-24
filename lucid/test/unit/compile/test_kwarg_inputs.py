@@ -17,6 +17,8 @@ Three properties pinned here:
      per-call feed resolver run-eagers rather than feeding ``None``.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 
@@ -26,6 +28,9 @@ from lucid.test.unit.compile._helpers import (
     assert_no_eager_fallback,
     metal_tensor,
 )
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 class _MaskedMLP(nn.Module):

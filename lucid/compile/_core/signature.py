@@ -156,6 +156,11 @@ class CacheKey:
         non-tensor.  ``f(x, x)`` traces to one feed read twice and
         ``f(a, b)`` to two, at identical shapes — without this they
         shared an entry and ``f(a, b)`` ran the one-feed executable.
+    grad : bool
+        Whether the call needs a differentiable result: grad mode was on
+        and a tensor it reads requires grad.  Such a call runs eagerly, so
+        its key never names an executable; it is its own key so that the
+        verdict never falls on the same call made under ``no_grad``.
 
     Examples
     --------
@@ -168,7 +173,8 @@ class CacheKey:
     >>> key = signature_of(model, (x,), {}, dynamic=False)
     >>> key in compiled._cache               # is this signature compiled yet?
     False
-    >>> _ = compiled(x)
+    >>> with lucid.no_grad():
+    ...     _ = compiled(x)
     >>> key in compiled._cache
     True
 
@@ -191,6 +197,8 @@ class CacheKey:
     alias: tuple[int, ...] = field(default_factory=tuple)
     # Per-submodule ``(training, scalar_attrs)`` snapshot across ``model.modules()``.
     module_state: tuple[object, ...] = field(default_factory=tuple)
+    # The call needs gradients and runs eagerly; see ``grad`` above.
+    grad: bool = False
 
 
 def _closure_modules(model: object) -> list[Module]:

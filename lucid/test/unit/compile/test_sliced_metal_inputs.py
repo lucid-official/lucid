@@ -16,7 +16,11 @@ import lucid
 import lucid.nn as nn
 from lucid.test._fixtures.devices import metal_available
 
-pytestmark = pytest.mark.skipif(not metal_available(), reason="metal unavailable")
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = [
+    pytest.mark.skipif(not metal_available(), reason="metal unavailable"),
+    pytest.mark.usefixtures("inference"),
+]
 
 
 @pytest.mark.parametrize("start", [1, 3, 5])

@@ -33,12 +33,17 @@ See also
 - ``obsidian/perf/perf-compile-vs-eager-2026-05-26.md``
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 import lucid.metal as metal
 from lucid._C import engine as _C_engine
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
 
 
 class _MiniGPT2Block(nn.Module):

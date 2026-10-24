@@ -22,6 +22,9 @@ import lucid.nn as nn
 from lucid.compile._entry.module import CompiledModule
 from lucid.test._fixtures.devices import metal_available
 
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
+
 
 class _Net(nn.Module):
     def __init__(self) -> None:

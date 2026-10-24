@@ -32,9 +32,9 @@ Surface
   an unstable surface.
 
 The MPSGraph builder + executable cache + per-op emitters live in
-:file:`lucid/_C/compile/`.  See :file:`lucid/compile/USER_GUIDE.md`
-for the production-facing user guide (op coverage, perf numbers,
-fallback policy).
+:file:`lucid/_C/compile/`.  The fallback policy is in :func:`compile`'s
+notes: a call that needs gradients, or that the compiler cannot lower,
+runs eagerly.
 """
 
 import sys
@@ -545,9 +545,8 @@ def compile[**P, R](
     * **Plain callable wrapping** — ``lucid.compile(fn)`` where ``fn``
       is a regular function or any callable.  Returns a thin wrapper
       whose ``__call__`` traces the function's body on the first
-      invocation with a new input signature and caches an executable.
-      The wrapper has no parameters of its own — pure tensor-in /
-      tensor-out.
+      invocation with a new input signature and caches an executable;
+      it has no parameters of its own — pure tensor-in / tensor-out.
     * **Decorator usage** — ``@lucid.compile`` on a function (or
       ``@lucid.compile(dynamic=True)`` factory form) — identical to
       the plain-callable form above but lets the user opt-in inline.
@@ -585,9 +584,9 @@ def compile[**P, R](
 
     Notes
     -----
-    * A call the compiler cannot lower runs eagerly, with a one-time
-      ``UserWarning`` naming why; ``LUCID_COMPILE_VERBOSE=1`` reports every
-      occurrence.
+    * A call the compiler cannot lower, or one that needs gradients (see
+      :class:`CompiledModule`), runs eagerly with a one-time ``UserWarning``
+      naming why; ``LUCID_COMPILE_VERBOSE=1`` reports every occurrence.
     * Attention lowers to a matmul-softmax-matmul decomposition, which
       materialises the score matrix; eager Metal's fused kernel never
       does.  A call whose attention would write more than 512 MiB of
@@ -602,7 +601,8 @@ def compile[**P, R](
     Module form::
 
         compiled = lucid.compile(nn.Linear(8, 4).to('metal'))
-        y = compiled(x)
+        with lucid.no_grad():
+            y = compiled(x)
 
     Callable form::
 

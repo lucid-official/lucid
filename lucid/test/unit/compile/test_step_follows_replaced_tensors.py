@@ -165,6 +165,7 @@ def test_fused_step_refuses_an_optimizer_left_without_the_models_parameters() ->
         step(x, t)
 
 
+@pytest.mark.usefixtures("inference")
 def test_a_compiled_module_answers_with_a_submodules_new_weights() -> None:
     # CompiledModule watched the model itself only: a load into one of its
     # submodules left it answering with the old weights.

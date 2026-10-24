@@ -14,6 +14,7 @@ Covers GitHub #251 (LCD-178):
 """
 
 import numpy as np
+import pytest
 
 import lucid
 import lucid.nn as nn
@@ -50,6 +51,7 @@ class _NestedBNNet(nn.Module):
 # ── 1. Submodule .train() / .eval() invalidates cache ───────────────────────
 
 
+@pytest.mark.usefixtures("inference")
 def test_submodule_dropout_eval_flip_retraces_compiled_module() -> None:
     """Flipping ``m.drop.eval()`` without touching ``m.training`` must re-trace."""
     m = _DropScaleNet(p=0.5).to(COMPILE_DEVICE)
@@ -128,7 +130,8 @@ def test_nested_batchnorm_submodule_mode_flip_compiled_module_and_step() -> None
     # Start in full eval mode: CompiledModule compiles batch_norm_eval.
     m.eval()
     cm = lucid.compile(m)
-    _ = cm(x)
+    with lucid.no_grad():
+        _ = cm(x)
     assert cm.cache_info()["entries"] == 1
     rm_before = bn.running_mean.numpy().copy()  # type: ignore[union-attr]
 
@@ -136,7 +139,8 @@ def test_nested_batchnorm_submodule_mode_flip_compiled_module_and_step() -> None
     # Forward-only CompiledModule must fall back to eager so running_mean updates.
     bn.train()
     assert m.training is False
-    _ = cm(x)
+    with lucid.no_grad():
+        _ = cm(x)
     rm_after = bn.running_mean.numpy().copy()  # type: ignore[union-attr]
     assert not np.allclose(
         rm_before, rm_after
@@ -156,6 +160,7 @@ def test_nested_batchnorm_submodule_mode_flip_compiled_module_and_step() -> None
     assert not np.allclose(bn.running_mean.numpy(), rm_frozen)  # type: ignore[union-attr]
 
 
+@pytest.mark.usefixtures("inference")
 def test_callable_closing_over_module_tracks_submodule_mode() -> None:
     """Plain function compiled via ``lucid.compile`` tracks closed-over module state."""
     m = _DropScaleNet(p=0.5).to(COMPILE_DEVICE)
@@ -186,28 +191,29 @@ def test_scalar_attribute_mutation_retraces_compiled_module_and_step() -> None:
     x = metal_tensor(4, 8)
 
     cm = lucid.compile(m)
-    y_one = cm(x).numpy()
-    assert cm.cache_info()["entries"] == 1
+    with lucid.no_grad():
+        y_one = cm(x).numpy()
+        assert cm.cache_info()["entries"] == 1
 
-    # Mutate root scalar attribute.
-    m.scale = 2.5
-    y_scaled = cm(x).numpy()
-    assert cm.cache_info()["entries"] == 2
-    assert np.allclose(y_scaled, y_one * 2.5, rtol=1e-5, atol=1e-5)
+        # Mutate root scalar attribute.
+        m.scale = 2.5
+        y_scaled = cm(x).numpy()
+        assert cm.cache_info()["entries"] == 2
+        assert np.allclose(y_scaled, y_one * 2.5, rtol=1e-5, atol=1e-5)
 
-    # Mutate submodule scalar attribute (Dropout.p).
-    m.train()
-    m.drop.p = 0.0
-    _ = cm(x)
-    entries_before = cm.cache_info()["entries"]
-    m.drop.p = 0.5
-    _ = cm(x)  # first call with p=0.5 traces + compiles
-    assert cm.cache_info()["entries"] == entries_before + 1
-    lucid.manual_seed(7)
-    y_drop = cm(x).numpy()
-    lucid.manual_seed(7)
-    want_drop = m(x).numpy()
-    assert np.allclose(y_drop, want_drop, rtol=1e-5, atol=1e-5)
+        # Mutate submodule scalar attribute (Dropout.p).
+        m.train()
+        m.drop.p = 0.0
+        _ = cm(x)
+        entries_before = cm.cache_info()["entries"]
+        m.drop.p = 0.5
+        _ = cm(x)  # first call with p=0.5 traces + compiles
+        assert cm.cache_info()["entries"] == entries_before + 1
+        lucid.manual_seed(7)
+        y_drop = cm(x).numpy()
+        lucid.manual_seed(7)
+        want_drop = m(x).numpy()
+        assert np.allclose(y_drop, want_drop, rtol=1e-5, atol=1e-5)
 
     # Also verify make_step re-traces on scalar attribute change.
     m.eval()
@@ -255,6 +261,7 @@ def test_signature_scalar_attr_edge_cases() -> None:
 # ── 3. Module hooks under CompiledModule and make_step ──────────────────────
 
 
+@pytest.mark.usefixtures("inference")
 def test_forward_hook_on_submodule_before_and_after_compile() -> None:
     """Submodule forward hooks run once per call with live tensors before & after compile."""
     m = _DropScaleNet(p=0.0).to(COMPILE_DEVICE)
@@ -313,7 +320,8 @@ def test_forward_pre_hook_and_output_transform_hook() -> None:
     step = lucid.compile.make_step(m, lambda y: (y * y).sum())
 
     # Warm up compiled caches before attaching hooks.
-    _ = cm(x)
+    with lucid.no_grad():
+        _ = cm(x)
     step(x).backward()
     assert cm.cache_info()["entries"] == 1
     assert len(step.cache) == 1
@@ -323,7 +331,8 @@ def test_forward_pre_hook_and_output_transform_hook() -> None:
     h_post = m.fc2.register_forward_hook(lambda mod, args, out: out + 1.0)
 
     try:
-        got_cm = cm(x).numpy()
+        with lucid.no_grad():
+            got_cm = cm(x).numpy()
         want_cm = m(x).numpy()
         assert np.allclose(got_cm, want_cm, rtol=1e-5, atol=1e-5)
 
@@ -416,6 +425,7 @@ def test_backward_hooks_on_submodule_under_make_step() -> None:
     assert next(iter(step.cache.values())).n_hits == hits_before + 1
 
 
+@pytest.mark.usefixtures("inference")
 def test_global_module_hook_and_internal_weight_norm_hook() -> None:
     """Global hooks route to eager while active; internal weight_norm pre-hooks still compile."""
     # Internal weight_norm hook is traced into the graph, not treated as an eager-only user hook.

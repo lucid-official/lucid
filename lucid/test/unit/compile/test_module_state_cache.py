@@ -29,6 +29,9 @@ from lucid.nn._tree_version import _TrackedDict
 from lucid.nn.utils import parametrize
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
 
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
+
 
 class _Net(nn.Module):
     def __init__(self) -> None:

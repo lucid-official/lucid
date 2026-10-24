@@ -19,6 +19,9 @@ import lucid.nn as nn
 from lucid.compile._core import fallback
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
+# Compiled forwards under grad mode run eagerly (LCD-582); these test them.
+pytestmark = pytest.mark.usefixtures("inference")
+
 
 def _metal_ok() -> bool:
     try:

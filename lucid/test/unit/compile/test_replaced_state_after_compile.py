@@ -163,6 +163,7 @@ def _compiled(model: _Net, entry: str) -> CompiledModule[[lucid.Tensor], lucid.T
     return lucid.compile(call)
 
 
+@pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("when", list(_WHEN))
 @pytest.mark.parametrize("entry", ["module", "bound-method", "closure"])
@@ -403,6 +404,7 @@ class _Masked(nn.Module):
         return self.lin(x) * self.mask
 
 
+@pytest.mark.usefixtures("inference")
 @_METAL
 @pytest.mark.xfail(
     strict=True,
@@ -421,6 +423,7 @@ def test_a_plain_tensor_attribute_put_in_anothers_place() -> None:
     _close(compiled(x), model(x))
 
 
+@pytest.mark.usefixtures("inference")
 @_METAL
 @pytest.mark.xfail(
     strict=True,
@@ -454,6 +457,7 @@ _GLOBAL_CHANGES: dict[str, Callable[[nn.Sequential], object]] = {
 }
 
 
+@pytest.mark.usefixtures("inference")
 @_METAL
 @pytest.mark.xfail(
     strict=True,

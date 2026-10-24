@@ -35,6 +35,7 @@ def _maxdiff(a: lucid.Tensor, b: lucid.Tensor) -> float:
     return float((a - b).abs().max().item())
 
 
+@pytest.mark.usefixtures("inference")
 class TestSymbolicByDefault:
     """Gate-clean graphs share ONE symbolic-batch executable, no env var needed."""
 
@@ -114,6 +115,7 @@ class TestSymbolicByDefault:
         assert_cache_hit(cm, 1)
 
 
+@pytest.mark.usefixtures("inference")
 class TestGateFallsBackToStatic:
     """Gate-unsafe graphs fall back to per-shape static — correct, never crashes."""
 
@@ -162,6 +164,7 @@ class TestGateFallsBackToStatic:
         assert cm._symbolic_resolved is False
 
 
+@pytest.mark.usefixtures("inference")
 class TestForceStaticOptOut:
     """``LUCID_COMPILE_DYNAMIC=0`` forces pure per-shape static (no symbolic)."""
 

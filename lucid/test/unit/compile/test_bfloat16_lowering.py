@@ -67,6 +67,7 @@ CASES: dict[str, Callable[[nn.Module, lucid.Tensor], lucid.Tensor]] = {
 }
 
 
+@pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_a_bfloat16_call_compiles_and_matches_eager(case: str) -> None:
     lucid.manual_seed(0)

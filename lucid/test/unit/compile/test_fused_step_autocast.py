@@ -28,6 +28,8 @@ Known limitations (documented for follow-up):
   gradient underflow protection.  Tracked as P2.2.
 """
 
+import pytest
+
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
@@ -258,6 +260,7 @@ def test_fused_step_autocast_batchnorm2d_conv_trains() -> None:
     )
 
 
+@pytest.mark.usefixtures("inference")
 def test_lucid_compile_forward_autocast_matches_eager() -> None:
     """lucid.compile(model) + autocast(F16) — output parity vs eager."""
     lucid.manual_seed(0)

@@ -65,7 +65,8 @@ def _history(kind: str, mode: str) -> list[tuple[float, int, list[float]]]:
         if mode == "step":
             step(x).backward()
         elif mode == "module":
-            compiled(x)
+            with lucid.no_grad():
+                compiled(x)
         else:
             model(x)
         seen.append(
@@ -105,6 +106,7 @@ def test_chained_in_place_ops_trace_in_order() -> None:
     assert tracer.lookup_id(_unwrap(ema)) == add.outputs[0].id
 
 
+@pytest.mark.usefixtures("inference")
 def test_a_tensor_held_from_outside_is_carried_back() -> None:
     tally = lucid.zeros((), device=COMPILE_DEVICE)
 
@@ -125,6 +127,7 @@ def test_a_tensor_held_from_outside_is_carried_back() -> None:
     assert not compiled.cache_info()["eager_only"]
 
 
+@pytest.mark.usefixtures("inference")
 def test_a_write_to_an_argument_runs_eager_once_per_call() -> None:
     class _Bumps(nn.Module):
         def __init__(self) -> None:
