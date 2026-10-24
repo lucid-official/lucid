@@ -302,7 +302,7 @@ class DiTBlock(nn.Module):
             shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = chunks
         else:
             shift_a, scale_a, shift_m, scale_m = chunks
-            gate_a = gate_m = lucid.ones((1, 1, 1), device=x.device.type)
+            gate_a = gate_m = lucid.ones((1, 1, 1), dtype=x.dtype, device=x.device.type)
 
         h = self.norm1(x) * (1.0 + scale_a) + shift_a
         attended, _ = self.attn(h, h, h, need_weights=False)

@@ -31,7 +31,8 @@ float32 constant a float64 run would and more:
   at two steps in float64 on the CPU and float16 / bfloat16 on Metal
   answers finite, in the model's dtype; likewise Score-SDE's three
   samplers and its likelihood, a DiT schedule whose float16 copy rounds
-  ᾱ_1 to 1, TVM's latent whitening, and both schedulers' ``add_noise``,
+  ᾱ_1 to 1, DiT's three non-default conditionings, TVM's latent
+  whitening, PlaNet's planner, and both schedulers' ``add_noise``,
   whose float32 tables are cast at use.
 * **train** — every family of the training-step table, and the detection
   and segmentation losses that table leaves to other files, take their
@@ -575,6 +576,49 @@ def test_tvm_latent_whitening_keeps_the_latent_dtype(
     whitened = model.from_vae_latent(latent)
     assert whitened.dtype == dtype
     assert model.to_vae_latent(whitened).dtype == dtype
+
+
+@pytest.mark.parametrize(
+    "conditioning", ["adaln_zero", "adaln", "cross_attention", "in_context"]
+)
+def test_every_dit_conditioning_answers_in_half(conditioning: str) -> None:
+    """The ungated adaLN block multiplied by a float32 ``ones`` gate.
+
+    The matrix builds only the default adaLN-Zero, so the paper's other
+    three designs are driven here.
+    """
+    model = _generator("dit", _HALF_DEVICE, _F16, conditioning=conditioning)
+    side = model.config.sample_size
+    latent = lucid.randn(1, model.config.in_channels, side, side)
+    with lucid.no_grad():
+        _sampled_in(model(latent.to(_HALF_DEVICE).to(_F16)), _F16, conditioning)
+        _sampled_in(model.generate(1, steps=2), _F16, conditioning)
+
+
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    _ROLLOUT_DTYPES,
+    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+)
+def test_planet_plans_in_the_model_dtype(device: str, dtype: lucid.dtype) -> None:
+    """The CEM search distribution was float32 ``zeros`` / ``ones``."""
+    _need(device)
+    from lucid.models.generative.planet import PlaNetConfig, PlaNetForWorldModeling
+
+    lucid.manual_seed(0)
+    config = PlaNetConfig(
+        action_dim=2,
+        stoch_size=4,
+        deter_size=8,
+        hidden_size=8,
+        cnn_depth=4,
+        reward_hidden=8,
+    )
+    model = PlaNetForWorldModeling(config).to(device).to(dtype).eval()
+    start = model.planet.rssm.initial(1)
+    with lucid.no_grad():
+        action = model.plan(start, horizon=3, iterations=2, candidates=8, elites=2)
+    _sampled_in(action, dtype, "planet plan")
 
 
 def _ddpm_scheduler() -> Any:

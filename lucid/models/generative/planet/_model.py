@@ -679,10 +679,10 @@ class PlaNetForWorldModeling(WorldModelingModel):
 
         b = int(state.deter.shape[0])
         action_dim = self.planet.rssm.action_dim
-        device = state.deter.device.type
+        device, dt = state.deter.device.type, state.deter.dtype  # dtype too
 
-        mean = lucid.zeros(b, horizon, action_dim, device=device)
-        std = lucid.ones(b, horizon, action_dim, device=device)
+        mean = lucid.zeros(b, horizon, action_dim, dtype=dt, device=device)
+        std = lucid.ones(b, horizon, action_dim, dtype=dt, device=device)
         # One rollout per (batch item, candidate); the dynamics only know
         # how to advance a flat batch, so the candidate axis is folded in.
         tiled = state.map(lambda x: lucid.cat([x] * candidates, dim=0))
