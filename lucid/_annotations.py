@@ -338,6 +338,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.compile._entry.segmented_step": (
         ("CompiledExecutable", "lucid._C.engine.compile", "CompiledExecutable"),
         ("Module", "lucid.nn.module", "Module"),
+        ("Sequential", "lucid.nn.modules.container", "Sequential"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),

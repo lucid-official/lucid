@@ -651,9 +651,10 @@ class _FusedStep:
         Useful after manual surgery on the model (e.g. resizing a
         parameter buffer) where the captured tensor identities no longer
         match the live ones.  Normal training loops never need to call
-        this — freezing / unfreezing parameters, LR schedules, and the
+        this — freezing / unfreezing parameters, LR schedules, the
         tensors a ``.to()`` / ``.half()`` or an ``assign=True`` load
-        replaces are picked up on their own.
+        replaces, and a parameter, buffer or submodule set in another's
+        place are picked up on their own.
         """
         self._plans.clear()
         self._eager_only.clear()
@@ -1064,6 +1065,7 @@ class _FusedStep:
 
         scaler_enabled = self._ensure_scaler_holders()
         traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
+        self._fingerprint.settle()
         bn_counters = bn_counter_targets(self._model, traced.graph, traced.ext)
         if not traced.graph.ops:
             raise RuntimeError("fused_step: empty trace")

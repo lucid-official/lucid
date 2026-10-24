@@ -481,7 +481,7 @@ class _CompiledStepBase:
         self._zero_grads: dict[int, Tensor] = {}
         self._plans: dict[tuple[object, ...], _Plan] = {}
         self._exact_plans_built: int = 0
-        self._group_sizes: tuple[int, ...] = ()
+        self._group_ids: tuple[tuple[int, ...], ...] = ()
         # Group values of the step being taken — read by ``_commit``.
         self._step_gv: list[dict[str, float]] = []
         # Whether this optimizer reads per-parameter (step-dependent) scalars.
@@ -731,20 +731,20 @@ class _CompiledStepBase:
     # ── Parameter bookkeeping ────────────────────────────────────
 
     def _sync_params(self) -> None:
-        """Re-flatten the groups when their sizes changed (``add_param_group``).
+        """Re-flatten the groups when they hold other parameters, by identity.
 
-        State and step counts follow each parameter by identity; every
-        cached executable is dropped because the flat indices moved.
+        A parameter put in another's place keeps the sizes (LCD-560).  State
+        and step counts follow each parameter; every executable is dropped.
         """
-        groups = self._opt.param_groups
-        sizes = tuple(len(cast(list[Tensor], g["params"])) for g in groups)
-        if sizes == self._group_sizes:
+        groups = [cast(list[Tensor], g["params"]) for g in self._opt.param_groups]
+        layout = tuple(tuple(map(id, ps)) for ps in groups)  # _params holds each
+        if layout == self._group_ids:
             return
         old = {id(p): k for k, p in enumerate(self._params)}
         params: list[Tensor] = []
         group_of: list[int] = []
-        for gi, group in enumerate(groups):
-            for p in cast(list[Tensor], group["params"]):
+        for gi, ps in enumerate(groups):
+            for p in ps:
                 params.append(p)
                 group_of.append(gi)
 
@@ -761,7 +761,7 @@ class _CompiledStepBase:
         self._pstate = carry(self._pstate, dict)
         self._params = params
         self._group_of = group_of
-        self._group_sizes = sizes
+        self._group_ids = layout
         self._zero_grads = {}
         self._plans = {}
         self._exact_plans_built = 0

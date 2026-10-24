@@ -122,10 +122,11 @@ def compiled_decode_step(
     from lucid.autograd._grad_mode import no_grad
     from lucid.compile import _tracing
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.signature import signature_of
+    from lucid.compile._core.signature import ParamFingerprint, signature_of
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
+    fingerprint = ParamFingerprint.of_callable(forward_fn, cache.clear)
 
     def _restore(snap: tuple[Any, ...]) -> None:
         """Undo every cache mutation the trace caused (buffer rebinds + counters),
@@ -297,15 +298,13 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         try:
-            # Params + cache buffers are pinned in the executable, so the cache
-            # key only needs to distinguish input shapes — pass an empty param
-            # fingerprint (and no model) to skip the parameter walk.
+            # Keyed by input shapes; ``get`` drops what read replaced weights.
             key = signature_of(
                 cast(Any, None),
                 (input_ids, cache_position),
                 {},
                 dynamic=False,
-                param_fingerprint=(),
+                param_fingerprint=fingerprint.get(),
             )
         except TypeError, AttributeError:
             key = None
@@ -316,6 +315,7 @@ def compiled_decode_step(
         entry = cache.get(key) if key is not None else None
         if entry is None:
             entry = _compile_for(input_ids, cache_position)
+            fingerprint.settle()
             if entry is None:
                 if key is not None:
                     eager_sigs.add(key)

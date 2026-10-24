@@ -194,12 +194,17 @@ class CacheKey:
 
 
 def _closure_modules(model: object) -> list[Module]:
-    """Extract :class:`Module` objects closed over by ``model._fn``."""
+    """The :class:`Module` objects ``model._fn`` is bound to or closes over."""
     from lucid.nn.module import Module
 
     fn = getattr(model, "_fn", None)
     closure = getattr(fn, "__closure__", None) or ()
     out: list[Module] = []
+    # A bound method — ``lucid.compile(model.forward)`` — runs its module's
+    # tree as a closure would.
+    owner = getattr(fn, "__self__", None)
+    if isinstance(owner, Module):
+        out.append(owner)
     for cell in closure:
         contents = getattr(cell, "cell_contents", None)
         if isinstance(contents, Module):
@@ -539,6 +544,46 @@ def _param_fingerprint(model: Module) -> tuple[tuple[str, str], ...]:
 
 
 @final
+class _TreeTensors:
+    """Which modules a tree holds, and which tensor sits in each of their slots.
+
+    An executable is fed the parameters and buffers it was traced with and
+    runs the forwards of the modules that were in the tree then.  A slot
+    given another tensor — ``m.w = Parameter(...)``, ``register_buffer``, a
+    ``ParameterList`` item, weight tying — or a submodule put in another's
+    place leaves the key as it was: same shapes, dtypes and devices.  So the
+    tree is compared with this record of it, by identity (LCD-560).
+
+    The record is the addresses, with the tensors behind them held, so no
+    new tensor can be given one; the modules are held weakly, and one that
+    died has left the tree.
+    """
+
+    __slots__ = ("_record", "_modules")
+
+    def __init__(self, model: object) -> None:
+        subs = _iter_modules(_root_modules(model))
+        ids: list[object] = []
+        held: list[object] = []
+        for sub in subs:
+            ids.append(id(sub))
+            for registry in (sub._parameters, sub._buffers):
+                ids.append(len(registry))
+                for name, tensor in registry.items():
+                    impl = None if tensor is None else tensor._impl
+                    ids += (name, id(tensor), id(impl))
+                    held += (tensor, impl)
+        self._record = (tuple(ids), tuple(held))
+        self._modules = tuple(weakref.ref(sub) for sub in subs)
+
+    def same_as(self, now: _TreeTensors) -> bool:
+        """Whether ``now`` holds the modules and tensors this record does."""
+        return self._record[0] == now._record[0] and all(
+            ref() is not None for ref in self._modules
+        )
+
+
+@final
 class ParamFingerprint(_ModuleWrapper):
     """A model's :func:`_param_fingerprint`, walked again only when it can change.
 
@@ -548,13 +593,20 @@ class ParamFingerprint(_ModuleWrapper):
     load put new tensors under the ``Parameter`` objects without a
     ``setattr``, so the tree version cannot see them; they tell the
     module's watchers (``_tensors_replaced``), and this watches every module
-    of the tree, a cast of one submodule included.  A ``setattr`` of a new
-    parameter or submodule moves the tree version, which is checked too.  A
-    tensor rebound by hand (``p.data = ...``) is not seen.
+    of the tree, a cast of one submodule included.  A write to a module's
+    parameter, buffer or submodule registry moves the tree version, which is
+    checked too.  A tensor given new storage by hand (``p.data = ...``) is
+    not seen.
 
     The same news reaches its owner: an executable is fed the tensors it was
     traced with, so one traced before a replacement goes on training the old
-    ones (LCD-505).
+    ones (LCD-505).  A tensor or submodule put in another's place leaves the
+    fingerprint as it was, so after the owner traces it calls :meth:`settle`,
+    and when the version moves the tree is compared with what was settled
+    (:class:`_TreeTensors`): any difference is a replacement (LCD-560).
+    Settling after the trace, not before, takes in what a forward does to its
+    own state while traced — a lazy layer materialising, a statistic kept by
+    assignment — which would otherwise read as a replacement on every call.
 
     Parameters
     ----------
@@ -571,15 +623,45 @@ class ParamFingerprint(_ModuleWrapper):
     def __init__(
         self, model: Module, on_replaced: Callable[[], object] | None = None
     ) -> None:
-        self._model: weakref.ref[Module] = weakref.ref(model)
+        self._model: Callable[[], Module | None] = weakref.ref(model)
         self._value: tuple[tuple[str, str], ...] | None = None
         self._version = -1
+        # The tree the owner's executables were traced against; ``None`` while
+        # it has none.
+        self._settled: _TreeTensors | None = None
         self._on_replaced: Callable[[], Callable[[], object] | None] = (
             weakref.WeakMethod(on_replaced)
             if isinstance(on_replaced, MethodType)
             else lambda: on_replaced
         )
         self._watch(model)
+
+    @classmethod
+    def of_callable(
+        cls, fn: Callable[..., object], on_replaced: Callable[[], object]
+    ) -> ParamFingerprint:
+        """The fingerprint of the modules ``fn`` is bound to or closes over.
+
+        It holds the adapter that names them, which nothing else does.
+
+        Parameters
+        ----------
+        fn : callable
+            A forward that is not a module — ``compiled_decode_step``'s.
+        on_replaced : callable
+            As for the constructor: drops what was traced from ``fn``.
+
+        Returns
+        -------
+        ParamFingerprint
+            The watcher, with the adapter held for as long as it lives.
+        """
+        from lucid.compile import _CallableModule
+
+        owner = _CallableModule(fn)
+        fingerprint = cls(owner, on_replaced)
+        fingerprint._model = lambda: owner
+        return fingerprint
 
     @override
     def __reduce__(
@@ -590,7 +672,9 @@ class ParamFingerprint(_ModuleWrapper):
         return (ParamFingerprint, (self.model, self._on_replaced()))
 
     def _watch(self, model: Module) -> None:
-        for sub in model.modules():
+        # The modules a wrapped callable closes over too: their ``.half()``
+        # replaces the tensors its executables read.
+        for sub in _iter_modules(_root_modules(model)):
             _watch_tensors(sub, self)
 
     @property
@@ -621,8 +705,20 @@ class ParamFingerprint(_ModuleWrapper):
             # Read before the walk, as ``_tree_walk`` does: a change made
             # while it runs moves the version past the one stored.
             self._version = version
+            settled = self._settled
+            if settled is not None and not settled.same_as(_TreeTensors(model)):
+                self._tensors_replaced()
             value = self._value = _param_fingerprint(model)
         return value
+
+    def settle(self) -> None:
+        """Record the tree as the owner's executables read it: it just traced.
+
+        Call it after every trace, whether or not an executable came of it:
+        the trace ran the forward, and what that did to the module's own
+        state is not a replacement.
+        """
+        self._settled = _TreeTensors(self.model)
 
     def key_of(
         self, args: Iterable[object], kwargs: dict[str, object], *, dynamic: bool
@@ -656,6 +752,9 @@ class ParamFingerprint(_ModuleWrapper):
     def _tensors_replaced(self) -> None:
         """A module of the tree had its parameters or buffers replaced."""
         self.invalidate()
+        # The owner drops what it traced, so nothing is settled until it
+        # traces again.
+        self._settled = None
         on_replaced = self._on_replaced()
         if on_replaced is not None:
             on_replaced()

@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.nn.module import Module
+    from lucid.nn.modules.container import Sequential
 
 __all__ = ["make_segmented_step", "make_autoseg_step"]
 
@@ -419,6 +420,51 @@ class _SegmentFunction(Function):
         return tuple([grad_x, *grad_params])
 
 
+def _group_fn(mods: list[Module]) -> Callable[[Tensor], Tensor]:
+    """The forward of one segment: its modules, one after another."""
+    from lucid._tensor.tensor import Tensor
+
+    def fn(x: Tensor) -> Tensor:
+        for m in mods:
+            out = m(x)
+            if not isinstance(out, Tensor):
+                raise TypeError(
+                    "make_step(segments>1): a segment module returned a "
+                    f"non-Tensor ({type(out).__name__}); segmented compile "
+                    "needs single-Tensor stage outputs"
+                )
+            x = out
+        return x
+
+    return fn
+
+
+def _segments_of(model: Sequential, segments: int) -> list[_Segment]:
+    """Split ``model``'s children, as it holds them now, into contiguous segments."""
+    children = list(model)
+    n_children = len(children)
+    if n_children == 0:
+        raise ValueError("make_step(segments>1): model has no child modules")
+    k = max(1, min(segments, n_children))
+
+    # Balanced contiguous partition of children into k groups.
+    seg_objs: list[_Segment] = []
+    base, extra = divmod(n_children, k)
+    start = 0
+    for gi in range(k):
+        mods = children[start : start + base + (1 if gi < extra else 0)]
+        start += len(mods)
+        seg_objs.append(
+            _Segment(
+                index=gi,
+                forward_fn=_group_fn(mods),
+                params=[p for m in mods for p in m.parameters()],
+                produce_input_grad=(gi > 0),  # segment 0's input is the data batch
+            )
+        )
+    return seg_objs
+
+
 def make_segmented_step(
     model: Module,
     loss_fn: Callable[..., Tensor],
@@ -459,6 +505,7 @@ def make_segmented_step(
     import lucid.nn as nn
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.signature import (
+        ParamFingerprint,
         leaf_tensors,
         model_has_active_hooks,
         tensors_have_active_hooks,
@@ -473,47 +520,17 @@ def make_segmented_step(
             "wrap the sequential trunk in nn.Sequential."
         )
 
-    children = list(model)
-    n_children = len(children)
-    if n_children == 0:
-        raise ValueError("make_step(segments>1): model has no child modules")
-    k = max(1, min(segments, n_children))
+    # Rebuilt when the model's tensors or children are replaced: each segment
+    # holds its modules and parameters, and its executables read them (LCD-560).
+    seq = model
+    seg_objs = _segments_of(seq, segments)
+    caches = [seg.cache for seg in seg_objs]
 
-    # Balanced contiguous partition of children into k groups.
-    groups: list[list[Module]] = []
-    base, extra = divmod(n_children, k)
-    start = 0
-    for gi in range(k):
-        size = base + (1 if gi < extra else 0)
-        groups.append(children[start : start + size])
-        start += size
+    def rebuild() -> None:
+        seg_objs[:] = _segments_of(seq, segments)
+        caches[:] = [seg.cache for seg in seg_objs]
 
-    def _make_group_fn(mods: list[Module]) -> Callable[..., Tensor]:
-        def fn(x: Tensor) -> Tensor:
-            for m in mods:
-                out = m(x)
-                if not isinstance(out, Tensor):
-                    raise TypeError(
-                        "make_step(segments>1): a segment module returned a "
-                        f"non-Tensor ({type(out).__name__}); segmented compile "
-                        "needs single-Tensor stage outputs"
-                    )
-                x = out
-            return x
-
-        return fn
-
-    seg_objs: list[_Segment] = []
-    for gi, mods in enumerate(groups):
-        gparams: list[Tensor] = [p for m in mods for p in m.parameters()]
-        seg_objs.append(
-            _Segment(
-                index=gi,
-                forward_fn=_make_group_fn(mods),
-                params=gparams,
-                produce_input_grad=(gi > 0),  # segment 0's input is the data batch
-            )
-        )
+    fingerprint = ParamFingerprint(model, on_replaced=rebuild)
 
     all_params = list(model.parameters())
     if not all_params:
@@ -527,6 +544,7 @@ def make_segmented_step(
 
     def step(*x_args: Tensor) -> Tensor:
         """Run one segmented compiled training step (or eager fallback)."""
+        fingerprint.get()  # rebuilds the segments if the model's were replaced
         if (
             eager_only["flag"]
             or model_has_active_hooks(model)
@@ -545,6 +563,7 @@ def make_segmented_step(
                 compiled = seg.cache.get(key)
                 if compiled is None:
                     compiled = _compile_segment(seg, cur)
+                    fingerprint.settle()
                     if compiled is None:
                         raise _SegmentCompileError(seg.index)
                     seg.cache[key] = compiled
@@ -557,9 +576,9 @@ def make_segmented_step(
         # Eager loss on the final segment output.
         return loss_fn(cur, *x_args[1:])
 
-    step.cache = [seg.cache for seg in seg_objs]  # type: ignore[attr-defined]
+    step.cache = caches  # type: ignore[attr-defined]
     step.eager_only = eager_only  # type: ignore[attr-defined]
-    step.segments = k  # type: ignore[attr-defined]
+    step.segments = len(seg_objs)  # type: ignore[attr-defined]
 
     def clear_cache() -> None:
         """Drop every cached executable for this segmented step callable."""

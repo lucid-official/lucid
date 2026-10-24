@@ -385,6 +385,7 @@ def _make_monolithic_step(
             entry = _compile_step_entry(
                 model, loss_fn, params, x_args, use_dynamic=use_dynamic
             )
+            fingerprint.settle()
             if entry is None:
                 if key is not None:
                     eager_only.add(key)
@@ -543,7 +544,8 @@ def _retrace_on_replace(
     tensors — a loss from the old weights, gradients for tensors the model no
     longer holds (LCD-505).  So every executable is dropped, and the
     parameters are taken again: an ``assign=True`` load puts new
-    ``Parameter`` objects in the tree.
+    ``Parameter`` objects in the tree, as does one set in another's place
+    (LCD-560) — the gradients go to the parameters the model holds now.
     """
 
     def retrace() -> None:

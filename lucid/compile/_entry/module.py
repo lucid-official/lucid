@@ -457,8 +457,16 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     @override
     def _tensors_replaced(self) -> None:
-        """Recompile on the next call: the model's tensors were replaced."""
-        self.clear_cache()
+        """Recompile on the next call: the model's tensors were replaced.
+
+        Every executable read the old ones, so all are dropped.  A signature
+        that runs eagerly stays eager — what kept it from compiling is in its
+        graph, not in which tensors fill it — and a forward that replaces its
+        own state on every eager call would otherwise be traced again on
+        every call.
+        """
+        self._cache.clear()
+        self._step_callables.clear()
 
     # ── Delegation surface ────────────────────────────────────────
 
@@ -877,6 +885,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         entry = self._cache.get(key)
         if entry is None:
             entry = self._compile_for(args, kwargs)
+            self._param_fp.settle()
             # The first trace may have downgraded symbolic → static (gate
             # rejected the graph, or the symbolic lowering failed): the
             # wildcarded key above is then wrong, so re-key on the resolved
