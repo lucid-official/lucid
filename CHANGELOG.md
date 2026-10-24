@@ -1450,6 +1450,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - one helper owns the sample-space channel rule
 
+- split the softmax, distance and shrinkage families out
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

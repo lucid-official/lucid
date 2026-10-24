@@ -1,25 +1,35 @@
 """
 nn.functional activation functions.
+
+The softmax family, the distance functions and the shrinkage operators are
+written in their own private modules and re-exported from here.
 """
 
-import operator
 from typing import TYPE_CHECKING
-import warnings
 
 import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _dim_size, _wrap_dim
-from lucid._ops._reduce import (
-    _log_softmax_adapter,
-    _require_floating,
-    _softmax_adapter,
-    _softmin_adapter,
+from lucid._types import GeluApproximate
+from lucid.nn.functional._distance import (
+    cosine_similarity as cosine_similarity,
+    pairwise_distance as pairwise_distance,
 )
-from lucid._types import DTypeLike, GeluApproximate
-from lucid.nn.functional._inplace import _dead_zone_zero, _in_place, _keep_in_graph
-from lucid.nn.functional.normalization import normalize
+from lucid.nn.functional._inplace import _in_place, _keep_in_graph
+from lucid.nn.functional._shrinkage import (
+    hardshrink as hardshrink,
+    softshrink as softshrink,
+    tanhshrink as tanhshrink,
+)
+from lucid.nn.functional._softmax import (
+    gumbel_softmax as gumbel_softmax,
+    log_softmax as log_softmax,
+    softmax as softmax,
+    softmin as softmin,
+    straight_through as straight_through,
+)
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -583,122 +593,6 @@ def tanh(input: Tensor) -> Tensor:
     return _wrap(_C_engine.tanh(_float_operand(_unwrap(input))))
 
 
-def _get_softmax_dim(name: str, ndim: int, dim: int | None, stacklevel: int) -> int:
-    if dim is not None:
-        return operator.index(dim)
-    warnings.warn(
-        f"Implicit dimension choice for {name} has been deprecated. "
-        "Change the call to include dim=X as an argument.",
-        UserWarning,
-        stacklevel=stacklevel,
-    )
-    return 0 if ndim in (0, 1, 3) else 1
-
-
-def softmax(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
-) -> Tensor:
-    r"""Apply the softmax function along a dimension.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor of any shape (the "logits").
-    dim : int or None, optional
-        Dimension along which softmax is computed.
-    _stacklevel : int, optional
-        Internal stack level for the implicit-dimension warning.
-    dtype : DTypeLike or None, optional
-        Target floating-point dtype to cast ``input`` to before softmax.
-
-    Returns
-    -------
-    Tensor
-        Same-shape tensor whose entries along ``dim`` sum to 1.
-
-    Notes
-    -----
-    .. math::
-
-        \text{softmax}(x)_i = \frac{e^{x_i}}{\sum_j e^{x_j}}
-
-    The engine uses the log-sum-exp shift :math:`x_i \mapsto x_i - \max_j x_j`.
-    For loss computation, prefer :func:`log_softmax` followed by :func:`nll_loss`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import softmax
-    >>> logits = lucid.tensor([[1.0, 2.0, 3.0]])
-    >>> p = softmax(logits, dim=1)
-    >>> p
-    tensor([[0.09003, 0.2447, 0.6652]])
-    >>> p.sum(dim=1)
-    tensor([1.])
-    """
-    return _wrap(
-        _softmax_adapter(
-            _unwrap(input),
-            _get_softmax_dim("softmax", input.ndim, dim, _stacklevel),
-            dtype,
-        )
-    )
-
-
-def log_softmax(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
-) -> Tensor:
-    r"""Numerically stable log-softmax along a dimension.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input logits of any shape.
-    dim : int or None, optional
-        Dimension along which the log-softmax is computed.
-    _stacklevel : int, optional
-        Internal stack level for the implicit-dimension warning.
-    dtype : DTypeLike or None, optional
-        Target floating-point dtype to cast ``input`` to before log-softmax.
-
-    Returns
-    -------
-    Tensor
-        Log-probabilities of the same shape as ``input``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{log\_softmax}(x)_i = x_i - \log\!\sum_j e^{x_j}
-        = (x_i - m) - \log\!\sum_j e^{x_j - m}, \quad m = \max_j x_j
-
-    Pairing ``log_softmax`` with :func:`nll_loss` is numerically equivalent
-    to — and more stable than — ``softmax`` followed by :func:`cross_entropy`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import log_softmax
-    >>> logits = lucid.tensor([[1.0, 2.0, 3.0]])
-    >>> log_softmax(logits, dim=1)
-    tensor([[-2.408, -1.408, -0.4076]])
-    """
-    return _wrap(
-        _log_softmax_adapter(
-            _unwrap(input),
-            _get_softmax_dim("log_softmax", input.ndim, dim, _stacklevel),
-            dtype,
-        )
-    )
-
-
 def softplus(input: Tensor, beta: float = 1.0, threshold: float = 20.0) -> Tensor:
     r"""Smooth approximation of :func:`relu`.
 
@@ -813,48 +707,6 @@ def relu6(input: Tensor, inplace: bool = False) -> Tensor:
         if inplace
         else _wrap(_C_engine.relu6(_unwrap(input)))
     )
-
-
-def softmin(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
-) -> Tensor:
-    r"""Softmin — softmax applied to the negation of the input.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor of any shape.
-    dim : int or None, optional
-        Dimension along which softmin is computed.
-    _stacklevel : int, optional
-        Internal stack level for the implicit-dimension warning.
-    dtype : DTypeLike or None, optional
-        Target floating-point dtype to cast ``input`` to before softmin.
-
-    Returns
-    -------
-    Tensor
-        Tensor of the same shape with values summing to ``1`` along ``dim``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{softmin}(x)_i = \text{softmax}(-x)_i = \frac{e^{-x_i}}{\sum_j e^{-x_j}}
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import softmin
-    >>> x = lucid.tensor([[1.0, 2.0, 3.0]])
-    >>> softmin(x, dim=1)
-    tensor([[0.6652, 0.2447, 0.09003]])
-    """
-    axis = _get_softmax_dim("softmin", input.ndim, dim, _stacklevel)
-    return _wrap(_softmin_adapter(_unwrap(input), axis, dtype=dtype))
 
 
 def glu(input: Tensor, dim: int = -1) -> Tensor:
@@ -1013,266 +865,6 @@ def celu(input: Tensor, alpha: float = 1.0, inplace: bool = False) -> Tensor:
         return _wrap(_C_engine.elu(xi, 1.0))
     a_t = _C_engine.full(xi.shape, alpha, xi.dtype, xi.device)
     return _wrap(_C_engine.mul(_C_engine.elu(_C_engine.div(xi, a_t), 1.0), a_t))
-
-
-def hardshrink(input: Tensor, lambd: float = 0.5) -> Tensor:
-    r"""Hard shrinkage operator.
-
-    Sets elements with magnitude below :math:`\lambda` to zero, leaves
-    larger-magnitude elements untouched.  Standard tool for sparse coding
-    and the proximal operator of the :math:`\ell_0` "pseudonorm" on a
-    coefficient-by-coefficient basis.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor.
-    lambd : float, optional
-        Threshold :math:`\lambda \ge 0`.  Default ``0.5``.
-
-    Returns
-    -------
-    Tensor
-        Shrunk tensor with the same shape as ``input``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{HardShrink}(x) = \begin{cases}
-            x & |x| > \lambda \\
-            0 & \text{otherwise}
-        \end{cases}
-
-    Discontinuous at :math:`x = \pm\lambda` — for an everywhere-continuous
-    alternative use :func:`softshrink` (the proximal operator of the
-    :math:`\ell_1` norm).
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import hardshrink
-    >>> x = lucid.tensor([-1.0, -0.3, 0.0, 0.3, 1.0])
-    >>> hardshrink(x, lambd=0.5)
-    tensor([-1., 0., 0., 0., 1.])
-    """
-    outside = _unwrap((input > lambd) | (input < -lambd))
-    return _keep_in_graph(
-        _wrap(_C_engine.where(outside, _unwrap(input), _dead_zone_zero(input))), input
-    )
-
-
-def tanhshrink(input: Tensor) -> Tensor:
-    r"""Tanh shrinkage activation.
-
-    Behaves like a smooth high-pass filter: subtracts the tanh-saturated
-    component of the input, leaving small linear residuals near zero and
-    near-linear behaviour for large magnitudes.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor of any shape; activation is element-wise.
-
-    Returns
-    -------
-    Tensor
-        Activated tensor with the same shape as ``input``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{TanhShrink}(x) = x - \tanh(x)
-
-    For :math:`|x| \ll 1`, :math:`\tanh(x) \approx x - x^3/3`, so
-    :math:`\text{TanhShrink}(x) \approx x^3/3` — small signals are
-    cubically suppressed.  For :math:`|x| \gg 1`, :math:`\tanh` saturates
-    to :math:`\pm 1` so the output behaves like :math:`x \mp 1`.
-    :math:`C^\infty`-smooth and monotonic.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import tanhshrink
-    >>> x = lucid.tensor([-2.0, -0.5, 0.0, 0.5, 2.0])
-    >>> tanhshrink(x)
-    tensor([-1.036, -0.03788, 0., 0.03788, 1.036])
-    """
-    if input.dtype == _l.bool_:
-        raise TypeError("tanhshrink: bool input is not supported")
-    xi = _float_operand(_unwrap(input))
-    return _wrap(_C_engine.sub(xi, _C_engine.tanh(xi)))
-
-
-def cosine_similarity(
-    x1: Tensor, x2: Tensor, dim: int = 1, eps: float = 1e-8
-) -> Tensor:
-    r"""Cosine similarity between two tensors along a dimension.
-
-    Measures the angle between two vectors irrespective of their
-    magnitudes — the natural similarity metric for unit-norm embedding
-    spaces (contrastive learning, retrieval, face verification).
-
-    Parameters
-    ----------
-    x1, x2 : Tensor
-        Tensors of the same shape.
-    dim : int, optional
-        Dimension along which the dot product / norms are taken.
-        Default ``1``.
-    eps : float, optional
-        Lower bound on the denominator to avoid division by zero.
-        Default ``1e-8``.
-
-    Returns
-    -------
-    Tensor
-        Similarity tensor whose shape matches the inputs with ``dim``
-        reduced, values in :math:`[-1, 1]`.
-
-    Notes
-    -----
-    .. math::
-
-        \text{cosine\_sim}(x_1, x_2) =
-        \frac{x_1 \cdot x_2}{\max(\|x_1\|_2 \, \|x_2\|_2,\, \epsilon)}
-
-    For pairwise similarity matrices, use ``unsqueeze`` to broadcast the
-    inputs into rank-3 tensors before calling this function.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import cosine_similarity
-    >>> a = lucid.tensor([[1.0, 0.0]])
-    >>> b = lucid.tensor([[1.0, 1.0]])
-    >>> cosine_similarity(a, b, dim=1)
-    tensor([0.7071])
-    """
-    for operand in (x1, x2):
-        _require_floating(_unwrap(operand), "cosine_similarity")
-    io = [_unwrap(t.to(_l.result_type(x1, x2))) for t in (x1, x2)]
-    with _autocast_entry("cosine_similarity", *io) as io:
-        x1n, x2n = (_unwrap(normalize(_wrap(t), p=2.0, dim=dim, eps=eps)) for t in io)
-        return _wrap(_C_engine.sum(_C_engine.mul(x1n, x2n), [dim]))
-
-
-def pairwise_distance(
-    x1: Tensor, x2: Tensor, p: float = 2.0, eps: float = 1e-6, keepdim: bool = False
-) -> Tensor:
-    r"""Element-wise :math:`L_p` distance between two equally-shaped tensors.
-
-    Computes the per-row :math:`L_p` norm of the difference — the standard
-    metric in metric-learning triplet and contrastive losses.
-
-    Parameters
-    ----------
-    x1, x2 : Tensor
-        Tensors of the same shape.  Distance is reduced over the **last**
-        dimension.
-    p : float, optional
-        Order of the norm.  ``2`` for Euclidean, ``1`` for Manhattan.
-        Default ``2.0``.
-    eps : float, optional
-        Small constant added to ``x1 - x2`` before the norm, as the
-        reference does.  Default ``1e-6``.
-    keepdim : bool, optional
-        If ``True``, retain the reduced dimension with size ``1``.
-        Default ``False``.
-
-    Returns
-    -------
-    Tensor
-        Distance tensor.
-
-    Notes
-    -----
-    .. math::
-
-        d_p(x_1, x_2) = \| x_1 - x_2 + \epsilon \|_p
-        = \Big(\sum_i |x_{1,i} - x_{2,i} + \epsilon|^p\Big)^{1/p}
-
-    The ``eps`` shift keeps coincident points off the norm's kink.  With
-    ``eps=0`` they sit on it, and their gradient is 0 — the subgradient
-    the reference picks — not ``nan``.  The shift used to be added to
-    ``|x1 - x2|`` instead, which differs by up to ``2 * eps`` per entry
-    where ``x1 < x2``.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import pairwise_distance
-    >>> a = lucid.tensor([[1.0, 2.0]])
-    >>> b = lucid.tensor([[4.0, 6.0]])
-    >>> pairwise_distance(a, b, p=2.0)
-    tensor([5.])
-    """
-    # The shared vector norm, so a zero distance (``eps=0`` at coincident
-    # points) has the 0 subgradient rather than a nan one, half inputs
-    # reduce in float32, and ``p=0`` counts instead of dividing by zero.
-    return _l.linalg.vector_norm(x1 - x2 + eps, p, -1, keepdim)
-
-
-def softshrink(input: Tensor, lambd: float = 0.5) -> Tensor:
-    r"""Soft shrinkage operator — proximal operator of :math:`\lambda \|\cdot\|_1`.
-
-    Translates the input toward zero by :math:`\lambda` and zeros out
-    everything in the dead zone :math:`[-\lambda, \lambda]`.  Used in
-    iterative-shrinkage solvers (ISTA / FISTA) and in sparse autoencoder
-    decoders.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor.
-    lambd : float, optional
-        Shrinkage threshold :math:`\lambda \ge 0`.  Default ``0.5``.
-
-    Returns
-    -------
-    Tensor
-        Shrunk tensor with the same shape as ``input``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{SoftShrink}(x) = \begin{cases}
-            x - \lambda & x > \lambda \\
-            x + \lambda & x < -\lambda \\
-            0 & \text{otherwise}
-        \end{cases}
-
-    Continuous everywhere (unlike :func:`hardshrink`), with derivative
-    :math:`1` outside the dead zone and :math:`0` inside it.  Coincides
-    with the closed-form solution of
-    :math:`\arg\min_y \tfrac12 (y - x)^2 + \lambda |y|`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import softshrink
-    >>> x = lucid.tensor([-1.0, -0.3, 0.0, 0.3, 1.0])
-    >>> softshrink(x, lambd=0.5)
-    tensor([-0.5, 0., 0., 0., 0.5])
-    """
-    if lambd < 0.0:
-        raise _C_engine.InvalidArgument(
-            f"softshrink: lambd must be no less than 0.0, but got {lambd}"
-        )
-    xi = _unwrap(input)
-    lam = _C_engine.full(xi.shape, lambd, xi.dtype, xi.device)
-    neg_lam = _C_engine.full(xi.shape, -lambd, xi.dtype, xi.device)
-    out = _C_engine.where(
-        _C_engine.greater(xi, lam), _C_engine.sub(xi, lam), _dead_zone_zero(input)
-    )
-    return _keep_in_graph(
-        _wrap(
-            _C_engine.where(_C_engine.less(xi, neg_lam), _C_engine.add(xi, lam), out)
-        ),
-        input,
-    )
 
 
 # ── P3 fills: missing activations ──────────────────────────────────────────
@@ -1484,147 +1076,6 @@ def _threshold(x: Tensor, threshold: float, value: float) -> Tensor:
     replaced = x <= threshold
     replacement = _l.full_like(x, float(value))
     return _keep_in_graph(_l.where(replaced, replacement, x), x)
-
-
-def straight_through(hard: Tensor, soft: Tensor) -> Tensor:
-    r"""Straight-through estimator — ``hard`` forward, ``soft`` backward.
-
-    Returns a tensor numerically equal to ``hard`` whose gradient is the
-    gradient of ``soft``:
-
-    .. math::
-
-        \mathrm{ST}(h, s) = s + \mathrm{sg}\!\big[h - s\big],
-
-    where :math:`\mathrm{sg}` is the stop-gradient operator.  The forward
-    value is exactly :math:`h`, and :math:`\partial \mathrm{ST} /
-    \partial s` is the identity, so a discrete or otherwise
-    non-differentiable ``hard`` can sit in the middle of a network while
-    the surrounding layers still train.
-
-    Parameters
-    ----------
-    hard : Tensor
-        The value the forward pass should carry — typically the output of
-        a non-differentiable step such as a one-hot ``argmax`` or a
-        nearest-codebook lookup.
-    soft : Tensor
-        The differentiable surrogate whose gradient is borrowed.  Must be
-        broadcast-compatible with ``hard``; in practice the two have the
-        same shape.
-
-    Returns
-    -------
-    Tensor
-        Equal to ``hard`` in value, differentiable with respect to
-        whatever ``soft`` depends on.
-
-    Notes
-    -----
-    Introduced by Bengio, Léonard, and Courville, *"Estimating or
-    Propagating Gradients Through Stochastic Neurons for Conditional
-    Computation"* (arXiv:1308.3432).  It is the mechanism behind
-    :func:`gumbel_softmax` with ``hard=True`` and behind
-    :class:`lucid.nn.VectorQuantizer`, which is why it lives here rather
-    than being rewritten at each call site.
-
-    The estimator is biased — the returned gradient is not the gradient of
-    the discrete function, which has none — but it is low-variance and
-    empirically trains where the true gradient does not exist.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> import lucid.nn.functional as F
-    >>> soft = lucid.tensor([0.3, 0.7], requires_grad=True)
-    >>> hard = lucid.tensor([0.0, 1.0])
-    >>> out = F.straight_through(hard, soft)
-    >>> out.tolist()               # the forward value is ``hard``
-    [0.0, 1.0]
-    >>> out.sum().backward()
-    >>> soft.grad.tolist()         # gradient passed through untouched
-    [1.0, 1.0]
-    """
-    return soft + (hard - soft).detach()
-
-
-def gumbel_softmax(
-    logits: Tensor,
-    tau: float = 1.0,
-    hard: bool = False,
-    eps: float = 1e-10,
-    dim: int = -1,
-) -> Tensor:
-    r"""Gumbel-Softmax — differentiable relaxation of categorical sampling.
-
-    Draws Gumbel noise, adds it to the logits, and softmaxes by
-    temperature :math:`\tau`.  Lets gradients flow through what would
-    otherwise be a non-differentiable categorical sample — central to
-    differentiable discrete-action RL, VQ-VAE codebook training, and
-    Concrete distributions (Jang et al. / Maddison et al. 2017).
-
-    Parameters
-    ----------
-    logits : Tensor
-        Unnormalised log-probabilities of any shape; the last (or
-        ``dim``-th) axis indexes the categorical alternatives.
-    tau : float, optional
-        Temperature :math:`\tau > 0`.  Smaller :math:`\tau` makes the
-        relaxation closer to a one-hot, at the cost of larger gradient
-        variance.  Default ``1.0``.
-    hard : bool, optional
-        If ``True`` the forward pass returns a true one-hot vector while
-        the backward pass uses the soft gradient (straight-through
-        estimator).  Default ``False``.
-    eps : float, optional
-        Deprecated legacy parameter kept for signature parity.  Default ``1e-10``.
-    dim : int, optional
-        Dimension over which to take the softmax.  Default ``-1``.
-
-    Returns
-    -------
-    Tensor
-        Sample with the same shape as ``logits``.  Rows sum to ``1``
-        along ``dim``; in hard mode each row is one-hot.
-
-    Notes
-    -----
-    .. math::
-
-        g_i \sim \text{Gumbel}(0, 1), \qquad
-        y_i = \frac{\exp((\log p_i + g_i)/\tau)}{\sum_j \exp((\log p_j + g_j)/\tau)}
-
-    Gumbel samples are drawn as :math:`-\log(-\log U)` with
-    :math:`U \sim \mathrm{Uniform}(0,1)`, clamped away from the boundaries
-    to avoid :math:`\log 0`.  In *hard* mode the result is
-    :math:`y_{\text{hard}} - y_{\text{soft}}.\text{detach}() + y_{\text{soft}}`,
-    which evaluates to :math:`y_{\text{hard}}` in the forward and to
-    :math:`y_{\text{soft}}` in the backward.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.nn.functional import gumbel_softmax
-    >>> logits = lucid.tensor([[1.0, 2.0, 3.0]])
-    >>> y = gumbel_softmax(logits, tau=0.5, hard=True)
-    >>> y.sum().item()
-    1.0
-    """
-    if eps != 1e-10:
-        warnings.warn("`eps` parameter is deprecated and has no effect.", stacklevel=2)
-    # Sample Gumbel noise: −log(−log U) with U ∈ (0, 1).  Clamp away
-    # from the boundaries to avoid log(0).
-    u: Tensor = _l.rand_like(logits).clip(1e-7, 1.0 - 1e-7)
-    gumbel: Tensor = -(-(u.log())).log()
-    y_soft: Tensor = softmax((logits + gumbel) / tau, dim=dim)
-    if not hard:
-        return y_soft
-    # Build a one-hot at argmax, then re-attach ``y_soft``'s gradient.
-    idx: Tensor = y_soft.argmax(dim=dim, keepdim=True)
-    y_hard: Tensor = _l.zeros_like(y_soft).scatter(
-        dim, idx, _l.ones_like(idx, dtype=y_soft.dtype)
-    )
-    return straight_through(y_hard, y_soft)
 
 
 def rrelu(
