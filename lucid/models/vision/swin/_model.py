@@ -273,20 +273,19 @@ class _SwinBlock(nn.Module):
         self._mask_cache: dict[tuple[int, int, int, int, str, str], Tensor] = {}
 
     def _attn_mask(
-        self,
-        H: int,
-        W: int,
-        shift_size: int,
-        device: str = "cpu",
-        ws: int | None = None,
-        *,
-        dtype: lucid.dtype,
+        self, H: int, W: int, shift_size: int, like: Tensor, ws: int | None = None
     ) -> Tensor | None:
+        """The shifted-window mask, on ``like``'s device and in its dtype.
+
+        Additive to the attention scores, so it takes their dtype; its
+        values (region ids, ``-100``) are exact in half precision.
+        """
         if shift_size == 0:
             return None
         ws = self.ws if ws is None else ws
         ss = shift_size
-        img_mask = lucid.zeros(1, H, W, 1, device=device)
+        device, dtype = like.device.type, like.dtype
+        img_mask = lucid.zeros(1, H, W, 1, dtype=dtype, device=device)
         slices_h = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
         slices_w = [slice(0, -ws), slice(-ws, -ss), slice(-ss, None)]
         cnt = 0
@@ -298,13 +297,11 @@ class _SwinBlock(nn.Module):
         mask_windows = mask_windows.reshape(-1, ws * ws)  # (nW, ws^2)
         mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)  # (nW, ws^2, ws^2)
         # Replace non-zero with -100
-        mask = lucid.where(
+        return lucid.where(
             mask != 0,
-            lucid.full(mask.shape, -100.0, device=device),
-            lucid.zeros(mask.shape, device=device),
+            lucid.full(mask.shape, -100.0, dtype=dtype, device=device),
+            lucid.zeros(mask.shape, dtype=dtype, device=device),
         )
-        # Additive to the scores, so it takes their dtype.
-        return mask.to(dtype)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -337,7 +334,7 @@ class _SwinBlock(nn.Module):
         cache_key = (Hp, Wp, eff_ss, eff_ws, dev, str(x.dtype))
         mask = self._mask_cache.get(cache_key)
         if mask is None and eff_ss > 0:
-            mask = self._attn_mask(Hp, Wp, eff_ss, device=dev, ws=eff_ws, dtype=x.dtype)
+            mask = self._attn_mask(Hp, Wp, eff_ss, x, ws=eff_ws)
             if mask is not None:
                 self._mask_cache[cache_key] = mask
         windows, nH, nW = _window_partition(x, eff_ws)

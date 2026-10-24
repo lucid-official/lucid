@@ -9,6 +9,19 @@ from lucid.models.generative._common._config import BetaSchedule, DiffusionModel
 __all__ = ["StableDiffusionConfig"]
 
 
+def _check_unet_widths(widths: tuple[int, ...], head_dim: int) -> None:
+    """Refuse U-Net widths the attention heads or the timestep embedding split unevenly."""
+    if widths[0] % 2:
+        raise ValueError(
+            f"the first U-Net width {widths[0]} is the timestep embedding's, "
+            f"which splits into cosine and sine halves: it must be even"
+        )
+    if any(w % head_dim != 0 for w in widths):
+        raise ValueError(
+            f"attention_head_dim {head_dim} must divide every U-Net width {widths}"
+        )
+
+
 @model_family_meta(
     canonical_name="Stable Diffusion",
     citation=(
@@ -231,11 +244,7 @@ class StableDiffusionConfig(DiffusionModelConfig):
                     f"every width in {name} must be divisible by "
                     f"norm_num_groups={self.norm_num_groups}, got {bad}"
                 )
-        if any(w % self.attention_head_dim != 0 for w in self.unet_block_out_channels):
-            raise ValueError(
-                f"attention_head_dim {self.attention_head_dim} must divide every "
-                f"U-Net width {self.unet_block_out_channels}"
-            )
+        _check_unet_widths(self.unet_block_out_channels, self.attention_head_dim)
         if self.beta_schedule not in ("linear", "scaled_linear"):
             raise ValueError(
                 f"beta_schedule must be 'linear' or 'scaled_linear', got "

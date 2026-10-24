@@ -22,13 +22,13 @@ conditioning and requiring the output to move; a reversed model fails
 that while passing every shape check.
 """
 
-import math
 from typing import final, override
 
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.generative._common._transformers import timestep_embedding
 from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
 
 __all__ = ["UNet2DConditionModel"]
@@ -41,42 +41,6 @@ __all__ = ["UNet2DConditionModel"]
 # different image at every one of the sixteen transformer blocks, and
 # nothing about a shape, a count or a loss reports it.
 _ATTENTION_NORM_EPS = 1e-6
-
-
-def _timestep_embedding(timesteps: Tensor, dim: int) -> Tensor:
-    r"""Sinusoidal features for a diffusion step — ``(B, dim)``.
-
-    Parameters
-    ----------
-    timesteps : Tensor
-        ``(B,)`` of step indices.
-    dim : int
-        Width of the embedding; must be even.
-
-    Returns
-    -------
-    Tensor
-        ``(B, dim)``.
-
-    Notes
-    -----
-    The released models order the halves ``[cos, sin]`` rather than the
-    ``[sin, cos]`` of the original transformer — ``flip_sin_to_cos`` in
-    their configuration. The two are a permutation of each other and
-    train identically from scratch, but a checkpoint trained under one
-    is nonsense under the other, so the released order is what is built
-    here.
-    """
-    if dim % 2:
-        raise ValueError(f"timestep embedding width must be even, got {dim}")
-    half = dim // 2
-    freqs = lucid.exp(
-        -math.log(10000.0)
-        * lucid.arange(half, dtype=timesteps.dtype, device=timesteps.device.type)
-        / half
-    )
-    args = timesteps.reshape(-1, 1) * freqs.reshape(1, -1)
-    return lucid.cat([lucid.cos(args), lucid.sin(args)], dim=-1)
 
 
 @final
@@ -476,8 +440,14 @@ class UNet2DConditionModel(nn.Module):
         steps = timestep.reshape(-1)
         if int(steps.shape[0]) == 1 and batch > 1:
             steps = steps.repeat(batch)
+        # The released ``[cos, sin]`` order (``flip_sin_to_cos``), computed in
+        # float32 at least and handed to the time MLP in the U-Net's dtype.
         emb = self.time_mlp(
-            _timestep_embedding(steps, self.config.unet_block_out_channels[0])
+            timestep_embedding(
+                steps,
+                self.config.unet_block_out_channels[0],
+                dtype=self.conv_in.weight.dtype,
+            )
         )
         if int(context.shape[-1]) != self.config.cross_attention_dim:
             raise ValueError(

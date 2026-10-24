@@ -34,6 +34,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import ModelOutput
 from lucid.models._tasks import WorldModelingModel
+from lucid.models._utils._generative import model_dtype
 from lucid.models.generative._common._returns import lambda_return
 from lucid.models.generative.diamond._config import DIAMONDConfig
 
@@ -868,9 +869,8 @@ class _RewardEndModel(nn.Module):
         feature = self.encoder(frames, cond)
         flat = feature.reshape(batch, -1)
         if state is None:
-            zeros = lucid.zeros(
-                (batch, self.config.reward_lstm_dim), device=frames.device.type
-            )
+            shape = (batch, self.config.reward_lstm_dim)  # start state in our dtype
+            zeros = lucid.zeros(shape, dtype=model_dtype(self), device=frames.device)
             state = (zeros, zeros)
         hidden, cell = self.cell(flat, state)
         out = self.head(hidden)
@@ -976,9 +976,8 @@ class _ActorCritic(nn.Module):
         feature = self.encoder(frame)
         flat = feature.reshape(batch, -1)
         if state is None:
-            zeros = lucid.zeros(
-                (batch, self.config.actor_lstm_dim), device=frame.device.type
-            )
+            shape = (batch, self.config.actor_lstm_dim)  # start state in our dtype
+            zeros = lucid.zeros(shape, dtype=model_dtype(self), device=frame.device)
             state = (zeros, zeros)
         hidden, cell = self.cell(flat, state)
         logits = self.actor_linear(hidden)
@@ -1761,10 +1760,10 @@ class DIAMONDModel(PretrainedModel):
         :math:`D_\theta`, so no extra loss weight appears here.
         """
         batch = int(next_frame.shape[0])
-        device = next_frame.device.type
+        device, dt = next_frame.device.type, next_frame.dtype  # draws in the frames'
         if sigma is None:
             log_sigma = (
-                lucid.randn((batch,), device=device) * self.config.p_std
+                lucid.randn((batch,), dtype=dt, device=device) * self.config.p_std
                 + self.config.p_mean
             )
             sigma = lucid.exp(log_sigma)
@@ -1773,10 +1772,9 @@ class DIAMONDModel(PretrainedModel):
         # usual isotropic draw.  It lets the target's overall level shift,
         # which isotropic noise at a single sigma cannot express — and it
         # exists only in the released configuration, not the paper.
-        offset = (
-            lucid.randn((batch, int(next_frame.shape[1]), 1, 1), device=device)
-            * self.config.sigma_offset_noise
-        )
+        shape = (batch, int(next_frame.shape[1]), 1, 1)
+        offset_noise = lucid.randn(shape, dtype=dt, device=device)
+        offset = offset_noise * self.config.sigma_offset_noise
         noised = (
             next_frame
             + offset
@@ -1788,7 +1786,7 @@ class DIAMONDModel(PretrainedModel):
         cond_sigma = None
         if self.config.noise_previous_obs:
             cond_sigma = lucid.exp(
-                lucid.randn((batch,), device=device) * self.config.p_std
+                lucid.randn((batch,), dtype=dt, device=device) * self.config.p_std
                 + self.config.p_mean
             )
         # No quantiser on the training path: it has no gradient, and the

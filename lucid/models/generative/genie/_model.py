@@ -36,6 +36,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import ModelOutput
 from lucid.models._tasks import WorldModelingModel
+from lucid.models._utils._generative import model_dtype
 from lucid.models.generative.genie._config import GenieConfig
 
 __all__ = [
@@ -929,8 +930,9 @@ class GenieModel(PretrainedModel):
         # masks a whole frame, which is where every generated frame starts
         # at play time, and a rate of exactly 0.5 is the one lost instead.
         rate = config.mask_ratio_max - lucid.rand(b, 1, 1, device=device) * span
-        later = (lucid.arange(t, device=device) > 0).to(lucid.float32).reshape(1, t, 1)
-        mask = (lucid.rand(b, t, n, device=device) < rate).to(lucid.float32) * later
+        dt = model_dtype(self)  # the loss weights meet the logits
+        later = (lucid.arange(t, device=device) > 0).to(dt).reshape(1, t, 1)
+        mask = (lucid.rand(b, t, n, device=device) < rate).to(dt) * later
         hide = mask.to(tokens.dtype)
         inputs = tokens + (self.dynamics.mask_token - tokens) * hide
         logits = self.dynamics(inputs, actions)

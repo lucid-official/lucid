@@ -626,6 +626,8 @@ class TestVariants:
 
 
 class TestTimestepEmbedding:
+    """The U-Net's step features come from the shared ``timestep_embedding``."""
+
     def test_it_orders_cosine_before_sine(self) -> None:
         """``flip_sin_to_cos`` in the released configuration.
 
@@ -634,23 +636,34 @@ class TestTimestepEmbedding:
         pinned here rather than left to whichever the transformer paper
         used.
         """
-        from lucid.models.generative.stable_diffusion._unet import _timestep_embedding
+        from lucid.models.generative._common._transformers import (
+            timestep_embedding,
+        )
 
-        emb = _timestep_embedding(lucid.tensor([0.0]), 8)
+        emb = timestep_embedding(lucid.tensor([0.0]), 8)
         # At t = 0 every argument is 0, so cos gives 1 and sin gives 0.
         assert [round(v, 6) for v in emb[0, :4].tolist()] == [1.0, 1.0, 1.0, 1.0]
         assert [round(v, 6) for v in emb[0, 4:].tolist()] == [0.0, 0.0, 0.0, 0.0]
 
     def test_an_odd_width_is_refused(self) -> None:
-        from lucid.models.generative.stable_diffusion._unet import _timestep_embedding
+        """The first U-Net width is the embedding's, split into two halves."""
+        from lucid.models.generative.stable_diffusion._config import (
+            StableDiffusionConfig,
+        )
 
         with pytest.raises(ValueError, match="even"):
-            _timestep_embedding(lucid.tensor([0.0]), 7)
+            StableDiffusionConfig(
+                unet_block_out_channels=(7, 14),
+                norm_num_groups=1,
+                attention_head_dim=7,
+            )
 
     def test_distinct_timesteps_get_distinct_embeddings(self) -> None:
-        from lucid.models.generative.stable_diffusion._unet import _timestep_embedding
+        from lucid.models.generative._common._transformers import (
+            timestep_embedding,
+        )
 
-        emb = _timestep_embedding(lucid.tensor([0.0, 1.0, 500.0]), 16)
+        emb = timestep_embedding(lucid.tensor([0.0, 1.0, 500.0]), 16)
         assert float((emb[0] - emb[1]).abs().max().item()) > 1e-6
         assert float((emb[1] - emb[2]).abs().max().item()) > 1e-6
         assert math.isfinite(float(emb.abs().max().item()))

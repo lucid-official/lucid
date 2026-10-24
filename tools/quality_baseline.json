@@ -1031,7 +1031,7 @@
     "lucid/fft/__init__.py": 379,
     "lucid/linalg/__init__.py": 2098,
     "lucid/models/_utils/_detection.py": 1333,
-    "lucid/models/generative/diamond/_model.py": 730,
+    "lucid/models/generative/diamond/_model.py": 728,
     "lucid/models/generative/rectified_flow/_model.py": 280,
     "lucid/models/vision/mask2former/_model.py": 28,
     "lucid/nn/functional/activations.py": 476,
