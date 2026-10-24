@@ -1254,6 +1254,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Module.to()` / `.float()` / `.type()` that change nothing keep every parameter, gradient and buffer as the same tensor, and no longer make a compiled module trace again on its next call (LCD-601).
 
+- TVM converter reads the compiled release pickles
+
 ### Changed
 
 - `LBFGS.zero_grad` honours `set_to_none` like every other optimizer: `set_to_none=False` now zeroes the gradients in place instead of dropping them (LCD-546).

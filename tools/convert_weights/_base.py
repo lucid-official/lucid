@@ -18,7 +18,6 @@ from typing import Callable
 
 import lucid
 import lucid.serialization as _serial
-from lucid._factories.converters import from_numpy
 from lucid.nn import Module
 
 from tools.convert_weights._templates import (
@@ -77,6 +76,17 @@ class ConversionSpec:
     """Metrics + recipe + flops, merged into config.json + card."""
 
 
+class UnknownSourceKey(KeyError):
+    """A source key that :meth:`Architecture.map_key` has no rule for.
+
+    ``map_key`` returning ``None`` is a decision to drop a key; raising
+    this says the recipe never decided anything about it.  :func:`convert`
+    collects every such key and refuses the checkpoint, because a key the
+    recipe does not know is a tensor the converted model would silently
+    lack or a layout the recipe was not written for.
+    """
+
+
 class Architecture(abc.ABC):
     """Per-architecture conversion recipe.
 
@@ -96,7 +106,13 @@ class Architecture(abc.ABC):
 
     @abc.abstractmethod
     def map_key(self, src_key: str) -> str | None:
-        """Map an upstream key to its Lucid name (``None`` drops the key)."""
+        """Map an upstream key to its Lucid name.
+
+        ``None`` drops the key on purpose.  A recipe that knows its
+        source's whole key set raises :class:`UnknownSourceKey` for
+        anything else, so that :func:`convert` refuses it instead of
+        dropping it.
+        """
         raise NotImplementedError
 
     def transform_value(self, src_key: str, arr: object) -> object:
@@ -137,23 +153,36 @@ def convert(arch: Architecture) -> tuple[dict[str, object], ConversionSpec]:
     Raises
     ------
     RuntimeError
-        On missing / extra keys or a shape mismatch.
+        On source keys the recipe has no rule for, missing / extra keys,
+        or a shape mismatch.
     """
     src = arch.source_state_dict()
     model = arch.target_model()
     target_sd = model.state_dict()
     target_keys = set(target_sd.keys())
 
-    out: dict[str, object] = {}
+    out: dict[str, lucid.Tensor] = {}
+    unknown: list[str] = []
     for src_key, arr in src.items():
-        lucid_key = arch.map_key(src_key)
+        try:
+            lucid_key = arch.map_key(src_key)
+        except UnknownSourceKey:
+            unknown.append(src_key)
+            continue
         if lucid_key is None:
             continue
         if lucid_key in out:
             raise RuntimeError(
                 f"convert: key collision — two source keys map to {lucid_key!r}"
             )
-        out[lucid_key] = from_numpy(arch.transform_value(src_key, arr))
+        out[lucid_key] = lucid.tensor(arch.transform_value(src_key, arr))
+
+    if unknown:
+        raise RuntimeError(
+            f"convert: {len(unknown)} source key(s) the "
+            f"{arch.spec().model_name} recipe has no rule for: "
+            f"{sorted(unknown)[:10]}"
+        )
 
     got = set(out)
     missing = sorted(target_keys - got)
@@ -175,7 +204,8 @@ def convert(arch: Architecture) -> tuple[dict[str, object], ConversionSpec]:
 
     # Real load — the ultimate correctness gate.
     model.load_state_dict(out, strict=True)
-    return out, arch.spec()
+    converted: dict[str, object] = dict(out)
+    return converted, arch.spec()
 
 
 def _sha256_of(path: Path) -> str:
