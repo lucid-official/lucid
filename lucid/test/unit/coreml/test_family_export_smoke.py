@@ -159,7 +159,31 @@ MULTI_INPUT = [
     # an M1 Pro, and at 64 it peaks at 1.65 GB through the same staged
     # upsample (verify 1.5e-08).
     ("rectified_flow_afhq_cat", lambda: (lucid.randn(1, 3, 64, 64), lucid.zeros(1))),
+    # A latent, the two times and a label. Built small through ``SMALL``:
+    # the paper's DiT-XL/2 is its only size.
+    (
+        "tvm_imagenet256",
+        lambda: (
+            lucid.randn(1, 4, 8, 8),
+            lucid.ones(1),
+            lucid.zeros(1),
+            lucid.zeros(1).to(lucid.int64),
+        ),
+    ),
 ]
+
+#: Factories whose only sizes are too large to export in a unit test, built
+#: through config overrides on the real factory — never an invented variant.
+SMALL: dict[str, dict[str, object]] = {
+    # 678M parameters at the paper's size: a package in gigabytes.
+    "tvm_imagenet256": {
+        "sample_size": 8,
+        "hidden_size": 32,
+        "depth": 1,
+        "num_heads": 4,
+        "num_classes": 4,
+    },
+}
 
 #: Families whose ``forward`` draws random numbers, exported with the
 #: draw lifted to an input the caller fills — see
@@ -261,12 +285,6 @@ NOT_SINGLE_IMAGE = {
     # package in gigabytes.  Covering it needs an agreed small
     # configuration first, as ``stable`` does.
     "vjepa",
-    # ``tvm``'s only factories are the paper's DiT-XL/2 network, 678M
-    # parameters, so the same holds: a package in gigabytes until a small
-    # configuration is agreed.  Its network is a function of a latent,
-    # two times, a label and a guidance weight, so it belongs with
-    # ``MULTI_INPUT`` once it has one.
-    "tvm",
     # ``genie``'s ``forward`` is its three training objectives, and a
     # tiny configuration stops on ``mse_loss``, which has no Core ML
     # translation.  A packaged training loss has no caller; the playable
@@ -359,6 +377,10 @@ def test_a_token_model_exports_and_matches(factory, shape, tmp_path):
         exported.close()
 
 
+def _create(factory: str) -> lucid.nn.Module:
+    return M.create_model(factory, **SMALL.get(factory, {})).eval()
+
+
 def _without_zero_initialised_parameters(factory: str) -> object:
     """The same model with its zeroed parameters given small values.
 
@@ -368,7 +390,7 @@ def _without_zero_initialised_parameters(factory: str) -> object:
     comparison — rightly, since an export that dropped every layer would
     score the same. Perturbing first is what the refusal asks for.
     """
-    model = M.create_model(factory).eval()
+    model = _create(factory)
     replaced = {}
     for name, value in model.state_dict().items():
         zeroed = (
@@ -377,7 +399,7 @@ def _without_zero_initialised_parameters(factory: str) -> object:
             and float(value.abs().max().item()) == 0.0
         )
         replaced[name] = lucid.randn(*value.shape) * 0.05 if zeroed else value
-    perturbed = M.create_model(factory).eval()
+    perturbed = _create(factory)
     perturbed.load_state_dict(replaced)
     return perturbed
 
