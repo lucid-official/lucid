@@ -44,6 +44,7 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._generative import (
     generative_activation,
+    model_dtype,
     normal_kl,
     resolve_generation_device,
 )
@@ -776,7 +777,9 @@ class RSSM(nn.Module):
         Returns
         -------
         RSSMState
-            Zeros throughout, parameterised the way this model is.
+            Zeros throughout, parameterised the way this model is, in its
+            parameters' dtype — a float32 start ran a float16 model's whole
+            unroll in float32.
 
         Notes
         -----
@@ -806,11 +809,12 @@ class RSSM(nn.Module):
         # A hard "cpu" default handed a Metal model a CPU start state, and
         # the first recurrent step raised on the concatenation.
         device = resolve_generation_device(self, device)
-        deter = lucid.zeros(batch_size, self.deter_size, device=device)
-        stoch = lucid.zeros(batch_size, self.stoch_width, device=device)
+        dtype = model_dtype(self)
+        deter = lucid.zeros(batch_size, self.deter_size, dtype=dtype, device=device)
+        stoch = lucid.zeros(batch_size, self.stoch_width, dtype=dtype, device=device)
         if self.discrete:
             logits = lucid.zeros(
-                batch_size, self.stoch_size, self.discrete, device=device
+                batch_size, self.stoch_size, self.discrete, dtype=dtype, device=device
             )
             return RSSMState(deter=deter, stoch=stoch, logits=logits)
         return RSSMState(deter=deter, stoch=stoch, mean=stoch, std=stoch)
