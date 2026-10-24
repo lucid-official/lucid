@@ -221,7 +221,10 @@ def test_vander_supports_batched_inputs() -> None:
     assert tuple(v_inc.shape) == (2, 3, 4)
     for i in range(2):
         np.testing.assert_allclose(
-            v_def[i].numpy(), np.vander(x_np[i]), rtol=1e-12, atol=1e-12
+            v_def[i].numpy(),
+            np.vander(x_np[i], increasing=True),
+            rtol=1e-12,
+            atol=1e-12,
         )
         np.testing.assert_allclose(
             v_inc[i].numpy(),
@@ -230,8 +233,8 @@ def test_vander_supports_batched_inputs() -> None:
             atol=1e-12,
         )
     assert tuple(LA.vander(x, N=0).shape) == (2, 3, 0)
-    with pytest.raises(RuntimeError):
-        LA.vander(lucid.tensor(1.0))
+    # A 0-d input is a vector of one, as the reference reads it.
+    assert LA.vander(lucid.tensor(2.0), N=3).tolist() == [[1.0, 2.0, 4.0]]
     with pytest.raises(RuntimeError):
         LA.vander(x, N=-1)
 

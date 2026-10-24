@@ -2117,7 +2117,7 @@ def solve_triangular(
     return _wrap(_la.solve_triangular(_unwrap(input), _unwrap(B), upper, unitriangular))
 
 
-def vander(x: Tensor, *, N: int | None = None, increasing: bool = False) -> Tensor:
+def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tensor:
     r"""Construct a Vandermonde matrix from a 1-D or batched vector.
 
     Given an input :math:`x` of shape ``(*, n)``, returns the
@@ -2126,9 +2126,9 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = False) -> Tens
 
     .. math::
 
-        V_{\ldots ij} \,=\, x_{\ldots i}^{\,j} \quad (\text{increasing})
+        V_{\ldots ij} \,=\, x_{\ldots i}^{\,j} \quad (\text{increasing, default})
         \qquad\text{or}\qquad
-        V_{\ldots ij} \,=\, x_{\ldots i}^{\,N-1-j} \quad (\text{decreasing, default}).
+        V_{\ldots ij} \,=\, x_{\ldots i}^{\,N-1-j} \quad (\text{decreasing}).
 
     Vandermonde matrices arise naturally in polynomial fitting and
     interpolation: the columns are the basis :math:`\{1, x, x^2,
@@ -2137,21 +2137,30 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = False) -> Tens
     Parameters
     ----------
     x : Tensor
-        Input tensor of shape ``(*, n)`` with ``ndim >= 1``.
+        Input tensor of shape ``(*, n)``; a 0-d tensor is a vector of one.
+        Floating, complex or integer; an integer input stays integral.
     N : int or None, keyword-only, optional
         Number of columns.  Defaults to :math:`n` (square output per vector).
     increasing : bool, keyword-only, optional
-        If ``True`` powers increase left-to-right (column 0 is
-        :math:`x^0`).  Default ``False`` matches the classical
-        convention used in polynomial regression.
+        Default ``True``: column 0 is :math:`x^0`, as the reference orders
+        it.  ``False`` reverses the columns.
 
     Returns
     -------
     Tensor
-        ``(*, n, N)`` Vandermonde tensor.
+        ``(*, n, N)`` Vandermonde tensor; ``int64`` for an integer input.
+
+    Raises
+    ------
+    TypeError
+        If ``x`` is a bool tensor.
 
     Notes
     -----
+    The powers are a running product of ``x``, as the reference builds
+    them, so they are exact for an integer input and the derivative at
+    :math:`x = 0` is the exact one.  The default was decreasing powers.
+
     Vandermonde matrices become highly ill-conditioned as
     :math:`N` grows (condition number grows exponentially) — for
     polynomial regression beyond degree :math:`\sim 10` prefer an
@@ -2161,50 +2170,22 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = False) -> Tens
     --------
     >>> import lucid
     >>> from lucid.linalg import vander
-    >>> vander(lucid.tensor([1.0, 2.0, 3.0]), N=3, increasing=True)
+    >>> vander(lucid.tensor([1.0, 2.0, 3.0]))
     tensor([[1., 1., 1.], [1., 2., 4.], [1., 3., 9.]])
     """
-    x_impl = _unwrap(x)
-    shape = [int(s) for s in x_impl.shape]
-    if not shape:
-        raise _C_engine.InvalidArgument(
-            "linalg.vander: expected input with at least 1 dimension, got 0D tensor"
-        )
-    n = shape[-1]
-    cols = n if N is None else int(N)
+    if x.dtype == lucid.bool:
+        raise TypeError("linalg.vander: expected a numeric input, got lucid.bool")
+    vec = x.unsqueeze(-1) if x.ndim == 0 else x
+    shape = tuple(vec.shape)
+    cols = shape[-1] if N is None else int(N)
     if cols < 0:
         raise _C_engine.InvalidArgument(
             f"linalg.vander: N must be non-negative, got {cols}"
         )
-    # The exponent row is combined with ``x`` by ``pow``, so it must live on the
-    # input's device — a hardcoded CPU exponent raised DeviceMismatch for any
-    # Metal input.
-    dev = x_impl.device
-    # ...and on the input's *dtype*, for the same reason.
-    #
-    # The device was fixed here once; the dtype one line over had the
-    # identical bug and was not.  ``pow`` requires both operands to agree,
-    # so a hardcoded F32 exponent raised ``DtypeMismatch (pow): expected
-    # float64, got float32`` for every f64 input — and f64 is the default
-    # dtype for a tensor built from a Python list.  Half formats widen,
-    # since ``arange`` has no half kernel and the result of ``pow`` is
-    # what carries the dtype anyway.
-    # ``arange`` has no half kernel, so a half input widens rather than
-    # the exponent narrowing: ``pow`` wants both operands at the same
-    # dtype, and F32 is the one they can both reach.
-    exp_dtype = x_impl.dtype
-    if exp_dtype not in (_C_engine.F32, _C_engine.F64):
-        exp_dtype = _C_engine.F32
-        x_impl = _C_engine.astype(x_impl, _C_engine.F32)
-    if cols == 0:
-        return _wrap(_C_engine.zeros([*shape, 0], exp_dtype, dev))
-    if increasing:
-        exp_impl = _C_engine.arange(0.0, float(cols), 1.0, exp_dtype, dev)
-    else:
-        exp_impl = _C_engine.arange(float(cols - 1), -1.0, -1.0, exp_dtype, dev)
-    x_col = _C_engine.reshape(x_impl, [*shape, 1])
-    exp_row = _C_engine.reshape(exp_impl, [*([1] * len(shape)), cols])
-    return _wrap(_C_engine.pow(x_col, exp_row))
+    powers = lucid.cumprod(vec.unsqueeze(-1).expand(*shape, max(cols - 1, 0)), -1)
+    ones = lucid.ones(*shape, min(cols, 1), dtype=powers.dtype, device=vec.device)
+    out = lucid.cat([ones, powers], -1)
+    return out if increasing else out.flip(-1)
 
 
 _COMPLEX_DTYPES = (lucid.complex64, lucid.complex128)

@@ -1,69 +1,147 @@
-"""``vander`` built its exponent row at a hardcoded dtype.
+"""``linalg.vander`` orders its powers as the reference does (LCD-431).
 
-``pow`` requires both operands to agree, so an ``f64`` input raised
-``DtypeMismatch (pow): expected float64, got float32`` — and ``f64`` is
-what a tensor built from a Python list gets by default, so the plainest
-possible call was the one that failed.
+The default was decreasing powers — NumPy's ``vander`` — and the docstring
+called that a convention; the reference's ``linalg.vander`` has no
+``increasing`` argument and always puts ``x^0`` first, so code ported from
+it read every column backwards.  Increasing is the default now, and
+``increasing=False`` reverses the columns.
 
-The device had exactly this bug and was fixed; the dtype one line over
-was not.  A comment above the fix explains the device case and says
-nothing about the dtype, which is how it survived.
-
-The column order is *not* changed here.  NumPy's ``vander`` decreases by
-default and the reference framework's increases; Lucid follows NumPy and
-documents ``increasing=False``, so that is a stated convention rather
-than a defect.  Both orders are checked against NumPy below.
+The powers are a running product of ``x``, as the reference builds them.
+``pow`` against an exponent row had raised for an f64 input and then for a
+Metal one, rounded ``3**4`` to 81.000008 in float32, widened an integer
+input to float32, and cast a complex input to float32 without a word.
 """
 
-import numpy as np
+from types import ModuleType
+
 import pytest
 
 import lucid
 from lucid.test._fixtures.devices import metal_available
 
-VALUES = np.array([1.0, 2.0, 3.0, 4.0])
+_SQUARES = [[1.0, 1.0, 1.0], [1.0, 2.0, 4.0], [1.0, 3.0, 9.0]]
+
+
+def test_the_default_is_increasing_powers(device: str) -> None:
+    x = lucid.tensor([1.0, 2.0, 3.0], device=device)
+    assert lucid.linalg.vander(x).tolist() == _SQUARES
+    assert lucid.linalg.vander(x, increasing=False).tolist() == [
+        row[::-1] for row in _SQUARES
+    ]
+
+
+def test_n_sets_the_number_of_columns(device: str) -> None:
+    x = lucid.tensor([-2.0, 0.0, 0.5], device=device)
+    assert lucid.linalg.vander(x, N=4).tolist() == [
+        [1.0, -2.0, 4.0, -8.0],
+        [1.0, 0.0, 0.0, 0.0],
+        [1.0, 0.5, 0.25, 0.125],
+    ]
+    assert lucid.linalg.vander(x, N=1).tolist() == [[1.0], [1.0], [1.0]]
+    assert lucid.linalg.vander(x, N=0).shape == (3, 0)
+
+
+def test_a_batch_of_vectors_gives_a_batch_of_matrices(device: str) -> None:
+    x = lucid.tensor([[1.0, 2.0], [3.0, 0.0]], device=device)
+    assert lucid.linalg.vander(x, N=3).tolist() == [
+        [[1.0, 1.0, 1.0], [1.0, 2.0, 4.0]],
+        [[1.0, 3.0, 9.0], [1.0, 0.0, 0.0]],
+    ]
+
+
+def test_a_0d_input_is_a_vector_of_one(device: str) -> None:
+    out = lucid.linalg.vander(lucid.tensor(2.0, device=device), N=3)
+    assert out.tolist() == [[1.0, 2.0, 4.0]]
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float16", "bfloat16"])
+def test_a_floating_input_keeps_its_dtype(device: str, dtype: str) -> None:
+    x = lucid.tensor([1.0, 2.0, 3.0], dtype=getattr(lucid, dtype), device=device)
+    out = lucid.linalg.vander(x)
+    assert out.dtype == x.dtype
+    assert out.to(lucid.float32).tolist() == _SQUARES
+
+
+def test_a_float64_input_keeps_its_dtype() -> None:
+    out = lucid.linalg.vander(lucid.tensor([1.0, 2.0, 3.0], dtype=lucid.float64))
+    assert out.dtype == lucid.float64
+    assert out.tolist() == _SQUARES
+
+
+@pytest.mark.parametrize("dtype", ["int32", "int64"])
+def test_an_integer_input_has_exact_int64_powers(device: str, dtype: str) -> None:
+    x = lucid.tensor([3, -7], dtype=getattr(lucid, dtype), device=device)
+    out = lucid.linalg.vander(x, N=12)
+    assert out.dtype == lucid.int64
+    assert out.tolist() == [[3**k for k in range(12)], [(-7) ** k for k in range(12)]]
+
+
+def test_a_bool_input_is_refused() -> None:
+    with pytest.raises(TypeError, match="vander"):
+        lucid.linalg.vander(lucid.tensor([True, False]))
+
+
+def test_a_negative_n_is_refused() -> None:
+    with pytest.raises(ValueError, match="N must be non-negative"):
+        lucid.linalg.vander(lucid.tensor([1.0, 2.0]), N=-1)
+
+
+def test_the_derivative_at_zero_is_exact(device: str) -> None:
+    # d/dx (1 + x + x^2 + x^3) = 1 + 2x + 3x^2: 1 at 0, 17 at 2.  ``pow``'s
+    # derivative of x^0 at 0 is 0 * 0^-1.
+    x = lucid.tensor([0.0, 2.0], device=device, requires_grad=True)
+    lucid.linalg.vander(x, N=4).sum().backward()
+    assert x.grad is not None
+    assert x.grad.tolist() == [1.0, 17.0]
 
 
 @pytest.mark.parametrize(
-    "dtype,expected",
+    "device",
     [
-        (lucid.float32, "float32"),
-        (lucid.float64, "float64"),
-        (lucid.float16, "float32"),
-        (lucid.bfloat16, "float32"),
+        pytest.param(
+            "cpu",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="engine: the CPU cumprod has no complex kernel (LCD-431 FOUND)",
+            ),
+        ),
+        pytest.param(
+            "metal",
+            marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
+        ),
     ],
 )
-def test_every_float_dtype_is_accepted(dtype, expected) -> None:
-    """The half formats widen: ``arange`` has no half kernel, so the
-    exponent cannot narrow to meet them."""
-    out = lucid.linalg.vander(lucid.tensor(VALUES, dtype=dtype))
-    assert expected in str(out.dtype)
-    assert np.allclose(np.asarray(out.numpy()), np.vander(VALUES), atol=1e-2)
+def test_a_complex_input_keeps_its_imaginary_part(device: str) -> None:
+    x = lucid.complex(
+        lucid.tensor([1.0, 2.0], device=device), lucid.tensor([1.0, 0.0], device=device)
+    )
+    out = lucid.linalg.vander(x)
+    assert out.dtype == lucid.complex64
+    assert out.tolist() == [[1 + 0j, 1 + 1j], [1 + 0j, 2 + 0j]]
 
 
-def test_the_default_list_input_works() -> None:
-    """``lucid.tensor([...])`` is f64, which is precisely what raised."""
-    out = lucid.linalg.vander(lucid.tensor([1.0, 2.0, 3.0]))
-    assert np.allclose(np.asarray(out.numpy()), np.vander(np.array([1.0, 2.0, 3.0])))
+@pytest.mark.parity
+@pytest.mark.parametrize(
+    "data, n_cols",
+    [
+        ([1.0, 2.0, 3.0], None),
+        ([0.5, -1.5, 2.0, 0.0], 6),
+        ([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]], 4),
+        ([float("nan"), float("inf")], 3),
+    ],
+)
+def test_the_reference_gives_the_same_matrix(
+    ref: ModuleType, data: list[float], n_cols: int | None
+) -> None:
+    got = lucid.linalg.vander(lucid.tensor(data), N=n_cols)
+    want = ref.linalg.vander(ref.tensor(data), N=n_cols)
+    assert got.shape == tuple(want.shape)
+    assert str(got.tolist()) == str(want.tolist())
 
 
-@pytest.mark.parametrize("increasing", [False, True])
-@pytest.mark.parametrize("n", [None, 2, 5])
-def test_both_orders_match_numpy(increasing, n) -> None:
-    out = lucid.linalg.vander(lucid.tensor(VALUES), N=n, increasing=increasing)
-    expected = np.vander(VALUES, N=n, increasing=increasing)
-    assert np.allclose(np.asarray(out.numpy()), expected)
-
-
-def test_the_documented_default_is_decreasing() -> None:
-    """Guard the convention, so a later 'fix' toward the reference has to
-    be a deliberate API change rather than a quiet one."""
-    out = np.asarray(lucid.linalg.vander(lucid.tensor([1.0, 2.0, 3.0])).numpy())
-    assert np.allclose(out[1], [1.0, 2.0, 4.0][::-1])  # 4, 2, 1
-
-
-@pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-def test_the_exponent_follows_the_input_device_too() -> None:
-    out = lucid.linalg.vander(lucid.tensor(VALUES, dtype=lucid.float32, device="metal"))
-    assert "metal" in str(out.device)
-    assert np.allclose(np.asarray(out.numpy()), np.vander(VALUES), atol=1e-4)
+@pytest.mark.parity
+def test_the_reference_gives_the_same_integer_matrix(ref: ModuleType) -> None:
+    got = lucid.linalg.vander(lucid.tensor([1, 2, 3]))
+    want = ref.linalg.vander(ref.tensor([1, 2, 3]))
+    assert got.tolist() == want.tolist()
+    assert str(got.dtype).split(".")[-1] == str(want.dtype).split(".")[-1]

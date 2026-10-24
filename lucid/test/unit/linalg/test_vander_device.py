@@ -28,8 +28,6 @@ def test_vander_matches_numpy(device, increasing, n_cols):
     )
     assert str(got.device) == f"device('{device}')"
     assert got.shape == ref.shape
-    # ``pow`` goes through exp/log, so 3**4 lands at 81.000008 in f32 — this is
-    # a device-placement test, not a precision one.
     assert np.abs(got.numpy() - ref).max() / max(np.abs(ref).max(), 1.0) < 1e-6
 
 

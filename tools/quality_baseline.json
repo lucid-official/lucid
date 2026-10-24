@@ -1034,7 +1034,7 @@
     "lucid/coreml/_emit.py": 1167,
     "lucid/distributions/transforms.py": 37,
     "lucid/fft/__init__.py": 379,
-    "lucid/linalg/__init__.py": 2098,
+    "lucid/linalg/__init__.py": 2079,
     "lucid/models/_utils/_detection.py": 1333,
     "lucid/models/generative/diamond/_model.py": 719,
     "lucid/models/generative/rectified_flow/_model.py": 278,
