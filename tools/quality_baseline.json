@@ -2031,7 +2031,7 @@
     "lucid/compile/_entry/decode_step.py": 135,
     "lucid/compile/_entry/function.py": 63,
     "lucid/compile/_entry/module.py": 43,
-    "lucid/compile/_entry/segmented_step.py": 24,
+    "lucid/compile/_entry/segmented_step.py": 20,
     "lucid/compile/_optim/compiler.py": 54,
     "lucid/coreml/__init__.py": 272,
     "lucid/coreml/_build.py": 11,
@@ -2434,9 +2434,6 @@
    },
    "TRY300": {
     "lucid/weights/_hub.py": 1
-   },
-   "TRY301": {
-    "lucid/compile/_entry/segmented_step.py": 1
    },
    "UP015": {
     "lucid/models/_auto.py": 2,

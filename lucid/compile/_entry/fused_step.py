@@ -1112,8 +1112,9 @@ class _FusedStep:
         from lucid.compile._core.attention_probe import maybe_probe_for_graph
 
         scaler_enabled = self._ensure_scaler_holders()
+        before = self._fingerprint.outside_slots()
         traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
-        self._fingerprint.settle(outside_feeds(traced.tracer))
+        self._fingerprint.settle(outside_feeds(traced.tracer), before)
         bn_counters = bn_counter_targets(self._model, traced.graph, traced.ext)
         if not traced.graph.ops:
             raise RuntimeError("fused_step: empty trace")

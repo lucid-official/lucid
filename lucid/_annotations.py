@@ -307,6 +307,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.compile._core.signature": (
         ("Module", "lucid.nn.module", "Module"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._debug.diagnose": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.compile._debug.trace_dump": (

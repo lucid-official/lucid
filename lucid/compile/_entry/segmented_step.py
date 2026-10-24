@@ -378,6 +378,20 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     )
 
 
+def _compile_into(
+    seg: _Segment, x: Tensor, fingerprint: ParamFingerprint
+) -> _SegCompiled:
+    """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
+    traces read; raise :class:`_SegmentCompileError` if it does not compile."""
+    before = fingerprint.outside_slots()
+    compiled = _compile_segment(seg, x)
+    fingerprint.settle(() if compiled is None else compiled.fed, before)
+    if compiled is None:
+        raise _SegmentCompileError(seg.index)
+    seg.cache[_sig(x, fingerprint)] = compiled
+    return compiled
+
+
 @final
 class _SegmentFunction(Function):
     """autograd.Function wrapping one compiled segment.
@@ -585,11 +599,7 @@ def make_segmented_step(
             for seg in seg_objs:
                 compiled = seg.cache.get(_sig(cur, fingerprint))
                 if compiled is None:
-                    compiled = _compile_segment(seg, cur)
-                    fingerprint.settle(() if compiled is None else compiled.fed)
-                    if compiled is None:
-                        raise _SegmentCompileError(seg.index)
-                    seg.cache[_sig(cur, fingerprint)] = compiled
+                    compiled = _compile_into(seg, cur, fingerprint)
                 holder: list[object] = [compiled]
                 cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
         except _SegmentCompileError:

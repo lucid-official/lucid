@@ -953,8 +953,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
         symbolic lowering failed), and the wildcarded key is then wrong.
         A signature that does not compile is remembered as eager-only.
         """
+        before = self._param_fp.outside_slots()
         entry = self._compile_for(args, kwargs)
-        self._param_fp.settle(() if entry is None else entry.reads.fed)
+        self._param_fp.settle(() if entry is None else entry.reads.fed, before)
         resolved = self._symbolic_resolved
         if resolved is not None and resolved != symbolic:
             key = self._param_fp.key_of(args, kwargs, dynamic=resolved)

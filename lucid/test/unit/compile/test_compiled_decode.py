@@ -186,7 +186,9 @@ def test_a_step_under_grad_mode_answers_as_eager(frozen: bool) -> None:
     got, want = runs
     assert [t.requires_grad for t in got] == [t.requires_grad for t in want]
     assert [t.requires_grad for t in want] == [not frozen] * 4
-    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want))
+    worst = max(
+        float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True)
+    )
     assert worst < 1e-4
 
 
@@ -224,5 +226,7 @@ def test_a_host_read_of_the_models_state_runs_the_step_eagerly() -> None:
             outs.append(step(h, lucid.tensor([pos], device=COMPILE_DEVICE).long()))
         runs.append(outs)
     got, want = runs
-    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want))
+    worst = max(
+        float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True)
+    )
     assert worst < 1e-4

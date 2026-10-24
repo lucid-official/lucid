@@ -342,8 +342,8 @@ def compiled_decode_step(
         call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
         if entry is None and not _needs_gradients(call, static_cache, None, adapter):
-            entry = _compile_for(input_ids, cache_position)
-            fingerprint.settle(() if entry is None else entry.reads.fed)
+            before, entry = fingerprint.outside_slots(), _compile_for(*call)
+            fingerprint.settle(() if entry is None else entry.reads.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, call, {})
                 if entry is None:

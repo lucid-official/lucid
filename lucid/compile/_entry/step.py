@@ -455,10 +455,11 @@ def _make_monolithic_step(
 
         entry = cache.get(key) if key is not None else None
         if entry is None:
+            before = fingerprint.outside_slots()
             entry = _compile_step_entry(
                 model, loss_fn, params, x_args, use_dynamic=use_dynamic
             )
-            fingerprint.settle(() if entry is None else entry.fed)
+            fingerprint.settle(() if entry is None else entry.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})
             if entry is None:

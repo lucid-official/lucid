@@ -595,6 +595,167 @@ def test_a_reparametrised_module_called_eagerly_in_between_is_not_traced_again(
     assert len(traces) == 1
 
 
+class _Stores(nn.Module):
+    """Keeps its input as its forward runs, the way a module keeps its last
+    activation for a hook or a later read."""
+
+    def __init__(self, store: Callable[[nn.Module, lucid.Tensor], None]) -> None:
+        super().__init__()
+        self.lin = nn.Linear(4, 4)
+        self.store = store
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        self.store(self, x)
+        return self.lin(x)
+
+
+_LAST: lucid.Tensor | None = None
+_STORING_NET: nn.Module = nn.Identity()
+
+
+def _stores(kind: str) -> Callable[[nn.Module, lucid.Tensor], None]:
+    """``forward``'s way of keeping its input: an attribute, a closure variable
+    rebound with ``nonlocal``, or a global."""
+    last: lucid.Tensor | None = None
+
+    def attribute(m: nn.Module, x: lucid.Tensor) -> None:
+        m.last = x
+
+    def closure(m: nn.Module, x: lucid.Tensor) -> None:
+        nonlocal last
+        last = x
+
+    def module_global(m: nn.Module, x: lucid.Tensor) -> None:
+        global _LAST
+        _LAST = x
+
+    return {"attribute": attribute, "nonlocal": closure, "global": module_global}[kind]
+
+
+def _storing_function(
+    model: nn.Module, kind: str, reach: str
+) -> Callable[[lucid.Tensor], lucid.Tensor]:
+    """A function over ``model`` that keeps the input itself — in its own
+    closure cell or a global — when ``kind`` says so."""
+    global _STORING_NET
+    _STORING_NET = model
+    last: lucid.Tensor | None = None
+
+    def through_closure(x: lucid.Tensor) -> lucid.Tensor:
+        nonlocal last
+        global _LAST
+        if kind == "nonlocal":
+            last = x
+        elif kind == "global":
+            _LAST = x
+        return model(x)
+
+    def through_global(x: lucid.Tensor) -> lucid.Tensor:
+        nonlocal last
+        global _LAST
+        if kind == "nonlocal":
+            last = x
+        elif kind == "global":
+            _LAST = x
+        return _STORING_NET(x)
+
+    return through_closure if reach == "closure" else through_global
+
+
+@_METAL
+@pytest.mark.parametrize(
+    "entry", ["module", "bound-method", "closure", "global", "make_step"]
+)
+@pytest.mark.parametrize("kind", ["attribute", "nonlocal", "global"])
+def test_a_forward_that_keeps_its_input_is_traced_once(
+    kind: str, entry: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slot is the executable's state only if it held the fed tensor before
+    the trace.  One the forward assigned the argument to while traced held
+    the argument then, and recorded as state it made every new input a
+    replacement: 20 compiles in 20 calls (LCD-606 review)."""
+    from lucid.compile._entry import step as step_module
+
+    lucid.manual_seed(0)
+    # A compiled module keeps it in its forward; a compiled function over the
+    # model in its own cell or global, unless it is an attribute of the model.
+    own = entry in ("module", "bound-method", "make_step") or kind == "attribute"
+    model = _Stores(_stores(kind) if own else lambda m, x: None).to("metal")
+    traces = _traces(monkeypatch)
+    steps: list[object] = []
+    real_step = step_module._compile_step_entry
+
+    def counted_step(*a: object, **k: object) -> object:
+        steps.append(a)
+        return real_step(*a, **k)
+
+    monkeypatch.setattr(step_module, "_compile_step_entry", counted_step)
+    if entry == "make_step":
+        run = make_step(model, F.mse_loss)
+        t = _values((8, 4), 0.2, "metal")
+        for k in range(4):
+            x = _values((8, 4), 0.1 * (k + 1), "metal")
+            loss = run(x, t)
+            _close(loss, F.mse_loss(model(x), t))
+        assert len(steps) == 1
+        return
+    compiled = (
+        lucid.compile(model)
+        if entry == "module"
+        else lucid.compile(model.forward)
+        if entry == "bound-method"
+        else lucid.compile(_storing_function(model, kind, entry))
+    )
+    with lucid.no_grad():
+        for k in range(4):
+            x = _values((8, 4), 0.1 * (k + 1), "metal")
+            _close(compiled(x), model.lin(x))
+    assert len(traces) == 1
+
+
+# ── What is still not seen — each its own card ─────────────────────────────
+
+_HELD_IN_A_DICT: dict[str, nn.Module] = {}
+_REACHED_BY_A_HELPER: nn.Module = nn.Identity()
+
+
+def _through_a_dict(x: lucid.Tensor) -> lucid.Tensor:
+    return _HELD_IN_A_DICT["model"](x)
+
+
+def _helper(x: lucid.Tensor) -> lucid.Tensor:
+    return _REACHED_BY_A_HELPER(x)
+
+
+def _through_a_helper(x: lucid.Tensor) -> lucid.Tensor:
+    return _helper(x)
+
+
+@pytest.mark.usefixtures("inference")
+@_METAL
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-642: a module held in a container, or reached through a "
+    "function the compiled one calls, is not watched — only modules held "
+    "directly by a closure cell or a global the code names are",
+)
+@pytest.mark.parametrize("reach", ["dict-held", "helper-reached"])
+@pytest.mark.parametrize("change", ["parameter-setattr", "rebound"])
+def test_a_module_reached_less_directly(reach: str, change: str) -> None:
+    global _REACHED_BY_A_HELPER
+    first, second = _linear(1, "metal"), _linear(2, "metal")
+    _HELD_IN_A_DICT["model"] = _REACHED_BY_A_HELPER = first
+    fn = _through_a_dict if reach == "dict-held" else _through_a_helper
+    compiled = lucid.compile(fn)
+    x, _ = _data("metal")
+    compiled(x)
+    if change == "parameter-setattr":
+        first.weight = nn.Parameter(_values((4, 4), 0.3, "metal"))
+    else:
+        _HELD_IN_A_DICT["model"] = _REACHED_BY_A_HELPER = second
+    _close(compiled(x), fn(x))
+
+
 @pytest.mark.usefixtures("inference")
 @_METAL
 @pytest.mark.xfail(

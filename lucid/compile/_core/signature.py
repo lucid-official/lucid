@@ -36,12 +36,13 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from types import CodeType, MethodType
-from typing import TYPE_CHECKING, Protocol, final, override
+from typing import TYPE_CHECKING, final, override
 
 from lucid._C import engine as _C_engine
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
 
 if TYPE_CHECKING:
+    from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.nn.module import Module
 
@@ -51,18 +52,6 @@ __all__ = ["TensorSig", "CacheKey", "signature_of"]
 # in the tree walk, the registry or attribute it is under, and its name.  The
 # wrapped callable's own closure cells and globals sit at position -1.
 type _Slot = tuple[int, str, str]
-
-
-class _Recording(Protocol):
-    """What a finished trace says about the tensors it read."""
-
-    @property
-    def external_feeds(self) -> Mapping[int, _C_engine.TensorImpl]: ...
-
-    @property
-    def retained_values(self) -> Mapping[int, _C_engine.TensorImpl]: ...
-
-    def made_here(self, impl: object) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,8 +240,9 @@ _GLOBAL_NAMES: dict[int, tuple[weakref.ref[CodeType], tuple[str, ...]]] = {}
 def _global_names(code: CodeType) -> tuple[str, ...]:
     """The names ``code`` and the code nested in it may read as globals, sorted.
 
-    ``co_names`` holds attribute names too: a global that only shares a name
-    with an attribute is watched for nothing worse than an extra trace.
+    ``co_names`` holds attribute names too, so this over-approximates: a
+    global that only shares a name with an attribute is watched for nothing
+    worse than an extra trace.
     """
     key = id(code)
     hit = _GLOBAL_NAMES.get(key)
@@ -660,7 +650,7 @@ def _tree_alias(
     )
 
 
-def outside_feeds(tracer: _Recording) -> tuple[_C_engine.TensorImpl, ...]:
+def outside_feeds(tracer: Tracer) -> tuple[_C_engine.TensorImpl, ...]:
     """Every tensor a finished trace was fed from outside — none it made itself.
 
     A constant the trace built and folded is a feed too, but no slot of the
@@ -702,7 +692,7 @@ class TraceReads:
 
     @classmethod
     def of(
-        cls, tracer: _Recording, input_ids: Iterable[int], sources: Iterable[object]
+        cls, tracer: Tracer, input_ids: Iterable[int], sources: Iterable[object]
     ) -> TraceReads:
         """Read them off a finished trace.
 
@@ -891,6 +881,30 @@ def _as_tensor(value: object) -> Tensor | None:
     return value if isinstance(value, Tensor) else None
 
 
+# A tensor held outside the registries: ``(id(module), attribute name, id of
+# its TensorImpl)``, or ``(-1, (kind, key), ...)`` for a closure cell or a global.
+type _Held = tuple[int, object, int]
+
+
+def _outside_tensors(
+    model: Module,
+) -> dict[_Held, tuple[Module | None, str | tuple[str, str]]]:
+    """Every tensor the tree's modules hold as plain attributes, and the
+    wrapped callable's cells and globals hold, with where it sits."""
+    from lucid._tensor.tensor import Tensor
+
+    out: dict[_Held, tuple[Module | None, str | tuple[str, str]]] = {}
+    for sub in _iter_modules(_root_modules(model)):
+        for name, value in vars(sub).items():
+            if isinstance(value, Tensor):
+                out[(id(sub), name, id(value._impl))] = (sub, name)
+    fn = _wrapped_callable(model)
+    for key, value in _callable_slots(fn) if fn is not None else ():
+        if isinstance(value, Tensor):
+            out[(-1, key, id(value._impl))] = (None, key)
+    return out
+
+
 @final
 class ParamFingerprint(_ModuleWrapper):
     """A model's :func:`_param_fingerprint`, walked again only when it can change.
@@ -1037,7 +1051,28 @@ class ParamFingerprint(_ModuleWrapper):
             self._tensors_replaced()
         self._keep(now)
 
-    def settle(self, fed: Iterable[_C_engine.TensorImpl] = ()) -> None:
+    def outside_slots(self) -> frozenset[_Held]:
+        """The tensors the tree holds outside its registries, taken before a trace.
+
+        A module's plain tensor attributes and the wrapped callable's closure
+        cells and globals, each with the tensor in it now.  Hand it to
+        :meth:`settle`: only a slot that held a fed tensor *before* the trace
+        is the executable's state.  One the forward assigned while traced —
+        ``self.last = x``, ``nonlocal last``, a global — holds the call's
+        argument then, and recorded it traced again on every new input.
+
+        Returns
+        -------
+        frozenset
+            ``(holder, name, TensorImpl id)`` for each such slot.
+        """
+        return frozenset(_outside_tensors(self.model))
+
+    def settle(
+        self,
+        fed: Iterable[_C_engine.TensorImpl] = (),
+        before: frozenset[_Held] = frozenset(),
+    ) -> None:
         """Record the tree as the owner's executables read it: it just traced.
 
         Call it after every trace, whether or not an executable came of it:
@@ -1048,38 +1083,31 @@ class ParamFingerprint(_ModuleWrapper):
         ----------
         fed : iterable of TensorImpl, optional
             What the executable the trace became was fed from outside it
-            (:func:`outside_feeds`); empty when none came of it.  A module's
-            plain tensor attribute, a closure cell or a global holding one of
-            them is recorded from now on: put another tensor there and the
-            executable is a replacement's.
+            (:func:`outside_feeds`); empty when none came of it.
+        before : frozenset, optional
+            :meth:`outside_slots` taken before the trace.  A module's plain
+            tensor attribute, a closure cell or a global that held one of
+            ``fed`` then, and holds it still, is recorded from now on: put
+            another tensor there and the executable is a replacement's.
         """
         model = self.model
-        self._learn(model, {id(impl) for impl in fed})
+        self._learn(model, {id(impl) for impl in fed}, before)
         self._keep(self._record_of(model))
 
-    def _learn(self, model: Module, fed: set[int]) -> None:
-        """Add the slots outside the registries that hold one of ``fed``."""
-        from lucid._tensor.tensor import Tensor
-
-        if not fed:
+    def _learn(self, model: Module, fed: set[int], before: frozenset[_Held]) -> None:
+        """Add the slots outside the registries that held one of ``fed``
+        before the trace and hold it still."""
+        if not fed or not before:
             return
-        for sub in _iter_modules(_root_modules(model)):
-            names = {
-                name
-                for name, value in vars(sub).items()
-                if isinstance(value, Tensor) and id(value._impl) in fed
-            }
-            known = self._attributes.get(sub, ())
-            if not names.issubset(known):
-                self._attributes[sub] = tuple(sorted(names.union(known)))
-        fn = _wrapped_callable(model)
-        found = {
-            key
-            for key, value in (_callable_slots(fn) if fn is not None else ())
-            if isinstance(value, Tensor) and id(value._impl) in fed
-        }
-        if not found.issubset(self._callable_slots):
-            self._callable_slots = tuple(sorted(found.union(self._callable_slots)))
+        for held, (sub, name) in _outside_tensors(model).items():
+            if held[2] not in fed or held not in before:
+                continue
+            if isinstance(name, tuple):
+                self._callable_slots = tuple(sorted({*self._callable_slots, name}))
+            elif sub is not None:
+                self._attributes[sub] = tuple(
+                    sorted({*self._attributes.get(sub, ()), name})
+                )
 
     def tree_alias(
         self, args: Iterable[object], kwargs: dict[str, object]
