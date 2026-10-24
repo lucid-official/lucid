@@ -60,6 +60,19 @@ def _own(value: Any) -> Any:
     return copy.requires_grad_() if value.requires_grad else copy
 
 
+def _strided_leaf(value: Any) -> Any:
+    """``value``'s numbers as a non-contiguous *leaf*: every second element
+    of a buffer twice as wide, detached so a gradient stops at it."""
+    if not isinstance(value, lucid.Tensor) or value.ndim == 0:
+        return value
+    values = _probe.to_numpy(value)
+    padded = np.zeros((*values.shape[:-1], 2 * values.shape[-1]), dtype=values.dtype)
+    padded[..., ::2] = values
+    wide = _probe.tensor_of(padded, dtype=value.dtype, device=value.device.type)
+    leaf = wide[..., ::2].detach()
+    return leaf.requires_grad_() if value.requires_grad else leaf
+
+
 class Call:
     """One concrete invocation of an op.
 
@@ -93,9 +106,24 @@ class Call:
         shared shape, the rule that rebuilds the whole call around a
         resized primary — ``(call, array) -> Call``.  Set from
         :data:`_JOINT_RESIZE` by :func:`invocations`; see there.
+    strided : bool
+        The primary is handed over as a non-contiguous leaf
+        (:func:`_strided_leaf`) however the call is rebuilt.  For an op
+        whose layout decides its path: ``contiguous`` returns a packed
+        input itself, with no node, so only a strided one reaches the copy
+        that has a backward.
     """
 
-    __slots__ = ("args", "kwargs", "primary", "note", "same_shape", "domain", "joint")
+    __slots__ = (
+        "args",
+        "kwargs",
+        "primary",
+        "note",
+        "same_shape",
+        "domain",
+        "joint",
+        "strided",
+    )
 
     def __init__(
         self,
@@ -106,7 +134,11 @@ class Call:
         same_shape: tuple[int, ...] = (),
         domain: tuple[float, float] | None = None,
         joint: Callable[[Call, np.ndarray], Call] | None = None,
+        strided: bool = False,
     ) -> None:
+        if strided and 0 <= primary < len(args):
+            args = list(args)
+            args[primary] = _strided_leaf(args[primary])
         self.args = args
         self.kwargs = kwargs or {}
         self.primary = primary
@@ -114,6 +146,7 @@ class Call:
         self.same_shape = same_shape
         self.domain = domain
         self.joint = joint
+        self.strided = strided
 
     def with_primary(self, array: np.ndarray) -> Call:
         """A copy whose differentiated argument is replaced by ``array``.
@@ -138,6 +171,7 @@ class Call:
             self.same_shape,
             self.domain,
             self.joint,
+            self.strided,
         )
 
     def fresh(self) -> Call:
@@ -160,6 +194,7 @@ class Call:
             self.same_shape,
             self.domain,
             self.joint,
+            self.strided,
         )
 
     def resized(self, array: np.ndarray) -> Call:
@@ -645,13 +680,15 @@ def _from_zero(positions: np.ndarray) -> np.ndarray:
 def _overwrite(name: str, domain: str) -> Iterator[Call]:
     """Overwrites by index, each naming a position once.
 
-    A position named twice keeps the last write on the CPU and an
-    unspecified one on Metal — the reference documents the order as
-    undefined — so a repeated index made the device axis compare a choice,
-    not an answer: the M4 picks another write than the M1 for
-    ``index_copy``, ``put_`` and ``scatter_``, whose signature-derived
-    index repeated.  The accumulating forms (``scatter_add``,
-    ``index_add``) keep their repeats.
+    A position named twice keeps the last write on the CPU and whichever
+    write lands last on Metal — the reference documents the order as
+    undefined — so a repeated index made the device axis compare a race,
+    not an answer.  It is not a chip difference: on one M1 Pro, fifteen
+    runs of the signature-derived ``(2, 3, 6, 6)`` ``scatter_`` gave
+    fifteen different results and ``put_`` ten.  The M4's FAILs on
+    ``index_copy``, ``put_`` and ``scatter_`` were that race losing the
+    other way.  The accumulating forms (``scatter_add``, ``index_add``)
+    keep their repeats.
 
     Fewer positions than the receiver has, so the rest keep ``x``'s value
     and its gradient: a full permutation overwrote all of ``x`` and left
@@ -1217,6 +1254,12 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
 
 #: Exact overrides, for the handful whose family cannot be inferred.
 _EXACT: dict[str, Callable[[str, str], Iterator[Call]]] = {
+    # A contiguous input is returned itself, with no node, as the reference
+    # does — the identity, which the gradient axis declines to measure.  The
+    # copy a strided input takes is the path with a backward of its own.
+    "contiguous": lambda n, d: iter(
+        [Call([_f(_probe.SHAPE, d)], {}, 0, "contiguous(strided leaf)", strided=True)]
+    ),
     "one_hot": lambda n, d: iter([Call([_int((_N,), 4), 4], {}, 0, "one_hot(idx, n)")]),
     # Class scores against class indices.  The blind ladder's ``op(x, dim)``
     # used to be the first call that ran; once ``==`` promoted its operands
@@ -1617,11 +1660,15 @@ def invocations(
     for call in _candidates(name, domain, qualname, fn):
         if joint is not None and call.joint is None:
             call.joint = joint
-        yield call
+        twin = None
         if drawing and "training" not in call.kwargs:
+            # Copied before ``call`` is handed out: an axis that runs an
+            # in-place sampler (``rrelu_``) writes into ``call``'s operands.
             twin = call.fresh()
             twin.kwargs["training"] = True
             twin.note = f"{call.note}, training=True"
+        yield call
+        if twin is not None:
             yield twin
 
 

@@ -34,7 +34,8 @@ them Lucid's — it matched the reference bit for bit:
   draw in eval mode; ``bernoulli``'s probabilities were moved out of
   ``[0, 1]`` by the dtype axis.
 * ``index_copy``, ``put_`` and ``scatter_`` were handed repeated indices,
-  whose write order is undefined, and the M4 chose another write than the M1.
+  whose write order on Metal is a race: the result changes from run to run
+  on any chip, and the M4 runs lost it.
 """
 
 import functools
@@ -246,6 +247,36 @@ def test_a_sampler_that_draws_only_in_training_is_asked_to_draw() -> None:
     # A mode switch on an op that never draws is not a sampler's.
     batch_norm = _surface.resolve(_symbol("F.batch_norm"))
     assert not _specs._draws_only_when_training("batch_norm", batch_norm)
+
+
+def test_a_training_twin_does_not_see_what_its_call_wrote() -> None:
+    symbol = _symbol("F.rrelu_")
+    fn = _surface.resolve(symbol)
+    calls = _specs.invocations(symbol.short, "moderate", symbol.qualname, fn)
+    call = next(calls)
+    before = np.array(_probe.to_numpy(call.args[0]), copy=True)
+    assert (before < 0).any(), "rrelu_ writes only negatives — probe has none"
+    fn(*call.args, **call.kwargs)  # in place, as the determinism axis runs it
+    twin = next(calls)
+    assert twin.kwargs.get("training") is True
+    np.testing.assert_array_equal(_probe.to_numpy(twin.args[0]), before)
+
+
+@pytest.mark.parametrize("qualname", ["lucid.contiguous", "Tensor.contiguous"])
+def test_contiguous_is_differentiated_through_its_copy(qualname: str) -> None:
+    # Since 730ef06c5 ``lucid.contiguous`` hands a packed input back itself,
+    # with no node, and the gradient axis rightly declines the identity; the
+    # probe is a strided leaf, so the copy and its backward are measured.
+    symbol = _symbol(qualname)
+    fn = _surface.resolve(symbol)
+    call = next(iter(_specs.invocations(symbol.short, "moderate", qualname, fn)))
+    probe = call.with_primary(call.base)
+    x = probe.args[probe.primary]
+    assert x.is_leaf and not x.is_contiguous()
+    x.requires_grad_(True)
+    assert fn(*probe.args, **probe.kwargs).grad_fn is not None
+    finding = GradientAxis().run(symbol, _context())
+    assert finding.status == Status.PASS, finding.detail
 
 
 def test_bernoullis_probabilities_stay_probabilities_across_dtypes() -> None:
