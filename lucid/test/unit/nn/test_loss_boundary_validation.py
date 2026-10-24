@@ -752,8 +752,9 @@ def test_cross_entropy_under_autocast_past_65504_targets(
 ) -> None:
     """Autocast gave the class-index mean's two sums the autocast dtype: a
     float16 count of 65504 kept samples is inf, and the mean was NaN with a
-    gradient of 0 (a float16 sum, inf).  ``_reduce`` runs them in float32
-    and answers in float32, as the reference's autocast does for a loss."""
+    gradient of 0 (a float16 sum, inf).  The loss's FP32 row, taken at its
+    entry, runs them in float32 and answers in float32, as the reference's
+    autocast does for a loss."""
     lucid.manual_seed(0)
     base = lucid.randn(n, 4, device="metal") * 0.1
     target = lucid.randint(0, 4, (n,), device="metal")

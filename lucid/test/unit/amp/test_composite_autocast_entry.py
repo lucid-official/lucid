@@ -21,20 +21,26 @@ so each applied its own row of the policy table mid-composite:
 - ``_keep_in_graph`` summed its zero under ``sum``'s FP32 Metal row, and the
   raw ``add`` refused the float32 zero beside a float16 output: a
   ``reflect`` / ``replicate`` pad, or ``nll_loss(reduction="none")``, of a
-  half input that requires grad raised under a Metal autocast.
+  half input that requires grad raised under a Metal autocast;
+- the losses applied their FP32 row only through their reduction, so with
+  ``reduction="none"`` a half input stayed half; and the reduction widened
+  a loss with no row (``multilabel_soft_margin_loss``) that the reference
+  keeps (LCD-614).
 
 Each case runs under ``autocast(metal, float16)`` and ``autocast(cpu,
 bfloat16)`` with a float32 and a half input: no error (the backward too),
 the values of the same call outside autocast on the inputs at the dtype the
 row gives, and the dtype the reference gives (``-m parity`` checks the table
-against the reference).  The rows still wrong are strict xfails naming
-LCD-614 — they must still run and match their values; only the dtype is
-pinned.
+against the reference).  Every loss is in the table at every reduction.
+The rows still wrong are strict xfails naming their issue — they must
+still run and match their values; only the dtype is pinned.
 
-A composite with a row enters through ``_autocast_entry``, one without
-through ``_autocast_suspended``; the last tests check that every name handed
-to ``_autocast_entry`` or ``amp_cast_inputs`` is a row of the table, so a
-misspelt row cannot quietly become "keep".
+A composite with a row enters through ``_autocast_entry`` (a loss through
+``amp_op``, the same entry around its whole call), one without through
+``_autocast_suspended``; the last tests check that every name handed to an
+entry is a row of the table, so a misspelt row cannot quietly become "keep",
+and that each loss enters through its own row or, with none, decomposes as
+the reference's does.
 """
 
 import ast
@@ -98,9 +104,20 @@ class _Make:
         self.made.append(t)
         return t
 
-    def unit(self, *shape: int) -> Any:
+    def unit(self, *shape: int, seed: int = 7) -> Any:
         """A target in ``(0.1, 0.9)``."""
-        return self._held(np.random.default_rng(7).random(shape) * 0.8 + 0.1)
+        return self._held(np.random.default_rng(seed).random(shape) * 0.8 + 0.1)
+
+    def prob(self, *shape: int) -> Any:
+        """A probability operand in ``(0.1, 0.9)`` that, like ``__call__``'s,
+        requires grad when the call is differentiated."""
+        t = self.unit(*shape, seed=11).requires_grad_(self.grad)
+        self.made.append(t)
+        return t
+
+    def pos(self, *shape: int) -> Any:
+        """A positive operand in ``(0.5, 1.5)`` — a variance, a weight."""
+        return self._held(np.random.default_rng(3).random(shape) + 0.5)
 
     def signs(self, n: int) -> Any:
         """A ``±1`` target."""
@@ -112,10 +129,6 @@ class _Make:
 
 _Fn = Callable[[Any, _Make], Any]
 
-_LOSS_NONE = (
-    "LCD-614: the loss applies its FP32 row only through its reduction, so "
-    "reduction='none' keeps a half input half (the reference: float32)"
-)
 _INNER_ROW = (
     "LCD-614: a part's FP32 Metal row applies inside (vector_norm, softplus); "
     "the reference keeps float16"
@@ -137,17 +150,18 @@ class _Case:
     # reference's, and why — pinned as strict xfails.
     pinned: tuple[str, ...] = ()
     reason: str = ""
+    # No row: its parts apply theirs, as the reference's do, so it rounds
+    # to half between them and its values are the call outside autocast's
+    # to within half precision only.
+    decomposed: bool = False
+    # Operands of two dtypes.  The reference's MPS backend aborts the
+    # process on those, so the parity check reads its CPU only.
+    mixed: bool = False
 
 
 def _grid(m: _Make, *shape: int, scale: float = 0.5) -> Any:
     return m(*shape, seed=1, scale=scale)
 
-
-def _loss(fn: _Fn, pinned: tuple[str, ...]) -> _Case:
-    return _Case(fn, "float32", "float32", pinned=pinned, reason=_LOSS_NONE)
-
-
-_BOTH = ("metal", "cpu")
 
 _CASES: dict[str, _Case] = {
     # The reference pools a rank-3 window with avg_pool2d (no row) and a
@@ -264,54 +278,6 @@ _CASES: dict[str, _Case] = {
         "half",
         devices=("metal",),
     ),
-    # Same class, not fixed here (LCD-614).  nll_loss's "none" also runs
-    # _keep_in_graph, whose Metal crash is fixed: the xfail only takes an
-    # AssertionError, so the forward, backward and values must still pass.
-    "nll_loss_none": _loss(
-        lambda F, m: F.nll_loss(m(3, 4), m.ints([0, 1, 3]), reduction="none"),
-        _BOTH,
-    ),
-    "l1_loss_none": _loss(
-        lambda F, m: F.l1_loss(m(4, 4), m(4, 4, seed=1), reduction="none"), _BOTH
-    ),
-    "binary_cross_entropy_with_logits_none": _loss(
-        lambda F, m: F.binary_cross_entropy_with_logits(
-            m(4, 4), m.unit(4, 4), reduction="none"
-        ),
-        _BOTH,
-    ),
-    "margin_ranking_loss_none": _loss(
-        lambda F, m: F.margin_ranking_loss(
-            m(4), m(4, seed=1), m.signs(4), reduction="none"
-        ),
-        _BOTH,
-    ),
-    "hinge_embedding_loss_none": _loss(
-        lambda F, m: F.hinge_embedding_loss(
-            m(4, 4), m.signs(16).reshape(4, 4), reduction="none"
-        ),
-        _BOTH,
-    ),
-    "cross_entropy_none": _loss(
-        lambda F, m: F.cross_entropy(m(3, 4), m.ints([0, 1, 3]), reduction="none"),
-        ("cpu",),
-    ),
-    "cosine_embedding_loss_none": _loss(
-        lambda F, m: F.cosine_embedding_loss(
-            m(4, 4), m(4, 4, seed=1), m.signs(4), reduction="none"
-        ),
-        ("cpu",),
-    ),
-    "triplet_margin_loss_none": _loss(
-        lambda F, m: F.triplet_margin_loss(
-            m(3, 4), m(3, 4, seed=1), m(3, 4, seed=2), reduction="none"
-        ),
-        ("cpu",),
-    ),
-    "multi_margin_loss_none": _loss(
-        lambda F, m: F.multi_margin_loss(m(3, 4), m.ints([0, 1, 3]), reduction="none"),
-        ("cpu",),
-    ),
     "pairwise_distance": _Case(
         lambda F, m: F.pairwise_distance(m(3, 4), m(3, 4, seed=1)),
         "half",
@@ -329,9 +295,243 @@ _CASES: dict[str, _Case] = {
 }
 
 
+# ── the losses, at every reduction (LCD-614) ────────────────────────────────
+
+_LossFn = Callable[[Any, _Make, str], Any]
+_REDUCTIONS = ("none", "mean", "sum")
+_F32 = "float32"
+
+
+@dataclass(frozen=True)
+class _Loss:
+    """One loss call, and what a half input comes out as at each reduction.
+
+    ``metal`` / ``cpu`` is ``"half"`` or ``"float32"``, or one of the two
+    per reduction.  A loss with a row is FP32 on both devices except
+    ``bce_loss`` (KEEP on Metal) and ``gaussian_nll_loss`` (KEEP on the
+    CPU); one without decomposes, as the reference's does.
+    """
+
+    fn: _LossFn
+    metal: str | dict[str, str] = _F32
+    cpu: str | dict[str, str] = _F32
+    decomposed: bool = False
+    mixed: bool = False
+    # (device, reduction) cells still wrong — strict xfails naming the issue.
+    pinned: tuple[tuple[str, str], ...] = ()
+
+
+def _at(spec: str | dict[str, str], reduction: str) -> str:
+    return spec if isinstance(spec, str) else spec[reduction]
+
+
+def _ce_target(m: _Make) -> Any:
+    return m.ints([0, 1, 3])
+
+
+#: Keyed by (the function, a variant); every loss in ``F.__all__`` is here.
+_LOSSES: dict[tuple[str, str], _Loss] = {
+    ("mse_loss", ""): _Loss(
+        lambda F, m, r: F.mse_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
+    ),
+    # Weighted, the reference's mse_loss and l1_loss are composites: ``pow``
+    # is FP32 on MPS, ``abs`` and ``mul`` have no row, ``sum`` is FP32 on MPS.
+    ("mse_loss", "weighted"): _Loss(
+        lambda F, m, r: F.mse_loss(
+            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
+        ),
+        cpu="half",
+        decomposed=True,
+    ),
+    ("l1_loss", ""): _Loss(
+        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
+    ),
+    ("l1_loss", "weighted"): _Loss(
+        lambda F, m, r: F.l1_loss(
+            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
+        ),
+        metal={"none": "half", "mean": _F32, "sum": _F32},
+        cpu="half",
+        decomposed=True,
+    ),
+    ("l1_loss", "float32_target"): _Loss(
+        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1).float(), reduction=r),
+        mixed=True,
+    ),
+    ("smooth_l1_loss", ""): _Loss(
+        lambda F, m, r: F.smooth_l1_loss(
+            m(4, 4), m(4, 4, seed=1), reduction=r, beta=0.5
+        )
+    ),
+    ("huber_loss", ""): _Loss(
+        lambda F, m, r: F.huber_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
+    ),
+    ("huber_loss", "weighted"): _Loss(
+        lambda F, m, r: F.huber_loss(
+            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
+        )
+    ),
+    ("cross_entropy", ""): _Loss(
+        lambda F, m, r: F.cross_entropy(m(3, 4), _ce_target(m), reduction=r)
+    ),
+    ("cross_entropy", "weighted_smoothed"): _Loss(
+        lambda F, m, r: F.cross_entropy(
+            m(3, 4), _ce_target(m), m.pos(4), reduction=r, label_smoothing=0.1
+        )
+    ),
+    ("cross_entropy", "probabilities"): _Loss(
+        lambda F, m, r: F.cross_entropy(m(3, 4), m.unit(3, 4), reduction=r)
+    ),
+    ("cross_entropy", "float32_weight"): _Loss(
+        lambda F, m, r: F.cross_entropy(
+            m(3, 4), _ce_target(m), m.pos(4).float(), reduction=r
+        ),
+        mixed=True,
+    ),
+    ("nll_loss", ""): _Loss(
+        lambda F, m, r: F.nll_loss(m(3, 4), _ce_target(m), reduction=r)
+    ),
+    ("nll_loss", "weighted"): _Loss(
+        lambda F, m, r: F.nll_loss(m(3, 4), _ce_target(m), m.pos(4), reduction=r)
+    ),
+    ("binary_cross_entropy", ""): _Loss(
+        lambda F, m, r: F.binary_cross_entropy(m.prob(4, 4), m.unit(4, 4), reduction=r),
+        metal="half",
+    ),
+    ("binary_cross_entropy", "weighted"): _Loss(
+        lambda F, m, r: F.binary_cross_entropy(
+            m.prob(4, 4), m.unit(4, 4), m.pos(4, 4), reduction=r
+        ),
+        metal="half",
+    ),
+    ("binary_cross_entropy_with_logits", ""): _Loss(
+        lambda F, m, r: F.binary_cross_entropy_with_logits(
+            m(4, 4), m.unit(4, 4), reduction=r
+        )
+    ),
+    ("binary_cross_entropy_with_logits", "weighted"): _Loss(
+        lambda F, m, r: F.binary_cross_entropy_with_logits(
+            m(4, 4), m.unit(4, 4), m.pos(4, 4), reduction=r, pos_weight=m.pos(4)
+        )
+    ),
+    ("binary_cross_entropy_with_logits", "float32_pos_weight"): _Loss(
+        lambda F, m, r: F.binary_cross_entropy_with_logits(
+            m(4, 4), m.unit(4, 4), reduction=r, pos_weight=m.pos(4).float()
+        ),
+        mixed=True,
+    ),
+    ("kl_div", ""): _Loss(lambda F, m, r: F.kl_div(m(4, 4), m.unit(4, 4), reduction=r)),
+    ("kl_div", "log_target"): _Loss(
+        lambda F, m, r: F.kl_div(m(4, 4), m(4, 4, seed=1), reduction=r, log_target=True)
+    ),
+    ("triplet_margin_loss", ""): _Loss(
+        lambda F, m, r: F.triplet_margin_loss(
+            m(3, 4), m(3, 4, seed=1), m(3, 4, seed=2), reduction=r
+        )
+    ),
+    # The reference's distance is ``aten::norm``, which has no MPS row, and
+    # its ``sum`` is FP32 on MPS; the CPU keeps throughout.
+    ("triplet_margin_with_distance_loss", ""): _Loss(
+        lambda F, m, r: F.triplet_margin_with_distance_loss(
+            m(3, 4), m(3, 4, seed=1), m(3, 4, seed=2), reduction=r
+        ),
+        metal={"none": "half", "mean": "half", "sum": _F32},
+        cpu="half",
+        decomposed=True,
+        pinned=(("metal", "none"), ("metal", "mean")),
+    ),
+    ("cosine_embedding_loss", ""): _Loss(
+        lambda F, m, r: F.cosine_embedding_loss(
+            m(4, 4), m(4, 4, seed=1), m.signs(4), reduction=r
+        )
+    ),
+    ("margin_ranking_loss", ""): _Loss(
+        lambda F, m, r: F.margin_ranking_loss(
+            m(4), m(4, seed=1), m.signs(4), reduction=r
+        )
+    ),
+    ("hinge_embedding_loss", ""): _Loss(
+        lambda F, m, r: F.hinge_embedding_loss(
+            m(4, 4), m.signs(16).reshape(4, 4), reduction=r
+        )
+    ),
+    ("poisson_nll_loss", ""): _Loss(
+        lambda F, m, r: F.poisson_nll_loss(m(4, 4), m.unit(4, 4), reduction=r)
+    ),
+    ("gaussian_nll_loss", ""): _Loss(
+        lambda F, m, r: F.gaussian_nll_loss(
+            m(4, 4), m(4, 4, seed=1), m.pos(4, 4), reduction=r
+        ),
+        cpu="half",
+    ),
+    # Lucid's Metal row is FP32 too; the reference has no MPS kernel.
+    ("ctc_loss", ""): _Loss(
+        lambda F, m, r: F.ctc_loss(
+            m(5, 2, 4),
+            m.ints([[1, 2], [3, 1]]),
+            m.ints([5, 5]),
+            m.ints([2, 2]),
+            reduction=r,
+        )
+    ),
+    ("multi_margin_loss", ""): _Loss(
+        lambda F, m, r: F.multi_margin_loss(m(3, 4), _ce_target(m), reduction=r)
+    ),
+    ("multi_margin_loss", "weighted"): _Loss(
+        lambda F, m, r: F.multi_margin_loss(
+            m(3, 4), _ce_target(m), weight=m.pos(4), reduction=r
+        )
+    ),
+    ("multilabel_margin_loss", ""): _Loss(
+        lambda F, m, r: F.multilabel_margin_loss(
+            m(3, 4),
+            m.ints([[0, 2, -1, 0], [1, -1, 0, 0], [3, 0, -1, 0]]),
+            reduction=r,
+        )
+    ),
+    ("soft_margin_loss", ""): _Loss(
+        lambda F, m, r: F.soft_margin_loss(
+            m(4, 4), m.signs(16).reshape(4, 4), reduction=r
+        )
+    ),
+    # No row; the reference's parts are logsigmoid and a sum, FP32 on MPS.
+    ("multilabel_soft_margin_loss", ""): _Loss(
+        lambda F, m, r: F.multilabel_soft_margin_loss(
+            m(3, 4), m.unit(3, 4), reduction=r
+        ),
+        cpu="half",
+        decomposed=True,
+    ),
+    ("multilabel_soft_margin_loss", "weighted"): _Loss(
+        lambda F, m, r: F.multilabel_soft_margin_loss(
+            m(3, 4), m.unit(3, 4), m.pos(4), reduction=r
+        ),
+        cpu="half",
+        decomposed=True,
+    ),
+}
+
+
+def _bound(fn: _LossFn, reduction: str) -> _Fn:
+    return lambda F, m: fn(F, m, reduction)
+
+
+for (_name, _variant), _loss in _LOSSES.items():
+    for _r in _REDUCTIONS:
+        _CASES["_".join(filter(None, (_name, _variant, _r)))] = _Case(
+            _bound(_loss.fn, _r),
+            _at(_loss.metal, _r),
+            _at(_loss.cpu, _r),
+            pinned=tuple(d for d, r in _loss.pinned if r == _r),
+            reason=_INNER_ROW,
+            decomposed=_loss.decomposed,
+            mixed=_loss.mixed,
+        )
+
+
 def _params(*, pin: bool) -> list[ParameterSet]:
     """Every (case, setting, input) a case is checked on; ``pin`` marks the
-    LCD-614 rows as strict xfails."""
+    cells still wrong as strict xfails."""
     params = []
     for name, case in sorted(_CASES.items()):
         for device, autocast_dt in _SETTINGS:
@@ -402,9 +602,9 @@ def test_a_composite_under_autocast_runs_and_keeps_its_values(
         want = case.fn(
             lucid.nn.functional, _Make(lucid, device, dtype, compute=out.dtype)
         )
-    # A row applied at the entry runs the same ops as the call outside;
-    # the LCD-614 rows do not apply theirs there, so they round in between.
-    tol = _TOL[autocast_dt] if case.pinned else _EXACT
+    # A row applied at the entry runs the same ops as the call outside; a
+    # pinned or decomposed case's parts apply theirs, so it rounds between.
+    tol = _TOL[autocast_dt] if case.pinned or case.decomposed else _EXACT
     np.testing.assert_allclose(
         out.detach().float().numpy(),
         want.float().numpy(),
@@ -509,6 +709,8 @@ def test_the_dtype_matches_the_reference(
     ref: ModuleType, name: str, device: str, autocast_dt: str, input_dt: str
 ) -> None:
     case = _CASES[name]
+    if case.mixed and device == "metal":
+        pytest.skip("the reference's MPS backend aborts the process on mixed dtypes")
     ref_device = _ref_device(ref, device)
     make = _Make(ref, ref_device, _input_dtype(ref, autocast_dt, input_dt))
     try:
@@ -522,7 +724,7 @@ def test_the_dtype_matches_the_reference(
 
 # ── every name an entry is handed is a row ──────────────────────────────────
 
-_ENTRY_FUNCTIONS = frozenset({"_autocast_entry", "amp_cast_inputs"})
+_ENTRY_FUNCTIONS = frozenset({"_autocast_entry", "amp_cast_inputs", "amp_op"})
 # Call sites whose name is built at run time, with every name each passes.
 _COMPUTED_NAMES: dict[tuple[str, str], frozenset[str]] = {
     ("lucid/fft/_transforms.py", "_transform"): frozenset(
@@ -530,8 +732,13 @@ _COMPUTED_NAMES: dict[tuple[str, str], frozenset[str]] = {
     ),
     ("lucid/nn/functional/_pool_core.py", "_pool_autocast"): _pool_core._POOL_ROWS,
 }
-# The entry itself, which hands on its caller's name.
-_FORWARDING = frozenset({("lucid/_ops/_autocast.py", "_autocast_entry")})
+# The entries themselves, which hand on their caller's name.
+_FORWARDING = frozenset(
+    {
+        ("lucid/_ops/_autocast.py", "_autocast_entry"),
+        ("lucid/_ops/_autocast.py", "at_entry"),
+    }
+)
 
 
 def _rows() -> frozenset[str]:
@@ -607,3 +814,58 @@ def test_the_pool_rows_are_the_pools_the_table_has() -> None:
         *(f"max_unpool{n}d" for n in (1, 2, 3)),
     }
     assert {p for p in pools if p in _rows()} == _pool_core._POOL_ROWS
+
+
+# ── each loss enters through its own row, or decomposes ─────────────────────
+
+#: A loss whose row is not its function's name.
+_LOSS_ROWS = {
+    "cross_entropy": "cross_entropy_loss",
+    "binary_cross_entropy": "bce_loss",
+    "binary_cross_entropy_with_logits": "bce_with_logits",
+}
+#: Losses whose row applies inside rather than around the call: their
+#: weighted form is a composite in the reference, so only the unweighted one
+#: has the row — ``mse_loss`` and ``huber_loss`` through their fused kernel's
+#: own entry, ``l1_loss`` through ``_autocast_entry`` on that branch.
+_ROW_INSIDE = frozenset({"mse_loss", "huber_loss", "l1_loss"})
+
+
+def _public_losses() -> set[str]:
+    from lucid.nn.functional import loss as module
+
+    F = lucid.nn.functional
+    return {n for n in F.__all__ if getattr(F, n).__module__ == module.__name__}
+
+
+def test_every_loss_is_in_the_table() -> None:
+    """A new loss is checked at every reduction once it is listed here."""
+    assert {name for name, _ in _LOSSES} == _public_losses()
+
+
+def test_a_loss_enters_through_its_row_and_only_one_with_a_row_does() -> None:
+    """``amp_op`` with its row on every loss that has one (but those in
+    ``_ROW_INSIDE``); none on a loss without, whose parts apply their rows as
+    the reference's composite's do."""
+    from lucid.nn.functional import loss as module
+
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    decorated: dict[str, str | None] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in _public_losses():
+            rows = [
+                d.args[0].value
+                for d in node.decorator_list
+                if isinstance(d, ast.Call)
+                and isinstance(d.func, ast.Name)
+                and d.func.id == "amp_op"
+                and isinstance(d.args[0], ast.Constant)
+            ]
+            decorated[node.name] = rows[0] if rows else None
+    assert decorated.keys() == _public_losses()
+    table = _rows()
+    for name, row in sorted(decorated.items()):
+        want = _LOSS_ROWS.get(name, name)
+        assert want in table or name not in _ROW_INSIDE, name
+        entered = want in table and name not in _ROW_INSIDE
+        assert row == (want if entered else None), name
