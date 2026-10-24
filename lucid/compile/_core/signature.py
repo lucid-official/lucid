@@ -601,9 +601,11 @@ class ParamFingerprint(_ModuleWrapper):
     The same news reaches its owner: an executable is fed the tensors it was
     traced with, so one traced before a replacement goes on training the old
     ones (LCD-505).  A tensor or submodule put in another's place leaves the
-    fingerprint as it was, so the tree is recorded when this is built and
-    again after each trace of its owner (:meth:`settle`), and when the
-    version moves the tree is compared with what was recorded
+    fingerprint as it was, so the tree is recorded at every point the owner
+    takes it — when this is built (``make_step`` takes the parameters, the
+    segmented step its children), after each of its traces (:meth:`settle`)
+    and after it is told of a replacement, when it takes the tree again — and
+    when the version moves the tree is compared with what was recorded
     (:class:`_TreeTensors`): any difference is a replacement (LCD-560).
     Settling after the trace, not before, takes in what a forward does to its
     own state while traced — a lazy layer materialising, a statistic kept by
@@ -633,11 +635,10 @@ class ParamFingerprint(_ModuleWrapper):
             else lambda: on_replaced
         )
         self._watch(model)
-        # The tree the owner's executables were traced against; ``None`` once
-        # they are dropped.  Settled from the start: an owner may take the
-        # tree when it is built — ``make_step`` its parameters, the segmented
-        # step its children — and a replacement before its first call is one.
+        # The tree as the owner last took it.  ``None`` after the owner was
+        # told of a replacement: it took the tree again at ``_retaken_at``.
         self._settled: _TreeTensors | None = _TreeTensors(model)
+        self._retaken_at = -1
 
     @override
     def __reduce__(
@@ -681,11 +682,23 @@ class ParamFingerprint(_ModuleWrapper):
             # Read before the walk, as ``_tree_walk`` does: a change made
             # while it runs moves the version past the one stored.
             self._version = version
-            settled = self._settled
-            if settled is not None and not settled.same_as(_TreeTensors(model)):
-                self._tensors_replaced()
+            self._compare_tree(model, version)
             value = self._value = _param_fingerprint(model)
         return value
+
+    def _compare_tree(self, model: Module, version: int) -> None:
+        """Tell the owner of a replacement since it took the tree; record it."""
+        now = _TreeTensors(model)
+        settled = self._settled
+        if settled is not None and settled.same_as(now):
+            return
+        # Told of a replacement, the owner took the tree again then; anything
+        # that has moved the version since may be another one.  Recorded here,
+        # not in the notice: ``.to()`` tells every module of the tree in turn,
+        # and a walk per notice is a walk per module.
+        if settled is not None or version != self._retaken_at:
+            self._tensors_replaced()
+        self._settled = now
 
     def settle(self) -> None:
         """Record the tree as the owner's executables read it: it just traced.
@@ -727,13 +740,17 @@ class ParamFingerprint(_ModuleWrapper):
     @override
     def _tensors_replaced(self) -> None:
         """A module of the tree had its parameters or buffers replaced."""
+        from lucid.nn._tree_version import _tree_version
+
         self.invalidate()
-        # The owner drops what it traced, so nothing is settled until it
-        # traces again.
-        self._settled = None
         on_replaced = self._on_replaced()
         if on_replaced is not None:
             on_replaced()
+        # The owner dropped what it traced and took the tree again — make_step
+        # its parameters, the segmented step its children: the next ``get``
+        # records it, or tells the owner again if the tree moved meanwhile.
+        self._settled = None
+        self._retaken_at = _tree_version()
 
 
 def signature_of(

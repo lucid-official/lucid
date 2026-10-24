@@ -25,7 +25,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
-from lucid.compile import compile_optimizer, fused_step, make_step
+from lucid.compile import CompiledModule, compile_optimizer, fused_step, make_step
 from lucid.compile._entry.decode_step import compiled_decode_step
 from lucid.test._fixtures.devices import metal_available
 from lucid.utils.cache import StaticCache
@@ -115,13 +115,42 @@ def _close(a: lucid.Tensor, b: lucid.Tensor) -> None:
     np.testing.assert_allclose(a.numpy(), b.numpy(), rtol=_TOL, atol=_TOL)
 
 
-# When the replacement comes: the step to make it before.  Before the first
-# call matters too — ``make_step`` takes the parameters, and the segmented step
-# its children, when it is built.
-_WHEN = {"before-the-first-call": 0, "after-the-first-call": 2}
+def _reload(model: nn.Module, device: str) -> None:
+    del device
+    state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+    model.load_state_dict(state, assign=True)
 
 
-def _compiled(model: _Net, entry: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
+def _move(model: nn.Module, device: str) -> None:
+    model.to(device)
+
+
+# When the replacement comes: before which call, and right after which notice.
+# Before the first call matters — ``make_step`` takes the parameters, and the
+# segmented step its children, when it is built — and so does right after an
+# assign load or a ``.to()``: told of those, the owner takes the tree again.
+_WHEN: dict[str, tuple[int, Callable[[nn.Module, str], None] | None]] = {
+    "before-the-first-call": (0, None),
+    "after-the-first-call": (2, None),
+    "right-after-an-assign-load": (0, _reload),
+    "right-after-a-same-device-to": (2, _move),
+}
+
+
+def _replace[M: nn.Module](
+    model: M,
+    changes: dict[str, Callable[[M, str], None]],
+    change: str,
+    when: str,
+    device: str,
+) -> None:
+    notice = _WHEN[when][1]
+    if notice is not None:
+        notice(model, device)
+    changes[change](model, device)
+
+
+def _compiled(model: _Net, entry: str) -> CompiledModule[[lucid.Tensor], lucid.Tensor]:
     """``lucid.compile`` of the model, of its bound forward, or of a closure."""
     if entry == "module":
         return lucid.compile(model)
@@ -144,13 +173,13 @@ def test_a_compiled_module_answers_with_what_the_model_holds_now(
     model = _net(device)
     x, _ = _data(device)
     compiled = _compiled(model, entry)
-    for _ in range(_WHEN[when]):
+    for _ in range(_WHEN[when][0]):
         _close(compiled(x), model(x))
-    _CHANGES[change](model, device)
+    _replace(model, _CHANGES, change, when, device)
     _close(compiled(x), model(x))
     if device == "metal":
         # It answered compiled, traced again — not eagerly.
-        info = compiled.cache_info()  # type: ignore[attr-defined]
+        info = compiled.cache_info()
         assert info["entries"] == 1 and not info["eager_only"], info
 
 
@@ -164,15 +193,15 @@ def _assert_compiled(cache: object, eager_only: object) -> None:
 
 
 def _make_step_run(
-    model: _Net, change: str, at: int, device: str, compiled: bool
+    model: _Net, change: str, when: str, device: str, compiled: bool
 ) -> list[float]:
     x, t = _data(device)
     step = make_step(model, F.mse_loss) if compiled else None
     opt = optim.SGD(model.parameters(), lr=0.1)
     losses = []
     for k in range(4):
-        if k == at:
-            _CHANGES[change](model, device)
+        if k == _WHEN[when][0]:
+            _replace(model, _CHANGES, change, when, device)
             # A training loop steps what the model holds after a replacement.
             opt = optim.SGD(model.parameters(), lr=0.1)
         opt.zero_grad()
@@ -192,8 +221,8 @@ def test_make_step_trains_what_the_model_holds_now(
     change: str, when: str, device: str
 ) -> None:
     model, ref = _net(device), _net(device)
-    losses = _make_step_run(model, change, _WHEN[when], device, compiled=True)
-    ref_losses = _make_step_run(ref, change, _WHEN[when], device, compiled=False)
+    losses = _make_step_run(model, change, when, device, compiled=True)
+    ref_losses = _make_step_run(ref, change, when, device, compiled=False)
     np.testing.assert_allclose(losses, ref_losses, rtol=_TOL, atol=_TOL)
     got, want = _named(model), _named(ref)
     assert got.keys() == want.keys()
@@ -216,9 +245,9 @@ def test_fused_step_trains_what_the_model_holds_now(change: str, when: str) -> N
     step = fused_step(model, F.mse_loss, opt)
     ref_opt = optim.SGD(ref.parameters(), lr=0.1)
     for k in range(4):
-        if k == _WHEN[when]:
+        if k == _WHEN[when][0]:
             for m, o in ((model, opt), (ref, ref_opt)):
-                _CHANGES[change](m, device)
+                _replace(m, _CHANGES, change, when, device)
                 o.param_groups[0]["params"] = list(m.parameters())
         loss = float(step(x, t).item())
         ref_opt.zero_grad()
@@ -282,9 +311,9 @@ def test_a_segmented_step_trains_what_the_model_holds_now(
     model, ref = _seq(device), _seq(device)
     step = make_step(model, F.mse_loss, segments=2)
     for k in range(4):
-        if k == _WHEN[when]:
-            _SEQ_CHANGES[change](model, device)
-            _SEQ_CHANGES[change](ref, device)
+        if k == _WHEN[when][0]:
+            _replace(model, _SEQ_CHANGES, change, when, device)
+            _replace(ref, _SEQ_CHANGES, change, when, device)
         for p in (*model.parameters(), *ref.parameters()):
             p.grad = None
         loss = step(x, t)

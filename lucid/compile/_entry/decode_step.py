@@ -126,7 +126,7 @@ def compiled_decode_step(
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
-    adapter = _CallableModule(forward_fn)  # held here: the fingerprint's ref is weak
+    adapter = _CallableModule(forward_fn)  # names forward_fn's modules; held on step
     fingerprint = ParamFingerprint(adapter, cache.clear)
 
     def _restore(snap: tuple[Any, ...]) -> None:
@@ -157,8 +157,7 @@ def compiled_decode_step(
 
         _tls.tracing = True
         try:
-            watched = (input_ids, cache_position)
-            with no_grad(), _tracing(watch=watched, module=adapter) as tracer:
+            with no_grad(), _tracing(watch=(input_ids, cache_position)) as tracer:
                 out = forward_fn(input_ids, cache_position)
         finally:
             _tls.tracing = False
@@ -324,5 +323,6 @@ def compiled_decode_step(
                 cache[key] = entry
         return _run(entry, input_ids, cache_position)
 
-    step.cache = cache  # type: ignore[attr-defined]
+    # The fingerprint holds the adapter weakly; the step keeps it alive.
+    step.cache, step.watched = cache, adapter  # type: ignore[attr-defined]
     return step
