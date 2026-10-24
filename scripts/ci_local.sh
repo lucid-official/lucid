@@ -33,7 +33,12 @@ export PYTHON_BIN="$VENV/bin/python"
 # The pinned MLX build's minos ([tool.lucid.mlx] macos), as CI exports it.
 MACOSX_DEPLOYMENT_TARGET="$("$PYTHON_BIN" tools/fetch_mlx.py --print-macos)"
 export MACOSX_DEPLOYMENT_TARGET
-export CLANG_FORMAT="$VENV/bin/clang-format" # the major ci.yml pins
+# The major ci.yml pins, where this venv has it.  A worktree's light venv
+# has none, and tools/check_format.sh then finds the main checkout's; set
+# to a missing file, it would have no clang-format to run (LCD-572).
+if [ -x "$VENV/bin/clang-format" ]; then
+    export CLANG_FORMAT="$VENV/bin/clang-format"
+fi
 export PYTHONPATH="$ROOT/scripts/ci_mirror${PYTHONPATH:+:$PYTHONPATH}"
 # CI's pytest loads one plugin, pytest-benchmark.  Any other a venv carries
 # would be refused by the mirror as pytest starts.
