@@ -476,3 +476,38 @@ def test_land_check_on_a_diff_cover_crash_cannot_measure_rather_than_fail_covera
     assert result.returncode == 9, out
     assert "diff-cover cannot measure (exit" in out
     assert "below 90%" not in out
+
+
+def test_land_check_with_nothing_to_measure_from_passes_with_a_note(
+    scratch: Scratch,
+) -> None:
+    """LCD-561: exit 0 without a measurement is kept for a branch that has
+    nothing to measure from — no coverage.xml, no coverage data, no touched
+    test — and is decided before any tool is looked for."""
+    commit_a_measured_lucid_change(scratch)
+
+    result = land(scratch, "--check")
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "no coverage.xml or touched tests to measure" in out
+
+
+def test_land_check_whose_touched_test_fails_under_coverage_cannot_measure(
+    scratch: Scratch,
+) -> None:
+    """LCD-561: a coverage run that fails is an attempt that did not measure
+    (exit 9), not the "nothing to measure" pass it used to fold into."""
+    pytest.importorskip("diff_cover")
+    commit_a_measured_lucid_change(scratch)
+    (scratch.a / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+    test = scratch.a / "lucid" / "test" / "test_mod.py"
+    test.parent.mkdir(parents=True)
+    test.write_text("def test_mod() -> None:\n    assert False\n")
+    paths = ("pyproject.toml", "lucid/test/test_mod.py")
+    assert scratch.git(scratch.a, "add", *paths).returncode == 0
+    assert scratch.git(scratch.a, "commit", "-q", "-m", "a test").returncode == 0
+
+    result = land(scratch, "--check")
+    out = result.stdout + result.stderr
+    assert result.returncode == 9, out
+    assert "diff-cover cannot measure: coverage run exited" in out
