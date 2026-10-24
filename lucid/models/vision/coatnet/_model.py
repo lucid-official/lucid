@@ -14,13 +14,15 @@ Architecture (CoAtNet-0, 4 stages after the stem):
 Reference param count: ~25.6 M (timm coatnet_0).
 """
 
+from collections import OrderedDict
 from typing import ClassVar, final, override
 
-import functools
+import threading
 
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.nn._shadow import is_active as _shadow_active
 from lucid.models._utils._classification import DropPath
@@ -150,42 +152,97 @@ class _MBConv(nn.Module):
 _LN_EPS: float = 1e-6
 
 
-#: How many ``(grid, device)`` index tables stay alive.  One table serves every
-#: block of every model that attends on that grid — the blocks of a stage
-#: share their grid — and each is an ``(N, N)`` int64 tensor, 8 MB for the
-#: 32×32 grid S3 attends on at 512 px.  A model attends on two grids per input
-#: size, so eight covers two sizes on two devices.
-_INDEX_CACHE_SIZE: int = 8
+#: Bytes of index tables kept alive across all models and devices.  Each table
+#: is ``(N, N)`` int64 for an ``N``-token grid: 8 MB for the 32×32 grid S3
+#: attends on at 512 px, 134 MB for the 64×64 one at 1024 px.  The cache is
+#: module-global, so what it holds outlives the model that asked for it; the
+#: budget caps that.  It fits both grids of a 1024-px model, or every grid of
+#: a multi-scale loop over a dozen sizes up to 512 px.  Past that, each
+#: forward rebuilds the tables it misses, and a single table larger than the
+#: budget (S3 above about 1220 px) is rebuilt on every call and never kept.
+_INDEX_CACHE_BYTES: int = 256 * 2**20
+
+
+@final
+class _IndexCache:
+    """Least-recently-used ``(grid, device)`` → index tables, bounded in bytes.
+
+    One table serves every block of every model that attends on that grid —
+    the blocks of a stage share their grid — where each block used to keep
+    its own copy.
+    """
+
+    def __init__(self, budget: int) -> None:
+        self.budget = budget
+        self.nbytes = 0
+        self._tables: OrderedDict[tuple[int, int, str], Tensor] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def __len__(self) -> int:
+        return len(self._tables)
+
+    def get(self, grid_h: int, grid_w: int, device: str) -> Tensor:
+        key = (grid_h, grid_w, device)
+        with self._lock:
+            held = self._tables.get(key)
+            if held is not None:
+                self._tables.move_to_end(key)
+                return held
+        # Built outside the lock: a second thread missing the same key builds
+        # an equal table, and the first one stored is the one both return.
+        table = _build_relative_index(grid_h, grid_w, device)
+        size = int(table.nbytes)
+        with self._lock:
+            held = self._tables.get(key)
+            if held is not None:
+                return held
+            if size <= self.budget:
+                self._tables[key] = table
+                self.nbytes += size
+                while self.nbytes > self.budget:
+                    _, dropped = self._tables.popitem(last=False)
+                    self.nbytes -= int(dropped.nbytes)
+        return table
+
+    def clear(self) -> None:
+        with self._lock:
+            self._tables.clear()
+            self.nbytes = 0
+
+
+_INDEX_CACHE = _IndexCache(_INDEX_CACHE_BYTES)
 
 
 def _relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
     """The shared ``(N, N)`` relative-offset index for ``grid`` on ``device``.
 
-    Derived from the grid and the device alone, so one tensor serves every
-    block.  A shadow build gets a table of its own: a phantom one in the
-    shared cache would reach real models, which cannot read it.
+    A shadow build gets a table of its own: a phantom one in the shared cache
+    would reach real models, which cannot read it.
     """
     if _shadow_active():
         return _build_relative_index(grid_h, grid_w, device)
-    return _shared_relative_index(grid_h, grid_w, device)
-
-
-@functools.lru_cache(maxsize=_INDEX_CACHE_SIZE)
-def _shared_relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
-    return _build_relative_index(grid_h, grid_w, device)
+    return _INDEX_CACHE.get(grid_h, grid_w, device)
 
 
 def _build_relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
-    """Flat ``(N, N)`` index of each position pair into a ``(2H-1)×(2W-1)`` table."""
-    coords_h = lucid.arange(grid_h, device=device).to(lucid.int64)
-    coords_w = lucid.arange(grid_w, device=device).to(lucid.int64)
-    ys = coords_h.reshape(grid_h, 1).expand(grid_h, grid_w).reshape(-1)
-    xs = coords_w.reshape(1, grid_w).expand(grid_h, grid_w).reshape(-1)
-    n = grid_h * grid_w
-    # Offsets shifted into [0, 2H-2] and [0, 2W-2], then flattened row-major.
-    rel_h = ys.reshape(n, 1) - ys.reshape(1, n) + (grid_h - 1)
-    rel_w = xs.reshape(n, 1) - xs.reshape(1, n) + (grid_w - 1)
-    return rel_h * (2 * grid_w - 1) + rel_w
+    """Flat ``(N, N)`` index of each position pair into a ``(2H-1)×(2W-1)`` table.
+
+    Built outside any active trace, so a recording always holds the table as
+    a constant feed — as it held the per-block buffer this replaced — and
+    never the ops that make it.  Built inside, a cold cache put them in the
+    graph and a warm one did not, so an export depended on what the process
+    had run before.
+    """
+    with untraced():
+        coords_h = lucid.arange(grid_h, device=device).to(lucid.int64)
+        coords_w = lucid.arange(grid_w, device=device).to(lucid.int64)
+        ys = coords_h.reshape(grid_h, 1).expand(grid_h, grid_w).reshape(-1)
+        xs = coords_w.reshape(1, grid_w).expand(grid_h, grid_w).reshape(-1)
+        n = grid_h * grid_w
+        # Offsets shifted into [0, 2H-2] and [0, 2W-2], then flattened row-major.
+        rel_h = ys.reshape(n, 1) - ys.reshape(1, n) + (grid_h - 1)
+        rel_w = xs.reshape(n, 1) - xs.reshape(1, n) + (grid_w - 1)
+        return rel_h * (2 * grid_w - 1) + rel_w
 
 
 def _resize_rel_table(

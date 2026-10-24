@@ -465,7 +465,7 @@ def test_blocks_share_one_index_per_grid(monkeypatch: pytest.MonkeyPatch) -> Non
     dict for every other one, so a stage of L blocks held L copies — 8 MB
     each for S3 of coatnet_0 at 512 px.
     """
-    _coatnet._shared_relative_index.cache_clear()
+    _coatnet._INDEX_CACHE.clear()
     built: list[tuple[int, int, str]] = []
     real = _coatnet._build_relative_index
 
@@ -486,19 +486,62 @@ def test_blocks_share_one_index_per_grid(monkeypatch: pytest.MonkeyPatch) -> Non
     assert _coatnet._relative_index(4, 4, "cpu") is _coatnet._relative_index(
         4, 4, "cpu"
     )
-    for side in range(1, _coatnet._INDEX_CACHE_SIZE + 4):
-        _coatnet._relative_index(side, side, "cpu")
-    info = _coatnet._shared_relative_index.cache_info()
-    assert info.currsize == _coatnet._INDEX_CACHE_SIZE
+
+
+def test_the_index_cache_is_bounded_in_bytes() -> None:
+    """The cache outlives every model, so it is capped by what it holds.
+
+    A 16-token grid's table is 16 × 16 int64 = 2048 bytes; two fit the
+    budget here and a third evicts the least recently read.
+    """
+    cache = _coatnet._IndexCache(budget=2 * 2048)
+    a = cache.get(4, 4, "cpu")
+    b = cache.get(2, 8, "cpu")
+    assert cache.get(4, 4, "cpu") is a
+    cache.get(8, 2, "cpu")
+    assert (len(cache), cache.nbytes) == (2, 2 * 2048)
+    assert cache.get(4, 4, "cpu") is a
+    assert cache.get(2, 8, "cpu") is not b, "the least recently read stayed"
+    # A table larger than the whole budget is answered but never kept.
+    big = cache.get(5, 5, "cpu")
+    assert big.shape == (25, 25)
+    assert (len(cache), cache.nbytes) == (2, 2 * 2048)
 
 
 def test_a_shadow_build_does_not_seed_the_shared_index() -> None:
     """A phantom table in the shared cache would reach real models."""
-    _coatnet._shared_relative_index.cache_clear()
+    _coatnet._INDEX_CACHE.clear()
     with shadow_alloc():
         phantom = _coatnet._relative_index(3, 3, "cpu")
     assert is_shadow(phantom)
     assert not is_shadow(_coatnet._relative_index(3, 3, "cpu"))
+    assert len(_coatnet._INDEX_CACHE) == 1
+
+
+def test_a_trace_holds_the_index_as_a_feed_cold_or_warm() -> None:
+    """A recording is the same whatever the process ran before (LCD-554).
+
+    A cold cache used to build the table inside the active trace, so its
+    ``arange`` / ``sub`` / ``mul`` ops entered the graph — 42 of them for a
+    small model — while a warm one handed the trace a constant feed.  An
+    export then depended on whether the model had been called first.
+    """
+    from lucid.compile import _tracing
+
+    lucid.manual_seed(0)
+    model = models.create_model("coatnet_0", image_size=64, **_SMALL).eval()
+    x = lucid.randn(1, 3, 64, 64)
+
+    def recorded() -> list[str]:
+        with _tracing(watch=[x]) as tracer, lucid.no_grad():
+            model.forward_features(x)
+        return [op.name for op in tracer.graph.ops]
+
+    _coatnet._INDEX_CACHE.clear()
+    cold = recorded()
+    warm = recorded()
+    assert cold == warm
+    assert "arange" not in cold
 
 
 def test_a_model_moved_to_metal_reads_a_metal_index(device_gpu_only: str) -> None:
