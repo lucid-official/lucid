@@ -120,13 +120,14 @@ def compiled_decode_step(
     from lucid._dispatch import _unwrap, _wrap
     from lucid._tensor.tensor import Tensor
     from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _tracing
+    from lucid.compile import _CallableModule, _tracing
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
     from lucid.compile._core.signature import ParamFingerprint, signature_of
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
-    fingerprint = ParamFingerprint.of_callable(forward_fn, cache.clear)
+    adapter = _CallableModule(forward_fn)  # held here: the fingerprint's ref is weak
+    fingerprint = ParamFingerprint(adapter, cache.clear)
 
     def _restore(snap: tuple[Any, ...]) -> None:
         """Undo every cache mutation the trace caused (buffer rebinds + counters),
@@ -156,9 +157,9 @@ def compiled_decode_step(
 
         _tls.tracing = True
         try:
-            with no_grad():
-                with _tracing(watch=(input_ids, cache_position)) as tracer:
-                    out = forward_fn(input_ids, cache_position)
+            watched = (input_ids, cache_position)
+            with no_grad(), _tracing(watch=watched, module=adapter) as tracer:
+                out = forward_fn(input_ids, cache_position)
         finally:
             _tls.tracing = False
 
@@ -298,13 +299,12 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         try:
-            # Keyed by input shapes; ``get`` drops what read replaced weights.
             key = signature_of(
                 cast(Any, None),
                 (input_ids, cache_position),
                 {},
                 dynamic=False,
-                param_fingerprint=fingerprint.get(),
+                param_fingerprint=fingerprint.get(),  # drops what read replaced tensors
             )
         except TypeError, AttributeError:
             key = None

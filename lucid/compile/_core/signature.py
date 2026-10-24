@@ -601,8 +601,9 @@ class ParamFingerprint(_ModuleWrapper):
     The same news reaches its owner: an executable is fed the tensors it was
     traced with, so one traced before a replacement goes on training the old
     ones (LCD-505).  A tensor or submodule put in another's place leaves the
-    fingerprint as it was, so after the owner traces it calls :meth:`settle`,
-    and when the version moves the tree is compared with what was settled
+    fingerprint as it was, so the tree is recorded when this is built and
+    again after each trace of its owner (:meth:`settle`), and when the
+    version moves the tree is compared with what was recorded
     (:class:`_TreeTensors`): any difference is a replacement (LCD-560).
     Settling after the trace, not before, takes in what a forward does to its
     own state while traced — a lazy layer materialising, a statistic kept by
@@ -623,45 +624,20 @@ class ParamFingerprint(_ModuleWrapper):
     def __init__(
         self, model: Module, on_replaced: Callable[[], object] | None = None
     ) -> None:
-        self._model: Callable[[], Module | None] = weakref.ref(model)
+        self._model: weakref.ref[Module] = weakref.ref(model)
         self._value: tuple[tuple[str, str], ...] | None = None
         self._version = -1
-        # The tree the owner's executables were traced against; ``None`` while
-        # it has none.
-        self._settled: _TreeTensors | None = None
         self._on_replaced: Callable[[], Callable[[], object] | None] = (
             weakref.WeakMethod(on_replaced)
             if isinstance(on_replaced, MethodType)
             else lambda: on_replaced
         )
         self._watch(model)
-
-    @classmethod
-    def of_callable(
-        cls, fn: Callable[..., object], on_replaced: Callable[[], object]
-    ) -> ParamFingerprint:
-        """The fingerprint of the modules ``fn`` is bound to or closes over.
-
-        It holds the adapter that names them, which nothing else does.
-
-        Parameters
-        ----------
-        fn : callable
-            A forward that is not a module — ``compiled_decode_step``'s.
-        on_replaced : callable
-            As for the constructor: drops what was traced from ``fn``.
-
-        Returns
-        -------
-        ParamFingerprint
-            The watcher, with the adapter held for as long as it lives.
-        """
-        from lucid.compile import _CallableModule
-
-        owner = _CallableModule(fn)
-        fingerprint = cls(owner, on_replaced)
-        fingerprint._model = lambda: owner
-        return fingerprint
+        # The tree the owner's executables were traced against; ``None`` once
+        # they are dropped.  Settled from the start: an owner may take the
+        # tree when it is built — ``make_step`` its parameters, the segmented
+        # step its children — and a replacement before its first call is one.
+        self._settled: _TreeTensors | None = _TreeTensors(model)
 
     @override
     def __reduce__(

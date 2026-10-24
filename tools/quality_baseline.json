@@ -2426,7 +2426,6 @@
    },
    "SIM117": {
     "lucid/compile/_debug/diagnose.py": 1,
-    "lucid/compile/_entry/decode_step.py": 1,
     "lucid/compile/_entry/function.py": 1,
     "lucid/compile/_optim/compiler.py": 1
    },

@@ -115,21 +115,42 @@ def _close(a: lucid.Tensor, b: lucid.Tensor) -> None:
     np.testing.assert_allclose(a.numpy(), b.numpy(), rtol=_TOL, atol=_TOL)
 
 
+# When the replacement comes: the step to make it before.  Before the first
+# call matters too — ``make_step`` takes the parameters, and the segmented step
+# its children, when it is built.
+_WHEN = {"before-the-first-call": 0, "after-the-first-call": 2}
+
+
+def _compiled(model: _Net, entry: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
+    """``lucid.compile`` of the model, of its bound forward, or of a closure."""
+    if entry == "module":
+        return lucid.compile(model)
+    if entry == "bound-method":
+        return lucid.compile(model.forward)
+
+    def call(x: lucid.Tensor) -> lucid.Tensor:
+        return model(x)
+
+    return lucid.compile(call)
+
+
 @pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("when", list(_WHEN))
+@pytest.mark.parametrize("entry", ["module", "bound-method", "closure"])
 @pytest.mark.parametrize("change", list(_CHANGES))
 def test_a_compiled_module_answers_with_what_the_model_holds_now(
-    change: str, device: str
+    change: str, entry: str, when: str, device: str
 ) -> None:
     model = _net(device)
     x, _ = _data(device)
-    compiled = lucid.compile(model)
-    _close(compiled(x), model(x))
-    compiled(x)
+    compiled = _compiled(model, entry)
+    for _ in range(_WHEN[when]):
+        _close(compiled(x), model(x))
     _CHANGES[change](model, device)
     _close(compiled(x), model(x))
     if device == "metal":
         # It answered compiled, traced again — not eagerly.
-        info = compiled.cache_info()
+        info = compiled.cache_info()  # type: ignore[attr-defined]
         assert info["entries"] == 1 and not info["eager_only"], info
 
 
@@ -137,15 +158,20 @@ def _named(model: nn.Module) -> dict[str, np.ndarray]:
     return {k: v.detach().numpy() for k, v in model.named_parameters()}
 
 
+def _assert_compiled(cache: object, eager_only: object) -> None:
+    """A step that answered eagerly would match eager without being fixed."""
+    assert cache and not eager_only, (cache, eager_only)
+
+
 def _make_step_run(
-    model: _Net, change: str, device: str, compiled: bool
+    model: _Net, change: str, at: int, device: str, compiled: bool
 ) -> list[float]:
     x, t = _data(device)
     step = make_step(model, F.mse_loss) if compiled else None
     opt = optim.SGD(model.parameters(), lr=0.1)
     losses = []
     for k in range(4):
-        if k == 2:
+        if k == at:
             _CHANGES[change](model, device)
             # A training loop steps what the model holds after a replacement.
             opt = optim.SGD(model.parameters(), lr=0.1)
@@ -154,15 +180,20 @@ def _make_step_run(
         loss.backward()
         opt.step()
         losses.append(float(loss.item()))
+    if step is not None and device == "metal":
+        _assert_compiled(step.cache, len(step.eager_only))  # type: ignore[attr-defined]
     return losses
 
 
 @pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("when", list(_WHEN))
 @pytest.mark.parametrize("change", list(_CHANGES))
-def test_make_step_trains_what_the_model_holds_now(change: str, device: str) -> None:
+def test_make_step_trains_what_the_model_holds_now(
+    change: str, when: str, device: str
+) -> None:
     model, ref = _net(device), _net(device)
-    losses = _make_step_run(model, change, device, compiled=True)
-    ref_losses = _make_step_run(ref, change, device, compiled=False)
+    losses = _make_step_run(model, change, _WHEN[when], device, compiled=True)
+    ref_losses = _make_step_run(ref, change, _WHEN[when], device, compiled=False)
     np.testing.assert_allclose(losses, ref_losses, rtol=_TOL, atol=_TOL)
     got, want = _named(model), _named(ref)
     assert got.keys() == want.keys()
@@ -171,8 +202,9 @@ def test_make_step_trains_what_the_model_holds_now(change: str, device: str) -> 
 
 
 @_METAL
+@pytest.mark.parametrize("when", list(_WHEN))
 @pytest.mark.parametrize("change", list(_CHANGES))
-def test_fused_step_trains_what_the_model_holds_now(change: str) -> None:
+def test_fused_step_trains_what_the_model_holds_now(change: str, when: str) -> None:
     # fused_step steps the optimizer it was built with; after a replacement
     # the loop hands that optimizer the model's parameters, and the fused
     # step is held to the eager loop doing the same.  (fused_step has no
@@ -184,7 +216,7 @@ def test_fused_step_trains_what_the_model_holds_now(change: str) -> None:
     step = fused_step(model, F.mse_loss, opt)
     ref_opt = optim.SGD(ref.parameters(), lr=0.1)
     for k in range(4):
-        if k == 2:
+        if k == _WHEN[when]:
             for m, o in ((model, opt), (ref, ref_opt)):
                 _CHANGES[change](m, device)
                 o.param_groups[0]["params"] = list(m.parameters())
@@ -194,6 +226,8 @@ def test_fused_step_trains_what_the_model_holds_now(change: str) -> None:
         ref_loss.backward()
         ref_opt.step()
         np.testing.assert_allclose(loss, float(ref_loss.item()), rtol=_TOL, atol=_TOL)
+    info = step.cache_info()
+    _assert_compiled(info["entries"], info["eager_only"])
     got, want = _named(model), _named(ref)
     for name, value in want.items():
         np.testing.assert_allclose(got[name], value, rtol=_TOL, atol=_TOL, err_msg=name)
@@ -238,16 +272,17 @@ _SEQ_CHANGES: dict[str, Callable[[nn.Sequential, str], None]] = {
 
 
 @pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("when", list(_WHEN))
 @pytest.mark.parametrize("change", list(_SEQ_CHANGES))
 def test_a_segmented_step_trains_what_the_model_holds_now(
-    change: str, device: str
+    change: str, when: str, device: str
 ) -> None:
     # Each segment held the children and parameters it was split from.
     x, t = _data(device)
     model, ref = _seq(device), _seq(device)
     step = make_step(model, F.mse_loss, segments=2)
     for k in range(4):
-        if k == 2:
+        if k == _WHEN[when]:
             _SEQ_CHANGES[change](model, device)
             _SEQ_CHANGES[change](ref, device)
         for p in (*model.parameters(), *ref.parameters()):
@@ -264,6 +299,10 @@ def test_a_segmented_step_trains_what_the_model_holds_now(
             np.testing.assert_allclose(
                 p.grad.numpy(), rp.grad.numpy(), rtol=_TOL, atol=_TOL
             )
+    if device == "metal":
+        segment_caches = step.cache  # type: ignore[attr-defined]
+        eager = step.eager_only["flag"]  # type: ignore[attr-defined]
+        _assert_compiled(all(segment_caches), eager)
 
 
 class _Decoder(nn.Module):
@@ -319,3 +358,88 @@ def test_a_compiled_decode_step_reads_a_replaced_parameter() -> None:
         outs.append(run)
     for got, want in zip(*outs, strict=True):
         np.testing.assert_allclose(got, want, rtol=1e-4, atol=1e-4)
+
+
+# ── What is still not seen — each its own card ─────────────────────────────
+
+
+class _Masked(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.lin = nn.Linear(4, 4)
+        # A plain attribute, not a buffer: it lives in ``__dict__``.
+        self.mask = lucid.ones(4)
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        return self.lin(x) * self.mask
+
+
+@_METAL
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-560 follow-up: a plain tensor attribute the forward reads is "
+    "not in the tree record (only the ones the trace fed may go in: the "
+    "reparametrisations rewrite theirs on every eager forward)",
+)
+def test_a_plain_tensor_attribute_put_in_anothers_place() -> None:
+    lucid.manual_seed(0)
+    model = _Masked().to("metal")
+    model.mask = model.mask.to("metal")
+    x, _ = _data("metal")
+    compiled = lucid.compile(model)
+    compiled(x)
+    model.mask = _values((4,), 0.9, "metal")
+    _close(compiled(x), model(x))
+
+
+@_METAL
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-598: p.data = v gives the parameter new storage without "
+    "moving the tree version",
+)
+def test_a_parameter_given_new_storage_through_data() -> None:
+    model = _net("metal")
+    x, _ = _data("metal")
+    compiled = lucid.compile(model)
+    compiled(x)
+    model.inp.weight.data = _values((4, 4), 0.3, "metal")
+    _close(compiled(x), model(x))
+
+
+# A module the compiled function reaches through a module-level name, not a
+# closure cell or a bound ``self``: nothing names it to the compiled wrapper.
+_GLOBALS: dict[str, nn.Sequential] = {}
+
+
+def _global_forward(x: lucid.Tensor) -> lucid.Tensor:
+    return _GLOBALS["model"](x)
+
+
+_GLOBAL_CHANGES: dict[str, Callable[[nn.Sequential], object]] = {
+    "parameter-setattr": lambda m: setattr(
+        m[0], "weight", nn.Parameter(_values((4, 4), 0.3, "metal"))
+    ),
+    "submodule": lambda m: m.__setitem__(1, nn.Sigmoid()),
+    "eval": lambda m: m.eval(),
+}
+
+
+@_METAL
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-599: a module reached through a module-level global is not "
+    "watched — not by the key, not by the tree record",
+)
+@pytest.mark.parametrize("change", list(_GLOBAL_CHANGES))
+def test_a_module_reached_through_a_global(change: str) -> None:
+    lucid.manual_seed(0)
+    model = nn.Sequential(nn.Linear(4, 4), nn.Tanh(), nn.Dropout(0.5)).to("metal")
+    # Dropout is on only for the change that turns it off.
+    model.train(change == "eval")
+    _GLOBALS["model"] = model
+    x, _ = _data("metal")
+    compiled = lucid.compile(_global_forward)
+    compiled(x)
+    _GLOBAL_CHANGES[change](model)
+    _close(compiled(x), model(x))
