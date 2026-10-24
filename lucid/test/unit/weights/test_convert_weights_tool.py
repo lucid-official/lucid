@@ -126,7 +126,58 @@ _BARE_STATE: dict[str, dict[str, object]] = {
     "BERTArch": {"_kind": "mlm"},
     "SENetArch": {"arch": ""},
     "MobileNetV3Arch": {"_key_map": {}},
+    "StableDiffusionArch": {"overrides": {}},
+    # One block each, so a key can reach the per-block rules.
+    "EfficientNetArch": {"_flat_index": {(1, 0): 3}, "_has_expand": {(1, 0): False}},
+    "MobileNetArch": {"_gb_to_feat": {(0, 0): 3}},
 }
+
+# Keys that pass a recipe's outer prefix and fall through a rule inside it —
+# the branches the top-level synthetic key never reaches.
+_NESTED_UNKNOWN: dict[str, tuple[str, ...]] = {
+    "CLIPArch": (
+        "vision_model.embeddings.unexpected.weight",
+        "vision_model.encoder.layers.0.unexpected.weight",
+    ),
+    "ConvNeXtArch": ("features.1.0", "features.1.0.block.9.weight"),
+    "ConvNeXtTimmArch": (
+        "stages.0.downsample.0.weight",
+        "stages.1.downsample.7.weight",
+        "stages.0.blocks.0.unexpected.weight",
+    ),
+    "DiTArch": (
+        "transformer_blocks.0.norm1.emb.unexpected.weight",
+        "transformer_blocks.0.unexpected.weight",
+    ),
+    "EfficientNetArch": (
+        "features.0.7.weight",
+        "features.8.7.weight",
+        "features.1.5.block.0.0.weight",
+        "features.1.0.block.9.weight",
+        "features.1.0.block.0.7.weight",
+    ),
+    "InceptionArch": ("Mixed_5b.unexpected.conv.weight", "Unexpected.conv.bn.weight"),
+    "MobileNetArch": ("blocks.0.0.unexpected.weight", "blocks.9.9.conv_dw.weight"),
+    "StableDiffusionArch": (
+        "unet.mid_block.unexpected.weight",
+        "unet.down_blocks.0.unexpected.0.weight",
+        "vae.encoder.mid_block.unexpected.weight",
+        "vae.decoder.up_blocks.0.unexpected.0.weight",
+    ),
+    "SwinArch": ("features.2.unexpected.weight",),
+    "SwinTimmArch": ("layers.1.downsample.unexpected.weight",),
+    "ViTArch": (
+        "encoder.layers.encoder_layer_0",
+        "encoder.layers.encoder_layer_0.unexpected.weight",
+    ),
+}
+
+
+def _bare(recipe: type[Architecture]) -> Architecture:
+    bare = recipe.__new__(recipe)
+    for name, value in _BARE_STATE.get(recipe.__name__, {}).items():
+        setattr(bare, name, value)
+    return bare
 
 
 @pytest.mark.parametrize("recipe", _recipe_classes(), ids=lambda c: c.__name__)
@@ -135,14 +186,33 @@ def test_no_recipe_drops_a_key_it_has_no_rule_for(recipe: type[Architecture]) ->
     it never decided about, and the conversion succeeded without it.  A key
     no rule covers must raise :class:`UnknownSourceKey`, or carry through
     under a name that :func:`convert`'s key-set check then refuses."""
-    bare = recipe.__new__(recipe)
-    for name, value in _BARE_STATE.get(recipe.__name__, {}).items():
-        setattr(bare, name, value)
     try:
-        mapped = bare.map_key("model.unexpected.weight")
+        mapped = _bare(recipe).map_key("model.unexpected.weight")
     except UnknownSourceKey:
         return
     assert mapped is not None
+
+
+_NESTED_CASES = [
+    (recipe, key)
+    for recipe in _recipe_classes()
+    for key in _NESTED_UNKNOWN.get(recipe.__name__, ())
+]
+
+
+@pytest.mark.parametrize(
+    "recipe,key", _NESTED_CASES, ids=[f"{r.__name__}:{k}" for r, k in _NESTED_CASES]
+)
+def test_a_key_inside_a_known_prefix_is_still_refused(
+    recipe: type[Architecture], key: str
+) -> None:
+    with pytest.raises(UnknownSourceKey):
+        _bare(recipe).map_key(key)
+
+
+def test_every_nested_case_names_a_recipe() -> None:
+    names = {recipe.__name__ for recipe in _recipe_classes()}
+    assert set(_NESTED_UNKNOWN) <= names
 
 
 # ── the TVM release format ───────────────────────────────────────────────────
