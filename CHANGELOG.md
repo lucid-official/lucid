@@ -1402,6 +1402,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - give the float32-or-wider rule one owner in lucid._dtype
 
+- state scalars take _float32_or_wider's dtype
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

@@ -45,6 +45,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.compile._optim.spec import _hp
 from lucid.optim._step_counter import _counts_as_step, _record_step
@@ -596,10 +597,9 @@ class _CompiledStepBase:
             entry: dict[str, object] = {}
             if self._EXPORTS_STEP:
                 entry["step"] = self._step_entry(i)
-            scalar_dt = _lucid.float64 if p.dtype == _lucid.float64 else _lucid.float32
+            scalar_dt = _float32_or_wider(p.dtype)
             for name in self._PSTATE_NAMES:
-                value = self._pstate[i].get(name)
-                if value is not None:
+                if (value := self._pstate[i].get(name)) is not None:
                     entry[name] = _lucid.tensor(value, dtype=scalar_dt).numpy()
             # Every buffer the parameter holds, including one kept after its
             # feature was switched off — the eager state keeps it too.
