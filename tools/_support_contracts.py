@@ -124,10 +124,13 @@ def contract_links(root: Path, symbols: list[Symbol], audit_report: dict[str, An
         documented = sorted(set(docs.get(name, []) + docs.get(definition, [])))
         source = None
         try:
-            filename = inspect.getsourcefile(obj)
+            # A decorated function (a loss under ``_amp_op``) is read where its
+            # def is, not where the wrapper was written.
+            defined = inspect.unwrap(obj)
+            filename = inspect.getsourcefile(defined)
             path = Path(filename) if filename else None
             if path is not None and path.is_relative_to(root):
-                source = f"{path.relative_to(root)}:{inspect.getsourcelines(obj)[1]}"
+                source = f"{path.relative_to(root)}:{inspect.getsourcelines(defined)[1]}"
         except (TypeError, OSError):
             pass
         result.append({

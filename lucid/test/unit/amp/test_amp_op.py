@@ -1,8 +1,8 @@
-"""``amp_op`` gives a composite its row at its entry, for the whole call (LCD-614).
+"""``_amp_op`` gives a composite its row at its entry, for the whole call (LCD-614).
 
 The losses applied their FP32 row only through their reduction, so
 ``reduction="none"`` kept a half input half.  Each now takes the row at its
-entry with ``amp_op``: every tensor argument is cast by the row, a
+entry with ``_amp_op``: every tensor argument is cast by the row, a
 ``weight`` as well as the input (the reference's autocast casts every
 floating tensor an op is handed), and the body runs with autocast off.
 These pin the decorator's own contract.
@@ -14,7 +14,7 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid._ops._autocast import amp_op
+from lucid._ops._autocast import _amp_op
 from lucid.amp import autocast
 from lucid.test._fixtures.devices import metal_available
 
@@ -32,7 +32,7 @@ _SETTINGS = [
 _seen: dict[str, object] = {}
 
 
-@amp_op("l1_loss")  # FP32 on both devices
+@_amp_op("l1_loss")  # FP32 on both devices
 def _composite(
     input: lucid.Tensor,
     target: lucid.Tensor,
@@ -55,7 +55,7 @@ def _composite(
     return out if weight is None else out * weight
 
 
-@amp_op("bce_loss")  # KEEP on Metal, FP32 on the CPU
+@_amp_op("bce_loss")  # KEEP on Metal, FP32 on the CPU
 def _keeps_on_metal(input: lucid.Tensor) -> lucid.Tensor:
     _seen.update(
         input=input.dtype, autocast=_C_engine.amp_is_active(input._impl.device)
@@ -109,7 +109,7 @@ def test_the_body_runs_with_autocast_off_and_it_is_back_on_after(
     assert _seen["autocast"] is False
 
 
-@amp_op("l1_loss")
+@_amp_op("l1_loss")
 def _refuses(input: lucid.Tensor) -> lucid.Tensor:
     raise ValueError(f"refused a {input.dtype} input")
 
@@ -146,7 +146,7 @@ def test_a_float32_argument_arrives_as_the_same_tensor() -> None:
     """The row leaves a float32 argument alone, and it arrives unwrapped."""
     got: list[lucid.Tensor] = []
 
-    @amp_op("l1_loss")
+    @_amp_op("l1_loss")
     def keep(input: lucid.Tensor) -> lucid.Tensor:
         got.append(input)
         return input
@@ -174,12 +174,68 @@ def test_the_signature_name_and_docstring_are_the_function_s() -> None:
     assert _composite.__doc__ == "Record what arrived, then compute with it."
 
 
-@pytest.mark.parametrize(
-    "name", ["binary_cross_entropy_with_logits", "cross_entropy", "kl_div", "ctc_loss"]
-)
+#: What a caller binds to, spelled out: ``inspect.signature`` follows
+#: ``__wrapped__``, so comparing with the undecorated def could not fail.
+_LOSS_PARAMS = {
+    "binary_cross_entropy_with_logits": [
+        "input",
+        "target",
+        "weight=",
+        "reduction=",
+        "pos_weight=",
+    ],
+    "cross_entropy": [
+        "input",
+        "target",
+        "weight=",
+        "ignore_index=",
+        "reduction=",
+        "label_smoothing=",
+    ],
+    "kl_div": ["input", "target", "size_average=", "reduction=", "log_target="],
+    "ctc_loss": [
+        "log_probs",
+        "targets",
+        "input_lengths",
+        "target_lengths",
+        "blank=",
+        "reduction=",
+        "zero_infinity=",
+    ],
+}
+
+
+@pytest.mark.parametrize("name", sorted(_LOSS_PARAMS))
 def test_a_decorated_loss_keeps_its_signature(name: str) -> None:
     """What a caller binds to, and what the stubs and docs read, is the def's."""
     fn = getattr(lucid.nn.functional, name)
-    assert inspect.signature(fn) == inspect.signature(fn.__wrapped__)
+    params = [
+        p.name + ("" if p.default is p.empty else "=")
+        for p in inspect.signature(fn).parameters.values()
+        if p.kind is p.POSITIONAL_OR_KEYWORD
+    ]
+    assert len(params) == len(inspect.signature(fn).parameters)
+    assert params == _LOSS_PARAMS[name]
     assert fn.__module__ == "lucid.nn.functional.loss"
     assert fn.__name__ == name and fn.__doc__ == fn.__wrapped__.__doc__
+
+
+@pytest.mark.parametrize(("device", "half"), _SETTINGS)
+def test_a_call_that_does_not_bind_raises_the_function_s_own_error(
+    device: str, half: str
+) -> None:
+    """``signature.bind`` would refuse first, with its own wording; the
+    error under autocast is the one the call raises outside it."""
+    dt = getattr(lucid, half)
+    x = lucid.randn(3, 4, device=device).to(dt)
+    F = lucid.nn.functional
+    with pytest.raises(TypeError) as outside:
+        F.cross_entropy(x)  # type: ignore[call-arg]
+    with autocast(device_type=device, dtype=dt):
+        with pytest.raises(TypeError) as inside:
+            F.cross_entropy(x)  # type: ignore[call-arg]
+        with pytest.raises(TypeError) as unknown:
+            F.nll_loss(x, x, bogus=1)  # type: ignore[call-arg]
+    assert str(inside.value) == str(outside.value)
+    assert "cross_entropy()" in str(inside.value)
+    assert "bogus" in str(unknown.value)

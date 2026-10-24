@@ -16,7 +16,7 @@ inputs, and still needs its body run with autocast off, or its parts apply
 their own rows (``interpolate``'s products ran ``matmul``'s LOWER row) — it
 enters through :func:`_autocast_suspended`.  A composite whose operands are
 all arguments (a loss) can take :func:`_autocast_entry` around its whole
-call with the :func:`amp_op` decorator.
+call with the :func:`_amp_op` decorator.
 """
 
 import annotationlib
@@ -83,7 +83,7 @@ def _autocast_entry(
         yield cast
 
 
-def amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorate a composite with ``row``'s entry: :func:`_autocast_entry` around the call.
 
     Every tensor argument, by position or by keyword, enters cast by the
@@ -122,7 +122,11 @@ def amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
         def at_entry(*args: P.args, **kwargs: P.kwargs) -> R:
             if not _C_engine.amp_is_active():
                 return fn(*args, **kwargs)
-            bound = signature.bind(*args, **kwargs)
+            try:
+                bound = signature.bind(*args, **kwargs)
+            except TypeError:
+                # A call that does not bind: the function's own refusal says why.
+                return fn(*args, **kwargs)
             held = {
                 name: impl
                 for name, value in bound.arguments.items()

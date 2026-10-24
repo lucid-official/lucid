@@ -36,7 +36,7 @@ against the reference).  Every loss is in the table at every reduction.
 FP32 Metal rows (``vector_norm``, ``softplus``) widened them (LCD-614).
 
 A composite with a row enters through ``_autocast_entry`` (a loss through
-``amp_op``, the same entry around its whole call), one without through
+``_amp_op``, the same entry around its whole call), one without through
 ``_autocast_suspended``; the last tests check that every name handed to an
 entry is a row of the table, so a misspelt row cannot quietly become "keep",
 and that each loss enters through its own row or, with none, decomposes as
@@ -695,7 +695,7 @@ def test_the_dtype_matches_the_reference(
 
 # ── every name an entry is handed is a row ──────────────────────────────────
 
-_ENTRY_FUNCTIONS = frozenset({"_autocast_entry", "amp_cast_inputs", "amp_op"})
+_ENTRY_FUNCTIONS = frozenset({"_autocast_entry", "amp_cast_inputs", "_amp_op"})
 # Call sites whose name is built at run time, with every name each passes.
 _COMPUTED_NAMES: dict[tuple[str, str], frozenset[str]] = {
     ("lucid/fft/_transforms.py", "_transform"): frozenset(
@@ -815,7 +815,7 @@ def test_every_loss_is_in_the_table() -> None:
 
 
 def test_a_loss_enters_through_its_row_and_only_one_with_a_row_does() -> None:
-    """``amp_op`` with its row on every loss that has one (but those in
+    """``_amp_op`` with its row on every loss that has one (but those in
     ``_ROW_INSIDE``); none on a loss without, whose parts apply their rows as
     the reference's composite's do."""
     from lucid.nn.functional import loss as module
@@ -829,7 +829,7 @@ def test_a_loss_enters_through_its_row_and_only_one_with_a_row_does() -> None:
                 for d in node.decorator_list
                 if isinstance(d, ast.Call)
                 and isinstance(d.func, ast.Name)
-                and d.func.id == "amp_op"
+                and d.func.id == "_amp_op"
                 and isinstance(d.args[0], ast.Constant)
             ]
             decorated[node.name] = rows[0] if rows else None

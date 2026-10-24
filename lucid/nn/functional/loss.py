@@ -18,7 +18,7 @@ import lucid as _lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry, amp_op
+from lucid._ops._autocast import _autocast_entry, _amp_op
 from lucid._dtype import bfloat16 as _bfloat16, dtype as _dtype, finfo as _finfo
 from lucid._dtype import float16 as _float16, float32 as _float32
 from lucid._types import Reduction, ReductionKL
@@ -84,7 +84,7 @@ def _reduce(
     here too rather than falling through to ``"none"``.
 
     Autocast is not applied here.  A loss with a row takes it at its entry
-    (``amp_op``) and runs with autocast off; one without, and a weighted
+    (``_amp_op``) and runs with autocast off; one without, and a weighted
     ``mse_loss`` / ``l1_loss``, is a composite in the reference too, so its
     sums and means apply their own rows.
 
@@ -326,7 +326,7 @@ def _check_triplet_margin(margin: float, op: str) -> None:
         raise ValueError(f"{op}: expected margin to be greater than 0, got {margin!r}")
 
 
-@amp_op("smooth_l1_loss")
+@_amp_op("smooth_l1_loss")
 def smooth_l1_loss(
     input: Tensor, target: Tensor, reduction: Reduction = "mean", beta: float = 1.0
 ) -> Tensor:
@@ -587,7 +587,7 @@ def _weighted_mean(nll: Tensor, sample_weight: Tensor) -> Tensor:
     return total / safe_denom + (denom - denom) / denom
 
 
-@amp_op("cross_entropy_loss")
+@_amp_op("cross_entropy_loss")
 def cross_entropy(
     input: Tensor,
     target: Tensor,
@@ -743,7 +743,7 @@ def _soft_target_nll(
     return _reduce(-prod.sum(dim=1), reduction)
 
 
-@amp_op("nll_loss")
+@_amp_op("nll_loss")
 def nll_loss(
     input: Tensor,
     target: Tensor,
@@ -825,7 +825,7 @@ def nll_loss(
     )
 
 
-@amp_op("bce_loss")
+@_amp_op("bce_loss")
 def binary_cross_entropy(
     input: Tensor,
     target: Tensor,
@@ -944,7 +944,7 @@ def binary_cross_entropy(
     return _reduce(bce, reduction, out_dtype)
 
 
-@amp_op("bce_with_logits")
+@_amp_op("bce_with_logits")
 def binary_cross_entropy_with_logits(
     input: Tensor,
     target: Tensor,
@@ -1044,7 +1044,7 @@ def binary_cross_entropy_with_logits(
     return _reduce(loss, reduction, out_dtype)
 
 
-@amp_op("kl_div")
+@_amp_op("kl_div")
 def kl_div(
     input: Tensor,
     target: Tensor,
@@ -1147,7 +1147,7 @@ def kl_div(
     return total / int(xi.shape[0]) if xi.shape else total
 
 
-@amp_op("triplet_margin_loss")
+@_amp_op("triplet_margin_loss")
 def triplet_margin_loss(
     anchor: Tensor,
     positive: Tensor,
@@ -1348,7 +1348,7 @@ def triplet_margin_with_distance_loss(
     return _reduce((d_ap - d_an + margin).clamp(min=0.0), reduction)
 
 
-@amp_op("cosine_embedding_loss")
+@_amp_op("cosine_embedding_loss")
 def cosine_embedding_loss(
     input1: Tensor,
     input2: Tensor,
@@ -1446,7 +1446,7 @@ def cosine_embedding_loss(
     return _reduce(loss, reduction)
 
 
-@amp_op("margin_ranking_loss")
+@_amp_op("margin_ranking_loss")
 def margin_ranking_loss(
     input1: Tensor,
     input2: Tensor,
@@ -1519,7 +1519,7 @@ def margin_ranking_loss(
     return _reduce(_wrap(loss), reduction)
 
 
-@amp_op("hinge_embedding_loss")
+@_amp_op("hinge_embedding_loss")
 def hinge_embedding_loss(
     input: Tensor, target: Tensor, margin: float = 1.0, reduction: Reduction = "mean"
 ) -> Tensor:
@@ -1585,7 +1585,7 @@ def hinge_embedding_loss(
     return _reduce(loss, reduction)
 
 
-@amp_op("poisson_nll_loss")
+@_amp_op("poisson_nll_loss")
 def poisson_nll_loss(
     input: Tensor,
     target: Tensor,
@@ -1720,7 +1720,7 @@ def _align_gaussian_var(x: Tensor, var: Tensor | float) -> Tensor:
     return var
 
 
-@amp_op("gaussian_nll_loss")
+@_amp_op("gaussian_nll_loss")
 def gaussian_nll_loss(
     input: Tensor,
     target: Tensor,
@@ -1826,7 +1826,7 @@ def gaussian_nll_loss(
     return _reduce(loss, reduction)
 
 
-@amp_op("ctc_loss")
+@_amp_op("ctc_loss")
 def ctc_loss(
     log_probs: Tensor,
     targets: Tensor,
@@ -2006,7 +2006,7 @@ def ctc_loss(
     return _reduce(per_sample, reduction)
 
 
-@amp_op("multi_margin_loss")
+@_amp_op("multi_margin_loss")
 def multi_margin_loss(
     input: Tensor,
     target: Tensor,
@@ -2123,7 +2123,7 @@ def multi_margin_loss(
     return _reduce(loss_n, reduction)
 
 
-@amp_op("multilabel_margin_loss")
+@_amp_op("multilabel_margin_loss")
 def multilabel_margin_loss(
     input: Tensor, target: Tensor, reduction: Reduction = "mean"
 ) -> Tensor:
@@ -2233,7 +2233,7 @@ def multilabel_margin_loss(
 # ── P3 fills: soft_margin_loss / multilabel_soft_margin_loss ───────────────
 
 
-@amp_op("soft_margin_loss")
+@_amp_op("soft_margin_loss")
 def soft_margin_loss(
     input: Tensor, target: Tensor, reduction: Reduction = "mean"
 ) -> Tensor:

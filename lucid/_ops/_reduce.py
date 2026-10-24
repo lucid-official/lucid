@@ -29,6 +29,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._deprecation import _PACKAGE_DIR
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
+from lucid._ops._autocast import _autocast_suspended
 from lucid._ops._dims import _to_axes, _wrap_dims
 from lucid._types import DTypeLike
 
@@ -398,10 +399,7 @@ def _run_with_dtype(
             f"either a floating point or complex dtype. Got: {_ENGINE_TO_DTYPE[target]}"
         )
     cast_impl = _C_engine.astype(x_impl, target) if x_impl.dtype != target else x_impl
-    if _C_engine.amp_is_active(cast_impl.device):
-        with _C_engine.AutocastGuard(_C_engine.F32, cast_impl.device, False):
-            out = call(cast_impl)
-    else:
+    with _autocast_suspended(cast_impl.device):
         out = call(cast_impl)
     return _C_engine.astype(out, target) if out.dtype != target else out
 
