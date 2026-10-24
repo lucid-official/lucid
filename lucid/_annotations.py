@@ -318,7 +318,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("StaticCache", "lucid.utils.cache", "StaticCache"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),
-    "lucid.compile._entry.function": (("Module", "lucid.nn.module", "Module"),),
+    "lucid.compile._entry.function": (
+        ("Module", "lucid.nn.module", "Module"),
+        ("Parameter", "lucid.nn.parameter", "Parameter"),
+    ),
     "lucid.compile._entry.fused_step": (
         ("CompiledExecutable", "lucid._C.engine.compile", "CompiledExecutable"),
         ("GradScaler", "lucid.amp.grad_scaler", "GradScaler"),

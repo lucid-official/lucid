@@ -1244,6 +1244,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a compiled step returns its inputs' gradients
 
+- compiled_step and auto-segments add gradients as eager
+
 ### Changed
 
 - ViT raises `ValueError`, naming the built and received sizes, for an input whose patch grid differs from the one it was built for. This includes inputs with the same patch count on another layout (e.g. 16x64 for a 32x32 build), which used to answer silently with the position table on the wrong layout (LCD-554).

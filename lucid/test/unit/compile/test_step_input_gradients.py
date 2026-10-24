@@ -1,4 +1,4 @@
-"""A compiled training step hands its inputs their gradients (LCD-617).
+"""A compiled training step adds every gradient eager would, inputs too (LCD-617).
 
 ``make_step``'s backward returned ``None`` for every argument, so a compiled
 head fed by an eager trunk (``loss = step(trunk(inp), t)``) left the trunk with
@@ -9,6 +9,14 @@ inside the executable and returns a loss with no ``grad_fn``, so it has no way
 to return an input gradient.  It dropped the gradient when it compiled and
 computed it when it fell back to eager; it now refuses such an input on every
 path.
+
+``compiled_step`` dropped the input's gradient too, and assigned ``p.grad``
+where ``backward`` adds: a second step without ``zero_grad`` left 1x the
+gradient where eager has 2x, a frozen parameter got one, and a held
+``g = p.grad`` saw nothing.  ``segments="auto"`` timed its candidates on the
+call's own tensors, then set every ``.grad`` to None — the gradient already
+there was lost, and with input gradients flowing, the timing runs would have
+backpropagated into the caller's trunk.
 
 Each case is held to eager on an identical model, on CPU and Metal.
 """
@@ -24,7 +32,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid.autograd.function import Function, FunctionCtx
-from lucid.compile import fused_step, make_step
+from lucid.compile import compiled_step, fused_step, make_step
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
@@ -334,3 +342,104 @@ def test_fused_step_refuses_an_input_that_requires_grad(
         for p, b in zip(head.parameters(), before, strict=True)
     ]
     assert max(moved) > 1e-4
+
+
+# ── compiled_step, and every entry: gradients add, as ``backward`` adds ──────
+
+
+def _same_grads(got: nn.Module, want: nn.Module) -> None:
+    for pc, pe in zip(got.parameters(), want.parameters(), strict=True):
+        if pe.grad is None:
+            assert pc.grad is None
+        else:
+            assert _close(pc.grad, pe.grad)
+
+
+@pytest.mark.parametrize("source", ["leaf", "trunk"])
+def test_compiled_step_hands_the_input_its_gradient(
+    source: str, device_gpu_only: str
+) -> None:
+    """``compiled_step`` has no eager path: on a CPU trace it raises."""
+    device = device_gpu_only
+    inp, x0, t = _data(device)
+    eager, compiled = _head(device), _head(device)
+    trunk_e, trunk_c = _trunk(device), _trunk(device)
+    for model in (eager, compiled):
+        model[0].bias.requires_grad_(False)  # eager gives a frozen one nothing
+    xe, xc = (
+        (_leaf(x0), _leaf(x0)) if source == "leaf" else (trunk_e(inp), trunk_c(inp))
+    )
+
+    want = F.cross_entropy(eager(xe), t)
+    want.backward()
+    got = compiled_step(compiled, xc, lambda y: F.cross_entropy(y, t))
+
+    assert abs(float(got.item()) - float(want.item())) <= _TOL
+    assert compiled[0].bias.grad is None
+    _same_grads(compiled, eager)
+    if source == "leaf":
+        assert _close(xc.grad, xe.grad)
+    else:
+        _same_grads(trunk_c, trunk_e)
+
+
+_KINDS = ["compiled_step", "monolithic", "segmented", "autoseg"]
+
+
+def _runner(
+    kind: str, model: nn.Module
+) -> tuple[Callable[[lucid.Tensor, lucid.Tensor], None], _Step | None]:
+    """One training step of ``kind`` — its backward run — and the step object."""
+    if kind == "compiled_step":
+
+        def run_compiled(x: lucid.Tensor, t: lucid.Tensor) -> None:
+            compiled_step(model, x, lambda y: F.cross_entropy(y, t))
+
+        return run_compiled, None
+    segments: int | str = {"monolithic": 1, "segmented": 2, "autoseg": "auto"}[kind]
+    step = make_step(model, F.cross_entropy, segments=segments)
+
+    def run(x: lucid.Tensor, t: lucid.Tensor) -> None:
+        step(x, t).backward()
+
+    return run, step
+
+
+@pytest.mark.parametrize("kind", _KINDS)
+def test_a_step_adds_into_the_gradient_already_there(kind: str, device: str) -> None:
+    """Two steps after an eager one, no ``zero_grad``: 3x, into the held tensor."""
+    if kind == "compiled_step" and device != "metal":
+        pytest.skip("compiled_step has no eager path: a CPU trace raises")
+    _, x, t = _data(device)
+    eager, compiled = _head(device), _head(device)
+    for model in (eager, compiled):
+        F.cross_entropy(model(x), t).backward()
+    held = [p.grad for p in compiled.parameters()]
+
+    run, step = _runner(kind, compiled)
+    for _ in range(2):
+        F.cross_entropy(eager(x), t).backward()
+        run(x, t)
+
+    if step is not None and kind != "autoseg":
+        _ran_compiled(step, kind, device)
+    _same_grads(compiled, eager)
+    for h, pe in zip(held, eager.parameters(), strict=True):
+        assert _close(h, pe.grad), "the held gradient did not take the sum"
+
+
+def test_auto_segments_time_their_candidates_off_the_callers_graph(
+    device: str,
+) -> None:
+    """The timing runs neither reach the trunk nor survive on the head."""
+    inp, _, t = _data(device)
+    trunk_e, head_e = _trunk(device), _head(device)
+    trunk_c, head_c = _trunk(device), _head(device)
+    F.cross_entropy(head_e(trunk_e(inp)), t).backward()
+
+    step = make_step(head_c, F.cross_entropy, segments="auto")
+    step(trunk_c(inp), t).backward()
+
+    assert step.chosen_segments() is not None
+    _same_grads(trunk_c, trunk_e)
+    _same_grads(head_c, head_e)

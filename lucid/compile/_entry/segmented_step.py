@@ -619,6 +619,58 @@ def _auto_candidates(n_children: int) -> list[int]:
     return ordered
 
 
+def _stand_ins(x_args: tuple[Tensor, ...]) -> tuple[Tensor, ...]:
+    """Fresh leaves with ``x_args``' values and grad need, for the timing runs.
+
+    The probe runs a step and its backward several times.  Fed the call's own
+    tensors, those backwards would run on into the graph behind an input that
+    eager ops computed — a trunk's — and the first would free it under the
+    caller.  A stand-in that requires grad times the same executables (its
+    gradient included) and ends the backward there.
+    """
+    from lucid._tensor.tensor import Tensor
+
+    return tuple(
+        a.detach().requires_grad_(a.requires_grad) if isinstance(a, Tensor) else a
+        for a in x_args
+    )
+
+
+def _probe_one(
+    model: Module, seg_step: Callable[..., Tensor], x_args: tuple[Tensor, ...]
+) -> float:
+    """Median fwd+bwd wall-time (ms) of ``seg_step`` over a few warm runs.
+
+    The backward is taken with :func:`lucid.autograd.grad`, which hands the
+    gradients back instead of adding them into ``.grad``: the timing runs
+    leave the caller's gradients as they were (they used to be set to None).
+    """
+    from lucid._tensor.tensor import Tensor
+    from lucid.autograd import grad
+
+    wrt: list[Tensor] = [p for p in model.parameters() if p.requires_grad]
+    wrt += [a for a in x_args if isinstance(a, Tensor) and a.requires_grad]
+
+    def one() -> None:
+        grads = grad(seg_step(*x_args), wrt, allow_unused=True)
+        # Force the backward graph to materialise so the timing is real
+        # (MLX dispatch is async): touch one gradient.
+        for g in grads:
+            if g is not None:
+                float(g.reshape(-1)[0].item())
+                break
+
+    for _ in range(2):
+        one()
+    samples: list[float] = []
+    for _ in range(3):
+        t0 = time.perf_counter()
+        one()
+        samples.append((time.perf_counter() - t0) * 1000.0)
+    samples.sort()
+    return samples[len(samples) // 2]
+
+
 def make_autoseg_step(
     model: Module,
     loss_fn: Callable[..., Tensor],
@@ -680,41 +732,12 @@ def make_autoseg_step(
 
     state: dict[str, object] = {}
 
-    def _probe_one(
-        seg_step: Callable[..., Tensor], x_args: tuple[Tensor, ...]
-    ) -> float:
-        """Median fwd+bwd wall-time (ms) of ``seg_step`` over a few warm runs."""
-
-        def one() -> None:
-            for p in model.parameters():
-                p.grad = None
-            loss = seg_step(*x_args)
-            loss.backward()
-            # Force the backward graph to materialise so the timing is real
-            # (MLX dispatch is async): touch one parameter gradient.
-            for p in model.parameters():
-                if p.grad is not None:
-                    float(p.grad.reshape(-1)[0].item())
-                    break
-
-        for _ in range(2):
-            one()
-        samples: list[float] = []
-        for _ in range(3):
-            t0 = time.perf_counter()
-            one()
-            samples.append((time.perf_counter() - t0) * 1000.0)
-        samples.sort()
-        return samples[len(samples) // 2]
-
     def _select(x_args: tuple[Tensor, ...]) -> Callable[..., Tensor]:
         results: list[tuple[int, float]] = []
-        steps: dict[int, Callable[..., Tensor]] = {}
+        probe_args = _stand_ins(x_args)
         for k in cand_list:
             seg_step = make_segmented_step(model, loss_fn, segments=k, dynamic=dynamic)
-            t = _probe_one(seg_step, x_args)
-            results.append((k, t))
-            steps[k] = seg_step
+            results.append((k, _probe_one(model, seg_step, probe_args)))
             # Drop this candidate's executables before probing the next so the
             # probe's transient peak stays near one candidate, not their sum.
             if k != cand_list[-1]:
@@ -725,9 +748,6 @@ def make_autoseg_step(
         chosen = make_segmented_step(model, loss_fn, segments=best_k, dynamic=dynamic)
         state["chosen_segments"] = best_k
         state["probe_results"] = results
-        # Clear gradients contaminated by the timing runs.
-        for p in model.parameters():
-            p.grad = None
         return chosen
 
     def step(*x_args: Tensor) -> Tensor:

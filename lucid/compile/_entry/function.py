@@ -14,15 +14,14 @@ compile, param drift < 5e-3) the minimal surface is a direct
   1. Runs ``model(x); loss_fn(out)`` once under ``_tracing()`` to record
      the op DAG.
   2. Calls ``compile_trace_with_backward`` to get a single executable
-     that produces ``loss`` + per-parameter gradients in one shot.
+     that produces ``loss`` + the gradients of the parameters and of
+     ``x`` (when it requires grad) in one shot.
   3. Runs that executable.
-  4. Writes the per-parameter gradients directly to ``param.grad``, so
-     downstream ``optimizer.step()`` works exactly like an eager
-     training step.
+  4. Hands those gradients to the autograd engine as seeds, which adds
+     them into ``.grad`` exactly as ``loss.backward()`` would, so
+     downstream ``optimizer.step()`` works like an eager training step.
 
-This bypasses Lucid's autograd graph entirely for the compiled step.
-That's fine for Phase 1.3's deliverable (5-step training parity); we
-keep the autograd-integrated surface for Phase 1.4.
+The loss returned carries no graph: the backward has already run.
 """
 
 from contextlib import nullcontext
@@ -31,12 +30,53 @@ from typing import TYPE_CHECKING, Callable
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.compile._core.custom_backward import refuse_custom_backward
-from lucid.compile._entry.step import _match_param_ids
+from lucid.compile._entry.step import (
+    _ExecutableLike,
+    _grad_slots,
+    _input_grad_targets,
+    _match_param_ids,
+)
 
 if TYPE_CHECKING:
     from lucid.nn.module import Module
+    from lucid.nn.parameter import Parameter
 
 __all__ = ["compiled_step"]
+
+
+def _accumulate_grads(
+    exe: _ExecutableLike,
+    grads: list[_C_engine.TensorImpl],
+    params: list[Parameter],
+    leaves: list[Tensor],
+    input_positions: list[int],
+) -> None:
+    """Add ``exe``'s gradients into ``.grad`` the way ``loss.backward()`` does.
+
+    Each gradient seeds the autograd engine at its tensor, so the engine's
+    rule holds: a gradient already there is added to in place (a held
+    ``p.grad`` sees the sum); a parameter that does not require grad, or
+    that the loss does not depend on, gets none; and an input computed by
+    eager ops passes its gradient on to the graph behind it.  Assigning
+    ``p.grad`` instead dropped every earlier gradient and never reached
+    the input (LCD-617).
+    """
+    from lucid._dispatch import _wrap
+    from lucid.autograd import backward
+
+    absent, input_grads = _grad_slots(exe, len(params), input_positions)
+    roots: list[Tensor] = []
+    seeds: list[Tensor] = []
+    for i, (p, g) in enumerate(zip(params, grads[: len(params)], strict=True)):
+        if p.requires_grad and not (absent and absent[i]):
+            roots.append(p)
+            seeds.append(_wrap(g))
+    for pos, g in zip(input_grads, grads[len(params) :], strict=True):
+        if pos is not None:
+            roots.append(leaves[pos])
+            seeds.append(_wrap(g))
+    if roots:
+        backward(roots, seeds)
 
 
 def compiled_step(
@@ -46,7 +86,7 @@ def compiled_step(
     *,
     use_grad_mode: bool = False,
 ) -> Tensor:
-    """Run one compiled training step: forward + backward + grad assignment.
+    """Run one compiled training step: forward + backward + grad accumulation.
 
     Parameters
     ----------
@@ -67,9 +107,10 @@ def compiled_step(
     Returns
     -------
     Tensor
-        The loss tensor (compiled result).  After this call,
-        ``param.grad`` is populated for every parameter of ``model``.
-        The caller can then run an optimizer step.
+        The loss (compiled result, with no graph: its backward has run).
+        Its gradients are added into ``.grad`` as ``loss.backward()`` adds
+        them — of each parameter that requires grad, and of ``x`` and the
+        graph behind it when ``x`` requires grad.  Then run the optimizer.
 
     Raises
     ------
@@ -151,7 +192,9 @@ def compiled_step(
             "compiled_step: a model parameter was not observed in the trace "
             "(model.forward did not use it, or the parameter was wrapped/copied)"
         )
-    refuse_custom_backward(tracer, loss_id, param_ids)
+    input_ids, input_positions = _input_grad_targets((x,), ext, param_ids)
+    grad_ids = param_ids + input_ids
+    refuse_custom_backward(tracer, loss_id, grad_ids)
 
     # 3.5 BatchNorm running-stats. compiled_step has no eager fallback (it raises
     # on any uncompilable trace), so a cumulative-MA BN (momentum=None) is a hard
@@ -173,7 +216,7 @@ def compiled_step(
     bn_stat_buffers = [_wrap(impl) for _, _, impl in bn_targets]
 
     exe = _C_engine.compile.compile_trace_with_backward(
-        g, ext, loss_id, param_ids, extra_output_ids=bn_stat_out_ids
+        g, ext, loss_id, grad_ids, extra_output_ids=bn_stat_out_ids
     )
     if exe is None:
         raise RuntimeError(
@@ -184,24 +227,18 @@ def compiled_step(
     feed_impls = [ext[tid] for tid in exe.input_ids]
     outs = _C_engine.compile.run_executable(exe, feed_impls)
 
-    # Output order is [loss, *grads, *bn_running_stats].
-    n_loss_grad = 1 + len(params)
+    # Output order is [loss, *param grads, *input grads, *bn_running_stats].
+    n_loss_grad = 1 + len(grad_ids)
     if len(outs) != n_loss_grad + len(bn_stat_out_ids):
         raise RuntimeError(
             f"compiled_step: executable produced {len(outs)} outputs but expected "
-            f"{n_loss_grad + len(bn_stat_out_ids)} (loss + {len(params)} grads + "
+            f"{n_loss_grad + len(bn_stat_out_ids)} (loss + {len(grad_ids)} grads + "
             f"{len(bn_stat_out_ids)} BN running-stats)"
         )
-    loss_compiled = _wrap(outs[0])
-
-    # Direct grad assignment — the eager optimizer reads ``param.grad``
-    # the same way as after ``loss.backward()``.
-    for param, grad_impl in zip(params, outs[1:n_loss_grad], strict=True):
-        param.grad = _wrap(grad_impl)
-
     # Write BN running stats back into the live module buffers.
     for _i, _buf in enumerate(bn_stat_buffers):
         _buf.copy_(_wrap(outs[n_loss_grad + _i]))
     advance_bn_counters(counters)
 
-    return loss_compiled
+    _accumulate_grads(exe, list(outs[1:n_loss_grad]), params, [x], input_positions)
+    return _wrap(outs[0])
