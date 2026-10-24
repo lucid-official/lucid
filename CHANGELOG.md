@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Fixed
+
+- repeat the stochastic probe; classify the release's new names
+
+---
+
 ## [3.16.0] — 2026-10-25
 
 A release about matching the reference where Lucid quietly differed. Since 3.15.5 about 550 issues were closed. Signatures across the top level, `nn.functional`, `linalg`, `fft` and `special` now bind as the reference's do. Silent wrong answers were removed: in `lucid.compile` (gradients under grad mode, cache keys that ignored which tensor an argument was, state replaced after compile), in autocast, in zoo models at half precision and in gradient writes. Read the **Breaking** entries under Changed before upgrading. The engine ABI moved from 16 to 36, so a C++ extension built against 3.15.x must be rebuilt.

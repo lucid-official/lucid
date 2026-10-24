@@ -181,18 +181,31 @@ class Axis:
                 base = _probe.to_numpy(primary)
             except TypeError:
                 base = None
+
+        # Two draws can agree by chance: ``dropout3d`` drops whole channels,
+        # so on a probe with two channels the masks coincide about one call
+        # in four, and the op then read as deterministic for one sweep and
+        # failed an axis that compares two draws.  Up to six draws make a
+        # chance agreement of every one negligible.
+        def draw() -> Any:
+            again = call if base is None else call.with_primary(base)
+            return _probe.to_numpy(fn(*again.args, **again.kwargs))
+
         try:
-            one = call if base is None else call.with_primary(base)
-            first = _probe.to_numpy(fn(*one.args, **one.kwargs))
-            two = call if base is None else call.with_primary(base)
-            second = _probe.to_numpy(fn(*two.args, **two.kwargs))
+            first = draw()
+            if first is None or first.dtype.kind not in "fciub":
+                return False
+            for _ in range(5):
+                other = draw()
+                if other is None or other.shape != first.shape:
+                    return False
+                if other.dtype.kind not in "fciub":
+                    return False
+                if not np.array_equal(first, other, equal_nan=first.dtype.kind in "fc"):
+                    return True
         except Exception:  # noqa: BLE001 - surveying, not asserting
             return False
-        if first is None or second is None or first.shape != second.shape:
-            return False
-        if first.dtype.kind not in "fciub" or second.dtype.kind not in "fciub":
-            return False
-        return not np.array_equal(first, second, equal_nan=first.dtype.kind in "fc")
+        return False
 
     @staticmethod
     def _comparable(array: np.ndarray) -> np.ndarray:
@@ -566,6 +579,8 @@ NOT_DIFFERENTIABLE: dict[str, str] = {
     "Tensor.new_zeros": "a new tensor that reads only shape, dtype and device",
     "Tensor.histc": "a count per bin: piecewise constant, no derivative in the reference",
     "lucid.histc": "a count per bin: piecewise constant, no derivative in the reference",
+    "lucid.histogram2d": "counts per bin: piecewise constant, no derivative in the reference",
+    "lucid.histogramdd": "counts per bin: piecewise constant, no derivative in the reference",
     "lucid.arange": "a factory: its arguments are endpoints and a step",
     "lucid.eye": "a factory: its arguments are sizes",
     "lucid.linspace": "a factory: its arguments are endpoints and a count",
@@ -2273,7 +2288,7 @@ class DtypeAxis(Axis):
                 return self._finding(
                     symbol,
                     Status.NOT_APPLICABLE,
-                    "result is float64 by definition, which Metal has no dtype for",
+                    "result is float64 or complex128 by definition, which Metal has no dtype for",
                 )
             # float64 does not exist on Metal and the engine documents the
             # downcast, so holding it against an op would flag every one.
@@ -2639,7 +2654,8 @@ def _produces_float64(fn: Any, call: Call) -> bool:
     except Exception:  # noqa: BLE001
         return False
     first = out[0] if isinstance(out, tuple | list) and out else out
-    return str(getattr(first, "dtype", "")).endswith("float64")
+    # complex128 is float64's pair and has no Metal dtype either: ``cdouble``.
+    return str(getattr(first, "dtype", "")).endswith(("float64", "complex128"))
 
 
 @functools.lru_cache(maxsize=1)

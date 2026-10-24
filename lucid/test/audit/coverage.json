@@ -12,7 +12,7 @@
     "Regenerate with:  lucid-audit --update-coverage",
     "Do that only when the new state is the intended one."
   ],
-  "cells": 10217,
+  "cells": 10216,
   "answered": {
     "broadcast::F.gumbel_softmax": "pass",
     "broadcast::F.straight_through": "pass",
@@ -49,7 +49,6 @@
     "broadcast::lucid.div": "pass",
     "broadcast::lucid.divide": "pass",
     "broadcast::lucid.eq": "pass",
-    "broadcast::lucid.equal": "pass",
     "broadcast::lucid.float_power": "pass",
     "broadcast::lucid.fmax": "pass",
     "broadcast::lucid.fmod": "pass",
