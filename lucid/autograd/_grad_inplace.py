@@ -14,28 +14,54 @@ Two kinds of gradient still get a new tensor (LCD-622):
 * the negation a ``maximize`` step installs.
 
 Both are spelled here, so the change that brings them in place lands in one
-file.
+file.  The writes go to the engine tensors directly: through
+``Tensor.copy_`` each one cost some twenty times the old assignment.
 """
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 
-from lucid._factories.creation import zeros_like
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
-from lucid.autograd._grad_mode import enable_grad, no_grad
+from lucid.autograd._grad_mode import no_grad
 
 
-def _held_apart(t: Tensor) -> bool:
-    """Whether ``t``'s gradient lives outside the slot the optimizers read.
+def _held_apart(impl: _C_engine.TensorImpl) -> bool:
+    """Whether ``impl``'s gradient lives outside the slot the optimizers read.
 
-    A gradient from ``backward(create_graph=True)``, or a tensor that
-    requires grad assigned to ``.grad``, is kept apart from the plain
-    gradient slot.  The engine's optimizers read only that slot (LCD-622).
-    A first-order backward adds into such a gradient out of place, making a
-    new tensor.  So a write that should reach the next step has to go into
-    the slot, as a new gradient.
+    Two kinds of gradient are kept apart from the plain gradient slot:
+
+    * one from ``backward(create_graph=True)``;
+    * a tensor that requires grad, assigned to ``.grad``.
+
+    The engine's optimizers read only that slot (LCD-622).  A first-order
+    backward adds into such a gradient out of place, making a new tensor.
+    So a write that should reach the next step goes into the slot, as a new
+    gradient.
+
+    Nothing writes into the tensor held apart, either.  The engine keeps the
+    first graph-mode contribution as it comes, so that tensor can be another
+    parameter's gradient, the ``gradient=`` given to ``backward``, or a
+    Parameter.  The reference clones it.
     """
-    return t._impl.grad_as_impl() is not None
+    return impl.grad_as_impl() is not None
+
+
+def _zeros(like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
+    return _C_engine.full(list(like.shape), 0.0, like.dtype, like.device)
+
+
+def _assign(grad: _C_engine.TensorImpl, value: _C_engine.TensorImpl, name: str) -> None:
+    """Write ``value`` into ``grad``'s buffer: ``Tensor.copy_``'s write, by itself.
+
+    A gradient in the slot never requires grad nor has a graph, so the write
+    records nothing under grad mode either.  ``value`` has ``grad``'s shape,
+    dtype and device.
+    """
+    if grad.is_aliased():
+        _C_engine.assign_inplace(grad, value, name)
+    else:
+        grad.assign_from(value, name)
 
 
 def zero_grads_(tensors: Iterable[Tensor], *, set_to_none: bool) -> None:
@@ -47,39 +73,21 @@ def zero_grads_(tensors: Iterable[Tensor], *, set_to_none: bool) -> None:
         The tensors whose gradients are cleared.  Those without one are
         skipped.
     set_to_none : bool
-        ``True`` drops each gradient.  ``False`` zeroes each one in place
-        and takes it out of the graph, the way the reference's
-        ``zero_grad`` takes it out: a gradient with a ``grad_fn`` (from
-        ``backward(create_graph=True)``) is detached, and one that requires
-        grad stops requiring it.
+        ``True`` drops each gradient.  ``False`` zeroes each one in place.
+        A gradient held apart (:func:`_held_apart`) is replaced by zeros
+        instead.
     """
-    with no_grad():
-        for t in tensors:
-            g = t.grad
-            if g is None:
-                continue
-            if set_to_none:
-                t.grad = None
-                continue
-            if g.grad_fn is not None:
-                # ``Tensor.detach_`` rebinds only its wrapper and leaves the
-                # gradient in the graph (LCD-621).  A copy recorded under grad
-                # mode moves the tensor to its source's place in the graph,
-                # and zeros have none, so this one write detaches and zeroes
-                # the gradient itself.
-                with enable_grad():
-                    g.copy_(zeros_like(g))
-            else:
-                if g.requires_grad:
-                    g.requires_grad_(False)
-                g.zero_()
-            if _held_apart(t):
-                # The held tensor has been reset above.  From here on
-                # ``t.grad`` is a new zero tensor in the slot.
-                t.grad = zeros_like(g)
+    for t in tensors:
+        impl = t._impl
+        if set_to_none:
+            impl.zero_grad()
+        elif _held_apart(impl):
+            impl.set_grad(_zeros(impl))
+        elif (g := impl.grad_to_tensor()) is not None:
+            _assign(g, _zeros(g), "zero_grad")
 
 
-def write_grad_(t: Tensor, value: Tensor) -> None:
+def write_grad_(t: Tensor, value: _C_engine.TensorImpl, name: str) -> None:
     """Write ``value`` into ``t``'s gradient, in place where it can.
 
     A gradient held apart from the optimizers' slot (:func:`_held_apart`)
@@ -89,24 +97,26 @@ def write_grad_(t: Tensor, value: Tensor) -> None:
     ----------
     t : Tensor
         The tensor whose gradient changes.
-    value : Tensor
-        The new values, of the gradient's shape.  The gradient keeps its
-        dtype: ``value`` is cast to it, so a result computed in a wider
-        dtype is rounded into the gradient once.
+    value : lucid._C.engine.TensorImpl
+        The new values, of the gradient's shape, dtype and device.  A result
+        computed in a wider dtype is cast by the caller, which knows whether
+        it was; reading a dtype costs more than the write itself.
+    name : str
+        The public operation writing, for the engine's refusals.
 
     Raises
     ------
     RuntimeError
         If ``t`` has no gradient to write into.
     """
-    g = t.grad
-    if g is None:
-        raise RuntimeError("write_grad_: the tensor has no gradient to write into")
-    if _held_apart(t):
-        t.grad = value if value.dtype == g.dtype else value.to(g.dtype)
+    impl = t._impl
+    if _held_apart(impl):
+        impl.set_grad(value)
         return
-    with no_grad():
-        g.copy_(value)
+    g = impl.grad_to_tensor()
+    if g is None:
+        raise RuntimeError(f"{name}: the tensor has no gradient to write into")
+    _assign(g, value, name)
 
 
 @contextmanager

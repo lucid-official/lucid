@@ -109,7 +109,10 @@ def _scale_clipped_grads(
         if coef is None:
             coef = _C_engine.full([], clip_coef, w_dt, g_w.device)
             coefs[key] = coef
-        write_grad_(p, _wrap(_C_engine.mul(g_w, coef)))
+        scaled = _C_engine.mul(g_w, coef)
+        if g_w is not g_impl:
+            scaled = _C_engine.astype(scaled, g_dt)
+        write_grad_(p, scaled, "clip_grad_norm_")
 
 
 def clip_grad_norm_(
@@ -268,7 +271,8 @@ def clip_grad_value_(
     for p in parameters:
         g_impl = p._impl.grad_as_impl() or p._impl.grad_to_tensor()
         if g_impl is not None:
-            write_grad_(p, _wrap(_C_engine.clip(g_impl, -clip_value, clip_value)))
+            clipped = _C_engine.clip(g_impl, -clip_value, clip_value)
+            write_grad_(p, clipped, "clip_grad_value_")
 
 
 def get_total_norm(

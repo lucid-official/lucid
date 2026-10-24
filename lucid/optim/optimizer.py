@@ -1263,9 +1263,10 @@ class Optimizer:
 
         ``set_to_none=True`` (the default) drops each gradient.  ``False``
         zeroes each gradient in place, so a tensor read from ``p.grad``
-        earlier reads the zeros too.  The gradient also leaves the graph: it
-        is detached if it has a ``grad_fn``, and stops requiring grad if it
-        required it.
+        earlier reads the zeros too.  The exception is a gradient from
+        ``backward(create_graph=True)``, or a tensor that requires grad
+        assigned to ``.grad``.  Such a gradient is replaced by new zeros
+        that carry no graph, and the tensor it was is left as it was.
 
         Examples
         --------

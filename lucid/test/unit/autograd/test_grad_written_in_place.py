@@ -84,6 +84,14 @@ def test_set_to_none_drops_the_gradient_and_leaves_the_held_one(
     assert g.tolist() == [2.0, 2.0, 2.0]
 
 
+_LCD_622_HELD = pytest.mark.xfail(
+    strict=True,
+    reason="LCD-622: a gradient held apart from the optimizers' slot can be "
+    "another tensor, so zeroing replaces it instead of writing into it",
+)
+
+
+@_LCD_622_HELD
 @pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
 def test_a_graph_gradient_is_detached_and_zeroed(reset: Reset, device: str) -> None:
     p = nn.Parameter(lucid.ones(3, device=device))
@@ -144,6 +152,7 @@ def test_detaching_the_gradient_detaches_it(device: str) -> None:
     assert p.grad is not None and p.grad.grad_fn is None
 
 
+@_LCD_622_HELD
 def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
     device: str,
 ) -> None:
@@ -154,6 +163,67 @@ def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
     assert w.tolist() == [0.0, 0.0, 0.0] and not w.requires_grad
     assert p.grad is not None and not p.grad.requires_grad
     assert p.grad.tolist() == [0.0, 0.0, 0.0]
+
+
+@pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
+@pytest.mark.parametrize("kind", _HELD_APART.values(), ids=_HELD_APART.keys())
+def test_a_held_apart_gradient_is_replaced_by_zeros(
+    kind: Callable[[nn.Parameter], None], reset: Reset, device: str
+) -> None:
+    p = nn.Parameter(lucid.ones(3, device=device))
+    kind(p)
+    reset(lucid, p, False)
+    assert p.grad is not None and p.grad.tolist() == [0.0, 0.0, 0.0]
+    assert p.grad.grad_fn is None and not p.grad.requires_grad
+
+
+# The engine keeps a parameter's first graph-mode gradient as it arrives, so
+# it can be another tensor.  Zeroing must leave that tensor alone.  Each case
+# builds the gradient and returns the tensor that must survive.
+def _shares_with_another_gradient(p: nn.Parameter) -> lucid.Tensor:
+    q = nn.Parameter(lucid.ones(3, device=p.device))
+    (p + q).sum().backward(create_graph=True)
+    assert q.grad is not None
+    return q.grad
+
+
+def _is_the_backward_seed(p: nn.Parameter) -> lucid.Tensor:
+    seed = lucid.full((3,), 5.0, device=p.device)
+    p.clone().backward(seed, create_graph=True)
+    return seed
+
+
+def _is_a_parameter_seed(p: nn.Parameter) -> lucid.Tensor:
+    w = nn.Parameter(lucid.full((3,), 7.0, device=p.device))
+    p.view(3).backward(w, create_graph=True)
+    return w
+
+
+def _is_a_view_of_a_leaf(p: nn.Parameter) -> lucid.Tensor:
+    big = lucid.full((6,), 3.0, device=p.device, requires_grad=True)
+    p.grad = big[0:3]
+    return big
+
+
+_OTHERS: dict[str, Callable[[nn.Parameter], lucid.Tensor]] = {
+    "another_parameters_gradient": _shares_with_another_gradient,
+    "the_gradient_argument": _is_the_backward_seed,
+    "a_parameter_as_the_seed": _is_a_parameter_seed,
+    "a_view_of_a_leaf": _is_a_view_of_a_leaf,
+}
+
+
+@pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
+@pytest.mark.parametrize("make", _OTHERS.values(), ids=_OTHERS.keys())
+def test_zeroing_leaves_the_tensor_a_gradient_came_from(
+    make: Callable[[nn.Parameter], lucid.Tensor], reset: Reset, device: str
+) -> None:
+    p = nn.Parameter(lucid.ones(3, device=device))
+    other = make(p)
+    before = other.tolist()
+    reset(lucid, p, False)
+    assert other.tolist() == before
+    assert p.grad is not None and p.grad.tolist() == [0.0, 0.0, 0.0]
 
 
 # ── the other writers: clip_grad_norm_, clip_grad_value_, GradScaler, maximize ─

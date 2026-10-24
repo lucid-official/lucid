@@ -344,7 +344,10 @@ class GradScaler:
             coef = _C_engine.full(
                 list(g_work.shape), inv_scale, work_dtype, g_work.device
             )
-            write_grad_(p, _wrap(_C_engine.mul(g_work, coef)))
+            unscaled = _C_engine.mul(g_work, coef)
+            if g_work is not g_impl:
+                unscaled = _C_engine.astype(unscaled, grad_dtype)
+            write_grad_(p, unscaled, "GradScaler.unscale_")
         return any(bool(_wrap(flag).item()) for flag in nonfinite.values())
 
     def step(
