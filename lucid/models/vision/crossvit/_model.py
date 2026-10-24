@@ -35,7 +35,10 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._common import init_transformer_trunc_normal
+from lucid.models._utils._common import (
+    float32_or_wider,
+    init_transformer_trunc_normal,
+)
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
@@ -389,18 +392,26 @@ def _bicubic_2d(x: Tensor, oh: int, ow: int) -> Tensor:
     rescale), so the lack of a fused C++ kernel doesn't matter.
 
     Shape: ``(B, C, H, W) → (B, C, oh, ow)``.
+
+    Computed in float32 at least — the reference's own accumulation type
+    for half inputs, float64 for float64 — and returned in ``x``'s dtype.
+    With float32 coordinates the weights widened a half image to float32,
+    and every token after the rescale with it.
     """
     B, C, H, W = x.shape
     a = -0.75
+    out_dtype = x.dtype
+    work = float32_or_wider(out_dtype)
+    x = x.to(work)
 
     def _coords(out_size: int, in_size: int) -> tuple[Tensor, Tensor]:
         # ``device=x.device``: the coordinates index ``x`` a few lines below,
         # and a CPU index tensor against GPU data raises bad_variant_access.
-        src = (lucid.arange(out_size, dtype=lucid.float32, device=x.device) + 0.5) * (
+        src = (lucid.arange(out_size, dtype=work, device=x.device) + 0.5) * (
             in_size / out_size
         ) - 0.5
         idx = src.floor().to(lucid.int64)
-        frac = src - idx.to(lucid.float32)
+        frac = src - idx.to(work)
         return idx, frac
 
     def _weights(
@@ -460,7 +471,7 @@ def _bicubic_2d(x: Tensor, oh: int, ow: int) -> Tensor:
         + wx2.reshape(*wx_shape) * c_p1
         + wx3.reshape(*wx_shape) * c_p2
     )
-    return out
+    return out.to(out_dtype)
 
 
 def _scale_image(x: Tensor, target: int, crop_scale: bool) -> Tensor:

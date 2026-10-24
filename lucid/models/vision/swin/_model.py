@@ -270,7 +270,7 @@ class _SwinBlock(nn.Module):
         # once per distinct geometry instead of on every forward.  Derived
         # state, so deliberately not a registered buffer: it must not enter
         # ``state_dict`` and it must not be restored from a checkpoint.
-        self._mask_cache: dict[tuple[int, int, int, int, str], Tensor] = {}
+        self._mask_cache: dict[tuple[int, int, int, int, str, str], Tensor] = {}
 
     def _attn_mask(
         self,
@@ -279,6 +279,8 @@ class _SwinBlock(nn.Module):
         shift_size: int,
         device: str = "cpu",
         ws: int | None = None,
+        *,
+        dtype: lucid.dtype,
     ) -> Tensor | None:
         if shift_size == 0:
             return None
@@ -301,7 +303,8 @@ class _SwinBlock(nn.Module):
             lucid.full(mask.shape, -100.0, device=device),
             lucid.zeros(mask.shape, device=device),
         )
-        return mask
+        # Additive to the scores, so it takes their dtype.
+        return mask.to(dtype)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -331,10 +334,10 @@ class _SwinBlock(nn.Module):
             x = lucid.roll(x, [-eff_ss, -eff_ss], dims=[1, 2])
 
         dev = x.device.type
-        cache_key = (Hp, Wp, eff_ss, eff_ws, dev)
+        cache_key = (Hp, Wp, eff_ss, eff_ws, dev, str(x.dtype))
         mask = self._mask_cache.get(cache_key)
         if mask is None and eff_ss > 0:
-            mask = self._attn_mask(Hp, Wp, eff_ss, device=dev, ws=eff_ws)
+            mask = self._attn_mask(Hp, Wp, eff_ss, device=dev, ws=eff_ws, dtype=x.dtype)
             if mask is not None:
                 self._mask_cache[cache_key] = mask
         windows, nH, nW = _window_partition(x, eff_ws)

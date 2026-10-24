@@ -162,7 +162,7 @@ class _Pooling(nn.Module):
         # stops the identity being counted twice.  Inherited from
         # PoolFormer, which EfficientFormer's MB4D block is built on.
         num = self.pool(x)
-        den = self.pool(lucid.ones(x.shape, device=x.device.type))
+        den = self.pool(lucid.ones_like(x))
         return num / den - x
 
 
