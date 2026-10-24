@@ -10,9 +10,12 @@ operands, so a later in-place write to either was refused
 gradient that does not read them.
 
 A compile recording takes the plain op for either node
-(:attr:`~lucid.autograd.function.Function._trace_form`): it runs no eager
-backward, so the saved operands are never checked, and the plain op's own
-derivative is the same zero.
+(:attr:`~lucid.autograd.function.Function._trace_form`), whose own
+derivative is the same zero, and no node noted as a custom backward.  The
+plain op reads graph-carrying copies of the operands (a ``contiguous``
+each), so what it saves is no tensor the traced code can write: an eager
+backward run inside the recording (``autograd.grad`` of an energy, a
+gradient penalty) would refuse that write as the node never does.
 """
 
 from typing import final, override
@@ -26,13 +29,13 @@ from lucid.autograd.function import Function, FunctionCtx
 
 
 def _plain_trunc_quotient(a: Tensor, b: Tensor) -> Tensor:
-    """``trunc(a / b)`` from the plain ops, for a compile recording."""
-    return _wrap(_trunc_quotient(a._impl, b._impl))
+    """``trunc(a / b)`` from the plain ops on copies, for a compile recording."""
+    return _wrap(_trunc_quotient(a.clone()._impl, b.clone()._impl))
 
 
 def _plain_round_decimals(a: Tensor, dec: int) -> Tensor:
-    """``round(a, decimals=dec)`` from the plain ops, for a compile recording."""
-    return _wrap(_round_decimals(a._impl, dec))
+    """``round(a, decimals=dec)`` from the plain ops on a copy, for a recording."""
+    return _wrap(_round_decimals(a.clone()._impl, dec))
 
 
 @final

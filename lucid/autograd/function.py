@@ -530,6 +530,8 @@ def _lucid_defined(klass: type) -> bool:
     marker changes what a compile recording keeps of the call, so only a
     class whose ``backward`` Lucid wrote and tests may set one.  A user's
     class, or a test's, that sets the attribute is treated as unmarked.
+    ``__module__`` is the class's own claim, so this keeps an ordinary
+    subclass from opting in by accident; it is not a security boundary.
     """
     module = klass.__module__
     if module != "lucid" and not module.startswith("lucid."):
@@ -554,9 +556,9 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
         """Run ``forward`` and register the autograd node when needed."""
         tracer = _C_engine.compile.current_tracer()
         if tracer is not None and (trace_form := _trace_form_of(klass)) is not None:
-            # A recording runs no eager backward, so the node's bookkeeping
-            # has nothing to protect: the plain op is what is recorded, in
-            # the caller's grad mode.
+            # The node exists for the eager graph's version checks, and a
+            # compile cannot differentiate through it: the recording takes
+            # the plain ops, in the caller's grad mode.
             return trace_form(*args, **kwargs)
         ctx = FunctionCtx()
         ctx.needs_input_grad = tuple(
@@ -700,9 +702,13 @@ class Function(metaclass=FunctionMeta):
     #: values from plain ops, in the caller's grad mode, whose own derivative
     #: is the one ``backward`` gives.  For a node that exists only for the
     #: eager graph's bookkeeping — saving nothing, so an in-place write after
-    #: it is not refused — which a recording, running no eager backward,
-    #: does not need.  ``apply`` then registers no node and the call is not
-    #: reported to the compile's custom-backward check.  Trusted only on a
+    #: it is not refused — whose own node a compile cannot differentiate
+    #: through.  The plain ops must save no tensor the traced code can write
+    #: either, or an eager backward run inside the recording (``autograd.grad``
+    #: of an energy, a gradient penalty) refuses the write the node allowed:
+    #: they read graph-carrying copies of the operands.  ``apply`` then
+    #: registers no node and the call is not reported to the compile's
+    #: custom-backward check.  Trusted only on a
     #: class defined in a ``lucid.`` module outside ``lucid.test``
     #: (:func:`_lucid_defined`); on any other class it is ignored.
     _trace_form: ClassVar[Callable[..., _Outputs] | None] = None

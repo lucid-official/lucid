@@ -2,18 +2,22 @@
 
 Four internal ``Function``s — ``_Snapshot``, ``_Overwritten``,
 ``_TruncQuotient``, ``_RoundDecimals`` — and ``_take``'s version bump exist
-only so an eager backward does not refuse an in-place write.  A recording
-runs no eager backward, so in grad mode it records their plain ops instead
-(``Function._trace_form``), the ops a recording under ``no_grad`` takes: no
-``detach`` (a gradient sink), no ``_make_view`` (no emitter), and no call
-noted as a custom backward the compile cannot run.  What the traced code
-sees — values, ``requires_grad`` — stays what eager gives it.
+only so an eager backward does not refuse an in-place write.  A compile
+cannot differentiate through their nodes, so in grad mode a recording takes
+their plain ops instead (``Function._trace_form``): the ops a recording
+under ``no_grad`` takes, plus one graph-carrying copy (``contiguous``) per
+operand the node reads, so the plain ops save nothing the traced code may
+write — an eager backward run inside the recording still sees what eager
+sees.  No ``detach`` (a gradient sink), no ``_make_view`` (no emitter), and
+no call noted as a custom backward.  Values and ``requires_grad`` stay
+eager's.
 
 Only a class defined in Lucid is trusted with these markers; one set on a
 user's class is ignored.
 """
 
 import difflib
+import warnings
 from collections.abc import Callable
 
 import pytest
@@ -21,14 +25,13 @@ import pytest
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
-from lucid._ops.composite.indexing import (
-    _recorded_snapshot,
-    _Snapshot,
-    _written_through_storage,
-)
+from lucid._C import engine as _C_engine
+from lucid._ops.composite._rounding import _RoundDecimals, _TruncQuotient
+from lucid._ops.composite.indexing import _Snapshot
 from lucid._tensor._indexing import _take
 from lucid._tensor.tensor import Tensor
 from lucid.autograd import Function
+from lucid.autograd._overwritten import _Overwritten
 from lucid.autograd.checkpoint import checkpoint
 from lucid.autograd.function import (
     FunctionMeta,
@@ -36,7 +39,8 @@ from lucid.autograd.function import (
     _lucid_defined,
     _trace_form_of,
 )
-from lucid.compile._core.custom_backward import _APPLIED
+from lucid.compile._core.custom_backward import _APPLIED, CustomBackwardInTrace
+from lucid.compile._core.fallback import CompileFallbackWarning
 
 type _Case = Callable[[nn.Linear, Tensor], tuple[Tensor, Tensor]]
 
@@ -138,17 +142,31 @@ _CASES: dict[str, _Case] = {
 }
 
 #: Ops the ``no_grad`` recording has that the grad-mode one lacks, and not
-#: for bookkeeping: there ``_write_inplace`` writes the result into the
-#: destination's own buffer (``assign_from``), which on Metal records a
-#: ``reshape`` of the view result, where grad mode rebinds the destination
-#: to it (``_take``) and records nothing.
-_PLAIN_ONLY: dict[tuple[str, str], list[str]] = {("index_put_", "metal"): ["reshape"]}
+#: for bookkeeping: the ``no_grad`` branch writes the scatter's result into
+#: the destination's own buffer (``assign_from``, or ``assign_inplace`` once
+#: the scatter's flattening view of it, kept alive by the tracer, aliases
+#: it), which on Metal records a ``reshape`` of the view result.  Grad mode
+#: scatters into a copy and rebinds the destination to the result
+#: (``_take``), recording nothing.
+_PLAIN_ONLY: dict[tuple[str, str], list[str]] = {
+    ("index_put_", "metal"): ["reshape"],
+    ("setitem_partial", "metal"): ["reshape"],
+}
 
 #: Ops only the grad-mode recording has, and not for bookkeeping either: a
 #: whole write of a value with a graph makes the value a buffer of its own
 #: before ``t`` takes it (``__setitem__``), a copy the ``no_grad`` branch
 #: makes into ``t``'s buffer without recording it.
 _RECORDED_ONLY: dict[str, list[str]] = {"setitem_whole": ["contiguous"]}
+
+#: How many operands each bookkeeping trace form reads through a copy: the
+#: tensors its node's plain op would otherwise save.
+_OPERANDS_READ: dict[type[Function], int] = {
+    _Snapshot: 1,
+    _RoundDecimals: 1,
+    _TruncQuotient: 2,
+    _Overwritten: 0,
+}
 
 
 def _differences(plain: list[str], recorded: list[str]) -> tuple[list[str], list[str]]:
@@ -183,23 +201,30 @@ def _record(
 def test_a_grad_mode_recording_takes_the_no_grad_ops(
     monkeypatch: pytest.MonkeyPatch, device: str, name: str
 ) -> None:
-    # A destination written through shared storage is read through a copy,
-    # one ``contiguous`` the ``no_grad`` recording does not have: count them.
+    # Each bookkeeping trace form reads graph-carrying copies of the operands
+    # its node reads — one ``contiguous`` each that ``no_grad`` lacks.
     copies = 0
 
-    def counting(x: Tensor) -> Tensor:
-        nonlocal copies
-        copies += _written_through_storage(x._impl)
-        return _recorded_snapshot(x)
+    def counting(klass: type[Function]) -> Callable[..., object]:
+        form = _trace_form_of(klass)
+        assert form is not None
+
+        def counted(*args: object) -> object:
+            nonlocal copies
+            copies += _OPERANDS_READ[klass]
+            return form(*args)
+
+        return counted
 
     lin, x = _setup(device)
     plain, _, _ = _record(_CASES[name], lin, x, grad=False)
-    monkeypatch.setattr(_Snapshot, "_trace_form", staticmethod(counting))
+    for klass in _OPERANDS_READ:
+        monkeypatch.setattr(klass, "_trace_form", staticmethod(counting(klass)))
     recorded, noted, _ = _record(_CASES[name], lin, x, grad=True)
     assert noted == 0, "a bookkeeping node was noted as a custom backward"
     assert "detach" not in recorded and "_make_view" not in recorded
     extra, missing = _differences(plain, recorded)
-    assert extra == ["contiguous"] * copies + _RECORDED_ONLY.get(name, [])
+    assert sorted(extra) == ["contiguous"] * copies + _RECORDED_ONLY.get(name, [])
     assert missing == _PLAIN_ONLY.get((name, device), [])
 
 
@@ -232,6 +257,152 @@ def test_take_bumps_the_version_but_records_no_view(device: str) -> None:
         _take(t, (t + 1.0)._impl)
     assert [str(op.name) for op in tracer.graph.ops] == ["full", "add"]
     assert old.version == before + 1
+
+
+# ── an eager backward inside a recording still runs ────────────────────────
+#
+# A recorded call may differentiate something itself — a force field
+# ``-grad(E(x))``, a gradient penalty, a ``jvp``.  The node lets a write
+# follow its read; the plain ops a recording takes in its place must too, or
+# the inner backward refuses that write (``VersionMismatch``) before the
+# compile can classify the call and run it eagerly.
+
+
+def _activation(name: str) -> _Case:
+    fn = getattr(F, name)
+
+    def case(lin: nn.Linear, x: Tensor) -> tuple[Tensor, Tensor]:
+        h = lin(x) * 1.0
+        fn(h, inplace=True)
+        return h * 2.0, h
+
+    return case
+
+
+def _trunc_then_write(lin: nn.Linear, x: Tensor) -> tuple[Tensor, Tensor]:
+    h = lin(x) * 1.0
+    q = lucid.div(h, 0.3, rounding_mode="trunc")
+    h.mul_(2.0)
+    return q + h, h
+
+
+def _trunc_divisor_written(lin: nn.Linear, x: Tensor) -> tuple[Tensor, Tensor]:
+    h = lin(x) * 1.0
+    b = x * 1.0 + 3.0
+    q = lucid.div(h, b, rounding_mode="trunc")
+    b.mul_(2.0)
+    return q + h, b
+
+
+def _round_then_write(lin: nn.Linear, x: Tensor) -> tuple[Tensor, Tensor]:
+    h = lin(x) * 1.0
+    r = lucid.round(h, decimals=1)
+    h.mul_(2.0)
+    return r + h, h
+
+
+def _fill_then_write(lin: nn.Linear, x: Tensor) -> tuple[Tensor, Tensor]:
+    h = lin(x) * 1.0
+    h.fill_(2.0)
+    h.mul_(3.0)
+    return h * x, h
+
+
+_INNER_CASES: dict[str, _Case] = {
+    **_CASES,
+    **{
+        f"{name}_inplace": _activation(name)
+        for name in ("relu", "leaky_relu", "hardtanh", "elu", "silu")
+    },
+    "trunc_then_write": _trunc_then_write,
+    "trunc_divisor_written": _trunc_divisor_written,
+    "round_then_write": _round_then_write,
+    "fill_then_write": _fill_then_write,
+}
+
+
+def _inner_grad(case: _Case, lin: nn.Linear, x: Tensor) -> list[object]:
+    with lucid.enable_grad():
+        out, _ = case(lin, x)
+        (g,) = lucid.autograd.grad(out.sum() + (x * x).sum(), (x,))
+    return g.tolist()
+
+
+@pytest.mark.parametrize("name", sorted(_INNER_CASES))
+def test_an_inner_backward_runs_in_a_recording(device: str, name: str) -> None:
+    case = _INNER_CASES[name]
+    lin, x = _setup(device)
+    x.requires_grad_(True)
+    want = _inner_grad(case, lin, x)
+    with lucid.compile._tracing(watch=(x,), module=lin):
+        got = _inner_grad(case, lin, x)
+    assert got == want
+
+
+class _ForceField(nn.Module):
+    """``-dE/dx`` of an energy whose hidden layer is written in place."""
+
+    def __init__(self, write: str) -> None:
+        super().__init__()
+        self.a = nn.Linear(4, 4)
+        self.b = nn.Linear(4, 1)
+        self._case = _INNER_CASES[write]
+
+    def forward(self, x: Tensor) -> Tensor:
+        with lucid.enable_grad():
+            xx = x.detach().requires_grad_(True)
+            out, _ = self._case(self.a, xx)
+            (g,) = lucid.autograd.grad(self.b(out).sum(), (xx,))
+        return -g
+
+
+_PUBLIC_WRITES = ("relu_inplace", "silu_inplace", "trunc_then_write", "fill_")
+
+
+def _is_classified_refusal(error: RuntimeError) -> bool:
+    """A refusal the compile names, not an inner backward's ``VersionMismatch``."""
+    if isinstance(error, _C_engine.VersionMismatch):
+        return False
+    return "backward pass ran inside" in str(error) or isinstance(
+        error, CustomBackwardInTrace
+    )
+
+
+@pytest.mark.parametrize("write", _PUBLIC_WRITES)
+def test_a_compiled_force_field_matches_eager(device: str, write: str) -> None:
+    lucid.manual_seed(0)
+    model = _ForceField(write).to(device).eval()
+    x = lucid.randn(3, 4, device=device)
+    want = model(x).tolist()
+    compiled = lucid.compile(model)
+    with lucid.no_grad(), warnings.catch_warnings():
+        warnings.simplefilter("ignore", CompileFallbackWarning)
+        assert compiled(x).tolist() == want
+
+
+@pytest.mark.parametrize("write", _PUBLIC_WRITES)
+def test_a_gradient_penalty_step_is_refused_by_name(device: str, write: str) -> None:
+    lucid.manual_seed(0)
+    lin = nn.Linear(4, 4).to(device)
+    case = _INNER_CASES[write]
+    x = lucid.randn(3, 4, device=device).requires_grad_(True)
+
+    def penalised(out: Tensor) -> Tensor:
+        (g,) = lucid.autograd.grad(out.sum(), (x,), create_graph=True)
+        return out.sum() + (g * g).sum()
+
+    class _Model(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.lin = lin
+
+        def forward(self, t: Tensor) -> Tensor:
+            return case(self.lin, t)[0]
+
+    try:
+        lucid.compile.compiled_step(_Model(), x, penalised, use_grad_mode=True)
+    except RuntimeError as error:
+        assert _is_classified_refusal(error), repr(error)
 
 
 # ── outside a recording nothing changes ────────────────────────────────────
@@ -337,10 +508,7 @@ def test_a_users_markers_are_ignored() -> None:
 
 
 def test_lucids_bookkeeping_classes_are_trusted() -> None:
-    from lucid._ops.composite._rounding import _RoundDecimals, _TruncQuotient
-    from lucid.autograd._overwritten import _Overwritten
-
-    for klass in (_Snapshot, _Overwritten, _TruncQuotient, _RoundDecimals):
+    for klass in _OPERANDS_READ:
         assert _trace_form_of(klass) is not None, klass.__name__
         assert not _is_exact_derivative(klass), klass.__name__
 
