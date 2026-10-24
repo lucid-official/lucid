@@ -218,6 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - stop running the no-op fusion pass on every backward
 
+- read only the slots a callable's tree record depends on
+
 ### Fixed
 
 - training batch normalization rejects a single value per channel before changing running stats

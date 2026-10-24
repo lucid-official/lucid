@@ -34,6 +34,7 @@ import struct
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from functools import partial
 from types import CodeType, MethodType
 from typing import TYPE_CHECKING, Protocol, final, override
 
@@ -242,9 +243,9 @@ def _wrapped_callable(model: object) -> object | None:
     return attrs.get("_fn") if isinstance(attrs, dict) else None
 
 
-_GLOBAL_NAMES: weakref.WeakKeyDictionary[CodeType, tuple[str, ...]] = (
-    weakref.WeakKeyDictionary()
-)
+# By the code object's address: hashing a code object hashes its bytecode and
+# constants, ~2 µs a call for a large function.  An entry leaves with its code.
+_GLOBAL_NAMES: dict[int, tuple[weakref.ref[CodeType], tuple[str, ...]]] = {}
 
 
 def _global_names(code: CodeType) -> tuple[str, ...]:
@@ -253,13 +254,17 @@ def _global_names(code: CodeType) -> tuple[str, ...]:
     ``co_names`` holds attribute names too: a global that only shares a name
     with an attribute is watched for nothing worse than an extra trace.
     """
-    names = _GLOBAL_NAMES.get(code)
-    if names is None:
-        found = set(code.co_names)
-        for const in code.co_consts:
-            if isinstance(const, CodeType):
-                found.update(_global_names(const))
-        names = _GLOBAL_NAMES[code] = tuple(sorted(found))
+    key = id(code)
+    hit = _GLOBAL_NAMES.get(key)
+    if hit is not None:
+        return hit[1]
+    found = set(code.co_names)
+    for const in code.co_consts:
+        if isinstance(const, CodeType):
+            found.update(_global_names(const))
+    names = tuple(sorted(found))
+    gone = partial(_GLOBAL_NAMES.pop, key, None)
+    _GLOBAL_NAMES[key] = (weakref.ref(code, lambda _: gone()), names)
     return names
 
 
@@ -271,21 +276,36 @@ def _cell_value(cell: object) -> object:
         return None
 
 
-def _callable_slots(fn: object) -> Iterator[tuple[tuple[str, str], object]]:
+def _read_slot(fn: object, key: tuple[str, str]) -> object:
+    """What ``fn``'s closure cell or global ``key`` holds now."""
+    kind, name = key
+    if kind == "cell":
+        cells = getattr(fn, "__closure__", None) or ()
+        return _cell_value(cells[int(name)]) if int(name) < len(cells) else None
+    space = getattr(fn, "__globals__", None)
+    return space.get(name) if isinstance(space, dict) else None
+
+
+def _callable_slots(fn: object) -> list[tuple[tuple[str, str], object]]:
     """What ``fn`` reads that no argument hands it: its closure cells and globals.
 
     A global counts when ``fn``'s code names it (LCD-599): a module-level
     model is as much the function's state as one it closes over.  What a
     function ``fn`` calls reads in its own globals is not followed.
     """
-    for i, cell in enumerate(getattr(fn, "__closure__", None) or ()):
-        yield ("cell", str(i)), _cell_value(cell)
+    out: list[tuple[tuple[str, str], object]] = [
+        (("cell", str(i)), _cell_value(cell))
+        for i, cell in enumerate(getattr(fn, "__closure__", None) or ())
+    ]
     code = getattr(fn, "__code__", None)
     space = getattr(fn, "__globals__", None)
     if isinstance(code, CodeType) and isinstance(space, dict):
-        for name in _global_names(code):
-            if name in space:
-                yield ("global", name), space[name]
+        out.extend(
+            (("global", name), space[name])
+            for name in _global_names(code)
+            if name in space
+        )
+    return out
 
 
 def _closure_modules(model: object) -> list[Module]:
@@ -299,14 +319,16 @@ def _closure_modules(model: object) -> list[Module]:
     fn = _wrapped_callable(model)
     if fn is None:
         return []
-    out: list[Module] = []
     # A bound method — ``lucid.compile(model.forward)`` — runs its module's
-    # tree as a closure would.
-    owner = getattr(fn, "__self__", None)
-    if isinstance(owner, Module):
-        out.append(owner)
-    out.extend(v for _, v in _callable_slots(fn) if isinstance(v, Module))
-    return out
+    # tree as a closure would.  Read on every call (``_tree_walk``), so the
+    # values only, not ``_callable_slots``' keys.
+    held = [getattr(fn, "__self__", None)]
+    held += map(_cell_value, getattr(fn, "__closure__", None) or ())
+    code = getattr(fn, "__code__", None)
+    space = getattr(fn, "__globals__", None)
+    if isinstance(code, CodeType) and isinstance(space, dict):
+        held += map(space.get, _global_names(code))
+    return [v for v in held if isinstance(v, Module)]
 
 
 def _parametrization_modules(mod: Module) -> list[Module]:
@@ -796,7 +818,7 @@ class _TreeTensors:
     reaches is checked on every call (:meth:`reads_the_same`).
     """
 
-    __slots__ = ("_record", "_modules", "_roots", "_callable", "slot_of")
+    __slots__ = ("_record", "_modules", "_reached", "_read", "slot_of")
 
     def __init__(
         self,
@@ -804,8 +826,9 @@ class _TreeTensors:
         attributes: Mapping[Module, tuple[str, ...]] | None = None,
         callable_slots: Sequence[tuple[str, str]] = (),
     ) -> None:
-        roots = _root_modules(model)
-        subs = _iter_modules(roots)
+        from lucid.nn.module import Module
+
+        subs = _iter_modules(_root_modules(model))
         slots = list(_registry_slots(subs))
         if attributes:
             slots.extend(
@@ -814,7 +837,7 @@ class _TreeTensors:
                 for name in attributes.get(sub, ())
             )
         fn = _wrapped_callable(model)
-        values = dict(_callable_slots(fn)) if callable_slots and fn else {}
+        values = dict(_callable_slots(fn)) if fn is not None else {}
         reads = [(key, _as_tensor(values.get(key))) for key in callable_slots]
         slots.extend(((-1, *key), tensor) for key, tensor in reads)
         ids: list[object] = [id(sub) for sub in subs]
@@ -825,11 +848,12 @@ class _TreeTensors:
             held += (tensor, impl)
         self._record = (tuple(ids), tuple(held))
         self._modules = tuple(weakref.ref(sub) for sub in subs)
-        self._roots = tuple(weakref.ref(root) for root in roots)
-        self._callable = tuple(
-            (key, tensor, None if tensor is None else tensor._impl)
-            for key, tensor in reads
+        # The callable's cells and globals this record depends on: the modules
+        # they name (held weakly, as the tree's are) and the tensors read.
+        self._reached = tuple(
+            (key, weakref.ref(v)) for key, v in values.items() if isinstance(v, Module)
         )
+        self._read = tuple((key, values.get(key)) for key in callable_slots)
         # Where each recorded tensor sits, for the key (``CacheKey.tree_alias``).
         self.slot_of = _slot_map(slots)
 
@@ -843,18 +867,11 @@ class _TreeTensors:
         """Whether the wrapped callable reaches the modules and recorded tensors
         it did — a module's tree moves the version when it changes, a rebound
         closure cell or global does not."""
+        if not self._reached and not self._read:
+            return True
         fn = _wrapped_callable(model)
-        if fn is None:
-            return True
-        if not _same_roots(self._roots, _root_modules(model)):
-            return False
-        if not self._callable:
-            return True
-        values = dict(_callable_slots(fn))
-        return all(
-            _as_tensor(values.get(key)) is tensor
-            and (tensor is None or tensor._impl is impl)
-            for key, tensor, impl in self._callable
+        return all(_read_slot(fn, key) is ref() for key, ref in self._reached) and all(
+            _read_slot(fn, key) is value for key, value in self._read
         )
 
 
