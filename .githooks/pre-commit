@@ -10,7 +10,8 @@
 #      surfaced four unsanctioned leaks that had crept in silently;
 #      this guard makes the same regression visible at commit time
 #      rather than after a release ships.  Step 1a does the same for
-#      H1 / H5 / H6 / H7 on the staged files (``check_source_rules.py``).
+#      H1 / H5 / H6 / H7 and dead ``lucid.`` paths in prose on the staged
+#      files (``check_source_rules.py``).
 #
 #   2. Docstring coverage.  ``tools/check_docstring_coverage.py``
 #      catches the five blind-spot categories that silently degrade the
@@ -124,13 +125,14 @@ if [[ "${LUCID_SKIP_H4_GUARD:-0}" != "1" && -f "${H4_SCRIPT}" ]]; then
     fi
 fi
 
-# ── 1a. Source rules (H1, H5, H6, H7) ───────────────────────────────────────
-# Hard-fail, milliseconds.  ``tools/check_source_rules.py --staged`` reads
-# the staged blob of every lucid/ and tools/ file in the commit and refuses
-# ``from __future__ import annotations`` in both, and in lucid/ an import or
-# a mention of the reference framework outside
-# ``lucid/test/_fixtures/ref_framework.py``, the other vendor's GPU name, and
-# string annotations.  The unit test
+# ── 1a. Source rules (H1, H5, H6, H7, dead paths) ───────────────────────────
+# Hard-fail, a fraction of a second.  ``tools/check_source_rules.py --staged``
+# reads the staged blob of every lucid/ and tools/ file in the commit and
+# refuses ``from __future__ import annotations`` in both, and in lucid/ an
+# import or a mention of the reference framework outside
+# ``lucid/test/_fixtures/ref_framework.py``, the other vendor's GPU name,
+# string annotations, and prose naming a ``lucid.`` path that no longer
+# resolves (LCD-587).  The unit test
 # ``test_source_rules.py`` checks the whole tree, but nothing ran it before a
 # commit, and tests importing the reference framework directly landed past
 # it.  Only the staged files: a commit that touches a file must leave it
@@ -141,7 +143,7 @@ RULES_SCRIPT="${REPO_ROOT}/tools/check_source_rules.py"
 if [[ -n "${PY}" && -f "${RULES_SCRIPT}" ]]; then
     if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(lucid|tools)/'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${RULES_SCRIPT}" --staged); then
-            echo "  ❌  Pre-commit blocked: a Hard Rule is broken in a staged file (see above)." >&2
+            echo "  ❌  Pre-commit blocked: a source rule is broken in a staged file (see above)." >&2
             exit 1
         fi
     fi

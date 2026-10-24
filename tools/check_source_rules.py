@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/check_source_rules.py — Hard Rules H1, H5, H6 and H7 over the source.
+"""tools/check_source_rules.py — Hard Rules H1, H5, H6 and H7, and dead paths.
 
 Each rule is a property of one source file, so each is checked per file:
 
@@ -17,6 +17,22 @@ Each rule is a property of one source file, so each is checked per file:
 * **H7** (``string-annotation``) — no annotation is a string.  A name used
   only for typing is imported under ``TYPE_CHECKING``.  ``Literal[...]``
   arguments and ``Annotated`` metadata are values, not types.
+* ``dead-path`` — prose does not name a ``lucid.`` path that is gone.  Prose
+  is a comment or a bare string (a docstring) in Python, and any line of
+  C++ or Markdown.  Nothing is imported to check a path.  Its longest
+  prefix that is a module (a ``.py`` or ``.pyi`` file, or a directory) must
+  be followed by a name that module binds at its top level: a def, a class,
+  an assignment, an import, ``__all__`` or a star import.  Only that first
+  name is checked, not the attributes after it.  A module with
+  ``__getattr__`` or a ``globals()`` write binds every name.  After
+  ``lucid._tensor._metal_views`` was deleted, nine places still named it as
+  the live owner of Metal views (LCD-587).  Two kinds of prose are let
+  through.  A sentence that says the path was deleted, removed or renamed,
+  or that there is no such path, is history or a contract (``_GONE``).  A
+  name in ``EXCUSES`` is not a path at all, and each entry gives the reason.
+  Where a module has a stub, the stub and the ``.py``'s own bindings are
+  its names: ``lucid`` serves its API lazily, so its ``__getattr__`` says
+  nothing about which names exist.
 
 Usage::
 
@@ -32,12 +48,16 @@ script uses the standard library only.
 
 import argparse
 import ast
+import functools
+import io
+import os
 import re
 import subprocess
 import sys
-from collections.abc import Iterable, Iterator
-from pathlib import Path
-from typing import NamedTuple, override
+import tokenize
+from collections.abc import Callable, Iterable, Iterator
+from pathlib import Path, PurePosixPath
+from typing import NamedTuple, Self, override
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LUCID = "lucid"
@@ -49,6 +69,17 @@ PYTHON_SUFFIXES = frozenset({".py", ".pyi"})
 _GPU_WORD = re.compile(r"\b" + "cu" + "da" + r"\b", re.IGNORECASE)
 # Calls whose first argument names a module to import.
 _IMPORTERS = frozenset({"import_module", "importorskip", "__import__"})
+# A ``lucid.`` path in prose.  Not part of a URL, a file name, a longer path,
+# a ``<lucid.Node ...>`` repr or a ``lucid.compile.trace/v1`` format tag.
+_DOTTED = re.compile(r"(?<![\w./<-])lucid(?:\.[A-Za-z_]\w*)+(?![\w/])")
+_SENTENCE_END = re.compile(r"[.!?](?=\s)|\n\s*\n")
+# Words by which a sentence says a path is gone, or was never there.
+_GONE = re.compile(
+    r"\b(?:deleted|removed|retired|renamed|superseded|formerly|took out"
+    r"|there is no|there are no|neither|does not exist|do not exist)\b",
+    re.IGNORECASE,
+)
+_CPP_COMMENT = re.compile(r"\s*(?://+|/\*+|\*+/?)")
 
 
 class Violation(NamedTuple):
@@ -182,6 +213,327 @@ def _annotations(tree: ast.AST) -> Iterator[ast.expr]:
             yield node.annotation
 
 
+# ── dead-path ────────────────────────────────────────────────────────────────
+
+
+class Excuse(NamedTuple):
+    """A ``lucid.`` name in prose that is not a path to check, and why."""
+
+    pattern: str  # matched against the whole dotted name
+    reason: str
+    path: str = ""  # only in this file; "" is every file
+
+
+EXCUSES: tuple[Excuse, ...] = (
+    Excuse(
+        r"lucid\.(?:metal\.)?[A-Z]\w*Tensor",
+        "a legacy type name: a string Tensor.type() returns and takes back "
+        "(lucid/_tensor/_to.py), never an attribute",
+    ),
+    Excuse(
+        r"lucid\.lucid\.bfloat16",
+        "the wrong legacy name a bfloat16 tensor used to report, quoted",
+        "lucid/test/unit/tensor/test_tensor_type_takes_dtypes_and_legacy_names.py",
+    ),
+    Excuse(
+        r"lucid\.(?:xxx|foo|X)",
+        "a placeholder for any top-level name",
+    ),
+)
+
+
+class _Binds(NamedTuple):
+    """What a module's top level binds: names, star-import sources, or anything."""
+
+    names: frozenset[str]
+    stars: tuple[str, ...]
+    any_name: bool
+
+
+class ModuleIndex:
+    """The ``lucid`` modules and the names each binds, read without importing.
+
+    A module is a ``.py`` or ``.pyi`` file, or a directory — Python imports a
+    directory without ``__init__.py`` as a namespace package.  The engine's
+    names are its stub's, ``lucid/_C/engine.pyi``.
+    """
+
+    def __init__(self, paths: Iterable[str], read: Callable[[str], str]) -> None:
+        self._read = read
+        self._files: dict[str, list[str]] = {}
+        self._binds: dict[str, _Binds] = {}
+        self._resolved: dict[str, bool] = {}
+        for path in paths:
+            parts = PurePosixPath(path).parts
+            if parts[0] != LUCID:
+                continue
+            for depth in range(1, len(parts)):
+                self._files.setdefault(".".join(parts[:depth]), [])
+            stem = PurePosixPath(path).stem
+            if PurePosixPath(path).suffix in PYTHON_SUFFIXES:
+                module = parts[:-1] if stem == "__init__" else (*parts[:-1], stem)
+                self._files.setdefault(".".join(module), []).append(path)
+
+    @classmethod
+    def of_tree(cls, root: Path) -> Self:
+        """Every module under ``root/lucid`` as it is on disk."""
+        paths: list[str] = []
+        for directory, subdirs, files in os.walk(root / LUCID):
+            subdirs[:] = [d for d in subdirs if d != "__pycache__"]
+            relative = Path(directory).relative_to(root).as_posix()
+            paths.extend(f"{relative}/{name}" for name in files)
+        return cls(paths, lambda path: (root / path).read_text(errors="ignore"))
+
+    def resolves(self, dotted: str) -> bool:
+        """Whether ``dotted``'s modules exist and the first name after them is bound."""
+        if dotted not in self._resolved:
+            self._resolved[dotted] = self._resolve(dotted)
+        return self._resolved[dotted]
+
+    def _resolve(self, dotted: str) -> bool:
+        module, *rest = dotted.split(".")
+        while rest and f"{module}.{rest[0]}" in self._files:
+            module = f"{module}.{rest.pop(0)}"
+        if not rest or (rest[0].startswith("__") and rest[0].endswith("__")):
+            return True
+        return self._defines(module, rest[0], set())
+
+    def _defines(self, module: str, name: str, seen: set[str]) -> bool:
+        if module in seen:
+            return False
+        seen.add(module)
+        binds = self._binds_of(module)
+        if binds.any_name or name in binds.names:
+            return True
+        for star in binds.stars:
+            if star.partition(".")[0] != LUCID:
+                return True  # another package's names are not indexed
+            if star in self._files and self._defines(star, name, seen):
+                return True
+        return False
+
+    def _binds_of(self, module: str) -> _Binds:
+        if module not in self._binds:
+            files = [(p, self._read(p)) for p in self._files.get(module, [])]
+            self._binds[module] = _module_binds(module, files)
+        return self._binds[module]
+
+
+@functools.cache
+def tree_index(root: Path = REPO_ROOT) -> ModuleIndex:
+    """The index of ``root``'s tree, built once per process."""
+    return ModuleIndex.of_tree(root)
+
+
+def _module_binds(module: str, files: list[tuple[str, str]]) -> _Binds:
+    # Where a stub lists the names a lazy module serves, the ``.py``'s
+    # ``__getattr__`` or ``globals()`` write says nothing more.
+    has_stub = any(PurePosixPath(path).suffix == ".pyi" for path, _ in files)
+    names: set[str] = set()
+    stars: list[str] = []
+    any_name = False
+    for path, source in files:
+        try:
+            tree = ast.parse(source, filename=path)
+        except SyntaxError:
+            return _Binds(frozenset(), (), True)  # ``syntax`` reports it
+        package = (
+            module
+            if PurePosixPath(path).stem == "__init__"
+            else module.rpartition(".")[0]
+        )
+        bound: set[str] = set()
+        for node in _module_level(tree.body):
+            bound.update(_bound_by(node))
+            if isinstance(node, ast.ImportFrom) and any(
+                a.name == "*" for a in node.names
+            ):
+                stars.append(_absolute(node, package))
+        # A lazy ``__getattr__`` serves the names ``__all__`` lists (PEP 562);
+        # without ``__all__`` nothing says which, nor after a ``globals()`` write.
+        lazy = "__getattr__" in bound and "__all__" not in bound
+        any_name = any_name or (not has_stub and (lazy or _writes_globals(tree)))
+        names |= bound
+    return _Binds(frozenset(names), tuple(stars), any_name)
+
+
+def _module_level(statements: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Every statement that runs in the module's namespace, nested blocks included."""
+    for node in statements:
+        yield node
+        for block in _blocks(node):
+            yield from _module_level(block)
+
+
+def _blocks(node: ast.stmt) -> list[list[ast.stmt]]:
+    if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While)):
+        return [node.body, node.orelse]
+    if isinstance(node, (ast.With, ast.AsyncWith)):
+        return [node.body]
+    if isinstance(node, (ast.Try, ast.TryStar)):
+        return [
+            node.body,
+            node.orelse,
+            node.finalbody,
+            *(h.body for h in node.handlers),
+        ]
+    if isinstance(node, ast.Match):
+        return [case.body for case in node.cases]
+    return []
+
+
+def _bound_by(node: ast.stmt) -> Iterator[str]:
+    """The names ``node`` binds where it runs, and the names ``__all__`` lists."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        yield node.name
+    elif isinstance(node, (ast.Import, ast.ImportFrom)):
+        for alias in node.names:
+            if alias.name != "*":
+                yield alias.asname or alias.name.partition(".")[0]
+    targets = _targets(node)
+    for target in targets:
+        yield from (n.id for n in ast.walk(target) if isinstance(n, ast.Name))
+    if (
+        isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+        and node.value is not None
+        and any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets)
+    ):
+        for constant in ast.walk(node.value):
+            if isinstance(constant, ast.Constant) and isinstance(constant.value, str):
+                yield constant.value
+
+
+def _targets(node: ast.stmt) -> list[ast.expr]:
+    if isinstance(node, ast.Assign):
+        return node.targets
+    if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.For, ast.AsyncFor)):
+        return [node.target]
+    if isinstance(node, ast.TypeAlias):
+        return [node.name]
+    if isinstance(node, (ast.With, ast.AsyncWith)):
+        return [i.optional_vars for i in node.items if i.optional_vars is not None]
+    return []
+
+
+def _absolute(node: ast.ImportFrom, package: str) -> str:
+    """The module ``from ... import *`` reads, made absolute."""
+    if node.level == 0:
+        return node.module or ""
+    parts = package.split(".")
+    base = parts[: len(parts) - node.level + 1]
+    return ".".join([*base, node.module] if node.module else base)
+
+
+def _writes_globals(tree: ast.Module) -> bool:
+    return any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id == "globals"
+        for n in ast.walk(tree)
+    )
+
+
+class _Prose(NamedTuple):
+    """A block of prose and the source line it starts on."""
+
+    line: int
+    text: str
+
+
+def _prose(path: str, source: str) -> list[_Prose]:
+    suffix = PurePosixPath(path).suffix
+    if suffix in PYTHON_SUFFIXES:
+        return _python_prose(source)
+    if suffix == ".md":
+        return [_Prose(1, source)]
+    comments: list[tuple[int, str]] = []
+    blocks: list[_Prose] = []
+    for number, line in enumerate(source.splitlines(), 1):
+        if marker := _CPP_COMMENT.match(line):
+            comments.append((number, line[marker.end() :]))
+        else:
+            blocks.append(_Prose(number, line))  # string literals: messages
+    return blocks + _runs(comments)
+
+
+def _python_prose(source: str) -> list[_Prose]:
+    """Each run of comment lines, and each bare string — a docstring."""
+    comments: list[tuple[int, str]] = []
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type == tokenize.COMMENT:
+                comments.append((token.start[0], token.string.lstrip("#")))
+        tree = ast.parse(source)
+    except tokenize.TokenError, SyntaxError:
+        return []  # ``syntax`` reports it
+    strings = [
+        _Prose(node.value.lineno, node.value.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    ]
+    return _runs(comments) + strings
+
+
+def _runs(lines: list[tuple[int, str]]) -> list[_Prose]:
+    """``(line number, text)`` pairs joined into blocks of consecutive lines."""
+    blocks: list[_Prose] = []
+    texts: list[str] = []
+    start = 0
+    for number, text in lines:
+        if texts and number != start + len(texts):
+            blocks.append(_Prose(start, "\n".join(texts)))
+            texts = []
+        if not texts:
+            start = number
+        texts.append(text)
+    if texts:
+        blocks.append(_Prose(start, "\n".join(texts)))
+    return blocks
+
+
+def _told_as_history(text: str, match: re.Match[str]) -> bool:
+    """Whether the sentence around ``match`` says the path was deleted or renamed."""
+    ends = [end.end() for end in _SENTENCE_END.finditer(text, 0, match.start())]
+    after = _SENTENCE_END.search(text, match.end())
+    sentence = text[ends[-1] if ends else 0 : after.start() if after else len(text)]
+    # The words count, not the paths: ``lucid.x.gone`` says nothing.
+    return _GONE.search(_DOTTED.sub(" ", sentence)) is not None
+
+
+def excuse_for(
+    path: str, name: str, excuses: Iterable[Excuse] = EXCUSES
+) -> Excuse | None:
+    """The excuse that lets ``name`` stand in ``path``'s prose, if any."""
+    for excuse in excuses:
+        if excuse.path in ("", path) and re.fullmatch(excuse.pattern, name):
+            return excuse
+    return None
+
+
+def dead_paths(
+    path: str, source: str, index: ModuleIndex, excuses: Iterable[Excuse] = EXCUSES
+) -> Iterator[Violation]:
+    """Each ``lucid.`` path ``path``'s prose names that does not resolve."""
+    excuses = tuple(excuses)
+    # Resolve every mention first; only a file with a dead one is worth
+    # tokenizing to find which mentions are prose.
+    dead = {
+        name
+        for name in {m.group() for m in _DOTTED.finditer(source)}
+        if not index.resolves(name) and excuse_for(path, name, excuses) is None
+    }
+    if not dead:
+        return
+    for prose in _prose(path, source):
+        for match in _DOTTED.finditer(prose.text):
+            name = match.group()
+            if name in dead and not _told_as_history(prose.text, match):
+                line = prose.line + prose.text.count("\n", 0, match.start())
+                yield Violation(path, line, "dead-path", f"{name} does not resolve")
+
+
 def _scope(path: str) -> str | None:
     """``lucid`` or ``tools`` for a repo-relative path the rules read, else None."""
     top, _, _ = path.partition("/")
@@ -193,14 +545,26 @@ def _scope(path: str) -> str | None:
     return None
 
 
-def check(sources: Iterable[tuple[str, str]], ref: str) -> list[Violation]:
-    """Every violation in ``(repo-relative path, source text)`` pairs."""
+def check(
+    sources: Iterable[tuple[str, str]],
+    ref: str,
+    index: ModuleIndex | None = None,
+    excuses: Iterable[Excuse] = EXCUSES,
+) -> list[Violation]:
+    """Every violation in ``(repo-relative path, source text)`` pairs.
+
+    ``index`` resolves the ``lucid.`` paths prose names; by default it is
+    this checkout's tree.
+    """
     rules = _Rules(ref)
+    modules = index or tree_index()
+    excuses = tuple(excuses)
     found: list[Violation] = []
     for path, source in sources:
         scope = _scope(path)
         if scope == LUCID:
             found.extend(rules.text(path, source))
+            found.extend(dead_paths(path, source, modules, excuses))
         if scope is not None and Path(path).suffix in PYTHON_SUFFIXES:
             found.extend(rules.python(path, source, full=scope == LUCID))
     return found
@@ -245,23 +609,32 @@ def path_sources(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check Hard Rules H1, H5, H6, H7.")
+    parser = argparse.ArgumentParser(
+        description="Check Hard Rules H1, H5, H6, H7 and dead lucid. paths in prose."
+    )
     parser.add_argument("paths", nargs="*", help="files (default: lucid/, tools/)")
     parser.add_argument("--staged", action="store_true", help="check the staged blobs")
     args = parser.parse_args(argv)
+    root = REPO_ROOT
     if args.staged:
+        # The hook's checkout, which is not this script's when a worktree
+        # borrows the main checkout's copy: its modules are the ones to find.
+        root = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
         sources = staged_sources(Path.cwd())
     elif args.paths:
         sources = path_sources(args.paths)
     else:
         sources = tree_sources()
-    found = check(sources, ref_name())
+    found = check(sources, ref_name(), tree_index(root))
     for violation in found:
         print(violation, file=sys.stderr)
     if found:
         print(
-            f"\n{len(found)} source-rule violation(s) — CLAUDE.md H1 / H5 / H6 / H7.\n"
-            "  H5: take the ``ref`` fixture and say 'reference framework'.",
+            f"\n{len(found)} source-rule violation(s) — CLAUDE.md H1 / H5 / H6 / H7"
+            " and dead paths.\n"
+            "  H5: take the ``ref`` fixture and say 'reference framework'.\n"
+            "  dead-path: name what owns it now, or say the path was deleted"
+            " (tools/check_source_rules.py EXCUSES for a name that is no path).",
             file=sys.stderr,
         )
         return 1
