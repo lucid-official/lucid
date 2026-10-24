@@ -11,6 +11,7 @@ from typing import Any, ClassVar, Protocol, SupportsFloat, SupportsIndex, overri
 import lucid as _lucid
 from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
+from lucid.autograd._grad_inplace import zero_grads_
 from lucid.nn.parameter import Parameter
 from lucid.optim._step_counter import _CountedStep
 
@@ -1266,23 +1267,25 @@ class Optimizer:
             self._sync_group_hyperparams()
 
     def zero_grad(self, set_to_none: bool = True) -> None:
-        """Zero gradients of all parameters."""
-        for group in self.param_groups:
-            for p in _group_params(group):
-                if p.grad is not None:
-                    if set_to_none:
-                        p.grad = None
-                    else:
-                        # ``TensorImpl.zero_grad`` *resets* the gradient — it
-                        # drops the buffer rather than filling it — so this
-                        # branch used to be indistinguishable from the one
-                        # above.  ``set_to_none=False`` exists precisely to
-                        # keep an allocated zero buffer: gradient accumulation
-                        # across micro-batches reads ``p.grad`` between steps,
-                        # and a ``None`` there is an AttributeError at best and
-                        # a silently skipped update wherever the code guards
-                        # with ``if p.grad is not None``.
-                        p.grad = _lucid.zeros_like(p)
+        """Reset the gradients of all parameters.
+
+        ``set_to_none=True`` (the default) drops each gradient.  ``False``
+        zeroes it in place, out of the graph, so a ``g = p.grad`` read
+        earlier reads zeros too (see ``lucid.autograd._grad_inplace``).
+
+        >>> import lucid
+        >>> p = lucid.nn.Parameter(lucid.ones(3))
+        >>> opt = lucid.optim.SGD([p], lr=0.1)
+        >>> (p * 2).sum().backward()
+        >>> g = p.grad
+        >>> opt.zero_grad(set_to_none=False)
+        >>> g.tolist()
+        [0.0, 0.0, 0.0]
+        """
+        zero_grads_(
+            (p for group in self.param_groups for p in _group_params(group)),
+            set_to_none=set_to_none,
+        )
 
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:
         """Perform a single optimization step.

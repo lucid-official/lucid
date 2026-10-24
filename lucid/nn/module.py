@@ -20,12 +20,12 @@ from typing import (
 )
 
 from lucid._C import engine as _C_engine
-import lucid as _lucid
 from lucid import _promotion
 from lucid._dtype import _ENGINE_TO_DTYPE, dtype as _dtype_cls
 from lucid._tensor.tensor import Tensor
 from lucid._tensor._to import _to_engine_target, _type_target
 from lucid._dispatch import _unwrap, _wrap
+from lucid.autograd._grad_inplace import zero_grads_
 from lucid.nn.parameter import Parameter, UninitializedParameter
 from lucid.nn.hooks import (
     _GLOBAL_BACKWARD_HOOKS,
@@ -1076,16 +1076,13 @@ class Module:
         return self
 
     def zero_grad(self, set_to_none: bool = True) -> None:
-        """Zero gradients of all parameters."""
-        for p in self.parameters():
-            if p.grad is not None:
-                if set_to_none:
-                    p.grad = None
-                else:
-                    # ``TensorImpl.zero_grad`` resets rather than fills, so
-                    # this branch was identical to the one above.  See the
-                    # same note in ``lucid.optim.Optimizer.zero_grad``.
-                    p.grad = _lucid.zeros_like(p)
+        """Reset the gradients of all parameters.
+
+        ``set_to_none=True`` (the default) drops each gradient.  ``False``
+        zeroes it in place, out of the graph, as
+        :meth:`lucid.optim.Optimizer.zero_grad` does.
+        """
+        zero_grads_(self.parameters(), set_to_none=set_to_none)
 
     def requires_grad_(self, requires_grad: bool = True) -> Self:
         """Set requires_grad for all parameters."""

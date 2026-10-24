@@ -666,42 +666,6 @@ class LBFGS(Optimizer):
         return _LinePoint(t, f, g, lucid.linalg.dot(g, d))
 
     @override
-    def zero_grad(self, set_to_none: bool = True) -> None:
-        """Set gradients of all parameters to ``None``.
-
-        L-BFGS always sets gradients to ``None`` regardless of the
-        ``set_to_none`` argument, because the closure passed to
-        :meth:`step` is responsible for zeroing and recomputing gradients
-        on each function evaluation.
-
-        Parameters
-        ----------
-        set_to_none : bool, optional
-            Ignored; kept for API compatibility with :class:`Optimizer`
-            (default: ``True``).
-
-        Examples
-        --------
-        >>> import lucid
-        >>> import lucid.nn as nn
-        >>> import lucid.optim as optim
-        >>> model = nn.Linear(4, 2)
-        >>> x = lucid.randn(1, 4)
-        >>> y = lucid.zeros((1, 2))
-        >>> criterion = nn.MSELoss()
-        >>> optimizer = optim.LBFGS(model.parameters(), lr=1.0, max_iter=20)
-        >>> def closure():
-        ...     optimizer.zero_grad()
-        ...     loss = criterion(model(x), y)
-        ...     loss.backward()
-        ...     return loss
-        >>> loss = optimizer.step(closure)   # step returns the closure's first loss
-        """
-        del set_to_none  # the closure recomputes every gradient anyway
-        for p in self._params():
-            p.grad = None
-
-    @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:
         """Run up to ``max_iter`` L-BFGS iterations.
 

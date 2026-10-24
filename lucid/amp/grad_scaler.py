@@ -294,14 +294,15 @@ class GradScaler:
         reads one flag per device rather than one per parameter, so a model
         on a single device costs a single host synchronisation.
 
-        Each gradient is written back in its own dtype: ``set_grad``
-        replaces the gradient's storage with the new tensor's bytes without
-        checking the dtype, so a float32 result written over a bfloat16
-        gradient would be read back as bfloat16 bit patterns (CHA-72).
-        All dtypes are checked before any gradient is touched, so a refused
-        call leaves the optimizer's gradients and stage as they were.
+        Each gradient is unscaled in place and keeps its dtype, so a tensor
+        read from ``p.grad`` before the call reads the unscaled values too.
+        The check reads the values before they are unscaled, as the
+        reference's fused unscale does.  All dtypes are checked before any
+        gradient is touched, so a refused call leaves the optimizer's
+        gradients and stage as they were.
         """
         from lucid._dispatch import _unwrap, _wrap
+        from lucid.autograd._grad_inplace import write_grad_
 
         grads: list[tuple[Tensor, _C_engine.TensorImpl]] = []
         for group in optimizer.param_groups:
@@ -343,10 +344,7 @@ class GradScaler:
             coef = _C_engine.full(
                 list(g_work.shape), inv_scale, work_dtype, g_work.device
             )
-            unscaled = _C_engine.mul(g_work, coef)
-            if unscaled.dtype != grad_dtype:
-                unscaled = _C_engine.astype(unscaled, grad_dtype)
-            p._impl.set_grad(unscaled)
+            write_grad_(p, _wrap(_C_engine.mul(g_work, coef)))
         return any(bool(_wrap(flag).item()) for flag in nonfinite.values())
 
     def step(

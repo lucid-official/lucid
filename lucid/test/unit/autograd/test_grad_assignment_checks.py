@@ -380,14 +380,18 @@ def test_clip_grad_norm_and_value_after_create_graph(device: str) -> None:
     assert w.grad is not None
     assert w.grad.tolist() == pytest.approx([0.6, 0.7], abs=1e-4)
 
-    # Also verify clipping under no_grad() replaces the graph-mode grad cleanly.
+    # Under no_grad() too, clipping scales the graph-mode gradient in place.
+    # It stays the same tensor, still requiring grad, as in the reference
+    # (LCD-546); it used to be swapped for a new tensor that did not.
     w2 = _param([3.0, 4.0], device)
     (w2 * w2).sum().backward(create_graph=True)
+    held = w2.grad
     with lucid.no_grad():
         clip_grad_norm_([w2], max_norm=1.0)
-    assert w2.grad is not None
+    assert w2.grad is not None and held is not None
     assert w2.grad.tolist() == pytest.approx([0.6, 0.8], abs=1e-4)
-    assert not w2.grad.requires_grad
+    assert held._impl is w2.grad._impl
+    assert w2.grad.requires_grad
 
 
 def test_mixed_create_graph_and_eager_backward_accumulates(device: str) -> None:

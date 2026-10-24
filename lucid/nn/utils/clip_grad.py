@@ -9,6 +9,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._factories.creation import zeros
+from lucid.autograd._grad_inplace import write_grad_
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -108,10 +109,7 @@ def _scale_clipped_grads(
         if coef is None:
             coef = _C_engine.full([], clip_coef, w_dt, g_w.device)
             coefs[key] = coef
-        scaled = _C_engine.mul(g_w, coef)
-        p._impl.set_grad(
-            scaled if scaled.dtype == g_dt else _C_engine.astype(scaled, g_dt)
-        )
+        write_grad_(p, _wrap(_C_engine.mul(g_w, coef)))
 
 
 def clip_grad_norm_(
@@ -270,7 +268,7 @@ def clip_grad_value_(
     for p in parameters:
         g_impl = p._impl.grad_as_impl() or p._impl.grad_to_tensor()
         if g_impl is not None:
-            p._impl.set_grad(_C_engine.clip(g_impl, -clip_value, clip_value))
+            write_grad_(p, _wrap(_C_engine.clip(g_impl, -clip_value, clip_value)))
 
 
 def get_total_norm(

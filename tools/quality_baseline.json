@@ -1578,7 +1578,7 @@
     "lucid/nn/utils/fusion.py": 1,
     "lucid/nn/utils/prune.py": 1,
     "lucid/optim/adam.py": 12,
-    "lucid/optim/lbfgs.py": 2,
+    "lucid/optim/lbfgs.py": 1,
     "lucid/optim/lr_scheduler.py": 23,
     "lucid/optim/others.py": 14,
     "lucid/optim/sgd.py": 2,
