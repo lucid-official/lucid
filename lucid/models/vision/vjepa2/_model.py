@@ -833,14 +833,16 @@ def _sincos_3d(
     grid: tuple[int, int, int],
     uniform_power: bool,
     *,
-    device: DeviceLike,
+    device: lucid.device,
     dtype: lucid.dtype,
 ) -> Tensor:
     """Build a fixed 3-D sine/cosine table for the optional non-RoPE path.
 
-    Built where the tokens it is added to live, in float32 or wider and cast
-    once to their dtype: a CPU float64 table met Metal tokens with a device
-    mismatch, and Metal has no float64 to build it in (LCD-639).  It depends
+    Built where the tokens it is added to live and cast once to their dtype:
+    a CPU table met Metal tokens with a device mismatch (LCD-639).  In
+    float64 on the CPU, as the reference builds it, so a checkpoint sees the
+    positions it was trained on; in float32 on Metal, which has no float64.
+    It depends
     on the grid alone, so it is built outside any active trace — a recording
     holds it as a constant feed, never the ops that make it (LCD-627).
     """
@@ -850,7 +852,7 @@ def _sincos_3d(
         widths = (each, each, each)
     else:
         widths = (dim // 2, dim // 4, dim // 4)
-    work = _float32_or_wider(dtype)
+    work = lucid.float64 if device.type == "cpu" else _float32_or_wider(dtype)
     with untraced():
         zeros = lucid.zeros(time, rows, cols, dtype=work, device=device)
         coords = (

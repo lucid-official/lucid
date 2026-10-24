@@ -176,12 +176,29 @@ class TestPositionTable:
 
     def test_an_odd_axis_width_is_padded_not_truncated(self) -> None:
         assert tuple(
-            _sincos_3d(12, (2, 2, 2), False, device="cpu", dtype=lucid.float32).shape
+            _sincos_3d(
+                12, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32
+            ).shape
         ) == (1, 8, 12)
 
+    def test_a_float32_cpu_table_is_the_float64_one_rounded_once(self) -> None:
+        # The reference builds its table in float64; a float32 build drifts
+        # by ~1e-6 at a released grid, which a checkpoint would see.
+        cpu = lucid.device("cpu")
+        narrow = _sincos_3d(1024, (8, 16, 16), True, device=cpu, dtype=lucid.float32)
+        wide = _sincos_3d(1024, (8, 16, 16), True, device=cpu, dtype=lucid.float64)
+        assert narrow.dtype == lucid.float32
+        assert bytes(narrow._impl.to_bytes()) == bytes(
+            wide.to(lucid.float32)._impl.to_bytes()
+        )
+
     def test_uniform_power_changes_the_split(self) -> None:
-        even = _sincos_3d(24, (2, 2, 2), True, device="cpu", dtype=lucid.float32)
-        split = _sincos_3d(24, (2, 2, 2), False, device="cpu", dtype=lucid.float32)
+        even = _sincos_3d(
+            24, (2, 2, 2), True, device=lucid.device("cpu"), dtype=lucid.float32
+        )
+        split = _sincos_3d(
+            24, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32
+        )
         assert float((even - split).abs().max().item()) > 0.0
 
     def test_the_config_chooses_the_split(self) -> None:
