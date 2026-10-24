@@ -21,18 +21,26 @@ class device:
     _METAL_TYPES: frozenset[str] = frozenset({"metal"})
     _VALID_TYPES: frozenset[str] = frozenset({"metal", "cpu"})
 
-    def __init__(self, type_or_str: str, index: int = 0) -> None:
+    type: str
+    index: int
+
+    def __init__(
+        self, type_or_str: device | _C_engine.Device | str, index: int = 0
+    ) -> None:
         """Parse a device specifier.
 
         Parameters
         ----------
-        type_or_str : str
-            Either a bare device type (``"cpu"`` / ``"metal"``) or a
+        type_or_str : device, lucid._C.engine.Device, or str
+            Either an existing :class:`device` (copied, as the reference's
+            device constructor copies one), the engine's own ``Device``
+            enum, a bare device type (``"cpu"`` / ``"metal"``), or a
             ``"<type>:<index>"`` string (e.g. ``"metal:0"``).
         index : int, optional
             Device index — only ``0`` is meaningful on current Apple
-            Silicon hardware. Ignored when ``type_or_str`` already
-            contains an index suffix.
+            Silicon hardware. Read only when ``type_or_str`` is a bare
+            type string without its own index suffix; a :class:`device`
+            or engine ``Device`` carries its own index instead.
 
         Raises
         ------
@@ -46,14 +54,28 @@ class device:
         device('cpu')
         >>> lucid.device("metal:0").is_metal
         True
+        >>> lucid.device(lucid.device("metal")) == lucid.device("metal")
+        True
         """
-        if ":" in type_or_str:
-            t, idx = type_or_str.split(":", 1)
-            self.type: str = t.strip()
-            self.index: int = int(idx)
+        if isinstance(type_or_str, device):
+            self.type = type_or_str.type
+            self.index = type_or_str.index
+        elif isinstance(type_or_str, _C_engine.Device):
+            self.type = "metal" if type_or_str == _C_engine.Device.GPU else "cpu"
+            self.index = 0
+        elif isinstance(type_or_str, str):
+            if ":" in type_or_str:
+                t, idx = type_or_str.split(":", 1)
+                self.type = t.strip()
+                self.index = int(idx)
+            else:
+                self.type = type_or_str.strip()
+                self.index = index
         else:
-            self.type = type_or_str.strip()
-            self.index = index
+            raise TypeError(
+                "lucid.device(): expected a device, lucid._C.engine.Device, "
+                f"or str, got {type(type_or_str).__name__}"
+            )
         if self.type not in self._VALID_TYPES:
             raise ValueError(f"Unknown device '{self.type}'. Use 'metal' or 'cpu'.")
         self._engine: _C_engine.Device = (
@@ -93,4 +115,4 @@ class device:
 
 def _device_from_engine(d: _C_engine.Device) -> device:
     """Convert engine Device enum → lucid device."""
-    return device("metal" if d == _C_engine.Device.GPU else "cpu")
+    return device(d)

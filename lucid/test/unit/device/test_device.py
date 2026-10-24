@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import lucid
+from lucid._C import engine as _C_engine
 from lucid.test._fixtures.devices import metal_available
 
 
@@ -61,6 +62,47 @@ class TestDeviceClass:
         bad = "cu" + "da"
         with pytest.raises(Exception):
             lucid.tensor([1.0], device=bad)
+
+
+class TestDeviceConstructorAcceptsEveryForm:
+    """LCD-645: ``lucid.device(x)`` round-trips every ``DeviceLike`` form.
+
+    ``t.device`` hands back a :class:`lucid.device`, so ``lucid.device(t.device)``
+    is the common case the constructor used to refuse (it treated any
+    non-``str`` argument as a colon-separated string to search).
+    """
+
+    @pytest.mark.parametrize("type_str", ["cpu", "metal"])
+    def test_device_object_round_trips(self, type_str: str) -> None:
+        original = lucid.device(type_str)
+        copy = lucid.device(original)
+        assert copy == original
+        assert copy.type == original.type
+        assert copy.index == original.index
+
+    @pytest.mark.parametrize(
+        "engine_device", [_C_engine.Device.CPU, _C_engine.Device.GPU]
+    )
+    def test_engine_device_enum_round_trips(
+        self, engine_device: object
+    ) -> None:
+        once = lucid.device(engine_device)
+        assert lucid.device(once) == once
+
+    def test_tensor_device_property_round_trips(self) -> None:
+        t = lucid.tensor([1.0, 2.0], device="cpu")
+        assert lucid.device(t.device) == t.device
+
+    def test_tensor_device_property_round_trips_on_metal(self) -> None:
+        if not metal_available():
+            pytest.skip("Metal not available")
+        t = lucid.tensor([1.0, 2.0], device="metal")
+        assert lucid.device(t.device) == t.device
+
+    def test_unsupported_type_is_refused(self) -> None:
+        bad: object = 5
+        with pytest.raises(TypeError):
+            lucid.device(bad)
 
 
 class TestDefaultDevice:
