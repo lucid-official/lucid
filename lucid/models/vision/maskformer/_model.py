@@ -571,12 +571,13 @@ class _TransformerModule(nn.Module):
         c = int(feat.shape[1])
         h = int(feat.shape[2])
         w = int(feat.shape[3])
-        device = feat.device.type
 
         # Query positions: (N, d) → (B, N, d)
         q_weight: Tensor = self.queries_embedder.weight
         query_pos = q_weight.unsqueeze(0).repeat(B, 1, 1)
-        hidden = lucid.zeros(query_pos.shape, device=device)
+        # The reference's ``zeros_like(query_embeddings)``: the decoder's
+        # first input takes the queries' dtype as well as their shape.
+        hidden = lucid.zeros_like(query_pos)
 
         # Spatial positions + flattened memory: (B, S, d)
         pos = self._pos_embed(feat)  # (B, d, h, w)
@@ -991,10 +992,10 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
 
         Every tensor the loss builds itself — class targets, the no-object
         class weight, match indices, the zero fallback — is created on the
-        predictions' device.  Built without ``device=`` they landed on the
-        CPU and the cross-entropy gather against Metal logits raised
-        ``DeviceMismatch``.  ``targets["masks"]`` must already be on that
-        device, as the predictions are.
+        predictions' device and, if floating, in their dtype: a CPU one
+        raised ``DeviceMismatch`` against Metal logits, a float32 one widened
+        a half loss.  ``targets["masks"]`` must already be on that device, as
+        the predictions are.
         """
         B = int(class_logits.shape[0])
         N = int(class_logits.shape[1])
@@ -1026,7 +1027,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
             class_ids: Tensor = lucid.arange(K, device=seg_b.device.type).long()
             onehot: Tensor = (
                 seg_b.reshape(1, seg_H, seg_W) == class_ids.reshape(K, 1, 1)
-            ).float()
+            ).to(ml_b.dtype)
             counts: list[float] = cast(list[float], onehot.sum(dim=(1, 2)).tolist())
             unique_classes: list[int] = [c for c in range(K) if counts[c] > 0.0]
 
@@ -1068,7 +1069,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
                 cls_tgt_data[pi] = unique_classes[gi]
             cls_tgt: Tensor = lucid.tensor(cls_tgt_data, device=dev)
             cls_weight: Tensor = lucid.tensor(
-                [1.0] * K + [_NO_OBJECT_WEIGHT], device=dev
+                [1.0] * K + [_NO_OBJECT_WEIGHT], dtype=cl_b.dtype, device=cl_b.device
             )
             cls_losses.append(
                 F.cross_entropy(cl_b, cls_tgt, weight=cls_weight, reduction="mean")
@@ -1116,12 +1117,12 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
         cls_loss: Tensor = (
             lucid.cat([l.reshape(1) for l in cls_losses]).mean()
             if cls_losses
-            else lucid.zeros((), device=dev)
+            else class_logits.new_zeros()
         )
         mask_loss: Tensor = (
             lucid.cat([l.reshape(1) for l in mask_losses]).mean()
             if mask_losses
-            else lucid.zeros((), device=dev)
+            else class_logits.new_zeros()
         )
 
         return cls_loss + mask_loss

@@ -614,7 +614,8 @@ def _decode_predictions(
     fW = int(raw.shape[3])
     nA = len(anchors_wh)
     C = int(raw.shape[1]) // nA - 5
-    device = raw.device
+    # Grids and priors take the head's device and dtype.
+    device, dt = raw.device, raw.dtype
 
     raw = raw.reshape(B, nA, 5 + C, fH, fW).permute(0, 1, 3, 4, 2)
 
@@ -627,8 +628,8 @@ def _decode_predictions(
 
     col_data: list[list[float]] = [[float(c) for c in range(fW)] for _ in range(fH)]
     row_data: list[list[float]] = [[float(r)] * fW for r in range(fH)]
-    col_t = lucid.tensor(col_data, device=device)
-    row_t = lucid.tensor(row_data, device=device)
+    col_t = lucid.tensor(col_data, dtype=dt, device=device)
+    row_t = lucid.tensor(row_data, dtype=dt, device=device)
 
     # bx — scale * sigmoid(tx) - 0.5 * (scale - 1) + cx
     scale = _SCALE_X_Y.get(stride, 1.0)
@@ -649,8 +650,8 @@ def _decode_predictions(
         aw_data.append(b_aw)
         ah_data.append(b_ah)
 
-    aw_t = lucid.tensor(aw_data, device=device)
-    ah_t = lucid.tensor(ah_data, device=device)
+    aw_t = lucid.tensor(aw_data, dtype=dt, device=device)
+    ah_t = lucid.tensor(ah_data, dtype=dt, device=device)
 
     pw = lucid.exp(tw) * aw_t
     ph = lucid.exp(th) * ah_t
@@ -691,7 +692,7 @@ def _ciou_loss(pred_boxes: Tensor, gt_boxes: Tensor) -> Tensor:
     """
     N = int(pred_boxes.shape[0])
     if N == 0:
-        return lucid.zeros((1,), device=pred_boxes.device)
+        return pred_boxes.new_zeros(1)
 
     # Vectorised and differentiable.  The previous per-box Python-float form
     # rebuilt each term with ``lucid.tensor``, so the box-regression channels
@@ -830,10 +831,10 @@ def _yolov4_loss(
                     pos_anchor_wh.append((aw_best, ah_best))
                     pos_gt_boxes.append([x1g, y1g, x2g, y2g])
 
-            dev = raw.device.type
-            tgt_obj = lucid.tensor(obj_arr, device=dev)
-            tgt_cls = lucid.tensor(cls_arr, device=dev)
-            obj_mask = lucid.tensor(mask_arr, device=dev)
+            dt, dev = raw.dtype, raw.device  # targets in the head's dtype
+            tgt_obj = lucid.tensor(obj_arr, dtype=dt, device=dev)
+            tgt_cls = lucid.tensor(cls_arr, dtype=dt, device=dev)
+            obj_mask = lucid.tensor(mask_arr, dtype=dt, device=dev)
 
             pred_tc = pred_b[..., 4]  # (nA, fH, fW)
             pred_cls_logits = pred_b[..., 5:]  # (nA, fH, fW, C)
@@ -869,10 +870,10 @@ def _yolov4_loss(
                     )
                     for j in range(4)
                 ]
-                cols = lucid.tensor([float(c) for (_, _, c) in pos_cells], device=dev)
-                rows = lucid.tensor([float(r) for (_, r, _) in pos_cells], device=dev)
-                anc_w = lucid.tensor([w for (w, _) in pos_anchor_wh], device=dev)
-                anc_h = lucid.tensor([h for (_, h) in pos_anchor_wh], device=dev)
+                cells = lucid.tensor(pos_cells, dtype=dt, device=dev)  # (a, r, c)
+                rows, cols = cells[:, 1], cells[:, 2]
+                anc = lucid.tensor(pos_anchor_wh, dtype=dt, device=dev)
+                anc_w, anc_h = anc[:, 0], anc[:, 1]
 
                 _sc = _SCALE_X_Y.get(stride, 1.0)
                 _bias = 0.5 * (_sc - 1.0)
@@ -890,16 +891,16 @@ def _yolov4_loss(
                     ],
                     dim=1,
                 )  # (P, 4)
-                g_boxes = lucid.tensor(pos_gt_boxes, device=dev)  # (P, 4)
+                g_boxes = lucid.tensor(pos_gt_boxes, dtype=dt, device=dev)  # (P, 4)
                 ciou_l = _ciou_loss(p_boxes, g_boxes)
             else:
-                ciou_l = lucid.zeros((1,), device=dev)
+                ciou_l = raw.new_zeros(1)
 
             scale_loss = ciou_l.sum() + obj_loss + cls_loss
             total_loss.append(scale_loss.reshape(1))
 
     if not total_loss:
-        return lucid.zeros((1,))
+        return raw_preds[0].new_zeros(1)
     return lucid.cat(total_loss).sum()
 
 

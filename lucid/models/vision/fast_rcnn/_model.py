@@ -454,7 +454,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         labels_list = host_ints(cls_labels)
         valid_mask = [n for n, label in enumerate(labels_list) if label >= 0]
         if not valid_mask:
-            cls_loss: Tensor = lucid.zeros((1,), device=dev)
+            cls_loss: Tensor = all_logits.new_zeros(1)
         else:
             valid_t = lucid.tensor(valid_mask, device=dev).long()
             cls_loss = F.cross_entropy(
@@ -491,7 +491,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         else:
             # Scalar in both branches — a foreground-free batch used to
             # return shape (1,), so the total loss changed rank.
-            reg_loss = lucid.zeros((), device=dev)
+            reg_loss = all_logits.new_zeros()
 
         return (cls_loss + reg_loss).reshape(())
 
@@ -525,7 +525,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         iW = int(x.shape[3])
 
         if proposals is None:
-            proposals = [lucid.zeros((0, 4), device=x.device.type) for _ in range(B)]
+            proposals = [x.new_zeros(0, 4) for _ in range(B)]
         check_per_image(type(self).__name__, B, proposals=proposals, targets=targets)
 
         # 1. Shared feature extraction (one forward pass for the whole batch)
@@ -573,12 +573,11 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         """
         K = self._num_classes
         N_total = int(all_deltas.shape[0])
-        dev = all_deltas.device.type
 
         if any(int(p.shape[0]) > 0 for p in proposals):
             flat_props = lucid.cat([p for p in proposals if int(p.shape[0]) > 0], dim=0)
         else:
-            return lucid.zeros((0, K, 4), device=dev)
+            return all_deltas.new_zeros(0, K, 4)
 
         # all_deltas: (N_total, K*4) → (N_total, K, 4)
         deltas_3d = all_deltas.reshape(N_total, K, 4)

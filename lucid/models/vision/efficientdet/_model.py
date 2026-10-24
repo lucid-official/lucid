@@ -795,7 +795,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         B = len(targets)
         K = self._cfg.num_classes
         A = int(all_anchors.shape[0])
-        dev = all_logits.device.type
+        dev, dt = all_logits.device.type, all_logits.dtype  # targets in both
 
         cls_losses: list[Tensor] = []
         reg_losses: list[Tensor] = []
@@ -809,7 +809,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
 
             if M == 0:
                 # All anchors → background; normaliser is the +1 floor.
-                tgt_cls = lucid.zeros((A, K), device=dev)
+                tgt_cls = lucid.zeros((A, K), dtype=dt, device=dev)
                 cls_losses.append(
                     _focal_loss(
                         lg_b.reshape(-1),
@@ -881,10 +881,10 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
                 pos_idx.append(a_forced)
                 pos_gt.append(m_i)
 
-            tgt_cls = lucid.tensor(tgt_cls_data, device=dev)  # (A, K)
-            cls_mask: Tensor | None = (
-                lucid.tensor(cls_mask_data, device=dev) if num_ignored else None
-            )
+            tgt_cls = lucid.tensor(tgt_cls_data, dtype=dt, device=dev)  # (A, K)
+            cls_mask: Tensor | None = None
+            if num_ignored:
+                cls_mask = lucid.tensor(cls_mask_data, dtype=dt, device=dev)
             # ``num_positives_sum = num_positives.sum() + 1.0`` in the reference
             # loss; both the class and box terms divide by it.
             num_pos = float(len(pos_idx)) + 1.0
@@ -902,7 +902,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
             if pos_idx:
                 pos_t = lucid.tensor(pos_idx, device=dev).long()
                 gt_rows = host_rows(gt_boxes[:, :4])
-                gt_boxes_pos = lucid.tensor([gt_rows[m] for m in pos_gt], device=dev)
+                gt_boxes_pos = lucid.tensor(gt_rows, dtype=dt, device=dev)[pos_gt]
                 anc_pos = all_anchors[pos_t]  # (P, 4)
                 tgt_d = encode_boxes(gt_boxes_pos, anc_pos)
                 pred_d = all_deltas[b][pos_t]  # (P, 4)
@@ -911,12 +911,12 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         cls_l = (
             lucid.cat([l.reshape(1) for l in cls_losses]).mean()
             if cls_losses
-            else lucid.zeros((1,), device=dev)
+            else lucid.zeros((1,), dtype=dt, device=dev)
         )
         reg_l = (
             lucid.cat([l.reshape(1) for l in reg_losses]).mean()
             if reg_losses
-            else lucid.zeros((1,), device=dev)
+            else lucid.zeros((1,), dtype=dt, device=dev)
         )
         # ``total_loss = cls_loss + box_loss_weight * box_loss`` — the box term
         # is boosted 50x precisely because both terms share the same

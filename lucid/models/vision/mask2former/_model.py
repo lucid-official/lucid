@@ -285,7 +285,7 @@ def _window_reverse(windows: Tensor, window_size: int, h: int, w: int) -> Tensor
 
 
 def _build_swin_attn_mask(
-    height: int, width: int, window_size: int, shift_size: int, device: str
+    height: int, width: int, window_size: int, shift_size: int, like: Tensor
 ) -> Tensor:
     """Cyclic-shift attention mask for shifted-window MSA."""
     img_mask: list[list[float]] = [[0.0] * width for _ in range(height)]
@@ -306,15 +306,15 @@ def _build_swin_attn_mask(
                 for j in range(ws, we):
                     img_mask[i][j] = float(count)
             count += 1
-    mask_t: Tensor = lucid.tensor(img_mask, dtype=lucid.float32, device=device).reshape(
-        1, height, width, 1
-    )
+    mask_t: Tensor = lucid.tensor(
+        img_mask, dtype=like.dtype, device=like.device
+    ).reshape(1, height, width, 1)
     mask_windows = _window_partition(mask_t, window_size).reshape(
         -1, window_size * window_size
     )
     # (nW, 1, seq) - (nW, seq, 1) -> (nW, seq, seq)
     diff = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-    nonzero = (diff != 0.0).float()
+    nonzero = (diff != 0.0).to(like.dtype)
     attn_mask: Tensor = nonzero * (-100.0)
     return attn_mask
 
@@ -374,7 +374,7 @@ class _SwinLayer(nn.Module):
         x_windows = _window_partition(x, ws).reshape(-1, ws * ws, c)
         attn_mask: Tensor | None = None
         if ss > 0:
-            attn_mask = _build_swin_attn_mask(hp, wp, ws, ss, x.device.type)
+            attn_mask = _build_swin_attn_mask(hp, wp, ws, ss, x)
         attn_out = self.attention(x_windows, attn_mask)
 
         attn_windows = attn_out.reshape(-1, ws, ws, c)
@@ -645,7 +645,7 @@ class _DeformableAttention(nn.Module):
             [float(w), float(h)] for (h, w) in spatial_shapes
         ]
         norm_t: Tensor = lucid.tensor(
-            normalizer, dtype=lucid.float32, device=hs.device
+            normalizer, dtype=hs.dtype, device=hs.device
         )  # (n_levels, 2)
         # sampling_locations — ref[:, :, None, :, None, :] + offsets / norm[None,None,None,:,None,:]
         ref_exp: Tensor = reference_points[:, :, None, :, None, :]
@@ -714,15 +714,15 @@ class _PixelDecoderEncoder(nn.Module):
 
     @staticmethod
     def get_reference_points(
-        spatial_shapes: list[tuple[int, int]], device: str
+        spatial_shapes: list[tuple[int, int]], like: Tensor
     ) -> Tensor:
         """Per-level reference points (valid_ratios are all 1 at inference)."""
         ref_list: list[Tensor] = []
         n_levels = len(spatial_shapes)
         for h, w in spatial_shapes:
             ref_y, ref_x = lucid.meshgrid(
-                lucid.linspace(0.5, h - 0.5, h, dtype=lucid.float32, device=device),
-                lucid.linspace(0.5, w - 0.5, w, dtype=lucid.float32, device=device),
+                lucid.linspace(0.5, h - 0.5, h, dtype=like.dtype, device=like.device),
+                lucid.linspace(0.5, w - 0.5, w, dtype=like.dtype, device=like.device),
                 indexing="ij",
             )
             ry: Tensor = ref_y.reshape(-1)[None] / float(h)
@@ -741,9 +741,7 @@ class _PixelDecoderEncoder(nn.Module):
         position_embeddings: Tensor,
         spatial_shapes: list[tuple[int, int]],
     ) -> Tensor:
-        reference_points = self.get_reference_points(
-            spatial_shapes, hidden_states.device.type
-        )
+        reference_points = self.get_reference_points(spatial_shapes, hidden_states)
         b = int(hidden_states.shape[0])
         if b > 1:
             reference_points = reference_points.repeat(b, 1, 1, 1)
@@ -1325,7 +1323,7 @@ def _m2f_stage_loss(
         # what keeps the N - M unmatched queries from dominating.
         weights = [1.0] * (bg_index + 1)
         weights[bg_index] = cfg.no_object_weight
-        weight_t = lucid.tensor(weights, device=dev)
+        weight_t = lucid.tensor(weights, dtype=cls_i.dtype, device=cls_i.device)
 
         if int(gt_labels.shape[0]) == 0:
             targets_i = lucid.full((n,), float(bg_index), device=dev).long()
@@ -1350,7 +1348,7 @@ def _m2f_stage_loss(
         if not pred_idx:
             continue
         src = msk_i[pred_t]  # (P, h, w)
-        tgt = gt_masks[gt_t].float()  # (P, H, W)
+        tgt = gt_masks[gt_t].to(msk_i.dtype)  # (P, H, W)
 
         coords = uncertain_point_coords(
             src, cfg.train_num_points, cfg.oversample_ratio, cfg.importance_sample_ratio
@@ -1362,7 +1360,7 @@ def _m2f_stage_loss(
 
     def _mean(parts: list[Tensor]) -> Tensor:
         if not parts:
-            return lucid.zeros((), device=dev)
+            return class_logits.new_zeros()
         return lucid.cat([t.reshape(1) for t in parts]).sum() / float(b)
 
     return _mean(cls_parts), _mean(ce_parts), _mean(dice_parts)

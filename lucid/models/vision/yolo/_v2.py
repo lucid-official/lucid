@@ -511,14 +511,16 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         fH = int(raw_r.shape[1])
         fW = int(raw_r.shape[2])
         A = int(raw_r.shape[3])
-        device = raw_r.device
+        device, dt = raw_r.device, raw_r.dtype
         stride_h = H / fH
         stride_w = W / fW
 
-        col_offsets = lucid.arange(fW, device=device).float().reshape(1, 1, fW, 1)
-        row_offsets = lucid.arange(fH, device=device).float().reshape(1, fH, 1, 1)
-        aw_t = lucid.tensor([a[0] for a in anchors], device=device).reshape(1, 1, 1, A)
-        ah_t = lucid.tensor([a[1] for a in anchors], device=device).reshape(1, 1, 1, A)
+        # Offsets and priors in the head's dtype: a half model decodes in half.
+        col_offsets = lucid.arange(fW, dtype=dt, device=device).reshape(1, 1, fW, 1)
+        row_offsets = lucid.arange(fH, dtype=dt, device=device).reshape(1, fH, 1, 1)
+        priors = lucid.tensor(anchors, dtype=dt, device=device)  # (A, 2)
+        aw_t = priors[:, 0].reshape(1, 1, 1, A)
+        ah_t = priors[:, 1].reshape(1, 1, 1, A)
 
         # bx — (sigmoid(tx) + col) * stride_w; bw — anchor_w * exp(tw) * stride_w
         bx = (F.sigmoid(raw_r[..., 0]) + col_offsets) * stride_w
@@ -641,11 +643,11 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         fH, fW = grid
         stride_h = H / fH
         stride_w = W / fW
-        dev = pred.device
+        dev, dt = pred.device, pred.dtype
         n_pred = int(pred.shape[0])
 
-        scale = lucid.tensor([float(W), float(H), float(W), float(H)], device=dev)
-        gt_xyxy = target["boxes"].to(dev).float() * scale
+        scale = lucid.tensor([W, H, W, H], dtype=dt, device=dev)
+        gt_xyxy = target["boxes"].to(device=dev, dtype=dt) * scale
         M = int(gt_xyxy.shape[0])
 
         # Per-predictor best IoU against every GT in this image.  darknet's
@@ -668,8 +670,8 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         # whose shape best matches the GT's (IoU of centred boxes).
         col = (gt_cx / stride_w).floor().clamp(0.0, float(fW - 1))
         row = (gt_cy / stride_h).floor().clamp(0.0, float(fH - 1))
-        aw = lucid.tensor([a[0] * stride_w for a in cfg.anchors], device=dev)
-        ah = lucid.tensor([a[1] * stride_h for a in cfg.anchors], device=dev)
+        aw = lucid.tensor([a[0] * stride_w for a in cfg.anchors], dtype=dt, device=dev)
+        ah = lucid.tensor([a[1] * stride_h for a in cfg.anchors], dtype=dt, device=dev)
         inter = lucid.minimum(gt_w[:, None], aw[None, :]) * lucid.minimum(
             gt_h[:, None], ah[None, :]
         )
@@ -705,13 +707,13 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         # 1/(C-1+e) ≈ 0.03 for C=80, so a perfectly fitted model would emit
         # no detections at all.  Darknet's region layer likewise takes the
         # delta against the softmax.
-        one_hot = F.one_hot(target["labels"].to(dev).long(), C).float()
+        one_hot = F.one_hot(target["labels"].to(dev).long(), C).to(dt)
         loss_cls = ((F.softmax(sel[:, 5:], dim=-1) - one_hot) ** 2).sum()
 
         # cfg [region] thresh = .6 — an unmatched predictor that already
         # overlaps a GT well is left alone.
-        assigned = F.one_hot(idx, n_pred).float().sum(dim=0).clamp(0.0, 1.0)
-        background = (1.0 - assigned) * (best_iou <= _NOOBJ_IOU_THRESH).float()
+        assigned = F.one_hot(idx, n_pred).to(dt).sum(dim=0).clamp(0.0, 1.0)
+        background = (1.0 - assigned) * (best_iou <= _NOOBJ_IOU_THRESH).to(dt)
         loss_conf_n = (sig_conf**2 * background).sum()
 
         # darknet's region layer is a SUM of squared errors over all cells and

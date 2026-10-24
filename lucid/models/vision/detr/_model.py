@@ -353,7 +353,9 @@ class _DETRTransformer(nn.Module):
         pos_flat = pos_embed.reshape(B, c, h * w).permute(2, 0, 1)
         # (N, c) → (N, B, c)
         query_pos = query_embed.unsqueeze(1).repeat(1, B, 1)
-        tgt = lucid.zeros(query_pos.shape, device=src.device.type)
+        # The reference's ``zeros_like(query_embed)``: the decoder's first
+        # input takes the queries' dtype as well as their shape.
+        tgt = lucid.zeros_like(query_pos)
 
         memory = self.encoder(src_flat, pos_flat, key_padding_mask=key_padding_mask)
         hs = self.decoder(
@@ -715,13 +717,13 @@ class DETRForObjectDetection(ObjectDetectionModel):
 
         Every tensor the loss builds itself — per-query targets and weights,
         match indices, the zero fallbacks — is created on the predictions'
-        device.  Built without ``device=`` they landed on the CPU and the
-        first op mixing them with Metal predictions raised ``DeviceMismatch``.
-        ``targets`` must already be on that device, as the predictions are.
+        device and, if floating, in their dtype: a CPU one raised
+        ``DeviceMismatch`` against Metal logits, a float32 one widened a half
+        loss.  ``targets`` must already be on that device, as the predictions are.
         """
         B = int(logits.shape[0])
         N = int(logits.shape[1])
-        dev = logits.device.type
+        dev, dt = logits.device.type, logits.dtype
 
         cls_losses: list[Tensor] = []
         l1_losses: list[Tensor] = []
@@ -788,7 +790,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
             for pi in pred_idx:
                 weight_data[pi] = 1.0
 
-            weight = lucid.tensor(weight_data, device=dev)  # (N,)
+            weight = lucid.tensor(weight_data, dtype=dt, device=dev)  # (N,)
             cls_tgt = lucid.tensor(cls_targets_data, device=dev).long()  # (N,)
 
             # Weighted CE (per-sample weight): pick each query's target column.
@@ -835,17 +837,17 @@ class DETRForObjectDetection(ObjectDetectionModel):
         cls_l = (
             lucid.cat([l.reshape(1) for l in cls_losses]).sum() / denom_cls
             if cls_losses
-            else lucid.zeros((), device=dev)
+            else logits.new_zeros()
         )
         l1_l = (
             lucid.cat([l.reshape(1) for l in l1_losses]).sum() / denom_box
             if l1_losses
-            else lucid.zeros((), device=dev)
+            else logits.new_zeros()
         )
         giou_l = (
             lucid.cat([l.reshape(1) for l in giou_losses]).sum() / denom_box
             if giou_losses
-            else lucid.zeros((), device=dev)
+            else logits.new_zeros()
         )
 
         # Scalar in every branch — the zero fallbacks used to return shape (1,),

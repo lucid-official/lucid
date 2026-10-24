@@ -115,7 +115,7 @@ def sigmoid_ce_loss(mask_logits: Tensor, gt_masks: Tensor) -> Tensor:
     undecided.
     """
     if int(mask_logits.shape[0]) == 0:
-        return lucid.zeros((), device=mask_logits.device.type)
+        return mask_logits.new_zeros()
     return F.binary_cross_entropy_with_logits(mask_logits, gt_masks)
 
 
@@ -142,7 +142,7 @@ def dice_loss(mask_logits: Tensor, gt_masks: Tensor) -> Tensor:
     """
     m = int(mask_logits.shape[0])
     if m == 0:
-        return lucid.zeros((), device=mask_logits.device.type)
+        return mask_logits.new_zeros()
     prob = F.sigmoid(mask_logits)
     inter = (prob * gt_masks).sum(dim=-1)
     denom = prob.sum(dim=-1) + gt_masks.sum(dim=-1)
@@ -218,9 +218,10 @@ def point_sample(masks: Tensor, coords: Tensor) -> Tensor:
     n = int(masks.shape[0])
     k = int(coords.shape[-2])
     if n == 0 or k == 0:
-        return lucid.zeros((n, k), device=masks.device.type)
+        return masks.new_zeros(n, k)
 
-    scaled = coords * 2.0 - 1.0
+    # Points in the masks' dtype: a float32 grid widened a half mask's samples.
+    scaled = coords.to(masks.dtype) * 2.0 - 1.0
     grid = (
         scaled.reshape(1, 1, k, 2).expand(n, 1, k, 2)
         if scaled.ndim == 2

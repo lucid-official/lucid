@@ -659,8 +659,8 @@ class AnchorGenerator(nn.Module):
             List of (H_l × W_l × A_l, 4) anchor tensors, one per level.
         """
         assert len(feature_maps) == len(self._cell_anchors)
-        # Propagate device from the first feature map so anchors stay co-located
-        # with the predictions they will be matched against.
+        # Device and dtype follow the feature maps, so anchors stay co-located
+        # with — and as wide as — the predictions they are matched against.
         device = feature_maps[0].device.type if feature_maps else "cpu"
         all_anchors: list[Tensor] = []
         for feat, base, stride in zip(
@@ -669,7 +669,7 @@ class AnchorGenerator(nn.Module):
             fH = int(feat.shape[2])
             fW = int(feat.shape[3])
             all_anchors.append(
-                self._grid_anchors((fH, fW), stride, base, device=device)
+                self._grid_anchors((fH, fW), stride, base, device=device).to(feat.dtype)
             )
         return all_anchors
 
@@ -735,7 +735,7 @@ def roi_align(
     feat_H = int(input.shape[2])
     feat_W = int(input.shape[3])
     C = int(input.shape[1])
-    dev = input.device.type
+    dev, dt = input.device.type, input.dtype
 
     offset = 0.5 if aligned else 0.0
     results: list[Tensor] = []
@@ -793,24 +793,23 @@ def roi_align(
             v3 = _gather_corner(feat_flat, yh_b, xl_b, C, ny, nx, feat_W)
             v4 = _gather_corner(feat_flat, yh_b, xh_b, C, ny, nx, feat_W)
 
-            fy_t = lucid.tensor([[v] for v in fy], device=dev)  # (ny, 1)
-            fx_t = lucid.tensor([fx], device=dev)  # (1, nx)
+            fy_t = lucid.tensor([[v] for v in fy], dtype=dt, device=dev)  # (ny, 1)
+            fx_t = lucid.tensor([fx], dtype=dt, device=dev)  # (1, nx)
             hy = 1.0 - fy_t
             hx = 1.0 - fx_t
             w1 = hy * hx
             w2 = hy * fx_t
             w3 = fy_t * hx
             w4 = fy_t * fx_t
-            zmask = lucid.tensor([[v] for v in zy], device=dev) * lucid.tensor(
-                [zx], device=dev
-            )  # (ny, nx) — 0 outside [-1, side]
+            zy_t = lucid.tensor([[v] for v in zy], dtype=dt, device=dev)
+            zmask = zy_t * lucid.tensor([zx], dtype=dt, device=dev)  # 0 off [-1, side]
 
             samp = (v1 * w1 + v2 * w2 + v3 * w3 + v4 * w4) * zmask  # (C, ny, nx)
             pooled = samp.reshape(C, out_h, ry, out_w, rx).mean(dim=(2, 4))
             results.append(pooled.unsqueeze(0))
 
     if not results:
-        return lucid.zeros((0, C, out_h, out_w), device=dev)
+        return input.new_zeros(0, C, out_h, out_w)
     return lucid.cat(results, dim=0)
 
 
@@ -998,7 +997,7 @@ def roi_pool(
             results.append(pooled.unsqueeze(0))
 
     if not results:
-        return lucid.zeros((0, C, out_h, out_w), device=input.device.type)
+        return input.new_zeros(0, C, out_h, out_w)
     return lucid.cat(results, dim=0)
 
 
@@ -1334,12 +1333,11 @@ class RPN(nn.Module):
 
         final_proposals: list[Tensor] = []
         final_scores: list[Tensor] = []
-        dev = features[0].device.type if features else "cpu"
 
         for b in range(B):
             if not all_proposals[b]:
-                final_proposals.append(lucid.zeros((0, 4), device=dev))
-                final_scores.append(lucid.zeros((0,), device=dev))
+                final_proposals.append(features[0].new_zeros(0, 4))
+                final_scores.append(features[0].new_zeros(0))
                 continue
 
             props_b = lucid.cat(all_proposals[b], dim=0)
@@ -1900,7 +1898,6 @@ def rpn_loss(
     every time; it draws a fixed batch at a fixed positive fraction
     instead.
     """
-    dev = logits[0].device.type
     flat_scores, flat_deltas = flatten_rpn_outputs(logits, deltas)
     objectness = lucid.cat(flat_scores, dim=1)  # (B, N)
     pred_deltas = lucid.cat(flat_deltas, dim=1)  # (B, N, 4)
@@ -1927,9 +1924,10 @@ def rpn_loss(
         n_sampled += n_this
 
         sampled = lucid.cat([pos, neg], dim=0)
+        obj_target = labels[sampled].to(objectness.dtype)
         obj_parts.append(
             F.binary_cross_entropy_with_logits(
-                objectness[b][sampled], labels[sampled].float(), reduction="sum"
+                objectness[b][sampled], obj_target, reduction="sum"
             )
         )
         if n_pos > 0:
@@ -1947,7 +1945,7 @@ def rpn_loss(
             )
 
     if n_sampled == 0:
-        zero = lucid.zeros((), device=dev)
+        zero = objectness.new_zeros()
         return zero, zero
 
     denom = float(n_sampled)
@@ -1955,7 +1953,7 @@ def rpn_loss(
     reg = (
         lucid.cat([t.reshape(1) for t in reg_parts]).sum() / denom
         if reg_parts
-        else lucid.zeros((), device=dev)
+        else objectness.new_zeros()
     )
     return obj, reg
 
@@ -2036,7 +2034,7 @@ def select_training_samples(
         if int(gt_boxes.shape[0]) == 0 or n == 0:
             out_props.append(props)
             out_labels.append(lucid.zeros((n,), device=dev).long())
-            out_reg.append(lucid.zeros((n, 4), device=dev))
+            out_reg.append(props.new_zeros(n, 4))
             out_matched.append(lucid.zeros((n,), device=dev).long())
             continue
 
@@ -2112,7 +2110,7 @@ def fastrcnn_loss(
     labels_cat = lucid.cat(labels, dim=0)
     n_total = int(labels_cat.shape[0])
     if n_total == 0:
-        zero = lucid.zeros((), device=dev)
+        zero = class_logits.new_zeros()
         return zero, zero
 
     cls_loss = F.cross_entropy(class_logits, labels_cat.long())
@@ -2120,7 +2118,7 @@ def fastrcnn_loss(
     flat = cast(list[int], labels_cat.tolist())
     pos_idx = [i for i, v in enumerate(flat) if v > 0]
     if not pos_idx:
-        return cls_loss, lucid.zeros((), device=dev)
+        return cls_loss, class_logits.new_zeros()
 
     pos = lucid.tensor(pos_idx, device=dev).long()
     pos_labels = labels_cat[pos].long()
@@ -2179,12 +2177,12 @@ def project_masks_on_boxes(
     frame, not the image's, because that is where the head predicts.
     """
     if int(proposals.shape[0]) == 0:
-        return lucid.zeros((0, mask_size, mask_size), device=gt_masks.device.type)
+        return proposals.new_zeros(0, mask_size, mask_size)
 
     # Each proposal crops its *own* ground-truth mask, so the batch axis is
     # the proposal axis: (P, 1, H, W) with exactly one RoI per entry.
     p_count = int(proposals.shape[0])
-    picked = gt_masks[matched_idxs.long()].unsqueeze(1).float()
+    picked = gt_masks[matched_idxs.long()].unsqueeze(1).to(proposals.dtype)
     rois = [proposals[i : i + 1] for i in range(p_count)]
     cropped = roi_align(
         picked,
@@ -2246,7 +2244,7 @@ def maskrcnn_loss(
     flat = cast(list[int], labels.reshape(-1).tolist())
     pos_idx = [i for i, v in enumerate(flat) if v > 0]
     if not pos_idx or int(mask_logits.shape[0]) == 0:
-        return lucid.zeros((), device=dev)
+        return mask_logits.new_zeros()
 
     pos = lucid.tensor(pos_idx, device=dev).long()
     k = int(mask_logits.shape[1])
@@ -2546,7 +2544,7 @@ class _ReferenceAnchorGenerator(nn.Module):
         return lucid.tensor(rows)
 
     def _grid_anchors(
-        self, grid_size: tuple[int, int], stride: int, base: Tensor, device: str
+        self, grid_size: tuple[int, int], stride: int, base: Tensor, like: Tensor
     ) -> Tensor:
         gh, gw = grid_size
         shifts: list[list[float]] = [
@@ -2554,21 +2552,21 @@ class _ReferenceAnchorGenerator(nn.Module):
             for r in range(gh)
             for c in range(gw)
         ]
-        shifts_t = lucid.tensor(shifts, device=device)  # (G, 4)
-        base_dev = base.to(device=device) if base.device.type != device else base
+        # (G, 4), in ``like``'s device and dtype: the reference casts so.
+        shifts_t = lucid.tensor(shifts, dtype=like.dtype, device=like.device)
+        base_dev = base.to(device=like.device, dtype=like.dtype)
         grid = shifts_t[:, None, :] + base_dev[None, :, :]
         return grid.reshape(-1, 4)
 
     @override
     def forward(self, feature_maps: list[Tensor], strides: list[int]) -> list[Tensor]:
-        device = feature_maps[0].device.type if feature_maps else "cpu"
         out: list[Tensor] = []
         for feat, base, stride in zip(
             feature_maps, self._cell_anchors, strides, strict=True
         ):
             gh = int(feat.shape[2])
             gw = int(feat.shape[3])
-            out.append(self._grid_anchors((gh, gw), stride, base, device=device))
+            out.append(self._grid_anchors((gh, gw), stride, base, feat))
         return out
 
 
@@ -2665,7 +2663,7 @@ def multiscale_roi_align(
     # Image-major proposal order (matches reference _convert_to_roi_format).
     flat_boxes = [b for b in boxes if int(b.shape[0]) > 0]
     if not flat_boxes:
-        return lucid.zeros((0, C, output_size, output_size), device=dev)
+        return features[0].new_zeros(0, C, output_size, output_size)
     all_boxes = lucid.cat(flat_boxes, dim=0)  # (R, 4)
     R = int(all_boxes.shape[0])
 
@@ -2714,7 +2712,7 @@ def multiscale_roi_align(
                 sel_t = lucid.tensor(sel, device=dev).long()
                 per_img.append(all_boxes[sel_t])
             else:
-                per_img.append(lucid.zeros((0, 4), device=dev))
+                per_img.append(all_boxes.new_zeros(0, 4))
             order.extend(sel)
         pooled = roi_align(
             features[level],

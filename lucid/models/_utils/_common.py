@@ -13,6 +13,7 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 import lucid.nn.functional as F
+from lucid._dtype import dtype as _dtype, float32 as _float32, float64 as _float64
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -142,6 +143,25 @@ def make_divisible(
     if new_v < 0.9 * v:
         new_v += divisor
     return new_v
+
+
+def float32_or_wider(dtype: _dtype) -> _dtype:
+    """The dtype a model does its position and time arithmetic in.
+
+    Sinusoid angles reach hundreds of radians and resampling coordinates
+    hundreds of pixels; float16 and bfloat16 cannot hold either to a useful
+    fraction.  Such tables are built in float32 — the reference's own
+    accumulation type for half activations — or float64 for a float64 model,
+    then cast once to the activations' dtype.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.models._utils._common import float32_or_wider
+    >>> float32_or_wider(lucid.float16), float32_or_wider(lucid.float64)
+    (lucid.float32, lucid.float64)
+    """
+    return _float64 if dtype == _float64 else _float32
 
 
 def transform_input_imagenet_to_tf(x: Tensor) -> Tensor:

@@ -412,9 +412,9 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         """
         S = self.config.split_size
         H, W = image_size
-        device = box_preds.device
-        cols = lucid.arange(S, device=device).float().reshape(1, 1, S, 1)
-        rows = lucid.arange(S, device=device).float().reshape(1, S, 1, 1)
+        device, dt = box_preds.device, box_preds.dtype
+        cols = lucid.arange(S, dtype=dt, device=device).reshape(1, 1, S, 1)
+        rows = lucid.arange(S, dtype=dt, device=device).reshape(1, S, 1, 1)
 
         # ``yolov1.cfg`` ends with ``[connected] activation=linear`` and
         # ``[detection] sqrt=1``: x/y are *raw* cell-relative offsets and the
@@ -540,7 +540,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         B_boxes = cfg.num_boxes
         C = cfg.num_classes
         H, W = image_size
-        dev = raw.device
+        dev, dt = raw.device, raw.dtype
         cell_w = W / S
         cell_h = H / S
 
@@ -548,8 +548,8 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         cls_preds = raw[..., B_boxes * 5 :].reshape(S * S, C)
         pred_conf = box_preds[:, 4]
 
-        scale = lucid.tensor([float(W), float(H), float(W), float(H)], device=dev)
-        gt_xyxy = target["boxes"].to(dev).float() * scale
+        scale = lucid.tensor([W, H, W, H], dtype=dt, device=dev)
+        gt_xyxy = target["boxes"].to(device=dev, dtype=dt) * scale
         M = int(gt_xyxy.shape[0])
         if M == 0:
             return (cfg.lambda_noobj * (pred_conf**2).sum()).reshape(1)
@@ -575,9 +575,9 @@ class YOLOForObjectDetection(ObjectDetectionModel):
 
         # One object per predictor: when two GTs claim the same one, the later
         # wins — the slot is overwritten, as darknet's truth grid is.
-        same = (idx[:, None] == idx[None, :]).float()
-        later = lucid.triu(lucid.ones((M, M), device=dev), 1)
-        won = ((same * later).sum(dim=1) == 0.0).float()  # (M,)
+        same = (idx[:, None] == idx[None, :]).to(dt)
+        later = lucid.triu(lucid.ones((M, M), dtype=dt, device=dev), 1)
+        won = ((same * later).sum(dim=1) == 0.0).to(dt)  # (M,)
 
         sel = box_preds[idx]  # (M, 5)
 
@@ -600,13 +600,13 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         loss_conf_o = (((sel[:, 4] - best_iou) ** 2) * won).sum()
 
         # Class loss: MSE on class scores vs one-hot
-        one_hot = F.one_hot(target["labels"].to(dev).long(), C).float()
+        one_hot = F.one_hot(target["labels"].to(dev).long(), C).to(dt)
         cls_err = ((cls_preds[cell] - one_hot) ** 2).sum(dim=1)
         loss_cls = (cls_err * won).sum()
 
         # No-object: confidence should be 0 everywhere nothing is assigned.
         n_pred = S * S * B_boxes
-        assigned = F.one_hot(idx, n_pred).float().sum(dim=0).clamp(0.0, 1.0)
+        assigned = F.one_hot(idx, n_pred).to(dt).sum(dim=0).clamp(0.0, 1.0)
         loss_conf_n = ((pred_conf**2) * (1.0 - assigned)).sum()
 
         # YOLOv1 Eq. 3 is a SUM of squared errors over all cells and

@@ -533,7 +533,6 @@ def _decode_predictions(
     fW = int(raw.shape[3])
     nA = len(anchors_wh)
     C = int(raw.shape[1]) // nA - 5
-    device = raw.device
 
     # Reshape → (B, nA, 5+C, H, W) → (B, nA, H, W, 5+C)
     raw = raw.reshape(B, nA, 5 + C, fH, fW)
@@ -550,8 +549,9 @@ def _decode_predictions(
     col_data: list[list[float]] = [[float(c) for c in range(fW)] for _ in range(fH)]
     row_data: list[list[float]] = [[float(r)] * fW for r in range(fH)]
 
-    col_t = lucid.tensor(col_data, device=device)  # (fH, fW)
-    row_t = lucid.tensor(row_data, device=device)  # (fH, fW)
+    # The grids and priors take the head's device and dtype.
+    col_t = lucid.tensor(col_data, dtype=raw.dtype, device=raw.device)  # (fH, fW)
+    row_t = lucid.tensor(row_data, dtype=raw.dtype, device=raw.device)  # (fH, fW)
 
     # Decode box centres
     px = (F.sigmoid(tx) + col_t) * float(stride)  # (B, nA, fH, fW)
@@ -573,8 +573,8 @@ def _decode_predictions(
         aw_data.append(b_aw)
         ah_data.append(b_ah)
 
-    aw_t = lucid.tensor(aw_data, device=device)  # (B, nA, fH, fW)
-    ah_t = lucid.tensor(ah_data, device=device)
+    aw_t = lucid.tensor(aw_data, dtype=raw.dtype, device=raw.device)  # (B, nA, fH, fW)
+    ah_t = lucid.tensor(ah_data, dtype=raw.dtype, device=raw.device)
 
     pw = lucid.exp(tw) * aw_t  # (B, nA, fH, fW)
     ph = lucid.exp(th) * ah_t
@@ -616,9 +616,9 @@ def _ignore_mask(pred_boxes: Tensor, gt_boxes: Tensor, thresh: float) -> Tensor:
     """
     n_pred = int(pred_boxes.shape[0])
     if int(gt_boxes.shape[0]) == 0:
-        return lucid.zeros((n_pred,), device=pred_boxes.device)
-    gt = gt_boxes.to(pred_boxes.device).float()
-    return (box_iou(pred_boxes, gt).max(dim=1) > thresh).float()
+        return pred_boxes.new_zeros(n_pred)
+    gt = gt_boxes.to(device=pred_boxes.device, dtype=pred_boxes.dtype)
+    return (box_iou(pred_boxes, gt).max(dim=1) > thresh).to(pred_boxes.dtype)
 
 
 def _gt_rows(
@@ -700,16 +700,15 @@ def _yolov3_loss(
             M = int(gt_boxes.shape[0])
             positives: set[tuple[int, int, int]] = set()
 
-            # Build target tensors (floats) for this image and scale
-            _dev = raw.device.type
-            tgt_tx = lucid.zeros((nA, fH, fW), device=_dev)
-            tgt_ty = lucid.zeros((nA, fH, fW), device=_dev)
-            tgt_tw = lucid.zeros((nA, fH, fW), device=_dev)
-            tgt_th = lucid.zeros((nA, fH, fW), device=_dev)
-            tgt_obj = lucid.zeros((nA, fH, fW), device=_dev)
-            tgt_cls = lucid.zeros((nA, fH, fW, C), device=_dev)
-            obj_mask = lucid.zeros((nA, fH, fW), device=_dev)  # 1 for positives
-            coord_scale = lucid.ones((nA, fH, fW), device=_dev)
+            # Target tensors for this image and scale, in the head's dtype
+            tgt_tx = raw.new_zeros(nA, fH, fW)
+            tgt_ty = raw.new_zeros(nA, fH, fW)
+            tgt_tw = raw.new_zeros(nA, fH, fW)
+            tgt_th = raw.new_zeros(nA, fH, fW)
+            tgt_obj = raw.new_zeros(nA, fH, fW)
+            tgt_cls = raw.new_zeros(nA, fH, fW, C)
+            obj_mask = raw.new_zeros(nA, fH, fW)  # 1 for positives
+            coord_scale = raw.new_ones(nA, fH, fW)
 
             if M > 0:
                 # Rebuild entire target arrays from scratch using Python lists.
@@ -793,15 +792,15 @@ def _yolov3_loss(
                     if 0 <= cls_id < C:
                         cls_arr[best_a][row_idx][col_idx][cls_id] = 1.0
 
-                dev = raw.device.type
-                tgt_tx = lucid.tensor(tx_arr, device=dev)
-                tgt_ty = lucid.tensor(ty_arr, device=dev)
-                tgt_tw = lucid.tensor(tw_arr, device=dev)
-                tgt_th = lucid.tensor(th_arr, device=dev)
-                tgt_obj = lucid.tensor(obj_arr, device=dev)
-                tgt_cls = lucid.tensor(cls_arr, device=dev)
-                obj_mask = lucid.tensor(mask_arr, device=dev)
-                coord_scale = lucid.tensor(coord_arr, device=dev)
+                dt, dev = raw.dtype, raw.device
+                tgt_tx = lucid.tensor(tx_arr, dtype=dt, device=dev)
+                tgt_ty = lucid.tensor(ty_arr, dtype=dt, device=dev)
+                tgt_tw = lucid.tensor(tw_arr, dtype=dt, device=dev)
+                tgt_th = lucid.tensor(th_arr, dtype=dt, device=dev)
+                tgt_obj = lucid.tensor(obj_arr, dtype=dt, device=dev)
+                tgt_cls = lucid.tensor(cls_arr, dtype=dt, device=dev)
+                obj_mask = lucid.tensor(mask_arr, dtype=dt, device=dev)
+                coord_scale = lucid.tensor(coord_arr, dtype=dt, device=dev)
 
             # Predicted values for this image
             pred_b = raw_r[b]  # (nA, fH, fW, 5+C)
@@ -855,7 +854,7 @@ def _yolov3_loss(
             n_cells += float(B * nA * fH * fW)
 
     if not localisation:
-        return lucid.zeros((1,))
+        return raw_preds[0].new_zeros(1)
     loc = lucid.cat(localisation).sum() / max(1.0, n_pos)
     obj = lucid.cat(objectness).sum() / max(1.0, n_cells)
     return loc + obj
