@@ -315,7 +315,7 @@ def _backward_seconds(
     build: Callable[[int], lucid.Tensor], size: int, retain: bool
 ) -> float:
     best = float("inf")
-    for _ in range(3):
+    for _ in range(5):
         loss = build(size)
         gc.collect()
         start = time.perf_counter()
@@ -328,7 +328,7 @@ def _backward_seconds(
 @pytest.mark.parametrize("retain", [False, True], ids=["default", "retain-graph"])
 @pytest.mark.parametrize(
     ("build", "size"),
-    [(_chain_loss, 2500), (_affine_chain_loss, 1500), (_gru_loss, 150)],
+    [(_chain_loss, 20000), (_affine_chain_loss, 15000), (_gru_loss, 1200)],
     ids=["mul-chain", "affine-f64-chain", "gru-cell-bptt"],
 )
 def test_a_backward_is_linear_in_the_graph(
@@ -341,10 +341,19 @@ def test_a_backward_is_linear_in_the_graph(
     # fused nothing and erased from the middle of a vector the size of the
     # graph.  Doubling a linear pass doubles its time; the slack absorbs a
     # loaded machine.  Both are host-side work, the same on every device.
+    #
+    # LCD-640: at the old sizes ``small`` sat at 1-5 ms, where fixed
+    # scheduler/timer noise (worth a millisecond or so, independent of the
+    # graph) is a sizeable fraction of what is measured — a shared CI
+    # runner pushed the ratio over the bound by about a millisecond.  Sizes
+    # are picked so ``small`` is tens of milliseconds even for the cheap
+    # retain_graph=True path, making that fixed noise a small fraction of
+    # either measurement, and ``best`` is now of 5 repeats, not 3, so a
+    # single stalled rep cannot stand in for the fastest one.
     small = _backward_seconds(build, size, retain)
     large = _backward_seconds(build, 2 * size, retain)
     assert (
-        large < 3 * small + 0.002
+        large < 3 * small + 0.01
     ), f"{size}: {small:.4f} s, {2 * size}: {large:.4f} s"
 
 

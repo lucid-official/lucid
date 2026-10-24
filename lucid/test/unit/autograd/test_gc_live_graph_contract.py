@@ -112,7 +112,7 @@ def test_a_stranded_function_ctx_leaves_its_graph_intact(device: str) -> None:
 def _collect_seconds(build: Callable[[int], list[lucid.Tensor]], n: int) -> float:
     kept = build(n)
     best = float("inf")
-    for _ in range(3):
+    for _ in range(5):
         start = time.perf_counter()
         gc.collect()
         best = min(best, time.perf_counter() - start)
@@ -130,6 +130,16 @@ def _chain(n: int) -> list[lucid.Tensor]:
 def test_collection_time_grows_linearly_with_kept_graph_tensors() -> None:
     # Quadratic was 0.26 s at 1,000 and 3.9 s at 4,000 (15x); linear is a
     # few milliseconds either way.  The slack absorbs a loaded machine.
+    #
+    # LCD-640: unlike the backward-cost sibling in this directory, this one
+    # is not pushed to a larger chain to shrink timer noise — measured at
+    # 60,000 vs 240,000 nodes, cPython's own cyclic collector got
+    # noticeably super-linear (observed ratios 3-5x over several trials,
+    # against the already-generous 6x + 50 ms bound here), so a bigger
+    # graph trades one flake risk for another instead of removing it.  The
+    # existing sizes keep both measurements in the low milliseconds, where
+    # the fixed +50 ms slack — not the 6x multiplier — is what actually
+    # carries a loaded runner; best-of-5 (was 3) only adds cheap margin.
     small = _collect_seconds(_chain, 1000)
     large = _collect_seconds(_chain, 4000)
     assert large < 6 * small + 0.05, f"1000: {small:.3f} s, 4000: {large:.3f} s"
