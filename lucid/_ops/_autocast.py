@@ -10,13 +10,40 @@ in float16 and only reduced in float32.
 
 The one Python owner of that entry.  It lives here, below ``nn``,
 ``linalg`` and the composites, so any of them can import it; the cast rule
-itself stays in the engine (``amp_cast_inputs``).
+itself stays in the engine (``amp_cast_inputs``).  A composite with a row
+enters through :func:`_autocast_entry`; one without a row keeps its
+inputs, and still needs its body run with autocast off, or its parts apply
+their own rows (``interpolate``'s products ran ``matmul``'s LOWER row) — it
+enters through :func:`_autocast_suspended`.
 """
 
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 from lucid._C import engine as _C_engine
+
+
+@contextmanager
+def _autocast_suspended(device: _C_engine.Device) -> Iterator[None]:
+    """Autocast off on ``device`` for the body, with no cast at the entry.
+
+    The entry of a composite that has no row in the policy table — the
+    reference's op has none either, so it keeps its inputs' dtype — and of
+    graph plumbing that does no arithmetic of its own.
+
+    Parameters
+    ----------
+    device : Device
+        The device whose autocast the body runs without.
+    """
+    if not _C_engine.amp_is_active(device):
+        yield
+        return
+    guard = _C_engine.AutocastGuard(_C_engine.F32, device, False)
+    try:
+        yield
+    finally:
+        del guard  # the last reference — ~AutocastGuard restores the prior state
 
 
 @contextmanager
@@ -28,7 +55,10 @@ def _autocast_entry(
     Parameters
     ----------
     name : str
-        The composite's row in the policy table.
+        The composite's row in the policy table.  It must be a row: an op
+        with none enters through :func:`_autocast_suspended`, so a misspelt
+        row cannot quietly become "keep".  ``lucid/test/unit/amp/
+        test_composite_autocast_entry.py`` checks every name passed here.
     *inputs : TensorImpl
         Its floating operands; the first one's device selects the column.
 
@@ -42,8 +72,5 @@ def _autocast_entry(
         yield list(inputs)
         return
     cast = _C_engine.amp_cast_inputs(name, list(inputs))
-    guard = _C_engine.AutocastGuard(_C_engine.F32, device, False)
-    try:
+    with _autocast_suspended(device):
         yield cast
-    finally:
-        del guard  # the last reference — ~AutocastGuard restores the prior state

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._autocast import _autocast_suspended
 from lucid._unsupported import unsupported_if
 from lucid.nn.functional._index_checks import (
     _check_indices,
@@ -190,7 +191,11 @@ def _renorm_rows(
     flat = idx.reshape(-1)
     if flat.dtype != lucid.int64:
         flat = flat.to(lucid.int64)
-    with lucid.no_grad():
+    # An in-place write computes in ``weight``'s dtype, as the reference's
+    # ``embedding_renorm_`` does, so it has no autocast row: under a Metal
+    # autocast ``vector_norm``'s FP32 row made the rows float32 and the copy
+    # into a float16 table was refused.
+    with lucid.no_grad(), _autocast_suspended(_unwrap(weight).device):
         rows = weight.index_select(0, flat)
         norms = lucid.linalg.vector_norm(rows, norm_type, dim=1, keepdim=True)
         scale = lucid.where(

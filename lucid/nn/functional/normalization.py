@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry
+from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -662,7 +662,14 @@ def local_response_norm(
         raise RuntimeError(
             f"local_response_norm: kernel size should be greater than zero, but got size={size}"
         )
+    # The row applies once, here: its parts (a FP32 ``sum`` and a KEEP
+    # ``div``) would otherwise meet in two dtypes under Metal autocast.
+    with _autocast_entry("local_response_norm", _lrn_operand(xi)) as (xi,):
+        return _wrap(_lrn_body(xi, size, alpha, beta, k))
 
+
+def _lrn_operand(xi: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
+    """:func:`local_response_norm`'s input, floating and at its pooling part's row."""
     # The normaliser is a fractional power of a scaled sum, so the result
     # is a real number whatever the input was — the same statement the
     # engine's ``real_valued`` schemas make.  Computing it in an integer
@@ -678,10 +685,14 @@ def local_response_norm(
         _C_engine.Dtype.I64,
     ):
         xi = _C_engine.astype(xi, _C_engine.Dtype.F32)
-    # The row applies once, here: its parts (a FP32 ``sum`` and a KEEP
-    # ``div``) would otherwise meet in two dtypes under Metal autocast.
-    with _autocast_entry("local_response_norm", xi) as (xi,):
-        return _wrap(_lrn_body(xi, size, alpha, beta, k))
+    # The reference averages a rank-3 input's window with ``avg_pool2d`` and
+    # a deeper one's with ``avg_pool3d``, whose CPU row is FP32, so under a
+    # CPU autocast its rank-4+ result is float32 and its rank-3 one is not.
+    # A row cannot depend on the rank, so the deeper input also takes the
+    # pooling part's row (a no-op on Metal, where it keeps).
+    if len(xi.shape) > 3:
+        (xi,) = _C_engine.amp_cast_inputs("avg_pool3d", [xi])
+    return xi
 
 
 def _lrn_body(
@@ -780,6 +791,10 @@ def normalize(
     if isinstance(dim, int):
         return _wrap(_C_engine.nn.lp_normalize(xi, p, dim, eps))
     # Several dims, or all of them, have no kernel: the norm over them,
-    # kept for broadcasting, divides as the kernel's does.
-    denom = vector_norm(input, ord=p, dim=dim, keepdim=True)
-    return input / denom.clamp(min=eps)
+    # kept for broadcasting, divides as the kernel's does.  ``normalize`` has
+    # no autocast row (nor has the reference's ``Tensor.norm`` it divides
+    # by), so it keeps the input, with autocast off so ``vector_norm`` does
+    # not apply its own FP32 Metal row inside.
+    with _autocast_suspended(xi.device):
+        denom = vector_norm(input, ord=p, dim=dim, keepdim=True)
+        return input / denom.clamp(min=eps)

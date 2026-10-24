@@ -11,6 +11,7 @@ the same way.
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from lucid._ops._autocast import _autocast_suspended
 from lucid._ops.composite.indexing import _write_inplace
 
 if TYPE_CHECKING:
@@ -64,13 +65,17 @@ def _keep_in_graph(out: Tensor, x: Tensor) -> Tensor:
         return out
     xi = _unwrap(x)
     oi = _unwrap(out)
-    safe = _C_engine.nan_to_num(xi, 0.0, 0.0, 0.0)
-    zero = _C_engine.relu(_C_engine.clip(safe, 0.0, 0.0))
-    if zero.dtype != oi.dtype:
-        zero = _C_engine.astype(zero, oi.dtype)
-    if zero.shape != oi.shape:
-        zero = _C_engine.sum(zero, [], False)
-    return _wrap(_C_engine.add(oi, zero))
+    # Graph plumbing, not arithmetic, so it has no row.  Under a Metal
+    # autocast ``sum``'s FP32 row copied the whole zero to float32, and the
+    # float32 zero beside a float16 ``out`` was refused by ``add``.
+    with _autocast_suspended(oi.device):
+        safe = _C_engine.nan_to_num(xi, 0.0, 0.0, 0.0)
+        zero = _C_engine.relu(_C_engine.clip(safe, 0.0, 0.0))
+        if zero.shape != oi.shape:
+            zero = _C_engine.sum(zero, [], False)
+        if zero.dtype != oi.dtype:
+            zero = _C_engine.astype(zero, oi.dtype)
+        return _wrap(_C_engine.add(oi, zero))
 
 
 def _dead_zone_zero(x: Tensor) -> _C_engine.TensorImpl:

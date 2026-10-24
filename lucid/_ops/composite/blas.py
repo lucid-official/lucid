@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import lucid
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry
+from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
@@ -588,8 +588,9 @@ def vdot(input: Tensor, other: Tensor) -> Tensor:
     >>> lucid.vdot(a, b)
     tensor(32.)
     """
-    with _autocast_entry("vdot", _unwrap(input), _unwrap(other)) as (a, b):
-        input, other = _wrap(a), _wrap(b)
+    # ``vdot`` has no row, so under autocast a mixed pair is refused as it is
+    # outside, rather than taking ``dot``'s WIDEST Metal row inside.
+    with _autocast_suspended(_unwrap(input).device):
         if (
             input.is_complex()
             and input.ndim == 1

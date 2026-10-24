@@ -36,6 +36,7 @@ import lucid as _lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._autocast import _autocast_suspended
 from lucid.nn.functional._grid_sampling import cubic_coefficients
 from lucid.nn.functional.pooling import (
     adaptive_avg_pool1d,
@@ -630,13 +631,18 @@ def resample(
     # Last axis first: it multiplies without a copy, and a shrinking image
     # makes every later product smaller.
     rule = _Filter(mode, corners, antialias, _pins_shortcuts(mode, sizes), wide)
-    for axis in reversed(range(2, x.ndim)):
-        n, m, s = spatial[axis - 2], sizes[axis - 2], scales[axis - 2]
-        plan = _axis_plan(rule, n, m, s)
-        if plan.identity:
-            continue
-        if plan.dense is not None:
-            out = _apply_dense(out, axis, plan)
-        else:
-            out = _apply_gathers(out, axis, plan.taps)
+    # ``interpolate`` has no autocast row, as the reference's resampling
+    # kernels have none: it keeps the input, and its body runs with autocast
+    # off so the products below do not apply ``matmul``'s LOWER row, which
+    # turned a float32 image half precision.
+    with _autocast_suspended(_unwrap(x).device):
+        for axis in reversed(range(2, x.ndim)):
+            n, m, s = spatial[axis - 2], sizes[axis - 2], scales[axis - 2]
+            plan = _axis_plan(rule, n, m, s)
+            if plan.identity:
+                continue
+            if plan.dense is not None:
+                out = _apply_dense(out, axis, plan)
+            else:
+                out = _apply_gathers(out, axis, plan.taps)
     return out.clone() if out is x else out

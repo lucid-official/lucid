@@ -11,14 +11,15 @@ read by :mod:`lucid.nn.functional._spatial_args`.
 import itertools
 import math
 import struct
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Literal, overload
 
 import lucid as _lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry
+from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional._spatial_args import (
     _PoolGeometry,
@@ -27,6 +28,32 @@ from lucid.nn.functional._spatial_args import (
     _ntuple,
     _require_positive,
 )
+
+# The composite pools with a row in the autocast policy table (FP32 on the
+# CPU, from the reference's CPU list).  The others — adaptive pools of rank
+# 1 and 2, ``max_unpool1d`` — have none and keep their input's dtype.
+_POOL_ROWS = frozenset(
+    {
+        "adaptive_avg_pool3d",
+        "adaptive_max_pool3d",
+        "fractional_max_pool2d",
+        "fractional_max_pool3d",
+        "max_unpool2d",
+        "max_unpool3d",
+    }
+)
+
+
+@contextmanager
+def _pool_autocast(op: str, x: Tensor) -> Iterator[Tensor]:
+    """``x`` at ``op``'s row, or kept when it has none; autocast off inside."""
+    if op not in _POOL_ROWS:
+        with _autocast_suspended(_unwrap(x).device):
+            yield x
+        return
+    with _autocast_entry(op, _unwrap(x)) as (xi,):
+        yield _wrap(xi)
+
 
 _MAX_POOL: dict[int, Callable[..., _C_engine.TensorImpl]] = {
     1: _C_engine.nn.max_pool1d,
@@ -365,8 +392,7 @@ def _adaptive_pool(
     route through here, so they cannot drift apart on which sizes they take.
     """
     op = f"adaptive_{'avg' if reduce == 'mean' else 'max'}_pool{n}d"
-    with _autocast_entry(op, _unwrap(x)) as (xi,):
-        x = _wrap(xi)
+    with _pool_autocast(op, x) as x:
         xb, unbatched = _add_batch_axis(x, n)
         if xb.ndim != n + 2:
             raise ValueError(
@@ -516,8 +542,7 @@ def _fractional_max_pool(
 ) -> Tensor | tuple[Tensor, Tensor]:
     """The one body of ``fractional_max_pool{2,3}d`` and their modules."""
     op = f"fractional_max_pool{n}d"
-    with _autocast_entry(op, _unwrap(x)) as (xi,):
-        x = _wrap(xi)
+    with _pool_autocast(op, x) as x:
         xb, unbatched = _add_batch_axis(x, n)
         if xb.ndim != n + 2:
             raise ValueError(
@@ -581,8 +606,7 @@ def _scatter_unpool(
     n_spatial: int,
 ) -> Tensor:
     """Shared body of ``max_unpool{1,2,3}d``."""
-    with _autocast_entry(f"max_unpool{n_spatial}d", _unwrap(x)) as (xi,):
-        x = _wrap(xi)
+    with _pool_autocast(f"max_unpool{n_spatial}d", x) as x:
         idx, spatial_numel = checked
         leading = [int(s) for s in x.shape[:-n_spatial]]
         zeros = _lucid.zeros(*leading, spatial_numel, dtype=x.dtype, device=x.device)

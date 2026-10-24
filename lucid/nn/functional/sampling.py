@@ -8,9 +8,11 @@ from typing import TYPE_CHECKING
 import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._autocast import _autocast_entry
 from lucid._ops._reduce import _require_floating
 from lucid.nn.functional._inplace import _keep_in_graph
 from lucid.nn.functional._grid_sampling import (
+    _as_real,
     affine_grid_3d as _affine_grid_3d,
     check_options as _check_options,
     composite_grid_sample as _composite_grid_sample,
@@ -232,20 +234,35 @@ def grid_sample(
     """
     _check_options(input, mode, padding_mode)
     ac = align_corners if align_corners is not None else False
-    if input.ndim == 5 or mode == "bicubic":
-        return _composite_grid_sample(input, grid, mode, padding_mode, ac)
+    # The row applies once, here, for every path: the reflection that runs
+    # before the kernel computed its coordinates at the grid's half
+    # precision, and the composite applied no row at all.  An integer
+    # operand is promoted first, as the kernel's schema does before its row:
+    # the row skips integers, and a float32 one beside a half one would
+    # otherwise meet the body with autocast already off.
+    operands = [_unwrap(_as_real(t)) for t in (input, grid)]
+    with _autocast_entry("grid_sample", *operands) as (xi, gi):
+        return _grid_sample(_wrap(xi), _wrap(gi), mode, padding_mode, ac)
+
+
+def _grid_sample(
+    x: Tensor, grid: Tensor, mode: str, padding_mode: str, align_corners: bool
+) -> Tensor:
+    """:func:`grid_sample` on operands its row has cast, with autocast off."""
+    if x.ndim == 5 or mode == "bicubic":
+        return _composite_grid_sample(x, grid, mode, padding_mode, align_corners)
     if padding_mode == "reflection":
         # The kernel has no reflection: the grid is reflected in pixel
         # space first and then read with border padding.
-        grid = _reflect_grid(input, grid, ac, mode == "nearest")
+        grid = _reflect_grid(x, grid, align_corners, mode == "nearest")
         padding_mode = "border"
     return _wrap(
         _C_engine.nn.grid_sample(
-            _unwrap(input),
+            _unwrap(x),
             _unwrap(grid),
             _KERNEL_MODES[mode],
             _KERNEL_PADDINGS[padding_mode],
-            ac,
+            align_corners,
         )
     )
 
