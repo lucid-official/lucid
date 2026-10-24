@@ -94,6 +94,11 @@ class _StepEntry:
     # slot with zeros and marks its grad id -1; eager leaves such a gradient
     # None, and so does this.  Empty = every reached parameter has one.
     absent: tuple[bool, ...] = ()
+    # Per gradient the executable returns after the parameters' — one for
+    # each call tensor that requires grad (an eager trunk's output): its
+    # position among the call's tensors, or None where the loss does not
+    # depend on it.  Without these a compiled head trained no trunk (LCD-617).
+    input_grads: tuple[int | None, ...] = ()
 
 
 def _match_param_ids(
@@ -115,6 +120,55 @@ def _match_param_ids(
         if found is not None:
             param_ids.append(found)
     return param_ids, observed
+
+
+def _input_grad_targets(
+    x_args: tuple[Tensor, ...],
+    ext: dict[int, object],
+    taken: list[int],
+) -> tuple[list[int], list[int]]:
+    """The feeds of the call's tensors that require grad, and their positions.
+
+    A tensor fed twice, or one that is also a parameter (``taken``), is asked
+    for once: its single gradient is the whole of it, and the autograd node
+    adds the slots it reaches back together.  A tensor the trace never read
+    has no gradient, as in eager.
+    """
+    from lucid._dispatch import _unwrap
+    from lucid.compile._core.signature import leaf_tensors
+
+    feed_of = {id(impl): tid for tid, impl in ext.items()}
+    seen = set(taken)
+    ids: list[int] = []
+    positions: list[int] = []
+    for pos, t in enumerate(leaf_tensors(x_args, {})):
+        tid = feed_of.get(id(_unwrap(t))) if t.requires_grad else None
+        if tid is None or tid in seen:
+            continue
+        seen.add(tid)
+        ids.append(tid)
+        positions.append(pos)
+    return ids, positions
+
+
+def _grad_slots(
+    exe: _ExecutableLike, n_params: int, input_positions: list[int]
+) -> tuple[tuple[bool, ...], tuple[int | None, ...]]:
+    """Read the gradients ``exe`` returns: ``_StepEntry.absent`` and ``.input_grads``.
+
+    A gradient the loss does not depend on comes back as zeros with grad id
+    -1: absent for a parameter, ``None`` in place of an input's position.
+    """
+    grad_ids = [int(g) for g in exe.grad_output_ids]
+    absent = tuple(g == -1 for g in grad_ids[:n_params])
+    inputs = grad_ids[n_params : n_params + len(input_positions)]
+    return (
+        absent if any(absent) else (),
+        tuple(
+            None if g == -1 else pos
+            for pos, g in zip(input_positions, inputs, strict=True)
+        ),
+    )
 
 
 def _build_input_source(
@@ -224,12 +278,13 @@ def _compile_step_entry(
     param_ids, observed = _match_param_ids(params, ext)
     if not param_ids:
         return None
+    input_ids, input_positions = _input_grad_targets(x_args, ext, param_ids)
 
     exe_like = _lower_step_executable(
         tracer,
         ext,
         loss_id,
-        param_ids,
+        param_ids + input_ids,
         bn_stat_out_ids + write_ids,
         use_dynamic=use_dynamic,
     )
@@ -240,14 +295,14 @@ def _compile_step_entry(
     if input_source is None:
         return None
 
-    grad_ids = list(exe_like.grad_output_ids)[: len(param_ids)]
-    absent = tuple(int(g) == -1 for g in grad_ids)
+    absent, input_grads = _grad_slots(exe_like, len(param_ids), input_positions)
     return _StepEntry(
         exe=exe_like,
         external_feeds=dict(ext),
         input_source=input_source,
         observed=() if all(observed) else tuple(observed),
-        absent=absent if any(absent) else (),
+        absent=absent,
+        input_grads=input_grads,
         graph_json=trace_to_json(graph),
         compile_ms=(time.perf_counter() - t0) * 1000.0,
         bn_stat_buffers=bn_stat_buffers,
@@ -257,12 +312,19 @@ def _compile_step_entry(
     )
 
 
+_Grads = list[_C_engine.TensorImpl | None]
+
+
 def _run_step_entry(
     entry: _StepEntry,
     params: list[Parameter],
     x_args: tuple[Tensor, ...],
-) -> tuple[_C_engine.TensorImpl, list[_C_engine.TensorImpl | None]]:
-    """Execute one cached step entry; return ``(loss_impl, [grad_impls])``."""
+) -> tuple[_C_engine.TensorImpl, _Grads, _Grads]:
+    """Execute one cached step entry.
+
+    Returns the loss, a gradient per parameter, and a gradient per tensor in
+    ``x_args`` (``None`` for those that need none).
+    """
     from lucid._dispatch import _unwrap, _wrap
     from lucid.compile._core.bn_runstats import advance_bn_counters
     from lucid.compile._core.buffer_writes import write_back
@@ -278,14 +340,15 @@ def _run_step_entry(
     entry.n_hits += 1
 
     n_grads = sum(entry.observed) if entry.observed else len(params)
-    n_loss_grad = 1 + n_grads
+    n_inputs = len(entry.input_grads)
+    n_loss_grad = 1 + n_grads + n_inputs
     n_writes = len(entry.written)
     if len(outs) != n_loss_grad + entry.bn_stat_out_count + n_writes:
         raise RuntimeError(
             f"make_step: run_executable returned {len(outs)} outputs, "
             f"expected {n_loss_grad + entry.bn_stat_out_count + n_writes} "
-            f"(1 loss + {n_grads} grads + {entry.bn_stat_out_count} BN stats "
-            f"+ {n_writes} buffer writes)"
+            f"(1 loss + {n_grads} grads + {n_inputs} input grads + "
+            f"{entry.bn_stat_out_count} BN stats + {n_writes} buffer writes)"
         )
     for i, buf in enumerate(entry.bn_stat_buffers):
         buf.copy_(_wrap(cast(_C_engine.TensorImpl, outs[n_loss_grad + i])))
@@ -293,15 +356,24 @@ def _run_step_entry(
     write_back(entry.written, list(outs[first : first + n_writes]))
     advance_bn_counters(entry.bn_counters)
 
-    loss_impl = cast(_C_engine.TensorImpl, outs[0])
-    reached: list[_C_engine.TensorImpl | None] = [
-        None if entry.absent and entry.absent[i] else cast(_C_engine.TensorImpl, g)
-        for i, g in enumerate(outs[1:n_loss_grad])
+    grads: list[_C_engine.TensorImpl] = list(outs[1:n_loss_grad])
+    input_grads: _Grads = [None] * len(x_args)
+    for pos, g in zip(entry.input_grads, grads[n_grads:], strict=True):
+        if pos is not None:
+            input_grads[pos] = g
+    reached: _Grads = [
+        None if entry.absent and entry.absent[i] else g
+        for i, g in enumerate(grads[:n_grads])
     ]
+    loss_impl = cast(_C_engine.TensorImpl, outs[0])
     if not entry.observed:
-        return loss_impl, reached
+        return loss_impl, reached, input_grads
     it = iter(reached)
-    return loss_impl, [next(it) if seen else None for seen in entry.observed]
+    return (
+        loss_impl,
+        [next(it) if seen else None for seen in entry.observed],
+        input_grads,
+    )
 
 
 @final
@@ -321,24 +393,22 @@ class _CompiledStepFunction(Function):
         from lucid._dispatch import _wrap
 
         entry, params = entry_holder
-        n_user = len(step_args) - len(params)
-        x_args = step_args[:n_user]
+        x_args = step_args[: len(step_args) - len(params)]
 
-        loss_impl, grad_impls = _run_step_entry(entry, params, x_args)
-        ctx.saved_grad_impls = grad_impls
-        ctx.n_user = n_user
+        loss_impl, grad_impls, input_grad_impls = _run_step_entry(entry, params, x_args)
+        ctx.saved_grad_impls = input_grad_impls + grad_impls
         return _wrap(loss_impl)
 
     @override
     @staticmethod
     def backward(ctx: FunctionCtx, grad_loss: Tensor) -> tuple[Tensor | None, ...]:
-        """Chain ``grad_loss`` into each saved per-parameter gradient."""
+        """Chain ``grad_loss`` into each saved input and parameter gradient."""
         from lucid._dispatch import _wrap
 
-        saved_grad_impls = cast(list[_C_engine.TensorImpl | None], ctx.saved_grad_impls)
-        n_user = cast(int, ctx.n_user)
-        scaled = [None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls]
-        return tuple([None] * n_user + scaled)
+        saved_grad_impls = cast(_Grads, ctx.saved_grad_impls)
+        return tuple(
+            None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls
+        )
 
 
 def _make_monolithic_step(
@@ -426,14 +496,18 @@ def make_step(
     1. Calls ``loss_fn(model(x), *extra_inputs)`` once under
        :func:`_tracing` to capture the op DAG (forward + loss).
     2. Compiles a single MPSGraph executable that produces the loss
-       and the gradient of the loss w.r.t. every model parameter, via
+       and the gradient of the loss w.r.t. every model parameter and
+       every input that requires grad, via
        :func:`compile_trace_with_backward`.
     3. Runs the executable, populates a Lucid :class:`autograd.Function`
        with the resulting (loss, grads) so the returned scalar loss has
        a working ``grad_fn`` and ``loss.backward()`` drives ``.grad`` on
-       every parameter.
+       every parameter — and on through an input computed by eager ops,
+       so a compiled head trains the eager trunk that feeds it.
     4. Caches the executable so a second call with the same input /
-       parameter signature is a pure run.
+       parameter signature is a pure run.  Which inputs require grad is
+       part of the signature: a step whose inputs need no gradient
+       computes none.
 
     Parameters
     ----------

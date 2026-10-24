@@ -106,20 +106,27 @@ class _SegCompiled:
     fwd: _SegExe
     bwd: _SegExe
     # ``produce_input_grad`` ⇒ the backward exe's first grad output is
-    # ``grad_input`` (the cotangent to feed the previous segment); the rest are
-    # per-parameter grads.  Segment 0 skips it (its input is the data batch).
+    # ``grad_input`` (the cotangent to feed the previous segment, or the eager
+    # trunk before the first); the rest are per-parameter grads.  Set when
+    # the segment's input requires grad — a first segment fed a data batch
+    # skips it.
     produce_input_grad: bool
     n_params: int
 
 
-def _sig(x: Tensor) -> tuple[tuple[int, ...], str]:
-    """Compile-cache key for a segment: its input shape + dtype.
+_SegKey = tuple[tuple[int, ...], str, bool]
+
+
+def _sig(x: Tensor) -> _SegKey:
+    """Compile-cache key for a segment: its input shape, dtype and grad need.
 
     Batch size is fixed across a training run, so one entry is compiled per
     segment.  Parameters never change shape during training, so they are not
-    part of the key.
+    part of the key.  Whether the input requires grad is: the first segment
+    returned no gradient to an input that did — an eager trunk before a
+    compiled model trained nothing (LCD-617).
     """
-    return (tuple(x.shape), str(x.dtype))
+    return (tuple(x.shape), str(x.dtype), bool(x.requires_grad))
 
 
 def _match_param_ids(
@@ -196,8 +203,7 @@ class _Segment:
     index: int
     forward_fn: Callable[..., Tensor]  # x -> y (traced, not run eagerly)
     params: list[Tensor]
-    produce_input_grad: bool
-    cache: dict[tuple[tuple[int, ...], str], _SegCompiled] = field(default_factory=dict)
+    cache: dict[_SegKey, _SegCompiled] = field(default_factory=dict)
 
 
 def _trace_segment_fn(
@@ -330,11 +336,10 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
 
     # param_ids for the backward = [input?] + segment params.  Including the
     # input id makes the executable also return grad_input (the cotangent fed to
-    # the previous segment).
-    if seg.produce_input_grad:
+    # whatever computed the input), exactly when eager would compute one.
+    grad_target_ids = bwd_param_ids
+    if x.requires_grad:
         grad_target_ids = [x_id_bwd, *bwd_param_ids]
-    else:
-        grad_target_ids = list(bwd_param_ids)
     bwd_exe = _lower_segment_backward(t_bwd, int(loss_id), grad_target_ids)
     if bwd_exe is None:
         return None
@@ -349,7 +354,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     return _SegCompiled(
         fwd=_SegExe(exe=fwd_exe, feed_plan=fwd_plan),
         bwd=_SegExe(exe=bwd_exe, feed_plan=bwd_plan),
-        produce_input_grad=seg.produce_input_grad,
+        produce_input_grad=bool(x.requires_grad),
         n_params=len(seg.params),
     )
 
@@ -459,7 +464,6 @@ def _segments_of(model: Sequential, segments: int) -> list[_Segment]:
                 index=gi,
                 forward_fn=_group_fn(mods),
                 params=[p for m in mods for p in m.parameters()],
-                produce_input_grad=(gi > 0),  # segment 0's input is the data batch
             )
         )
     return seg_objs

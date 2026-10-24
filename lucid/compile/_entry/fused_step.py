@@ -59,7 +59,8 @@ Limitations
 -----------
 * No dynamic batch — shape-locked to the first call's input signature.
 * The loss tensor returned has no ``grad_fn`` (the backward has
-  already run inside the executable).  ``loss.backward()`` is a no-op.
+  already run inside the executable).  ``loss.backward()`` is a no-op,
+  and an input that requires grad is refused: no gradient can reach it.
 * A step whose gradient passes through a custom ``autograd.Function``
   runs eagerly: the executable cannot run the ``Function``'s ``backward``.
 """
@@ -203,7 +204,10 @@ def fused_step(
     ------
     RuntimeError
         On the first call, when no parameter both requires grad and
-        reaches the loss (there would be nothing to step).
+        reaches the loss (there would be nothing to step).  On any call
+        given a tensor that requires grad — the output of an eager trunk,
+        say: the step cannot return a gradient to it.  Detach it, or use
+        :func:`make_step`, whose loss carries the input gradients.
 
     Examples
     --------
@@ -223,6 +227,26 @@ def fused_step(
         translator that produces the update graph.
     """
     return _FusedStep(model, loss_fn, optimizer, grad_scaler=grad_scaler)
+
+
+def _refuse_input_grads(tensors: list[Tensor]) -> None:
+    """Refuse a call tensor that requires grad: the step cannot hand one back.
+
+    The backward runs inside the executable and the loss returned has no
+    ``grad_fn``, so the gradient of an input computed by eager ops never
+    reached them — a compiled head on an eager trunk trained no trunk, and
+    only the eager fallback (which calls ``backward`` itself) did (LCD-617).
+    Refused on every path, before any state moves, so the answer does not
+    depend on whether the step compiled.
+    """
+    for k, t in enumerate(tensors):
+        if t.requires_grad:
+            raise RuntimeError(
+                f"fused_step: input {k} requires grad, which fused_step cannot "
+                "produce: its backward runs inside the executable and the loss "
+                "it returns has no grad_fn. Pass the input detached, or train a "
+                "compiled head on an eager trunk with make_step"
+            )
 
 
 def _prod_shape(shape: tuple[int, ...]) -> int:
@@ -549,6 +573,8 @@ class _FusedStep:
             tensors_have_active_hooks,
         )
 
+        leaves = leaf_tensors(args, {})
+        _refuse_input_grads(leaves)
         copt = self._copt
         copt._count_step()  # the fused update never calls ``optimizer.step``
         copt._sync_params()
@@ -558,9 +584,7 @@ class _FusedStep:
             self._plans.clear()
             self._eager_only.clear()
             self._reachable = None
-        if model_has_active_hooks(self._model) or tensors_have_active_hooks(
-            leaf_tensors(args, {})
-        ):
+        if model_has_active_hooks(self._model) or tensors_have_active_hooks(leaves):
             return self._run_eager(args)
         flags = copt._flags_now()
         key = self._key(
