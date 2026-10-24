@@ -526,7 +526,10 @@ class TestQuantizedWeights:
 
     def test_int8_halves_the_weights_and_still_agrees(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
-        x = lucid.randn(1, 3, 224, 224)
+        # From a stream of its own: drawn after the factory's initialisation
+        # on the default one, the input changed with every draw that
+        # initialisation made, and the error is measured on it (LCD-615).
+        x = lucid.randn(1, 3, 224, 224, generator=lucid.Generator(1))
         reference = model(x).logits
         scale = float(reference.abs().max().item())
 

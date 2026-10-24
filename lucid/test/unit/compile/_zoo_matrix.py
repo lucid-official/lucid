@@ -655,7 +655,8 @@ def _float64_reference(
     and compiled disagree without either being wrong: in DenseNet-121's
     last dense layer eager was 37% off float64 and compiled 3%.  When the
     two float32 paths disagree, the compiled one is judged against this —
-    with dropout off, since the CPU draws a different stream from Metal.
+    with dropout off, since the CPU draws different masks than Metal from
+    the one stream.
     """
     _, model, _, _ = build(family, task)
     model = model.to("cpu").to(lucid.float64)

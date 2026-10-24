@@ -43,6 +43,18 @@ def _ranking(scores: lucid.Tensor, k: int = 5) -> list[int]:
     return sorted(range(len(values)), key=lambda i: -values[i])[:k]
 
 
+def _images(count: int, seed: int) -> list[lucid.Tensor]:
+    """``count`` noise images from a stream of their own.
+
+    Drawn from the default stream, the set was whatever that stream held
+    after the factory's initialisation — one more draw anywhere upstream
+    and every image changed, and with it a count held at one flip from
+    failing (LCD-615).
+    """
+    stream = lucid.Generator(seed)
+    return [lucid.randn(1, 3, 224, 224, generator=stream) for _ in range(count)]
+
+
 class TestTrainedAgreement:
     def test_float16_predicts_what_the_model_predicts(self, tmp_path: object) -> None:
         """The claim the Neural Engine path rests on.
@@ -61,8 +73,7 @@ class TestTrainedAgreement:
             compute_units=cml.ComputeUnits.CPU_AND_NE,
         )
         try:
-            for _ in range(4):
-                x = lucid.randn(1, 3, 224, 224)
+            for x in _images(4, seed=1):
                 wanted = _ranking(model(x).logits)
                 got = _ranking(exported.predict(x))
                 assert got[0] == wanted[0]
@@ -79,7 +90,10 @@ class TestTrainedAgreement:
         survives, and the ordering below it does not always — AlexNet
         lost one top-1 in eight and DenseNet four top-5 places in thirty.
         Asserting only the top result keeps the test honest about what
-        int8 actually preserves.
+        int8 actually preserves.  The twelve images come from a stream of
+        their own, so the set is fixed and the count moves only when the
+        export does; at one flip in eight, any six fresh draws failed a
+        one-flip allowance one time in six.
         """
         model = _trained()
         exported = cml.export(
@@ -92,12 +106,11 @@ class TestTrainedAgreement:
         )
         try:
             agreed = 0
-            for _ in range(6):
-                x = lucid.randn(1, 3, 224, 224)
+            for x in _images(12, seed=2):
                 wanted = _ranking(model(x).logits)
                 got = _ranking(exported.predict(x))
                 agreed += got[0] == wanted[0]
-            assert agreed >= 5
+            assert agreed >= 10, f"{agreed} of 12 top-1 results held"
         finally:
             exported.close()
 
@@ -110,9 +123,7 @@ class TestTrainedAgreement:
         separates its classes, so a preserved ordering means something.
         """
         model = _trained()
-        scores = sorted(
-            model(lucid.randn(1, 3, 224, 224)).logits.reshape(-1).tolist(),
-            reverse=True,
-        )
+        (x,) = _images(1, seed=3)
+        scores = sorted(model(x).logits.reshape(-1).tolist(), reverse=True)
         scale = max(abs(scores[0]), abs(scores[-1]))
         assert (scores[0] - scores[4]) / scale > 0.05

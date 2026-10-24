@@ -28,7 +28,12 @@ class _ToyDataset(Dataset):
 class TestDataPipeline:
     def test_loader_drives_training(self, device: str) -> None:
         ds = _ToyDataset()
-        loader = DataLoader(ds, batch_size=8, shuffle=True)
+        # The batch order has a stream of its own, so the model's
+        # initialisation cannot reorder it (LCD-615).  The bound is far from
+        # any draw: across 60 seeds the loss fell to at most 0.29 of its start.
+        loader = DataLoader(
+            ds, batch_size=8, shuffle=True, generator=lucid.Generator(0)
+        )
 
         model = nn.Sequential(
             nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 1), nn.Sigmoid()

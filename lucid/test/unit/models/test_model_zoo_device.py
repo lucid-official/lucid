@@ -497,9 +497,10 @@ def test_vqvae_generate_runs_on_device(device):
 # PlaNet does not fit the sweep above: its forward takes two sequences and
 # returns neither ``logits`` nor ``last_hidden_state``.  It also cannot be
 # compared trajectory-for-trajectory across devices — every step draws a
-# fresh ``randn`` for the reparameterised latent, and the two RNG streams
-# do not agree, so the sequences diverge after step 0 by design rather than
-# by defect.
+# fresh ``randn`` for the reparameterised latent, and the CPU and Metal
+# kernels turn the one stream into different samples (a Metal ``rand(4)``
+# advances it one block, a CPU one four), so the sequences diverge after
+# step 0 by design rather than by defect.
 #
 # What *is* deterministic gets compared exactly: the encoder over the whole
 # sequence, the decoder and the reward head from a fixed feature tensor,

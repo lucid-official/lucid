@@ -51,9 +51,12 @@ class TestQATConvert:
     def test_convert_to_int8(self) -> None:
         lucid.manual_seed(2)
         qat = Q.prepare_qat(_Net())
+        # The data has a stream of its own, so the initialisation's draws
+        # ahead of it cannot change it (LCD-615).
+        data = lucid.Generator(2)
         opt = optim.SGD(qat.parameters(), lr=0.05)
         for _ in range(5):
-            loss = (qat(lucid.randn(16, 16)) ** 2).mean()
+            loss = (qat(lucid.randn(16, 16, generator=data)) ** 2).mean()
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -62,7 +65,9 @@ class TestQATConvert:
         assert isinstance(qm.fc1, nnq.Linear)
         assert qm.fc1.weight_int8.dtype is lucid.int8
         # QAT-then-convert output tracks the fake-quant training model closely.
-        x = lucid.randn(8, 16)
+        # Over 64 inputs, not 8: across 60 seeds the error on 8 reached 0.125,
+        # past the bound, and on 64 at most 0.077.
+        x = lucid.randn(64, 16, generator=data)
         yq_train = qat(x).numpy()
         yq_int8 = qm(x).numpy()
         assert (

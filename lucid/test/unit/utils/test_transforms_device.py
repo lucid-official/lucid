@@ -16,8 +16,10 @@ Two properties are pinned here:
 1. Every transform runs on Metal and returns a Metal tensor.
 2. Deterministic transforms are numerically equivalent across devices.
    RNG-driven ones (GaussNoise / ISONoise / PixelDropout / ElasticTransform)
-   are compared by statistics instead: Lucid's CPU and GPU generators are
-   distinct streams, so identical seeds do not give identical samples.
+   are compared by statistics instead.  There is one stream, but the two
+   devices read it differently — a Metal ``rand(4)`` takes one Philox block
+   of four numbers, a CPU one four blocks — so one seed gives each device
+   different samples.
 """
 
 import inspect
@@ -44,8 +46,8 @@ _NOT_A_TRANSFORM = {
     "Interpolation",
 }
 
-# Driven by the RNG: identical seeds give different samples per device because
-# the CPU and GPU generators are separate streams.
+# Driven by the RNG: identical seeds give different samples per device, because
+# the CPU and Metal kernels map the one stream to samples differently.
 _STOCHASTIC = {"GaussNoise", "ISONoise", "PixelDropout", "ElasticTransform"}
 
 
@@ -104,7 +106,8 @@ def test_transform_matches_across_devices(name):
     cpu, metal = outs["cpu"], outs["metal"]
     assert cpu.shape == metal.shape, name
     if name in _STOCHASTIC:
-        # Separate RNG streams — compare distributions, not samples.
+        # One stream, read differently per device — compare distributions,
+        # not samples.
         assert abs(float(cpu.mean()) - float(metal.mean())) < 5e-2, name
         assert abs(float(cpu.std()) - float(metal.std())) < 5e-2, name
     else:

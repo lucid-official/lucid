@@ -52,14 +52,19 @@ class TestCheckpointRoundTrip:
         loss_after = float(F.mse_loss(model2(x), y).item())
         assert abs(loss_before - loss_after) < 1e-5
 
-        # And training continues smoothly from there — loss shouldn't
-        # explode after resuming with the loaded optimizer state.
+        # And training continues from there as if it had never stopped: the
+        # resumed pair takes the uninterrupted pair's next 20 steps.  "The
+        # loss did not rise" asked the initialisation a question, whose answer
+        # moved with every draw before it (LCD-615); this asks the checkpoint.
         for _ in range(20):
-            opt2.zero_grad()
-            F.mse_loss(model2(x), y).backward()
-            opt2.step()
-        loss_final = float(F.mse_loss(model2(x), y).item())
-        assert loss_final <= loss_before + 1e-3
+            losses = []
+            for module, optimizer in ((model, opt), (model2, opt2)):
+                optimizer.zero_grad()
+                loss = F.mse_loss(module(x), y)
+                loss.backward()
+                optimizer.step()
+                losses.append(float(loss.item()))
+            assert losses[1] == pytest.approx(losses[0], rel=1e-6, abs=1e-7)
 
 
 @pytest.mark.parametrize("kind", ["SGD", "Adam", "AdamW"])

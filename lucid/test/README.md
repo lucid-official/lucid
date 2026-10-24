@@ -78,6 +78,33 @@ test (autouse fixture). When a test additionally needs the reference
 framework's RNG seeded the same way, use
 `lucid.test._helpers.seeding.seed_all(0, ref=ref)`.
 
+There is one default stream (LCD-583): `nn.init`, dropout and every random
+factory read it in turn, on either device. So a seeded test's numbers depend
+on every draw made before them, and one more `nn.init` call in a constructor
+changes every sample after it. A bound that holds at one draw and not the
+next is a failure waiting on an unrelated change (LCD-615). Make the
+assertion independent of the draws:
+
+- **Pair the arms.** When two arms are compared — with a feature and
+  without — replay the same draws for both: `state = lucid.get_rng_state()`
+  before the first, `lucid.set_rng_state(state)` before the second, so the
+  feature is the only difference (`unit/coreml/test_compression_aware.py`).
+- **Give data a stream of its own.** Inputs, batch order and evaluation sets
+  come from `g = lucid.Generator(seed)` — `lucid.randn(..., generator=g)`,
+  `DataLoader(..., generator=g)` — so a model's initialisation cannot move
+  them.
+- **Measure the margin.** Run the property over seeds (dozens are cheap for a
+  small model), put the bound where none comes near it, write the measured
+  range beside it, and widen the set when one sample decides the outcome:
+  64 QAT inputs rather than 8, 12 Core ML int8 images rather than 6.
+- **Assert what the code promises.** A checkpoint promises that training
+  resumes as if it never stopped, so compare the resumed run with the
+  uninterrupted one rather than ask whether the loss rose.
+
+The devices read the one stream differently — a Metal `rand(4)` advances it
+one Philox block, a CPU `rand(4)` four — so one seed gives each device
+different samples. Across devices compare deterministic ops, or statistics.
+
 ## CPU + GPU coverage
 
 The `device` fixture parametrizes over `["cpu", "metal"]` whenever
