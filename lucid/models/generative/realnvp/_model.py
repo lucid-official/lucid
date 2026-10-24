@@ -266,8 +266,26 @@ class _FlowBatchNorm(nn.Module):
         self.register_buffer("running_mean", lucid.zeros(1, channels, 1, 1))
         self.register_buffer("running_var", lucid.ones(1, channels, 1, 1))
 
-    def _stats(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        """Normalisation statistics for the current pass.
+    def _track(self, mean: Tensor, var: Tensor) -> None:
+        """Fold one batch's statistics into the running estimates.
+
+        Assigned as attributes, which keeps each buffer in its slot and,
+        under a compile trace, writes it in place so the compiled call
+        carries the update back (``Module._write_traced_buffer``).  This
+        used to write ``self._buffers[...]`` directly, which bypassed that:
+        a compiled flow went on reading the statistics it was traced with.
+        """
+        with lucid.no_grad():
+            self.running_mean = (
+                1.0 - self._momentum
+            ) * self.running_mean + self._momentum * mean
+            self.running_var = (
+                1.0 - self._momentum
+            ) * self.running_var + self._momentum * var
+
+    @override
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """Normalise ``x`` and return it beside the log-determinant.
 
         Evaluation always uses the running estimates — that is what makes
         :meth:`inverse` well-defined for a single sample.
@@ -280,43 +298,25 @@ class _FlowBatchNorm(nn.Module):
         updated from the current batch, so the two differ in what is
         *used*, not in what is tracked.
         """
-        if not self.training:
-            return self.running_mean, self.running_var
-        mean = x.mean(dim=(0, 2, 3), keepdim=True)
-        var = ((x - mean) ** 2).mean(dim=(0, 2, 3), keepdim=True)
-        # Snapshot before the update: Appendix E normalises by the average
-        # over *recent* minibatches, which must not already include this one
-        # — folding the current batch in first would reintroduce exactly the
-        # dependence on it that the variant exists to remove.
-        used = (
-            (self.running_mean, self.running_var)
-            if self._use_running_stats
-            else (mean, var)
-        )
-        with lucid.no_grad():
-            # Write through ``_buffers`` — a plain attribute assignment makes
-            # ``Module.__setattr__`` drop the name from the buffer registry
-            # (a bare Tensor is neither Parameter nor Module), so the running
-            # statistics would silently vanish from ``state_dict()`` on the
-            # first training step and the flow would be non-invertible after
-            # a save/load round-trip.  ``nn.BatchNorm2d`` writes through for
-            # the same reason.
-            self._buffers["running_mean"] = (
-                1.0 - self._momentum
-            ) * self.running_mean + self._momentum * mean
-            self._buffers["running_var"] = (
-                1.0 - self._momentum
-            ) * self.running_var + self._momentum * var
-        return used
-
-    @override
-    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        mean, var = self._stats(x)
+        mean, var = self.running_mean, self.running_var
+        observed: tuple[Tensor, Tensor] | None = None
+        if self.training:
+            batch_mean = x.mean(dim=(0, 2, 3), keepdim=True)
+            batch_var = ((x - batch_mean) ** 2).mean(dim=(0, 2, 3), keepdim=True)
+            observed = (batch_mean, batch_var)
+            if not self._use_running_stats:
+                mean, var = observed
         y = (x - mean) / (var + self._eps).sqrt()
         # log|det| = -½ Σ log(σ² + ε), broadcast over the spatial extent.
         per_channel = -0.5 * (var + self._eps).log()
         spatial = int(x.shape[2]) * int(x.shape[3])
         log_det = per_channel.reshape(-1).sum() * spatial
+        if observed is not None:
+            # Folded in only after normalising: Appendix E normalises by the
+            # average over *recent* minibatches, which must not include this
+            # one.  Under a trace the write lands in the buffer in place, so
+            # reading it after the write would see this batch already in it.
+            self._track(*observed)
         batch = int(x.shape[0])
         return y, log_det.reshape(1).expand(batch)
 
