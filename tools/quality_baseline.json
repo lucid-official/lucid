@@ -1013,7 +1013,6 @@
     "lucid/nn/quantized/modules.py": 2,
     "lucid/nn/quantized/sparse.py": 3,
     "lucid/nn/utils/clip_grad.py": 1,
-    "lucid/nn/utils/parametrize.py": 2,
     "lucid/quantization/_quantize.py": 4,
     "lucid/quantization/fuse_modules.py": 5,
     "lucid/quantization/observer.py": 1,
@@ -1079,7 +1078,6 @@
     "lucid/nn/modules/padding.py": 1,
     "lucid/nn/modules/sparse.py": 1,
     "lucid/nn/qat/conv.py": 3,
-    "lucid/nn/utils/parametrize.py": 1,
     "lucid/nn/utils/prune.py": 1,
     "lucid/nn/utils/spectral_norm.py": 1,
     "lucid/nn/utils/weight_norm.py": 1,
@@ -1155,8 +1153,7 @@
     "lucid/utils/data/dataloader.py": 1
    },
    "type-ignore[union-attr]": {
-    "lucid/nn/modules/attention.py": 2,
-    "lucid/nn/utils/parametrize.py": 1
+    "lucid/nn/modules/attention.py": 2
    }
   },
   "engine": {
@@ -2082,7 +2079,7 @@
     "lucid/nn/modules/transformer.py": 17,
     "lucid/nn/utils/clip_grad.py": 1,
     "lucid/nn/utils/fusion.py": 13,
-    "lucid/nn/utils/parametrize.py": 31,
+    "lucid/nn/utils/parametrize.py": 11,
     "lucid/nn/utils/rnn.py": 6,
     "lucid/nn/utils/spectral_norm.py": 39,
     "lucid/quantization/_functional.py": 41,

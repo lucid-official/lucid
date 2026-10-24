@@ -12,7 +12,7 @@
     "Regenerate with:  lucid-audit --update-coverage",
     "Do that only when the new state is the intended one."
   ],
-  "cells": 10216,
+  "cells": 10215,
   "answered": {
     "broadcast::F.gumbel_softmax": "pass",
     "broadcast::F.straight_through": "pass",
@@ -6181,7 +6181,6 @@
     "module::lucid.nn.quantized.dynamic.LSTMCell": "pass",
     "module::lucid.nn.quantized.dynamic.Linear": "pass",
     "module::lucid.nn.quantized.dynamic.RNNCell": "pass",
-    "module::lucid.nn.utils.parametrize.ParametrizationContainer": "pass",
     "module::lucid.quantization.FakeQuantize": "pass",
     "module::lucid.quantization.FixedQParamsObserver": "pass",
     "module::lucid.quantization.HistogramObserver": "pass",

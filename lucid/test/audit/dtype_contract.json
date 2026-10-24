@@ -5532,7 +5532,6 @@
     "lucid.nn.utils.pad_packed_sequence",
     "lucid.nn.utils.pad_sequence",
     "lucid.nn.utils.parameters_to_vector",
-    "lucid.nn.utils.parametrize.ParametrizationContainer",
     "lucid.nn.utils.parametrize.is_parametrized",
     "lucid.nn.utils.parametrize.register_parametrization",
     "lucid.nn.utils.parametrize.remove_parametrizations",

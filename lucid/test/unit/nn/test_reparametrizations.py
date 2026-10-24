@@ -416,8 +416,11 @@ def test_chaining_keeps_exactly_one_trainable_leaf():
     """Composing must not mint a second copy of the weight."""
     layer, _, _ = _chained()
     container = layer.parametrizations["weight"]
-    assert len(container.parametrizations) == 2
+    assert len(container) == 2
     assert isinstance(container.original, nn.Parameter)
+    assert [n for n, _ in layer.named_parameters()] == [
+        "parametrizations.weight.original"
+    ]
 
     layer(_x(2, 4)).sum().backward()
     assert np.abs(_v(container.original.grad)).max() > 0
@@ -430,14 +433,14 @@ def test_chaining_rejects_a_shape_change_unless_asked():
 
     layer = nn.Linear(4, 4, bias=False)
     register_parametrization(layer, "weight", _Symmetric())
-    with pytest.raises(RuntimeError, match="shape"):
+    with pytest.raises(ValueError, match="shape"):
         register_parametrization(layer, "weight", _Widen())
     register_parametrization(layer, "weight", _Widen(), unsafe=True)
     assert _v(layer.parametrizations["weight"]()).shape == (4, 8)
 
 
-def test_the_first_parametrization_is_still_reachable():
+def test_the_chain_keeps_registration_order():
     layer, _, _ = _chained()
     container = layer.parametrizations["weight"]
-    assert container.parametrization is container.parametrizations[0]
-    assert isinstance(container.parametrization, _Symmetric)
+    assert isinstance(container[0], _Symmetric)
+    assert isinstance(container[1], _Scale)
