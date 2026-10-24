@@ -65,6 +65,35 @@ def _check_reduction(reduction: object, op: str, *, batchmean: bool = False) -> 
         raise ValueError(f"{op}: reduction must be one of {valid}, got {reduction!r}")
 
 
+def _check_device(op: str, **tensors: Tensor | None) -> None:
+    """Refuse a loss ``op``'s operands if two of them live on different
+    devices, before a kernel dispatches assuming they share one storage
+    and fails deep inside — naming the op that touched it last, not the
+    loss (:func:`mse_loss` on a CPU/Metal pair raised a phantom-storage
+    error from the fused kernel; :func:`l1_loss` named ``sub``).
+
+    Pass every operand the loss takes, by the name its message should
+    use — ``input``, ``target``, ``weight``, ``pos_weight``, ``var`` —
+    including the ones that are ``None`` for this call; ``None`` is
+    skipped, and so is a 0-d CPU tensor, which is a scalar that follows
+    the other operands' device, as a binary op's own device check does
+    (:func:`lucid._ops.composite._shared._binary_device`)."""
+    cpu = _C_engine.Device.CPU
+    ref: tuple[str, Tensor] | None = None
+    for name, t in tensors.items():
+        if t is None or (t.ndim == 0 and t._impl.device == cpu):
+            continue
+        if ref is None:
+            ref = (name, t)
+            continue
+        ref_name, ref_t = ref
+        if t._impl.device != ref_t._impl.device:
+            raise _C_engine.DeviceMismatch(
+                f"{op}: expected every operand on one device ({ref_name} on "
+                f"{ref_t.device.type}), got {name} on {t.device.type}"
+            )
+
+
 def _shape(t: Tensor) -> tuple[int, ...]:
     return tuple(int(d) for d in t.shape)
 
@@ -165,10 +194,13 @@ def _broadcast_operands(
 
 
 def _check_same_rank(op: str, *, broadcast: bool = True, **tensors: Tensor) -> None:
-    """The inputs of a pairwise loss line up element for element: one rank,
-    and (with ``broadcast``) shapes that broadcast together.  A user's
-    distance function decides for itself which shapes it pairs, so
-    ``triplet_margin_with_distance_loss`` checks the rank only."""
+    """The inputs of a pairwise loss line up element for element: one
+    device (:func:`_check_device`), one rank, and (with ``broadcast``)
+    shapes that broadcast together.  A user's distance function decides
+    for itself which shapes it pairs, so ``triplet_margin_with_distance_loss``
+    checks the rank only — but every triplet loss reaches this, unconditionally
+    and before a custom distance function ever runs, for the device check."""
+    _check_device(op, **tensors)
     shapes = {name: _shape(t) for name, t in tensors.items()}
     if len({len(s) for s in shapes.values()}) > 1 or (
         broadcast and _broadcast_shape(*shapes.values()) is None
@@ -191,12 +223,22 @@ def _num_classes(x: Tensor, op: str, *, max_ndim: int | None = None) -> int:
     return int(x.shape[0] if x.ndim == 1 else x.shape[1])
 
 
-def _check_class_weight(weight: Tensor | None, num_classes: int, op: str) -> None:
-    """A per-class ``weight`` has exactly one entry per class.
+def _check_class_weight(
+    weight: Tensor | None, num_classes: int, x: Tensor, target: Tensor, op: str
+) -> None:
+    """A per-class ``weight`` has exactly one entry per class, and ``x``,
+    ``target`` and ``weight`` all share one device
+    (:func:`_check_device`) — the class-index losses call this
+    unconditionally, before their first gather, so it is where their
+    device check lives too (``cross_entropy``'s falls here rather than
+    its own dtype check, which skips ``target`` for a class-probability
+    one).
 
-    Shape only — no value is read, so this costs nothing on Metal.  A
-    longer weight was silently cut to its first ``C`` entries, and a
-    shorter one read out of bounds for the classes past its end."""
+    The weight's shape is checked by value only — no entry is read, so
+    this costs nothing on Metal.  A longer weight was silently cut to
+    its first ``C`` entries, and a shorter one read out of bounds for
+    the classes past its end."""
+    _check_device(op, input=x, target=target, weight=weight)
     if weight is not None and (weight.ndim != 1 or int(weight.shape[0]) != num_classes):
         raise ValueError(
             f"{op}: weight tensor should be defined either for all {num_classes} "
@@ -311,12 +353,25 @@ def _check_kind(t: Tensor, kind: str, what: str, op: str) -> None:
         raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
 
 
+def _check_gaussian_var(var: Tensor, x: Tensor, op: str) -> None:
+    """``var`` of :func:`~lucid.nn.functional.loss.gaussian_nll_loss`:
+    floating point, and on ``x``'s device (``target``'s is already
+    checked against ``x``'s by the ``_check_dtypes`` call above this
+    one)."""
+    _check_kind(var, "floating", "var", op)
+    _check_device(op, input=x, var=var)
+
+
 def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> None:
     """Refuse an operand whose dtype loss ``op`` does not take, by its row
-    of ``_OPERAND_DTYPES``.
+    of ``_OPERAND_DTYPES`` — after refusing one on another device
+    (:func:`_check_device`): every loss that is not routed through
+    :func:`_operands` / :func:`_pair_operands` calls this unconditionally,
+    so it is the device check's other reach into this module.
 
     ``inputs`` are the loss's inputs, by the names the message uses for
     them; ``target`` is its target, when it has one."""
+    _check_device(op, target=target, **inputs)
     input_kind, target_kind = _OPERAND_DTYPES[op]
     for what, t in inputs.items():
         _check_kind(t, input_kind, what, op)
@@ -349,14 +404,23 @@ def _cast(t: Tensor, d: _C_engine.Dtype) -> Tensor:
 
 
 def _operands(
-    op: str, x: Tensor, target: Tensor, *, promote: bool = True
+    op: str,
+    x: Tensor,
+    target: Tensor,
+    *,
+    promote: bool = True,
+    **extra: Tensor | None,
 ) -> tuple[Tensor, Tensor]:
-    """``x`` and ``target`` checked for loss ``op`` (:func:`_check_dtypes`)
-    and cast to the dtype the loss computes in.
+    """``x`` and ``target`` checked for loss ``op`` (:func:`_check_device`,
+    :func:`_check_dtypes`) and cast to the dtype the loss computes in.
 
     That dtype is the one the two promote to.  With ``promote=False`` it is
     ``x``'s alone: a target that is only compared, never multiplied, does
-    not widen the loss."""
+    not widen the loss.  ``extra`` is a loss's other tensor operands —
+    ``weight``, ``pos_weight`` — checked against ``x``'s device too, but
+    not cast: a weight is only ever multiplied through the ordinary
+    operator overloads, which promote and broadcast on their own."""
+    _check_device(op, input=x, target=target, **extra)
     _check_dtypes(op, target, input=x)
     d = _loss_dtype(x, target) if promote else _loss_dtype(x)
     return _cast(x, d), _cast(target, d)
@@ -366,9 +430,10 @@ def _pair_operands(
     op: str, x1: Tensor, x2: Tensor, y: Tensor, *, promote: bool
 ) -> tuple[Tensor, Tensor, Tensor]:
     """The two inputs and the label ``y`` of a pair loss, checked for loss
-    ``op`` and cast to the dtype it computes in: the inputs' dtype, joined
-    with the label's when ``promote`` (a label that is only compared does
-    not widen the loss)."""
+    ``op`` (:func:`_check_device`, :func:`_check_dtypes`) and cast to the
+    dtype it computes in: the inputs' dtype, joined with the label's when
+    ``promote`` (a label that is only compared does not widen the loss)."""
+    _check_device(op, input1=x1, input2=x2, target=y)
     _check_dtypes(op, y, input1=x1, input2=x2)
     d = _loss_dtype(x1, x2, y) if promote else _loss_dtype(x1, x2)
     return _cast(x1, d), _cast(x2, d), _cast(y, d)

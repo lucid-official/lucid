@@ -31,7 +31,7 @@ from lucid.nn.functional._loss_checks import (
     _check_class_target,
     _check_class_weight,
     _check_dtypes,
-    _check_kind,
+    _check_gaussian_var,
     _check_reduction as _check_reduction,
     _check_same_rank,
     _check_target,
@@ -203,7 +203,7 @@ def mse_loss(
     op = "mse_loss"
     _check_reduction(reduction, op)
     _check_same_weight(weight, input, op)
-    x, target = _operands(op, input, target)
+    x, target = _operands(op, input, target, weight=weight)
     # The fused kernel takes operands of one shape; a target that
     # broadcasts (as l1_loss's and the reference's do) is expanded first.
     x, target = _broadcast_operands(x, target, _check_target(x, target, op))
@@ -274,7 +274,7 @@ def l1_loss(
     """
     _check_reduction(reduction, "l1_loss")
     _check_same_weight(weight, input, "l1_loss")
-    x, target = _operands("l1_loss", input, target)
+    x, target = _operands("l1_loss", input, target, weight=weight)
     _check_target(x, target, "l1_loss")
     # Weighted, the reference composes it of ops without a row, and so does
     # this; unweighted it is one op, whose row applies at the entry.
@@ -485,7 +485,7 @@ def huber_loss(
     _check_delta(delta, op)
     _check_same_weight(weight, input, op)
     # The loss keeps the input's dtype, as the reference's does.
-    x, target = _operands(op, input, target, promote=False)
+    x, target = _operands(op, input, target, promote=False, weight=weight)
     x, target = _broadcast_operands(x, target, _check_target(x, target, op))
     if weight is not None:
         raw = _C_engine.nn.huber_loss(
@@ -685,7 +685,7 @@ def cross_entropy(
     _check_label_smoothing(label_smoothing, op)
     x = input
     num_classes: int = _num_classes(x, op)
-    _check_class_weight(weight, num_classes, op)
+    _check_class_weight(weight, num_classes, x, target, op)
     # A target of the input's own shape holds class probabilities, as in
     # the reference; the docstring said so, and the gather path refused it
     # with a rank mismatch.
@@ -811,7 +811,7 @@ def nll_loss(
     x = input
     _check_dtypes(op, target, input=x)
     num_classes: int = _num_classes(x, op)
-    _check_class_weight(weight, num_classes, op)
+    _check_class_weight(weight, num_classes, x, target, op)
     _check_class_target(x, target, op)
     # An unbatched (C,) input is one sample.
     unbatched: bool = x.ndim == 1
@@ -901,7 +901,7 @@ def binary_cross_entropy(
     op = "binary_cross_entropy"
     _check_reduction(reduction, op)
     # In the input's dtype: the gradient floor below is chosen for it.
-    x, target = _operands(op, input, target, promote=False)
+    x, target = _operands(op, input, target, promote=False, weight=weight)
     _check_target(x, target, op)
     _check_broadcasts_to(weight, _shape(x), "weight", op)
     # Last: the only check that reads values, and only on the CPU.
@@ -1020,7 +1020,7 @@ def binary_cross_entropy_with_logits(
     """
     op = "binary_cross_entropy_with_logits"
     _check_reduction(reduction, op)
-    x, target = _operands(op, input, target)
+    x, target = _operands(op, input, target, weight=weight, pos_weight=pos_weight)
     _check_target(x, target, op)
     _check_broadcasts_to(weight, _shape(x), "weight", op)
     _check_broadcasts_to(pos_weight, _shape(x), "pos_weight", op)
@@ -1806,7 +1806,7 @@ def gaussian_nll_loss(
     _check_target(x := input, target, "gaussian_nll_loss")
     _check_dtypes("gaussian_nll_loss", target, input=x)
     if not isinstance(var := _promotion.as_number(var), (int, float)):
-        _check_kind(var, "floating", "var", "gaussian_nll_loss")
+        _check_gaussian_var(var, x, "gaussian_nll_loss")
         d = _loss_dtype(x, target, var)
         var = _cast(var, d)
     else:
@@ -2085,7 +2085,7 @@ def multi_margin_loss(
     # two.
     _check_multi_margin(p, weight, op)
     num_classes: int = _num_classes(x, op, max_ndim=2)
-    _check_class_weight(weight, num_classes, op)
+    _check_class_weight(weight, num_classes, x, target, op)
     _check_class_target(x, target, op)
     # An unbatched (C,) input is one sample; its loss takes the target's
     # shape, () or (1,), as in the reference.  It raised in the gather.
@@ -2364,7 +2364,7 @@ def multilabel_soft_margin_loss(
     """
     op = "multilabel_soft_margin_loss"
     _check_reduction(reduction, op)
-    input, target = _operands(op, input, target)
+    input, target = _operands(op, input, target, weight=weight)
     _check_target(input, target, op)
     _check_broadcasts_to(weight, _shape(input), "weight", op)
     # logσ(x)   = -softplus(-x);  log(1-σ(x)) = -softplus(x).  Both forms
