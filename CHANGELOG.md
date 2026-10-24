@@ -1292,6 +1292,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `Tensor` gains the out-of-place twin of every in-place method: 37 names such as `expm1`, `lgamma`, `xlogy`, `addbmm` and `frexp`, plus `Tensor.real` / `Tensor.imag` (views with setters; `x.real is x` for a real tensor), `Tensor.normal_` / `Tensor.uniform_(from_=0, /, to=1)`, and `lucid.randint_like`. `lucid.eval` is public and raises `TypeError` for an argument that is not a Tensor (LCD-547, LCD-613).
+
+- `inspect.signature` of the registry free functions (`lucid.contiguous`, `lucid.detach` and 68 more) shows `Tensor`, not the engine type. `x.expand(-1, n)` raises for a `-1` in a new leading dim, as the reference does. An int8/int16 index raises `IndexError` naming `x[i]` / `index_put`, where it used to raise a `LucidError` naming `index_select` (LCD-547, LCD-611).
+
+- `randint`, `randint_like` and `randperm` refuse a range the result dtype cannot hold (it used to wrap or overflow silently) and warn where a floating dtype's integers stop being exact. `randperm` refuses `dtype=bool`. `randint_like(x, low=n)` with no `high` raises `TypeError`. `nn.init.uniform_` / `normal_` draw through `Tensor.uniform_` / `normal_`, giving the same values for real dtypes, and complex `normal_` now puts the mean on both parts. `uniform_(a, a)` advances the RNG stream like any other bounds (LCD-547).
+
+- Under autocast, every `nn.functional` loss with a policy-table row applies it once at its entry, casting `weight` / `pos_weight` with it. `reduction="none"` now returns float32 for a half input, as the reference does. Losses with no row no longer widen. `F.pairwise_distance` and `F.logsigmoid` keep a float16 input's dtype. A half `F.grid_sample` on the bicubic, 5-D and reflection paths computes in float32 and rounds once. `lucid.nn.functional.activations` moved softmax/distance/shrinkage functions into private modules: their `__module__` changed, their import paths did not (LCD-614, LCD-616).
+
+- Swin builds its shifted-window attention mask, and `DDPMScheduler` moves its schedule tables, outside any active trace, so a Core ML export or compiled step records the same graph on its first call as on later ones (LCD-627).
+
 - `TVMConfig` and `MeanFlowConfig` raise `ValueError` when `out_channels != in_channels`, instead of failing later with a shape mismatch in forward or generate (LCD-620).
 
 - `tools/convert_weights`: the TVM converter now reads the published checkpoints, which are compiled `OptimizedModule` pickles; before, it recovered 0 tensors. It refuses any pickle global outside an exact allowlist, loads nested storages weights-only, and refuses to run on a reference framework older than 2.6 (CVE-2025-32434). The conversion engine refuses source keys a recipe raises `UnknownSourceKey` for, instead of dropping them (LCD-619).
