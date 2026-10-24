@@ -20,11 +20,16 @@ float32 constant a float64 run would and more:
 
 * **eval** — every family of the compiled-training matrix (its smallest
   factory, shrunk by the matrix's rules and further where that is cheap)
-  runs one forward in float64 on the CPU and in float16 on Metal; every
-  floating tensor it answers with has the input's dtype.
+  runs one forward in float64 on the CPU and in float16 on Metal (on the
+  CPU without one); every floating tensor it answers with has the
+  input's dtype.
 * **rollouts** — Stable Diffusion, DIAMOND and Genie, whose task forward
-  is a rollout the matrix skips, are checked component by component in
-  float64 on the CPU and float16 / bfloat16 on Metal.
+  is a rollout the matrix skips, are driven through that forward, their
+  sampler and their parts in float64 on the CPU and float16 / bfloat16
+  on Metal.
+* **sampling** — every image-generation family's ``generate`` at two
+  steps in float16; most still draw their start noise in float32, which
+  is pinned as a strict expected failure under LCD-597.
 * **train** — every family of the training-step table, and the detection
   and segmentation losses that table leaves to other files, take their
   step in float16 on the CPU (the losses in float64 too); the loss and
@@ -143,7 +148,10 @@ _SMALLER: dict[str, dict[str, object]] = {
 #: Image side where the matrix's is the network's native one.
 _SIDE = {"inception": 96, "inception_resnet": 96, "inception_v4": 96, "xception": 96}
 
-_EVAL = [("cpu", _F64), ("metal", _F16)]
+#: Half precision runs on Metal, or on the CPU where there is no Metal,
+#: so a runner without a GPU still sweeps a narrow dtype.
+_HALF_DEVICE = "metal" if metal_available() else "cpu"
+_EVAL = [("cpu", _F64), (_HALF_DEVICE, _F16)]
 
 
 @pytest.mark.parametrize(
@@ -236,15 +244,15 @@ _GENIE = {
 Component = Callable[[str, lucid.dtype], Callable[[], Any]]
 
 
-def _sd(device: str, dtype: lucid.dtype) -> Any:
+def _sd_task(device: str, dtype: lucid.dtype) -> Any:
     lucid.manual_seed(0)
-    model = models.create_model("stable_diffusion_gen", **_SD).stable_diffusion
+    model = models.create_model("stable_diffusion_gen", **_SD)
     return model.to(device).to(dtype).eval()
 
 
-def _diamond(device: str, dtype: lucid.dtype) -> Any:
+def _diamond_task(device: str, dtype: lucid.dtype) -> Any:
     lucid.manual_seed(0)
-    model = models.create_model("diamond_world_model", **_DIAMOND).diamond
+    model = models.create_model("diamond_world_model", **_DIAMOND)
     return model.to(device).to(dtype).eval()
 
 
@@ -252,68 +260,123 @@ def _like(device: str, dtype: lucid.dtype, *shape: int) -> lucid.Tensor:
     return lucid.randn(*shape).to(device).to(dtype)
 
 
+def _history(m: Any, device: str, dtype: lucid.dtype) -> tuple[Any, Any]:
+    """Two DIAMOND conditioning histories and the actions between them."""
+    count = m.config.conditioning_frames
+    actions = lucid.ones(2, count, dtype=lucid.int64).to(device)
+    return _like(device, dtype, 2, count, 3, 16, 16), actions
+
+
 def _sd_training(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
-    m = _sd(device, dtype)
+    m = _sd_task(device, dtype)
     images, context = _like(device, dtype, 1, 3, 32, 32), _like(device, dtype, 1, 4, 16)
-    return lambda: m(images, context, return_loss=True)
+    return lambda: m(images, context)
+
+
+def _sd_generate_ddim(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _sd_task(device, dtype)
+    context = _like(device, dtype, 1, 4, 16)
+    return lambda: m.generate(context, num_inference_steps=2, sampler="ddim")
+
+
+def _sd_generate_pndm_guided(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    """The released sampler, with classifier-free guidance's doubled batch."""
+    m = _sd_task(device, dtype)
+    context, empty = _like(device, dtype, 1, 4, 16), _like(device, dtype, 1, 4, 16)
+    return lambda: m.generate(context, empty, num_inference_steps=2, sampler="pndm")
 
 
 def _sd_unet_integer_step(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
     """The step a sampler hands the U-Net: an integer tensor."""
-    m = _sd(device, dtype)
+    m = _sd_task(device, dtype).stable_diffusion
     latent, context = _like(device, dtype, 1, 4, 8, 8), _like(device, dtype, 1, 4, 16)
     step = lucid.tensor([10]).to(device)
     return lambda: m.unet(latent, step, context)
 
 
 def _sd_vae(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
-    m = _sd(device, dtype)
+    m = _sd_task(device, dtype).stable_diffusion
     images = _like(device, dtype, 1, 3, 32, 32)
     return lambda: m.decode_latent(m.encode_image(images))
 
 
+def _diamond_world_rollout(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    """The task forward: imagine two steps, score the policy on them."""
+    m = _diamond_task(device, dtype)
+    frames, actions = _history(m.diamond, device, dtype)
+    return lambda: m(frames, actions, horizon=2)
+
+
+def _diamond_imagine_frame(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _diamond_task(device, dtype).diamond
+    frames, actions = _history(m, device, dtype)
+    return lambda: m.imagine_frame(frames, actions, steps=2)
+
+
 def _diamond_denoiser(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
-    m = _diamond(device, dtype)
-    frames = _like(device, dtype, 2, m.config.conditioning_frames, 3, 16, 16)
-    actions = lucid.ones(2, m.config.conditioning_frames, dtype=lucid.int64)
+    m = _diamond_task(device, dtype).diamond
+    frames, actions = _history(m, device, dtype)
     next_frame = _like(device, dtype, 2, 3, 16, 16)
-    return lambda: m(frames, actions.to(device), next_frame)
+    return lambda: m(frames, actions, next_frame)
 
 
 def _diamond_reward_end(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
-    m = _diamond(device, dtype)
-    frame, next_frame = _like(device, dtype, 2, 3, 16, 16), _like(
-        device, dtype, 2, 3, 16, 16
-    )
-    action = lucid.ones(2, dtype=lucid.int64).to(device)
-    return lambda: m.step_reward_end(frame, next_frame, action)
+    m = _diamond_task(device, dtype)
+    frames, actions = _history(m.diamond, device, dtype)
+    rewards = _like(device, dtype, 2, int(frames.shape[1]))
+    ends = lucid.zeros(2, int(frames.shape[1])).to(device).to(dtype)
+    return lambda: m.reward_end_loss(frames, actions, rewards, ends)
 
 
 def _diamond_actor_critic(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
-    m = _diamond(device, dtype)
+    m = _diamond_task(device, dtype).diamond
     frame = _like(device, dtype, 2, 3, 16, 16)
     return lambda: m.step_actor_critic(frame)
 
 
-def _genie(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+def _genie_task(device: str, dtype: lucid.dtype) -> Any:
     lucid.manual_seed(0)
-    m = models.create_model("genie_world_model", **_GENIE).genie
-    m = m.to(device).to(dtype).eval()
+    model = models.create_model("genie_world_model", **_GENIE, maskgit_steps=2)
+    return model.to(device).to(dtype).eval()
+
+
+def _genie_rollout(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    """The task forward: play two frames from a one-frame prompt."""
+    m = _genie_task(device, dtype)
+    prompt = lucid.rand(1, 1, 3, 8, 8).to(device).to(dtype)
+    actions = lucid.zeros(1, 2, dtype=lucid.int64).to(device)
+    return lambda: m(prompt, actions)
+
+
+def _genie_losses(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
+    m = _genie_task(device, dtype).genie
     video = lucid.rand(2, 4, 3, 8, 8).to(device).to(dtype)
     return lambda: m(video)
 
 
-_COMPONENTS: dict[str, tuple[str, Component]] = {
-    "sd-training": ("stable_diffusion", _sd_training),
-    "sd-unet-integer-step": ("stable_diffusion", _sd_unet_integer_step),
-    "sd-vae": ("stable_diffusion", _sd_vae),
-    "diamond-denoiser": ("diamond", _diamond_denoiser),
-    "diamond-reward-end": ("diamond", _diamond_reward_end),
-    "diamond-actor-critic": ("diamond", _diamond_actor_critic),
-    "genie-all-three-losses": ("genie", _genie),
+#: name -> (family, kind, builder).  ``task`` is the task model's own
+#: forward, ``sampler`` a public sampling method, ``part`` a sub-module or
+#: training term.  Every rollout family needs one of the first two.
+_COMPONENTS: dict[str, tuple[str, str, Component]] = {
+    "sd-training": ("stable_diffusion", "task", _sd_training),
+    "sd-generate-ddim": ("stable_diffusion", "sampler", _sd_generate_ddim),
+    "sd-generate-pndm-guided": (
+        "stable_diffusion",
+        "sampler",
+        _sd_generate_pndm_guided,
+    ),
+    "sd-unet-integer-step": ("stable_diffusion", "part", _sd_unet_integer_step),
+    "sd-vae": ("stable_diffusion", "part", _sd_vae),
+    "diamond-world-rollout": ("diamond", "task", _diamond_world_rollout),
+    "diamond-imagine-frame": ("diamond", "sampler", _diamond_imagine_frame),
+    "diamond-denoiser": ("diamond", "part", _diamond_denoiser),
+    "diamond-reward-end-loss": ("diamond", "part", _diamond_reward_end),
+    "diamond-actor-critic": ("diamond", "part", _diamond_actor_critic),
+    "genie-rollout": ("genie", "task", _genie_rollout),
+    "genie-all-three-losses": ("genie", "part", _genie_losses),
 }
 
-_ROLLOUT_DTYPES = [("cpu", _F64), ("metal", _F16), ("metal", _BF16)]
+_ROLLOUT_DTYPES = [("cpu", _F64), (_HALF_DEVICE, _F16), ("metal", _BF16)]
 
 
 @pytest.mark.parametrize(
@@ -326,7 +389,7 @@ def test_a_rollout_family_component_answers_in_its_dtype(
     component: str, device: str, dtype: lucid.dtype
 ) -> None:
     _need(device)
-    call = _COMPONENTS[component][1](device, dtype)
+    call = _COMPONENTS[component][2](device, dtype)
     with lucid.no_grad():
         answer = call()
     assert _floating(answer), "the component answered with no floating tensor"
@@ -334,12 +397,131 @@ def test_a_rollout_family_component_answers_in_its_dtype(
     assert not wrong, f"a {_name(dtype)} {component} answered with {wrong[:6]}"
 
 
-def test_every_family_is_swept_or_checked_by_component() -> None:
+def test_every_family_is_swept_or_driven_through_its_own_entry_point() -> None:
+    """A rollout family counts only when its task forward or sampler is run.
+
+    Sub-module checks alone let Stable Diffusion's sampler and DIAMOND's
+    imagination stay float32 while the family looked covered.
+    """
     families = {e.family for e in _REGISTRY.values()}
     swept = {f for f, _ in _PAIRS}
-    by_component = {family for family, _ in _COMPONENTS.values()}
-    assert by_component == _ROLLOUTS, sorted(by_component ^ _ROLLOUTS)
     assert families - swept == _ROLLOUTS, sorted(families - swept - _ROLLOUTS)
+    entry = {f for f, kind, _ in _COMPONENTS.values() if kind in ("task", "sampler")}
+    assert entry == _ROLLOUTS, sorted(entry ^ _ROLLOUTS)
+
+
+# -- sampling -----------------------------------------------------------------
+
+_LCD_597 = "LCD-597: generate() draws its start noise without the model dtype"
+
+#: Families whose ``generate`` still answers float32 on a half model.
+_GENERATE_PENDING = {
+    "ddpm",
+    "dit",
+    "flow_matching",
+    "mean_flow",
+    "ncsn",
+    "neural_ode",
+    "nice",
+    "realnvp",
+    "rectified_flow",
+    "score_sde",
+    "tvm",
+    "vae",
+}
+
+#: On top of the matrix's shrink: a sampler runs the network once per step.
+_GENERATE_SMALLER: dict[str, dict[str, object]] = {
+    "ddpm": {
+        "sample_size": 16,
+        "channel_mult": (1, 2),
+        "num_res_blocks": 1,
+        "attention_resolutions": (),
+        "num_train_timesteps": 20,
+    },
+    "ncsn": {
+        "sample_size": 16,
+        "channel_mult": (1, 2),
+        "num_res_blocks": 1,
+        "attention_resolutions": (),
+        "num_noise_levels": 10,
+        "langevin_steps": 1,
+    },
+    "neural_ode": {
+        "sample_size": 4,
+        "hidden_dim": 8,
+        "num_blocks": 1,
+        "solver": "euler",
+    },
+    "nice": {"hidden_dim": 32},
+    "realnvp": {"sample_size": 8, "num_scales": 1, "residual_blocks": 1, "base_dim": 8},
+    "score_sde": {
+        "sample_size": 16,
+        "channel_mult": (1, 2),
+        "num_res_blocks": 1,
+        "attention_resolutions": (),
+    },
+    "stable_diffusion": _SD,
+    "vae": {"latent_dim": (8, 16, 32), "down_block_channels": (8, 16, 32)},
+    "vqvae": {
+        "num_embeddings": 16,
+        "embedding_dim": 8,
+        "hidden_channels": 16,
+        "residual_hidden_channels": 8,
+    },
+}
+
+_STEPPED = {"dit", "flow_matching", "mean_flow", "rectified_flow", "score_sde", "tvm"}
+
+
+def _generate(family: str, model: Any, dtype: lucid.dtype) -> Any:
+    """Two sampling steps through each family's own ``generate`` signature."""
+    if family == "ddpm":
+        return model.generate(model.make_scheduler(), num_inference_steps=2)
+    if family == "stable_diffusion":
+        context = lucid.randn(1, 4, 16).to(_HALF_DEVICE).to(dtype)
+        return model.generate(context, num_inference_steps=2, sampler="ddim")
+    if family == "ncsn":
+        return model.generate(1, langevin_steps=1)
+    if family in _STEPPED:
+        return model.generate(1, steps=2)
+    return model.generate(1)
+
+
+_GENERATORS = [
+    (
+        pytest.param(
+            family,
+            marks=pytest.mark.xfail(strict=True, reason=_LCD_597),
+            id=family,
+        )
+        if family in _GENERATE_PENDING
+        else pytest.param(family, id=family)
+    )
+    for family in zoo.families("image-generation")
+]
+
+
+@pytest.mark.parametrize("family", _GENERATORS)
+def test_generate_answers_in_the_model_dtype(family: str) -> None:
+    name = zoo.representative(family, "image-generation")
+    assert name is not None
+    overrides = _GENERATE_SMALLER.get(family, {})
+    if family != "stable_diffusion":
+        cfg = _REGISTRY[name].default_config
+        overrides = {
+            **zoo.shrink(cfg),
+            **zoo.SPECS.get(family, zoo.Spec()).overrides,
+            **overrides,
+        }
+    lucid.manual_seed(0)
+    model = models.create_model(name, **overrides).to(_HALF_DEVICE).to(_F16).eval()
+    with lucid.no_grad():
+        answer = _generate(family, model, _F16)
+    assert _floating(answer), "generate answered with no floating tensor"
+    assert not _wrong(
+        answer, _F16
+    ), f"a float16 {family} sampled {_wrong(answer, _F16)}"
 
 
 # -- a training step --------------------------------------------------------------
