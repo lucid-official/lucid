@@ -14,6 +14,8 @@ for, widen losslessly to the next signed width.
 """
 
 import struct
+from pathlib import Path
+from types import MappingProxyType
 import json
 
 import numpy as np
@@ -81,6 +83,17 @@ def test_every_dtype_round_trips_bit_for_bit(tmp_path, dtype) -> None:  # type: 
     back = load_safetensors(path)
     assert back["t"].dtype == dtype and tuple(back["s"].shape) == ()
     assert bytes(back["t"]._impl.to_bytes()) == bytes(t._impl.to_bytes())
+
+
+def test_any_read_only_mapping_saves(tmp_path: Path) -> None:
+    # LCD-630: typed ``dict[str, object]``, it made a caller holding a
+    # ``dict[str, Tensor]`` copy it, since a dict's value type is invariant.
+    t = lucid.randn(2, 3)
+    path = str(tmp_path / "mapping.safetensors")
+    save_safetensors(MappingProxyType({"t": t}), path)
+    assert bytes(load_safetensors(path)["t"]._impl.to_bytes()) == bytes(
+        t._impl.to_bytes()
+    )
 
 
 def test_unsigned_entries_widen_losslessly(tmp_path) -> None:  # type: ignore[no-untyped-def]
