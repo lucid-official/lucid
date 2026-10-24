@@ -1326,6 +1326,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **`autograd.Function` (LCD-543).** An input that `forward` returns as-is and marks with `ctx.mark_non_differentiable` comes back as a new detached tensor over the same storage, positional or keyword, as in the reference; the caller's tensor keeps `requires_grad`. Marked outputs are always detached, so compiled training steps send no gradient through them.
   - **LR schedulers (LCD-492).** A param group added after a scheduler was built gets the reference's schedule, so its LR trajectory changes under ConstantLR, LinearLR, CosineAnnealingLR, PolynomialLR, ChainedScheduler and SequentialLR. LambdaLR, MultiplicativeLR, CyclicLR, OneCycleLR and CosineAnnealingWarmRestarts raise ValueError on the step after such a group was added (as do CosineAnnealingLR at its post-trough step and an LR-scheduler child of SequentialLR at its milestone); OneCycleLR accepts a group that carries `initial_lr`, `max_lr` and `min_lr`. SequentialLR switches at the milestone itself and restarts the incoming scheduler at epoch 0 from the base rates. ChainedScheduler steps its children in turn, so a child that computes from its base rates overwrites the product. A chainable scheduler built with `last_epoch=N` keeps the optimizer's current lr instead of jumping to its closed form, so resuming without `optimizer.load_state_dict` restarts from the base lr. LinearLR requires `start_factor` in (0, 1] and `end_factor` in [0, 1]; ConstantLR requires `factor` in [0, 1], and with `factor=0` the step that reaches `total_iters` raises ValueError.
 
+- share the operand load of binary Metal kernels
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

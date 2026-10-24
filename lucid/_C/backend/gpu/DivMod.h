@@ -37,6 +37,7 @@
 #include <mlx/ops.h>
 
 #include "../DivMod.h"
+#include "BinaryKernelLoad.h"
 
 namespace lucid::backend {
 
@@ -132,16 +133,7 @@ inline const char* int_body_src() {
 }
 
 inline mx::fast::CustomKernelFunction make_kernel(const char* name, bool is_float, bool strided) {
-    const std::string load = strided ? R"(
-        uint elem = thread_position_in_grid.x;
-        T av = a[elem_to_loc(int64_t(elem), a_shape, a_strides, a_ndim)];
-        T bv = b[elem_to_loc(int64_t(elem), b_shape, b_strides, b_ndim)];
-    )"
-                                     : R"(
-        uint elem = thread_position_in_grid.x;
-        T av = AScalar ? a[0] : a[elem];
-        T bv = BScalar ? b[0] : b[elem];
-    )";
+    const std::string load = binary_kernel_load_src(strided);
     return mx::fast::metal_kernel(name, {"a", "b"}, {"out"},
                                   load + (is_float ? float_body_src() : int_body_src()), "",
                                   /*ensure_row_contiguous=*/!strided,
