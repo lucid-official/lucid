@@ -362,7 +362,10 @@ class DiTModel(PretrainedModel):
                 tokens = cast(DiTBlock, block)(tokens, cond)
 
         image = unpatchify(
-            self.final(tokens, cond), self.grid, self.config.patch_size, self.config.out_channels
+            self.final(tokens, cond),
+            self.grid,
+            self.config.patch_size,
+            self.config.out_channels,
         )
         return DiffusionModelOutput(sample=image)
 

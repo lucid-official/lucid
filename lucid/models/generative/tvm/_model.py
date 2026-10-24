@@ -80,7 +80,9 @@ def _zero_projection(head: nn.Module) -> None:
             layer.weight.zero_()
 
 
-def _modulation(params: Tensor, count: int, width: int, normalize: bool) -> list[Tensor]:
+def _modulation(
+    params: Tensor, count: int, width: int, normalize: bool
+) -> list[Tensor]:
     r"""Split an adaLN projection into ``count`` vectors of ``width``.
 
     With ``normalize`` each vector is RMS-normalised on its own — Eq. 16
@@ -272,7 +274,11 @@ class _FinalLayer(nn.Module):
     """
 
     def __init__(
-        self, hidden_size: int, patch_size: int, out_channels: int, modulation_norm: bool
+        self,
+        hidden_size: int,
+        patch_size: int,
+        out_channels: int,
+        modulation_norm: bool,
     ) -> None:
         """Initialise the head. See the class docstring for parameters."""
         super().__init__()
@@ -526,7 +532,9 @@ class TVMModel(PretrainedModel):
         device = x.device.type
         guidance = self.resolve_guidance(guidance_scale, labels)
         if not isinstance(guidance, Tensor):
-            guidance = lucid.full((batch,), float(guidance), device=device, dtype=x.dtype)
+            guidance = lucid.full(
+                (batch,), float(guidance), device=device, dtype=x.dtype
+            )
         if labels is None:
             labels = lucid.full(
                 (batch,),
@@ -548,7 +556,10 @@ class TVMModel(PretrainedModel):
         for block in self.blocks:
             tokens = block(tokens, cond)
         out = unpatchify(
-            self.final(tokens, cond), self.grid, self.config.patch_size, self.config.out_channels
+            self.final(tokens, cond),
+            self.grid,
+            self.config.patch_size,
+            self.config.out_channels,
         )
         if self.config.scaled_parameterization:
             out = out * guidance.reshape(-1, 1, 1, 1)
@@ -789,7 +800,9 @@ class TVMForImageGeneration(ImageGenerationModel):
         if config.guidance_range is None:
             return lucid.full((batch,), config.guidance_scale, device=device)
         low, high = config.guidance_range
-        beta = 1.0 / high + lucid.rand((batch,), device=device) * (1.0 / low - 1.0 / high)
+        beta = 1.0 / high + lucid.rand((batch,), device=device) * (
+            1.0 / low - 1.0 / high
+        )
         return 1.0 / beta
 
     # ── objective ────────────────────────────────────────────────────────
