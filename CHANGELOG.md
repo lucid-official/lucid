@@ -1352,6 +1352,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Every generative config refuses an `out_channels` its network cannot produce: VAE, VQ-VAE, NCSN, Score SDE, DIAMOND, Stable Diffusion, the PlaNet/Dreamer world models, NICE, and DDPM. DDPM accepts `in_channels`, or `2 * in_channels` with `learn_sigma=True`, so a `learn_sigma=True` override needs `out_channels=6`, as DiT already required; the ImageNet-64 preset states `out_channels=6`. `NICEConfig` defaults to 1 channel and refuses others; before, it replaced any value silently (LCD-631).
+
+- I-JEPA, V-JEPA, V-JEPA 2, DreamerV2, DreamerV3 and TVM pair their target/EMA networks with the live network by parameter name through one helper. A re-assigned submodule no longer mixes the wrong tensors (LCD-635). V-JEPA 2 without RoPE runs on Metal, and a standalone `DDIMScheduler` moves its tables once (LCD-639). `save_safetensors` takes any `Mapping[str, Tensor]`. The weight converters refuse a source key no rule covers, instead of dropping it (LCD-630).
+
 - **Breaking:** `lucid.equal(a, b)` returns a single Python bool, as the reference's does: True only when the shapes match and every element is equal at the promoted dtype (NaN equals nothing). For the elementwise comparison use `lucid.eq` or `==` (LCD-633).
 
 - `lucid.gcd` / `lcm` broadcast and follow the binary-op device rule. They take only integer tensors (an integer beside a bool promotes), refuse floats and Python numbers, and wrap on overflow exactly as the reference does. `lucid.isreal` is now False where the imaginary part is nonzero. 39 more functions are public in `lucid.__all__` (gcd, lcm, put, copysign, ldexp, frexp, amax, amin, std_mean, var_mean, histogram, cov, cdist, logdet, multinomial, poisson, …). Tensor gains `bfloat16()`/`short()`/`char()`/`cfloat()`/`cdouble()` (`byte()`/`chalf()` refuse) and methods for adjoint, angle, conj, fmax, fmin, moveaxis, nanmean, nansum, rot90, swapdims, vdot and others. `lucid.Callable` is removed (LCD-641, LCD-633, LCD-634).
