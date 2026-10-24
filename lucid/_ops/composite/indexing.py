@@ -56,6 +56,32 @@ if TYPE_CHECKING:
 # ── helpers ────────────────────────────────────────────────────────────────
 
 
+def _written_through_storage(impl: _C_engine.TensorImpl) -> bool:
+    """Whether an in-place write to ``impl`` goes into a buffer it shares.
+
+    A tensor with a live view, or a view itself: the write lands through
+    ``assign_inplace``, which refuses it while a saved tensor holds the
+    storage.
+    """
+    return (
+        impl.is_aliased()
+        or not impl.is_contiguous()
+        or impl.storage_offset_bytes() != 0
+    )
+
+
+def _recorded_snapshot(x: Tensor) -> Tensor:
+    """What a compile recording reads for a :class:`_Snapshot` of ``x``.
+
+    ``x`` itself, unless the write goes through shared storage: the op
+    computing the write then saves its input in grad mode, and the engine
+    refuses a write to storage a saved tensor holds, so the op reads a
+    copy, whose derivative is the identity too.  That case records one
+    ``contiguous`` that a recording under ``no_grad`` does not.
+    """
+    return x.clone() if _written_through_storage(x._impl) else x
+
+
 @final
 class _Snapshot(Function):
     """``x``'s values in a buffer of their own, standing in for ``x`` in the graph.
@@ -65,7 +91,15 @@ class _Snapshot(Function):
     version, and the write that follows bumps it, so the op's own backward
     refused the write as an in-place modification of a tensor it saved.
     This node saves nothing, and its derivative is the identity.
+
+    A compile recording reads ``x`` itself (:attr:`Function._trace_form`):
+    it runs no eager backward, so there is no version check to dodge.  A
+    destination written through shared storage is read through a copy
+    instead, which records one extra ``contiguous``
+    (:func:`_recorded_snapshot`).
     """
+
+    _trace_form = staticmethod(_recorded_snapshot)
 
     @override
     @staticmethod
@@ -360,11 +394,7 @@ def _write_inplace[T: Tensor](
             f"{name}: a leaf tensor that requires grad cannot be modified in place — "
             "wrap the call in lucid.no_grad(), or use the out-of-place form"
         )
-    aliased = (
-        input._impl.is_aliased()
-        or not input.is_contiguous()
-        or input._impl.storage_offset_bytes() != 0
-    )
+    aliased = _written_through_storage(input._impl)
     base: Tensor = input
     if records:
         snapshot = _Snapshot.apply(input)

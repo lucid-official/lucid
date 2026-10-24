@@ -154,6 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - snapshot and restore every live stream without tensor ops
 
+- bookkeeping Functions record plain ops in a trace
+
 ### Performance
 
 - strided views copy by runs; contiguous() is 11-35x faster

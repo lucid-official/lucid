@@ -141,6 +141,7 @@ def checkpoint(
     @final
     class _CheckpointFn(Function):
         _once_differentiable = True  # second derivatives through it are unverified
+        _exact_derivative = True  # backward differentiates a re-run of ``fn``
 
         @override
         @staticmethod
@@ -199,7 +200,6 @@ def checkpoint(
         return cast(Tensor | tuple[Tensor, ...], _CheckpointFn.apply(*args))
 
     # ── non-reentrant ────────────────────────────────────────────────────
-    #
     # The reentrant form derives the output's ``requires_grad`` from its
     # positional inputs alone.  A segment whose inputs are all constants but
     # which closes over trainable parameters — a first layer fed raw data, a

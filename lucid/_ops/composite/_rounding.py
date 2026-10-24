@@ -8,6 +8,11 @@ operands, so a later in-place write to either was refused
 (``y.mul_(3)`` after ``div(y, 2, rounding_mode="trunc")``, or
 ``y.div_(2, rounding_mode="trunc")`` with a view of ``y`` alive) for a
 gradient that does not read them.
+
+A compile recording takes the plain op for either node
+(:attr:`~lucid.autograd.function.Function._trace_form`): it runs no eager
+backward, so the saved operands are never checked, and the plain op's own
+derivative is the same zero.
 """
 
 from typing import final, override
@@ -20,9 +25,21 @@ from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 
 
+def _plain_trunc_quotient(a: Tensor, b: Tensor) -> Tensor:
+    """``trunc(a / b)`` from the plain ops, for a compile recording."""
+    return _wrap(_trunc_quotient(a._impl, b._impl))
+
+
+def _plain_round_decimals(a: Tensor, dec: int) -> Tensor:
+    """``round(a, decimals=dec)`` from the plain ops, for a compile recording."""
+    return _wrap(_round_decimals(a._impl, dec))
+
+
 @final
 class _TruncQuotient(Function):
     """``trunc(a / b)``, with a zero derivative with respect to both."""
+
+    _trace_form = staticmethod(_plain_trunc_quotient)
 
     @override
     @staticmethod
@@ -41,6 +58,8 @@ class _TruncQuotient(Function):
 @final
 class _RoundDecimals(Function):
     """``round(a, decimals=dec)``, with a zero derivative."""
+
+    _trace_form = staticmethod(_plain_round_decimals)
 
     @override
     @staticmethod

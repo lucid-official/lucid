@@ -1110,7 +1110,6 @@
     "lucid/_ops/__init__.py": 2,
     "lucid/_ops/_adapters.py": 1,
     "lucid/amp/grad_scaler.py": 1,
-    "lucid/autograd/function.py": 1,
     "lucid/compile/_entry/decode_step.py": 1,
     "lucid/compile/_entry/segmented_step.py": 7,
     "lucid/compile/_entry/step.py": 4,

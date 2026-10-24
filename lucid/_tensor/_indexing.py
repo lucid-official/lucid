@@ -51,6 +51,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE
+from lucid._engine_scope import untraced
 from lucid._factories._build import _fill
 from lucid._factories.converters import _to_impl
 
@@ -953,8 +954,11 @@ def _take(t: Tensor, impl: _C_engine.TensorImpl) -> None:
     old = t._impl
     retains = old.retains_grad
     if isinstance(old, _C_engine.TensorImpl):
-        v0 = _C_engine.TensorImpl._make_view(old, [0], [1], 0)
-        v0.copy_from(v0)
+        # Bumps ``old``'s version, eager bookkeeping a compile recording
+        # must not take for an op of the traced call.
+        with untraced():
+            v0 = _C_engine.TensorImpl._make_view(old, [0], [1], 0)
+            v0.copy_from(v0)
     t._impl = impl
     if retains:
         impl.retain_grad_()

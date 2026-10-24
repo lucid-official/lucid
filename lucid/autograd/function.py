@@ -2,12 +2,16 @@
 autograd.Function: base class for custom differentiable operations.
 """
 
-from typing import Any, NamedTuple, Protocol, cast, override
+from collections.abc import Callable
+from typing import Any, ClassVar, NamedTuple, Protocol, cast, override
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._python_node import _register
+
+#: What ``Function.apply`` hands back.
+type _Outputs = Tensor | tuple[Tensor, ...]
 
 
 class _Saved(NamedTuple):
@@ -518,13 +522,42 @@ def _wrap_outputs(
     return tuple(entries) if is_tuple else entries[0]
 
 
+def _lucid_defined(klass: type) -> bool:
+    """Whether ``klass`` is defined in a ``lucid.`` module outside ``lucid.test``.
+
+    The rule every private ``Function`` marker is trusted by
+    (:attr:`Function._trace_form`, :attr:`Function._exact_derivative`): a
+    marker changes what a compile recording keeps of the call, so only a
+    class whose ``backward`` Lucid wrote and tests may set one.  A user's
+    class, or a test's, that sets the attribute is treated as unmarked.
+    """
+    module = klass.__module__
+    if module != "lucid" and not module.startswith("lucid."):
+        return False
+    return module != "lucid.test" and not module.startswith("lucid.test.")
+
+
+def _trace_form_of(klass: type[Function]) -> Callable[..., _Outputs] | None:
+    """``klass``'s trusted :attr:`Function._trace_form`, or ``None``."""
+    return klass._trace_form if _lucid_defined(klass) else None
+
+
+def _is_exact_derivative(klass: type[Function]) -> bool:
+    """Whether ``klass`` carries a trusted :attr:`Function._exact_derivative`."""
+    return klass._exact_derivative and _lucid_defined(klass)
+
+
 def _make_apply() -> classmethod:  # type: ignore[type-arg]
     """Build the per-subclass ``apply`` classmethod injected by ``FunctionMeta``."""
 
-    def apply(
-        klass: type, *args: Tensor, **kwargs: object
-    ) -> Tensor | tuple[Tensor, ...]:
+    def apply(klass: type[Function], *args: object, **kwargs: object) -> _Outputs:
         """Run ``forward`` and register the autograd node when needed."""
+        tracer = _C_engine.compile.current_tracer()
+        if tracer is not None and (trace_form := _trace_form_of(klass)) is not None:
+            # A recording runs no eager backward, so the node's bookkeeping
+            # has nothing to protect: the plain op is what is recorded, in
+            # the caller's grad mode.
+            return trace_form(*args, **kwargs)
         ctx = FunctionCtx()
         ctx.needs_input_grad = tuple(
             isinstance(a, Tensor) and a.requires_grad for a in args
@@ -535,18 +568,15 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
         # was thrown away by every tracked call and kept by an untracked one,
         # which sent a gradient to whatever tensor ``forward`` closed over.
         with _C_engine.NoGradGuard():
-            output = klass.forward(ctx, *args, **kwargs)  # type: ignore[attr-defined]
-        if (tracer := _C_engine.compile.current_tracer()) is not None:
+            output = klass.forward(ctx, *args, **kwargs)
+        if tracer is not None:
             # Imported here: ``lucid.compile`` imports this package.
             from lucid.compile._core.custom_backward import note_applied
 
             note_applied(tracer, klass, args, output)
 
         tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
-        return cast(
-            Tensor | tuple[Tensor, ...],
-            _wrap_outputs(output, klass, ctx, args, tracked),
-        )
+        return cast(_Outputs, _wrap_outputs(output, klass, ctx, args, tracked))
 
     return classmethod(apply)  # type: ignore[arg-type]
 
@@ -664,6 +694,26 @@ class Function(metaclass=FunctionMeta):
     >>> y = MyReLU.apply(lucid.tensor([-1.0, 2.0], requires_grad=True))
     >>> y.sum().backward()
     """
+
+    #: What a ``lucid.compile`` recording runs in place of the node: a
+    #: callable taking ``apply``'s arguments and returning ``forward``'s
+    #: values from plain ops, in the caller's grad mode, whose own derivative
+    #: is the one ``backward`` gives.  For a node that exists only for the
+    #: eager graph's bookkeeping — saving nothing, so an in-place write after
+    #: it is not refused — which a recording, running no eager backward,
+    #: does not need.  ``apply`` then registers no node and the call is not
+    #: reported to the compile's custom-backward check.  Trusted only on a
+    #: class defined in a ``lucid.`` module outside ``lucid.test``
+    #: (:func:`_lucid_defined`); on any other class it is ignored.
+    _trace_form: ClassVar[Callable[..., _Outputs] | None] = None
+
+    #: Whether the derivative a compile takes of the recorded ``forward`` is
+    #: ``backward``: the recorded ops' VJP equals it, and ``forward`` reads no
+    #: tensor that carries a gradient besides its positional inputs (or
+    #: ``backward`` answers for that tensor too), so a compiled backward may
+    #: differentiate the recording instead of calling ``backward``.  Trusted
+    #: only as :attr:`_trace_form` is.
+    _exact_derivative: ClassVar[bool] = False
 
     # The base signature is ``(ctx, *Any, **Any) -> Any`` on purpose: every
     # subclass declares its own concrete parameters and return type, and only
