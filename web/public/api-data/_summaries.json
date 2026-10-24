@@ -7404,13 +7404,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 8768604,
@@ -7564,13 +7557,6 @@
         "params": 13595568,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -8160,13 +8146,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 8768604,
@@ -8320,13 +8299,6 @@
         "params": 13595568,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -8959,13 +8931,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 24817512,
@@ -9119,13 +9084,6 @@
         "params": 13595568,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -9715,13 +9673,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 24817512,
@@ -9875,13 +9826,6 @@
         "params": 13595568,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -10514,13 +10458,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 44034528,
@@ -10674,13 +10611,6 @@
         "params": 24156736,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -11270,13 +11200,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 44034528,
@@ -11430,13 +11353,6 @@
         "params": 24156736,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -12069,13 +11985,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 98885328,
@@ -12229,13 +12138,6 @@
         "params": 54323040,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -12825,13 +12727,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 98885328,
@@ -12985,13 +12880,6 @@
         "params": 54323040,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -13624,13 +13512,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 198360480,
@@ -13784,13 +13665,6 @@
         "params": 54323040,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -14380,13 +14254,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 198360480,
@@ -14540,13 +14407,6 @@
         "params": 54323040,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -15179,13 +15039,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 549082544,
@@ -15339,13 +15192,6 @@
         "params": 98634816,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -15935,13 +15781,6 @@
         "own_params": 0,
         "children": [
           {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
-          {
             "name": "blocks",
             "type": "ModuleList",
             "params": 549082544,
@@ -16095,13 +15934,6 @@
         "params": 98634816,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -16957,13 +16789,6 @@
             "own_params": 0,
             "children": [
               {
-                "name": "pool",
-                "type": "Identity",
-                "params": 0,
-                "own_params": 0,
-                "children": []
-              },
-              {
                 "name": "blocks",
                 "type": "ModuleList",
                 "params": 1190291256,
@@ -17054,13 +16879,6 @@
         "params": 100727072,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -17873,13 +17691,6 @@
             "own_params": 0,
             "children": [
               {
-                "name": "pool",
-                "type": "Identity",
-                "params": 0,
-                "own_params": 0,
-                "children": []
-              },
-              {
                 "name": "blocks",
                 "type": "ModuleList",
                 "params": 1190291256,
@@ -17970,13 +17781,6 @@
         "params": 100727072,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -18832,13 +18636,6 @@
             "own_params": 0,
             "children": [
               {
-                "name": "pool",
-                "type": "Identity",
-                "params": 0,
-                "own_params": 0,
-                "children": []
-              },
-              {
                 "name": "blocks",
                 "type": "ModuleList",
                 "params": 2115537312,
@@ -18929,13 +18726,6 @@
         "params": 223441840,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",
@@ -19748,13 +19538,6 @@
             "own_params": 0,
             "children": [
               {
-                "name": "pool",
-                "type": "Identity",
-                "params": 0,
-                "own_params": 0,
-                "children": []
-              },
-              {
                 "name": "blocks",
                 "type": "ModuleList",
                 "params": 2115537312,
@@ -19845,13 +19628,6 @@
         "params": 223441840,
         "own_params": 0,
         "children": [
-          {
-            "name": "pool",
-            "type": "MaxPool2d",
-            "params": 0,
-            "own_params": 0,
-            "children": []
-          },
           {
             "name": "blocks",
             "type": "ModuleList",

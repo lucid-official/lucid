@@ -1244,6 +1244,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ViT raises `ValueError`, naming the built and received sizes, for an input whose patch grid differs from the one it was built for. This includes inputs with the same patch count on another layout (e.g. 16x64 for a 32x32 build), which used to answer silently with the position table on the wrong layout (LCD-554).
+
+- EfficientDet raises `ValueError`, naming the input and the sizes to pad or resize to, for a side its BiFPN cannot fuse (the stride-8 map must be a multiple of 16). This includes sides of 8 px or less, which used to answer silently through size-1 broadcasts (LCD-554).
+
+- CoAtNet's transformer stages no longer register an unused `pool` submodule. The relative-position index is one shared table per (grid, device), built outside any trace and capped at 256 MiB in total, instead of a copy per block. `state_dict` is unchanged (LCD-554).
+
+- Score-SDE `log_likelihood` is reported at float32 or wider: it sums over every dimension, so a half-precision answer would overflow. `SDE.prior_sampling(shape, device, *, dtype=None)` takes the draw's dtype, and `marginal_prob`'s standard deviation takes the state's dtype, as its mean does (LCD-597).
+
+- Generative models draw their start noise in the model's dtype: a float64 model now samples float64 noise instead of widened float32 draws, so its samples differ from before (LCD-597).
+
 - `lucid.compile`: a call in grad mode that reads a tensor with `requires_grad=True` (a model with trainable parameters, eval mode included, or a forward that makes a grad leaf) now runs eagerly, so `backward()` works. Before, it returned a result that was silently cut from the graph. To keep the compiled path, run inference under `lucid.no_grad()` / `lucid.inference_mode()`, and train with `make_step` / `fused_step`. `save_compiled` saves only an executable that has run, and says to call under `lucid.no_grad()` otherwise (LCD-582).
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:
