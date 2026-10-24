@@ -33,7 +33,9 @@ Subcommands::
   doctor                      show where `import lucid` resolves from here
   land WORKTREE [--check] [--cleanup] [--skip-stub-check] [--no-changelog]
                 [--allow-slop REASON]   (refuses a quality-gate increase, exit 6,
-                and an audit baseline whose totals disagree with its body, exit 7)
+                an audit baseline whose totals disagree with its body, exit 7,
+                changed-line coverage under 90%, exit 8, and --check refuses a
+                diff-cover that cannot measure, exit 9)
   heavy -- CMD...             run CMD under the machine-wide heavy-job lock
   build                       build the C++ engine in place in a worktree
   hook                        Claude Code PreToolUse entry point (stdin JSON)
@@ -100,7 +102,11 @@ MERGE_DRIVERS = {
 SLOP_EXIT = 6
 BASELINE_EXIT = 7
 DIFF_COVER_EXIT = 8
+DIFF_COVER_UNMEASURED_EXIT = 9
 DIFF_COVER_THRESHOLD = 90
+# diff-cover's own verdict for --fail-under.  Any other non-zero exit means
+# it never measured (module missing, git error, unreadable XML).
+DIFF_COVER_BELOW = "Coverage is below"
 COVERAGE_OMIT_PREFIXES = ("lucid/test/", "lucid/models/", "lucid/benchmarks/")
 
 # Machine-local and outside the synced project tree: locks must never travel
@@ -1276,13 +1282,40 @@ def _resolve_coverage_xml(wt: Path, py: str, touched: set[str]) -> Path | None:
     return None
 
 
+def _diff_cover_unimportable(py: str) -> str:
+    """Why *py* cannot import diff-cover; empty when it can."""
+    proc = subprocess.run(
+        [py, "-c", "import diff_cover.diff_cover_tool"],
+        env=repo_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return ""
+    lines = proc.stderr.strip().splitlines()
+    return lines[-1] if lines else f"exit {proc.returncode}"
+
+
 def diff_coverage_report(
     wt: Path, py: str, base: str, touched: set[str]
 ) -> tuple[int, str]:
-    """Run ``diff-cover`` on *wt* against *base* when ``lucid/*.py`` changed (LCD-269)."""
+    """Run ``diff-cover`` on *wt* against *base* when ``lucid/*.py`` changed (LCD-269).
+
+    A run that never measured is DIFF_COVER_UNMEASURED_EXIT, never a pass and
+    never "coverage below the threshold".
+    """
     measured = _measurable_lucid_py(touched)
     if not measured:
         return 0, "(no covered lucid/*.py changes — diff-cover skipped)"
+    # Checked before the XML, which may mean a coverage run of the touched tests.
+    why = _diff_cover_unimportable(py)
+    if why:
+        return (
+            DIFF_COVER_UNMEASURED_EXIT,
+            f"✗ diff-cover cannot measure: {py} cannot import it ({why}). It is in "
+            "the `quality` dependency group; this is not a coverage verdict.",
+        )
     xml_path = _resolve_coverage_xml(wt, py, touched)
     if xml_path is None:
         return (
@@ -1315,9 +1348,15 @@ def diff_coverage_report(
     out = (proc.stdout + proc.stderr).rstrip()
     if proc.returncode == 0:
         return 0, out
+    if DIFF_COVER_BELOW in out:
+        return (
+            DIFF_COVER_EXIT,
+            f"{out}\n✗ diff-cover: changed-line coverage is below {DIFF_COVER_THRESHOLD}%",
+        )
     return (
-        DIFF_COVER_EXIT,
-        f"{out}\n✗ diff-cover: changed-line coverage is below {DIFF_COVER_THRESHOLD}%",
+        DIFF_COVER_UNMEASURED_EXIT,
+        f"{out}\n✗ diff-cover cannot measure (exit {proc.returncode}); this is not a "
+        "coverage verdict.",
     )
 
 

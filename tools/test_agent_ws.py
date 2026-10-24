@@ -370,12 +370,25 @@ def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(
     assert not agent_ws._check_engine_freshness(wt_root)
 
 
-def test_land_check_reports_and_enforces_diff_cover_threshold(
-    scratch: Scratch,
-) -> None:
-    """LCD-269: ``land --check`` runs ``diff-cover`` on changed ``lucid/*.py`` files
-    and requires >= 90% changed-line coverage."""
-    (scratch.main / ".gitignore").write_text("build/\ncoverage.xml\n")
+_COVERAGE_XML = (
+    '<?xml version="1.0" ?>\n'
+    '<coverage version="7.0">\n'
+    '  <packages><package name="lucid"><classes>\n'
+    '    <class name="mod.py" filename="lucid/mod.py">\n'
+    "      <lines>\n"
+    '        <line number="1" hits="1"/>\n'
+    '        <line number="2" hits="{hits}"/>\n'
+    '        <line number="3" hits="{hits}"/>\n'
+    "      </lines>\n"
+    "    </class>\n"
+    "  </classes></package></packages>\n"
+    "</coverage>\n"
+)
+
+
+def commit_a_measured_lucid_change(scratch: Scratch) -> Path:
+    """Branch A changes ``lucid/mod.py``; returns where its coverage.xml goes."""
+    (scratch.main / ".gitignore").write_text("build/\ncoverage.xml\n.venv/\n")
     (scratch.main / "lucid").mkdir(parents=True, exist_ok=True)
     (scratch.main / "lucid" / "mod.py").write_text("def f(x: int) -> int:\n    return x\n")
     assert scratch.git(scratch.main, "add", ".gitignore", "lucid/mod.py").returncode == 0
@@ -390,23 +403,21 @@ def test_land_check_reports_and_enforces_diff_cover_threshold(
 
     cov_dir = scratch.a / "build" / "coverage"
     cov_dir.mkdir(parents=True, exist_ok=True)
-    xml_template = (
-        '<?xml version="1.0" ?>\n'
-        '<coverage version="7.0">\n'
-        '  <packages><package name="lucid"><classes>\n'
-        '    <class name="mod.py" filename="lucid/mod.py">\n'
-        "      <lines>\n"
-        '        <line number="1" hits="1"/>\n'
-        '        <line number="2" hits="{hits}"/>\n'
-        '        <line number="3" hits="{hits}"/>\n'
-        "      </lines>\n"
-        "    </class>\n"
-        "  </classes></package></packages>\n"
-        "</coverage>\n"
-    )
+    return cov_dir
+
+
+def test_land_check_reports_and_enforces_diff_cover_threshold(
+    scratch: Scratch,
+) -> None:
+    """LCD-269: ``land --check`` runs ``diff-cover`` on changed ``lucid/*.py`` files
+    and requires >= 90% changed-line coverage."""
+    # diff-cover is in the `quality` dependency group, not the `test` extra
+    # CI installs; without it nothing is measured (the test below).
+    pytest.importorskip("diff_cover")
+    cov_dir = commit_a_measured_lucid_change(scratch)
 
     # 0% changed-line coverage -> refused with exit 8
-    (cov_dir / "coverage.xml").write_text(xml_template.format(hits=0))
+    (cov_dir / "coverage.xml").write_text(_COVERAGE_XML.format(hits=0))
     bad = land(scratch, "--check")
     bad_out = bad.stdout + bad.stderr
     assert bad.returncode == 8, bad_out
@@ -414,11 +425,54 @@ def test_land_check_reports_and_enforces_diff_cover_threshold(
     assert "below 90%" in bad_out
 
     # 100% changed-line coverage -> passes with exit 0
-    (cov_dir / "coverage.xml").write_text(xml_template.format(hits=1))
+    (cov_dir / "coverage.xml").write_text(_COVERAGE_XML.format(hits=1))
     good = land(scratch, "--check")
     good_out = good.stdout + good.stderr
     assert good.returncode == 0, good_out
     assert "100%" in good_out
 
 
+def test_land_check_without_diff_cover_cannot_measure_rather_than_fail_coverage(
+    scratch: Scratch, tmp_path: Path
+) -> None:
+    """LCD-561: a worktree interpreter without diff-cover is "cannot measure"
+    (exit 9), not "coverage below 90%" (exit 8) — CI's `.[test]` install has none."""
+    cov_dir = commit_a_measured_lucid_change(scratch)
+    (cov_dir / "coverage.xml").write_text(_COVERAGE_XML.format(hits=1))
 
+    # `land` runs diff-cover with the worktree's .venv python; this one finds
+    # a `diff_cover` that refuses to import ahead of any installed copy.
+    hidden = tmp_path / "no-diff-cover"
+    hidden.mkdir()
+    (hidden / "diff_cover.py").write_text(
+        "raise ModuleNotFoundError(\"No module named 'diff_cover'\", name='diff_cover')\n"
+    )
+    venv_py = scratch.a / ".venv" / "bin" / "python3"
+    venv_py.parent.mkdir(parents=True)
+    venv_py.write_text(
+        "#!/bin/sh\n"
+        f"PYTHONPATH={shlex.quote(str(hidden))} exec {shlex.quote(sys.executable)} \"$@\"\n"
+    )
+    venv_py.chmod(0o755)
+
+    result = land(scratch, "--check")
+    out = result.stdout + result.stderr
+    assert result.returncode == 9, out
+    assert "diff-cover cannot measure" in out
+    assert "below 90%" not in out
+
+
+def test_land_check_on_a_diff_cover_crash_cannot_measure_rather_than_fail_coverage(
+    scratch: Scratch,
+) -> None:
+    """LCD-561: only diff-cover's own --fail-under verdict is exit 8; a run that
+    dies before measuring (here an unreadable coverage.xml) is exit 9."""
+    pytest.importorskip("diff_cover")
+    cov_dir = commit_a_measured_lucid_change(scratch)
+    (cov_dir / "coverage.xml").write_text("<coverage><unclosed>\n")
+
+    result = land(scratch, "--check")
+    out = result.stdout + result.stderr
+    assert result.returncode == 9, out
+    assert "diff-cover cannot measure (exit" in out
+    assert "below 90%" not in out

@@ -1158,6 +1158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - run a step through a custom Function's backward eagerly
 
+- diff-cover that never measured is not low coverage
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:
