@@ -97,7 +97,9 @@ class StabilityAxis(Axis):
         # Where the reference is finite.  Absent means "not measured", and
         # an unmeasured op is checked at every scale as before — the table
         # narrows the claim, it does not gate it.
-        reference_finite = _stability_contract().get(symbol.qualname)
+        reference_finite = _stability_contract().get(
+            _surface.recorded_as(symbol.qualname)
+        )
 
         # What the check is actually about: does *changing the magnitude*
         # introduce a NaN?  A NaN that was there before anything was scaled

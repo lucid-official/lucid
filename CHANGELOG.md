@@ -1308,6 +1308,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a non-number or non-finite polynomial degree
 
+- free-function method twins read the free function's tables
+
 ### Changed
 
 - DiT, MeanFlow, TVM, LeNet-5 and the VAE raise `ValueError`, naming the built and received sizes, for an input size they were not built for, instead of an engine `ShapeMismatch`. This includes off-by-one sizes that used to answer silently with an output of the built size (e.g. 9×9 into an 8×8 DiT, 33 px into a 32 px VAE). HVAE `encode` refuses another size too (LCD-625).

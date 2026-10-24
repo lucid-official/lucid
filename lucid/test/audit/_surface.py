@@ -22,6 +22,7 @@ import lucid
 import lucid._tensor.tensor as _tensor_module
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._tensor._free_fn_methods import FREE_FN_METHODS
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -590,6 +591,26 @@ def spellings(short: str) -> frozenset[str]:
     return frozenset({f"lucid.{short}", f"Tensor.{short}", f"F.{short}"})
 
 
+def recorded_as(qualname: str) -> str:
+    """The qualname the audit files what it knows about ``qualname`` under.
+
+    The tables keyed by qualname — where the reference is finite
+    (``stability_contract.json``), which dtypes it accepts
+    (``dtype_contract.json``), why an op has no derivative
+    (``NOT_DIFFERENTIABLE``) — are measured or written per spelling.  A
+    :data:`~lucid._tensor._free_fn_methods.FREE_FN_METHODS` method *is*
+    ``lucid.<name>`` with ``self`` first, so it has no knowledge of its
+    own to record: what is true of the free function is true of it.  When
+    LCD-547 added 32 of them, each was a stranger to every table, and
+    eight cells went red on CI for facts already on file under the free
+    function — ``x.acosh()`` NaN below 1, ``x.heaviside(v)`` a step.
+    """
+    head, _, tail = qualname.rpartition(".")
+    if head == "Tensor" and tail in FREE_FN_METHODS:
+        return f"lucid.{tail}"
+    return qualname
+
+
 #: The module a qualname's first component stands for, where that
 #: component is a :data:`_PREFIX` rather than the head of a module path.
 _ROOTS = {"lucid": "lucid", "F": "lucid.nn.functional", "nn": "lucid.nn"}
@@ -652,6 +673,7 @@ __all__ = [
     "Symbol",
     "counterparts",
     "enumerate_surface",
+    "recorded_as",
     "removed",
     "resolve",
     "spellings",
