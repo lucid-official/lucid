@@ -889,15 +889,20 @@ def index_put(
 
 def _index_put(
     input: Tensor,
-    indices: list[Tensor] | tuple[Tensor, ...],
+    indices: object,
     values: Tensor,
     accumulate: bool,
     name: str,
 ) -> Tensor:
-    """:func:`index_put`, its refusals under ``name`` — ``index_put_`` runs it too."""
+    """:func:`index_put`, its refusals under ``name`` — ``index_put_`` runs it too.
+
+    ``name`` is for messages only: both spellings take the autocast table's
+    ``index_put`` row.  ``indices`` is whatever the caller passed, and is
+    checked here.
+    """
     if not isinstance(indices, (list, tuple)) or len(indices) == 0:
         raise ValueError(f"{name}: `indices` must be a non-empty sequence of Tensors")
-    with _autocast_entry(name, _unwrap(input), _unwrap(values)) as (
+    with _autocast_entry("index_put", _unwrap(input), _unwrap(values)) as (
         impl,
         val_impl,
     ):
