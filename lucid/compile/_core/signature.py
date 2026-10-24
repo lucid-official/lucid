@@ -995,7 +995,7 @@ class ParamFingerprint(_ModuleWrapper):
         if (
             value is None
             or version != self._version
-            or (settled is not None and not settled.reads_the_same(self.model))
+            or (settled is not None and not settled.reads_the_same(self._model()))
         ):
             model = self.model
             # A submodule added since the last walk is watched from now on.
