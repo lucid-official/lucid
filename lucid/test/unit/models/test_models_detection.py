@@ -1118,6 +1118,37 @@ class TestEfficientDetD0:
         diff = float(lucid.abs(out.logits - out2.logits).max().item())
         assert diff < 1e-5
 
+    def test_a_side_the_bifpn_cannot_fuse_is_refused_by_name(self) -> None:
+        """288 px used to fail as a broadcast ShapeMismatch inside the first
+        BiFPN layer (a 5x5 map met the 2x up-sample of a 3x3 one), naming
+        neither the input nor the rule (LCD-554)."""
+        from lucid._C import engine as _C_engine
+        import lucid.models as models
+
+        lucid.manual_seed(0)
+        m = models.create_model(
+            "efficientdet_d0",
+            num_classes=3,
+            image_size=_H_ED,
+            fpn_channels=16,
+            fpn_repeats=1,
+            head_repeats=1,
+        ).eval()
+        for side, named in ((288, ("256x256", "384x384")), (248, ("256x256",))):
+            with pytest.raises(ValueError) as caught:
+                m(lucid.randn(1, 3, side, side))
+            # The engine's ShapeMismatch is a ValueError too.
+            assert not isinstance(caught.value, _C_engine.LucidError)
+            message = str(caught.value)
+            assert f"Got {side}x{side} pixels" in message
+            for size in named:
+                assert size in message
+        # A side that rounds up to a multiple of 128 still answers.
+        for side in (384, 250):
+            with lucid.no_grad():
+                out = m(lucid.randn(1, 3, side, side))
+            assert bool(out.logits.isfinite().all().item())
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # YOLOv1

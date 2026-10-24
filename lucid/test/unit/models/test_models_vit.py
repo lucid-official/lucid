@@ -5,6 +5,7 @@ import unittest
 
 import lucid
 import lucid.models as models
+from lucid._C import engine as _C_engine
 from lucid.models.vision.vit import (
     ViT,
     ViTConfig,
@@ -146,6 +147,57 @@ class TestViTClassifier(unittest.TestCase):
         m.eval()
         x = lucid.randn(1, 3, 384, 384)
         self.assertEqual(m(x).logits.shape, (1, 10))
+
+
+class TestViTResolutionBoundary(unittest.TestCase):
+    """Another patch grid is refused at the patch embedding (LCD-554).
+
+    The position table has one row per patch of the built grid, so another
+    grid could only fail — as a broadcast ShapeMismatch at ``x + pos_embed``
+    that named neither the built size nor the one it was given.
+    """
+
+    _SMALL: dict[str, int] = {
+        "image_size": 32,
+        "patch_size": 8,
+        "dim": 32,
+        "depth": 1,
+        "num_heads": 2,
+    }
+
+    def _refusal(self, factory: str, height: int, width: int) -> str:
+        lucid.manual_seed(0)
+        model = models.create_model(factory, **self._SMALL).eval()
+        with self.assertRaises(ValueError) as caught:
+            model(lucid.randn(1, 3, height, width))
+        # The engine's ShapeMismatch is a ValueError too.
+        self.assertNotIsInstance(caught.exception, _C_engine.LucidError)
+        return str(caught.exception)
+
+    def test_another_grid_names_both_sizes(self) -> None:
+        for factory in ("vit_base_16", "vit_base_16_cls"):
+            for side in (24, 40, 64):
+                with self.subTest(factory=factory, side=side):
+                    message = self._refusal(factory, side, side)
+                    self.assertIn("built for 32x32", message)
+                    self.assertIn(f"Got {side}x{side} pixels", message)
+                    self.assertIn(f"image_size={side}", message)
+
+    def test_a_non_square_input_names_its_sides(self) -> None:
+        message = self._refusal("vit_base_16_cls", 32, 64)
+        self.assertIn("Got 32x64 pixels, which is 4x8 patches", message)
+        self.assertNotIn("image_size=", message)
+
+    def test_the_built_grid_still_answers_at_any_remainder(self) -> None:
+        # The patch conv drops a remainder smaller than a patch, so 39 px is
+        # still the 4x4 grid the table was built for.
+        lucid.manual_seed(0)
+        model = models.create_model("vit_base_16_cls", **self._SMALL).eval()
+        for side in (32, 36, 39):
+            with self.subTest(side=side), lucid.no_grad():
+                self.assertEqual(
+                    model(lucid.randn(1, 3, side, side)).logits.shape, (1, 1000)
+                )
 
 
 class TestViTRegistry(unittest.TestCase):

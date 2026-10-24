@@ -50,6 +50,8 @@ class _PatchEmbed(nn.Module):
         Spatial side length of each non-overlapping patch.
     dim : int
         Output feature dimension :math:`D` of every patch embedding.
+    image_size : int
+        Side of the square input the position table is built for.
 
     Attributes
     ----------
@@ -57,17 +59,47 @@ class _PatchEmbed(nn.Module):
         The single projection convolution with ``kernel_size=stride=patch_size``.
     """
 
-    def __init__(self, in_channels: int, patch_size: int, dim: int) -> None:
+    def __init__(
+        self, in_channels: int, patch_size: int, dim: int, image_size: int
+    ) -> None:
         super().__init__()
         # A Conv2d with kernel=stride=patch_size extracts patches in one op.
         self.proj = nn.Conv2d(in_channels, dim, patch_size, stride=patch_size)
+        self.patch_size = patch_size
+        self.image_size = image_size
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        self._check_grid(int(x.shape[-2]), int(x.shape[-1]))
         # (B, C, H, W) → (B, dim, H/p, W/p) → (B, num_patches, dim)
         x = self.proj(x)
         B, C, H, W = x.shape
         return x.reshape(B, C, H * W).permute(0, 2, 1)
+
+    def _check_grid(self, height: int, width: int) -> None:
+        """Refuse an input whose patch grid the position table does not cover.
+
+        The learned position table holds one row per patch of the built grid,
+        so another grid can only fail — before this check, as a broadcast
+        error at ``x + pos_embed`` that named neither size.
+        """
+        p, size = self.patch_size, self.image_size
+        side = size // p
+        if (height // p, width // p) == (side, side):
+            return
+        rebuild = (
+            f", or build the model with image_size={height}, whose position "
+            "table then has to be learned or resized for that grid"
+            if height == width
+            else ""
+        )
+        raise ValueError(
+            f"ViT is built for {size}x{size} inputs: its position table holds "
+            f"one entry per patch of a {side}x{side} grid of {p}px patches.  "
+            f"Got {height}x{width} pixels, which is "
+            f"{height // p}x{width // p} patches.  "
+            f"Resize the input to {size}x{size}{rebuild}."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +322,7 @@ def _build_trunk(cfg: ViTConfig) -> tuple[
     num_patches = (cfg.image_size // cfg.patch_size) ** 2
     mlp_dim = int(cfg.dim * cfg.mlp_ratio)
 
-    patch_embed = _PatchEmbed(cfg.in_channels, cfg.patch_size, cfg.dim)
+    patch_embed = _PatchEmbed(cfg.in_channels, cfg.patch_size, cfg.dim, cfg.image_size)
 
     cls_token = nn.Parameter(lucid.zeros(1, 1, cfg.dim))
     pos_embed = nn.Parameter(lucid.zeros(1, num_patches + 1, cfg.dim))

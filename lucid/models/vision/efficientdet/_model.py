@@ -504,6 +504,41 @@ def _focal_loss(
 
 
 # ---------------------------------------------------------------------------
+# Input geometry
+# ---------------------------------------------------------------------------
+
+#: Strides of P3 … P7, the five levels the BiFPN fuses.
+_LEVEL_STRIDES: tuple[int, ...] = (8, 16, 32, 64, 128)
+
+
+def _check_input_size(height: int, width: int) -> None:
+    """Refuse an input side the BiFPN cannot fuse, naming the sizes that work.
+
+    Every stride-2 step rounds up, so P3 is ``ceil(side / 8)`` and each
+    coarser level halves the one before it.  A top-down node adds the 2×
+    up-sample of the coarser level to the finer one, which lines up only
+    while P3 … P6 are all even — so P3 must be a multiple of 16.  Another
+    size used to fail as a broadcast error inside the first BiFPN layer.
+    """
+    first, last = _LEVEL_STRIDES[0], _LEVEL_STRIDES[-1]
+    factor = last // first
+    p3 = (-(-height // first), -(-width // first))
+    if p3[0] % factor == 0 and p3[1] % factor == 0:
+        return
+    up = (-(-height // last) * last, -(-width // last) * last)
+    down = (height // last * last, width // last * last)
+    resize = f" or resize it to {down[0]}x{down[1]}" if min(down) > 0 else ""
+    raise ValueError(
+        f"EfficientDet fuses P3-P7 by up-sampling each level 2x onto the next "
+        f"finer one, so its stride-{first} map must be a multiple of {factor} "
+        f"per side: an input side that is a multiple of {last}, or at most "
+        f"{first - 1}px short of one.  Got {height}x{width} pixels, whose "
+        f"stride-{first} map is {p3[0]}x{p3[1]}.  Pad it to {up[0]}x{up[1]}"
+        f"{resize}."
+    )
+
+
+# ---------------------------------------------------------------------------
 # EfficientDet
 # ---------------------------------------------------------------------------
 
@@ -706,6 +741,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         iH = int(x.shape[2])
         iW = int(x.shape[3])
         check_per_image(type(self).__name__, B, targets=targets)
+        _check_input_size(iH, iW)
 
         # 1. Backbone → (P3, P4, P5)
         p3, p4, p5 = self.backbone(x)
@@ -718,13 +754,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
             fpn_feats = bifpn_layer(fpn_feats)
 
         # 4. Strides for 5 levels (P3=8, P4=16, P5=32, P6=64, P7=128)
-        strides: list[tuple[int, int]] = [
-            (8, 8),
-            (16, 16),
-            (32, 32),
-            (64, 64),
-            (128, 128),
-        ]
+        strides: list[tuple[int, int]] = [(s, s) for s in _LEVEL_STRIDES]
 
         # 5. Generate anchors → list of (A_l, 4) per level
         anchors_per_level = self._anchor_gen(fpn_feats, (iH, iW), strides)
