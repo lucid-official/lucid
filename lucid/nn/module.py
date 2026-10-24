@@ -122,10 +122,9 @@ def _apply_to_parameter(param: Parameter, fn: Callable[[Tensor], Tensor]) -> boo
     """Apply ``fn`` to ``param`` and its gradient; whether either got a new tensor."""
     grad = param.grad
     converted = fn(param)
-    # ``.data =`` keeps the Parameter and its requires_grad and records no
-    # graph, so backward accumulates on the parameter, not through a cast node.
-    # An unchanged tensor stays, or an optimizer would see a replaced parameter
-    # and a held ``p.grad`` would stop being the gradient.
+    # ``.data =`` keeps the Parameter and records no graph, so backward still
+    # accumulates on it.  An unchanged tensor stays, or an optimizer would see a
+    # replaced parameter and a held ``p.grad`` would stop being the gradient.
     replaced = converted._impl is not param._impl
     if replaced:
         param.data = converted
@@ -418,9 +417,10 @@ class Module:
         engine_state: object = _C_engine._create_module_backward_hook_state(  # type: ignore[attr-defined]
             len(args), runners.run_pre_hooks, runners.run_full_hooks
         )
+        given: tuple[object, ...] = args  # a forward is given anything at run time
         entries: list[tuple[int, _C_engine.TensorImpl]] = [
             (idx, _unwrap(arg))
-            for idx, arg in enumerate(args)
+            for idx, arg in enumerate(given)
             if isinstance(arg, Tensor) and arg.requires_grad
         ]
         if not entries:
@@ -439,11 +439,12 @@ class Module:
         engine_state: object,
     ) -> _ModuleOutput:
         if isinstance(output, tuple):
-            n_outputs = sum(1 for item in output if isinstance(item, Tensor))
+            items: tuple[object, ...] = output  # it returns anything, too
+            n_outputs = sum(1 for item in items if isinstance(item, Tensor))
             entries: list[tuple[int, _C_engine.TensorImpl]] = []
             output_idx = 0
             positions: list[int] = []
-            for pos, item in enumerate(output):
+            for pos, item in enumerate(items):
                 if isinstance(item, Tensor):
                     if item.requires_grad:
                         entries.append((output_idx, _unwrap(item)))
@@ -459,7 +460,8 @@ class Module:
                 wrapped_output[pos] = _wrap(impl)
             return tuple(wrapped_output)
 
-        if not isinstance(output, Tensor) or not output.requires_grad:
+        result: object = output
+        if not isinstance(result, Tensor) or not result.requires_grad:
             return output
         wrapped_impl = _C_engine._wrap_module_backward_outputs(  # type: ignore[attr-defined]
             engine_state, [(0, _unwrap(output))], 1
