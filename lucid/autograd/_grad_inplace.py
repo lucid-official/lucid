@@ -1,4 +1,4 @@
-"""Writes that change a gradient write into it, so whoever holds it sees them.
+"""Every write that changes a gradient, and why most land in place.
 
 ``t.grad`` reads the gradient's own buffer, and the reference framework's
 ``.grad`` is one tensor that all its holders share: a hook, a
@@ -7,14 +7,35 @@ that changes a gradient therefore changes that tensor.  Assigning
 ``t.grad = new`` instead installs a second tensor and leaves every holder
 reading the old values.  That is what ``zero_grad(set_to_none=False)``,
 ``clip_grad_norm_``, ``clip_grad_value_`` and ``GradScaler.unscale_`` did.
-All of them write through here now.
+
+Two kinds of gradient still get a new tensor (LCD-622):
+
+* a gradient held apart from the plain slot (see :func:`_held_apart`);
+* the negation a ``maximize`` step installs.
+
+Both are spelled here, so the change that brings them in place lands in one
+file.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 
 from lucid._factories.creation import zeros_like
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._grad_mode import enable_grad, no_grad
+
+
+def _held_apart(t: Tensor) -> bool:
+    """Whether ``t``'s gradient lives outside the slot the optimizers read.
+
+    A gradient from ``backward(create_graph=True)``, or a tensor that
+    requires grad assigned to ``.grad``, is kept apart from the plain
+    gradient slot.  The engine's optimizers read only that slot (LCD-622).
+    A first-order backward adds into such a gradient out of place, making a
+    new tensor.  So a write that should reach the next step has to go into
+    the slot, as a new gradient.
+    """
+    return t._impl.grad_as_impl() is not None
 
 
 def zero_grads_(tensors: Iterable[Tensor], *, set_to_none: bool) -> None:
@@ -41,29 +62,28 @@ def zero_grads_(tensors: Iterable[Tensor], *, set_to_none: bool) -> None:
                 t.grad = None
                 continue
             if g.grad_fn is not None:
-                # ``detach_`` would rebind only this wrapper and leave the
-                # gradient in the graph.  A copy recorded under grad mode puts
-                # the tensor where its source is in the graph, and zeros are
-                # nowhere, so this write detaches and zeroes the gradient
-                # itself.
+                # ``Tensor.detach_`` rebinds only its wrapper and leaves the
+                # gradient in the graph (LCD-621).  A copy recorded under grad
+                # mode moves the tensor to its source's place in the graph,
+                # and zeros have none, so this one write detaches and zeroes
+                # the gradient itself.
                 with enable_grad():
                     g.copy_(zeros_like(g))
             else:
                 if g.requires_grad:
                     g.requires_grad_(False)
                 g.zero_()
-            if t._impl.grad_as_impl() is not None:
-                # A gradient that has a graph, or that was assigned a tensor
-                # requiring grad, is kept apart from the plain gradient slot.
-                # The engine's optimizers and first-order accumulation read
-                # only that slot, so zeros go there as well.  The held tensor
-                # has been reset above, but from here on ``t.grad`` is a
-                # different tensor.
+            if _held_apart(t):
+                # The held tensor has been reset above.  From here on
+                # ``t.grad`` is a new zero tensor in the slot.
                 t.grad = zeros_like(g)
 
 
 def write_grad_(t: Tensor, value: Tensor) -> None:
-    """Write ``value`` into ``t``'s gradient in place.
+    """Write ``value`` into ``t``'s gradient, in place where it can.
+
+    A gradient held apart from the optimizers' slot (:func:`_held_apart`)
+    gets ``value`` as a new gradient instead, so the next step reads it.
 
     Parameters
     ----------
@@ -82,5 +102,37 @@ def write_grad_(t: Tensor, value: Tensor) -> None:
     g = t.grad
     if g is None:
         raise RuntimeError("write_grad_: the tensor has no gradient to write into")
+    if _held_apart(t):
+        t.grad = value if value.dtype == g.dtype else value.to(g.dtype)
+        return
     with no_grad():
         g.copy_(value)
+
+
+@contextmanager
+def negated_grads(tensors: Iterable[Tensor]) -> Iterator[None]:
+    """Hold each non-empty gradient of ``tensors`` negated for the block.
+
+    The negation is installed as a new gradient, and the original goes back
+    afterwards, even when the block raises.  A held ``p.grad`` is therefore
+    not the gradient after the block (LCD-622).  Negating in place is refused
+    for a CPU gradient that another gradient shares, and it would not reach
+    a gradient held apart from the optimizers' slot.
+
+    Parameters
+    ----------
+    tensors : Iterable[Tensor]
+        The tensors whose gradients the block sees negated.
+    """
+    saved: list[tuple[Tensor, Tensor]] = []
+    with no_grad():
+        for t in tensors:
+            g = t.grad
+            if g is not None and g.numel() > 0:
+                saved.append((t, g))
+                t.grad = -g
+    try:
+        yield
+    finally:
+        for t, g in saved:
+            t.grad = g

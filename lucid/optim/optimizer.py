@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Protocol, SupportsFloat, SupportsIndex, overri
 import lucid as _lucid
 from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
-from lucid.autograd._grad_inplace import zero_grads_
+from lucid.autograd._grad_inplace import negated_grads, zero_grads_
 from lucid.nn.parameter import Parameter
 from lucid.optim._step_counter import _CountedStep
 
@@ -1200,19 +1200,11 @@ class Optimizer:
                 f"{type(self).__name__}: differentiable=True is not supported"
             )
         params = _group_params(group)
-        saved_grads: list[tuple[Parameter, Tensor]] = []
-        if group.get("maximize", False):
-            with _lucid.no_grad():
-                for p in params:
-                    if p.grad is not None and p.grad.numel() > 0:
-                        saved_grads.append((p, p.grad))
-                        p.grad = -p.grad
-        try:
+        # The engine steps the gradient each parameter holds, so maximising
+        # flips that gradient for the step.
+        with negated_grads(params if group.get("maximize", False) else ()):
             self._apply_decoupled_wd(group, params)
             optim.step()
-        finally:
-            for p, g in saved_grads:
-                p.grad = g
 
     def _refuse_phantom_step(self) -> None:
         """Refuse an optimizer step under phantom mode or over a phantom parameter/gradient."""
@@ -1270,9 +1262,13 @@ class Optimizer:
         """Reset the gradients of all parameters.
 
         ``set_to_none=True`` (the default) drops each gradient.  ``False``
-        zeroes it in place, out of the graph, so a ``g = p.grad`` read
-        earlier reads zeros too (see ``lucid.autograd._grad_inplace``).
+        zeroes each gradient in place, so a tensor read from ``p.grad``
+        earlier reads the zeros too.  The gradient also leaves the graph: it
+        is detached if it has a ``grad_fn``, and stops requiring grad if it
+        required it.
 
+        Examples
+        --------
         >>> import lucid
         >>> p = lucid.nn.Parameter(lucid.ones(3))
         >>> opt = lucid.optim.SGD([p], lr=0.1)
