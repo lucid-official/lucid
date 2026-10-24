@@ -19,7 +19,9 @@ The list is held both ways, so it cannot go stale:
 * an entry with a count fails when its skips number anything else — more
   means something new stopped running, fewer that the entry is stale.  A
   count of ``None`` is for a class of skip that is the design whatever its
-  size, such as one per zoo family without the feature a test asks about;
+  size, such as one per zoo family without the feature a test asks about.
+  It is held one way only — a skip that joins the class is not seen — and
+  that is the trade: a pinned count would fail on every family the zoo adds;
 * an entry none of whose skips occurred fails: delete it.
 
 Designed skips are listed at the end of the report, so a green run still
@@ -83,6 +85,11 @@ DESIGNED: dict[str, tuple[Designed, ...]] = {
         ),
     ),
     "lucid/test/unit/models/test_models_inplace_independence.py": (
+        # None, deliberately, and so held one way only: a family that loses
+        # its last inplace module starts skipping unseen.  A pinned count, or
+        # a pinned list of families, would instead fail on every family added
+        # to the zoo without one and copy the zoo's roster into a CI script;
+        # the test itself still checks every family that has one.
         Designed(
             r"^\w+: no module built with inplace=True$",
             None,

@@ -140,6 +140,33 @@ def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(
 
 #: A pytest flag that ends the run at its first failure.
 _STOP_AT_FIRST = re.compile(r"-[qvsl]*x[qvsl]*|--exitfirst|--maxfail=1")
+
+
+def _stops_at_first(args: list[str]) -> bool:
+    """Whether pytest ``args`` end the run at its first failure."""
+    return any(
+        _STOP_AT_FIRST.fullmatch(arg)
+        or (arg == "--maxfail" and args[i + 1 : i + 2] == ["1"])
+        for i, arg in enumerate(args)
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "stops"),
+    [
+        (["-x"], True),
+        (["-qx"], True),
+        (["--exitfirst"], True),
+        (["--maxfail=1"], True),
+        (["--maxfail", "1"], True),
+        (["--maxfail", "50"], False),
+        (["--maxfail=50", "-q"], False),
+        (["-rsx"], False),  # -r takes "sx" as report characters
+        (["-c", "x"], False),
+    ],
+)
+def test_the_first_failure_detector(args: list[str], stops: bool) -> None:
+    assert _stops_at_first(args) is stops
 _SCRIPT_REF = re.compile(r"(?:scripts|tools)/[\w./-]+\.(?:sh|py)")
 
 
@@ -203,7 +230,7 @@ def test_no_ci_pytest_command_stops_at_its_first_failure() -> None:
         f"{path.relative_to(root)}: pytest {' '.join(args)}"
         for path, found in commands.items()
         for args in found
-        if any(_STOP_AT_FIRST.fullmatch(arg) for arg in args)
+        if _stops_at_first(args)
     ]
     assert not offenders, "\n".join(offenders)
 
