@@ -2859,6 +2859,9 @@ def _default_submodule(name: str, rank: int = 2) -> Any:
         # 4 in keeps the (2, 4) probe input; 1024 out clears the floor.
         "compressible": lambda: nn.Linear(4, 1024),
         "parametrization": lambda: nn.Identity(),
+        # ``ParametrizationList(modules, original)`` (LCD-624): the chain
+        # of steps the original passes through, as the installer builds it.
+        "modules": lambda: [nn.Identity()],
         "original": lambda: nn.Parameter(
             _probe.as_f32(_probe.sample("moderate", (4, 4)))
         ),
@@ -2875,6 +2878,7 @@ _CTOR_FACTORY: dict[str, Any] = {
     "qconfig": _default_qconfig,
     "module": lambda: _default_submodule("module"),
     "parametrization": lambda: _default_submodule("parametrization"),
+    "modules": lambda: _default_submodule("modules"),
     "original": lambda: _default_submodule("original"),
     "scale": lambda: _default_qparams("scale"),
     "zero_point": lambda: _default_qparams("zero_point"),

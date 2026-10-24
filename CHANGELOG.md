@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - correct the RNG claim and keep activations grouped (LCD-628)
 - fingerprint _summaries.json entries per slug (LCD-628)
 - build parametrizations.* on register_parametrization (LCD-646)
+- build ParametrizationList from a one-step chain
 
 ---
 
