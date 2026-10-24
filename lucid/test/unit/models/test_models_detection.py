@@ -1121,7 +1121,9 @@ class TestEfficientDetD0:
     def test_a_side_the_bifpn_cannot_fuse_is_refused_by_name(self) -> None:
         """288 px used to fail as a broadcast ShapeMismatch inside the first
         BiFPN layer (a 5x5 map met the 2x up-sample of a 3x3 one), naming
-        neither the input nor the rule (LCD-554)."""
+        neither the input nor the rule.  8 px used to answer: every level was
+        1x1 and the size-1 broadcasts grew each fused node, so the levels
+        and anchors no longer described the input (LCD-554)."""
         from lucid._C import engine as _C_engine
         import lucid.models as models
 
@@ -1134,7 +1136,12 @@ class TestEfficientDetD0:
             fpn_repeats=1,
             head_repeats=1,
         ).eval()
-        for side, named in ((288, ("256x256", "384x384")), (248, ("256x256",))):
+        refused = (
+            (288, ("256x256", "384x384")),
+            (248, ("256x256",)),
+            (8, ("128x128",)),
+        )
+        for side, named in refused:
             with pytest.raises(ValueError) as caught:
                 m(lucid.randn(1, 3, side, side))
             # The engine's ShapeMismatch is a ValueError too.

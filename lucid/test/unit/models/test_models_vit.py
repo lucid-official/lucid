@@ -152,9 +152,10 @@ class TestViTClassifier(unittest.TestCase):
 class TestViTResolutionBoundary(unittest.TestCase):
     """Another patch grid is refused at the patch embedding (LCD-554).
 
-    The position table has one row per patch of the built grid, so another
-    grid could only fail — as a broadcast ShapeMismatch at ``x + pos_embed``
-    that named neither the built size nor the one it was given.
+    The position table has one row per patch of the built grid.  Another
+    grid failed as a broadcast ShapeMismatch at ``x + pos_embed`` that named
+    neither size — or, with the same patch count on another layout, answered
+    silently with every patch reading another patch's position entry.
     """
 
     _SMALL: dict[str, int] = {
@@ -187,6 +188,14 @@ class TestViTResolutionBoundary(unittest.TestCase):
         message = self._refusal("vit_base_16_cls", 32, 64)
         self.assertIn("Got 32x64 pixels, which is 4x8 patches", message)
         self.assertNotIn("image_size=", message)
+
+    def test_the_same_patch_count_on_another_layout_is_refused(self) -> None:
+        # 2x8, 8x2 and 1x16 patches are the built grid's 16 — the table fit,
+        # so these used to answer, each patch reading another's position.
+        for height, width in ((16, 64), (64, 16), (8, 128)):
+            with self.subTest(height=height, width=width):
+                message = self._refusal("vit_base_16", height, width)
+                self.assertIn(f"Got {height}x{width} pixels", message)
 
     def test_the_built_grid_still_answers_at_any_remainder(self) -> None:
         # The patch conv drops a remainder smaller than a patch, so 39 px is

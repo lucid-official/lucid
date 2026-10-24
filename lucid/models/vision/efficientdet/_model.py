@@ -517,8 +517,12 @@ def _check_input_size(height: int, width: int) -> None:
     Every stride-2 step rounds up, so P3 is ``ceil(side / 8)`` and each
     coarser level halves the one before it.  A top-down node adds the 2×
     up-sample of the coarser level to the finer one, which lines up only
-    while P3 … P6 are all even — so P3 must be a multiple of 16.  Another
-    size used to fail as a broadcast error inside the first BiFPN layer.
+    while P3 … P6 are all even — so P3 must be a multiple of 16.  Before this
+    check another size either failed as a broadcast error inside the first
+    BiFPN layer or, for a side of 8 px or less, answered silently: every
+    level was 1×1, and the size-1 broadcasts grew each fused node to the
+    up-sample's size, so the levels and their anchors no longer described
+    the input.  Both are refused.
     """
     first, last = _LEVEL_STRIDES[0], _LEVEL_STRIDES[-1]
     factor = last // first

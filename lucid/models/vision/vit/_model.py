@@ -79,9 +79,12 @@ class _PatchEmbed(nn.Module):
     def _check_grid(self, height: int, width: int) -> None:
         """Refuse an input whose patch grid the position table does not cover.
 
-        The learned position table holds one row per patch of the built grid,
-        so another grid can only fail — before this check, as a broadcast
-        error at ``x + pos_embed`` that named neither size.
+        The learned position table holds one row per patch of the built grid.
+        Before this check another grid either failed as a broadcast error at
+        ``x + pos_embed`` that named neither size or, when it had the same
+        patch count (16x64 against a 32x32 build of 8px patches), answered
+        silently with the table laid over a different 2-D layout — every
+        patch added the position entry of another.  Both are refused.
         """
         p, size = self.patch_size, self.image_size
         side = size // p
