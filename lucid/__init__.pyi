@@ -2309,47 +2309,6 @@ def topk(input: Tensor, k: _int, dim: _int = ..., largest: _bool = ..., sorted: 
     """
     ...
 def diagonal(input: Tensor, offset: _int = ..., dim1: _int = ..., dim2: _int = ...) -> Tensor: ...
-def equal(input: Tensor, other: Tensor | Scalar) -> Tensor:
-    r"""    Element-wise equality predicate.
-    
-    Element-wise comparison with broadcasting; the result is a boolean tensor that
-    is ``True`` where ``input`` equals ``other`` and ``False`` elsewhere. Python
-    scalars on either side are promoted to a matching tensor before the comparison.
-    
-    Parameters
-    ----------
-    input : Tensor
-        Left operand.
-    other : Tensor or scalar
-        Right operand. Broadcasts against ``input``.
-    
-    Returns
-    -------
-    Tensor
-        Boolean tensor (dtype ``bool``) with shape ``broadcast(input.shape, other.shape)``.
-    
-    Notes
-    -----
-    Mathematical definition:
-    
-    .. math::
-    
-        \text{out}_i = (\text{input}_i = \text{other}_i)
-    
-    Floating-point comparison is exact bit-pattern equality / strict ordering;
-    NaN entries are never equal to anything and produce ``False`` for ordering
-    predicates. For tolerance-based comparison use :func:`isclose`. Comparison
-    operations are not differentiable; gradients passed to them are dropped.
-    
-    Examples
-    --------
-    >>> import lucid
-    >>> a = lucid.tensor([1.0, 2.0, 3.0])
-    >>> b = lucid.tensor([1.0, 5.0, 2.0])
-    >>> lucid.equal(a, b)
-    Tensor([...])
-    """
-    ...
 def not_equal(input: Tensor, other: Tensor | Scalar) -> Tensor:
     r"""    Element-wise inequality predicate.
     
@@ -5900,6 +5859,46 @@ def digamma(input: Tensor) -> Tensor: ...
 def divide(input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = ...) -> Tensor: ...
 def dsplit(input: Tensor, indices_or_sections: _int | Sequence[_int]) -> list[Tensor]: ...
 def dstack(tensors: Sequence[Tensor]) -> Tensor: ...
+def equal(input: Tensor, other: Tensor) -> _bool:
+    r"""    Predicate: do two tensors have the same shape and the same elements?
+    
+    One Python ``bool`` for the whole pair, unlike the element-wise
+    :func:`lucid.eq`.  The shapes must match exactly — no broadcasting —
+    and the elements are compared at the pair's promoted dtype, so an
+    integer tensor equals the float tensor holding the same values.
+    
+    Parameters
+    ----------
+    input : Tensor
+        First tensor.
+    other : Tensor
+        Second tensor.
+    
+    Returns
+    -------
+    bool
+        ``True`` iff ``input.shape == other.shape`` and every element pair
+        compares equal.  ``NaN`` equals nothing, itself included, and
+        ``-0.0`` equals ``0.0``.  Two empty tensors of one shape are equal.
+    
+    Raises
+    ------
+    TypeError
+        If either argument is not a :class:`Tensor`.
+    
+    Notes
+    -----
+    Reading the answer synchronises any pending Metal work on the pair.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.equal(lucid.tensor([1, 2]), lucid.tensor([1.0, 2.0]))
+    True
+    >>> lucid.equal(lucid.tensor([1, 2]), lucid.tensor([[1, 2]]))
+    False
+    """
+    ...
 def erfc(input: Tensor) -> Tensor: ...
 def expm1(input: Tensor) -> Tensor: ...
 def float_power(input: Tensor | Scalar, exponent: Tensor | Scalar) -> Tensor: ...

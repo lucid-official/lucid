@@ -156,6 +156,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bookkeeping Functions record plain ops in a trace
 
+- reference cast methods, free-fn twins, a whole __all__
+
 ### Performance
 
 - strided views copy by runs; contiguous() is 11-35x faster

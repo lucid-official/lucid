@@ -10,6 +10,12 @@ refusals, on either device), a table method's signature is the free
 function's after the first parameter, the reference has it and binds the
 same keywords to the same values, and the class as a whole — no public
 ``X_`` without its ``X``.
+
+LCD-633 widened the table past the in-place twins: 38 free functions
+(``equal``, ``stft``, ``mv``, ``amax`` …), and the registry op ``conj``,
+whose reference method Lucid's ``Tensor`` lacked.  Held for that class
+too: every reference method whose free function ``lucid`` publishes is a
+``Tensor`` method.
 """
 
 import inspect
@@ -27,10 +33,64 @@ def _t(data: object, dtype: str = "float32") -> tuple[str, object, str]:
     return ("tensor", data, dtype)
 
 
+_NAN = float("nan")
+_INF = float("inf")
+
+
 #: ``name -> (self, positional args, keyword args)`` for one representative
 #: call, each tensor spelled ``_t(data, dtype)`` so either framework builds it.
 _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "absolute": (_t([-1.5, 2.0]), (), {}),
+    "adjoint": (_t([[1.0, 2.0], [3.0, 4.0]]), (), {}),
+    "allclose": (_t([1.0, 2.0]), (_t([1.0, 2.000001]),), {"rtol": 1e-5}),
+    "amax": (_t([[1.0, 5.0], [3.0, 2.0]]), (), {"dim": 1, "keepdim": True}),
+    "amin": (_t([[1.0, 5.0], [3.0, 2.0]]), (), {"dim": 1, "keepdim": True}),
+    "angle": (_t([1 + 1j, -1j], "complex64"), (), {}),
+    "argwhere": (_t([[0.0, 1.0], [2.0, 0.0]]), (), {}),
+    "conj": (_t([1 + 2j, -3j], "complex64"), (), {}),
+    "corrcoef": (_t([[1.0, 2.0, 4.0], [2.0, 1.0, 0.5]]), (), {}),
+    "count_nonzero": (_t([[0.0, 1.0], [2.0, 0.0]]), (), {"dim": 0}),
+    "cov": (_t([[1.0, 2.0, 4.0], [2.0, 1.0, 0.5]]), (), {"correction": 0}),
+    "diag_embed": (_t([[1.0, 2.0], [3.0, 4.0]]), (), {"offset": 1}),
+    "equal": (_t([1.0, 2.0]), (_t([1, 2], "int64"),), {}),
+    "fmax": (_t([1.0, _NAN, 3.0]), (_t([2.0, 1.0, _NAN]),), {}),
+    "fmin": (_t([1.0, _NAN, 3.0]), (_t([2.0, 1.0, _NAN]),), {}),
+    "ger": (_t([1.0, 2.0]), (_t([3.0, 4.0, 5.0]),), {}),
+    "histogram": (_t([0.5, 1.5, 1.7, 3.0]), (4,), {"range": (0.0, 4.0)}),
+    "is_conj": (_t([1.0]), (), {}),
+    "is_neg": (_t([1.0]), (), {}),
+    "is_nonzero": (_t([3.0]), (), {}),
+    "is_same_size": (_t([1.0, 2.0]), (_t([[3.0, 4.0]]),), {}),
+    "is_signed": (_t([1, 2], "int64"), (), {}),
+    "isneginf": (_t([-_INF, 1.0, _INF]), (), {}),
+    "isposinf": (_t([-_INF, 1.0, _INF]), (), {}),
+    "isreal": (_t([1 + 0j, 1j], "complex64"), (), {}),
+    # A two-bin spectrum of the frames [1, 2], [2, 3], [3, 4]: istft gives
+    # the signal back.
+    "istft": (
+        _t([[3.0, 5.0, 7.0], [-1.0, -1.0, -1.0]], "complex64"),
+        (2, 1, 2, _t([1.0, 1.0])),
+        {"center": False},
+    ),
+    "logdet": (_t([[2.0, 1.0], [1.0, 3.0]]), (), {}),
+    "moveaxis": (_t([[[1.0, 2.0]]]), (0, 2), {}),
+    # One nonzero weight: the draw is the same in either framework.
+    "multinomial": (_t([0.0, 1.0, 0.0]), (1,), {}),
+    "mv": (_t([[1.0, 2.0], [3.0, 4.0]]), (_t([1.0, -1.0]),), {}),
+    "nanmean": (_t([[1.0, _NAN], [3.0, 4.0]]), (1,), {"keepdim": True}),
+    "nansum": (_t([[1.0, _NAN], [3.0, 4.0]]), (1,), {"keepdim": True}),
+    "positive": (_t([1.0, -2.0]), (), {}),
+    "resolve_conj": (_t([1.0, -2.0]), (), {}),
+    "resolve_neg": (_t([1.0, -2.0]), (), {}),
+    "rot90": (_t([[1.0, 2.0], [3.0, 4.0]]), (1, (0, 1)), {}),
+    "signbit": (_t([-1.0, 0.0, 2.0]), (), {}),
+    "stft": (
+        _t([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+        (4, 2, 4, _t([0.0, 0.5, 1.0, 0.5])),
+        {"return_complex": True},
+    ),
+    "swapdims": (_t([[1.0, 2.0, 3.0]]), (0, 1), {}),
+    "vdot": (_t([1.0, 2.0]), (_t([3.0, 4.0]),), {}),
     "acosh": (_t([1.5, 3.0]), (), {}),
     "addbmm": (
         _t([[0.5, 1.0, -1.0], [2.0, 0.0, 1.0]]),
@@ -116,16 +176,23 @@ def _call(mod: ModuleType, name: str, device: str | None, method: bool) -> objec
 
 
 def _parts(out: object) -> tuple[object, ...]:
-    """A result's tensors: ``frexp`` answers two."""
+    """A result's parts: ``frexp`` answers two tensors, ``equal`` a bool."""
     return tuple(out) if isinstance(out, tuple) else (out,)
 
 
 def _values(out: object) -> list[object]:
-    return [getattr(p, "tolist")() for p in _parts(out)]
+    return [p.tolist() if hasattr(p, "tolist") else p for p in _parts(out)]
 
 
 def _dtypes(out: object) -> list[str]:
-    return [str(getattr(p, "dtype")).rsplit(".", 1)[-1] for p in _parts(out)]
+    return [
+        (
+            str(getattr(p, "dtype")).rsplit(".", 1)[-1]
+            if hasattr(p, "dtype")
+            else type(p).__name__
+        )
+        for p in _parts(out)
+    ]
 
 
 def _close(a: object, b: object) -> bool:
@@ -145,7 +212,14 @@ def _close(a: object, b: object) -> bool:
 
 
 #: Twins a registry entry gives their method (``OpEntry.method_name``).
-_REGISTRY_TWINS = ("greater", "greater_equal", "less", "less_equal", "not_equal")
+_REGISTRY_TWINS = (
+    "conj",
+    "greater",
+    "greater_equal",
+    "less",
+    "less_equal",
+    "not_equal",
+)
 
 
 def test_every_twin_has_a_case_and_one_owner() -> None:
@@ -161,7 +235,7 @@ def test_every_twin_has_a_case_and_one_owner() -> None:
 def test_the_method_is_the_free_function(name: str, device: str) -> None:
     try:
         expected = _call(lucid, name, device, method=False)
-    except (RuntimeError, TypeError, ValueError) as err:
+    except (NotImplementedError, RuntimeError, TypeError, ValueError) as err:
         # A refusal of the free function (Metal has no float64 for
         # ``float_power``) is the method's refusal too, word for word.
         with pytest.raises(type(err)) as got:
@@ -255,3 +329,98 @@ def test_every_inplace_method_has_its_out_of_place_twin() -> None:
 @pytest.mark.parity
 def test_the_excused_twins_are_ones_the_reference_lacks(ref: ModuleType) -> None:
     assert [n for n in sorted(_NO_TWIN) if hasattr(ref.Tensor, n[:-1])] == []
+
+
+@pytest.mark.parity
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-545: signbit reads the sign with `< 0`, so -0.0 counts as positive",
+)
+def test_signbit_reads_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None:
+    ours = lucid.tensor([-0.0, 0.0]).signbit()
+    theirs = ref.tensor([-0.0, 0.0]).signbit()
+    assert ours.tolist() == theirs.tolist() == [True, False]
+
+
+#: Reference ``Tensor`` methods whose free function ``lucid`` publishes,
+#: but which Lucid's ``Tensor`` has no method for, and why.
+_NO_METHOD: dict[str, str] = {}
+
+
+def _published_functions() -> set[str]:
+    return {
+        n
+        for n in lucid.__all__
+        if callable(getattr(lucid, n)) and not isinstance(getattr(lucid, n), type)
+    }
+
+
+@pytest.mark.parity
+def test_every_reference_method_of_a_published_function_is_a_method(
+    ref: ModuleType,
+) -> None:
+    lacking = sorted(
+        n
+        for n in _published_functions()
+        if callable(getattr(ref.Tensor, n, None)) and not hasattr(lucid.Tensor, n)
+    )
+    assert [n for n in lacking if n not in _NO_METHOD] == []
+    assert sorted(set(_NO_METHOD) - set(lacking)) == []
+
+
+#: ``(input, other, dtypes, answer)`` as the reference answers ``equal``:
+#: the shape exactly, the values at the promoted dtype, NaN equal to nothing.
+_EQUAL_CASES: dict[str, tuple[object, object, tuple[str, str], bool]] = {
+    "same values": ([1.0, 2.0], [1.0, 2.0], ("float32", "float32"), True),
+    "a different value": ([1.0, 2.0], [1.0, 3.0], ("float32", "float32"), False),
+    "int beside float": ([1, 2], [1.0, 2.0], ("int64", "float32"), True),
+    "bool beside int": ([True, False], [1, 0], ("bool", "int64"), True),
+    "complex beside float": ([1 + 0j], [1.0], ("complex64", "float32"), True),
+    "nan": ([_NAN], [_NAN], ("float32", "float32"), False),
+    "signed zero": ([-0.0], [0.0], ("float32", "float32"), True),
+    "a longer other": ([1, 2], [1, 2, 3], ("int64", "int64"), False),
+    "a broadcastable other": ([[1, 2]], [1, 2], ("int64", "int64"), False),
+    "0-d beside one element": (1, [1], ("int64", "int64"), False),
+    "both empty": ([], [], ("float32", "float32"), True),
+}
+
+
+def _dtype(mod: ModuleType, name: str) -> object:
+    return getattr(mod, "bool_" if name == "bool" and mod is lucid else name)
+
+
+@pytest.mark.parametrize("case", sorted(_EQUAL_CASES))
+def test_equal_answers_one_bool_for_the_whole_pair(case: str, device: str) -> None:
+    a, b, (da, db), want = _EQUAL_CASES[case]
+    x = lucid.tensor(a, dtype=_dtype(lucid, da), device=device)
+    y = lucid.tensor(b, dtype=_dtype(lucid, db), device=device)
+    assert lucid.equal(x, y) is want
+    assert x.equal(y) is want
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("case", sorted(_EQUAL_CASES))
+def test_the_reference_answers_equal_the_same(ref: ModuleType, case: str) -> None:
+    a, b, (da, db), want = _EQUAL_CASES[case]
+    x = ref.tensor(a, dtype=_dtype(ref, da))
+    y = ref.tensor(b, dtype=_dtype(ref, db))
+    assert ref.equal(x, y) is want
+
+
+@pytest.mark.parametrize("other", [1, 1.0, [1.0], None])
+def test_equal_refuses_what_is_not_a_tensor(other: object) -> None:
+    x = lucid.tensor([1.0])
+    with pytest.raises(TypeError, match="lucid.equal"):
+        lucid.equal(x, other)  # type: ignore[arg-type]  # the refusal under test
+    with pytest.raises(TypeError, match="lucid.equal"):
+        x.equal(other)
+
+
+def test_isreal_is_false_where_the_imaginary_part_is_not_zero(device: str) -> None:
+    x = lucid.tensor([1 + 0j, 1j, 2 - 3j, _NAN + 0j], device=device)
+    assert lucid.isreal(x).tolist() == [True, False, False, True]
+    assert x.isreal().tolist() == [True, False, False, True]
+    assert lucid.isreal(lucid.tensor([1.0, _NAN], device=device)).tolist() == [
+        True,
+        True,
+    ]

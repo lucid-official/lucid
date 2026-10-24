@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, cast
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dtype import dtype as _dtype_cls, to_engine_dtype
-from lucid._dtype import float16, float32, float64, int32, int64, bool_
+from lucid._dtype import bfloat16, bool_, complex64, complex128
+from lucid._dtype import float16, float32, float64, int8, int16, int32, int64
 from lucid._device import device as _device_cls
 from lucid._dispatch import _impl_with_grad, _parse_device, _wrap
 
@@ -375,6 +376,13 @@ def _cpu(self: Tensor) -> Tensor:
     return _to(self, _C_engine.Device.CPU)
 
 
+def _cast(self: Tensor, target: _dtype_cls) -> Tensor:
+    """``self`` at ``target``'s dtype: ``self`` itself when it is there already."""
+    if self._impl.dtype == to_engine_dtype(target):
+        return self
+    return _to(self, target)
+
+
 def _float(self: Tensor) -> Tensor:
     """Cast to float32.
 
@@ -390,9 +398,7 @@ def _float(self: Tensor) -> Tensor:
     ``float32``.  Otherwise performs a copy-cast via the engine's
     ``astype`` op; the device is preserved.
     """
-    if self._impl.dtype == _C_engine.Dtype.F32:
-        return self
-    return _to(self, float32)
+    return _cast(self, float32)
 
 
 def _double(self: Tensor) -> Tensor:
@@ -408,11 +414,10 @@ def _double(self: Tensor) -> Tensor:
     -----
     Returns ``self`` unchanged when the source dtype is already
     ``float64``.  Otherwise allocates a new tensor with widened
-    precision; device is preserved.
+    precision; device is preserved.  Metal has no float64, so a Metal
+    tensor is refused with ``NotImplementedError``.
     """
-    if self._impl.dtype == _C_engine.Dtype.F64:
-        return self
-    return _to(self, float64)
+    return _cast(self, float64)
 
 
 def _half(self: Tensor) -> Tensor:
@@ -431,9 +436,26 @@ def _half(self: Tensor) -> Tensor:
     ``inf`` for magnitudes above ~65504 and underflow to 0 for
     magnitudes below ~6e-5.
     """
-    if self._impl.dtype == _C_engine.Dtype.F16:
-        return self
-    return _to(self, float16)
+    return _cast(self, float16)
+
+
+def _bfloat16(self: Tensor) -> Tensor:
+    """Cast to bfloat16.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.zeros(3).bfloat16().dtype
+    lucid.bfloat16
+
+    Notes
+    -----
+    Returns ``self`` unchanged when the source dtype is already
+    ``bfloat16``.  bfloat16 keeps float32's exponent range with an 8-bit
+    significand, so narrowing rounds to about three significant decimal
+    digits but does not overflow where float32 does not.
+    """
+    return _cast(self, bfloat16)
 
 
 def _int(self: Tensor) -> Tensor:
@@ -451,9 +473,7 @@ def _int(self: Tensor) -> Tensor:
     ``int32``.  Casts from floating point truncate toward zero;
     values outside ``[-2**31, 2**31 - 1]`` produce undefined results.
     """
-    if self._impl.dtype == _C_engine.Dtype.I32:
-        return self
-    return _to(self, int32)
+    return _cast(self, int32)
 
 
 def _long(self: Tensor) -> Tensor:
@@ -471,9 +491,135 @@ def _long(self: Tensor) -> Tensor:
     ``int64``.  Casts from floating point truncate toward zero.
     Typically used for index tensors (e.g. ``gather`` / ``scatter``).
     """
-    if self._impl.dtype == _C_engine.Dtype.I64:
-        return self
-    return _to(self, int64)
+    return _cast(self, int64)
+
+
+def _short(self: Tensor) -> Tensor:
+    """Cast to int16.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.tensor([1.7, -2.3]).short().tolist()
+    [1, -2]
+
+    Notes
+    -----
+    Returns ``self`` unchanged when the source dtype is already
+    ``int16``.  Casts from floating point truncate toward zero.
+    """
+    return _cast(self, int16)
+
+
+def _char(self: Tensor) -> Tensor:
+    """Cast to int8.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.tensor([1.7, -2.3]).char().dtype
+    lucid.int8
+
+    Notes
+    -----
+    Returns ``self`` unchanged when the source dtype is already
+    ``int8``, the signed byte.  Casts from floating point truncate
+    toward zero.
+    """
+    return _cast(self, int8)
+
+
+def _byte(self: Tensor) -> Tensor:
+    """Cast to uint8: refused, since Lucid has no unsigned dtype.
+
+    The reference's ``byte()`` is ``to(uint8)``.  Lucid's integer dtypes
+    are all signed, and a silent stand-in would wrap every value above
+    127 or read a negative one differently, so the call is refused.
+
+    Raises
+    ------
+    NotImplementedError
+        Always.  ``char()`` casts to int8, the signed byte, and
+        ``short()`` to int16, which holds every uint8 value.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.zeros(3).byte()
+    Traceback (most recent call last):
+        ...
+    NotImplementedError: Tensor.byte(): lucid has no uint8 dtype ...
+    """
+    del self  # reference-signature parity: the method takes the tensor
+    raise NotImplementedError(
+        "Tensor.byte(): lucid has no uint8 dtype — its integer dtypes are "
+        "signed.  Use .char() for int8, or .short() for int16, which holds "
+        "every uint8 value."
+    )
+
+
+def _cfloat(self: Tensor) -> Tensor:
+    """Cast to complex64.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.tensor([1.0, -2.0]).cfloat().dtype
+    lucid.complex64
+
+    Notes
+    -----
+    Returns ``self`` unchanged when the source dtype is already
+    ``complex64``.  A real tensor becomes the real part, with a zero
+    imaginary part.
+    """
+    return _cast(self, complex64)
+
+
+def _chalf(self: Tensor) -> Tensor:
+    """Cast to complex32: refused, since Lucid has no half-precision complex.
+
+    The reference's ``chalf()`` is ``to(complex32)``, a pair of float16
+    halves.  Lucid's narrowest complex dtype is complex64, and handing one
+    back would double the width the caller asked for, so the call is
+    refused.
+
+    Raises
+    ------
+    NotImplementedError
+        Always.  ``cfloat()`` casts to complex64.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.zeros(3).chalf()
+    Traceback (most recent call last):
+        ...
+    NotImplementedError: Tensor.chalf(): lucid has no complex32 dtype ...
+    """
+    del self  # reference-signature parity: the method takes the tensor
+    raise NotImplementedError(
+        "Tensor.chalf(): lucid has no complex32 dtype — its narrowest complex "
+        "dtype is complex64.  Use .cfloat() for complex64."
+    )
+
+
+def _cdouble(self: Tensor) -> Tensor:
+    """Cast to complex128.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.tensor([1.0, -2.0]).cdouble().dtype
+    lucid.complex128
+
+    Notes
+    -----
+    Returns ``self`` unchanged when the source dtype is already
+    ``complex128``.  Metal has no complex128, so a Metal tensor is
+    refused with ``NotImplementedError``.
+    """
+    return _cast(self, complex128)
 
 
 def _bool(self: Tensor) -> Tensor:
@@ -491,9 +637,7 @@ def _bool(self: Tensor) -> Tensor:
     ``bool``.  Otherwise each element is reduced to ``True`` if
     nonzero and ``False`` if zero.
     """
-    if self._impl.dtype == _C_engine.Dtype.Bool:
-        return self
-    return _to(self, bool_)
+    return _cast(self, bool_)
 
 
 _TO_METHODS = (
@@ -503,8 +647,15 @@ _TO_METHODS = (
     ("float", _float),
     ("double", _double),
     ("half", _half),
+    ("bfloat16", _bfloat16),
     ("int", _int),
     ("long", _long),
+    ("short", _short),
+    ("char", _char),
+    ("byte", _byte),
+    ("cfloat", _cfloat),
+    ("chalf", _chalf),
+    ("cdouble", _cdouble),
     ("bool", _bool),
 )
 

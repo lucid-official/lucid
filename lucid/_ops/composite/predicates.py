@@ -173,6 +173,56 @@ def is_same_size(input: Tensor, other: Tensor) -> bool:
     return tuple(input.shape) == tuple(other.shape)
 
 
+def equal(input: Tensor, other: Tensor) -> bool:
+    r"""Predicate: do two tensors have the same shape and the same elements?
+
+    One Python ``bool`` for the whole pair, unlike the element-wise
+    :func:`lucid.eq`.  The shapes must match exactly — no broadcasting —
+    and the elements are compared at the pair's promoted dtype, so an
+    integer tensor equals the float tensor holding the same values.
+
+    Parameters
+    ----------
+    input : Tensor
+        First tensor.
+    other : Tensor
+        Second tensor.
+
+    Returns
+    -------
+    bool
+        ``True`` iff ``input.shape == other.shape`` and every element pair
+        compares equal.  ``NaN`` equals nothing, itself included, and
+        ``-0.0`` equals ``0.0``.  Two empty tensors of one shape are equal.
+
+    Raises
+    ------
+    TypeError
+        If either argument is not a :class:`Tensor`.
+
+    Notes
+    -----
+    Reading the answer synchronises any pending Metal work on the pair.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.equal(lucid.tensor([1, 2]), lucid.tensor([1.0, 2.0]))
+    True
+    >>> lucid.equal(lucid.tensor([1, 2]), lucid.tensor([[1, 2]]))
+    False
+    """
+    for name, x in (("input", input), ("other", other)):
+        if not _is_tensor(x):
+            raise TypeError(
+                f"lucid.equal(): argument '{name}' must be a Tensor, "
+                f"got {type(x).__name__}"
+            )
+    if tuple(input.shape) != tuple(other.shape):
+        return False
+    return bool(lucid.eq(input, other).all().item())
+
+
 def is_neg(input: Tensor) -> bool:
     r"""Predicate: does the tensor carry a lazy "negated" flag?
 
@@ -393,10 +443,9 @@ def isposinf(input: Tensor) -> Tensor:
 def isreal(input: Tensor) -> Tensor:
     r"""Element-wise test for real-valued entries.
 
-    Lucid currently supports only real-valued floating dtypes (and
-    complex tensors via the dedicated ``complex64`` dtype), so for real
-    inputs this predicate is uniformly ``True``. Provided for API parity
-    with reference frameworks that include both real and complex dtypes.
+    An entry is real when its imaginary part is exactly zero, so every
+    entry of a real (or integer, or bool) tensor is, and an entry of a
+    complex tensor is where its imaginary part is ``0``.
 
     Parameters
     ----------
@@ -406,30 +455,26 @@ def isreal(input: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        Boolean tensor of the same shape as ``input``; every entry is
-        ``True`` for real-valued inputs.
+        Boolean tensor of the same shape as ``input``.
 
     Notes
     -----
-    Mathematical definition (for real dtypes):
-
     .. math::
 
-        \text{out}_i = \text{True}.
+        \text{out}_i = (\operatorname{Im}(\text{input}_i) = 0).
 
-    For complex inputs (when supported), ``isreal`` reports ``True``
-    only where the imaginary part is exactly zero. The current
-    implementation returns ``isfinite | isnan | isinf``, which is a
-    tautology for real dtypes.
+    ``NaN`` and infinite real parts do not matter; a ``NaN`` imaginary
+    part is not zero.
 
     Examples
     --------
     >>> import lucid
-    >>> x = lucid.tensor([1.0, float('nan'), float('inf')])
-    >>> lucid.isreal(x)
-    tensor([True, True, True], dtype=lucid.bool)
+    >>> lucid.isreal(lucid.tensor([1 + 0j, 1j, float('nan') + 0j])).tolist()
+    [True, False, True]
     """
-    return lucid.isfinite(input) | lucid.isnan(input) | lucid.isinf(input)
+    if input.is_complex():
+        return lucid.imag(input) == 0.0
+    return lucid.ones_like(input, dtype=lucid.bool_)
 
 
 def conj_physical(input: Tensor) -> Tensor:
@@ -615,6 +660,7 @@ __all__ = [
     "is_storage",
     "is_nonzero",
     "is_same_size",
+    "equal",
     "is_neg",
     "is_conj",
     "isin",

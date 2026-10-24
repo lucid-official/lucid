@@ -2,7 +2,7 @@
 Lucid — Apple Silicon ML framework.
 """
 
-from typing import Callable
+from collections.abc import Callable as _Callable
 
 # ── Save Python builtins before dtype aliases shadow them ────────────────────
 _py_int = int
@@ -71,7 +71,7 @@ from lucid._threads import (
 # The engine already exposes ``set_deterministic`` / ``is_deterministic``;
 # wrap them under the standard ``use_deterministic_algorithms`` /
 # ``are_deterministic_algorithms_enabled`` names without an alias hop.
-def use_deterministic_algorithms(mode: bool, *, warn_only: bool = False) -> None:  # type: ignore
+def use_deterministic_algorithms(mode: _py_bool, *, warn_only: _py_bool = False) -> None:
     """Globally toggle deterministic kernel selection.
 
     Lucid does not ship a separate ``warn_only`` mode — callers either
@@ -95,7 +95,7 @@ def use_deterministic_algorithms(mode: bool, *, warn_only: bool = False) -> None
     _C_engine.set_deterministic(_py_bool(mode))
 
 
-def are_deterministic_algorithms_enabled() -> bool:  # type: ignore
+def are_deterministic_algorithms_enabled() -> _py_bool:
     """Return whether deterministic kernel selection is currently active.
 
     Reflects the engine-side flag toggled by
@@ -231,6 +231,16 @@ __all__ = [
     # __all__ / dir() (IDE autocomplete + ``from lucid import *``) ────────
     "abs", "all", "any", "complex", "cummax", "cummin", "diagonal",
     "erf", "erfinv", "max", "min", "pow", "ravel", "round", "sum",
+    # ── composites the module served but __all__ omitted (LCD-641) ───────
+    "floor_divide", "copysign", "ldexp", "frexp", "gcd", "lcm",
+    "digamma", "erfc", "i0", "lgamma",
+    "amax", "amin", "std_mean", "var_mean", "count_nonzero", "allclose",
+    "argwhere", "put", "index_add", "index_copy", "index_fill",
+    "index_put", "index_put_", "masked_scatter", "scatter_reduce",
+    "bincount", "histogram", "histogram2d", "histogramdd",
+    "corrcoef", "cov", "cdist", "combinations",
+    "tril_indices", "triu_indices", "diag_embed", "logdet",
+    "multinomial", "poisson",
     # ── subpackages ───────────────────────────────────────────────────────
     "nn", "optim", "autograd", "func", "linalg", "fft", "signal", "special",
     "diffeq", "utils", "amp", "profiler", "einops", "compile", "quantization",
@@ -277,7 +287,7 @@ _OPS_NAMES: frozenset[str] = frozenset([
     # ── complex viewing (engine ops) ──────────────────────────────────────
     "real", "imag", "complex", "conj",
     # ── comparison ────────────────────────────────────────────────────────
-    "equal", "not_equal", "greater", "greater_equal", "less", "less_equal",
+    "not_equal", "greater", "greater_equal", "less", "less_equal",
     "eq", "ne", "lt", "le", "gt", "ge", "isclose",
     # ── logical / bitwise ─────────────────────────────────────────────────
     "logical_and", "logical_or", "logical_xor", "logical_not",
@@ -350,17 +360,17 @@ _TYPE_ALIAS_NAMES: frozenset[str] = frozenset([
 #
 # fmt: on
 
-_GROUP_LOADERS: dict[str, Callable[[], dict[str, object]]] = {}
+_GROUP_LOADERS: dict[str, _Callable[[], dict[str, object]]] = {}
 
 
 def _register(
     names: frozenset[str],
-) -> Callable[[Callable[[], dict[str, object]]], Callable[[], dict[str, object]]]:
+) -> _Callable[[_Callable[[], dict[str, object]]], _Callable[[], dict[str, object]]]:
     """Register a batch loader for a set of lazily-imported names."""
 
     def decorator(
-        fn: Callable[[], dict[str, object]],
-    ) -> Callable[[], dict[str, object]]:
+        fn: _Callable[[], dict[str, object]],
+    ) -> _Callable[[], dict[str, object]]:
         """Bind ``fn`` as the loader for every name in the enclosing group."""
         for name in names:
             _GROUP_LOADERS[name] = fn
@@ -444,25 +454,25 @@ def _load_predicates() -> dict[str, object]:
         e for e, k in _KINDS.items() if k in ("float", "complex", "int")
     )
 
-    def is_tensor(obj: object, /) -> bool:  # type: ignore
+    def is_tensor(obj: object, /) -> _py_bool:
         """Return True if *obj* is a lucid Tensor."""
         from lucid._tensor.tensor import Tensor as _T
 
         return isinstance(obj, _T)
 
-    def is_floating_point(input: object) -> bool:  # type: ignore
+    def is_floating_point(input: object) -> _py_bool:
         """Return True if *input* has a floating-point dtype."""
         from lucid._dispatch import _unwrap
 
         return _unwrap(input).dtype in _FLOAT_DTYPES  # type: ignore[arg-type]
 
-    def is_complex(input: object) -> bool:  # type: ignore
+    def is_complex(input: object) -> _py_bool:
         """Return True if *input* has a complex dtype."""
         from lucid._dispatch import _unwrap
 
         return _unwrap(input).dtype in _COMPLEX_DTYPES  # type: ignore[arg-type]
 
-    def is_signed(input: object) -> bool:  # type: ignore
+    def is_signed(input: object) -> _py_bool:
         """Return True if *input* has a signed numeric dtype."""
         from lucid._dispatch import _unwrap
 
@@ -522,7 +532,7 @@ def _load_method_aliases() -> dict[str, object]:
 
     from lucid._tensor.tensor import Tensor as _T
 
-    def _make(method_name: str) -> Callable[..., object]:
+    def _make(method_name: str) -> _Callable[..., object]:
         """Build a free-function wrapper that forwards to ``Tensor.<method_name>``."""
 
         def _fn(input: object, *args: object, **kwargs: object) -> object:

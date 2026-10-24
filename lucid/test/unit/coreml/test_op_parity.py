@@ -176,7 +176,7 @@ _OTHER = [
     # Added when exporting families the smoke test did not reach: VQ-VAE
     # needs the first three to look its codebook up, DETR needs cumsum
     # for its positional encoding.
-    ("equal", lambda x: lucid.equal(x, x * 0.0).to(lucid.float32), False),
+    ("equal", lambda x: lucid.eq(x, x * 0.0).to(lucid.float32), False),
     ("argmax", lambda x: lucid.argmax(x, dim=1).to(lucid.float32), False),
     ("argmin", lambda x: lucid.argmin(x, dim=1).to(lucid.float32), False),
     ("argmax_flat", lambda x: lucid.argmax(x).to(lucid.float32), False),

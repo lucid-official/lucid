@@ -40,7 +40,7 @@ _BINARY_SPECS: list[tuple[str, Callable[[Tensor, Tensor], Tensor]]] = [
     ("fn_minimum", lucid.minimum),
     ("fn_atan2", lucid.atan2),
     ("fn_hypot", lucid.hypot),
-    ("fn_equal", lucid.equal),
+    ("fn_eq", lucid.eq),
     ("fn_less", lucid.less),
     ("method_add", lambda a, b: a.add(b)),
     ("method_sub", lambda a, b: a.sub(b)),
