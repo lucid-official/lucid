@@ -1785,7 +1785,7 @@
     "lucid/_C/coreml/CoreMLRuntime.mm": 16,
     "lucid/_C/coreml/MilProgram.cpp": 18,
     "lucid/_C/interop/Dlpack.cpp": 1,
-    "lucid/_C/nn/Attention.cpp": 10,
+    "lucid/_C/nn/Attention.cpp": 6,
     "lucid/_C/nn/BatchNorm.cpp": 12,
     "lucid/_C/nn/ConvNd.cpp": 3,
     "lucid/_C/nn/Embedding.cpp": 13,

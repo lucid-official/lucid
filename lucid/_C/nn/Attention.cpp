@@ -104,13 +104,13 @@ ForwardCore run_forward(const TensorImplPtr& q,
                         bool need_weights) {
     if (!q || !k || !v)
         ErrorBuilder("attention").fail("null input");
-    if (q->device() != k->device() || q->device() != v->device())
-        throw DeviceMismatch(std::string(device_name(q->device())),
-                             std::string(device_name(k->device())),
-                             "attention: Q/K/V device mismatch");
-    if (q->dtype() != k->dtype() || q->dtype() != v->dtype())
-        throw DtypeMismatch(std::string(dtype_name(q->dtype())),
-                            std::string(dtype_name(k->dtype())), "attention: Q/K/V dtype mismatch");
+    // Pairwise against Q, so the error names the operand that differs: one
+    // three-way test reported Q and K even when V was the odd one out, and
+    // read "expected float32, got float32".
+    Validator::pair(q, k, "attention: Q/K device mismatch").same_device();
+    Validator::pair(q, v, "attention: Q/V device mismatch").same_device();
+    Validator::pair(q, k, "attention: Q/K dtype mismatch").same_dtype();
+    Validator::pair(q, v, "attention: Q/V dtype mismatch").same_dtype();
     if (attn_mask) {
         // A bool mask selects; an additive one is summed into the scores, so
         // both kernels read it in q's dtype.  The CPU read a mismatched one
