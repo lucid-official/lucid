@@ -694,6 +694,8 @@ class TestTheGapAgainstCompileIsAccountedFor:
         "conj",
         "imag",
         "real",
+        "view_as_complex",
+        "view_as_real",
         # No linear-algebra solver.
         "det",
         "inv",
