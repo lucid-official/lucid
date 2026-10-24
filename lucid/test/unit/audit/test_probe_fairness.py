@@ -279,6 +279,22 @@ def test_contiguous_is_differentiated_through_its_copy(qualname: str) -> None:
     assert finding.status == Status.PASS, finding.detail
 
 
+def test_a_resized_in_place_call_keeps_what_it_declared() -> None:
+    # ``Call.strided`` (and ``domain``) promise to survive every rebuild,
+    # including the in-place joint rule, which built its own ``Call``.
+    receiver = _probe.as_f64(np.full((2, 3), 0.5))
+    peer = _probe.as_f64(np.full((2, 3), 0.25))
+    call = _specs.Call(
+        [receiver, peer], {}, 0, "x.op_(peer)", domain=(0.0, 1.0), strided=True
+    )
+    call.joint = _specs._bounds_resized
+    shrunk = call.resized(np.full((1, 3), 0.5))
+    x, follower = shrunk.args
+    assert x.is_leaf and not x.is_contiguous() and tuple(x.shape) == (1, 3)
+    assert tuple(follower.shape) == (1, 3)
+    assert shrunk.domain == (0.0, 1.0) and shrunk.strided
+
+
 def test_bernoullis_probabilities_stay_probabilities_across_dtypes() -> None:
     for qualname in ("lucid.bernoulli", "Tensor.bernoulli"):
         finding = DtypeAxis().run(_symbol(qualname), _context())

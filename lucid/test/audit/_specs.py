@@ -1587,7 +1587,20 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
         if index != call.primary
         and (index in call.same_shape or tuple(getattr(arg, "shape", (None,))) == shape)
     )
-    return Call(call.args, call.kwargs, call.primary, call.note, bounds).resized(array)
+    # Everything the call declares survives, as in every other rebuild
+    # (``with_primary``), except ``joint``: this function *is* the call's
+    # joint rule, and carried, ``resized`` would hand the call back to it.
+    peers = Call(
+        call.args,
+        call.kwargs,
+        call.primary,
+        call.note,
+        bounds,
+        call.domain,
+        None,
+        call.strided,
+    )
+    return peers.resized(array)
 
 
 #: Keyed by qualified name; consulted by :func:`invocations`, which sets

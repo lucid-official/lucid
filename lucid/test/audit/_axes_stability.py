@@ -596,7 +596,10 @@ class DeterminismAxis(Axis):
                         # This call does not draw; a later one may.  The
                         # default of ``alpha_dropout`` is ``training=False``,
                         # the identity, and its spec offers ``training=True``
-                        # next (``_specs.invocations``).
+                        # next (``_specs.invocations``).  For every op, not
+                        # only those: moving on can turn VACUOUS into PASS or
+                        # FAIL, and every later call still faces the
+                        # same-seed check, so it is never more lenient.
                         quiet = True
                         continue
                     return self._finding(
