@@ -250,10 +250,11 @@ than the framework:
   a strided view, and the engine then materialised every view —
   `t[..., ::2]`, `T`, `expand`, `broadcast_to`, `diagonal` and `unfold`
   all came back packed — so the two operands were byte-identical. 688
-  cells per run were reporting agreement between an op and itself. On the
-  CPU those are views now and `t[..., ::2]` is the strided operand; on
-  metal, where tensors stay packed, the axis still says the layout half is
-  vacuous.
+  cells per run were reporting agreement between an op and itself. Those
+  are views now and `t[..., ::2]` is the strided operand — on metal too,
+  since metal slices became members of their base's view family
+  (730ef06c5). If a slice ever comes back packed again, the axis says the
+  layout half is vacuous instead of claiming agreement.
 
 `SKIP` is the number to watch. The summary's *applicable cells* line
 reports how many cells produced a verdict at all, and that is the honest

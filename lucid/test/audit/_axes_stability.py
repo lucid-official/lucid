@@ -440,11 +440,11 @@ class ContiguityAxis(Axis):
                 base, dtype=original.dtype, device=original.device
             )
             big = lucid.tensor(padded, dtype=original.dtype, device=original.device)
-            # On the CPU a positive-step slice is a view: every second
-            # element of ``big``'s buffer, read in place, so an op that
-            # assumes a dense buffer reads the sentinels instead of the
-            # probe.  Metal tensors are always packed, and there the slice
-            # is a copy.
+            # A positive-step slice is a view on either device: every
+            # second element of ``big``'s buffer, so an op that assumes a
+            # dense buffer reads the sentinels instead of the probe.  On
+            # Metal the slice is a strided member of ``big``'s view family
+            # (730ef06c5), not a packed copy.
             if symbol.qualname == "lucid.view_as_complex" and base.ndim >= 2:
                 view = big[..., 1:, :][..., ::2, :]
             else:
@@ -501,13 +501,13 @@ class ContiguityAxis(Axis):
                 "(including imaginary components and exact integer values)",
             )
 
-        # They agreed — but could they have disagreed?  Only if the op read a
-        # strided buffer.  A Metal slice is a packed array of its own, which
-        # ops read as they read a fresh tensor, so the comparison is between
-        # an op and itself: the sentinel check above is then the half that
-        # earned the verdict, and the detail says so.  The engine's layout
-        # says which buffer the op read; ``stride()`` reports where the view
-        # sits in its base, as the reference has it, on either device.
+        # They agreed — but could they have disagreed?  Only if the op was
+        # handed a strided layout.  The engine's layout says what the op
+        # was handed; a slice that came back packed is read as a fresh
+        # tensor, so the comparison is between an op and itself.  Since
+        # Metal slices became view-family members (730ef06c5) no device
+        # does that, but if one ever does again the sentinel check above is
+        # the half that earned the verdict, and the detail says so.
         if bool(view._impl.is_contiguous()) and list(view._impl.stride) == list(
             big[..., : base.shape[-1]]._impl.stride
         ):
