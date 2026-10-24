@@ -147,13 +147,16 @@ class FunctionCtx:
 
     def __init__(self) -> None:
         """Initialise an empty context with no saved tensors or extras."""
+        # What ``save_for_backward`` was given.  Once the node is registered
+        # (``_hold_saved``), only the values that are not tensors (``None``,
+        # say) are left here, in order: the node's carrier holds the tensors.
         self._saved_tensors: list[Tensor] = []
-        # Written when the node is registered (``_hold_saved``): one entry
-        # per saved value — a ``_Saved`` for a tensor, the value itself for
-        # anything else — and the node's carrier, which holds the tensors.
-        # ``None`` before that, so a ``forward`` reading its own
-        # ``saved_tensors`` gets the objects it saved, unchecked.
-        self._saved_record: list[_Saved | Tensor] | None = None
+        # Written at registration: one entry per saved value, a ``_Saved``
+        # for a tensor and ``None`` for a value that is not one (the next
+        # left in ``_saved_tensors``).  ``None`` before that, so a
+        # ``forward`` reading its own ``saved_tensors`` gets the objects it
+        # saved, unchecked.
+        self._saved_record: list[_Saved | None] | None = None
         self._carrier: _C_engine.FunctionCtx | None = None
         self.needs_input_grad: tuple[bool, ...] = ()
         self._non_differentiable: list[Tensor] = []
@@ -235,12 +238,14 @@ class FunctionCtx:
         input_impls = [_impl_of(a) for a in inputs]
         output_impls = [_impl_of(o) for o in returned]
         node_impls: list[_C_engine.TensorImpl | None] = [t._impl for t in on_node]
-        record: list[_Saved | Tensor] = []
+        record: list[_Saved | None] = []
         held: list[_C_engine.TensorImpl] = []
+        others: list[Tensor] = []
         for i, t in enumerate(self._saved_tensors):
             impl = _impl_of(t)
             if impl is None:
-                record.append(t)
+                record.append(None)
+                others.append(t)
                 continue
             # Named the way the engine names a node's input — "mul input 1" —
             # by the position the caller knows it under.
@@ -259,7 +264,7 @@ class FunctionCtx:
         carrier.save_for_backward(*held)
         self._carrier = carrier
         self._saved_record = record
-        self._saved_tensors = []
+        self._saved_tensors = others
 
     @property
     def saved_tensors(self) -> tuple[Tensor, ...]:
@@ -289,10 +294,11 @@ class FunctionCtx:
             )
         check = not _C_engine.is_mutation_on_saved_allowed()
         held = carrier.saved_tensors
+        others = iter(self._saved_tensors)
         result: list[Tensor] = []
         for entry in record:
-            if not isinstance(entry, _Saved):
-                result.append(entry)
+            if entry is None:
+                result.append(next(others))
                 continue
             impl = held[entry.slot]
             if check and impl.version != entry.version:
@@ -331,6 +337,13 @@ class FunctionCtx:
         the tensor ``forward`` returned is left as it was: a marked input
         returned as-is keeps the caller's ``requires_grad``, and a buffer
         ``forward`` read from a module keeps its place there.
+
+        Unlike the reference framework, that holds for every marked output.
+        The reference hands back the very object ``forward`` returned when
+        it needs no gradient, and detaches one that does in place: a leaf
+        parameter ``forward`` closed over, returned and marked, loses its
+        ``requires_grad`` there.  Here the parameter keeps it, and the
+        caller gets a new detached tensor instead.
 
         An output of a dtype that carries no gradient — bool or an integer
         — is treated as marked without being named here, as the reference
@@ -608,7 +621,10 @@ class Function(metaclass=FunctionMeta):
     An output that is non-differentiable — marked so, or of a bool or
     integer dtype — comes back as a new, detached tensor over the same
     storage, and the tensor ``forward`` returned is left as it was: an
-    input passed through keeps the caller's ``requires_grad``.  An unmarked
+    input passed through keeps the caller's ``requires_grad``.  Unlike the
+    reference framework, which hands back the very object ``forward``
+    returned when it needs no gradient and detaches a closed-over leaf in
+    place, every such output here is a new tensor.  An unmarked
     input returned as-is comes back as the same tensor, now the node's
     output: where the reference framework hands back a view of it, the
     caller's tensor here is no longer a leaf after the call.

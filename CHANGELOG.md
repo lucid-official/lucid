@@ -1206,6 +1206,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Function frees saved outputs, records no forward graph
 
+- pin LCD-602, type the saved record, note the alias gap
+
 ### Changed
 
 - **Breaking (2026-10-11 wave).** Every change below makes Lucid match the reference; read this list before upgrading:

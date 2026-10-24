@@ -101,6 +101,32 @@ def test_a_call_that_runs_no_backward_is_freed(
     assert grown < _ELEMS * 4, f"{_CALLS} forwards left {grown} bytes alive"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-602: saved outputs are freed by the cyclic GC, not by refcount",
+)
+def test_a_call_that_runs_no_backward_is_freed_by_refcount(device: str) -> None:
+    # The reference frees these the moment the outputs are dropped; here the
+    # output <-> node cycle waits for the collector, so with it switched off
+    # every call stays alive.
+    fn = _scaled(2, "all outputs")
+    x = lucid.randn(_ELEMS, requires_grad=True, device=device)
+    lucid.eval(_first(fn.apply(x)))
+    gc.collect()
+    gc.disable()
+    try:
+        before = _live_bytes(device)
+        for _ in range(4):
+            out = fn.apply(x)
+            lucid.eval(_first(out))
+            del out
+        grown = _live_bytes(device) - before
+    finally:
+        gc.enable()
+        gc.collect()
+    assert grown < _ELEMS * 4, f"4 forwards left {grown} bytes alive without a GC"
+
+
 def _square(device: str) -> lucid.Tensor:
     a = lucid.randn(_SIDE, _SIDE, device=device)
     return (a @ a.mT + _SIDE * lucid.eye(_SIDE, device=device)).requires_grad_()
