@@ -795,8 +795,9 @@ std::vector<Storage> cpu_scatter_prod_grads(const Storage& g_s,
 // the graph behind them alive.  Nor is a copy of its buffer kept instead: on
 // the CPU an in-place write into bytes a node also holds is refused at the
 // write, where the reference refuses it at backward with the version error.
-// A result that is gone cannot have been written since; the backward that
-// needs its values recomputes them (ScatterExtremumNode::result).
+// Once the result is gone, the backward that needs its values recomputes
+// them (ScatterExtremumNode::result), and a write into it after which nothing
+// held it is not refused — as for every node's saved output (LCD-590).
 struct ScatterReduceNode : Node {
     int dim_ = 0;
     TensorImplPtr saved_base_;
