@@ -65,39 +65,19 @@ jobs:
           FORCE_API_BUILD: "1"
         run: python3 scripts/build-api-data-cached.py
 
-      # Mirror ``pnpm prebuild`` so the committed tree is the FULL deployable
-      # artifact, not Griffe-only.  Skipping these would leave the Docs
-      # workflow's post-processor drift gate failing.
-      - name: Run post-processors
-        if: steps.drift.outputs.stale == 'true'
-        working-directory: web
-        run: |
-          python3 scripts/build-cross-links.py
-          python3 scripts/build-usedby.py
-          python3 scripts/link-citations.py
-          python3 scripts/build-bibtex.py
-          python3 scripts/build-meta.py
-
-      - name: Re-baseline the drift cache
-        if: steps.drift.outputs.stale == 'true'
-        working-directory: web
-        run: python3 scripts/build-api-data-cached.py --write-cache
-
-      - name: Commit and push
+      # Post-processes (mirroring ``pnpm prebuild``, so the committed tree is
+      # the full deployable artifact the Docs drift gate expects),
+      # re-baselines the drift cache, commits and pushes.  A push refused
+      # because main moved during the rebuild is carried onto the new tip,
+      # with the pages its commits made stale rebuilt there, a bounded
+      # number of times; past that it fails naming the stale slugs.
+      - name: Post-process, commit and push
         if: steps.drift.outputs.stale == 'true'
         id: push
         run: |
-          if git diff --quiet -- web/public/api-data; then
-            echo "drift check flagged staleness but regen produced no change"
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/public/api-data
-          git commit -m "docs(api-data): nightly refresh against the current source"
-          git push
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
+          ./scripts/ci_api_data_push.sh
 
       # A GITHUB_TOKEN push does not trigger other workflows, so the Docs
       # deploy would otherwise wait for the next human ``web/**`` push.
