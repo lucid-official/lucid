@@ -1122,6 +1122,7 @@ def gen_tensor_pyi() -> tuple[str, int]:
         "    def true_divide(self, other: Tensor | _float) -> Tensor: ...",
     ]
     from lucid._tensor._methods import (
+        _BINARY_INPLACE_TENSOR_ONLY,
         _BINARY_INPLACE_TWINS,
         _BMM_INPLACE_TWINS,
         _SCAN_INPLACE_TWINS,
@@ -1131,7 +1132,12 @@ def gen_tensor_pyi() -> tuple[str, int]:
 
     python_only.extend(f"    def {m}(self) -> Self: ..." for m in _UNARY_INPLACE_TWINS)
     python_only.extend(
-        f"    def {m}(self, other: TensorOrScalar) -> Self: ..." for m in _BINARY_INPLACE_TWINS
+        # ``gcd_``/``lcm_`` refuse a bare Python number -- see
+        # ``_BINARY_INPLACE_TENSOR_ONLY`` (LCD-644). Every other twin's
+        # stub keeps the blanket ``TensorOrScalar`` it already accepts.
+        f"    def {m}(self, other: "
+        f"{'Tensor' if m in _BINARY_INPLACE_TENSOR_ONLY else 'TensorOrScalar'}) -> Self: ..."
+        for m in _BINARY_INPLACE_TWINS
     )
     python_only.extend(
         f"    def {m}(self, dim: _int = -1, *, dtype: DTypeLike | None = None) -> Self: ..."

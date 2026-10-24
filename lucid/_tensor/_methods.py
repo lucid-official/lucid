@@ -815,6 +815,18 @@ _BINARY_INPLACE_TWINS: tuple[str, ...] = (
     "xlogy_",
 )
 
+#: Which of ``_BINARY_INPLACE_TWINS`` refuse a bare Python number -- their
+#: free function (``lucid.gcd`` / ``lucid.lcm``) has no engine promotion
+#: path for a scalar operand and raises ``TypeError`` itself (LCD-644).
+#: Every other twin forwards to a free function that promotes a scalar the
+#: way ``+`` does (``lucid._dispatch._binary_operands``), so the stub's
+#: default ``other: TensorOrScalar`` already matches what it accepts.
+#: ``tools/gen_pyi.py`` reads this set to stub each twin by what it truly
+#: takes, rather than one blanket annotation for all 22 (see
+#: ``lucid/test/unit/tensor/test_inplace_entry_points.py`` for the guard
+#: that a scalar call matches the stub either way).
+_BINARY_INPLACE_TENSOR_ONLY: frozenset[str] = frozenset({"gcd_", "lcm_"})
+
 _SCAN_INPLACE_TWINS: tuple[str, ...] = ("cumsum_", "cumprod_")
 _TRI_INPLACE_TWINS: tuple[str, ...] = ("tril_", "triu_")
 _BMM_INPLACE_TWINS: tuple[str, ...] = ("addbmm_", "baddbmm_")

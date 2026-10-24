@@ -28,6 +28,7 @@ from types import ModuleType
 import pytest
 
 import lucid
+from lucid._tensor._methods import _BINARY_INPLACE_TENSOR_ONLY, _BINARY_INPLACE_TWINS
 
 # The reference's in-place refusal, whichever op raises it.
 _CANNOT_CAST = re.compile(r"result type .+ can't be cast to the desired output type .+")
@@ -428,6 +429,31 @@ def test_lucid_has_every_in_place_method_the_table_names(
 ) -> None:
     assert hasattr(ref.Tensor, name)
     assert hasattr(lucid.Tensor, name)
+
+
+@pytest.mark.parametrize("name", list(_BINARY_INPLACE_TWINS))
+def test_the_stub_scalar_claim_matches_what_the_method_accepts(
+    device: str, name: str
+) -> None:
+    """LCD-644: a scalar ``other`` works exactly where the generated stub
+    says it does. The 22 binary in-place twins used to share one blanket
+    ``other: TensorOrScalar`` stub regardless of the op; ``gcd_``/``lcm_``
+    claimed a scalar they refuse (no engine promotion for a bare number).
+    ``_BINARY_INPLACE_TENSOR_ONLY`` (``lucid/_tensor/_methods.py``) is what
+    both the stub generator and this guard read, so the two cannot drift
+    apart again.
+    """
+    tensor_only = name in _BINARY_INPLACE_TENSOR_ONLY
+    base = (
+        lucid.tensor([12, 18, 20, 15]) if tensor_only else _floats(lucid, [1.5, 2.5, 3.5, 4.5])
+    ).to(device)
+    scalar = 2 if tensor_only else 2.0
+
+    if tensor_only:
+        with pytest.raises(TypeError):
+            getattr(base, name)(scalar)
+    else:
+        getattr(base, name)(scalar)  # the stub promises this works -- must not raise
 
 
 @pytest.mark.parametrize("name", list(METHODS))

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - make the backward-linearity timing guard robust to CI jitter
 - register a parametrization's originals in the module tree
 - accept a device object in lucid.device()'s constructor
+- stub each binary in-place twin by what it actually accepts
 
 ---
 
