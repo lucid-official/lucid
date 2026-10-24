@@ -26,7 +26,8 @@ beyond the axis reads nothing.
 The composites are differentiable in both the input (through ``gather``)
 and the grid (through the filter weights, the reflection's ``±1`` slope
 and the clip's ``0`` / ``1`` slope), the same two gradients the kernel
-provides.
+provides.  A half input is sampled in float32 and rounded once
+(:func:`opmath`).
 """
 
 import itertools
@@ -36,6 +37,7 @@ from typing import TYPE_CHECKING
 import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._dtype import _float32_or_wider
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -534,6 +536,34 @@ def _as_real(t: Tensor) -> Tensor:
     return t if t.is_floating_point() else t.to(_lucid.float32)
 
 
+def opmath(x: Tensor, grid: Tensor) -> tuple[Tensor, Tensor]:
+    """``x`` and ``grid`` in the dtype the composite parts sample in.
+
+    A half pair is widened to float32, and the caller rounds the result
+    back once — as the reference's MPS kernels sample one.  Coordinates,
+    weights and sums each rounded to float16 put a bicubic sample about
+    2e-2 off the float32 answer, where a single rounding costs 5e-4.
+    float32 and float64 are their own; a pair of two dtypes is returned as
+    it is, for the caller's check or the kernel to refuse.
+
+    Parameters
+    ----------
+    x : Tensor
+        Floating input.
+    grid : Tensor
+        Floating grid.
+
+    Returns
+    -------
+    tuple of Tensor
+        The two operands, widened or as they were.
+    """
+    if x.dtype != grid.dtype:
+        return x, grid
+    work = _float32_or_wider(x.dtype)
+    return x.to(work), grid.to(work)
+
+
 def _check_operands(x: Tensor, grid: Tensor) -> None:
     """Refuse a grid that does not fit the input, before any read.
 
@@ -597,6 +627,8 @@ def composite_grid_sample(
     x = _as_real(x)
     grid = _as_real(grid)
     _check_operands(x, grid)
+    out_dtype = x.dtype
+    x, grid = opmath(x, grid)
     n, c = int(x.shape[0]), int(x.shape[1])
     spatial = [int(s) for s in x.shape[2:]]
     out_spatial = [int(s) for s in grid.shape[1:-1]]
@@ -620,7 +652,7 @@ def composite_grid_sample(
         ]
         sample = _nearest if mode == "nearest" else _linear
         out = sample(flat, coords, sizes)
-    return out.reshape(n, c, *out_spatial)
+    return out.reshape(n, c, *out_spatial).to(out_dtype)
 
 
 def _normalize(position: Tensor, size: int, align_corners: bool) -> Tensor:

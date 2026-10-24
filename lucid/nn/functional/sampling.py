@@ -16,6 +16,7 @@ from lucid.nn.functional._grid_sampling import (
     affine_grid_3d as _affine_grid_3d,
     check_options as _check_options,
     composite_grid_sample as _composite_grid_sample,
+    opmath as _opmath,
     reflect_grid as _reflect_grid,
 )
 from lucid.nn.functional._interpolate import resample as _resample
@@ -253,9 +254,12 @@ def _grid_sample(
         return _composite_grid_sample(x, grid, mode, padding_mode, align_corners)
     if padding_mode == "reflection":
         # The kernel has no reflection: the grid is reflected in pixel
-        # space first and then read with border padding.
+        # space first and then read with border padding — for a half pair,
+        # all of it in float32, rounded once, as the composites sample.
+        dtype = x.dtype
+        x, grid = _opmath(x, grid)
         grid = _reflect_grid(x, grid, align_corners, mode == "nearest")
-        padding_mode = "border"
+        return _grid_sample(x, grid, mode, "border", align_corners).to(dtype)
     return _wrap(
         _C_engine.nn.grid_sample(
             _unwrap(x),
