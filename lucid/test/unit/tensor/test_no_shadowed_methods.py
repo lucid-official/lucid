@@ -93,3 +93,17 @@ def test_the_injectors_are_read_not_restated() -> None:
     ):
         assert name in injected, name
     assert sorted(_REPLACED_ON_PURPOSE - _class_members().keys()) == []
+
+
+def test_an_injector_run_on_another_class_leaves_tensor_alone() -> None:
+    # The shadowing checks above run every injector on a blank class.  An
+    # injector that stashed its argument in a module global made a later
+    # ``x.to(other)`` refuse a real tensor ("takes a device, a dtype or a
+    # tensor first, got Tensor"), but only when this file ran first.
+    import lucid
+
+    for inject in _INJECTORS:
+        _attached_by(inject)
+    x = lucid.tensor([1.0, 2.0])
+    other = lucid.tensor([1.0], dtype=lucid.float64)
+    assert x.to(other).dtype == lucid.float64

@@ -203,9 +203,6 @@ def _type_target(
     )
 
 
-_TENSOR_CLS: type = object
-
-
 def _fast_device_enum(dev_in: object) -> _C_engine.Device | None:
     if isinstance(dev_in, str):
         return _STR_TO_DEVICE_ENUM.get(dev_in)
@@ -223,7 +220,12 @@ def _resolve_to_targets(
 ) -> tuple[_C_engine.Device, _C_engine.Dtype, bool]:
     target_device = self._impl.device
     target_dtype = self._impl.dtype
-    other, device, dtype, copy = _to_operands(args, kwargs, _TENSOR_CLS)
+    # The class is read at the call, not stashed by the injector: running an
+    # injector on another class (the shadowing guard does) must not change
+    # what ``x.to(other)`` accepts.
+    from lucid._tensor.tensor import Tensor as _Tensor
+
+    other, device, dtype, copy = _to_operands(args, kwargs, _Tensor)
     if other is not None:
         t = cast("Tensor", other)
         target_device = t._impl.device
@@ -509,8 +511,6 @@ _TO_METHODS = (
 
 def _inject_to(cls: type) -> None:
     """Attach .to(), .metal(), .cpu(), and dtype-cast methods to Tensor."""
-    global _TENSOR_CLS
-    _TENSOR_CLS = cls
     globals().setdefault("Tensor", cls)
     for name, fn in _TO_METHODS:
         fn.__name__ = name
