@@ -125,8 +125,17 @@ def test_ops_that_only_share_a_name_are_not_compared() -> None:
         assert got == labels, (qualname, got)
 
 
-def test_a_chained_scheduler_is_handed_schedulers_of_its_own_optimizer() -> None:
-    finding = SchedulerAxis().run(_symbol("lucid.optim.ChainedScheduler"), _context())
+@pytest.mark.parametrize(
+    "qualname", ["lucid.optim.ChainedScheduler", "lucid.optim.SequentialLR"]
+)
+@pytest.mark.parametrize("axis", [SchedulerAxis, SmokeAxis], ids=["scheduler", "smoke"])
+def test_a_composite_scheduler_is_handed_children_of_its_own_optimizer(
+    qualname: str, axis: type
+) -> None:
+    # Since LCD-492 both refuse another optimizer's schedulers, and
+    # ``SequentialLR`` wants one milestone fewer than it has schedulers —
+    # the reference refuses either too.
+    finding = axis().run(_symbol(qualname), _context())
     assert finding.status == Status.PASS, finding.detail
 
 

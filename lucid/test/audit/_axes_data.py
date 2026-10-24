@@ -189,11 +189,6 @@ _VARIADIC: dict[str, Any] = {
 #: axis and its own subsystem axis — the same gap counted twice.
 _BUILD_BY_NAME: dict[str, Any] = {
     "data": lambda: lucid.tensor(np.linspace(0.1, 0.9, 12, dtype=np.float32)),
-    # ``SequentialLR`` and ``ChainedScheduler`` compose real schedulers.
-    # ``None`` here passed only while their constructors never looked at
-    # the list; the reference refuses it too.  The scheduler axis still
-    # passes its own.
-    "schedulers": lambda: [s for s in (_constant_scheduler(),) if s is not None],
     "vocab": _tiny_vocab,
     # The last handful of classes whose one required argument is an
     # object no annotation describes.  Each is one line and each was
@@ -335,11 +330,29 @@ _BY_ANNOTATION: tuple[tuple[str, Any], ...] = (
 _BY_CLASS: dict[str, dict[str, Any]] = {
     "iinfo": {"dt": "int32"},
     "dtype": {"engine_dtype": lucid.float32._engine, "itemsize": 4},
+    # One switch between the two nested schedulers: ``SequentialLR`` takes
+    # ``len(schedulers) - 1`` milestones, and refuses the table's
+    # ``[2, 4]`` (a ``MultiStepLR`` value) as the reference does (LCD-492).
+    "SequentialLR": {"milestones": [2]},
+}
+
+
+#: Values that have to agree with a parameter filled before them in the
+#: same signature: ``(arguments built so far) -> value``.  A composite
+#: scheduler's children must drive the optimizer it is handed —
+#: ``SequentialLR`` refuses another optimizer's, as the reference does
+#: (LCD-492) — so they are built on it.  ``ChainedScheduler`` takes its
+#: optimizer after the children, defaulting to theirs.
+_BUILD_FROM_SIBLINGS: dict[str, Any] = {
+    "schedulers": lambda built: _nested_schedulers(built.get("optimizer")),
 }
 
 
 def _value_for(
-    param: inspect.Parameter, extra: dict[str, Any], cls_name: str = ""
+    param: inspect.Parameter,
+    extra: dict[str, Any],
+    cls_name: str = "",
+    built: dict[str, Any] | None = None,
 ) -> tuple[bool, Any]:
     """``(found, value)`` for one required parameter."""
     override = _BY_CLASS.get(cls_name, {})
@@ -347,6 +360,12 @@ def _value_for(
         return True, override[param.name]
     if param.name in extra:
         return True, extra[param.name]
+    sibling = _BUILD_FROM_SIBLINGS.get(param.name)
+    if sibling is not None:
+        # The caller's own arguments count as built: ``ChainedScheduler``
+        # lists its optimizer after the children it has to agree with.
+        value = sibling({**extra, **(built or {})})
+        return value is not None, value
     if param.name in _BY_NAME:
         return True, _BY_NAME[param.name]
     builder = _BUILD_BY_NAME.get(param.name)
@@ -413,7 +432,7 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
             if param.default is None:
                 optional.append(param)
             continue
-        found, value = _value_for(param, extra, getattr(cls, "__name__", ""))
+        found, value = _value_for(param, extra, getattr(cls, "__name__", ""), kwargs)
         if not found:
             return None, f"no value for required parameter {name!r}: {param.annotation}"
         kwargs[name] = value
@@ -448,7 +467,9 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
         )
         if group is not None and group in claimed:
             continue
-        found, value = _value_for(param, extra, getattr(cls, "__name__", ""))
+        found, value = _value_for(
+            param, extra, getattr(cls, "__name__", ""), extra_kwargs
+        )
         if found:
             extra_kwargs[param.name] = value
             added = True
@@ -958,11 +979,7 @@ class SchedulerAxis(Axis):
         if optimizer is None:
             return self._finding(symbol, Status.SKIP, "no optimizer to schedule")
 
-        instance, why = _construct(
-            obj,
-            optimizer=optimizer,
-            schedulers=[s for s in (_constant_scheduler(optimizer),) if s is not None],
-        )
+        instance, why = _construct(obj, optimizer=optimizer)
         if instance is None:
             return self._finding(symbol, Status.SKIP, f"construct: {why}")
         if not hasattr(instance, "step"):
@@ -1001,13 +1018,7 @@ class SchedulerAxis(Axis):
         # the optimizer that had been reset.
         live_rates = [group["lr"] for group in optimizer.param_groups]
         fresh_optimizer = _toy_optimizer()
-        replacement, _ = _construct(
-            obj,
-            optimizer=fresh_optimizer,
-            schedulers=[
-                s for s in (_constant_scheduler(fresh_optimizer),) if s is not None
-            ],
-        )
+        replacement, _ = _construct(obj, optimizer=fresh_optimizer)
         if replacement is None or not hasattr(replacement, "load_state_dict"):
             return self._finding(symbol, Status.PASS, f"{len(rates)} finite rates")
         for group, rate in zip(fresh_optimizer.param_groups, live_rates):
@@ -1044,20 +1055,26 @@ def _toy_optimizer() -> Any:
         return None
 
 
-def _constant_scheduler(optimizer: Any = None) -> Any:
-    """A scheduler to nest, for the ones that compose others.
+def _nested_schedulers(optimizer: Any = None) -> list[Any] | None:
+    """Two schedulers to nest, for the ones that compose others.
 
-    Pass the optimizer the composite drives: ``ChainedScheduler`` refuses
-    schedulers of another optimizer, as the reference does, and nesting
-    one built on a fresh optimizer cost the scheduler axis its cell.
+    Built on the optimizer the composite drives: ``ChainedScheduler`` and
+    ``SequentialLR`` refuse schedulers of another optimizer, as the
+    reference does (LCD-492), and nesting ones built on a fresh optimizer
+    cost the composites their cells.  Two, so ``SequentialLR`` has a
+    switch to make (one milestone, :data:`_BY_CLASS`).
     """
     if optimizer is None:
         optimizer = _toy_optimizer()
     if optimizer is None:
         return None
+    constant = lucid.optim.lr_scheduler.ConstantLR
     try:
-        return lucid.optim.lr_scheduler.ConstantLR(optimizer, factor=0.5, total_iters=2)
-    except Exception:  # noqa: BLE001
+        return [
+            constant(optimizer, factor=0.5, total_iters=2),
+            constant(optimizer, factor=0.25, total_iters=2),
+        ]
+    except Exception:  # noqa: BLE001 - surveying: no scheduler is no value
         return None
 
 
