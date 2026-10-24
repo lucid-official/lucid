@@ -152,8 +152,10 @@ python -m lucid.test.unit.compile._zoo_matrix <family> <task>
 ```
 
 Agreement between two NaNs is no agreement, so a family whose loss or
-gradients are not finite, or whose gradients are all zero, is `nonfinite`
-and fails whatever `EXPECTED` says (`_zoo_matrix.nonfinite`, pinned by
+gradients are not finite, or whose gradients are all zero — on the eager
+step, the compiled one, any arm of the float64 tie-breaker or the retry
+batches — is `nonfinite` and fails whatever `EXPECTED` says, with no retry
+into `ok` (`_zoo_matrix.nonfinite`, pinned by
 `unit/compile/test_zoo_matrix_status.py` without running the matrix). A
 density over a bounded domain gets inputs inside it (`Spec.domain`).
 

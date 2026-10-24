@@ -10,7 +10,9 @@ without running the matrix, which takes a process per family.
 """
 
 import math
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -64,27 +66,119 @@ class _Frozen(nn.Module):
         return x + self.w * 0.0
 
 
-def _batches(x: lucid.Tensor) -> list[tuple[tuple[lucid.Tensor, ...], dict]]:
+_Batch = tuple[tuple[lucid.Tensor, ...], dict[str, Any]]
+_Grads = dict[str, np.ndarray]
+_needs_metal = pytest.mark.skipif(
+    not metal_available(), reason="the matrix runs on Metal"
+)
+
+
+def _batches(x: lucid.Tensor) -> list[_Batch]:
     return [((x.to(zoo.DEV),), {}), ((x.to(zoo.DEV),), {})]
 
 
-@pytest.mark.skipif(not metal_available(), reason="the matrix runs on Metal")
+def _linear() -> nn.Module:
+    return nn.Linear(3, 2)
+
+
+@_needs_metal
 @pytest.mark.parametrize("mode", ["eval", "train"])
 @pytest.mark.parametrize(
     ("make", "x", "why"),
     [
-        (lambda: nn.Linear(3, 2), lucid.tensor([[1.0, math.nan, 0.0]]), "loss is nan"),
+        (_linear, lucid.tensor([[1.0, math.nan, 0.0]]), "loss is nan"),
         (_Frozen, lucid.ones(1, 3), "every gradient is zero"),
     ],
     ids=["nan", "zero-grad"],
 )
 def test_a_mode_whose_eager_step_is_unusable_is_nonfinite(
-    make: type[nn.Module], x: lucid.Tensor, why: str, mode: str
+    make: Callable[[], nn.Module], x: lucid.Tensor, why: str, mode: str
 ) -> None:
     model = make().to(zoo.DEV)
     status, detail = zoo._check_mode("synthetic", "test", model, mode, _batches(x))
     assert status == "nonfinite"
     assert detail.startswith(f"eager: {why}"), detail
+
+
+@_needs_metal
+@pytest.mark.parametrize("mode", ["eval", "train"])
+def test_a_mode_whose_compiled_step_is_unusable_is_nonfinite(
+    mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def compiled(
+        model: nn.Module, batches: list[_Batch], seed: int, start: _Grads
+    ) -> tuple[float, str]:
+        zoo._zero(model)
+        return math.nan, ""
+
+    monkeypatch.setattr(zoo, "_compiled_step", compiled)
+    model = _linear().to(zoo.DEV)
+    batches = _batches(lucid.ones(1, 3))
+    status, detail = zoo._check_mode("synthetic", "test", model, mode, batches)
+    assert (status, detail) == ("nonfinite", "compiled: loss is nan")
+
+
+@_needs_metal
+@pytest.mark.parametrize(
+    ("reference", "status"), [("finite", "wrong"), ("nan", "nonfinite")]
+)
+def test_a_nonfinite_float64_arm_is_nonfinite_not_wrong(
+    reference: str, status: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compiled agrees on the loss and doubles every gradient, so the mode
+    reaches the float64 tie-breaker; a finite one calls it wrong (the
+    control), a NaN one may not, and nothing can retry it into ``ok``."""
+    model = _linear().to(zoo.DEV)
+
+    def compiled(
+        module: nn.Module, batches: list[_Batch], seed: int, start: _Grads
+    ) -> tuple[float, str]:
+        loss = zoo._eager_step(module, batches[1], seed)
+        for p in module.parameters():
+            assert p.grad is not None
+            p.grad = p.grad * 2.0
+        return loss, ""
+
+    def float64(
+        family: str, task: str, mode: str, start: _Grads, batch: _Batch, seed: int
+    ) -> tuple[float, _Grads]:
+        if reference == "nan":
+            return math.nan, {}
+        return zoo._eager_step(model, batch, seed), zoo._grads(model)
+
+    monkeypatch.setattr(zoo, "_compiled_step", compiled)
+    monkeypatch.setattr(zoo, "_float64_reference", float64)
+    got, detail = zoo._check_mode(
+        "synthetic", "test", model, "eval", _batches(lucid.ones(1, 3))
+    )
+    assert got == status, detail
+    if status == "nonfinite":
+        assert detail == "float64 verdict, float64 without dropout: loss is nan"
+    else:
+        assert detail["float64"]["ok"] is False, detail
+
+
+def test_a_retry_that_is_nonfinite_makes_the_pair_nonfinite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A "wrong" first pair is retried; a NaN on the retry cannot pass."""
+    answers = iter([("wrong", {"grad": 1.0}), ("nonfinite", "eager: loss is nan")])
+
+    def build(family: str, task: str) -> tuple[str, Any, Any, dict[str, Any]]:
+        return "synthetic_small", _linear(), SimpleNamespace(), {}
+
+    def inputs(model: Any, cfg: Any, family: str, seed: int) -> _Batch:
+        return (), {}
+
+    def check(*args: object) -> tuple[str, Any]:
+        return next(answers)
+
+    monkeypatch.setattr(zoo, "build", build)
+    monkeypatch.setattr(zoo, "default_inputs", inputs)
+    monkeypatch.setattr(zoo, "_check_mode", check)
+    rec = zoo.run_family("synthetic", "test")
+    assert rec["status"] == "nonfinite"
+    assert rec["detail"] == "eval on the retry batches, eager: loss is nan"
 
 
 def test_a_nonfinite_pair_fails_the_sweep_whatever_expected_says() -> None:
@@ -111,7 +205,7 @@ def test_realnvp_images_are_drawn_inside_its_data_domain() -> None:
         assert values.min() >= 0.0 and values.max() < 1.0
 
 
-@pytest.mark.skipif(not metal_available(), reason="the matrix runs on Metal")
+@_needs_metal
 @pytest.mark.parametrize("mode", ["eval", "train"])
 def test_realnvp_trains_on_its_domain_and_is_nan_off_it(mode: str) -> None:
     """The counterfactual is why the domain is in its Spec at all."""

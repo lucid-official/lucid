@@ -25,8 +25,9 @@ carries gradient.
 
 Agreement means nothing between two NaNs, or between two steps that move
 nothing, so every status asks first that the loss be finite and the
-gradients finite and not all zero — on the eager step, the compiled one and
-the float64 tie-breaker alike.  A pair that fails it is ``nonfinite``, never
+gradients finite and not all zero — on the eager step, the compiled one, each
+arm of the float64 tie-breaker and the retry batches alike.  A pair that
+fails it anywhere is ``nonfinite``, never
 ``ok`` (realnvp was: its loss NaN on inputs outside its data domain,
 LCD-563).  A model that is a density over a bounded domain is fed inputs
 inside it (``Spec.domain``).
@@ -634,7 +635,8 @@ def _float64_verdict(
         ("float64", ref_loss, ref),
     ):
         if (bad := nonfinite(loss, grads)) is not None:
-            return {"verdict": f"{side} without dropout: {bad}", "ok": False}
+            # Not a verdict either way: the mode is nonfinite (_check_mode).
+            return {"nonfinite": f"{side} without dropout: {bad}", "ok": False}
     e = _global_rel(want, ref)
     c = _global_rel(got, ref)
     return {"eager": e, "compiled": c, "ok": c <= max(1.25 * e, 1e-3)}
@@ -736,6 +738,8 @@ def _check_mode(
         except Exception as e:  # noqa: BLE001
             detail["float64"] = f"{type(e).__name__}: {str(e)[:120]}"
         else:
+            if "nonfinite" in verdict:
+                return "nonfinite", f"float64 verdict, {verdict['nonfinite']}"
             detail["float64"] = verdict
             ok = bool(verdict.get("ok"))
     return ("ok" if ok else "wrong"), detail
@@ -777,6 +781,8 @@ def run_family(family: str, task: str) -> dict[str, Any]:
                 status2, detail2 = _check_mode(family, task, model, mode, retry)
                 if status2 == "ok":
                     status, detail = "ok", {"unstable": detail, "retry": detail2}
+                elif status2 == "nonfinite":
+                    status, detail = status2, f"on the retry batches, {detail2}"
         except _StepFailed as e:
             rec.update(status=e.status, mode=mode, detail=str(e))
             return rec
