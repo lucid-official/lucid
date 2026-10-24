@@ -415,8 +415,8 @@ def ifft(
 
 def fft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     r"""2-D discrete Fourier transform over a pair of axes.
@@ -441,14 +441,14 @@ def fft2(
     ----------
     input : Tensor
         Input tensor with at least 2 dimensions.  May be real or complex.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Output size ``(M_out, N_out)`` along each transformed axis.
         The input is zero-padded or truncated to this size before the
-        transform.  ``len(s)`` must be 2 when given.  If ``None``, the
+        transform.  ``len(s)`` must match ``dim``.  If ``None``, the
         axes are transformed at their current sizes.
-    dim : sequence of int, optional
-        The two axes over which to compute the transform.  Default is
-        ``(-2, -1)`` (the last two axes).
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` (the last two) by default; a
+        single int transforms that one axis.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.  :math:`N` in the scaling formula is the product
@@ -495,13 +495,13 @@ def fft2(
 
     >>> X_shifted = lucid.fft.fftshift(lucid.fft.fft2(x))
     """
-    return fftn(input, s=s, dim=list(dim), norm=norm)
+    return fftn(input, s=s, dim=dim, norm=norm)
 
 
 def ifft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     r"""2-D inverse discrete Fourier transform over a pair of axes.
@@ -522,14 +522,14 @@ def ifft2(
     input : Tensor
         Complex input tensor (2-D frequency domain) with at least 2
         dimensions.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Output size ``(M_out, N_out)`` along each transformed axis.
         The frequency tensor is zero-padded or truncated before inverting.
-        ``len(s)`` must be 2 when given.  If ``None``, the axes keep
+        ``len(s)`` must match ``dim``.  If ``None``, the axes keep
         their current sizes.
-    dim : sequence of int, optional
-        The two axes over which to compute the inverse transform.
-        Default is ``(-2, -1)``.
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` by default; a single int
+        transforms that one axis.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.  See :func:`fftn` for the full description.
@@ -569,7 +569,7 @@ def ifft2(
     >>> # Zero out high frequencies, then invert
     >>> x_smooth = lucid.fft.ifft2(X)
     """
-    return ifftn(input, s=s, dim=list(dim), norm=norm)
+    return ifftn(input, s=s, dim=dim, norm=norm)
 
 
 # ── Public API: real-input FFT (rfft / rfft2 / rfftn) ────────────────────────
@@ -924,8 +924,8 @@ def irfft(
 
 def rfft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     r"""2-D FFT of a real-valued input over a pair of axes.
@@ -943,15 +943,15 @@ def rfft2(
     ----------
     input : Tensor
         Real-valued input tensor with at least 2 dimensions.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Output sizes ``(M_out, N_out)`` along the two transformed axes.
         The last value ``s[-1]`` is the full signal length along the last
         axis before the real FFT; the output last axis will be
         ``s[-1] // 2 + 1``.  If ``None``, current axis sizes are used.
-    dim : sequence of int, optional
-        The two axes over which to compute the transform.  Default is
-        ``(-2, -1)``.  The *last* element receives the conjugate-symmetry
-        compression.
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` by default; a single int
+        transforms that one axis.  The *last* one receives the
+        conjugate-symmetry compression.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.
@@ -995,13 +995,13 @@ def rfft2(
     >>> x_rec.shape
     (64, 64)
     """
-    return rfftn(input, s=s, dim=list(dim), norm=norm)
+    return rfftn(input, s=s, dim=dim, norm=norm)
 
 
 def irfft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     r"""2-D inverse FFT for a Hermitian-symmetric spectrum.
@@ -1019,14 +1019,14 @@ def irfft2(
     input : Tensor
         Complex Hermitian tensor (one-sided 2-D spectrum) with at least
         2 dimensions, typically the output of :func:`rfft2`.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Full output sizes ``(M_out, N_out)`` along the two transformed
         axes.  Pass the original signal shape to avoid the even/odd
         ambiguity in the last axis.  If ``None``, the last axis
         defaults to :math:`2(m-1)`.
-    dim : sequence of int, optional
-        The two axes over which to compute the inverse transform.
-        Default is ``(-2, -1)``.
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` by default; a single int
+        transforms that one axis.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.  See :func:`fftn` for the full description.
@@ -1055,7 +1055,7 @@ def irfft2(
     >>> x_rec.shape
     (128, 256)
     """
-    return irfftn(input, s=s, dim=list(dim), norm=norm)
+    return irfftn(input, s=s, dim=dim, norm=norm)
 
 
 # ── Public API: Hermitian FFT (hfft / hfft2 / hfftn) ─────────────────────────
@@ -1389,8 +1389,8 @@ def ihfft(
 
 def hfft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     """2-D FFT of a Hermitian-symmetric complex signal over a pair of axes.
@@ -1406,12 +1406,12 @@ def hfft2(
     ----------
     input : Tensor
         Complex Hermitian half-spectrum tensor with at least 2 dimensions.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Full output sizes ``(M_out, N_out)`` along the two transformed
         axes.  If ``None``, the last axis defaults to :math:`2(m-1)`.
-    dim : sequence of int, optional
-        The two axes over which to compute the transform.  Default is
-        ``(-2, -1)``.
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` by default; a single int
+        transforms that one axis.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.  See :func:`fftn` for the full description.
@@ -1438,13 +1438,13 @@ def hfft2(
     >>> y.shape
     (64, 64)
     """
-    return hfftn(input, s=s, dim=list(dim), norm=norm)
+    return hfftn(input, s=s, dim=dim, norm=norm)
 
 
 def ihfft2(
     input: Tensor,
-    s: Sequence[int] | None = None,
-    dim: Sequence[int] = (-2, -1),
+    s: int | Sequence[int] | None = None,
+    dim: int | Sequence[int] = (-2, -1),
     norm: str | None = None,
 ) -> Tensor:
     r"""2-D inverse FFT of a real signal, giving a Hermitian half-spectrum.
@@ -1461,12 +1461,12 @@ def ihfft2(
     ----------
     input : Tensor
         Real-valued input tensor with at least 2 dimensions.
-    s : sequence of int, optional
+    s : int or sequence of int, optional
         Signal sizes ``(M_out, N_out)`` along the two transformed axes.
         If ``None``, current axis sizes are used.
-    dim : sequence of int, optional
-        The two axes over which to compute the transform.  Default is
-        ``(-2, -1)``.
+    dim : int or sequence of int, optional
+        The axes to transform, ``(-2, -1)`` by default; a single int
+        transforms that one axis.
     norm : str or None, optional
         Normalisation mode — ``"backward"`` (default), ``"forward"``, or
         ``"ortho"``.  See :func:`fftn` for the full description.
@@ -1502,7 +1502,7 @@ def ihfft2(
     >>> x_rec.shape
     (64, 64)
     """
-    return ihfftn(input, s=s, dim=list(dim), norm=norm)
+    return ihfftn(input, s=s, dim=dim, norm=norm)
 
 
 # ── Public API: utility functions ────────────────────────────────────────────
@@ -1514,6 +1514,7 @@ def fftfreq(
     *,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Frequency bin centres for the output of :func:`fft` / :func:`fftn`.
 
@@ -1549,6 +1550,8 @@ def fftfreq(
         default floating-point type.
     device : DeviceLike, optional
         Device on which to allocate the output tensor.
+    requires_grad : bool, optional
+        Whether autograd records operations on the result.
 
     Returns
     -------
@@ -1573,10 +1576,6 @@ def fftfreq(
     **Centred display** — to get frequencies in monotonically increasing
     order (centred at zero), apply :func:`fftshift` to both the frequency
     vector and the DFT output.
-
-    **Closed-form implementation** — ``fftfreq`` is computed as a
-    closed-form expression over :func:`lucid.arange`; no external
-    libraries are required.
 
     Examples
     --------
@@ -1605,7 +1604,7 @@ def fftfreq(
     pos = lucid.arange(0.0, float(half), 1.0, dtype=dtype, device=device)
     neg = lucid.arange(float(-(n // 2)), 0.0, 1.0, dtype=dtype, device=device)
     full = lucid.cat([pos, neg], 0)
-    return full * (1.0 / (float(d) * n))
+    return (full * (1.0 / (float(d) * n))).requires_grad_(requires_grad)
 
 
 def rfftfreq(
@@ -1614,6 +1613,7 @@ def rfftfreq(
     *,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Frequency bin centres for the output of :func:`rfft` / :func:`rfftn`.
 
@@ -1640,6 +1640,8 @@ def rfftfreq(
         Data type of the output tensor.
     device : DeviceLike, optional
         Device on which to allocate the output tensor.
+    requires_grad : bool, optional
+        Whether autograd records operations on the result.
 
     Returns
     -------
@@ -1690,7 +1692,7 @@ def rfftfreq(
     if n <= 0:
         raise ValueError(f"rfftfreq requires n > 0, got {n}")
     bins = lucid.arange(0.0, float(n // 2 + 1), 1.0, dtype=dtype, device=device)
-    return bins * (1.0 / (float(d) * n))
+    return (bins * (1.0 / (float(d) * n))).requires_grad_(requires_grad)
 
 
 def fftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
@@ -1747,10 +1749,6 @@ def fftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
     For even :math:`N`, ``fftshift`` and ``ifftshift`` are
     self-inverse (applying either twice returns the original).  For
     odd :math:`N` the two differ by one position.
-
-    **Implementation** — realised as ``lucid.roll`` with shift
-    :math:`\lfloor N/2 \rfloor` along each axis; no data copy is
-    required when the underlying buffer supports strides.
 
     Examples
     --------
