@@ -574,10 +574,13 @@ class _MaxViTBlock(nn.Module):
 
         # A validity plane marking the real positions.  It rides through the
         # exact same partitioning as the features, so each attention window
-        # learns which of its tokens are padding.
+        # learns which of its tokens are padding.  One plane per sample: the
+        # partitions put the batch outermost, so a single plane gave one mask
+        # row per window of the *first* image and failed to broadcast against
+        # the B·windows attention batch for any B > 1.
         valid_cl: Tensor | None = None
         if int(_Hp) != pre_H or int(_Wp) != pre_W:
-            ones = lucid.ones(1, pre_H, pre_W, 1, device=x_cl.device.type)
+            ones = lucid.ones(B, pre_H, pre_W, 1, device=x_cl.device.type)
             valid_cl, _, _ = _pad_to_multiple(ones, ws)
 
         # 2. Block (window) attention — local within ws×ws windows

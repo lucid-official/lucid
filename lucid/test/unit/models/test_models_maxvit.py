@@ -5,6 +5,7 @@ import unittest
 
 import lucid
 import lucid.models as models
+import lucid.optim as optim
 from lucid.models.vision.maxvit import (
     MaxViTConfig,
     MaxViT,
@@ -76,6 +77,47 @@ class TestMaxViTBackbone(unittest.TestCase):
                 feat = self.model.forward_features(x)
                 self.assertEqual(feat.shape[0], 1)
                 self.assertTrue(bool(feat.isfinite().all().item()))
+
+
+class TestMaxViTPaddedBatch(unittest.TestCase):
+    """A padded feature map answers every sample of a batch (LCD-554).
+
+    The validity plane that drives padded keys out of the softmax was built
+    for one image, so the pad bias held one row per window of the first
+    sample and failed to broadcast against the B·windows attention batch:
+    every resolution that is not a multiple of the window grid ran at batch
+    size 1 only.
+    """
+
+    def _model(self) -> MaxViTForImageClassification:
+        lucid.manual_seed(0)
+        return models.create_model(
+            "maxvit_tiny_cls",
+            depths=(1, 1, 1, 1),
+            dims=(16, 32, 64, 128),
+            window_size=2,
+            head_dim=8,
+            stem_width=16,
+        )
+
+    def test_a_batch_answers_as_each_sample_alone(self) -> None:
+        # 100 pads from stage 0 (25x25), 96 only at the last stage (3x3).
+        model = self._model().eval()
+        for side in (100, 96, 65):
+            with self.subTest(side=side), lucid.no_grad():
+                x = lucid.randn(3, 3, side, side)
+                batch = model(x).logits
+                alone = lucid.cat([model(x[i : i + 1]).logits for i in range(3)])
+                self.assertLess(float((batch - alone).abs().max()), 1e-5)
+
+    def test_trains_on_a_padded_batch(self) -> None:
+        model = self._model().train()
+        opt = optim.SGD(model.parameters(), lr=0.1)
+        out = model(lucid.randn(2, 3, 100, 100), labels=lucid.tensor([0, 7]))
+        assert out.loss is not None
+        out.loss.backward()
+        opt.step()
+        self.assertTrue(bool(out.loss.isfinite().item()))
 
 
 class TestMaxViTClassifier(unittest.TestCase):
