@@ -41,6 +41,7 @@ from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _dim_size, _wrap_dim
 import lucid._C.engine as _C_engine
 from lucid._tensor._indexing import (
+    _INDEX_DTYPES,
     _broadcast_shape,
     _normalize_key,
     _normalize_value,
@@ -102,11 +103,6 @@ def _scatter_add(base: Tensor, dim: int, index: Tensor, src: Tensor) -> Tensor:
     return _wrap(
         _C_engine.scatter_add(_unwrap(base), _unwrap(index), _unwrap(src), dim)
     )
-
-
-#: The dtypes an index tensor may hold: the ones the engine's gather and
-#: scatter kernels read.
-_INDEX_DTYPES = (_C_engine.I32, _C_engine.I64)
 
 
 def _require_device(name: str, input: Tensor, other: Tensor, what: str) -> None:
@@ -854,8 +850,8 @@ def index_put(
     input : Tensor
         Destination tensor; not mutated.
     indices : sequence of Tensors
-        One integer index tensor per leading dimension of ``input``, or a
-        bool mask covering as many dims as it has.
+        One ``int32`` / ``int64`` index tensor per leading dimension of
+        ``input``, or a bool mask covering as many dims as it has.
     values : Tensor
         Values of ``input``'s dtype, broadcastable to the shape
         ``input[tuple(indices)]`` reads.
@@ -874,7 +870,8 @@ def index_put(
     ValueError
         ``indices`` is not a non-empty sequence.
     IndexError
-        More indices than ``input`` has dims, a mask whose shape does not
+        An index tensor of another integer width (``int8``, ``int16``),
+        more indices than ``input`` has dims, a mask whose shape does not
         match, index tensors that do not broadcast together, or — on the
         CPU — an index out of range; Metal drops such a write.
     lucid._C.engine.DtypeMismatch
@@ -887,16 +884,27 @@ def index_put(
     >>> lucid.index_put(lucid.zeros(4), (mask,), lucid.tensor(5.0))
     tensor([0., 0., 5., 5.])
     """
+    return _index_put(input, indices, values, accumulate, "index_put")
+
+
+def _index_put(
+    input: Tensor,
+    indices: list[Tensor] | tuple[Tensor, ...],
+    values: Tensor,
+    accumulate: bool,
+    name: str,
+) -> Tensor:
+    """:func:`index_put`, its refusals under ``name`` — ``index_put_`` runs it too."""
     if not isinstance(indices, (list, tuple)) or len(indices) == 0:
-        raise ValueError("index_put: `indices` must be a non-empty sequence of Tensors")
-    with _autocast_entry("index_put", _unwrap(input), _unwrap(values)) as (
+        raise ValueError(f"{name}: `indices` must be a non-empty sequence of Tensors")
+    with _autocast_entry(name, _unwrap(input), _unwrap(values)) as (
         impl,
         val_impl,
     ):
         input, values = _wrap(impl), _wrap(val_impl)
-        _require_input_dtype("index_put", input, values, "values")
+        _require_input_dtype(name, input, values, "values")
         shape = list(impl.shape)
-        key = _normalize_key(tuple(indices), shape, impl.device)
+        key = _normalize_key(tuple(indices), shape, impl.device, op=name)
         positions, target_shape = _written_positions(shape, key, impl.device)
         flat_values = _C_engine.reshape(
             _C_engine.contiguous(_normalize_value(values, impl, target_shape)), [-1]
@@ -1012,8 +1020,8 @@ def index_put_(
         Per-axis index tensors (one per leading dimension of ``input``);
         same contract as :func:`index_put`.
     values : Tensor
-        Values to write at the addressed positions; cast to ``input``'s
-        dtype.
+        Values to write at the addressed positions, of ``input``'s dtype;
+        another dtype is refused (``lucid._C.engine.DtypeMismatch``).
     accumulate : bool, optional
         When ``True`` add to existing values (duplicate indices sum);
         when ``False`` (default) overwrite — a duplicate index keeps the
@@ -1033,7 +1041,7 @@ def index_put_(
     return _write_inplace(
         input,
         "index_put_",
-        lambda base: index_put(base, indices, values, accumulate=accumulate),
+        lambda base: _index_put(base, indices, values, accumulate, "index_put_"),
         values,
     )
 

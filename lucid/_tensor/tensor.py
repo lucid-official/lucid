@@ -3025,10 +3025,12 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor of length ``m`` naming the slices to add to.
+            0-D or 1-D ``int32`` / ``int64`` tensor of ``m`` positions
+            naming the slices to add to; a 0-D one names a single slice.
         source : Tensor
-            Same shape as ``self`` except ``source.shape[dim] == m``.  Cast
-            to ``self``'s dtype.
+            Same shape as ``self`` except ``source.shape[dim] == m``, and
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
         alpha : float, optional
             Scale applied to ``source`` before it is added.  Default ``1.0``.
 
@@ -3073,10 +3075,12 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor of length ``m`` naming the slices to add to.
+            0-D or 1-D ``int32`` / ``int64`` tensor of ``m`` positions
+            naming the slices to add to; a 0-D one names a single slice.
         source : Tensor
-            Same shape as ``self`` except ``source.shape[dim] == m``.  Cast
-            to ``self``'s dtype.
+            Same shape as ``self`` except ``source.shape[dim] == m``, and
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
         alpha : float, optional
             Scale applied to ``source`` before it is added.  Default ``1.0``.
 
@@ -3133,10 +3137,12 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor of length ``m`` naming the slices to replace.
+            0-D or 1-D ``int32`` / ``int64`` tensor of ``m`` positions
+            naming the slices to replace; a 0-D one names a single slice.
         source : Tensor
-            Same shape as ``self`` except ``source.shape[dim] == m``.  Cast
-            to ``self``'s dtype.
+            Same shape as ``self`` except ``source.shape[dim] == m``, and
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
 
         Returns
         -------
@@ -3179,10 +3185,12 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor of length ``m`` naming the slices to replace.
+            0-D or 1-D ``int32`` / ``int64`` tensor of ``m`` positions
+            naming the slices to replace; a 0-D one names a single slice.
         source : Tensor
-            Same shape as ``self`` except ``source.shape[dim] == m``.  Cast
-            to ``self``'s dtype.
+            Same shape as ``self`` except ``source.shape[dim] == m``, and
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
 
         Returns
         -------
@@ -3233,7 +3241,8 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor naming the slices to fill.
+            0-D or 1-D ``int32`` / ``int64`` tensor naming the slices to
+            fill; a 0-D one names a single slice.
         value : float
             The scalar every element of those slices becomes, in ``self``'s
             dtype.
@@ -3278,7 +3287,8 @@ class Tensor:
             Axis along which ``index`` addresses slices.  Negative values
             count from the end.
         index : Tensor
-            1-D integer tensor naming the slices to fill.
+            0-D or 1-D ``int32`` / ``int64`` tensor naming the slices to
+            fill; a 0-D one names a single slice.
         value : float
             The scalar every element of those slices becomes, in ``self``'s
             dtype.
@@ -3330,10 +3340,13 @@ class Tensor:
         Parameters
         ----------
         indices : tuple of Tensor or list of Tensor
-            Integer index tensors, one per leading dimension of ``self``.
+            ``int32`` / ``int64`` index tensors, one per leading dimension
+            of ``self``, or a bool mask; another integer width is refused
+            with ``IndexError``.
         values : Tensor
-            Values to write, broadcastable to the indexed shape.  Cast to
-            ``self``'s dtype.
+            Values to write, broadcastable to the indexed shape, of
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
         accumulate : bool, optional
             ``True`` adds at each position, so repeated positions sum;
             ``False`` (default) overwrites.
@@ -3381,10 +3394,13 @@ class Tensor:
         Parameters
         ----------
         indices : tuple of Tensor or list of Tensor
-            Integer index tensors, one per leading dimension of ``self``.
+            ``int32`` / ``int64`` index tensors, one per leading dimension
+            of ``self``, or a bool mask; another integer width is refused
+            with ``IndexError``.
         values : Tensor
-            Values to write, broadcastable to the indexed shape.  Cast to
-            ``self``'s dtype.
+            Values to write, broadcastable to the indexed shape, of
+            ``self``'s dtype: another dtype is refused
+            (``lucid._C.engine.DtypeMismatch``), not cast.
         accumulate : bool, optional
             ``True`` adds at each position, so repeated positions sum;
             ``False`` (default) overwrites.
@@ -3415,14 +3431,9 @@ class Tensor:
         >>> x
         tensor([0., 3., 0., 3.])
         """
-        from lucid._ops.composite.indexing import _write_inplace, index_put
+        from lucid._ops.composite.indexing import index_put_
 
-        return _write_inplace(
-            self,
-            "index_put_",
-            lambda base: index_put(base, indices, values, accumulate=accumulate),
-            values,
-        )
+        return index_put_(self, indices, values, accumulate)
 
     def expand_as(self, other: Tensor) -> Tensor:
         r"""Broadcast ``self`` to match ``other.shape``.

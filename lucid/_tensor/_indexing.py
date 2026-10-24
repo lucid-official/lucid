@@ -50,6 +50,7 @@ from typing import Sequence, SupportsIndex, TYPE_CHECKING, cast
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._factories._build import _fill
 from lucid._factories.converters import _to_impl
 
@@ -161,6 +162,11 @@ _BOOL = _C_engine.Dtype.Bool
 _I64 = _C_engine.Dtype.I64
 _CPU = _C_engine.Device.CPU
 
+#: The dtypes an index tensor may hold: the ones the engine's gather and
+#: scatter kernels read.  Every index door — a key here, the ``index``
+#: argument of the composite index ops — refuses the rest by this set.
+_INDEX_DTYPES = (_C_engine.Dtype.I32, _I64)
+
 
 class _Key:
     """A key as every indexing path reads it.
@@ -193,9 +199,15 @@ def _is_bool_scalar(token: object) -> bool:
     )
 
 
-def _token(part: object) -> object:
+def _token(part: object, op: str) -> object:
     """One part of a key as ``None``, ``...``, ``bool``, ``int``, ``slice``
-    or a ``TensorImpl`` — an integer index or a bool mask."""
+    or a ``TensorImpl`` — an ``int32`` / ``int64`` index or a bool mask.
+
+    A 0-d integer tensor of any width is the integer it holds, as Python
+    reads it through ``__index__``; an index tensor with dims must be one
+    the engine's kernels read, and is refused here, under ``op``'s name,
+    rather than by the gather or scatter it would reach.
+    """
     if isinstance(part, (type(None), type(Ellipsis), bool, int, slice)):
         return part
     impl = _promotion.try_unwrap(part)
@@ -227,13 +239,23 @@ def _token(part: object) -> object:
                 "a list index holds only integers or only bools; to index "
                 "several dims, use a tuple — x[i, j], not x[[i, j]]"
             ) from err
+    return _index_part(impl, op)
+
+
+def _index_part(impl: _C_engine.TensorImpl, op: str) -> object:
+    """A tensor in a key as ``_token`` answers it: a mask, the integer a
+    0-d integer tensor holds, or an index tensor of a width the kernels read."""
     if impl.dtype == _BOOL:
         return impl
-    if not _promotion.is_integer(impl.dtype):
+    integer = _promotion.is_integer(impl.dtype)
+    if integer and not impl.shape:
+        return int(impl.item())
+    if not integer or impl.dtype not in _INDEX_DTYPES:
         raise IndexError(
-            f"tensors used as indices must be integer or bool tensors, got {impl.dtype}"
+            f"{op}: tensors used as indices must be int32, int64 or bool "
+            f"tensors, got {_ENGINE_TO_DTYPE[impl.dtype]}"
         )
-    return int(impl.item()) if not impl.shape else impl
+    return impl
 
 
 def _consumes(token: object) -> int:
@@ -289,8 +311,10 @@ def _bool_scalar_index(
     return _mask_indices(_C_engine.reshape(_on_device(token, device), [1]))[0]
 
 
-def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device) -> _Key:
-    """Normalise ``key`` against a tensor of ``shape`` on ``device``.
+def _normalize_key(
+    key: object, shape: Sequence[int], device: _C_engine.Device, *, op: str
+) -> _Key:
+    """Normalise ``key`` against a tensor of ``shape`` on ``device`` for ``op``.
 
     The single owner of what an index key means: ``Tensor.__getitem__``,
     ``Tensor.__setitem__`` and ``index_put``, which takes keys of the same
@@ -308,16 +332,21 @@ def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device) 
       still reads with a deprecation warning;
     * an integer index tensor moves to ``device`` and keeps its width, so
       the engine checks an int64 index at full width (``2**40`` is out of
-      range, not 0).
+      range, not 0); one with dims must be ``int32`` or ``int64``.
+
+    ``op`` names the caller in a refusal — ``__getitem__``, ``__setitem__``
+    or ``index_put`` — rather than the engine op the key would reach.
 
     Raises
     ------
     IndexError
-        A part that is not a valid index, a second ``...``, more indices
-        than ``shape`` has dims, or a mask whose shape does not match.
+        A part that is not a valid index — an index tensor with dims that
+        is neither ``int32``, ``int64`` nor bool among them — a second
+        ``...``, more indices than ``shape`` has dims, or a mask whose
+        shape does not match.
     """
     parts = key if isinstance(key, tuple) else (key,)
-    tokens = [_token(part) for part in parts]
+    tokens = [_token(part, op) for part in parts]
     if sum(1 for token in tokens if token is Ellipsis) > 1:
         raise IndexError("an index can only have a single ellipsis ('...')")
     ndim = len(shape)
@@ -1040,7 +1069,7 @@ def _getitem(t: Tensor, idx: _IndexType) -> Tensor:
         The selected sub-tensor (a view where possible, a copy otherwise).
     """
     impl = t._impl
-    key = _normalize_key(idx, impl.shape, impl.device)
+    key = _normalize_key(idx, impl.shape, impl.device, op="__getitem__")
     source = _inserted(impl, key.unsqueeze)
     if key.advanced:
         out = _advanced_getitem(source, key.items, key.unchecked)
@@ -1119,7 +1148,7 @@ def _setitem(t: Tensor, idx: _IndexType, value: TensorOrScalar) -> None:
             "tensor"
         )
     shape = list(impl.shape)
-    key = _normalize_key(idx, shape, impl.device)
+    key = _normalize_key(idx, shape, impl.device, op="__setitem__")
 
     # ``t[:] = v`` and ``t[...] = v`` select every element, and scattering
     # through the flat index of the entire tensor costs random-access writes

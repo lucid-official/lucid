@@ -1270,6 +1270,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep the loss entry private and let a bad call raise its own
 
+- refuse an int8/int16 index at the key, under its op
+
 ### Changed
 
 - `TVMConfig` and `MeanFlowConfig` raise `ValueError` when `out_channels != in_channels`, instead of failing later with a shape mismatch in forward or generate (LCD-620).
