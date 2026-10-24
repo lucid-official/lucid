@@ -36,6 +36,7 @@ import lucid.nn.functional as F
 import lucid.special
 from lucid import Tensor
 from lucid._C import engine as _C_engine
+from lucid._engine_scope import untraced
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
@@ -684,29 +685,34 @@ class TVMForImageGeneration(ImageGenerationModel):
         return decays
 
     def _average(self, name: str) -> TVMModel:
-        """One average, every average created together on first use.
+        r"""One average, every average created together on first use.
 
         Creating them together is what makes both start from the same
         weights — the initial ones, since the first training step is what
         first asks for :math:`\theta^*`.  Each is frozen, kept on the live
         network's device, and in evaluation mode.
+
+        Built and moved outside any active trace: the first forward to read
+        :math:`\theta^*` is what builds them, so a trace taken then recorded
+        their construction too and differed from one taken a call later.
         """
         # The averages follow the live network's device *and* dtype: built
         # lazily in float32, they ran a half model's targets in float32.
         live = next(iter(self.tvm.parameters()))
-        if not self._averages:
-            weights = self.tvm.state_dict()
-            for key in self._decays():
-                copy = skip_init(_AveragedTVM, self.config)
-                assert isinstance(copy, _AveragedTVM), "skip_init builds its class"
-                copy.load_state_dict(weights)
-                for param in copy.parameters():
-                    param.requires_grad_(False)
-                self._averages[key] = copy.eval()
-        average = self._averages[name]
-        slow = next(iter(average.parameters()))
-        if slow.device != live.device or slow.dtype != live.dtype:
-            average.to(device=live.device, dtype=live.dtype)
+        with untraced():
+            if not self._averages:
+                weights = self.tvm.state_dict()
+                for key in self._decays():
+                    copy = skip_init(_AveragedTVM, self.config)
+                    assert isinstance(copy, _AveragedTVM), "skip_init builds it"
+                    copy.load_state_dict(weights)
+                    for param in copy.parameters():
+                        param.requires_grad_(False)
+                    self._averages[key] = copy.eval()
+            average = self._averages[name]
+            slow = next(iter(average.parameters()))
+            if slow.device != live.device or slow.dtype != live.dtype:
+                average.to(device=live.device, dtype=live.dtype)
         return average
 
     @property
