@@ -16,10 +16,13 @@ Reference param count: ~25.6 M (timm coatnet_0).
 
 from typing import ClassVar, final, override
 
+import functools
+
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.nn._shadow import is_active as _shadow_active
 from lucid.models._utils._classification import DropPath
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
@@ -61,7 +64,8 @@ class _MBConv(nn.Module):
     Squeeze-and-Excitation is applied between DWConv and projection, with
     se_ch = max(1, round(out_ch * se_ratio)).
 
-    Downsampling: stride=2 on the expansion conv (Eqn 5); shortcut pools then projects.
+    Downsampling: stride=2 on the expansion conv (Eqn 5); shortcut pools then
+    projects.  An odd side downsamples to its floor on both branches.
     """
 
     def __init__(
@@ -117,8 +121,17 @@ class _MBConv(nn.Module):
 
         # Pre-activation form is ``x + Module(Norm(x))`` — Norm only; the
         # reference's pre_norm is built with apply_act=False.
-        out = self.bn_pre(x)
-        out = F.gelu(self.bn_exp(self.expand(out)))
+        out = self.expand(self.bn_pre(x))
+        if self.stride != 1:
+            # A 1x1 stride-2 conv keeps ceil(H/2) rows, the shortcut's
+            # AvgPool2d floor(H/2), so an odd side failed the residual add.
+            # Odd grids pool with floor — what timm's down-sample and the
+            # transformer stages do — so the conv drops its last sample too.
+            # Even sides already agree and take no slice.
+            rows, cols = int(x.shape[2]) // self.stride, int(x.shape[3]) // self.stride
+            if (int(out.shape[2]), int(out.shape[3])) != (rows, cols):
+                out = out[:, :, :rows, :cols]
+        out = F.gelu(self.bn_exp(out))
         out = F.gelu(self.bn_dw(self.dw(out)))
         out = self.se(out)
         out = self.project(out)
@@ -137,7 +150,32 @@ class _MBConv(nn.Module):
 _LN_EPS: float = 1e-6
 
 
+#: How many ``(grid, device)`` index tables stay alive.  One table serves every
+#: block of every model that attends on that grid — the blocks of a stage
+#: share their grid — and each is an ``(N, N)`` int64 tensor, 8 MB for the
+#: 32×32 grid S3 attends on at 512 px.  A model attends on two grids per input
+#: size, so eight covers two sizes on two devices.
+_INDEX_CACHE_SIZE: int = 8
+
+
 def _relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
+    """The shared ``(N, N)`` relative-offset index for ``grid`` on ``device``.
+
+    Derived from the grid and the device alone, so one tensor serves every
+    block.  A shadow build gets a table of its own: a phantom one in the
+    shared cache would reach real models, which cannot read it.
+    """
+    if _shadow_active():
+        return _build_relative_index(grid_h, grid_w, device)
+    return _shared_relative_index(grid_h, grid_w, device)
+
+
+@functools.lru_cache(maxsize=_INDEX_CACHE_SIZE)
+def _shared_relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
+    return _build_relative_index(grid_h, grid_w, device)
+
+
+def _build_relative_index(grid_h: int, grid_w: int, device: str) -> Tensor:
     """Flat ``(N, N)`` index of each position pair into a ``(2H-1)×(2W-1)`` table."""
     coords_h = lucid.arange(grid_h, device=device).to(lucid.int64)
     coords_w = lucid.arange(grid_w, device=device).to(lucid.int64)
@@ -186,8 +224,6 @@ class _RelAttnBlock(nn.Module):
     to rebase the table itself onto a new grid.
     """
 
-    _rel_idx: Tensor
-
     def __init__(
         self,
         dim: int,
@@ -218,10 +254,6 @@ class _RelAttnBlock(nn.Module):
         self.rel_bias = nn.Parameter(
             lucid.zeros(num_heads, (2 * grid_h - 1) * (2 * grid_w - 1))
         )
-        # Index tables for grids other than the built one.  They depend only
-        # on the grid and the device — never on a parameter — so they are
-        # derived state: not a buffer, never in ``state_dict``.
-        self._grid_index: dict[tuple[int, int, str], Tensor] = {}
 
         # Eqn (4): ``x <- Proj(Pool(x)) + Attention(Pool(Norm(x)))``.  The
         # identity branch projects the pooled input to the new width, and the
@@ -238,14 +270,6 @@ class _RelAttnBlock(nn.Module):
         mlp_dim = out_dim * mlp_ratio
         self.fc1 = nn.Linear(out_dim, mlp_dim)
         self.fc2 = nn.Linear(mlp_dim, out_dim)
-
-        self._init_rel_idx()
-
-    def _init_rel_idx(self) -> None:
-        # A non-persistent buffer so ``.to(device=...)`` moves it alongside
-        # the parameters and the Metal forward stays on-device.
-        rel_idx = _relative_index(self.grid_h, self.grid_w, self.rel_bias.device.type)
-        self.register_buffer("_rel_idx", rel_idx, persistent=False)
 
     def resample_rel_pos(self, grid_h: int, grid_w: int) -> None:
         r"""Rebase the relative-position table onto a new attention grid.
@@ -287,29 +311,19 @@ class _RelAttnBlock(nn.Module):
             )
         self.rel_bias = nn.Parameter(resized)
         self.grid_h, self.grid_w = grid_h, grid_w
-        self._init_rel_idx()
 
     def _rel_pos_bias(self, grid: tuple[int, int]) -> Tensor:
         """The ``(num_heads, N, N)`` bias for attention on ``grid``."""
-        table: Tensor
-        if grid == (self.grid_h, self.grid_w):
-            table, idx = self.rel_bias, self._rel_idx
-        else:
+        table: Tensor = self.rel_bias
+        if grid != (self.grid_h, self.grid_w):
             table = _resize_rel_table(
-                self.rel_bias, self.num_heads, (self.grid_h, self.grid_w), grid
+                table, self.num_heads, (self.grid_h, self.grid_w), grid
             )
-            idx = self._index_for(grid)
+        # Looked up by the table's device on every call, so a model moved to
+        # another device reads an index that lives there.
+        idx = _relative_index(grid[0], grid[1], self.rel_bias.device.type)
         n = grid[0] * grid[1]
         return table[:, idx.reshape(-1)].reshape(self.num_heads, n, n)
-
-    def _index_for(self, grid: tuple[int, int]) -> Tensor:
-        device = self.rel_bias.device.type
-        key = (grid[0], grid[1], device)
-        idx = self._grid_index.get(key)
-        if idx is None:
-            idx = _relative_index(grid[0], grid[1], device)
-            self._grid_index[key] = idx
-        return idx
 
     def _attn(self, x: Tensor, grid: tuple[int, int]) -> Tensor:
         B, N, _C = x.shape
@@ -393,13 +407,6 @@ class _TransformerStage(nn.Module):
             grid_w = input_grid[1]
 
         self.downsample = downsample
-        self.pool: nn.MaxPool2d | nn.Identity = (
-            # Eqn (4): "the standard max pooling of stride 2 is directly
-            # applied to the input states of both branches".
-            nn.MaxPool2d(2, stride=2)
-            if downsample
-            else nn.Identity()
-        )
         rates = dpr if dpr is not None else [0.0] * num_blocks
         # Eqn (4) makes the down-sample part of the *first block's* residual
         # structure, not a stage-level step: pooling once up front and then

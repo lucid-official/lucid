@@ -6,7 +6,10 @@ import pytest
 
 import lucid
 import lucid.models as models
+import lucid.nn as nn
+import lucid.nn.functional as F
 import lucid.optim as optim
+from lucid.models.vision.coatnet import _model as _coatnet
 from lucid.models.vision.coatnet import (
     CoAtNetConfig,
     CoAtNet,
@@ -24,7 +27,8 @@ from lucid.models.vision.coatnet import (
     coatnet_7,
     coatnet_7_cls,
 )
-from lucid.models.vision.coatnet._model import _TransformerStage
+from lucid.models.vision.coatnet._model import _MBConv, _TransformerStage
+from lucid.nn._shadow import is_shadow, shadow_alloc
 
 #: CoAtNet-0 shrunk through its own config (H11): one block per stage.
 _SMALL: dict[str, object] = {
@@ -381,6 +385,143 @@ def test_odd_sided_grids_pool_with_floor(image_size: int) -> None:
             assert table is tables[name], f"forward replaced {name}"
             assert float((table.detach() - kept[name]).abs().max()) == 0.0
     assert float((first - again).abs().max()) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# LCD-554: odd sides in the MBConv stages, one shared index per grid
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("side", [100, 101, 65, 64, 96])
+def test_public_factory_trains_and_infers_at_odd_and_even_sides(side: int) -> None:
+    """Every side reaches the loss and the logits through the public factory.
+
+    100 reaches S2 on a 25×25 map and 65 reaches S1 on a 33×33 one.  The
+    stride-2 expand conv kept ``ceil`` rows there while the shortcut's
+    ``AvgPool2d`` kept ``floor``, so the residual add failed on 13×13 + 12×12.
+    """
+    lucid.manual_seed(0)
+    model = models.create_model(
+        "coatnet_0_cls", image_size=side, num_classes=4, **_SMALL
+    )
+    opt = optim.SGD(model.parameters(), lr=0.1)
+    out = model.train()(lucid.randn(2, 3, side, side), labels=lucid.tensor([0, 3]))
+    assert out.loss is not None
+    out.loss.backward()
+    opt.step()
+    with lucid.no_grad():
+        logits = model.eval()(lucid.randn(1, 3, side, side)).logits
+    assert logits.shape == (1, 4)
+    assert bool(logits.isfinite().all().item())
+
+
+def _stride2_block() -> _MBConv:
+    lucid.manual_seed(0)
+    block = _MBConv(8, 16, stride=2).eval()
+    # Non-trivial statistics, so an off-by-one row would show.
+    with lucid.no_grad():
+        for bn in (block.bn_pre, block.bn_exp, block.bn_dw):
+            bn.running_mean.copy_(lucid.randn(*bn.running_mean.shape))
+            bn.running_var.copy_(lucid.rand(*bn.running_var.shape) + 0.5)
+    return block
+
+
+@pytest.mark.parametrize("odd", [(9, 9), (9, 10), (10, 11)])
+def test_mbconv_odd_side_answers_as_its_floor(odd: tuple[int, int]) -> None:
+    """Both branches drop the last row or column of an odd side, so an odd
+    input answers exactly as its even top-left crop does."""
+    block = _stride2_block()
+    x = lucid.randn(2, 8, *odd)
+    even = (odd[0] // 2 * 2, odd[1] // 2 * 2)
+    with lucid.no_grad():
+        got = block(x)
+        crop = block(x[:, :, : even[0], : even[1]])
+    assert got.shape == (2, 16, odd[0] // 2, odd[1] // 2)
+    assert float((got - crop).abs().max()) < 1e-6
+
+
+def test_mbconv_even_side_is_eqn5_bit_for_bit() -> None:
+    """An even side takes no slice: the block is Eqn (5) exactly."""
+    block = _stride2_block()
+    x = lucid.randn(2, 8, 8, 10)
+    with lucid.no_grad():
+        got = block(x)
+        h = F.gelu(block.bn_exp(block.expand(block.bn_pre(x))))
+        h = F.gelu(block.bn_dw(block.dw(h)))
+        want = block.drop_path(block.project(block.se(h))) + block.shortcut(x)
+    assert float((got - want).abs().max()) == 0.0
+
+
+def _deep_model() -> CoAtNet:
+    lucid.manual_seed(0)
+    small = {**_SMALL, "blocks_per_stage": (1, 1, 3, 2)}
+    return models.create_model("coatnet_0", image_size=64, **small).eval()
+
+
+def test_blocks_share_one_index_per_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every block reads the one shared table for its grid (LCD-554).
+
+    Each block used to keep its own index for the built grid and a growing
+    dict for every other one, so a stage of L blocks held L copies — 8 MB
+    each for S3 of coatnet_0 at 512 px.
+    """
+    _coatnet._shared_relative_index.cache_clear()
+    built: list[tuple[int, int, str]] = []
+    real = _coatnet._build_relative_index
+
+    def counting(grid_h: int, grid_w: int, device: str) -> lucid.Tensor:
+        built.append((grid_h, grid_w, device))
+        return real(grid_h, grid_w, device)
+
+    monkeypatch.setattr(_coatnet, "_build_relative_index", counting)
+    model = _deep_model()
+    with lucid.no_grad():
+        for side in (64, 64, 96):
+            model.forward_features(lucid.randn(1, 3, side, side))
+    # 64 px: S3 attends on 4×4, S4 on 2×2; 96 px: 6×6 and 3×3 — one table
+    # each, however many blocks attend there and however often.
+    assert sorted(built) == sorted(
+        [(4, 4, "cpu"), (2, 2, "cpu"), (6, 6, "cpu"), (3, 3, "cpu")]
+    )
+    assert _coatnet._relative_index(4, 4, "cpu") is _coatnet._relative_index(
+        4, 4, "cpu"
+    )
+    for side in range(1, _coatnet._INDEX_CACHE_SIZE + 4):
+        _coatnet._relative_index(side, side, "cpu")
+    info = _coatnet._shared_relative_index.cache_info()
+    assert info.currsize == _coatnet._INDEX_CACHE_SIZE
+
+
+def test_a_shadow_build_does_not_seed_the_shared_index() -> None:
+    """A phantom table in the shared cache would reach real models."""
+    _coatnet._shared_relative_index.cache_clear()
+    with shadow_alloc():
+        phantom = _coatnet._relative_index(3, 3, "cpu")
+    assert is_shadow(phantom)
+    assert not is_shadow(_coatnet._relative_index(3, 3, "cpu"))
+
+
+def test_a_model_moved_to_metal_reads_a_metal_index(device_gpu_only: str) -> None:
+    model = _deep_model()
+    x = lucid.randn(1, 3, 64, 64)
+    with lucid.no_grad():
+        on_cpu = model.forward_features(x)
+        model.to(device_gpu_only)
+        moved = model.forward_features(x.to(device_gpu_only))
+    assert moved.device.type == device_gpu_only
+    assert _coatnet._relative_index(4, 4, device_gpu_only).device.type == "metal"
+    assert float((moved.to("cpu") - on_cpu).abs().max()) < 1e-4
+
+
+def test_transformer_stages_hold_no_pool_module() -> None:
+    """The first block pools both of its branches; the stage-level pool it
+    replaced was registered but never called (LCD-554)."""
+    model = models.create_model("coatnet_0_cls", image_size=64, num_classes=4, **_SMALL)
+    pools = [n for n, m in model.named_modules() if isinstance(m, nn.MaxPool2d)]
+    assert pools == []
+    stages = [m for m in model.modules() if isinstance(m, _TransformerStage)]
+    assert len(stages) == 2
+    assert all(not hasattr(stage, "pool") for stage in stages)
 
 
 if __name__ == "__main__":
