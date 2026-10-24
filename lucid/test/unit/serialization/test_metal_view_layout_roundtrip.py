@@ -1,8 +1,8 @@
 """A loaded Metal view reads the storage where the live one did (LCD-513).
 
 ``lucid.save`` places each Metal view in the storage it shares with its base
-by the one owner of a Metal view's layout, ``_metal_views._layout`` — the
-place ``stride()`` and ``storage_offset()`` report.  It used to replay the
+by the view's ``stride()`` and ``storage_offset()``, which the engine's view
+family reports for a Metal view as for a CPU one.  It used to replay the
 view's links on a CPU probe instead, by the CPU's rules, which restart the
 storage at a leading slice (LCD-517): ``y[1:].as_strided((2,), (1,), 6)``
 reads ``y[1, :2]`` live and came back reading ``y[2, :2]``.  And a view whose

@@ -161,8 +161,8 @@ class Axis:
         matched none of them while drawing a fresh random matrix on every
         call.  Four separate axes reported them for it, each measuring the
         draw rather than the op: a finite difference across two draws, a
-        cpu/metal comparison across two RNG streams that differ by design,
-        and a strided view across a third.
+        cpu/metal comparison across two devices that sample the one stream
+        differently by design, and a strided view across a third.
 
         Two calls, no list, nothing to keep in sync.
         """

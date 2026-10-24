@@ -278,7 +278,7 @@ def test_an_entry_cell_goes_with_the_spelling_it_was_compared_with(
     public_probe, capsys
 ) -> None:
     """``entry::F.pad`` answered by comparing ``F.pad`` with ``lucid.pad``;
-    with the free spelling gone there is one entry point and no question."""
+    with the free spelling removed there is one entry point and no question."""
     publish, _ = public_probe
     publish("lucid.nn.functional")
     recorded = {f"entry::F.{_PROBE}": "pass", f"entry::lucid.{_PROBE}": "pass"}

@@ -1,7 +1,8 @@
 """A Metal view reads, writes and reports its base's storage as the CPU does.
 
-Two defects of one owner, :mod:`lucid._tensor._metal_views`, which stands in
-for the storage a Metal tensor does not share with its views:
+Defects of one owner, the Python layer that stood in for the storage a Metal
+tensor did not share with its views.  The engine's view family has since
+replaced it: a Metal view is a member of its base's family, as a CPU view is.
 
 * **Which keys are views (LCD-512).**  Every basic key was linked back to its
   base, a negative step included, so ``x[::-1].add_(10)`` wrote ``x`` on

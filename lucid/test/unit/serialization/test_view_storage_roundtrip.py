@@ -1,9 +1,10 @@
 """``lucid.save`` keeps every view's values and the storage views share (LCD-460).
 
-On Metal most views are still copies that :mod:`lucid._tensor._metal_views`
-links back to their base, and the base a link names may be gone.  The saver
-used to lay a materialised view's packed bytes out as if they had its base's
-layout, so a transpose, a column slice or a view of a view came back
+When this was found, most Metal views were copies that a Python layer linked
+back to their base, and the base a link named could be gone; a Metal view is
+now a member of its base's view family in the engine, as a CPU view is.  The
+saver used to lay a materialised view's packed bytes out as if they had its
+base's layout, so a transpose, a column slice or a view of a view came back
 scrambled — and scrambled its base too when both were saved.
 
 Every case here is checked bit for bit against the tensor that was saved,

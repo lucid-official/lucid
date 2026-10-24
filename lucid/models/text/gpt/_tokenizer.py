@@ -13,9 +13,9 @@ reference implementation already provides for their absence — its
 tokenizer "uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they
 are installed, fallback to BERT's ``BasicTokenizer`` if not" — and that
 fallback is what is built here, out of pieces Lucid already has:
-:class:`~lucid.utils.tokenizer.WhitespacePunctuationSplit` for the
-BasicTokenizer role and :class:`~lucid.utils.tokenizer.Lowercase` for the
-casing.  So ids match the published vocabulary wherever the fallback and
+:class:`~lucid.utils.tokenizer._pre_tokenizers.WhitespacePunctuationSplit`
+for the BasicTokenizer role and
+:class:`~lucid.utils.tokenizer._normalizers.Lowercase` for the casing.  So ids match the published vocabulary wherever the fallback and
 spaCy agree on word boundaries, and diverge where they do not — mostly
 contractions and unusual punctuation runs.
 

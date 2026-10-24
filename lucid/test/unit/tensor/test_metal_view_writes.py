@@ -4,7 +4,8 @@ On Metal a view is its own MLX array, so ``x[0].add_(1)``, ``x.t()[1].mul_(2)``,
 ``r[1][0] = v``, ``p.data.sub_(lr * g)`` and ``p.grad.mul_(s)`` changed the
 view and nothing else.  No error was raised, while the CPU and the reference
 framework wrote through, and a hand-written optimizer step on Metal trained
-nothing.  The write is now carried back (``lucid._tensor._metal_views``).
+nothing.  A Metal view is now a member of its base's view family in the
+engine, as a CPU view is, so the write lands in the base.
 Every case here is held to what the CPU does with the same code.
 
 Found while verifying that compiled steps follow writes through views: they

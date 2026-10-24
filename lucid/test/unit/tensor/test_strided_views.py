@@ -4,8 +4,8 @@ Only dim-0 slices shared their tensor's buffer; a column slice, a ``split``
 along columns and ``expand`` were copies, so a write through one never
 reached the tensor it came from.  Every op now reads a strided CPU view
 correctly and a write through one follows its strides, so these are views
-too.  On Metal a slice is its own array, but a write through it is carried
-back to its base (``lucid._tensor._metal_views``), so it ends the same way.
+too.  On Metal a slice is a member of its base's view family in the engine,
+as on the CPU, so a write through it ends the same way.
 """
 
 import pytest

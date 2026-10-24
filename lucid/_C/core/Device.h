@@ -10,7 +10,7 @@
 //     on posix_memalign-backed host buffers.
 //   * ``GPU`` — MLX lazy graph executing on the Metal GPU.
 //
-// The Python-side :class:`lucid.Device` is a thin wrapper around this enum;
+// The Python-side :class:`lucid.device` is a thin wrapper around this enum;
 // :attr:`Tensor.device` ultimately reads from :class:`TensorImpl`'s
 // :class:`TensorMeta::device` field.
 //

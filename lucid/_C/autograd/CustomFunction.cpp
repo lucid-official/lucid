@@ -264,7 +264,7 @@ std::vector<Storage> PythonBackwardNode::invoke_backward(const py::tuple& grads)
 // -------------------------------------------------------------------------
 
 void register_custom_function(py::module_& m) {
-    // FunctionCtx — Python-visible as lucid._C.FunctionCtx.
+    // FunctionCtx — Python-visible as lucid._C.engine.FunctionCtx.
     // save_for_backward accepts *args of tensors (TensorImpl or Python
     // wrappers with an .impl attribute).  saved_tensors returns a tuple.
     // Arbitrary attributes are stored/retrieved via __setattr__/__getattr__.

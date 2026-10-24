@@ -5,10 +5,10 @@ slice — need the strides the same view would have on the CPU, to know
 whether the new shape can read it in place.  They were read back by
 replaying the view on a CPU tensor: a host allocation and a CPU op for every
 merge-heads ``attn.permute(0, 2, 1, 3).reshape(b, n, e)``, in every attention
-layer, every step (LCD-462).  :mod:`lucid._tensor._metal_views` now works
-them out from the op's arguments, with where the view starts in its base's
-storage, which ``as_strided``, ``stride()`` and ``storage_offset()`` read
-(LCD-513); these tests hold each rule to the CPU and to zero host work.
+layer, every step (LCD-462).  The engine's view family now keeps each Metal
+view's geometry from the op that made it, with where the view starts in its
+base's storage, which ``as_strided``, ``stride()`` and ``storage_offset()``
+read (LCD-513); these tests hold each rule to the CPU and to zero host work.
 
 Strides are compared on the axes that move an element.  An axis of length
 one moves none, and the CPU's choice of stride for it depends on how the

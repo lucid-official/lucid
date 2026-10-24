@@ -364,10 +364,11 @@ Storage in_range_mask_storage(const Storage& s,
 // Version counter validation.
 // -------------------------------------------------------------------------
 
-// Process-wide flag controlled by ``lucid.autograd.graph.allow_mutation_on_
-// saved_tensors``.  When set, ``check_version_match`` becomes a no-op — the
-// user has explicitly opted into the unsafe contract that they will not
-// mutate saved tensors in a way that would corrupt the gradient.  The flag
+// Process-wide flag controlled by
+// ``lucid.autograd.graph.allow_mutation_on_saved_tensors``.  When set,
+// ``check_version_match`` becomes a no-op — the user has explicitly opted
+// into the unsafe contract that they will not mutate saved tensors in a
+// way that would corrupt the gradient.  The flag
 // is intentionally a plain ``bool`` (no atomic / thread-local): autograd is
 // already a single-threaded contract in Lucid and the cost of synchronisation
 // would dwarf the actual check.

@@ -1182,7 +1182,7 @@ class CorrCholeskyTransform(Transform):
         = \sum_{i>j} \log(1 - \tanh^2(x_{ij}))
         + \sum_{i=1}^{d-1} (d - i)\log L_{ii}
 
-    Combine with the :class:`~lucid.distributions.relaxed.LKJCholesky`
+    Combine with the :class:`~lucid.distributions.LKJCholesky`
     distribution (or equivalent) to learn unconstrained correlation
     matrices end-to-end.
 

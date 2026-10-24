@@ -44,14 +44,15 @@ if TYPE_CHECKING:
 
 
 def _draw(device: str = "cpu") -> Any:
-    """One sample from ``device``'s RNG — the observable a seed controls.
+    """One sample drawn on ``device`` — the observable a seed controls.
 
-    The device is a parameter because the streams are separate.
-    ``lucid.metal.manual_seed`` seeds the GPU stream and nothing else, so
-    a CPU draw between two calls to it advances an RNG the seed never
-    touched — and the axis reported "the same seed produced two
-    different draws" about a seed that works.  The instrument has to ask
-    on the stream it just set.
+    Every device draws from one generator: ``lucid.metal.manual_seed`` and
+    ``lucid.manual_seed`` seed the same stream, and since LCD-583 every draw
+    that names no generator reads it.  The device picks only how the stream
+    is sampled: one seed gives different numbers on the CPU and on Metal, so
+    the draws a check compares are taken on one device.  It is a parameter
+    so that a ``lucid.metal`` seed is checked by a draw on the device it
+    names.
     """
     return _probe.to_numpy(lucid.rand((3,), device=device))
 
@@ -205,19 +206,16 @@ class StateAxis(Axis):
         )
 
     def _seed(self, symbol: Symbol, obj: Any, name: str) -> Finding:
-        # ``lucid.metal.manual_seed`` seeds the GPU stream, ``lucid.manual_seed``
-        # the CPU one.  Which stream the symbol belongs to is in its
-        # qualname, and asking the wrong one measures an RNG the call
-        # never touched.
+        # One stream serves both devices (see ``_draw``).  The draw is taken
+        # on the device the symbol's qualname names, so a ``lucid.metal``
+        # seed is held to what a Metal draw sees.
         device = "metal" if ".metal." in symbol.qualname else "cpu"
         if device == "metal" and not _probe.metal_available():
             return self._finding(symbol, Status.SKIP, "no Metal device to seed")
-        # The CPU state is saved and restored around a CPU seed and
-        # *not* around a Metal one.  ``set_rng_state`` disturbs the Metal
-        # stream — permanently, as it turns out — so restoring the CPU
-        # state here would break the very reproducibility this method is
-        # measuring, and the axis would report the contamination it had
-        # just caused.  The harness is the first suspect, every time.
+        # The stream is saved and restored around a ``lucid`` seed only.  The
+        # asymmetry dates from separate CPU and Metal streams, when restoring
+        # around a Metal seed disturbed the Metal stream; with one stream it
+        # no longer protects anything.
         before = None
         if device == "cpu":
             with contextlib.suppress(Exception):

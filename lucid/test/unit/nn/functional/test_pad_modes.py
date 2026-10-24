@@ -1,7 +1,7 @@
 """``nn.functional.pad`` is the one ``pad``, and it refuses as the reference does.
 
-``lucid.pad`` and ``Tensor.pad`` advertised ``mode=`` but padded only with
-a constant, while ``F.pad`` had every mode (LCD-473).  The reference has
+``lucid.pad`` and ``Tensor.pad``, since removed, advertised ``mode=`` but
+padded only with a constant, while ``F.pad`` had every mode (LCD-473).  The reference has
 neither of the first two, so they are gone and ``F.pad`` is the only path.
 
 ``F.pad`` read its spec loosely: an odd-length one dropped its last entry,

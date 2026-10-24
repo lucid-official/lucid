@@ -13,7 +13,7 @@ MultimodalActivation = Literal["gelu", "quick_gelu", "relu", "silu"]
 ``quick_gelu`` is here rather than in the generic list because the
 released contrastive checkpoints were trained with it and it is not
 interchangeable with ``gelu`` — see
-:class:`~lucid.models.multimodal.QuickGELU`.
+:class:`~lucid.models.multimodal.clip._towers.QuickGELU`.
 """
 
 

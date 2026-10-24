@@ -685,7 +685,7 @@ def trunc_normal_(
 
     Each entry is drawn from :math:`\mathcal{N}(\text{mean},
     \text{std}^2)` truncated to ``[a, b]`` via the inverse-CDF transform
-    (:func:`~lucid.special.erfinv` applied to uniform draws in
+    (:func:`~lucid.erfinv` applied to uniform draws in
     ``[2*Phi((a-mean)/std)-1, 2*Phi((b-mean)/std)-1]``).
     This is the preferred initialiser for transformer weights (e.g.
     ViT, BERT) where unbounded Gaussian tails would otherwise produce

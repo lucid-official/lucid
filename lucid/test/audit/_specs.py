@@ -1157,7 +1157,7 @@ def _accessor(name: str, domain: str) -> Iterator[Call]:
 
 # ── resolution ───────────────────────────────────────────────────────────────
 # Ordered: the first predicate that matches wins.  Patterns are matched
-# against the short name, so ``F.conv2d`` and ``lucid.conv2d`` share a
+# against the short name, so ``F.relu`` and ``lucid.relu`` share a
 # builder.
 
 _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [

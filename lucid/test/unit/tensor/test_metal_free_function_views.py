@@ -2,8 +2,9 @@
 
 ``x.squeeze(0).add_(1)`` wrote through on Metal, but ``lucid.squeeze(x,
 0).add_(1)`` did not: only the Tensor methods linked their Metal results to
-the tensor they view (``lucid._tensor._metal_views``), and the free functions
-generated from the same registry entries went straight to the engine.  The
+the tensor they view, in a Python layer since replaced by the engine's view
+family, and the free functions generated from the same registry entries went
+straight to the engine.  The
 same was true of ``lucid.narrow``, ``lucid.transpose``, ``lucid.split`` and
 the rest, of ``lucid.Tensor(x)``, and of the methods ``ravel``,
 ``broadcast_to``, ``as_strided``, ``squeeze_all`` and ``expand_dims``, which

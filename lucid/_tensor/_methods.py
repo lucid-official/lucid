@@ -725,7 +725,7 @@ def _clamp_inplace(
     where ``clamp`` takes its ``clip``; anything else is ``clamp``'s result,
     written through :func:`_write`.  One helper for ``clamp_``, ``clip_``,
     ``clamp_min_`` and ``clamp_max_``, so each public spelling is one
-    in-place write (one Metal write-back) and names itself in its errors.
+    in-place write and names itself in its errors.
     """
     impl = self._impl
     dt = _clip_dtype(impl, min, max)
@@ -1126,9 +1126,10 @@ _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
 
 
 # ── augmented assignment, through the methods above ─────────────────────────
-# Each calls its method by attribute, not directly: on Metal the method is
-# wrapped to carry the write back into the tensor a view was taken from
-# (``lucid._tensor._metal_views.install``), and the operator must be too.
+# Each operator is its in-place method, called by attribute (``x &= y`` is
+# ``x.bitwise_and_(y)``), so the two refuse and write alike.  A write through
+# a view reaches its base on both devices in the engine's view family
+# (``ViewFamily``, lucid/_C/core/TensorImpl.h); nothing here carries it back.
 
 
 def __iand__(self: Tensor, other: TensorOrScalar) -> Tensor:

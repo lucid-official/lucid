@@ -5,7 +5,7 @@ that:
 
     * No additive position embedding (``position_embeddings`` is removed).
     * Inside every self-attention layer, ``q`` and ``k`` are rotated by
-      :func:`lucid.models.text.apply_rotary_emb` before the dot product.
+      :func:`lucid.nn.functional.apply_rotary_emb` before the dot product.
 
 State-dict key naming mirrors HF ``RoFormerModel`` so future weight ports
 amount to a flat rename.

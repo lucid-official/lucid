@@ -259,7 +259,7 @@ def register_model(
             raise ValueError(f"Model {name!r} already registered")
 
         if family is None:
-            # Module path looks like ``lucid.models.vision.resnet.pretrained``;
+            # Module path looks like ``lucid.models.vision.resnet._pretrained``;
             # the second-to-last component is the family name.
             parts = fn.__module__.split(".")
             family_resolved = parts[-2] if len(parts) >= 2 else fn.__module__

@@ -320,8 +320,9 @@ def test_reshape_family_ops_view_a_dense_cpu_tensor(
 
 
 def test_a_write_through_a_metal_reshape_reaches_its_base() -> None:
-    # An MLX array cannot see a write made through another; the write is
-    # carried back instead (lucid._tensor._metal_views).
+    # An MLX array cannot see a write made through another; the reshape is a
+    # member of its base's view family in the engine, and the write lands in
+    # the family's root.
     x = lucid.arange(6).float().to("metal")
     v = x.reshape(2, 3)
     v.add_(1.0)
