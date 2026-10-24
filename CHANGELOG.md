@@ -1248,6 +1248,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `lucid.compile.fused_step` raises `RuntimeError` when given an input that requires grad, on every path including its eager fallback. Its loss has no `grad_fn`, so no gradient could reach the input. Detach the input, or train a compiled head on an eager trunk with `make_step`, which now returns input gradients. `compiled_step` now adds into `.grad` as `loss.backward()` does: frozen parameters get no gradient, unreached ones get `None`, and the input gets its gradient (LCD-617).
+
 - ViT raises `ValueError`, naming the built and received sizes, for an input whose patch grid differs from the one it was built for. This includes inputs with the same patch count on another layout (e.g. 16x64 for a 32x32 build), which used to answer silently with the position table on the wrong layout (LCD-554).
 
 - EfficientDet raises `ValueError`, naming the input and the sizes to pad or resize to, for a side its BiFPN cannot fuse (the stride-8 map must be a multiple of 16). This includes sides of 8 px or less, which used to answer silently through size-1 broadcasts (LCD-554).
