@@ -1246,6 +1246,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compiled_step and auto-segments add gradients as eager
 
+- type the autoseg probe's arguments as what they are
+
 ### Changed
 
 - `lucid.compile.fused_step` raises `RuntimeError` when given an input that requires grad, on every path including its eager fallback. Its loss has no `grad_fn`, so no gradient could reach the input. Detach the input, or train a compiled head on an eager trunk with `make_step`, which now returns input gradients. `compiled_step` now adds into `.grad` as `loss.backward()` does: frozen parameters get no gradient, unreached ones get `None`, and the input gets its gradient (LCD-617).

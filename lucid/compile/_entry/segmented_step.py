@@ -619,7 +619,7 @@ def _auto_candidates(n_children: int) -> list[int]:
     return ordered
 
 
-def _stand_ins(x_args: tuple[Tensor, ...]) -> tuple[Tensor, ...]:
+def _stand_ins(x_args: tuple[object, ...]) -> tuple[object, ...]:
     """Fresh leaves with ``x_args``' values and grad need, for the timing runs.
 
     The probe runs a step and its backward several times.  Fed the call's own
@@ -637,7 +637,7 @@ def _stand_ins(x_args: tuple[Tensor, ...]) -> tuple[Tensor, ...]:
 
 
 def _probe_one(
-    model: Module, seg_step: Callable[..., Tensor], x_args: tuple[Tensor, ...]
+    model: Module, seg_step: Callable[..., Tensor], x_args: tuple[object, ...]
 ) -> float:
     """Median fwd+bwd wall-time (ms) of ``seg_step`` over a few warm runs.
 
