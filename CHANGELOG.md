@@ -1256,6 +1256,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TVM converter reads the compiled release pickles
 
+- TVM and MeanFlow refuse out_channels != in_channels
+
 ### Changed
 
 - `LBFGS.zero_grad` honours `set_to_none` like every other optimizer: `set_to_none=False` now zeroes the gradients in place instead of dropping them (LCD-546).

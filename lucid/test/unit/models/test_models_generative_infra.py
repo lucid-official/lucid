@@ -28,6 +28,26 @@ from lucid.models._utils import (
     make_beta_schedule,
     reparameterize,
 )
+from lucid.models.generative.flow_matching import FlowMatchingConfig
+from lucid.models.generative.genie import GenieConfig
+from lucid.models.generative.mean_flow import MeanFlowConfig
+from lucid.models.generative.neural_ode import NeuralODEConfig
+from lucid.models.generative.realnvp import RealNVPConfig
+from lucid.models.generative.rectified_flow import RectifiedFlowConfig
+from lucid.models.generative.tvm import TVMConfig
+
+# Families whose network returns a field in the input's own space — a
+# velocity, a displacement, a bijection's image, the next frame — which
+# the objective or the sampler adds to or compares with the input.
+_SAMPLE_SPACE_CONFIGS: list[type[GenerativeModelConfig]] = [
+    FlowMatchingConfig,
+    GenieConfig,
+    MeanFlowConfig,
+    NeuralODEConfig,
+    RealNVPConfig,
+    RectifiedFlowConfig,
+    TVMConfig,
+]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configs
@@ -68,6 +88,18 @@ class TestGenerativeConfigs:
     def test_negative_timesteps_rejected(self) -> None:
         with pytest.raises(ValueError, match="num_train_timesteps"):
             DiffusionModelConfig(num_train_timesteps=0)
+
+    @pytest.mark.parametrize(
+        "config_class", _SAMPLE_SPACE_CONFIGS, ids=lambda c: c.__name__
+    )
+    def test_a_sample_space_output_refuses_other_channels(
+        self, config_class: type[GenerativeModelConfig]
+    ) -> None:
+        # Accepted, the mismatch surfaced as a broadcast error deep in the
+        # forward pass or the sampler (LCD-620).
+        wider = config_class().in_channels + 1
+        with pytest.raises(ValueError, match="out_channels"):
+            config_class(out_channels=wider)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

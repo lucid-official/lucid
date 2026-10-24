@@ -114,6 +114,28 @@ TimeEmbeddingInit = Literal["spectral", "normal"]
     RMSNorm, queries and keys are RMS-normalised, every adaLN modulation
     vector is itself RMS-normalised so its scale cannot grow without
     bound, and linear layers start at unit spectral norm.
+
+    **Where Lucid departs from the authors' release, on purpose.**  The
+    model matches the authors' code to float32 rounding (forward pass,
+    terminal derivative, loss, every gradient and the sampler), but three
+    choices differ, and they matter to anyone reproducing a released run
+    from scratch:
+
+    * *The patch embedding starts at unit spectral norm.*  Lucid divides
+      the patch-embedding weight by its largest singular value, as the
+      paper prescribes for linear layers.  The release's initialiser
+      divides a rebound alias of the weight (``w.data = w.data / s[0]``)
+      rather than the parameter, so its patch embedding keeps the
+      Xavier-normal draw, :math:`\sigma_{\max} \approx 1.53` at full size.
+    * *Precision.*  The release trains under bf16 autocast, and its
+      Jacobian-vector product runs attention in bf16 even when autocast
+      is off.  Lucid computes in the model's own dtype throughout —
+      float32 unless the model is cast — including the terminal
+      derivative.  A converted checkpoint sampled in Lucid is therefore
+      not rounded where the authors' bf16 sampler is.
+    * *No NaN masking.*  The release replaces a NaN loss with zero before
+      the backward pass; Lucid returns the loss as computed, so a
+      diverging step is seen instead of trained through.
     """,
 )
 @dataclass(frozen=True)
@@ -127,8 +149,9 @@ class TVMConfig(GenerativeModelConfig):
         256-pixel ImageNet, ``64`` for 512-pixel, after the Stable
         Diffusion VAE's factor of eight.
     in_channels, out_channels : int, default=4, 4
-        Latent channels.  The network predicts one field of the same
-        width as its input.
+        Latent channels.  The network predicts a velocity in the latent's
+        own space, which the loss and the sampler add to the input, so
+        the two must be equal.
     patch_size : int, default=2
         Side of the square patch each token covers.
     hidden_size : int, default=1152
@@ -335,7 +358,13 @@ class TVMConfig(GenerativeModelConfig):
             )
 
     def _check_latent(self) -> None:
-        """One whitening statistic per latent channel, with positive spreads."""
+        """Output channels match the latent's; each channel's whitening is valid."""
+        if self.in_channels != self.out_channels:
+            raise ValueError(
+                f"the velocity lives in the latent's own space, so "
+                f"in_channels must equal out_channels; got {self.in_channels} "
+                f"and {self.out_channels}"
+            )
         if not len(self.latent_mean) == len(self.latent_std) == self.in_channels:
             raise ValueError(
                 f"latent_mean and latent_std need one entry per latent channel "

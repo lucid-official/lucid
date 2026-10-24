@@ -123,7 +123,9 @@ class MeanFlowConfig(GenerativeModelConfig):
         256-pixel image.
     in_channels, out_channels : int, default=4, 4
         Latent channels.  Four is the standard VAE tokenizer's width;
-        the CIFAR-10 experiment works in pixel space at three.
+        the CIFAR-10 experiment works in pixel space at three.  The
+        average velocity is a displacement in the sample's own space, so
+        the two must be equal.
     patch_size : int, default=2
         Side of the square patch each token covers.  The suffix in the
         paper's variant names — ``B/2`` is the Base backbone at patch 2.
@@ -248,6 +250,12 @@ class MeanFlowConfig(GenerativeModelConfig):
         )
         if self.depth <= 0:
             raise ValueError(f"depth must be positive, got {self.depth}")
+        if self.in_channels != self.out_channels:
+            raise ValueError(
+                f"the average velocity lives in the sample's own space, so "
+                f"in_channels must equal out_channels; got {self.in_channels} "
+                f"and {self.out_channels}"
+            )
         if not 0.0 <= self.ratio_r_not_t <= 1.0:
             raise ValueError(
                 f"ratio_r_not_t is a probability, got {self.ratio_r_not_t}"
