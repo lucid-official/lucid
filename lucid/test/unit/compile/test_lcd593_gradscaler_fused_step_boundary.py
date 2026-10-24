@@ -89,8 +89,13 @@ def test_skip_sequence_matches_away_from_known_boundary(init_scale_exp: int) -> 
     assert eager_scales == comp_scales
 
 
+# Not strict: which (seed, init_scale) points fall in the band depends on
+# the GPU.  These five diverge on an M1 Pro, while the CI runner's GPU puts
+# the same gradients on the finite side of the float16 max, so they XPASSed
+# there (main 590a4b5a4).  The defect is the dtype direction, not these
+# points.  The C++ fix's own test must pin the overflow directly.
 @pytest.mark.xfail(
-    strict=True,
+    strict=False,
     reason=(
         "LCD-593: compiled Linear VJP (lucid/_C/compile/VjpEmitters/"
         "linalg/Linear.mm) casts the saved forward x/W up to the incoming "
@@ -98,7 +103,7 @@ def test_skip_sequence_matches_away_from_known_boundary(init_scale_exp: int) -> 
         "the matmul in the op's own forward (autocast-lowered float16) "
         "precision the way eager's backward does, so the compiled matmul "
         "misses the float16 overflow eager hits by design in this scale "
-        "band. Needs a C++ fix + rebuild; XPASS once fixed."
+        "band on some GPUs. Needs a C++ fix + rebuild."
     ),
 )
 @pytest.mark.parametrize(
