@@ -17,18 +17,11 @@ from typing import TYPE_CHECKING, cast
 
 import lucid
 from lucid import _promotion
-from lucid._C import _C_engine
 from lucid._dispatch import _binary_operands, _float_input, _wrap
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._gamma import _lgamma, _polygamma
-from lucid._ops.composite._opmath import (
-    _in_float32,
-    _normalize_metal_f32,
-    _pow2,
-    _real,
-    _restore_metal_f32_subnormals,
-    _scale_pow2,
-)
+from lucid._ops.composite._opmath import _in_float32, _real
+from lucid._ops.composite._pow2 import _frexp, _ldexp
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
 
@@ -1303,11 +1296,16 @@ def copysign(input: Tensor, other: TensorOrScalar) -> Tensor:
 
 
 def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
-    r"""Element-wise :math:`\text{input} \cdot 2^{\text{exponent}}`.
+    r"""Element-wise :math:`\text{input} \cdot 2^{\text{other}}`.
 
-    Splits scaling into three bounded power-of-two steps so extreme exponents
-    neither overflow nor flush to subnormal zero prematurely, while remaining
-    differentiable through both arguments.
+    For an integral exponent the product is rounded once, so it is exact
+    wherever it is representable.  That holds on every device and at every
+    magnitude, subnormal operands and answers included, and also where
+    :math:`2^{\text{other}}` alone is out of range (``ldexp(1e30, -200)``).
+    A fractional exponent costs an ulp or so.  Differentiable in both:
+    :math:`\partial / \partial\,\text{input} = 2^{\text{other}}` (exact
+    for an integral exponent) and :math:`\partial / \partial\,\text{other}
+    = \text{input} \cdot 2^{\text{other}} \ln 2` (within a few ulp).
 
     Parameters
     ----------
@@ -1324,30 +1322,16 @@ def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
     See Also
     --------
     frexp : inverse decomposition into mantissa / exponent.
+
+    Notes
+    -----
+    On Metal a subnormal gradient flushes to zero, as in every backward
+    there; under ``lucid.compile`` float32 subnormal values flush too.
     """
     orig = (input := _float_input(input)).dtype
     work_dtype = orig if orig in (lucid.float32, lucid.float64) else lucid.float32
     work = input if orig == work_dtype else input.to(dtype=work_dtype)
-    exp_t: Tensor = (
-        other.to(dtype=work_dtype)
-        if _is_tensor(other)
-        else lucid.tensor(
-            _promotion.as_number(other), dtype=work_dtype, device=input.device
-        )
-    )
-    limit = 2400.0 if work_dtype == lucid.float64 else 300.0
-    if (
-        work.device.type == "metal"
-        and work_dtype == lucid.float32
-        and not work._impl.is_phantom
-        and _C_engine.compile.current_tracer() is None
-    ):
-        work_norm, shift, bits = _normalize_metal_f32(work)
-        exp_eff = exp_t - shift
-        out = _scale_pow2(work_norm, exp_eff, limit)
-        out = _restore_metal_f32_subnormals(work_norm, exp_eff, bits, out)
-    else:
-        out = _scale_pow2(work, exp_t, limit)
+    out = _ldexp(work, other)
     return out.to(dtype=orig) if orig != work_dtype else out
 
 
@@ -1358,38 +1342,17 @@ def frexp(input: Tensor) -> tuple[Tensor, Tensor]:
     Returns a ``(mantissa, exponent)`` tuple.  Exponent dtype is int32.
     Non-finite inputs and signed zero propagate verbatim:
     ``NaN -> (NaN, 0)``, ``±inf -> (±inf, 0)``, ``±0.0 -> (±0.0, 0)``.
+    Exact on every device, subnormal inputs included.  The mantissa is
+    differentiable, ``dm / dinput = 2**-e`` (a subnormal one flushes on
+    Metal); the exponent is not.
     """
     orig_dtype = input.dtype
     work_dtype = (
         orig_dtype if orig_dtype in (lucid.float32, lucid.float64) else lucid.float32
     )
     work = input if orig_dtype == work_dtype else input.to(dtype=work_dtype)
-    shift: Tensor | None = None
-    if (
-        work.device.type == "metal"
-        and work_dtype == lucid.float32
-        and not work._impl.is_phantom
-        and _C_engine.compile.current_tracer() is None
-    ):
-        work, shift, _ = _normalize_metal_f32(work)
-    abs_x = lucid.abs(work)
-    special = (abs_x == 0.0) | lucid.isinf(work) | lucid.isnan(work)
-    safe_abs = lucid.where(special, lucid.full_like(work, 1.0), abs_x)
-    e_float = lucid.where(
-        special, lucid.zeros_like(work), lucid.floor(lucid.log2(safe_abs)) + 1.0
-    )
-    e1 = lucid.trunc(e_float * 0.5)
-    m = (work * _pow2(-e1)) * _pow2(-(e_float - e1))
-    hi = (~special) & (lucid.abs(m) >= 1.0)
-    m, e_float = lucid.where(hi, m * 0.5, m), lucid.where(hi, e_float + 1.0, e_float)
-    lo = (~special) & (lucid.abs(m) < 0.5)
-    m, e_float = lucid.where(lo, m * 2.0, m), lucid.where(lo, e_float - 1.0, e_float)
-    if shift is not None:
-        e_float = e_float - shift
-    m = lucid.where(special, work, m)
-    return (m.to(dtype=orig_dtype) if orig_dtype != work_dtype else m), e_float.to(
-        dtype=lucid.int32
-    )
+    m, e = _frexp(work)
+    return (m.to(dtype=orig_dtype) if orig_dtype != work_dtype else m), e
 
 
 # ── Integer math (non-differentiable) ────────────────────────────────────

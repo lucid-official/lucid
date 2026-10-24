@@ -20,8 +20,7 @@ operands arrive in, and two kinds of operand are not fit for that:
 from collections.abc import Callable
 
 import lucid
-from lucid._C import _C_engine
-from lucid._dispatch import _float_input, _wrap
+from lucid._dispatch import _float_input
 from lucid._tensor.tensor import Tensor
 
 
@@ -71,50 +70,3 @@ def _in_float32(fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:
     if common not in (lucid.float16, lucid.bfloat16):
         return fn(*operands)
     return fn(*(t.to(lucid.float32) for t in operands)).to(common)
-
-
-def _pow2(k: Tensor) -> Tensor:
-    return lucid.where(k < 0.0, 1.0 / (2.0 ** (-k)), 2.0**k)
-
-
-def _scale_pow2(work: Tensor, exp_t: Tensor, limit: float) -> Tensor:
-    k = lucid.clip(lucid.trunc(exp_t), -limit, limit)
-    k1 = lucid.trunc(k / 3.0)
-    k2 = lucid.trunc((k - k1) * 0.5)
-    k3 = lucid.where(lucid.abs(exp_t) > limit, k - k1 - k2, exp_t - k1 - k2)
-    return ((work * _pow2(k1)) * _pow2(k2)) * _pow2(k3)
-
-
-def _normalize_metal_f32(work: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-    with lucid.no_grad():
-        bits = _wrap(_C_engine._bitcast(work._impl, _C_engine.Dtype.I32))
-        abs_bits = bits & 0x7FFFFFFF
-        is_sub = ((abs_bits >> 23) == 0) & (abs_bits != 0)
-        signed_frac = lucid.where(bits < 0, -abs_bits, abs_bits).to(dtype=lucid.float32)
-        shift = lucid.where(
-            is_sub, lucid.full_like(work, 149.0), lucid.zeros_like(work)
-        )
-    return lucid.where(is_sub, signed_frac, work), shift, bits
-
-
-def _restore_metal_f32_subnormals(
-    work_norm: Tensor, exp_eff: Tensor, bits: Tensor, out: Tensor
-) -> Tensor:
-    with lucid.no_grad():
-        scaled = _scale_pow2(lucid.abs(work_norm), lucid.trunc(exp_eff) + 149.0, 300.0)
-        finite_nz = (
-            (lucid.abs(work_norm) > 0.0)
-            & (~lucid.isinf(work_norm))
-            & (~lucid.isnan(work_norm))
-            & (~lucid.isnan(exp_eff))
-        )
-        flushed = (
-            finite_nz
-            & (lucid.abs(out) == 0.0)
-            & (scaled >= 0.5)
-            & (scaled <= float(1 << 23))
-        )
-        sign_bit = (bits & (-0x80000000)).broadcast_to(out.shape)
-        sub_bits = sign_bit | lucid.round(scaled).to(dtype=lucid.int32)
-        sub_f32 = _wrap(_C_engine._bitcast(sub_bits._impl, _C_engine.Dtype.F32))
-    return lucid.where(flushed, sub_f32, out)
