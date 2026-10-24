@@ -16,13 +16,14 @@ batch-norm modes, ends with the running statistics eager ends with.
 """
 
 import ast
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 import lucid
 import lucid.models as models
-from lucid.compile import make_step
+from lucid.compile import fused_step, make_step
 
 _REGISTRIES = frozenset(
     {"_buffers", "_parameters", "_modules", "_non_persistent_buffers"}
@@ -99,9 +100,50 @@ def _running(model: lucid.nn.Module) -> dict[str, lucid.Tensor]:
     }
 
 
+#: A compile entry's step, and a check that it compiled what it should have.
+_Entry = tuple[Callable[[lucid.Tensor], lucid.Tensor], Callable[[], bool]]
+
+
+def _make(model: lucid.nn.Module) -> _Entry:
+    step = make_step(model, _negative_log_likelihood)
+    return step, lambda: not step.eager_only
+
+
+def _fused(model: lucid.nn.Module) -> _Entry:
+    # A flow batch norm writes its buffers in place, which fused_step cannot
+    # carry back, so it runs the step eagerly — correct, and not compiled.
+    optimizer = lucid.optim.SGD(model.parameters(), lr=0.0)
+    return fused_step(model, _negative_log_likelihood, optimizer), lambda: True
+
+
+#: The compile entries a training loop would reach for, and whether each is
+#: expected to have compiled the step rather than run it eagerly.
+_ENTRIES = [
+    pytest.param(_make, id="make_step"),
+    pytest.param(
+        _fused,
+        id="fused_step",
+        marks=pytest.mark.xfail(
+            strict=True,
+            raises=AssertionError,
+            reason=(
+                "LCD-607: fused_step's eager fallback draws other numbers than "
+                "eager on every call, so the losses part however the buffers do"
+            ),
+        ),
+    ),
+]
+
+
+@pytest.mark.filterwarnings(
+    "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
+)
+@pytest.mark.parametrize("entry", _ENTRIES)
 @pytest.mark.parametrize("running_in_training", [False, True], ids=["batch", "running"])
 def test_a_compiled_realnvp_step_keeps_the_running_statistics(
-    device_gpu_only: str, running_in_training: bool
+    device_gpu_only: str,
+    running_in_training: bool,
+    entry: Callable[[lucid.nn.Module], _Entry],
 ) -> None:
     def build() -> lucid.nn.Module:
         return (
@@ -116,9 +158,7 @@ def test_a_compiled_realnvp_step_keeps_the_running_statistics(
 
     lucid.manual_seed(0)
     compiled, eager = build(), build()
-    # make_step alone: fused_step joins once LCD-607 lands, as its eager
-    # fallback draws other numbers than eager on every call.
-    step = make_step(compiled, _negative_log_likelihood)
+    step, compiled_it = entry(compiled)
     # LCD-607: the tracing call draws other numbers than eager does (the
     # dequantisation noise), so it is taken first and the two start after it.
     step(lucid.rand(2, 3, 8, 8, device=device_gpu_only))
@@ -133,7 +173,7 @@ def test_a_compiled_realnvp_step_keeps_the_running_statistics(
         want = float(_negative_log_likelihood(eager(x)).item())
         assert got == pytest.approx(want, rel=1e-4, abs=1e-4), f"step {index}"
 
-    assert not step.eager_only, "the step ran eagerly, so nothing compiled was checked"
+    assert compiled_it(), "the step ran eagerly, so nothing compiled was checked"
     ran, reference = _running(compiled), _running(eager)
     assert ran.keys() == reference.keys() and ran
     for name, value in reference.items():
