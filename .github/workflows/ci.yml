@@ -322,8 +322,9 @@ jobs:
   # parity tier without the reference framework — so it skips wholesale —
   # and deselects the heavy and control markers.  These jobs run all of it,
   # one process per file, with the oracles installed and LUCID_TEST_NETWORK
-  # on; scripts/ci_nightly_suite.py fails on a skip as well as a failure,
-  # so a test that silently stops running is caught the next night.
+  # on; scripts/ci_nightly_suite.py fails on a failure and on any skip its
+  # DESIGNED list does not name with a reason, so a test that silently
+  # stops running is caught the next night.
   #
   # The long-training parity — 3,000 steps against the reference, on both
   # devices — is 41 of this tier's 59 minutes on a hosted runner and half

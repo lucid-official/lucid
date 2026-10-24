@@ -1,9 +1,11 @@
 """A broken instrument cannot turn a required CI stage green, and a stage
-failure in ``part_checks`` / ``part_core`` / ``Coverage`` does not mask later
-stages (LCD-530)."""
+failure in ``part_checks`` / ``part_core`` / ``part_coreml`` / ``Coverage``
+does not mask later stages (LCD-530)."""
 
+import ast
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -59,15 +61,30 @@ def test_required_ci_stage_preserves_failure(
     assert ("NEXT_STAGE" in result.stdout) == (status in (0, 1))
 
 
+def _function(script: str, name: str) -> str:
+    """The text of shell function ``name`` in ``script``, header to brace."""
+    return (
+        f"{name}() {{"
+        + script.split(f"\n{name}() {{", 1)[1].split("\n}", 1)[0]
+        + "\n}\n"
+    )
+
+
 def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_error() -> (
     None
 ):
     root = Path(__file__).resolve().parents[4]
     ci_full = (root / "scripts/ci_full.sh").read_text()
-    part_core = ci_full.split("part_core() {", 1)[1].split("\n}", 1)[0]
-    assert " -x" not in part_core
-    assert "--maxfail=50" in part_core
-    assert "--continue-on-collection-errors" in part_core
+    assert (
+        "\nFAST_TIER_FAILURES=(--maxfail=50 --continue-on-collection-errors)\n"
+        in ci_full
+    )
+    for part in ("part_core", "part_coreml"):
+        body = _function(ci_full, part)
+        commands = [c for c in _logical_lines(body) if "-m pytest" in c]
+        assert commands, part
+        for command in commands:
+            assert '"${FAST_TIER_FAILURES[@]}"' in command, (part, command)
 
     ci_yml = (root / ".github/workflows/ci.yml").read_text()
     cov_lines = [
@@ -78,6 +95,117 @@ def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_erro
     assert len(cov_lines) == 3
     for line in cov_lines:
         assert "--continue-on-collection-errors" in line
+
+
+def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(
+    tmp_path: Path,
+) -> None:
+    """Since 10-21 one red Core ML test meant the export smoke never ran."""
+    root = Path(__file__).resolve().parents[4]
+    ci_full = (root / "scripts/ci_full.sh").read_text()
+    calls = tmp_path / "calls"
+    fake_python = tmp_path / "python"
+    fake_python.write_text(
+        f"#!{sys.executable}\nimport sys\n"
+        f"with open({str(calls)!r}, 'a') as log:\n"
+        "    log.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "sys.exit(1 if any(a.startswith('--ignore=') for a in sys.argv) else 0)\n"
+    )
+    fake_python.chmod(0o700)
+    definitions = "".join(
+        line + "\n"
+        for line in ci_full.splitlines()
+        if line.startswith(("COREML_TESTS=", "EXPORT_SMOKE=", "FAST_TIER_FAILURES="))
+    )
+    script = (
+        "set -euo pipefail\n"
+        + definitions
+        + _function(ci_full, "part_coreml")
+        + "part_coreml\n"
+    )
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "PYTHON_BIN": str(fake_python)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    ran = calls.read_text().splitlines()
+    assert len(ran) == 2, ran
+    assert ran[1].startswith(
+        "-m pytest lucid/test/unit/coreml/test_family_export_smoke.py"
+    ), ran
+
+
+#: A pytest flag that ends the run at its first failure.
+_STOP_AT_FIRST = re.compile(r"-[qvsl]*x[qvsl]*|--exitfirst|--maxfail=1")
+_SCRIPT_REF = re.compile(r"(?:scripts|tools)/[\w./-]+\.(?:sh|py)")
+
+
+def _logical_lines(text: str) -> list[str]:
+    """Shell lines with their continuations joined, comments dropped."""
+    joined = re.sub(r"\\\n\s*", " ", text)
+    return [
+        line.strip()
+        for line in joined.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _ci_files(root: Path) -> list[Path]:
+    """Every workflow and action, and every script they reach, transitively."""
+    seen = set((root / ".github").rglob("*.yml"))
+    queue = list(seen)
+    while queue:
+        for ref in _SCRIPT_REF.findall(queue.pop().read_text()):
+            path = root / ref
+            if path.is_file() and path not in seen:
+                seen.add(path)
+                queue.append(path)
+    return sorted(seen)
+
+
+def _pytest_arguments(path: Path) -> list[list[str]]:
+    """The arguments of every pytest command ``path`` runs."""
+    if path.suffix == ".py":
+        # A command built as a list: the strings of any list or tuple that
+        # names pytest, after it.
+        commands = []
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, (ast.List, ast.Tuple)):
+                words = [
+                    e.value
+                    for e in node.elts
+                    if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                ]
+                if "pytest" in words:
+                    commands.append(words[words.index("pytest") + 1 :])
+        return commands
+    return [
+        match.group(1).split()
+        for line in _logical_lines(path.read_text())
+        if (match := re.search(r"(?:^|[\s(])pytest\s(.*)", line))
+    ]
+
+
+def test_no_ci_pytest_command_stops_at_its_first_failure() -> None:
+    """A run that stops at the first red test reports one defect and hides
+    the rest — 91% of core under ``-x`` (LCD-530), then the coreml part's
+    export smoke."""
+    root = Path(__file__).resolve().parents[4]
+    files = _ci_files(root)
+    commands = {path: _pytest_arguments(path) for path in files}
+    # The scan has to reach the gate's scripts, or it proves nothing.
+    for script in ("scripts/ci_full.sh", "scripts/ci_nightly_suite.py"):
+        assert commands.get(root / script), f"no pytest command found in {script}"
+    offenders = [
+        f"{path.relative_to(root)}: pytest {' '.join(args)}"
+        for path, found in commands.items()
+        for args in found
+        if any(_STOP_AT_FIRST.fullmatch(arg) for arg in args)
+    ]
+    assert not offenders, "\n".join(offenders)
 
 
 def test_part_checks_stage_helper_continues_and_exits_one_at_end(

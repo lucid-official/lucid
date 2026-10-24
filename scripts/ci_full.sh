@@ -92,16 +92,29 @@ FAST_TIER_IGNORES=(
 COREML_TESTS=lucid/test/unit/coreml
 EXPORT_SMOKE=$COREML_TESTS/test_family_export_smoke.py
 
+# No fast-tier process stops at its first failure.  ``-x`` once hid 91% of
+# core behind whichever test failed first (LCD-530), and on coreml it went
+# on hiding the export smoke: one red Core ML test meant the 61 export
+# checks behind it never ran.  Fifty failures is a broken build, not a list
+# worth reading on; the cap keeps a red run near its green length.
+FAST_TIER_FAILURES=(--maxfail=50 --continue-on-collection-errors)
+
 part_core() {
     echo "==> Python fast tier (non-models)"
     "$PYTHON_BIN" -m pytest lucid/test/ "${FAST_TIER_IGNORES[@]}" --ignore="$COREML_TESTS" \
-        --maxfail=50 --continue-on-collection-errors -q
+        "${FAST_TIER_FAILURES[@]}" -q
 }
 
 part_coreml() {
+    # Both processes run however the first one ends, so a red Core ML test
+    # cannot cost the export smoke its run; the part is red if either is.
     echo "==> Python fast tier (Core ML)"
-    "$PYTHON_BIN" -m pytest "$COREML_TESTS" --ignore="$EXPORT_SMOKE" -x -q
-    "$PYTHON_BIN" -m pytest "$EXPORT_SMOKE" -x -q
+    local status=0
+    "$PYTHON_BIN" -m pytest "$COREML_TESTS" --ignore="$EXPORT_SMOKE" \
+        "${FAST_TIER_FAILURES[@]}" -q || status=1
+    echo "==> Python fast tier (Core ML export smoke)"
+    "$PYTHON_BIN" -m pytest "$EXPORT_SMOKE" "${FAST_TIER_FAILURES[@]}" -q || status=1
+    return "$status"
 }
 
 part_checks() {
