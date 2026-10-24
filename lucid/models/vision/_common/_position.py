@@ -14,8 +14,8 @@ from typing import final, override
 
 import lucid
 import lucid.nn as nn
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._common import float32_or_wider
 
 __all__ = ["SinePositionEmbedding"]
 
@@ -71,7 +71,7 @@ class SinePositionEmbedding(nn.Module):
         height = int(feature.shape[-2])
         width = int(feature.shape[-1])
         device = feature.device.type
-        work = float32_or_wider(feature.dtype)
+        work = _float32_or_wider(feature.dtype)
         npf = self.num_position_features
 
         ones = lucid.ones(1, height, width, dtype=work, device=device)

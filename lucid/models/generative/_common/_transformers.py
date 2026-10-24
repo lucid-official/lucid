@@ -25,8 +25,8 @@ from typing import cast, override
 
 import lucid
 import lucid.nn as nn
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._common import float32_or_wider
 
 __all__ = [
     "timestep_embedding",
@@ -92,7 +92,7 @@ def timestep_embedding(
     (2, 8)
     """
     half = dim // 2
-    work = float32_or_wider(t.dtype if dtype is None else dtype)
+    work = _float32_or_wider(t.dtype if dtype is None else dtype)
     freqs = lucid.exp(
         -math.log(max_period)
         * lucid.arange(half, dtype=work, device=t.device.type)

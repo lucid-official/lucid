@@ -20,6 +20,7 @@ between siblings).
 from typing import override
 
 import lucid
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
 from lucid.nn.functional.positional import (
@@ -366,7 +367,7 @@ class TimestepEmbedding(Module):
             1.0 / (self.base ** (i / denom)) for i in range(half)
         ]
         out_dtype = self.linear_1.weight.dtype
-        work = lucid.float64 if out_dtype == lucid.float64 else lucid.float32
+        work = _float32_or_wider(out_dtype)
         inv_freq = lucid.tensor(inv_freq_vals, dtype=work, device=timesteps.device.type)
         # outer product (* …, half)
         t = timesteps.to(work).unsqueeze(-1)  # (*shape, 1)

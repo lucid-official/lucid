@@ -108,6 +108,28 @@ double: dtype = float64
 short: dtype = int16
 long: dtype = int64
 
+
+def _float32_or_wider(d: dtype) -> dtype:
+    """The dtype position and time tables are computed in for a ``d`` model.
+
+    Sinusoid angles reach a thousand radians and resampling coordinates
+    hundreds of pixels; float16 and bfloat16 cannot hold either to a
+    useful fraction.  Such tables are built in float32 — the reference's
+    accumulation type for half activations — or float64 for a float64
+    model, then cast once to the activations' dtype.  Unlike the loss and
+    reduction rules, which widen half only, every non-float64 input maps to
+    float32: an integer timestep gets a float32 table.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid._dtype import _float32_or_wider
+    >>> _float32_or_wider(lucid.float16), _float32_or_wider(lucid.float64)
+    (lucid.float32, lucid.float64)
+    """
+    return float64 if d == float64 else float32
+
+
 _ENGINE_TO_DTYPE: dict[_C_engine.Dtype, dtype] = {
     _C_engine.Dtype.F16: float16,
     _C_engine.Dtype.BF16: bfloat16,

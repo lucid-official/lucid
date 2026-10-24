@@ -35,11 +35,11 @@ import lucid
 import lucid.diffeq
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput
-from lucid.models._utils._common import float32_or_wider
 from lucid.models._utils._generative import (
     exact_divergence,
     generative_activation,
@@ -599,7 +599,7 @@ class _VelocityField(nn.Module):
 
     def _time_embedding(self, t: Tensor) -> Tensor:
         dtype = self.time_mlp_fc1.weight.dtype  # angles reach 999 rad: float32+
-        scaled = t.to(float32_or_wider(dtype)) * _TIME_SCALE
+        scaled = t.to(_float32_or_wider(dtype)) * _TIME_SCALE
         if self.fourier is not None:
             # The reference embeds the log of the time, a habit from conditioning
             # on a noise level: monotone in ``t``, but singular at ``t = 0``.  The

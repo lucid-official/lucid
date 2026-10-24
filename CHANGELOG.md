@@ -1362,6 +1362,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - share one sine position table across the DETR lineage
 
+- give the float32-or-wider rule one owner in lucid._dtype
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

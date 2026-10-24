@@ -35,10 +35,8 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._common import (
-    float32_or_wider,
-    init_transformer_trunc_normal,
-)
+from lucid._dtype import _float32_or_wider
+from lucid.models._utils._common import init_transformer_trunc_normal
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
@@ -401,7 +399,7 @@ def _bicubic_2d(x: Tensor, oh: int, ow: int) -> Tensor:
     B, C, H, W = x.shape
     a = -0.75
     out_dtype = x.dtype
-    work = float32_or_wider(out_dtype)
+    work = _float32_or_wider(out_dtype)
     x = x.to(work)
 
     def _coords(out_size: int, in_size: int) -> tuple[Tensor, Tensor]:
