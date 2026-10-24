@@ -41,6 +41,7 @@ from lucid._ops.composite._gamma import _polygamma, gammainc, gammaincc
 from lucid._ops.composite._opmath import _in_float32, _real
 from lucid._ops.composite._zeta import zeta
 from lucid._ops.composite.elementwise import _x_times_log
+from lucid._types import TensorOrScalar
 from lucid.special._polynomials import (
     chebyshev_polynomial_t,
     chebyshev_polynomial_u,
@@ -658,7 +659,7 @@ def _ndtri(p: Tensor) -> Tensor:
 # ── x-times-log-of-something helpers ───────────────────────────────────────
 
 
-def xlog1py(input: Tensor, other: Tensor) -> Tensor:
+def xlog1py(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     r"""Safe product :math:`x \log(1 + y)` with limit-convention zero handling.
 
     Computes :math:`x \log(1 + y)` element-wise but takes the product as
@@ -671,9 +672,9 @@ def xlog1py(input: Tensor, other: Tensor) -> Tensor:
 
     Parameters
     ----------
-    input : Tensor
-        Multiplier tensor.
-    other : Tensor
+    input : Tensor | Scalar
+        Multiplier.  Either operand may be a Python number.
+    other : Tensor | Scalar
         Argument of ``log1p``; broadcast-compatible with ``input``.
 
     Returns
@@ -700,14 +701,13 @@ def xlog1py(input: Tensor, other: Tensor) -> Tensor:
     ``1 + y`` would round to ``1.0``.
 
     Gradients are :math:`\partial/\partial x = \log(1 + y)` and
-    :math:`\partial/\partial y = x / (1 + y)`, except where ``x == 0``
-    and :math:`\log(1 + y)` is not finite (``y <= -1`` or ``y``
-    infinite): there both are ``0``, so the backward never forms
-    ``0 \cdot \infty``.  This is the convention of :func:`lucid.xlogy`,
-    and the two functions share one implementation.  Two cells differ
-    from the reference framework on purpose: at ``(0, -1)`` its ``y``
-    gradient is ``0 / 0 = NaN`` and Lucid's is ``0``, and at
-    ``(0, +\infty)`` its ``x`` gradient is :math:`+\infty` and Lucid's
+    :math:`\partial/\partial y = x / (1 + y)`, except where ``x == 0`` and
+    :math:`\log(1 + y)` is not finite (``y <= -1`` or ``y`` infinite): there
+    both are ``0``, so the backward never forms ``0 \cdot \infty``.  This is
+    the convention of :func:`lucid.xlogy`, and the two functions share one
+    implementation.  Two cells differ from the reference framework on purpose:
+    at ``(0, -1)`` its ``y`` gradient is ``0 / 0 = NaN`` and Lucid's is ``0``,
+    and at ``(0, +\infty)`` its ``x`` gradient is :math:`+\infty` and Lucid's
     is ``0``.
 
     Examples

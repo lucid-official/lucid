@@ -13,6 +13,7 @@ one is the zero polynomial.  ``n`` was a Python int alone, and a negative
 one raised ``ValueError``.
 """
 
+import math
 from collections.abc import Callable, Iterator
 
 import lucid
@@ -42,6 +43,22 @@ def _terms(
         yield p_curr
 
 
+def _top_degree(op: str, n: float) -> int:
+    """The highest degree a call needs, ``n`` truncated toward zero.
+
+    A NaN or infinite degree has no integer to truncate to; the reference
+    casts it anyway and answers whatever the cast gives.
+
+    Raises
+    ------
+    ValueError
+        If ``n`` is not finite.
+    """
+    if not math.isfinite(n):
+        raise ValueError(f"{op}: expected a finite degree n, got {n}")
+    return int(n)
+
+
 def _ortho_poly(
     op: str,
     x: TensorOrScalar,
@@ -61,13 +78,18 @@ def _ortho_poly(
     if isinstance(n, Tensor):
         x, n = _real_pair(op, x, n)
         degree = lucid.trunc(n)
-        top = int(degree.max().item()) if degree.numel() else -1
-    elif isinstance(x, Tensor):
-        x, top = _real(x), int(n)
-    else:
+        top = _top_degree(op, degree.max().item() if degree.numel() else -1)
+    elif not isinstance(x, Tensor):
         raise TypeError(
             f"{op}: expected a Tensor for x or n, got "
             f"{type(x).__name__} and {type(n).__name__}"
+        )
+    elif isinstance(n, bool | int | float):
+        x, top = _real(x), _top_degree(op, n)
+    else:
+        raise TypeError(
+            f"{op}: expected the degree n to be a Tensor or a real number, "
+            f"got {type(n).__name__}"
         )
     if shift:
         x = 2 * x - 1

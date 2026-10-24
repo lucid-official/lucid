@@ -147,6 +147,25 @@ def test_two_python_numbers_are_refused(name: str) -> None:
         getattr(lucid.special, name)(0.5, 2)
 
 
+@pytest.mark.parametrize("name", _POLYNOMIALS)
+@pytest.mark.parametrize("n", ["2", None, 1j], ids=["str", "none", "complex"])
+def test_a_degree_that_is_not_a_real_number_is_refused(name: str, n: object) -> None:
+    # ``int(n)`` read ``"2"`` as degree 2.
+    with pytest.raises(TypeError, match=name):
+        getattr(lucid.special, name)(lucid.tensor([0.5]), n)
+
+
+@pytest.mark.parametrize("name", _POLYNOMIALS)
+@pytest.mark.parametrize(
+    "n",
+    [float("nan"), float("inf"), lucid.tensor([1.0, float("nan")])],
+    ids=["nan", "inf", "nan-in-tensor"],
+)
+def test_a_degree_that_is_not_finite_is_refused(name: str, n: object) -> None:
+    with pytest.raises(ValueError, match=f"{name}: expected a finite degree"):
+        getattr(lucid.special, name)(lucid.tensor([0.5, 0.2]), n)
+
+
 def test_the_per_element_path_is_differentiable_in_x() -> None:
     x = lucid.tensor([0.3, -0.4, 0.7], requires_grad=True)
     lucid.special.legendre_polynomial_p(x, lucid.tensor([0, 2, 5])).sum().backward()

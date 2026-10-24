@@ -102,7 +102,7 @@ def test_the_derivative_at_zero_is_exact(device: str) -> None:
             "cpu",
             marks=pytest.mark.xfail(
                 strict=True,
-                reason="engine: the CPU cumprod has no complex kernel (LCD-431 FOUND)",
+                reason="LCD-637: the CPU cumprod has no complex kernel",
             ),
         ),
         pytest.param(
