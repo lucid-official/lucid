@@ -24,6 +24,7 @@ import pytest
 
 import lucid
 import lucid.nn as nn
+from lucid._C import engine as _C_engine
 from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
 from lucid.compile._entry.module import CompiledModule
 from lucid.test._fixtures.devices import metal_available
@@ -260,6 +261,46 @@ def test_alternating_grad_and_no_grad_traces_once(
     (grad_key,) = info["eager_only"]
     assert grad_key.grad
     assert sorted(info["n_calls"].values()) == [4, 4]
+
+
+@_METAL
+@pytest.mark.parametrize("first_call", ["no_grad", "grad"])
+def test_a_first_run_mpsgraph_refuses_answers_eagerly(
+    first_call: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MPSGraph may refuse a kernel only when it first runs: eager, remembered.
+
+    A call that needed gradients found only by its trace (a closure tensor)
+    caches the executable unrun; the first ``no_grad`` call then runs it first.
+    """
+    weight = _data((4, 3), "metal").requires_grad_(True)
+
+    def function(t: lucid.Tensor) -> lucid.Tensor:
+        return (t @ weight).tanh()
+
+    runs = 0
+
+    def refusing(exe: object, feeds: list[object]) -> list[object]:
+        nonlocal runs
+        runs += 1
+        raise RuntimeError("run_executable: MPSGraph failed: simulated first run")
+
+    monkeypatch.setattr(_C_engine.compile, "run_executable", refusing)
+    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set())
+    compiled = lucid.compile(function)
+    x = _data((6, 4), "metal", seed=1)
+    if first_call == "grad":
+        assert compiled(x).requires_grad
+        assert runs == 0 and compiled.cache_info()["entries"] == 1
+    with lucid.no_grad():
+        with pytest.warns(CompileFallbackWarning, match="MPSGraph failed"):
+            got = compiled(x)
+        again = compiled(x)
+        want = function(x)
+    assert runs == 1
+    assert compiled.cache_info()["entries"] == 0
+    np.testing.assert_array_equal(got.numpy(), want.numpy())
+    np.testing.assert_array_equal(again.numpy(), want.numpy())
 
 
 def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
