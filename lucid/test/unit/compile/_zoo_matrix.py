@@ -23,6 +23,14 @@ The objective is the model's own ``loss`` when it returns one, else a
 fixed random probe dotted with its main output, so every output element
 carries gradient.
 
+Agreement means nothing between two NaNs, or between two steps that move
+nothing, so every status asks first that the loss be finite and the
+gradients finite and not all zero — on the eager step, the compiled one and
+the float64 tie-breaker alike.  A pair that fails it is ``nonfinite``, never
+``ok`` (realnvp was: its loss NaN on inputs outside its data domain,
+LCD-563).  A model that is a density over a bounded domain is fed inputs
+inside it (``Spec.domain``).
+
 Run one family per process (``python -m …_zoo_matrix <family> <task>``):
 an MPSGraph abort kills the interpreter, and it must not take the other
 families with it.  ``--sweep`` runs every family of every task that way and
@@ -33,6 +41,7 @@ import dataclasses
 import inspect
 import io
 import json
+import math
 import os
 import subprocess
 import sys
@@ -132,6 +141,9 @@ class Spec:
     inputs: Callable[[Any, int], tuple[tuple[Any, ...], dict[str, Any]]] | None = None
     #: Why the family is not a training-step check at all, when it is not.
     skip: str | None = None
+    #: ``[low, high)`` of the data a density model is defined on; image
+    #: inputs are drawn uniformly inside it.  ``None`` = standard normal.
+    domain: tuple[float, float] | None = None
 
 
 def _video(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
@@ -251,6 +263,9 @@ SPECS: dict[str, Spec] = {
     "flow_matching": Spec({"base_channels": 32}),
     # Flat samples, (B, 784).
     "nice": Spec(inputs=_flat),
+    # A density on [0, 1]: the flow opens with logit(alpha + (1 - 2 alpha) x),
+    # NaN wherever that leaves (0, 1) — for 62% of a standard-normal draw.
+    "realnvp": Spec(domain=(0.0, 1.0)),
     # Proposals and their targets: the CNN sees nothing else.
     "rcnn": Spec(inputs=_regions),
     "dreamer": Spec(inputs=_episodes),
@@ -332,7 +347,11 @@ def default_inputs(
             inspect.Parameter.KEYWORD_ONLY,
         ):
             continue
-        if p.name in _IMAGE_ARGS:
+        if p.name in _IMAGE_ARGS and spec.domain is not None:
+            low, high = spec.domain
+            image = lucid.rand(BATCH, chans, size, size) * (high - low) + low
+            args.append(image.to(DEV))
+        elif p.name in _IMAGE_ARGS:
             args.append(lucid.randn(BATCH, chans, size, size).to(DEV))
         elif p.name in _TOKEN_ARGS:
             args.append(lucid.randint(0, vocab, (BATCH, SEQ)).to(DEV))
@@ -438,6 +457,25 @@ def _restore(
 def _zero(model: Any) -> None:
     for p in model.parameters():
         p.grad = None
+
+
+def nonfinite(loss: float, grads: Mapping[str, np.ndarray]) -> str | None:
+    """Why one step's numbers cannot be compared with another's, or ``None``.
+
+    The comparisons below all go quiet on NaN — every ``NaN < tol`` is false,
+    every ``NaN > worst`` too — and two steps that train nothing agree
+    trivially, so neither may reach them.
+    """
+    if not math.isfinite(loss):
+        return f"loss is {loss}"
+    bad = sorted(n for n, g in grads.items() if not np.isfinite(g).all())
+    if bad:
+        return f"{len(bad)} gradient(s) not finite, first {bad[0]!r}"
+    if not grads:
+        return "no parameter received a gradient"
+    if not any(np.any(g != 0) for g in grads.values()):
+        return f"every gradient is zero ({len(grads)} parameters)"
+    return None
 
 
 def _worst(
@@ -578,18 +616,25 @@ def _float64_verdict(
     """
     saved = _silence_dropout(model)
     try:
-        _eager_step(model, batches[1], 100)
+        want_loss = _eager_step(model, batches[1], 100)
         want = _grads(model)
         _restore(model, start)
-        _, why = _compiled_step(model, batches, 100, start)
+        got_loss, why = _compiled_step(model, batches, 100, start)
         got = _grads(model)
         _restore(model, start)
         if why:
             return {"verdict": "fallback without dropout", "why": why[:200]}
-        _, ref = _float64_reference(family, task, mode, start, batches[1], 100)
+        ref_loss, ref = _float64_reference(family, task, mode, start, batches[1], 100)
     finally:
         for m, attr, v in saved:
             setattr(m, attr, v)
+    for side, loss, grads in (
+        ("eager", want_loss, want),
+        ("compiled", got_loss, got),
+        ("float64", ref_loss, ref),
+    ):
+        if (bad := nonfinite(loss, grads)) is not None:
+            return {"verdict": f"{side} without dropout: {bad}", "ok": False}
     e = _global_rel(want, ref)
     c = _global_rel(got, ref)
     return {"eager": e, "compiled": c, "ok": c <= max(1.25 * e, 1e-3)}
@@ -646,7 +691,7 @@ def _check_mode(
     mode: str,
     batches: list[tuple[tuple[Any, ...], dict[str, Any]]],
 ) -> tuple[str, Any]:
-    """One mode's comparison: ``("ok" | "wrong" | "fallback", detail)``."""
+    """One mode's comparison: ``("ok" | "wrong" | "fallback" | "nonfinite", detail)``."""
     model.train(mode == "train")
     start = _state(model)
     try:
@@ -655,12 +700,16 @@ def _check_mode(
         raise _StepFailed("eager", e) from e
     want, want_state = _grads(model), _state(model)
     _restore(model, start)
+    if (bad := nonfinite(want_loss, want)) is not None:
+        return "nonfinite", f"eager: {bad}"
     try:
         got_loss, why = _compiled_step(model, batches, 100, start)
     except Exception as e:  # noqa: BLE001
         raise _StepFailed("error", e) from e
     got, got_state = _grads(model), _state(model)
     _restore(model, start)
+    if (bad := nonfinite(got_loss, got)) is not None:
+        return "nonfinite", f"compiled: {bad}"
     if why:
         return "fallback", why
     worst, worst_name, missing = _worst(want, got)
@@ -729,6 +778,10 @@ def run_family(family: str, task: str) -> dict[str, Any]:
                     status, detail = "ok", {"unstable": detail, "retry": detail2}
         except _StepFailed as e:
             rec.update(status=e.status, mode=mode, detail=str(e))
+            return rec
+        if status == "nonfinite":
+            # Nothing the other mode says can make this pair a pass.
+            rec.update(status=status, mode=mode, detail=f"{mode} {detail}")
             return rec
         rec[f"{mode}_status"] = status
         rec[f"{mode}_detail"] = detail

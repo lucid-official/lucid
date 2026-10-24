@@ -124,6 +124,12 @@ kills the interpreter:
 python -m lucid.test.unit.compile._zoo_matrix <family> <task>
 ```
 
+Agreement between two NaNs is no agreement, so a family whose loss or
+gradients are not finite, or whose gradients are all zero, is `nonfinite`
+and fails whatever `EXPECTED` says (`_zoo_matrix.nonfinite`, pinned by
+`unit/compile/test_zoo_matrix_status.py` without running the matrix). A
+density over a bounded domain gets inputs inside it (`Spec.domain`).
+
 Adding a case means adding it to `CASES` and giving it a numpy reference in
 `REFS`, or a reason in `NO_REF` — `test_every_case_is_accounted_for` fails
 otherwise. numpy is used there only to compute expected values (H4 covers
