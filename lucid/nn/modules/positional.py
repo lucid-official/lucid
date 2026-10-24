@@ -351,6 +351,13 @@ class TimestepEmbedding(Module):
         Equivalent to Vaswani's 1-D PE but queried per *scalar* ``t``
         (typically with ``t`` continuously varying in [0, num_train_timesteps),
         not bounded by ``num_positions`` like SinusoidalEmbedding's table).
+
+        The angles reach ``num_train_timesteps`` radians, which float16
+        cannot hold to a useful fraction, so they are computed in float32
+        (float64 for a float64 layer) and the embedding is handed to the MLP
+        in its weights' dtype — the cast the reference U-Nets make before
+        their time MLP.  Without it a float16 model ran its conditioning
+        path widened to float32.
         """
         half = self.in_dim // 2
         # Frequencies: ω_i = base ** (-i / (half - 1))    for i = 0 … half-1
@@ -358,9 +365,11 @@ class TimestepEmbedding(Module):
         inv_freq_vals: list[float] = [
             1.0 / (self.base ** (i / denom)) for i in range(half)
         ]
-        inv_freq = lucid.tensor(inv_freq_vals, device=timesteps.device.type)
+        out_dtype = self.linear_1.weight.dtype
+        work = lucid.float64 if out_dtype == lucid.float64 else lucid.float32
+        inv_freq = lucid.tensor(inv_freq_vals, dtype=work, device=timesteps.device.type)
         # outer product (* …, half)
-        t = timesteps.float().unsqueeze(-1)  # (*shape, 1)
+        t = timesteps.to(work).unsqueeze(-1)  # (*shape, 1)
         # broadcast (*shape, 1) × (half,) → (*shape, half)
         while inv_freq.ndim < t.ndim:
             inv_freq = inv_freq.unsqueeze(0)
@@ -369,7 +378,7 @@ class TimestepEmbedding(Module):
             emb = lucid.cat([lucid.cos(ang), lucid.sin(ang)], dim=-1)
         else:
             emb = lucid.cat([lucid.sin(ang), lucid.cos(ang)], dim=-1)
-        return emb
+        return emb.to(out_dtype)
 
     @override
     def forward(self, timesteps: Tensor) -> Tensor:
