@@ -74,7 +74,8 @@ LUCID_INTERNAL void vsqrt_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise hyperbolic tangent.
 //
-// Computes $\text{out}_i = \tanh(\text{in}_i)$ via ``std::tanh``.
+// Computes $\text{out}_i = \tanh(\text{in}_i)$ via ``vvtanhf``, with
+// $|x| \le 3.52 \times 10^{-4}$ set back to x (see split_edges in Vforce.cpp).
 //
 // Parameters
 // ----------
@@ -84,11 +85,17 @@ LUCID_INTERNAL void vsqrt_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtanhf``.
 LUCID_INTERNAL void vtanh_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise sine.
 //
-// Computes $\text{out}_i = \sin(\text{in}_i)$ via ``std::sin``.
+// Computes $\text{out}_i = \sin(\text{in}_i)$ via ``vvsinf``, with
+// $|x| \le 3.52 \times 10^{-4}$ set back to x.  Near odd multiples of $\pi/2$
+// the result can be 1-2 ulp short of $\pm 1$.
 //
 // Parameters
 // ----------
@@ -98,11 +105,17 @@ LUCID_INTERNAL void vtanh_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvsinf``.
 LUCID_INTERNAL void vsin_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise cosine.
 //
-// Computes $\text{out}_i = \cos(\text{in}_i)$ via ``std::cos``.
+// Computes $\text{out}_i = \cos(\text{in}_i)$ via ``vvcosf``, with
+// $|x| \le 2^{-12}$ set to 1.  Near other multiples of $\pi$ the result can be
+// 1-2 ulp short of $\pm 1$.
 //
 // Parameters
 // ----------
@@ -112,11 +125,16 @@ LUCID_INTERNAL void vsin_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvcosf``.
 LUCID_INTERNAL void vcos_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise tangent.
 //
-// Computes $\text{out}_i = \tan(\text{in}_i)$ via ``std::tan``.
+// Computes $\text{out}_i = \tan(\text{in}_i)$ via ``vvtanf``, with
+// $|x| \le 3.52 \times 10^{-4}$ (and -0) set back to x.
 //
 // Parameters
 // ----------
@@ -126,6 +144,10 @@ LUCID_INTERNAL void vcos_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtanf``.
 LUCID_INTERNAL void vtan_f32(const float* in, float* out, std::size_t n);
 
 // Double-precision elementwise exponential.  Uses ``vvexp``.
@@ -176,7 +198,8 @@ LUCID_INTERNAL void vlog_f64(const double* in, double* out, std::size_t n);
 // Accelerate.framework ``vvsqrt``.
 LUCID_INTERNAL void vsqrt_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision elementwise tanh.  Uses ``std::tanh``.
+// Double-precision elementwise tanh.  Uses ``vvtanh``, with
+// $|x| \le 1.35 \times 10^{-8}$ set back to x.
 //
 // Parameters
 // ----------
@@ -186,9 +209,14 @@ LUCID_INTERNAL void vsqrt_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtanh``.
 LUCID_INTERNAL void vtanh_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision elementwise sine.  Uses ``std::sin``.
+// Double-precision elementwise sine.  Uses ``vvsin``; near odd multiples of
+// $\pi/2$ the result can be 1-3 ulp short of $\pm 1$.
 //
 // Parameters
 // ----------
@@ -198,9 +226,15 @@ LUCID_INTERNAL void vtanh_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvsin``.
 LUCID_INTERNAL void vsin_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision elementwise cosine.  Uses ``std::cos``.
+// Double-precision elementwise cosine.  Uses ``vvcos``, with $|x| < 2^{-26.5}$
+// set to 1; near other multiples of $\pi$ the result can be 1-3 ulp short of
+// $\pm 1$.
 //
 // Parameters
 // ----------
@@ -210,9 +244,14 @@ LUCID_INTERNAL void vsin_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvcos``.
 LUCID_INTERNAL void vcos_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision elementwise tangent.  Uses ``std::tan``.
+// Double-precision elementwise tangent.  Uses ``vvtan``, with
+// $|x| \le 1.35 \times 10^{-8}$ (and -0) set back to x.
 //
 // Parameters
 // ----------
@@ -222,6 +261,10 @@ LUCID_INTERNAL void vcos_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtan``.
 LUCID_INTERNAL void vtan_f64(const double* in, double* out, std::size_t n);
 
 // Single-precision elementwise power.
@@ -270,7 +313,7 @@ LUCID_INTERNAL void vpow_f64(const double* base, const double* expo, double* out
 
 // Single-precision elementwise arcsine.
 //
-// Computes $\text{out}_i = \arcsin(\text{in}_i)$ via ``std::asin``.  Outputs
+// Computes $\text{out}_i = \arcsin(\text{in}_i)$ via ``vvasinf``.  Outputs
 // in $[-\pi/2, \pi/2]$; inputs must be in $[-1, 1]$.
 //
 // Parameters
@@ -281,11 +324,15 @@ LUCID_INTERNAL void vpow_f64(const double* base, const double* expo, double* out
 //     Output buffer (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvasinf``.
 LUCID_INTERNAL void vasin_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise arccosine.
 //
-// Computes $\text{out}_i = \arccos(\text{in}_i)$ via ``std::acos``.  Outputs
+// Computes $\text{out}_i = \arccos(\text{in}_i)$ via ``vvacosf``.  Outputs
 // in $[0, \pi]$.
 //
 // Parameters
@@ -296,11 +343,15 @@ LUCID_INTERNAL void vasin_f32(const float* in, float* out, std::size_t n);
 //     Output buffer (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvacosf``.
 LUCID_INTERNAL void vacos_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision elementwise arctangent.
 //
-// Computes $\text{out}_i = \arctan(\text{in}_i)$ via ``std::atan``.  Outputs
+// Computes $\text{out}_i = \arctan(\text{in}_i)$ via ``vvatanf``.  Outputs
 // in $(-\pi/2, \pi/2)$.
 //
 // Parameters
@@ -311,9 +362,13 @@ LUCID_INTERNAL void vacos_f32(const float* in, float* out, std::size_t n);
 //     Output buffer (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvatanf``.
 LUCID_INTERNAL void vatan_f32(const float* in, float* out, std::size_t n);
 
-// Double-precision arcsine.  Uses ``std::asin``.
+// Double-precision arcsine.  Uses ``vvasin``.
 //
 // Parameters
 // ----------
@@ -323,9 +378,13 @@ LUCID_INTERNAL void vatan_f32(const float* in, float* out, std::size_t n);
 //     Output (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvasin``.
 LUCID_INTERNAL void vasin_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision arccosine.  Uses ``std::acos``.
+// Double-precision arccosine.  Uses ``vvacos``.
 //
 // Parameters
 // ----------
@@ -335,9 +394,13 @@ LUCID_INTERNAL void vasin_f64(const double* in, double* out, std::size_t n);
 //     Output (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvacos``.
 LUCID_INTERNAL void vacos_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision arctangent.  Uses ``std::atan``.
+// Double-precision arctangent.  Uses ``vvatan``.
 //
 // Parameters
 // ----------
@@ -347,11 +410,15 @@ LUCID_INTERNAL void vacos_f64(const double* in, double* out, std::size_t n);
 //     Output (radians).
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvatan``.
 LUCID_INTERNAL void vatan_f64(const double* in, double* out, std::size_t n);
 
 // Single-precision hyperbolic sine.
 //
-// Computes $\text{out}_i = \sinh(\text{in}_i)$ via ``std::sinh``.
+// Computes $\text{out}_i = \sinh(\text{in}_i)$ via ``vvsinhf``.
 //
 // Parameters
 // ----------
@@ -361,11 +428,15 @@ LUCID_INTERNAL void vatan_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvsinhf``.
 LUCID_INTERNAL void vsinh_f32(const float* in, float* out, std::size_t n);
 
 // Single-precision hyperbolic cosine.
 //
-// Computes $\text{out}_i = \cosh(\text{in}_i)$ via ``std::cosh``.
+// Computes $\text{out}_i = \cosh(\text{in}_i)$ via ``vvcoshf``.
 //
 // Parameters
 // ----------
@@ -375,9 +446,13 @@ LUCID_INTERNAL void vsinh_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvcoshf``.
 LUCID_INTERNAL void vcosh_f32(const float* in, float* out, std::size_t n);
 
-// Double-precision sinh.  Uses ``std::sinh``.
+// Double-precision sinh.  Uses ``vvsinh``.
 //
 // Parameters
 // ----------
@@ -387,9 +462,13 @@ LUCID_INTERNAL void vcosh_f32(const float* in, float* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvsinh``.
 LUCID_INTERNAL void vsinh_f64(const double* in, double* out, std::size_t n);
 
-// Double-precision cosh.  Uses ``std::cosh``.
+// Double-precision cosh.  Uses ``vvcosh``.
 //
 // Parameters
 // ----------
@@ -399,6 +478,10 @@ LUCID_INTERNAL void vsinh_f64(const double* in, double* out, std::size_t n);
 //     Output buffer.
 // n : std::size_t
 //     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvcosh``.
 LUCID_INTERNAL void vcosh_f64(const double* in, double* out, std::size_t n);
 
 // Single-precision base-2 logarithm.
