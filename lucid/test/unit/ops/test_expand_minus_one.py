@@ -1,4 +1,4 @@
-"""``-1`` in a target size keeps that dim, for ``expand`` and ``broadcast_to`` alike (LCD-547).
+"""``-1`` in a target size keeps that dim, in ``expand`` and ``broadcast_to`` (LCD-547).
 
 ``broadcast_to(x, (-1, 6))`` raised ``InvalidArgument`` where the reference
 keeps the size, and ``expand`` read a ``-1`` in a dim the input does not
@@ -25,7 +25,11 @@ _KEEPS = [
 def test_minus_one_keeps_the_aligned_size(
     device: str, shape: tuple[int, ...], size: tuple[int, ...]
 ) -> None:
-    x = lucid.zeros(*shape, device=device) if shape else lucid.tensor(1.0, device=device)
+    x = (
+        lucid.zeros(*shape, device=device)
+        if shape
+        else lucid.tensor(1.0, device=device)
+    )
     lead = len(size) - len(shape)
     want = tuple(shape[i - lead] if s == -1 else s for i, s in enumerate(size))
     assert lucid.broadcast_to(x, size).shape == want

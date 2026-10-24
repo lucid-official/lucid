@@ -30,7 +30,9 @@ def test_imag_of_a_real_tensor_is_refused(device: str) -> None:
         lucid.imag(x)
 
 
-@pytest.mark.parametrize("dtype,part", [("complex64", "float32"), ("complex128", "float64")])
+@pytest.mark.parametrize(
+    "dtype,part", [("complex64", "float32"), ("complex128", "float64")]
+)
 def test_the_parts_are_views_of_the_complex_storage(
     device: str, dtype: str, part: str
 ) -> None:

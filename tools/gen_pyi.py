@@ -1006,10 +1006,9 @@ def _tensor_method_sig(entry: object) -> str:
     parts = []
     if n == 2:
         parts.append("other: Tensor | _float")
-    if extra:
-        for kw in extra if isinstance(extra, (list, tuple)) else []:
-            ptype = _PARAM_TYPE_MAP.get(kw, "object")
-            parts.append(f"{kw}: {ptype} = ...")
+    for kw in extra:
+        ptype = _PARAM_TYPE_MAP.get(kw, "object")
+        parts.append(f"{kw}: {ptype} = ...")
     args_str = (", " + ", ".join(parts)) if parts else ""
     return f"    def {name}(self{args_str}) -> Tensor: ..."
 
@@ -1176,6 +1175,13 @@ def gen_tensor_pyi() -> tuple[str, int]:
     return content, count
 
 
+#: How a variadic parameter is spelled in a stub.
+_STAR: dict[inspect._ParameterKind, str] = {
+    inspect.Parameter.VAR_POSITIONAL: "*",
+    inspect.Parameter.VAR_KEYWORD: "**",
+}
+
+
 def _stub_default(value: object) -> str:
     """`` = <value>`` for a stub parameter's default: the literal, or ``...``."""
     if value is inspect.Parameter.empty:
@@ -1210,7 +1216,7 @@ def _free_fn_method_sig(name: str) -> str:
             ptype = _PARAM_TYPE_MAP.get(param.name, "object")
         else:
             ptype = _stringify_annotation(param.annotation)
-        prefix = {param.VAR_POSITIONAL: "*", param.VAR_KEYWORD: "**"}.get(param.kind, "")
+        prefix = _STAR.get(param.kind, "")
         parts.append(f"{prefix}{param.name}: {ptype}{_stub_default(param.default)}")
     returns = (
         "Tensor"

@@ -203,7 +203,6 @@ def _complex_adapter(real: _Impl, imag: _Impl) -> _Impl:
     return _complex_parts(real, imag)
 
 
-
 def _make_join_adapter(engine_fn: Callable[..., _Impl]) -> Callable[..., _Impl]:
     """Wrap a joining engine op (cat, stack, ...) so it takes mixed dtypes.
 

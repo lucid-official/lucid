@@ -34,18 +34,21 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._registry import OpEntry, _REGISTRY, _bind_leading
 
+
 # 3.2.2: index ``_REGISTRY`` by ``free_fn_name`` so ``_make_free_fn`` and
 # ``_populate_free_fns`` skip the O(N) linear scan over ~500–1000 entries.
-# Built once at module load, before ``_populate_free_fns`` runs.  Entries
-# without a ``free_fn_name`` are excluded; collisions are resolved by
-# first-wins (matching the previous ``set``-based dedup in
+# Built once at module load, before ``_populate_free_fns`` runs.  An entry
+# without a ``free_fn_name`` is indexed by its ``name``; collisions are
+# resolved by first-wins (matching the ``set``-based dedup in
 # ``_populate_free_fns``).
-_REGISTRY_BY_FREE_FN: dict[str, OpEntry] = {}
-for _e in _REGISTRY:
-    _fn = _e.free_fn_name or _e.name
-    if _fn and _fn not in _REGISTRY_BY_FREE_FN:
-        _REGISTRY_BY_FREE_FN[_fn] = _e
-del _e, _fn
+def _by_free_fn_name() -> dict[str, OpEntry]:
+    by_name: dict[str, OpEntry] = {}
+    for entry in _REGISTRY:
+        by_name.setdefault(entry.free_fn_name or entry.name, entry)
+    return by_name
+
+
+_REGISTRY_BY_FREE_FN = _by_free_fn_name()
 
 # PEP 749 / Python 3.14: ``Format.FORWARDREF`` keeps unresolved names as
 # ``ForwardRef`` objects instead of raising ``NameError``.  Used when
@@ -382,7 +385,7 @@ from lucid._tensor.tensor import Tensor
 
 
 def _tensor_typed(annotation: object) -> object:
-    """``annotation`` with the engine's ``TensorImpl`` read as ``Tensor``, at any depth."""
+    """``annotation`` with every engine ``TensorImpl`` in it read as ``Tensor``."""
     if annotation is _C_engine.TensorImpl:
         return Tensor
     args = typing.get_args(annotation)

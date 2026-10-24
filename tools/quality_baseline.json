@@ -1025,7 +1025,7 @@
     "lucid/utils/transforms/_presets.py": 1
    },
    "file-loc-over-cap": {
-    "lucid/_ops/_adapters.py": 52,
+    "lucid/_ops/_adapters.py": 51,
     "lucid/_ops/composite/elementwise.py": 48,
     "lucid/_tensor/_dunders.py": 228,
     "lucid/_tensor/tensor.py": 2510,
