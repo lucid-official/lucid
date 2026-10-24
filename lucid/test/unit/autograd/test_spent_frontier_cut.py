@@ -343,9 +343,9 @@ def test_a_backward_is_linear_in_the_graph(
     # loaded machine.  Both are host-side work, the same on every device.
     small = _backward_seconds(build, size, retain)
     large = _backward_seconds(build, 2 * size, retain)
-    assert large < 3 * small + 0.002, (
-        f"{size}: {small:.4f} s, {2 * size}: {large:.4f} s"
-    )
+    assert (
+        large < 3 * small + 0.002
+    ), f"{size}: {small:.4f} s, {2 * size}: {large:.4f} s"
 
 
 _DEEP = """

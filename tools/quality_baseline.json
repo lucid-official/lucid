@@ -111,6 +111,11 @@
    "date": "2026-10-24",
    "reason": "user's editor formatting (black, 88 columns), format-only and AST-identical; line-based counts move with the re-wrap (user instruction 2026-10-17)",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-10-24",
+   "reason": "user's editor formatting (black 88, standing instruction 2026-10-17): re-wrapped check_patch_grid(...) call reads as a jscpd clone pair between dit/_config.py and mean_flow/_config.py; AST unchanged",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -1342,6 +1347,7 @@
     "lucid/models/generative/ddpm/_pretrained.py": 4,
     "lucid/models/generative/diamond/_model.py": 10,
     "lucid/models/generative/diamond/_pretrained.py": 3,
+    "lucid/models/generative/dit/_config.py": 1,
     "lucid/models/generative/dit/_model.py": 2,
     "lucid/models/generative/dit/_pretrained.py": 40,
     "lucid/models/generative/dreamer/_model.py": 18,
@@ -1359,6 +1365,7 @@
     "lucid/models/generative/flow_matching/_pretrained.py": 5,
     "lucid/models/generative/genie/_model.py": 3,
     "lucid/models/generative/genie/_pretrained.py": 5,
+    "lucid/models/generative/mean_flow/_config.py": 1,
     "lucid/models/generative/mean_flow/_model.py": 1,
     "lucid/models/generative/mean_flow/_pretrained.py": 16,
     "lucid/models/generative/ncsn/_config.py": 2,

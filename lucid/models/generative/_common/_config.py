@@ -312,7 +312,10 @@ def patch_grid_side(sample_size: int | tuple[int, int]) -> int:
 
 
 def check_patch_grid(
-    sample_size: int | tuple[int, int], patch_size: int, hidden_size: int, num_heads: int
+    sample_size: int | tuple[int, int],
+    patch_size: int,
+    hidden_size: int,
+    num_heads: int,
 ) -> None:
     """Refuse a patch grid a DiT backbone cannot be built over.
 

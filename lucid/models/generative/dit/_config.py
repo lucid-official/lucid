@@ -193,7 +193,9 @@ class DiTConfig(DiffusionModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
+        check_patch_grid(
+            self.sample_size, self.patch_size, self.hidden_size, self.num_heads
+        )
         if self.frequency_embedding_size % 2 != 0:
             raise ValueError(
                 f"frequency_embedding_size must be even — the sinusoid "

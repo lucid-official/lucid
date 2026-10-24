@@ -267,7 +267,13 @@ CASES: list[Any] = [
     (
         "tvm",
         "tvm_imagenet256_gen",
-        {"sample_size": 8, "hidden_size": 32, "depth": 1, "num_heads": 4, "num_classes": _CLASSES},
+        {
+            "sample_size": 8,
+            "hidden_size": 32,
+            "depth": 1,
+            "num_heads": 4,
+            "num_classes": _CLASSES,
+        },
         _images(8, channels=4),
     ),
 ]
