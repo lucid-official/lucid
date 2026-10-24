@@ -19,6 +19,7 @@ from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
     check_patch_grid,
+    check_sample_space_channels,
     patch_grid_side,
 )
 
@@ -359,12 +360,7 @@ class TVMConfig(GenerativeModelConfig):
 
     def _check_latent(self) -> None:
         """Output channels match the latent's; each channel's whitening is valid."""
-        if self.in_channels != self.out_channels:
-            raise ValueError(
-                f"the velocity lives in the latent's own space, so "
-                f"in_channels must equal out_channels; got {self.in_channels} "
-                f"and {self.out_channels}"
-            )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the velocity")
         if not len(self.latent_mean) == len(self.latent_std) == self.in_channels:
             raise ValueError(
                 f"latent_mean and latent_std need one entry per latent channel "

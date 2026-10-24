@@ -1444,6 +1444,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - state scalars take _float32_or_wider's dtype
 
+- one helper owns the sample-space channel rule
+
 ### Removed
 
 - delete dead C++ einops kernels and unbound engine bindings

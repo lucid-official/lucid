@@ -2151,7 +2151,6 @@
     "lucid/diffeq/_flatten.py": 1,
     "lucid/func/__init__.py": 3,
     "lucid/models/_meta.py": 2,
-    "lucid/models/generative/_common/_config.py": 1,
     "lucid/models/vision/crossvit/_config.py": 1,
     "lucid/models/vision/vjepa2/_config.py": 1,
     "lucid/nn/module.py": 3,

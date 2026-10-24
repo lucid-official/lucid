@@ -23,6 +23,7 @@ from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
     check_patch_grid,
+    check_sample_space_channels,
     patch_grid_side,
 )
 
@@ -250,12 +251,9 @@ class MeanFlowConfig(GenerativeModelConfig):
         )
         if self.depth <= 0:
             raise ValueError(f"depth must be positive, got {self.depth}")
-        if self.in_channels != self.out_channels:
-            raise ValueError(
-                f"the average velocity lives in the sample's own space, so "
-                f"in_channels must equal out_channels; got {self.in_channels} "
-                f"and {self.out_channels}"
-            )
+        check_sample_space_channels(
+            self.in_channels, self.out_channels, "the average velocity"
+        )
         if not 0.0 <= self.ratio_r_not_t <= 1.0:
             raise ValueError(
                 f"ratio_r_not_t is a probability, got {self.ratio_r_not_t}"

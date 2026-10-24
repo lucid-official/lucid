@@ -64,7 +64,9 @@ class GenerativeModelConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         if isinstance(self.sample_size, tuple):
-            if len(self.sample_size) != 2 or any(s <= 0 for s in self.sample_size):
+            # Annotated as a pair, but a dataclass does not enforce the arity.
+            sides: tuple[int, ...] = self.sample_size
+            if len(sides) != 2 or any(s <= 0 for s in sides):
                 raise ValueError(
                     f"sample_size tuple must be (H, W) with both positive, got {self.sample_size}"
                 )
@@ -170,6 +172,7 @@ __all__ = [
     "FlowPrior",
     "patch_grid_side",
     "check_patch_grid",
+    "check_sample_space_channels",
 ]
 
 
@@ -358,4 +361,39 @@ def check_patch_grid(
         raise ValueError(
             f"hidden_size must be divisible by num_heads, got "
             f"{hidden_size} and {num_heads}"
+        )
+
+
+# ── fields that live in the sample's own space ───────────────────────────────
+
+
+def check_sample_space_channels(
+    in_channels: int, out_channels: int, quantity: str
+) -> None:
+    """Refuse an output width other than the input's, for an in-place field.
+
+    A family whose network predicts something the objective or the sampler
+    adds to, or compares with, the input — a velocity, a displacement, a
+    bijection's image — needs the two widths equal.  A mismatch would
+    otherwise pass construction and fail as a broadcast error deep in the
+    forward pass or the sampler.
+
+    Parameters
+    ----------
+    in_channels : int
+        The config's ``in_channels``.
+    out_channels : int
+        The config's ``out_channels``.
+    quantity : str
+        What the network predicts, for the message — ``"the velocity"``.
+
+    Raises
+    ------
+    ValueError
+        If the widths differ.
+    """
+    if in_channels != out_channels:
+        raise ValueError(
+            f"{quantity} lives in the sample's own space, so in_channels must "
+            f"equal out_channels; got {in_channels} and {out_channels}"
         )
