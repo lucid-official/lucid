@@ -2360,7 +2360,6 @@
    },
    "RET504": {
     "lucid/autograd/checkpoint.py": 1,
-    "lucid/compile/_entry/module.py": 1,
     "lucid/distributions/student.py": 1,
     "lucid/models/text/gpt/_model.py": 1,
     "lucid/models/text/gpt2/_model.py": 1,

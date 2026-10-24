@@ -45,6 +45,7 @@ from typing import (
 class _TracerLike(Protocol):
     graph: object
     external_feeds: dict[int, _C_engine.TensorImpl]
+    retained_values: dict[int, _C_engine.TensorImpl]
 
     def lookup_id(self, impl: object) -> int | None: ...
 
@@ -68,10 +69,10 @@ from lucid.compile._core.fallback import (
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
-    _root_modules,
     leaf_tensors,
     model_has_active_hooks,
     tensors_have_active_hooks,
+    tree_requires_grad,
 )
 from lucid.nn.module import Module, _ModuleWrapper
 from lucid.nn.parameter import Parameter
@@ -210,27 +211,19 @@ _AUTOGRAD_FALLBACK = (
 )
 
 
-def _any_requires_grad(impls: tuple[_C_engine.TensorImpl, ...]) -> bool:
-    """Whether one of ``impls`` requires grad."""
-    return any(impl.requires_grad for impl in impls)
+def _makes_grad_leaf(
+    tracer: _TracerLike, feeds: Mapping[int, _C_engine.TensorImpl]
+) -> bool:
+    """Whether the traced call made a tensor that requires grad of its own.
 
-
-def _tree_requires_grad(model: Module) -> bool:
-    """Whether a parameter or buffer of ``model``'s tree requires grad.
-
-    The modules a wrapped callable is bound to or closes over count as the
-    tree.  The walk stops at the first one that does — in a model being
-    trained, its first parameter.  It walks ``named_parameters``, as
-    ``parameters`` warns about a lazy layer that has not seen an input yet.
+    A factory given ``requires_grad=True`` inside the forward: on Metal the
+    graph builds it, so it is no feed, while eager hands it to autograd as a
+    leaf.  Every call of the signature makes it again, so this is decided
+    once, from what the trace held that came from no feed.
     """
-    for root in _root_modules(model):
-        for _, param in root.named_parameters():
-            if param.requires_grad:
-                return True
-        for _, buffer in root.named_buffers():
-            if buffer.requires_grad:
-                return True
-    return False
+    fed = {id(impl) for impl in feeds.values()}
+    held = tracer.retained_values.values()
+    return any(impl.requires_grad and id(impl) not in fed for impl in held)
 
 
 __all__ = ["CompiledModule"]
@@ -280,10 +273,17 @@ class _CacheEntry:
     # own — parameters, buffers, and tensors a closure or a global holds.
     # Under grad mode one that requires grad makes the call eager.
     pinned: tuple[_C_engine.TensorImpl, ...] = field(init=False, default=())
+    # The call makes a tensor that requires grad itself (``_makes_grad_leaf``).
+    grad_leaf: bool = False
 
     def __post_init__(self) -> None:
         sources = zip(self.exe.input_ids, self.input_source, strict=True)
         self.pinned = tuple(self.external_feeds[t] for t, s in sources if s is None)
+
+    def reads_grad(self) -> bool:
+        """Whether, besides its arguments, the call reads or makes a tensor
+        that requires grad — read now, as freezing one moves no version."""
+        return self.grad_leaf or any(impl.requires_grad for impl in self.pinned)
 
 
 class CompiledModule[**P, R](_ModuleWrapper):
@@ -932,11 +932,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
         except (TypeError, AttributeError):  # fmt: skip
             return run_eager(self._model, args, kwargs)
 
+        # An eager call's result is differentiable already: the gradient
+        # check, which can walk the tree, is for calls that would compile.
         leaves = leaf_tensors(args, kwargs)
-        grad_mode = _C_engine.grad_enabled()
-        if grad_mode and self._needs_gradients(leaves, self._cache.get(key)):
-            return self._run_differentiable(key, args, kwargs)
-
         if (
             key in self._eager_only
             or model_has_active_hooks(self._model)
@@ -945,13 +943,16 @@ class CompiledModule[**P, R](_ModuleWrapper):
             self._count(key)
             return run_eager(self._model, args, kwargs)
 
+        grad_mode = _C_engine.grad_enabled()
         entry = self._cache.get(key)
+        if grad_mode and self._needs_gradients(leaves, entry):
+            return self._run_differentiable(key, args, kwargs)
         if entry is None:
             key, entry = self._compile_and_cache(key, eff, args, kwargs)
-            # A tensor no module holds — a closure's, a global — is seen
-            # only once the trace has read it.  The executable stays cached
-            # for the calls made under ``no_grad``.
-            if entry is not None and grad_mode and _any_requires_grad(entry.pinned):
+            # A tensor no module holds — a closure's, a global, one a factory
+            # makes — is seen only once the trace has read it.  The executable
+            # stays cached for the calls made under ``no_grad``.
+            if entry is not None and grad_mode and entry.reads_grad():
                 return self._run_differentiable(key, args, kwargs)
         self._count(key)
         if entry is None:
@@ -990,17 +991,18 @@ class CompiledModule[**P, R](_ModuleWrapper):
     def _needs_gradients(self, leaves: list[Tensor], entry: _CacheEntry | None) -> bool:
         """Whether, grad mode on, the eager call would record an autograd graph.
 
-        It does when a tensor it reads requires grad: an argument, or a
-        tensor the executable is fed besides them.  Before the first trace
-        those are not known yet, and the model tree's parameters and buffers
-        stand in for them — a call that trains its model is then never
-        traced; a closure tensor is found once the trace has read it.
+        It does when a tensor it reads or makes requires grad: an argument,
+        or one the executable is fed or builds besides them.  Before the
+        first trace those are not known yet, and the model tree's parameters
+        and buffers stand in for them — a call that trains its model is then
+        never traced; a closure tensor or a factory's is found once the trace
+        has read it.
         """
         if any(t.requires_grad for t in leaves):
             return True
         if entry is not None:
-            return _any_requires_grad(entry.pinned)
-        return _tree_requires_grad(self._model)
+            return entry.reads_grad()
+        return tree_requires_grad(self._model)
 
     def _run_differentiable(
         self, key: CacheKey, args: tuple[object, ...], kwargs: dict[str, object]
@@ -1320,7 +1322,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         from lucid.compile._debug.trace_dump import trace_to_json
 
-        entry = _CacheEntry(
+        return _CacheEntry(
             exe=exe,
             external_feeds=dict(ext),
             input_source=tuple(input_source),
@@ -1328,8 +1330,8 @@ class CompiledModule[**P, R](_ModuleWrapper):
             graph_json=trace_to_json(graph),
             compile_ms=(time.perf_counter() - t_compile_start) * 1000.0,
             written=written,
+            grad_leaf=_makes_grad_leaf(tracer, ext),
         )
-        return entry
 
     def _run(
         self,

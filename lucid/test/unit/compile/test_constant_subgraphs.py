@@ -152,6 +152,9 @@ def _assert_follows(
 
 @pytest.mark.parametrize("grad_mode", ["no_grad", "enable_grad"])
 def test_a_captured_weight_updated_by_an_optimizer_is_followed(grad_mode: str) -> None:
+    """Under ``no_grad`` the executable reads ``w`` as it is now.  Under grad
+    mode the call needs ``w``'s gradient, so it runs eagerly instead and
+    stays differentiable (LCD-582) — following ``w`` all the same."""
     lucid.manual_seed(0)
     w = nn.Parameter(lucid.randn(3, 4).to(COMPILE_DEVICE))
 
@@ -168,6 +171,13 @@ def test_a_captured_weight_updated_by_an_optimizer_is_followed(grad_mode: str) -
 
     calls = lucid.no_grad if grad_mode == "no_grad" else lucid.enable_grad
     _assert_follows(compiled, fn, step, calls)
+    eager_only = compiled.cache_info()["eager_only"]
+    if grad_mode == "no_grad":
+        assert not eager_only
+        return
+    with calls():
+        assert compiled(_x(3, 2, 4)).requires_grad
+    assert eager_only and all(key.grad for key in eager_only)
 
 
 def test_a_captured_weight_written_in_place_is_followed_without_recompiling(

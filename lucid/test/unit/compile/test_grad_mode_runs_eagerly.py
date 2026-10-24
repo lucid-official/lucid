@@ -16,6 +16,7 @@ it stays compiled.  Each test holds the compiled answer to eager on the CPU
 
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
@@ -149,6 +150,94 @@ def test_closure_tensor_requiring_grad(device: str) -> None:
         assert weight.grad is not None
         np.testing.assert_array_equal(weight.grad.numpy(), eager)
         weight.grad = None
+
+
+class _Scaled(nn.Module):
+    """No parameters: only its buffer requires grad."""
+
+    def __init__(self, device: str) -> None:
+        super().__init__()
+        self.register_buffer("scale", _data((4,), device).requires_grad_(True))
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        return (x * self.scale).tanh()
+
+
+@dataclass(frozen=True)
+class _Where:
+    """A call whose result needs gradients from one place, compiled or not."""
+
+    target: Callable[..., object]
+    call: Callable[[Callable[..., object]], lucid.Tensor]
+    sources: tuple[lucid.Tensor, ...]
+    dynamic: bool = False
+
+
+_HELD: dict[str, lucid.Tensor] = {}
+
+
+def _held_weight(t: lucid.Tensor) -> lucid.Tensor:
+    return (t @ _HELD["weight"]).tanh()
+
+
+def _where(name: str, device: str) -> _Where:
+    x = _data((6, 4), device, seed=2)
+    grad = _data((6, 4), device, seed=3).requires_grad_(True)
+    if name == "buffer":
+        model = _Scaled(device)
+        return _Where(model, lambda f: f(x), (model.get_buffer("scale"),))
+    if name in ("bound-method", "dynamic"):
+        model = _mlp(device)
+        target = model.forward if name == "bound-method" else model
+        return _Where(
+            target, lambda f: f(x), tuple(model.parameters()), name == "dynamic"
+        )
+    if name == "tuple-input":
+        return _Where(lambda p: (p[0] * p[1]).tanh(), lambda f: f((grad, x)), (grad,))
+    if name == "dict-input":
+        return _Where(lambda d: d["a"].exp() * 2.0, lambda f: f({"a": grad}), (grad,))
+    if name == "kwarg-input":
+        return _Where(lambda t, *, s: t * s, lambda f: f(x, s=grad), (grad,))
+    if name == "global":
+        _HELD["weight"] = _data((4, 3), device, seed=4).requires_grad_(True)
+        return _Where(_held_weight, lambda f: f(x), (_HELD["weight"],))
+    assert name == "factory"
+
+    def made_inside(t: lucid.Tensor) -> lucid.Tensor:
+        return t @ lucid.ones(4, 4, device=device, requires_grad=True)
+
+    return _Where(made_inside, lambda f: f(x), ())
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize(
+    "where",
+    [
+        "buffer",
+        "tuple-input",
+        "dict-input",
+        "kwarg-input",
+        "bound-method",
+        "dynamic",
+        "global",
+        "factory",
+    ],
+)
+def test_wherever_the_grad_tensor_is(where: str, device: str) -> None:
+    """Every place a tensor requiring grad can sit: the result needs gradients."""
+    case = _where(where, device)
+    want = case.call(case.target)
+    assert want.requires_grad
+    want.sum().backward()
+    eager = _grads(list(case.sources))
+
+    compiled = lucid.compile(case.target, dynamic=case.dynamic)
+    for _ in range(2):  # the call that traces (or not) and the one after
+        out = case.call(compiled)
+        assert out.requires_grad, f"{where}: a compiled result lost its gradient"
+        np.testing.assert_array_equal(out.detach().numpy(), want.detach().numpy())
+        out.sum().backward()
+        _assert_same(_grads(list(case.sources)), eager)
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -303,6 +392,35 @@ def test_a_first_run_mpsgraph_refuses_answers_eagerly(
     np.testing.assert_array_equal(again.numpy(), want.numpy())
 
 
+@pytest.mark.parametrize("why", ["eager-only", "hooked"])
+def test_a_call_that_runs_eagerly_anyway_checks_no_gradients(
+    why: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its result is differentiable already: the tree is not walked for it.
+
+    On the CPU a frozen model's first call traces, fails to lower and marks
+    the signature eager-only; a hooked model never traces.
+    """
+    from lucid.compile._entry import module as compiled_module
+
+    walks = 0
+    real = compiled_module.tree_requires_grad
+
+    def counted(model: object) -> bool:
+        nonlocal walks
+        walks += 1
+        return real(model)
+
+    monkeypatch.setattr(compiled_module, "tree_requires_grad", counted)
+    model = _mlp("cpu").requires_grad_(False)
+    if why == "hooked":
+        model.register_forward_hook(lambda module, args, out: None)
+    compiled = lucid.compile(model)
+    for _ in range(4):
+        compiled(_data((6, 4), "cpu"))
+    assert walks == (1 if why == "eager-only" else 0)
+
+
 def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
     monkeypatch.setattr(
@@ -326,14 +444,20 @@ def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_reference_keeps_autograd_the_same_way(ref: ModuleType) -> None:
-    """Whether the result requires grad, case by case, as the reference decides."""
+    """Whether the result requires grad, case by case, as the reference decides.
+
+    Lucid's half runs on Metal when it can: on the CPU every call is eager.
+    """
+    device = "metal" if metal_available() else "cpu"
     ref_model = ref.nn.Sequential(ref.nn.Linear(4, 3))
     ref_compiled = ref.compile(ref_model, backend="aot_eager")
-    model = nn.Sequential(nn.Linear(4, 3))
+    model = nn.Sequential(nn.Linear(4, 3)).to(device)
     compiled = lucid.compile(model)
 
-    def cases(lib: ModuleType, m: Any, call: Callable[[Any], Any]) -> list[bool]:
-        x = lib.randn(2, 4)
+    def cases(
+        lib: ModuleType, m: Any, call: Callable[[Any], Any], **where: str
+    ) -> list[bool]:
+        x = lib.randn(2, 4, **where)
         out = [call(x).requires_grad]
         m.eval()
         out.append(call(x).requires_grad)
@@ -341,9 +465,11 @@ def test_reference_keeps_autograd_the_same_way(ref: ModuleType) -> None:
             out.append(call(x).requires_grad)
         m.requires_grad_(False)
         out.append(call(x).requires_grad)
-        out.append(call(lib.randn(2, 4).requires_grad_(True)).requires_grad)
+        out.append(call(lib.randn(2, 4, **where).requires_grad_(True)).requires_grad)
         return out
 
     want = cases(ref, ref_model, ref_compiled)
     assert want == [True, True, False, False, True]
-    assert cases(lucid, model, compiled) == want
+    assert cases(lucid, model, compiled, device=device) == want
+    if device == "metal":
+        assert compiled.cache_info()["entries"] >= 1  # the no_grad call compiled

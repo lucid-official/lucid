@@ -353,6 +353,9 @@ class _TreeWalk:
     roots: tuple[weakref.ref[Module], ...]
     states: tuple[object, ...]
     hooked: bool
+    # Every parameter and buffer of the tree.  Their ``requires_grad`` moves
+    # no version, so it is read from these each time it is asked.
+    tensors: tuple[Tensor, ...]
 
     def walked_from(self, roots: Sequence[Module]) -> bool:
         return len(roots) == len(self.roots) and all(
@@ -390,10 +393,27 @@ def _tree_walk(model: object) -> _TreeWalk:
             for sub in subs
         ),
         hooked=any(_sub_has_active_hooks(sub) for sub in subs),
+        tensors=tuple(
+            t
+            for sub in subs
+            for registry in (sub._parameters, sub._buffers)
+            for t in registry.values()
+            if t is not None
+        ),
     )
     if isinstance(model, Module):
         _WALKS[model] = walk
     return walk
+
+
+def tree_requires_grad(model: object) -> bool:
+    """Whether a parameter or buffer of ``model``'s tree requires grad.
+
+    The modules a wrapped callable is bound to or closes over are part of
+    the tree.  The walk is the one kept per tree version; the flags are read
+    from it on every call, as freezing a parameter moves no version.
+    """
+    return any(t.requires_grad for t in _tree_walk(model).tensors)
 
 
 def model_has_active_hooks(model: object) -> bool:
