@@ -167,6 +167,8 @@ def _stops_at_first(args: list[str]) -> bool:
 )
 def test_the_first_failure_detector(args: list[str], stops: bool) -> None:
     assert _stops_at_first(args) is stops
+
+
 _SCRIPT_REF = re.compile(r"(?:scripts|tools)/[\w./-]+\.(?:sh|py)")
 
 
