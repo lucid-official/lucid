@@ -180,13 +180,13 @@ class FunctionCtx:
         Writes inside ``forward`` itself are fine — the version is taken
         once ``forward`` has returned.
 
-        Saving one of ``forward``'s own outputs is how ``backward`` reads
-        them, and it is safe: the output is held by the graph node rather
-        than by this context, so a call that runs no backward does not keep
-        it alive.  Such a call is freed by Python's cyclic garbage collector,
-        on its next pass, rather than the moment its last output is dropped.
-        Assigning a tensor to an attribute of the context (``ctx.out = y``)
-        has no such care taken of it — save tensors through this method.
+        ``forward``'s own outputs may be saved too: the graph node holds
+        them, not this context, so a call that runs no backward does not
+        keep them alive.  Such a call is freed by Python's cyclic garbage
+        collector on its next pass, rather than the moment its last output
+        is dropped.  A tensor assigned to an attribute of the context
+        (``ctx.out = y``) gets none of this — save tensors through this
+        method.
         """
         self._saved_tensors = list(tensors)
 
@@ -517,10 +517,10 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
             isinstance(a, Tensor) and a.requires_grad for a in args
         )
 
-        # As the reference runs it: the node registered below is the graph,
-        # and one ``forward`` built itself was thrown away on every call — or,
-        # in an untracked call, kept, sending a gradient to whatever tensor
-        # ``forward`` closed over.
+        # Under ``no_grad``, as the reference runs it: the node registered
+        # below is the call's whole graph.  A graph ``forward`` built itself
+        # was thrown away by every tracked call and kept by an untracked one,
+        # which sent a gradient to whatever tensor ``forward`` closed over.
         with _C_engine.NoGradGuard():
             output = klass.forward(ctx, *args, **kwargs)  # type: ignore[attr-defined]
         if (tracer := _C_engine.compile.current_tracer()) is not None:
