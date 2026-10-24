@@ -578,6 +578,36 @@ def test_tvm_latent_whitening_keeps_the_latent_dtype(
     assert model.to_vae_latent(whitened).dtype == dtype
 
 
+def test_a_half_dit_training_step_noises_where_half_rounds_alpha_bar_to_one() -> None:
+    """At t ∈ {0, 1} the float16 buffer's ``1 - ᾱ`` is 0, so x_t was x_0.
+
+    A two-step schedule draws only those steps.  The float16 forward's
+    x_t must carry the noise the float32 forward adds, to half precision.
+    """
+    extra = {"num_train_timesteps": 2, "beta_start": 1e-4, "beta_end": 1.1e-4}
+    wide = _generator("dit", "cpu", lucid.float32, **extra)
+    narrow = _generator("dit", "cpu", _F16, **extra)
+    assert narrow.alphas_cumprod.tolist() == [1.0, 1.0], "the premise moved"
+    side = wide.config.sample_size
+    lucid.manual_seed(1)
+    x0 = lucid.randn(2, wide.config.in_channels, side, side) * 0.1
+    added = []
+    for model, x in ((wide, x0), (narrow, x0.to(_F16))):
+        seen: list[lucid.Tensor] = []
+        handle = model.dit.register_forward_pre_hook(
+            lambda _module, args: seen.append(args[0])
+        )
+        lucid.manual_seed(2)  # the same steps and the same noise, rounded
+        with lucid.no_grad():
+            model(x)
+        handle.remove()
+        added.append((seen[0].to(_F64) - x.to(_F64)).numpy())
+    want, got = added
+    scale = float(np.abs(want).max())
+    assert scale > 0.0
+    assert float(np.abs(got - want).max()) < _TOL[_F16] * scale
+
+
 @pytest.mark.parametrize(
     "conditioning", ["adaln_zero", "adaln", "cross_attention", "in_context"]
 )

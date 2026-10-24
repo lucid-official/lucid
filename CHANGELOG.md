@@ -1238,6 +1238,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ungated DiT block and PlaNet planner keep the model dtype
 
+- DiT training noises from a float32 alpha-bar table
+
 ### Changed
 
 - `lucid.compile`: a call in grad mode that reads a tensor with `requires_grad=True` (a model with trainable parameters, eval mode included, or a forward that makes a grad leaf) now runs eagerly, so `backward()` works. Before, it returned a result that was silently cut from the graph. To keep the compiled path, run inference under `lucid.no_grad()` / `lucid.inference_mode()`, and train with `make_step` / `fused_step`. `save_compiled` saves only an executable that has run, and says to call under `lucid.no_grad()` otherwise (LCD-582).

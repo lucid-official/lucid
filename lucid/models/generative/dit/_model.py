@@ -509,9 +509,14 @@ class DiTForImageGeneration(ImageGenerationModel):
         steps = lucid.randint(
             0, config.num_train_timesteps, size=(batch,), device=device
         )
-        noise = lucid.randn(images.shape, dtype=images.dtype, device=device)
-        alpha_bar = self.alphas_cumprod[steps].reshape(-1, 1, 1, 1)
-        noised = alpha_bar.sqrt() * images + (1.0 - alpha_bar).sqrt() * noise
+        dt = images.dtype
+        noise = lucid.randn(images.shape, dtype=dt, device=device)
+        # At float32 or wider, cast once: on the float16 buffer the first two
+        # steps' 1 - alpha_bar is 0, and they added no noise.
+        table = self._alphas_cumprod_in(_float32_or_wider(dt), device)
+        alpha_bar = table[steps].reshape(-1, 1, 1, 1)
+        signal, noise_scale = alpha_bar.sqrt().to(dt), (1.0 - alpha_bar).sqrt().to(dt)
+        noised = signal * images + noise_scale * noise
 
         if labels is not None and config.class_dropout > 0.0:
             drop = lucid.rand((batch,), device=device) < config.class_dropout
