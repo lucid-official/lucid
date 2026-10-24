@@ -132,12 +132,6 @@ def _scatter(mode: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
     return run
 
 
-_LCD_588 = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-588: a custom Function saving two or more of its own outputs "
-    "is never collected",
-)
-
 #: The node whose backward reads its op's output -> (input, forward).
 _SAVES_OUTPUT: dict[
     str, tuple[Callable[[str], lucid.Tensor], Callable[[lucid.Tensor], lucid.Tensor]]
@@ -184,10 +178,8 @@ _SAVES_OUTPUT: dict[
     "cholesky (_CholeskyAutograd)": (_spd, lucid.linalg.cholesky),
     "lu_factor (_LUFactorGrad)": (_spd, lambda A: lucid.linalg.lu_factor(A)[0]),
     "ldl_factor (_LDLFactorGrad)": (_spd, lambda A: lucid.linalg.ldl_factor(A)[0]),
-}
-_SAVES_OUTPUT_LEAKING: dict[
-    str, tuple[Callable[[str], lucid.Tensor], Callable[[lucid.Tensor], lucid.Tensor]]
-] = {
+    # A node two outputs share: freed by the collector through the engine
+    # context that holds them (LCD-588).
     "custom Function saving both of its outputs": (
         _vector,
         lambda x: _SavesBothOutputs.apply(x)[0],
@@ -196,14 +188,11 @@ _SAVES_OUTPUT_LEAKING: dict[
 }
 
 
-@pytest.mark.parametrize(
-    "node",
-    [*_SAVES_OUTPUT, *(pytest.param(k, marks=_LCD_588) for k in _SAVES_OUTPUT_LEAKING)],
-)
+@pytest.mark.parametrize("node", list(_SAVES_OUTPUT))
 def test_a_node_that_reads_its_output_frees_it_without_a_backward(
     node: str, device: str
 ) -> None:
-    make, forward = {**_SAVES_OUTPUT, **_SAVES_OUTPUT_LEAKING}[node]
+    make, forward = _SAVES_OUTPUT[node]
     x = make(device)
     out = forward(x)
     assert out.grad_fn is not None, f"{node}: the case records no graph"

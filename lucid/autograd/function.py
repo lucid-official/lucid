@@ -2,15 +2,36 @@
 autograd.Function: base class for custom differentiable operations.
 """
 
-from typing import Any, Protocol, cast, override
+from typing import Any, NamedTuple, Protocol, cast, override
+from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._python_node import _register
 
-#: A saved tensor's impl, its version when ``forward`` returned, and where it
-#: came from ("Mul input 1") for the ``VersionMismatch`` message.
-type _SavedEntry = tuple[_C_engine.TensorImpl, int, str]
+
+class _Saved(NamedTuple):
+    """One tensor ``save_for_backward`` was given, once the node holds the call.
+
+    Attributes
+    ----------
+    slot : int
+        Where the node's carrier context holds the tensor's impl.
+    version : int
+        That impl's version once ``forward`` returned.
+    where : str
+        Where it came from ("Mul input 1"), for the ``VersionMismatch``
+        message.
+    tensor : Tensor or None
+        The object that was saved, handed back while it still has that
+        impl; ``None`` for one of the node's own outputs, which the context
+        must not hold (:meth:`FunctionCtx._hold_saved`).
+    """
+
+    slot: int
+    version: int
+    where: str
+    tensor: Tensor | None
 
 
 def _impl_of(t: object) -> _C_engine.TensorImpl | None:
@@ -127,11 +148,13 @@ class FunctionCtx:
     def __init__(self) -> None:
         """Initialise an empty context with no saved tensors or extras."""
         self._saved_tensors: list[Tensor] = []
-        # One entry per saved tensor — its impl, that impl's version once
-        # ``forward`` returned, and where it came from for the error message
-        # — written when the node is registered.  ``None`` before that, so a
-        # ``forward`` reading its own ``saved_tensors`` is not checked.
-        self._saved_record: list[_SavedEntry | None] | None = None
+        # Written when the node is registered (``_hold_saved``): one entry
+        # per saved value — a ``_Saved`` for a tensor, the value itself for
+        # anything else — and the node's carrier, which holds the tensors.
+        # ``None`` before that, so a ``forward`` reading its own
+        # ``saved_tensors`` gets the objects it saved, unchecked.
+        self._saved_record: list[_Saved | Tensor] | None = None
+        self._carrier: _C_engine.FunctionCtx | None = None
         self.needs_input_grad: tuple[bool, ...] = ()
         self._non_differentiable: list[Tensor] = []
         self._extra: dict[str, object] = {}
@@ -156,13 +179,26 @@ class FunctionCtx:
         op's backward does, instead of handing ``backward`` the new values.
         Writes inside ``forward`` itself are fine — the version is taken
         once ``forward`` has returned.
+
+        Saving one of ``forward``'s own outputs is how ``backward`` reads
+        them, and it is safe: the output is held by the graph node rather
+        than by this context, so a call that runs no backward does not keep
+        it alive.  Such a call is freed by Python's cyclic garbage collector,
+        on its next pass, rather than the moment its last output is dropped.
+        Assigning a tensor to an attribute of the context (``ctx.out = y``)
+        has no such care taken of it — save tensors through this method.
         """
         self._saved_tensors = list(tensors)
 
-    def _record_saved_versions(
-        self, name: str, inputs: tuple[object, ...], returned: tuple[object, ...]
+    def _hold_saved(
+        self,
+        name: str,
+        inputs: tuple[object, ...],
+        returned: list[object],
+        on_node: list[Tensor],
+        carrier: _C_engine.FunctionCtx,
     ) -> None:
-        """Note each saved tensor's impl and version now that ``forward`` is done.
+        """Hand the saved tensors to the node's carrier now that it exists.
 
         Parameters
         ----------
@@ -170,22 +206,41 @@ class FunctionCtx:
             The ``Function`` subclass's name, for the error message.
         inputs : tuple of object
             ``forward``'s positional arguments.
-        returned : tuple of object
-            What ``forward`` returned, as a tuple.
+        returned : list of object
+            What ``forward`` returned, one entry per result.
+        on_node : list of Tensor
+            The tensors registered as the node's outputs.
+        carrier : FunctionCtx
+            The engine context the node owns (``_register``).
 
         Notes
         -----
-        Taken after ``forward`` — the reference framework saves at the same
-        point — so a ``forward`` that writes a tensor in place and then
-        returns it is not refused for its own write.
+        Each version is taken here, after ``forward`` — the reference
+        framework saves at the same point — so a ``forward`` that writes a
+        tensor in place and then returns it is not refused for its own
+        write.
+
+        Every saved impl goes to ``carrier``, and this context keeps no
+        reference to one of the node's outputs.  It used to keep the tensor
+        itself, which closed output → node → ``backward`` closure → context
+        → output: a cycle the engine's collector hooks see through only from
+        a node that a single output owns, so a ``forward`` saving two of its
+        outputs and running no backward was never freed (LCD-588).  Held by
+        the carrier, every output and their shared node sit in the one
+        region its hook reports, and the collector frees them together.
+        Plain refcounting would free them at once, as the reference's saved
+        variables do — that needs the node held weakly and re-attached on
+        read, which the engine cannot do yet (LCD-602).
         """
         input_impls = [_impl_of(a) for a in inputs]
         output_impls = [_impl_of(o) for o in returned]
-        record: list[_SavedEntry | None] = []
+        node_impls: list[_C_engine.TensorImpl | None] = [t._impl for t in on_node]
+        record: list[_Saved | Tensor] = []
+        held: list[_C_engine.TensorImpl] = []
         for i, t in enumerate(self._saved_tensors):
             impl = _impl_of(t)
             if impl is None:
-                record.append(None)
+                record.append(t)
                 continue
             # Named the way the engine names a node's input — "mul input 1" —
             # by the position the caller knows it under.
@@ -197,8 +252,14 @@ class FunctionCtx:
                 where = f"{name} output {j}"
             else:
                 where = f"{name} saved tensor {i}"
-            record.append((impl, impl.version, where))
+            own = _position(impl, node_impls) is not None
+            keep = t if isinstance(t, Tensor) and not own else None
+            record.append(_Saved(len(held), impl.version, where, keep))
+            held.append(impl)
+        carrier.save_for_backward(*held)
+        self._carrier = carrier
         self._saved_record = record
+        self._saved_tensors = []
 
     @property
     def saved_tensors(self) -> tuple[Tensor, ...]:
@@ -220,30 +281,35 @@ class FunctionCtx:
             Suppressed inside
             ``lucid.autograd.graph.allow_mutation_on_saved_tensors``.
         """
-        record = self._saved_record
-        check = record is not None and not _C_engine.is_mutation_on_saved_allowed()
+        record, carrier = self._saved_record, self._carrier
+        if record is None or carrier is None:
+            return tuple(
+                _wrap(t) if isinstance(t, _C_engine.TensorImpl) else t
+                for t in self._saved_tensors
+            )
+        check = not _C_engine.is_mutation_on_saved_allowed()
+        held = carrier.saved_tensors
         result: list[Tensor] = []
-        for i, t in enumerate(self._saved_tensors):
-            entry = record[i] if record is not None else None
-            if entry is None:
-                result.append(_wrap(t) if isinstance(t, _C_engine.TensorImpl) else t)
+        for entry in record:
+            if not isinstance(entry, _Saved):
+                result.append(entry)
                 continue
-            impl, version, where = entry
-            if check and impl.version != version:
+            impl = held[entry.slot]
+            if check and impl.version != entry.version:
                 # Worded as the engine's own ``check_version_match`` words it.
                 raise _C_engine.VersionMismatch(
-                    f"VersionMismatch ({where}): saved version {version} but "
-                    f"tensor is now at version {impl.version} (in-place "
-                    "mutation between forward and backward?)"
+                    f"VersionMismatch ({entry.where}): saved version "
+                    f"{entry.version} but tensor is now at version {impl.version} "
+                    "(in-place mutation between forward and backward?)"
                 )
             # What was saved is the impl, as for a built-in op: a write that
             # rebinds the Python tensor to a new impl (``t[i] = v`` on a
             # tensor that needs no grad) leaves the saved values where they
-            # were, and ``backward`` reads those, not the new ones.
-            if isinstance(t, Tensor) and t._impl is impl:
-                result.append(t)
-            else:
-                result.append(_wrap(impl))
+            # were, and ``backward`` reads those, not the new ones.  An
+            # output comes back as a new tensor over its impl, ``grad_fn``
+            # and all, so a second derivative still runs through the node.
+            t = entry.tensor
+            result.append(t if t is not None and t._impl is impl else _wrap(impl))
         return tuple(result)
 
     def mark_non_differentiable(self, *tensors: Tensor) -> None:
@@ -261,9 +327,14 @@ class FunctionCtx:
         ``requires_grad=False`` and no ``grad_fn``, and a compiled step
         sends no gradient through it either.  ``backward`` is still given a
         gradient for it — zeros — so its arguments keep one slot per
-        output.  Marking one of ``forward``'s inputs, returned as-is,
-        leaves the caller's tensor alone: what comes back is a new tensor
-        over the same storage.
+        output.  What comes back is a new tensor over the same storage, and
+        the tensor ``forward`` returned is left as it was: a marked input
+        returned as-is keeps the caller's ``requires_grad``, and a buffer
+        ``forward`` read from a module keeps its place there.
+
+        An output of a dtype that carries no gradient — bool or an integer
+        — is treated as marked without being named here, as the reference
+        framework treats it.
 
         Examples
         --------
@@ -315,16 +386,18 @@ class FunctionCtx:
 
 
 def _owned_outputs(
-    entries: list[object], ctx: FunctionCtx, inputs: list[Tensor]
+    entries: list[object], ctx: FunctionCtx
 ) -> tuple[list[object], list[Tensor], list[bool]]:
-    """``forward``'s results, with every marked one a tensor this call owns.
+    """``forward``'s results, with every non-differentiable one a new tensor.
 
-    A marked output is detached, which rebinds the tensor it is applied
-    to.  A tensor ``forward`` made is its own, and so is a view it took of
-    an input; one of the caller's inputs returned as-is is not, and is
-    replaced by the detached alias :meth:`Tensor.detach` hands out — a new
-    tensor over the same storage, as the reference hands back — so the
-    caller's tensor keeps its ``requires_grad``.
+    An output is non-differentiable when ``forward`` marked it, or when
+    its dtype carries no gradient — bool or an integer — as the reference
+    framework decides it.  Each comes back as the detached alias
+    :meth:`Tensor.detach` hands out: a new tensor over the same storage,
+    which a compiled step traces as a gradient sink.  The tensor
+    ``forward`` returned is left alone — a caller's input keeps its
+    ``requires_grad``, a module buffer its place — where detaching it in
+    place rebound whatever else held it.
 
     An unmarked input returned as-is is still handed back itself, with the
     node registered on it.  Neither alias the engine can make keeps both
@@ -339,18 +412,14 @@ def _owned_outputs(
         What ``forward`` returned, one entry per result.
     ctx : FunctionCtx
         The context ``forward`` filled in, with its marks.
-    inputs : list of Tensor
-        The caller's tensors: every tensor passed to ``apply``,
-        positionally or by keyword.
 
     Returns
     -------
     tuple
-        The entries with each marked input swapped for its alias, their
-        tensors in order, and whether each tensor was marked
+        The entries with each non-differentiable tensor swapped for its
+        alias, their tensors in order, and whether each tensor is
         non-differentiable.
     """
-    input_impls: list[_C_engine.TensorImpl | None] = [t._impl for t in inputs]
     marked_impls: list[_C_engine.TensorImpl | None] = [
         t._impl for t in ctx._non_differentiable
     ]
@@ -360,10 +429,12 @@ def _owned_outputs(
     for entry in entries:
         if isinstance(entry, Tensor):
             # Marks name what ``forward`` returned, so they are read before
-            # an input is swapped for its alias.
-            is_marked = _position(entry._impl, marked_impls) is not None
-            if is_marked and _position(entry._impl, input_impls) is not None:
-                entry = _wrap(entry._impl.data_alias())
+            # the output is swapped for its alias.
+            impl = entry._impl
+            named = _position(impl, marked_impls) is not None
+            is_marked = named or _promotion.is_integral(impl.dtype)
+            if is_marked:
+                entry = _wrap(impl.data_alias())
             marked.append(is_marked)
             tensors.append(entry)
         owned.append(entry)
@@ -375,14 +446,13 @@ def _wrap_outputs(
     klass: type,
     ctx: FunctionCtx,
     args: tuple[object, ...],
-    kwargs: dict[str, object],
     tracked: bool,
 ) -> object:
     """What ``apply`` hands back for what ``forward`` returned.
 
-    Detaching a marked output rebinds the tensor it is applied to, so it is
-    applied only to tensors this call owns (:func:`_owned_outputs`): a
-    marked input keeps its ``requires_grad``.
+    A non-differentiable output comes back as a new detached tensor
+    (:func:`_owned_outputs`).  When the call is tracked, the node is
+    registered and handed the saved tensors (:meth:`FunctionCtx._hold_saved`).
 
     Parameters
     ----------
@@ -395,9 +465,6 @@ def _wrap_outputs(
         The context ``forward`` filled in.
     args : tuple of object
         ``forward``'s positional arguments, the ones gradients go to.
-    kwargs : dict of str to object
-        ``forward``'s keyword arguments.  They receive no gradient, but a
-        tensor among them is the caller's as much as a positional one.
     tracked : bool
         Whether this call is recorded — grad mode is on and an input needs
         a gradient.
@@ -406,28 +473,35 @@ def _wrap_outputs(
     -------
     object
         ``output`` with each tensor entry settled: on the node when it is
-        differentiable and the call is tracked, detached when it was
-        marked non-differentiable.
+        differentiable and the call is tracked, a new detached tensor when
+        it is not differentiable.
     """
     is_tuple = isinstance(output, tuple)
-    tensor_inputs = [a for a in args if isinstance(a, Tensor)]
-    callers = tensor_inputs + [v for v in kwargs.values() if isinstance(v, Tensor)]
-    entries, tensors, marked = _owned_outputs(
-        list(output) if isinstance(output, tuple) else [output], ctx, callers
-    )
+    returned = list(output) if isinstance(output, tuple) else [output]
+    entries, tensors, marked = _owned_outputs(returned, ctx)
     if tracked and not all(marked):
-        # Every tensor output is on the node, a marked one too: ``backward``
-        # is handed one gradient per *tensor* output, zeros for a marked one.
-        on_node = tuple(tensors) if is_tuple else tensors[0]
+        # ``backward`` is handed one gradient per *tensor* output, zeros for
+        # a non-differentiable one.  Its slot goes to a stand-in alias that
+        # dies here, so neither what ``forward`` returned nor the detached
+        # tensor handed back gets the node.
+        slots = [
+            _wrap(t._impl.data_alias()) if is_marked else t
+            for t, is_marked in zip(tensors, marked, strict=True)
+        ]
         # Which positional arguments were tensors, so ``backward`` may
         # answer with one gradient per argument (``None`` for the rest).
         is_tensor_arg = [isinstance(a, Tensor) for a in args]
-        _register(on_node, klass, ctx, tensor_inputs, is_tensor_arg)  # type: ignore[arg-type]
-    for t, is_marked in zip(tensors, marked, strict=True):
-        # Whether or not it needs a gradient here: a compiled step traces the
-        # model under ``no_grad``, and only the detach tells it to stop.
-        if is_marked:
-            t.detach_()
+        carrier = _register(
+            tuple(slots) if is_tuple else slots[0],
+            klass,  # type: ignore[arg-type]
+            ctx,
+            [a for a in args if isinstance(a, Tensor)],
+            is_tensor_arg,
+        )
+        # ``backward`` will read the saved tensors now: note their versions,
+        # as a built-in op does when it saves its inputs, so a write in
+        # between is refused there.
+        ctx._hold_saved(klass.__name__, args, returned, slots, carrier)
     return tuple(entries) if is_tuple else entries[0]
 
 
@@ -443,7 +517,12 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
             isinstance(a, Tensor) and a.requires_grad for a in args
         )
 
-        output = klass.forward(ctx, *args, **kwargs)  # type: ignore[attr-defined]
+        # As the reference runs it: the node registered below is the graph,
+        # and one ``forward`` built itself was thrown away on every call — or,
+        # in an untracked call, kept, sending a gradient to whatever tensor
+        # ``forward`` closed over.
+        with _C_engine.NoGradGuard():
+            output = klass.forward(ctx, *args, **kwargs)  # type: ignore[attr-defined]
         if (tracer := _C_engine.compile.current_tracer()) is not None:
             # Imported here: ``lucid.compile`` imports this package.
             from lucid.compile._core.custom_backward import note_applied
@@ -451,15 +530,10 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
             note_applied(tracer, klass, args, output)
 
         tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
-        output = _wrap_outputs(output, klass, ctx, args, kwargs, tracked)
-        if tracked:
-            # The node exists now, so ``backward`` will read the saved
-            # tensors: note their versions, as a built-in op does when it
-            # saves its inputs, so a write in between is refused there.
-            returned = output if isinstance(output, tuple) else (output,)
-            ctx._record_saved_versions(klass.__name__, args, returned)
-
-        return cast(Tensor | tuple[Tensor, ...], output)
+        return cast(
+            Tensor | tuple[Tensor, ...],
+            _wrap_outputs(output, klass, ctx, args, tracked),
+        )
 
     return classmethod(apply)  # type: ignore[arg-type]
 
@@ -527,12 +601,17 @@ class Function(metaclass=FunctionMeta):
     bookkeeping autograd needs to call ``backward`` later — saved
     tensors plus per-input non-differentiable flags.
 
-    An input that ``forward`` returns as-is and marks non-differentiable —
-    passed positionally or by keyword — comes back as a new, detached
-    tensor over the same storage, and the caller's tensor keeps its
-    ``requires_grad``.  An unmarked one comes back as the same tensor, now
-    the node's output: where the reference framework hands back a view of
-    it, the caller's tensor here is no longer a leaf after the call.
+    ``forward`` runs with gradient recording off, as in the reference
+    framework: the node ``apply`` registers is the whole graph of the call,
+    and a tensor ``forward`` computes needs no gradient of its own.
+
+    An output that is non-differentiable — marked so, or of a bool or
+    integer dtype — comes back as a new, detached tensor over the same
+    storage, and the tensor ``forward`` returned is left as it was: an
+    input passed through keeps the caller's ``requires_grad``.  An unmarked
+    input returned as-is comes back as the same tensor, now the node's
+    output: where the reference framework hands back a view of it, the
+    caller's tensor here is no longer a leaf after the call.
 
     Each :py:class:`Function` defines a node in the computation graph
 
@@ -583,6 +662,11 @@ class Function(metaclass=FunctionMeta):
         during backward on ``ctx`` (via ``ctx.save_for_backward(...)``
         or by setting attributes like ``ctx.shape = x.shape``); do not
         capture tensors via closure.
+
+        It runs under ``no_grad``: ``lucid.is_grad_enabled()`` is ``False``
+        inside it and the tensors it computes record no graph.  A
+        ``forward`` that differentiates something itself does so inside
+        ``lucid.enable_grad()``.
 
         Parameters
         ----------

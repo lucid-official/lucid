@@ -185,7 +185,7 @@ def _register(
     py_ctx: object,
     tensor_inputs: list[Tensor],
     is_tensor_arg: Sequence[bool] | None = None,
-) -> None:
+) -> _C_engine.FunctionCtx:
     """
     Wire a Python backward function into the C++ autograd graph.
 
@@ -204,8 +204,12 @@ def _register(
     gradient ``backward`` returns is checked against its input — shape,
     dtype, device — before the engine sees it, in the eager, barrier and
     ``create_graph`` paths alike, since all three call ``backward_fn``.
+
+    Returns the engine context the node owns.  The engine needs it to be
+    non-null, and ``FunctionCtx._hold_saved`` keeps the saved tensors in
+    it: the collector's hook on it reaches the node through them, which a
+    Python-held saved output never let it do.
     """
-    # C++ FunctionCtx — used as a carrier; C++ engine needs it to be non-null
     cpp_ctx = _C_engine.FunctionCtx()
 
     name = f"{getattr(fn_class, '__name__', 'Function')}Backward"
@@ -248,3 +252,4 @@ def _register(
     _C_engine._register_python_backward_node(
         [t._impl for t in out_seq], node, impl_inputs
     )
+    return cpp_ctx
