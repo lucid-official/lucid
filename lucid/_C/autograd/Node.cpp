@@ -60,24 +60,28 @@ Node::Node() : sequence_nr_(next_sequence_nr()) {}
 // edge owns the node it points at, so dropping the last tensor of a chain of
 // N nodes destroyed N nodes nested one inside the next, a few stack frames
 // each: about 200,000 of them overflowed the main thread's stack (LCD-564),
-// and far fewer a worker thread's.  Now the outermost destructor on a thread
-// keeps a worklist, and every node destroyed while it runs — through an edge,
-// or through a tensor a node held whose grad_fn it was — hands its own edges
-// to that list instead of releasing them where it stands.  The members of a
-// derived node are gone by the time this body runs, so a tensor one of them
-// held has already dropped its grad_fn and the use counts read here are
-// final.  Python objects a node holds are released by its own destructor, as
-// before, under the GIL that destructor takes.
+// and some 10,000 a 512 KiB thread's.  Now the outermost destructor on a
+// thread keeps a worklist, and every node destroyed while it runs — through
+// an edge, or through a tensor, hook or Python object another node held —
+// hands its own edges to that list instead of releasing them where it stands.
+//
+// The edges are counted once the node holds nothing else: a derived node's
+// members are gone by the time this body runs, and the tensor hooks are
+// released here before the edges are read, the order the members were
+// destroyed in before, as a hook's closure may hold a tensor whose grad_fn an
+// edge points at.  Python objects are released by the destructor of the node
+// holding them, as before, under the GIL that destructor takes.
 Node::~Node() {
     if (next_edges_.empty())
         return;
-    if (PendingNodes* running = t_pending) {
-        defer_release(next_edges_, *running);
-        return;
-    }
+    PendingNodes* const running = t_pending;
     PendingNodes pending;
-    t_pending = &pending;
-    defer_release(next_edges_, pending);
+    if (running == nullptr)
+        t_pending = &pending;
+    release_tensor_hooks();
+    defer_release(next_edges_, running != nullptr ? *running : pending);
+    if (running != nullptr)
+        return;
     while (!pending.empty()) {
         std::shared_ptr<Node> node = std::move(pending.back());
         pending.pop_back();
