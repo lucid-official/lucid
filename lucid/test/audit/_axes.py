@@ -580,10 +580,6 @@ NOT_DIFFERENTIABLE: dict[str, str] = {
     "lucid.from_numpy": "constructs a new leaf from an array",
     "lucid.tensor": "constructs a new leaf from data",
     "lucid.heaviside": "a step function the reference defines no derivative for",
-    # Float-valued only because this axis rebuilds its primary as a float
-    # and Lucid truncates one where the reference refuses it.
-    "lucid.gcd": "integer-valued: the reference defines it on integers only",
-    "lucid.lcm": "integer-valued: the reference defines it on integers only",
     "lucid.nn.utils.clip_grad_norm": "rescales .grad in place; the norm is bookkeeping",
     "lucid.nn.utils.get_total_norm": "a norm of .grad tensors, read after backward",
     "lucid.utils.transforms.functional.posterize": "bit-level quantisation of pixel values",

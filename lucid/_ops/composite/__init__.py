@@ -20,6 +20,7 @@ Categories (one file each):
 * ``constants`` — ``pi`` / ``e`` / ``inf`` / ``nan`` / ``newaxis``.
 * ``statistics`` — ``quantile`` / ``nanquantile`` / ``cov`` / ``corrcoef`` / ``cdist`` / ``bincount`` / ``multinomial``.
 * ``indexing`` — ``index_fill`` / ``index_add`` / ``index_copy`` / ``scatter_reduce`` / ``masked_scatter``.
+* ``integer`` — ``gcd`` / ``lcm``, on integer tensors only.
 * ``spectral`` — ``stft`` / ``istft`` and the ``*_window`` factories, which forward to ``lucid.signal.windows``.
 
 The single source of truth for "which composite names get re-exported
@@ -37,6 +38,7 @@ from lucid._ops.composite import (
     dtype,
     statistics,
     indexing,
+    integer,
     complex as complex_mod,
     spectral,
 )
@@ -55,6 +57,7 @@ _SUBMODULES = (
     dtype,
     statistics,
     indexing,
+    integer,
     complex_mod,
     spectral,
 )

@@ -1026,7 +1026,6 @@
    },
    "file-loc-over-cap": {
     "lucid/_ops/_adapters.py": 51,
-    "lucid/_ops/composite/elementwise.py": 33,
     "lucid/_tensor/_dunders.py": 228,
     "lucid/_tensor/tensor.py": 2510,
     "lucid/compile/_optim/compiler.py": 779,
@@ -1055,9 +1054,6 @@
    "noqa[F401]": {
     "lucid/_dispatch.py": 1,
     "lucid/distributions/bernoulli.py": 1
-   },
-   "type-ignore-bare": {
-    "lucid/__init__.py": 6
    },
    "type-ignore[arg-type]": {
     "lucid/__init__.py": 3,
@@ -1297,7 +1293,7 @@
     "lucid/_factories/creation.py": 4,
     "lucid/_factories/random.py": 3,
     "lucid/_ops/composite/blas.py": 2,
-    "lucid/_ops/composite/elementwise.py": 4,
+    "lucid/_ops/composite/elementwise.py": 3,
     "lucid/_ops/composite/predicates.py": 2,
     "lucid/_ops/composite/shape.py": 4,
     "lucid/_ops/composite/statistics.py": 1,
@@ -2251,9 +2247,6 @@
     "lucid/nn/functional/positional.py": 1,
     "lucid/nn/init.py": 1
    },
-   "PGH003": {
-    "lucid/__init__.py": 6
-   },
    "PIE790": {
     "lucid/_tensor/tensor.py": 2,
     "lucid/nn/module.py": 1,
@@ -2446,7 +2439,6 @@
     "lucid/diffeq/_multistep.py": 1
    },
    "UP035": {
-    "lucid/__init__.py": 1,
     "lucid/_ops/_adapters.py": 1,
     "lucid/_ops/_registry.py": 1,
     "lucid/_ops/composite/reductions.py": 1,

@@ -236,6 +236,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid._ops.composite.dtype": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.elementwise": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.indexing": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid._ops.composite.integer": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.predicates": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.reductions": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.shape": (("Tensor", "lucid._tensor.tensor", "Tensor"),),

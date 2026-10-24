@@ -22,8 +22,8 @@ from lucid.test.audit._result import Status
 
 
 def _pair(name: str) -> tuple[_surface.Symbol, _surface.Symbol]:
-    """The method and the free function, built directly: ``lucid.gcd`` is
-    not in ``lucid.__all__``, so the surface walk does not reach it."""
+    """The method and the free function, built directly rather than found
+    by a walk of the whole surface."""
     method = _surface.Symbol(
         f"Tensor.{name}", "tensor", "method", inspect.getattr_static(Tensor, name)
     )
@@ -56,5 +56,6 @@ def test_a_twin_gets_the_free_functions_verdict(
     want = axis.run(free, ctx)
     assert (got.status, got.detail) == (want.status, want.detail)
     # Equal is not enough: ``lucid.gcd`` failed the gradient axis exactly
-    # as its twin did until the table said why it has no derivative.
+    # as its twin did while it truncated the float probe; it refuses one
+    # now, and the axis files that as unsupported.
     assert got.status != Status.FAIL, got.detail

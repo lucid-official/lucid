@@ -1340,60 +1340,6 @@ def frexp(input: Tensor) -> tuple[Tensor, Tensor]:
     return (m.to(dtype=orig_dtype) if orig_dtype != work_dtype else m), e
 
 
-# ── Integer math (non-differentiable) ────────────────────────────────────
-
-
-def _per_element(fn: Callable[[int, int], int], input: Tensor, other: Tensor) -> Tensor:
-    """``fn`` of each pair of same-shape integer elements, through Python."""
-    a, b = input.clone().reshape(-1), other.clone().reshape(-1)
-    result = [fn(int(a[i].item()), int(b[i].item())) for i in range(int(a.shape[0]))]
-    return lucid.tensor(result, dtype=input.dtype, device=input.device).reshape(
-        input.shape
-    )
-
-
-def gcd(input: Tensor, other: Tensor) -> Tensor:
-    """Element-wise greatest common divisor for integer tensors.
-
-    Falls through to Python's ``math.gcd`` per element — the engine
-    has no native GCD kernel and this path is for low-rate utility use
-    (e.g. shape arithmetic), not hot-loop computation.  Non-differentiable.
-
-    Parameters
-    ----------
-    input, other : Tensor
-        Same-shape integer tensors.
-
-    Returns
-    -------
-    Tensor
-        Same shape and dtype as ``input``.  Each element is
-        ``math.gcd(input_i, other_i)``.
-    """
-    return _per_element(math.gcd, input, other)
-
-
-def lcm(input: Tensor, other: Tensor) -> Tensor:
-    """Element-wise least common multiple for integer tensors.
-
-    Same implementation strategy as :func:`gcd` — pure-Python per
-    element via ``math.lcm``, intended for utility use only.
-    Non-differentiable.
-
-    Parameters
-    ----------
-    input, other : Tensor
-        Same-shape integer tensors.
-
-    Returns
-    -------
-    Tensor
-        Same shape and dtype as ``input``.  Each element is
-        ``math.lcm(input_i, other_i)``.
-    """
-    return _per_element(math.lcm, input, other)
-
-
 # ── Log-gamma and Digamma ─────────────────────────────────────────────────
 
 
@@ -1516,8 +1462,6 @@ __all__ = [
     "copysign",
     "ldexp",
     "frexp",
-    "gcd",
-    "lcm",
     "lgamma",
     "digamma",
     "i0",

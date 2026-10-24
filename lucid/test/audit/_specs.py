@@ -615,6 +615,20 @@ def _bitwise(name: str, domain: str) -> Iterator[Call]:
     yield Call([a, 2], {}, 0, "bitwise(int, scalar)")
 
 
+def _integer_pair(name: str, domain: str) -> Iterator[Call]:
+    """``gcd`` / ``lcm``: two integer tensors, as the reference defines them.
+
+    A float probe is refused at the boundary, and so is a Python number —
+    the reference takes no scalar ``other`` for these — so neither is
+    built.  The second call broadcasts a row against the full operand.
+    """
+    a = _probe.as_int(_probe.rng(1).integers(1, 30, _probe.SHAPE))
+    b = _probe.as_int(_probe.rng(2).integers(1, 12, _probe.SHAPE))
+    row = _probe.as_int(_probe.rng(3).integers(1, 12, _probe.SHAPE[-1:]))
+    yield Call([a, b], {}, 0, f"{name}(int, int)")
+    yield Call([a, row], {}, 0, f"{name}(int, int row)")
+
+
 def _factory(name: str, domain: str) -> Iterator[Call]:
     """Constructors take a shape or a range, never an input tensor.
 
@@ -1171,6 +1185,7 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
     ),
     (r"^(addbmm|baddbmm|addmm|addmv|addr|addcmul|addcdiv|lerp)$", _ternary),
     (r"^bitwise_|^invert$", _bitwise),
+    (r"^gcd_?$|^lcm_?$", _integer_pair),
     (
         r"^(arange|linspace|logspace|eye|full|new_full|empty|zeros|ones|rand|randn|"
         r"randint|randperm|normal|bernoulli|meshgrid|cartesian_prod|vander|"
