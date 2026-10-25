@@ -43,6 +43,7 @@ Notes
 
 from typing import Callable, cast, final, override
 
+from lucid._engine_scope import untraced
 from lucid._factories.creation import zeros
 from lucid._factories.random import get_rng_state, set_rng_state
 from lucid._tensor.tensor import Tensor
@@ -73,6 +74,78 @@ def _roots_and_seeds(
         roots.append(out)
         seeds.append(seed)
     return roots, seeds
+
+
+def _make_checkpoint_fn(
+    fn: Callable[..., Tensor | tuple[Tensor, ...]],
+    kw: dict[str, object],
+    n_args: int,
+    n_inputs: int,
+    preserve_rng_state: bool,
+) -> type[Function]:
+    """Build the per-call :class:`Function` subclass for :func:`checkpoint`."""
+
+    @final
+    class _CheckpointFn(Function):
+        _once_differentiable = True  # second derivatives through it are unverified
+        _exact_derivative = True  # backward differentiates a re-run of ``fn``
+
+        @override
+        @staticmethod
+        def forward(ctx: FunctionCtx, *inputs: Tensor) -> Tensor | tuple[Tensor, ...]:
+            real = inputs[:n_args]
+            ctx.save_for_backward(*real)
+            # The segment runs twice, and the second run has to draw what
+            # the first drew — or a dropout inside it masks different units
+            # and the gradient belongs to a different network.  Reading the
+            # stream state is eager-backward bookkeeping, not an op of ``fn``.
+            with untraced():
+                ctx.rng_state = get_rng_state() if preserve_rng_state else None
+            # Run without tracking so intermediate activations are NOT stored.
+            with no_grad():
+                output = fn(*real, **kw)
+            return output
+
+        @override
+        @staticmethod
+        def backward(
+            ctx: FunctionCtx, *grad_outputs: Tensor
+        ) -> tuple[Tensor | None, ...]:
+            inputs = ctx.saved_tensors
+
+            # Detach inputs so the re-run doesn't accumulate into their .grad
+            # before we collect the fresh gradients below.
+            detached = tuple(t.detach().requires_grad_(t.requires_grad) for t in inputs)
+
+            # Re-run the forward segment to rebuild the local graph.  Anything
+            # the segment closed over — module parameters, most often — is
+            # part of that graph and accumulates through the backward below.
+            saved_state = cast(Tensor | None, ctx.rng_state)
+            resume = get_rng_state() if saved_state is not None else None
+            if saved_state is not None:
+                set_rng_state(saved_state)
+            try:
+                with enable_grad():
+                    output = fn(*detached, **kw)
+            finally:
+                if resume is not None:
+                    set_rng_state(resume)
+
+            # Backward through the re-computed graph, every output seeded
+            # with its own gradient.
+            roots, seeds = _roots_and_seeds(output, grad_outputs)
+            if roots:
+                from lucid.autograd._backward import backward
+
+                backward(roots, seeds)
+
+            grads: tuple[Tensor | None, ...] = tuple(
+                t.grad if t.requires_grad else None for t in detached
+            )
+            # Trailing ``None`` for the anchor, when one was added.
+            return grads if n_inputs == n_args else grads + (None,)
+
+    return _CheckpointFn
 
 
 def checkpoint(
@@ -131,73 +204,16 @@ def checkpoint(
     >>> x.grad
     tensor([[1., 0.]])
     """
-    fn = function
-    kw = kwargs
     n_args = len(args)
     # Non-reentrant mode appends one extra input (see below), so backward
     # has to know how many gradients the caller is actually owed.
     n_inputs = n_args if use_reentrant else n_args + 1
-
-    @final
-    class _CheckpointFn(Function):
-        _once_differentiable = True  # second derivatives through it are unverified
-        _exact_derivative = True  # backward differentiates a re-run of ``fn``
-
-        @override
-        @staticmethod
-        def forward(ctx: FunctionCtx, *inputs: Tensor) -> Tensor | tuple[Tensor, ...]:
-            real = inputs[:n_args]
-            ctx.save_for_backward(*real)
-            # The segment runs twice, and the second run has to draw what
-            # the first drew — or a dropout inside it masks different units
-            # and the gradient belongs to a different network.
-            ctx.rng_state = get_rng_state() if preserve_rng_state else None
-            # Run without tracking so intermediate activations are NOT stored.
-            with no_grad():
-                output = fn(*real, **kw)
-            return output
-
-        @override
-        @staticmethod
-        def backward(
-            ctx: FunctionCtx, *grad_outputs: Tensor
-        ) -> tuple[Tensor | None, ...]:
-            inputs = ctx.saved_tensors
-
-            # Detach inputs so the re-run doesn't accumulate into their .grad
-            # before we collect the fresh gradients below.
-            detached = tuple(t.detach().requires_grad_(t.requires_grad) for t in inputs)
-
-            # Re-run the forward segment to rebuild the local graph.  Anything
-            # the segment closed over — module parameters, most often — is
-            # part of that graph and accumulates through the backward below.
-            saved_state = cast(Tensor | None, ctx.rng_state)
-            resume = get_rng_state() if saved_state is not None else None
-            if saved_state is not None:
-                set_rng_state(saved_state)
-            try:
-                with enable_grad():
-                    output = fn(*detached, **kw)
-            finally:
-                if resume is not None:
-                    set_rng_state(resume)
-
-            # Backward through the re-computed graph, every output seeded
-            # with its own gradient.
-            roots, seeds = _roots_and_seeds(output, grad_outputs)
-            if roots:
-                from lucid.autograd._backward import backward
-
-                backward(roots, seeds)
-
-            grads: tuple[Tensor | None, ...] = tuple(
-                t.grad if t.requires_grad else None for t in detached
-            )
-            # Trailing ``None`` for the anchor, when one was added.
-            return grads if n_inputs == n_args else grads + (None,)
+    checkpoint_fn = _make_checkpoint_fn(
+        function, kwargs, n_args, n_inputs, preserve_rng_state
+    )
 
     if use_reentrant:
-        return cast(Tensor | tuple[Tensor, ...], _CheckpointFn.apply(*args))
+        return cast(Tensor | tuple[Tensor, ...], checkpoint_fn.apply(*args))
 
     # ── non-reentrant ────────────────────────────────────────────────────
     # The reentrant form derives the output's ``requires_grad`` from its
@@ -211,9 +227,11 @@ def checkpoint(
     # Passing a trainable scalar the segment never reads is enough to keep
     # the node in the graph.  Its own gradient is discarded; what matters is
     # that backward fires, the segment is recomputed under ``enable_grad``,
-    # and the closed-over parameters accumulate.
-    anchor = zeros(1, requires_grad=True)
-    return cast(Tensor | tuple[Tensor, ...], _CheckpointFn.apply(*args, anchor))
+    # and the closed-over parameters accumulate.  Allocated untraced so a
+    # compile recording never sees the CPU anchor op.
+    with untraced():
+        anchor = zeros(1, requires_grad=True)
+    return cast(Tensor | tuple[Tensor, ...], checkpoint_fn.apply(*args, anchor))
 
 
 __all__ = ["checkpoint"]
