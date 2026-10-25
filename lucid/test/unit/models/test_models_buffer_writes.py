@@ -120,18 +120,7 @@ def _fused(model: lucid.nn.Module) -> _Entry:
 #: expected to have compiled the step rather than run it eagerly.
 _ENTRIES = [
     pytest.param(_make, id="make_step"),
-    pytest.param(
-        _fused,
-        id="fused_step",
-        marks=pytest.mark.xfail(
-            strict=True,
-            raises=AssertionError,
-            reason=(
-                "LCD-607: fused_step's eager fallback draws other numbers than "
-                "eager on every call, so the losses part however the buffers do"
-            ),
-        ),
-    ),
+    pytest.param(_fused, id="fused_step"),
 ]
 
 
@@ -157,12 +146,10 @@ def test_a_compiled_realnvp_step_keeps_the_running_statistics(
         )
 
     lucid.manual_seed(0)
-    compiled, eager = build(), build()
+    compiled = build()
+    lucid.manual_seed(0)
+    eager = build()
     step, compiled_it = entry(compiled)
-    # LCD-607: the tracing call draws other numbers than eager does (the
-    # dequantisation noise), so it is taken first and the two start after it.
-    step(lucid.rand(2, 3, 8, 8, device=device_gpu_only))
-    eager.load_state_dict(compiled.state_dict())
     before = _running(eager)
 
     for index in range(3):

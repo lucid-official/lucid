@@ -139,7 +139,6 @@ def test_every_call_draws_afresh() -> None:
 def test_compiled_call_is_bit_identical_to_eager() -> None:
     model, x = _model(), _x()
     compiled = lucid.compile(model)
-    compiled(x)  # trace
     for seed in (5, 6):
         lucid.manual_seed(seed)
         got_h, got_noise = (t.numpy() for t in compiled(x))
@@ -163,7 +162,6 @@ def test_make_step_draws_like_eager() -> None:
         return (out[0] * out[0]).sum()
 
     step = lucid.compile.make_step(model, loss_fn)
-    step(x).backward()  # trace
     for seed in (7, 8):
         for p in model.parameters():
             p.grad = None
@@ -223,8 +221,6 @@ def test_rng_draw_with_view_taken_redraws_like_eager() -> None:
         return (out * out).mean()
 
     step = lucid.compile.make_step(model, loss_fn)
-    step(x).backward()  # trace
-    assert not step.eager_only
 
     for seed in (7, 8):
         for p in model.parameters():
@@ -244,3 +240,4 @@ def test_rng_draw_with_view_taken_redraws_like_eager() -> None:
         assert np.allclose(got.item(), want.item(), rtol=1e-5)
         for g, w in zip(got_grads, want_grads):
             assert np.allclose(g, w, rtol=1e-4, atol=1e-5)
+    assert not step.eager_only

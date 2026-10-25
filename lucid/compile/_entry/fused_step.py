@@ -517,7 +517,7 @@ class _FusedStep:
         # tensors it was traced with: after a ``.half()`` / ``.float()`` round
         # trip or an ``assign=True`` load on any module of the tree, it went on
         # training the old ones (LCD-505).
-        self._fingerprint = ParamFingerprint(model, on_replaced=self.recompile)
+        self._fingerprint = ParamFingerprint(model, on_replaced=self._plans.clear)
         # Per-call args stash so positional resolvers can pick them up.
         self._current_args: tuple[Tensor, ...] = ()
         # This call's packed scalar vectors (read by their resolvers).
@@ -581,9 +581,7 @@ class _FusedStep:
         if copt._params is not self._params_seen:
             # ``add_param_group`` re-flattened the parameters.
             self._params_seen = copt._params
-            self._plans.clear()
-            self._eager_only.clear()
-            self._reachable = None
+            self.recompile()
         if model_has_active_hooks(self._model) or tensors_have_active_hooks(leaves):
             return self._run_eager(args)
         flags = copt._flags_now()
@@ -607,12 +605,14 @@ class _FusedStep:
     ) -> Tensor:
         """Build a new fused plan and execute its first run, or fall back to eager."""
         from lucid.compile._core.fallback import _fallback_notice
+        from lucid.compile._core.trace_context import compile_attempt
 
         copt = self._copt
         prev_init = list(copt._initialized)
         prev_pstate = [dict(d) for d in copt._pstate]
         try:
-            plan = self._build_plan(args, flags)
+            with compile_attempt():
+                plan = self._build_plan(args, flags)
             self._refresh_scaler_scalars()
             result = self._run(plan, args, flags)
         except (RuntimeError, NotImplementedError) as why:
@@ -755,18 +755,17 @@ class _FusedStep:
         from lucid._dispatch import _unwrap
 
         params = self._copt._params
-        if self._reachable is None:
-            loss_tid = tracer.lookup_id(_unwrap(loss_for_bwd))
-            if loss_tid is None:
-                raise RuntimeError("fused_step: loss missing from trace")
-            ancestors = _loss_ancestors(tracer.graph, int(loss_tid))
-            reachable = {
-                i
-                for i, p in enumerate(params)
-                if (tid := tracer.lookup_id(_unwrap(p))) is not None
-                and int(tid) in ancestors
-            }
-            self._reachable = frozenset(reachable)
+        loss_tid = tracer.lookup_id(_unwrap(loss_for_bwd))
+        if loss_tid is None:
+            raise RuntimeError("fused_step: loss missing from trace")
+        ancestors = _loss_ancestors(tracer.graph, int(loss_tid))
+        reachable = {
+            i
+            for i, p in enumerate(params)
+            if (tid := tracer.lookup_id(_unwrap(p))) is not None
+            and int(tid) in ancestors
+        }
+        self._reachable = frozenset(reachable)
         members = self._members()
         if not members:
             raise RuntimeError(
@@ -836,10 +835,10 @@ class _FusedStep:
         *,
         scaler_enabled: bool,
     ) -> _FusedTrace:
-        """Trace forward + loss + optimizer update under ``no_grad()``."""
+        """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
-        from lucid.compile import _tracing
         from lucid.compile._core.buffer_writes import refuse
+        from lucid.compile._core.trace_context import recording
 
         copt = self._copt
         params = copt._params
@@ -847,7 +846,7 @@ class _FusedStep:
 
         _tls.active = True
         try:
-            with no_grad(), _tracing(watch=args, module=self._model) as tracer:
+            with recording(watch=args, module=self._model) as tracer:
                 try:
                     out = self._model(*args[:1])
                     loss = self._loss_fn(out, *args[1:])
@@ -858,26 +857,29 @@ class _FusedStep:
                         loss_for_bwd = loss
 
                     members = self._resolve_members(tracer, loss_for_bwd)
-                    with _untraced(tracer):
-                        for i in members:
-                            copt._activate(i, flags, groups)
-                        ghost_grads = {i: _zeros_like(params[i]) for i in members}
-                        layout = copt._new_layout(members, False, flags)
-                        vectors = copt._trace_vectors(layout)
+                    with no_grad():
+                        with _untraced(tracer):
+                            for i in members:
+                                copt._activate(i, flags, groups)
+                            ghost_grads = {i: _zeros_like(params[i]) for i in members}
+                            layout = copt._new_layout(members, False, flags)
+                            vectors = copt._trace_vectors(layout)
 
-                    found_inf_f32: Tensor | None = None
-                    if scaler_enabled:
-                        opt_outputs, slots, found_inf_f32 = self._emit_scaled_update(
-                            ghost_grads,
-                            layout,
-                            vectors,
-                            flags,
-                            loss_for_bwd,
-                        )
-                    else:
-                        opt_outputs, slots = copt._emit(
-                            members, ghost_grads, layout, vectors, flags, False
-                        )
+                        found_inf_f32: Tensor | None = None
+                        if scaler_enabled:
+                            opt_outputs, slots, found_inf_f32 = (
+                                self._emit_scaled_update(
+                                    ghost_grads,
+                                    layout,
+                                    vectors,
+                                    flags,
+                                    loss_for_bwd,
+                                )
+                            )
+                        else:
+                            opt_outputs, slots = copt._emit(
+                                members, ghost_grads, layout, vectors, flags, False
+                            )
                 finally:
                     refuse(tracer)
         finally:
@@ -1113,7 +1115,11 @@ class _FusedStep:
 
         scaler_enabled = self._ensure_scaler_holders()
         before = self._fingerprint.outside_slots()
-        traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
+        try:
+            traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
+        except BaseException:
+            self._fingerprint.settle((), before)
+            raise
         self._fingerprint.settle(outside_feeds(traced.tracer), before)
         bn_counters = bn_counter_targets(self._model, traced.graph, traced.ext)
         if not traced.graph.ops:

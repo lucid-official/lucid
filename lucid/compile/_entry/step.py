@@ -455,11 +455,14 @@ def _make_monolithic_step(
 
         entry = cache.get(key) if key is not None else None
         if entry is None:
-            before = fingerprint.outside_slots()
-            entry = _compile_step_entry(
-                model, loss_fn, params, x_args, use_dynamic=use_dynamic
-            )
-            fingerprint.settle(() if entry is None else entry.fed, before)
+            from lucid.compile._core.trace_context import compile_attempt
+
+            with compile_attempt():
+                before = fingerprint.outside_slots()
+                entry = _compile_step_entry(
+                    model, loss_fn, params, x_args, use_dynamic=use_dynamic
+                )
+                fingerprint.settle(() if entry is None else entry.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})
             if entry is None:
@@ -594,19 +597,19 @@ def _trace_step(
     loss_fn: Callable[..., Tensor],
     x_args: tuple[Tensor, ...],
 ) -> tuple[Tracer, Tensor] | None:
-    """Trace ``model`` + ``loss_fn`` under :func:`no_grad`, declining on tensor hooks."""
-    from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _tracing
-    from lucid.compile._core.fallback import _fallback_notice
+    """Trace ``model`` + ``loss_fn`` in the caller's grad mode, declining on tensor hooks."""
+    from lucid.compile._core.trace_context import (
+        notice_if_tensor_hook_error,
+        recording,
+    )
 
     try:
-        with no_grad(), _tracing(watch=x_args, module=model) as tracer:
+        with recording(watch=x_args, module=model) as tracer:
             x_out = model(*x_args[:1])
             loss_t = loss_fn(x_out, *x_args[1:])
     except RuntimeError as why:
-        if "register_hook" not in str(why):
+        if not notice_if_tensor_hook_error(why):
             raise
-        _fallback_notice("tensor-hook", str(why))
         return None
     if not tracer.graph.ops:
         return None

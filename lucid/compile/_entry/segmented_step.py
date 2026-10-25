@@ -219,17 +219,19 @@ class _Segment:
 def _trace_segment_fn(
     watch: tuple[object, ...], fn: Callable[[], Tensor]
 ) -> tuple[Tracer, Tensor] | None:
-    """Trace *fn* under ``no_grad()``, returning ``None`` on a tensor hook or empty graph."""
-    from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _tracing
+    """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph."""
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
     from lucid.compile._core.buffer_writes import refuse
+    from lucid.compile._core.trace_context import (
+        notice_if_tensor_hook_error,
+        recording,
+    )
 
     try:
-        with no_grad(), _tracing(watch=watch) as tracer:
+        with recording(watch=watch) as tracer:
             out = fn()
     except RuntimeError as why:
-        if "register_hook" not in str(why):
+        if not notice_if_tensor_hook_error(why):
             raise
         return None
     if not tracer.graph.ops:
@@ -252,6 +254,29 @@ def _grad_targets(x: Tensor, x_id: int, param_ids: list[int]) -> list[int]:
     return param_ids
 
 
+def _lower_segment_forward(
+    tracer: Tracer, y_id: int, grad_target_ids: list[int]
+) -> CompiledExecutable | None:
+    """A segment's forward executable, or ``None`` when it cannot be compiled."""
+    from lucid.compile._core.custom_backward import (
+        CustomBackwardInTrace,
+        refuse_custom_backward,
+    )
+    from lucid.compile._core.fallback import _fallback_notice
+
+    try:
+        refuse_custom_backward(tracer, y_id, grad_target_ids)
+        return _C_engine.compile.compile_or_cached(
+            tracer.graph, dict(tracer.external_feeds), False, [], [y_id]
+        )
+    except CustomBackwardInTrace as why:
+        _fallback_notice("custom-backward", str(why))
+        return None
+    except RuntimeError as why:
+        _fallback_notice("lowering", str(why))
+        return None
+
+
 def _lower_segment_backward(
     tracer: Tracer, loss_id: int, grad_target_ids: list[int]
 ) -> CompiledExecutable | None:
@@ -270,8 +295,9 @@ def _lower_segment_backward(
     except CustomBackwardInTrace as why:
         _fallback_notice("custom-backward", str(why))
         return None
-    except RuntimeError:
-        return None  # another lowering failure: the step runs eagerly, as it did
+    except RuntimeError as why:
+        _fallback_notice("lowering", str(why))
+        return None
 
 
 def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
@@ -292,7 +318,6 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     if traced_fwd is None:
         return None
     t_fwd, y = traced_fwd
-    g_fwd = t_fwd.graph
     ext_fwd = t_fwd.external_feeds
     # The segment's output, not whatever op it recorded last.
     found = t_fwd.lookup_id(_unwrap(y))
@@ -312,12 +337,9 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     if fwd_param_ids is None:
         return None
 
-    try:
-        fwd_exe = _C_engine.compile.compile_or_cached(
-            g_fwd, dict(ext_fwd), False, [], [y_id]
-        )
-    except RuntimeError:
-        return None
+    fwd_exe = _lower_segment_forward(
+        t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids)
+    )
     if fwd_exe is None:
         return None
 
@@ -383,13 +405,29 @@ def _compile_into(
 ) -> _SegCompiled:
     """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
     traces read; raise :class:`_SegmentCompileError` if it does not compile."""
-    before = fingerprint.outside_slots()
-    compiled = _compile_segment(seg, x)
-    fingerprint.settle(() if compiled is None else compiled.fed, before)
+    from lucid.compile._core.trace_context import compile_attempt
+
+    with compile_attempt():
+        before = fingerprint.outside_slots()
+        compiled = _compile_segment(seg, x)
+        fingerprint.settle(() if compiled is None else compiled.fed, before)
     if compiled is None:
         raise _SegmentCompileError(seg.index)
     seg.cache[_sig(x, fingerprint)] = compiled
     return compiled
+
+
+def _forward_segments(
+    seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint
+) -> Tensor:
+    """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``."""
+    for seg in seg_objs:
+        compiled = seg.cache.get(_sig(cur, fingerprint))
+        if compiled is None:
+            compiled = _compile_into(seg, cur, fingerprint)
+        holder: list[object] = [compiled]
+        cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+    return cur
 
 
 @final
@@ -541,7 +579,6 @@ def make_segmented_step(
         path.
     """
     import lucid.nn as nn
-    from lucid._tensor.tensor import Tensor
     from lucid.compile._core.signature import (
         ParamFingerprint,
         leaf_tensors,
@@ -594,15 +631,13 @@ def make_segmented_step(
         # exes must run to know the next segment's input shape, so compile +
         # forward are interleaved.  Each segment is an autograd node;
         # ``loss.backward()`` later unwinds them in reverse.
-        cur = x_args[0]
+        from lucid._factories._generator import _restore_stream_states, _stream_states
+
+        rng_before = _stream_states()
         try:
-            for seg in seg_objs:
-                compiled = seg.cache.get(_sig(cur, fingerprint))
-                if compiled is None:
-                    compiled = _compile_into(seg, cur, fingerprint)
-                holder: list[object] = [compiled]
-                cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+            cur = _forward_segments(seg_objs, x_args[0], fingerprint)
         except _SegmentCompileError:
+            _restore_stream_states(rng_before)
             eager_only["flag"] = True
             return _run_eager(x_args)
 
@@ -781,9 +816,12 @@ def make_autoseg_step(
 
     def step(*x_args: Tensor) -> Tensor:
         """Run one training step, selecting the segment count on first call."""
+        from lucid.compile._core.trace_context import compile_attempt
+
         sel = state.get("step")
         if sel is None:
-            sel = _select(x_args)
+            with compile_attempt():
+                sel = _select(x_args)
             state["step"] = sel
         return cast(Callable[..., Tensor], sel)(*x_args)
 

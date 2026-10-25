@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - keep tracked exact-derivative Function calls compiled and classify every Function (LCD-570)
 - expect tracked checkpoint passthrough to compile on Metal (LCD-570)
 - trace CompiledModule forward in caller grad mode (LCD-580, LCD-607, LCD-626)
+- record training traces in caller's grad mode (LCD-580, LCD-607)
 
 ---
 
