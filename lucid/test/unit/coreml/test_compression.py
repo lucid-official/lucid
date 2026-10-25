@@ -134,7 +134,7 @@ class TestTheKeysSurviveTheTrip:
         """
         lucid.manual_seed(0)
         groups, width = 5, 200
-        palettes = lucid.sort(lucid.randn(groups, count), dim=-1)
+        palettes = lucid.sort(lucid.randn(groups, count), dim=-1).values
         values = lucid.randn(groups, width) * 2
         got = _build._assign(values, _build._edge_table(palettes), count).tolist()
 

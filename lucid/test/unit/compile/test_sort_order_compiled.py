@@ -75,7 +75,7 @@ def test_topk(dtype: str, k: int, dim: int) -> None:
 @pytest.mark.parametrize("dtype", list(DTYPES))
 def test_sort_and_argsort(dtype: str, dim: int) -> None:
     x = _rows(DTYPES[dtype])
-    _same(lambda t: lucid.sort(t, dim=dim) * 1, x)
+    _same(lambda t: tuple(o * 1 for o in lucid.sort(t, dim=dim)), x)
     _same(lambda t: lucid.argsort(t, dim=dim) * 1, x)
     _same(lambda t: lucid.argsort(t, dim=dim, descending=True) * 1, x)
 
@@ -97,7 +97,7 @@ def test_compiling_the_order_prints_no_mps_warning(
     x = _rows(FLOATS[dtype])
     capfd.readouterr()
     _same(lambda t: lucid.argsort(t) * 1, x)
-    _same(lambda t: lucid.sort(t) * 1, x)
+    _same(lambda t: tuple(o * 1 for o in lucid.sort(t)), x)
     _same(lambda t: tuple(o * 1 for o in lucid.topk(t, 3)), x)
     out, err = capfd.readouterr()
     assert "mps_equal" not in out + err
@@ -118,7 +118,7 @@ def test_wide_int64_ranks_exactly() -> None:
 def test_wide_int64_values_come_back_whole() -> None:
     """The values come back through ``_DataMovement.h`` (LCD-435)."""
     _same(lambda t: lucid.topk(t, 8)[0] * 1, _wide())
-    _same(lambda t: lucid.sort(t, descending=True) * 1, _wide())
+    _same(lambda t: lucid.sort(t, descending=True).values * 1, _wide())
 
 
 @pytest.mark.parametrize("n", [5387, 1 << 17])

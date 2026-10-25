@@ -365,8 +365,8 @@ REFS: dict[str, Ref] = {
     "mean": lambda x, c: _f(x).mean(axis=1),
     "prod": lambda x, c: x.prod(axis=0),
     "max_all": lambda x, c: x.max(),
-    "max_dim": lambda x, c: x.max(axis=0),
-    "min_dim": lambda x, c: x.min(axis=1),
+    "max_dim": lambda x, c: (x.max(axis=0), x.argmax(axis=0)),
+    "min_dim": lambda x, c: (x.min(axis=1), x.argmin(axis=1)),
     "argmax": lambda x, c: x.argmax(axis=1),
     "argmin": lambda x, c: x.argmin(axis=0),
     "var": lambda x, c: _f(x).var(axis=1, ddof=1),
@@ -384,8 +384,11 @@ REFS: dict[str, Ref] = {
     "vector_norm": lambda x, c: np.sqrt((_f(x) ** 2).sum(axis=1)),
     "nansum": lambda x, c: np.nansum(x),
     "trace": lambda x, c: np.trace(x),
-    # ── sort family (values only where ties make the order of indices free)
-    "sort": lambda x, c: np.sort(x, axis=-1),
+    # ── sort family (values and stable indices)
+    "sort": lambda x, c: (
+        np.sort(x, axis=-1),
+        np.argsort(x, axis=-1, kind="stable"),
+    ),
     "topk_values": lambda x, c: np.sort(x, axis=-1)[:, ::-1][:, :2],
     "topk": lambda x, c: (
         np.sort(x, axis=-1)[:, ::-1][:, :2],

@@ -105,8 +105,8 @@ class _Symmetric:
     def _fit(self, weight: Tensor) -> tuple[Tensor, Tensor]:
         flat = weight.reshape(self.channels, -1)
         return _quant.calculate_qparams(
-            flat.min(dim=1),
-            flat.max(dim=1),
+            flat.min(dim=1).values,
+            flat.max(dim=1).values,
             _quant.per_channel_symmetric,
             _quant.qint8,
         )

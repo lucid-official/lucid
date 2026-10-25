@@ -421,7 +421,7 @@ def msort(input: Tensor) -> Tensor:
     >>> lucid.msort(lucid.tensor([[3.0, 1.0], [2.0, 0.0]]))
     tensor([[2., 0.], [3., 1.]])
     """
-    return lucid.sort(input, dim=0)
+    return lucid.sort(input, dim=0).values
 
 
 def count_nonzero(

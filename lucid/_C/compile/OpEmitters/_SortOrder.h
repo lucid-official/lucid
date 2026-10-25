@@ -86,6 +86,8 @@ graph_gather_sorted(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* order, NSInt
 // and the first position, 0, is the answer.
 inline MPSGraphTensor*
 graph_first_extreme(MPSGraph* g, MPSGraphTensor* x, NSInteger axis, bool is_max) {
+    if (x.dataType == MPSDataTypeBool)
+        x = [g castTensor:x toType:MPSDataTypeInt32 name:nil];
     MPSGraphTensor* r = is_max ? [g reductionArgMaximumWithTensor:x axis:axis name:nil]
                                : [g reductionArgMinimumWithTensor:x axis:axis name:nil];
     if (r == nil)

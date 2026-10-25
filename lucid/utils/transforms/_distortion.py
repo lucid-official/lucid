@@ -94,16 +94,16 @@ class _DisplacementTransform(GeometricTransform[DispParams]):
         my = moved[:, 1:2].reshape(4, n)
         h, w = params.out_hw
         nx1 = lucid.clip(
-            lucid.min(mx, dim=0, keepdim=True).reshape(n, 1), 0.0, float(w)
+            lucid.min(mx, dim=0, keepdim=True).values.reshape(n, 1), 0.0, float(w)
         )
         nx2 = lucid.clip(
-            lucid.max(mx, dim=0, keepdim=True).reshape(n, 1), 0.0, float(w)
+            lucid.max(mx, dim=0, keepdim=True).values.reshape(n, 1), 0.0, float(w)
         )
         ny1 = lucid.clip(
-            lucid.min(my, dim=0, keepdim=True).reshape(n, 1), 0.0, float(h)
+            lucid.min(my, dim=0, keepdim=True).values.reshape(n, 1), 0.0, float(h)
         )
         ny2 = lucid.clip(
-            lucid.max(my, dim=0, keepdim=True).reshape(n, 1), 0.0, float(h)
+            lucid.max(my, dim=0, keepdim=True).values.reshape(n, 1), 0.0, float(h)
         )
         return _rebuild(boxes, F._cat([nx1, ny1, nx2, ny2], 1), (h, w))
 

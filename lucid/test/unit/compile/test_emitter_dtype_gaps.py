@@ -123,7 +123,7 @@ def test_causal_mask_spelled_with_triu() -> None:
 
 def test_bool_sort_on_metal() -> None:
     x = _x(lucid.bool_)
-    got = lucid.sort(x, dim=-1).to("cpu").numpy()
+    got = lucid.sort(x, dim=-1).values.to("cpu").numpy()
     assert np.array_equal(got, np.sort(x.to("cpu").numpy(), axis=-1))
     got_desc = lucid.topk(x.to(lucid.int32), 2, dim=-1)[0].to("cpu").numpy()
     assert np.array_equal(

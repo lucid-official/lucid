@@ -504,8 +504,8 @@ def rgb_to_hsv(img: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     r = img[..., 0:1, :, :]
     g = img[..., 1:2, :, :]
     b = img[..., 2:3, :, :]
-    maxc = lucid.max(img, dim=-3, keepdim=True)
-    minc = lucid.min(img, dim=-3, keepdim=True)
+    maxc = lucid.max(img, dim=-3, keepdim=True).values
+    minc = lucid.min(img, dim=-3, keepdim=True).values
     delta = maxc - minc
     eps = 1e-10
 
@@ -1410,8 +1410,12 @@ def autocontrast(img: Tensor) -> Tensor:
         Contrast-stretched image, same shape and dtype as ``img``.
     """
     # min/max per channel over the spatial axes — both shape (..., C, 1, 1).
-    minv = lucid.min(lucid.min(img, dim=-1, keepdim=True), dim=-2, keepdim=True)
-    maxv = lucid.max(lucid.max(img, dim=-1, keepdim=True), dim=-2, keepdim=True)
+    minv = lucid.min(
+        lucid.min(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True
+    ).values
+    maxv = lucid.max(
+        lucid.max(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True
+    ).values
     span = maxv - minv  # (..., C, 1, 1)
     # Multiplicative mask avoids the lucid.where shape constraint (which
     # requires cond + branches all the same shape, no broadcast).  The

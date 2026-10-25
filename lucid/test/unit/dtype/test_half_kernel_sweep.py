@@ -157,7 +157,7 @@ def test_embedding_bag(dtype: lucid.dtype, device: str, mode: str) -> None:
 @pytest.mark.parametrize("descending", [False, True])
 def test_sort(dtype: lucid.dtype, device: str, dim: int, descending: bool) -> None:
     def op(t: list[lucid.Tensor]) -> lucid.Tensor:
-        return lucid.sort(t[0], dim, descending)
+        return lucid.sort(t[0], dim, descending).values
 
     _sweep(op, [_distinct((3, 8), dtype)], dtype, device)
 
@@ -222,7 +222,7 @@ def test_complex_sort_and_topk_keep_a_grad_fn(device_gpu_only: str) -> None:
     # The CPU refuses complex sort in the forward; Metal answers it, and
     # what it answers carries a gradient like any other float result.
     x = _complex_input(device_gpu_only)
-    assert lucid.sort(x).grad_fn is not None
+    assert lucid.sort(x).values.grad_fn is not None
     assert lucid.topk(x, 2)[0].grad_fn is not None
 
 
@@ -232,7 +232,7 @@ def test_complex_sort_and_topk_backward(device_gpu_only: str, op: str) -> None:
     # Where each output element came from: MLX orders complex values by
     # their real part here (sort ascending, topk largest first).
     if op == "sort":
-        out, order = lucid.sort(x), [3, 1, 2, 0]
+        out, order = lucid.sort(x).values, [3, 1, 2, 0]
     else:
         out, order = lucid.topk(x, 2)[0], [0, 2]
     re = [1.0 + k for k in range(len(order))]

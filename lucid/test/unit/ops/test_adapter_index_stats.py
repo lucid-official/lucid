@@ -445,7 +445,7 @@ def test_half_data_dependent_ops_match_reference(
     rgrid = ref.tensor([0.0, 1.0, 2.0, 3.0], dtype=ref_dt)
     _same(lucid.searchsorted(grid, x), ref.searchsorted(rgrid, rx))
     _same(lucid.bucketize(x, grid), ref.bucketize(rx, rgrid))
-    _same(lucid.sort(x), ref.sort(rx)[0])
+    _same(lucid.sort(x), ref.sort(rx))
     _same(lucid.topk(x, 3), ref.topk(rx, 3))
 
     # histogram2d and histogramdd on half

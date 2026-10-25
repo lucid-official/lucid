@@ -393,19 +393,17 @@ def _masked_select_adapter(a_impl: _Impl, mask: _Impl) -> _Impl:
 
 
 def _sort_adapter(
-    a_impl: _Impl,
-    dim: int = -1,
-    descending: bool = False,
-    *,
-    stable: bool = False,
-) -> _Impl:
-    """sort(a, dim=-1, descending=False, *, stable=False) — the sorted values along ``dim``."""
+    a_impl: _Impl, dim: int = -1, descending: bool = False, *, stable: bool = False
+) -> _ValuesIndices[_Impl]:
+    """sort(a, dim=-1, descending=False, *, stable=False) — ``(values, indices)`` along ``dim``."""
     del stable
     d = _wrap_dim(int(dim), len(a_impl.shape), "sort")
-    out = _C_engine.sort(a_impl, d)
-    if descending and a_impl.shape:
-        out = _C_engine.flip(out, [d])
-    return out
+    indices = _argsort_adapter(a_impl, d, descending)
+    if not (descending and a_impl.shape):
+        return _ValuesIndices((_C_engine.sort(a_impl, d), indices))
+    if a_impl.requires_grad and _C_engine.grad_enabled():
+        return _ValuesIndices((_C_engine.gather(a_impl, indices, d), indices))
+    return _ValuesIndices((_C_engine.flip(_C_engine.sort(a_impl, d), [d]), indices))
 
 
 def _argsort_adapter(

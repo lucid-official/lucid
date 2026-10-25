@@ -44,10 +44,18 @@ def test_sorting_is_stable_in_both_directions(device: str, n: int, dtype) -> Non
             np.argsort(-a, dim, kind="stable"),
         )
         np.testing.assert_array_equal(
-            lucid.sort(x, dim=dim, descending=True).numpy(), -np.sort(-a, dim)
+            lucid.sort(x, dim=dim, descending=True).values.numpy(), -np.sort(-a, dim)
         )
         np.testing.assert_array_equal(
-            x.sort(dim=dim, descending=True).numpy(), -np.sort(-a, dim)
+            lucid.sort(x, dim=dim, descending=True).indices.numpy(),
+            np.argsort(-a, dim, kind="stable"),
+        )
+        np.testing.assert_array_equal(
+            x.sort(dim=dim, descending=True).values.numpy(), -np.sort(-a, dim)
+        )
+        np.testing.assert_array_equal(
+            x.sort(dim=dim, descending=True).indices.numpy(),
+            np.argsort(-a, dim, kind="stable"),
         )
 
 
@@ -59,7 +67,8 @@ def test_nan_sorts_as_the_largest_value() -> None:
 
 def test_a_descending_sort_differentiates() -> None:
     x = lucid.tensor([3.0, 1.0, 2.0], requires_grad=True)
-    y = lucid.sort(x, dim=0, descending=True)
+    y, idx = lucid.sort(x, dim=0, descending=True)
+    assert idx.tolist() == [0, 2, 1]
     (y * lucid.tensor([1.0, 10.0, 100.0])).sum().backward()
     assert x.grad.tolist() == [1.0, 100.0, 10.0]
 
@@ -110,7 +119,7 @@ def test_ties_share_the_gradient(device: str, op: str) -> None:
     reduce = getattr(lucid, op)
 
     x = lucid.tensor(a, device=device, requires_grad=True)
-    reduce(x, dim=1).sum().backward()
+    reduce(x, dim=1).values.sum().backward()
     np.testing.assert_allclose(
         x.grad.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6
     )
@@ -121,7 +130,7 @@ def test_ties_share_the_gradient(device: str, op: str) -> None:
 
     # The graph-mode backward takes the same shares.
     x = lucid.tensor(a, device=device, requires_grad=True)
-    (d,) = grad(reduce(x, dim=1).sum(), [x], create_graph=True)
+    (d,) = grad(reduce(x, dim=1).values.sum(), [x], create_graph=True)
     np.testing.assert_allclose(
         d.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6
     )
@@ -129,7 +138,7 @@ def test_ties_share_the_gradient(device: str, op: str) -> None:
 
 def test_a_nan_slice_gets_no_gradient_rather_than_nan() -> None:
     x = lucid.tensor([[1.0, float("nan")], [2.0, 3.0]], requires_grad=True)
-    lucid.max(x, dim=1).sum().backward()
+    lucid.max(x, dim=1).values.sum().backward()
     assert x.grad.tolist() == [[0.0, 0.0], [0.0, 1.0]]
 
 
@@ -149,7 +158,7 @@ def test_radix_sort_stability_signed_zero_nan_and_100k_budget() -> None:
     # All zeros keep their input relative order: 0, 1, 5, 6, 7, ...
     zero_positions = [i for i in idx_asc if i not in (2, 3, 4)]
     assert zero_positions == sorted(zero_positions)
-    sorted_vals = lucid.sort(t).numpy()
+    sorted_vals = lucid.sort(t).values.numpy()
     assert np.copysign(1.0, sorted_vals[1]) == -1.0
     assert np.copysign(1.0, sorted_vals[2]) == 1.0
     assert np.copysign(1.0, sorted_vals[3]) == -1.0

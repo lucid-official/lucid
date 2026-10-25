@@ -353,7 +353,7 @@ class OneHotCategorical:
         log-probabilities carry; this one depends on nothing but the
         logits.
         """
-        maximum = self.logits.max(dim=-1, keepdim=True)
+        maximum = self.logits.max(dim=-1, keepdim=True).values
         shifted = (self.logits - maximum).exp().sum(dim=-1, keepdim=True)
         normaliser = (maximum + shifted.log()).squeeze(dim=-1)
         return normaliser - (self.probs * self.logits).sum(dim=-1)

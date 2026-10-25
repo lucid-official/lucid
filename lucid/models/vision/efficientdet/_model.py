@@ -875,8 +875,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
             pos_gt: list[int] = []
 
             # Vectorised per-anchor reductions.
-            best_m_t = lucid.argmax(iou_mat, dim=1)
-            best_v_t = iou_mat.max(dim=1)
+            best_v_t, best_m_t = iou_mat.max(dim=1)
             best_v_list = host_floats(best_v_t)
             best_m_list = host_ints(best_m_t)
             labels_list = host_ints(gt_labels)

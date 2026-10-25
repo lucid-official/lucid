@@ -512,22 +512,48 @@ def _log_softmax_adapter(
     )
 
 
+def _extreme_adapter(
+    name: str,
+    val_fn: Callable[[_Impl, list[int], bool], _Impl],
+    idx_fn: Callable[[_Impl, int, bool], _Impl],
+    x_impl: _Impl,
+    dim: int | Sequence[int] | None,
+    keepdim: bool,
+) -> _Impl | _ValuesIndices[_Impl]:
+    """Shared body of ``max`` and ``min``."""
+    axes = _reduction_axes(x_impl, dim, name)
+    values = val_fn(x_impl, axes, bool(keepdim))
+    if dim is None or isinstance(dim, Sequence):
+        return values
+    axis = axes[0] if axes else 0
+    idx_in = (
+        _C_engine.astype(x_impl, _C_engine.I8)
+        if x_impl.dtype == _C_engine.Bool
+        else x_impl
+    )
+    return _ValuesIndices((values, idx_fn(idx_in, axis, bool(keepdim))))
+
+
 def _max_adapter(
     x_impl: _Impl,
     dim: int | Sequence[int] | None = None,
     keepdim: bool = False,
-) -> _Impl:
+) -> _Impl | _ValuesIndices[_Impl]:
     """max(x, dim=None, keepdim=False)."""
-    return _C_engine.max(x_impl, _reduction_axes(x_impl, dim, "max"), bool(keepdim))
+    return _extreme_adapter(
+        "max", _C_engine.max, _C_engine.argmax, x_impl, dim, keepdim
+    )
 
 
 def _min_adapter(
     x_impl: _Impl,
     dim: int | Sequence[int] | None = None,
     keepdim: bool = False,
-) -> _Impl:
+) -> _Impl | _ValuesIndices[_Impl]:
     """min(x, dim=None, keepdim=False)."""
-    return _C_engine.min(x_impl, _reduction_axes(x_impl, dim, "min"), bool(keepdim))
+    return _extreme_adapter(
+        "min", _C_engine.min, _C_engine.argmin, x_impl, dim, keepdim
+    )
 
 
 def _flat_arg_reduce(

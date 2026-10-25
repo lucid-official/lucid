@@ -1105,7 +1105,7 @@ class GenieForWorldModeling(WorldModelingModel):
             # chosen again; the threshold is the reveal-th best score.
             score = confidence * masked - (1.0 - masked)
             best, _ = lucid.topk(score, reveal, dim=-1)
-            threshold = best.min(dim=-1, keepdim=True)
+            threshold = best.min(dim=-1, keepdim=True).values
             chosen = (score >= threshold).to(lucid.float32) * masked
             frame = frame + (sampled - frame) * chosen.to(tokens.dtype)
             masked = masked * (1.0 - chosen)

@@ -418,8 +418,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
             return F.cross_entropy(logits, zeros), lucid.zeros((), device=dev)
 
         iou = box_iou(gt_boxes, proposals)  # (M, N)
-        best_iou = iou.max(dim=0)  # (N,)
-        best_gt = lucid.argmax(iou, dim=0)  # (N,)
+        best_iou, best_gt = iou.max(dim=0)  # (N,)
 
         # Stage 1: class ids are 1-based, 0 is background.
         fg = best_iou >= cfg.fg_iou_thresh

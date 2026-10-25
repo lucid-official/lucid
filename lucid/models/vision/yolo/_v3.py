@@ -618,7 +618,7 @@ def _ignore_mask(pred_boxes: Tensor, gt_boxes: Tensor, thresh: float) -> Tensor:
     if int(gt_boxes.shape[0]) == 0:
         return pred_boxes.new_zeros(n_pred)
     gt = gt_boxes.to(device=pred_boxes.device, dtype=pred_boxes.dtype)
-    return (box_iou(pred_boxes, gt).max(dim=1) > thresh).to(pred_boxes.dtype)
+    return (box_iou(pred_boxes, gt).max(dim=1).values > thresh).to(pred_boxes.dtype)
 
 
 def _gt_rows(

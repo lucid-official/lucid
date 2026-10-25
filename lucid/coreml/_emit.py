@@ -574,7 +574,7 @@ def _arg_reduce(b: Builder, op: TracedOp, ins: list[str], mil_type: str) -> Emit
     else:
         axis = _as_int(raw_axis)
     return mil_type, [
-        ("x", source),
+        ("x", widened(b, source)),
         ("axis", b.const_int(axis)),
         ("keep_dims", b.const_bool(keep)),
     ]

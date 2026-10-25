@@ -569,8 +569,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
             [box_iou(cell_boxes[:, b], gt_xyxy).diagonal() for b in range(B_boxes)],
             dim=1,
         )  # (M, B)
-        best_b = ious.argmax(dim=1)
-        best_iou = ious.max(dim=1)
+        best_iou, best_b = ious.max(dim=1)
         idx = cell * B_boxes + best_b  # (M,) predictor index
 
         # One object per predictor: when two GTs claim the same one, the later

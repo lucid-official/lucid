@@ -23,7 +23,7 @@ from lucid._C import engine as _C_engine
 from lucid._dtype import dtype as dtype, finfo as finfo, iinfo as iinfo
 from lucid._device import device as device
 from lucid._factories._generator import Generator as Generator
-from lucid._ops._reduce import _MinMax as _MinMax
+from lucid._ops._reduce import _MinMax as _MinMax, _ValuesIndices as _ValuesIndices
 from lucid._tensor.tensor import Tensor as Tensor
 
 # Public-facing type aliases (``lucid.Scalar``, ``lucid.TensorLike`` ...).
@@ -2115,13 +2115,10 @@ def triu(input: Tensor, diagonal: _int = ...) -> Tensor:
     tensor([[0., 1., 1.], [0., 0., 1.], [0., 0., 0.]])
     """
     ...
-def sort(input: Tensor, dim: _int = ..., descending: _bool = ..., *, stable: _bool = ...) -> Tensor:
-    r"""    Sort ``input`` along ``dim`` and return the sorted values.
+def sort(input: Tensor, dim: _int = ..., descending: _bool = ..., *, stable: _bool = ...) -> _ValuesIndices[Tensor]:
+    r"""    Sort ``input`` along ``dim`` and return ``(values, indices)``.
     
-    The sort is stable: equal keys keep their input order.  Only the values
-    come back — :func:`argsort` gives the permutation that produces them,
-    with the same ``descending`` flag.  (The reference framework returns a
-    ``(values, indices)`` pair here.)
+    The sort is stable: equal keys keep their input order.
     
     Parameters
     ----------
@@ -2134,23 +2131,23 @@ def sort(input: Tensor, dim: _int = ..., descending: _bool = ..., *, stable: _bo
     
     Returns
     -------
-    Tensor
-        ``input``'s values ordered along ``dim``, same shape and dtype.
+    _ValuesIndices[Tensor]
+        Named-tuple-like ``(values, indices)`` pair along ``dim``.
     
     Notes
     -----
     NaN sorts as the largest value: last ascending, first descending.
     ``lucid.gather(input, dim, lucid.argsort(input, dim))`` equals
-    ``lucid.sort(input, dim)``.  Gradients flow back to the positions the
-    values came from.
+    ``lucid.sort(input, dim).values``.  Gradients flow back to the positions
+    the values came from.
     
     Examples
     --------
     >>> import lucid
     >>> x = lucid.tensor([3, 1, 2])
-    >>> lucid.sort(x, dim=0)
+    >>> lucid.sort(x, dim=0).values
     Tensor([1, 2, 3])
-    >>> lucid.sort(x, dim=0, descending=True)
+    >>> lucid.sort(x, dim=0, descending=True).values
     Tensor([3, 2, 1])
     """
     ...
@@ -2266,7 +2263,7 @@ def unique(input: Tensor, sorted: _bool = ..., return_inverse: _bool = ..., retu
     """
     ...
 def unique_consecutive(input: Tensor, return_inverse: _bool = ..., return_counts: _bool = ..., dim: _int | None = ...) -> Tensor: ...
-def topk(input: Tensor, k: _int, dim: _int = ..., largest: _bool = ..., sorted: _bool = ...) -> tuple[Tensor, Tensor]:
+def topk(input: Tensor, k: _int, dim: _int = ..., largest: _bool = ..., sorted: _bool = ...) -> _ValuesIndices[Tensor]:
     r"""    Return the ``k`` largest (or smallest) values along ``dim`` and their indices.
     
     Both outputs have size ``k`` along ``dim``; all other dims match
@@ -4045,7 +4042,7 @@ def scatter(input: Tensor, dim: _int, index: Tensor, src: Tensor | Scalar, reduc
     Tensor(shape=(3, 4))
     """
     ...
-def kthvalue(input: Tensor, k: _int, dim: _int = ..., keepdim: _bool = ...) -> tuple[Tensor, Tensor]:
+def kthvalue(input: Tensor, k: _int, dim: _int = ..., keepdim: _bool = ...) -> _ValuesIndices[Tensor]:
     r"""    Return the ``k``-th smallest value along ``dim``.
     
     ``k`` is 1-based: ``k=1`` is the minimum, ``k=size(dim)`` the maximum.
@@ -5217,13 +5214,23 @@ def prod(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = F
     Tensor(24.)
     """
     ...
-def max(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False) -> Tensor: ...
-def min(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False) -> Tensor:
-    r"""    Return the smallest element of ``input``, or the smallest along ``dim``.
+@overload
+def max(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...
+@overload
+def max(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...
+@overload
+def max(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...
+@overload
+def min(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...
+@overload
+def min(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...
+@overload
+def min(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor:
+    r"""    Return the smallest element of ``input``, or ``(values, indices)`` along ``dim``.
     
-    Only the values come back.  The reference framework's ``min(x, dim)``
-    returns a ``(values, indices)`` pair; here :func:`argmin` gives the
-    positions, and ``lucid.topk(x, 1, dim, largest=False)`` returns both.
+    When ``dim`` is an ``int``, returns a ``(values, indices)`` pair with
+    ``.values`` and ``.indices`` attributes; when ``dim`` is ``None`` or a
+    sequence of axes, returns the reduced ``Tensor`` of values.
     
     Parameters
     ----------
@@ -5236,9 +5243,9 @@ def min(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = Fa
     
     Returns
     -------
-    Tensor
-        The smallest values; ``x.shape`` with the reduced axes removed (or
-        kept as 1).
+    Tensor or _ValuesIndices[Tensor]
+        The smallest values (and first-occurrence ``int64`` indices when ``dim``
+        is a single integer axis).
     
     Notes
     -----
@@ -5253,7 +5260,7 @@ def min(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = Fa
     >>> x = lucid.tensor([[1.0, 4.0], [3.0, 2.0]])
     >>> lucid.min(x)
     Tensor(1.)
-    >>> lucid.min(x, dim=1)
+    >>> lucid.min(x, dim=1).values
     Tensor([1., 2.])
     """
     ...

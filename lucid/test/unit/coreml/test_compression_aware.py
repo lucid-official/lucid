@@ -201,7 +201,7 @@ class TestTheExportWritesWhatWasTrained:
         """
         lucid.manual_seed(0)
         count = 16
-        table = lucid.sort(lucid.randn(4, count), dim=-1)
+        table = lucid.sort(lucid.randn(4, count), dim=-1).values
         keys = (lucid.arange(4 * 64) % count).reshape(4, 64).to(lucid.int64)
         rows = lucid.gather(table, 1, keys)
 

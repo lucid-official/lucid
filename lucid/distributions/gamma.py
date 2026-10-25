@@ -1173,7 +1173,7 @@ class Dirichlet(ExponentialFamily):
         """
         excess = (self.concentration - 1.0).clip(0.0, None)
         interior = excess / excess.sum(dim=-1, keepdim=True)
-        all_below = (self.concentration < 1.0).min(dim=-1).unsqueeze(-1)
+        all_below = (self.concentration < 1.0).min(dim=-1).values.unsqueeze(-1)
         k = int(self.concentration.shape[-1])
         first_vertex = (lucid.arange(k, device=self.concentration.device) == 0).to(
             interior.dtype

@@ -41,13 +41,27 @@ class TestMax:
 
     def test_along_dim(self, device: str) -> None:
         t = lucid.tensor([[1.0, 4.0], [3.0, 2.0]], device=device)
-        np.testing.assert_array_equal(lucid.max(t, dim=0).numpy(), [3.0, 4.0])
+        vals, idx = lucid.max(t, dim=0)
+        np.testing.assert_array_equal(vals.numpy(), [3.0, 4.0])
+        np.testing.assert_array_equal(idx.numpy(), [1, 0])
+        assert vals is lucid.max(t, dim=0).values or np.array_equal(
+            lucid.max(t, dim=0).values.numpy(), [3.0, 4.0]
+        )
+        np.testing.assert_array_equal(lucid.max(t, dim=0).indices.numpy(), [1, 0])
 
 
 class TestMin:
     def test_full(self, device: str) -> None:
         t = lucid.tensor([3.0, 1.0, 5.0, 2.0], device=device)
         assert lucid.min(t).item() == 1.0
+
+    def test_along_dim(self, device: str) -> None:
+        t = lucid.tensor([[1.0, 4.0], [3.0, 2.0]], device=device)
+        vals, idx = lucid.min(t, dim=0)
+        np.testing.assert_array_equal(vals.numpy(), [1.0, 2.0])
+        np.testing.assert_array_equal(idx.numpy(), [0, 1])
+        np.testing.assert_array_equal(lucid.min(t, dim=0).values.numpy(), [1.0, 2.0])
+        np.testing.assert_array_equal(lucid.min(t, dim=0).indices.numpy(), [0, 1])
 
 
 class TestProd:

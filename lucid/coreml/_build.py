@@ -859,18 +859,18 @@ def _grid_already_there(flat: Tensor) -> Tensor | None:
     """
     width = int(flat.shape[1])
     sample = flat[:, :: (width // _GRID_SAMPLE + 1)] if width > _GRID_SAMPLE else flat
-    ordered = lucid.sort(sample, dim=-1)
+    ordered = lucid.sort(sample, dim=-1).values
     fresh = (ordered[:, 1:] != ordered[:, :-1]).to(lucid.float32)
     if float(fresh.sum(dim=1).max().item()) + 1 > 256:
         return None
 
-    ordered = lucid.sort(flat, dim=-1)
+    ordered = lucid.sort(flat, dim=-1).values
     gaps = ordered[:, 1:] - ordered[:, :-1]
     # The step is the smallest gap that is not two identical values. A
     # grid with a code missing in the middle would give a multiple of the
     # step instead, which the integrality check below then rejects.
     positive = lucid.where(gaps > 0, gaps, lucid.full_like(gaps, float("inf")))
-    step = positive.min(dim=1).reshape(-1, 1)
+    step = positive.min(dim=1).values.reshape(-1, 1)
     if not bool((step < float("inf")).all().item()):
         return None
 
@@ -948,7 +948,7 @@ def _quantize_weight(
         )
     else:
         scale, zero_point = _quant.calculate_qparams(
-            flat.min(dim=1), flat.max(dim=1), _quant.per_channel_symmetric, _quant.qint8
+            flat.min(dim=1)[0], flat.max(dim=1)[0], _quant.per_channel_symmetric, _quant.qint8
         )
         codes = _quant.quantize(tensor, scale, zero_point, _quant.qint8, ch_axis=0)
 
@@ -1094,7 +1094,7 @@ def _palettes_for(rows: Tensor, count: int) -> Tensor:
     )
     span = int(sample.shape[1])
 
-    ordered = lucid.sort(sample, dim=-1)
+    ordered = lucid.sort(sample, dim=-1).values
     settled = _values_already_there(ordered, count)
     if settled is not None:
         # Exact, and the iteration below would not find it — see the
@@ -1124,7 +1124,7 @@ def _palettes_for(rows: Tensor, count: int) -> Tensor:
         )
         # Re-sorted because the bisection needs a monotone table, and a
         # row whose entries crossed would otherwise answer nonsense.
-        centres = lucid.sort(moved, dim=-1)
+        centres = lucid.sort(moved, dim=-1).values
     return centres
 
 

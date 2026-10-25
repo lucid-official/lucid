@@ -213,7 +213,8 @@ class TestSortArgsort:
     def test_sort_ascending(self, device: str) -> None:
         t = lucid.tensor([3.0, 1.0, 4.0, 1.0, 5.0], device=device)
         out = lucid.sort(t, dim=0)
-        np.testing.assert_array_equal(out.numpy(), [1.0, 1.0, 3.0, 4.0, 5.0])
+        np.testing.assert_array_equal(out.values.numpy(), [1.0, 1.0, 3.0, 4.0, 5.0])
+        np.testing.assert_array_equal(out.indices.numpy(), [1, 3, 0, 2, 4])
 
     def test_argsort(self, device: str) -> None:
         t = lucid.tensor([3.0, 1.0, 4.0], device=device)

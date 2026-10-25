@@ -81,7 +81,7 @@ def _all_trailing(result: Tensor, ndims: int) -> Tensor:
     tensor along an axis is the *and* along it.
     """
     for _ in range(ndims):
-        result = result.min(dim=-1)
+        result = result.min(dim=-1).values
     return result
 
 
@@ -303,7 +303,7 @@ class _Simplex(Constraint):
         Verifies non-negativity of every component and that the sum along
         the last axis equals ``1`` (within a ``1e-6`` tolerance).
         """
-        nonneg = value.min(dim=-1) >= 0
+        nonneg = value.min(dim=-1).values >= 0
         sums = value.sum(dim=-1)
         unit = (sums - 1.0).abs() < 1e-6
         return nonneg & unit

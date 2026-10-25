@@ -175,8 +175,8 @@ def test_axis_reductions_keep_their_answers(shape: tuple[int, ...], axis: int) -
     x = np.random.default_rng(9).standard_normal(shape).astype(np.float32)
     x.flat[5] = np.nan
     t = lucid.tensor(x)
-    np.testing.assert_array_equal(t.max(dim=axis).numpy(), np.max(x, axis=axis))
-    np.testing.assert_array_equal(t.min(dim=axis).numpy(), np.min(x, axis=axis))
+    np.testing.assert_array_equal(t.max(dim=axis).values.numpy(), np.max(x, axis=axis))
+    np.testing.assert_array_equal(t.min(dim=axis).values.numpy(), np.min(x, axis=axis))
     np.testing.assert_allclose(t.sum(dim=axis).numpy(), np.sum(x, axis=axis), rtol=1e-6)
     np.testing.assert_allclose(
         t.prod(dim=axis).numpy(), np.prod(x, axis=axis), rtol=1e-5

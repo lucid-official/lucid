@@ -203,7 +203,7 @@ def quantile(
         # ordinary median where the reference and NumPy both return NaN.
         if dim is None:
             flat = input.reshape(-1)
-            sorted_x = lucid.sort(flat)
+            sorted_x = lucid.sort(flat).values
             n = flat.shape[0]
             results = _quantile_sorted(
                 sorted_x, q_list, None, keepdim, interpolation, n
@@ -216,7 +216,7 @@ def quantile(
                 return quantile(
                     input.reshape(1), q, 0, False, interpolation=interpolation
                 )
-            sorted_x = lucid.sort(input, dim)
+            sorted_x = lucid.sort(input, dim).values
             n = input.shape[dim]
             results = _quantile_sorted(sorted_x, q_list, dim, keepdim, interpolation, n)
             nans = lucid.isnan(input).sum(dim=dim, keepdim=keepdim)
@@ -303,7 +303,7 @@ def nanquantile(
             (input.reshape(-1), 0) if dim is None or input.ndim == 0 else (input, dim)
         )
         # The engine's sort already puts every NaN after the numbers.
-        sorted_x = lucid.sort(x, along)
+        sorted_x = lucid.sort(x, along).values
         non_nan_count = (~lucid.isnan(x)).sum(dim=along, keepdim=True).to(x.dtype)
         results = _nanquantile_along(
             sorted_x,

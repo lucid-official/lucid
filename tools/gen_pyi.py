@@ -606,7 +606,7 @@ from lucid._C import engine as _C_engine
 from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
 from lucid._dtype import dtype as _dtype_cls
 from lucid._device import device as _device_cls
-from lucid._ops._reduce import _MinMax as _MinMax
+from lucid._ops._reduce import _MinMax as _MinMax, _ValuesIndices as _ValuesIndices
 from lucid._types import DeviceLike, DTypeLike, DimLike, ShapeLike, Scalar, TensorOrScalar, _IndexType  # noqa: F401
 
 # Aliases for builtins that get shadowed by same-named Tensor methods below.
@@ -1055,8 +1055,18 @@ def gen_tensor_pyi() -> tuple[str, int]:
         "    def sum(self, dim: DimLike = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
         "    def mean(self, dim: DimLike = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
         "    def prod(self, dim: DimLike = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
-        "    def max(self, dim: DimLike = None, keepdim: _bool = False) -> Tensor: ...",
-        "    def min(self, dim: DimLike = None, keepdim: _bool = False) -> Tensor: ...",
+        "    @overload",
+        "    def max(self, dim: None = None, keepdim: _bool = False) -> Tensor: ...",
+        "    @overload",
+        "    def max(self, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...",
+        "    @overload",
+        "    def max(self, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...",
+        "    @overload",
+        "    def min(self, dim: None = None, keepdim: _bool = False) -> Tensor: ...",
+        "    @overload",
+        "    def min(self, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...",
+        "    @overload",
+        "    def min(self, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...",
         "    def var(self, dim: DimLike = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor: ...",
         "    def std(self, dim: DimLike = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor: ...",
         "    def argmax(self, dim: _int | None = None, keepdim: _bool = False) -> Tensor: ...",
@@ -1068,9 +1078,9 @@ def gen_tensor_pyi() -> tuple[str, int]:
         "    def squeeze(self, dim: _int | list[_int] | None = None) -> Tensor: ...",
         "    def unsqueeze(self, dim: DimLike) -> Tensor: ...",
         "    def gather(self, dim: _int, index: Tensor, *, sparse_grad: _bool = False) -> Tensor: ...",
-        "    def sort(self, dim: _int = -1, descending: _bool = False, *, stable: _bool = False) -> Tensor: ...",
+        "    def sort(self, dim: _int = -1, descending: _bool = False, *, stable: _bool = False) -> _ValuesIndices[Tensor]: ...",
         "    def argsort(self, dim: _int = -1, descending: _bool = False, *, stable: _bool = False) -> Tensor: ...",
-        "    def topk(self, k: _int, dim: _int = -1, largest: _bool = True, sorted: _bool = True) -> tuple[Tensor, Tensor]: ...",
+        "    def topk(self, k: _int, dim: _int = -1, largest: _bool = True, sorted: _bool = True) -> _ValuesIndices[Tensor]: ...",
         "    def chunk(self, chunks: _int, dim: _int = 0) -> list[Tensor]: ...",
         "    def softmax(self, dim: _int = -1, dtype: DTypeLike = None) -> Tensor: ...",
         "    def log_softmax(self, dim: _int = -1, dtype: DTypeLike = None) -> Tensor: ...",
@@ -1093,7 +1103,7 @@ def gen_tensor_pyi() -> tuple[str, int]:
         "    def view(self, *size: _int) -> Tensor: ...",
         "    def narrow(self, dim: _int, start: _int, length: _int) -> Tensor: ...",
         "    def scatter(self, dim: _int, index: Tensor, src: Tensor | _float, reduce: str | None = None) -> Tensor: ...",
-        "    def kthvalue(self, k: _int, dim: _int = -1, keepdim: _bool = False) -> tuple[Tensor, Tensor]: ...",
+        "    def kthvalue(self, k: _int, dim: _int = -1, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...",
         "    def movedim(self, source: _int | Sequence[_int], destination: _int | Sequence[_int]) -> Tensor: ...",
         "    def roll(self, shifts: _int | Sequence[_int], dims: _int | Sequence[_int] | None = None) -> Tensor: ...",
         "    def flatten(self, start_dim: _int = 0, end_dim: _int = -1) -> Tensor: ...",
@@ -1295,7 +1305,7 @@ from lucid._C import engine as _C_engine
 from lucid._dtype import dtype as dtype, finfo as finfo, iinfo as iinfo
 from lucid._device import device as device
 from lucid._factories._generator import Generator as Generator
-from lucid._ops._reduce import _MinMax as _MinMax
+from lucid._ops._reduce import _MinMax as _MinMax, _ValuesIndices as _ValuesIndices
 from lucid._tensor.tensor import Tensor as Tensor
 
 # Public-facing type aliases (``lucid.Scalar``, ``lucid.TensorLike`` ...).
@@ -2232,8 +2242,9 @@ _RETURN_TYPE_MAP: dict[str, str] = {
     "var_mean": "tuple[Tensor, Tensor]",
     "frexp": "tuple[Tensor, Tensor]",
     "histogram": "tuple[Tensor, Tensor]",
-    "topk": "tuple[Tensor, Tensor]",
-    "kthvalue": "tuple[Tensor, Tensor]",
+    "topk": "_ValuesIndices[Tensor]",
+    "kthvalue": "_ValuesIndices[Tensor]",
+    "sort": "_ValuesIndices[Tensor]",
     "chunk": "list[Tensor]",
     "unbind": "list[Tensor]",
     "histogram2d": "tuple[Tensor, Tensor, Tensor]",
@@ -2413,8 +2424,8 @@ def gen_init_pyi() -> tuple[str, int]:
         "def sum(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
         "def mean(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
         "def prod(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False, *, dtype: DTypeLike = None) -> Tensor: ...",
-        "def max(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False) -> Tensor: ...",
-        "def min(input: Tensor, dim: _int | list[_int] | None = None, keepdim: _bool = False) -> Tensor: ...",
+        "@overload\ndef max(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...\n@overload\ndef max(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...\n@overload\ndef max(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...",
+        "@overload\ndef min(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...\n@overload\ndef min(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...\n@overload\ndef min(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...",
         "def var(input: Tensor, dim: _int | Sequence[_int] | None = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor: ...",
         "def std(input: Tensor, dim: _int | Sequence[_int] | None = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor: ...",
         "def argmax(input: Tensor, dim: _int | None = None, keepdim: _bool = False) -> Tensor: ...",
@@ -2430,7 +2441,7 @@ def gen_init_pyi() -> tuple[str, int]:
         "def lerp(input: Tensor, end: Tensor, weight: _float | Tensor) -> Tensor: ...",
         "def diff(input: Tensor, n: _int = 1, dim: _int = -1, prepend: Tensor | None = None, append: Tensor | None = None) -> Tensor: ...",
     ]
-    seen.update(line.split("(")[0].removeprefix("def ").strip() for line in overrides)
+    seen.update(re.findall(r"def (\w+)\(", "\n".join(overrides)))
 
     # ── Composite ops (lucid._ops.composite) ─────────────────────────────────
     import lucid._ops.composite as _comp
@@ -2488,7 +2499,7 @@ def gen_init_pyi() -> tuple[str, int]:
     overrides = [
         _format_with_docstring(
             _avoid_dtype_shadow(line),
-            line.split("(")[0].removeprefix("def ").strip(),
+            re.findall(r"def (\w+)\(", line)[-1],
             _existing_docs,
         )
         for line in overrides

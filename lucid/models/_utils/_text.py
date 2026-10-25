@@ -201,7 +201,7 @@ def last_kept_token(hidden: Tensor, attention_mask: Tensor | None) -> Tensor:
     kept = (attention_mask.float() > 0.5).long()
     positions = lucid.arange(T, device=attention_mask.device)
     # Unkept slots score 0, so an all-pad row lands on position 0.
-    return token_at(hidden, (kept * positions).max(dim=-1))
+    return token_at(hidden, (kept * positions).max(dim=-1).values)
 
 
 def init_text_module_weights(

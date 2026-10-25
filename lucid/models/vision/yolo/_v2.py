@@ -659,7 +659,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         if M == 0:
             background_loss = (sig_conf**2).sum()
             return (cfg.lambda_noobj * background_loss / float(n_pred)).reshape(1)
-        best_iou = box_iou(pred_boxes, gt_xyxy).max(dim=1)  # (P,)
+        best_iou = box_iou(pred_boxes, gt_xyxy).max(dim=1).values  # (P,)
 
         gt_cx = (gt_xyxy[:, 0] + gt_xyxy[:, 2]) / 2.0
         gt_cy = (gt_xyxy[:, 1] + gt_xyxy[:, 3]) / 2.0

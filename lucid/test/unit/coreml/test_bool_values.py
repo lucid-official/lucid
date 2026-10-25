@@ -85,7 +85,7 @@ def _diagonal(x: lucid.Tensor) -> lucid.Tensor:
 
 
 def _sort(x: lucid.Tensor) -> lucid.Tensor:
-    return x.masked_fill(lucid.sort(x > 0, dim=1).bool(), 0.0)
+    return x.masked_fill(lucid.sort(x > 0, dim=1).values.bool(), 0.0)
 
 
 def _argsort(x: lucid.Tensor) -> lucid.Tensor:

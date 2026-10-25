@@ -347,25 +347,20 @@ def test_sort_and_argsort_on_a_0d_tensor(ref, device, dim, descending):
         ref,
         device,
         (),
-        lambda lib, F, t: (
-            lib.sort(t, dim=dim, descending=descending)
-            if lib is lucid
-            else lib.sort(t, dim=dim, descending=descending)[0]
-        ),
+        lambda lib, F, t: lib.sort(t, dim=dim, descending=descending)[0],
     )
     _compare(
         ref,
         device,
         (),
-        lambda lib, F, t: (
-            t.sort(dim=dim, descending=descending)
-            if lib is lucid
-            else t.sort(dim=dim, descending=descending)[0]
-        ),
+        lambda lib, F, t: t.sort(dim=dim, descending=descending)[0],
     )
-    got_idx = lucid.argsort(
-        lucid.tensor(1.5, device=device), dim=dim, descending=descending
-    )
+    x = lucid.tensor(1.5, device=device)
+    sort_res = lucid.sort(x, dim=dim, descending=descending)
+    assert sort_res.indices.shape == () and sort_res.indices.dtype == lucid.int64
+    assert sort_res.indices.item() == 0
+    assert x.sort(dim=dim, descending=descending).indices.item() == 0
+    got_idx = lucid.argsort(x, dim=dim, descending=descending)
     want_idx = ref.argsort(ref.tensor(1.5), dim=dim, descending=descending)
     assert got_idx.shape == () and got_idx.dtype == lucid.int64
     assert got_idx.item() == want_idx.item() == 0

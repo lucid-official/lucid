@@ -223,7 +223,7 @@ def _top_p_filter(logits: Tensor, p: float) -> Tensor:
     is always kept), then scatter the mask back to the original token order via
     the inverse permutation.
     """
-    sorted_vals = lucid.flip(lucid.sort(logits, dim=-1), -1)
+    sorted_vals = lucid.flip(lucid.sort(logits, dim=-1).values, -1)
     sorted_idx = lucid.flip(lucid.argsort(logits, dim=-1), -1)
     sorted_probs = F.softmax(sorted_vals, dim=-1)
     exclusive_cdf = lucid.cumsum(sorted_probs, dim=-1) - sorted_probs

@@ -264,7 +264,7 @@ class MedianBlur(PhotometricTransform[KSizeParam]):
             for dx in range(-half, half + 1)
         ]
         stacked = lucid.stack(neigh, dim=0)
-        ordered = lucid.sort(stacked, dim=0)
+        ordered = lucid.sort(stacked, dim=0).values
         return ordered[(k * k) // 2]
 
     @override

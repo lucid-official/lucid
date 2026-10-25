@@ -142,8 +142,8 @@ def test_axis_reductions_agree_too(keepdims, axis):
     """The broadcast-back path differs per axis and per keepdims."""
     for fn in (
         lambda t: t.prod(dim=axis, keepdim=keepdims),
-        lambda t: t.max(dim=axis, keepdim=keepdims),
-        lambda t: t.min(dim=axis, keepdim=keepdims),
+        lambda t: t.max(dim=axis, keepdim=keepdims).values,
+        lambda t: t.min(dim=axis, keepdim=keepdims).values,
     ):
         reference = _f64(_BASE).requires_grad_(True)
         _loss(fn, reference).backward()

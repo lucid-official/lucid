@@ -289,6 +289,58 @@ def test_kthvalue_returns_values_and_indices_namedtuple(
         np.testing.assert_allclose(_np(x.grad), _np(want_x.grad), rtol=1e-3)
 
 
+@pytest.mark.parametrize("descending", [False, True], ids=["asc", "desc"])
+@pytest.mark.parametrize("dim", (0, 1, -1), ids=lambda d: f"dim{d}")
+@pytest.mark.parametrize("dtype", _DTYPES)
+def test_sort_returns_values_and_indices_namedtuple(
+    ref: ModuleType, device: str, dtype: str, dim: int, descending: bool
+) -> None:
+    grad = dtype != "int64"
+    x, want_x = _pair(ref, _TIES, dtype, device, grad)
+    result = lucid.sort(x, dim=dim, descending=descending)
+    values, indices = result
+    assert values is result.values and indices is result.indices
+    m_res = x.sort(dim=dim, descending=descending)
+    _same(m_res.values, values)
+    _same(m_res.indices, indices)
+    want_res = ref.sort(want_x, dim=dim, descending=descending, stable=True)
+    _same(values, want_res.values)
+    _same(indices, want_res.indices)
+    if grad:
+        weights = lucid.arange(1, x.numel() + 1, dtype=x.dtype, device=device).reshape(
+            x.shape
+        )
+        r_weights = ref.arange(1, want_x.numel() + 1, dtype=want_x.dtype).reshape(
+            want_x.shape
+        )
+        (values * weights).sum().backward()
+        (want_res.values * r_weights).sum().backward()
+        np.testing.assert_allclose(_np(x.grad), _np(want_x.grad), rtol=1e-3)
+
+
+@pytest.mark.parametrize("op", ("max", "min"))
+@pytest.mark.parametrize("keepdim", [False, True], ids=["drop", "keep"])
+@pytest.mark.parametrize("dim", (0, 1, -1), ids=lambda d: f"dim{d}")
+@pytest.mark.parametrize("dtype", _DTYPES)
+def test_max_and_min_dim_return_values_and_indices_namedtuple(
+    ref: ModuleType, device: str, dtype: str, dim: int, keepdim: bool, op: str
+) -> None:
+    x, want_x = _pair(ref, _DATA["no_nan"], dtype, device, False)
+    fn_l = getattr(lucid, op)
+    fn_r = getattr(ref, op)
+    result = fn_l(x, dim=dim, keepdim=keepdim)
+    values, indices = result
+    assert values is result.values and indices is result.indices
+    m_res = getattr(x, op)(dim=dim, keepdim=keepdim)
+    _same(m_res.values, values)
+    _same(m_res.indices, indices)
+    want_res = fn_r(want_x, dim=dim, keepdim=keepdim)
+    _same(values, want_res.values)
+    _same(indices, want_res.indices)
+    assert isinstance(fn_l(x), lucid.Tensor)
+    assert isinstance(fn_l(x, dim=(0, 1), keepdim=keepdim), lucid.Tensor)
+
+
 @pytest.mark.parametrize("dtype", _DTYPES)
 def test_msort_matches_reference(ref: ModuleType, device: str, dtype: str) -> None:
     grad = dtype != "int64"

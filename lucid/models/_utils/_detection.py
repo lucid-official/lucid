@@ -1624,8 +1624,7 @@ class Matcher:
                 "regression term is defined."
             )
 
-        best_gt_iou = iou.max(dim=0)  # (N,) best overlap per prediction
-        matches = lucid.argmax(iou, dim=0)  # (N,) which ground truth it was
+        best_gt_iou, matches = iou.max(dim=0)  # (N,) best overlap and GT index
 
         below = best_gt_iou < self.low_threshold
         between = (best_gt_iou >= self.low_threshold) & (
@@ -1639,7 +1638,7 @@ class Matcher:
             # overlap is restored to a match.  Comparing against the row max
             # rather than taking an argmax keeps all of the tied predictions,
             # which is what the reference does.
-            best_per_gt = iou.max(dim=1, keepdim=True)  # (M, 1)
+            best_per_gt = iou.max(dim=1, keepdim=True).values  # (M, 1)
             forced = (iou == best_per_gt).sum(dim=0) > 0  # (N,)
             result = lucid.where(forced, matches, result)
 

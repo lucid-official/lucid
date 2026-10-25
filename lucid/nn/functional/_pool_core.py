@@ -263,7 +263,7 @@ def _max_pool(
                 f"kernel_size={g.kernel} with dilation={g.dilation}"
             )
         windows = _pool_windows(xb, g, out_spatial)
-        out = windows.max(dim=-1)
+        out = windows.max(dim=-1).values
     else:
         out = _wrap(
             _MAX_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode)
@@ -500,7 +500,7 @@ def _fractional_plane(
         )
     order = [2 * d for d in range(n)] + [2 * d + 1 for d in range(n)]
     flat = windows.permute(order).reshape(*out, math.prod(kernel))
-    local = _lucid.argmax(flat, dim=-1)
+    values, local = flat.max(dim=-1)
     index = None
     for d in range(n):
         shape = [1] * n
@@ -510,7 +510,7 @@ def _fractional_plane(
         coord = offset + origin.reshape(*shape)
         index = coord if index is None else index * spatial[d] + coord
     assert index is not None
-    return flat.max(dim=-1), index
+    return values, index
 
 
 def _no_planes(

@@ -146,7 +146,7 @@ def percentile(values: Tensor, fraction: float) -> Tensor:
         raise ValueError(f"fraction must be in [0, 100], got {fraction}")
     flat = values.reshape(-1)
     count = int(flat.shape[0])
-    ordered = lucid.sort(flat)
+    ordered = lucid.sort(flat).values
     index = min(count - 1, max(0, int(round(fraction / 100.0 * (count - 1)))))
     return ordered[index]
 
