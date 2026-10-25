@@ -12,7 +12,7 @@ from collections.abc import (
     ValuesView,
 )
 from typing import Iterator, cast, overload, override
-from lucid.nn.module import Module
+from lucid.nn.module import Module, _ModuleWrapper
 from lucid.nn.parameter import Parameter
 from lucid._tensor.tensor import Tensor
 
@@ -29,12 +29,24 @@ def _key_at(keys: list[str], idx: int) -> str:
     return keys[position]
 
 
+@overload
+def _as_parameter(value: Tensor) -> Parameter: ...
+@overload
+def _as_parameter[T](value: T) -> T: ...
+
+
 def _as_parameter(value: object) -> object:
     """A plain tensor as a :class:`Parameter`; anything else unchanged.
 
-    Typed ``object`` because what arrives at runtime is not always what the
-    caller's annotation promised, and whatever is not a tensor is left for
-    ``Module.__setattr__`` to refuse.
+    The reference wraps a plain tensor at every entry point that adds one
+    to a :class:`ParameterList` / :class:`ParameterDict` -- the constructor,
+    ``append``/``extend``, item assignment and ``update`` -- so this is
+    the one place that rule lives, called from each of them.  The two
+    overloads above are the honest contract every typed caller relies on
+    (``Tensor`` in, ``Parameter`` out); a value that defies its own
+    parameter's type hint at runtime (not a tensor at all) comes back
+    unchanged below, for the registry's own check to refuse with its usual
+    message rather than this function's.
     """
     if isinstance(value, Tensor) and not isinstance(value, Parameter):
         return Parameter(value)
@@ -204,13 +216,21 @@ class Sequential(Module):
         setattr(self, _key_at(list(self._modules), idx), module)
 
     def __delitem__(self, idx: int | slice) -> None:
-        """Remove the child module at the given index or slice."""
+        """Remove the child module at the given index or slice.
+
+        Through ``delattr`` -- not a direct ``_modules`` deletion -- so a
+        compiled child's wrapper (the ``_ModuleWrapper`` branch of
+        ``Module.__setattr__`` keeps it in ``__dict__`` under this same
+        key) is cleared along with the registry entry, instead of
+        lingering to clash with whatever key the renumbering below
+        assigns next (LCD-571).
+        """
         keys = list(self._modules.keys())
         if isinstance(idx, slice):
             for key in keys[idx]:
-                del self._modules[key]
+                delattr(self, key)
         else:
-            del self._modules[keys[idx]]
+            delattr(self, keys[idx])
         self._renumber_modules()
 
     def __len__(self) -> int:
@@ -245,11 +265,25 @@ class Sequential(Module):
             self.add_module(str(i), item)
 
     def _renumber_modules(self) -> None:
-        """Internal helper for the Sequential module."""
-        items = list(self._modules.values())
-        self._modules.clear()
-        for i, module in enumerate(items):
-            self.add_module(str(i), module)
+        """Reassign every remaining child to a fresh ``'0', '1', ...`` key.
+
+        A compiled child's wrapper sits in ``__dict__`` under its *old*
+        key, separate from the unwrapped model ``_modules`` holds
+        (LCD-571): carried along here, through ``setattr`` with the
+        wrapper itself, so the wrapper -- not the bare model inside it --
+        answers under the new key too, and the old key is cleared before
+        any new key is assigned, so it can never clash with one.
+        """
+        keys = list(self._modules.keys())
+        modules = list(self._modules.values())
+        wrappers = [self.__dict__.get(key) for key in keys]
+        for key in keys:
+            delattr(self, key)
+        for i, (module, wrapper) in enumerate(zip(modules, wrappers, strict=True)):
+            if isinstance(wrapper, _ModuleWrapper):
+                setattr(self, str(i), wrapper)
+            else:
+                self.add_module(str(i), module)
 
 
 class ModuleList[M: Module = Module](Module):
@@ -372,13 +406,21 @@ class ModuleList[M: Module = Module](Module):
         setattr(self, _key_at(list(self._modules), idx), module)
 
     def __delitem__(self, idx: int | slice) -> None:
-        """Remove the child module at the given index or slice."""
+        """Remove the child module at the given index or slice.
+
+        Through ``delattr`` -- not a direct ``_modules`` deletion -- so a
+        compiled child's wrapper (the ``_ModuleWrapper`` branch of
+        ``Module.__setattr__`` keeps it in ``__dict__`` under this same
+        key) is cleared along with the registry entry, instead of
+        lingering to clash with whatever key the renumbering below
+        assigns next (LCD-571).
+        """
         keys = list(self._modules.keys())
         if isinstance(idx, slice):
             for key in keys[idx]:
-                del self._modules[key]
+                delattr(self, key)
         else:
-            del self._modules[keys[idx]]
+            delattr(self, keys[idx])
         self._renumber_modules()
 
     def __len__(self) -> int:
@@ -411,11 +453,25 @@ class ModuleList[M: Module = Module](Module):
             self.add_module(str(i), item)
 
     def _renumber_modules(self) -> None:
-        """Internal helper for the ModuleList module."""
-        items = list(self._modules.values())
-        self._modules.clear()
-        for i, module in enumerate(items):
-            self.add_module(str(i), module)
+        """Reassign every remaining child to a fresh ``'0', '1', ...`` key.
+
+        A compiled child's wrapper sits in ``__dict__`` under its *old*
+        key, separate from the unwrapped model ``_modules`` holds
+        (LCD-571): carried along here, through ``setattr`` with the
+        wrapper itself, so the wrapper -- not the bare model inside it --
+        answers under the new key too, and the old key is cleared before
+        any new key is assigned, so it can never clash with one.
+        """
+        keys = list(self._modules.keys())
+        modules = list(self._modules.values())
+        wrappers = [self.__dict__.get(key) for key in keys]
+        for key in keys:
+            delattr(self, key)
+        for i, (module, wrapper) in enumerate(zip(modules, wrappers, strict=True)):
+            if isinstance(wrapper, _ModuleWrapper):
+                setattr(self, str(i), wrapper)
+            else:
+                self.add_module(str(i), module)
 
     @override
     def forward(self, *args: object) -> Tensor:
@@ -563,8 +619,19 @@ class ModuleDict[M: Module = Module](Module):
         yield from self._modules.keys()
 
     def __delitem__(self, key: str) -> None:
-        """Remove the child module at the given index or slice."""
-        del self._modules[key]
+        """Remove the child module at the given index or slice.
+
+        Through ``delattr`` once ``key`` is known to be present, so a
+        compiled child's wrapper (``Module.__setattr__``'s
+        ``_ModuleWrapper`` branch keeps it in ``__dict__`` under this
+        same key) is cleared along with the registry entry rather than
+        left dangling (LCD-571) -- the missing-key case is checked first
+        so it still raises ``KeyError``, as a mapping does, rather than
+        ``delattr``'s ``AttributeError``.
+        """
+        if key not in self._modules:
+            raise KeyError(key)
+        delattr(self, key)
 
     def keys(self) -> KeysView[str]:
         """Return an iterable over the keys of the ModuleDict."""
@@ -579,9 +646,30 @@ class ModuleDict[M: Module = Module](Module):
         return cast(ValuesView[M], self._modules.values())
 
     def get(self, key: str, default: M | None = None) -> M | None:
-        """Method on the ModuleDict module."""
-        val = self._modules.get(key)
-        return default if val is None else cast(M, val)
+        """Return the module at ``key``, or ``default`` if ``key`` is absent.
+
+        Checked by membership, not by the stored value being ``None`` --
+        an entry explicitly set to ``None`` (a cleared slot that keeps
+        its place in :meth:`named_children`) is a present value in its
+        own right and must come back as ``None``, not silently swapped
+        for ``default``.
+
+        Parameters
+        ----------
+        key : str
+            Name to look up.
+        default : Module, optional
+            Returned when ``key`` is not registered.  Default ``None``.
+
+        Returns
+        -------
+        Module or None
+            The registered module, ``default`` if ``key`` is absent, or
+            ``None`` if the slot at ``key`` was explicitly cleared.
+        """
+        if key not in self._modules:
+            return default
+        return cast(M, self._modules[key])
 
     def pop(self, key: str) -> M:
         """Remove and return the module at the given index from the ModuleDict."""
@@ -627,10 +715,12 @@ class ParameterList(Module):
 
     Parameters
     ----------
-    values : Iterable[Parameter] or None, optional
-        Initial iterable of ``Parameter`` objects.  Each is registered under its
-        zero-based integer index formatted as a string.  Pass ``None``
-        (default) for an empty list.
+    values : Iterable[Tensor] or None, optional
+        Initial iterable of ``Parameter`` objects, or plain tensors -- each
+        wrapped in a :class:`Parameter` first, as every entry point that
+        adds one does.  Each is registered under its zero-based integer
+        index formatted as a string.  Pass ``None`` (default) for an empty
+        list.
 
     Attributes
     ----------
@@ -691,19 +781,20 @@ class ParameterList(Module):
     >>> n_params = sum(p.numel() for p in bias_bank.parameters())
     """
 
-    def __init__(self, values: Iterable[Parameter] | None = None) -> None:
+    def __init__(self, values: Iterable[Tensor] | None = None) -> None:
         """Initialise the ParameterList module. See the class docstring for parameter semantics."""
         super().__init__()
         if values is not None:
             for i, p in enumerate(values):
-                self.register_parameter(str(i), p)
+                self.register_parameter(str(i), _as_parameter(p))
 
-    def __getitem__(self, idx: int) -> Parameter:
-        """Return the child module(s) at the given index or slice."""
+    def __getitem__(self, idx: int) -> Parameter | None:
+        """Return the parameter at the given index, as the reference does --
+        ``None`` if that slot was explicitly cleared by assignment, never
+        an assertion failure for reading back what was legitimately put
+        there (LCD-571)."""
         keys = list(self._parameters.keys())
-        p = self._parameters[keys[idx]]
-        assert p is not None
-        return p
+        return self._parameters[keys[idx]]
 
     def __setitem__(self, idx: int, param: Tensor) -> None:
         """Replace the parameter at the given index.
@@ -728,17 +819,20 @@ class ParameterList(Module):
         """Return the number of registered child modules."""
         return len(self._parameters)
 
-    def __iter__(self) -> Iterator[Parameter]:
-        """Iterate over the registered child modules."""
-        for p in self._parameters.values():
-            assert p is not None
-            yield p
+    def __iter__(self) -> Iterator[Parameter | None]:
+        """Iterate over the registered parameters, ``None`` included for a
+        slot explicitly cleared by assignment (LCD-571)."""
+        yield from self._parameters.values()
 
-    def append(self, param: Parameter) -> None:
-        """Append a module to the end of the ParameterList."""
-        self.register_parameter(str(len(self._parameters)), param)
+    def append(self, param: Tensor) -> None:
+        """Append a module to the end of the ParameterList.
 
-    def extend(self, parameters: Iterable[Parameter]) -> None:
+        A plain tensor is wrapped in a :class:`Parameter`, as the
+        reference does for every entry point that adds one.
+        """
+        self.register_parameter(str(len(self._parameters)), _as_parameter(param))
+
+    def extend(self, parameters: Iterable[Tensor]) -> None:
         """Append each module from an iterable to the ParameterList."""
         for param in parameters:
             self.append(param)
@@ -783,9 +877,11 @@ class ParameterDict(Module):
 
     Parameters
     ----------
-    parameters : dict[str, Parameter] or None, optional
+    parameters : dict[str, Tensor] or None, optional
         Initial ``{name: parameter}`` mapping.  Each entry is registered via
-        ``register_parameter``.  Pass ``None`` (default) for an empty dict.
+        ``register_parameter``; a plain tensor is wrapped in a
+        :class:`Parameter` first, as every entry point that adds one does.
+        Pass ``None`` (default) for an empty dict.
 
     Attributes
     ----------
@@ -864,22 +960,27 @@ class ParameterDict(Module):
     ['low_freq', 'high_freq']
     """
 
-    def __init__(self, parameters: dict[str, Parameter] | None = None) -> None:
+    def __init__(self, parameters: dict[str, Tensor] | None = None) -> None:
         """Initialise the ParameterDict module. See the class docstring for parameter semantics."""
         super().__init__()
         if parameters is not None:
             for k, p in parameters.items():
-                self.register_parameter(k, p)
+                self.register_parameter(k, _as_parameter(p))
 
-    def __getitem__(self, key: str) -> Parameter:
-        """Return the child module(s) at the given index or slice."""
-        p = self._parameters[key]
-        assert p is not None
-        return p
+    def __getitem__(self, key: str) -> Parameter | None:
+        """Return the parameter at ``key``, as the reference does -- ``None``
+        if that slot was explicitly cleared by assignment, never an
+        assertion failure for reading back what was legitimately put
+        there (LCD-571)."""
+        return self._parameters[key]
 
-    def __setitem__(self, key: str, param: Parameter) -> None:
-        """Replace the child module at the given index."""
-        self.register_parameter(key, param)
+    def __setitem__(self, key: str, param: Tensor) -> None:
+        """Register ``param`` under ``key``.
+
+        A plain tensor is wrapped in a :class:`Parameter`, as the
+        reference does for every entry point that adds one.
+        """
+        self.register_parameter(key, _as_parameter(param))
 
     def __contains__(self, key: str) -> bool:
         """Return ``True`` if the key/module is registered."""
@@ -913,23 +1014,27 @@ class ParameterDict(Module):
         """Method on the ParameterDict module."""
         return self._parameters.get(key, default)
 
-    def pop(self, key: str) -> Parameter:
-        """Remove and return the module at the given index from the ParameterDict."""
-        p = self._parameters.pop(key)
-        assert p is not None
-        return p
+    def pop(self, key: str) -> Parameter | None:
+        """Remove and return the parameter at ``key``, as the reference does
+        -- ``None`` if that slot was explicitly cleared by assignment,
+        never an assertion failure (LCD-571)."""
+        return self._parameters.pop(key)
 
     def clear(self) -> None:
         """Remove all modules from the ParameterDict."""
         self._parameters.clear()
 
     def update(
-        self, parameters: Mapping[str, Parameter] | Iterable[tuple[str, Parameter]]
+        self, parameters: Mapping[str, Tensor] | Iterable[tuple[str, Tensor]]
     ) -> None:
-        """Update the ParameterDict with another mapping of modules."""
+        """Update the ParameterDict with another mapping of modules.
+
+        A plain tensor is wrapped in a :class:`Parameter`, as the
+        reference does for every entry point that adds one.
+        """
         items = parameters.items() if isinstance(parameters, Mapping) else parameters
         for key, param in items:
-            self.register_parameter(key, param)
+            self.register_parameter(key, _as_parameter(param))
 
     @override
     def forward(self, *args: object) -> Tensor:

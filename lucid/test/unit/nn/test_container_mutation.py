@@ -120,6 +120,42 @@ def test_deleting_an_absent_key_from_a_module_dict_is_refused():
         del container["missing"]
 
 
+# ── a compiled child survives delete + renumber (LCD-571) ─────────────────────
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda mods: nn.Sequential(*mods),
+        lambda mods: nn.ModuleList(mods),
+    ],
+    ids=["sequential", "modulelist"],
+)
+def test_deleting_before_a_compiled_child_keeps_it_compiled(build):
+    """``_renumber_modules`` used to clear ``_modules`` and re-add through
+    ``add_module``, leaving the old key's ``_ModuleWrapper`` behind in
+    ``__dict__`` -- clashing with whatever key the shift assigned next and
+    raising ``KeyError`` partway through, with the remaining children lost."""
+    container = build([nn.Linear(4, 4), nn.Linear(4, 4), nn.Linear(4, 2)])
+    container[1] = lucid.compile(container[1])
+    del container[0]
+    assert _keys(container) == ["0", "1"]
+    assert isinstance(container.__dict__.get("0"), lucid.nn.module._ModuleWrapper)
+    assert "1" not in container.__dict__, "stale wrapper left under the old key"
+    out = container[0](_x())
+    for m in list(container)[1:]:
+        out = m(out)
+    assert _v(out).shape == (2, 2)
+
+
+def test_deleting_from_a_module_dict_clears_a_compiled_childs_wrapper():
+    container = nn.ModuleDict({"a": nn.Linear(4, 4), "b": nn.Linear(4, 4)})
+    container.b = lucid.compile(container.b)
+    del container["b"]
+    assert "b" not in container.__dict__
+    assert "b" not in dict(container.named_children())
+
+
 # ── inserting ─────────────────────────────────────────────────────────────────
 
 

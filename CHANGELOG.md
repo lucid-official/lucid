@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bootstrap links semgrep's console scripts into worktree venvs (LCD-536)
 - compile probes exercise the compiled path, not eager-vs-eager
 - watch modules reached via a container/helper (LCD-642)
+- keep containers consistent for a compiled child and plain tensors
 
 ---
 
