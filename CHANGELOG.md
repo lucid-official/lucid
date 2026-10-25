@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - build ParametrizationList from a one-step chain
 - inline a nested compiled callable instead of baking it in
 - no stamp means mtime decides engine freshness (LCD-536)
+- bootstrap links semgrep's console scripts into worktree venvs (LCD-536)
 
 ---
 

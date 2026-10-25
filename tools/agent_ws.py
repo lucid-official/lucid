@@ -603,6 +603,24 @@ def bootstrap(root: Path, main_root: Path) -> list[str]:
             if not (site / name).is_file() or (site / name).read_text() != text:
                 (site / name).write_text(text)
                 done.append(f"wrote .venv site-packages/{name}")
+        # The quality gate's semgrep collector shells out to a literal
+        # `semgrep` executable next to the interpreter that ran it
+        # (tools/quality_gate/collectors/semgrep_rules.py) rather than
+        # importing it as a module — `python -m semgrep` is itself deprecated
+        # and exits nonzero — so the site-packages link above makes the
+        # *module* importable but not runnable this way (LCD-536: every
+        # worktree's `land`/self-check exited 2, "cannot measure", and needed
+        # `--allow-slop`).  lizard and vulture need no such link: their
+        # collectors already run them as `-m lizard` / `-m vulture`, which
+        # that same site-packages link resolves; jscpd runs through Node's
+        # `npx`, outside any venv.  `semgrep`'s own CLI re-execs `pysemgrep`
+        # found beside it, so both ship together.
+        for name in ("semgrep", "pysemgrep"):
+            src = main_root / ".venv/bin" / name
+            dst = root / ".venv/bin" / name
+            if src.is_file() and not dst.exists() and not dst.is_symlink():
+                dst.symlink_to(src)
+                done.append(f"linked .venv/bin/{name}")
     # 3. The vault is not in git; link its folders so notes written here land
     #    in the one shared vault instead of a copy that dies with the worktree.
     vault = main_root / "obsidian"

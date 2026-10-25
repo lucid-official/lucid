@@ -316,6 +316,43 @@ def test_bootstrap_refreshes_stale_so_and_warns_when_cpp_is_newer(
     assert not agent_ws._check_engine_freshness(wt_root)
 
 
+def test_bootstrap_links_semgrep_executables_from_the_main_venv(tmp_path: Path) -> None:
+    """LCD-536: the quality gate's semgrep collector shells out to a literal
+    `semgrep` executable beside the interpreter that ran it, not an importable
+    module (`python -m semgrep` is itself deprecated and exits nonzero), so the
+    site-packages link bootstrap already writes is not enough — every
+    worktree's self-check exited 2 ("cannot measure") until this. `pysemgrep`
+    ships alongside it because semgrep's own CLI re-execs it from the same
+    directory."""
+    spec = importlib.util.spec_from_file_location("agent_ws", AGENT_WS)
+    assert spec is not None and spec.loader is not None
+    agent_ws = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(agent_ws)
+
+    main_root = tmp_path / "main"
+    wt_root = tmp_path / "wt"
+    for root in (main_root, wt_root):
+        (root / ".venv" / "bin").mkdir(parents=True)
+        (root / ".venv" / "lib" / "python3.14" / "site-packages").mkdir(parents=True)
+        (root / ".venv" / "bin" / "python3").write_text("#!/bin/sh\n")
+    (main_root / ".venv" / "bin" / "semgrep").write_text("#!/bin/sh\necho semgrep\n")
+    (main_root / ".venv" / "bin" / "pysemgrep").write_text(
+        "#!/bin/sh\necho pysemgrep\n"
+    )
+
+    done = agent_ws.bootstrap(wt_root, main_root)
+    assert "linked .venv/bin/semgrep" in done
+    assert "linked .venv/bin/pysemgrep" in done
+    wt_semgrep = wt_root / ".venv" / "bin" / "semgrep"
+    assert wt_semgrep.is_symlink()
+    assert wt_semgrep.resolve() == (main_root / ".venv" / "bin" / "semgrep").resolve()
+
+    # Idempotent: an existing link (or a tool the main venv lacks) is left alone.
+    done2 = agent_ws.bootstrap(wt_root, main_root)
+    assert "linked .venv/bin/semgrep" not in done2
+    assert "linked .venv/bin/jscpd" not in done2
+
+
 def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(
     tmp_path: Path,
 ) -> None:
