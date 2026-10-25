@@ -39,6 +39,12 @@ pytestmark = pytest.mark.skipif(not metal_available(), reason="Metal unavailable
 _ENTRY_KINDS = ("make_step", "segments_2", "fused_step")
 
 
+@pytest.fixture(autouse=True)
+def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
+    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
+
+
 class _RoundSTE(Function):
     @staticmethod
     def forward(ctx: FunctionCtx, x: lucid.Tensor) -> lucid.Tensor:

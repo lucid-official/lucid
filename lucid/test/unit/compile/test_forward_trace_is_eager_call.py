@@ -24,6 +24,12 @@ from lucid.compile._core.trace_context import recording
 import lucid.nn as nn
 
 
+@pytest.fixture(autouse=True)
+def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
+    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
+
+
 class _FrozenGradBranchModel(nn.Module):
     def __init__(self) -> None:
         super().__init__()

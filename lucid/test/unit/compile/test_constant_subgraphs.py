@@ -414,6 +414,7 @@ def _tracing_caller() -> str:
     while frame is not None and Path(frame.f_code.co_filename).name in (
         "__init__.py",
         "contextlib.py",
+        "trace_context.py",
     ):
         frame = frame.f_back
     return Path(frame.f_code.co_filename).name if frame is not None else "?"
