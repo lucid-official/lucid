@@ -445,7 +445,9 @@ def test_the_stub_scalar_claim_matches_what_the_method_accepts(
     """
     tensor_only = name in _BINARY_INPLACE_TENSOR_ONLY
     base = (
-        lucid.tensor([12, 18, 20, 15]) if tensor_only else _floats(lucid, [1.5, 2.5, 3.5, 4.5])
+        lucid.tensor([12, 18, 20, 15])
+        if tensor_only
+        else _floats(lucid, [1.5, 2.5, 3.5, 4.5])
     ).to(device)
     scalar = 2 if tensor_only else 2.0
 
@@ -622,6 +624,12 @@ def test_a_leaf_that_requires_grad_is_not_written(device: str, name: str) -> Non
     with lucid.no_grad():
         getattr(leaf, name)(*_on(device, args(lucid)))
     assert leaf.is_leaf and leaf.requires_grad
+    f16_leaf = lucid.tensor(
+        [1.0, 2.0], dtype=lucid.float16, device=device, requires_grad=True
+    )
+    with pytest.raises(RuntimeError, match="leaf"):
+        f16_leaf.add_(lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device))
+    assert f16_leaf.is_leaf and f16_leaf.tolist() == [1.0, 2.0]
 
 
 @pytest.mark.parametrize(
@@ -640,7 +648,9 @@ def test_the_gradient_through_the_write_is_the_references(
         operands = args(lib)
         operands = _on(to, operands) if to else operands
         y = x * 1.0
+        before_version = y._version
         getattr(y, name)(*operands)
+        assert y._version > before_version
         (y * y).sum().backward()
         return x.grad.tolist()
 

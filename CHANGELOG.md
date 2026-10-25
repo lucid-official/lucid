@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - untrace Function stand-in aliases and preserve caller leaf state in trace
 - alias CPU Tensor and refuse uncopyable host buffers in from_dlpack
 - accept value=0 in F.pad non-constant modes
+- bump _take version and refuse 0-d int8/16 index_put
 
 ---
 

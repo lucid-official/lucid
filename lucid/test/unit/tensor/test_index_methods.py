@@ -366,6 +366,28 @@ class TestOutOfPlace:
         want[[3, 1]] = values
         assert_close(out, want)
 
+    @pytest.mark.parity
+    def test_index_put_refuses_0d_narrow_integer_indices(
+        self, ref: object, device: str
+    ) -> None:
+        x = lucid.zeros(3, device=device)
+        v = lucid.tensor(5.0, device=device)
+        rx = ref.zeros(3)  # type: ignore[attr-defined]
+        rv = ref.tensor(5.0)  # type: ignore[attr-defined]
+        for dtype_name in ("int8", "int16"):
+            idx = lucid.tensor(1, dtype=getattr(lucid, dtype_name), device=device)
+            ridx = ref.tensor(1, dtype=getattr(ref, dtype_name))  # type: ignore[attr-defined]
+            with pytest.raises(IndexError):
+                rx.index_put((ridx,), rv)
+            with pytest.raises(IndexError, match="index_put"):
+                x.index_put((idx,), v)
+            with pytest.raises(IndexError, match="index_put_"):
+                x.clone().index_put_((idx,), v)
+            assert x[idx].item() == 0.0
+        for dtype_name in ("int32", "int64"):
+            idx = lucid.tensor(1, dtype=getattr(lucid, dtype_name), device=device)
+            assert x.index_put((idx,), v).tolist() == [0.0, 5.0, 0.0]
+
     def test_a_source_of_another_dtype_is_refused_not_reinterpreted(
         self, device: str
     ) -> None:

@@ -249,7 +249,11 @@ def _index_part(impl: _C_engine.TensorImpl, op: str) -> object:
     if impl.dtype == _BOOL:
         return impl
     integer = _promotion.is_integer(impl.dtype)
-    if integer and not impl.shape:
+    if (
+        integer
+        and not impl.shape
+        and (op in ("__getitem__", "__setitem__") or impl.dtype in _INDEX_DTYPES)
+    ):
         return int(impl.item())
     if not integer or impl.dtype not in _INDEX_DTYPES:
         raise IndexError(
@@ -955,10 +959,14 @@ def _take(t: Tensor, impl: _C_engine.TensorImpl) -> None:
     retains = old.retains_grad
     if isinstance(old, _C_engine.TensorImpl):
         # Bumps ``old``'s version, eager bookkeeping a compile recording
-        # must not take for an op of the traced call.
+        # must not take for an op of the traced call, and carries the
+        # bumped version onto ``impl`` so ``t._version`` advances on
+        # non-leaf in-place rebinds as well.
         with untraced():
             v0 = _C_engine.TensorImpl._make_view(old, [0], [1], 0)
             v0.copy_from(v0)
+            while impl.version < old.version:
+                impl.copy_from(impl)
     t._impl = impl
     if retains:
         impl.retain_grad_()
@@ -1043,10 +1051,14 @@ def _adopt_inplace(t: Tensor, impl: _C_engine.TensorImpl, name: str) -> Tensor:
             or t._impl.storage_offset_bytes() != 0
         ):
             _C_engine.assign_inplace(t._impl, impl, name)
+        elif (
+            impl.requires_grad
+            and not (t._impl.requires_grad and t._impl.is_leaf)
+            and _C_engine.grad_enabled()
+        ):
+            _take(t, impl)
         else:
             t._impl.assign_from(impl, name)
-            if impl.requires_grad and _C_engine.grad_enabled():
-                _take(t, impl)
     return t
 
 
