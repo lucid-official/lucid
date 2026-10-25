@@ -31,41 +31,6 @@ struct BinaryGradPair {
     MPSGraphTensor* db = nil;
 };
 
-inline bool is_0d_f32_tensor(MPSGraphTensor* t) {
-    return t != nil && t.dataType == MPSDataTypeFloat32 && t.shape != nil && t.shape.count == 0;
-}
-
-inline bool is_half_f32_0d_pair(const OpNode& node,
-                                MPSDataType chain_dt,
-                                MPSGraphTensor* a_t,
-                                MPSGraphTensor* b_t) {
-    if (chain_dt != MPSDataTypeFloat16 && chain_dt != MPSDataTypeBFloat16)
-        return false;
-    if (node.name != "mul" && node.name != "div")
-        return false;
-    return (a_t.dataType == chain_dt && is_0d_f32_tensor(b_t)) ||
-           (b_t.dataType == chain_dt && is_0d_f32_tensor(a_t));
-}
-
-// All binary-arith VJPs share the same accumulation pattern: compute
-// the full-shape gradient w.r.t. each input, then unreduce back to the
-// pre-broadcast shape and accumulate.  Factored as a helper so each
-// per-op body stays the math-only minimum.  ``body(c) -> BinaryGradPair``.
-//
-// Mixed-dtype reconciliation (autocast): the forward emit casts both
-// operands to the recorded output dtype, but ``bctx.forward(*)`` returns
-// the original (uncast) producer binding, so ``c.a`` / ``c.b`` may have
-// different dtypes than each other and ``c.go``.  All arithmetic in the
-// gradient body must run in ``c.go.dataType`` (the chain's dtype), so
-// we cast both forward activations to that dtype before invoking the
-// per-op body.
-//
-// Half op-math (``mul`` / ``div`` on a half tensor and a 0-d ``float32``
-// operand, LCD-300): eager widens ``grad_out`` and ``T`` to ``float32``,
-// reduces ``dS`` in ``float32``, and rounds ``dT`` once back to the half
-// dtype.  Keep that width here before ``unreduce`` so a learnable 0-d
-// ``float32`` parameter accumulates its ``float32`` gradient in compiled
-// steps.
 template <class Body>
 inline bool accumulate_binary(BackwardContext& bctx,
                               const OpNode& node,
@@ -74,21 +39,13 @@ inline bool accumulate_binary(BackwardContext& bctx,
     BinaryVjpCtx c = unpack_binary_vjp(bctx, node, grad_outs);
     if (!c.ok)
         return false;
-    const MPSDataType chain_dt = c.go.dataType;
-    const bool opmath = is_half_f32_0d_pair(node, chain_dt, c.a, c.b);
-    const MPSDataType a_target_dt = opmath ? c.a.dataType : chain_dt;
-    const MPSDataType b_target_dt = opmath ? c.b.dataType : chain_dt;
-    const MPSDataType work_dt = opmath ? MPSDataTypeFloat32 : chain_dt;
-    c.go = cast_if_needed(c.g, c.go, work_dt);
-    c.a = cast_if_needed(c.g, c.a, work_dt);
-    c.b = cast_if_needed(c.g, c.b, work_dt);
     BinaryGradPair g = body(c);
     if (g.da == nil || g.db == nil)
         return false;
     MPSGraphTensor* da = as_tensor(bctx.unreduce(from_tensor(g.da), c.a_shape, c.out_shape));
     MPSGraphTensor* db = as_tensor(bctx.unreduce(from_tensor(g.db), c.b_shape, c.out_shape));
-    bctx.accumulate_grad(c.a_id, from_tensor(cast_if_needed(c.g, da, a_target_dt)));
-    bctx.accumulate_grad(c.b_id, from_tensor(cast_if_needed(c.g, db, b_target_dt)));
+    bctx.accumulate_grad(c.a_id, from_tensor(da));
+    bctx.accumulate_grad(c.b_id, from_tensor(db));
     return true;
 }
 

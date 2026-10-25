@@ -3,27 +3,18 @@
 ``GradScaler``'s skip decision (eager ``scaler.step()`` vs.
 :func:`lucid.compile.fused_step`) must agree across a training run: both
 read "did any gradient overflow" from the same scaled loss, so they must
-halve (or grow) the scale on the same step.
+halve (or grow) the scale on the same step, including right at the
+``float16`` overflow boundary (`65504.0`).
 
-Near the float16 overflow boundary they currently do not (LCD-593): eager's
-``nn.Linear`` backward operates on the saved *forward* tensors, which
-``autocast(float16)`` already downcast to float16, so the scaled gradient
-overflows to ``inf`` in float16 precision once ``scale`` is large enough.
-The compiled backward (``lucid/_C/compile/VjpEmitters/linalg/Linear.mm``)
-instead casts those saved tensors *up* to the incoming gradient's dtype
-(``chain_dt = grad.dataType``, which is float32 here) before the matmul, so
-the same matmul runs in float32 and never overflows at that scale. The two
-paths only disagree in the narrow scale band where eager's float16 matmul
-has already overflowed but naive float32 arithmetic has not — outside that
-band (or once the scale is large enough that even the float32-side value
-overflows too) they agree again.
-
-Fixing the root cause means changing how every VJP emitter under
-``lucid/_C/compile/VjpEmitters/`` reconciles mixed forward/gradient dtypes
-(13 files use the same ``cast_if_needed(..., chain_dt)`` convention), which
-needs a C++ rebuild and a full autocast+compile parity pass — out of scope
-for this guard. See the LCD-593 report for the evidence (per-seed,
-per-``init_scale`` scale sequences) and the escalation to the orchestrator.
+Eager's backward runs each op's gradient in the op's forward compute dtype
+(e.g. ``float16`` for ``nn.Linear`` under ``autocast(float16)``) and casts
+the resulting gradient back to each input's dtype at accumulation time.
+Compiled VJP emitters (:mod:`lucid._C.compile.VjpEmitters`) reconcile the
+incoming gradient and saved forward operands to the op's forward compute
+dtype via ``vjp_compute_dtype`` and commit half-precision intermediates
+via ``commit_half_before_widen`` before widening to ``float32`` so
+``MPSGraph`` does not fuse ``float16 -> float32`` casts into ``float32``
+kernels and elide ``float16`` overflow or rounding.
 """
 
 import lucid
@@ -89,23 +80,6 @@ def test_skip_sequence_matches_away_from_known_boundary(init_scale_exp: int) -> 
     assert eager_scales == comp_scales
 
 
-# Not strict: which (seed, init_scale) points fall in the band depends on
-# the GPU.  These five diverge on an M1 Pro, while the CI runner's GPU puts
-# the same gradients on the finite side of the float16 max, so they XPASSed
-# there (main 590a4b5a4).  The defect is the dtype direction, not these
-# points.  The C++ fix's own test must pin the overflow directly.
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "LCD-593: compiled Linear VJP (lucid/_C/compile/VjpEmitters/"
-        "linalg/Linear.mm) casts the saved forward x/W up to the incoming "
-        "gradient's dtype (chain_dt = grad.dataType) instead of running "
-        "the matmul in the op's own forward (autocast-lowered float16) "
-        "precision the way eager's backward does, so the compiled matmul "
-        "misses the float16 overflow eager hits by design in this scale "
-        "band on some GPUs. Needs a C++ fix + rebuild."
-    ),
-)
 @pytest.mark.parametrize(
     "seed,init_scale_exp",
     [(1, 18), (1, 19), (36, 17), (36, 18), (36, 19)],
@@ -117,3 +91,34 @@ def test_skip_sequence_matches_at_overflow_boundary(
         seed=seed, init_scale=2.0**init_scale_exp
     )
     assert eager_scales == comp_scales
+
+
+def test_compiled_vjp_and_half_widening_preserve_float16_overflow_boundary() -> None:
+    """Directly pin the float16 overflow boundary (65504.0) regardless of GPU:
+    when a float16 intermediate or Linear VJP exceeds 65504.0 before widening
+    to float32, both eager and compiled produce ``inf`` so ``GradScaler``
+    skips the step and halves the scale identically."""
+    eager_layer = nn.Linear(4, 4, bias=False).to(COMPILE_DEVICE)
+    comp_layer = nn.Linear(4, 4, bias=False).to(COMPILE_DEVICE)
+    with lucid.no_grad():
+        eager_layer.weight.fill_(16.0)
+        comp_layer.weight.fill_(16.0)
+
+    opt_eager = optim.SGD(list(eager_layer.parameters()), lr=0.1)
+    opt_comp = optim.SGD(list(comp_layer.parameters()), lr=0.1)
+    scaler_eager = GradScaler(init_scale=4096.0)
+    scaler_comp = GradScaler(init_scale=4096.0)
+    step = fused_step(comp_layer, F.mse_loss, opt_comp, grad_scaler=scaler_comp)
+
+    xb = lucid.ones(2, 4, device=COMPILE_DEVICE)
+    yb = lucid.zeros(2, 4, device=COMPILE_DEVICE)
+    with autocast("metal", dtype=lucid.float16):
+        opt_eager.zero_grad()
+        loss_e = F.mse_loss(eager_layer(xb), yb)
+        scaler_eager.scale(loss_e).backward()
+        scaler_eager.step(opt_eager)
+        scaler_eager.update()
+        step(xb, yb)
+
+    assert scaler_eager.get_scale() == 2048.0
+    assert scaler_comp.get_scale() == 2048.0

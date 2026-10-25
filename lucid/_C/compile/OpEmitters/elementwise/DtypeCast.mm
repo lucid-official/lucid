@@ -49,7 +49,7 @@ public:
         const auto dst = mps_dtype_of(target);
         if (!dst)
             return false;
-        ctx.bind(node.outputs[0].id, (__bridge void*)([graph castTensor:x_t toType:*dst name:@"astype"]));
+        ctx.bind(node.outputs[0].id, (__bridge void*)cast_mps_tensor(graph, x_t, *dst, @"astype"));
         return true;
     }
 };

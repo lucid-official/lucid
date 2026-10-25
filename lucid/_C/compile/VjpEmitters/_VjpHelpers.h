@@ -56,11 +56,37 @@ namespace lucid::compile {
 // precision for whatever comes next in the backward walk.
 [[maybe_unused]] inline MPSGraphTensor*
 cast_if_needed(MPSGraph* g, MPSGraphTensor* t, MPSDataType target) {
-    if (t == nil || g == nil)
-        return t;
-    if (t.dataType == target)
-        return t;
-    return [g castTensor:t toType:target name:@"vjp_dtype_cast"];
+    return cast_mps_tensor(g, t, target, @"vjp_dtype_cast");
+}
+
+// Resolve the compute dtype for ``node``'s backward pass: the forward
+// output's floating MPSDataType when recorded, else ``fallback``.  Matches
+// eager autograd, which executes each backward formula at the forward op's
+// effective dtype (``eff_dt``) and casts each input gradient back to its
+// input's dtype upon accumulation.
+[[maybe_unused]] inline MPSDataType vjp_compute_dtype(const OpNode& node, MPSDataType fallback) {
+    if (!node.outputs.empty()) {
+        if (const auto dt = mps_dtype_of(node.outputs[0].dtype)) {
+            if ((*dt & MPSDataTypeFloatBit) != 0)
+                return *dt;
+        }
+    }
+    return fallback;
+}
+
+[[maybe_unused]] inline bool is_vjp_half_f32_0d_pair(const OpNode& node,
+                                                     MPSDataType target_dt,
+                                                     MPSGraphTensor* a_t,
+                                                     MPSGraphTensor* b_t) {
+    if (target_dt != MPSDataTypeFloat16 && target_dt != MPSDataTypeBFloat16)
+        return false;
+    if (node.name != "mul" && node.name != "div" && node.name != "floordiv")
+        return false;
+    auto is_0d_f32 = [](MPSGraphTensor* t) {
+        return t != nil && t.dataType == MPSDataTypeFloat32 && t.shape != nil && t.shape.count == 0;
+    };
+    return (a_t.dataType == target_dt && is_0d_f32(b_t)) ||
+           (b_t.dataType == target_dt && is_0d_f32(a_t));
 }
 
 // Lift a ``Shape`` (``std::vector<int64_t>``) to an ``NSArray<NSNumber*>``.
@@ -215,8 +241,11 @@ inline bool emit_unary_vjp(BackwardContext& bctx,
     MPSGraphTensor* x = as_tensor(bctx.forward(x_id));
     if (g == nil || x == nil || go == nil)
         return false;
-    if (cast_forward_to_grad)
-        x = cast_if_needed(g, x, go.dataType);
+    if (cast_forward_to_grad) {
+        const MPSDataType dt = vjp_compute_dtype(node, go.dataType);
+        x = cast_if_needed(g, x, dt);
+        go = cast_if_needed(g, go, dt);
+    }
     MPSGraphTensor* dx = body(g, x, go);
     if (dx == nil)
         return false;
@@ -259,8 +288,14 @@ unpack_binary_vjp(BackwardContext& bctx, const OpNode& node, const std::vector<v
     c.b = as_tensor(bctx.forward(c.b_id));
     if (c.g == nil || c.go == nil || c.a == nil || c.b == nil)
         return c;
+    const MPSDataType target_dt = vjp_compute_dtype(node, c.go.dataType);
+    const MPSDataType op_dt =
+        is_vjp_half_f32_0d_pair(node, target_dt, c.a, c.b) ? MPSDataTypeFloat32 : target_dt;
     c.a_shape = shape_of_mps(c.a);
     c.b_shape = shape_of_mps(c.b);
+    c.go = cast_if_needed(c.g, c.go, op_dt);
+    c.a = cast_if_needed(c.g, c.a, op_dt);
+    c.b = cast_if_needed(c.g, c.b, op_dt);
     if (!node.outputs.empty())
         c.out_shape = node.outputs[0].shape;
     if (c.out_shape.empty())

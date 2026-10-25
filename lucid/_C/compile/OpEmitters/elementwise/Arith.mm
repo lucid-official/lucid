@@ -83,17 +83,17 @@ inline bool emit_binary(BuilderContext& ctx, const OpNode& node, BuilderBlock bu
         is_half_f32_0d_pair(node, target_dt, a_t, b_t) ? MPSDataTypeFloat32 : target_dt;
 
     if (a_t.dataType != op_dt) {
-        a_t = [graph castTensor:a_t toType:op_dt name:@"binop_cast_a"];
+        a_t = cast_mps_tensor(graph, a_t, op_dt, @"binop_cast_a");
     }
     if (b_t.dataType != op_dt) {
-        b_t = [graph castTensor:b_t toType:op_dt name:@"binop_cast_b"];
+        b_t = cast_mps_tensor(graph, b_t, op_dt, @"binop_cast_b");
     }
 
     MPSGraphTensor* y = builder(graph, a_t, b_t);
     if (y == nil)
         return false;
     if (y.dataType != target_dt) {
-        y = [graph castTensor:y toType:target_dt name:@"binop_cast_out"];
+        y = cast_mps_tensor(graph, y, target_dt, @"binop_cast_out");
     }
     ctx.bind(node.outputs[0].id, (__bridge void*)y);
     return true;

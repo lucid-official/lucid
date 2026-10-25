@@ -80,6 +80,23 @@ bool carries_gradient(const OpNode& node) {
     return false;
 }
 
+std::unordered_set<TensorId> param_dependents(const std::vector<OpNode>& ops,
+                                              const std::vector<TensorId>& param_ids) {
+    std::unordered_set<TensorId> depends(param_ids.begin(), param_ids.end());
+    for (const auto& node : ops) {
+        bool dep = false;
+        for (TensorId in : node.inputs)
+            if (in >= 0 && depends.count(in) != 0) {
+                dep = true;
+                break;
+            }
+        if (dep)
+            for (const auto& om : node.outputs)
+                depends.insert(om.id);
+    }
+    return depends;
+}
+
 }  // namespace
 
 void register_vjp_emitter(std::unique_ptr<VjpEmitter> vjp) {
@@ -234,25 +251,25 @@ void* BackwardContext::resolve_grad(TensorId tid) const {
 
 void BackwardContext::accumulate_grad(TensorId tid, void* grad) {
     if (grad == nullptr) return;
+    MPSGraph* g = (__bridge MPSGraph*)graph_;
+    MPSGraphTensor* b = (__bridge MPSGraphTensor*)grad;
+    MPSGraphTensor* fwd = (__bridge MPSGraphTensor*)forward(tid);
+    // Match eager autograd's ``grad_to_input_dtype``: each tensor id's
+    // gradient lives in that tensor's own forward dtype.
+    if (g != nil && b != nil && fwd != nil && (fwd.dataType & MPSDataTypeFloatBit) != 0 &&
+        b.dataType != fwd.dataType) {
+        b = cast_mps_tensor(g, b, fwd.dataType, @"accum_to_fwd_dtype");
+        grad = (__bridge void*)b;
+    }
     auto it = grad_map_.find(tid);
     if (it == grad_map_.end()) {
         grad_map_[tid] = grad;
         return;
     }
     // Sum existing contribution + new one.
-    MPSGraph* g = (__bridge MPSGraph*)graph_;
     MPSGraphTensor* a = (__bridge MPSGraphTensor*)it->second;
-    MPSGraphTensor* b = (__bridge MPSGraphTensor*)grad;
-    // Mixed-dtype reconciliation: under autocast, gradients from
-    // different paths in the backward walk may have different dtypes
-    // (e.g. residual + main path).  Cast b to match a's dtype so the
-    // add succeeds — MPSGraph's additionWithPrimaryTensor: requires
-    // matching dtypes and would otherwise fail with
-    // ``'mps.add' op requires the same element type for all operands
-    // and results``.  We pick a's dtype (the existing accumulator)
-    // arbitrarily; either choice works as long as we're consistent.
     if (a != nil && b != nil && a.dataType != b.dataType) {
-        b = [g castTensor:b toType:a.dataType name:@"grad_accum_cast"];
+        b = cast_mps_tensor(g, b, a.dataType, @"grad_accum_cast");
     }
     MPSGraphTensor* s =
         [g additionWithPrimaryTensor:a secondaryTensor:b name:@"grad_accum"];
@@ -309,23 +326,8 @@ bool BackwardWalker::compute_grads(TensorId loss_id,
     //    grads via :func:`accumulate_grad`.
     const auto& ops = trace_.ops;
     const auto& sink = no_grad_ops();
-    // Values that depend on a parameter, in dispatch order.  An op none of
-    // whose outputs is among them has no parameter upstream, so no gradient
-    // the caller asked for runs through it — and walking it anyway demanded
-    // a VJP for mask and index arithmetic built from constants, turning a
-    // learnable additive mask (CoaT's relative-position bias) into a gap.
-    std::unordered_set<TensorId> depends(param_ids.begin(), param_ids.end());
-    for (const auto& node : ops) {
-        bool dep = false;
-        for (TensorId in : node.inputs)
-            if (in >= 0 && depends.count(in) != 0) {
-                dep = true;
-                break;
-            }
-        if (dep)
-            for (const auto& om : node.outputs)
-                depends.insert(om.id);
-    }
+    // Values that depend on a parameter, in dispatch order.
+    const std::unordered_set<TensorId> depends = param_dependents(ops, param_ids);
     for (auto it = ops.rbegin(); it != ops.rend(); ++it) {
         const OpNode& node = *it;
         bool upstream_param = false;
@@ -343,8 +345,12 @@ bool BackwardWalker::compute_grads(TensorId loss_id,
         bool any_demand = false;
         for (const auto& om : node.outputs) {
             void* go = bctx_.resolve_grad(om.id);
+            if (go != nullptr) {
+                any_demand = true;
+                if (auto dt = mps_dtype_of(om.dtype))
+                    go = from_tensor(cast_if_needed(graph, as_tensor(go), *dt));
+            }
             grad_outs.push_back(go);
-            if (go != nullptr) any_demand = true;
         }
         if (!any_demand) continue;  // no path from loss touches this op
 

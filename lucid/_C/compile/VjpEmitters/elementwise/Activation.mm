@@ -266,9 +266,7 @@ public:
         // the original ``x`` dtype to cast the grad *back* to it.
         return emit_unary_vjp(bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) {
-                MPSDataType x_dt = x.dataType;
-                if (go.dataType == x_dt) return go;
-                return [g castTensor:go toType:x_dt name:@"astype_vjp"];
+                return cast_mps_tensor(g, go, x.dataType, @"astype_vjp");
             },
             /*cast_forward_to_grad=*/false);
     }

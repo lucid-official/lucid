@@ -161,18 +161,23 @@ inline bool bool_attr(const OpNode& node, const char* key, bool def) {
 // ``sum(int)`` keep their integer arithmetic.
 [[maybe_unused]] inline MPSGraphTensor*
 promote_to_float_output(MPSGraph* g, MPSGraphTensor* x, const OpNode& node) {
-    if (node.outputs.empty() || (x.dataType & MPSDataTypeFloatBit))
+    if (node.outputs.empty() || x == nil)
         return x;
+    MPSDataType target = x.dataType;
     switch (node.outputs[0].dtype) {
     case Dtype::F32:
-        return [g castTensor:x toType:MPSDataTypeFloat32 name:nil];
+        target = MPSDataTypeFloat32;
+        break;
     case Dtype::F16:
-        return [g castTensor:x toType:MPSDataTypeFloat16 name:nil];
+        target = MPSDataTypeFloat16;
+        break;
     case Dtype::BF16:
-        return [g castTensor:x toType:MPSDataTypeBFloat16 name:nil];
+        target = MPSDataTypeBFloat16;
+        break;
     default:
         return x;
     }
+    return x.dataType == target ? x : [g castTensor:x toType:target name:nil];
 }
 
 // Build ``[0, 1, …, rank-1]`` as an Objective-C array of NSNumber.

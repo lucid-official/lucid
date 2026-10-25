@@ -72,6 +72,28 @@ inline MPSDataType mps_dtype_or_throw(Dtype dt) {
     throw std::runtime_error("lucid::compile: dtype not supported on the MPSGraph compile path");
 }
 
+// Materialise a float16 / bfloat16 tensor's 16-bit representation before
+// widening it to float32.  MPSGraph's MLIR optimizer otherwise folds
+// ``cast(op_f16(...), f32)`` into ``op_f32(...)``, eliding the IEEE binary16 /
+// bfloat16 rounding and finite-range clamp (65504 for float16).
+inline MPSGraphTensor* commit_half_before_widen(MPSGraph* g, MPSGraphTensor* x, MPSDataType dst) {
+    if (g == nil || x == nil || dst != MPSDataTypeFloat32 ||
+        (x.dataType != MPSDataTypeFloat16 && x.dataType != MPSDataTypeBFloat16))
+        return x;
+    const bool scalar = (x.shape != nil && x.shape.count == 0);
+    MPSGraphTensor* r = scalar ? [g expandDimsOfTensor:x axis:0 name:nil] : x;
+    MPSGraphTensor* i16 = [g reinterpretCastTensor:r toType:MPSDataTypeInt16 name:nil];
+    MPSGraphTensor* back = [g reinterpretCastTensor:i16 toType:x.dataType name:nil];
+    return scalar ? [g squeezeTensor:back axis:0 name:nil] : back;
+}
+
+inline MPSGraphTensor*
+cast_mps_tensor(MPSGraph* g, MPSGraphTensor* x, MPSDataType dst, NSString* name = nil) {
+    if (x == nil || g == nil || x.dataType == dst)
+        return x;
+    return [g castTensor:commit_half_before_widen(g, x, dst) toType:dst name:name];
+}
+
 // ``t`` held at the declared dtype ``dt``: ``t`` itself when it already is,
 // a cast when only the width or the kind of a real value differs, and nil
 // when ``dt`` has no MPSGraph type or the cast would cross between real and
@@ -87,7 +109,7 @@ inline MPSGraphTensor* held_at(MPSGraph* g, MPSGraphTensor* t, Dtype dt) {
     const bool want_complex = (*want & MPSDataTypeComplexBit) != 0;
     if (t_complex != want_complex)
         return nil;
-    return [g castTensor:t toType:*want name:@"held_at_declared_dtype"];
+    return cast_mps_tensor(g, t, *want, @"held_at_declared_dtype");
 }
 
 }  // namespace lucid::compile
