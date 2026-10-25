@@ -210,10 +210,12 @@ _INDEX = [0, 0, 1, 2, 2, 3, 3]
 
 class _Weigh(Function):
     """``x * [1, 2, ..., n]`` through a node that keeps nothing (a Python
-    Function's node holds no tensor of its own), so the scatter result it
-    consumes is held by its caller alone.  A built-in node holds the inputs
-    graph-mode backward reads — ``y.sum()`` keeps ``y`` — so a dropped
-    result is gone at backward only past a node like this one."""
+    Function's node holds no tensor of its own), so the scatter result is
+    freed as soon as nothing outside the graph holds it — even before
+    ``backward()`` runs.  (A built-in consumer such as ``y.sum()`` also takes
+    the recompute path once ``y`` is dropped outside the graph, because the
+    engine calls ``release_saved`` on the consumer before running the scatter
+    node.)"""
 
     @staticmethod
     def forward(ctx: FunctionCtx, x: lucid.Tensor) -> lucid.Tensor:
@@ -314,6 +316,70 @@ def test_create_graph_is_refused_either_way(mode: str, drop: bool, device: str) 
         del y
     with pytest.raises(RuntimeError, match="create_graph=True is not yet supported"):
         lucid.autograd.grad(loss, [base, src], create_graph=True)
+
+
+@pytest.mark.parametrize("mode", ["amax", "amin", "prod"])
+@pytest.mark.parametrize("drop", [False, True], ids=["live", "recomputed"])
+def test_allow_mutation_on_saved_tensors_uses_pre_write_operands(
+    mode: str, drop: bool, device: str
+) -> None:
+    def run(mutate: bool) -> list[np.ndarray]:
+        b0 = lucid.tensor([3.0, 0.0, 5.0, -1.0, 7.0], device=device, requires_grad=True)
+        s0 = lucid.tensor(_SRC, device=device, requires_grad=True)
+        base = b0 * 1.0
+        src = s0 * 1.0
+        index = lucid.tensor(_INDEX, device=device)
+        y = base.scatter_reduce(0, index, src, reduce=mode)
+        loss = _Weigh.apply(y).sum()
+        if drop:
+            del y
+        if mutate:
+            with lucid.autograd.graph.allow_mutation_on_saved_tensors():
+                with lucid.no_grad():
+                    base.add_(10.0)
+                    src.add_(-20.0)
+                loss.backward()
+        else:
+            loss.backward()
+        assert b0.grad is not None and s0.grad is not None
+        return [b0.grad.numpy(), s0.grad.numpy()]
+
+    want_b, want_s = run(mutate=False)
+    got_b, got_s = run(mutate=True)
+    np.testing.assert_allclose(got_b, want_b, rtol=0, atol=1e-6)
+    np.testing.assert_allclose(got_s, want_s, rtol=0, atol=1e-6)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("mode", ["amax", "amin"])
+@pytest.mark.parametrize("drop", [False, True], ids=["live", "recomputed"])
+def test_extremum_nan_winner_gradient_matches_reference(
+    mode: str, drop: bool, device: str, ref: ModuleType
+) -> None:
+    base_vals = [3.0, 0.0, 5.0, -1.0, 7.0]
+    src_vals = [3.0, float("nan"), 1.0, 5.0, 5.0, -1.0, 2.0]
+
+    r_base = ref.tensor(base_vals, requires_grad=True)
+    r_src = ref.tensor(src_vals, requires_grad=True)
+    r_y = r_base.scatter_reduce(0, ref.tensor(_INDEX), r_src, reduce=mode)
+    (r_y * ref.arange(1.0, len(base_vals) + 1.0)).sum().backward()
+
+    base = lucid.tensor(base_vals, device=device, requires_grad=True)
+    src = lucid.tensor(src_vals, device=device, requires_grad=True)
+    y = base.scatter_reduce(0, lucid.tensor(_INDEX, device=device), src, reduce=mode)
+    loss = _Weigh.apply(y).sum()
+    if drop:
+        del y
+    loss.backward()
+    assert base.grad is not None and src.grad is not None
+    np.testing.assert_allclose(
+        base.grad.numpy(), r_base.grad.numpy(), rtol=0, atol=1e-6, equal_nan=True
+    )
+    np.testing.assert_allclose(
+        src.grad.numpy(), r_src.grad.numpy(), rtol=0, atol=1e-6, equal_nan=True
+    )
+    assert np.isnan(base.grad.numpy()[0])
+    assert np.all(np.isnan(src.grad.numpy()[:2]))
 
 
 @pytest.mark.parametrize("mode", ["amax", "amin", "prod"])

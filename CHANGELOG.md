@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - grid_sample half opmath & complex scan (LCD-632, LCD-637)
 
+- scatter_reduce saved operands & NaN grads (LCD-603)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

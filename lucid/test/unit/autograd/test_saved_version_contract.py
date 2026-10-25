@@ -549,6 +549,7 @@ public:
 };
 struct BarNode : Node {
     TensorImplPtr held_;
+    std::array<std::shared_ptr<TensorImpl>, 2> arr_;
     std::vector<Storage> apply(Storage g) override;
 };
 class BazBackward : public FuncOp<BazBackward, 1> {
@@ -588,7 +589,8 @@ def test_the_check_refuses_each_way_a_node_can_escape_the_guard(tmp_path: Path) 
         in text
     )
     assert "BarNode::held_ is listed as guarded but BarNode declares no" in text
+    assert "BarNode::arr_ holds tensor data and is not classified" in text
     assert "an empty validate_versions override" in text
     assert "HELD lists Gone::x_" in text
-    assert "ops/Foo.cpp:15: writes a saved slot directly" in text
-    assert len(problems) == 7
+    assert "ops/Foo.cpp:16: writes a saved slot directly" in text
+    assert len(problems) == 8

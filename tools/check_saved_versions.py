@@ -65,7 +65,9 @@ _NODE_BASE = re.compile(
     r"VariadicKernel|UnaryOp|BinaryOp|ReduceOp|ScatterReduceNode)\b"
 )
 _HELD_TYPE = (
-    r"(?:std::array<\s*Storage\s*,[^>]*>|std::vector<\s*Storage\s*>|"
+    r"(?:std::array<\s*Storage\s*,[^>]*>|"
+    r"std::array<\s*(?:TensorImplPtr|std::shared_ptr<\s*TensorImpl\s*>)\s*,[^>]*>|"
+    r"std::vector<\s*Storage\s*>|"
     r"std::optional<\s*Storage\s*>|Storage|CpuStorage|"
     r"GpuStorage|TensorImplPtr|std::shared_ptr<\s*TensorImpl\s*>|"
     r"std::vector<\s*TensorImplPtr\s*>|std::vector<\s*std::shared_ptr<\s*TensorImpl\s*>\s*>)"
@@ -108,6 +110,7 @@ _OUTPUT = "the forward's output by value, read only as data"
 HELD: dict[str, str] = {
     # The canonical slots — an input's values live here, guarded by the base.
     "AutogradNode::saved_inputs_": GUARDED,
+    "AutogradNode::saved_impl_inputs_": GUARDED,
     "AutogradNode::saved_output_": _OUTPUT,
     "VariadicKernel::saved_inputs_v_": GUARDED,
     "VariadicKernel::saved_output_": _OUTPUT,
@@ -117,6 +120,7 @@ HELD: dict[str, str] = {
     "LstmBackward::saved_weights": GUARDED,
     "LstmBackward::gates_all": _DERIVED,
     "LstmBackward::cells_all": _DERIVED,
+    "ScatterReduceNode::saved_impl_inputs_": GUARDED,
     "ScatterReduceNode::saved_base_": GUARDED,
     "ScatterReduceNode::saved_indices_": GUARDED,
     "ScatterReduceNode::saved_src_": GUARDED,

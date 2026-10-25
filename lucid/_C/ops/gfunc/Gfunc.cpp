@@ -815,11 +815,22 @@ std::vector<Storage> cpu_scatter_prod_grads(const Storage& g_s,
     return {Storage{std::move(gb_s)}, Storage{std::move(gs_s)}};
 }
 
+// Snapshot ``t``'s forward-time values into a detached TensorImpl so
+// ``allow_mutation_on_saved_tensors`` reads the original saved values while a
+// CPU in-place write into ``t`` is not refused by ``storage_is_shared`` before
+// ``validate_versions`` runs.
+TensorImplPtr snapshot_scatter_operand(const TensorImplPtr& t) {
+    Storage s = (!t->is_phantom() && t->device() == Device::CPU)
+                    ? backend::Dispatcher::for_device(Device::CPU)
+                          .clone(t->storage(), t->shape(), t->dtype())
+                    : t->storage();
+    return std::make_shared<TensorImpl>(std::move(s), t->shape(), t->dtype(), t->device(), false);
+}
+
 // What the scatter_amax / scatter_amin / scatter_prod backwards hold: both
-// operands, the index and the result, read by value at backward through the
-// tensors themselves.  Held as tensors, they are what a write after forward
-// would change under the node, so each one's version is guarded — the
-// reference saves all four and refuses the same writes.
+// operands and the index saved by value in detached TensorImpls, strong
+// handles to the live inputs so each one's version is guarded (the reference
+// saves all four and refuses the same writes), and a weak handle to the result.
 //
 // The result is held weakly.  It owns this node through its grad_fn, so a
 // strong handle closed a cycle only a backward broke: every forward that ran
@@ -827,11 +838,13 @@ std::vector<Storage> cpu_scatter_prod_grads(const Storage& g_s,
 // the graph behind them alive.  Nor is a copy of its buffer kept instead: on
 // the CPU an in-place write into bytes a node also holds is refused at the
 // write, where the reference refuses it at backward with the version error.
-// Once the result is gone, the backward that needs its values recomputes
-// them (ScatterExtremumNode::result), and a write into it after which nothing
-// held it is not refused — as for every node's saved output (LCD-590).
+// Once nothing outside the graph holds the result, the backward that needs its
+// values recomputes them (ScatterExtremumNode::result), and a write into it
+// after which nothing held it is not refused — as for every node's saved
+// output (LCD-590).
 struct ScatterReduceNode : Node {
     int dim_ = 0;
+    std::array<TensorImplPtr, 3> saved_impl_inputs_;
     TensorImplPtr saved_base_;
     TensorImplPtr saved_indices_;
     TensorImplPtr saved_src_;
@@ -840,7 +853,8 @@ struct ScatterReduceNode : Node {
     Dtype dtype_ = Dtype::F32;
     Device device_ = Device::CPU;
 
-    // Hold the operands, the index and the result, at the versions they are
+    // Hold the operands and the index by value, keep strong handles to the
+    // live operands and a weak handle to the result at the versions they are
     // guarded at, and wire the edges to ``base`` and ``src``.
     void hold(const TensorImplPtr& base,
               const TensorImplPtr& indices,
@@ -848,9 +862,10 @@ struct ScatterReduceNode : Node {
               const TensorImplPtr& out,
               int dim) {
         dim_ = dim;
-        saved_base_ = base;
-        saved_indices_ = indices;
-        saved_src_ = src;
+        saved_impl_inputs_ = {base, indices, src};
+        saved_base_ = snapshot_scatter_operand(base);
+        saved_indices_ = snapshot_scatter_operand(indices);
+        saved_src_ = snapshot_scatter_operand(src);
         saved_out_ = out;
         base_shape_ = base->shape();
         dtype_ = base->dtype();
@@ -862,14 +877,16 @@ struct ScatterReduceNode : Node {
 
     void validate_versions() override {
         const std::string op = node_name();
-        check_saved_version(saved_base_, 0, op, 0);
-        check_saved_version(saved_indices_, 1, op, 1);
-        check_saved_version(saved_src_, 2, op, 2);
+        check_saved_version(saved_impl_inputs_[0], 0, op, 0);
+        check_saved_version(saved_impl_inputs_[1], 1, op, 1);
+        check_saved_version(saved_impl_inputs_[2], 2, op, 2);
         if (saved_versions_.size() > 3)
             check_version_match(saved_out_, saved_versions_[3], op + " output 0");
     }
 
     void release_saved() override {
+        for (auto& p : saved_impl_inputs_)
+            p.reset();
         saved_base_.reset();
         saved_indices_.reset();
         saved_src_.reset();
@@ -877,9 +894,9 @@ struct ScatterReduceNode : Node {
     }
 
     void for_each_owned_tensor(const std::function<void(const TensorImplPtr&)>& fn) const override {
-        for (const auto* t : {&saved_base_, &saved_indices_, &saved_src_}) {
-            if (*t)
-                fn(*t);
+        for (const auto& t : saved_impl_inputs_) {
+            if (t)
+                fn(t);
         }
     }
 };
@@ -896,10 +913,11 @@ struct ScatterExtremumNode : ScatterReduceNode {
     std::string node_name() const override { return name_; }
 
     // The result's values as forward computed them: the tensor itself while
-    // it lives — :meth:`validate_versions` has just checked it — and once it
-    // is gone, the forward's kernel run again on the operands, whose
-    // versions are checked the same way.  A max or min selects its value, so
-    // the two agree bit for bit.
+    // it lives — :meth:`validate_versions` has just checked it — and once
+    // nothing outside the graph holds it, the forward's kernel run again on
+    // the saved operands.  A max or min selects its value, so outside
+    // ``allow_mutation_on_saved_tensors`` (where a write into the live result
+    // itself is not refused) the two agree bit for bit.
     TensorImplPtr result() const {
         if (auto out = saved_out_.lock())
             return out;
@@ -921,20 +939,21 @@ struct ScatterExtremumNode : ScatterReduceNode {
 
         // 2. Count total tied winners per output position:
         //    winners_from_src[i] = Σ mask_src_f[j]  (over j where idx[j]==i)
+        //    Since base[i] is always a participant, total_wins[i] == 0 occurs
+        //    if and only if out[i] is NaN; dividing without clamping yields
+        //    0 / 0 = NaN at every participant of a NaN bucket, matching the
+        //    reference on both CPU and Metal.
         auto zeros_out = zeros_like_op(out);
         auto wins_from_src = scatter_add_op(zeros_out, saved_indices_, mask_src_f, dim_);
-        auto total_wins = add_op(mask_base_f, wins_from_src);  // per-output count
-        // Clamp to avoid divide-by-zero at non-participating positions
-        auto safe_wins = where_op(equal_op(total_wins, zeros_like_op(total_wins)),
-                                  ones_like_op(total_wins), total_wins);
+        auto total_wins = add_op(mask_base_f, wins_from_src);
 
-        // 3. grad_base = g * mask_base_f / safe_wins
-        Storage grad_base = div_op(mul_op(g_impl, mask_base_f), safe_wins)->storage();
+        // 3. grad_base = g * mask_base_f / total_wins
+        Storage grad_base = div_op(mul_op(g_impl, mask_base_f), total_wins)->storage();
 
-        // 4. grad_src = gather(g / safe_wins) * mask_src_f
-        auto g_normed = div_op(g_impl, safe_wins);
-        auto gathered_gn = gather_op(g_normed, saved_indices_, dim_);
-        Storage grad_src = mul_op(gathered_gn, mask_src_f)->storage();
+        // 4. grad_src = gather(g) * mask_src_f / gather(total_wins)
+        auto gathered_g = gather_op(g_impl, saved_indices_, dim_);
+        auto gathered_wins = gather_op(total_wins, saved_indices_, dim_);
+        Storage grad_src = div_op(mul_op(gathered_g, mask_src_f), gathered_wins)->storage();
         return {std::move(grad_base), std::move(grad_src)};
     }
 };
