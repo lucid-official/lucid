@@ -443,6 +443,38 @@ def test_power_of_two_base_with_an_integer_exponent_is_exact(
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_DTYPES))
+def test_exp2_at_integer_exponents_is_exact_and_within_one_ulp_elsewhere(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    if dtype is lucid.float16:
+        ints = np.arange(-24, 16, dtype=np.float64)
+        fracs = np.linspace(-14.0, 15.0, 128, dtype=np.float64)
+    elif dtype is lucid.float64:
+        ints = np.arange(-1074, 1024, dtype=np.float64)
+        fracs = np.linspace(-500.0, 500.0, 256, dtype=np.float64)
+    else:
+        ints = np.arange(-149, 128, dtype=np.float64)
+        fracs = np.linspace(-100.0, 100.0, 256, dtype=np.float64)
+
+    x_int = _round_to(ints, dtype)
+    got_int = _values(lucid.exp2(_on(x_int, dtype, device)))
+    raw_int = ref.exp2(ref.tensor(x_int, dtype=ref.float64))
+    want_int = _metal_flush(_round_to(raw_int.numpy(), dtype), device, dtype)
+    _assert_within(got_int, want_int, x_int, dtype, 0, "exp2(int)")
+
+    x_frac = _round_to(fracs, dtype)
+    got_frac = _values(lucid.exp2(_on(x_frac, dtype, device)))
+    raw_frac = ref.exp2(ref.tensor(x_frac, dtype=ref.float64))
+    want_frac = _metal_flush(_round_to(raw_frac.numpy(), dtype), device, dtype)
+    _assert_within(got_frac, want_frac, x_frac, dtype, 1, "exp2(frac)")
+
+    if device == "metal":
+        t_int = _on(x_int, dtype, device)
+        got_compiled = _values(lucid.compile(lucid.exp2)(t_int))
+        _assert_within(got_compiled, want_int, x_int, dtype, 0, "compiled exp2(int)")
+
+
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_DTYPES))
 def test_other_scalar_bases_match_the_reference(
     ref: ModuleType, device: str, dtype: lucid.dtype
 ) -> None:

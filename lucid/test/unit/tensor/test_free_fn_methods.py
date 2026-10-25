@@ -285,11 +285,6 @@ def test_the_reference_method_binds_our_keywords_to_our_values(
 
 
 @pytest.mark.parity
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-545: signbit / copysign read the sign with `< 0`, so -0.0 and "
-    "a negative NaN count as positive",
-)
 def test_copysign_takes_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None:
     ours = lucid.tensor([3.0, 3.0]).copysign(lucid.tensor([-0.0, -float("nan")]))
     theirs = ref.tensor([3.0, 3.0]).copysign(ref.tensor([-0.0, -float("nan")]))
@@ -332,14 +327,120 @@ def test_the_excused_twins_are_ones_the_reference_lacks(ref: ModuleType) -> None
 
 
 @pytest.mark.parity
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-545: signbit reads the sign with `< 0`, so -0.0 counts as positive",
-)
 def test_signbit_reads_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None:
     ours = lucid.tensor([-0.0, 0.0]).signbit()
     theirs = ref.tensor([-0.0, 0.0]).signbit()
     assert ours.tolist() == theirs.tolist() == [True, False]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(
+    ("device", "dtype"),
+    [
+        ("cpu", lucid.float16),
+        ("cpu", lucid.bfloat16),
+        ("cpu", lucid.float32),
+        ("cpu", lucid.float64),
+        *(
+            [
+                ("metal", lucid.float16),
+                ("metal", lucid.bfloat16),
+                ("metal", lucid.float32),
+            ]
+            if lucid.metal.is_available()
+            else []
+        ),
+    ],
+)
+def test_signbit_copysign_and_atan2_preserve_ieee_signs_across_special_values(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    from lucid._C import _C_engine
+    from lucid._dispatch import _wrap
+
+    ref_dtype = getattr(ref, str(dtype).split(".")[-1])
+    vals = [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        2.5,
+        -2.5,
+        math.inf,
+        -math.inf,
+        float("nan"),
+        float("nan"),
+    ]
+    t = lucid.tensor(vals, dtype=dtype, device=device)
+    rt = ref.tensor(vals, dtype=ref_dtype)
+
+    if dtype in (lucid.float16, lucid.bfloat16):
+        int_dt, flt_dt = _C_engine.Dtype.I16, (
+            _C_engine.Dtype.F16 if dtype is lucid.float16 else _C_engine.Dtype.BF16
+        )
+        pos_nan = 0x7E00 if dtype is lucid.float16 else 0x7FC0
+        neg_nan = pos_nan | -0x8000
+        rt.view(ref.int16)[8] = pos_nan
+        rt.view(ref.int16)[9] = neg_nan
+    elif dtype is lucid.float32:
+        int_dt, flt_dt = _C_engine.Dtype.I32, _C_engine.Dtype.F32
+        pos_nan, neg_nan = 0x7FC00000, -0x00400000
+        rt.view(ref.int32)[8] = pos_nan
+        rt.view(ref.int32)[9] = neg_nan
+    else:
+        int_dt, flt_dt = _C_engine.Dtype.I64, _C_engine.Dtype.F64
+        pos_nan, neg_nan = 0x7FF8000000000000, -0x0008000000000000
+        rt.view(ref.int64)[8] = pos_nan
+        rt.view(ref.int64)[9] = neg_nan
+
+    idx = lucid.arange(len(vals), device=device)
+    bits = _wrap(_C_engine._bitcast(t._impl, int_dt))
+    bits = lucid.where(idx == 8, lucid.full_like(bits, pos_nan), bits)
+    bits = lucid.where(idx == 9, lucid.full_like(bits, neg_nan), bits)
+    t = _wrap(_C_engine._bitcast(bits._impl, flt_dt))
+
+    # 1. signbit over >= 16 elements (tiled to 20 elements)
+    t20 = lucid.cat([t, t])
+    rt20 = ref.cat([rt, rt])
+    assert lucid.signbit(t20).tolist() == ref.signbit(rt20).tolist()
+
+    # 2. copysign over the full 10x10 (100-element) grid
+    yy, xx = lucid.meshgrid(t, t, indexing="ij")
+    ryy, rxx = ref.meshgrid(rt, rt, indexing="ij")
+    cs = lucid.copysign(yy, xx)
+    rcs = ref.copysign(ryy, rxx)
+    assert lucid.signbit(cs).tolist() == ref.signbit(rcs).tolist()
+    assert lucid.isnan(cs).tolist() == ref.isnan(rcs).tolist()
+
+    # 3. atan2 over the full 10x10 (100-element) grid
+    at = lucid.atan2(yy, xx)
+    rat = ref.atan2(ryy, rxx)
+    assert lucid.isnan(at).tolist() == ref.isnan(rat).tolist()
+    at_sb = lucid.signbit(at).tolist()
+    rat_sb = ref.signbit(rat).tolist()
+    tol = (
+        3e-3
+        if dtype is lucid.float16
+        else (
+            2e-2
+            if dtype is lucid.bfloat16
+            else (1e-6 if dtype is lucid.float32 else 1e-15)
+        )
+    )
+    for i in range(len(vals)):
+        for j in range(len(vals)):
+            if not math.isnan(rat[i, j].item()):
+                assert abs(at[i, j].item() - rat[i, j].item()) <= tol
+                assert at_sb[i][j] == rat_sb[i][j]
+
+    # 4. atan2 finite gradients at (0, ±1) and (±1, 0)
+    y_g = lucid.tensor([0.0, -0.0, 1.0, -1.0], dtype=dtype, device=device, requires_grad=True)
+    x_g = lucid.tensor([1.0, -1.0, 0.0, -0.0], dtype=dtype, device=device, requires_grad=True)
+    lucid.atan2(y_g, x_g).sum().backward()
+    assert y_g.grad is not None and x_g.grad is not None
+    assert lucid.isfinite(y_g.grad).all().item()
+    assert lucid.isfinite(x_g.grad).all().item()
+    assert y_g.grad.tolist()[:2] == [1.0, -1.0]
 
 
 #: Reference ``Tensor`` methods whose free function ``lucid`` publishes,

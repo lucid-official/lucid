@@ -21,7 +21,7 @@ from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._gamma import _lgamma, _polygamma
 from lucid._ops.composite._opmath import _in_float32, _promote_pair, _real
-from lucid._ops.composite._pow2 import _frexp, _ldexp
+from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp, _signbit
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
 
@@ -989,17 +989,16 @@ def logit(input: Tensor, eps: float | None = None) -> Tensor:
 
 
 def signbit(input: Tensor) -> Tensor:
-    r"""Element-wise sign-bit predicate.
+    r"""Element-wise IEEE-754 sign-bit predicate.
 
-    Returns a boolean tensor that is ``True`` wherever ``input`` is strictly
-    negative. The current implementation uses the strict inequality
-    ``x < 0``, so ``-0.0`` reports ``False`` (i.e. the value is treated
-    as zero rather than tested via IEEE 754 sign-bit inspection).
+    Returns a boolean tensor that is ``True`` wherever the sign bit of
+    ``input`` is set (including ``-0.0``, ``-inf``, and negative ``NaN``
+    for floating-point inputs, and strictly negative values for integers).
 
     Parameters
     ----------
     input : Tensor
-        Input tensor. Any numeric dtype.
+        Input tensor. Any real numeric dtype.
 
     Returns
     -------
@@ -1014,8 +1013,8 @@ def signbit(input: Tensor) -> Tensor:
 
         \text{signbit}(x_i) =
         \begin{cases}
-            \text{True},  & x_i < 0, \\
-            \text{False}, & x_i \geq 0.
+            \text{True},  & \text{sign bit of } x_i \text{ is } 1, \\
+            \text{False}, & \text{otherwise.}
         \end{cases}
 
     Non-differentiable: the gradient is zero almost everywhere and the
@@ -1024,11 +1023,11 @@ def signbit(input: Tensor) -> Tensor:
     Examples
     --------
     >>> import lucid
-    >>> x = lucid.tensor([-1.0, 0.0, 1.0])
+    >>> x = lucid.tensor([-1.0, -0.0, 0.0, 1.0])
     >>> lucid.signbit(x)
-    tensor([True, False, False], dtype=lucid.bool)
+    tensor([True, True, False, False], dtype=lucid.bool)
     """
-    return input < 0.0
+    return _signbit(input)
 
 
 def float_power(input: Tensor | Scalar, exponent: Tensor | Scalar) -> Tensor:
@@ -1267,8 +1266,8 @@ def copysign(input: Tensor, other: TensorOrScalar) -> Tensor:
     input : Tensor
         Magnitude source; result has ``|x|`` element-wise.
     other : Tensor or Scalar
-        Sign source; result is positive where ``y >= 0``, negative
-        where ``y < 0`` (broadcastable to the shape of ``input``).
+        Sign source; result takes the IEEE-754 sign bit of ``other``
+        (broadcastable to the shape of ``input``).
 
     Returns
     -------
@@ -1276,8 +1275,7 @@ def copysign(input: Tensor, other: TensorOrScalar) -> Tensor:
         Broadcast shape of ``input`` and ``other`` at their common floating dtype.
     """
     x, y = _promote_pair(input, other, float_valued=True)
-    mag = lucid.abs(x)
-    return lucid.where(y < 0.0, -mag, mag)
+    return _copysign(x, y)
 
 
 def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:

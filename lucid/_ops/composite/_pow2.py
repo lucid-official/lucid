@@ -345,3 +345,59 @@ def _frexp(work: Tensor) -> tuple[Tensor, Tensor]:
     """
     m, e = _frexp_parts(work)
     return m, e.to(dtype=lucid.int32)
+
+
+_SIGN_INT_DTYPE: dict[object, _C_engine.Dtype] = {
+    lucid.float16: _C_engine.Dtype.I16,
+    lucid.bfloat16: _C_engine.Dtype.I16,
+    lucid.float32: _C_engine.Dtype.I32,
+    lucid.float64: _C_engine.Dtype.I64,
+}
+_SIGN_FLOAT_DTYPE: dict[object, _C_engine.Dtype] = {
+    lucid.float16: _C_engine.Dtype.F16,
+    lucid.bfloat16: _C_engine.Dtype.BF16,
+    lucid.float32: _C_engine.Dtype.F32,
+    lucid.float64: _C_engine.Dtype.F64,
+}
+_SIGN_BIT_MASK: dict[object, int] = {
+    lucid.float16: -0x8000,
+    lucid.bfloat16: -0x8000,
+    lucid.float32: -0x80000000,
+    lucid.float64: -0x8000000000000000,
+}
+
+
+def _signbit(input: Tensor) -> Tensor:
+    """IEEE-754 sign-bit predicate across floating and integer dtypes."""
+    int_dt = _SIGN_INT_DTYPE.get(input.dtype)
+    if int_dt is not None:
+        if _traced() or input._impl.is_phantom:
+            return (input < 0.0) | ((input == 0.0) & (lucid.reciprocal(input) < 0.0))
+        with lucid.no_grad():
+            return _wrap(_C_engine._bitcast(input._impl, int_dt)) < 0
+    return input < 0
+
+
+def _copysign(x: Tensor, y: Tensor) -> Tensor:
+    """``|x|`` with the IEEE-754 sign bit of ``y``."""
+    mag = lucid.abs(x)
+    sb = _signbit(y)
+    out = lucid.where(sb, -mag, mag)
+    if (
+        out.device.type == "metal"
+        and out.dtype in (lucid.float16, lucid.bfloat16)
+        and not out._impl.is_phantom
+        and not _traced()
+    ):
+        with lucid.no_grad():
+            int_dt = _SIGN_INT_DTYPE[out.dtype]
+            obits = _wrap(_C_engine._bitcast(out._impl, int_dt))
+            neg_obits = obits | _SIGN_BIT_MASK[out.dtype]
+            fixed_bits = lucid.where(lucid.isnan(out) & sb, neg_obits, obits)
+            fixed = _wrap(
+                _C_engine._bitcast(fixed_bits._impl, _SIGN_FLOAT_DTYPE[out.dtype])
+            )
+        if not out.requires_grad:
+            return fixed
+        out = lucid.where(lucid.isnan(out), fixed, out)
+    return out

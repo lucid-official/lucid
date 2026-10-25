@@ -26,6 +26,7 @@
 #include "../bfunc/Maximum.h"
 #include "../bfunc/Minimum.h"
 #include "../bfunc/Mul.h"
+#include "../bfunc/Pow.h"
 #include "../bfunc/Sub.h"
 #include "../gfunc/Gfunc.h"
 #include "../ufunc/Arith.h"
@@ -34,8 +35,10 @@
 #include "../ufunc/Exponential.h"
 #include "../ufunc/Predicate.h"
 #include "../ufunc/Trig.h"
+#include "../utils/Nextafter.h"
 #include "../utils/Promote.h"
 #include "../utils/Select.h"
+#include "Logical.h"
 
 namespace lucid {
 
@@ -116,13 +119,13 @@ TensorImplPtr log1p_op(const TensorImplPtr& a_in) {
     return where_op(vanished, a, add_op(plain, correction));
 }
 
-// ``exp2(x) = exp(x · log(2))``.  Multiplying against a constant tensor keeps
-// the gradient chain visible to ``MulBackward`` and ``ExpBackward``.
+// ``exp2(x) = 2**x``.  Routing through ``pow_op(2, a)`` reaches the exact
+// base-2 power path on CPU and Metal (so integer inputs are exact powers of
+// two) while keeping the gradient chain visible to ``PowBackward``.
 TensorImplPtr exp2_op(const TensorImplPtr& a_in) {
     const AmpScope amp{"exp2", unary_input(a_in, "exp2")->device()};
     const TensorImplPtr a = amp.cast(a_in);
-    auto ln2 = full_like_op(a, std::log(2.0));
-    return exp_op(mul_op(a, ln2));
+    return pow_op(full_op({}, 2.0, a->dtype(), a->device()), a);
 }
 
 // Fractional part — the ``trunc`` term contributes zero gradient, so the
@@ -135,9 +138,31 @@ TensorImplPtr frac_op(const TensorImplPtr& a_in) {
 
 // ── binary compositions ─────────────────────────────────────────────────────
 
-// Quadrant-aware arctangent.  Patches ``arctan(y / x)`` with ±π/zero/±π/2
-// branches via ``where`` based on the signs of the operands; the divide is
-// guarded by substituting 1 for x = 0 so the safe branch is always defined.
+namespace {
+
+// IEEE-754 sign bit of a floating-point tensor ``t`` as a Bool mask (true for
+// negative values, ``-0.0``, and ``-nan``).  Under an active compile trace,
+// ``_bitcast`` is not traced, so the sign of zero is read via ``1 / t < 0``.
+TensorImplPtr float_signbit_mask(const TensorImplPtr& t) {
+    const auto zero = full_like_op(t, 0.0);
+    if (compile::current_tracer() != nullptr || t->is_phantom()) {
+        return logical_or_op(less_op(t, zero),
+                             logical_and_op(equal_op(t, zero), less_op(reciprocal_op(t), zero)));
+    }
+    NoGradGuard no_grad;
+    const Dtype idt = (t->dtype() == Dtype::F16 || t->dtype() == Dtype::BF16)
+                          ? Dtype::I16
+                          : (t->dtype() == Dtype::F32 ? Dtype::I32 : Dtype::I64);
+    const auto bits = bitcast_op(t, idt);
+    return less_op(bits, full_like_op(bits, 0.0));
+}
+
+}  // namespace
+
+// Quadrant-aware arctangent.  Patches ``arctan(y / x)`` with ±π/±0/±π/2/±π/4/±3π/4
+// branches via ``where`` based on the IEEE-754 sign bits of the operands; the
+// divide is guarded by substituting ±1 for x = ±0 or ±inf and ±1 for y = ±inf
+// so the safe branch is always finite.
 TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     constexpr double pi = 3.14159265358979323846;
     if (!y_in || !x_in)
@@ -153,35 +178,63 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     const TensorImplPtr y = to_float(y_amp);
     const TensorImplPtr x = to_float(x_amp);
 
-    auto zero_x = full_like_op(x, 0.0);
-    auto zero_y = full_like_op(y, 0.0);
-    auto ones_x = full_like_op(x, 1.0);
+    const auto zero_x = full_like_op(x, 0.0);
+    const auto zero_y = full_like_op(y, 0.0);
+    const auto ones_x = full_like_op(x, 1.0);
+    const auto ones_y = full_like_op(y, 1.0);
 
-    auto x_is_zero = equal_op(x, zero_x);
-    auto safe_x = where_op(x_is_zero, ones_x, x);
-    auto base = arctan_op(div_op(y, safe_x));
+    const auto x_neg = float_signbit_mask(x);
+    const auto y_neg = float_signbit_mask(y);
+    const auto x_is_zero = equal_op(x, zero_x);
+    const auto y_is_zero = equal_op(y, zero_y);
+    const auto x_is_inf = isinf_op(x);
+    const auto y_is_inf = isinf_op(y);
 
-    auto x_pos = greater_op(x, zero_x);
-    auto y_neg = less_op(y, zero_y);
-    auto y_pos = greater_op(y, zero_y);
-    auto y_zero = equal_op(y, zero_y);
+    const auto safe_x =
+        where_op(logical_or_op(x_is_zero, x_is_inf), where_op(x_neg, neg_op(ones_x), ones_x), x);
+    const auto safe_y = where_op(y_is_inf, where_op(y_neg, neg_op(ones_y), ones_y), y);
+    const auto base = arctan_op(div_op(safe_y, safe_x));
+    const auto pos_zero = full_like_op(base, 0.0);
+    const auto neg_zero = neg_op(pos_zero);
+    // Hardware arctan(-0.0) on Metal (and half on CPU) returns +0.0; adding -base
+    // detached inside NoGradGuard turns base's +0.0 into 0.0 - (+0.0) = 0.0,
+    // whereas selecting neg_zero when grad is not tracked or adding a zero-grad
+    // -0.0 shift is needed.  Even simpler: ``sub_op(base, base_detached)`` is +0.0
+    // with derivative 1 * base', and ``sub_op(neg_zero, sub_op(base_detached, base))``
+    // is ``-0.0 - 0.0 = -0.0`` with derivative ``+base'``!
+    TensorImplPtr base_detached;
+    {
+        NoGradGuard no_grad;
+        base_detached = add_op(base, pos_zero);
+    }
+    const auto neg_zero_with_grad = sub_op(neg_zero, sub_op(base_detached, base));
+    const auto base_signed =
+        where_op(logical_and_op(logical_and_op(y_is_zero, y_neg), logical_not_op(x_neg)),
+                 neg_zero_with_grad, base);
 
-    auto base_plus_pi = add_op(base, full_like_op(base, pi));
-    auto base_minus_pi = sub_op(base, full_like_op(base, pi));
-    auto half_pi = full_like_op(base, 0.5 * pi);
-    auto neg_half_pi = full_like_op(base, -0.5 * pi);
-    auto zero_out = full_like_op(base, 0.0);
+    const auto pi_t = full_like_op(base, pi);
+    const auto half_pi = full_like_op(base, 0.5 * pi);
+    const auto quarter_pi = full_like_op(base, 0.25 * pi);
+    const auto three_quarter_pi = full_like_op(base, 0.75 * pi);
 
-    // x > 0 keeps base; x < 0 adds ±π depending on the sign of y.
-    auto x_neg_branch = where_op(y_neg, base_minus_pi, base_plus_pi);
-    auto by_x = where_op(x_pos, base, x_neg_branch);
+    const auto signed_pi = where_op(y_neg, neg_op(pi_t), pi_t);
+    const auto signed_half_pi = where_op(y_neg, neg_op(half_pi), half_pi);
+    const auto signed_zero = where_op(y_neg, neg_zero, pos_zero);
 
-    // x == 0 special cases — pick by the sign of y.
-    auto by_y_neg = where_op(y_neg, neg_half_pi, zero_out);
-    auto by_y_pos = where_op(y_pos, half_pi, by_y_neg);
-    auto x0_branch = where_op(y_zero, zero_out, by_y_pos);
+    const auto x_neg_branch = where_op(y_neg, sub_op(base_signed, pi_t), add_op(base_signed, pi_t));
+    const auto normal = where_op(x_neg, x_neg_branch, base_signed);
 
-    return where_op(x_is_zero, x0_branch, by_x);
+    const auto y0_branch = where_op(x_neg, signed_pi, signed_zero);
+    const auto inf_inf_mag = where_op(x_neg, three_quarter_pi, quarter_pi);
+    const auto inf_inf_branch = where_op(y_neg, neg_op(inf_inf_mag), inf_inf_mag);
+
+    auto out = where_op(logical_and_op(x_is_inf, logical_not_op(y_is_inf)), y0_branch, normal);
+    out = where_op(logical_or_op(logical_and_op(x_is_zero, logical_not_op(y_is_zero)),
+                                 logical_and_op(y_is_inf, logical_not_op(x_is_inf))),
+                   signed_half_pi, out);
+    out = where_op(logical_and_op(x_is_inf, y_is_inf), inf_inf_branch, out);
+    out = where_op(logical_and_op(x_is_zero, y_is_zero), y0_branch, out);
+    return where_op(logical_or_op(isnan_op(x), isnan_op(y)), base, out);
 }
 
 namespace {

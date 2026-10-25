@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - advance version counter by 1 across no_view, live_view, and dead_view (LCD-643)
 - divide by n in mean/avg_pool and compute f32 rsqrt as 1/sqrt
 - mask pow backward at zero and round half std once after sqrt
+- exact integer exp2 and IEEE sign-bit handling in signbit/copysign/atan2 (LCD-579, LCD-545)
 
 ---
 

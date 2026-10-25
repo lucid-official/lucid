@@ -266,62 +266,6 @@ _ALLOWLIST: dict[tuple[str, str, str], tuple[str, str]] = {
         "2026-10-14",
         "AE-7 (#314): local extern reshape_op in Matmul.cpp; include View.h instead",
     ),
-    (
-        "ops/bfunc/Pow.h",
-        "extern-op",
-        "pow_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern pow_op in Pow.h; include canonical header",
-    ),
-    (
-        "ops/bfunc/Pow.h",
-        "extern-op",
-        "mul_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern mul_op in Pow.h; include Mul.h",
-    ),
-    (
-        "ops/bfunc/Pow.h",
-        "extern-op",
-        "log_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern log_op in Pow.h; include Exponential.h",
-    ),
-    (
-        "ops/bfunc/Pow.h",
-        "extern-op",
-        "sub_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern sub_op in Pow.h; include Sub.h",
-    ),
-    (
-        "ops/ufunc/ScalarParam.h",
-        "extern-op",
-        "pow_scalar_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern pow_scalar_op in ScalarParam.h; include canonical header",
-    ),
-    (
-        "ops/ufunc/ScalarParam.h",
-        "extern-op",
-        "mul_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern mul_op in ScalarParam.h; include Mul.h",
-    ),
-    (
-        "ops/ufunc/ScalarParam.h",
-        "extern-op",
-        "full_like_op",
-    ): (
-        "2026-10-14",
-        "AE-7 (#314): local extern full_like_op in ScalarParam.h; include Gfunc.h",
-    ),
 }
 
 
