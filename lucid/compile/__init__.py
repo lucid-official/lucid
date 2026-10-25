@@ -375,6 +375,31 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f"module 'lucid.compile' has no attribute {name!r}")
 
 
+def _refuse_if_already_recording() -> None:
+    """Raise if a :class:`Tracer` is already installed on this thread.
+
+    Guards :func:`_tracing` against reentrancy (LCD-626): opening a second
+    tracer while one is active would replace it, and :func:`_tracing`'s
+    ``finally`` detaches to ``None`` unconditionally on exit rather than
+    restoring whatever was there — dropping the outer recording.  See
+    :func:`_tracing`'s ``Raises`` section for the entry points this reaches
+    and the one that does not (:class:`CompiledModule`, which checks
+    :func:`lucid.compile._core.trace_context.recording_active` itself and
+    runs its wrapped model inline instead of reaching here).
+    """
+    if _C_engine.compile.current_tracer() is not None:
+        raise RuntimeError(
+            "lucid.compile._tracing: a trace is already recording on this "
+            "thread. This entry point (make_step / fused_step / "
+            "compiled_step / compile_optimizer / decode- or segment-step "
+            "tracing) cannot be entered while already inside another "
+            "trace — it would replace the active Tracer and drop it on "
+            "exit instead of restoring it. A lucid.compile(...)-wrapped "
+            "callable may be called from inside another trace: it runs "
+            "its wrapped model inline, eagerly, under the outer trace."
+        )
+
+
 @contextmanager
 def _tracing(
     watch: Iterable[object] = (),
@@ -425,6 +450,12 @@ def _tracing(
         the trace (``len(tracer.graph)`` grows monotonically) and after
         (the final recorded DAG).
 
+    Raises
+    ------
+    RuntimeError
+        A :class:`Tracer` is already installed on this thread (LCD-626)
+        — see :func:`_refuse_if_already_recording`.
+
     Notes
     -----
     Phase 1.1 only records op headers — input-id wiring and MPSGraph
@@ -451,6 +482,7 @@ def _tracing(
     """
     from lucid.compile._core.signature import leaf_tensors, tree_tensors
 
+    _refuse_if_already_recording()
     tracer = _C_engine.compile.Tracer()
     tracer.fold_constants = fold_constants
     state = () if module is None else tree_tensors(module)

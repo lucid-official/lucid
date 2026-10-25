@@ -892,6 +892,20 @@ class CompiledModule[**P, R](_ModuleWrapper):
         kwargs: dict[str, object],
     ) -> object:
         """Signature-agnostic cache lookup + execute (body of :meth:`__call__`)."""
+        from lucid.compile._core.trace_context import recording_active
+
+        if recording_active():
+            # Called while someone else's trace is recording (LCD-626):
+            # a cache hit would run this executable directly, handing the
+            # outer trace a tensor no recorded op produced — pinned at
+            # this call's value forever.  A miss would open a second
+            # Tracer, which detaches the outer one on exit.  Neither is
+            # safe here, so run the wrapped model inline: its ops dispatch
+            # through the ALREADY-installed (outer) tracer, exactly as if
+            # the caller had written them out instead of nesting a second
+            # ``lucid.compile``.
+            return run_eager(self._model, args, kwargs)
+
         # Hashable signature.  If the signature itself is un-hashable
         # (e.g. an exotic input that we can't fingerprint), fall back
         # to eager without poisoning the cache.
@@ -935,9 +949,11 @@ class CompiledModule[**P, R](_ModuleWrapper):
             if entry is not None and grad_mode and entry.reads_grad():
                 return self._run_differentiable(key, args, kwargs)
         self._count(key)
-        if entry is None:
-            return run_eager(self._model, args, kwargs)
-        return self._execute(key, entry, args, kwargs)
+        return (
+            run_eager(self._model, args, kwargs)
+            if entry is None
+            else self._execute(key, entry, args, kwargs)
+        )
 
     def _compile_and_cache(
         self,
