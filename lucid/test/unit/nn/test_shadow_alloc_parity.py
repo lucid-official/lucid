@@ -319,10 +319,17 @@ def test_reduction_free_fn_and_method_parity(
         ph_out = fn(ph_x, dim=dim, keepdim=keepdim)
         method_out = getattr(ph_x, op_name)(dim=dim, keepdim=keepdim)
 
-    assert ph_out.shape == eager_out.shape
-    assert ph_out.dtype == eager_out.dtype
-    assert method_out.shape == eager_out.shape
-    assert method_out.dtype == eager_out.dtype
+    if isinstance(eager_out, tuple):
+        for got in (ph_out, method_out):
+            assert isinstance(got, tuple) and len(got) == len(eager_out)
+            for g, e in zip(got, eager_out, strict=True):
+                assert g.shape == e.shape
+                assert g.dtype == e.dtype
+    else:
+        assert ph_out.shape == eager_out.shape
+        assert ph_out.dtype == eager_out.dtype
+        assert method_out.shape == eager_out.shape
+        assert method_out.dtype == eager_out.dtype
 
 
 def test_direct_reproducers_from_issue_419() -> None:

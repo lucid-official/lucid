@@ -178,7 +178,9 @@ def test_an_extreme_over_an_empty_axis_is_refused(op: str, device: str) -> None:
     with pytest.raises((RuntimeError, IndexError), match="numel\\(\\) == 0"):
         fn(x)
     # A non-empty reduced axis of an empty tensor has an empty answer.
-    assert tuple(fn(x, dim=1).shape) == (0,)
+    out = fn(x, dim=1)
+    values = out[0] if isinstance(out, tuple) else out
+    assert tuple(values.shape) == (0,)
 
 
 @pytest.mark.parametrize("device", DEVICES)

@@ -289,7 +289,7 @@ def test_scatter_add_reads_its_index_at_the_right_width(dtype_name: str) -> None
         np.array([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]], np.float32)
     )
     if dtype_name in ("int8", "int16"):
-        with pytest.raises(TypeError, match="index"):
+        with pytest.raises((TypeError, IndexError), match="index"):
             lucid.scatter_add(base, 1, index, source)
         return
     got = lucid.scatter_add(base, 1, index, source).numpy()

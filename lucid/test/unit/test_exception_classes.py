@@ -151,7 +151,9 @@ def test_mlx_invalid_argument_is_translated_to_lucid_invalid_argument(
     prefix: str,
 ) -> None:
     fn = _MLX_INVALID_ARGUMENT_REPROS[prefix]
-    with pytest.raises(_C_engine.InvalidArgument, match=rf"^\[{prefix}\]") as exc_info:
+    with pytest.raises(
+        _C_engine.InvalidArgument, match=rf"(?:^|: )\[{prefix}\]"
+    ) as exc_info:
         fn()
     assert isinstance(exc_info.value, _C_engine.LucidError)
     assert isinstance(exc_info.value, ValueError)

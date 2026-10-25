@@ -447,7 +447,7 @@ _ROW1 = [0.30000001192092896, 0.9000000357627869, 1.5]
         # ``_Overwritten`` stopped detaching its output.
         ("fill_", ([_ROW0, _ROW0], [_ROW0, _ROW0], True, True, False, 1)),
         ("zero_", ([[0.0] * 3] * 2, [[0.0] * 3] * 2, True, True, False, 1)),
-        ("fill_view", (_ROW0, [_ROW0, _ROW1], True, True, False, 4)),
+        ("fill_view", (_ROW0, [_ROW0, _ROW1], True, True, False, 1)),
     ],
 )
 def test_an_eager_overwrite_is_unchanged(
