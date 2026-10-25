@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - narrow ParameterList reads now typed Parameter | None
 - resize boolean masks and broadcast peers on in-place edge probes (LCD-536)
 - keep tracked exact-derivative Function calls compiled and classify every Function (LCD-570)
+- expect tracked checkpoint passthrough to compile on Metal (LCD-570)
 
 ---
 

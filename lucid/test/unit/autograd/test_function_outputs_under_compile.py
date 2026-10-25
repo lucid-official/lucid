@@ -15,9 +15,9 @@ trace sees:
   the layer in front of it off (``make_step``: ``grad is None``;
   ``fused_step``: one step off by 0.43) though eager trained it.
 
-Since LCD-565 such a step runs eagerly and says so: whether a ``backward``
-is the derivative of its ``forward`` cannot be proven, so none is compiled
-through.
+Since LCD-565 an unverified custom ``Function`` runs eagerly and says so;
+since LCD-570 ``_CheckpointFn`` (:attr:`~lucid.autograd.Function._exact_derivative`)
+compiles on Metal when its inputs carry or descend from a gradient source.
 """
 
 import pytest
@@ -73,10 +73,9 @@ _BLOCKS = {
     "marked fresh tensor": lambda h, s: _marking("fresh").apply(h, s),
 }
 
-#: The ``Function`` each block goes through, as the fallback names it.
+#: The ``Function`` each unverified block goes through, as the fallback names it.
 _FUNCTIONS = {
     "input returned as-is": "_PassThrough",
-    "checkpoint passing an input through": "_CheckpointFn",
     "marked input": "Marking",
     "marked fresh tensor": "Marking",
 }
@@ -133,15 +132,20 @@ def test_make_step_gradients_match_eager(block: str, device: str) -> None:
     model = _model(block, device)
     x, t = _data(device)
     step = lucid.compile.make_step(model, F.mse_loss)
-    if device == "metal":
+    if device == "metal" and block in _FUNCTIONS:
         with _says_it_ran_eagerly(block):
             step(x, t).backward()  # the first call traces
     else:
         step(x, t).backward()
+        _NOTICED.discard("lowering")
     for p in model.parameters():
         p.grad = None
     step(x, t).backward()
-    assert len(step.eager_only) == 1
+    if device == "metal" and block not in _FUNCTIONS:
+        assert len(step.cache) == 1
+        assert len(step.eager_only) == 0
+    else:
+        assert len(step.eager_only) == 1
     got = {
         n: None if p.grad is None else p.grad.tolist()
         for n, p in model.named_parameters()
@@ -163,9 +167,14 @@ def test_fused_step_updates_match_eager(block: str, device_gpu_only: str) -> Non
 
     fused = _model(block, device)
     step = fused_step(fused, F.mse_loss, optim.SGD(fused.parameters(), lr=0.5))
-    with _says_it_ran_eagerly(block):
+    if block in _FUNCTIONS:
+        with _says_it_ran_eagerly(block):
+            step(x, t)
+        assert step.cache_info()["eager_only"]
+    else:
         step(x, t)
-    assert step.cache_info()["eager_only"]
+        assert step.cache_info()["entries"] == 1
+        assert not step.cache_info()["eager_only"]
 
     for (name, want), got in zip(
         eager.named_parameters(), fused.parameters(), strict=True
