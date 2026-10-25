@@ -357,17 +357,33 @@ def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(
     os.utime(wt_root / "lucid" / "_C" / "foo.cpp", (future + 10.0, future + 10.0))
     assert not agent_ws._check_engine_freshness(wt_root)
 
-    # Without a stamp, matching ABI_VERSION overrides mtime while a mismatch flags stale:
+    # Without a stamp, a matching ABI_VERSION does NOT override mtime (LCD-536
+    # regression: a prior version treated "no stamp + ABI match" as fresh,
+    # false-negativing this still-stale .cpp-newer-than-.so state):
     agent_ws._engine_stamp_path(wt_root).unlink()
+    version_h = wt_root / "lucid" / "_C" / "version.h"
+    cpp = wt_root / "lucid" / "_C" / "foo.cpp"
+    os.utime(version_h, (future, future))  # writes below must not leak wall-clock times
     venv_bin = wt_root / ".venv" / "bin"
     venv_bin.mkdir(parents=True)
     fake_py = venv_bin / "python3"
     fake_py.write_text("#!/bin/sh\necho 7\n")
     fake_py.chmod(0o755)
-    assert agent_ws._check_engine_freshness(wt_root)
-
-    (wt_root / "lucid" / "_C" / "version.h").write_text("#define LUCID_ABI_VERSION 8\n")
     assert not agent_ws._check_engine_freshness(wt_root)
+
+    # A mismatched ABI_VERSION always flags stale, stamp or not:
+    version_h.write_text("#define LUCID_ABI_VERSION 8\n")
+    os.utime(version_h, (future, future))
+    assert not agent_ws._check_engine_freshness(wt_root)
+
+    # Restore a fresh .so/.cpp pair (matching mtimes) and confirm a matching
+    # ABI_VERSION with no stamp and no mtime skew reads as fresh:
+    version_h.write_text("#define LUCID_ABI_VERSION 7\n")
+    os.utime(version_h, (future, future))
+    fresh_mtime = future + 10.0
+    os.utime(cpp, (fresh_mtime, fresh_mtime))
+    os.utime(wt_so, (fresh_mtime, fresh_mtime))
+    assert agent_ws._check_engine_freshness(wt_root)
 
 
 _COVERAGE_XML = (

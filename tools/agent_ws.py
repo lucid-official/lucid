@@ -534,11 +534,16 @@ def _write_engine_stamp(root: Path, src_hash: str) -> None:
 def _engine_is_stale(root: Path) -> bool:
     """True when ``root``'s ``engine.cpython-*.so`` does not match its ``lucid/_C`` sources.
 
-    Checks ``LUCID_ABI_VERSION`` against ``_C_engine.ABI_VERSION`` and the
-    recorded ``build/.engine_stamp`` source digest first so a ``git rebase``
-    or checkout that bumps file mtimes without changing C++ sources (or after
-    cloning a fresh ``main`` ``.so``) does not false-positive on mtime alone.
-    Falls back to mtime comparison when neither stamp nor ABI probe applies.
+    A mismatched ``LUCID_ABI_VERSION`` vs. ``_C_engine.ABI_VERSION`` always means
+    stale. Otherwise the recorded ``build/.engine_stamp`` source digest, when
+    present, is authoritative (a ``git rebase`` or checkout that bumps file
+    mtimes without changing C++ source bytes must not false-positive on mtime
+    alone). A matching ABI_VERSION is *not* by itself proof of freshness — the
+    ABI only bumps on layout-breaking changes, so two different C++ sources can
+    share one ABI_VERSION. Without a stamp, mtime comparison is the only signal
+    left and is always consulted (LCD-536: a prior version returned "fresh"
+    whenever ABI matched and no stamp existed, false-negativing a genuinely
+    stale .so after a rebase into a stamp-less worktree).
     """
     sos = list(root.glob("lucid/_C/engine.cpython-*.so"))
     cpp_mtime = _newest_cpp_mtime(root)
@@ -554,8 +559,6 @@ def _engine_is_stale(root: Path) -> bool:
         current = _cpp_source_hash(root)
         if recorded and current:
             return recorded != current
-    if hdr_abi is not None and so_abi is not None:
-        return False
     return any(cpp_mtime > so.stat().st_mtime for so in sos)
 
 
