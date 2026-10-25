@@ -84,6 +84,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite.blas"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite.complex"
     },
     {
@@ -216,6 +220,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._core.trace_context"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._debug.diagnose"
     },
     {
@@ -313,6 +321,10 @@
     {
       "kind": "module",
       "module": "lucid.models.multimodal.clip._tokenizer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn._module_backward_state"
     },
     {
       "kind": "module",
@@ -698,6 +710,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._core.trace_context"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._entry.fused_step"
     },
     {
@@ -748,31 +764,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.compile._debug.diagnose"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.decode_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.function"
+      "module": "lucid.compile._core.trace_context"
     },
     {
       "kind": "module",
       "module": "lucid.compile._entry.fused_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.module"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.segmented_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.step"
     },
     {
       "kind": "module",
@@ -837,6 +833,10 @@
     {
       "kind": "module",
       "module": "lucid.autograd.checkpoint"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.custom_backward"
     },
     {
       "kind": "module",
@@ -960,31 +960,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.compile._debug.diagnose"
+      "module": "lucid.compile._core.trace_context"
     },
     {
       "kind": "module",
       "module": "lucid.compile._entry.decode_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.function"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.fused_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.module"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.segmented_step"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.compile._entry.step"
     },
     {
       "kind": "module",
@@ -14506,6 +14486,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._core.trace_context"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._entry.decode_step"
     },
     {
@@ -14547,6 +14531,10 @@
     {
       "kind": "module",
       "module": "lucid.nn"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn._module_backward_state"
     },
     {
       "kind": "module",

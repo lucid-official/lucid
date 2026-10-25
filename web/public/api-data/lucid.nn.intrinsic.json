@@ -3,7 +3,7 @@
   "name": "intrinsic",
   "path": "lucid.nn.intrinsic",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/__init__.py#L1",
   "members": [
     {
       "name": "ConvReLU1d",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU1d(conv: nn.Conv1d, relu: nn.ReLU)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L19",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L19",
       "subcategory": "modules",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(conv: nn.Conv1d, relu: nn.ReLU)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L99",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L99",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -96,7 +96,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU2d(conv: nn.Conv2d, relu: nn.ReLU)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L103",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L103",
       "subcategory": "modules",
       "methods": [
         {
@@ -105,7 +105,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(conv: nn.Conv2d, relu: nn.ReLU)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L184",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L184",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -177,7 +177,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU3d(conv: nn.Conv3d, relu: nn.ReLU)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L188",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L188",
       "subcategory": "modules",
       "methods": [
         {
@@ -186,7 +186,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(conv: nn.Conv3d, relu: nn.ReLU)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L268",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L268",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -258,7 +258,7 @@
       ],
       "labels": [],
       "signature": "LinearReLU(linear: nn.Linear, relu: nn.ReLU)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L272",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L272",
       "subcategory": "modules",
       "methods": [
         {
@@ -267,7 +267,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(linear: nn.Linear, relu: nn.ReLU)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/nn/intrinsic/modules.py#L352",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/nn/intrinsic/modules.py#L352",
           "subcategory": "modules",
           "summary": null,
           "extended": null,

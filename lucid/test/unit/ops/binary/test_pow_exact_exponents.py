@@ -423,21 +423,8 @@ def test_float16_tie_rounds_to_even(ref: ModuleType, device: str, form: str) -> 
 # ── a scalar base ────────────────────────────────────────────────────────────
 
 
-def _power_of_two_params() -> list[ParameterSet]:
-    # Metal float32 is metal::pow for a non-special exponent, up to 3 ulp
-    # off even here (2 ** -3 is 0.12499999).  The 16-bit floats round that
-    # error away; the CPU's vForce answers these exactly.
-    out = []
-    for p in device_dtype_params(_DTYPES):
-        device, dtype = p.values
-        broken = device == "metal" and dtype is lucid.float32
-        marks = _strict_xfail(broken, "LCD-557: metal::pow misses 2**n")
-        out.append(pytest.param(device, dtype, marks=marks, id=p.id))
-    return out
-
-
 @pytest.mark.parametrize("base", [2.0, 0.5, 4.0, -2.0, 0.125])
-@pytest.mark.parametrize(("device", "dtype"), _power_of_two_params())
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_DTYPES))
 def test_power_of_two_base_with_an_integer_exponent_is_exact(
     ref: ModuleType, device: str, dtype: lucid.dtype, base: float
 ) -> None:

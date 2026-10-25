@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - name offending operand pair on multi-tensor mismatches (LCD-585)
 - unify index argument error classes, op names, and empty-index scatter (LCD-604, LCD-609)
 - advance version counter by 1 across no_view, live_view, and dead_view (LCD-643)
+- divide by n in mean/avg_pool and compute f32 rsqrt as 1/sqrt
 
 ---
 

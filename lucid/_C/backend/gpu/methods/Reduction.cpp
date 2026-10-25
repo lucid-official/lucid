@@ -15,6 +15,19 @@ GpuBackend::reduce_sum(const Storage& a, const Shape& in_shape, const ReduceOpts
 Storage
 GpuBackend::reduce_mean(const Storage& a, const Shape& in_shape, const ReduceOpts& opts, Dtype dt) {
     return mlx_reduce(a, in_shape, opts, dt, [](auto& x, auto& axes, bool keepdims) {
+        if (!is_half(x.dtype())) {
+            auto s = ::mlx::core::sum(x, axes, keepdims);
+            std::vector<int> norm = axes;
+            std::size_t n = 1;
+            const int nd = static_cast<int>(x.ndim());
+            if (norm.empty()) {
+                n = x.size();
+            } else if (normalize_reduce_axes(nd, norm)) {
+                for (int ax : norm)
+                    n *= static_cast<std::size_t>(x.shape(ax));
+            }
+            return ::mlx::core::divide(s, ::mlx::core::array(static_cast<double>(n), s.dtype()));
+        }
         return mean_widened(x, axes, keepdims);
     });
 }

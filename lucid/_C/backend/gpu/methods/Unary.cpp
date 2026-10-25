@@ -18,6 +18,11 @@ Storage GpuBackend::sqrt(const Storage& a, const Shape& shape, Dtype dt) {
 }
 
 Storage GpuBackend::rsqrt(const Storage& a, const Shape& shape, Dtype dt) {
+    if (dt == Dtype::F32) {
+        return mlx_unary_fused(a, dt, [](const ::mlx::core::array& x) {
+            return ::mlx::core::reciprocal(::mlx::core::sqrt(x));
+        });
+    }
     return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::rsqrt(x); });
 }
 

@@ -3,7 +3,7 @@
   "name": "rcnn",
   "path": "lucid.models.vision.rcnn",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/__init__.py#L1",
   "members": [
     {
       "name": "RCNNConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "RCNNConfig(num_classes: int = 80, in_channels: int = 3, roi_size: int = 227, context_pad: int = 16, dropout: float = 0.5, score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, fg_iou_thresh: float = 0.5, bbox_reg_iou_thresh: float = 0.6)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 80, in_channels: int = 3, roi_size: int = 227, context_pad: int = 16, dropout: float = 0.5, score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, fg_iou_thresh: float = 0.5, bbox_reg_iou_thresh: float = 0.6)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -64,7 +64,7 @@
       ],
       "labels": [],
       "signature": "RCNNForObjectDetection(config: RCNNConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_model.py#L184",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_model.py#L184",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +73,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RCNNConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_model.py#L268",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_model.py#L268",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -95,7 +95,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, proposals: list[Tensor] | None = None, targets: list[dict[str, Tensor]] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_model.py#L456",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_model.py#L455",
           "subcategory": "model",
           "summary": "Run R-CNN on a batch of images.",
           "extended": null,
@@ -141,7 +141,7 @@
           "kind": "function",
           "labels": [],
           "signature": "postprocess(output: ObjectDetectionOutput, proposals: list[Tensor] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_model.py#L568",
+          "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_model.py#L567",
           "subcategory": "model",
           "summary": "Apply score threshold + per-class NMS to raw R-CNN output.",
           "extended": null,
@@ -215,7 +215,7 @@
       "kind": "function",
       "labels": [],
       "signature": "rcnn(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/vision/rcnn/_pretrained.py#L34",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/models/vision/rcnn/_pretrained.py#L34",
       "subcategory": "pretrained",
       "summary": "R-CNN with AlexNet backbone (Girshick et al., CVPR 2014).",
       "extended": "Builds a `RCNNForObjectDetection` with the paper-cited AlexNet\ntopology: five-conv trunk applied to each region proposal warped to\n$227 \\times 227$, followed by two FC layers and sibling\nclassification (`num_classes + 1`) and class-specific bounding-box\nregression (`4 \\cdot num_classes`) heads.  Original PASCAL VOC 2010\ntest mAP of 53.3% (paper Table 9) — a ~20-point jump over the prior\nDPM state of the art.",

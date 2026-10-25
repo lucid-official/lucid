@@ -3,7 +3,7 @@
   "name": "utils",
   "path": "lucid.utils",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/utils/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/utils/__init__.py#L1",
   "members": [
     {
       "name": "checkpoint",
@@ -11,7 +11,7 @@
       "kind": "function",
       "labels": [],
       "signature": "checkpoint(function: Callable[..., Tensor | tuple[Tensor, ...]], args: Tensor = (), use_reentrant: bool = False, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/utils/checkpoint.py#L9",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/utils/checkpoint.py#L9",
       "subcategory": "checkpoint",
       "summary": "Run `function` without saving its intermediates; recompute them on backward.",
       "extended": "Memory-for-compute tradeoff used to fit larger models / longer\nsequences in fixed VRAM.  In a normal forward pass autograd stashes\nevery intermediate activation needed by the backward pass — for a\ndeep transformer block this is the dominant memory cost.  Wrapping\nthe block in `checkpoint` runs forward under `no_grad`,\nsaves *only the inputs*, and re-executes the block from scratch\nduring backward to recompute the intermediates on demand.\n\nNet effect: peak memory drops from \"all activations\" to \"inputs +\none block's intermediates at backward time\"; wall-clock grows by\nroughly the cost of one extra forward pass per checkpointed block.",
@@ -67,7 +67,7 @@
       "kind": "function",
       "labels": [],
       "signature": "rollout(env: Environment, policy: Policy, action_repeat: int = 1, max_steps: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/utils/rollout/_driver.py#L273",
+      "source": "https://github.com/lucid-official/lucid/blob/8d37c04b3/lucid/utils/rollout/_driver.py#L273",
       "subcategory": "rollout/driver",
       "summary": "Run one episode and return it, ready for the replay buffer.",
       "extended": null,

@@ -131,6 +131,10 @@ public:
     std::string_view op_name() const override { return "rsqrt"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_unary_math(ctx, node, [](MPSGraph* g, MPSGraphTensor* x) {
+            if (x.dataType == MPSDataTypeFloat32) {
+                MPSGraphTensor* root = [g squareRootWithTensor:x name:@"rsqrt_sqrt"];
+                return [g reciprocalWithTensor:root name:@"rsqrt"];
+            }
             return [g reciprocalSquareRootWithTensor:x name:@"rsqrt"];
         });
     }

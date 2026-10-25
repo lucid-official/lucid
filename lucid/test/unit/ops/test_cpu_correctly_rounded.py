@@ -272,3 +272,54 @@ def test_mean_matches_sum_divided_by_n_and_backward(dtype: type) -> None:
         assert x3.grad is not None
         want3 = (g3 / 7).unsqueeze(-1).expand((2, 3, 7)).cpu().numpy()
         _assert_bits(x3.grad.cpu().numpy(), want3)
+
+
+def test_metal_mean_matches_sum_divided_by_n_and_pool() -> None:
+    rng = np.random.default_rng(12)
+    for _ in range(100):
+        n = int(rng.integers(3, 12))
+        m = int(rng.integers(3, 12))
+        v = float(rng.standard_normal())
+        c = lucid.full((n,), v, dtype=lucid.float32, device="metal")
+        _assert_bits(c.mean().cpu().numpy(), (c.sum() / n).cpu().numpy())
+        r = lucid.tensor(rng.standard_normal(n).astype(np.float32), device="metal")
+        _assert_bits(r.mean().cpu().numpy(), (r.sum() / n).cpu().numpy())
+        r2 = lucid.tensor(
+            rng.standard_normal((m, n)).astype(np.float32), device="metal"
+        )
+        _assert_bits(r2.mean().cpu().numpy(), (r2.sum() / (m * n)).cpu().numpy())
+        _assert_bits(r2.mean(dim=0).cpu().numpy(), (r2.sum(dim=0) / m).cpu().numpy())
+        _assert_bits(r2.mean(dim=1).cpu().numpy(), (r2.sum(dim=1) / n).cpu().numpy())
+        for hdt in (lucid.float16, lucid.bfloat16):
+            ch = lucid.full((n,), v, dtype=hdt, device="metal")
+            want_h = (ch.float().sum() / n).to(hdt)
+            assert bool((ch.mean() == want_h).all().item())
+        p = lucid.full((1, 1, 3, 3), v, dtype=lucid.float32, device="metal")
+        pooled = lucid.nn.functional.avg_pool2d(p, 3)
+        win_sum = lucid.nn.functional.avg_pool2d(p, 3, divisor_override=1)
+        _assert_bits(pooled.cpu().numpy(), (win_sum / 9).cpu().numpy())
+
+
+def test_metal_rsqrt_matches_reference_and_neg_half_power() -> None:
+    x = np.concatenate(
+        [np.abs(_gauss(100_000, np.float32, 13)), np.array(_F32_EDGES, np.float32)]
+    )
+    xm = lucid.tensor(x, dtype=lucid.float32, device="metal")
+    tiny = np.finfo(np.float32).tiny
+    x_ftz = np.where(np.abs(x) < tiny, np.copysign(np.float32(0.0), x), x)
+    want = _ref_rsqrt(x_ftz)
+    _assert_bits(lucid.rsqrt(xm).cpu().numpy(), want)
+    pos = xm[:100_000]
+    _assert_bits(lucid.rsqrt(pos).cpu().numpy(), (pos**-0.5).cpu().numpy())
+    compiled_rsqrt = lucid.compile(lucid.rsqrt)
+    _assert_bits(compiled_rsqrt(pos).cpu().numpy(), want[:100_000])
+    xf16 = np.arange(1 << 16, dtype=np.uint32).astype(np.uint16).view(np.float16)
+    with np.errstate(all="ignore"):
+        want_f16 = _ref_rsqrt(xf16.astype(np.float32)).astype(np.float16)
+    _assert_bits(
+        lucid.rsqrt(lucid.tensor(xf16, dtype=lucid.float16, device="metal"))
+        .cpu()
+        .numpy(),
+        want_f16,
+    )
+

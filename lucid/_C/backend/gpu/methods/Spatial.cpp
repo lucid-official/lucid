@@ -429,6 +429,8 @@ Storage GpuBackend::avg_pool_nd_backward(const Storage& grad_out,
     (void)C;
     using SE = ::mlx::core::ShapeElem;
     const auto mdt = gpu::to_mlx_dtype(dt);
+    double uniform_div = 1.0;
+    std::optional<::mlx::core::array> non_uniform_div;
     for (int i = 0; i < N; ++i) {
         std::vector<float> spans(static_cast<std::size_t>(O[i]));
         bool uniform = true;
@@ -438,19 +440,25 @@ Storage GpuBackend::avg_pool_nd_backward(const Storage& grad_out,
             if (spans[static_cast<std::size_t>(o)] != static_cast<float>(K[i]))
                 uniform = false;
         }
-        ::mlx::core::Shape bshape(static_cast<std::size_t>(N) + 2, 1);
-        bshape[static_cast<std::size_t>(2 + i)] = static_cast<SE>(O[i]);
-        ::mlx::core::array vec =
-            ::mlx::core::array(spans.data(), {static_cast<SE>(O[i])}, ::mlx::core::float32);
         if (uniform) {
-            // Every window on this axis has the full span — one scalar
-            // divide instead of a broadcast tensor.
-            y = ::mlx::core::divide(y, ::mlx::core::array(static_cast<double>(K[i]), mdt));
+            uniform_div *= static_cast<double>(K[i]);
             continue;
         }
-        y = ::mlx::core::divide(y, ::mlx::core::astype(::mlx::core::reshape(vec, bshape), mdt));
+        ::mlx::core::Shape bshape(static_cast<std::size_t>(N) + 2, 1);
+        bshape[static_cast<std::size_t>(2 + i)] = static_cast<SE>(O[i]);
+        ::mlx::core::array vec = ::mlx::core::reshape(
+            ::mlx::core::array(spans.data(), {static_cast<SE>(O[i])}, ::mlx::core::float32),
+            bshape);
+        non_uniform_div =
+            non_uniform_div ? ::mlx::core::multiply(*non_uniform_div, vec) : std::move(vec);
     }
-    return y;
+    if (!non_uniform_div)
+        return ::mlx::core::divide(y, ::mlx::core::array(uniform_div, mdt));
+    if (uniform_div != 1.0) {
+        non_uniform_div = ::mlx::core::multiply(
+            *non_uniform_div, ::mlx::core::array(static_cast<float>(uniform_div)));
+    }
+    return ::mlx::core::divide(y, ::mlx::core::astype(*non_uniform_div, mdt));
 }
 
 int GpuBackend::gpu_avg_pool_span(int o, int S, int K, int stride, int pad, bool count_pad) {

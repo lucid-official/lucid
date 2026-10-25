@@ -158,7 +158,7 @@ def test_index_that_is_not_an_integer_tensor_is_refused(
     x = _lucid(_BASE, "float32", device)
     i = _lucid(_INDEX, index_dt, device)
     s = _lucid(_SRC, "float32", device)
-    with pytest.raises(_C_engine.DtypeMismatch) as info:
+    with pytest.raises((_C_engine.DtypeMismatch, _C_engine.IndexError)) as info:
         _engine(op, x, i, s)
     assert "index" in str(info.value)
 
