@@ -698,6 +698,7 @@ def from_dlpack(
     """
     from lucid._dispatch import _parse_device, _wrap
     from lucid._engine_scope import untraced
+    from lucid._tensor.tensor import Tensor
 
     if _dlpack_device_kind(ext_tensor) == _DLPACK_METAL:
         capsule = ext_tensor.__dlpack__()  # type: ignore[attr-defined]

@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - clear negative-zero input sign in singular slogdet
 - support Generator(device=), cast memory_format=, and CPU non-int randint
 - qr complete/r, lstsq rcond/driver/rank, fftfreq(0)
+- import Tensor at runtime in from_dlpack
 
 ---
 
