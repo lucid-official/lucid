@@ -168,7 +168,9 @@ def _refine_param_type(pname: str, ann: str, default_part: str | None) -> str:
     return ann
 
 
-def _format_engine_param(piece: str, *, is_method: bool = False, is_first: bool = False) -> str:
+def _format_engine_param(
+    piece: str, *, is_method: bool = False, is_first: bool = False
+) -> str:
     default_part: str | None = None
     if "=" in piece:
         head, default_part = piece.split("=", 1)
@@ -226,7 +228,9 @@ def _parse_sig_line(
     _strip_leading_defaults(params, is_method=is_method)
     ret = _RET_OVERRIDES.get(
         qualname,
-        _engine_strip(m.group("ret").strip(), collapse_tensor_tuples=collapse_tensor_tuples),
+        _engine_strip(
+            m.group("ret").strip(), collapse_tensor_tuples=collapse_tensor_tuples
+        ),
     )
     return f"({', '.join(params)}) -> {ret}"
 
@@ -294,7 +298,11 @@ def _class_base_str(cls: type) -> str:
 
 def _render_enum_body(cls: type, sub_indent: str) -> list[str]:
     cname = cls.__name__
-    body = [f"{sub_indent}{k}: {cname}" for k, v in cls.__dict__.items() if isinstance(v, cls)]
+    body = [
+        f"{sub_indent}{k}: {cname}"
+        for k, v in cls.__dict__.items()
+        if isinstance(v, cls)
+    ]
     if "name" in cls.__dict__:
         body.append(f"{sub_indent}@property")
         body.append(f"{sub_indent}def name(self) -> str: ...")
@@ -340,7 +348,9 @@ def _prop_setter_type(cname: str, mname: str, prop: property, getter_type: str) 
     return _engine_strip(m.group(1)) if m else getter_type
 
 
-def _render_property(cname: str, mname: str, prop: property, sub_indent: str) -> list[str]:
+def _render_property(
+    cname: str, mname: str, prop: property, sub_indent: str
+) -> list[str]:
     ptype = _prop_getter_type(cname, mname, prop)
     lines = [
         f"{sub_indent}@property",
@@ -397,7 +407,10 @@ def _render_class(cls: type, indent: str = "") -> list[str]:
         return [f"{indent}class {cname}{base_str}: ..."]
     sub_indent = indent + "    "
     if _is_pybind_enum(cls):
-        return [f"{indent}class {cname}{base_str}:", *_render_enum_body(cls, sub_indent)]
+        return [
+            f"{indent}class {cname}{base_str}:",
+            *_render_enum_body(cls, sub_indent),
+        ]
 
     body: list[str] = []
     for mname, raw in cls.__dict__.items():
@@ -452,7 +465,9 @@ def _render_subnamespace_member(prefix: str, k: str, val: object) -> list[str]:
     return []
 
 
-def _render_subnamespace(prefix: str, ns_class_name: str, mod: types.ModuleType) -> list[str]:
+def _render_subnamespace(
+    prefix: str, ns_class_name: str, mod: types.ModuleType
+) -> list[str]:
     out: list[str] = []
     mod_classes = _topo_sort_classes(
         [
@@ -470,11 +485,15 @@ def _render_subnamespace(prefix: str, ns_class_name: str, mod: types.ModuleType)
         if not k.startswith("__") and isinstance(getattr(mod, k), types.ModuleType):
             sub_mod = getattr(mod, k)
             sub_prefix = f"{prefix}_{k}"
-            out.extend(_render_subnamespace(sub_prefix, f"_{sub_prefix}_namespace", sub_mod))
+            out.extend(
+                _render_subnamespace(sub_prefix, f"_{sub_prefix}_namespace", sub_mod)
+            )
             out.append("")
             submods.append((k, sub_mod))
 
-    body = [f"    {sub_name}: _{prefix}_{sub_name}_namespace" for sub_name, _ in submods]
+    body = [
+        f"    {sub_name}: _{prefix}_{sub_name}_namespace" for sub_name, _ in submods
+    ]
     for k in sorted(dir(mod)):
         if k.startswith("__"):
             continue
@@ -499,7 +518,10 @@ def gen_engine_pyi() -> tuple[str, int]:
     policy_map: dict[str, tuple[str, str]] = {}
     try:
         for schema in e.op_registry_all():
-            policy_map[schema.name] = (str(schema.amp_policy), str(schema.amp_policy_cpu))
+            policy_map[schema.name] = (
+                str(schema.amp_policy),
+                str(schema.amp_policy_cpu),
+            )
         for name, metal, cpu in e.amp_policy_table():
             policy_map[name] = (str(metal), str(cpu))
     except Exception:
@@ -914,19 +936,19 @@ class Tensor:
     def to(self, device: DeviceLike | DTypeLike | Tensor | None = None, dtype: DTypeLike | None = None, non_blocking: _bool = False, copy: _bool = False) -> Tensor: ...
     def metal(self) -> Tensor: ...
     def cpu(self) -> Tensor: ...
-    def float(self) -> Tensor: ...
-    def double(self) -> Tensor: ...
-    def half(self) -> Tensor: ...
-    def bfloat16(self) -> Tensor: ...
-    def int(self) -> Tensor: ...
-    def long(self) -> Tensor: ...
-    def short(self) -> Tensor: ...
-    def char(self) -> Tensor: ...
-    def byte(self) -> Tensor: ...
-    def cfloat(self) -> Tensor: ...
-    def chalf(self) -> Tensor: ...
-    def cdouble(self) -> Tensor: ...
-    def bool(self) -> Tensor: ...
+    def float(self, memory_format: object = None) -> Tensor: ...
+    def double(self, memory_format: object = None) -> Tensor: ...
+    def half(self, memory_format: object = None) -> Tensor: ...
+    def bfloat16(self, memory_format: object = None) -> Tensor: ...
+    def int(self, memory_format: object = None) -> Tensor: ...
+    def long(self, memory_format: object = None) -> Tensor: ...
+    def short(self, memory_format: object = None) -> Tensor: ...
+    def char(self, memory_format: object = None) -> Tensor: ...
+    def byte(self, memory_format: object = None) -> Tensor: ...
+    def cfloat(self, memory_format: object = None) -> Tensor: ...
+    def chalf(self, memory_format: object = None) -> Tensor: ...
+    def cdouble(self, memory_format: object = None) -> Tensor: ...
+    def bool(self, memory_format: object = None) -> Tensor: ...
 
     # ── registry-injected ops (_registry.py) ────────────────────────────
 """
@@ -942,7 +964,9 @@ def _method_param(param: inspect.Parameter, operand: bool) -> str:
     elif param.annotation is not inspect.Parameter.empty:
         ptype = _SHADOWED_BUILTINS.sub(r"_\1", _stringify_annotation(param.annotation))
     else:
-        ptype = _SHADOWED_BUILTINS.sub(r"_\1", _PARAM_TYPE_MAP.get(param.name, "object"))
+        ptype = _SHADOWED_BUILTINS.sub(
+            r"_\1", _PARAM_TYPE_MAP.get(param.name, "object")
+        )
     default = "" if param.default is param.empty else " = ..."
     return f"{param.name}: {ptype}{default}"
 
@@ -1144,7 +1168,8 @@ def gen_tensor_pyi() -> tuple[str, int]:
         for m in _SCAN_INPLACE_TWINS
     )
     python_only.extend(
-        f"    def {m}(self, diagonal: _int = 0) -> Self: ..." for m in _TRI_INPLACE_TWINS
+        f"    def {m}(self, diagonal: _int = 0) -> Self: ..."
+        for m in _TRI_INPLACE_TWINS
     )
     python_only.extend(
         f"    def {m}(self, batch1: Tensor, batch2: Tensor, *, beta: _float = 1.0, alpha: _float = 1.0) -> Self: ..."
@@ -1168,7 +1193,9 @@ def gen_tensor_pyi() -> tuple[str, int]:
     # A registry method with a stub already written out — in the header or
     # ``python_only`` — is not emitted again: derived from what is written,
     # so a name cannot be skipped as "hand-written" when nothing is.
-    written = set(re.findall(r"^    def (\w+)\(", _TENSOR_HEADER + "\n".join(python_only), re.M))
+    written = set(
+        re.findall(r"^    def (\w+)\(", _TENSOR_HEADER + "\n".join(python_only), re.M)
+    )
     lines = []
     count = 0
     for entry in _REGISTRY:
@@ -2373,7 +2400,9 @@ def gen_init_pyi() -> tuple[str, int]:
             continue
         seen.add(fn)
         lines.append(
-            _format_with_docstring(_avoid_dtype_shadow(_free_fn_sig(entry)), fn, _existing_docs)
+            _format_with_docstring(
+                _avoid_dtype_shadow(_free_fn_sig(entry)), fn, _existing_docs
+            )
         )
         count += 1
 
@@ -2425,7 +2454,9 @@ def gen_init_pyi() -> tuple[str, int]:
             continue
         seen.add(n)
         line = _COMPOSITE_SIGNATURES.get(n) or _sig_from_callable(n, fn)
-        composite_lines.append(_format_with_docstring(_avoid_dtype_shadow(line), n, _existing_docs))
+        composite_lines.append(
+            _format_with_docstring(_avoid_dtype_shadow(line), n, _existing_docs)
+        )
 
     # ── nn.functional / linalg / method aliases ───────────────────────────────
     import lucid
@@ -2464,7 +2495,9 @@ def gen_init_pyi() -> tuple[str, int]:
     ]
 
     content = _INIT_HEADER + "\n".join(lines) + "\n\n"
-    content += "# ── Reference-compatible overrides (see _ops/__init__.py) ───────────\n"
+    content += (
+        "# ── Reference-compatible overrides (see _ops/__init__.py) ───────────\n"
+    )
     content += "\n".join(overrides) + "\n"
     content += "\n".join(composite_lines) + "\n"
     content += "\n".join(alias_lines) + "\n"
@@ -2472,7 +2505,9 @@ def gen_init_pyi() -> tuple[str, int]:
     # exported in __init__.pyi — replace with the public ``dtype`` name.
     content = content.replace("_DType", "dtype")
 
-    total = count + len([l for l in composite_lines + alias_lines if l.startswith("def ")])
+    total = count + len(
+        [l for l in composite_lines + alias_lines if l.startswith("def ")]
+    )
     return content, total
 
 
@@ -2492,9 +2527,15 @@ def main() -> None:
     _write(tensor_path, tensor_content)
     _write(init_path, init_content)
 
-    print(f"[gen_pyi] engine.pyi  → {engine_path.relative_to(ROOT)}  ({n_engine} schemas)")
-    print(f"[gen_pyi] tensor.pyi  → {tensor_path.relative_to(ROOT)}  ({n_tensor_methods} registry)")
-    print(f"[gen_pyi] __init__.pyi → {init_path.relative_to(ROOT)}  ({n_free_fns} registry fns)")
+    print(
+        f"[gen_pyi] engine.pyi  → {engine_path.relative_to(ROOT)}  ({n_engine} schemas)"
+    )
+    print(
+        f"[gen_pyi] tensor.pyi  → {tensor_path.relative_to(ROOT)}  ({n_tensor_methods} registry)"
+    )
+    print(
+        f"[gen_pyi] __init__.pyi → {init_path.relative_to(ROOT)}  ({n_free_fns} registry fns)"
+    )
     print("[gen_pyi] done.")
 
 

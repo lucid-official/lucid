@@ -64,11 +64,25 @@ def test_a_cast_to_a_dtype_lucid_lacks_is_refused(name: str, device: str) -> Non
 
 @pytest.mark.parametrize("name", sorted(_CASTS | _REFUSED))
 def test_every_cast_has_the_same_signature(name: str) -> None:
-    # Pinned as it stands, not as it should be: the reference's casts take
-    # ``memory_format=``, which LCD-488 adds to every one of them.  That fix
-    # changes this list for all thirteen at once.
     params = list(inspect.signature(getattr(lucid.Tensor, name)).parameters)
-    assert params == ["self"]
+    assert params == ["self", "memory_format"]
+
+
+@pytest.mark.parametrize("name", sorted(_CASTS))
+def test_cast_methods_accept_preserve_and_contiguous_formats_and_refuse_others(
+    name: str, device: str
+) -> None:
+    if device == "metal" and _CASTS[name] in _CPU_ONLY:
+        return
+    target = getattr(lucid, _CASTS[name])
+    x = lucid.zeros(2, 3, dtype=target, device=device).T
+    assert not x.is_contiguous()
+    assert getattr(x, name)(memory_format="preserve_format") is x
+    contig = getattr(x, name)(memory_format="contiguous_format")
+    assert contig.is_contiguous()
+    assert contig.dtype == target
+    with pytest.raises(NotImplementedError, match="memory_format"):
+        getattr(x, name)(memory_format="channels_last")
 
 
 def _reference_casts(ref: ModuleType) -> set[str]:

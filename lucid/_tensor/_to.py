@@ -376,14 +376,41 @@ def _cpu(self: Tensor) -> Tensor:
     return _to(self, _C_engine.Device.CPU)
 
 
-def _cast(self: Tensor, target: _dtype_cls) -> Tensor:
+_PRESERVE_FORMATS = frozenset({None, "preserve_format"})
+_CONTIGUOUS_FORMATS = frozenset({"contiguous_format"})
+
+
+def _check_memory_format(memory_format: object, method: str) -> str:
+    """Validate ``memory_format`` for a dtype-cast method."""
+    name = (
+        memory_format
+        if isinstance(memory_format, str) or memory_format is None
+        else str(memory_format).rsplit(".", 1)[-1]
+    )
+    if name in _PRESERVE_FORMATS:
+        return "preserve"
+    if name in _CONTIGUOUS_FORMATS:
+        return "contiguous"
+    raise NotImplementedError(
+        f"Tensor.{method}(): unsupported memory_format {memory_format!r}; "
+        "only preserve_format and contiguous_format are supported."
+    )
+
+
+def _cast(
+    self: Tensor,
+    target: _dtype_cls,
+    memory_format: object = None,
+    method: str = "to",
+) -> Tensor:
     """``self`` at ``target``'s dtype: ``self`` itself when it is there already."""
+    fmt = _check_memory_format(memory_format, method)
     if self._impl.dtype == to_engine_dtype(target):
-        return self
+        return self if fmt == "preserve" else self.contiguous()
     return _to(self, target)
 
 
-def _float(self: Tensor) -> Tensor:
+def _float(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to float32.
 
     Examples
@@ -398,10 +425,10 @@ def _float(self: Tensor) -> Tensor:
     ``float32``.  Otherwise performs a copy-cast via the engine's
     ``astype`` op; the device is preserved.
     """
-    return _cast(self, float32)
+    return _cast(self, float32, memory_format, "float")
 
 
-def _double(self: Tensor) -> Tensor:
+def _double(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to float64.
 
     Examples
@@ -417,10 +444,10 @@ def _double(self: Tensor) -> Tensor:
     precision; device is preserved.  Metal has no float64, so a Metal
     tensor is refused with ``NotImplementedError``.
     """
-    return _cast(self, float64)
+    return _cast(self, float64, memory_format, "double")
 
 
-def _half(self: Tensor) -> Tensor:
+def _half(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to float16.
 
     Examples
@@ -436,10 +463,10 @@ def _half(self: Tensor) -> Tensor:
     ``inf`` for magnitudes above ~65504 and underflow to 0 for
     magnitudes below ~6e-5.
     """
-    return _cast(self, float16)
+    return _cast(self, float16, memory_format, "half")
 
 
-def _bfloat16(self: Tensor) -> Tensor:
+def _bfloat16(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to bfloat16.
 
     Examples
@@ -455,10 +482,10 @@ def _bfloat16(self: Tensor) -> Tensor:
     significand, so narrowing rounds to about three significant decimal
     digits but does not overflow where float32 does not.
     """
-    return _cast(self, bfloat16)
+    return _cast(self, bfloat16, memory_format, "bfloat16")
 
 
-def _int(self: Tensor) -> Tensor:
+def _int(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to int32.
 
     Examples
@@ -473,10 +500,10 @@ def _int(self: Tensor) -> Tensor:
     ``int32``.  Casts from floating point truncate toward zero;
     values outside ``[-2**31, 2**31 - 1]`` produce undefined results.
     """
-    return _cast(self, int32)
+    return _cast(self, int32, memory_format, "int")
 
 
-def _long(self: Tensor) -> Tensor:
+def _long(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to int64.
 
     Examples
@@ -491,10 +518,10 @@ def _long(self: Tensor) -> Tensor:
     ``int64``.  Casts from floating point truncate toward zero.
     Typically used for index tensors (e.g. ``gather`` / ``scatter``).
     """
-    return _cast(self, int64)
+    return _cast(self, int64, memory_format, "long")
 
 
-def _short(self: Tensor) -> Tensor:
+def _short(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to int16.
 
     Examples
@@ -508,10 +535,10 @@ def _short(self: Tensor) -> Tensor:
     Returns ``self`` unchanged when the source dtype is already
     ``int16``.  Casts from floating point truncate toward zero.
     """
-    return _cast(self, int16)
+    return _cast(self, int16, memory_format, "short")
 
 
-def _char(self: Tensor) -> Tensor:
+def _char(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to int8.
 
     Examples
@@ -526,10 +553,10 @@ def _char(self: Tensor) -> Tensor:
     ``int8``, the signed byte.  Casts from floating point truncate
     toward zero.
     """
-    return _cast(self, int8)
+    return _cast(self, int8, memory_format, "char")
 
 
-def _byte(self: Tensor) -> Tensor:
+def _byte(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to uint8: refused, since Lucid has no unsigned dtype.
 
     The reference's ``byte()`` is ``to(uint8)``.  Lucid's integer dtypes
@@ -550,7 +577,7 @@ def _byte(self: Tensor) -> Tensor:
         ...
     NotImplementedError: Tensor.byte(): lucid has no uint8 dtype ...
     """
-    del self  # reference-signature parity: the method takes the tensor
+    del self, memory_format  # reference-signature parity
     raise NotImplementedError(
         "Tensor.byte(): lucid has no uint8 dtype — its integer dtypes are "
         "signed.  Use .char() for int8, or .short() for int16, which holds "
@@ -558,7 +585,7 @@ def _byte(self: Tensor) -> Tensor:
     )
 
 
-def _cfloat(self: Tensor) -> Tensor:
+def _cfloat(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to complex64.
 
     Examples
@@ -573,10 +600,10 @@ def _cfloat(self: Tensor) -> Tensor:
     ``complex64``.  A real tensor becomes the real part, with a zero
     imaginary part.
     """
-    return _cast(self, complex64)
+    return _cast(self, complex64, memory_format, "cfloat")
 
 
-def _chalf(self: Tensor) -> Tensor:
+def _chalf(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to complex32: refused, since Lucid has no half-precision complex.
 
     The reference's ``chalf()`` is ``to(complex32)``, a pair of float16
@@ -597,14 +624,14 @@ def _chalf(self: Tensor) -> Tensor:
         ...
     NotImplementedError: Tensor.chalf(): lucid has no complex32 dtype ...
     """
-    del self  # reference-signature parity: the method takes the tensor
+    del self, memory_format  # reference-signature parity
     raise NotImplementedError(
         "Tensor.chalf(): lucid has no complex32 dtype — its narrowest complex "
         "dtype is complex64.  Use .cfloat() for complex64."
     )
 
 
-def _cdouble(self: Tensor) -> Tensor:
+def _cdouble(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to complex128.
 
     Examples
@@ -619,10 +646,10 @@ def _cdouble(self: Tensor) -> Tensor:
     ``complex128``.  Metal has no complex128, so a Metal tensor is
     refused with ``NotImplementedError``.
     """
-    return _cast(self, complex128)
+    return _cast(self, complex128, memory_format, "cdouble")
 
 
-def _bool(self: Tensor) -> Tensor:
+def _bool(self: Tensor, memory_format: object = None) -> Tensor:
     """Cast to bool.
 
     Examples
@@ -637,7 +664,7 @@ def _bool(self: Tensor) -> Tensor:
     ``bool``.  Otherwise each element is reduced to ``True`` if
     nonzero and ``False`` if zero.
     """
-    return _cast(self, bool_)
+    return _cast(self, bool_, memory_format, "bool")
 
 
 _TO_METHODS = (

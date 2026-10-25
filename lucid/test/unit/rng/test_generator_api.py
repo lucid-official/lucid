@@ -106,3 +106,17 @@ def test_the_global_manual_seed_reads_its_seed_through_int(
     ref.manual_seed(seed)
     lucid.manual_seed(seed)
     assert lucid.initial_seed() == ref.initial_seed()
+
+
+def test_generator_device_parameter_and_property(ref: ModuleType) -> None:
+    assert lucid.Generator().device == lucid.device("cpu")
+    assert lucid.Generator(device="cpu").device == lucid.device("cpu")
+    assert lucid.Generator("cpu").device == lucid.device("cpu")
+    assert lucid.Generator("metal").device == lucid.device("metal")
+    assert lucid.Generator(7, device="metal").device == lucid.device("metal")
+    assert lucid.Generator(7, device="metal").initial_seed() == 7
+    assert ref.Generator(device="cpu").device.type == "cpu"
+    with pytest.raises(TypeError, match="multiple values for argument 'device'"):
+        lucid.Generator("cpu", device="metal")
+    with pytest.raises(ValueError, match="Unknown device"):
+        lucid.Generator(device="bogus")

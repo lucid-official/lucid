@@ -180,13 +180,14 @@ def test_a_wide_floating_bound_stays_finite_and_says_it_rounds() -> None:
         lucid.randint_like(lucid.zeros(3, dtype=lucid.complex64), 3)
 
 
-@pytest.mark.parametrize("dtype,top,bottom", _EDGES[:3], ids=[e[0] for e in _EDGES[:3]])
+@pytest.mark.filterwarnings("ignore:randint.*not uniform:UserWarning")
+@pytest.mark.parametrize("dtype,top,bottom", _EDGES, ids=[e[0] for e in _EDGES])
 def test_randint_draws_only_what_the_dtype_holds(
     device: str, dtype: str, top: int, bottom: int
 ) -> None:
     dt = getattr(lucid, dtype)
     edge = lucid.randint(top - 1, top, (8,), dtype=dt, device=device)
-    assert set(edge.tolist()) == {top - 1}
+    assert set(edge.to(lucid.int64).tolist()) == {top - 1}
     with pytest.raises(RuntimeError, match="to - 1 .* out of bounds"):
         lucid.randint(0, top + 1, (8,), dtype=dt, device=device)
     with pytest.raises(RuntimeError, match="from=.* out of bounds"):

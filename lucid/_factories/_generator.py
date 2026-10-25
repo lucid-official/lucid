@@ -16,11 +16,13 @@ through the helpers here.
 import operator
 import os
 import weakref
-from typing import TYPE_CHECKING, Self, override
+from typing import TYPE_CHECKING, Self, SupportsIndex, override
 
 from lucid._C import engine as _C_engine
+from lucid._device import device as _device_cls
 from lucid._dtype import int64
 from lucid._factories.converters import tensor
+from lucid._types import DeviceLike
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -33,21 +35,16 @@ _SIGNED_64 = 1 << 63
 _ENGINE_COUNTER = _C_engine.Generator.__dict__["counter"]
 
 
-def _seed_value(seed: int, op: str) -> int:
+def _seed_value(seed: object, op: str) -> int:
     """``seed`` as the engine's unsigned 64-bit key.
 
     The reference takes any 64-bit integer, signed or unsigned, and reads a
     negative one modulo :math:`2^{64}`; the engine refused it with a raw
     "incompatible constructor arguments".  A float or bool is refused.
     """
-    if isinstance(seed, bool):
-        raise TypeError(f"{op}: seed must be an int, got bool")
-    try:
-        value = operator.index(seed)
-    except TypeError:
-        raise TypeError(
-            f"{op}: seed must be an int, got {type(seed).__name__}"
-        ) from None
+    if isinstance(seed, bool) or not isinstance(seed, SupportsIndex):
+        raise TypeError(f"{op}: seed must be an int, got {type(seed).__name__}")
+    value = operator.index(seed)
     if not -_SIGNED_64 <= value < _UNSIGNED_64:
         raise ValueError(f"{op}: seed must lie in [-2**63, 2**64), got {value}")
     return value % _UNSIGNED_64
@@ -92,23 +89,29 @@ class Generator(_C_engine.Generator):
 
     Parameters
     ----------
-    seed : int, optional
+    seed : int or str or lucid.device, optional
         The key, any integer in :math:`[-2^{63}, 2^{64})` — a negative one
-        is read modulo :math:`2^{64}`, as the reference reads it.
-        Default ``0``.
+        is read modulo :math:`2^{64}`, as the reference reads it.  When a
+        device specifier is given as the single positional argument
+        (``Generator("cpu")``), it is read as ``device`` and the key
+        defaults to ``0``.
+    device : str or lucid.device, optional
+        The device recorded on :attr:`device`.  Defaults to ``device("cpu")``.
 
     Raises
     ------
     TypeError
-        If ``seed`` is not an integer.
+        If ``seed`` is not an integer or device specifier.
     ValueError
-        If ``seed`` is out of the 64-bit range.
+        If ``seed`` is out of the 64-bit range or ``device`` names no
+        supported device.
 
     Notes
     -----
-    The reference's constructor takes a ``device``; a Lucid stream is
-    device-independent, so there is none.  :meth:`seed` reseeds from
-    entropy, as the reference's does; :meth:`initial_seed` reads the key.
+    The constructor accepts both ``Generator(seed)`` and the reference's
+    ``Generator(device=...)`` / ``Generator("cpu")``.  :meth:`seed` reseeds
+    from entropy, as the reference's does; :meth:`initial_seed` reads the
+    key.
 
     Examples
     --------
@@ -124,9 +127,25 @@ class Generator(_C_engine.Generator):
     True
     """
 
-    def __init__(self, seed: int = 0) -> None:
+    _device: _device_cls
+
+    def __init__(
+        self,
+        seed: int | DeviceLike = 0,
+        device: DeviceLike = None,
+    ) -> None:
+        if isinstance(seed, (str, _device_cls, _C_engine.Device)):
+            if device is not None:
+                raise TypeError("Generator() got multiple values for argument 'device'")
+            device, seed = seed, 0
+        self._device = _device_cls("cpu" if device is None else device)
         super().__init__(_seed_value(seed, "Generator"))
         _LIVE.add(self)
+
+    @property
+    def device(self) -> _device_cls:
+        """The device recorded when this generator was constructed."""
+        return self._device
 
     def manual_seed(self, seed: int) -> Self:
         """Set the key to ``seed`` and rewind the stream to its start.

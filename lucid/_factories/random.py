@@ -621,20 +621,10 @@ def randint(
     Notes
     -----
     The engine generates the integers via
-
-    .. math::
-
-        X_i = l + \lfloor U_i \cdot (h - l) \rfloor,
-        \quad U_i \sim U[0, 1)
-
-    which gives an exact discrete uniform distribution with no
-    acceptance–rejection overhead.
-
-    Common uses include:
-
-    * Sampling mini-batch indices for data loaders
-    * Generating random class labels for testing
-    * Stochastic depth / drop-path masks
+    $X_i = l + \lfloor U_i \cdot (h - l) \rfloor$ for $U_i \sim U[0, 1)$,
+    giving an exact discrete uniform distribution with no
+    acceptance–rejection overhead.  Common uses include sampling mini-batch
+    indices, generating random class labels, and stochastic depth masks.
 
     Examples
     --------
@@ -645,13 +635,7 @@ def randint(
     ((5,), lucid.int64)
     >>> bool(((x >= 0) & (x < 10)).all())
     True
-
-    Shuffle indices for a dataset of 1024 examples:
-
     >>> idx = lucid.randint(0, 1024, (64,))  # sample 64 indices
-
-    Random binary mask:
-
     >>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}
     """
     _check_random()
@@ -659,9 +643,15 @@ def randint(
         dtype if dtype is not None else int64, device
     )
     _require_holds("randint", low, high, _dt)
-    shape = list(size)
-    impl = _C_engine.randint(shape, low, high, _dt, _dev, generator)
-    return _wrap(_leaf(impl, requires_grad))
+    draw_dt = (
+        _C_engine.I64
+        if _dev == _C_engine.Device.CPU and not _promotion.is_integer(_dt)
+        else _dt
+    )
+    impl = _C_engine.randint(list(size), low, high, draw_dt, _dev, generator)
+    return _wrap(
+        _leaf(_C_engine.astype(impl, _dt) if draw_dt != _dt else impl, requires_grad)
+    )
 
 
 def bernoulli(

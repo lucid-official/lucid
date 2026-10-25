@@ -83,7 +83,7 @@ def test_generator_reads_as_a_python_class() -> None:
     """``Generator`` was the bound C++ class, which ``inspect`` cannot
     describe; the Python subclass that carries the reference's methods
     (LCD-374) reads like any other callable, so it left the exemptions."""
-    assert list(inspect.signature(lucid.Generator).parameters) == ["seed"]
+    assert list(inspect.signature(lucid.Generator).parameters) == ["seed", "device"]
 
 
 def test_from_numpy_is_unreadable_only_through_its_numpy_annotation() -> None:
