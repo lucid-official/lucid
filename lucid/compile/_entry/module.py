@@ -969,9 +969,12 @@ class CompiledModule[**P, R](_ModuleWrapper):
         symbolic lowering failed), and the wildcarded key is then wrong.
         A signature that does not compile is remembered as eager-only.
         """
-        before = self._param_fp.outside_slots()
-        entry = self._compile_for(args, kwargs)
-        self._param_fp.settle(() if entry is None else entry.reads.fed, before)
+        from lucid.compile._core.trace_context import compile_attempt
+
+        with compile_attempt():
+            before = self._param_fp.outside_slots()
+            entry = self._compile_for(args, kwargs)
+            self._param_fp.settle(() if entry is None else entry.reads.fed, before)
         resolved = self._symbolic_resolved
         if resolved is not None and resolved != symbolic:
             key = self._param_fp.key_of(args, kwargs, dynamic=resolved)
@@ -1165,23 +1168,21 @@ class CompiledModule[**P, R](_ModuleWrapper):
         args: tuple[object, ...],
         kwargs: dict[str, object],
     ) -> tuple[Tracer, object] | None:
-        """Trace ``self._model(*args, **kwargs)`` under :func:`no_grad`."""
+        """Trace ``self._model(*args, **kwargs)`` in the caller's grad mode."""
         from lucid._tensor.tensor import Tensor
-        from lucid.autograd._grad_mode import no_grad
-        from lucid.compile import _tracing
+        from lucid.compile._core.trace_context import (
+            notice_if_tensor_hook_error,
+            recording,
+        )
 
         try:
-            with (
-                no_grad(),
-                _tracing(
-                    watch=(args, kwargs), module=self._model, fold_constants=True
-                ) as tracer,
-            ):
+            with recording(
+                watch=(args, kwargs), module=self._model, fold_constants=True
+            ) as tracer:
                 return_value = self._model(*(cast(Tensor, a) for a in args), **kwargs)
         except RuntimeError as why:
-            if "register_hook" not in str(why):
+            if not notice_if_tensor_hook_error(why):
                 raise
-            _fallback_notice("tensor-hook", str(why))
             return None
         if not tracer.graph.ops:
             _fallback_notice("empty-trace", "traced call recorded no operations")

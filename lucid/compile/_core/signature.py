@@ -175,6 +175,10 @@ class CacheKey:
         tensor of the same signature ran with the weight replaced by it
         (LCD-629); ``alias`` cannot see this, since it compares the
         arguments only with each other.
+    grad_mode : bool
+        Snapshot of ``grad_enabled()`` at the call site.  A frozen model
+        with an ``is_grad_enabled()`` branch traces different graphs under
+        ``enable_grad`` and ``no_grad``, so each mode gets its own entry.
     grad : bool
         Whether the call needs a differentiable result: grad mode was on
         and a tensor it reads requires grad.  Such a call runs eagerly, so
@@ -189,12 +193,12 @@ class CacheKey:
     >>> model = nn.Linear(8, 4).to("metal")
     >>> x = lucid.randn(2, 8, device="metal")
     >>> compiled = lucid.compile(model)
-    >>> key = signature_of(model, (x,), {}, dynamic=False)
-    >>> key in compiled._cache               # is this signature compiled yet?
-    False
     >>> with lucid.no_grad():
+    ...     key = signature_of(model, (x,), {}, dynamic=False)
+    ...     key in compiled._cache           # is this signature compiled yet?
     ...     _ = compiled(x)
-    >>> key in compiled._cache
+    ...     key in compiled._cache
+    False
     True
 
     See Also
@@ -218,6 +222,8 @@ class CacheKey:
     tree_alias: tuple[tuple[int, _Slot], ...] = field(default_factory=tuple)
     # Per-submodule ``(training, scalar_attrs)`` snapshot across ``model.modules()``.
     module_state: tuple[object, ...] = field(default_factory=tuple)
+    # Snapshot of ``grad_enabled()`` at the call site; see ``grad_mode`` above.
+    grad_mode: bool = False
     # The call needs gradients and runs eagerly; see ``grad`` above.
     grad: bool = False
 
@@ -858,7 +864,10 @@ class TraceReads:
         pairs = zip(input_ids, sources, strict=True)
         return cls(
             pinned=tuple(feeds[tid] for tid, src in pairs if src is None),
-            grad_leaf=any(impl.requires_grad and id(impl) not in ids for impl in held),
+            grad_leaf=any(
+                impl.requires_grad and impl.is_leaf and id(impl) not in ids
+                for impl in held
+            ),
             fed=outside_feeds(tracer),
         )
 
@@ -1483,4 +1492,5 @@ def signature_of(
             leaves, _tree_walk(model).slot_of if slots is None else slots
         ),
         module_state=module_state,
+        grad_mode=bool(_C_engine.grad_enabled()),
     )

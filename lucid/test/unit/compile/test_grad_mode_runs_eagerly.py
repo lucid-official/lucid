@@ -181,8 +181,8 @@ def _held_weight(t: lucid.Tensor) -> lucid.Tensor:
 
 
 # A grad leaf the forward makes on the CPU and moves to the input's device.
-# On Metal the CPU factory is no traced value and the move, made under the
-# trace's no_grad, is a pinned feed that does not require grad (LCD-618).
+# Because ``_trace_forward`` records in the caller's grad mode (LCD-580b), the
+# ``.to()`` copy is a pinned feed with ``requires_grad=True`` on Metal too.
 _CPU_LEAVES: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "cpu-factory-tensor": lambda t: t
     * lucid.tensor([1.0, 2.0, 3.0, 4.0], requires_grad=True).to(t.device),
@@ -223,13 +223,6 @@ def _where(name: str, device: str) -> _Where:
     return _Where(made_inside, lambda f: f(x), ())
 
 
-_LCD_618 = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-618: a grad leaf made on the CPU and moved to Metal inside the "
-    "forward is neither a traced value nor a feed that requires grad",
-)
-
-
 def _locations() -> list[object]:
     names = [
         "buffer",
@@ -245,8 +238,7 @@ def _locations() -> list[object]:
     out: list[object] = []
     for name in names:
         out.append(pytest.param(name, "cpu", id=f"{name}-cpu"))
-        marks = [_METAL, _LCD_618] if name in _CPU_LEAVES else [_METAL]
-        out.append(pytest.param(name, "metal", marks=marks, id=f"{name}-metal"))
+        out.append(pytest.param(name, "metal", marks=[_METAL], id=f"{name}-metal"))
     return out
 
 
@@ -388,7 +380,8 @@ def test_a_first_run_mpsgraph_refuses_answers_eagerly(
     """MPSGraph may refuse a kernel only when it first runs: eager, remembered.
 
     A call that needed gradients found only by its trace (a closure tensor)
-    caches the executable unrun; the first ``no_grad`` call then runs it first.
+    caches the executable unrun under its ``grad_mode`` key; once that tensor
+    is frozen, the next call in the same grad mode runs it first.
     """
     weight = _data((4, 3), "metal").requires_grad_(True)
 
@@ -409,7 +402,9 @@ def test_a_first_run_mpsgraph_refuses_answers_eagerly(
     if first_call == "grad":
         assert compiled(x).requires_grad
         assert runs == 0 and compiled.cache_info()["entries"] == 1
-    with lucid.no_grad():
+        weight.requires_grad_(False)
+    ctx = lucid.no_grad() if first_call == "no_grad" else lucid.enable_grad()
+    with ctx:
         with pytest.warns(CompileFallbackWarning, match="MPSGraph failed"):
             got = compiled(x)
         again = compiled(x)
