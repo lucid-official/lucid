@@ -38,9 +38,11 @@
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/Half.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
 #include "../../core/OpSchema.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Scope.h"
 #include "../../core/Shape.h"
 #include "../../core/Storage.h"
@@ -197,6 +199,34 @@ fused_combine() {
     return compiled;
 }
 
+Storage combine_half_cpu(const TensorImplPtr& y0,
+                         const std::vector<TensorImplPtr>& inputs,
+                         const std::vector<std::size_t>& live,
+                         const std::vector<double>& scales,
+                         Dtype dtype,
+                         std::size_t n) {
+    const bool is_bf16 = dtype == Dtype::BF16;
+    const std::size_t k_count = live.size();
+    auto scratch = allocate_aligned_bytes(n * (k_count + 2) * sizeof(float), Device::CPU);
+    auto* y0_f = reinterpret_cast<float*>(scratch.get());
+    auto* out_f = y0_f + n;
+    backend::detail::half_or_bfloat16_to_float_bulk(cpu_data<std::uint16_t>(y0), y0_f, n, is_bf16);
+    std::vector<const float*> kp;
+    kp.reserve(k_count);
+    for (std::size_t j = 0; j < k_count; ++j) {
+        float* kj = out_f + (j + 1) * n;
+        backend::detail::half_or_bfloat16_to_float_bulk(cpu_data<std::uint16_t>(inputs[live[j]]),
+                                                        kj, n, is_bf16);
+        kp.push_back(kj);
+    }
+    combine_cpu<float>(y0_f, kp, scales, out_f, n);
+    const std::size_t nbytes = n * dtype_size(dtype);
+    auto ptr = allocate_aligned_bytes(nbytes, Device::CPU);
+    backend::detail::float_to_half_or_bfloat16_bulk(
+        out_f, reinterpret_cast<std::uint16_t*>(ptr.get()), n, is_bf16);
+    return Storage{CpuStorage{ptr, nbytes, dtype}};
+}
+
 // `y0 + sum_j scales[j] * inputs[live[j]]`, as one pass per device family.
 //
 // `live` indexes `inputs`, whose slot 0 is `y0` itself; only stages with a
@@ -209,10 +239,14 @@ Storage combine_storage(const TensorImplPtr& y0,
                         Dtype dtype,
                         Device device,
                         std::size_t n) {
+    if (PhantomMode::is_enabled())
+        return phantom_storage(shape, dtype, device);
     if (live.empty() || n == 0)
         return clone_storage(y0->storage(), n, dtype, device);
 
     if (device == Device::CPU) {
+        if (is_half_float(dtype))
+            return combine_half_cpu(y0, inputs, live, scales, dtype, n);
         if (dtype != Dtype::F32 && dtype != Dtype::F64)
             throw NotImplementedError("rk_combine: dtype " + std::string(dtype_name(dtype)) +
                                       " is not supported on the CPU stream");

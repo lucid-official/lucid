@@ -151,12 +151,12 @@ def error_ratio(
     matter how it is computed; the fused op makes that exactly one
     synchronisation per step and never materialises the error tensor.
 
-    The engine kernel carries only float32 and float64 — step control is a
-    scalar diagnostic, so a lower-precision state is promoted here instead of
-    the kernel growing a half-precision path.
+    The engine kernel widens half-precision operands internally so step
+    control accumulates in wide floating point without allocating promoted
+    tensors in Python.
     """
     operands = _promote([y0, y1, *ks])
-    if operands[0].dtype not in (lucid.float32, lucid.float64):
+    if not operands[0].is_floating_point():
         operands = tuple(t.to(lucid.float32) for t in operands)
     base, end, *stages = operands
     return _C_engine.diffeq.rk_error_norm(
@@ -229,12 +229,12 @@ def broyden_probe(
     moving eight bytes -- MLX evaluates lazily, so it waits for everything
     queued behind it.  Fused, an iteration pays for one.
 
-    The engine kernel carries only float32 and float64, matching
-    :func:`error_ratio`; a lower-precision state is promoted here rather than
-    the kernel growing a half-precision path.
+    The engine kernel widens half-precision operands internally, matching
+    :func:`error_ratio`, so convergence norms accumulate in wide floating
+    point without allocating promoted tensors in Python.
     """
     operands = _promote([residual, step, state])
-    if operands[0].dtype not in (lucid.float32, lucid.float64):
+    if not operands[0].is_floating_point():
         operands = tuple(t.to(lucid.float32) for t in operands)
     res, stp, cur = operands
     raw = None if info is None else _unwrap(info)

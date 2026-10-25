@@ -118,6 +118,21 @@ TEST(RkCombine, BackwardAccumulatesRepeatedStage) {
         EXPECT_NEAR(v, 1.5f, 1e-6f);
 }
 
+TEST(RkCombine, SupportsHalfAndBFloat16OnCpu) {
+    for (Dtype dt : {Dtype::F16, Dtype::BF16}) {
+        auto y0 = full_op({4}, 1.0, dt, Device::CPU, /*requires_grad=*/true);
+        auto k1 = full_op({4}, 2.0, dt, Device::CPU, /*requires_grad=*/true);
+        auto k2 = full_op({4}, 3.0, dt, Device::CPU, /*requires_grad=*/true);
+        auto y = rk_combine_op(y0, {k1, k2}, {0.5, 0.25}, 2.0);
+        EXPECT_EQ(y->dtype(), dt);
+        EXPECT_TENSOR_NEAR(y, 4.5f, 1e-2f);
+        Engine::backward(sum_op(y, {}, false));
+        ASSERT_TRUE(has_grad(y0));
+        ASSERT_TRUE(has_grad(k1));
+        ASSERT_TRUE(has_grad(k2));
+    }
+}
+
 TEST(RkCombine, RejectsCoeffLengthMismatch) {
     auto y0 = cpu_ones({2});
     auto k1 = cpu_ones({2});
@@ -234,9 +249,9 @@ TEST(RkErrorNorm, RejectsNonFloatDtype) {
 
 TEST(BroydenProbe, ReturnsEachNormSeparately) {
     // Distinct values per operand so a swapped or shared accumulator shows.
-    auto residual = cpu_full({4}, 2.0);   // sum of squares = 16
-    auto step = cpu_full({4}, 3.0);       // sum of squares = 36
-    auto state = cpu_full({4}, 5.0);      // sum of squares = 100
+    auto residual = cpu_full({4}, 2.0);  // sum of squares = 16
+    auto step = cpu_full({4}, 3.0);      // sum of squares = 36
+    auto state = cpu_full({4}, 5.0);     // sum of squares = 100
     auto info = cpu_full({}, 0.0);
     const BroydenProbeResult r = broyden_probe_op(residual, step, state, info);
     EXPECT_NEAR(r.residual_sq, 16.0, 1e-12);

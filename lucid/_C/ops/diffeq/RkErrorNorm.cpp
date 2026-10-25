@@ -30,6 +30,7 @@
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
+#include "../../core/Half.h"
 #include "../../core/OpRegistry.h"
 #include "../../core/OpSchema.h"
 #include "../../core/Scope.h"
@@ -228,6 +229,100 @@ double read_scalar(const CpuStorage& cs, Dtype dtype) {
     return static_cast<double>(*reinterpret_cast<const float*>(cs.ptr.get()));
 }
 
+double error_norm_half_cpu(const CpuStorage& c0,
+                           const CpuStorage& c1,
+                           const std::vector<TensorImplPtr>& ks_c,
+                           const std::vector<double>& scales,
+                           Dtype dtype,
+                           std::size_t n,
+                           double rtol,
+                           double atol) {
+    const bool is_bf16 = dtype == Dtype::BF16;
+    const std::size_t k_count = ks_c.size();
+    auto scratch = allocate_aligned_bytes(n * (k_count + 2) * sizeof(float), Device::CPU);
+    auto* y0_f = reinterpret_cast<float*>(scratch.get());
+    auto* y1_f = y0_f + n;
+    backend::detail::half_or_bfloat16_to_float_bulk(
+        reinterpret_cast<const std::uint16_t*>(c0.ptr.get()), y0_f, n, is_bf16);
+    backend::detail::half_or_bfloat16_to_float_bulk(
+        reinterpret_cast<const std::uint16_t*>(c1.ptr.get()), y1_f, n, is_bf16);
+    std::vector<const float*> kp;
+    kp.reserve(k_count);
+    for (std::size_t j = 0; j < k_count; ++j) {
+        float* kj = y1_f + (j + 1) * n;
+        const auto& ck = std::get<CpuStorage>(ks_c[j]->storage());
+        backend::detail::half_or_bfloat16_to_float_bulk(
+            reinterpret_cast<const std::uint16_t*>(ck.ptr.get()), kj, n, is_bf16);
+        kp.push_back(kj);
+    }
+    return error_norm_cpu<float>(y0_f, y1_f, kp, scales, n, rtol, atol);
+}
+
+double error_norm_dispatch_cpu(const TensorImplPtr& y0_c,
+                               const TensorImplPtr& y1_c,
+                               const std::vector<TensorImplPtr>& ks_c,
+                               const std::vector<double>& scales,
+                               Dtype dtype,
+                               std::size_t n,
+                               double rtol,
+                               double atol) {
+    const auto& c0 = std::get<CpuStorage>(y0_c->storage());
+    const auto& c1 = std::get<CpuStorage>(y1_c->storage());
+    if (is_half_float(dtype))
+        return error_norm_half_cpu(c0, c1, ks_c, scales, dtype, n, rtol, atol);
+    if (dtype == Dtype::F64) {
+        std::vector<const double*> kp;
+        kp.reserve(ks_c.size());
+        for (const auto& k : ks_c)
+            kp.push_back(
+                reinterpret_cast<const double*>(std::get<CpuStorage>(k->storage()).ptr.get()));
+        return error_norm_cpu<double>(reinterpret_cast<const double*>(c0.ptr.get()),
+                                      reinterpret_cast<const double*>(c1.ptr.get()), kp, scales, n,
+                                      rtol, atol);
+    }
+    std::vector<const float*> kp;
+    kp.reserve(ks_c.size());
+    for (const auto& k : ks_c)
+        kp.push_back(reinterpret_cast<const float*>(std::get<CpuStorage>(k->storage()).ptr.get()));
+    return error_norm_cpu<float>(reinterpret_cast<const float*>(c0.ptr.get()),
+                                 reinterpret_cast<const float*>(c1.ptr.get()), kp, scales, n, rtol,
+                                 atol);
+}
+
+double error_norm_gpu(const TensorImplPtr& y0_c,
+                      const TensorImplPtr& y1_c,
+                      const std::vector<TensorImplPtr>& ks_c,
+                      const std::vector<double>& scales,
+                      Dtype dtype,
+                      std::size_t n,
+                      double rtol,
+                      double atol) {
+    namespace mx = ::mlx::core;
+    const bool widen_half = is_half_float(dtype);
+    const Dtype accum_dt = widen_half ? Dtype::F32 : dtype;
+    const mx::Dtype mdt =
+        widen_half ? mx::float32 : std::get<GpuStorage>(y0_c->storage()).arr->dtype();
+    auto as_accum = [&](const TensorImplPtr& t) -> mx::array {
+        const mx::array& arr = *std::get<GpuStorage>(t->storage()).arr;
+        return widen_half ? mx::astype(arr, mdt) : arr;
+    };
+
+    std::vector<mx::array> ins;
+    ins.reserve(2 * ks_c.size() + 4);
+    ins.push_back(as_accum(y0_c));
+    ins.push_back(as_accum(y1_c));
+    for (const auto& k : ks_c)
+        ins.push_back(as_accum(k));
+    for (const double scale : scales)
+        ins.push_back(mx::array(scale, mdt));
+    ins.push_back(mx::array(rtol, mdt));
+    ins.push_back(mx::array(atol, mdt));
+
+    GpuStorage gs = gpu::wrap_mlx_array(std::move(fused_error_norm()(ins)[0]), accum_dt);
+    const CpuStorage host = gpu::download_gpu_to_cpu(gs, Shape{});
+    return std::sqrt(read_scalar(host, accum_dt) / static_cast<double>(n));
+}
+
 }  // namespace
 
 // Validate the operands against ``y0``, materialise any views, then dispatch
@@ -250,7 +345,7 @@ double rk_error_norm_op(const TensorImplPtr& y0,
     const Device device = y0->device();
     const Shape shape = y0->shape();
 
-    if (dtype != Dtype::F32 && dtype != Dtype::F64)
+    if (!is_floating_point(dtype))
         throw NotImplementedError("rk_error_norm: dtype " + std::string(dtype_name(dtype)) +
                                   " is not supported; promote to float32 or float64 first");
 
@@ -292,48 +387,9 @@ double rk_error_norm_op(const TensorImplPtr& y0,
         ks_c.push_back(k->is_contiguous() ? k : contiguous_op(k));
     }
 
-    if (device == Device::CPU) {
-        const auto& c0 = std::get<CpuStorage>(y0_c->storage());
-        const auto& c1 = std::get<CpuStorage>(y1_c->storage());
-        if (dtype == Dtype::F64) {
-            std::vector<const double*> kp;
-            kp.reserve(ks_c.size());
-            for (const auto& k : ks_c)
-                kp.push_back(
-                    reinterpret_cast<const double*>(std::get<CpuStorage>(k->storage()).ptr.get()));
-            return error_norm_cpu<double>(reinterpret_cast<const double*>(c0.ptr.get()),
-                                          reinterpret_cast<const double*>(c1.ptr.get()), kp, scales,
-                                          n, rtol, atol);
-        }
-        std::vector<const float*> kp;
-        kp.reserve(ks_c.size());
-        for (const auto& k : ks_c)
-            kp.push_back(
-                reinterpret_cast<const float*>(std::get<CpuStorage>(k->storage()).ptr.get()));
-        return error_norm_cpu<float>(reinterpret_cast<const float*>(c0.ptr.get()),
-                                     reinterpret_cast<const float*>(c1.ptr.get()), kp, scales, n,
-                                     rtol, atol);
-    }
-
-    // GPU: one compiled kernel for the whole reduction, so the download below
-    // is the single point where anything evaluates.  See `fused_error_norm`.
-    namespace mx = ::mlx::core;
-    const mx::Dtype mdt = std::get<GpuStorage>(y0_c->storage()).arr->dtype();
-
-    std::vector<mx::array> ins;
-    ins.reserve(2 * ks_c.size() + 4);
-    ins.push_back(*std::get<GpuStorage>(y0_c->storage()).arr);
-    ins.push_back(*std::get<GpuStorage>(y1_c->storage()).arr);
-    for (const auto& k : ks_c)
-        ins.push_back(*std::get<GpuStorage>(k->storage()).arr);
-    for (const double scale : scales)
-        ins.push_back(mx::array(scale, mdt));
-    ins.push_back(mx::array(rtol, mdt));
-    ins.push_back(mx::array(atol, mdt));
-
-    GpuStorage gs = gpu::wrap_mlx_array(std::move(fused_error_norm()(ins)[0]), dtype);
-    const CpuStorage host = gpu::download_gpu_to_cpu(gs, Shape{});
-    return std::sqrt(read_scalar(host, dtype) / static_cast<double>(n));
+    if (device == Device::CPU)
+        return error_norm_dispatch_cpu(y0_c, y1_c, ks_c, scales, dtype, n, rtol, atol);
+    return error_norm_gpu(y0_c, y1_c, ks_c, scales, dtype, n, rtol, atol);
 }
 
 }  // namespace lucid

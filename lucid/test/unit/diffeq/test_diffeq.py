@@ -2981,3 +2981,134 @@ class TestPropagatedOrder:
         assert tab.b[6] == 0.0
         assert tab.is_fsal
         assert tab.a[-1] == tab.b[:-1]
+
+
+class TestDiffeqKernelDtypesAndHalfPrecision:
+    """Every diffeq kernel and solver across floating-point dtypes on CPU and Metal."""
+
+    @pytest.mark.parametrize(
+        "dt",
+        [lucid.float16, lucid.bfloat16, lucid.float32, lucid.float64],
+        ids=["f16", "bf16", "f32", "f64"],
+    )
+    def test_every_diffeq_kernel_supports_every_floating_dtype(
+        self, device: str, dt: lucid.Dtype
+    ) -> None:
+        if device == "metal" and dt == lucid.float64:
+            pytest.skip("Metal has no float64")
+        tol = 5e-2 if dt == lucid.bfloat16 else (1e-2 if dt == lucid.float16 else 1e-5)
+
+        y0 = lucid.tensor([1.0, -2.0, 0.5, 3.0], dtype=dt, device=device)
+        y1 = lucid.tensor([1.25, -1.75, 0.75, 2.5], dtype=dt, device=device)
+        k0 = lucid.tensor([0.5, -1.0, 2.0, -0.5], dtype=dt, device=device)
+        k1 = lucid.tensor([-0.25, 0.5, -1.0, 1.5], dtype=dt, device=device)
+
+        # 1. rk_combine (forward + backward)
+        y0_g = y0.detach().clone().requires_grad_(True)
+        k0_g = k0.detach().clone().requires_grad_(True)
+        k1_g = k1.detach().clone().requires_grad_(True)
+        combined = _fused.combine(y0_g, [k0_g, k1_g], [0.5, -0.25], 0.5)
+        assert combined.dtype == dt
+        assert combined.device == device
+        expected_combine = y0.to(lucid.float32) + 0.5 * (
+            0.5 * k0.to(lucid.float32) - 0.25 * k1.to(lucid.float32)
+        )
+        assert (
+            float((combined.to(lucid.float32) - expected_combine).abs().max().item())
+            < tol
+        )
+        combined.sum().backward()
+        assert y0_g.grad is not None and y0_g.grad.dtype == dt
+        assert k0_g.grad is not None and k0_g.grad.dtype == dt
+        assert k1_g.grad is not None and k1_g.grad.dtype == dt
+
+        # 2. rk_error_norm (via _fused.error_ratio and raw _C_engine.diffeq.rk_error_norm)
+        ratio = _fused.error_ratio(y0, y1, [k0, k1], [0.5, -0.5], 0.25, 1e-3, 1e-3)
+        raw_ratio = lucid._C.engine.diffeq.rk_error_norm(
+            y0._impl, y1._impl, [k0._impl, k1._impl], [0.5, -0.5], 0.25, 1e-3, 1e-3
+        )
+        ref_ratio = TestRkErrorNorm._reference(
+            y0.to(lucid.float32),
+            y1.to(lucid.float32),
+            [k0.to(lucid.float32), k1.to(lucid.float32)],
+            [0.5, -0.5],
+            0.25,
+            1e-3,
+            1e-3,
+        )
+        assert ratio == pytest.approx(ref_ratio, rel=tol)
+        assert raw_ratio == pytest.approx(ref_ratio, rel=tol)
+
+        # 3. broyden_probe (via _fused.broyden_probe and raw _C_engine.diffeq.broyden_probe)
+        info = lucid.tensor(2.0, dtype=dt, device=device)
+        r_sq, s_sq, x_sq, info_val = _fused.broyden_probe(y0, k0, y1, info)
+        raw_r_sq, raw_s_sq, raw_x_sq, raw_info = lucid._C.engine.diffeq.broyden_probe(
+            y0._impl, k0._impl, y1._impl, info._impl
+        )
+        assert r_sq == pytest.approx(
+            float((y0.to(lucid.float32) ** 2).sum().item()), rel=tol
+        )
+        assert s_sq == pytest.approx(
+            float((k0.to(lucid.float32) ** 2).sum().item()), rel=tol
+        )
+        assert x_sq == pytest.approx(
+            float((y1.to(lucid.float32) ** 2).sum().item()), rel=tol
+        )
+        assert info_val == pytest.approx(2.0, abs=tol)
+        assert (raw_r_sq, raw_s_sq, raw_x_sq, raw_info) == pytest.approx(
+            (r_sq, s_sq, x_sq, info_val), rel=1e-6
+        )
+
+    @pytest.mark.parametrize(
+        ("dt", "atol"),
+        [(lucid.float16, 1e-2), (lucid.bfloat16, 5e-2)],
+        ids=["f16", "bf16"],
+    )
+    @pytest.mark.parametrize("adjoint", [False, True], ids=["direct", "adjoint"])
+    @pytest.mark.parametrize("method", ["euler", "rk4", "dopri5"])
+    def test_odeint_half_precision_forward_and_backward(
+        self, device: str, dt: lucid.Dtype, atol: float, adjoint: bool, method: str
+    ) -> None:
+        y0_f64 = lucid.tensor([1.0, 2.0], dtype=lucid.float64, requires_grad=True)
+        out_f64 = diffeq.odeint(
+            lambda t, y: -y, y0_f64, [0.0, 1.0], method=method, rtol=1e-6, atol=1e-8
+        )
+        out_f64[-1].sum().backward()
+        assert y0_f64.grad is not None
+        want_y = out_f64[-1].to(lucid.float32)
+        want_g = y0_f64.grad.to(lucid.float32)
+
+        y0 = lucid.tensor([1.0, 2.0], dtype=dt, device=device, requires_grad=True)
+        scale = lucid.nn.Parameter(lucid.ones((1,), dtype=dt, device=device))
+
+        class _LinearRHS(lucid.nn.Module):
+            def __init__(self, s: lucid.nn.Parameter) -> None:
+                super().__init__()
+                self.s = s
+
+            def forward(self, t: lucid.Tensor, y: lucid.Tensor) -> lucid.Tensor:
+                return -self.s * y
+
+        rhs = _LinearRHS(scale)
+        solver = diffeq.odeint_adjoint if adjoint else diffeq.odeint
+        out = solver(
+            rhs,
+            y0,
+            [0.0, 1.0],
+            method=method,
+            rtol=1e-2,
+            atol=1e-3,
+        )
+        assert out.dtype == dt
+        assert out.device == device
+        out[-1].sum().backward()
+        assert y0.grad is not None
+        assert y0.grad.dtype == dt
+        assert y0.grad.device == device
+        assert scale.grad is not None
+        assert scale.grad.dtype == dt
+
+        got_y = out[-1].to("cpu").to(lucid.float32)
+        got_g = y0.grad.to("cpu").to(lucid.float32)
+        assert float((got_y - want_y).abs().max().item()) < atol
+        assert float((got_g - want_g).abs().max().item()) < atol

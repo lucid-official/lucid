@@ -256,6 +256,12 @@ CASES: list[Any] = [
     ),
     # -- generative: ``model(x)`` answers ``.loss`` --
     (
+        "neural_ode",
+        "neural_ode_gen",
+        {"sample_size": 4, "hidden_dim": 8, "num_blocks": 1, "solver": "euler"},
+        _pixels(4),
+    ),
+    (
         "vae",
         "vae_gen",
         {"latent_dim": 8, "down_block_channels": (8, 16, 32)},
@@ -455,7 +461,6 @@ def test_a_family_takes_a_training_step(
 ELSEWHERE: dict[str, str] = {
     "nice": "test_models_recent_e2e.py — negative log-likelihood",
     "realnvp": "test_models_recent_e2e.py — negative log-likelihood",
-    "neural_ode": "test_models_recent_e2e.py",
     "flow_matching": "test_models_recent_e2e.py — .loss",
     "rectified_flow": "test_models_recent_e2e.py — .loss",
     "score_sde": "test_models_recent_e2e.py — .loss",
