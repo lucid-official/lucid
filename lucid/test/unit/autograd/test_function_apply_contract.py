@@ -29,15 +29,11 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid.autograd import Function, FunctionCtx
+from lucid.test._fixtures.memory import live_bytes
 
 _ELEMS = 1 << 14  # 64 KiB of float32 per output: far above the noise
 _SIDE = 64
 _CALLS = 8
-
-
-def _live_bytes(device: str) -> int:
-    dev = _C_engine.CPU if device == "cpu" else _C_engine.GPU
-    return int(_C_engine.memory_stats(dev).current_bytes)
 
 
 def _first(out: object) -> lucid.Tensor:
@@ -51,13 +47,13 @@ def _retained(run: Callable[[], object], device: str) -> int:
     each result is dropped without a backward."""
     lucid.eval(_first(run()))  # the first call settles caches and lazy constants
     gc.collect()
-    before = _live_bytes(device)
+    before = live_bytes(device)
     for _ in range(_CALLS):
         out = run()
         lucid.eval(_first(out))
         del out
     gc.collect()
-    return _live_bytes(device) - before
+    return live_bytes(device) - before
 
 
 # ── LCD-588: a call that runs no backward is freed ────────────────────────────
@@ -115,12 +111,12 @@ def test_a_call_that_runs_no_backward_is_freed_by_refcount(device: str) -> None:
     gc.collect()
     gc.disable()
     try:
-        before = _live_bytes(device)
+        before = live_bytes(device)
         for _ in range(4):
             out = fn.apply(x)
             lucid.eval(_first(out))
             del out
-        grown = _live_bytes(device) - before
+        grown = live_bytes(device) - before
     finally:
         gc.enable()
         gc.collect()

@@ -27,7 +27,7 @@ import pytest
 
 import lucid
 import lucid.nn as nn
-from lucid._C import engine as _C_engine
+from lucid.test._fixtures.memory import live_bytes
 
 Scenario = Callable[[ModuleType, str], object]
 
@@ -252,11 +252,6 @@ _ELEMS = 1 << 15  # 128 KiB of float32 per saved tensor: far above the noise
 _STEPS = 8
 
 
-def _live_bytes(device: str) -> int:
-    dev = _C_engine.CPU if device == "cpu" else _C_engine.GPU
-    return int(_C_engine.memory_stats(dev).current_bytes)
-
-
 @pytest.mark.parametrize("retain", [False, True], ids=["default", "retain-graph"])
 def test_a_pass_that_does_not_retain_its_graph_frees_what_it_saved(
     retain: bool, device: str
@@ -268,11 +263,11 @@ def test_a_pass_that_does_not_retain_its_graph_frees_what_it_saved(
     loss = y.sum()
     lucid.eval(loss)
     gc.collect()
-    held = _live_bytes(device)
+    held = live_bytes(device)
     loss.backward(retain_graph=retain)
     lucid.eval(x.grad)
     gc.collect()
-    freed = held - _live_bytes(device)
+    freed = held - live_bytes(device)
     # Seven intermediates are held only by the nodes that saved them; the
     # pass adds x.grad.
     buffer = _ELEMS * 4

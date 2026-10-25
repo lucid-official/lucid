@@ -26,15 +26,11 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.autograd import Function, FunctionCtx
+from lucid.test._fixtures.memory import live_bytes
 
 _ELEMS = 1 << 14  # 64 KiB of float32 per output: far above the noise
 _SIDE = 64
 _CALLS = 8
-
-
-def _live_bytes(device: str) -> int:
-    dev = _C_engine.CPU if device == "cpu" else _C_engine.GPU
-    return int(_C_engine.memory_stats(dev).current_bytes)
 
 
 def _retained(run: Callable[[], lucid.Tensor], device: str) -> int:
@@ -42,13 +38,13 @@ def _retained(run: Callable[[], lucid.Tensor], device: str) -> int:
     each result is dropped without a backward."""
     lucid.eval(run())  # the first call settles caches and lazy constants
     gc.collect()
-    before = _live_bytes(device)
+    before = live_bytes(device)
     for _ in range(_CALLS):
         out = run()
         lucid.eval(out)
         del out
     gc.collect()
-    return _live_bytes(device) - before
+    return live_bytes(device) - before
 
 
 # ── one leak test per reduce mode ─────────────────────────────────────────────
@@ -263,10 +259,10 @@ def test_a_result_only_the_caller_held_is_gone_at_backward(device: str) -> None:
     loss = _Weigh.apply(y).sum()
     lucid.eval(loss)
     gc.collect()
-    held = _live_bytes(device)
+    held = live_bytes(device)
     del y
     gc.collect()
-    freed = held - _live_bytes(device)
+    freed = held - live_bytes(device)
     assert freed >= _ELEMS * 4, f"dropping the result freed {freed} bytes"
     loss.backward()
     assert base.grad is not None and src.grad is not None

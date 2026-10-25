@@ -30,7 +30,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.intrinsic.qat as nniqat
 import lucid.quantization as Q
-from lucid._C import engine as _C_engine
+from lucid.test._fixtures.memory import live_bytes
 from lucid.test._helpers.compare import assert_close
 
 _STEPS = 20
@@ -96,11 +96,6 @@ def _step(module: nn.Module, name: str, device: str) -> None:
     (module(hidden) * hidden.mean()).sum().backward()
 
 
-def _live_bytes(device: str) -> int:
-    dev = _C_engine.CPU if device == "cpu" else _C_engine.GPU
-    return int(_C_engine.memory_stats(dev).current_bytes)
-
-
 @pytest.mark.parametrize("name", list(_MODELS))
 def test_no_buffer_carries_a_graph_after_training(name: str, device: str) -> None:
     lucid.manual_seed(0)
@@ -125,11 +120,11 @@ def test_training_steps_keep_no_activation_alive(name: str, device: str) -> None
     module.train()
     _step(module, name, device)  # first call settles shapes and devices
     gc.collect()
-    before = _live_bytes(device)
+    before = live_bytes(device)
     for _ in range(_STEPS):
         _step(module, name, device)
     gc.collect()
-    grown = _live_bytes(device) - before
+    grown = live_bytes(device) - before
     one_activation = 4 * _SHAPE[0] * _SHAPE[1]
     assert grown < one_activation, (
         f"{name}: {_STEPS} steps left {grown} bytes alive "
