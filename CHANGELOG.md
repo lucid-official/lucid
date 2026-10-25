@@ -63,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - support float16 and bfloat16 across diffeq kernels
 - name offending operand pair on multi-tensor mismatches (LCD-585)
 - unify index argument error classes, op names, and empty-index scatter (LCD-604, LCD-609)
+- advance version counter by 1 across no_view, live_view, and dead_view (LCD-643)
 
 ---
 

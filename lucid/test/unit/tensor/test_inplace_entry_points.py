@@ -650,7 +650,7 @@ def test_the_gradient_through_the_write_is_the_references(
         y = x * 1.0
         before_version = y._version
         getattr(y, name)(*operands)
-        assert y._version > before_version
+        assert y._version == before_version + 1
         (y * y).sum().backward()
         return x.grad.tolist()
 

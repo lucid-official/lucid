@@ -847,11 +847,12 @@ public:
     // the same bytes may have been saved.  So does a view family's, for the
     // same reason.
     void bump_version() noexcept {
-        ++ensure_autograd()->version;
         if (shared_)
             shared_->bump_version();
-        if (family_)
+        else if (family_)
             family_->version.fetch_add(1, std::memory_order_relaxed);
+        else
+            ++ensure_autograd()->version;
     }
 
     // ---------------------------------------------------------------------------

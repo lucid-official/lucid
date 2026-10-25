@@ -135,21 +135,10 @@ def _lcm(x: int, y: int, bits: int) -> int:
 
 
 def _int_values(x: Tensor) -> list[int]:
-    """The elements of an integer tensor in order, read back in one transfer.
-
-    Flattened here rather than through ``x.reshape(-1)``: a view of
-    ``input``, even one already dropped, makes the write of ``gcd_`` bump
-    ``input``'s version twice.
-    """
-    flat: list[int] = []
-    pending: list[object] = [x.tolist()]
-    while pending:
-        item = pending.pop()
-        if isinstance(item, list):
-            pending.extend(reversed(item))
-        elif isinstance(item, int):
-            flat.append(item)
-    return flat
+    """The elements of an integer tensor in order, read back in one transfer."""
+    vals = x.reshape(-1).tolist()
+    assert isinstance(vals, list)
+    return [v for v in vals if isinstance(v, int)]
 
 
 def gcd(input: Tensor, other: Tensor) -> Tensor:

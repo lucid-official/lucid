@@ -629,6 +629,34 @@ void check_cpu_write_through_target(const TensorImpl& dst,
         refuse_write_to_leaf_view(dst, name);
 }
 
+void write_cpu_buffer(const TensorImpl& dst_impl,
+                      CpuStorage& dst,
+                      const TensorImpl& src,
+                      const CpuStorage& from,
+                      const std::optional<SharedStorage>& shared) {
+    // The op handed back this very buffer (a no-op for this dtype): the
+    // values are already in place.
+    if (from.ptr == dst.ptr && src.is_dense() && dst_impl.is_dense())
+        return;
+    // The source packed, then laid into this tensor's own elements — at its
+    // offset and through its strides, which a dense tensor has trivially.
+    const std::size_t n = dst_impl.nbytes();
+    std::vector<std::byte> packed;
+    const std::byte* bytes = from.ptr.get();
+    if (!src.is_dense()) {
+        packed = contig_snapshot_cpu(from, src.shape(), src.stride(), src.storage_offset());
+        bytes = packed.data();
+    }
+    settle_before_host_write(shared, dst_impl.raw_storage());
+    if (dst_impl.is_dense()) {
+        if (n > 0)
+            std::memcpy(dst.ptr.get(), bytes, n);
+    } else {
+        scatter_contig_to_strided(bytes, dst, dst_impl.shape(), dst_impl.stride(),
+                                  dst_impl.storage_offset());
+    }
+}
+
 }  // namespace
 
 bool TensorImpl::write_lands_in_buffer() const {
@@ -795,21 +823,31 @@ std::vector<std::shared_ptr<TensorImpl>> TensorImpl::live_views() const {
 void TensorImpl::write_through(const TensorImpl& src, const char* name) {
     check_write_through_target(*this, src, name);
     // Before the trace learns of the write: a refused one never happened.
+    // The caller (inplace::write_result or assign_inplace_op) bumps the
+    // version once in adopt_graph_position / detach_and_bump.
     if (absorbs_phantom_write(storage_, src.raw_storage(), name))
-        return bump_version();
+        return;
     note_inplace_write(*this, src);
     if (gpu_member()) {
         write_gpu_member(src, name, /*raw=*/false);
+        return;
+    }
+    if (meta_.device == Device::GPU) {
+        if (src.device() != Device::GPU)
+            throw DeviceMismatch(std::string(device_name(meta_.device)),
+                                 std::string(device_name(src.device())), name);
+        const bool graph = src.requires_grad() || src.grad_fn();
+        if (!graph && write_into_shared(src))
+            return;
+        const auto& value = std::get<GpuStorage>(src.readable());
+        auto& dst = std::get<GpuStorage>(storage_);
+        dst.arr = gpu::wrap_mlx_array(::mlx::core::copy(*value.arr), dst.dtype).arr;
         return;
     }
     const long members = family_ ? family_.use_count() : 1;
     check_cpu_write_through_target(*this, storage_, src.storage_, members, name);
     auto& dst = std::get<CpuStorage>(storage_);
     const auto& from = std::get<CpuStorage>(src.storage_);
-    // The op handed back this very buffer (a no-op for this dtype): the
-    // values are already in place.
-    if (from.ptr == dst.ptr && src.is_dense() && is_dense())
-        return;
     // Whatever else holds the buffer — a storage saved for backward, a NumPy
     // array — expects the values it has now, and nothing would tell it they
     // changed: a node's saved output carries no version.  A gradient's slot
@@ -820,23 +858,7 @@ void TensorImpl::write_through(const TensorImpl& src, const char* name) {
             "an in-place write to a tensor that shares storage with a live view is not supported "
             "while something else also holds that storage (a tensor saved for backward, a NumPy "
             "array) — clone() first");
-    // The source packed, then laid into this tensor's own elements — at its
-    // offset and through its strides, which a dense tensor has trivially.
-    const std::size_t n = nbytes();
-    std::vector<std::byte> packed;
-    const std::byte* bytes = from.ptr.get();
-    if (!src.is_dense()) {
-        packed = contig_snapshot_cpu(from, src.shape(), src.stride(), src.storage_offset());
-        bytes = packed.data();
-    }
-    settle_before_host_write(shared_, storage_);
-    if (is_dense()) {
-        if (n > 0)
-            std::memcpy(dst.ptr.get(), bytes, n);
-    } else {
-        scatter_contig_to_strided(bytes, dst, meta_.shape, meta_.stride, offset_);
-    }
-    bump_version();
+    write_cpu_buffer(*this, dst, src, from, shared_);
 }
 
 void TensorImpl::write_gpu_member(const TensorImpl& src, const char* name, bool raw) {
@@ -872,7 +894,8 @@ void TensorImpl::write_gpu_member(const TensorImpl& src, const char* name, bool 
     }
     rebind_gpu_grad_slot(family_, root.arr);
     drop_family_caches();
-    bump_version();
+    if (raw)
+        bump_version();
 }
 
 void TensorImpl::drop_family_caches() {
@@ -2196,6 +2219,11 @@ void TensorImpl::add_to_family(const std::shared_ptr<TensorImpl>& base,
                                const std::shared_ptr<TensorImpl>& view) {
     if (!base->family_) {
         base->family_ = std::make_shared<ViewFamily>();
+        if (base->autograd_ && base->autograd_->version > 0) {
+            base->family_->version.store(static_cast<std::uint64_t>(base->autograd_->version),
+                                         std::memory_order_relaxed);
+            base->autograd_->version = 0;
+        }
         base->family_->nbytes = base->allocation_nbytes();
         base->family_->members.push_back(base);
         // A Metal base's value becomes the family's root, which every

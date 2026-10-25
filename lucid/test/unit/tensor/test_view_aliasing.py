@@ -85,10 +85,72 @@ def test_every_member_s_version_moves_with_a_write(x: lucid.Tensor) -> None:
     v = _view(x, 2, 3)
     before = v._impl.version
     x.add_(1.0)
-    assert v._impl.version != before
+    assert x._impl.version == before + 1
+    assert v._impl.version == before + 1
     before = x._impl.version
     v.mul_(2.0)
-    assert x._impl.version != before
+    assert x._impl.version == before + 1
+    assert v._impl.version == before + 1
+
+
+@pytest.mark.parametrize("view_state", ["no_view", "live_view", "dead_view"])
+@pytest.mark.parametrize(
+    "door",
+    [
+        "add_",
+        "mul_",
+        "copy_",
+        "fill_",
+        "setitem_all",
+        "setitem_slice",
+        "assign_from",
+        "assign_inplace",
+        "gcd_",
+    ],
+)
+def test_inplace_doors_advance_version_by_exactly_one(
+    device: str, door: str, view_state: str
+) -> None:
+    dtype = lucid.int64 if door == "gcd_" else lucid.float32
+    a = lucid.tensor([12, 18, 24, 30], dtype=dtype, device=device)
+    live_view: lucid.Tensor | None = None
+    if view_state == "live_view":
+        live_view = a.reshape(2, 2)
+    elif view_state == "dead_view":
+        _ = a.reshape(2, 2)
+        _ = a[0:]
+        _ = a.unsqueeze(0)
+
+    before = a._version
+    if live_view is not None:
+        assert live_view._version == before
+
+    if door == "add_":
+        a.add_(1)
+    elif door == "mul_":
+        a.mul_(2)
+    elif door == "copy_":
+        a.copy_(lucid.tensor([1, 2, 3, 4], dtype=dtype, device=device))
+    elif door == "fill_":
+        a.fill_(7)
+    elif door == "setitem_all":
+        a[...] = 9
+    elif door == "setitem_slice":
+        a[:2] = 5
+    elif door == "assign_from":
+        src = lucid.tensor([3, 4, 5, 6], dtype=dtype, device=device)
+        a._impl.assign_from(src._impl, "assign_from")
+    elif door == "assign_inplace":
+        src = lucid.tensor([3, 4, 5, 6], dtype=dtype, device=device)
+        _C_engine.assign_inplace(a._impl, src._impl, "assign_inplace")
+    elif door == "gcd_":
+        a.gcd_(lucid.tensor([8, 12, 16, 20], dtype=dtype, device=device))
+
+    assert a._version == before + 1
+    assert a._impl.version == before + 1
+    if live_view is not None:
+        assert live_view._version == before + 1
+        assert live_view._impl.version == before + 1
 
 
 def test_a_tensor_whose_views_are_gone_writes_as_before(x: lucid.Tensor) -> None:
