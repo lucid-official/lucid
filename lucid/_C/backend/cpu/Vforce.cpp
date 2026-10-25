@@ -294,6 +294,7 @@ LUCID_VFORCE_EDGED(vtanh, vvtanhf, vvtanh, kOddEdge)
 
 #undef LUCID_VFORCE_EDGED
 
+LUCID_VFORCE_UNARY(vtanh_unfixed, vvtanhf, vvtanh)
 LUCID_VFORCE_UNARY(vlog2, vvlog2f, vvlog2)
 LUCID_VFORCE_UNARY(vfabs, vvfabsf, vvfabs)
 LUCID_VFORCE_UNARY(vfloor, vvfloorf, vvfloor)

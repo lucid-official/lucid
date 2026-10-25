@@ -333,15 +333,48 @@ def test_strided_and_tanh_gelu_inputs() -> None:
         _assert_bits(got, getattr(lucid, name)(_t(dense)).numpy(), dense)
         tiny = np.abs(dense) < 1e-20
         _assert_bits(got[tiny], _exact(name, dense[tiny]), dense[tiny])
-    # GELU's tanh runs in place on its own tiles, and tiny inputs take the
-    # fix there: it must still read the inner value, not the tanh of it.
-    xs = np.array([0.0, -0.0, 1e-30, 1e-6, -1e-4, 0.5], dtype=np.float32)
-    g = F.gelu(_t(xs), approximate="tanh").numpy()
-    x64 = xs.astype(np.float64)
-    inner = math.sqrt(2.0 / math.pi) * (x64 + 0.044715 * x64**3)
-    want = (0.5 * x64 * (1.0 + np.tanh(inner))).astype(np.float32)
-    assert np.array_equal(np.signbit(g), np.signbit(want))
-    assert int(_ulp(g, want).max()) <= 2
+    # GELU's tanh uses raw vtanh_unfixed_{f32,f64} (LCD-595) because 1 + tanh(u)
+    # and 1 - tanh(u)^2 absorb a 1-ulp difference on a tiny u: its forward and
+    # backward bits match the fixed lucid.tanh formula bit-for-bit and stay
+    # within 2 ulp of the float64 oracle.
+    c1 = 0.7978845608028654
+    c2 = 0.044715
+    rng = np.random.default_rng(595)
+    for dtype in (np.float32, np.float64):
+        edge = _ODD_X[dtype]
+        xs = np.concatenate(
+            [
+                np.array([0.0, -0.0, 1e-30, -1e-30, 1e-6, -1e-4, edge, -edge, 0.5, -2.0], dtype=dtype),
+                rng.uniform(-edge, edge, 2048).astype(dtype),
+                rng.uniform(-4.0, 4.0, 2048).astype(dtype),
+            ]
+        )
+        tx = _t(xs)
+        tx.requires_grad_(True)
+        out = F.gelu(tx, approximate="tanh")
+        out.sum().backward()
+        assert tx.grad is not None
+
+        # On the entire |x| <= edge band where split_edges post-fixes tanh,
+        # 1 + tanh(u) and 1 - tanh(u)^2 absorb the 1-ulp difference at tiny u
+        # so the output and gradient bits are identical to the fixed tanh path.
+        ux = _t(xs)
+        c1_t = float(np.dtype(dtype).type(c1))
+        c2_t = float(np.dtype(dtype).type(c2))
+        inner_t = c1_t * (ux + c2_t * ux * ux * ux)
+        t_fixed = lucid.tanh(inner_t)
+        want_fwd = (0.5 * ux * (1.0 + t_fixed)).numpy()
+        dinner = c1_t * (1.0 + 3.0 * c2_t * ux * ux)
+        want_bwd = (0.5 * (1.0 + t_fixed) + 0.5 * ux * (1.0 - t_fixed * t_fixed) * dinner).numpy()
+        in_edge = np.abs(xs) <= edge
+        _assert_bits(out.detach().numpy()[in_edge], want_fwd[in_edge], xs[in_edge])
+        _assert_bits(tx.grad.numpy()[in_edge], want_bwd[in_edge], xs[in_edge])
+
+        x64 = xs[:9].astype(np.float64)
+        inner = math.sqrt(2.0 / math.pi) * (x64 + 0.044715 * x64**3)
+        oracle = (0.5 * x64 * (1.0 + np.tanh(inner))).astype(dtype)
+        assert np.array_equal(np.signbit(out.detach().numpy()[:9]), np.signbit(oracle))
+        assert int(_ulp(out.detach().numpy()[:9], oracle).max()) <= 2
 
 
 # ── The ±1 plateaus at multiples of π/2 other than 0 ──────────────────────────

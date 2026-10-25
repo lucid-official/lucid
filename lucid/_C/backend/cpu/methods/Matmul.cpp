@@ -491,7 +491,7 @@ Storage CpuBackend::fused_linear_gelu_forward(
             const float xi = p[i];
             scratch[static_cast<std::size_t>(i)] = kSqrt2OverPi * (xi + kCoeff * xi * xi * xi);
         }
-        cpu::vtanh_f32(scratch.data(), scratch.data(), static_cast<std::size_t>(n));
+        cpu::vtanh_unfixed_f32(scratch.data(), scratch.data(), static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i)
             p[i] = 0.5f * p[i] * (1.f + scratch[static_cast<std::size_t>(i)]);
     }

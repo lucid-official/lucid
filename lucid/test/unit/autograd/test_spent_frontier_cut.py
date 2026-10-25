@@ -16,6 +16,7 @@ one it refuses.
 """
 
 import gc
+import os
 import subprocess
 import sys
 import textwrap
@@ -30,6 +31,11 @@ import lucid.nn as nn
 from lucid.test._fixtures.memory import live_bytes
 
 Scenario = Callable[[ModuleType, str], object]
+_SANITIZED = bool(
+    os.environ.get("ASAN_OPTIONS")
+    or os.environ.get("UBSAN_OPTIONS")
+    or os.environ.get("LUCID_SANITIZE")
+)
 
 
 def _values(t: object) -> object:
@@ -97,6 +103,11 @@ def _shared_interior_frontier(m: ModuleType, dev: str) -> object:
 def _shared_frontier_and_below(m: ModuleType, dev: str) -> object:
     x, _, _, _, q, y = _shared(m, dev)
     return _grads(m, y, [q, x])
+
+
+def _shared_one_marker_of_two(m: ModuleType, dev: str) -> object:
+    _, w, _, _, _, y = _shared(m, dev)
+    return _grads(m, y, w)
 
 
 # ── a chain of saving nodes ──────────────────────────────────────────────────
@@ -213,6 +224,7 @@ _EXPECTED: dict[str, tuple[Scenario, dict[str, object]]] = {
         {"value": [[1.0, 1.0], [1.0, 1.0]]},
     ),
     "shared-frontier-and-below": (_shared_frontier_and_below, _REFUSED),
+    "shared-one-marker-of-two": (_shared_one_marker_of_two, _REFUSED),
     "chain-last": (_chain_last, {"value": [[1.0, 1.0]]}),
     "chain-middle": (_chain_middle, _REFUSED),
     "chain-leaf": (_chain_leaf, _REFUSED),
@@ -280,76 +292,115 @@ def test_a_pass_that_does_not_retain_its_graph_frees_what_it_saved(
 # ── how the cut scales ───────────────────────────────────────────────────────
 
 
-def _chain_loss(n: int) -> lucid.Tensor:
+def _chain_loss(n: int) -> Callable[[bool], object]:
     y = lucid.randn(64, requires_grad=True)
     for _ in range(n):
         y = y * 1.0001
-    return y.sum()
+    loss = y.sum()
+    return lambda retain: loss.backward(retain_graph=retain)
+
+
+def _chain_grad_loss(n: int) -> Callable[[bool], object]:
+    x = lucid.randn(64, requires_grad=True)
+    y = x
+    for _ in range(n):
+        y = y * 1.0001
+    loss = y.sum()
+    return lambda retain: lucid.autograd.grad(loss, [x], retain_graph=retain)
 
 
 # A saving node between every two save-free ones: the cut walks through
 # nodes it keeps wired as well as the ones it cuts.
-def _affine_chain_loss(n: int) -> lucid.Tensor:
+def _affine_chain_loss(n: int) -> Callable[[bool], object]:
     y = lucid.randn(64, dtype=lucid.float64, requires_grad=True)
     for _ in range(n):
         y = y * 0.999 + 0.001
-    return y.sum()
+    loss = y.sum()
+    return lambda retain: loss.backward(retain_graph=retain)
 
 
-def _gru_loss(steps: int) -> lucid.Tensor:
+def _gru_loss(steps: int) -> Callable[[bool], object]:
     lucid.manual_seed(0)
     cell = nn.GRUCell(8, 16)
     xs = lucid.randn(steps, 4, 8)
     h = lucid.zeros(4, 16)
     for t in range(steps):
         h = cell(xs[t], h)
-    return h.sum()
+    loss = h.sum()
+    return lambda retain: loss.backward(retain_graph=retain)
 
 
 def _backward_seconds(
-    build: Callable[[int], lucid.Tensor], size: int, retain: bool
+    build: Callable[[int], Callable[[bool], object]], size: int, retain: bool
 ) -> float:
     best = float("inf")
     for _ in range(5):
-        loss = build(size)
+        run = build(size)
         gc.collect()
         start = time.perf_counter()
-        loss.backward(retain_graph=retain)
+        run(retain)
         best = min(best, time.perf_counter() - start)
-        del loss
+        del run
     return best
 
 
+@pytest.mark.skipif(_SANITIZED, reason="wall-clock scale ratio guard skipped under sanitizers")
 @pytest.mark.parametrize("retain", [False, True], ids=["default", "retain-graph"])
 @pytest.mark.parametrize(
     ("build", "size"),
-    [(_chain_loss, 20000), (_affine_chain_loss, 15000), (_gru_loss, 1200)],
-    ids=["mul-chain", "affine-f64-chain", "gru-cell-bptt"],
+    [
+        (_chain_loss, 5000),
+        (_chain_grad_loss, 5000),
+        (_affine_chain_loss, 4000),
+        (_gru_loss, 300),
+    ],
+    ids=["mul-chain", "grad-mul-chain", "affine-f64-chain", "gru-cell-bptt"],
 )
 def test_a_backward_is_linear_in_the_graph(
-    build: Callable[[int], lucid.Tensor], size: int, retain: bool
+    build: Callable[[int], Callable[[bool], object]], size: int, retain: bool
 ) -> None:
     # The cut was quadratic: 16 ms at a 2,000-node chain and 62 ms at
     # 4,000, 0.33 s and 1.35 s at 4,000 and 8,000 steps of y * 0.999 +
     # 0.001, and a GRUCell unrolled 500 steps took 0.6 s where
     # retain_graph=True took 8 ms.  Every pass also ran a fusion pass that
     # fused nothing and erased from the middle of a vector the size of the
-    # graph.  Doubling a linear pass doubles its time; the slack absorbs a
-    # loaded machine.  Both are host-side work, the same on every device.
-    #
-    # LCD-640: at the old sizes ``small`` sat at 1-5 ms, where fixed
-    # scheduler/timer noise (worth a millisecond or so, independent of the
-    # graph) is a sizeable fraction of what is measured — a shared CI
-    # runner pushed the ratio over the bound by about a millisecond.  Sizes
-    # are picked so ``small`` is tens of milliseconds even for the cheap
-    # retain_graph=True path, making that fixed noise a small fraction of
-    # either measurement, and ``best`` is now of 5 repeats, not 3, so a
-    # single stalled rep cannot stand in for the fastest one.
+    # graph.  Quadrupling a linear pass quadruples its time (4x vs 16x for
+    # quadratic); the 8x bound absorbs a loaded machine.
     small = _backward_seconds(build, size, retain)
-    large = _backward_seconds(build, 2 * size, retain)
+    large = _backward_seconds(build, 4 * size, retain)
     assert (
-        large < 3 * small + 0.01
-    ), f"{size}: {small:.4f} s, {2 * size}: {large:.4f} s"
+        large < 8 * small + 0.01
+    ), f"{size}: {small:.4f} s, {4 * size}: {large:.4f} s"
+
+
+def _repeated_grad_over_spent_seconds(chain_len: int, calls: int = 40) -> float:
+    h = lucid.randn(64, requires_grad=True)
+    for _ in range(chain_len):
+        h = h * 1.0001
+    h.sum().backward()
+    w = lucid.ones(64, requires_grad=True)
+    loss = (h * w).sum()
+    best = float("inf")
+    for _ in range(5):
+        gc.collect()
+        start = time.perf_counter()
+        for _ in range(calls):
+            lucid.autograd.grad(loss, [w], retain_graph=True)
+        best = min(best, time.perf_counter() - start)
+    return best
+
+
+@pytest.mark.skipif(_SANITIZED, reason="wall-clock scale ratio guard skipped under sanitizers")
+def test_repeated_grad_over_spent_graph_prunes_by_sequence_range() -> None:
+    # LCD-568: SpentSearch prunes at the marker's [lo, hi] descendant
+    # sequence range in O(log T) when the requested target lies outside
+    # the spent subgraph, rather than walking every SpentPart below the
+    # marker on each grad() call.
+    small = _repeated_grad_over_spent_seconds(4000)
+    large = _repeated_grad_over_spent_seconds(16000)
+    assert (
+        large < 2.5 * small + 0.005
+    ), f"4000: {small:.4f} s, 16000: {large:.4f} s"
 
 
 _DEEP = """

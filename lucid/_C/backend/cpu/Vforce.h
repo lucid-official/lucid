@@ -91,6 +91,24 @@ LUCID_INTERNAL void vsqrt_f32(const float* in, float* out, std::size_t n);
 // Accelerate.framework ``vvtanhf``.
 LUCID_INTERNAL void vtanh_f32(const float* in, float* out, std::size_t n);
 
+// Single-precision elementwise hyperbolic tangent via raw ``vvtanhf`` without
+// the near-zero identity post-fix.  Used by GELU's tanh approximation, where
+// ``1 + tanh(u)`` absorbs a 1-ulp difference on a tiny ``u`` (LCD-595).
+//
+// Parameters
+// ----------
+// in : const float*
+//     Input buffer.
+// out : float*
+//     Output buffer.
+// n : std::size_t
+//     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtanhf``.
+LUCID_INTERNAL void vtanh_unfixed_f32(const float* in, float* out, std::size_t n);
+
 // Single-precision elementwise sine.
 //
 // Computes $\text{out}_i = \sin(\text{in}_i)$ via ``vvsinf``, with
@@ -214,6 +232,23 @@ LUCID_INTERNAL void vsqrt_f64(const double* in, double* out, std::size_t n);
 // ----------
 // Accelerate.framework ``vvtanh``.
 LUCID_INTERNAL void vtanh_f64(const double* in, double* out, std::size_t n);
+
+// Double-precision elementwise tanh via raw ``vvtanh`` without the near-zero
+// identity post-fix.  Used by GELU's tanh approximation (LCD-595).
+//
+// Parameters
+// ----------
+// in : const double*
+//     Input buffer.
+// out : double*
+//     Output buffer.
+// n : std::size_t
+//     Element count.
+//
+// References
+// ----------
+// Accelerate.framework ``vvtanh``.
+LUCID_INTERNAL void vtanh_unfixed_f64(const double* in, double* out, std::size_t n);
 
 // Double-precision elementwise sine.  Uses ``vvsin``; near odd multiples of
 // $\pi/2$ the result can be 1-3 ulp short of $\pm 1$.

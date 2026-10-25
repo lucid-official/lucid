@@ -300,8 +300,7 @@ lucid_object_library(
     autograd/Engine.cpp
     autograd/TensorHooks.cpp
     autograd/ModuleHookNode.cpp
-    autograd/CustomFunction.cpp    # Phase 12: PythonBackwardNode
-    autograd/FusionPass.cpp)       # Phase 19: Op Fusion pass
+    autograd/CustomFunction.cpp)   # Phase 12: PythonBackwardNode
 
 lucid_object_library(
     lucid_ops

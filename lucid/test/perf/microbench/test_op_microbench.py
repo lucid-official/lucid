@@ -102,3 +102,23 @@ class TestActivationMicrobench:
             assert_no_regression(
                 f"softmax_1024_{device}", bench.last_elapsed, _THRESHOLDS
             )
+
+    def test_tanh_1m(self, bench, device: str) -> None:
+        a = lucid.tensor(
+            np.random.standard_normal((1_048_576,)).astype(np.float32), device=device
+        )
+        bench(lambda: lucid.tanh(a))
+        if hasattr(bench, "last_elapsed"):
+            assert_no_regression(f"tanh_1m_{device}", bench.last_elapsed, _THRESHOLDS)
+
+    def test_gelu_tanh_1m(self, bench, device: str) -> None:
+        from lucid.nn.functional import gelu
+
+        a = lucid.tensor(
+            np.random.standard_normal((1_048_576,)).astype(np.float32), device=device
+        )
+        bench(lambda: gelu(a, approximate="tanh"))
+        if hasattr(bench, "last_elapsed"):
+            assert_no_regression(
+                f"gelu_tanh_1m_{device}", bench.last_elapsed, _THRESHOLDS
+            )

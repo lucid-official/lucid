@@ -530,7 +530,6 @@
     "lucid/_C/autograd/AutogradNode.h": 12,
     "lucid/_C/autograd/CustomFunction.cpp": 26,
     "lucid/_C/autograd/Engine.cpp": 25,
-    "lucid/_C/autograd/FusionPass.cpp": 7,
     "lucid/_C/autograd/Helpers.cpp": 9,
     "lucid/_C/autograd/ModuleHookNode.cpp": 35,
     "lucid/_C/autograd/Node.cpp": 1,
@@ -838,7 +837,6 @@
     "lucid/_C/compile/VjpEmitters/VjpEmitter.mm": 1
    },
    "performance-enum-size": {
-    "lucid/_C/autograd/FusionPass.h": 1,
     "lucid/_C/backend/cpu/CpuBackend.h": 2,
     "lucid/_C/backend/cpu/GridSample.h": 2,
     "lucid/_C/backend/cpu/Interpolate.h": 1,
@@ -1616,7 +1614,6 @@
   "lizard": {
    "function-ccn": {
     "lucid/_C/autograd/CustomFunction.cpp": 1,
-    "lucid/_C/autograd/FusionPass.cpp": 1,
     "lucid/_C/backend/cpu/Pool.cpp": 3,
     "lucid/_C/backend/cpu/methods/Binary.cpp": 4,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,
@@ -1723,7 +1720,6 @@
    },
    "function-ccn-excess": {
     "lucid/_C/autograd/CustomFunction.cpp": 1,
-    "lucid/_C/autograd/FusionPass.cpp": 4,
     "lucid/_C/backend/cpu/Pool.cpp": 4,
     "lucid/_C/backend/cpu/methods/Binary.cpp": 19,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,

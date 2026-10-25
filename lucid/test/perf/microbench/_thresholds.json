@@ -5,5 +5,7 @@
   "matmul_64_cpu": 0.010,
   "matmul_256_cpu": 0.050,
   "sum_4096_cpu": 0.005,
-  "softmax_1024_cpu": 0.020
+  "softmax_1024_cpu": 0.020,
+  "tanh_1m_cpu": 0.010,
+  "gelu_tanh_1m_cpu": 0.015
 }

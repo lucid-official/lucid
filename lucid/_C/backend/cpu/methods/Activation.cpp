@@ -134,14 +134,14 @@ Storage CpuBackend::gelu(const Storage& a, const Shape& shape, Dtype dt) {
         const float c1 = static_cast<float>(kC1);
         const float c2 = static_cast<float>(kC2);
         cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-            float tile[kTanhTile];
+            alignas(64) float tile[kTanhTile];
             for (std::size_t base = lo; base < hi; base += kTanhTile) {
                 const std::size_t m = std::min(kTanhTile, hi - base);
                 for (std::size_t i = 0; i < m; ++i) {
                     const float x = p[base + i];
                     tile[i] = c1 * (x + c2 * x * x * x);
                 }
-                cpu::vtanh_f32(tile, tile, m);
+                cpu::vtanh_unfixed_f32(tile, tile, m);
                 for (std::size_t i = 0; i < m; ++i)
                     q[base + i] = 0.5f * p[base + i] * (1.f + tile[i]);
             }
@@ -150,14 +150,14 @@ Storage CpuBackend::gelu(const Storage& a, const Shape& shape, Dtype dt) {
         const double* p = reinterpret_cast<const double*>(cs.ptr.get());
         double* q = reinterpret_cast<double*>(ptr.get());
         cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-            double tile[kTanhTile];
+            alignas(64) double tile[kTanhTile];
             for (std::size_t base = lo; base < hi; base += kTanhTile) {
                 const std::size_t m = std::min(kTanhTile, hi - base);
                 for (std::size_t i = 0; i < m; ++i) {
                     const double x = p[base + i];
                     tile[i] = kC1 * (x + kC2 * x * x * x);
                 }
-                cpu::vtanh_f64(tile, tile, m);
+                cpu::vtanh_unfixed_f64(tile, tile, m);
                 for (std::size_t i = 0; i < m; ++i)
                     q[base + i] = 0.5 * p[base + i] * (1.0 + tile[i]);
             }
@@ -192,14 +192,14 @@ CpuBackend::gelu_backward(const Storage& a, const Storage& grad, const Shape& sh
         const float c2 = static_cast<float>(kC2);
         // As the forward: vForce tanh a tile at a time, on every core.
         cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-            float tile[kTanhTile];
+            alignas(64) float tile[kTanhTile];
             for (std::size_t base = lo; base < hi; base += kTanhTile) {
                 const std::size_t m = std::min(kTanhTile, hi - base);
                 for (std::size_t i = 0; i < m; ++i) {
                     const float xi = x[base + i];
                     tile[i] = c1 * (xi + c2 * xi * xi * xi);
                 }
-                cpu::vtanh_f32(tile, tile, m);
+                cpu::vtanh_unfixed_f32(tile, tile, m);
                 for (std::size_t i = 0; i < m; ++i) {
                     const float xi = x[base + i];
                     const float t = tile[i];
@@ -214,14 +214,14 @@ CpuBackend::gelu_backward(const Storage& a, const Storage& grad, const Shape& sh
         const double* g = reinterpret_cast<const double*>(gs.ptr.get());
         double* q = reinterpret_cast<double*>(ptr.get());
         cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
-            double tile[kTanhTile];
+            alignas(64) double tile[kTanhTile];
             for (std::size_t base = lo; base < hi; base += kTanhTile) {
                 const std::size_t m = std::min(kTanhTile, hi - base);
                 for (std::size_t i = 0; i < m; ++i) {
                     const double xi = x[base + i];
                     tile[i] = kC1 * (xi + kC2 * xi * xi * xi);
                 }
-                cpu::vtanh_f64(tile, tile, m);
+                cpu::vtanh_unfixed_f64(tile, tile, m);
                 for (std::size_t i = 0; i < m; ++i) {
                     const double xi = x[base + i];
                     const double t = tile[i];

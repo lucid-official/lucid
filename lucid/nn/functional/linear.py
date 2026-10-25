@@ -1,7 +1,7 @@
 """
 nn.functional linear (fully-connected) operations.
 
-Includes fused forward kernels (Phase 19 FusionPass):
+Includes fused forward kernels:
   ``fused_linear_relu``  — y = max(0, x @ W.T + b)   (BLAS + vDSP, single pass)
   ``fused_linear_gelu``  — y = GELU(x @ W.T + b)     (BLAS + vForce tanh, single pass)
 
@@ -66,9 +66,9 @@ def linear(
         \frac{\partial y}{\partial b} = \mathbf{1}
 
     can be evaluated with two more SGEMMs in :class:`LinearBackward`.
-    For inference-only ReLU / GELU follow-up the FusionPass picks
-    :func:`fused_linear_relu` / :func:`fused_linear_gelu` instead and
-    skips the activation's intermediate buffer.
+    For inference-only ReLU / GELU follow-up, callers can invoke
+    :func:`fused_linear_relu` / :func:`fused_linear_gelu` to skip the
+    activation's intermediate buffer.
 
     Examples
     --------
@@ -195,11 +195,10 @@ def fused_linear_relu(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
 
     Implementation: a single BLAS SGEMM followed by vDSP ``vrelu`` over
     the GEMM output buffer for CPU float32; on Metal and in the half
-    formats, the backend's linear followed by its ReLU.  Selected by the
-    Phase-19 FusionPass when grad-mode is disabled and none of ``x`` /
-    ``weight`` / ``bias`` has
-    ``requires_grad=True``.  In training mode the call routes through
-    the standard :func:`linear` + :func:`relu` graph so autograd's
+    formats, the backend's linear followed by its ReLU.  Runs the fused
+    kernel when grad-mode is disabled or none of ``x`` / ``weight`` /
+    ``bias`` has ``requires_grad=True``.  In training mode the call routes
+    through the standard :func:`linear` + :func:`relu` graph so autograd's
     backward derivations are exact.
 
     Examples

@@ -74,7 +74,15 @@ public:
     static constexpr std::uint64_t kUnion = std::numeric_limits<std::uint64_t>::max();
 
     SpentPart(std::uint64_t sequence_nr, std::vector<Ptr> below)
-        : sequence_nr_(sequence_nr), below_(std::move(below)) {}
+        : sequence_nr_(sequence_nr),
+          lo_(sequence_nr),
+          hi_(sequence_nr == kUnion ? 0 : sequence_nr),
+          below_(std::move(below)) {
+        for (const Ptr& child : below_) {
+            lo_ = std::min(lo_, child->lo_);
+            hi_ = std::max(hi_, child->hi_);
+        }
+    }
 
     SpentPart(const SpentPart&) = delete;
     SpentPart& operator=(const SpentPart&) = delete;
@@ -96,10 +104,16 @@ public:
 
     std::uint64_t sequence_nr() const noexcept { return sequence_nr_; }
 
+    std::uint64_t lo() const noexcept { return lo_; }
+
+    std::uint64_t hi() const noexcept { return hi_; }
+
     const std::vector<Ptr>& below() const noexcept { return below_; }
 
 private:
     std::uint64_t sequence_nr_;
+    std::uint64_t lo_;
+    std::uint64_t hi_;
     std::vector<Ptr> below_;
 };
 
@@ -1046,12 +1060,16 @@ private:
     };
 
     // Whether ``part`` is known to reach a request or is one; otherwise it
-    // is searched next, unless it was searched already.
+    // is searched next, unless it was searched already or no request falls
+    // within its descendant sequence-number range [lo, hi] (LCD-568).
     bool enter(const SpentPart& part) {
+        const auto wit = std::lower_bound(wanted_.begin(), wanted_.end(), part.lo());
+        if (wit == wanted_.end() || *wit > part.hi())
+            return false;
         auto [it, fresh] = known_.try_emplace(&part, false);
         if (!fresh)
             return it->second;
-        if (std::binary_search(wanted_.begin(), wanted_.end(), part.sequence_nr())) {
+        if (std::binary_search(wit, wanted_.end(), part.sequence_nr())) {
             it->second = true;
             return true;
         }

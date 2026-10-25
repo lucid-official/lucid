@@ -1,4 +1,4 @@
-"""Unit tests for Phase 19 FusionPass: fused_linear_relu/gelu + FusedLinear."""
+"""Unit tests for fused_linear_relu/gelu + FusedLinear."""
 
 import numpy as np
 import pytest
