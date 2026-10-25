@@ -1471,7 +1471,7 @@ class CompiledAxis(Axis):
         x = _probe.as_f32(_probe.sample("moderate", (3, 4)))
         try:
             if name == "compile":
-                return self._function(symbol, obj, x)
+                return self._function(symbol, obj)
             if name in ("save_compiled", "load_compiled"):
                 return self._artefact(symbol, x)
             if name == "diagnose":
@@ -1489,7 +1489,14 @@ class CompiledAxis(Axis):
             )
         return self._finding(symbol, Status.NOT_APPLICABLE, "not a compile entry point")
 
-    def _function(self, symbol: Symbol, compile_fn: Any, x: Any) -> Finding:
+    def _function(self, symbol: Symbol, compile_fn: Any) -> Finding:
+        # `compile` lowers to a single MPSGraphExecutable — a Metal-only
+        # artefact (lucid/compile/__init__.py).  On CPU every call already
+        # runs eagerly, so a CPU-built `x` compares eager against eager and
+        # never exercises the compiled path at all (LCD-536).
+        if not _probe.metal_available():
+            return self._finding(symbol, Status.SKIP, "compile has nothing to lower to")
+        x = _probe.as_f32(_probe.sample("moderate", (3, 4)), "metal")
         try:
             compiled = compile_fn(_eager)
             got = _probe.to_numpy(compiled(x))
@@ -1497,6 +1504,17 @@ class CompiledAxis(Axis):
             return self._finding(
                 symbol, Status.UNSUPPORTED, f"{type(exc).__name__}: {str(exc)[:70]}"
             )
+        # A `CompiledModule`'s cache proves the compiled path actually ran;
+        # a plain callable (e.g. the self-check's disagreeing-compiler
+        # mutant, which returns a bare lambda) has no such cache and falls
+        # through to the numeric comparison below instead.
+        cache_info = getattr(compiled, "cache_info", None)
+        if cache_info is not None:
+            info = cache_info()
+            if info["entries"] < 1 or info["eager_only"]:
+                return self._finding(
+                    symbol, Status.FAIL, f"never compiled, ran eager: cache_info={info}"
+                )
         want = _probe.to_numpy(_eager(x))
         if got is None or want is None:
             return self._finding(symbol, Status.SKIP, "no comparable output")
