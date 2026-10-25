@@ -117,17 +117,19 @@ def test_there_is_one_pad(ref: ModuleType, owner: Any) -> None:
 def test_non_constant_mode_refuses_value(
     ref: ModuleType, device: str, mode: str
 ) -> None:
-    """LCD-507: non-constant padding modes reject an explicit ``value``."""
+    """LCD-507: non-constant padding modes reject a non-zero ``value`` and accept 0."""
     with pytest.raises(RuntimeError, match="doesn't take in value argument"):
         ref.nn.functional.pad(ref.zeros(1, 2, 3), (1, 1), mode=mode, value=1.0)
     with pytest.raises(
         _C_engine.InvalidArgument, match="doesn't take in value argument"
     ):
         F.pad(lucid.zeros(1, 2, 3, device=device), (1, 1), mode=mode, value=1.0)
-    with pytest.raises(
-        _C_engine.InvalidArgument, match="doesn't take in value argument"
-    ):
-        F.pad(lucid.zeros(1, 2, 3, device=device), (1, 1), mode=mode, value=0.0)
+    x = lucid.arange(6, dtype=lucid.float32, device=device).reshape(1, 2, 3)
+    xr = ref.arange(6, dtype=ref.float32).reshape(1, 2, 3)
+    for zero in (0, 0.0):
+        got = F.pad(x, (1, 1), mode=mode, value=zero)
+        want = ref.nn.functional.pad(xr, (1, 1), mode=mode, value=zero)
+        assert got.tolist() == want.tolist()
 
 
 @pytest.mark.parametrize(
