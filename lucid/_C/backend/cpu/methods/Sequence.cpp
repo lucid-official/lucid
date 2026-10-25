@@ -26,7 +26,7 @@ Storage CpuBackend::embedding_bag_forward(const Storage& weight,
 
     const std::int64_t num_emb = weight_shape[0];
     const int D = static_cast<int>(weight_shape[1]);
-    constexpr const char* kOp = "cpu_backend::embedding_bag";
+    constexpr const char* kOp = "embedding_bag";
     // Indices and offsets are each read at their own width.  This path
     // cast an int64 index to int, so an index of 2^32 + 1 read row 1.
     const auto read_idx = cpu::index_reader(kOp, ci);
@@ -117,7 +117,7 @@ Storage CpuBackend::embedding_bag_backward(const Storage& grad_out,
 
     const std::int64_t num_emb = weight_shape[0];
     const int D = static_cast<int>(weight_shape[1]);
-    constexpr const char* kOp = "cpu_backend::embedding_bag_backward";
+    constexpr const char* kOp = "embedding_bag_backward";
     const auto read_idx = cpu::index_reader(kOp, ci);
     // The same bag boundaries the forward computed, derived by the same
     // helper so the two cannot disagree about which rows a bag owns.
@@ -542,7 +542,7 @@ Storage CpuBackend::embedding_forward(const Storage& weight,
     const auto& is = std::get<CpuStorage>(indices);
     auto out_cpu = alloc_cpu(M * static_cast<std::size_t>(D), dt);
     const std::size_t row_bytes = static_cast<std::size_t>(D) * dtype_size(dt);
-    const auto read_idx = cpu::index_reader("cpu_backend::embedding_forward", is);
+    const auto read_idx = cpu::index_reader("embedding", is);
     // padding_idx does not mask the lookup.  The convention it comes
     // from zeroes that row at initialisation and stops its gradient,
     // so the row holds whatever training left there — and a loaded
@@ -557,7 +557,7 @@ Storage CpuBackend::embedding_forward(const Storage& weight,
         // Refuse rather than copy a row from outside the table.  Nothing
         // checked this: the Python wrapper's host-side range check was
         // the only guard, and the engine op read past the allocation.
-        const std::int64_t id = cpu::checked_row("cpu_backend::embedding_forward", read_idx(i), N);
+        const std::int64_t id = cpu::checked_row("embedding", read_idx(i), N);
         std::byte* dst = out_cpu.ptr.get() + i * row_bytes;
         const std::byte* src = ws.ptr.get() + static_cast<std::size_t>(id) * row_bytes;
         std::memcpy(dst, src, row_bytes);
@@ -592,7 +592,7 @@ Storage CpuBackend::embedding_backward(const Storage& grad_out,
     const auto& is = std::get<CpuStorage>(indices);
     // The index buffer is read at its own width, so any other integer
     // width would be misread the same way.
-    const auto read_idx = cpu::index_reader("cpu_backend::embedding_backward", is);
+    const auto read_idx = cpu::index_reader("embedding_backward", is);
     auto dW = alloc_cpu(static_cast<std::size_t>(N) * static_cast<std::size_t>(D), dt);
     std::memset(dW.ptr.get(), 0, dW.nbytes);
     auto run = [&](auto tag) {
@@ -604,8 +604,7 @@ Storage CpuBackend::embedding_backward(const Storage& grad_out,
             // Refuse rather than add into memory past the gradient.  The
             // forward refuses the same index, so only indices changed in
             // place since then can reach here.
-            const std::int64_t id =
-                cpu::checked_row("cpu_backend::embedding_backward", read_idx(i), N);
+            const std::int64_t id = cpu::checked_row("embedding_backward", read_idx(i), N);
             if (padding_idx >= 0 && id == static_cast<std::int64_t>(padding_idx))
                 continue;
             const T* sp = gp + i * width;

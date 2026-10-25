@@ -116,6 +116,31 @@ def _require_input_dtype(name: str, input: Tensor, source: Tensor, what: str) ->
         )
 
 
+_KERNEL_PREFIXES: tuple[str, ...] = (
+    "scatter_add: ",
+    "scatter_set: ",
+    "scatter_amax: ",
+    "scatter_amin: ",
+    "scatter_prod: ",
+    "scatter: ",
+)
+
+
+def _call_engine[R](name: str, fn: Callable[[], R]) -> R:
+    """Run ``fn()``, naming ``name`` in any engine refusal it raises."""
+    try:
+        return fn()
+    except _C_engine.LucidError as exc:
+        msg = str(exc)
+        for prefix in _KERNEL_PREFIXES:
+            if msg.startswith(prefix):
+                msg = msg.removeprefix(prefix)
+                break
+        if not msg.startswith(f"{name}:"):
+            msg = f"{name}: {msg}"
+        raise type(exc)(msg) from None
+
+
 def _scatter_add(base: Tensor, dim: int, index: Tensor, src: Tensor) -> Tensor:
     """``base`` with ``src`` added at ``index`` along ``dim``, by the engine.
 
@@ -253,6 +278,7 @@ def _as_vector(impl: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
 
 
 def _write_slices(
+    name: str,
     input: Tensor,
     dim: int,
     positions: _C_engine.TensorImpl,
@@ -270,8 +296,11 @@ def _write_slices(
     shape.  Their shapes were checked by :func:`_require_source_slices`.
     """
     src = _as_vector(_unwrap(source))
-    out = write(
-        _as_vector(_unwrap(input)), _along(positions, dim, list(src.shape)), src
+    out = _call_engine(
+        name,
+        lambda: write(
+            _as_vector(_unwrap(input)), _along(positions, dim, list(src.shape)), src
+        ),
     )
     return _wrap(_C_engine.reshape(out, []) if input.ndim == 0 else out)
 
@@ -457,11 +486,14 @@ def index_fill(
     dim, positions = _positions("index_fill", input, dim, index)
     n = shape[dim]
     device = input._impl.device
-    hits = _C_engine.scatter_add(
-        _C_engine.zeros([n], _C_engine.I32, device),
-        positions,
-        _C_engine.full([int(positions.shape[0])], 1.0, _C_engine.I32, device),
-        0,
+    hits = _call_engine(
+        "index_fill",
+        lambda: _C_engine.scatter_add(
+            _C_engine.zeros([n], _C_engine.I32, device),
+            positions,
+            _C_engine.full([int(positions.shape[0])], 1.0, _C_engine.I32, device),
+            0,
+        ),
     )
     along = [1] * len(shape)
     along[dim] = n
@@ -539,6 +571,7 @@ def index_add(
     _require_source_slices("index_add", input, dim, count, source, same_rank=True)
     scaled = source * alpha if alpha != 1 else source
     return _write_slices(
+        "index_add",
         input,
         dim,
         positions,
@@ -616,6 +649,7 @@ def index_copy(
         count = int(positions.shape[0])
         _require_source_slices("index_copy", input, dim, count, source, same_rank=False)
         return _write_slices(
+            "index_copy",
             input,
             dim,
             positions,
@@ -629,13 +663,18 @@ def _scatter_into(
 ) -> Tensor:
     """``src`` reduced into ``base`` by ``reduce`` — a ``'mean'`` as its sum."""
     if reduce in ("sum", "mean"):
-        return _scatter_add(base, dim, index, src)
+        return _call_engine(
+            "scatter_reduce", lambda: _scatter_add(base, dim, index, src)
+        )
     _fn = {
         "amax": _C_engine.scatter_amax,
         "amin": _C_engine.scatter_amin,
         "prod": _C_engine.scatter_prod,
     }[reduce]
-    return _wrap(_fn(_unwrap(base), _unwrap(index), _unwrap(src), dim))
+    return _call_engine(
+        "scatter_reduce",
+        lambda: _wrap(_fn(_unwrap(base), _unwrap(index), _unwrap(src), dim)),
+    )
 
 
 def _divide(total: Tensor, count: Tensor) -> Tensor:
@@ -936,10 +975,11 @@ def _index_put(
         flat_values = _C_engine.reshape(
             _C_engine.contiguous(_normalize_value(values, impl, target_shape)), [-1]
         )
-        return _put_flat(input, positions, flat_values, accumulate)
+        return _put_flat(name, input, positions, flat_values, accumulate)
 
 
 def _put_flat(
+    name: str,
     input: Tensor,
     positions: _C_engine.TensorImpl,
     values: _C_engine.TensorImpl,
@@ -952,9 +992,11 @@ def _put_flat(
         impl = _C_engine.contiguous(impl)
     flat = _C_engine.reshape(impl, [int(input.numel())])
     if accumulate:
-        out = _C_engine.scatter_add(flat, positions, values, 0)
+        out = _call_engine(
+            name, lambda: _C_engine.scatter_add(flat, positions, values, 0)
+        )
     else:
-        out = _C_engine.scatter(flat, 0, positions, values)
+        out = _call_engine(name, lambda: _C_engine.scatter(flat, 0, positions, values))
     return _wrap(_C_engine.reshape(out, shape))
 
 
@@ -1021,7 +1063,7 @@ def put(
         )
     positions = _C_engine.reshape(_unwrap(index), [-1])
     values = _C_engine.reshape(_C_engine.contiguous(_unwrap(source)), [-1])
-    return _put_flat(input, positions, values, accumulate)
+    return _put_flat("put", input, positions, values, accumulate)
 
 
 def index_put_(

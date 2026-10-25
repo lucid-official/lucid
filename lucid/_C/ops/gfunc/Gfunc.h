@@ -38,6 +38,13 @@
 
 namespace lucid {
 
+namespace backend {
+class IBackend;
+}  // namespace backend
+
+using ScatterKernel = Storage (backend::IBackend::*)(
+    const Storage&, const Storage&, const Storage&, const Shape&, const Shape&, int, Dtype);
+
 // Create a tensor of the given shape filled with zeros.
 //
 // Parameters
@@ -508,6 +515,27 @@ LUCID_API TensorImplPtr scatter_set_op(const TensorImplPtr& base,
                                        const TensorImplPtr& indices,
                                        const TensorImplPtr& src,
                                        int dim);
+
+// Validated and normalised operands for an axis-scatter op.
+struct AxisScatterOperands {
+    int dim;                // normalised axis in [0, base->ndim)
+    TensorImplPtr indices;  // reshaped to empty base slice when indices->numel() == 0
+    TensorImplPtr values;   // src cut to the corner the index covers
+};
+
+// Validate device, dtypes, axis, and shapes for an axis-scatter op, returning
+// the normalised axis, index tensor, and narrowed source slice.
+AxisScatterOperands axis_scatter_operands(const char* op,
+                                          const TensorImplPtr& base,
+                                          const TensorImplPtr& indices,
+                                          const TensorImplPtr& src,
+                                          int dim);
+
+// Run a backend axis-scatter kernel under ``OpScopeFull`` and record trace I/O.
+TensorImplPtr dispatch_axis_scatter(const char* scope_name,
+                                    ScatterKernel kernel,
+                                    const TensorImplPtr& base,
+                                    const AxisScatterOperands& ops);
 
 // Sliding-window view of ``a`` along a single dimension.
 //

@@ -40,7 +40,7 @@ Storage CpuBackend::gather(const Storage& a,
     }
     (void)index_dtype;
     const std::size_t total = shape_numel(output_shape);
-    const auto load_idx = cpu::index_reader("cpu_backend::gather", is);
+    const auto load_idx = cpu::index_reader("gather", is);
 
     const std::int64_t axis_extent =
         ndim > 0 ? static_cast<std::int64_t>(input_shape[static_cast<std::size_t>(axis)]) : 0;
@@ -54,8 +54,7 @@ Storage CpuBackend::gather(const Storage& a,
         if (static_cast<int>(d) == axis)
             continue;
         if (output_shape[d] > input_shape[d])
-            ErrorBuilder("cpu_backend::gather")
-                .fail("index is larger than the operand on a non-gathered axis");
+            ErrorBuilder("gather").fail("index is larger than the operand on a non-gathered axis");
     }
 
     // When every non-gathered axis of the output is as wide as the
@@ -72,7 +71,7 @@ Storage CpuBackend::gather(const Storage& a,
                     const std::size_t row = (o * rows->taken + j) * rows->inner;
                     for (std::size_t i = 0; i < rows->inner; ++i) {
                         const std::int64_t k =
-                            cpu::checked_axis("cpu_backend::gather", load_idx(row + i), axis_extent,
+                            cpu::checked_axis("gather", load_idx(row + i), axis_extent,
                                               "index out of range for the gathered axis");
                         dst[row + i] =
                             src[(o * rows->extent + static_cast<std::size_t>(k)) * rows->inner + i];
@@ -107,9 +106,8 @@ Storage CpuBackend::gather(const Storage& a,
 
     std::vector<std::int64_t> coord(ndim, 0);
     for (std::size_t out_flat = 0; out_flat < total; ++out_flat) {
-        const std::int64_t k =
-            cpu::checked_axis("cpu_backend::gather", load_idx(out_flat), axis_extent,
-                              "index out of range for the gathered axis");
+        const std::int64_t k = cpu::checked_axis("gather", load_idx(out_flat), axis_extent,
+                                                 "index out of range for the gathered axis");
         std::size_t a_flat = 0;
         for (std::size_t d = 0; d < ndim; ++d) {
             std::int64_t c = (static_cast<int>(d) == axis) ? k : coord[d];
@@ -378,7 +376,7 @@ Storage CpuBackend::scatter_add(const Storage& base,
     // read as one, giving a silently wrong result; an int8 one had
     // four read as one, producing an index far outside the base and an
     // out-of-bounds write — a bus error reachable from Python.
-    const auto load_index = cpu::index_reader("cpu_backend::scatter_add", ci);
+    const auto load_index = cpu::index_reader("scatter_add", ci);
 
     auto run = [&](auto* dst, const auto* sp) {
         const auto len = static_cast<std::int64_t>(base_dim);
@@ -387,7 +385,7 @@ Storage CpuBackend::scatter_add(const Storage& base,
                 for (std::size_t k = 0; k < idx_dim; ++k) {
                     const std::size_t src_flat = (o * idx_dim + k) * inner + j;
                     const std::int64_t tgt =
-                        cpu::checked_axis("cpu_backend::scatter_add", load_index(src_flat), len,
+                        cpu::checked_axis("scatter_add", load_index(src_flat), len,
                                           "index out of range for the scattered axis");
                     const std::size_t dst_flat =
                         outer_off[o] + static_cast<std::size_t>(tgt) * dim_stride + inner_off[j];
@@ -462,9 +460,8 @@ void CpuBackend::scatter_set_lines(std::byte* dst,
         for (std::size_t k = 0; k < w.idx_dim; ++k) {
             const std::size_t row = (o * w.idx_dim + k) * inner;
             for (std::size_t j = 0; j < inner; ++j) {
-                const std::int64_t tgt =
-                    cpu::checked_axis("cpu_backend::scatter_set", read_idx(row + j), len,
-                                      "index out of range for the scattered axis");
+                const std::int64_t tgt = cpu::checked_axis(
+                    "scatter", read_idx(row + j), len, "index out of range for the scattered axis");
                 const std::size_t at =
                     w.outer_off[o] + static_cast<std::size_t>(tgt) * w.dim_stride + w.inner_off[j];
                 std::memcpy(dst + at * W, src + (row + j) * W, W);
@@ -543,8 +540,8 @@ Storage CpuBackend::scatter_amax(const Storage& base,
                                  const Shape& idx_shape,
                                  int dim,
                                  Dtype dt) {
-    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt,
-                               "cpu_backend::scatter_amax", cpu::ScatterReduce::Amax);
+    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt, "scatter_amax",
+                               cpu::ScatterReduce::Amax);
 }
 
 Storage CpuBackend::scatter_amin(const Storage& base,
@@ -554,8 +551,8 @@ Storage CpuBackend::scatter_amin(const Storage& base,
                                  const Shape& idx_shape,
                                  int dim,
                                  Dtype dt) {
-    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt,
-                               "cpu_backend::scatter_amin", cpu::ScatterReduce::Amin);
+    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt, "scatter_amin",
+                               cpu::ScatterReduce::Amin);
 }
 
 Storage CpuBackend::scatter_prod(const Storage& base,
@@ -565,8 +562,8 @@ Storage CpuBackend::scatter_prod(const Storage& base,
                                  const Shape& idx_shape,
                                  int dim,
                                  Dtype dt) {
-    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt,
-                               "cpu_backend::scatter_prod", cpu::ScatterReduce::Prod);
+    return scatter_reduce_loop(base, indices, src, base_shape, idx_shape, dim, dt, "scatter_prod",
+                               cpu::ScatterReduce::Prod);
 }
 
 Storage CpuBackend::scatter_set(const Storage& base,
@@ -582,9 +579,9 @@ Storage CpuBackend::scatter_set(const Storage& base,
     // The bytes are moved, not converted: a src of another dtype would be
     // reinterpreted, and one of another width read out of bounds.
     if (cs.dtype != dt || cb.dtype != dt)
-        ErrorBuilder("cpu_backend::scatter_set")
-            .fail("source and destination must share a dtype, got " +
-                  std::string(dtype_name(cs.dtype)) + " into " + std::string(dtype_name(cb.dtype)));
+        ErrorBuilder("scatter").fail("source and destination must share a dtype, got " +
+                                     std::string(dtype_name(cs.dtype)) + " into " +
+                                     std::string(dtype_name(cb.dtype)));
 
     const std::size_t esz = dtype_size(dt);
     const std::size_t nbytes = shape_numel(base_shape) * esz;
@@ -595,15 +592,14 @@ Storage CpuBackend::scatter_set(const Storage& base,
     if (count == 0)
         return Storage{CpuStorage{ptr, nbytes, dt}};
     if (cs.nbytes < count * esz || ci.nbytes < count * dtype_size(ci.dtype))
-        ErrorBuilder("cpu_backend::scatter_set")
-            .fail("index and source must hold one "
-                  "element per index position");
+        ErrorBuilder("scatter").fail("index and source must hold one "
+                                     "element per index position");
 
     const int ndim = static_cast<int>(base_shape.size());
     if (dim < 0)
         dim += ndim;
     const AxisScatterWalk walk = axis_scatter_walk(base_shape, idx_shape, dim);
-    const auto read_idx = cpu::index_reader("cpu_backend::scatter_set", ci);
+    const auto read_idx = cpu::index_reader("scatter", ci);
     std::byte* dst = ptr.get();
     const std::byte* sp = cs.ptr.get();
     switch (esz) {
@@ -679,15 +675,15 @@ Storage CpuBackend::one_hot_forward(const Storage& indices,
     const auto& is_ = std::get<CpuStorage>(indices);
     auto out_cpu = alloc_cpu(M * static_cast<std::size_t>(num_classes), out_dtype);
     std::memset(out_cpu.ptr.get(), 0, out_cpu.nbytes);
-    const auto read_idx = cpu::real_index_reader("cpu_backend::one_hot", is_);
+    const auto read_idx = cpu::real_index_reader("one_hot", is_);
     for (std::size_t i = 0; i < M; ++i) {
         // A class outside [0, num_classes) is refused, as the reference
         // refuses it.  It used to leave its row zero, the same answer as
         // Metal, so a bad label vanished silently on both devices.  Metal
         // still answers a zero row (policy B, see GpuBackend's
         // ``gpu_axis_index``), because refusing there needs a host sync.
-        const auto cls = static_cast<std::size_t>(
-            cpu::checked_row("cpu_backend::one_hot", read_idx(i), num_classes));
+        const auto cls =
+            static_cast<std::size_t>(cpu::checked_row("one_hot", read_idx(i), num_classes));
         const std::size_t pos = i * static_cast<std::size_t>(num_classes) + cls;
         switch (out_dtype) {
         case Dtype::F32:

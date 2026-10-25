@@ -17,6 +17,7 @@
 
 #include "../../autograd/Helpers.h"
 #include "../../core/TensorImpl.h"
+#include "../../core/Validate.h"
 #include "View.h"
 
 namespace lucid {
@@ -58,7 +59,15 @@ TensorImplPtr on_scalar_scatter(const char* op,
         return nullptr;
     if (!base->shape().empty() && !indices->shape().empty() && !src->shape().empty())
         return nullptr;
+    Validator::pair(base, indices, op).same_device();
+    Validator::pair(base, src, op).same_device();
     wrap_dim(dim, static_cast<int>(base->shape().size()), op);
+    if (indices->numel() == 0) {
+        if (!base->shape().empty())
+            return nullptr;
+        return reshape_op(
+            std::forward<Run>(run)(reshape_op(base, {1}), indices, scalar_as_1d(src), 0), {});
+    }
     auto out =
         std::forward<Run>(run)(scalar_as_1d(base), scalar_as_1d(indices), scalar_as_1d(src), 0);
     return base->shape().empty() ? reshape_op(out, {}) : out;

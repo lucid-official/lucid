@@ -443,18 +443,61 @@ void require_scatter_dtypes(const char* op,
                             const TensorImplPtr& src) {
     const Dtype idt = indices->dtype();
     if (idt != Dtype::I32 && idt != Dtype::I64)
-        throw DtypeMismatch("int32 or int64", std::string(dtype_name(idt)),
-                            std::string(op) + ": index");
+        ErrorBuilder(op).index_error("index must be an int32 or int64 tensor, got " +
+                                     std::string(dtype_name(idt)));
     if (src->dtype() != base->dtype())
         throw DtypeMismatch(std::string(dtype_name(base->dtype())),
                             std::string(dtype_name(src->dtype())),
                             std::string(op) + ": src must have self's dtype");
 }
 
-struct AxisScatterOperands {
-    int dim;               // normalised
-    TensorImplPtr values;  // src cut to the corner the index covers
-};
+std::string format_scatter_shape(const Shape& sh) {
+    std::string out = "[";
+    for (std::size_t i = 0; i < sh.size(); ++i)
+        out += (i ? ", " : "") + std::to_string(sh[i]);
+    return out + "]";
+}
+
+AxisScatterOperands empty_axis_scatter_operands(int d,
+                                                const Shape& bs,
+                                                const TensorImplPtr& indices,
+                                                const TensorImplPtr& src) {
+    Shape empty_is = bs;
+    empty_is[static_cast<std::size_t>(d)] = 0;
+    TensorImplPtr idx = (indices->shape() == empty_is) ? indices : reshape_op(indices, empty_is);
+    auto flat_src = reshape_op(src, Shape{static_cast<std::int64_t>(src->numel())});
+    TensorImplPtr values =
+        (src->shape() == empty_is) ? src : reshape_op(narrow_op(flat_src, 0, 0, 0), empty_is);
+    return {d, std::move(idx), std::move(values)};
+}
+
+void check_axis_scatter_shapes(
+    const char* op, int d, const Shape& bs, const Shape& is, const Shape& ss) {
+    const int ndim = static_cast<int>(bs.size());
+    if (is.size() != bs.size() || ss.size() != bs.size())
+        ErrorBuilder(op).fail("index " + format_scatter_shape(is) + ", self " +
+                              format_scatter_shape(bs) + " and src " + format_scatter_shape(ss) +
+                              " must have the same number of dimensions");
+    // The index walks src and lands in base, so it may be no larger than src
+    // on any axis, nor than base on any but ``dim``.  Unchecked, a larger
+    // index read src and wrote base past their ends.
+    for (int i = 0; i < ndim; ++i) {
+        const auto k = static_cast<std::size_t>(i);
+        if (is[k] > ss[k] || (i != d && is[k] > bs[k]))
+            ErrorBuilder(op).fail("Expected index " + format_scatter_shape(is) +
+                                  " to be no larger than self " + format_scatter_shape(bs) +
+                                  " apart from dimension " + std::to_string(d) +
+                                  " and to be no larger than src " + format_scatter_shape(ss));
+    }
+    // Any index into an empty axis is out of range; saying so needs only the
+    // shapes, so Metal, which reads no index back, refuses it too (as
+    // ``scatter`` and ``gather`` do).
+    if (bs[static_cast<std::size_t>(d)] == 0 && shape_numel(is) > 0)
+        ErrorBuilder(op).index_error("index out of range: dimension " + std::to_string(d) +
+                                     " has size 0");
+}
+
+}  // namespace
 
 AxisScatterOperands axis_scatter_operands(const char* op,
                                           const TensorImplPtr& base,
@@ -472,34 +515,14 @@ AxisScatterOperands axis_scatter_operands(const char* op,
     const Shape& is = indices->shape();
     const Shape& ss = src->shape();
     const int ndim = static_cast<int>(bs.size());
-    auto shape_str = [](const Shape& sh) {
-        std::string out = "[";
-        for (std::size_t i = 0; i < sh.size(); ++i)
-            out += (i ? ", " : "") + std::to_string(sh[i]);
-        return out + "]";
-    };
-    if (is.size() != bs.size() || ss.size() != bs.size())
-        ErrorBuilder(op).fail("index " + shape_str(is) + ", self " + shape_str(bs) + " and src " +
-                              shape_str(ss) + " must have the same number of dimensions");
     // A 0-d base never reaches here: on_scalar_scatter takes it first.
     const int d = wrap_dim(dim, ndim, op);
-    // The index walks src and lands in base, so it may be no larger than src
-    // on any axis, nor than base on any but ``dim``.  Unchecked, a larger
-    // index read src and wrote base past their ends.
-    for (int i = 0; i < ndim; ++i) {
-        const auto k = static_cast<std::size_t>(i);
-        if (is[k] > ss[k] || (i != d && is[k] > bs[k]))
-            ErrorBuilder(op).fail("Expected index " + shape_str(is) +
-                                  " to be no larger than self " + shape_str(bs) +
-                                  " apart from dimension " + std::to_string(d) +
-                                  " and to be no larger than src " + shape_str(ss));
-    }
-    // Any index into an empty axis is out of range; saying so needs only the
-    // shapes, so Metal, which reads no index back, refuses it too (as
-    // ``scatter`` and ``gather`` do).
-    if (bs[static_cast<std::size_t>(d)] == 0 && shape_numel(is) > 0)
-        ErrorBuilder(op).index_error("index out of range: dimension " + std::to_string(d) +
-                                     " has size 0");
+    // An empty index writes nothing and skips the rank and extent checks, as
+    // the reference does.  Normalise the empty index and source slice to base's
+    // rank so the backend kernels and backward nodes see an empty slice along d.
+    if (indices->numel() == 0)
+        return empty_axis_scatter_operands(d, bs, indices, src);
+    check_axis_scatter_shapes(op, d, bs, is, ss);
     // Only the corner of src the index covers is scattered; every backend
     // reads src in the index's own layout.
     TensorImplPtr values = src;
@@ -508,10 +531,28 @@ AxisScatterOperands axis_scatter_operands(const char* op,
         if (ss[k] > is[k])
             values = narrow_op(values, i, 0, is[k]);
     }
-    return {d, std::move(values)};
+    return {d, indices, std::move(values)};
 }
 
-}  // namespace
+TensorImplPtr dispatch_axis_scatter(const char* scope_name,
+                                    ScatterKernel kernel,
+                                    const TensorImplPtr& base,
+                                    const AxisScatterOperands& ops) {
+    const Dtype dt = base->dtype();
+    const Device dv = base->device();
+    const Shape& bs = base->shape();
+    const Shape& is = ops.indices->shape();
+    OpScopeFull scope{scope_name, dv, dt, bs};
+    scope.set_attr("dim", static_cast<std::int64_t>(ops.dim));
+
+    auto& be = backend::Dispatcher::for_device(dv);
+    Storage out_s = (be.*kernel)(base->storage(), ops.indices->storage(), ops.values->storage(), bs,
+                                 is, ops.dim, dt);
+    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
+    if (auto* trc = ::lucid::compile::current_tracer())
+        trc->on_op_io({base, ops.indices, ops.values}, out);
+    return out;
+}
 
 // ── scatter_add ───────────────────────────────────────────────────────────────
 // Autograd: d/d(base)=grad_out; d/d(src)=gather(grad_out, dim, index).
@@ -528,21 +569,12 @@ TensorImplPtr scatter_add_op(const TensorImplPtr& base_in,
     const TensorImplPtr& src = cast_ops[1];
     if (auto out = on_scalar_scatter("scatter_add", base, indices, src, dim, scatter_add_op))
         return out;
-    auto [d, values] = axis_scatter_operands("scatter_add", base, indices, src, dim);
+    auto ops = axis_scatter_operands("scatter_add", base, indices, src, dim);
+    auto out = dispatch_axis_scatter("scatter_add", &backend::IBackend::scatter_add, base, ops);
+    const auto& [d, idx, values] = ops;
     const Dtype dt = base->dtype();
     const Device dv = base->device();
     const Shape& bs = base->shape();
-    const Shape& is = indices->shape();
-    OpScopeFull scope{"scatter_add", dv, dt, bs};
-    scope.set_attr("dim", static_cast<std::int64_t>(d));
-
-    auto& be = backend::Dispatcher::for_device(dv);
-    Storage out_s =
-        be.scatter_add(base->storage(), indices->storage(), values->storage(), bs, is, d, dt);
-    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
-    if (auto* trc = ::lucid::compile::current_tracer()) {
-        trc->on_op_io({base, indices, values}, out);
-    }
 
     // Autograd wiring
     const bool needs_grad =
@@ -595,13 +627,13 @@ TensorImplPtr scatter_add_op(const TensorImplPtr& base_in,
 
     auto bwd = std::make_shared<ScatterAddNode>();
     bwd->dim_ = d;
-    bwd->saved_indices_ = indices;
+    bwd->saved_indices_ = idx;
     bwd->base_shape_ = bs;
     bwd->dtype_ = dt;
     bwd->device_ = dv;
     bwd->set_next_edges(
         {Edge(base_edge, base->grad_output_nr()), Edge(src_edge, values->grad_output_nr())});
-    bwd->set_saved_versions({indices->version()});
+    bwd->set_saved_versions({idx->version()});
 
     out->set_grad_fn(std::move(bwd));
     out->set_leaf(false);
@@ -852,10 +884,6 @@ struct ScatterReduceNode : Node {
     }
 };
 
-// The backend kernel a scatter extremum's forward ran.
-using ScatterKernel = Storage (backend::IBackend::*)(
-    const Storage&, const Storage&, const Storage&, const Shape&, const Shape&, int, Dtype);
-
 // The scatter_amax / scatter_amin backward.  The gradient at each output
 // position is split equally among all tied winners there, base's element
 // included (the reference framework's scatter_reduce convention).
@@ -961,6 +989,33 @@ struct ScatterProdNode : ScatterReduceNode {
     }
 };
 
+TensorImplPtr run_scatter_reduce(const char* name,
+                                 ScatterKernel kernel,
+                                 const TensorImplPtr& base,
+                                 const TensorImplPtr& indices,
+                                 const TensorImplPtr& src_in,
+                                 int dim,
+                                 bool is_prod) {
+    if (auto out = on_scalar_scatter(
+            name, base, indices, src_in, dim,
+            [&](const TensorImplPtr& b, const TensorImplPtr& i, const TensorImplPtr& s, int ax) {
+                return run_scatter_reduce(name, kernel, b, i, s, ax, is_prod);
+            }))
+        return out;
+    auto ops = axis_scatter_operands(name, base, indices, src_in, dim);
+    auto out = dispatch_axis_scatter(name, kernel, base, ops);
+    const auto& [d, idx, values] = ops;
+
+    if (!GradMode::is_enabled() || !(base->requires_grad() || values->requires_grad()))
+        return out;
+
+    std::shared_ptr<ScatterReduceNode> node =
+        is_prod ? std::static_pointer_cast<ScatterReduceNode>(std::make_shared<ScatterProdNode>())
+                : std::static_pointer_cast<ScatterReduceNode>(
+                      std::make_shared<ScatterExtremumNode>(name, kernel));
+    return attach_scatter_reduce(std::move(node), base, idx, values, std::move(out), d);
+}
+
 }  // anonymous namespace
 
 // ── scatter_amax ──────────────────────────────────────────────────────────────
@@ -968,33 +1023,8 @@ TensorImplPtr scatter_amax_op(const TensorImplPtr& base,
                               const TensorImplPtr& indices,
                               const TensorImplPtr& src_in,
                               int dim) {
-    if (auto out = on_scalar_scatter("scatter_amax", base, indices, src_in, dim, scatter_amax_op))
-        return out;
-    auto [d, values] = axis_scatter_operands("scatter_amax", base, indices, src_in, dim);
-    const TensorImplPtr& src = values;
-    const Dtype dt = base->dtype();
-    const Device dv = base->device();
-    const Shape& bs = base->shape();
-    const Shape& is = indices->shape();
-    OpScopeFull scope{"scatter_amax", dv, dt, bs};
-    scope.set_attr("dim", static_cast<std::int64_t>(d));
-
-    auto& be = backend::Dispatcher::for_device(dv);
-    Storage out_s =
-        be.scatter_amax(base->storage(), indices->storage(), src->storage(), bs, is, d, dt);
-    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
-    if (auto* trc = ::lucid::compile::current_tracer()) {
-        trc->on_op_io({base, indices, src}, out);
-    }
-
-    const bool needs_grad =
-        GradMode::is_enabled() && (base->requires_grad() || src->requires_grad());
-    if (!needs_grad)
-        return out;
-
-    return attach_scatter_reduce(
-        std::make_shared<ScatterExtremumNode>("scatter_amax", &backend::IBackend::scatter_amax),
-        base, indices, src, std::move(out), d);
+    return run_scatter_reduce("scatter_amax", &backend::IBackend::scatter_amax, base, indices,
+                              src_in, dim, false);
 }
 
 // ── scatter_amin ──────────────────────────────────────────────────────────────
@@ -1002,33 +1032,8 @@ TensorImplPtr scatter_amin_op(const TensorImplPtr& base,
                               const TensorImplPtr& indices,
                               const TensorImplPtr& src_in,
                               int dim) {
-    if (auto out = on_scalar_scatter("scatter_amin", base, indices, src_in, dim, scatter_amin_op))
-        return out;
-    auto [d, values] = axis_scatter_operands("scatter_amin", base, indices, src_in, dim);
-    const TensorImplPtr& src = values;
-    const Dtype dt = base->dtype();
-    const Device dv = base->device();
-    const Shape& bs = base->shape();
-    const Shape& is = indices->shape();
-    OpScopeFull scope{"scatter_amin", dv, dt, bs};
-    scope.set_attr("dim", static_cast<std::int64_t>(d));
-
-    auto& be = backend::Dispatcher::for_device(dv);
-    Storage out_s =
-        be.scatter_amin(base->storage(), indices->storage(), src->storage(), bs, is, d, dt);
-    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
-    if (auto* trc = ::lucid::compile::current_tracer()) {
-        trc->on_op_io({base, indices, src}, out);
-    }
-
-    const bool needs_grad =
-        GradMode::is_enabled() && (base->requires_grad() || src->requires_grad());
-    if (!needs_grad)
-        return out;
-
-    return attach_scatter_reduce(
-        std::make_shared<ScatterExtremumNode>("scatter_amin", &backend::IBackend::scatter_amin),
-        base, indices, src, std::move(out), d);
+    return run_scatter_reduce("scatter_amin", &backend::IBackend::scatter_amin, base, indices,
+                              src_in, dim, false);
 }
 
 // ── scatter_prod ──────────────────────────────────────────────────────────────
@@ -1036,32 +1041,8 @@ TensorImplPtr scatter_prod_op(const TensorImplPtr& base,
                               const TensorImplPtr& indices,
                               const TensorImplPtr& src_in,
                               int dim) {
-    if (auto out = on_scalar_scatter("scatter_prod", base, indices, src_in, dim, scatter_prod_op))
-        return out;
-    auto [d, values] = axis_scatter_operands("scatter_prod", base, indices, src_in, dim);
-    const TensorImplPtr& src = values;
-    const Dtype dt = base->dtype();
-    const Device dv = base->device();
-    const Shape& bs = base->shape();
-    const Shape& is = indices->shape();
-    OpScopeFull scope{"scatter_prod", dv, dt, bs};
-    scope.set_attr("dim", static_cast<std::int64_t>(d));
-
-    auto& be = backend::Dispatcher::for_device(dv);
-    Storage out_s =
-        be.scatter_prod(base->storage(), indices->storage(), src->storage(), bs, is, d, dt);
-    auto out = std::make_shared<TensorImpl>(std::move(out_s), bs, dt, dv, false);
-    if (auto* trc = ::lucid::compile::current_tracer()) {
-        trc->on_op_io({base, indices, src}, out);
-    }
-
-    const bool needs_grad =
-        GradMode::is_enabled() && (base->requires_grad() || src->requires_grad());
-    if (!needs_grad)
-        return out;
-
-    return attach_scatter_reduce(std::make_shared<ScatterProdNode>(), base, indices, src,
-                                 std::move(out), d);
+    return run_scatter_reduce("scatter_prod", &backend::IBackend::scatter_prod, base, indices,
+                              src_in, dim, true);
 }
 
 // ── unfold_dim ─────────────────────────────────────────────────────────────────

@@ -13,9 +13,7 @@ The owner for the ops that flatten their index before a kernel sees it
 is the index check in ``lucid._ops.composite.indexing`` (``_require_index``,
 ``_positions``, ``_require_source_slices``).  ``index_select`` and
 ``scatter_reduce`` hand the caller's index to the engine, whose doors own
-their rules.  Two of those doors do not yet say what the caller called.
-Those cells are pinned: index_select's 2-D class is LCD-604, and the
-kernel names in the engine's refusals are LCD-609.
+their rules.
 
 Each table records the class the reference raises, as measured, so the
 guard runs without the reference installed.  ``-m parity`` checks the
@@ -24,7 +22,7 @@ record against the reference itself.
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import ModuleType
 
 import pytest
@@ -45,9 +43,6 @@ _BOTH = frozenset({"cpu", "metal"})
 _CPU = frozenset({"cpu"})
 _METAL = frozenset({"metal"})
 
-_PIN_604 = "LCD-604: the engine's index_select refuses a 2-D index as a bare LucidError"
-_PIN_609 = "LCD-609: the engine's refusal names its kernel, not the public op"
-
 
 @dataclass(frozen=True)
 class _Bad:
@@ -60,8 +55,6 @@ class _Bad:
     cpu_args: frozenset[int] = frozenset()
     # Ops whose reference accepts the call; Lucid refuses it as ``kinds`` says.
     stricter: frozenset[str] = frozenset()
-    class_pins: Mapping[str, str] = field(default_factory=dict)
-    name_pins: Mapping[str, str] = field(default_factory=dict)
 
 
 def _same(
@@ -89,7 +82,7 @@ def _build(bad: _Bad, m: ModuleType, device: str) -> tuple[object, ...]:
 
 
 def _cells(
-    table: Mapping[str, _Bad], spellings: Mapping[str, _Call], pins: str, *lead: str
+    table: Mapping[str, _Bad], spellings: Mapping[str, _Call], *lead: str
 ) -> list[object]:
     """One cell per spelling, case and device; ``lead`` goes first in each."""
     cells: list[object] = []
@@ -98,8 +91,6 @@ def _cells(
             op = _op(spelling)
             if op not in bad.kinds:
                 continue
-            reason = getattr(bad, pins).get(op)
-            marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
             for device in _DEVICES:
                 if device in bad.devices:
                     cells.append(
@@ -108,7 +99,6 @@ def _cells(
                             spelling,
                             case,
                             device,
-                            marks=marks,
                             id=f"{spelling}-{case}-{device}",
                         )
                     )
@@ -163,24 +153,20 @@ _SOURCED = frozenset({"index_copy", "index_add"})
 # The reference's classes for an index of the wrong rank, and of the wrong dtype.
 _RANK = {"index_copy": _I, "index_add": _I, "index_fill": _R, "index_select": _I}
 _DTYPE = {"index_copy": _R, "index_add": _R, "index_fill": _I, "index_select": _R}
-_SELECT_RANK = {"index_select": _PIN_604}
 
 _BAD: dict[str, _Bad] = {
     # The LCD-586 repro: as many slices as the index has elements.
     "2d-index": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(4, 3)),
         _RANK,
-        class_pins=_SELECT_RANK,
     ),
     "2d-index-short-source": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(2, 3)),
         _RANK,
-        class_pins=_SELECT_RANK,
     ),
     "empty-2d-index": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.zeros(0, 1, dtype=m.int64), m.ones(0, 3)),
         _RANK,
-        class_pins=_SELECT_RANK,
     ),
     "float-index": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([0.0, 1.0]), m.ones(2, 3)), _DTYPE
@@ -244,14 +230,12 @@ _BAD: dict[str, _Bad] = {
         lambda m: (m.zeros(0, 3), 0, m.tensor([0]), m.zeros(1, 3)),
         {**_same(_R, {"index_copy", "index_fill", "index_select"}), "index_add": _I},
         stricter=frozenset({"index_add"}),
-        name_pins={"index_select": _PIN_609},
     ),
     # Index values past the axis: refused on the CPU, dropped on Metal.
     "index-value-past-the-axis": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([7]), m.ones(1, 3)),
         {"index_copy": _I, "index_add": _R, "index_fill": _I, "index_select": _I},
         devices=_CPU,
-        name_pins=dict.fromkeys(_ALL, _PIN_609),
     ),
     "index-on-the-cpu": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([0, 2]), m.ones(2, 3)),
@@ -274,9 +258,7 @@ _BAD: dict[str, _Bad] = {
 }
 
 
-@pytest.mark.parametrize(
-    ("spelling", "case", "device"), _cells(_BAD, _FAMILY, "class_pins")
-)
+@pytest.mark.parametrize(("spelling", "case", "device"), _cells(_BAD, _FAMILY))
 def test_a_bad_index_argument_raises_the_reference_class(
     spelling: str, case: str, device: str
 ) -> None:
@@ -285,9 +267,7 @@ def test_a_bad_index_argument_raises_the_reference_class(
         _FAMILY[spelling](lucid, *_build(bad, lucid, device))
 
 
-@pytest.mark.parametrize(
-    ("spelling", "case", "device"), _cells(_BAD, _FAMILY, "name_pins")
-)
+@pytest.mark.parametrize(("spelling", "case", "device"), _cells(_BAD, _FAMILY))
 def test_a_bad_index_argument_is_refused_by_the_public_op(
     spelling: str, case: str, device: str
 ) -> None:
@@ -516,7 +496,6 @@ _PUT_BAD: dict[str, _Bad] = {
         lambda m: (m.zeros(4, 3), 0, m.tensor([12]), m.ones(1)),
         {"put": _I},
         devices=_CPU,
-        name_pins={"put": _PIN_609},
     ),
     # The reference's GPU device has no put; the class is its CPU one's.
     "index-on-the-cpu": _Bad(
@@ -547,63 +526,49 @@ _SCATTERS: dict[str, _Call] = {
     ),
 }
 
-# scatter_reduce hands its index to the engine's scatter door unchanged;
-# the door's classes match the reference's, its messages name the kernel.
-_SCATTER = {"scatter_reduce": _PIN_609}
-
 _SCATTER_BAD: dict[str, _Bad] = {
     "index-fewer-dims": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(4, 3)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "index-more-dims": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.zeros(2, 3, 1, dtype=m.int64), m.ones(4, 3)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "src-more-dims": _Bad(
         lambda m: (m.zeros(2, 3), 0, m.tensor([[0, 1]]), m.ones(2, 3, 1)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "float-index": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([[0.0, 1.0, 2.0]]), m.ones(4, 3)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "index-wider-than-input": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.zeros(2, 4, dtype=m.int64), m.ones(4, 4)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "index-larger-than-src": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.zeros(2, 3, dtype=m.int64), m.ones(1, 3)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "dim-past-the-last": _Bad(
         lambda m: (m.zeros(4, 3), 2, m.zeros(2, 3, dtype=m.int64), m.ones(4, 3)),
         {"scatter_reduce": _I},
-        name_pins=_SCATTER,
     ),
     "index-into-an-empty-axis": _Bad(
         lambda m: (m.zeros(0, 3), 0, m.zeros(1, 3, dtype=m.int64), m.ones(1, 3)),
         {"scatter_reduce": _R},
-        name_pins=_SCATTER,
     ),
     "index-value-past-the-axis": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([[7, 0, 0]]), m.ones(1, 3)),
         {"scatter_reduce": _R},
         devices=_CPU,
-        name_pins=_SCATTER,
     ),
     "index-on-the-cpu": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([[0, 1, 2]]), m.ones(1, 3)),
         {"scatter_reduce": _R},
         devices=_METAL,
         cpu_args=frozenset({2}),
-        name_pins=_SCATTER,
     ),
 }
 
@@ -613,17 +578,15 @@ _SIBLINGS: dict[str, tuple[Mapping[str, _Call], Mapping[str, _Bad]]] = {
 }
 
 
-def _sibling_cells(pins: str) -> list[object]:
+def _sibling_cells() -> list[object]:
     return [
         cell
         for family, (spellings, table) in _SIBLINGS.items()
-        for cell in _cells(table, spellings, pins, family)
+        for cell in _cells(table, spellings, family)
     ]
 
 
-@pytest.mark.parametrize(
-    ("family", "spelling", "case", "device"), _sibling_cells("class_pins")
-)
+@pytest.mark.parametrize(("family", "spelling", "case", "device"), _sibling_cells())
 def test_a_sibling_raises_the_reference_class(
     family: str, spelling: str, case: str, device: str
 ) -> None:
@@ -633,9 +596,7 @@ def test_a_sibling_raises_the_reference_class(
         spellings[spelling](lucid, *_build(bad, lucid, device))
 
 
-@pytest.mark.parametrize(
-    ("family", "spelling", "case", "device"), _sibling_cells("name_pins")
-)
+@pytest.mark.parametrize(("family", "spelling", "case", "device"), _sibling_cells())
 def test_a_sibling_is_refused_by_the_public_op(
     family: str, spelling: str, case: str, device: str
 ) -> None:
@@ -664,3 +625,69 @@ def test_the_recorded_sibling_classes_are_the_reference_s(
     with pytest.raises((IndexError, TypeError, ValueError, RuntimeError)) as theirs:
         spellings[spelling](ref, *_build(bad, ref, _ref_device(ref, bad)))
     assert _builtin(theirs.value) is bad.kinds[_op(spelling)], theirs.value
+
+
+# ── empty-index scatter family (LCD-609) ────────────────────────────────────
+
+_EMPTY_SCATTER_OPS: dict[
+    str, Callable[[ModuleType, object, int, object, object], object]
+] = {
+    "scatter": lambda m, b, d, i, s: m.scatter(b, d, i, s),
+    "scatter_add": lambda m, b, d, i, s: m.scatter_add(b, d, i, s),
+    "scatter_reduce-sum": lambda m, b, d, i, s: m.scatter_reduce(b, d, i, s, "sum"),
+    "scatter_reduce-mean": lambda m, b, d, i, s: m.scatter_reduce(b, d, i, s, "mean"),
+    "scatter_reduce-amax": lambda m, b, d, i, s: m.scatter_reduce(b, d, i, s, "amax"),
+    "scatter_reduce-amin-noself": lambda m, b, d, i, s: m.scatter_reduce(
+        b, d, i, s, "amin", include_self=False
+    ),
+    "scatter_reduce-prod": lambda m, b, d, i, s: m.scatter_reduce(b, d, i, s, "prod"),
+}
+
+_EMPTY_INDEX_SHAPES: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = (
+    ((0,), (2, 3)),
+    ((0, 0), (2, 3)),
+    ((0,), (0,)),
+    ((0,), ()),
+    ((2, 0), (2, 3)),
+)
+
+
+@pytest.mark.parametrize(("idx_shape", "src_shape"), _EMPTY_INDEX_SHAPES)
+@pytest.mark.parametrize("op", list(_EMPTY_SCATTER_OPS))
+def test_empty_index_scatter_returns_input_and_propagates_grad(
+    device: str,
+    op: str,
+    idx_shape: tuple[int, ...],
+    src_shape: tuple[int, ...],
+) -> None:
+    base = lucid.arange(1.0, 7.0, device=device).reshape(2, 3).requires_grad_(True)
+    idx = lucid.zeros(idx_shape, dtype=lucid.int64, device=device)
+    src = lucid.ones(src_shape, device=device).requires_grad_(True)
+    out = _EMPTY_SCATTER_OPS[op](lucid, base, 0, idx, src)
+    assert isinstance(out, lucid.Tensor)
+    assert out.shape == (2, 3)
+    assert out.tolist() == base.tolist()
+    out.sum().backward()
+    assert base.grad is not None and base.grad.tolist() == [[1.0, 1.0, 1.0]] * 2
+    assert src.grad is not None and src.grad.shape == src_shape
+    assert src.grad.reshape(-1).tolist() == [0.0] * src.numel()
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("idx_shape", "src_shape"), _EMPTY_INDEX_SHAPES)
+@pytest.mark.parametrize("op", list(_EMPTY_SCATTER_OPS))
+def test_empty_index_scatter_matches_reference(
+    ref: ModuleType,
+    op: str,
+    idx_shape: tuple[int, ...],
+    src_shape: tuple[int, ...],
+) -> None:
+    base = lucid.arange(1.0, 7.0).reshape(2, 3)
+    idx = lucid.zeros(idx_shape, dtype=lucid.int64)
+    src = lucid.ones(src_shape)
+    got = _EMPTY_SCATTER_OPS[op](lucid, base, 0, idx, src)
+    r_base = ref.arange(1.0, 7.0).reshape(2, 3)
+    r_idx = ref.zeros(idx_shape, dtype=ref.int64)
+    r_src = ref.ones(src_shape)
+    want = _EMPTY_SCATTER_OPS[op](ref, r_base, 0, r_idx, r_src)
+    assert got.tolist() == want.tolist()
