@@ -733,15 +733,13 @@ def _through_a_helper(x: lucid.Tensor) -> lucid.Tensor:
 
 @pytest.mark.usefixtures("inference")
 @_METAL
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-642: a module held in a container, or reached through a "
-    "function the compiled one calls, is not watched — only modules held "
-    "directly by a closure cell or a global the code names are",
-)
 @pytest.mark.parametrize("reach", ["dict-held", "helper-reached"])
 @pytest.mark.parametrize("change", ["parameter-setattr", "rebound"])
 def test_a_module_reached_less_directly(reach: str, change: str) -> None:
+    """A module held in a dict global, or reached through a function the
+    compiled one calls, is watched the same way a direct closure cell or
+    global is (LCD-642): both a parameter swapped on it and the name itself
+    rebound to another module force the next compiled call to match eager."""
     global _REACHED_BY_A_HELPER
     first, second = _linear(1, "metal"), _linear(2, "metal")
     _HELD_IN_A_DICT["model"] = _REACHED_BY_A_HELPER = first

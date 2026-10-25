@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - no stamp means mtime decides engine freshness (LCD-536)
 - bootstrap links semgrep's console scripts into worktree venvs (LCD-536)
 - compile probes exercise the compiled path, not eager-vs-eager
+- watch modules reached via a container/helper (LCD-642)
 
 ---
 

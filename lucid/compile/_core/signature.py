@@ -298,12 +298,153 @@ def _callable_slots(fn: object) -> list[tuple[tuple[str, str], object]]:
     return out
 
 
-def _closure_modules(model: object) -> list[Module]:
-    """The modules ``model._fn`` is bound to, closes over or reads as a global.
+# A hop in a path from the wrapped callable to something it reaches
+# indirectly: ("cell"/"global", name) relative to a callable, ("item", key)
+# into a list/tuple (by stringified index) or a str-keyed dict, or ("attr",
+# name) on a plain object's ``__dict__``.
+type _Hop = tuple[str, str]
+type _Path = tuple[_Hop, ...]
 
-    Only a module held directly counts, not one inside a list or a dict —
-    walking a container held as a global would cost its length on every call.
+# Bounds for the indirect walk below (LCD-642): a container or an object's
+# attributes cost the same regardless of their size, and a chain of helper
+# functions is followed only this many hops deep — enough for the shapes
+# seen in practice (one container, or one helper calling the model) with a
+# little headroom, not a search of the whole reachable heap.
+_MAX_PATH_DEPTH = 3
+_MAX_PATH_ITEMS = 64
+
+
+def _sequence_children(value: Sequence[object]) -> Iterator[tuple[_Hop, object]]:
+    """``("item", index)`` for each of ``value``'s first ``_MAX_PATH_ITEMS``."""
+    for i, item in enumerate(value):
+        if i >= _MAX_PATH_ITEMS:
+            return
+        yield ("item", str(i)), item
+
+
+def _dict_children(value: dict[object, object]) -> Iterator[tuple[_Hop, object]]:
+    """``("item", key)`` for each str key among ``value``'s first
+    ``_MAX_PATH_ITEMS``."""
+    for i, (key, item) in enumerate(value.items()):
+        if i >= _MAX_PATH_ITEMS:
+            return
+        if isinstance(key, str):
+            yield ("item", key), item
+
+
+def _function_children(
+    value: object, seen_funcs: set[int]
+) -> Iterator[tuple[_Hop, object]]:
+    """``value``'s own cells and globals, once per function (cycle guard)."""
+    if id(value) in seen_funcs:
+        return
+    seen_funcs.add(id(value))
+    yield from _callable_slots(value)
+
+
+def _object_children(value: object) -> Iterator[tuple[_Hop, object]]:
+    """``("attr", name)`` for each public attribute among ``value``'s first
+    ``_MAX_PATH_ITEMS``, or nothing if ``value`` has no ``__dict__``."""
+    try:
+        attrs = vars(value)
+    except TypeError:  # no __dict__ (a plain scalar, a slotted object, …)
+        return
+    for i, (name, item) in enumerate(attrs.items()):
+        if i >= _MAX_PATH_ITEMS:
+            return
+        if not name.startswith("_"):
+            yield ("attr", name), item
+
+
+def _path_children(
+    value: object, seen_funcs: set[int]
+) -> Iterator[tuple[_Hop, object]]:
+    """One further hop's worth of values reachable from ``value``: the items
+    of a list/tuple/dict, the cells and globals of a function it is, or the
+    public attributes of a plain object — each capped at
+    ``_MAX_PATH_ITEMS`` so a large one costs the same as a small one.
     """
+    from lucid._tensor.tensor import Tensor
+    from lucid.nn.module import Module
+
+    if isinstance(value, (list, tuple)):
+        yield from _sequence_children(value)
+    elif isinstance(value, dict):
+        yield from _dict_children(value)
+    elif callable(value) and hasattr(value, "__code__"):
+        yield from _function_children(value, seen_funcs)
+    elif not isinstance(value, (Module, Tensor)):
+        yield from _object_children(value)
+
+
+def _indirect_module_paths(fn: object) -> list[tuple[_Path, Module]]:
+    """Every module ``fn`` reaches beyond its own direct cells and globals.
+
+    A dict/list global, a helper function ``fn`` calls that itself closes
+    over or names a global module, and a plain attribute of an object one
+    of those holds, are each walked — bounded by ``_MAX_PATH_DEPTH`` hops
+    and ``_MAX_PATH_ITEMS`` per container, function or object so the cost
+    never scales with how large the container is (LCD-642: a module
+    reached only this way used to go unwatched, so a parameter swap or a
+    rebind after compile answered silently wrong).
+    """
+    from lucid.nn.module import Module
+
+    if fn is None:
+        return []
+    found: list[tuple[_Path, Module]] = []
+    seen_funcs: set[int] = {id(fn)}
+    seen_values: set[int] = set()
+    frontier: list[tuple[_Path, object]] = [
+        ((hop,), value) for hop, value in _callable_slots(fn)
+    ]
+    for _ in range(_MAX_PATH_DEPTH):
+        if not frontier:
+            break
+        next_frontier: list[tuple[_Path, object]] = []
+        for path, value in frontier:
+            if isinstance(value, Module):
+                if len(path) > 1:
+                    found.append((path, value))
+                continue
+            vid = id(value)
+            if vid in seen_values:
+                continue
+            seen_values.add(vid)
+            for hop, child in _path_children(value, seen_funcs):
+                next_frontier.append((path + (hop,), child))
+        frontier = next_frontier
+    return found
+
+
+def _resolve_path(fn: object, path: _Path) -> object | None:
+    """What following ``path`` from ``fn`` reaches now, or ``None`` if a hop
+    is gone — the cheap, targeted re-check :meth:`_TreeTensors.reads_the_same`
+    runs every call, as opposed to :func:`_indirect_module_paths`'s search
+    for one."""
+    current: object = fn
+    for kind, key in path:
+        if kind in ("cell", "global"):
+            current = _read_slot(current, (kind, key))
+        elif kind == "item":
+            if isinstance(current, dict):
+                current = current.get(key)
+            elif isinstance(current, (list, tuple)):
+                idx = int(key)
+                current = current[idx] if 0 <= idx < len(current) else None
+            else:
+                return None
+        elif kind == "attr":
+            current = getattr(current, key, None)
+        else:
+            return None
+    return current
+
+
+def _closure_modules(model: object) -> list[Module]:
+    """The modules ``model._fn`` is bound to, closes over, reads as a global,
+    or reaches through a container, a helper function or an object's
+    attribute (:func:`_indirect_module_paths`, LCD-642)."""
     from lucid.nn.module import Module
 
     fn = _wrapped_callable(model)
@@ -318,7 +459,15 @@ def _closure_modules(model: object) -> list[Module]:
     space = getattr(fn, "__globals__", None)
     if isinstance(code, CodeType) and isinstance(space, dict):
         held += map(space.get, _global_names(code))
-    return [v for v in held if isinstance(v, Module)]
+    direct = [v for v in held if isinstance(v, Module)]
+    indirect = [m for _, m in _indirect_module_paths(fn)]
+    seen: set[int] = set()
+    out: list[Module] = []
+    for m in (*direct, *indirect):
+        if id(m) not in seen:
+            seen.add(id(m))
+            out.append(m)
+    return out
 
 
 def _root_modules(model: object) -> list[Module]:
@@ -787,6 +936,25 @@ def _param_fingerprint(model: Module) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(seen.keys()))
 
 
+def _reached_modules(
+    values: dict[tuple[str, str], object], fn: object
+) -> tuple[tuple[_Path, weakref.ref[Module]], ...]:
+    """Every module ``fn`` reaches, direct cells/globals and indirect alike,
+    each with the path :meth:`_TreeTensors.reads_the_same` re-follows later.
+
+    A module reached only through a container, a helper function or an
+    object's attribute (:func:`_indirect_module_paths`, LCD-642) is keyed by
+    the longer path found there instead of a bare ``(key,)``.
+    """
+    from lucid.nn.module import Module
+
+    reached: dict[_Path, Module] = {
+        (key,): v for key, v in values.items() if isinstance(v, Module)
+    }
+    reached.update(_indirect_module_paths(fn) if fn is not None else ())
+    return tuple((path, weakref.ref(v)) for path, v in reached.items())
+
+
 @final
 class _TreeTensors:
     """Which modules a tree holds, and which tensor sits in each of their slots.
@@ -817,8 +985,6 @@ class _TreeTensors:
         attributes: Mapping[Module, tuple[str, ...]] | None = None,
         callable_slots: Sequence[tuple[str, str]] = (),
     ) -> None:
-        from lucid.nn.module import Module
-
         subs = _iter_modules(_root_modules(model))
         slots = list(_registry_slots(subs))
         if attributes:
@@ -841,9 +1007,7 @@ class _TreeTensors:
         self._modules = tuple(weakref.ref(sub) for sub in subs)
         # The callable's cells and globals this record depends on: the modules
         # they name (held weakly, as the tree's are) and the tensors read.
-        self._reached = tuple(
-            (key, weakref.ref(v)) for key, v in values.items() if isinstance(v, Module)
-        )
+        self._reached = _reached_modules(values, fn)
         self._read = tuple((key, values.get(key)) for key in callable_slots)
         # Where each recorded tensor sits, for the key (``CacheKey.tree_alias``).
         self.slot_of = _slot_map(slots)
@@ -857,13 +1021,16 @@ class _TreeTensors:
     def reads_the_same(self, model: object) -> bool:
         """Whether the wrapped callable reaches the modules and recorded tensors
         it did — a module's tree moves the version when it changes, a rebound
-        closure cell or global does not."""
+        closure cell or global does not, and neither does one swapped inside
+        a container or a helper function's own globals (LCD-642): each
+        ``_reached`` path is re-followed from ``fn``, not rescanned, so this
+        stays cheap regardless of a container's size."""
         if not self._reached and not self._read:
             return True
         fn = _wrapped_callable(model)
-        return all(_read_slot(fn, key) is ref() for key, ref in self._reached) and all(
-            _read_slot(fn, key) is value for key, value in self._read
-        )
+        return all(
+            _resolve_path(fn, path) is ref() for path, ref in self._reached
+        ) and all(_read_slot(fn, key) is value for key, value in self._read)
 
 
 def _as_tensor(value: object) -> Tensor | None:
