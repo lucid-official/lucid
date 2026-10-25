@@ -1,15 +1,9 @@
-"""A half ``grid_sample`` composite samples in float32 and rounds once (LCD-616).
+"""A half ``grid_sample`` samples in float32 and rounds once (LCD-616, LCD-632).
 
-The parts of ``grid_sample`` written in Python — bicubic, every 5-D path,
-and the reflection the 4-D kernel lacks — computed a float16 or bfloat16
-input's coordinates, weights and sums in that dtype.  A float16 bicubic
-sample came out about 2e-2 off the float32 answer on both devices, where
-the reference's MPS kernel is one rounding (5e-4) off.  Each now widens a
-half pair to float32 and rounds the result once, so on the same half
-inputs it is the float32 answer, rounded, and so is its gradient.
-
-The 4-D bilinear / nearest kernel without reflection is the engine's and
-is not held here.
+Both the Python composite paths (bicubic, 5-D, reflection) and the 4-D
+bilinear / nearest engine kernels on CPU and Metal widen a float16 or
+bfloat16 input pair to float32, compute coordinates, weights and sums in
+float32, and round the result (and both gradients) once at the output.
 """
 
 import numpy as np
@@ -19,11 +13,9 @@ import lucid
 import lucid.nn.functional as F
 
 _PADDINGS = ("zeros", "border", "reflection")
-# (rank, mode, padding): every path the composite or the reflection serves.
+# (rank, mode, padding): every 4-D and 5-D mode × padding combination.
 _PATHS = [
-    *((4, "bicubic", p) for p in _PADDINGS),
-    (4, "bilinear", "reflection"),
-    (4, "nearest", "reflection"),
+    *((4, m, p) for m in ("bilinear", "nearest", "bicubic") for p in _PADDINGS),
     *((5, m, p) for m in ("bilinear", "nearest") for p in _PADDINGS),
 ]
 

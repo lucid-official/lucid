@@ -14,6 +14,7 @@
 #include "Reductions.h"
 
 #include <algorithm>
+#include <complex>
 #include <cstring>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include "../bfunc/Div.h"
 #include "../bfunc/Mul.h"
 #include "../bfunc/Sub.h"
+#include "../complex/Conj.h"
 #include "../gfunc/Gfunc.h"
 #include "../utils/Layout.h"
 #include "../utils/Select.h"
@@ -88,6 +90,21 @@ void prod_axis_int(const void* src, void* dst, const OIR& oir, bool as_bool = fa
     }
 }
 
+template <typename T>
+void prod_axis_complex(const void* src, void* dst, const OIR& oir) {
+    const auto* p = reinterpret_cast<const std::complex<T>*>(src);
+    auto* out = reinterpret_cast<std::complex<T>*>(dst);
+    for (std::size_t o = 0; o < oir.outer; ++o) {
+        for (std::size_t i = 0; i < oir.inner; ++i) {
+            std::complex<T> acc{T(1), T(0)};
+            for (std::size_t r = 0; r < oir.reduce_dim; ++r) {
+                acc *= p[(o * oir.reduce_dim + r) * oir.inner + i];
+            }
+            out[o * oir.inner + i] = acc;
+        }
+    }
+}
+
 // Apply a typed Accelerate kernel (k32 for F32, k64 for F64) along one axis.
 // Allocates the output buffer, then calls the appropriate typed overload.
 template <class Kernel32, class Kernel64>
@@ -117,6 +134,12 @@ AxisResult reduce_one_axis(const CpuStorage& in,
     case Dtype::F64:
         k64(reinterpret_cast<const double*>(in.ptr.get()),
             reinterpret_cast<double*>(r.data.ptr.get()), oir.outer, oir.reduce_dim, oir.inner);
+        break;
+    case Dtype::C64:
+        prod_axis_complex<float>(in.ptr.get(), r.data.ptr.get(), oir);
+        break;
+    case Dtype::C128:
+        prod_axis_complex<double>(in.ptr.get(), r.data.ptr.get(), oir);
         break;
     case Dtype::F16:
     case Dtype::BF16: {
@@ -483,7 +506,10 @@ Storage ProdBackward::grad_formula(const Storage& grad_out) {
         std::make_shared<TensorImpl>(std::move(g_bcast), shape, this->dtype_, this->device_, false);
     auto x = std::make_shared<TensorImpl>(this->saved_inputs_[0], shape, this->dtype_,
                                           this->device_, false);
-    return mul_op(g, prod_of_others(x, this->reduce_axes_, false))->storage();
+    auto others = prod_of_others(x, this->reduce_axes_, false);
+    if (is_complex(this->dtype_))
+        others = conj_op(others);
+    return mul_op(g, others)->storage();
 }
 
 // Graph-mode prod backward.  The products are recomputed from the saved
@@ -491,7 +517,10 @@ Storage ProdBackward::grad_formula(const Storage& grad_out) {
 // graph, and a second derivative taken through it would be silently wrong
 // even while the first stayed right.
 TensorImplPtr ProdBackward::scale_graph_grad(const TensorImplPtr& g) {
-    return mul_op(g, prod_of_others(this->saved_impl_inputs_[0], this->reduce_axes_, true));
+    auto others = prod_of_others(this->saved_impl_inputs_[0], this->reduce_axes_, true);
+    if (is_complex(this->dtype_))
+        others = conj_op(others);
+    return mul_op(g, others);
 }
 
 TensorImplPtr prod_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims) {

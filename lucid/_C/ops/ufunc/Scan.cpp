@@ -44,6 +44,7 @@
 #include "../bfunc/Div.h"
 #include "../bfunc/Mul.h"
 #include "../bfunc/_BinaryOp.h"
+#include "../complex/Conj.h"
 #include "../composite/Logical.h"
 #include "../gfunc/Gfunc.h"
 #include "../utils/Layout.h"
@@ -126,15 +127,19 @@ public:
 //   i < z:  suffix(g * y)_i / x_i                    (x_i is not zero)
 //   i = z:  prod_{j<z} x_j * sum_{k>=z} g_k * r_k    r_k = prod_{z<j<=k} x_j
 //   i > z:  0 — every product holds x_z.  Graph mode (``differentiable``)
-//           writes it as x_z * prod_{j<z} x_j * suffix(g * r)_i / x_i at a
-//           non-zero x_i, so that this formula's own derivative (cumprod's
-//           second) is right at a lone zero; past a second zero it is not.
+//           carries the dependence on x_z across the non-zero positions
+//           between z and the second zero z_2 (``at_between``) and at z_2
+//           itself (``at_second``), so cumprod's second derivative is exact
+//           for any number of zeros per slice.
 // Every piece is an op, so the formula serves eager and graph-mode backward.
 TensorImplPtr cumprod_grad(const TensorImplPtr& g,
-                           const TensorImplPtr& x,
-                           const TensorImplPtr& y,
+                           const TensorImplPtr& x_in,
+                           const TensorImplPtr& y_in,
                            int axis,
                            bool differentiable) {
+    const bool cplx = is_complex(x_in->dtype());
+    const TensorImplPtr x = cplx ? conj_op(x_in) : x_in;
+    const TensorImplPtr y = cplx ? conj_op(y_in) : y_in;
     const Shape& shape = x->shape();
     auto slice_wide = [&](const TensorImplPtr& t) { return broadcast_to_op(t, shape); };
     auto suffix_sum = [axis](const TensorImplPtr& t) {
@@ -159,8 +164,18 @@ TensorImplPtr cumprod_grad(const TensorImplPtr& g,
     auto after = nil;
     if (differentiable) {
         auto x_first = slice_wide(sum_op(where_op(first, x, nil), {axis}, true));
-        after =
-            where_op(zero, nil, mul_op(mul_op(x_first, lead), div_op(suffix_sum(weighted), x_1)));
+        auto between = logical_and_op(logical_not_op(zero), so_far_is(1.0));
+        auto second = logical_and_op(zero, so_far_is(2.0));
+        auto before_second = logical_or_op(before, so_far_is(1.0));
+        auto lead_second =
+            slice_wide(prod_op(where_op(logical_or_op(before, between), x, one), {axis}, true));
+        auto restarted_second =
+            cumprod_op(where_op(logical_or_op(before_second, second), one, x), axis);
+        auto weighted_second = mul_op(where_op(before_second, nil, g), restarted_second);
+        auto at_second =
+            mul_op(mul_op(x_first, lead_second), slice_wide(sum_op(weighted_second, {axis}, true)));
+        auto at_between = mul_op(mul_op(x_first, lead), div_op(suffix_sum(weighted), x_1));
+        after = where_op(second, at_second, where_op(between, at_between, nil));
     }
     return where_op(before, at_before, where_op(first, at_first, after));
 }

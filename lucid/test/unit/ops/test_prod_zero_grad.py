@@ -40,10 +40,6 @@ _X = {
     "spread": [[0.0, 3.0, 0.5, 0.0], [0.0, -2.0, 0.0, 0.5]],
     "all": [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
 }
-# Every row and column holds at most one zero: cumprod's second derivative
-# is exact there, and only there — past a slice's first zero, the derivative
-# of the gradient with respect to that zero is taken as 0.
-_CUMPROD_GRADGRAD = ["none", "lone"]
 
 # (base, index, src) for scatter along dim 1.
 _SCATTER = {
@@ -220,14 +216,30 @@ def test_scatter_prod_gradcheck(include_self: bool, case: str) -> None:
 def _gradgrad_params() -> list[object]:
     out = []
     for op in _REDUCE:
-        cases = _CUMPROD_GRADGRAD if op.startswith("cumprod") else list(_X)
-        out += [pytest.param(op, case, id=f"{op}-{case}") for case in cases]
+        out += [pytest.param(op, case, id=f"{op}-{case}") for case in _X]
     return out
 
 
 @pytest.mark.parametrize(("op", "case"), _gradgrad_params())
 def test_reduction_gradgradcheck(op: str, case: str) -> None:
     assert gradgradcheck(_weighted(_REDUCE[op][0]), [_f64(_X[case])])
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_expanded_zero_cumprod_second_derivative_matches_reference(
+    ref: ModuleType, device: str
+) -> None:
+    ar = ref.tensor([0.0], requires_grad=True)
+    (gr1,) = ref.autograd.grad(ar.expand(3).cumprod(0).sum(), [ar], create_graph=True)
+    (gr2,) = ref.autograd.grad(gr1, [ar])
+
+    al = lucid.tensor([0.0], device=device, requires_grad=True)
+    (gl1,) = lucid.autograd.grad(
+        lucid.cumprod(al.expand(3), 0).sum(), [al], create_graph=True
+    )
+    (gl2,) = lucid.autograd.grad(gl1, [al])
+    assert gl1.tolist() == gr1.tolist() == [1.0]
+    assert gl2.tolist() == gr2.tolist() == [2.0]
 
 
 @pytest.mark.parametrize("device", _DEVICES)

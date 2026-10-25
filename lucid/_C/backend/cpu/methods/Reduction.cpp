@@ -150,101 +150,13 @@ Storage CpuBackend::cumsum(const Storage& a, const Shape& shape, int axis, Dtype
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
         return detail::back_to_f16(cumsum(detail::as_f32(a), shape, axis, Dtype::F32), dt);
-    const auto& cs = std::get<CpuStorage>(a);
-    std::size_t nb = cs.nbytes;
-    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
-    const int ndim = static_cast<int>(shape.size());
-    std::size_t outer = 1, inner = 1;
-    for (int d = 0; d < axis; ++d)
-        outer *= static_cast<std::size_t>(shape[static_cast<std::size_t>(d)]);
-    for (int d = axis + 1; d < ndim; ++d)
-        inner *= static_cast<std::size_t>(shape[static_cast<std::size_t>(d)]);
-    const std::size_t L = static_cast<std::size_t>(shape[static_cast<std::size_t>(axis)]);
-    // An empty scan axis has nothing to seed the running value with; the
-    // loop below read element 0 of every row anyway, past the end of an
-    // empty buffer, and ``cumsum(zeros(0, 6), 0)`` died of SIGSEGV.
-    if (L == 0)
-        return Storage{CpuStorage{ptr, nb, dt}};
-
-    auto run = [&](auto* dst, const auto* src) {
-        using T = std::remove_pointer_t<decltype(dst)>;
-        for (std::size_t o = 0; o < outer; ++o)
-            for (std::size_t j = 0; j < inner; ++j) {
-                T acc = src[(o * L) * inner + j];
-                dst[(o * L) * inner + j] = acc;
-                for (std::size_t k = 1; k < L; ++k) {
-                    acc = acc + src[(o * L + k) * inner + j];
-                    dst[(o * L + k) * inner + j] = acc;
-                }
-            }
-    };
-
-    if (dt == Dtype::F32)
-        run(reinterpret_cast<float*>(ptr.get()), reinterpret_cast<const float*>(cs.ptr.get()));
-    else if (dt == Dtype::F64)
-        run(reinterpret_cast<double*>(ptr.get()), reinterpret_cast<const double*>(cs.ptr.get()));
-    else if (dt == Dtype::I32)
-        run(reinterpret_cast<std::int32_t*>(ptr.get()),
-            reinterpret_cast<const std::int32_t*>(cs.ptr.get()));
-    else if (dt == Dtype::I64)
-        run(reinterpret_cast<std::int64_t*>(ptr.get()),
-            reinterpret_cast<const std::int64_t*>(cs.ptr.get()));
-    else
-        ErrorBuilder("cpu_backend::cumsum").not_implemented("dtype not supported");
-
-    return Storage{CpuStorage{ptr, nb, dt}};
+    return detail::scan_axis(a, shape, axis, dt, "cpu_backend::cumsum", std::plus<>{});
 }
 
 Storage CpuBackend::cumprod(const Storage& a, const Shape& shape, int axis, Dtype dt) {
-    // Accelerate has no half kernels, so the whole family widens at the door,
-    // reuses the float path and rounds once on the way out.  as_f32 /
-    // back_to_f16 key off each storage's own dtype, so index and mask
-    // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
         return detail::back_to_f16(cumprod(detail::as_f32(a), shape, axis, Dtype::F32), dt);
-    const auto& cs = std::get<CpuStorage>(a);
-    std::size_t nb = cs.nbytes;
-    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
-    const int ndim = static_cast<int>(shape.size());
-    std::size_t outer = 1, inner = 1;
-    for (int d = 0; d < axis; ++d)
-        outer *= static_cast<std::size_t>(shape[static_cast<std::size_t>(d)]);
-    for (int d = axis + 1; d < ndim; ++d)
-        inner *= static_cast<std::size_t>(shape[static_cast<std::size_t>(d)]);
-    const std::size_t L = static_cast<std::size_t>(shape[static_cast<std::size_t>(axis)]);
-    // An empty scan axis has nothing to seed the running value with; the
-    // loop below read element 0 of every row anyway, past the end of an
-    // empty buffer, and ``cumsum(zeros(0, 6), 0)`` died of SIGSEGV.
-    if (L == 0)
-        return Storage{CpuStorage{ptr, nb, dt}};
-
-    auto run = [&](auto* dst, const auto* src) {
-        using T = std::remove_pointer_t<decltype(dst)>;
-        for (std::size_t o = 0; o < outer; ++o)
-            for (std::size_t j = 0; j < inner; ++j) {
-                T acc = src[(o * L) * inner + j];
-                dst[(o * L) * inner + j] = acc;
-                for (std::size_t k = 1; k < L; ++k) {
-                    acc = acc * src[(o * L + k) * inner + j];
-                    dst[(o * L + k) * inner + j] = acc;
-                }
-            }
-    };
-
-    if (dt == Dtype::F32)
-        run(reinterpret_cast<float*>(ptr.get()), reinterpret_cast<const float*>(cs.ptr.get()));
-    else if (dt == Dtype::F64)
-        run(reinterpret_cast<double*>(ptr.get()), reinterpret_cast<const double*>(cs.ptr.get()));
-    else if (dt == Dtype::I32)
-        run(reinterpret_cast<std::int32_t*>(ptr.get()),
-            reinterpret_cast<const std::int32_t*>(cs.ptr.get()));
-    else if (dt == Dtype::I64)
-        run(reinterpret_cast<std::int64_t*>(ptr.get()),
-            reinterpret_cast<const std::int64_t*>(cs.ptr.get()));
-    else
-        ErrorBuilder("cpu_backend::cumprod").not_implemented("dtype not supported");
-
-    return Storage{CpuStorage{ptr, nb, dt}};
+    return detail::scan_axis(a, shape, axis, dt, "cpu_backend::cumprod", std::multiplies<>{});
 }
 
 Storage CpuBackend::cummax(const Storage& a, const Shape& shape, int axis, Dtype dt) {
@@ -904,19 +816,22 @@ Storage CpuBackend::reduce_broadcast(const Storage& grad,
 
     // The broadcast's runs, read backwards; see sum_broadcast_runs for
     // why the sums are the same bits the element walk produced.
-    auto run = [&](auto type_tag) {
-        using T = decltype(type_tag);
+    auto run = [&]<typename T>() {
         sum_broadcast_runs(plan, reinterpret_cast<const T*>(gc.ptr.get()),
                            reinterpret_cast<T*>(ptr.get()));
     };
     if (dt == Dtype::F32)
-        run(float{});
+        run.template operator()<float>();
     else if (dt == Dtype::F64)
-        run(double{});
+        run.template operator()<double>();
     else if (dt == Dtype::I32)
-        run(std::int32_t{});
+        run.template operator()<std::int32_t>();
     else if (dt == Dtype::I64)
-        run(std::int64_t{});
+        run.template operator()<std::int64_t>();
+    else if (dt == Dtype::C64)
+        run.template operator()<std::complex<float>>();
+    else if (dt == Dtype::C128)
+        run.template operator()<std::complex<double>>();
     else
         ErrorBuilder("cpu_backend::reduce_broadcast").not_implemented("dtype not supported");
     return Storage{CpuStorage{ptr, nb, dt}};

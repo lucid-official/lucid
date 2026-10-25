@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <bit>
 #include <cmath>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <type_traits>
@@ -17,6 +19,7 @@
 #include <vector>
 
 #include "../../core/Allocator.h"
+#include "../../core/ErrorBuilder.h"
 #include "../../core/Half.h"
 #include "../../core/Shape.h"
 #include "../IBackend.h"
@@ -607,6 +610,65 @@ inline void pow_tile(const T* x, const T* y, T* out, std::size_t n) {
     }
     vpow(x, y, out, n);
     exact_powers(x, y, out, n);
+}
+
+// Inclusive scan along ``axis`` for ``cumsum`` and ``cumprod``.  An empty scan
+// axis returns an empty buffer without reading ``src[0]``.
+template <typename Op>
+inline Storage
+scan_axis(const Storage& a, const Shape& shape, int axis, Dtype dt, const char* op_name, Op op) {
+    const auto& cs = std::get<CpuStorage>(a);
+    const std::size_t nb = cs.nbytes;
+    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+    const std::size_t ax = static_cast<std::size_t>(axis);
+    const std::size_t L = static_cast<std::size_t>(shape[ax]);
+    if (L == 0)
+        return Storage{CpuStorage{ptr, nb, dt}};
+    std::size_t outer = 1, inner = 1;
+    for (std::size_t d = 0; d < shape.size(); ++d) {
+        if (d < ax)
+            outer *= static_cast<std::size_t>(shape[d]);
+        else if (d > ax)
+            inner *= static_cast<std::size_t>(shape[d]);
+    }
+
+    auto step = [&]<typename T>() {
+        auto* dst = reinterpret_cast<T*>(ptr.get());
+        const auto* src = reinterpret_cast<const T*>(cs.ptr.get());
+        for (std::size_t o = 0; o < outer; ++o)
+            for (std::size_t j = 0; j < inner; ++j) {
+                T acc = src[(o * L) * inner + j];
+                dst[(o * L) * inner + j] = acc;
+                for (std::size_t k = 1; k < L; ++k) {
+                    acc = op(acc, src[(o * L + k) * inner + j]);
+                    dst[(o * L + k) * inner + j] = acc;
+                }
+            }
+    };
+
+    switch (dt) {
+    case Dtype::F32:
+        step.template operator()<float>();
+        break;
+    case Dtype::F64:
+        step.template operator()<double>();
+        break;
+    case Dtype::I32:
+        step.template operator()<std::int32_t>();
+        break;
+    case Dtype::I64:
+        step.template operator()<std::int64_t>();
+        break;
+    case Dtype::C64:
+        step.template operator()<std::complex<float>>();
+        break;
+    case Dtype::C128:
+        step.template operator()<std::complex<double>>();
+        break;
+    default:
+        ErrorBuilder(op_name).not_implemented("dtype not supported");
+    }
+    return Storage{CpuStorage{ptr, nb, dt}};
 }
 
 }  // namespace detail

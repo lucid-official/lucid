@@ -69,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mask pow backward at zero and round half std once after sqrt
 - exact integer exp2 and IEEE sign-bit handling in signbit/copysign/atan2 (LCD-579, LCD-545)
 
+- grid_sample half opmath & complex scan (LCD-632, LCD-637)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

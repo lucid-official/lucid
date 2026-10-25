@@ -95,16 +95,21 @@ def test_the_derivative_at_zero_is_exact(device: str) -> None:
     assert x.grad.tolist() == [1.0, 17.0]
 
 
+def test_the_second_derivative_at_zero_is_exact(device: str) -> None:
+    # d^2/dx^2 (1 + x + x^2 + x^3) = 2 + 6x: 2 at 0, 14 at 2 (LCD-637).
+    x = lucid.tensor([0.0, 2.0], device=device, requires_grad=True)
+    (g1,) = lucid.autograd.grad(
+        lucid.linalg.vander(x, N=4).sum(), [x], create_graph=True
+    )
+    (g2,) = lucid.autograd.grad(g1.sum(), [x])
+    assert g1.tolist() == [1.0, 17.0]
+    assert g2.tolist() == [2.0, 14.0]
+
+
 @pytest.mark.parametrize(
     "device",
     [
-        pytest.param(
-            "cpu",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-637: the CPU cumprod has no complex kernel",
-            ),
-        ),
+        "cpu",
         pytest.param(
             "metal",
             marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
@@ -118,6 +123,16 @@ def test_a_complex_input_keeps_its_imaginary_part(device: str) -> None:
     out = lucid.linalg.vander(x)
     assert out.dtype == lucid.complex64
     assert out.tolist() == [[1 + 0j, 1 + 1j], [1 + 0j, 2 + 0j]]
+
+
+@pytest.mark.parametrize("dtype", [lucid.complex64, lucid.complex128])
+def test_cpu_complex_cumsum_and_cumprod_preserve_dtype(dtype: lucid.dtype) -> None:
+    x = lucid.tensor([1 + 2j, 3 - 1j, 0 + 1j], dtype=dtype)
+    assert lucid.cumsum(x, 0).dtype == dtype
+    assert lucid.cumsum(x, 0).tolist() == [1 + 2j, 4 + 1j, 4 + 2j]
+    assert lucid.cumprod(x, 0).dtype == dtype
+    assert lucid.cumprod(x, 0).tolist() == [1 + 2j, 5 + 5j, -5 + 5j]
+    assert lucid.linalg.vander(x, N=3).dtype == dtype
 
 
 @pytest.mark.parity
