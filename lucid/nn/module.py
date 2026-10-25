@@ -33,7 +33,7 @@ from lucid.nn.hooks import (
     RemovableHandle,
 )
 from lucid.nn._module_backward_state import _ModuleBackwardState
-from lucid.nn._tree_version import _TrackedDict, _tree_changed
+from lucid._tree_version import _TrackedDict, _tree_changed
 from lucid._types import _ModuleOutput, _ForwardPreHook, _ForwardHook, _BackwardHook
 
 if TYPE_CHECKING:

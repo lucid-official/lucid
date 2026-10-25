@@ -248,3 +248,50 @@ def test_assignment_matches_the_reference(ref):
     # always matches its tensor, so that one is dropped.
     assert mine[:-1] == theirs[:-1]
     assert theirs[-1] is not None and mine[-1] is None
+
+
+@pytest.mark.parametrize("via_local", [False, True], ids=["direct", "local-handle"])
+def test_setting_data_on_a_gradient_updates_the_owner_slot(device, via_local):
+    p = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
+    (p * 2.0).sum().backward()
+    replacement = lucid.tensor([7.0, 8.0, 9.0], device=device)
+    if via_local:
+        g = p.grad
+        assert g is not None
+        g.data = replacement
+        assert g.tolist() == [7.0, 8.0, 9.0]
+    else:
+        assert p.grad is not None
+        p.grad.data = replacement
+    assert p.grad is not None
+    assert p.grad.tolist() == [7.0, 8.0, 9.0]
+
+    opt = lucid.optim.SGD([p], lr=0.5)
+    opt.step()
+    assert p.tolist() == [-2.5, -2.0, -1.5]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("via_local", [False, True], ids=["direct", "local-handle"])
+def test_gradient_data_assignment_matches_the_reference(ref, via_local):
+    import numpy as np
+
+    def run(lib, tensor_of):
+        p = lib.nn.Parameter(tensor_of(np.array([1.0, 2.0, 3.0])))
+        (p * 2.0).sum().backward()
+        replacement = tensor_of(np.array([7.0, 8.0, 9.0]))
+        if via_local:
+            g = p.grad
+            g.data = replacement
+        else:
+            p.grad.data = replacement
+        opt = lib.optim.SGD([p], lr=0.5)
+        opt.step()
+        return (
+            np.asarray(p.grad.detach().numpy()).tolist(),
+            np.asarray(p.detach().numpy()).tolist(),
+        )
+
+    mine = run(lucid, lambda a: lucid.tensor(a.astype(np.float32)))
+    theirs = run(ref, lambda a: ref.tensor(a.astype(np.float32)))
+    assert mine == theirs

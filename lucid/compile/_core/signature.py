@@ -652,7 +652,7 @@ def _tree_walk(model: object) -> _TreeWalk:
     runs moves it past the version stored, and the next call walks again.
     """
     from lucid.autograd._hooks import _tensor_hook_version
-    from lucid.nn._tree_version import _tree_version
+    from lucid._tree_version import _tree_version
     from lucid.nn.module import Module
 
     version = _tree_version() + _tensor_hook_version()
@@ -1178,7 +1178,7 @@ class ParamFingerprint(_ModuleWrapper):
         tuple of (dtype_str, device_str)
             What :func:`_param_fingerprint` gives for the model now.
         """
-        from lucid.nn._tree_version import _tree_version
+        from lucid._tree_version import _tree_version
 
         version = _tree_version()
         value = self._value
@@ -1381,7 +1381,7 @@ class ParamFingerprint(_ModuleWrapper):
     @override
     def _tensors_replaced(self) -> None:
         """A module of the tree had its parameters or buffers replaced."""
-        from lucid.nn._tree_version import _tree_version
+        from lucid._tree_version import _tree_version
 
         self.invalidate()
         on_replaced = self._on_replaced()

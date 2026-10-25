@@ -93,6 +93,9 @@ _CHANGES: dict[str, _Change] = {
     "parameter-setattr": lambda m, d: setattr(
         m.inp, "weight", nn.Parameter(_values((4, 4), 0.3, d))
     ),
+    "parameter-data": lambda m, d: setattr(
+        m.inp.weight, "data", _values((4, 4), 0.3, d)
+    ),
     "parameter-register_parameter": lambda m, d: m.out.register_parameter(
         "bias", nn.Parameter(_values((4,), 0.9, d))
     ),
@@ -102,6 +105,7 @@ _CHANGES: dict[str, _Change] = {
     "parameter-weight-tying": lambda m, d: setattr(m.out, "weight", m.inp.weight),
     "parameter-assign-load": _assign_load,
     "buffer-setattr": lambda m, d: setattr(m, "shift", _values((4,), -0.6, d)),
+    "buffer-data": lambda m, d: setattr(m.shift, "data", _values((4,), -0.6, d)),
     "buffer-register_buffer": lambda m, d: m.register_buffer(
         "shift", _values((4,), 0.8, d)
     ),
@@ -318,6 +322,9 @@ def _seq(device: str) -> nn.Sequential:
 _SEQ_CHANGES: dict[str, Callable[[nn.Sequential, str], None]] = {
     "parameter-setattr": lambda m, d: setattr(
         m[0], "weight", nn.Parameter(_values((4, 4), 0.3, d))
+    ),
+    "parameter-data": lambda m, d: setattr(
+        m[0].weight, "data", _values((4, 4), 0.3, d)
     ),
     "submodule-with-parameters": lambda m, d: m.__setitem__(2, _linear(7, d)),
     "submodule-without-parameters": lambda m, d: m.__setitem__(1, nn.Sigmoid()),
@@ -702,9 +709,11 @@ def test_a_forward_that_keeps_its_input_is_traced_once(
     compiled = (
         lucid.compile(model)
         if entry == "module"
-        else lucid.compile(model.forward)
-        if entry == "bound-method"
-        else lucid.compile(_storing_function(model, kind, entry))
+        else (
+            lucid.compile(model.forward)
+            if entry == "bound-method"
+            else lucid.compile(_storing_function(model, kind, entry))
+        )
     )
     with lucid.no_grad():
         for k in range(4):
@@ -756,11 +765,6 @@ def test_a_module_reached_less_directly(reach: str, change: str) -> None:
 
 @pytest.mark.usefixtures("inference")
 @_METAL
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-598: p.data = v gives the parameter new storage without "
-    "moving the tree version",
-)
 def test_a_parameter_given_new_storage_through_data() -> None:
     model = _net("metal")
     x, _ = _data("metal")

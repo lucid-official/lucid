@@ -43,7 +43,14 @@ from lucid._dtype import (
     complex128,
 )
 from lucid._device import device as _device_cls, _device_from_engine
-from lucid._dispatch import _check_grad_dtype, _impl_with_grad, _swap_data, _wrap
+from lucid._dispatch import (
+    _check_grad_dtype,
+    _impl_with_grad,
+    _read_grad,
+    _set_grad,
+    _swap_data,
+    _wrap,
+)
 from lucid._factories.creation import (
     zeros as _zeros,
     ones as _ones,
@@ -970,13 +977,8 @@ class Tensor:
         tensor([2., 4., 6.])
         """
         # Prefer graph-mode gradient (set when backward was run with create_graph=True).
-        g_impl = self._impl.grad_as_impl()
-        if g_impl is not None:
-            return Tensor.__new_from_impl__(g_impl)
-        g_impl = self._impl.grad_to_tensor()
-        if g_impl is None:
-            return None
-        return Tensor.__new_from_impl__(g_impl)
+        g_impl = _read_grad(self._impl)
+        return None if g_impl is None else Tensor.__new_from_impl__(g_impl)
 
     @grad.setter
     def grad(self, v: Tensor | None) -> None:
@@ -1019,12 +1021,7 @@ class Tensor:
         >>> x.grad is None
         True
         """
-        if v is None:
-            self._impl.zero_grad()
-        else:
-            from lucid._dispatch import _unwrap
-
-            self._impl.set_grad(_unwrap(v))
+        _set_grad(self._impl, v)
 
     @property
     def grad_fn(self) -> _C_engine.Node | None:

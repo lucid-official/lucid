@@ -1,10 +1,13 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
+import weakref
+
 from lucid._C import engine as _C_engine
 from lucid import _promotion
 from lucid._dtype import dtype, to_engine_dtype, _ENGINE_TO_DTYPE
 from lucid._device import device, _device_from_engine  # noqa: F401
 from lucid._globals import get_default_dtype, get_default_device
+from lucid._tree_version import _tree_changed
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -558,6 +561,28 @@ def _impl_with_grad(
     return impl.clone_with_grad(requires_grad)
 
 
+_GRAD_OWNERS: weakref.WeakKeyDictionary[
+    _C_engine.TensorImpl, weakref.ReferenceType[_C_engine.TensorImpl]
+] = weakref.WeakKeyDictionary()
+
+
+def _read_grad(owner: _C_engine.TensorImpl) -> _C_engine.TensorImpl | None:
+    """Read ``owner``'s ``.grad`` impl and record it as ``owner``'s handle."""
+    grad_impl = owner.grad_as_impl() or owner.grad_to_tensor()
+    if grad_impl is None:
+        return None
+    _GRAD_OWNERS[grad_impl] = weakref.ref(owner)
+    return grad_impl
+
+
+def _set_grad(owner: _C_engine.TensorImpl, v: Tensor | None) -> None:
+    """Assign or clear ``owner``'s accumulated ``.grad`` slot."""
+    if v is None:
+        owner.zero_grad()
+    else:
+        owner.set_grad(_unwrap(v))
+
+
 def _swap_data(
     old: _C_engine.TensorImpl, value: _C_engine.TensorImpl
 ) -> _C_engine.TensorImpl:
@@ -568,7 +593,10 @@ def _swap_data(
     and device — and carries what ``old`` is to autograd: its
     ``requires_grad``, and its gradient while that still fits the new data.
     It has no ``grad_fn``, so the swap records nothing in a graph, and
-    ``value``'s own flag and graph stay with ``value``.
+    ``value``'s own flag and graph stay with ``value``.  When ``old`` is a
+    tensor's current ``.grad`` handle, the owner's gradient slot is updated
+    too (``p.grad.data = value``, LCD-598), and the module tree version moves
+    so a compiled module or step sees the replaced storage.
 
     Raises
     ------
@@ -593,6 +621,16 @@ def _swap_data(
         new.device,
     ):
         new.set_grad(grad)
+    owner_ref = _GRAD_OWNERS.get(old)
+    owner = owner_ref() if owner_ref is not None else None
+    if owner is not None and (
+        owner.grad_as_impl() is old or owner.grad_to_tensor() is old
+    ):
+        owner.set_grad(new)
+        slot = _read_grad(owner)
+        if slot is not None:
+            new = slot
+    _tree_changed()
     return new
 
 

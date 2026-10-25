@@ -81,6 +81,11 @@ _WRITES: dict[str, tuple[Callable[[_Holder], object], Callable[[_Holder], object
     ),
     "delattr a parameter": (_none, lambda m: delattr(m.lin, "bias")),
     "delattr a buffer": (_none, lambda m: delattr(m, "buf")),
+    "parameter .data =": (
+        _none,
+        lambda m: setattr(m.lin.weight, "data", lucid.ones(4, 4)),
+    ),
+    "buffer .data =": (_none, lambda m: setattr(m.buf, "data", lucid.ones(2))),
     "assign load": (_none, _assign_load),
     ".to() a buffer": (_none, lambda m: m.half()),
     "_parameters write": (
