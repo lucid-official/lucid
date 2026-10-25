@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - record training traces in caller's grad mode (LCD-580, LCD-607)
 - move tree version and update grad slot on .data = (LCD-598)
 - untrace Function stand-in aliases and preserve caller leaf state in trace
+- alias CPU Tensor and refuse uncopyable host buffers in from_dlpack
 
 ---
 

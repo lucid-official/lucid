@@ -629,6 +629,39 @@ def from_numpy(ndarray: np.ndarray, /) -> Tensor:
 _DLPACK_METAL = 8
 
 
+def _dlpack_device_kind(ext_tensor: object) -> int | None:
+    dl_device = getattr(ext_tensor, "__dlpack_device__", None)
+    if not callable(dl_device):
+        return None
+    try:
+        kind, _index = dl_device()
+    except (
+        AttributeError,
+        NotImplementedError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
+        return None
+    return kind if isinstance(kind, int) else None
+
+
+def _finish_dlpack_import(
+    out: Tensor, *, device: DeviceLike, copy: bool | None
+) -> Tensor:
+    from lucid._dispatch import _parse_device
+
+    if device is not None:
+        target_dev = _parse_device(device)
+        if target_dev != out._impl.device:
+            if copy is False:
+                raise BufferError(
+                    "from_dlpack: cannot move across devices when copy=False"
+                )
+            return out.to(device=target_dev)
+    return out.clone() if copy else out
+
+
 def from_dlpack(
     ext_tensor: object,
     *,
@@ -664,32 +697,18 @@ def from_dlpack(
         when a copy is required.
     """
     from lucid._dispatch import _parse_device, _wrap
+    from lucid._engine_scope import untraced
 
-    dl_device = getattr(ext_tensor, "__dlpack_device__", None)
-    if callable(dl_device):
-        try:
-            kind, _index = dl_device()
-        except (
-            AttributeError,
-            NotImplementedError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-        ):
-            # A broken producer falls back to numpy.
-            kind = None
-        if kind == _DLPACK_METAL:
-            capsule = ext_tensor.__dlpack__()  # type: ignore[attr-defined]
-            out = _wrap(_C_engine.from_dlpack_metal(capsule))
-            if device is not None:
-                target_dev = _parse_device(device)
-                if target_dev != out._impl.device:
-                    if copy is False:
-                        raise BufferError(
-                            "from_dlpack: cannot move across devices when copy=False"
-                        )
-                    return out.to(device=target_dev)
-            return out.clone() if copy else out
+    if _dlpack_device_kind(ext_tensor) == _DLPACK_METAL:
+        capsule = ext_tensor.__dlpack__()  # type: ignore[attr-defined]
+        out = _wrap(_C_engine.from_dlpack_metal(capsule))
+        return _finish_dlpack_import(out, device=device, copy=copy)
+
+    if isinstance(ext_tensor, Tensor):
+        ext_tensor.numpy()
+        with untraced():
+            alias = _wrap(ext_tensor._impl.data_alias())
+        return _finish_dlpack_import(alias, device=device, copy=copy)
 
     if (
         device is not None
@@ -699,7 +718,11 @@ def from_dlpack(
         raise BufferError("from_dlpack: cannot move across devices when copy=False")
     np = _require_numpy("lucid.from_dlpack")
     arr = np.from_dlpack(ext_tensor)  # type: ignore[attr-defined]
-    return tensor(arr, device=device)
+    if copy is False:
+        raise BufferError(
+            "from_dlpack: cannot avoid a copy when importing an external host buffer"
+        )
+    return tensor(arr, device="cpu" if device is None else device)
 
 
 def to_dlpack(tensor: Tensor) -> object:

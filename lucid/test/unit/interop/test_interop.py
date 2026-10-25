@@ -1,5 +1,7 @@
 """Bridge surface: ``from_numpy`` / ``.numpy()`` / DLPack."""
 
+from types import ModuleType
+
 import numpy as np
 import pytest
 
@@ -104,6 +106,27 @@ class TestDLPackProtocol:
         arr = np.array([10.0, 20.0, 30.0], dtype=np.float32)
         t = lucid.from_dlpack(arr)
         np.testing.assert_array_equal(t.numpy(), [10.0, 20.0, 30.0])
+
+    @pytest.mark.parity
+    def test_from_dlpack_cpu_copy_contract(self, ref: ModuleType) -> None:
+        a = lucid.tensor([1.0, 2.0])
+        b = lucid.from_dlpack(a, copy=False)
+        ra = ref.tensor([1.0, 2.0])
+        rb = ref.from_dlpack(ra, copy=False)
+        a[0] = 99.0
+        ra[0] = 99.0
+        assert b.tolist() == rb.tolist() == [99.0, 2.0]
+
+        c = lucid.from_dlpack(a, copy=True)
+        a[1] = -5.0
+        assert c.tolist() == [99.0, 2.0]
+
+        arr = np.array([3.0, 4.0], dtype=np.float32)
+        with pytest.raises(BufferError, match="without a copy|cannot avoid a copy"):
+            lucid.from_dlpack(arr, copy=False)
+        if metal_available():
+            with pytest.raises(BufferError, match="cannot move across devices"):
+                lucid.from_dlpack(a, device="metal", copy=False)
 
     @pytest.mark.skipif(not metal_available(), reason="needs Metal")
     def test_metal_tensor_reports_metal(self) -> None:
