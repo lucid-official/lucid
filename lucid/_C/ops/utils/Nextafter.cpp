@@ -356,19 +356,15 @@ fma_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in, const TensorImplPtr
     Validator::input(c_in, "fma.c").non_null();
 
     const Dtype dt = a_in->dtype();
-    if (b_in->dtype() != dt)
-        throw DtypeMismatch(std::string(dtype_name(dt)), std::string(dtype_name(b_in->dtype())),
-                            "fma");
-    if (c_in->dtype() != dt)
-        throw DtypeMismatch(std::string(dtype_name(dt)), std::string(dtype_name(c_in->dtype())),
-                            "fma");
+    Validator::pair(a_in, b_in, "fma: a/b").same_dtype();
+    Validator::pair(a_in, c_in, "fma: a/c").same_dtype();
     if (!is_floating_point(dt))
         ErrorBuilder("fma").invalid_argument(
             "dtype must be floating-point (F16, BF16, F32, or F64)");
 
-    auto [a1, b1] = detail::align_binary_devices(a_in, b_in, "fma");
-    auto [b, c] = detail::align_binary_devices(b1, c_in, "fma");
-    auto [a, _] = detail::align_binary_devices(a1, b, "fma");
+    auto [a1, b1] = detail::align_binary_devices(a_in, b_in, "fma: a/b");
+    auto [b, c] = detail::align_binary_devices(b1, c_in, "fma: a/c");
+    auto [a, _] = detail::align_binary_devices(a1, b, "fma: a/b");
 
     const Shape out_shape =
         detail::broadcast_shapes(detail::broadcast_shapes(a->shape(), b->shape()), c->shape());

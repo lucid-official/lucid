@@ -74,10 +74,9 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
                                          int groups) {
     if (!x || !W || !b)
         ErrorBuilder("conv").fail("null input");
-    if (x->device() != W->device() || x->device() != b->device())
-        throw DeviceMismatch(std::string(device_name(x->device())),
-                             std::string(device_name(W->device())), "conv");
     const std::string op(ConvNdBackward<N>::schema_v1.name);
+    Validator::pair(x, W, op + ": x/weight").same_device();
+    Validator::pair(x, b, op + ": x/bias").same_device();
     require_rank(x->shape(), N + 2, op + ": x", channels_first_layout(N, "N", "C_in"));
     require_rank(W->shape(), N + 2, op + ": weight",
                  channels_first_layout(N, "C_out", "C_in/groups"));
@@ -92,11 +91,9 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
     // F16 on GPU where ``mlx::core::conv_general`` accepts native F16
     // and Apple Silicon GPUs run the conv at half throughput → speedup).
     // Without this plumbing, ``with amp.autocast(F16):`` had no effect on
-    // Conv2d — F32 was used regardless.  Must run before the
-    // dtype-match check: under autocast, the surrounding Conv has cast
-    // x to F16 while W / b on the Parameter slots are still F32 — the
-    // pre-AMP strict equality check fired before SchemaGuard could
-    // unify them.
+    // Conv2d — F32 was used regardless.  Under autocast, the surrounding
+    // Conv has cast x to F16 while W / b on the Parameter slots are still
+    // F32; after the cast all three share ``eff_dt``.
     //
     // Use ``astype_op`` (not ``maybe_cast_for_kernel``) so the cast
     // tensors carry an ``AstypeBackward`` grad_fn pointing back to the
@@ -111,9 +108,6 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
     const TensorImplPtr x_eff = astype_op(x, eff_dt);
     const TensorImplPtr W_eff = astype_op(W, eff_dt);
     const TensorImplPtr b_eff = astype_op(b, eff_dt);
-    if (x_eff->dtype() != W_eff->dtype() || x_eff->dtype() != b_eff->dtype())
-        throw DtypeMismatch(std::string(dtype_name(x_eff->dtype())),
-                            std::string(dtype_name(W_eff->dtype())), "conv");
 
     const int B = static_cast<int>(x_eff->shape()[0]);
     const int Cin = static_cast<int>(x_eff->shape()[1]);

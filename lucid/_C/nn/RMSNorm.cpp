@@ -12,17 +12,14 @@
 
 #include <vector>
 
-#include "../autograd/Helpers.h"
 #include "../backend/Dispatcher.h"
-#include "../core/AmpPolicy.h"
 #include "../core/Error.h"
 #include "../core/ErrorBuilder.h"
-#include "../core/GradMode.h"
 #include "../core/OpRegistry.h"
-#include "../core/Profiler.h"
 #include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
+#include "../core/Validate.h"
 #include "../kernel/NaryKernel.h"
 #include "../ops/bfunc/Add.h"
 #include "../ops/bfunc/Mul.h"
@@ -38,11 +35,9 @@ const OpSchema RMSNormBackward::schema_v1{"rms_norm", 1, AmpPolicy::ForceFP32, t
 
 TensorImplPtr
 RMSNormBackward::forward(const TensorImplPtr& x, const TensorImplPtr& gamma, double eps) {
-    if (!x || !gamma)
-        ErrorBuilder("rms_norm").fail("null input");
-    if (x->device() != gamma->device())
-        throw DeviceMismatch(std::string(device_name(x->device())),
-                             std::string(device_name(gamma->device())), "rms_norm");
+    Validator::input(x, "rms_norm.x").non_null();
+    Validator::input(gamma, "rms_norm.weight").non_null();
+    Validator::pair(x, gamma, "rms_norm: x/weight").same_device();
 
     // 3.4+ Phase A.8: AMP plumbing (same as BatchNorm / LayerNorm).
     // schema_v1.amp_policy = ForceFP32 — under autocast(F16) we upcast x
@@ -52,10 +47,6 @@ RMSNormBackward::forward(const TensorImplPtr& x, const TensorImplPtr& gamma, dou
     const Dtype eff_dt = sg.effective_dtype();
     const TensorImplPtr x_eff = astype_op(x, eff_dt);
     const TensorImplPtr gamma_eff = astype_op(gamma, eff_dt);
-
-    if (x_eff->dtype() != gamma_eff->dtype())
-        throw DtypeMismatch(std::string(dtype_name(x_eff->dtype())),
-                            std::string(dtype_name(gamma_eff->dtype())), "rms_norm");
 
     // Validate that gamma's shape matches the trailing dims of x.
     if (gamma_eff->shape().size() > x_eff->shape().size())

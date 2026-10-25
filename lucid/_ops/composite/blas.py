@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 import lucid
+from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
 import lucid.linalg as _la
@@ -336,6 +337,70 @@ def addr(
         return _scaled_add(input, beta, out, alpha)
 
 
+def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
+    return a.device == b.device or (
+        (a.ndim == 0 and a.device.type == "cpu")
+        or (b.ndim == 0 and b.device.type == "cpu")
+    )
+
+
+def _check_ternary_devices(
+    op: str, input: Tensor, tensor1: Tensor, tensor2: Tensor
+) -> None:
+    for name, peer in (("tensor1", tensor1), ("tensor2", tensor2)):
+        if not _can_mix_devices(input, peer):
+            raise _C_engine.DeviceMismatch(
+                f"DeviceMismatch ({op}: input/{name}): "
+                f"expected {input.device.type}, got {peer.device.type}"
+            )
+    if not _can_mix_devices(tensor1, tensor2):
+        raise _C_engine.DeviceMismatch(
+            f"DeviceMismatch ({op}: tensor1/tensor2): "
+            f"expected {tensor1.device.type}, got {tensor2.device.type}"
+        )
+
+
+def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
+    """Linearly interpolate ``input`` and ``end`` by ``weight``."""
+    if not (input.is_floating_point() and end.is_floating_point()):
+        raise _C_engine.NotImplementedError(
+            f"lerp expects floating-point tensors, got {input.dtype} and "
+            f"{end.dtype} — cast them first"
+        )
+    if end.dtype != input.dtype:
+        raise _C_engine.DtypeMismatch(
+            f"DtypeMismatch (lerp: input/end): "
+            f"expected {input.dtype._name}, got {end.dtype._name}"
+        )
+    if not _can_mix_devices(input, end):
+        raise _C_engine.DeviceMismatch(
+            f"DeviceMismatch (lerp: input/end): "
+            f"expected {input.device.type}, got {end.device.type}"
+        )
+    diff = _wrap(_C_engine.sub(_unwrap(end), _unwrap(input)))
+    if isinstance(weight, lucid.Tensor):
+        if weight.dtype != input.dtype:
+            raise _C_engine.DtypeMismatch(
+                f"DtypeMismatch (lerp: input/weight): "
+                f"expected {input.dtype._name}, got {weight.dtype._name}"
+            )
+        if not _can_mix_devices(diff, weight):
+            raise _C_engine.DeviceMismatch(
+                f"DeviceMismatch (lerp: input/weight): "
+                f"expected {diff.device.type}, got {weight.device.type}"
+            )
+        scaled = _wrap(_C_engine.mul(_unwrap(weight), _unwrap(diff)))
+    else:
+        w_impl = _C_engine.full(
+            list(_unwrap(diff).shape),
+            float(weight),
+            _unwrap(diff).dtype,
+            _unwrap(diff).device,
+        )
+        scaled = _wrap(_C_engine.mul(w_impl, _unwrap(diff)))
+    return _wrap(_C_engine.add(_unwrap(input), _unwrap(scaled)))
+
+
 def addcmul(
     input: Tensor,
     tensor1: Tensor,
@@ -393,6 +458,7 @@ def addcmul(
     >>> lucid.addcmul(a, b, c, value=2.0)
     tensor([5., 7., 9.])
     """
+    _check_ternary_devices("addcmul", input, tensor1, tensor2)
     with _autocast_entry(
         "addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)
     ) as (inp, t1, t2):
@@ -452,6 +518,7 @@ def addcdiv(
     """
     from lucid import _promotion
 
+    _check_ternary_devices("addcdiv", input, tensor1, tensor2)
     if _promotion.is_integral(_unwrap(tensor1).dtype) and _promotion.is_integral(
         _unwrap(tensor2).dtype
     ):

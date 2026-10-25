@@ -466,13 +466,16 @@ std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>
 align_where_devices(const TensorImplPtr& cond, const TensorImplPtr& x, const TensorImplPtr& y) {
     if (cond->device() == x->device() && x->device() == y->device())
         return {cond, x, y};
-    for (const auto& t : {cond, x, y}) {
-        if (t->device() == Device::CPU && !t->shape().empty())
-            throw DeviceMismatch(std::string(device_name(Device::CPU)),
-                                 std::string(device_name(Device::GPU)), "where");
-    }
-    return {to_device_op(cond, Device::GPU), to_device_op(x, Device::GPU),
-            to_device_op(y, Device::GPU)};
+    auto lift = [](const TensorImplPtr& t) {
+        return (t->device() == Device::CPU && t->shape().empty()) ? to_device_op(t, Device::GPU)
+                                                                  : t;
+    };
+    auto c_out = lift(cond);
+    auto x_out = lift(x);
+    auto y_out = lift(y);
+    Validator::pair(x_out, y_out, "where: x/y").same_device();
+    Validator::pair(x_out, c_out, "where: x/condition").same_device();
+    return {c_out, x_out, y_out};
 }
 
 }  // namespace
@@ -487,9 +490,7 @@ TensorImplPtr
 where_op(const TensorImplPtr& cond_in, const TensorImplPtr& x_in, const TensorImplPtr& y_in) {
     if (!cond_in || !x_in || !y_in)
         ErrorBuilder("where").fail("null input");
-    if (x_in->dtype() != y_in->dtype())
-        throw DtypeMismatch(std::string(dtype_name(x_in->dtype())),
-                            std::string(dtype_name(y_in->dtype())), "where");
+    Validator::pair(x_in, y_in, "where: x/y").same_dtype();
     const auto [cond, x, y] = align_where_devices(cond_in, x_in, y_in);
     const Dtype dt = x->dtype();
     const Device device = x->device();

@@ -88,12 +88,7 @@ std::array<TensorImplPtr, 3> cast_conv_transpose_operands(const TensorImplPtr& x
                                                           const TensorImplPtr& W,
                                                           const TensorImplPtr& b,
                                                           Dtype eff_dt) {
-    std::array<TensorImplPtr, 3> out{astype_op(x, eff_dt), astype_op(W, eff_dt),
-                                     astype_op(b, eff_dt)};
-    if (out[1]->dtype() != eff_dt || out[2]->dtype() != eff_dt)
-        throw DtypeMismatch(std::string(dtype_name(eff_dt)),
-                            std::string(dtype_name(out[1]->dtype())), "conv_transpose");
-    return out;
+    return {astype_op(x, eff_dt), astype_op(W, eff_dt), astype_op(b, eff_dt)};
 }
 
 template <int N>
@@ -136,9 +131,8 @@ TensorImplPtr ConvTransposeNdBackward<N>::forward(const TensorImplPtr& x,
         ErrorBuilder("conv_transpose").fail("null input");
     const std::string op(ConvTransposeNdBackward<N>::schema_v1.name);
     validate_conv_transpose_params(op, groups, stride, pad, opad, dilation);
-    if (x->device() != W->device() || x->device() != b->device())
-        throw DeviceMismatch(std::string(device_name(x->device())),
-                             std::string(device_name(W->device())), "conv_transpose");
+    Validator::pair(x, W, op + ": x/weight").same_device();
+    Validator::pair(x, b, op + ": x/bias").same_device();
     require_rank(x->shape(), N + 2, op + ": x", channels_first_layout(N, "N", "C_in"));
     require_rank(W->shape(), N + 2, op + ": weight",
                  channels_first_layout(N, "C_in", "C_out/groups"));

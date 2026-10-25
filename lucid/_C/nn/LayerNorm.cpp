@@ -25,6 +25,7 @@
 #include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
+#include "../core/Validate.h"
 #include "../kernel/NaryKernel.h"
 #include "../ops/bfunc/Add.h"
 #include "../ops/bfunc/Mul.h"
@@ -79,21 +80,19 @@ TensorImplPtr LayerNormBackward::forward(const TensorImplPtr& x,
                                          double eps) {
     if (!x || !gamma || !beta)
         ErrorBuilder("layer_norm").fail("null input");
-    if (x->device() != gamma->device() || x->device() != beta->device())
-        throw DeviceMismatch(std::string(device_name(x->device())),
-                             std::string(device_name(gamma->device())), "layer_norm");
+    Validator::pair(x, gamma, "layer_norm: x/weight").same_device();
+    Validator::pair(x, beta, "layer_norm: x/bias").same_device();
 
     // 3.4+ AMP plumbing: schema_v1.amp_policy = ForceFP32.  Under
     // ``AutocastGuard(F16)`` SchemaGuard returns ``F32`` regardless of x's
     // input dtype — LayerNorm's per-sample mean/var reductions are
     // numerically sensitive and running them in F16 risks catastrophic
-    // cancellation on the variance.  The cast must happen before the
-    // strict ``x->dtype() == gamma->dtype()`` check below: under autocast
-    // the preceding op (typically Embedding with ``AmpPolicy::Promote``)
-    // emits F16 while ``gamma``/``beta`` Parameter slots are still F32.
-    // After the cast all three operands share ``eff_dt`` and the dtype-
-    // match invariant holds.  Outside an autocast scope this is a no-op
-    // (``astype_op`` returns the input unchanged when dtypes already match).
+    // cancellation on the variance.  Under autocast the preceding op
+    // (typically Embedding with ``AmpPolicy::Promote``) emits F16 while
+    // ``gamma``/``beta`` Parameter slots are still F32; after the cast all
+    // three operands share ``eff_dt``.  Outside an autocast scope this is a
+    // no-op (``astype_op`` returns the input unchanged when dtypes already
+    // match).
     //
     // ``astype_op`` (not ``maybe_cast_for_kernel``) is used so the cast
     // tensors carry an ``AstypeBackward`` grad_fn — without that the F32-
@@ -105,9 +104,6 @@ TensorImplPtr LayerNormBackward::forward(const TensorImplPtr& x,
     const TensorImplPtr gamma_eff = astype_op(gamma, eff_dt);
     const TensorImplPtr beta_eff = astype_op(beta, eff_dt);
 
-    if (x_eff->dtype() != gamma_eff->dtype() || x_eff->dtype() != beta_eff->dtype())
-        throw DtypeMismatch(std::string(dtype_name(x_eff->dtype())),
-                            std::string(dtype_name(gamma_eff->dtype())), "layer_norm");
     // The kernel reads N entries of β, N being γ's element count.
     if (gamma_eff->shape() != beta_eff->shape())
         throw ShapeMismatch(gamma_eff->shape(), beta_eff->shape(),

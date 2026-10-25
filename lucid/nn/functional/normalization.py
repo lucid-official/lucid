@@ -454,8 +454,21 @@ def _check_instance_norm_input(
     use_input_stats: bool,
     running_mean: Tensor | None,
     running_var: Tensor | None,
+    weight: Tensor | None = None,
+    bias: Tensor | None = None,
 ) -> None:
     """Refuse an input instance normalisation has no statistics for."""
+    for name, peer in (
+        ("running_mean", running_mean),
+        ("running_var", running_var),
+        ("weight", weight),
+        ("bias", bias),
+    ):
+        if peer is not None and peer.device != x.device:
+            raise _C_engine.DeviceMismatch(
+                f"DeviceMismatch (instance_norm: x/{name}): "
+                f"expected {x.device.type}, got {peer.device.type}"
+            )
     if not use_input_stats and (running_mean is None or running_var is None):
         raise RuntimeError(
             "Expected running_mean and running_var to be defined when use_input_stats is false"
@@ -552,18 +565,19 @@ def instance_norm(
     >>> y.shape
     (4, 3, 64, 64)
     """
-    _check_instance_norm_input(input, use_input_stats, running_mean, running_var)
+    _check_instance_norm_input(
+        input, use_input_stats, running_mean, running_var, weight, bias
+    )
     amp_was_active = _C_engine.amp_is_active(_unwrap(input).device)
     with _autocast_entry("instance_norm", _unwrap(input)) as (xi,):
         input = _wrap(xi)
         weight = _cast_if_amp(weight, input.dtype, amp_was_active)
         bias = _cast_if_amp(bias, input.dtype, amp_was_active)
-        spatial_dims: list[int] = list(range(2, input.ndim))
-        bcast_shape: list[int] = [1, int(input.shape[1])] + [1] * (input.ndim - 2)
-
+        spatial_dims = list(range(2, input.ndim))
+        bcast_shape = [1, int(input.shape[1])] + [1] * (input.ndim - 2)
         if use_input_stats or running_mean is None or running_var is None:
-            mean: Tensor = input.mean(spatial_dims, keepdim=True)
-            var: Tensor = input.var(spatial_dims, keepdim=True, correction=0)
+            mean = input.mean(spatial_dims, keepdim=True)
+            var = input.var(spatial_dims, keepdim=True, correction=0)
             if running_mean is not None and running_var is not None and momentum != 0.0:
                 _fold_instance_stats(input, running_mean, running_var, momentum)
         else:
@@ -571,15 +585,11 @@ def instance_norm(
             rv = _cast_if_amp(running_var, input.dtype, amp_was_active)
             assert rm is not None and rv is not None
             mean, var = rm.reshape(bcast_shape), rv.reshape(bcast_shape)
-
         from lucid._factories.creation import full as _full_factory
 
-        eps_scalar: Tensor = _full_factory(
-            (), eps, device=input.device, dtype=var.dtype
-        )
-        y: Tensor = (input - mean) / (var + eps_scalar).sqrt()
-        if weight is not None:
-            y = y * weight.reshape(bcast_shape)
+        eps_t = _full_factory((), eps, device=input.device, dtype=var.dtype)
+        y = (input - mean) / (var + eps_t).sqrt()
+        y = y * weight.reshape(bcast_shape) if weight is not None else y
         return y + bias.reshape(bcast_shape) if bias is not None else y
 
 

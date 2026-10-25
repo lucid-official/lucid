@@ -283,6 +283,8 @@ TensorImplPtr embedding_bag_op(const TensorImplPtr& weight,
     Validator::input(weight, "embedding_bag.weight").non_null();
     Validator::input(indices, "embedding_bag.indices").non_null();
     Validator::input(offsets, "embedding_bag.offsets").non_null();
+    Validator::pair(weight, indices, "embedding_bag: weight/indices").same_device();
+    Validator::pair(weight, offsets, "embedding_bag: weight/offsets").same_device();
 
     // ``embedding`` has always checked this; ``embedding_bag`` did not, and
     // read ``shape()[1]`` off a rank-1 table anyway.  What came back sized

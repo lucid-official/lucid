@@ -3693,23 +3693,9 @@ class Tensor:
         >>> a.lerp(b, 0.5).tolist()
         [5.0, 10.0, 15.0]
         """
-        if not (self.is_floating_point() and end.is_floating_point()):
-            raise _C_engine.NotImplementedError(
-                f"lerp expects floating-point tensors, got {self.dtype} and "
-                f"{end.dtype} — cast them first"
-            )
-        diff = Tensor.__new_from_impl__(_C_engine.sub(end._impl, self._impl))
-        if isinstance(weight, Tensor):
-            scaled = Tensor.__new_from_impl__(_C_engine.mul(weight._impl, diff._impl))
-        else:
-            w_impl = _C_engine.full(
-                list(diff._impl.shape),
-                float(weight),
-                diff._impl.dtype,
-                diff._impl.device,
-            )
-            scaled = Tensor.__new_from_impl__(_C_engine.mul(w_impl, diff._impl))
-        return Tensor.__new_from_impl__(_C_engine.add(self._impl, scaled._impl))
+        from lucid._ops.composite.blas import _lerp
+
+        return _lerp(self, end, weight)
 
     def where(self, condition: Tensor, other: Tensor | float) -> Tensor:
         r"""Element-wise piecewise selection between ``self`` and ``other``.

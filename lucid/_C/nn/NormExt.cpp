@@ -62,6 +62,10 @@ TensorImplPtr BatchNormEvalBackward::forward(const TensorImplPtr& x,
                                              double eps) {
     if (!x || !mean || !var || !gamma || !beta)
         ErrorBuilder("batch_norm_eval").fail("null input");
+    Validator::pair(x, mean, "batch_norm_eval: x/running_mean").same_device();
+    Validator::pair(x, var, "batch_norm_eval: x/running_var").same_device();
+    Validator::pair(x, gamma, "batch_norm_eval: x/weight").same_device();
+    Validator::pair(x, beta, "batch_norm_eval: x/bias").same_device();
     require_min_rank(x->shape(), 2, "batch_norm_eval: x", "(N, C, *)");
 
     const int C = static_cast<int>(x->shape()[1]);
@@ -335,8 +339,8 @@ TensorImplPtr GlobalResponseNormBackward::forward(const TensorImplPtr& x,
     if (!x || !gamma || !beta)
         ErrorBuilder("global_response_norm").fail("null input");
     // The kernels read gamma and beta in x's dtype.
-    Validator::pair(x, gamma, "global_response_norm").same_device().same_dtype();
-    Validator::pair(x, beta, "global_response_norm").same_device().same_dtype();
+    Validator::pair(x, gamma, "global_response_norm: x/weight").same_device().same_dtype();
+    Validator::pair(x, beta, "global_response_norm: x/bias").same_device().same_dtype();
     require_rank(x->shape(), 4, "global_response_norm: x", "(N, C, H, W)");
     const int C = static_cast<int>(x->shape()[1]);
     if (gamma->numel() != static_cast<std::size_t>(C) ||

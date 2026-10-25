@@ -15,14 +15,10 @@
 #include <string>
 #include <vector>
 
-#include "../autograd/Helpers.h"
 #include "../backend/Dispatcher.h"
-#include "../core/AmpPolicy.h"
 #include "../core/Error.h"
 #include "../core/ErrorBuilder.h"
-#include "../core/GradMode.h"
 #include "../core/OpRegistry.h"
-#include "../core/Profiler.h"
 #include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
@@ -31,7 +27,6 @@
 #include "../ops/bfunc/Add.h"
 #include "../ops/bfunc/Mul.h"
 #include "../ops/bfunc/Sub.h"
-#include "../ops/bfunc/_BinaryOp.h"
 #include "../ops/gfunc/Gfunc.h"
 #include "../ops/ufunc/Astype.h"
 #include "../ops/ufunc/Exponential.h"
@@ -49,9 +44,8 @@ TensorImplPtr GroupNormBackward::forward(const TensorImplPtr& x,
                                          double eps) {
     if (!x || !gamma || !beta)
         ErrorBuilder("group_norm").fail("null input");
-    if (x->device() != gamma->device() || x->device() != beta->device())
-        throw DeviceMismatch(std::string(device_name(x->device())),
-                             std::string(device_name(gamma->device())), "group_norm");
+    Validator::pair(x, gamma, "group_norm: x/weight").same_device();
+    Validator::pair(x, beta, "group_norm: x/bias").same_device();
 
     // 3.4+ Phase A.8: AMP plumbing (same as BatchNorm / LayerNorm / RMSNorm).
     // schema_v1.amp_policy = ForceFP32 — cast x / γ / β to F32 under autocast(F16).
@@ -61,9 +55,6 @@ TensorImplPtr GroupNormBackward::forward(const TensorImplPtr& x,
     const TensorImplPtr gamma_eff = astype_op(gamma, eff_dt);
     const TensorImplPtr beta_eff = astype_op(beta, eff_dt);
 
-    if (x_eff->dtype() != gamma_eff->dtype() || x_eff->dtype() != beta_eff->dtype())
-        throw DtypeMismatch(std::string(dtype_name(x_eff->dtype())),
-                            std::string(dtype_name(gamma_eff->dtype())), "group_norm");
     require_min_rank(x_eff->shape(), 2, "group_norm: x", "(N, C, *)");
     const int B = static_cast<int>(x_eff->shape()[0]);
     const int C = static_cast<int>(x_eff->shape()[1]);

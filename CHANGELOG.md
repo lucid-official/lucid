@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - import Tensor at runtime in from_dlpack
 - run VJPs in forward compute dtype and commit half casts
 - support float16 and bfloat16 across diffeq kernels
+- name offending operand pair on multi-tensor mismatches (LCD-585)
 
 ---
 

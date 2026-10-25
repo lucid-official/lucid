@@ -119,8 +119,8 @@ lucid::TensorImplPtr fused_linear_forward(const char* name,
         .ndim_at_least(1);
     Validator::input(w, op + ".weight").non_null().ndim(2);
     Validator::input(b, op + ".bias").non_null().ndim(1);
-    Validator::pair(x, w, op).same_device().same_dtype();
-    Validator::pair(x, b, op).same_device().same_dtype();
+    Validator::pair(x, w, op + ": x/weight").same_device().same_dtype();
+    Validator::pair(x, b, op + ": x/bias").same_device().same_dtype();
     const auto& xs = x->shape();
     const auto& ws = w->shape();
     if (ws[1] != xs.back())

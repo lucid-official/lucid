@@ -133,16 +133,10 @@ void require_bilinear_operands(const TensorImplPtr& x1,
                                const TensorImplPtr& x2,
                                const TensorImplPtr& weight,
                                const TensorImplPtr& bias) {
-    for (const auto* t : {&x2, &weight, &bias}) {
-        if (!*t)
-            continue;
-        if ((*t)->dtype() != x1->dtype())
-            throw DtypeMismatch(std::string(dtype_name(x1->dtype())),
-                                std::string(dtype_name((*t)->dtype())), "bilinear_layer");
-        if ((*t)->device() != x1->device())
-            throw DeviceMismatch(std::string(device_name(x1->device())),
-                                 std::string(device_name((*t)->device())), "bilinear_layer");
-    }
+    Validator::pair(x1, x2, "bilinear_layer: x1/x2").same_device().same_dtype();
+    Validator::pair(x1, weight, "bilinear_layer: x1/weight").same_device().same_dtype();
+    if (bias)
+        Validator::pair(x1, bias, "bilinear_layer: x1/bias").same_device().same_dtype();
 }
 
 }  // namespace

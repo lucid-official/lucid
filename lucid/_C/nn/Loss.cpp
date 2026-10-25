@@ -149,8 +149,8 @@ TensorImplPtr BCELossBackward::forward(const TensorImplPtr& input,
             .fail("input/target/weight required (pass ones for weight if not used)");
     // The kernels read every operand in the input's dtype; a mismatched one
     // was read as such — a float16 target as float32 bytes, say.
-    Validator::pair(input, target, "bce_loss").same_device().same_dtype();
-    Validator::pair(input, weight, "bce_loss").same_device().same_dtype();
+    Validator::pair(input, target, "bce_loss: input/target").same_device().same_dtype();
+    Validator::pair(input, weight, "bce_loss: input/weight").same_device().same_dtype();
     if (input->shape() != target->shape())
         throw ShapeMismatch(input->shape(), target->shape(),
                             "bce_loss: input/target shape mismatch");
@@ -204,8 +204,11 @@ TensorImplPtr BCEWithLogitsBackward::forward(const TensorImplPtr& input,
                                              Reduction reduction) {
     if (!input || !target || !weight || !pos_weight)
         ErrorBuilder("bce_with_logits").fail("input/target/weight/pos_weight required");
-    for (const auto* other : {&target, &weight, &pos_weight})
-        Validator::pair(input, *other, "bce_with_logits").same_device().same_dtype();
+    Validator::pair(input, target, "bce_with_logits: input/target").same_device().same_dtype();
+    Validator::pair(input, weight, "bce_with_logits: input/weight").same_device().same_dtype();
+    Validator::pair(input, pos_weight, "bce_with_logits: input/pos_weight")
+        .same_device()
+        .same_dtype();
     if (input->shape() != target->shape())
         throw ShapeMismatch(input->shape(), target->shape(),
                             "bce_with_logits: input/target shape mismatch");

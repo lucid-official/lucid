@@ -66,11 +66,9 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
     Validator::input(x, "linear.x").non_null();
     Validator::input(W, "linear.W").non_null().ndim(2);
     Validator::input(b, "linear.b").non_null().ndim(1);
-    // Device check first — AMP cast doesn't change device.  Dtype check
-    // is deferred until after the AMP cast (operands match by
-    // construction at eff_dt).
-    Validator::pair(x, W, "linear").same_device();
-    Validator::pair(x, b, "linear").same_device();
+    // Device check first — AMP cast doesn't change device.
+    Validator::pair(x, W, "linear: x/weight").same_device();
+    Validator::pair(x, b, "linear: x/bias").same_device();
 
     // 3.3 AMP plumbing: schema_v1.amp_policy == Promote.  Under an
     // ``AutocastGuard(F16)`` scope, SchemaGuard resolves ``eff_dt`` to the
@@ -78,10 +76,10 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
     // GPU).  All three operands are cast to ``eff_dt`` before the matmul
     // so MLX's conv/matmul kernels can take their native F16 fast path —
     // previously the autocast scope was completely ignored by Linear, so
-    // F32 was used even inside ``with amp.autocast(F16):``.  The cast
-    // must precede the dtype-match validator: under autocast, the
-    // surrounding op has cast x to F16 while W / b on the Parameter
-    // slots are still F32.  After the cast all three share ``eff_dt``.
+    // F32 was used even inside ``with amp.autocast(F16):``.  Under
+    // autocast, the surrounding op has cast x to F16 while W / b on the
+    // Parameter slots are still F32; after the cast all three share
+    // ``eff_dt``.
     //
     // ``astype_op`` (not ``maybe_cast_for_kernel``) is used because it
     // wires an ``AstypeBackward`` node when the input has requires_grad.
@@ -95,8 +93,6 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
     const TensorImplPtr x_eff = astype_op(x, eff_dt);
     const TensorImplPtr W_eff = astype_op(W, eff_dt);
     const TensorImplPtr b_eff = astype_op(b, eff_dt);
-    Validator::pair(x_eff, W_eff, "linear").same_dtype();
-    Validator::pair(x_eff, b_eff, "linear").same_dtype();
 
     const auto fx = flatten_x(x_eff->shape());
     const std::size_t M = fx.M;
