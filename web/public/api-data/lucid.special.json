@@ -3,7 +3,7 @@
   "name": "special",
   "path": "lucid.special",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1",
   "members": [
     {
       "name": "gammainc",
@@ -11,7 +11,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gammainc(input: Tensor, other: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/_ops/composite/_gamma.py#L664",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/_ops/composite/_gamma.py#L664",
       "subcategory": "gamma",
       "summary": "Regularized lower incomplete gamma function $P(a, x)$.",
       "extended": "$$\nP(a, x) = \\frac{1}{\\Gamma(a)} \\int_0^x t^{a-1} e^{-t}\\, dt\n$$\n\nThe CDF of a `Gamma(a, 1)` variable at `x` — what\n`lucid.distributions.Gamma.cdf` evaluates.",
@@ -55,7 +55,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gammaincc(input: Tensor, other: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/_ops/composite/_gamma.py#L716",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/_ops/composite/_gamma.py#L716",
       "subcategory": "gamma",
       "summary": "Regularized upper incomplete gamma function $Q(a, x)$.",
       "extended": "$$\nQ(a, x) = \\frac{1}{\\Gamma(a)} \\int_x^\\infty t^{a-1} e^{-t}\\, dt\n        = 1 - P(a, x)\n$$\n\nEvaluated directly rather than as `1 - gammainc`, so a small upper\ntail keeps its relative precision.",
@@ -98,22 +98,22 @@
       "path": "lucid._ops.composite._zeta.zeta",
       "kind": "function",
       "labels": [],
-      "signature": "zeta(input: Tensor, other: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/_ops/composite/_zeta.py#L15",
+      "signature": "zeta(input: TensorOrScalar, other: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/_ops/composite/_zeta.py#L16",
       "subcategory": "zeta",
       "summary": "Hurwitz zeta function $\\zeta(x, q)$.",
       "extended": "Computes the Hurwitz zeta function, a two-argument generalisation\nof the Riemann zeta that arises in moment-generating functions of\ndiscrete distributions, in expansions of polygamma functions, and\nas a regulariser in analytic number theory.",
       "parameters": [
         {
           "name": "input",
-          "annotation": "Tensor",
-          "description": "Exponent; must satisfy $\\Re(x) > 1$ for the series to\nconverge.  Any floating-point dtype.",
+          "annotation": "Tensor | Scalar",
+          "description": "Exponent; must satisfy $\\Re(x) > 1$ for the series to\nconverge.  Any real dtype.",
           "default": null
         },
         {
           "name": "other",
-          "annotation": "Tensor",
-          "description": "Shift parameter; broadcast-compatible with `input`.  The\nnon-positive integers are poles.",
+          "annotation": "Tensor | Scalar",
+          "description": "Shift parameter; broadcast-compatible with `input`.  The\nnon-positive integers are poles.  Either operand may be a Python\nnumber, which follows the other's device and dtype; not both.",
           "default": null
         }
       ],
@@ -123,10 +123,478 @@
       },
       "raises": [],
       "examples": [
-        ">>> import lucid\n>>> from lucid.special import zeta\n>>> x = lucid.tensor([2.0, 3.0])\n>>> q = lucid.tensor([1.0, 1.0])\n>>> zeta(x, q)\ntensor([1.645, 1.202])"
+        ">>> import lucid\n>>> from lucid.special import zeta\n>>> x = lucid.tensor([2.0, 3.0])\n>>> q = lucid.tensor([1.0, 1.0])\n>>> zeta(x, q)\ntensor([1.645, 1.202])\n>>> zeta(x, 1.0)\ntensor([1.645, 1.202])"
       ],
       "notes": [
         "Series definition:\n\n\n\n$$\n\\zeta(x, q) = \\sum_{k=0}^\\infty \\frac{1}{(k + q)^x}.\n$$\n\nThe implementation accumulates an explicit prefix of 12 terms and\ncloses the tail with the Euler–Maclaurin correction\n\n\n\n$$\n\\sum_{k=N}^\\infty (k + q)^{-x}\n    \\approx \\frac{a^{1-x}}{x - 1}\n          + \\frac{a^{-x}}{2}\n          + \\sum_j \\frac{B_{2j}}{(2j)!}\n            \\prod_{i=0}^{2j-2}(x + i)\\, a^{-x-2j+1},\n$$\n\nwhere $a = q + N$ and the $B_{2j}$ are Bernoulli\nnumbers; that is accurate to float64 rounding for $x > 1$\nand $q > 0$.  A negative non-integer `other` is real only for\nan integer `input` and is reduced to positive arguments; otherwise it\nis NaN.  The non-positive integers `other` are poles (`+inf`),\n`input = 1` is `+inf` and `input < 1` is NaN.  The Riemann zeta is the\nspecial case $\\zeta(x) = \\zeta(x, 1)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "chebyshev_polynomial_t",
+      "path": "lucid.special._polynomials.chebyshev_polynomial_t",
+      "kind": "function",
+      "labels": [],
+      "signature": "chebyshev_polynomial_t(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L110",
+      "subcategory": "polynomials",
+      "summary": "Chebyshev polynomial of the first kind, $T_n(x)$.",
+      "extended": "The Chebyshev T polynomials are orthogonal on $[-1, 1]$ with\nweight $1/\\sqrt{1 - x^2}$ and underlie spectral methods,\nminimax polynomial approximation, and Clenshaw-Curtis quadrature.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $T_n$ is evaluated, of any real dtype.  Customarily on\n$[-1, 1]$ but defined for all real `x`.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $T_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$T_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_t\n>>> chebyshev_polynomial_t(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-1., -0., -1., 1.])"
+      ],
+      "notes": [
+        "Defined by $T_n(\\cos\\theta) = \\cos(n\\theta)$ and built by the\nthree-term recurrence\n\n\n\n$$\nT_0(x) = 1, \\quad T_1(x) = x, \\quad\nT_{k+1}(x) = 2x\\, T_k(x) - T_{k-1}(x).\n$$\n\nOn $[-1, 1]$, $|T_n(x)| \\le 1$; the extrema lie at the\nChebyshev nodes $\\cos(j\\pi/n)$ for $j = 0,\\ldots,n$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "chebyshev_polynomial_u",
+      "path": "lucid.special._polynomials.chebyshev_polynomial_u",
+      "kind": "function",
+      "labels": [],
+      "signature": "chebyshev_polynomial_u(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L154",
+      "subcategory": "polynomials",
+      "summary": "Chebyshev polynomial of the second kind, $U_n(x)$.",
+      "extended": "The U polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{1 - x^2}$.  They appear naturally as the derivative of\nthe T polynomials (up to a normalisation) and in Gauss-Chebyshev\nquadrature of the second kind.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $U_n$ is evaluated, of any real dtype.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $U_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$U_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_u\n>>> chebyshev_polynomial_u(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-4., -0., -1., 4.])"
+      ],
+      "notes": [
+        "Defined by $U_n(\\cos\\theta) = \\sin((n+1)\\theta)/\\sin\\theta$\nand obeying\n\n\n\n$$\nU_0(x) = 1, \\quad U_1(x) = 2x, \\quad\nU_{k+1}(x) = 2x\\, U_k(x) - U_{k-1}(x).\n$$\n\nLinked to T by $T_n'(x) = n\\, U_{n-1}(x)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "chebyshev_polynomial_v",
+      "path": "lucid.special._polynomials.chebyshev_polynomial_v",
+      "kind": "function",
+      "labels": [],
+      "signature": "chebyshev_polynomial_v(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L197",
+      "subcategory": "polynomials",
+      "summary": "Chebyshev polynomial of the third kind, $V_n(x)$.",
+      "extended": "The V polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{(1 + x)/(1 - x)}$ and arise in problems with one\nDirichlet and one Neumann boundary condition along the interval.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $V_n$ is evaluated, of any real dtype.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $V_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$V_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_v\n>>> chebyshev_polynomial_v(lucid.tensor([-1.0, 0.0, 1.0]), n=2)\ntensor([5., -1., 1.])"
+      ],
+      "notes": [
+        "Half-angle definition\n\n\n\n$$\nV_n(\\cos\\theta) = \\frac{\\cos((n + \\tfrac{1}{2})\\theta)}\n                        {\\cos(\\theta/2)},\n$$\n\nwith the recurrence\n\n\n\n$$\nV_0(x) = 1, \\quad V_1(x) = 2x - 1, \\quad\nV_{k+1}(x) = 2x\\, V_k(x) - V_{k-1}(x).\n$$"
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "chebyshev_polynomial_w",
+      "path": "lucid.special._polynomials.chebyshev_polynomial_w",
+      "kind": "function",
+      "labels": [],
+      "signature": "chebyshev_polynomial_w(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L245",
+      "subcategory": "polynomials",
+      "summary": "Chebyshev polynomial of the fourth kind, $W_n(x)$.",
+      "extended": "The W polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{(1 - x)/(1 + x)}$ — the mirror image of the V family —\nand partner with V under the substitution $x \\mapsto -x$.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $W_n$ is evaluated, of any real dtype.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $W_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$W_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_w\n>>> chebyshev_polynomial_w(lucid.tensor([-1.0, 0.0, 1.0]), n=2)\ntensor([1., -1., 5.])"
+      ],
+      "notes": [
+        "Half-angle definition\n\n\n\n$$\nW_n(\\cos\\theta) = \\frac{\\sin((n + \\tfrac{1}{2})\\theta)}\n                        {\\sin(\\theta/2)},\n$$\n\nwith the recurrence\n\n\n\n$$\nW_0(x) = 1, \\quad W_1(x) = 2x + 1, \\quad\nW_{k+1}(x) = 2x\\, W_k(x) - W_{k-1}(x).\n$$\n\nSymmetry relation: $W_n(-x) = (-1)^n V_n(x)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "shifted_chebyshev_polynomial_t",
+      "path": "lucid.special._polynomials.shifted_chebyshev_polynomial_t",
+      "kind": "function",
+      "labels": [],
+      "signature": "shifted_chebyshev_polynomial_t(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L295",
+      "subcategory": "polynomials",
+      "summary": "Shifted Chebyshev T polynomial $T^*_n(x)$ on $[0, 1]$.",
+      "extended": "Maps the standard Chebyshev T family from $[-1, 1]$ onto the\nunit interval $[0, 1]$ via the linear substitution\n$x \\mapsto 2x - 1$.  Useful when the natural domain of an\napproximation problem is $[0, 1]$.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $T^*_n$ is evaluated, of any real dtype.  Customarily on the\nshifted domain $[0, 1]$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $T^*_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$T^*_n(x) = T_n(2x - 1)$, element-wise, broadcast over `x` and\n`n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_t\n>>> shifted_chebyshev_polynomial_t(lucid.tensor([0.0, 0.5, 1.0]), n=2)\ntensor([1., -1., 1.])"
+      ],
+      "notes": [
+        "Definition: $T^*_n(x) = T_n(2x - 1)$.  Inherits orthogonality\non $[0, 1]$ with weight $1/\\sqrt{x - x^2}$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "shifted_chebyshev_polynomial_u",
+      "path": "lucid.special._polynomials.shifted_chebyshev_polynomial_u",
+      "kind": "function",
+      "labels": [],
+      "signature": "shifted_chebyshev_polynomial_u(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L334",
+      "subcategory": "polynomials",
+      "summary": "Shifted Chebyshev U polynomial $U^*_n(x)$ on $[0, 1]$.",
+      "extended": "Standard Chebyshev U polynomials shifted from $[-1, 1]$ onto\nthe unit interval by $x \\mapsto 2x - 1$.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $U^*_n$ is evaluated, of any real dtype.  Customarily on\n$[0, 1]$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $U^*_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$U^*_n(x) = U_n(2x - 1)$, element-wise, broadcast over `x` and\n`n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_u\n>>> shifted_chebyshev_polynomial_u(lucid.tensor([0.0, 0.5, 1.0]), n=2)\ntensor([3., -1., 3.])"
+      ],
+      "notes": [
+        "$U^*_n(x) = U_n(2x - 1)$.  Orthogonal on $[0, 1]$ with\nweight $\\sqrt{x - x^2}$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "shifted_chebyshev_polynomial_v",
+      "path": "lucid.special._polynomials.shifted_chebyshev_polynomial_v",
+      "kind": "function",
+      "labels": [],
+      "signature": "shifted_chebyshev_polynomial_v(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L371",
+      "subcategory": "polynomials",
+      "summary": "Shifted Chebyshev V polynomial $V^*_n(x)$ on $[0, 1]$.",
+      "extended": "Chebyshev V polynomials of the third kind composed with\n$x \\mapsto 2x - 1$, yielding a basis orthogonal on\n$[0, 1]$.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $V^*_n$ is evaluated, of any real dtype.  Customarily on\n$[0, 1]$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $V^*_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$V^*_n(x) = V_n(2x - 1)$, element-wise, broadcast over `x` and\n`n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_v\n>>> shifted_chebyshev_polynomial_v(lucid.tensor([0.0, 1.0]), n=1)\ntensor([-3., 1.])"
+      ],
+      "notes": [
+        "$V^*_n(x) = V_n(2x - 1)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "shifted_chebyshev_polynomial_w",
+      "path": "lucid.special._polynomials.shifted_chebyshev_polynomial_w",
+      "kind": "function",
+      "labels": [],
+      "signature": "shifted_chebyshev_polynomial_w(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L408",
+      "subcategory": "polynomials",
+      "summary": "Shifted Chebyshev W polynomial $W^*_n(x)$ on $[0, 1]$.",
+      "extended": "Chebyshev W polynomials of the fourth kind composed with\n$x \\mapsto 2x - 1$.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $W^*_n$ is evaluated, of any real dtype.  Customarily on\n$[0, 1]$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $W^*_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$W^*_n(x) = W_n(2x - 1)$, element-wise, broadcast over `x` and\n`n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_w\n>>> shifted_chebyshev_polynomial_w(lucid.tensor([0.0, 1.0]), n=1)\ntensor([-1., 3.])"
+      ],
+      "notes": [
+        "$W^*_n(x) = W_n(2x - 1)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "hermite_polynomial_h",
+      "path": "lucid.special._polynomials.hermite_polynomial_h",
+      "kind": "function",
+      "labels": [],
+      "signature": "hermite_polynomial_h(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L444",
+      "subcategory": "polynomials",
+      "summary": "Physicist's Hermite polynomial $H_n(x)$.",
+      "extended": "The physicists' Hermite polynomials are orthogonal on\n$(-\\infty, \\infty)$ with weight $e^{-x^2}$ and form the\neigenfunctions of the quantum harmonic oscillator (in conjunction\nwith the Gaussian envelope).",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $H_n$ is evaluated, of any real dtype.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $H_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$H_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import hermite_polynomial_h\n>>> hermite_polynomial_h(lucid.tensor([-1.0, 0.0, 1.0]), n=3)\ntensor([4., -0., -4.])"
+      ],
+      "notes": [
+        "Rodrigues formula and recurrence:\n\n\n\n$$\nH_n(x) = (-1)^n e^{x^2}\n         \\frac{d^n}{dx^n} e^{-x^2}, \\qquad\nH_{k+1}(x) = 2x\\, H_k(x) - 2k\\, H_{k-1}(x).\n$$\n\nStarting values: $H_0(x) = 1$, $H_1(x) = 2x$.  Linked to\nthe probabilists' Hermite polynomials by $H_n(x) = 2^{n/2} He_n(\\sqrt{2}\\, x)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "hermite_polynomial_he",
+      "path": "lucid.special._polynomials.hermite_polynomial_he",
+      "kind": "function",
+      "labels": [],
+      "signature": "hermite_polynomial_he(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L495",
+      "subcategory": "polynomials",
+      "summary": "Probabilist's Hermite polynomial $\\mathit{He}_n(x)$.",
+      "extended": "Probabilists' Hermite polynomials are orthogonal on\n$(-\\infty, \\infty)$ with weight $e^{-x^2/2} / \\sqrt{2\\pi}$ — the standard normal density — and are the natural\nbasis for Hermite-expansions of functions against a Gaussian\nmeasure (Wiener chaos, Gauss-Hermite quadrature with weight 1).",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $\\mathit{He}_n$ is evaluated, of any real dtype.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $\\mathit{He}_n$, for every element or one per element;\ntruncated toward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$\\mathit{He}_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import hermite_polynomial_he\n>>> hermite_polynomial_he(lucid.tensor([-1.0, 0.0, 1.0]), n=3)\ntensor([2., -0., -2.])"
+      ],
+      "notes": [
+        "Recurrence:\n\n\n\n$$\n\\mathit{He}_0(x) = 1, \\quad \\mathit{He}_1(x) = x, \\quad\n\\mathit{He}_{k+1}(x) = x\\, \\mathit{He}_k(x)\n                     - k\\, \\mathit{He}_{k-1}(x).\n$$\n\nConnection to physicists' Hermite: $\\mathit{He}_n(x) = 2^{-n/2} H_n(x/\\sqrt 2)$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "legendre_polynomial_p",
+      "path": "lucid.special._polynomials.legendre_polynomial_p",
+      "kind": "function",
+      "labels": [],
+      "signature": "legendre_polynomial_p(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L546",
+      "subcategory": "polynomials",
+      "summary": "Legendre polynomial $P_n(x)$.",
+      "extended": "The Legendre polynomials are orthogonal on $[-1, 1]$ with\nuniform weight, and serve as the angular eigenfunctions of the\nLaplacian on the sphere (spherical harmonics with $m = 0$)\nand as a basis for Gauss-Legendre quadrature.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $P_n$ is evaluated, of any real dtype.  Customarily on\n$[-1, 1]$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $P_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$P_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import legendre_polynomial_p\n>>> legendre_polynomial_p(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-1., -0., -0.4375, 1.])"
+      ],
+      "notes": [
+        "Bonnet recurrence:\n\n\n\n$$\nP_0(x) = 1, \\quad P_1(x) = x, \\quad\n(k+1)\\, P_{k+1}(x) = (2k + 1)\\, x\\, P_k(x) - k\\, P_{k-1}(x).\n$$\n\nOn $[-1, 1]$, $|P_n(x)| \\le 1$ with boundary values\n$P_n(1) = 1$, $P_n(-1) = (-1)^n$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "laguerre_polynomial_l",
+      "path": "lucid.special._polynomials.laguerre_polynomial_l",
+      "kind": "function",
+      "labels": [],
+      "signature": "laguerre_polynomial_l(x: TensorOrScalar, n: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/_polynomials.py#L596",
+      "subcategory": "polynomials",
+      "summary": "Laguerre polynomial $L_n(x)$.",
+      "extended": "The (simple) Laguerre polynomials are orthogonal on\n$[0, \\infty)$ with weight $e^{-x}$ and appear as the\nradial eigenfunctions of the hydrogen atom, as the basis of\nGauss-Laguerre quadrature, and in survival-analysis kernels.",
+      "parameters": [
+        {
+          "name": "x",
+          "annotation": "Tensor | Scalar",
+          "description": "Where $L_n$ is evaluated, of any real dtype.  Customarily on\n$[0, \\infty)$.",
+          "default": null
+        },
+        {
+          "name": "n",
+          "annotation": "Tensor | Scalar",
+          "description": "Degree of $L_n$, for every element or one per element; truncated\ntoward zero, and a negative degree gives 0.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "$L_n(x)$ element-wise, broadcast over `x` and `n`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.special import laguerre_polynomial_l\n>>> laguerre_polynomial_l(lucid.tensor([0.0, 1.0, 2.0]), n=2)\ntensor([1., -0.5, -1.])"
+      ],
+      "notes": [
+        "Recurrence:\n\n\n\n$$\nL_0(x) = 1, \\quad L_1(x) = 1 - x, \\quad\n(k+1)\\, L_{k+1}(x) = (2k + 1 - x)\\, L_k(x)\n                   - k\\, L_{k-1}(x).\n$$\n\nThe leading coefficient is $(-x)^n / n!$, and\n$L_n(0) = 1$ for every `n`."
       ],
       "attributes": [],
       "warns": [],
@@ -138,7 +606,7 @@
       "kind": "function",
       "labels": [],
       "signature": "erfcx(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L52",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L67",
       "subcategory": null,
       "summary": "Scaled complementary error function.",
       "extended": "Computes $\\mathrm{erfcx}(x) = e^{x^2}\\, \\mathrm{erfc}(x)$, the\nMills-ratio-friendly scaling of the complementary error function.\nWhereas $\\mathrm{erfc}(x)$ underflows to zero for moderately\nlarge $x$, `erfcx` decays only as $1/(x\\sqrt\\pi)$ and\nremains finite, which is essential for tail-probability evaluations\nof Gaussian-related distributions.",
@@ -171,7 +639,7 @@
       "kind": "function",
       "labels": [],
       "signature": "i0e(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L151",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L166",
       "subcategory": null,
       "summary": "Exponentially scaled modified Bessel function of order 0.",
       "extended": "Computes $I_0(x)\\, e^{-|x|}$, the standard exponentially-scaled\nvariant of the modified Bessel function of the first kind.  `I_0`\nitself grows as $e^{|x|}/\\sqrt{|x|}$ and therefore overflows\nfloating-point representation for moderately large arguments; the\nscaled form is bounded by 1 for $x \\ge 0$ and is the natural\nquantity to manipulate in log-density computations (von Mises /\nBessel distributions, Rice distribution, etc.).",
@@ -204,7 +672,7 @@
       "kind": "function",
       "labels": [],
       "signature": "i1(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L237",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L252",
       "subcategory": null,
       "summary": "Modified Bessel function of the first kind, order 1.",
       "extended": "Computes $I_1(x)$, the order-one solution of the modified\nBessel equation $x^2 y'' + x y' - (x^2 + 1) y = 0$ that is\nregular at the origin.  Used in Rician statistics, Bessel /\nvon Mises – Fisher distributions, and rotational-symmetric kernels.",
@@ -237,7 +705,7 @@
       "kind": "function",
       "labels": [],
       "signature": "i1e(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L307",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L322",
       "subcategory": null,
       "summary": "Exponentially scaled modified Bessel function of order 1.",
       "extended": "Computes $I_1(x)\\, e^{-|x|}$, the bounded counterpart of\n`i1`.  Because $I_1$ itself grows exponentially with\n$|x|$, this scaled form is the safer building block for\nlog-likelihood expressions (Rice / Skellam distributions and\nsimilar) where evaluating `I_1` directly would overflow.",
@@ -270,7 +738,7 @@
       "kind": "function",
       "labels": [],
       "signature": "ndtr(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L373",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L388",
       "subcategory": null,
       "summary": "Standard normal cumulative distribution function.",
       "extended": "Evaluates $\\Phi(x) = P(Z \\le x)$ where $Z$ is a standard\nnormal random variable.  Implemented as a thin wrapper around the\nerror function via the textbook identity\n$\\Phi(x) = \\tfrac{1}{2}\\,(1 + \\mathrm{erf}(x/\\sqrt{2}))$.",
@@ -303,7 +771,7 @@
       "kind": "function",
       "labels": [],
       "signature": "log_ndtr(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L425",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L440",
       "subcategory": null,
       "summary": "Numerically stable logarithm of the standard normal CDF.",
       "extended": "Computes $\\log \\Phi(x)$ without losing precision in the deep\nleft tail, where the direct composition `log(ndtr(x))` underflows.\nEssential for log-likelihood evaluation of probit / Tobit / censored\nmodels that need to handle $x \\ll 0$ cleanly.",
@@ -336,7 +804,7 @@
       "kind": "function",
       "labels": [],
       "signature": "ndtri(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L531",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L546",
       "subcategory": null,
       "summary": "Inverse standard normal CDF (probit / quantile function).",
       "extended": "Computes $\\Phi^{-1}(p)$, the quantile function of the standard\nnormal distribution.  This is the workhorse for sampling Gaussian\nvariates from uniforms via inverse-CDF, for probit regression, and\nfor converting tail probabilities back to standard scores.",
@@ -368,21 +836,21 @@
       "path": "lucid.special.xlog1py",
       "kind": "function",
       "labels": [],
-      "signature": "xlog1py(input: Tensor, other: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L647",
+      "signature": "xlog1py(input: TensorOrScalar, other: TensorOrScalar)",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L662",
       "subcategory": null,
       "summary": "Safe product $x \\log(1 + y)$ with limit-convention zero handling.",
       "extended": "Computes $x \\log(1 + y)$ element-wise but takes the product as\n`0` wherever $x = 0$, including where $\\log(1 + y)$ is\ninfinite (`y = -1`).  Mirrors `lucid.xlogy` but uses\n$\\log(1 + y)$ instead of $\\log y$, which is the right\nprimitive for log-densities of distributions expressed in terms of\nsmall offsets (Negative Binomial log-likelihood, Beta survival\nfunctions, etc.).",
       "parameters": [
         {
           "name": "input",
-          "annotation": "Tensor",
-          "description": "Multiplier tensor.",
+          "annotation": "Tensor | Scalar",
+          "description": "Multiplier.  Either operand may be a Python number.",
           "default": null
         },
         {
           "name": "other",
-          "annotation": "Tensor",
+          "annotation": "Tensor | Scalar",
           "description": "Argument of `log1p`; broadcast-compatible with `input`.",
           "default": null
         }
@@ -396,7 +864,7 @@
         ">>> import lucid\n>>> from lucid.special import xlog1py\n>>> x = lucid.tensor([0.0, 1.0, 2.0])\n>>> y = lucid.tensor([0.0, 1.0, 3.0])\n>>> xlog1py(x, y)\ntensor([0., 0.6931, 2.773])\n>>> xlog1py(lucid.tensor([0.0, 2.0]), lucid.tensor([-1.0, -1.0]))\ntensor([0., -inf])"
       ],
       "notes": [
-        "Mathematical definition with the limit convention:\n\n\n\n$$\n\\text{xlog1py}(x, y) = \\begin{cases}\n    \\mathrm{NaN}, & y = \\mathrm{NaN} \\\\[2pt]\n    0, & x = 0 \\\\[2pt]\n    x \\log(1 + y), & \\text{otherwise}.\n\\end{cases}\n$$\n\nThe convention covers only `x == 0`: with `x != 0` the plain\ndefinition applies, so `xlog1py(2, -1)` is `-inf`.  Using\n$\\log(1 + y)$ avoids precision loss for small `y` where\n`1 + y` would round to `1.0`.\n\nGradients are $\\partial/\\partial x = \\log(1 + y)$ and\n$\\partial/\\partial y = x / (1 + y)$, except where `x == 0`\nand $\\log(1 + y)$ is not finite (`y <= -1` or `y`\ninfinite): there both are `0`, so the backward never forms\n`0 \\cdot \\infty`.  This is the convention of `lucid.xlogy`,\nand the two functions share one implementation.  Two cells differ\nfrom the reference framework on purpose: at `(0, -1)` its `y`\ngradient is `0 / 0 = NaN` and Lucid's is `0`, and at\n`(0, +\\infty)` its `x` gradient is $+\\infty$ and Lucid's\nis `0`."
+        "Mathematical definition with the limit convention:\n\n\n\n$$\n\\text{xlog1py}(x, y) = \\begin{cases}\n    \\mathrm{NaN}, & y = \\mathrm{NaN} \\\\[2pt]\n    0, & x = 0 \\\\[2pt]\n    x \\log(1 + y), & \\text{otherwise}.\n\\end{cases}\n$$\n\nThe convention covers only `x == 0`: with `x != 0` the plain\ndefinition applies, so `xlog1py(2, -1)` is `-inf`.  Using\n$\\log(1 + y)$ avoids precision loss for small `y` where\n`1 + y` would round to `1.0`.\n\nGradients are $\\partial/\\partial x = \\log(1 + y)$ and\n$\\partial/\\partial y = x / (1 + y)$, except where `x == 0` and\n$\\log(1 + y)$ is not finite (`y <= -1` or `y` infinite): there\nboth are `0`, so the backward never forms `0 \\cdot \\infty`.  This is\nthe convention of `lucid.xlogy`, and the two functions share one\nimplementation.  Two cells differ from the reference framework on purpose:\nat `(0, -1)` its `y` gradient is `0 / 0 = NaN` and Lucid's is `0`,\nand at `(0, +\\infty)` its `x` gradient is $+\\infty$ and Lucid's\nis `0`."
       ],
       "attributes": [],
       "warns": [],
@@ -408,7 +876,7 @@
       "kind": "function",
       "labels": [],
       "signature": "entr(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L713",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L727",
       "subcategory": null,
       "summary": "Element-wise entropy kernel $-x \\log x$.",
       "extended": "Returns the per-element contribution to Shannon entropy.  This is\nthe standard building block for evaluating $H(p) = \\sum_i \\mathrm{entr}(p_i)$ for a discrete distribution, with the\nlimit convention $0 \\log 0 = 0$ applied at the boundary.",
@@ -441,7 +909,7 @@
       "kind": "function",
       "labels": [],
       "signature": "multigammaln(input: Tensor, p: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L779",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L793",
       "subcategory": null,
       "summary": "Logarithm of the multivariate gamma function $\\Gamma_p(a)$.",
       "extended": "Computes $\\log \\Gamma_p(a)$, the natural generalisation of\n`lgamma` that appears in the normalising constants of the Wishart\nand inverse-Wishart distributions over positive-definite matrices,\nand in matrix-Bayes log-evidence formulas.",
@@ -480,7 +948,7 @@
       "kind": "function",
       "labels": [],
       "signature": "polygamma(n: int, input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L832",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L846",
       "subcategory": null,
       "summary": "Polygamma function $\\psi^{(n)}(x)$.",
       "extended": "The `n`-th derivative of the digamma function.  Polygamma\nfunctions appear in the derivatives of log-partition functions of\nthe Gamma / Beta / Dirichlet families and are needed for evaluating\nFisher information matrices for these distributions analytically.",
@@ -519,7 +987,7 @@
       "kind": "function",
       "labels": [],
       "signature": "spherical_bessel_j0(x: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L918",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L932",
       "subcategory": null,
       "summary": "Spherical Bessel function of the first kind, order 0.",
       "extended": "Computes $j_0(x) = \\sin x / x$ with the continuous extension\n$j_0(0) = 1$.  Arises in 3D wave / scattering problems and is\nthe radial component of plane waves expanded in spherical harmonics.",
@@ -547,480 +1015,12 @@
       "see_also": []
     },
     {
-      "name": "chebyshev_polynomial_t",
-      "path": "lucid.special.chebyshev_polynomial_t",
-      "kind": "function",
-      "labels": [],
-      "signature": "chebyshev_polynomial_t(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L998",
-      "subcategory": null,
-      "summary": "Chebyshev polynomial of the first kind, $T_n(x)$.",
-      "extended": "The Chebyshev T polynomials are orthogonal on $[-1, 1]$ with\nweight $1/\\sqrt{1 - x^2}$ and underlie spectral methods,\nminimax polynomial approximation, and Clenshaw-Curtis quadrature.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.  Customarily\nevaluated on $[-1, 1]$ but defined for all real `x`.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$T_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_t\n>>> chebyshev_polynomial_t(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-1., -0., -1., 1.])"
-      ],
-      "notes": [
-        "Defined by $T_n(\\cos\\theta) = \\cos(n\\theta)$ and built by the\nthree-term recurrence\n\n\n\n$$\nT_0(x) = 1, \\quad T_1(x) = x, \\quad\nT_{k+1}(x) = 2x\\, T_k(x) - T_{k-1}(x).\n$$\n\nOn $[-1, 1]$, $|T_n(x)| \\le 1$; the extrema lie at the\nChebyshev nodes $\\cos(j\\pi/n)$ for $j = 0,\\ldots,n$.\nRaises `ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "chebyshev_polynomial_u",
-      "path": "lucid.special.chebyshev_polynomial_u",
-      "kind": "function",
-      "labels": [],
-      "signature": "chebyshev_polynomial_u(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1042",
-      "subcategory": null,
-      "summary": "Chebyshev polynomial of the second kind, $U_n(x)$.",
-      "extended": "The U polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{1 - x^2}$.  They appear naturally as the derivative of\nthe T polynomials (up to a normalisation) and in Gauss-Chebyshev\nquadrature of the second kind.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$U_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_u\n>>> chebyshev_polynomial_u(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-4., -0., -1., 4.])"
-      ],
-      "notes": [
-        "Defined by $U_n(\\cos\\theta) = \\sin((n+1)\\theta)/\\sin\\theta$\nand obeying\n\n\n\n$$\nU_0(x) = 1, \\quad U_1(x) = 2x, \\quad\nU_{k+1}(x) = 2x\\, U_k(x) - U_{k-1}(x).\n$$\n\nLinked to T by $T_n'(x) = n\\, U_{n-1}(x)$.  Raises\n`ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "chebyshev_polynomial_v",
-      "path": "lucid.special.chebyshev_polynomial_v",
-      "kind": "function",
-      "labels": [],
-      "signature": "chebyshev_polynomial_v(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1085",
-      "subcategory": null,
-      "summary": "Chebyshev polynomial of the third kind, $V_n(x)$.",
-      "extended": "The V polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{(1 + x)/(1 - x)}$ and arise in problems with one\nDirichlet and one Neumann boundary condition along the interval.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$V_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_v\n>>> chebyshev_polynomial_v(lucid.tensor([-1.0, 0.0, 1.0]), n=2)\ntensor([5., -1., 1.])"
-      ],
-      "notes": [
-        "Half-angle definition\n\n\n\n$$\nV_n(\\cos\\theta) = \\frac{\\cos((n + \\tfrac{1}{2})\\theta)}\n                        {\\cos(\\theta/2)},\n$$\n\nwith the recurrence\n\n\n\n$$\nV_0(x) = 1, \\quad V_1(x) = 2x - 1, \\quad\nV_{k+1}(x) = 2x\\, V_k(x) - V_{k-1}(x).\n$$\n\nRaises `ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "chebyshev_polynomial_w",
-      "path": "lucid.special.chebyshev_polynomial_w",
-      "kind": "function",
-      "labels": [],
-      "signature": "chebyshev_polynomial_w(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1132",
-      "subcategory": null,
-      "summary": "Chebyshev polynomial of the fourth kind, $W_n(x)$.",
-      "extended": "The W polynomials are orthogonal on $[-1, 1]$ with weight\n$\\sqrt{(1 - x)/(1 + x)}$ — the mirror image of the V family —\nand partner with V under the substitution $x \\mapsto -x$.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$W_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import chebyshev_polynomial_w\n>>> chebyshev_polynomial_w(lucid.tensor([-1.0, 0.0, 1.0]), n=2)\ntensor([1., -1., 5.])"
-      ],
-      "notes": [
-        "Half-angle definition\n\n\n\n$$\nW_n(\\cos\\theta) = \\frac{\\sin((n + \\tfrac{1}{2})\\theta)}\n                        {\\sin(\\theta/2)},\n$$\n\nwith the recurrence\n\n\n\n$$\nW_0(x) = 1, \\quad W_1(x) = 2x + 1, \\quad\nW_{k+1}(x) = 2x\\, W_k(x) - W_{k-1}(x).\n$$\n\nSymmetry relation: $W_n(-x) = (-1)^n V_n(x)$.  Raises\n`ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "shifted_chebyshev_polynomial_t",
-      "path": "lucid.special.shifted_chebyshev_polynomial_t",
-      "kind": "function",
-      "labels": [],
-      "signature": "shifted_chebyshev_polynomial_t(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1180",
-      "subcategory": null,
-      "summary": "Shifted Chebyshev T polynomial $T^*_n(x)$ on $[0, 1]$.",
-      "extended": "Maps the standard Chebyshev T family from $[-1, 1]$ onto the\nunit interval $[0, 1]$ via the linear substitution\n$x \\mapsto 2x - 1$.  Useful when the natural domain of an\napproximation problem is $[0, 1]$.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument on the shifted domain $[0, 1]$; any\nfloating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$T^*_n(x) = T_n(2x - 1)$, element-wise, same shape and\ndtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_t\n>>> shifted_chebyshev_polynomial_t(lucid.tensor([0.0, 0.5, 1.0]), n=2)\ntensor([1., -1., 1.])"
-      ],
-      "notes": [
-        "Definition: $T^*_n(x) = T_n(2x - 1)$.  Inherits orthogonality\non $[0, 1]$ with weight $1/\\sqrt{x - x^2}$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "shifted_chebyshev_polynomial_u",
-      "path": "lucid.special.shifted_chebyshev_polynomial_u",
-      "kind": "function",
-      "labels": [],
-      "signature": "shifted_chebyshev_polynomial_u(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1217",
-      "subcategory": null,
-      "summary": "Shifted Chebyshev U polynomial $U^*_n(x)$ on $[0, 1]$.",
-      "extended": "Standard Chebyshev U polynomials shifted from $[-1, 1]$ onto\nthe unit interval by $x \\mapsto 2x - 1$.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument on $[0, 1]$; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$U^*_n(x) = U_n(2x - 1)$, element-wise."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_u\n>>> shifted_chebyshev_polynomial_u(lucid.tensor([0.0, 0.5, 1.0]), n=2)\ntensor([3., -1., 3.])"
-      ],
-      "notes": [
-        "$U^*_n(x) = U_n(2x - 1)$.  Orthogonal on $[0, 1]$ with\nweight $\\sqrt{x - x^2}$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "shifted_chebyshev_polynomial_v",
-      "path": "lucid.special.shifted_chebyshev_polynomial_v",
-      "kind": "function",
-      "labels": [],
-      "signature": "shifted_chebyshev_polynomial_v(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1250",
-      "subcategory": null,
-      "summary": "Shifted Chebyshev V polynomial $V^*_n(x)$ on $[0, 1]$.",
-      "extended": "Chebyshev V polynomials of the third kind composed with\n$x \\mapsto 2x - 1$, yielding a basis orthogonal on\n$[0, 1]$.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument on $[0, 1]$; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$V^*_n(x) = V_n(2x - 1)$, element-wise."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_v\n>>> shifted_chebyshev_polynomial_v(lucid.tensor([0.0, 1.0]), n=1)\ntensor([-3., 1.])"
-      ],
-      "notes": [
-        "$V^*_n(x) = V_n(2x - 1)$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "shifted_chebyshev_polynomial_w",
-      "path": "lucid.special.shifted_chebyshev_polynomial_w",
-      "kind": "function",
-      "labels": [],
-      "signature": "shifted_chebyshev_polynomial_w(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1283",
-      "subcategory": null,
-      "summary": "Shifted Chebyshev W polynomial $W^*_n(x)$ on $[0, 1]$.",
-      "extended": "Chebyshev W polynomials of the fourth kind composed with\n$x \\mapsto 2x - 1$.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument on $[0, 1]$; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$W^*_n(x) = W_n(2x - 1)$, element-wise."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import shifted_chebyshev_polynomial_w\n>>> shifted_chebyshev_polynomial_w(lucid.tensor([0.0, 1.0]), n=1)\ntensor([-1., 3.])"
-      ],
-      "notes": [
-        "$W^*_n(x) = W_n(2x - 1)$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "hermite_polynomial_h",
-      "path": "lucid.special.hermite_polynomial_h",
-      "kind": "function",
-      "labels": [],
-      "signature": "hermite_polynomial_h(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1315",
-      "subcategory": null,
-      "summary": "Physicist's Hermite polynomial $H_n(x)$.",
-      "extended": "The physicists' Hermite polynomials are orthogonal on\n$(-\\infty, \\infty)$ with weight $e^{-x^2}$ and form the\neigenfunctions of the quantum harmonic oscillator (in conjunction\nwith the Gaussian envelope).",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$H_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import hermite_polynomial_h\n>>> hermite_polynomial_h(lucid.tensor([-1.0, 0.0, 1.0]), n=3)\ntensor([4., -0., -4.])"
-      ],
-      "notes": [
-        "Rodrigues formula and recurrence:\n\n\n\n$$\nH_n(x) = (-1)^n e^{x^2}\n         \\frac{d^n}{dx^n} e^{-x^2}, \\qquad\nH_{k+1}(x) = 2x\\, H_k(x) - 2k\\, H_{k-1}(x).\n$$\n\nStarting values: $H_0(x) = 1$, $H_1(x) = 2x$.  Linked to\nthe probabilists' Hermite polynomials by $H_n(x) = 2^{n/2} He_n(\\sqrt{2}\\, x)$.  Raises `ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "hermite_polynomial_he",
-      "path": "lucid.special.hermite_polynomial_he",
-      "kind": "function",
-      "labels": [],
-      "signature": "hermite_polynomial_he(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1361",
-      "subcategory": null,
-      "summary": "Probabilist's Hermite polynomial $\\mathit{He}_n(x)$.",
-      "extended": "Probabilists' Hermite polynomials are orthogonal on\n$(-\\infty, \\infty)$ with weight $e^{-x^2/2} / \\sqrt{2\\pi}$ — the standard normal density — and are the natural\nbasis for Hermite-expansions of functions against a Gaussian\nmeasure (Wiener chaos, Gauss-Hermite quadrature with weight 1).",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$\\mathit{He}_n(x)$ element-wise, same shape and dtype as\n`x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import hermite_polynomial_he\n>>> hermite_polynomial_he(lucid.tensor([-1.0, 0.0, 1.0]), n=3)\ntensor([2., -0., -2.])"
-      ],
-      "notes": [
-        "Recurrence:\n\n\n\n$$\n\\mathit{He}_0(x) = 1, \\quad \\mathit{He}_1(x) = x, \\quad\n\\mathit{He}_{k+1}(x) = x\\, \\mathit{He}_k(x)\n                     - k\\, \\mathit{He}_{k-1}(x).\n$$\n\nConnection to physicists' Hermite: $\\mathit{He}_n(x) = 2^{-n/2} H_n(x/\\sqrt 2)$.  Raises `ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "legendre_polynomial_p",
-      "path": "lucid.special.legendre_polynomial_p",
-      "kind": "function",
-      "labels": [],
-      "signature": "legendre_polynomial_p(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1406",
-      "subcategory": null,
-      "summary": "Legendre polynomial $P_n(x)$.",
-      "extended": "The Legendre polynomials are orthogonal on $[-1, 1]$ with\nuniform weight, and serve as the angular eigenfunctions of the\nLaplacian on the sphere (spherical harmonics with $m = 0$)\nand as a basis for Gauss-Legendre quadrature.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.  Customarily\nevaluated on $[-1, 1]$.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$P_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import legendre_polynomial_p\n>>> legendre_polynomial_p(lucid.tensor([-1.0, 0.0, 0.5, 1.0]), n=3)\ntensor([-1., -0., -0.4375, 1.])"
-      ],
-      "notes": [
-        "Bonnet recurrence:\n\n\n\n$$\nP_0(x) = 1, \\quad P_1(x) = x, \\quad\n(k+1)\\, P_{k+1}(x) = (2k + 1)\\, x\\, P_k(x) - k\\, P_{k-1}(x).\n$$\n\nOn $[-1, 1]$, $|P_n(x)| \\le 1$ with boundary values\n$P_n(1) = 1$, $P_n(-1) = (-1)^n$.  Raises\n`ValueError` for `n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "laguerre_polynomial_l",
-      "path": "lucid.special.laguerre_polynomial_l",
-      "kind": "function",
-      "labels": [],
-      "signature": "laguerre_polynomial_l(x: Tensor, n: int)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1455",
-      "subcategory": null,
-      "summary": "Laguerre polynomial $L_n(x)$.",
-      "extended": "The (simple) Laguerre polynomials are orthogonal on\n$[0, \\infty)$ with weight $e^{-x}$ and appear as the\nradial eigenfunctions of the hydrogen atom, as the basis of\nGauss-Laguerre quadrature, and in survival-analysis kernels.",
-      "parameters": [
-        {
-          "name": "x",
-          "annotation": "Tensor",
-          "description": "Argument tensor; any floating-point dtype.  Customarily\nevaluated on $[0, \\infty)$.",
-          "default": null
-        },
-        {
-          "name": "n",
-          "annotation": "int",
-          "description": "Non-negative polynomial degree.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "$L_n(x)$ element-wise, same shape and dtype as `x`."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> from lucid.special import laguerre_polynomial_l\n>>> laguerre_polynomial_l(lucid.tensor([0.0, 1.0, 2.0]), n=2)\ntensor([1., -0.5, -1.])"
-      ],
-      "notes": [
-        "Recurrence:\n\n\n\n$$\nL_0(x) = 1, \\quad L_1(x) = 1 - x, \\quad\n(k+1)\\, L_{k+1}(x) = (2k + 1 - x)\\, L_k(x)\n                   - k\\, L_{k-1}(x).\n$$\n\nThe leading coefficient is $(-x)^n / n!$, and\n$L_n(0) = 1$ for every `n`.  Raises `ValueError` for\n`n < 0`."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
       "name": "bessel_j0",
       "path": "lucid.special.bessel_j0",
       "kind": "function",
       "labels": [],
       "signature": "bessel_j0(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1595",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1066",
       "subcategory": null,
       "summary": "Bessel function of the first kind, order 0.",
       "extended": "Computes $J_0(x)$, the regular-at-origin solution of Bessel's\nequation $x^2 y'' + x y' + x^2 y = 0$ for order 0.  Appears\nthroughout wave propagation, optical diffraction (the Airy disk\nprofile), and vibration of circular membranes.",
@@ -1053,7 +1053,7 @@
       "kind": "function",
       "labels": [],
       "signature": "bessel_j1(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1687",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1158",
       "subcategory": null,
       "summary": "Bessel function of the first kind, order 1.",
       "extended": "Computes $J_1(x)$, the regular order-one solution of Bessel's\nequation.  Closely related to $J_0$ by\n$J_0'(x) = -J_1(x)$; appears as the radial derivative of\ncylindrical waves and in the antenna-pattern of a uniformly\nilluminated circular aperture.",
@@ -1086,7 +1086,7 @@
       "kind": "function",
       "labels": [],
       "signature": "bessel_y0(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1772",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1243",
       "subcategory": null,
       "summary": "Bessel function of the second kind, order 0.",
       "extended": "Computes $Y_0(x)$, the singular-at-origin partner of\n$J_0$.  Together $J_0$ and $Y_0$ span the\nsolution space of Bessel's equation at order 0; $Y_0$ is the\none that diverges (logarithmically) at the origin.",
@@ -1119,7 +1119,7 @@
       "kind": "function",
       "labels": [],
       "signature": "bessel_y1(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1867",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1338",
       "subcategory": null,
       "summary": "Bessel function of the second kind, order 1.",
       "extended": "Computes $Y_1(x)$, the singular-at-origin order-one solution\nof Bessel's equation.  Diverges as $-2/(\\pi x)$ at the origin\nand decays as $\\sqrt{2/(\\pi x)}$ for large `x`.",
@@ -1152,7 +1152,7 @@
       "kind": "function",
       "labels": [],
       "signature": "modified_bessel_k0(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1936",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1407",
       "subcategory": null,
       "summary": "Modified Bessel function of the second kind, order 0.",
       "extended": "Computes $K_0(x)$, the exponentially decaying solution of the\nmodified Bessel equation at order 0.  Appears as the Green's\nfunction of the 2D Helmholtz operator and as the log-density kernel\nof certain heavy-tailed distributions.",
@@ -1185,7 +1185,7 @@
       "kind": "function",
       "labels": [],
       "signature": "scaled_modified_bessel_k0(x: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L1986",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1461",
       "subcategory": null,
       "summary": "Exponentially scaled modified Bessel $K_0$: $e^x K_0(x)$.",
       "extended": "Computes $e^{x} K_0(x)$, the bounded counterpart of\n`modified_bessel_k0`.  Because $K_0$ decays\nexponentially as $e^{-x}/\\sqrt{x}$, the scaled form is the\nnatural quantity to manipulate in log-density expressions where\ndirect evaluation of $K_0$ would underflow.",
@@ -1218,7 +1218,7 @@
       "kind": "function",
       "labels": [],
       "signature": "modified_bessel_k1(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2046",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1521",
       "subcategory": null,
       "summary": "Modified Bessel function of the second kind, order 1.",
       "extended": "Computes $K_1(x)$, the order-one analogue of $K_0$.\nDiverges as $1/x$ near the origin and decays exponentially\nfor large argument.  Appears in Generalised-Inverse-Gaussian and\nNormal-Inverse-Gaussian log-densities.",
@@ -1251,7 +1251,7 @@
       "kind": "function",
       "labels": [],
       "signature": "scaled_modified_bessel_k1(x: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2094",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1573",
       "subcategory": null,
       "summary": "Exponentially scaled modified Bessel $K_1$: $e^x K_1(x)$.",
       "extended": "Computes $e^x K_1(x)$, the bounded scaled variant of\n`modified_bessel_k1` suitable for stable evaluation of\nlog-densities involving $K_1$ at large argument.",
@@ -1284,7 +1284,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gammaln(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2137",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1616",
       "subcategory": null,
       "summary": "Natural logarithm of the absolute value of the gamma function.",
       "extended": "Convenience alias for `lucid.lgamma`.  Computes\n$\\log|\\Gamma(x)|$ with numerical stability for large\narguments where $\\Gamma(x)$ would itself overflow.",
@@ -1317,7 +1317,7 @@
       "kind": "function",
       "labels": [],
       "signature": "psi(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2177",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1656",
       "subcategory": null,
       "summary": "Digamma function $\\psi(x) = \\frac{d}{dx} \\log \\Gamma(x)$.",
       "extended": "Convenience alias for `lucid.digamma`.  The digamma function\nis the logarithmic derivative of the gamma function and the\nfundamental building block of the polygamma family.",
@@ -1350,7 +1350,7 @@
       "kind": "function",
       "labels": [],
       "signature": "expit(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2220",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1699",
       "subcategory": null,
       "summary": "Logistic sigmoid (expit) function $\\sigma(x)$.",
       "extended": "Convenience alias for `lucid.sigmoid`.  Maps the real line\nonto the open interval $(0, 1)$ and is the inverse of\n`lucid.logit`.",
@@ -1383,7 +1383,7 @@
       "kind": "function",
       "labels": [],
       "signature": "modified_bessel_i0(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2261",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1740",
       "subcategory": null,
       "summary": "Modified Bessel function of the first kind, order 0.",
       "extended": "Convenience alias for `lucid.i0`.  Computes $I_0(x)$,\nthe order-zero regular solution of the modified Bessel equation,\nused in the von Mises density and rotational kernel families.",
@@ -1416,7 +1416,7 @@
       "kind": "function",
       "labels": [],
       "signature": "modified_bessel_i1(input: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/special/__init__.py#L2301",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/special/__init__.py#L1780",
       "subcategory": null,
       "summary": "Modified Bessel function of the first kind, order 1.",
       "extended": "Convenience wrapper around `i1`.  Computes $I_1(x)$,\nthe order-one regular solution of the modified Bessel equation,\nforming a natural pair with $I_0$ for log-density evaluation\nof Rician / Bessel-family distributions.",

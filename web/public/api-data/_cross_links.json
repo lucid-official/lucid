@@ -1474,7 +1474,7 @@
         "kind": "free_function"
       }
     ],
-    "lucid.ops.equal": [
+    "lucid.ops.composite.equal": [
       {
         "name": "equal_op",
         "kind": "free_function"
@@ -3519,8 +3519,8 @@
     ],
     "equal_op": [
       {
-        "path": "lucid.ops.equal",
-        "module": "lucid.ops",
+        "path": "lucid.ops.composite.equal",
+        "module": "lucid.ops.composite",
         "kind": "function"
       }
     ],

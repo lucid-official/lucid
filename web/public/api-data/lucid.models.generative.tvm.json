@@ -3,7 +3,7 @@
   "name": "tvm",
   "path": "lucid.models.generative.tvm",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/__init__.py#L1",
   "members": [
     {
       "name": "TVMConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "TVMConfig(sample_size: int | tuple[int, int] = 32, in_channels: int = 4, out_channels: int = 4, act_fn: GenerativeActivation = 'silu', patch_size: int = 2, hidden_size: int = 1152, depth: int = 28, num_heads: int = 18, mlp_ratio: float = 4.0, frequency_embedding_size: int = 256, num_classes: int = 1000, class_dropout: float = 0.1, qk_norm: bool = True, modulation_norm: bool = True, time_embedding_init: TimeEmbeddingInit = 'spectral', guidance_scale: float = 2.0, guidance_range: tuple[float, float] | None = None, scaled_parameterization: bool = True, time_sampler: TimeSampler = 'gap', gap_mean: float = -0.8, gap_std: float = 1.0, t_mean: float = 1.0, t_std: float = 1.0, s_mean: float = -0.4, s_std: float = 1.0, separate_flow_matching_time: bool = True, ratio_t_equals_s: float = 0.0, target_ema_decay: float = 0.99, eval_ema_decay: float | None = 0.9999, detach_jvp: bool = False, latent_mean: tuple[float, ...] = (0.86488, -0.27787343, 0.21616915, 0.3738409), latent_std: tuple[float, ...] = (4.85503674, 5.31922414, 3.93725398, 3.9870003))",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_config.py#L43",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_config.py#L44",
       "subcategory": "config",
       "methods": [
         {
@@ -26,7 +26,7 @@
             "property"
           ],
           "signature": "num_patches: int",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_config.py#L284",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_config.py#L308",
           "summary": "Tokens the latent is cut into — `(sample_size / patch_size)^2`.",
           "extended": null,
           "parameters": [],
@@ -47,7 +47,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(sample_size: int | tuple[int, int] = 32, in_channels: int = 4, out_channels: int = 4, act_fn: GenerativeActivation = 'silu', patch_size: int = 2, hidden_size: int = 1152, depth: int = 28, num_heads: int = 18, mlp_ratio: float = 4.0, frequency_embedding_size: int = 256, num_classes: int = 1000, class_dropout: float = 0.1, qk_norm: bool = True, modulation_norm: bool = True, time_embedding_init: TimeEmbeddingInit = 'spectral', guidance_scale: float = 2.0, guidance_range: tuple[float, float] | None = None, scaled_parameterization: bool = True, time_sampler: TimeSampler = 'gap', gap_mean: float = -0.8, gap_std: float = 1.0, t_mean: float = 1.0, t_std: float = 1.0, s_mean: float = -0.4, s_std: float = 1.0, separate_flow_matching_time: bool = True, ratio_t_equals_s: float = 0.0, target_ema_decay: float = 0.99, eval_ema_decay: float | None = 0.9999, detach_jvp: bool = False, latent_mean: tuple[float, ...] = (0.86488, -0.27787343, 0.21616915, 0.3738409), latent_std: tuple[float, ...] = (4.85503674, 5.31922414, 3.93725398, 3.9870003))",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_config.py#L1",
           "subcategory": "config",
           "summary": "Initialise the embedder. See the class docstring for parameters.",
           "extended": null,
@@ -76,13 +76,13 @@
         {
           "name": "in_channels",
           "annotation": "int",
-          "description": "Latent channels.  The network predicts one field of the same\nwidth as its input.",
+          "description": "Latent channels.  The network predicts a velocity in the latent's\nown space, which the loss and the sampler add to the input, so\nthe two must be equal.",
           "default": "4, 4"
         },
         {
           "name": "out_channels",
           "annotation": "int",
-          "description": "Latent channels.  The network predicts one field of the same\nwidth as its input.",
+          "description": "Latent channels.  The network predicts a velocity in the latent's\nown space, which the loss and the sampler add to the input, so\nthe two must be equal.",
           "default": "4, 4"
         },
         {
@@ -276,7 +276,7 @@
       ],
       "labels": [],
       "signature": "TVMForImageGeneration(config: TVMConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L557",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L609",
       "subcategory": "model",
       "methods": [
         {
@@ -285,7 +285,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: TVMConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L609",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L664",
           "subcategory": "model",
           "summary": "Initialise the model. See the class docstring for parameters.",
           "extended": null,
@@ -309,7 +309,7 @@
             "property"
           ],
           "signature": "target_network: TVMModel",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L652",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L726",
           "summary": "The EMA network $\\theta^*$ the targets are read from.",
           "extended": "With `TVMConfig.target_ema_decay` at zero this is the live\nnetwork itself, used under a stop-gradient — Table 4b's\n$\\gamma = 0$.",
           "parameters": [],
@@ -332,7 +332,7 @@
             "property"
           ],
           "signature": "ema_network: TVMModel",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L669",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L743",
           "summary": "The evaluation EMA $\\theta^{**}$ — what Algorithm 1 outputs.",
           "extended": null,
           "parameters": [],
@@ -358,10 +358,10 @@
           "kind": "function",
           "labels": [],
           "signature": "update_ema()",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L690",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L764",
           "subcategory": "model",
           "summary": "Advance both of Algorithm 1's averages by one step.",
-          "extended": "$\\theta^* \\leftarrow \\gamma^*\\theta^* + (1 - \\gamma^*)\\theta$\nand $\\theta^{**} \\leftarrow \\gamma^{**}\\theta^{**} + (1 - \\gamma^{**})\\theta$, over parameters only — the released\ntraining loop averages nothing else, and this network has no\npersistent buffers.  Call it after each optimiser step.\n\nEach average is evaluated as it is written.  The averages are\noutside `parameters`, so neither the optimiser's flush nor a\nloop's reaches them on Metal.",
+          "extended": "$\\theta^* \\leftarrow \\gamma^*\\theta^* + (1 - \\gamma^*)\\theta$\nand $\\theta^{**} \\leftarrow \\gamma^{**}\\theta^{**} + (1 - \\gamma^{**})\\theta$, over parameters only — the released\ntraining loop averages nothing else, and this network has no\npersistent buffers.  Call it after each optimiser step.\n\nThe averages are evaluated once they are written.  They are\noutside `parameters`, so neither the optimiser's flush nor a\nloop's reaches them on Metal.",
           "parameters": [],
           "returns": {
             "annotation": "None",
@@ -380,7 +380,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(images: Tensor, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L832",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L893",
           "subcategory": "model",
           "summary": "One training step of the TVM objective (Eq. 15).",
           "extended": null,
@@ -417,7 +417,7 @@
           "kind": "function",
           "labels": [],
           "signature": "generate(n_samples: int = 1, labels: Tensor | None = None, steps: int = 1, guidance_scale: float | None = None, noise: Tensor | None = None, device: str | None = None, use_ema: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L928",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L990",
           "subcategory": "model",
           "summary": "Jump from noise to data in `steps` evaluations.",
           "extended": null,
@@ -489,7 +489,7 @@
           "kind": "function",
           "labels": [],
           "signature": "from_vae_latent(latent: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L1004",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L1066",
           "subcategory": "model",
           "summary": "Whiten a Stable Diffusion VAE latent the way the model was trained.",
           "extended": null,
@@ -520,7 +520,7 @@
           "kind": "function",
           "labels": [],
           "signature": "to_vae_latent(samples: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L1034",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L1105",
           "subcategory": "model",
           "summary": "Undo the per-channel whitening the model's latents carry.",
           "extended": null,
@@ -564,7 +564,7 @@
         ">>> import lucid\n>>> from lucid.models.generative.tvm import (\n...     TVMConfig, TVMForImageGeneration)\n>>> config = TVMConfig(sample_size=8, patch_size=2, hidden_size=32,\n...                    depth=2, num_heads=4, num_classes=10)\n>>> model = TVMForImageGeneration(config).eval()\n>>> model.generate(2, labels=lucid.tensor([1, 2])).samples.shape\n(2, 4, 8, 8)"
       ],
       "notes": [
-        "Reference: Zhou, Parger, Haque, and Song, *\"Terminal Velocity\nMatching\"*, ICLR 2026 ([arXiv:2511.19797](https://arxiv.org/abs/2511.19797)).  Training is Algorithm 1\nwith the objective of Eq. 15; sampling is Figure 3.\n\n**Call** `update_ema` **once per optimiser step.**  Algorithm 1\nkeeps two exponential moving averages of the weights and updates both\nafter every step: $\\theta^*$ at\n`TVMConfig.target_ema_decay`, which the terminal target and the\nunconditional half of the guided velocity are read off, and\n$\\theta^{**}$ at `TVMConfig.eval_ema_decay`, the model\nthat is evaluated and that the released checkpoints are.  Only the\ncaller knows when an optimiser step has happened.\n\nBoth copies are created from the live weights the first time either\nis needed — the first training step reads $\\theta^*$, so that\nis $\\theta^* \\leftarrow \\theta,\\ \\theta^{**} \\leftarrow \\theta$ at initialisation, as Algorithm 1 has it — and both are kept\noutside the module tree: not parameters, not in `state_dict`,\nnot counted.  They are training state, like an optimiser's moments;\n`target_network` and `ema_network` expose them for\ncheckpointing."
+        "Reference: Zhou, Parger, Haque, and Song, *\"Terminal Velocity\nMatching\"*, ICLR 2026 ([arXiv:2511.19797](https://arxiv.org/abs/2511.19797)).  Training is Algorithm 1\nwith the objective of Eq. 15; sampling is Figure 3.\n\n**Call** `update_ema` **once per optimiser step.**  Algorithm 1\nkeeps two exponential moving averages of the weights and updates both\nafter every step: $\\theta^*$ at\n`TVMConfig.target_ema_decay`, which the terminal target and the\nunconditional half of the guided velocity are read off, and\n$\\theta^{**}$ at `TVMConfig.eval_ema_decay`, the model\nthat is evaluated and that the released checkpoints are.  Only the\ncaller knows when an optimiser step has happened.\n\nBoth copies are created from the live weights the first time either\nis needed — the first training step reads $\\theta^*$, so that\nis $\\theta^* \\leftarrow \\theta,\\ \\theta^{**} \\leftarrow \\theta$ at initialisation, as Algorithm 1 has it — and both are kept\noutside the module tree: not parameters, not in `state_dict`,\nnot counted.  They are training state, like an optimiser's moments;\n`target_network` and `ema_network` expose them for\ncheckpointing.  Loading weights into the network — through\n`load_state_dict` here or on `tvm` — restarts both from the\nloaded weights, so to resume a run load the network first and the\naverages' own checkpoints after it."
       ],
       "attributes": [
         {
@@ -586,7 +586,7 @@
       ],
       "labels": [],
       "signature": "TVMModel(config: TVMConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L330",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L348",
       "subcategory": "model",
       "methods": [
         {
@@ -595,7 +595,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: TVMConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L383",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L401",
           "subcategory": "model",
           "summary": "Initialise the network. See the class docstring for parameters.",
           "extended": null,
@@ -617,7 +617,7 @@
           "kind": "function",
           "labels": [],
           "signature": "resolve_guidance(guidance_scale: Tensor | float | None, labels: Tensor | None)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L465",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L490",
           "subcategory": "model",
           "summary": "The guidance weight a call runs at.",
           "extended": null,
@@ -652,7 +652,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, t: Tensor, s: Tensor, labels: Tensor | None = None, guidance_scale: Tensor | float | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L489",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L514",
           "subcategory": "model",
           "summary": "Evaluate the average velocity from time `t` to time `s`.",
           "extended": null,
@@ -763,7 +763,7 @@
       ],
       "labels": [],
       "signature": "TVMOutput(loss: Tensor, terminal_loss: Tensor, flow_matching_loss: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L292",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L310",
       "subcategory": "model",
       "methods": [
         {
@@ -772,7 +772,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(loss: Tensor, terminal_loss: Tensor, flow_matching_loss: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_model.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_model.py#L1",
           "subcategory": "model",
           "summary": "Initialise the embedder. See the class docstring for parameters.",
           "extended": null,
@@ -824,7 +824,7 @@
       "kind": "function",
       "labels": [],
       "signature": "tvm_imagenet256(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_pretrained.py#L59",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_pretrained.py#L59",
       "subcategory": "pretrained",
       "summary": "The 256-pixel ImageNet network — one step to 3.29 FID.",
       "extended": null,
@@ -856,7 +856,215 @@
       "attributes": [],
       "warns": [],
       "see_also": [],
-      "param_count": 678000000
+      "param_count": 678000000,
+      "model_summary": {
+        "name": "TVMModel",
+        "type": "TVMModel",
+        "params": 678068496,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "patch_embed",
+            "type": "Conv2d",
+            "params": 19584,
+            "own_params": 19584,
+            "children": []
+          },
+          {
+            "name": "time_embed",
+            "type": "_ScalarEmbedder",
+            "params": 1624320,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 296064,
+                "own_params": 296064,
+                "children": []
+              },
+              {
+                "name": "act",
+                "type": "SiLU",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1328256,
+                "own_params": 1328256,
+                "children": []
+              }
+            ],
+            "repeat": 3
+          },
+          {
+            "name": "label_embed",
+            "type": "Embedding",
+            "params": 1153152,
+            "own_params": 1153152,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 669347840,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_TVMBlock",
+                "params": 23905280,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 5313152,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3984768,
+                        "own_params": 3984768,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1328256,
+                        "own_params": 1328256,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "norm2",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_FeedForward",
+                    "params": 10622592,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "fc1",
+                        "type": "Linear",
+                        "params": 5313024,
+                        "own_params": 5313024,
+                        "children": []
+                      },
+                      {
+                        "name": "act",
+                        "type": "GELU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "fc2",
+                        "type": "Linear",
+                        "params": 5309568,
+                        "own_params": 5309568,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Sequential",
+                    "params": 7969536,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "SiLU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "1",
+                        "type": "Linear",
+                        "params": 7969536,
+                        "own_params": 7969536,
+                        "children": []
+                      }
+                    ]
+                  }
+                ],
+                "repeat": 28
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2674960,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Sequential",
+                "params": 2656512,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "SiLU",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "1",
+                    "type": "Linear",
+                    "params": 2656512,
+                    "own_params": 2656512,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 18448,
+                "own_params": 18448,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "tvm_imagenet256_gen",
@@ -864,7 +1072,7 @@
       "kind": "function",
       "labels": [],
       "signature": "tvm_imagenet256_gen(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_pretrained.py#L152",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_pretrained.py#L152",
       "subcategory": "pretrained",
       "summary": "`tvm_imagenet256` with its objective and sampler.",
       "extended": null,
@@ -896,7 +1104,223 @@
       "attributes": [],
       "warns": [],
       "see_also": [],
-      "param_count": 678000000
+      "param_count": 678000000,
+      "model_summary": {
+        "name": "TVMForImageGeneration",
+        "type": "TVMForImageGeneration",
+        "params": 678068496,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "tvm",
+            "type": "TVMModel",
+            "params": 678068496,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "patch_embed",
+                "type": "Conv2d",
+                "params": 19584,
+                "own_params": 19584,
+                "children": []
+              },
+              {
+                "name": "time_embed",
+                "type": "_ScalarEmbedder",
+                "params": 1624320,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 296064,
+                    "own_params": 296064,
+                    "children": []
+                  },
+                  {
+                    "name": "act",
+                    "type": "SiLU",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 1328256,
+                    "own_params": 1328256,
+                    "children": []
+                  }
+                ],
+                "repeat": 3
+              },
+              {
+                "name": "label_embed",
+                "type": "Embedding",
+                "params": 1153152,
+                "own_params": 1153152,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 669347840,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_TVMBlock",
+                    "params": 23905280,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 5313152,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 3984768,
+                            "own_params": 3984768,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 1328256,
+                            "own_params": 1328256,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "norm2",
+                        "type": "RMSNorm",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_FeedForward",
+                        "params": 10622592,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "fc1",
+                            "type": "Linear",
+                            "params": 5313024,
+                            "own_params": 5313024,
+                            "children": []
+                          },
+                          {
+                            "name": "act",
+                            "type": "GELU",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "fc2",
+                            "type": "Linear",
+                            "params": 5309568,
+                            "own_params": 5309568,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Sequential",
+                        "params": 7969536,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "0",
+                            "type": "SiLU",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "1",
+                            "type": "Linear",
+                            "params": 7969536,
+                            "own_params": 7969536,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ],
+                    "repeat": 28
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 2674960,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Sequential",
+                    "params": 2656512,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "SiLU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "1",
+                        "type": "Linear",
+                        "params": 2656512,
+                        "own_params": 2656512,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 18448,
+                    "own_params": 18448,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "tvm_imagenet512",
@@ -904,7 +1328,7 @@
       "kind": "function",
       "labels": [],
       "signature": "tvm_imagenet512(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_pretrained.py#L105",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_pretrained.py#L105",
       "subcategory": "pretrained",
       "summary": "The 512-pixel ImageNet network — one step to 4.32 FID.",
       "extended": null,
@@ -936,7 +1360,215 @@
       "attributes": [],
       "warns": [],
       "see_also": [],
-      "param_count": 678000000
+      "param_count": 678000000,
+      "model_summary": {
+        "name": "TVMModel",
+        "type": "TVMModel",
+        "params": 678068496,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "patch_embed",
+            "type": "Conv2d",
+            "params": 19584,
+            "own_params": 19584,
+            "children": []
+          },
+          {
+            "name": "time_embed",
+            "type": "_ScalarEmbedder",
+            "params": 1624320,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 296064,
+                "own_params": 296064,
+                "children": []
+              },
+              {
+                "name": "act",
+                "type": "SiLU",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1328256,
+                "own_params": 1328256,
+                "children": []
+              }
+            ],
+            "repeat": 3
+          },
+          {
+            "name": "label_embed",
+            "type": "Embedding",
+            "params": 1153152,
+            "own_params": 1153152,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 669347840,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_TVMBlock",
+                "params": 23905280,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 5313152,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3984768,
+                        "own_params": 3984768,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1328256,
+                        "own_params": 1328256,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "norm2",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_FeedForward",
+                    "params": 10622592,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "fc1",
+                        "type": "Linear",
+                        "params": 5313024,
+                        "own_params": 5313024,
+                        "children": []
+                      },
+                      {
+                        "name": "act",
+                        "type": "GELU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "fc2",
+                        "type": "Linear",
+                        "params": 5309568,
+                        "own_params": 5309568,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Sequential",
+                    "params": 7969536,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "SiLU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "1",
+                        "type": "Linear",
+                        "params": 7969536,
+                        "own_params": 7969536,
+                        "children": []
+                      }
+                    ]
+                  }
+                ],
+                "repeat": 28
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2674960,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Sequential",
+                "params": 2656512,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "SiLU",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "1",
+                    "type": "Linear",
+                    "params": 2656512,
+                    "own_params": 2656512,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 18448,
+                "own_params": 18448,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "tvm_imagenet512_gen",
@@ -944,7 +1576,7 @@
       "kind": "function",
       "labels": [],
       "signature": "tvm_imagenet512_gen(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/7c1432e/lucid/models/generative/tvm/_pretrained.py#L195",
+      "source": "https://github.com/lucid-official/lucid/blob/1ad6e4e/lucid/models/generative/tvm/_pretrained.py#L195",
       "subcategory": "pretrained",
       "summary": "`tvm_imagenet512` with its objective and sampler.",
       "extended": null,
@@ -976,7 +1608,223 @@
       "attributes": [],
       "warns": [],
       "see_also": [],
-      "param_count": 678000000
+      "param_count": 678000000,
+      "model_summary": {
+        "name": "TVMForImageGeneration",
+        "type": "TVMForImageGeneration",
+        "params": 678068496,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "tvm",
+            "type": "TVMModel",
+            "params": 678068496,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "patch_embed",
+                "type": "Conv2d",
+                "params": 19584,
+                "own_params": 19584,
+                "children": []
+              },
+              {
+                "name": "time_embed",
+                "type": "_ScalarEmbedder",
+                "params": 1624320,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 296064,
+                    "own_params": 296064,
+                    "children": []
+                  },
+                  {
+                    "name": "act",
+                    "type": "SiLU",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 1328256,
+                    "own_params": 1328256,
+                    "children": []
+                  }
+                ],
+                "repeat": 3
+              },
+              {
+                "name": "label_embed",
+                "type": "Embedding",
+                "params": 1153152,
+                "own_params": 1153152,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 669347840,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_TVMBlock",
+                    "params": 23905280,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 5313152,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 3984768,
+                            "own_params": 3984768,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 1328256,
+                            "own_params": 1328256,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "norm2",
+                        "type": "RMSNorm",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_FeedForward",
+                        "params": 10622592,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "fc1",
+                            "type": "Linear",
+                            "params": 5313024,
+                            "own_params": 5313024,
+                            "children": []
+                          },
+                          {
+                            "name": "act",
+                            "type": "GELU",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "fc2",
+                            "type": "Linear",
+                            "params": 5309568,
+                            "own_params": 5309568,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Sequential",
+                        "params": 7969536,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "0",
+                            "type": "SiLU",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          },
+                          {
+                            "name": "1",
+                            "type": "Linear",
+                            "params": 7969536,
+                            "own_params": 7969536,
+                            "children": []
+                          }
+                        ]
+                      }
+                    ],
+                    "repeat": 28
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 2674960,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Sequential",
+                    "params": 2656512,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "SiLU",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      },
+                      {
+                        "name": "1",
+                        "type": "Linear",
+                        "params": 2656512,
+                        "own_params": 2656512,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 18448,
+                    "own_params": 18448,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   ],
   "summary": "Terminal Velocity Matching — one- and few-step generation from scratch.",
@@ -991,7 +1839,7 @@
   "see_also": [],
   "canonical_name": "TVM",
   "citation": "Zhou, Linqi, Mathias Parger, Ayaan Haque, and Jiaming Song. \"Terminal Velocity Matching.\" International Conference on Learning Representations (ICLR), 2026.  [arXiv:2511.19797](https://arxiv.org/abs/2511.19797).",
-  "theory": "Write the ground-truth flow map from time $t$ to time $s$\nas $\\psi(x_t, t, s) = x_t + \\int_t^s u(x_r, r)\\,dr$ and its net\ndisplacement as $f(x_t, t, s) = \\psi(x_t, t, s) - x_t$.  The\ndisplacement satisfies two conditions: it *is* the integral, and its\nderivative at $s = t$ is the instantaneous velocity.  One\ntwo-time network parameterises both,\n\n\n\n$$\nf_\\theta(x_t, t, s) = (s - t)\\,F_\\theta(x_t, t, s), \\qquad\nu_\\theta(x_t, t) = F_\\theta(x_t, t, t),\n$$\n\nand the scaling $(s - t)$ makes $f_\\theta(x_t, t, t) = 0$\nhold by construction.\n\nThe integral condition cannot be trained directly — it would need an\nODE solve per sample.  Differentiating it with respect to the\n**terminal** time $s$ instead gives a condition with no\nintegral in it,\n\n\n\n$$\n\\frac{d}{ds} f(x_t, t, s) = u\\bigl(\\psi(x_t, t, s), s\\bigr),\n$$\n\nand the squared error in that condition, integrated over\n$s \\in [0, t]$, upper-bounds the displacement error.  The\nunknowns on the right are replaced by the model itself — the jump\nlands at $x_t + f_\\theta(x_t, t, s)$ and the velocity there is\n$u_\\theta$ — which is only sound if $u_\\theta$ is right,\nso Flow Matching is trained jointly.  It is the same condition at\nzero displacement:\n\n\n\n$$\n\\mathcal{L}^{t,s}_{\\mathrm{TVM}}\n= \\Bigl\\lVert \\tfrac{d}{ds} f_\\theta(x_t, t, s)\n  - u_{\\theta^*}\\!\\bigl(x_t + f_{\\theta}(x_t, t, s), s\\bigr)\n  \\Bigr\\rVert^2\n+ \\bigl\\lVert u_\\theta(x_s, s) - v_s \\bigr\\rVert^2 .\n$$\n\n$\\theta^*$ is an exponential moving average of the weights,\nheld under a stop-gradient, and the derivative expands to\n$F_\\theta + (s - t)\\,\\partial_s F_\\theta$ — one Jacobian-vector\nproduct along $s$, whose result is itself back-propagated\nthrough.  A weighted integral of this objective over $s$ bounds\n$W_2^2$ between the data and the model's push-forward when\n$u_\\theta(\\cdot, s)$ is Lipschitz (Theorem 1).\n\n**MeanFlow's dual.**  MeanFlow enforces\n$\\frac{d}{dt} f_\\theta = -u(x_t, t)$, differentiating at the\n*start*; the tangent of that derivative contains the sampled velocity\n$v_t$, whose magnitude under guidance varies widely.  TVM's\ntangent is a unit step in $s$, independent of $x_t$ and\n$t$, which is why it trains stably even with random guidance.\n\n**Guidance is learned, not applied.**  The class-conditional field is\nthe guided one, $w\\,u(x, r, c) + (1 - w)\\,u(x, r)$, with the\nunconditional half supplied by the EMA network.  Its magnitude grows\nlinearly in $w$, so the loss is weighted by $1/w^2$ and\nthe network optionally predicts $F$ with the factor $w$\npulled out — the *scaled parameterisation*.\n\n**Semi-Lipschitz control.**  Every LayerNorm becomes a parameter-free\nRMSNorm, queries and keys are RMS-normalised, every adaLN modulation\nvector is itself RMS-normalised so its scale cannot grow without\nbound, and linear layers start at unit spectral norm.",
+  "theory": "Write the ground-truth flow map from time $t$ to time $s$\nas $\\psi(x_t, t, s) = x_t + \\int_t^s u(x_r, r)\\,dr$ and its net\ndisplacement as $f(x_t, t, s) = \\psi(x_t, t, s) - x_t$.  The\ndisplacement satisfies two conditions: it *is* the integral, and its\nderivative at $s = t$ is the instantaneous velocity.  One\ntwo-time network parameterises both,\n\n\n\n$$\nf_\\theta(x_t, t, s) = (s - t)\\,F_\\theta(x_t, t, s), \\qquad\nu_\\theta(x_t, t) = F_\\theta(x_t, t, t),\n$$\n\nand the scaling $(s - t)$ makes $f_\\theta(x_t, t, t) = 0$\nhold by construction.\n\nThe integral condition cannot be trained directly — it would need an\nODE solve per sample.  Differentiating it with respect to the\n**terminal** time $s$ instead gives a condition with no\nintegral in it,\n\n\n\n$$\n\\frac{d}{ds} f(x_t, t, s) = u\\bigl(\\psi(x_t, t, s), s\\bigr),\n$$\n\nand the squared error in that condition, integrated over\n$s \\in [0, t]$, upper-bounds the displacement error.  The\nunknowns on the right are replaced by the model itself — the jump\nlands at $x_t + f_\\theta(x_t, t, s)$ and the velocity there is\n$u_\\theta$ — which is only sound if $u_\\theta$ is right,\nso Flow Matching is trained jointly.  It is the same condition at\nzero displacement:\n\n\n\n$$\n\\mathcal{L}^{t,s}_{\\mathrm{TVM}}\n= \\Bigl\\lVert \\tfrac{d}{ds} f_\\theta(x_t, t, s)\n  - u_{\\theta^*}\\!\\bigl(x_t + f_{\\theta}(x_t, t, s), s\\bigr)\n  \\Bigr\\rVert^2\n+ \\bigl\\lVert u_\\theta(x_s, s) - v_s \\bigr\\rVert^2 .\n$$\n\n$\\theta^*$ is an exponential moving average of the weights,\nheld under a stop-gradient, and the derivative expands to\n$F_\\theta + (s - t)\\,\\partial_s F_\\theta$ — one Jacobian-vector\nproduct along $s$, whose result is itself back-propagated\nthrough.  A weighted integral of this objective over $s$ bounds\n$W_2^2$ between the data and the model's push-forward when\n$u_\\theta(\\cdot, s)$ is Lipschitz (Theorem 1).\n\n**MeanFlow's dual.**  MeanFlow enforces\n$\\frac{d}{dt} f_\\theta = -u(x_t, t)$, differentiating at the\n*start*; the tangent of that derivative contains the sampled velocity\n$v_t$, whose magnitude under guidance varies widely.  TVM's\ntangent is a unit step in $s$, independent of $x_t$ and\n$t$, which is why it trains stably even with random guidance.\n\n**Guidance is learned, not applied.**  The class-conditional field is\nthe guided one, $w\\,u(x, r, c) + (1 - w)\\,u(x, r)$, with the\nunconditional half supplied by the EMA network.  Its magnitude grows\nlinearly in $w$, so the loss is weighted by $1/w^2$ and\nthe network optionally predicts $F$ with the factor $w$\npulled out — the *scaled parameterisation*.\n\n**Semi-Lipschitz control.**  Every LayerNorm becomes a parameter-free\nRMSNorm, queries and keys are RMS-normalised, every adaLN modulation\nvector is itself RMS-normalised so its scale cannot grow without\nbound, and linear layers start at unit spectral norm.\n\n**Where Lucid departs from the authors' release, on purpose.**  The\nmodel matches the authors' code to float32 rounding (forward pass,\nterminal derivative, loss, every gradient and the sampler), but three\nchoices differ, and they matter to anyone reproducing a released run\nfrom scratch:\n\n* *The patch embedding starts at unit spectral norm.*  Lucid divides\n  the patch-embedding weight by its largest singular value, as the\n  paper prescribes for linear layers.  The release's initialiser\n  divides a rebound alias of the weight (`w.data = w.data / s[0]`)\n  rather than the parameter, so its patch embedding keeps the\n  Xavier-normal draw, $\\sigma_{\\max} \\approx 1.53$ at full size.\n* *Precision.*  The release trains under bf16 autocast, and its\n  Jacobian-vector product runs attention in bf16 even when autocast\n  is off.  Lucid computes in the model's own dtype throughout —\n  float32 unless the model is cast — including the terminal\n  derivative.  A converted checkpoint sampled in Lucid is therefore\n  not rounded where the authors' bf16 sampler is.\n* *No NaN masking.*  The release replaces a NaN loss with zero before\n  the backward pass; Lucid returns the loss as computed, so a\n  diverging step is seen instead of trained through.",
   "tasks": [
     "image-generation"
   ]

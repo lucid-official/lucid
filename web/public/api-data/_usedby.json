@@ -80,11 +80,19 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._shared"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite.complex"
     },
     {
       "kind": "module",
       "module": "lucid._ops.composite.indexing"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite.integer"
     },
     {
       "kind": "module",
@@ -148,6 +156,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.autograd._grad_inplace"
+    },
+    {
+      "kind": "module",
       "module": "lucid.autograd._grad_mode"
     },
     {
@@ -193,6 +205,14 @@
     {
       "kind": "module",
       "module": "lucid.compile._core.buffer_writes"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.custom_backward"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.signature"
     },
     {
       "kind": "module",
@@ -304,6 +324,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.nn.functional._distance"
+    },
+    {
+      "kind": "module",
       "module": "lucid.nn.functional._grid_sampling"
     },
     {
@@ -321,6 +345,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.functional._pool_core"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional._shrinkage"
     },
     {
       "kind": "module",
@@ -397,6 +425,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.utils.clip_grad"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrize"
     },
     {
       "kind": "module",
@@ -520,6 +552,14 @@
     }
   ],
   "lucid.autograd": [
+    {
+      "kind": "module",
+      "module": "lucid.compile._entry.function"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._entry.segmented_step"
+    },
     {
       "kind": "module",
       "module": "lucid.distributions.student"
@@ -700,6 +740,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.autograd._grad_inplace"
+    },
+    {
+      "kind": "module",
       "module": "lucid.autograd.checkpoint"
     },
     {
@@ -772,6 +816,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._pow2"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._rounding"
     },
     {
@@ -827,6 +875,10 @@
     {
       "kind": "module",
       "module": "lucid._ops.composite._gamma"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite._pow2"
     },
     {
       "kind": "module",
@@ -2161,6 +2213,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.functional.normalization"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
     }
   ],
   "lucid.linalg._ex.cholesky_ex": [
@@ -2223,16 +2279,38 @@
       "module": "lucid.linalg._ex"
     }
   ],
+  "lucid.linalg.householder_product": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
+    }
+  ],
   "lucid.linalg.inv": [
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
     }
   ],
+  "lucid.linalg.matrix_exp": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
+    }
+  ],
+  "lucid.linalg.qr": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
+    }
+  ],
   "lucid.linalg.solve": [
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
     }
   ],
   "lucid.linalg.solve_triangular": [
@@ -12330,6 +12408,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.vision._common._position"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.vision._common._transformers"
     },
     {
@@ -13055,24 +13137,70 @@
       "module": "lucid.utils.transforms.functional"
     }
   ],
+  "lucid.nn.functional._distance.cosine_similarity": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._distance.pairwise_distance": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._shrinkage.hardshrink": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._shrinkage.softshrink": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._shrinkage.tanhshrink": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._softmax.gumbel_softmax": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._softmax.log_softmax": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._softmax.softmax": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._softmax.softmin": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
+  "lucid.nn.functional._softmax.straight_through": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional.activations"
+    }
+  ],
   "lucid.nn.functional.activations.celu": [
     {
       "kind": "module",
       "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
-  "lucid.nn.functional.activations.cosine_similarity": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional.loss"
     },
     {
       "kind": "module",
@@ -13114,22 +13242,6 @@
     }
   ],
   "lucid.nn.functional.activations.glu": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
-  "lucid.nn.functional.activations.gumbel_softmax": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    }
-  ],
-  "lucid.nn.functional.activations.hardshrink": [
     {
       "kind": "module",
       "module": "lucid.nn.functional"
@@ -13191,24 +13303,6 @@
       "module": "lucid.nn.functional"
     }
   ],
-  "lucid.nn.functional.activations.log_softmax": [
-    {
-      "kind": "module",
-      "module": "lucid.distributions.categorical"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional.loss"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
   "lucid.nn.functional.activations.logsigmoid": [
     {
       "kind": "module",
@@ -13227,24 +13321,6 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules.activation"
-    }
-  ],
-  "lucid.nn.functional.activations.pairwise_distance": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional.loss"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.loss"
     }
   ],
   "lucid.nn.functional.activations.prelu": [
@@ -13351,42 +13427,6 @@
       "module": "lucid.nn.modules.activation"
     }
   ],
-  "lucid.nn.functional.activations.softmax": [
-    {
-      "kind": "module",
-      "module": "lucid.distributions.categorical"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.distributions.relaxed"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.distributions.transforms"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional.attention"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
-  "lucid.nn.functional.activations.softmin": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
   "lucid.nn.functional.activations.softplus": [
     {
       "kind": "module",
@@ -13401,34 +13441,10 @@
       "module": "lucid.nn.modules.activation"
     }
   ],
-  "lucid.nn.functional.activations.softshrink": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
-    }
-  ],
   "lucid.nn.functional.activations.softsign": [
     {
       "kind": "module",
       "module": "lucid.nn.functional"
-    }
-  ],
-  "lucid.nn.functional.activations.straight_through": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional.sparse"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.sparse"
     }
   ],
   "lucid.nn.functional.activations.symexp": [
@@ -13459,16 +13475,6 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules.rnn"
-    }
-  ],
-  "lucid.nn.functional.activations.tanhshrink": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.functional"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.modules.activation"
     }
   ],
   "lucid.nn.functional.activations.threshold": [
@@ -13958,7 +13964,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.nn.functional.activations"
+      "module": "lucid.nn.functional._distance"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
     }
   ],
   "lucid.nn.functional.normalization.rms_norm": [
@@ -14496,6 +14506,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._entry.decode_step"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._entry.function"
     },
     {
@@ -14621,6 +14635,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.utils._copy"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrizations"
     },
     {
       "kind": "module",
@@ -14863,6 +14881,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.utils.parametrize"
     }
   ],
   "lucid.nn.modules.container.ModuleList": [
@@ -14888,6 +14910,10 @@
     }
   ],
   "lucid.nn.modules.container.Sequential": [
+    {
+      "kind": "module",
+      "module": "lucid.compile._entry.segmented_step"
+    },
     {
       "kind": "module",
       "module": "lucid.nn.modules"
@@ -15696,6 +15722,10 @@
   "lucid.nn.parameter.Parameter": [
     {
       "kind": "module",
+      "module": "lucid.compile._entry.function"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._entry.module"
     },
     {
@@ -16093,6 +16123,12 @@
       "module": "lucid.nn.quantized"
     }
   ],
+  "lucid.nn.utils": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.tvm._model"
+    }
+  ],
   "lucid.nn.utils._copy.copy_parameters_and_buffers": [
     {
       "kind": "module",
@@ -16219,10 +16255,6 @@
     {
       "kind": "module",
       "module": "lucid.nn.utils"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.parametrizations"
     }
   ],
   "lucid.nn.utils.weight_norm.remove_weight_norm": [
@@ -16235,10 +16267,6 @@
     {
       "kind": "module",
       "module": "lucid.nn.utils"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.parametrizations"
     }
   ],
   "lucid.optim": [
@@ -16389,6 +16417,14 @@
     {
       "kind": "module",
       "module": "lucid.optim"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.optim._scheduler_base"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.optim._step_counter"
     },
     {
       "kind": "module",
@@ -17079,6 +17115,78 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.tvm._model"
+    }
+  ],
+  "lucid.special._polynomials.chebyshev_polynomial_t": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.chebyshev_polynomial_u": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.chebyshev_polynomial_v": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.chebyshev_polynomial_w": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.hermite_polynomial_h": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.hermite_polynomial_he": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.laguerre_polynomial_l": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.legendre_polynomial_p": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.shifted_chebyshev_polynomial_t": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.shifted_chebyshev_polynomial_u": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.shifted_chebyshev_polynomial_v": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
+    }
+  ],
+  "lucid.special._polynomials.shifted_chebyshev_polynomial_w": [
+    {
+      "kind": "module",
+      "module": "lucid.special"
     }
   ],
   "lucid.special.multigammaln": [
