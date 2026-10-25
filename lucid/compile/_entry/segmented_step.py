@@ -61,12 +61,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
+from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.signature import outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
-    from lucid._tensor.tensor import Tensor
     from lucid.compile._core.signature import ParamFingerprint, _Slot
     from lucid.nn.module import Module
     from lucid.nn.modules.container import Sequential

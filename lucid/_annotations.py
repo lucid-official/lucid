@@ -351,7 +351,6 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("ParamFingerprint", "lucid.compile._core.signature", "ParamFingerprint"),
         ("Sequential", "lucid.nn.modules.container", "Sequential"),
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
         ("_Slot", "lucid.compile._core.signature", "_Slot"),
     ),

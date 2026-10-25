@@ -17,7 +17,7 @@
 [![PyPI Total Downloads](https://static.pepy.tech/personalized-badge/lucid-dl?period=total&units=NONE&left_color=GRAY&right_color=yellow&left_text=total%20downloads)](https://pepy.tech/projects/lucid-dl)
 ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/lucid-official/lucid.svg)
 ![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)
-![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-427105-purple)
+![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-427145-purple)
 
 **[Documentation](https://lucid-official.github.io/lucid/)** ·
 **[Model Zoo](https://lucid-official.github.io/lucid/)** ·

@@ -493,3 +493,41 @@ def test_which_outputs_are_differentiable_matches_the_reference(
     got = outcome(lucid, lucid.tensor([1.0, 2.0], requires_grad=True))
     want = outcome(ref, ref.tensor([1.0, 2.0], requires_grad=True))
     assert got == want
+
+
+def test_marked_outputs_add_no_stand_in_detach_to_grad_mode_trace(
+    device: str,
+) -> None:
+    """Non-differentiable output stand-in aliases do not emit extra detach ops (LCD-612)."""
+    from lucid.compile._core.trace_context import recording
+
+    class TwoMarked(Function):
+        @staticmethod
+        def forward(
+            ctx: FunctionCtx, x: lucid.Tensor
+        ) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
+            m1 = x + 1.0
+            m2 = (x > 0.0).long()
+            ctx.mark_non_differentiable(m1)
+            return x * 2.0, m1, m2
+
+        @staticmethod
+        def backward(
+            ctx: FunctionCtx,
+            gy: lucid.Tensor,
+            gm1: lucid.Tensor,
+            gm2: lucid.Tensor,
+        ) -> lucid.Tensor:
+            del ctx, gm1, gm2
+            return gy * 2.0
+
+    x = lucid.randn(4, device=device, requires_grad=True)
+    with recording(watch=(x,), grad_mode=False) as tr_no_grad:
+        TwoMarked.apply(x)
+    with recording(watch=(x,), grad_mode=True) as tr_grad:
+        TwoMarked.apply(x)
+
+    ops_no_grad = [op.name for op in tr_no_grad.graph.ops]
+    ops_grad = [op.name for op in tr_grad.graph.ops]
+    assert ops_grad == ops_no_grad
+    assert ops_grad.count("detach") == 2

@@ -7,6 +7,7 @@ from typing import Any, ClassVar, NamedTuple, Protocol, cast, override
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._python_node import _register
 
@@ -500,11 +501,22 @@ def _wrap_outputs(
         # ``backward`` is handed one gradient per *tensor* output, zeros for
         # a non-differentiable one.  Its slot goes to a stand-in alias that
         # dies here, so neither what ``forward`` returned nor the detached
-        # tensor handed back gets the node.
-        slots = [
-            _wrap(t._impl.data_alias()) if is_marked else t
-            for t, is_marked in zip(tensors, marked, strict=True)
-        ]
+        # tensor handed back gets the node.  The stand-in alias is untraced so
+        # it adds no extra ``detach`` op to a grad-mode trace (LCD-612); an
+        # output that already required grad before ``_register`` (an input or
+        # parameter ``forward`` handed back as-is) also gets a stand-in slot
+        # while a tracer is active so an aborted compile recording does not
+        # turn a caller leaf into a non-leaf.
+        tracing = _C_engine.compile.current_tracer() is not None
+        with untraced():
+            slots = [
+                (
+                    _wrap(t._impl.data_alias())
+                    if is_marked or (tracing and t.requires_grad)
+                    else t
+                )
+                for t, is_marked in zip(tensors, marked, strict=True)
+            ]
         # Which positional arguments were tensors, so ``backward`` may
         # answer with one gradient per argument (``None`` for the rest).
         is_tensor_arg = [isinstance(a, Tensor) for a in args]

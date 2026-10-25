@@ -33,7 +33,7 @@ call does: the executable records no autograd graph (LCD-618).
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, cast, final
 
 from lucid._C import engine as _C_engine
@@ -364,7 +364,10 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         try:  # ``key_of`` drops what read replaced tensors
-            key = fingerprint.key_of((input_ids, cache_position), {}, dynamic=False)
+            key = replace(
+                fingerprint.key_of((input_ids, cache_position), {}, dynamic=False),
+                grad_mode=False,
+            )
         except TypeError, AttributeError:
             key = None
 
