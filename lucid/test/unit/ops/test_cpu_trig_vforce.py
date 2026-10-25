@@ -457,3 +457,98 @@ def test_reference_parity_within_the_measured_ulp_bound(
     sp_want = getattr(ref, name)(ref.from_numpy(sp)).numpy()
     exact = _ulp(sp_want, _exact(name, sp)) == 0
     _assert_bits(getattr(lucid, name)(_t(sp)).numpy()[exact], sp_want[exact], sp[exact])
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_mish_lstm_rope_and_randn_vforce_parity(dtype: type, ref: ModuleType) -> None:
+    """CPU mish, LSTM, RoPE, and Box-Muller normal draws route through Vforce.h (LCD-608)."""
+    l_dt = lucid.float32 if dtype is np.float32 else lucid.float64
+    r_dt = ref.float32 if dtype is np.float32 else ref.float64
+    atol = 1e-6 if dtype is np.float32 else 1e-12
+    rtol = 1e-5 if dtype is np.float32 else 1e-12
+
+    # 1. mish & mish_backward: calls cpu::vtanh(tile, tile, m) in-place (out == in).
+    #    For x in [-16, -9] (f32) or [-35, -19] (f64), softplus(x) = exp(x) sits inside
+    #    |sp| <= _ODD_X[dtype], directly exercising split_edges's out == in stack buffer
+    #    without a (1 + t) term absorbing a 1-ulp error.
+    rng = np.random.default_rng(608)
+    xs = np.concatenate(
+        [
+            np.array(
+                [-30.0, -20.0, -12.0, -10.0, -9.0, -1.0, -0.0, 0.0, 0.5, 2.0, 10.0],
+                dtype=dtype,
+            ),
+            rng.uniform(-14.0, 4.0, 2055).astype(dtype),
+        ]
+    )
+    lx = _t(xs)
+    lx.requires_grad_(True)
+    rx = ref.from_numpy(xs.copy()).requires_grad_(True)
+    ly = F.mish(lx)
+    ry = ref.nn.functional.mish(rx)
+    np.testing.assert_allclose(ly.detach().numpy(), ry.detach().numpy(), rtol=rtol, atol=atol)
+    ly.sum().backward()
+    ry.sum().backward()
+    assert lx.grad is not None and rx.grad is not None
+    np.testing.assert_allclose(lx.grad.numpy(), rx.grad.numpy(), rtol=rtol, atol=atol)
+
+    # 2. CPU LSTM (unprojected and projected, forward + backward) via vexp & vtanh.
+    for proj in (0, 3):
+        l_lstm = lucid.nn.LSTM(4, 6, proj_size=proj, dtype=l_dt)
+        r_lstm = ref.nn.LSTM(4, 6, proj_size=proj, dtype=r_dt)
+        with lucid.no_grad():
+            for name_p, p in l_lstm.named_parameters():
+                arr = rng.standard_normal(p.shape).astype(dtype) * 0.25
+                p.copy_(_t(arr))
+                getattr(r_lstm, name_p).data.copy_(ref.from_numpy(arr))
+        x_seq = rng.standard_normal((5, 3, 4)).astype(dtype)
+        lx_s = _t(x_seq)
+        lx_s.requires_grad_(True)
+        rx_s = ref.from_numpy(x_seq.copy()).requires_grad_(True)
+        l_out, (l_hn, l_cn) = l_lstm(lx_s)
+        r_out, (r_hn, r_cn) = r_lstm(rx_s)
+        np.testing.assert_allclose(l_out.detach().numpy(), r_out.detach().numpy(), rtol=rtol, atol=atol)
+        np.testing.assert_allclose(l_hn.detach().numpy(), r_hn.detach().numpy(), rtol=rtol, atol=atol)
+        np.testing.assert_allclose(l_cn.detach().numpy(), r_cn.detach().numpy(), rtol=rtol, atol=atol)
+        (l_out.sum() + l_hn.sum() + l_cn.sum()).backward()
+        (r_out.sum() + r_hn.sum() + r_cn.sum()).backward()
+        assert lx_s.grad is not None and rx_s.grad is not None
+        np.testing.assert_allclose(lx_s.grad.numpy(), rx_s.grad.numpy(), rtol=rtol, atol=atol)
+        for name_p, p in l_lstm.named_parameters():
+            rp = getattr(r_lstm, name_p)
+            assert p.grad is not None and rp.grad is not None
+            np.testing.assert_allclose(p.grad.numpy(), rp.grad.numpy(), rtol=rtol, atol=atol)
+
+    # 3. CPU RoPE: calls cpu::vcos(sp, cp, LDh) and in-place cpu::vsin(sp, sp, LDh).
+    x_rope = rng.standard_normal((2, 5, 8)).astype(dtype)
+    for interleaved in (False, True):
+        got_rope = lucid.Tensor(
+            lucid._C_engine.nn.rotary_pos_embedding(_t(x_rope)._impl, None, interleaved)
+        ).numpy()
+        theta = np.exp(-2.0 * np.arange(4, dtype=np.float64) * math.log(10000.0) / 8.0)
+        angles = (np.arange(5, dtype=np.float64)[:, None] * theta[None, :]).astype(dtype)
+        c = np.cos(angles.astype(np.float64)).astype(dtype)
+        s = np.sin(angles.astype(np.float64)).astype(dtype)
+        if interleaved:
+            xe, xo = x_rope[..., 0::2], x_rope[..., 1::2]
+            want_rope = np.empty_like(x_rope)
+            want_rope[..., 0::2] = xe * c - xo * s
+            want_rope[..., 1::2] = xo * c + xe * s
+        else:
+            x1, x2 = x_rope[..., :4], x_rope[..., 4:]
+            want_rope = np.concatenate([x1 * c - x2 * s, x2 * c + x1 * s], axis=-1)
+        np.testing.assert_allclose(got_rope, want_rope, rtol=rtol, atol=atol)
+        # Position 0 has angle == 0, where vcos is exact 1 and vsin is exact 0.
+        np.testing.assert_array_equal(got_rope[:, 0, :], x_rope[:, 0, :])
+
+    # 4. CPU Box-Muller normal_ / randn across tile boundary (odd numel = 2051).
+    g1 = lucid.Generator(608)
+    g2 = lucid.Generator(608)
+    n1 = lucid.empty((2051,), dtype=l_dt).normal_(mean=1.5, std=0.75, generator=g1).numpy()
+    n2 = lucid.empty((2051,), dtype=l_dt).normal_(mean=1.5, std=0.75, generator=g2).numpy()
+    assert np.all(np.isfinite(n1))
+    np.testing.assert_array_equal(n1, n2)
+    np.testing.assert_array_equal(g1.get_state().numpy(), g2.get_state().numpy())
+    assert abs(float(n1.mean()) - 1.5) < 0.08
+    assert abs(float(n1.std()) - 0.75) < 0.08

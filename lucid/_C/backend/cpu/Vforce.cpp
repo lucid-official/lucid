@@ -316,10 +316,12 @@ void vrec_f64(const double* in, double* out, std::size_t n) {
     split(in, out, n, [](double* o, const double* i, int* c) { vvrec(o, i, c); });
 }
 
-// erf — Apple Accelerate does not expose a vForce erf symbol.  float32 uses
-// erf_f32 (ErfPoly.h): within 1 ulp of the correctly rounded value and
-// branch-free, so this loop vectorises, which a loop over libm's erff did
-// not.  float64 keeps std::erf.
+// erf — Apple Accelerate does not expose a vForce erf symbol (no vverff /
+// vverf in <Accelerate/Accelerate.h>).  float32 uses erf_f32 (ErfPoly.h):
+// within 1 ulp of the correctly rounded value and branch-free, so this loop
+// vectorises, which a loop over libm's erff did not.  float64 keeps std::erf
+// across parallel_for chunks (0.37 ms on 1e6 elements on M4 Max; allowed under
+// the 2026-10-24 H3 ruling since Accelerate has no double erf routine).
 void verf_f32(const float* in, float* out, std::size_t n) {
     parallel_for(n, kGrain, [&](std::size_t lo, std::size_t hi) {
         const float* __restrict x = in;

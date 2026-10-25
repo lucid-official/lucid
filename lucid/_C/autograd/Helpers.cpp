@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "../backend/Dispatcher.h"
+#include "../backend/cpu/Vforce.h"
 #include "../backend/gpu/MlxBridge.h"
 #include "../core/Allocator.h"
 #include "../core/Error.h"
@@ -786,34 +787,41 @@ void fill_uniform(T* dst, std::size_t numel, double lo, double hi, Generator& ge
 // Fill dst[0..numel) with samples from N(mean, std) using the Box-Muller
 // transform.  Pairs of uniform samples produce two normal samples, so the
 // loop processes two elements at a time with a tail case for odd numel.
-// u1 is clamped away from zero to prevent log(0).
+// u1 is clamped away from zero to prevent log(0), and log / sqrt / cos / sin
+// run through the vForce entries in Vforce.h over aligned L1 tiles.
 template <typename T>
 void fill_normal(T* dst, std::size_t numel, double mean, double std, Generator& gen) {
+    if (numel == 0)
+        return;
     const T m = static_cast<T>(mean);
     const T s = static_cast<T>(std);
     constexpr T two_pi = static_cast<T>(6.28318530717958647692);
     constexpr T eps = std::is_same_v<T, double> ? static_cast<T>(1e-15) : static_cast<T>(1e-7);
-    std::size_t i = 0;
-    while (i + 1 < numel) {
-        T u1 = next_uniform<T>(gen);
-        if (u1 < eps)
-            u1 = eps;
-        T u2 = next_uniform<T>(gen);
-        const T r = std::sqrt(static_cast<T>(-2) * std::log(u1));
-        const T z0 = r * std::cos(two_pi * u2);
-        const T z1 = r * std::sin(two_pi * u2);
-        dst[i] = m + s * z0;
-        dst[i + 1] = m + s * z1;
-        i += 2;
-    }
-    if (i < numel) {
-        // Odd element: use only z0 from the final Box-Muller pair.
-        T u1 = next_uniform<T>(gen);
-        if (u1 < eps)
-            u1 = eps;
-        T u2 = next_uniform<T>(gen);
-        const T r = std::sqrt(static_cast<T>(-2) * std::log(u1));
-        dst[i] = m + s * r * std::cos(two_pi * u2);
+    constexpr std::size_t kPairTile = 1024;
+    const std::size_t total_pairs = (numel + 1) / 2;
+    alignas(64) T u1_buf[kPairTile], ang_buf[kPairTile], c_buf[kPairTile];
+    for (std::size_t base = 0; base < total_pairs; base += kPairTile) {
+        const std::size_t mp = std::min(kPairTile, total_pairs - base);
+        for (std::size_t p = 0; p < mp; ++p) {
+            T u1 = next_uniform<T>(gen);
+            if (u1 < eps)
+                u1 = eps;
+            u1_buf[p] = u1;
+            ang_buf[p] = two_pi * next_uniform<T>(gen);
+        }
+        backend::cpu::vlog(u1_buf, u1_buf, mp);
+        for (std::size_t p = 0; p < mp; ++p)
+            u1_buf[p] = static_cast<T>(-2) * u1_buf[p];
+        backend::cpu::vsqrt(u1_buf, u1_buf, mp);
+        backend::cpu::vcos(ang_buf, c_buf, mp);
+        backend::cpu::vsin(ang_buf, ang_buf, mp);
+        for (std::size_t p = 0; p < mp; ++p) {
+            const std::size_t idx = (base + p) * 2;
+            const T r = u1_buf[p];
+            dst[idx] = m + s * (r * c_buf[p]);
+            if (idx + 1 < numel)
+                dst[idx + 1] = m + s * (r * ang_buf[p]);
+        }
     }
 }
 

@@ -23,6 +23,7 @@
 #include "../../core/Storage.h"
 #include "../IBackend.h"
 #include "Blas.h"
+#include "Vforce.h"
 
 namespace lucid::backend::cpu::lstm {
 
@@ -68,11 +69,6 @@ inline void gemm(bool ta,
 }
 
 template <class S>
-S sigmoid(S x) {
-    return S(1) / (S(1) + std::exp(-x));
-}
-
-template <class S>
 const S* in(const Storage& s) {
     return reinterpret_cast<const S*>(std::get<CpuStorage>(s).ptr.get());
 }
@@ -91,24 +87,37 @@ inline std::size_t n(int a, int b, int c = 1) {
     return static_cast<std::size_t>(a) * static_cast<std::size_t>(b) * static_cast<std::size_t>(c);
 }
 
+// Rebuild the unprojected hidden vector h_raw = o * tanh(c) for one step.
+template <class S>
+void rebuild_h_raw(const Dims& d, const S* o_gate, const S* c_step, S* h_raw) {
+    const int B = d.B, H = d.H, fH = d.gates();
+    vtanh(c_step, h_raw, n(B, H));
+    for (int b = 0; b < B; ++b)
+        for (int k = 0; k < H; ++k)
+            h_raw[n(b, H) + k] *= o_gate[n(b, fH) + k];
+}
+
 // Turn one step's pre-activations into gates and advance the cell:
 // c_t = f * c_{t-1} + i * g, h_raw = o * tanh(c_t).
 template <class S>
 void activate_step(const Dims& d, const S* raw, const S* c_prev, S* gates, S* c_next, S* h_raw) {
-    const int H = d.H, fH = d.gates();
-    for (int b = 0; b < d.B; ++b) {
+    const int B = d.B, H = d.H, fH = d.gates();
+    const std::size_t total_g = n(B, fH);
+    for (std::size_t j = 0; j < total_g; ++j)
+        gates[j] = -raw[j];
+    vexp(gates, gates, total_g);
+    for (int b = 0; b < B; ++b) {
         const S* rb = raw + n(b, fH);
         S* gb = gates + n(b, fH);
+        vtanh(rb + 2 * H, gb + 2 * H, static_cast<std::size_t>(H));
         for (int k = 0; k < H; ++k) {
-            gb[k] = sigmoid(rb[k]);
-            gb[H + k] = sigmoid(rb[H + k]);
-            gb[2 * H + k] = std::tanh(rb[2 * H + k]);
-            gb[3 * H + k] = sigmoid(rb[3 * H + k]);
-            const S c = gb[H + k] * c_prev[n(b, H) + k] + gb[k] * gb[2 * H + k];
-            c_next[n(b, H) + k] = c;
-            h_raw[n(b, H) + k] = gb[3 * H + k] * std::tanh(c);
+            gb[k] = S(1) / (S(1) + gb[k]);
+            gb[H + k] = S(1) / (S(1) + gb[H + k]);
+            gb[3 * H + k] = S(1) / (S(1) + gb[3 * H + k]);
+            c_next[n(b, H) + k] = gb[H + k] * c_prev[n(b, H) + k] + gb[k] * gb[2 * H + k];
         }
     }
+    rebuild_h_raw(d, gates + 3 * H, c_next, h_raw);
 }
 
 // Returns {output, hn, cn, gates, cells}; see the file header for layouts.
@@ -183,11 +192,7 @@ void recurrent_input(const Dims& d,
         return;
     }
     S* h_raw = d.P > 0 ? scratch : h_prev;
-    const S* o_prev = G + n(t - 1, B, fH) + 3 * H;
-    const S* c_prev = C + n(t, B, H);
-    for (int b = 0; b < B; ++b)
-        for (int k = 0; k < H; ++k)
-            h_raw[n(b, H) + k] = o_prev[n(b, fH) + k] * std::tanh(c_prev[n(b, H) + k]);
+    rebuild_h_raw(d, G + n(t - 1, B, fH) + 3 * H, C + n(t, B, H), h_raw);
     if (d.P > 0)
         gemm(false, true, B, d.P, H, h_raw, H, Whr, H, S(0), h_prev, d.P);
 }
@@ -195,16 +200,23 @@ void recurrent_input(const Dims& d,
 // Chain one step's hidden gradient through the gates.  On return ``dG``
 // holds d(pre-activation) for [i, f, g, o] and ``dc`` holds dL/dc_{t-1}.
 template <class S>
-void gate_grads(
-    const Dims& d, const S* gt, const S* ct, const S* ct_prev, const S* dh, S* dc, S* dG) {
+void gate_grads(const Dims& d,
+                const S* gt,
+                const S* ct,
+                const S* ct_prev,
+                const S* dh,
+                S* tc_buf,
+                S* dc,
+                S* dG) {
     const int H = d.H, fH = d.gates();
+    vtanh(ct, tc_buf, n(d.B, H));
     for (int b = 0; b < d.B; ++b) {
         const S* gb = gt + n(b, fH);
         S* dg = dG + n(b, fH);
         for (int k = 0; k < H; ++k) {
             const std::size_t j = n(b, H) + static_cast<std::size_t>(k);
             const S i = gb[k], f = gb[H + k], g = gb[2 * H + k], o = gb[3 * H + k];
-            const S tc = std::tanh(ct[j]);
+            const S tc = tc_buf[j];
             const S dc_k = dh[j] * o * (S(1) - tc * tc) + dc[j];
             dg[k] = dc_k * g * i * (S(1) - i);
             dg[H + k] = dc_k * ct_prev[j] * f * (S(1) - f);
@@ -239,11 +251,7 @@ void hidden_grad(const Dims& d,
         std::copy_n(dh_step, n(B, H), dh_raw);
         return;
     }
-    const S* o_t = G + n(t, B, fH) + 3 * H;
-    const S* c_t = C + n(t + 1, B, H);
-    for (int b = 0; b < B; ++b)
-        for (int k = 0; k < H; ++k)
-            h_raw[n(b, H) + k] = o_t[n(b, fH) + k] * std::tanh(c_t[n(b, H) + k]);
+    rebuild_h_raw(d, G + n(t, B, fH) + 3 * H, C + n(t + 1, B, H), h_raw);
     gemm(true, false, d.P, H, B, dh_step, d.P, h_raw, H, S(1), dWhr, H);
     gemm(false, false, B, H, d.P, dh_step, d.P, Whr, H, S(0), dh_raw, H);
 }
@@ -288,8 +296,8 @@ std::vector<Storage> backward(const Storage& grad_output,
     for (int t = d.T - 1; t >= 0; --t) {
         hidden_grad(d, t, in<S>(grad_output), dh.data(), G, C, Whr, dh_step.data(), h_raw.data(),
                     out<S>(dWhr_s), dh_raw.data());
-        gate_grads(d, G + n(t, B, fH), C + n(t + 1, B, H), C + n(t, B, H), dh_raw.data(), dc.data(),
-                   dG.data());
+        gate_grads(d, G + n(t, B, fH), C + n(t + 1, B, H), C + n(t, B, H), dh_raw.data(),
+                   h_raw.data(), dc.data(), dG.data());
         recurrent_input(d, t, G, C, in<S>(h0), Whr, h_raw.data(), h_prev.data());
 
         gemm(false, false, B, I, fH, dG.data(), fH, Wih, I, S(0), out<S>(dX_s) + n(t, B, I), I);

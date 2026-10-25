@@ -583,22 +583,22 @@ Storage CpuBackend::mish(const Storage& a, const Shape& shape, Dtype dt) {
     std::size_t n = shape_numel(shape);
     std::size_t nb = n * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+    auto run = [&]<typename T>() {
+        const T* p = reinterpret_cast<const T*>(cs.ptr.get());
+        T* q = reinterpret_cast<T*>(ptr.get());
+        for (std::size_t i = 0; i < n; ++i)
+            q[i] = -std::abs(p[i]);
+        cpu::vexp(q, q, n);
+        for (std::size_t i = 0; i < n; ++i)
+            q[i] = std::max(p[i], T(0)) + std::log1p(q[i]);
+        cpu::vtanh(q, q, n);
+        for (std::size_t i = 0; i < n; ++i)
+            q[i] *= p[i];
+    };
     if (dt == Dtype::F32) {
-        const float* p = reinterpret_cast<const float*>(cs.ptr.get());
-        float* q = reinterpret_cast<float*>(ptr.get());
-        for (std::size_t i = 0; i < n; ++i) {
-            const float x = p[i];
-            const float sp = std::max(x, 0.f) + std::log1p(std::exp(-std::abs(x)));
-            q[i] = x * std::tanh(sp);
-        }
+        run.template operator()<float>();
     } else if (dt == Dtype::F64) {
-        const double* p = reinterpret_cast<const double*>(cs.ptr.get());
-        double* q = reinterpret_cast<double*>(ptr.get());
-        for (std::size_t i = 0; i < n; ++i) {
-            const double x = p[i];
-            const double sp = std::max(x, 0.0) + std::log1p(std::exp(-std::abs(x)));
-            q[i] = x * std::tanh(sp);
-        }
+        run.template operator()<double>();
     } else {
         ErrorBuilder("cpu_backend::mish").not_implemented("dtype not supported");
     }
@@ -619,28 +619,39 @@ CpuBackend::mish_backward(const Storage& a, const Storage& grad, const Shape& sh
     std::size_t n = shape_numel(shape);
     std::size_t nb = n * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+    auto run = [&]<typename T>() {
+        const T* xp = reinterpret_cast<const T*>(cs.ptr.get());
+        const T* gp = reinterpret_cast<const T*>(gs.ptr.get());
+        T* qp = reinterpret_cast<T*>(ptr.get());
+        cpu::parallel_for(n, kTranscendentalGrain, [&](std::size_t lo, std::size_t hi) {
+            alignas(64) T tile[kTanhTile], sig_tile[kTanhTile];
+            for (std::size_t base = lo; base < hi; base += kTanhTile) {
+                const std::size_t m = std::min(kTanhTile, hi - base);
+                for (std::size_t i = 0; i < m; ++i) {
+                    const T x = xp[base + i];
+                    tile[i] = -std::abs(x);
+                    sig_tile[i] = -x;
+                }
+                cpu::vexp(tile, tile, m);
+                cpu::vexp(sig_tile, sig_tile, m);
+                for (std::size_t i = 0; i < m; ++i) {
+                    const T x = xp[base + i];
+                    tile[i] = std::max(x, T(0)) + std::log1p(tile[i]);
+                }
+                cpu::vtanh(tile, tile, m);
+                for (std::size_t i = 0; i < m; ++i) {
+                    const T x = xp[base + i];
+                    const T t = tile[i];
+                    const T sig = T(1) / (T(1) + sig_tile[i]);
+                    qp[base + i] = (t + x * (T(1) - t * t) * sig) * gp[base + i];
+                }
+            }
+        });
+    };
     if (dt == Dtype::F32) {
-        const float* xp = reinterpret_cast<const float*>(cs.ptr.get());
-        const float* gp = reinterpret_cast<const float*>(gs.ptr.get());
-        float* qp = reinterpret_cast<float*>(ptr.get());
-        for (std::size_t i = 0; i < n; ++i) {
-            const float x = xp[i];
-            const float sp = std::max(x, 0.f) + std::log1p(std::exp(-std::abs(x)));
-            const float t = std::tanh(sp);
-            const float sig = 1.f / (1.f + std::exp(-x));
-            qp[i] = (t + x * (1.f - t * t) * sig) * gp[i];
-        }
+        run.template operator()<float>();
     } else if (dt == Dtype::F64) {
-        const double* xp = reinterpret_cast<const double*>(cs.ptr.get());
-        const double* gp = reinterpret_cast<const double*>(gs.ptr.get());
-        double* qp = reinterpret_cast<double*>(ptr.get());
-        for (std::size_t i = 0; i < n; ++i) {
-            const double x = xp[i];
-            const double sp = std::max(x, 0.0) + std::log1p(std::exp(-std::abs(x)));
-            const double t = std::tanh(sp);
-            const double sig = 1.0 / (1.0 + std::exp(-x));
-            qp[i] = (t + x * (1.0 - t * t) * sig) * gp[i];
-        }
+        run.template operator()<double>();
     } else {
         ErrorBuilder("cpu_backend::mish_backward").not_implemented("dtype not supported");
     }

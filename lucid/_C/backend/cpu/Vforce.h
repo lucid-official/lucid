@@ -760,4 +760,41 @@ LUCID_INTERNAL void vround_f32(const float* in, float* out, std::size_t n);
 // Accelerate.framework ``vvnint``.
 LUCID_INTERNAL void vround_f64(const double* in, double* out, std::size_t n);
 
+inline void vexp(const float* in, float* out, std::size_t n) {
+    vexp_f32(in, out, n);
+}
+inline void vexp(const double* in, double* out, std::size_t n) {
+    vexp_f64(in, out, n);
+}
+inline void vlog(const float* in, float* out, std::size_t n) {
+    vlog_f32(in, out, n);
+}
+inline void vlog(const double* in, double* out, std::size_t n) {
+    vlog_f64(in, out, n);
+}
+inline void vsqrt(const float* in, float* out, std::size_t n) {
+    vsqrt_f32(in, out, n);
+}
+inline void vsqrt(const double* in, double* out, std::size_t n) {
+    vsqrt_f64(in, out, n);
+}
+inline void vtanh(const float* in, float* out, std::size_t n) {
+    vtanh_f32(in, out, n);
+}
+inline void vtanh(const double* in, double* out, std::size_t n) {
+    vtanh_f64(in, out, n);
+}
+inline void vsin(const float* in, float* out, std::size_t n) {
+    vsin_f32(in, out, n);
+}
+inline void vsin(const double* in, double* out, std::size_t n) {
+    vsin_f64(in, out, n);
+}
+inline void vcos(const float* in, float* out, std::size_t n) {
+    vcos_f32(in, out, n);
+}
+inline void vcos(const double* in, double* out, std::size_t n) {
+    vcos_f64(in, out, n);
+}
+
 }  // namespace lucid::backend::cpu

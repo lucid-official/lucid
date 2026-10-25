@@ -477,38 +477,22 @@ Storage CpuBackend::fused_linear_gelu_forward(
 
     Storage lin_out = linear(x, w, b, x_shape_g, weight_shape_g, out_shape, dt);
 
-#ifdef __APPLE__
-    {
-        auto& cpu = std::get<CpuStorage>(lin_out);
-        const int n = static_cast<int>(cpu.nbytes / sizeof(float));
-        float* p = reinterpret_cast<float*>(cpu.ptr.get());
+    auto& cpu = std::get<CpuStorage>(lin_out);
+    const std::size_t n = cpu.nbytes / sizeof(float);
+    float* p = reinterpret_cast<float*>(cpu.ptr.get());
 
-        std::vector<float> scratch(static_cast<std::size_t>(n));
-        constexpr float kSqrt2OverPi = 0.7978845608f;
-        constexpr float kCoeff = 0.044715f;
+    std::vector<float> scratch(n);
+    constexpr float kSqrt2OverPi = 0.7978845608f;
+    constexpr float kCoeff = 0.044715f;
 
-        for (int i = 0; i < n; ++i) {
-            const float xi = p[i];
-            scratch[static_cast<std::size_t>(i)] = kSqrt2OverPi * (xi + kCoeff * xi * xi * xi);
-        }
-        cpu::vtanh_unfixed_f32(scratch.data(), scratch.data(), static_cast<std::size_t>(n));
-        for (int i = 0; i < n; ++i)
-            p[i] = 0.5f * p[i] * (1.f + scratch[static_cast<std::size_t>(i)]);
+    for (std::size_t i = 0; i < n; ++i) {
+        const float xi = p[i];
+        scratch[i] = kSqrt2OverPi * (xi + kCoeff * xi * xi * xi);
     }
-#else
-    {
-        auto& cpu = std::get<CpuStorage>(lin_out);
-        const std::size_t n = cpu.nbytes / sizeof(float);
-        float* p = reinterpret_cast<float*>(cpu.ptr.get());
-        constexpr float kSqrt2OverPi = 0.7978845608f;
-        constexpr float kCoeff = 0.044715f;
-        for (std::size_t i = 0; i < n; ++i) {
-            const float xi = p[i];
-            const float inner = kSqrt2OverPi * (xi + kCoeff * xi * xi * xi);
-            p[i] = 0.5f * xi * (1.f + std::tanh(inner));
-        }
-    }
-#endif
+    cpu::vtanh_unfixed_f32(scratch.data(), scratch.data(), n);
+    for (std::size_t i = 0; i < n; ++i)
+        p[i] = 0.5f * p[i] * (1.f + scratch[i]);
+
     return lin_out;
 }
 

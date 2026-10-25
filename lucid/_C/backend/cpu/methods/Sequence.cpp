@@ -335,23 +335,15 @@ std::vector<Storage> CpuBackend::sdpa_forward(const Storage& q,
         // the zero output.
         for (std::size_t r = 0; r < B * Lq && Lk > 0; ++r) {
             double* row = Wp + r * Lk;
-            double m = row[0];
-            for (std::size_t j = 1; j < Lk; ++j)
-                if (row[j] > m)
-                    m = row[j];
+            const double m = cpu::vmaxval_f64(row, Lk);
             if (!std::isfinite(m)) {
-                for (std::size_t j = 0; j < Lk; ++j)
-                    row[j] = 0.0;
+                std::memset(row, 0, Lk * sizeof(double));
                 continue;
             }
-            double s = 0.0;
-            for (std::size_t j = 0; j < Lk; ++j) {
-                row[j] = std::exp(row[j] - m);
-                s += row[j];
-            }
-            const double inv = s > 0.0 ? 1.0 / s : 0.0;
-            for (std::size_t j = 0; j < Lk; ++j)
-                row[j] *= inv;
+            cpu::vsadd_f64(row, -m, row, Lk);
+            cpu::vexp_f64(row, row, Lk);
+            const double s = cpu::vsum_f64(row, Lk);
+            cpu::vsmul_f64(row, s > 0.0 ? 1.0 / s : 0.0, row, Lk);
         }
         for (std::size_t b = 0; b < B; ++b)
             cpu::dgemm(false, false, static_cast<int>(Lq), static_cast<int>(Dv),
@@ -630,17 +622,27 @@ CpuBackend::sinusoidal_pos_embedding(std::int64_t seq_len, std::int64_t embed_di
     auto out = alloc_cpu(L * D, dt);
     if (L * D == 0)
         return Storage{std::move(out)};
-    const double inv_d = -std::log(10000.0) / static_cast<double>(D);
+    constexpr double kLog10000 = 9.2103403719761836;
+    const double inv_d = -kLog10000 / static_cast<double>(D);
+    std::vector<double> freq(Dh);
+    for (std::size_t k = 0; k < Dh; ++k)
+        freq[k] = 2.0 * static_cast<double>(k) * inv_d;
+    cpu::vexp_f64(freq.data(), freq.data(), Dh);
+    const std::size_t LDh = L * Dh;
     auto run = [&](auto tag) {
         using T = decltype(tag);
+        std::vector<T> angles(LDh), sines(LDh), cosines(LDh);
+        for (std::size_t i = 0; i < L; ++i)
+            for (std::size_t k = 0; k < Dh; ++k)
+                angles[i * Dh + k] = static_cast<T>(static_cast<double>(i) * freq[k]);
+        cpu::vsin(angles.data(), sines.data(), LDh);
+        cpu::vcos(angles.data(), cosines.data(), LDh);
         T* op = reinterpret_cast<T*>(out.ptr.get());
         for (std::size_t i = 0; i < L; ++i)
             for (std::size_t k = 0; k < Dh; ++k) {
-                const double angle =
-                    static_cast<double>(i) * std::exp(2.0 * static_cast<double>(k) * inv_d);
-                op[i * D + 2 * k] = static_cast<T>(std::sin(angle));
+                op[i * D + 2 * k] = sines[i * Dh + k];
                 if (2 * k + 1 < D)
-                    op[i * D + 2 * k + 1] = static_cast<T>(std::cos(angle));
+                    op[i * D + 2 * k + 1] = cosines[i * Dh + k];
             }
     };
     if (dt == Dtype::F32)
@@ -680,19 +682,20 @@ std::vector<Storage> CpuBackend::rope_forward(const Storage& x,
             pos[i] = static_cast<double>(i);
     }
     std::vector<double> theta(Dh);
-    const double base = std::log(10000.0);
+    constexpr double kLog10000 = 9.2103403719761836;
     for (std::size_t k = 0; k < Dh; ++k)
-        theta[k] = std::exp(-2.0 * static_cast<double>(k) * base / static_cast<double>(D));
+        theta[k] = -2.0 * static_cast<double>(k) * kLog10000 / static_cast<double>(D);
+    cpu::vexp_f64(theta.data(), theta.data(), Dh);
+    const std::size_t LDh = L * Dh;
     auto run = [&](auto tag) {
         using T = decltype(tag);
         T* cp = reinterpret_cast<T*>(cos_t.ptr.get());
         T* sp = reinterpret_cast<T*>(sin_t.ptr.get());
         for (std::size_t i = 0; i < L; ++i)
-            for (std::size_t k = 0; k < Dh; ++k) {
-                const double a = pos[i] * theta[k];
-                cp[i * Dh + k] = static_cast<T>(std::cos(a));
-                sp[i * Dh + k] = static_cast<T>(std::sin(a));
-            }
+            for (std::size_t k = 0; k < Dh; ++k)
+                sp[i * Dh + k] = static_cast<T>(pos[i] * theta[k]);
+        cpu::vcos(sp, cp, LDh);
+        cpu::vsin(sp, sp, LDh);
         const T* xp = reinterpret_cast<const T*>(xs.ptr.get());
         T* op = reinterpret_cast<T*>(out.ptr.get());
         for (std::size_t b = 0; b < batch; ++b)

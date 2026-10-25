@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)
+- route CPU LSTM, mish, RoPE, normal_ via vForce (LCD-608)
 
 ---
 

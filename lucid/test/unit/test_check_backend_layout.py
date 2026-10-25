@@ -155,3 +155,14 @@ def test_rejects_untracked_cpp_non_member_and_extra_include(tmp_path: Path) -> N
     )
     violations = check_backend_layout.scan_backend_layout(tmp_path, tracked)
     assert [v.rule for v in violations] == ["methods-preamble"]
+
+    # 4. Unallowed std::tanh / std::sin in CPU backend compute file (LCD-608)
+    cpu_bin.write_text(
+        _CLEAN_CPU_BINARY.replace(
+            "return a;",
+            "float y = std::tanh(0.5f) + std::sin(0.5f); (void)y;\n    return a;",
+        ),
+        encoding="utf-8",
+    )
+    violations = check_backend_layout.scan_backend_layout(tmp_path, tracked)
+    assert [v.rule for v in violations] == ["cpu-scalar-libm", "cpu-scalar-libm"]
