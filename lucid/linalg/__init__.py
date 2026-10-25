@@ -1000,22 +1000,15 @@ def qr(A: Tensor, mode: str = "reduced") -> tuple[Tensor, Tensor]:
     >>> lucid.allclose(Q.T @ Q, lucid.eye(2), atol=1e-5)   # Q is orthonormal
     True
     """
-    unsupported_if(
-        mode != "reduced",
-        "qr",
-        "mode",
-        mode,
-        detail="Only the reduced factorisation is computed.",
-    )
     with _autocast_entry("qr", _unwrap(A)) as (a_impl,):
         A_cast = _wrap(a_impl)
         q_impl, r_impl = _la.qr(a_impl)
         if not _C_engine.grad_enabled() or not A_cast.requires_grad:
-            return _QrResult(_wrap(q_impl), _wrap(r_impl))
+            return _complete_qr_factors(A_cast, _wrap(q_impl), _wrap(r_impl), mode)
         Q = _QRQGrad.apply(A_cast, q_impl, r_impl)
         R = _QRRGradWithA.apply(A_cast, q_impl, r_impl)
         assert isinstance(Q, Tensor) and isinstance(R, Tensor)
-        return _QrResult(Q, R)
+        return _complete_qr_factors(A_cast, Q, R, mode)
 
 
 @final
@@ -2759,13 +2752,8 @@ def lstsq(
     >>> sol
     tensor([[3.], [3.]])
     """
-    unsupported_if(rcond is not None, "lstsq", "rcond", rcond)
-    unsupported_if(driver is not None, "lstsq", "driver", driver)
     with _autocast_entry("lstsq", _unwrap(input), _unwrap(b)) as (ai, bi):
-        input, b = _wrap(ai), _wrap(bi)
-        sol = _lstsq_solution(input, b, _broadcast_batch)
-        empty = _wrap(_C_engine.zeros([0], ai.dtype, ai.device))
-        return _LstsqResult(sol, empty, empty, empty)
+        return _lstsq_solution(_wrap(ai), _wrap(bi), _broadcast_batch, rcond, driver)
 
 
 def lu_solve(
@@ -3504,6 +3492,7 @@ def diagonal(
 # ``ldl_factor`` above are its checked forms.
 from lucid.linalg._ex import (
     _check_matrix_norm_dims,
+    _complete_qr_factors,
     _complete_svd_factors,
     _cond_compute,
     _EighResult,

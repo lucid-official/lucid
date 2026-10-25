@@ -67,6 +67,22 @@ def test_the_frequency_factories_take_requires_grad(fn: str, n: int) -> None:
 
 
 @pytest.mark.parity
+def test_fftfreq_and_rfftfreq_zero_match_reference(
+    ref: ModuleType, device: str
+) -> None:
+    f0 = lucid.fft.fftfreq(0, device=device)
+    rf0 = ref.fft.fftfreq(0)
+    assert f0.shape == tuple(rf0.shape) == (0,)
+    r0 = lucid.fft.rfftfreq(0, device=device)
+    rr0 = ref.fft.rfftfreq(0)
+    assert r0.shape == tuple(rr0.shape) == (1,)
+    assert bool(lucid.isnan(r0).all().item()) and bool(ref.isnan(rr0).all().item())
+    for fn in ("fftfreq", "rfftfreq"):
+        with pytest.raises(ValueError, match=">= 0"):
+            getattr(lucid.fft, fn)(-1, device=device)
+
+
+@pytest.mark.parity
 @pytest.mark.parametrize(
     "fn, args, kwargs",
     [

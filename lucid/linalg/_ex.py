@@ -858,6 +858,32 @@ def _complete_svd_factors(
     return _SvdResult(U, S, Vh)
 
 
+def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResult:
+    """Return ``(Q, R)`` shaped according to ``mode`` (``'reduced'``, ``'complete'``, ``'r'``)."""
+    if mode not in ("reduced", "complete", "r"):
+        raise ValueError(
+            f"linalg.qr: received unrecognized mode {mode!r}, expected "
+            "'reduced', 'complete', or 'r'"
+        )
+    if mode == "r":
+        return _QrResult(
+            _wrap(_C_engine.zeros([0], A.dtype._engine, A.device._engine)), R
+        )
+    if mode == "complete":
+        m, n = int(A.shape[-2]), int(A.shape[-1])
+        if m > n:
+            Q = _complete_svd_basis(Q, m, n, columns=True)
+            pad = lucid.zeros(
+                *tuple(int(s) for s in A.shape[:-2]),
+                m - n,
+                n,
+                dtype=R.dtype,
+                device=R.device,
+            )
+            R = lucid.cat([R, pad], dim=-2)
+    return _QrResult(Q, R)
+
+
 def _tol_tensor(
     val: float | Tensor, A: Tensor, dtype: lucid.dtype, op: str = "matrix_rank"
 ) -> Tensor:
@@ -1137,22 +1163,91 @@ def _check_lstsq_shapes(
     return vec_rhs, b_batch
 
 
+_LSTSQ_DRIVERS = frozenset({None, "gels", "gelsy", "gelsd", "gelss"})
+
+
+def _lstsq_rank_and_residuals(
+    A: Tensor,
+    b_mat: Tensor,
+    sol_mat: Tensor,
+    sv: Tensor,
+    rank: Tensor,
+    batch: tuple[int, ...],
+    drv: str,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Compute ``(residuals, rank, singular_values)`` for ``lstsq`` under ``drv``."""
+    empty_f = _wrap(_C_engine.zeros([0], _unwrap(A).dtype, _unwrap(A).device))
+    empty_i = _wrap(_C_engine.zeros([0], _C_engine.I64, _unwrap(A).device))
+    if drv == "gelsy":
+        return empty_f, rank, empty_f
+    m, n, k = int(A.shape[-2]), int(A.shape[-1]), int(b_mat.shape[-1])
+    full_rank = bool((rank == n).all().item()) if rank.numel() > 0 else True
+    if m > n and (drv == "gels" or full_rank):
+        if m == 0 or n == 0 or k == 0 or 0 in batch:
+            residuals = lucid.zeros(*batch, k, dtype=A.dtype, device=A.device)
+        else:
+            diff = lucid.matmul(A, sol_mat) - b_mat
+            residuals = (diff.abs() ** 2).sum(dim=-2)
+    else:
+        residuals = empty_f
+    if drv == "gels":
+        return residuals, empty_i, empty_f
+    return residuals, rank, sv
+
+
 def _lstsq_solution(
     A: Tensor,
     B: Tensor,
     broadcast_batch: Callable[[tuple[int, ...], tuple[int, ...]], tuple[int, ...]],
-) -> Tensor:
-    """Validate shapes and compute the minimum-norm least-squares solution ``A⁺ B``."""
+    rcond: float | None = None,
+    driver: str | None = None,
+) -> _LstsqResult:
+    """Validate shapes and compute ``(solution, residuals, rank, singular_values)``."""
+    if driver not in _LSTSQ_DRIVERS:
+        raise ValueError(
+            f"linalg.lstsq: invalid driver {driver!r}; expected one of "
+            "None, 'gels', 'gelsy', 'gelsd', 'gelss'"
+        )
+    drv = ("gelsy" if A.device.type == "cpu" else "gels") if driver is None else driver
     a_shape = tuple(int(s) for s in A.shape)
     b_shape = tuple(int(s) for s in B.shape)
     vec_rhs, b_batch = _check_lstsq_shapes(a_shape, b_shape)
     batch = broadcast_batch(a_shape[:-2], b_batch)
+    n = a_shape[-1]
     b_mat = B.unsqueeze(-1) if vec_rhs else B
-    sol_mat = lucid.matmul(lucid.linalg.pinv(A), b_mat)
-    target_shape = (*batch, a_shape[-1], int(b_mat.shape[-1]))
+    k = int(b_mat.shape[-1])
+    pinv_a = (
+        lucid.linalg.pinv(A)
+        if rcond is None
+        else _pinv_with_tol(A, atol=None, rtol=rcond, hermitian=False)
+    )
+    sol_mat = lucid.matmul(pinv_a, b_mat)
+    target_shape = (*batch, n, k)
     if tuple(int(s) for s in sol_mat.shape) != target_shape:
         sol_mat = sol_mat.expand(*target_shape).contiguous()
-    return sol_mat.squeeze(-1) if vec_rhs else sol_mat
+    with lucid.no_grad():
+        a_det = A.detach()
+        bad = (
+            ~lucid.isfinite(a_det).all(dim=(-2, -1))
+            if a_det.numel() > 0
+            else lucid.zeros(a_shape[:-2], dtype=lucid.bool, device=A.device)
+        )
+        safe_a = (
+            lucid.where(bad.unsqueeze(-1).unsqueeze(-1), lucid.zeros_like(a_det), a_det)
+            if bool(bad.any().item())
+            else a_det
+        )
+        sv = lucid.linalg.svdvals(safe_a)
+        cutoff = _sv_cutoff(safe_a, sv, atol=None, rtol=rcond, op="lstsq")
+        rank = (sv > cutoff).to(lucid.int64).sum(dim=-1)
+        if bool(bad.any().item()):
+            rank = lucid.where(bad, lucid.zeros_like(rank), rank)
+            sv = lucid.where(bad.unsqueeze(-1), lucid.full_like(sv, float("nan")), sv)
+        residuals, rank_out, sv_out = _lstsq_rank_and_residuals(
+            a_det, b_mat.detach(), sol_mat.detach(), sv, rank, batch, drv
+        )
+    sol = sol_mat.squeeze(-1) if vec_rhs else sol_mat
+    return _LstsqResult(sol, residuals, rank_out, sv_out)
 
 
 def _householder_product_ops(H: Tensor, tau: Tensor) -> Tensor:

@@ -1598,13 +1598,13 @@ def fftfreq(
     >>> # Now ranges from -500 Hz to ~496 Hz, centred at 0
     """
     n = int(n)
-    if n <= 0:
-        raise ValueError(f"fftfreq requires n > 0, got {n}")
+    if n < 0:
+        raise ValueError(f"fftfreq requires n >= 0, got {n}")
     half = (n - 1) // 2 + 1  # number of non-negative frequency bins
     pos = lucid.arange(0.0, float(half), 1.0, dtype=dtype, device=device)
     neg = lucid.arange(float(-(n // 2)), 0.0, 1.0, dtype=dtype, device=device)
     full = lucid.cat([pos, neg], 0)
-    return (full * (1.0 / (float(d) * n))).requires_grad_(requires_grad)
+    return (full / (float(d) * n)).requires_grad_(requires_grad)
 
 
 def rfftfreq(
@@ -1689,10 +1689,10 @@ def rfftfreq(
     >>> # len(freqs) == X.shape[-1] == 513
     """
     n = int(n)
-    if n <= 0:
-        raise ValueError(f"rfftfreq requires n > 0, got {n}")
+    if n < 0:
+        raise ValueError(f"rfftfreq requires n >= 0, got {n}")
     bins = lucid.arange(0.0, float(n // 2 + 1), 1.0, dtype=dtype, device=device)
-    return (bins * (1.0 / (float(d) * n))).requires_grad_(requires_grad)
+    return (bins / (float(d) * n)).requires_grad_(requires_grad)
 
 
 def fftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:

@@ -292,3 +292,58 @@ def test_linalg_decompositions_return_named_tuples() -> None:
     assert (ldlf.LD, ldlf.pivots) == (ldlf[0], ldlf[1])
     ldlfe = LA.ldl_factor_ex(a)
     assert (ldlfe.LD, ldlfe.pivots, ldlfe.info) == (ldlfe[0], ldlfe[1], ldlfe[2])
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("shape", [(4, 2), (2, 4), (3, 3), (2, 4, 2)])
+def test_qr_complete_and_r_modes_match_reference(
+    ref: object, device: str, shape: tuple[int, ...]
+) -> None:
+    rng = np.random.default_rng(19)
+    a_np = rng.standard_normal(shape).astype(np.float32)
+    a = lucid.tensor(a_np, device=device, requires_grad=True)
+    ra = ref.tensor(a_np)  # type: ignore[attr-defined]
+
+    q_c, r_c = LA.qr(a, mode="complete")
+    rq_c, rr_c = ref.linalg.qr(ra, mode="complete")  # type: ignore[attr-defined]
+    assert q_c.shape == tuple(rq_c.shape)
+    assert r_c.shape == tuple(rr_c.shape)
+    m = shape[-2]
+    eye = np.broadcast_to(np.eye(m, dtype=np.float32), (*shape[:-2], m, m))
+    np.testing.assert_allclose((q_c.mT @ q_c).detach().numpy(), eye, atol=1e-5)
+    np.testing.assert_allclose((q_c @ r_c).detach().numpy(), a_np, atol=1e-5)
+    (q_c.sum() + r_c.sum()).backward()
+    assert a.grad is not None and np.isfinite(a.grad.numpy()).all()
+
+    q_r, r_r = LA.qr(a.detach(), mode="r")
+    rq_r, rr_r = ref.linalg.qr(ra, mode="r")  # type: ignore[attr-defined]
+    assert q_r.shape == tuple(rq_r.shape) == (0,)
+    assert r_r.shape == tuple(rr_r.shape)
+    np.testing.assert_allclose(
+        np.abs(r_r.diagonal(dim1=-2, dim2=-1).numpy()),
+        np.abs(rr_r.diagonal(dim1=-2, dim2=-1).numpy()),
+        atol=1e-5,
+    )
+    with pytest.raises(ValueError, match="mode"):
+        LA.qr(a.detach(), mode="raw")
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("driver", [None, "gels", "gelsy", "gelsd", "gelss"])
+def test_lstsq_drivers_rcond_residuals_rank_and_sv_match_reference(
+    ref: object, driver: str | None
+) -> None:
+    rng = np.random.default_rng(23)
+    a_np = rng.standard_normal((5, 3))
+    b_np = rng.standard_normal((5, 2))
+    a, b = lucid.tensor(a_np), lucid.tensor(b_np)
+    ra, rb = ref.tensor(a_np), ref.tensor(b_np)  # type: ignore[attr-defined]
+    got = LA.lstsq(a, b, rcond=1e-6, driver=driver)
+    want = ref.linalg.lstsq(ra, rb, rcond=1e-6, driver=driver)  # type: ignore[attr-defined]
+    for g, w in zip(got, want, strict=True):
+        assert g.shape == tuple(w.shape)
+        assert g.dtype == getattr(lucid, str(w.dtype).split(".")[-1])
+        if g.numel() > 0:
+            np.testing.assert_allclose(g.numpy(), w.numpy(), rtol=1e-6, atol=1e-6)
+    with pytest.raises(ValueError, match="driver"):
+        LA.lstsq(a, b, driver="bogus")
