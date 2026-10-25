@@ -27,6 +27,8 @@ _SINGULAR: dict[str, tuple[list[list[float]], float]] = {
     "zero column": ([[0.0, 1.0], [0.0, 2.0]], -1.0),
 }
 
+_NEGATIVE_ZERO_MATRIX = [[-0.0, 0.0], [0.0, 0.0]]
+
 
 def _placements() -> list[object]:
     metal = pytest.mark.skipif(not metal_available(), reason="needs Metal")
@@ -85,7 +87,10 @@ def test_a_batch_mixing_singular_and_regular_matrices(device: str, dtype: str) -
 
 
 def _parity_cases() -> list[object]:
-    return [pytest.param(rows, id=name) for name, (rows, _) in _SINGULAR.items()]
+    return [
+        *(pytest.param(rows, id=name) for name, (rows, _) in _SINGULAR.items()),
+        pytest.param(_NEGATIVE_ZERO_MATRIX, id="negative zero matrix"),
+    ]
 
 
 @pytest.mark.parity

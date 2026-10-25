@@ -1794,12 +1794,11 @@ def slogdet(A: Tensor) -> tuple[Tensor, Tensor]:
     (tensor(-1.), tensor(0.6931))
     """
     d = det(A)
-    di, z = _unwrap(d), _C_engine.zeros_like(_unwrap(d))
-    sign = _wrap(
-        _C_engine.where(
-            _C_engine.equal(di, z), _C_engine.mul(di, z), _C_engine.sign(di)
-        )
-    )
+    di, z, ai = _unwrap(d), _C_engine.zeros_like(_unwrap(d)), _unwrap(A)
+    with _C_engine.NoGradGuard():
+        ds = _unwrap(det(_wrap(_C_engine.add(ai, _C_engine.zeros_like(ai)))))
+    eq = _C_engine.equal(di, z)
+    sign = _wrap(_C_engine.where(eq, _C_engine.mul(ds, z), _C_engine.sign(di)))
     return _SlogdetResult(sign, cast(Tensor, _LogAbsDet.apply(d)))
 
 

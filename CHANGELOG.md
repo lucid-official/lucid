@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - alias CPU Tensor and refuse uncopyable host buffers in from_dlpack
 - accept value=0 in F.pad non-constant modes
 - bump _take version and refuse 0-d int8/16 index_put
+- clear negative-zero input sign in singular slogdet
 
 ---
 
