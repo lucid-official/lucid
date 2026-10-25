@@ -770,7 +770,7 @@
   "lucid.compile._tracing": {"params": ["a:watch=", "a:module=", "k:fold_constants="]},
   "lucid.compile.compile": {"params": ["a:model=", "k:fullgraph=", "k:dynamic=", "k:backend=", "k:mode=", "k:options=", "k:disable="]},
   "lucid.compile.compile_optimizer": {"params": ["a:opt"]},
-  "lucid.compile.compiled_step": {"params": ["a:model", "a:x", "a:loss_fn", "k:use_grad_mode="]},
+  "lucid.compile.compiled_step": {"params": ["a:model", "a:x", "a:loss_fn"]},
   "lucid.compile.diagnose": {"params": ["a:fn", "v:example_inputs"]},
   "lucid.compile.fused_step": {"params": ["a:model", "a:loss_fn", "a:optimizer", "k:grad_scaler="]},
   "lucid.compile.load_compiled": {"params": ["a:path"]},

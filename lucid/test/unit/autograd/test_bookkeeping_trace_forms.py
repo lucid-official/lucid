@@ -400,7 +400,7 @@ def test_a_gradient_penalty_step_is_refused_by_name(device: str, write: str) -> 
             return case(self.lin, t)[0]
 
     try:
-        lucid.compile.compiled_step(_Model(), x, penalised, use_grad_mode=True)
+        lucid.compile.compiled_step(_Model(), x, penalised)
     except RuntimeError as error:
         assert _is_classified_refusal(error), repr(error)
 

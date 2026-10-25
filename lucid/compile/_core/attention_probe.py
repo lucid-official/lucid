@@ -103,11 +103,11 @@ def _run_probe() -> None:
     # Force the workaround OFF so the probe observes the raw hardware result.
     _C_engine.compile.set_attention_workaround_state(0)
     try:
-        lucid.manual_seed(0)
+        gen = lucid.Generator(0)
         for b, h, n, d in _ENVELOPE:
-            q = lucid.randn(b, h, n, d).to("metal")
-            k = lucid.randn(b, h, n, d).to("metal")
-            v = lucid.randn(b, h, n, d).to("metal")
+            q = lucid.randn(b, h, n, d, generator=gen).to("metal")
+            k = lucid.randn(b, h, n, d, generator=gen).to("metal")
+            v = lucid.randn(b, h, n, d, generator=gen).to("metal")
             ref = _attn(q, k, v)  # eager (MLX, correct)
             cm = lucid.compile(_attn)
             out = cm(q, k, v)

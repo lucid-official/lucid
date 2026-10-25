@@ -32,13 +32,15 @@ call does: the executable records no autograd graph (LCD-618).
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Protocol, cast, final
+from typing import TYPE_CHECKING, Any, Protocol, cast, final
 
 from lucid._C import engine as _C_engine
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
 if TYPE_CHECKING:
+    from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.nn.module import Module
     from lucid.utils.cache import StaticCache
@@ -123,6 +125,203 @@ def _needs_gradients(
     return tree_requires_grad(adapter)
 
 
+type _CacheSnapshot = tuple[list[Tensor], list[Tensor], list[int], int]
+
+
+def _restore_cache(static_cache: StaticCache, snap: _CacheSnapshot) -> None:
+    """Undo every cache mutation the trace caused (buffer rebinds + counters),
+    so the real run starts from the pre-trace state."""
+    orig_key, orig_val, orig_cumlen, orig_seen = snap
+    static_cache.key_cache[:] = orig_key
+    static_cache.value_cache[:] = orig_val
+    static_cache._cumulative_length[:] = orig_cumlen
+    static_cache._seen_tokens = orig_seen
+
+
+def _trace_decode_step(
+    forward_fn: Callable[[Tensor, Tensor], Tensor],
+    call: tuple[Tensor, Tensor],
+    adapter: Module,
+    static_cache: StaticCache,
+    snap: _CacheSnapshot,
+) -> tuple[Tracer, Tensor] | None:
+    """Record ``forward_fn(*call)`` under ``recording`` and validate the output."""
+    from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.trace_context import is_tensor_hook_error, recording
+
+    _tls.tracing = True
+    try:
+        with recording(watch=call, module=adapter, grad_mode=False) as tracer:
+            out = forward_fn(*call)
+    except RuntimeError as why:
+        _restore_cache(static_cache, snap)
+        if not is_tensor_hook_error(why):
+            raise
+        return None
+    finally:
+        _tls.tracing = False
+
+    if not tracer.graph.ops or not isinstance(out, Tensor):
+        _restore_cache(static_cache, snap)
+        return None
+    return tracer, out
+
+
+def _collect_cache_write_ids(
+    tracer: Tracer,
+    out: Tensor,
+    static_cache: StaticCache,
+    orig_key: list[Tensor],
+    orig_val: list[Tensor],
+) -> tuple[list[int], dict[int, int]] | None:
+    """Collect the output and per-layer cache write trace IDs and buffer slot map."""
+    from lucid._dispatch import _unwrap
+
+    out_id = tracer.lookup_id(_unwrap(out))
+    if out_id is None:
+        return None
+    write_ids: list[int] = [int(out_id)]
+    buf_slot: dict[int, int] = {}
+    for i in range(len(static_cache.key_cache)):
+        for slot_kv, (buf_after, buf_before) in enumerate(
+            (
+                (static_cache.key_cache[i], orig_key[i]),
+                (static_cache.value_cache[i], orig_val[i]),
+            )
+        ):
+            wid = tracer.lookup_id(_unwrap(buf_after))
+            if wid is None:
+                return None
+            write_ids.append(int(wid))
+            buf_slot[id(_unwrap(buf_before))] = 2 * i + slot_kv
+    return write_ids, buf_slot
+
+
+def _compile_decode_entry(
+    forward_fn: Callable[[Tensor, Tensor], Tensor],
+    static_cache: StaticCache,
+    adapter: Module,
+    input_ids: Tensor,
+    cache_position: Tensor,
+) -> _DecodeEntry | None:
+    """Trace + compile one decode step for this signature."""
+    from lucid._dispatch import _unwrap
+    from lucid.compile._core.attention_probe import maybe_probe_for_graph
+
+    t0 = time.perf_counter()
+    n_layers = len(static_cache.key_cache)
+    snap = (
+        list(static_cache.key_cache),
+        list(static_cache.value_cache),
+        list(static_cache._cumulative_length),
+        static_cache._seen_tokens,
+    )
+    orig_key, orig_val = snap[0], snap[1]
+    traced = _trace_decode_step(
+        forward_fn, (input_ids, cache_position), adapter, static_cache, snap
+    )
+    if traced is None:
+        return None
+    tracer, out = traced
+    graph = tracer.graph
+    maybe_probe_for_graph(graph)
+    ext = tracer.external_feeds
+
+    collected = _collect_cache_write_ids(tracer, out, static_cache, orig_key, orig_val)
+    _restore_cache(static_cache, snap)
+    if collected is None:
+        return None
+    write_ids, buf_slot = collected
+
+    try:
+        exe = _C_engine.compile.compile_or_cached(
+            graph, dict(ext), False, [], write_ids
+        )
+    except RuntimeError:
+        return None
+    if exe is None:
+        return None
+
+    ids_impl = id(_unwrap(input_ids))
+    cp_impl = id(_unwrap(cache_position))
+    input_source: list[object] = []
+    for tid in exe.input_ids:
+        impl = ext.get(tid)
+        if impl is None:
+            return None
+        iid = id(impl)
+        if iid == ids_impl:
+            input_source.append(0)
+        elif iid == cp_impl:
+            input_source.append(1)
+        elif iid in buf_slot:
+            input_source.append(("buf", buf_slot[iid]))
+        else:
+            input_source.append(None)
+
+    return _DecodeEntry(
+        exe=exe,
+        external_feeds=dict(ext),
+        input_source=tuple(input_source),
+        n_buffers=2 * n_layers,
+        compile_ms=(time.perf_counter() - t0) * 1000.0,
+        reads=TraceReads.of(tracer, exe.input_ids, input_source),
+    )
+
+
+def _run_decode_entry(
+    entry: _DecodeEntry,
+    static_cache: StaticCache,
+    input_ids: Tensor,
+    cache_position: Tensor,
+) -> Tensor:
+    """Run one cached decode step + roll the cache forward (rebind, no copy)."""
+    from lucid._dispatch import _unwrap, _wrap
+
+    exe = cast(_ExecutableLike, entry.exe)
+    ids_impl, cp_impl = _unwrap(input_ids), _unwrap(cache_position)
+    feed_impls: list[object] = []
+    for tid, src in zip(exe.input_ids, entry.input_source, strict=True):
+        if src == 0:
+            feed_impls.append(ids_impl)
+        elif src == 1:
+            feed_impls.append(cp_impl)
+        elif isinstance(src, tuple):
+            layer, kv = divmod(src[1], 2)
+            buf = (
+                static_cache.key_cache[layer]
+                if kv == 0
+                else static_cache.value_cache[layer]
+            )
+            feed_impls.append(_unwrap(buf))
+        else:
+            feed_impls.append(entry.external_feeds[tid])
+
+    t0 = time.perf_counter()
+    outs = _C_engine.compile.run_executable(entry.exe, feed_impls)
+    entry.last_run_ms = (time.perf_counter() - t0) * 1000.0
+    entry.n_hits += 1
+
+    n_expected = 1 + entry.n_buffers
+    if len(outs) != n_expected:
+        raise RuntimeError(
+            f"compiled_decode_step: executable returned {len(outs)} outputs, "
+            f"expected {n_expected} (1 output + {entry.n_buffers} cache buffers)"
+        )
+    for slot in range(entry.n_buffers):
+        layer, kv = divmod(slot, 2)
+        new_buf = _wrap(cast(Any, outs[1 + slot]))
+        if kv == 0:
+            static_cache.key_cache[layer] = new_buf
+        else:
+            static_cache.value_cache[layer] = new_buf
+    t_new = int(input_ids.shape[1])
+    for layer in range(len(static_cache._cumulative_length)):
+        static_cache._cumulative_length[layer] += t_new
+    static_cache._seen_tokens += t_new
+    return _wrap(cast(Any, outs[0]))
+
+
 def compiled_decode_step(
     forward_fn: Callable[[Tensor, Tensor], Tensor],
     static_cache: StaticCache,
@@ -150,184 +349,17 @@ def compiled_decode_step(
         eager ``forward_fn`` call if the decode graph cannot be compiled, and
         under grad mode when the step needs gradients (see the module notes).
     """
-    from lucid._dispatch import _unwrap, _wrap
-    from lucid._tensor.tensor import Tensor
-    from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _CallableModule, _tracing
-    from lucid.compile._core.attention_probe import maybe_probe_for_graph
+    from lucid.compile import _CallableModule
     from lucid.compile._core.signature import ParamFingerprint
+    from lucid.compile._core.trace_context import compile_attempt
 
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
     adapter = _CallableModule(forward_fn)  # names forward_fn's modules
     fingerprint = ParamFingerprint(adapter, cache.clear)
 
-    def _restore(snap: tuple[Any, ...]) -> None:
-        """Undo every cache mutation the trace caused (buffer rebinds + counters),
-        so the real run starts from the pre-trace state."""
-        orig_key, orig_val, orig_cumlen, orig_seen = snap
-        static_cache.key_cache[:] = orig_key
-        static_cache.value_cache[:] = orig_val
-        static_cache._cumulative_length[:] = orig_cumlen
-        static_cache._seen_tokens = orig_seen
-
-    def _compile_for(input_ids: Tensor, cache_position: Tensor) -> _DecodeEntry | None:
-        """Trace + compile one decode step for this signature."""
-        t0 = time.perf_counter()
-
-        # Snapshot ALL cache state before tracing.  forward_fn's ``update`` rebinds
-        # key_cache[i]/value_cache[i] to the index_copy write outputs AND advances
-        # the length counters — both must be rolled back so the live buffers stay
-        # the pinned feeds and the real run isn't double-counted.
-        n_layers = len(static_cache.key_cache)
-        snap = (
-            list(static_cache.key_cache),
-            list(static_cache.value_cache),
-            list(static_cache._cumulative_length),
-            static_cache._seen_tokens,
-        )
-        orig_key, orig_val = snap[0], snap[1]
-        call = (input_ids, cache_position)
-        _tls.tracing = True
-        try:
-            with no_grad(), _tracing(watch=call, module=adapter) as tracer:
-                out = forward_fn(*call)
-        finally:
-            _tls.tracing = False
-
-        graph = tracer.graph
-        if not graph.ops or not isinstance(out, Tensor):
-            _restore(snap)
-            return None
-
-        maybe_probe_for_graph(graph)
-        ext = tracer.external_feeds
-
-        # The decode output + every cache buffer's post-write id become the
-        # executable's explicit outputs (output first, then key/value per layer,
-        # flat slot 2*i + {0:key, 1:value}).  Also map each ORIGINAL buffer's feed
-        # impl id → its flat slot so the run feeds the current buffer and rebinds
-        # the matching output.
-        out_id = tracer.lookup_id(_unwrap(out))
-        if out_id is None:
-            _restore(snap)
-            return None
-        write_ids: list[int] = [int(out_id)]
-        buf_slot: dict[int, int] = {}
-        ok = True
-        for i in range(n_layers):
-            for slot_kv, (buf_after, buf_before) in enumerate(
-                (
-                    (static_cache.key_cache[i], orig_key[i]),
-                    (static_cache.value_cache[i], orig_val[i]),
-                )
-            ):
-                wid = tracer.lookup_id(_unwrap(buf_after))
-                if wid is None:
-                    ok = False
-                    break
-                write_ids.append(int(wid))
-                buf_slot[id(_unwrap(buf_before))] = 2 * i + slot_kv
-            if not ok:
-                break
-
-        _restore(snap)
-        if not ok:
-            return None
-
-        try:
-            exe = _C_engine.compile.compile_or_cached(
-                graph, dict(ext), False, [], write_ids
-            )
-        except RuntimeError:
-            return None
-        if exe is None:
-            return None
-
-        # Feed plan: input_ids → 0, cache_position → 1, a cache buffer →
-        # ("buf", slot) (fed per-call, rebound after), else → None (pinned param).
-        ids_impl = id(_unwrap(input_ids))
-        cp_impl = id(_unwrap(cache_position))
-        input_source: list[object] = []
-        for tid in exe.input_ids:
-            impl = ext.get(tid)
-            if impl is None:
-                return None
-            iid = id(impl)
-            if iid == ids_impl:
-                input_source.append(0)
-            elif iid == cp_impl:
-                input_source.append(1)
-            elif iid in buf_slot:
-                input_source.append(("buf", buf_slot[iid]))
-            else:
-                input_source.append(None)
-
-        return _DecodeEntry(
-            exe=exe,
-            external_feeds=dict(ext),
-            input_source=tuple(input_source),
-            n_buffers=2 * n_layers,
-            compile_ms=(time.perf_counter() - t0) * 1000.0,
-            reads=TraceReads.of(tracer, exe.input_ids, input_source),
-        )
-
-    def _run(entry: _DecodeEntry, input_ids: Tensor, cache_position: Tensor) -> Tensor:
-        """Run one cached decode step + roll the cache forward (rebind, no copy)."""
-        exe = cast(_ExecutableLike, entry.exe)
-        ids_impl, cp_impl = _unwrap(input_ids), _unwrap(cache_position)
-        feed_impls: list[object] = []
-        for tid, src in zip(exe.input_ids, entry.input_source, strict=True):
-            if src == 0:
-                feed_impls.append(ids_impl)
-            elif src == 1:
-                feed_impls.append(cp_impl)
-            elif isinstance(src, tuple):  # ("buf", slot) — current cache buffer
-                layer, kv = divmod(src[1], 2)
-                buf = (
-                    static_cache.key_cache[layer]
-                    if kv == 0
-                    else static_cache.value_cache[layer]
-                )
-                feed_impls.append(_unwrap(buf))
-            else:  # pinned param / constant
-                feed_impls.append(entry.external_feeds[tid])
-
-        t0 = time.perf_counter()
-        outs = _C_engine.compile.run_executable(entry.exe, feed_impls)
-        entry.last_run_ms = (time.perf_counter() - t0) * 1000.0
-        entry.n_hits += 1
-
-        n_expected = 1 + entry.n_buffers
-        if len(outs) != n_expected:
-            raise RuntimeError(
-                f"compiled_decode_step: executable returned {len(outs)} outputs, "
-                f"expected {n_expected} (1 output + {entry.n_buffers} cache buffers)"
-            )
-        # Roll the cache forward by REBINDING each buffer onto the executable's
-        # updated output (a pointer swap) — the next step feeds it.  No copy_.
-        for slot in range(entry.n_buffers):
-            layer, kv = divmod(slot, 2)
-            new_buf = _wrap(cast(Any, outs[1 + slot]))
-            if kv == 0:
-                static_cache.key_cache[layer] = new_buf
-            else:
-                static_cache.value_cache[layer] = new_buf
-        # Keep the length counter coherent for get_seq_length() queries (the
-        # compiled run drives positions off cache_position, not the counter).
-        t_new = int(input_ids.shape[1])
-        for layer in range(len(static_cache._cumulative_length)):
-            static_cache._cumulative_length[layer] += t_new
-        static_cache._seen_tokens += t_new
-        return _wrap(cast(Any, outs[0]))
-
     def step(input_ids: Tensor, cache_position: Tensor) -> Tensor:
         """Run one compiled decode step (or eager fallback)."""
-        # The cache buffers must be pre-allocated (the prefill step does this) so
-        # they are persistent external feeds rather than in-graph ``zeros``
-        # re-created each run.  Until then, run eager — this allocates the cache
-        # WITHOUT recording the signature as eager-only (so the next, allocated,
-        # call still attempts to compile).
         if len(static_cache.key_cache) == 0:
             return forward_fn(input_ids, cache_position)
 
@@ -342,7 +374,11 @@ def compiled_decode_step(
         call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
         if entry is None and not _needs_gradients(call, static_cache, None, adapter):
-            before, entry = fingerprint.outside_slots(), _compile_for(*call)
+            with compile_attempt():
+                before = fingerprint.outside_slots()
+                entry = _compile_decode_entry(
+                    forward_fn, static_cache, adapter, input_ids, cache_position
+                )
             fingerprint.settle(() if entry is None else entry.reads.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, call, {})
@@ -350,11 +386,9 @@ def compiled_decode_step(
                     eager_sigs.add(key)
                 else:
                     cache[key] = entry
-        # A trace may show it reads a tensor requiring grad; it stays cached
-        # for the steps made under ``no_grad``.
         if entry is None or _needs_gradients(call, static_cache, entry, adapter):
             return forward_fn(input_ids, cache_position)
-        return _run(entry, input_ids, cache_position)
+        return _run_decode_entry(entry, static_cache, input_ids, cache_position)
 
     step.cache = cache  # type: ignore[attr-defined]
     return step

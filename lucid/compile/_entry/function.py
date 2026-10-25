@@ -24,8 +24,8 @@ compile, param drift < 5e-3) the minimal surface is a direct
 The loss returned carries no graph: the backward has already run.
 """
 
-from contextlib import nullcontext
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
@@ -83,8 +83,6 @@ def compiled_step(
     model: Module,
     x: Tensor,
     loss_fn: Callable[[Tensor], Tensor],
-    *,
-    use_grad_mode: bool = False,
 ) -> Tensor:
     """Run one compiled training step: forward + backward + grad accumulation.
 
@@ -96,13 +94,6 @@ def compiled_step(
         Input tensor (single forward pass).
     loss_fn : callable
         Maps ``model(x)`` → scalar loss tensor.  Typical: ``lambda y: F.cross_entropy(y, target)``.
-    use_grad_mode : bool, optional
-        Whether to keep autograd's GradMode on during tracing.  Default
-        ``False`` — the compiled step bypasses Lucid's autograd graph
-        entirely; we only need the trace hook to fire (it fires under
-        no_grad too because the kernel hooks run before the GradMode
-        short-circuit).  Set ``True`` if you want the eager autograd
-        graph to also build (useful for verification).
 
     Returns
     -------
@@ -120,8 +111,9 @@ def compiled_step(
 
     Notes
     -----
-    The trace is captured fresh on every call; cache integration
-    (compile-or-cached) lives in Phase 1.4's ``CompiledModule``.
+    The trace is captured in the caller's grad mode and fresh on every call;
+    cache integration (compile-or-cached) lives in Phase 1.4's
+    ``CompiledModule``.
 
     Phase 1.3 acceptance: ``ResNet-18 + CE + SGD, 5 steps``, param
     drift < 5e-3 vs eager.
@@ -148,23 +140,22 @@ def compiled_step(
     """
     # Local imports to avoid circulars during package init.
     from lucid._dispatch import _unwrap, _wrap
-    from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _tracing
-    from lucid.compile._core.buffer_writes import refuse
+    from lucid.compile._core.attention_probe import maybe_probe_for_graph
     from lucid.compile._core.bn_runstats import (
         advance_bn_counters,
         bn_counter_targets,
         bn_writeback_targets,
         model_has_cumulative_bn,
     )
+    from lucid.compile._core.buffer_writes import refuse
+    from lucid.compile._core.trace_context import compile_attempt, recording
 
     params = list(model.parameters())
     if not params:
         raise ValueError("compiled_step: model has no trainable parameters")
 
-    grad_ctx = nullcontext() if use_grad_mode else no_grad()
-    with grad_ctx:
-        with _tracing(watch=(x,), module=model) as tracer:
+    with compile_attempt():
+        with recording(watch=(x,), module=model) as tracer:
             out = model(x)
             # Module.__call__ widens to Tensor|tuple; loss_fn expects Tensor.
             if not isinstance(out, Tensor):
@@ -174,55 +165,58 @@ def compiled_step(
                 )
             loss_t = loss_fn(out)
 
-    g = tracer.graph
-    ext = tracer.external_feeds
-    # No write-back on this path: a traced in-place buffer write sends it eager.
-    refuse(tracer)
-    if not g.ops:
-        raise RuntimeError("compiled_step: empty trace (model produced no ops)")
-    # The tensor ``loss_fn`` returned, not the last op traced — see make_step.
-    found = tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
-    if found is None:
-        raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
-    loss_id = int(found)
-
-    param_ids, observed = _match_param_ids(params, ext)
-    if not all(observed):
-        raise RuntimeError(
-            "compiled_step: a model parameter was not observed in the trace "
-            "(model.forward did not use it, or the parameter was wrapped/copied)"
+        g = tracer.graph
+        ext = tracer.external_feeds
+        # No write-back on this path: a traced in-place buffer write sends it eager.
+        refuse(tracer)
+        if not g.ops:
+            raise RuntimeError("compiled_step: empty trace (model produced no ops)")
+        maybe_probe_for_graph(g)
+        # The tensor ``loss_fn`` returned, not the last op traced — see make_step.
+        found = (
+            tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
         )
-    input_ids, input_positions = _input_grad_targets((x,), ext, param_ids)
-    grad_ids = param_ids + input_ids
-    refuse_custom_backward(tracer, loss_id, grad_ids)
+        if found is None:
+            raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
+        loss_id = int(found)
 
-    # 3.5 BatchNorm running-stats. compiled_step has no eager fallback (it raises
-    # on any uncompilable trace), so a cumulative-MA BN (momentum=None) is a hard
-    # error. A track_running_stats=False BN keeps no buffers and compiles
-    # unchanged. A fused-momentum BN traces 5-input; surface its EMA outputs as
-    # extra executable outputs and copy_ them into the live module buffers after
-    # the run, else the running stats freeze at trace time and eval() reads stale
-    # stats (the eager EMA is skipped under a tracer).
-    if model_has_cumulative_bn(model):
-        raise RuntimeError(
-            "compiled_step: BatchNorm with momentum=None (cumulative moving "
-            "average) can't have its running-stats lowered into the compiled "
-            "graph, and compiled_step has no eager fallback. Use "
-            "lucid.compile.make_step or a momentum-based BatchNorm."
-        )
-    bn_targets = bn_writeback_targets(g, ext)
-    counters = bn_counter_targets(model, g, ext)
-    bn_stat_out_ids = [out_id for _, out_id, _ in bn_targets]
-    bn_stat_buffers = [_wrap(impl) for _, _, impl in bn_targets]
+        param_ids, observed = _match_param_ids(params, ext)
+        if not all(observed):
+            raise RuntimeError(
+                "compiled_step: a model parameter was not observed in the trace "
+                "(model.forward did not use it, or the parameter was wrapped/copied)"
+            )
+        input_ids, input_positions = _input_grad_targets((x,), ext, param_ids)
+        grad_ids = param_ids + input_ids
+        refuse_custom_backward(tracer, loss_id, grad_ids)
 
-    exe = _C_engine.compile.compile_trace_with_backward(
-        g, ext, loss_id, grad_ids, extra_output_ids=bn_stat_out_ids
-    )
-    if exe is None:
-        raise RuntimeError(
-            "compiled_step: compile_trace_with_backward returned None — "
-            "the trace contains an op without an emitter (eager fallback)"
+        # 3.5 BatchNorm running-stats. compiled_step has no eager fallback (it raises
+        # on any uncompilable trace), so a cumulative-MA BN (momentum=None) is a hard
+        # error. A track_running_stats=False BN keeps no buffers and compiles
+        # unchanged. A fused-momentum BN traces 5-input; surface its EMA outputs as
+        # extra executable outputs and copy_ them into the live module buffers after
+        # the run, else the running stats freeze at trace time and eval() reads stale
+        # stats (the eager EMA is skipped under a tracer).
+        if model_has_cumulative_bn(model):
+            raise RuntimeError(
+                "compiled_step: BatchNorm with momentum=None (cumulative moving "
+                "average) can't have its running-stats lowered into the compiled "
+                "graph, and compiled_step has no eager fallback. Use "
+                "lucid.compile.make_step or a momentum-based BatchNorm."
+            )
+        bn_targets = bn_writeback_targets(g, ext)
+        counters = bn_counter_targets(model, g, ext)
+        bn_stat_out_ids = [out_id for _, out_id, _ in bn_targets]
+        bn_stat_buffers = [_wrap(impl) for _, _, impl in bn_targets]
+
+        exe = _C_engine.compile.compile_trace_with_backward(
+            g, ext, loss_id, grad_ids, extra_output_ids=bn_stat_out_ids
         )
+        if exe is None:
+            raise RuntimeError(
+                "compiled_step: compile_trace_with_backward returned None — "
+                "the trace contains an op without an emitter (eager fallback)"
+            )
 
     feed_impls = [ext[tid] for tid in exe.input_ids]
     outs = _C_engine.compile.run_executable(exe, feed_impls)

@@ -43,7 +43,8 @@ the offending op + a sample shape::
 
 import dataclasses
 from collections import Counter
-from typing import TYPE_CHECKING, Callable, override
+from collections.abc import Callable
+from typing import TYPE_CHECKING, override
 
 from lucid._C import engine as _C_engine
 
@@ -179,12 +180,10 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
     """
     # Local imports avoid the package-init cycle that ``lucid.compile``
     # carefully sidesteps via its own lazy ``__getattr__``.
-    from lucid.autograd._grad_mode import no_grad
-    from lucid.compile import _tracing
+    from lucid.compile._core.trace_context import compile_attempt, recording
 
-    with no_grad():
-        with _tracing(watch=example_inputs) as tracer:
-            fn(*example_inputs)
+    with compile_attempt(), recording(watch=example_inputs) as tracer:
+        fn(*example_inputs)
 
     op_counts: Counter[str] = Counter()
     op_samples: dict[str, tuple[tuple[int, ...], str]] = {}

@@ -310,6 +310,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
+    "lucid.compile._core.trace_context": (
+        ("Module", "lucid.nn.module", "Module"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
+    ),
     "lucid.compile._debug.diagnose": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.compile._debug.trace_dump": (
         ("OpNode", "lucid._C.engine.compile", "OpNode"),
@@ -320,6 +324,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("StaticCache", "lucid.utils.cache", "StaticCache"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.function": (
         ("Module", "lucid.nn.module", "Module"),
