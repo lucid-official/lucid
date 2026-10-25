@@ -509,6 +509,35 @@ def test_matrix_norm_empty_axes_return_zero(
 
 
 @pytest.mark.parity
+@pytest.mark.parametrize("dtype_name", ["float16", "bfloat16"])
+@pytest.mark.parametrize("correction", [0, 1])
+@pytest.mark.parametrize("fn", ["var", "std", "var_mean", "std_mean"])
+def test_half_std_rounds_once_after_sqrt_and_compiled_matches_eager(
+    ref: ModuleType, device: str, dtype_name: str, correction: int, fn: str
+) -> None:
+    # Small-magnitude inputs where rounding var to half before sqrt loses 15%
+    # (bfloat16 [0, 0.01]: var=5e-5 rounds to 4.98e-5, sqrt 0.00704956 vs
+    # float32 sqrt(5e-5)=0.00707107 -> bfloat16 0.00708008).
+    dt = getattr(lucid, dtype_name)
+    rdt = getattr(ref, dtype_name)
+    vals = [[0.0, 0.01, -0.01, 0.02], [1e-3, -1e-3, 2e-3, -2e-3]]
+    x = lucid.tensor(vals, dtype=dt, device=device)
+    rx = ref.tensor(vals, dtype=rdt)
+    ours = _outputs(getattr(lucid, fn)(x, dim=-1, correction=correction))
+    theirs = _outputs(getattr(ref, fn)(rx, dim=-1, correction=correction))
+    for o, t in zip(ours, theirs, strict=True):
+        assert o.dtype == dt
+        np.testing.assert_array_equal(_lucid_np(o), _ref_np(t), err_msg=f"{fn} {dtype_name}")
+    if device == "metal" and fn in ("var", "std"):
+        c_fn = lucid.compile.compile(
+            lambda t_in: getattr(lucid, fn)(t_in, dim=-1, correction=correction) + (t_in[:, :1].squeeze(-1) * 0)
+        )
+        c_out = c_fn(x)
+        assert c_out.dtype == dt
+        np.testing.assert_array_equal(_lucid_np(c_out), _lucid_np(ours[0]))
+
+
+@pytest.mark.parity
 def test_int64_prod_preserves_bits_above_2_pow_53_and_wraps_modulo_2_pow_64(
     ref: ModuleType, device: str
 ) -> None:

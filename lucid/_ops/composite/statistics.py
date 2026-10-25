@@ -1384,6 +1384,8 @@ def _moments(
     spread = _corrected_variance(xi, axes, correction, keepdim, name)
     if name == "std_mean":
         spread = _zero_safe_root(spread, 2)
+    if spread.dtype != xi.dtype:
+        spread = _C_engine.astype(spread, xi.dtype)
     return _wrap(spread), _wrap(_C_engine.mean(xi, axes, keepdim))
 
 

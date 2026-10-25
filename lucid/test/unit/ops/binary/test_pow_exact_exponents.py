@@ -528,13 +528,75 @@ def test_second_derivative_is_the_power_rule(device: str, e: float) -> None:
     np.testing.assert_allclose(_values(g2), e * (e - 1) * xs ** (e - 2), rtol=1e-6)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="LCD-559: pow backward does not mask exponent 0 at x=0"
-)
-def test_gradient_of_the_zeroth_power_at_zero_is_zero(device: str) -> None:
-    x = lucid.tensor([0.0, 1.5], requires_grad=True, device=device)
+def test_gradient_of_the_zeroth_power_at_zero_is_zero(
+    ref: ModuleType, device: str
+) -> None:
+    x = lucid.tensor([0.0, -0.0, 1.5], requires_grad=True, device=device)
     (x**0).sum().backward()
-    assert x.grad.tolist() == [0.0, 0.0]
+    assert x.grad is not None and x.grad.tolist() == [0.0, 0.0, 0.0]
+
+    # Tensor-exponent pow(x, y): dA masks b == 0 to 0, dB masks a == 0 & b >= 0 to 0.
+    a_vals = [0.0, 0.0, 0.0, 0.0, 1.5]
+    b_vals = [-1.0, 0.0, 1.0, 2.0, 0.0]
+    a = lucid.tensor(a_vals, requires_grad=True, device=device)
+    b = lucid.tensor(b_vals, requires_grad=True, device=device)
+    ra = ref.tensor(a_vals, requires_grad=True)
+    rb = ref.tensor(b_vals, requires_grad=True)
+    (a**b).sum().backward()
+    (ra**rb).sum().backward()
+    assert a.grad is not None and b.grad is not None
+    np.testing.assert_array_equal(
+        _values(a.grad), ra.grad.numpy(), err_msg="pow dA at zero"
+    )
+    np.testing.assert_array_equal(
+        _values(b.grad), rb.grad.numpy(), err_msg="pow dB at zero"
+    )
+
+    # Scalar-base rpow(0.0, y): dB masks y >= 0 to 0.
+    y = lucid.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True, device=device)
+    ry = ref.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True)
+    (0.0**y).sum().backward()
+    (0.0**ry).sum().backward()
+    assert y.grad is not None
+    np.testing.assert_array_equal(
+        _values(y.grad), ry.grad.numpy(), err_msg="rpow 0.0 ** y"
+    )
+
+    # Higher-order (create_graph=True) path uses the same masks.
+    x_ho = lucid.tensor([0.0, 1.5], requires_grad=True, device=device)
+    y_ho = lucid.tensor([0.0, 2.0], requires_grad=True, device=device)
+    ga, gb = lucid.autograd.grad((x_ho**y_ho).sum(), [x_ho, y_ho], create_graph=True)
+    (gx0,) = lucid.autograd.grad((x_ho**0.0).sum(), [x_ho], create_graph=True)
+    (gr0,) = lucid.autograd.grad((0.0**y_ho).sum(), [y_ho], create_graph=True)
+    assert gx0.tolist() == [0.0, 0.0]
+    assert gr0.tolist() == [0.0, 0.0]
+    assert ga.tolist()[0] == 0.0 and gb.tolist()[0] == 0.0
+
+    if device == "metal":
+        from lucid.compile import make_step
+
+        class _PowZeroprobe(lucid.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.a = lucid.nn.Parameter(
+                    lucid.tensor([0.0, 0.0, 1.5], device="metal")
+                )
+                self.b = lucid.nn.Parameter(
+                    lucid.tensor([0.0, 2.0, 0.0], device="metal")
+                )
+
+            def forward(self, x_in: lucid.Tensor) -> lucid.Tensor:
+                return (self.a**self.b) + (self.a**0.0) + (0.0**self.b) + x_in
+
+        probe = _PowZeroprobe()
+        step = make_step(probe, lambda out, tgt: (out - tgt).sum())
+        step(
+            lucid.zeros((3,), device="metal"),
+            lucid.zeros((3,), device="metal"),
+        ).backward()
+        assert probe.a.grad is not None and probe.b.grad is not None
+        assert probe.a.grad.tolist() == [0.0, 0.0, 0.0]
+        assert probe.b.grad.tolist()[:2] == [0.0, 0.0]
 
 
 # ── F.normalize reaches the same kernel ──────────────────────────────────────

@@ -350,6 +350,12 @@ public:
         return emit_unary_vjp(bctx, node, grad_outs,
             [k](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) {
                 MPSDataType dt = go.dataType;
+                MPSGraphTensor* zero = cst(g, 0.0, dt);
+                if (!REVERSE && k == 0.0) {
+                    return [g broadcastTensor:zero
+                                toShapeTensor:[g shapeOfTensor:go name:nil]
+                                         name:@"pow_scalar_zero_vjp"];
+                }
                 MPSGraphTensor* d =
                     REVERSE
                         ? [g multiplicationWithPrimaryTensor:[g powerWithPrimaryTensor:cst(g, k, dt)
@@ -362,6 +368,16 @@ public:
                                                                          secondaryTensor:cst(g, k - 1.0, dt)
                                                                                     name:nil]
                                                          name:nil];
+                if (REVERSE && k == 0.0) {
+                    MPSGraphTensor* ge_zero =
+                        [g greaterThanOrEqualToWithPrimaryTensor:x
+                                                 secondaryTensor:cst(g, 0.0, x.dataType)
+                                                            name:nil];
+                    d = [g selectWithPredicateTensor:ge_zero
+                                 truePredicateTensor:zero
+                                falsePredicateTensor:d
+                                                name:nil];
+                }
                 return [g multiplicationWithPrimaryTensor:go secondaryTensor:d name:nil];
             });
     }

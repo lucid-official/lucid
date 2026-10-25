@@ -117,26 +117,15 @@ public:
     // Math
     // ----
     // $$\frac{\partial}{\partial x}(x^e) = e \cdot x^{e-1}$$
-    TensorImplPtr grad_formula_impl(const TensorImplPtr& g,
-                                    const TensorImplPtr& a,
-                                    const TensorImplPtr& /*out*/) {
-        extern TensorImplPtr pow_scalar_op(const TensorImplPtr&, double);
-        extern TensorImplPtr mul_op(const TensorImplPtr&, const TensorImplPtr&);
-        extern TensorImplPtr full_like_op(const TensorImplPtr&, double, bool);
-        // e * x^(e-1), kept on the graph.  Scaling the storage directly and
-        // wrapping it in a fresh tensor cut x^(e-1) off from x, so the
-        // second derivative lost its e (e - 1) x^(e-2) g term and answered
-        // wrong — silently — for every exponent but 0 and 1.
-        auto a_pow_em1 = pow_scalar_op(a, exp_ - 1.0);
-        auto scaled = mul_op(a_pow_em1, full_like_op(a_pow_em1, exp_, false));
-        return mul_op(scaled, g);
-    }
+    TensorImplPtr
+    grad_formula_impl(const TensorImplPtr& g, const TensorImplPtr& a, const TensorImplPtr& out);
 };
 
 // Autograd node for scalar-base reverse power: $y = \text{base}^{x}$.
 //
-// The base is captured on the node; the *output* tensor (not the input)
-// is saved because the gradient formula uses $y$ directly.
+// The base is captured on the node; the *output* tensor (and the input
+// when ``base == 0``) is saved because the gradient formula uses $y$
+// directly and masks $x \geq 0$ when $\text{base} = 0$.
 //
 // Attributes
 // ----------
@@ -144,7 +133,7 @@ public:
 //     Scalar base captured at forward; ``std::log(base_)`` is computed
 //     inside ``grad_formula``.
 // kSavesInput : bool
-//     ``false`` — the input is not needed for the backward pass.
+//     ``false`` by default (input saved only when ``base_ == 0``).
 // kSavesOutput : bool
 //     ``true`` — the forward output $y = \text{base}^{x}$ is saved.
 // schema_v1 : OpSchema

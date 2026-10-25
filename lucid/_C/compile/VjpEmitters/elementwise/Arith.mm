@@ -153,6 +153,7 @@ public:
             bctx, node, grad_outs, [](const BinaryVjpCtx& c) -> BinaryGradPair {
                 // c.a / c.b already cast to chain dtype by accumulate_binary.
                 MPSDataType dt = c.go.dataType;
+                MPSGraphTensor* zero = [c.g constantWithScalar:0.0 dataType:dt];
                 MPSGraphTensor* one = [c.g constantWithScalar:1.0 dataType:dt];
                 MPSGraphTensor* bm1 = [c.g subtractionWithPrimaryTensor:c.b
                                                         secondaryTensor:one
@@ -163,6 +164,13 @@ public:
                 MPSGraphTensor* b_times_apow = [c.g multiplicationWithPrimaryTensor:c.b
                                                                     secondaryTensor:a_pow_bm1
                                                                                name:nil];
+                MPSGraphTensor* b_eq_zero = [c.g equalWithPrimaryTensor:c.b
+                                                        secondaryTensor:zero
+                                                                   name:nil];
+                b_times_apow = [c.g selectWithPredicateTensor:b_eq_zero
+                                          truePredicateTensor:zero
+                                         falsePredicateTensor:b_times_apow
+                                                         name:nil];
                 MPSGraphTensor* da = [c.g multiplicationWithPrimaryTensor:b_times_apow
                                                           secondaryTensor:c.go
                                                                      name:nil];
@@ -174,6 +182,19 @@ public:
                 MPSGraphTensor* prod = [c.g multiplicationWithPrimaryTensor:log_a
                                                             secondaryTensor:a_pow_b
                                                                        name:nil];
+                MPSGraphTensor* a_eq_zero = [c.g equalWithPrimaryTensor:c.a
+                                                        secondaryTensor:zero
+                                                                   name:nil];
+                MPSGraphTensor* b_ge_zero = [c.g greaterThanOrEqualToWithPrimaryTensor:c.b
+                                                                       secondaryTensor:zero
+                                                                                  name:nil];
+                MPSGraphTensor* mask_db = [c.g logicalANDWithPrimaryTensor:a_eq_zero
+                                                           secondaryTensor:b_ge_zero
+                                                                      name:nil];
+                prod = [c.g selectWithPredicateTensor:mask_db
+                                  truePredicateTensor:zero
+                                 falsePredicateTensor:prod
+                                                 name:nil];
                 MPSGraphTensor* db = [c.g multiplicationWithPrimaryTensor:prod
                                                           secondaryTensor:c.go
                                                                      name:nil];

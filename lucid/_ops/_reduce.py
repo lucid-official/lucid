@@ -329,9 +329,16 @@ def _variance_operands(
 def _corrected_variance(
     x_impl: _Impl, axes: list[int], correction: float, keepdim: bool, name: str
 ) -> _Impl:
-    """The variance over ``axes`` divided by ``max(N - correction, 0)``."""
-    biased = _C_engine.var(x_impl, axes, keepdim)
-    return _bessel_correct(biased, x_impl, axes, correction, name)
+    """The variance over ``axes`` divided by ``max(N - correction, 0)``.
+
+    A half input is widened to float32 before the reduction and Bessel
+    correction so ``var``, ``std``, ``var_mean`` and ``std_mean`` evaluate
+    in float32 opmath and round back to the half dtype once at the caller's
+    boundary (avoiding rounding the variance to half before ``sqrt``).
+    """
+    work = _C_engine.astype(x_impl, _C_engine.F32) if x_impl.dtype in _HALF else x_impl
+    biased = _C_engine.var(work, axes, keepdim)
+    return _bessel_correct(biased, work, axes, correction, name)
 
 
 def _variance(
@@ -359,7 +366,8 @@ def _var_adapter(input: _Impl, *args: object, **kwargs: object) -> _Impl:
     overloads bind the second one by type — a bool there is ``unbiased``,
     anything else ``dim`` — see :func:`_variance_operands`.
     """
-    return _variance("var", input, args, kwargs)
+    out = _variance("var", input, args, kwargs)
+    return _C_engine.astype(out, input.dtype) if input.dtype in _HALF else out
 
 
 def _std_adapter(input: _Impl, *args: object, **kwargs: object) -> _Impl:
@@ -368,7 +376,8 @@ def _std_adapter(input: _Impl, *args: object, **kwargs: object) -> _Impl:
     The square root of :func:`_var_adapter`'s variance, with a zero
     gradient where that variance is 0 (a constant slice).
     """
-    return _zero_safe_root(_variance("std", input, args, kwargs), 2)
+    out = _zero_safe_root(_variance("std", input, args, kwargs), 2)
+    return _C_engine.astype(out, input.dtype) if input.dtype in _HALF else out
 
 
 def _run_with_dtype(

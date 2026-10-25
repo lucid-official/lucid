@@ -33,15 +33,32 @@ namespace lucid {
 // set_flops uses *11 as a rough estimate for the cost of a pow() call.
 const OpSchema PowScalarBackward::schema_v1{"pow_scalar", 1, AmpPolicy::ForceFP32, true};
 
-// dL/dx = exp * x^(exp-1) * dL/dy.
+// dL/dx = exp * x^(exp-1) * dL/dy (0 everywhere when exp == 0 so x = 0 does
+// not produce 0 * inf = NaN).
 // Reuses the backend's pow_scalar to compute x^(exp-1) rather than
 // implementing a separate "reduce-exponent-by-one" kernel.
 Storage PowScalarBackward::grad_formula(const Storage& g) {
+    if (exp_ == 0.0)
+        return make_zero_storage(out_shape_, dtype_, device_);
     const std::size_t n = shape_numel(out_shape_);
     Storage x_pow_em1 = backend::Dispatcher::for_device(device_).pow_scalar(
         saved_inputs_[0], out_shape_, dtype_, exp_ - 1.0);
     Storage scaled = mul_scalar_storage(x_pow_em1, exp_, n, dtype_, device_);
     return multiply_storages(scaled, g, n, dtype_, device_);
+}
+
+TensorImplPtr PowScalarBackward::grad_formula_impl(const TensorImplPtr& g,
+                                                   const TensorImplPtr& a,
+                                                   const TensorImplPtr& /*out*/) {
+    if (exp_ == 0.0)
+        return zeros_like_op(g, false);
+    // e * x^(e-1), kept on the graph.  Scaling the storage directly and
+    // wrapping it in a fresh tensor cut x^(e-1) off from x, so the
+    // second derivative lost its e (e - 1) x^(e-2) g term and answered
+    // wrong — silently — for every exponent but 0 and 1.
+    auto a_pow_em1 = pow_scalar_op(a, exp_ - 1.0);
+    auto scaled = mul_op(a_pow_em1, full_like_op(a_pow_em1, exp_, false));
+    return mul_op(scaled, g);
 }
 
 // Capture exp before wiring autograd so grad_formula has it at backward time.
@@ -66,7 +83,7 @@ TensorImplPtr PowScalarBackward::forward(const TensorImplPtr& a_in, double exp) 
 
     auto bwd = std::make_shared<PowScalarBackward>();
     bwd->exp_ = exp;
-    kernel::NaryKernel<PowScalarBackward, 1>::wire_autograd(std::move(bwd), {a}, out);
+    kernel::NaryKernel<PowScalarBackward, 1>::wire_autograd(std::move(bwd), {a}, out, exp != 0.0);
     return out;
 }
 
@@ -79,23 +96,33 @@ LUCID_REGISTER_OP(PowScalarBackward)
 const OpSchema RPowScalarBackward::schema_v1{"rpow_scalar", 1, AmpPolicy::ForceFP32, true};
 
 // dL/dx = ln(base) * y * dL/dy  where y = saved_output_ = base^x.
-// ln(base) is computed once per backward call from the saved base_.
+// When base == 0 and x >= 0, masks the derivative to 0 (matching the reference
+// so 0 ** 0 -> 1 * (-inf) = -inf and 0 ** (+x) -> 0 * (-inf) = NaN become 0).
 Storage RPowScalarBackward::grad_formula(const Storage& g) {
     const std::size_t n = shape_numel(out_shape_);
 
     const double ln_base = std::log(base_);
     Storage scaled_out = mul_scalar_storage(saved_output_, ln_base, n, dtype_, device_);
+    if (base_ == 0.0) {
+        auto& be = backend::Dispatcher::for_device(device_);
+        Storage zero = make_zero_storage(out_shape_, dtype_, device_);
+        Storage ge_zero = be.compare_binary(saved_inputs_[0], zero, out_shape_, dtype_, 3);
+        scaled_out = be.where_op(ge_zero, zero, scaled_out, out_shape_, dtype_);
+    }
     return multiply_storages(scaled_out, g, n, dtype_, device_);
 }
 
 TensorImplPtr RPowScalarBackward::grad_formula_impl(const TensorImplPtr& g,
-                                                    const TensorImplPtr&,
+                                                    const TensorImplPtr& x,
                                                     const TensorImplPtr& out) {
-    return mul_op(g, mul_op(out, full_like_op(out, std::log(base_))));
+    auto slope = mul_op(out, full_like_op(out, std::log(base_)));
+    if (base_ == 0.0)
+        slope = where_op(greater_equal_op(x, zeros_like_op(x)), zeros_like_op(slope), slope);
+    return mul_op(g, slope);
 }
 
 // Manually saves the output in bwd->saved_output_ because the standard
-// wire_autograd helper (called with save_output=false) does not do so.
+// wire_autograd helper does not do so; saves the input only when base == 0.0.
 TensorImplPtr RPowScalarBackward::forward(double base, const TensorImplPtr& a_in) {
     Validator::input(a_in, "rpow_scalar.a").non_null();
     const TensorImplPtr a = promote_for_schema(schema_v1, a_in);
@@ -111,7 +138,7 @@ TensorImplPtr RPowScalarBackward::forward(double base, const TensorImplPtr& a_in
     auto bwd = std::make_shared<RPowScalarBackward>();
     bwd->keep_output(out->storage());
     bwd->base_ = base;
-    kernel::NaryKernel<RPowScalarBackward, 1>::wire_autograd(std::move(bwd), {a}, out, false);
+    kernel::NaryKernel<RPowScalarBackward, 1>::wire_autograd(std::move(bwd), {a}, out, base == 0.0);
     return out;
 }
 
