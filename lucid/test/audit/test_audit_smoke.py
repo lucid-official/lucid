@@ -305,19 +305,44 @@ def test_report_serialises(tmp_path: pytest.TempPathFactory) -> None:
     assert out.is_file()
 
 
+_INPLACE_PEER_METHODS = (
+    "add_",
+    "addcdiv_",
+    "addcmul_",
+    "copy_",
+    "div_",
+    "floor_divide_",
+    "fmod_",
+    "lerp_",
+    "logical_and_",
+    "logical_or_",
+    "logical_xor_",
+    "masked_fill_",
+    "masked_scatter_",
+    "maximum_",
+    "minimum_",
+    "mul_",
+    "pow_",
+    "remainder_",
+    "sub_",
+)
+
+
 def test_inplace_tensor_methods_resize_tensor_peers_and_index_put_runs() -> None:
-    """LCD-536: in-place Tensor methods shrink same-shape tensor peers on the
-    edge axis, and ``index_put`` / ``index_put_`` pass a tuple of index tensors."""
+    """LCD-536: all 19 in-place Tensor methods shrink tensor peers (including
+    boolean masks and broadcast peers) on both empty and size-1 edge probes,
+    and ``index_put`` / ``index_put_`` pass a tuple of index tensors."""
     edge = _axes.axis_by_name("edge")
     entry = _axes.axis_by_name("entry")
     assert edge is not None and entry is not None
     ctx = _axes.Context(quick=True)
-    for name in ("add_", "mul_", "lerp_", "masked_fill_"):
+    for name in _INPLACE_PEER_METHODS:
         sym = _surface.Symbol(
             f"Tensor.{name}", "tensor", "method", getattr(lucid.Tensor, name)
         )
         finding = edge.run(sym, ctx)
         assert finding.status is Status.PASS, (name, finding)
+        assert finding.detail == "empty and size-1 accepted", (name, finding)
     for qual, obj in (
         ("lucid.index_put", lucid.index_put),
         ("Tensor.index_put_", lucid.Tensor.index_put_),

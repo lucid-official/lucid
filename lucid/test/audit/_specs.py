@@ -39,7 +39,7 @@ def _rebuild(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
 
     A float32 or float16 operand comes back float32, a complex one at its
     width, anything else float64 — or, with ``keep_integer``, an integer
-    operand (a class index) at its own integer dtype.
+    or boolean operand (a class index or a mask) at its own dtype.
     """
     dtype = getattr(original, "dtype", None)
     text = str(dtype) if dtype is not None else ""
@@ -47,6 +47,8 @@ def _rebuild(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
         return (_probe.as_complex64 if "64" in text else _probe.as_complex)(array)
     if "float32" in text or "float16" in text:
         return _probe.as_f32(array)
+    if keep_integer and "bool" in text:
+        return lucid.tensor(np.asarray(array, dtype=bool), dtype=lucid.bool)
     if keep_integer and "int" in text:
         return _probe.tensor_of(np.asarray(array, dtype=np.int64), dtype)
     return _probe.as_f64(array)
@@ -1585,22 +1587,36 @@ def _ctc_resized(call: Call, array: np.ndarray) -> Call:
     return rebuilt
 
 
+def _fits_receiver(arg: Any, shape: tuple[int, ...]) -> bool:
+    """Whether ``arg`` is a tensor whose shape broadcasts into ``shape``."""
+    peer_shape = getattr(arg, "shape", None)
+    if peer_shape is None:
+        return False
+    dims = tuple(peer_shape)
+    return 0 < len(dims) <= len(shape) and all(
+        d in (1, s) for d, s in zip(reversed(dims), reversed(shape), strict=False)
+    )
+
+
 def _bounds_resized(call: Call, array: np.ndarray) -> Call:
     """``x.op_(peer, ...)``: a tensor peer of the receiver's shape follows it.
 
     An in-place op cannot grow its receiver, so a resized ``x`` against
-    peers of the old shape is refused for a result that no longer fits:
-    the probe's refusal, not the op's (LCD-532, LCD-536).  The peers the
-    call itself declares (``same_shape``) follow it too.
+    peers of the old shape (or a broadcast peer like ``lerp_``'s per-column
+    ``weight``) is refused for a result that no longer fits: the probe's
+    refusal, not the op's (LCD-532, LCD-536).  The peers the call itself
+    declares (``same_shape``) follow it too.
     """
-    if not 0 <= call.primary < len(call.args):
+    if not 0 <= call.primary < len(call.args) or not hasattr(
+        call.args[call.primary], "shape"
+    ):
         return call.with_primary(array)
     shape = tuple(call.args[call.primary].shape)
     bounds = tuple(
         index
         for index, arg in enumerate(call.args)
         if index != call.primary
-        and (index in call.same_shape or tuple(getattr(arg, "shape", (None,))) == shape)
+        and (index in call.same_shape or _fits_receiver(arg, shape))
     )
     # Everything the call declares survives, as in every other rebuild
     # (``with_primary``), except ``joint``: this function *is* the call's
