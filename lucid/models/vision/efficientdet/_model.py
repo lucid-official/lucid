@@ -170,7 +170,9 @@ class _BiFPNLayer(nn.Module):
             # the weight vector puts +eps in every numerator and N*eps in the
             # sum, which changes the fusion ratios rather than just avoiding a
             # division by zero.
-            w: Tensor = F.relu(self.td_weights[L - 2 - i])
+            td_w = self.td_weights[L - 2 - i]
+            assert td_w is not None
+            w: Tensor = F.relu(td_w)
             wsum = w.sum() + _EPS
             up = F.interpolate(td[0], scale_factor=2.0, mode="nearest")
             fused: Tensor = (w[0] / wsum) * features[i] + (w[1] / wsum) * up
@@ -182,7 +184,9 @@ class _BiFPNLayer(nn.Module):
         out: list[Tensor] = [td[0]]
 
         for i in range(1, L):
-            wl: Tensor = F.relu(self.out_weights[i - 1])
+            out_w = self.out_weights[i - 1]
+            assert out_w is not None
+            wl: Tensor = F.relu(out_w)
             wlsum = wl.sum() + _EPS
             down = self.down(out[-1])
             if i < L - 1:

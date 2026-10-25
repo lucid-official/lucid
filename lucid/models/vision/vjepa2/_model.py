@@ -614,9 +614,11 @@ class _RoPEVideoPredictor(nn.Module):
         _init_vjepa2_weights(self, init_std)
         if zero_init_mask_tokens:
             for token in self.mask_tokens:
+                assert token is not None
                 nn.init.zeros_(token)
         else:
             for token in self.mask_tokens:
+                assert token is not None
                 nn.init.trunc_normal_(token, std=init_std)
         for index, block in enumerate(blocks, start=1):
             _scale_projection(block.attn.proj, block.mlp, index, init_std)
@@ -637,7 +639,9 @@ class _RoPEVideoPredictor(nn.Module):
         batch, context_count = int(context.shape[0]), int(context.shape[1])
         target_count = int(target_indices.shape[1])
         tokens = self.predictor_embed(context)
-        queries = self.mask_tokens[mask_index].repeat(batch, target_count, 1)
+        mask_token = self.mask_tokens[mask_index]
+        assert mask_token is not None
+        queries = mask_token.repeat(batch, target_count, 1)
         if not self.use_rope:
             positions = _sincos_3d(
                 self.predictor_dim,
