@@ -586,7 +586,10 @@ def _swap_dynamic(
     for name, child in list(module.named_children()):
         build = mapping.get(type(child))
         if build is not None and type(child) in types:
-            module._modules[name] = build(child, dtype)
+            # ``setattr`` keeps the child's slot in place (LCD-551), so a
+            # ``Sequential`` still runs it in the same turn; no direct
+            # ``_modules`` write needed (LCD-556).
+            setattr(module, name, build(child, dtype))
         else:
             _swap_dynamic(child, mapping, types, dtype)
 
@@ -710,7 +713,9 @@ def _prepare_qat_recursive(
         build = qat_map.get(type(child))
         if qcfg is not None and build is not None:
             child.qconfig = qcfg
-            module._modules[name] = build(child)
+            # ``setattr`` keeps the child's slot in place (LCD-551); no
+            # direct ``_modules`` write needed (LCD-556).
+            setattr(module, name, build(child))
         elif qcfg is not None and isinstance(child, nnq.QuantStub):
             child.qconfig = qcfg
             child.activation_post_process = qcfg.activation()
@@ -728,9 +733,9 @@ def _convert_recursive(
             isinstance(child, always) or hasattr(child, "activation_post_process")
         )
         if convertible and build is not None:
-            # Written into the child's slot, so a ``Sequential`` runs it in the
-            # same turn.  ``setattr`` keeps the slot as well since LCD-551; the
-            # direct write predates that.
-            module._modules[name] = build(child)
+            # ``setattr`` keeps the child's slot in place (LCD-551), so a
+            # ``Sequential`` still runs it in the same turn; no direct
+            # ``_modules`` write needed (LCD-556).
+            setattr(module, name, build(child))
         else:
             _convert_recursive(child, mapping, always)

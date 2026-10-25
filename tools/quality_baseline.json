@@ -121,6 +121,11 @@
    "date": "2026-10-24",
    "reason": "engine unbound engine.pyi 17->18: LCD-583 (one default RNG stream) removed the last Python caller of the _set_default_override binding; deleting the binding is C++/ABI work tracked as LCD-594 (batched with the next ABI bump; no MacBook builds per the user, 2026-10-24)",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-10-25",
+   "reason": "LCD-556: pure move of _ModuleBackwardState/_wrap_grads from nn/module.py (at its 1500-line cap) to nn/_module_backward_state.py; its 2 casts move with it (module.py 5->3, new file 0->2, net 0)",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -991,9 +996,10 @@
     "lucid/models/vision/rcnn/_model.py": 3,
     "lucid/models/vision/yolo/_v1.py": 2,
     "lucid/models/vision/yolo/_v3.py": 1,
+    "lucid/nn/_module_backward_state.py": 2,
     "lucid/nn/functional/_index_checks.py": 2,
     "lucid/nn/intrinsic/qat/modules.py": 9,
-    "lucid/nn/module.py": 5,
+    "lucid/nn/module.py": 3,
     "lucid/nn/modules/container.py": 11,
     "lucid/nn/modules/conv.py": 1,
     "lucid/nn/modules/transformer.py": 2,
@@ -2114,20 +2120,14 @@
    }
   },
   "mypy": {
-   "misc": {
-    "lucid/nn/module.py": 1
-   },
    "possibly-undefined": {
-    "lucid/_ops/__init__.py": 1,
     "lucid/benchmarks/bench_ops.py": 1,
     "lucid/models/vision/ijepa/_model.py": 2,
-    "lucid/models/vision/vjepa/_model.py": 2,
-    "lucid/models/vision/vjepa2/_model.py": 1
+    "lucid/models/vision/vjepa/_model.py": 2
    },
    "redundant-expr": {
-    "lucid/_ops/composite/indexing.py": 1,
     "lucid/_ops/composite/statistics.py": 1,
-    "lucid/autograd/function.py": 3,
+    "lucid/autograd/function.py": 2,
     "lucid/autograd/gradcheck.py": 1,
     "lucid/compile/_entry/function.py": 1,
     "lucid/compile/_entry/step.py": 1,
@@ -2136,7 +2136,6 @@
     "lucid/models/_meta.py": 2,
     "lucid/models/vision/crossvit/_config.py": 1,
     "lucid/models/vision/vjepa2/_config.py": 1,
-    "lucid/nn/module.py": 3,
     "lucid/utils/data/dataset.py": 1,
     "lucid/utils/rollout/_driver.py": 1
    }

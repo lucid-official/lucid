@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - compile probes exercise the compiled path, not eager-vs-eager
 - watch modules reached via a container/helper (LCD-642)
 - keep containers consistent for a compiled child and plain tensors
+- a plain attribute set before Module.__init__ is accepted (LCD-556)
 
 ---
 

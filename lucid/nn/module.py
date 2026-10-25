@@ -11,11 +11,9 @@ from typing import (
     Any,
     Callable,
     ClassVar,
-    Iterable,
     Iterator,
     Self,
     cast,
-    final,
     override,
 )
 
@@ -34,6 +32,7 @@ from lucid.nn.hooks import (
     _GLOBAL_FORWARD_PRE_HOOKS,
     RemovableHandle,
 )
+from lucid.nn._module_backward_state import _ModuleBackwardState
 from lucid.nn._tree_version import _TrackedDict, _tree_changed
 from lucid._types import _ModuleOutput, _ForwardPreHook, _ForwardHook, _BackwardHook
 
@@ -147,6 +146,15 @@ def _refuse_unless_none(value: object, name: str, kind: str, expected: str) -> N
             f"cannot assign '{type(value).__name__}' as {kind} '{name}' "
             f"({expected} or None expected)"
         )
+
+
+def _before_init_kind(value: object) -> str | None:
+    """Which registry ``value`` would need, or ``None`` for a plain value."""
+    if isinstance(value, Parameter):
+        return "parameters"
+    if isinstance(value, (Module, _ModuleWrapper)):
+        return "module"
+    return None
 
 
 class Module:
@@ -489,7 +497,10 @@ class Module:
             raise KeyError("module attribute name cannot contain '.'")
         if name == "":
             raise KeyError("module attribute name cannot be empty")
-        if self._write_traced_buffer(name, value):
+
+        if self._setattr_before_init(name, value) or self._write_traced_buffer(
+            name, value
+        ):
             return
 
         if isinstance(value, Parameter):
@@ -532,6 +543,22 @@ class Module:
         else:
             object.__setattr__(self, name, value)
         _tree_changed()
+
+    def _setattr_before_init(self, name: str, value: object) -> bool:
+        """True, and already written, if ``Module.__init__`` hasn't run yet.
+
+        None of the tracked registries exist before that -- every branch
+        in ``__setattr__`` past this point reads one -- so a plain value
+        is written directly and a value that would need a registry is
+        refused with the reference's own wording (LCD-556).
+        """
+        if "_parameters" in self.__dict__:
+            return False
+        kind = _before_init_kind(value)
+        if kind is not None:
+            raise AttributeError(f"cannot assign {kind} before Module.__init__() call")
+        object.__setattr__(self, name, value)
+        return True
 
     def _write_traced_buffer(self, name: str, value: object) -> bool:
         """Under a compile trace, write ``value`` into buffer ``name`` in place.
@@ -597,15 +624,18 @@ class Module:
         _tree_changed()
 
     def __getattr__(self, name: str) -> Tensor | Parameter | Module:
-        """Attribute lookup fallback; resolves Parameter / buffer / submodule registries when ordinary lookup fails."""
-        p = object.__getattribute__(self, "_parameters")
-        if name in p:
+        """Attribute lookup fallback; resolves Parameter / buffer / submodule registries when ordinary lookup fails.
+
+        Reads via ``self.__dict__.get(...)`` so a registry missing before
+        ``Module.__init__`` doesn't recurse back here about itself."""
+        p = self.__dict__.get("_parameters")
+        if p is not None and name in p:
             return cast(Tensor | Parameter | Module, p[name])
-        b = object.__getattribute__(self, "_buffers")
-        if name in b:
+        b = self.__dict__.get("_buffers")
+        if b is not None and name in b:
             return cast(Tensor | Parameter | Module, b[name])
-        m = object.__getattribute__(self, "_modules")
-        if name in m:
+        m = self.__dict__.get("_modules")
+        if m is not None and name in m:
             return cast(Tensor | Parameter | Module, m[name])
         raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
@@ -859,6 +889,10 @@ class Module:
 
     def register_parameter(self, name: str, param: Parameter | None) -> None:
         """Register a Parameter under the given name."""
+        if "_parameters" not in self.__dict__:
+            raise AttributeError(
+                "cannot assign parameter before Module.__init__() call"
+            )
         self._validate_child_name(name, "parameter")
         if hasattr(self, name) and name not in self._parameters:
             raise KeyError(f"attribute '{name}' already exists")
@@ -880,6 +914,8 @@ class Module:
         self, name: str, tensor: Tensor | None, persistent: bool = True
     ) -> None:
         """Register a buffer tensor. Non-persistent buffers are excluded from state_dict."""
+        if "_buffers" not in self.__dict__:
+            raise AttributeError("cannot assign buffer before Module.__init__() call")
         self._validate_child_name(name, "buffer")
         if hasattr(self, name) and name not in self._buffers:
             raise KeyError(f"attribute '{name}' already exists")
@@ -1431,70 +1467,3 @@ class Module:
     def extra_repr(self) -> str:
         """Override to add extra repr info (e.g. Linear shows in_features, etc.)."""
         return ""
-
-
-@final
-class _ModuleBackwardState:
-    """The Python half of one hooked module call's backward.
-
-    The engine's two barriers (``ModuleHookNode``) hold the call's
-    gradients and call back into :meth:`run_pre_hooks` and
-    :meth:`run_full_hooks`.  Each calls one kind of hook in turn, global
-    ones first, and yields every result that is not ``None``.  The engine
-    checks that result against the gradients it replaces — the count, then
-    each gradient's dtype, device and shape — and puts it in place before
-    the generator goes on, so the next hook is handed only a tuple the
-    engine accepted, and what flows on is the last hook's.  Nothing is
-    filtered here: an entry that is not a tensor reaches the engine, which
-    refuses it.
-
-    The engine's state holds this object through its two bound methods, so
-    it must hold nothing that leads back to that state: the garbage
-    collector cannot see the engine's edges, and such a cycle would keep
-    the module and every call's state alive forever (LCD-167).  It holds
-    the module, as the reference's graph does, so a module that is only
-    reachable from a pending graph still runs its hooks.
-    """
-
-    def __init__(self, module: Module) -> None:
-        self.module = module
-
-    def run_pre_hooks(
-        self, grad_output_impls: tuple[_C_engine.TensorImpl | None, ...]
-    ) -> Iterator[object]:
-        """Run the backward pre-hooks on the output gradients."""
-        grad_outputs = _wrap_grads(grad_output_impls)
-        hooks = (
-            *_GLOBAL_BACKWARD_PRE_HOOKS.values(),
-            *self.module._backward_pre_hooks.values(),
-        )
-        for hook in hooks:
-            result = hook(self.module, grad_outputs)
-            if result is not None:
-                yield result
-                grad_outputs = tuple(cast(Iterable[Tensor | None], result))
-
-    def run_full_hooks(
-        self,
-        grad_input_impls: tuple[_C_engine.TensorImpl | None, ...],
-        grad_output_impls: tuple[_C_engine.TensorImpl | None, ...],
-    ) -> Iterator[object]:
-        """Run the full backward hooks on the input and output gradients."""
-        grad_inputs = _wrap_grads(grad_input_impls)
-        grad_outputs = _wrap_grads(grad_output_impls)
-        hooks = (
-            *_GLOBAL_BACKWARD_HOOKS.values(),
-            *self.module._backward_hooks.values(),
-        )
-        for hook in hooks:
-            result = hook(self.module, grad_inputs, grad_outputs)
-            if result is not None:
-                yield result
-                grad_inputs = tuple(cast(Iterable[Tensor | None], result))
-
-
-def _wrap_grads(
-    impls: tuple[_C_engine.TensorImpl | None, ...],
-) -> tuple[Tensor | None, ...]:
-    """The engine's gradients as the tensors a backward hook is handed."""
-    return tuple(None if g is None else _wrap(g) for g in impls)

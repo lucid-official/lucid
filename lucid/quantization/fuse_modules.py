@@ -36,19 +36,15 @@ def _get_module(root: nn.Module, dotted: str) -> nn.Module:
 def _set_module(root: nn.Module, dotted: str, value: nn.Module) -> None:
     """Assign ``value`` at a dotted submodule path, preserving child order.
 
-    An existing child is written over in its slot, so ``Sequential``
-    execution order is unchanged.  ``setattr`` keeps the slot as well since
-    LCD-551; the direct ``_modules`` write predates that.
+    ``setattr`` keeps an existing child's slot in place (LCD-551), so one
+    unconditional call covers both the replace and the fresh-name case --
+    no direct ``_modules`` write needed (LCD-556).
     """
     parts = dotted.split(".")
     parent: nn.Module = root
     for part in parts[:-1]:
         parent = cast("nn.Module", getattr(parent, part))
-    leaf = parts[-1]
-    if leaf in parent._modules:
-        parent._modules[leaf] = value
-    else:
-        setattr(parent, leaf, value)
+    setattr(parent, parts[-1], value)
 
 
 def _conv_relu(conv: nn.Module, relu: nn.Module) -> nn.Module:
