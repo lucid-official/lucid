@@ -27,15 +27,19 @@ The accepted operands are cast to one dtype (:func:`_loss_dtype`), so no
 kernel sees a mixed pair.
 """
 
+import math
 import warnings
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import Literal, TYPE_CHECKING, override, overload
 
 import lucid as _lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
 from lucid._tensor._indexing import broadcast_shapes
+from lucid._types import Reduction, ReductionKL
 from lucid.nn.functional._index_checks import _host_read
+from lucid.nn.module import Module
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -63,6 +67,102 @@ def _check_reduction(reduction: object, op: str, *, batchmean: bool = False) -> 
     valid = _REDUCTIONS + ("batchmean",) if batchmean else _REDUCTIONS
     if not isinstance(reduction, str) or reduction not in valid:
         raise ValueError(f"{op}: reduction must be one of {valid}, got {reduction!r}")
+
+
+@overload
+def _legacy_reduction(
+    size_average: bool | None,
+    reduce: bool | None,
+    reduction: object,
+    op: str,
+    *,
+    batchmean: Literal[False] = False,
+) -> Reduction: ...
+
+
+@overload
+def _legacy_reduction(
+    size_average: bool | None,
+    reduce: bool | None,
+    reduction: object,
+    op: str,
+    *,
+    batchmean: bool,
+) -> ReductionKL: ...
+
+
+def _legacy_reduction(
+    size_average: bool | None,
+    reduce: bool | None,
+    reduction: object,
+    op: str,
+    *,
+    batchmean: bool = False,
+) -> ReductionKL:
+    """Resolve legacy ``size_average`` / ``reduce`` slots into ``reduction``
+    (matching the reference's legacy reduction rule without a deprecation
+    warning) and validate the resulting mode."""
+    if size_average is not None or reduce is not None:
+        sa = True if size_average is None else bool(size_average)
+        red = True if reduce is None else bool(reduce)
+        reduction = "mean" if (sa and red) else ("sum" if red else "none")
+    _check_reduction(reduction, op, batchmean=batchmean)
+    if reduction == "none":
+        return "none"
+    if reduction == "sum":
+        return "sum"
+    if reduction == "batchmean":
+        return "batchmean"
+    return "mean"
+
+
+def _check_same_weight(weight: Tensor | None, x: Tensor, op: str) -> None:
+    if weight is not None and _shape(weight) != _shape(x):
+        raise ValueError(
+            f"{op}: weight of shape {_shape(weight)} must have the same size as input {_shape(x)}"
+        )
+
+
+def _check_beta(beta: float, op: str = "smooth_l1_loss") -> None:
+    if isinstance(beta := _promotion.as_number(beta), bool) or not beta >= 0.0:
+        raise ValueError(f"{op}: beta must be non-negative, got {beta!r}")
+
+
+def _check_delta(delta: float, op: str = "huber_loss") -> None:
+    if isinstance(delta := _promotion.as_number(delta), bool) or not isinstance(
+        delta, (int, float)
+    ):
+        raise TypeError(
+            f"{op}: delta must be a float or int, got {type(delta).__name__}"
+        )
+    if not delta > 0.0:
+        raise ValueError(f"{op}: delta must be positive, got {delta!r}")
+
+
+def _check_label_smoothing(label_smoothing: float, op: str = "cross_entropy") -> None:
+    if (
+        isinstance(label_smoothing := _promotion.as_number(label_smoothing), bool)
+        or not 0.0 <= label_smoothing <= 1.0
+    ):
+        raise ValueError(
+            f"{op}: label_smoothing must be in [0, 1], got {label_smoothing!r}"
+        )
+
+
+def _check_multi_margin(
+    p: int, weight: Tensor | None, op: str = "multi_margin_loss"
+) -> None:
+    if isinstance(p := _promotion.as_number(p), bool) or (p != 1 and p != 2):
+        raise ValueError(f"{op}: only p == 1 and p == 2 supported, got {p!r}")
+    if weight is not None and weight.ndim != 1:
+        raise ValueError(
+            f"{op}: expected weight to be None or 1D tensor, got {weight.ndim}D"
+        )
+
+
+def _check_triplet_margin(margin: float, op: str) -> None:
+    if isinstance(margin := _promotion.as_number(margin), bool) or not margin > 0.0:
+        raise ValueError(f"{op}: expected margin to be greater than 0, got {margin!r}")
 
 
 def _check_device(op: str, **tensors: Tensor | None) -> None:
@@ -437,3 +537,159 @@ def _pair_operands(
     _check_dtypes(op, y, input1=x1, input2=x2)
     d = _loss_dtype(x1, x2, y) if promote else _loss_dtype(x1, x2)
     return _cast(x1, d), _cast(x2, d), _cast(y, d)
+
+
+def _check_cross_entropy_target(
+    x: Tensor,
+    target: Tensor,
+    weight: Tensor | None,
+    ignore_index: int,
+    op: str,
+) -> tuple[int, bool]:
+    """Validate ``x``, ``target``, ``weight`` and ``ignore_index`` for
+    :func:`~lucid.nn.functional.loss.cross_entropy`, returning
+    ``(num_classes, soft)``."""
+    num_classes: int = _num_classes(x, op)
+    _check_class_weight(weight, num_classes, x, target, op)
+    # A target of the input's own shape holds class probabilities, as in
+    # the reference; the docstring said so, and the gather path refused it
+    # with a rank mismatch.
+    soft: bool = _shape(target) == _shape(x)
+    _check_dtypes(op, None if soft else target, input=x)
+    if not soft:
+        _check_class_target(x, target, op)
+    elif not target.is_floating_point():
+        raise TypeError(
+            f"{op}: a target of the input's shape holds class probabilities "
+            f"and must be floating point, got {target.dtype}"
+        )
+    elif ignore_index >= 0:
+        raise ValueError(
+            f"{op}: ignore_index is not supported for a target of class probabilities"
+        )
+    return num_classes, soft
+
+
+def _check_cosine_shapes(x1: Tensor, x2: Tensor, y: Tensor, op: str) -> None:
+    """Validate rank and broadcast compatibility for :func:`cosine_embedding_loss`."""
+    # A (N,) target pairs (N, D) inputs; a 0-d one pairs one unbatched (D,)
+    # pair, which raised IndexError ("axis out of range") here.
+    if y.ndim > 1:
+        raise ValueError(f"{op}: expected a 0-d or 1-D target, got {_shape(y)}")
+    pair = _broadcast_shape(_shape(x1), _shape(x2))
+    if x1.ndim != y.ndim + 1 or x2.ndim != y.ndim + 1 or pair is None:
+        raise ValueError(
+            f"{op}: a {y.ndim}-D target expects two {y.ndim + 1}-D inputs of "
+            f"broadcastable shapes, got {_shape(x1)} and {_shape(x2)}"
+        )
+    # The target broadcasts with the pairs' batch, either way: a batch of
+    # one against N labels is N losses, as in the reference.
+    if _broadcast_shape(_shape(y), pair[:-1]) is None:
+        raise ValueError(
+            f"{op}: target of shape {_shape(y)} does not broadcast with the "
+            f"inputs' batch shape {pair[:-1]}"
+        )
+
+
+def _align_gaussian_var(x: Tensor, var: Tensor | float) -> Tensor:
+    """Materialise and broadcast-align ``var`` to ``x`` for :func:`gaussian_nll_loss`."""
+    if isinstance(var, (int, float)):
+        if var < 0:
+            raise ValueError("var has negative entry/entries")
+        var = _lucid.full_like(x, float(var))
+    if tuple(var.shape) != tuple(x.shape):
+        if tuple(x.shape[:-1]) == tuple(var.shape):
+            var = var.unsqueeze(-1)
+        elif x.ndim != var.ndim or (
+            sum(v for d, v in zip(x.shape, var.shape, strict=True) if d != v) != 1
+        ):
+            raise ValueError("var is of incorrect size")
+    if var.device == "cpu" and _host_read(lambda: bool((var < 0.0).any().item())):
+        raise ValueError("var has negative entry/entries")
+    return var
+
+
+def _triplet_distances(
+    anchor: Tensor, positive: Tensor, negative: Tensor, p: float, eps: float, swap: bool
+) -> tuple[_C_engine.TensorImpl, _C_engine.TensorImpl]:
+    """Validate and compute ``(d_ap, d_an)`` for :func:`triplet_margin_loss`."""
+    from lucid.nn.functional.activations import pairwise_distance
+
+    op = "triplet_margin_loss"
+    _check_dtypes(op, anchor=anchor, positive=positive, negative=negative)
+    d = _loss_dtype(anchor, positive, negative)
+    anchor, positive, negative = (_cast(t, d) for t in (anchor, positive, negative))
+    _check_same_rank(op, anchor=anchor, positive=positive, negative=negative)
+    d_ap = _unwrap(pairwise_distance(anchor, positive, p=p, eps=eps))
+    d_an = _unwrap(pairwise_distance(anchor, negative, p=p, eps=eps))
+    if swap:
+        d_pn = _unwrap(pairwise_distance(positive, negative, p=p, eps=eps))
+        d_an = _C_engine.minimum(d_an, d_pn)
+    return d_ap, d_an
+
+
+def _poisson_stirling(ti: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
+    """Stirling's approximation to ``log(target!)`` for :func:`poisson_nll_loss`."""
+    # ``full`` was accepted and did nothing: passing it changed the
+    # answer by exactly zero.  The term it names is Stirling's
+    # approximation to the ``log(target!)`` that the non-full form
+    # drops as constant in the parameters —
+    #
+    #     target·log(target) − target + ½·log(2π·target)
+    #
+    # applied only where ``target > 1``, since at 0 and 1 the true
+    # ``log(target!)`` is 0 and the approximation is not.
+    one = _C_engine.full(ti.shape, 1.0, ti.dtype, ti.device)
+    safe = _C_engine.maximum(ti, one)  # keeps log finite at target == 0
+    two_pi_safe = _C_engine.mul(
+        _C_engine.full(ti.shape, 2.0 * math.pi, ti.dtype, ti.device), safe
+    )
+    stirling = _C_engine.add(
+        _C_engine.sub(_C_engine.mul(safe, _C_engine.log(safe)), safe),
+        _C_engine.mul(
+            _C_engine.full(ti.shape, 0.5, ti.dtype, ti.device),
+            _C_engine.log(two_pi_safe),
+        ),
+    )
+    zero = _C_engine.zeros(ti.shape, ti.dtype, ti.device)
+    return _C_engine.where(_C_engine.greater(ti, one), stirling, zero)
+
+
+class _Loss(Module):
+    """Base of the loss modules in :mod:`lucid.nn.modules.loss`."""
+
+    reduction: Reduction
+
+    def __init__(
+        self,
+        size_average: bool | None = None,
+        reduce: bool | None = None,
+        reduction: Reduction = "mean",
+    ) -> None:
+        """Initialise the loss module's ``reduction`` attribute."""
+        super().__init__()
+        self.reduction = _legacy_reduction(
+            size_average, reduce, reduction, self.__class__.__name__
+        )
+
+    @override
+    def extra_repr(self) -> str:
+        """Return a string representation of the layer's configuration."""
+        return f"reduction={self.reduction!r}"
+
+
+def _default_distance(
+    distance_function: Callable[[Tensor, Tensor], Tensor] | None,
+) -> Callable[[Tensor, Tensor], Tensor]:
+    """Return ``distance_function`` or the default L2 pairwise distance."""
+    if distance_function is not None:
+        return distance_function
+    from lucid.nn.functional.activations import pairwise_distance
+
+    def _default(a: Tensor, b: Tensor) -> Tensor:
+        return pairwise_distance(a, b, p=2.0)
+
+    return _default
+
+
+

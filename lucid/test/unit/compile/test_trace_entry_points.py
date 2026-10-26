@@ -54,7 +54,7 @@ _NOT_A_READ = {
 
 #: Bindings to a TensorImpl member function by pointer, whose body the scan
 #: cannot see. ``transfer_to_device`` was one of these. Each is reviewed: none
-#: returns a tensor or its values.
+#: returns a tensor or its values without calling ``compile::traced_derive``.
 _BARE_MEMBERS = {
     "numel",
     "nbytes",
@@ -72,6 +72,8 @@ _BARE_MEMBERS = {
     "is_aliased",
     "detach_inplace",
     "rebind_version_from",
+    "clone_with_grad",
+    "data_alias",
 }
 
 _START = re.compile(

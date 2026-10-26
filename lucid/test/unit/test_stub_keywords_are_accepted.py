@@ -171,16 +171,14 @@ _KINDS = {
 }
 
 #: Arguments the whole surface leaves out: output buffers, layouts, memory
-#: formats — and the reference's own deprecated loss, autograd, and scheduler
-#: arguments, which are not added (LCD-410 decision).
+#: formats — and the reference's own deprecated autograd and scheduler
+#: arguments, which are not added (LCD-410 / LCD-430 decision).
 _OMITTED = frozenset(
     {
         "out",
         "layout",
         "memory_format",
         "pin_memory",
-        "size_average",
-        "reduce",
         "grad_variables",
         "epoch",
         "name",
@@ -1000,3 +998,44 @@ def test_lcd434_signature_parity_stragglers(device: str) -> None:
     loaded = lucid.load(buf, "cpu", pickle, weights_only=True, mmap=False)
     assert isinstance(loaded, Tensor)
     assert loaded.tolist() == [1.0, 2.0, 3.0]
+
+
+def test_lcd430_legacy_reduction_and_elu_inplace_scale(device: str) -> None:
+    import warnings
+    import lucid.nn as nn
+    import lucid.nn.functional as F
+    from lucid.nn.functional._loss_checks import _legacy_reduction
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert _legacy_reduction(None, None, "mean", "mse_loss") == "mean"
+        assert _legacy_reduction(False, None, "mean", "mse_loss") == "sum"
+        assert _legacy_reduction(True, False, "mean", "mse_loss") == "none"
+        assert _legacy_reduction(False, False, "mean", "mse_loss") == "none"
+        assert _legacy_reduction(False, True, "mean", "mse_loss") == "sum"
+        assert _legacy_reduction(True, True, "sum", "mse_loss") == "mean"
+        assert (
+            _legacy_reduction(None, None, "batchmean", "kl_div", batchmean=True)
+            == "batchmean"
+        )
+
+        x = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
+        y = lucid.tensor([[0.0, 1.0], [1.0, 2.0]], device=device)
+        assert F.mse_loss(x, y, False).item() == pytest.approx(
+            F.mse_loss(x, y, reduction="sum").item()
+        )
+        assert F.mse_loss(x, y, True, False).shape == (2, 2)
+        assert nn.MSELoss(False)(x, y).item() == pytest.approx(
+            nn.MSELoss(reduction="sum")(x, y).item()
+        )
+        assert nn.MSELoss(True, False)(x, y).shape == (2, 2)
+        assert nn.KLDivLoss(size_average=False).reduction == "sum"
+        assert nn.CrossEntropyLoss(None, False).reduction == "sum"
+        assert nn.NLLLoss(None, None, -100, False).reduction == "none"
+        assert nn.PoissonNLLLoss(True, False, False).reduction == "sum"
+        assert nn.MultiLabelMarginLoss(reduce=False).reduction == "none"
+
+    t = lucid.tensor([-1.0, 2.0], device=device)
+    assert F.elu_(t, 1.0, False) is t
+    assert t.tolist() == [0.0, 0.0]
+
