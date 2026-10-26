@@ -1,4 +1,4 @@
-"""Every write that changes a gradient, and why most land in place.
+"""Every write that changes a gradient, and why it lands in place.
 
 ``t.grad`` reads the gradient's own buffer, and the reference framework's
 ``.grad`` is one tensor that all its holders share: a hook, a
@@ -6,45 +6,25 @@ gradient-accumulation buffer, a training loop that kept ``g = p.grad``.  Code
 that changes a gradient therefore changes that tensor.  Assigning
 ``t.grad = new`` instead installs a second tensor and leaves every holder
 reading the old values.  That is what ``zero_grad(set_to_none=False)``,
-``clip_grad_norm_``, ``clip_grad_value_`` and ``GradScaler.unscale_`` did.
+``clip_grad_norm_``, ``clip_grad_value_``, ``GradScaler.unscale_`` and a
+``maximize`` step did.
 
-Two kinds of gradient still get a new tensor (LCD-622):
-
-* a gradient held apart from the plain slot (see :func:`_held_apart`);
-* the negation a ``maximize`` step installs.
-
-Both are spelled here, so the change that brings them in place lands in one
-file.  The writes go to the engine tensors directly: through
-``Tensor.copy_`` each one cost some twenty times the old assignment.
+The writes go to the engine tensors directly: through ``Tensor.copy_`` each
+one cost some twenty times the old assignment.
 """
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+import math
 
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
-from lucid.autograd._grad_mode import no_grad
+from lucid.autograd._grad_mode import enable_grad, no_grad
 
 
-def _held_apart(impl: _C_engine.TensorImpl) -> bool:
-    """Whether ``impl``'s gradient lives outside the slot the optimizers read.
-
-    Two kinds of gradient are kept apart from the plain gradient slot:
-
-    * one from ``backward(create_graph=True)``;
-    * a tensor that requires grad, assigned to ``.grad``.
-
-    The engine's optimizers read only that slot (LCD-622).  A first-order
-    backward adds into such a gradient out of place, making a new tensor.
-    So a write that should reach the next step goes into the slot, as a new
-    gradient.
-
-    Nothing writes into the tensor held apart, either.  The engine keeps the
-    first graph-mode contribution as it comes, so that tensor can be another
-    parameter's gradient, the ``gradient=`` given to ``backward``, or a
-    Parameter.  The reference clones it.
-    """
-    return impl.grad_as_impl() is not None
+def _aliased_tracked(g: _C_engine.TensorImpl) -> bool:
+    """Whether ``g`` is a view of a tensor that participates in autograd."""
+    return g.is_aliased() and (g.requires_grad or g.grad_fn is not None)
 
 
 def _zeros(like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
@@ -54,10 +34,16 @@ def _zeros(like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
 def _assign(grad: _C_engine.TensorImpl, value: _C_engine.TensorImpl, name: str) -> None:
     """Write ``value`` into ``grad``'s buffer: ``Tensor.copy_``'s write, by itself.
 
-    A gradient in the slot never requires grad nor has a graph, so the write
-    records nothing under grad mode either.  ``value`` has ``grad``'s shape,
-    dtype and device.
+    When ``value`` carries no graph, a graph-mode or leaf ``grad`` is detached
+    in place as it is written.  ``value`` has ``grad``'s shape, dtype and
+    device.
     """
+    if grad.requires_grad and grad.grad_fn is None:
+        grad._set_requires_grad(False)
+    if not value.requires_grad and value.grad_fn is None and grad.grad_fn is not None:
+        with enable_grad():
+            grad.assign_from(value, name)
+        return
     if grad.is_aliased():
         _C_engine.assign_inplace(grad, value, name)
     else:
@@ -74,24 +60,22 @@ def zero_grads_(tensors: Iterable[Tensor], *, set_to_none: bool) -> None:
         skipped.
     set_to_none : bool
         ``True`` drops each gradient.  ``False`` zeroes each one in place.
-        A gradient held apart (:func:`_held_apart`) is replaced by zeros
-        instead.
+        A gradient assigned as a view of a leaf that requires grad is replaced
+        by zeros instead so the leaf's buffer is left alone.
     """
     for t in tensors:
         impl = t._impl
         if set_to_none:
             impl.zero_grad()
-        elif _held_apart(impl):
-            impl.set_grad(_zeros(impl))
         elif (g := impl.grad_to_tensor()) is not None:
-            _assign(g, _zeros(g), "zero_grad")
+            if _aliased_tracked(g):
+                impl.set_grad(_zeros(impl))
+            else:
+                _assign(g, _zeros(g), "zero_grad")
 
 
 def write_grad_(t: Tensor, value: _C_engine.TensorImpl, name: str) -> None:
-    """Write ``value`` into ``t``'s gradient, in place where it can.
-
-    A gradient held apart from the optimizers' slot (:func:`_held_apart`)
-    gets ``value`` as a new gradient instead, so the next step reads it.
+    """Write ``value`` into ``t``'s gradient in place.
 
     Parameters
     ----------
@@ -110,39 +94,57 @@ def write_grad_(t: Tensor, value: _C_engine.TensorImpl, name: str) -> None:
         If ``t`` has no gradient to write into.
     """
     impl = t._impl
-    if _held_apart(impl):
-        impl.set_grad(value)
-        return
     g = impl.grad_to_tensor()
     if g is None:
         raise RuntimeError(f"{name}: the tensor has no gradient to write into")
+    if _aliased_tracked(g):
+        impl.set_grad(value)
+        return
     _assign(g, value, name)
+
+
+def _negate_inplace(g: _C_engine.TensorImpl) -> None:
+    neg = _C_engine.neg(g)
+    if g.is_aliased():
+        _C_engine.assign_inplace(g, neg, "maximize")
+    else:
+        g.assign_from(neg, "maximize")
 
 
 @contextmanager
 def negated_grads(tensors: Iterable[Tensor]) -> Iterator[None]:
-    """Hold each non-empty gradient of ``tensors`` negated for the block.
+    """Hold each non-empty gradient of ``tensors`` negated in place for the block.
 
-    The negation is installed as a new gradient, and the original goes back
-    afterwards, even when the block raises.  A held ``p.grad`` is therefore
-    not the gradient after the block (LCD-622).  Negating in place is refused
-    for a CPU gradient that another gradient shares, and it would not reach
-    a gradient held apart from the optimizers' slot.
+    Each gradient is negated in place on entry and negated back on exit, even
+    when the block raises, so a held ``p.grad`` stays the gradient after the
+    block.
 
     Parameters
     ----------
     tensors : Iterable[Tensor]
         The tensors whose gradients the block sees negated.
     """
-    saved: list[tuple[Tensor, Tensor]] = []
+    grads: list[_C_engine.TensorImpl] = []
+    seen: set[tuple[int, int, tuple[int, ...], tuple[int, ...]]] = set()
     with no_grad():
         for t in tensors:
-            g = t.grad
-            if g is not None and g.numel() > 0:
-                saved.append((t, g))
-                t.grad = -g
+            g = t._impl.grad_to_tensor()
+            if g is not None and math.prod(g.shape) > 0:
+                key = (
+                    g.family_id() or g.storage_data_ptr() or id(g),
+                    g.storage_offset_bytes(),
+                    tuple(g.shape),
+                    tuple(g.stride),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                grads.append(g)
+                _negate_inplace(g)
     try:
         yield
     finally:
-        for t, g in saved:
-            t.grad = g
+        with no_grad():
+            for g in grads:
+                _negate_inplace(g)
+

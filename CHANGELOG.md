@@ -85,6 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - alias source view family on Metal grad assignment (LCD-623)
 
+- unify grad_impl step, accumulation, and shared-grad writes
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

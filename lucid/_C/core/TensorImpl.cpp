@@ -435,17 +435,7 @@ SlotWrite gradient_slot_write(const Storage& storage, long members) {
     // backward, a NumPy array, a tensor the gradient was taken from — and the
     // write would change them behind its back.
     const auto* owned = std::get_deleter<GradSlot>(ref->slot);
-    if (owned == nullptr)
-        return SlotWrite::kRefused;  // not a slot grad_to_tensor wrapped
-    // Nor may the slot's buffer be another gradient's, read through that
-    // gradient's own record — a hook that returned ``p.grad`` became this
-    // tensor's gradient as it was, and so does ``q.grad = p.grad``.  The
-    // count above sees only the outer pointer, so it would let the write
-    // change ``p``'s gradient in silence.
-    const bool another_gradient = std::get_deleter<GradSlotRef>(owned->buffer) != nullptr ||
-                                  std::get_deleter<GradSlot>(owned->buffer) != nullptr;
-    if (another_gradient || ref->slot.use_count() > 2 || owned->buffer.use_count() > 1 ||
-        cpu->ptr.use_count() > members)
+    if (owned == nullptr || ref->slot.use_count() > 2 || cpu->ptr.use_count() > members)
         return SlotWrite::kRefused;
     return SlotWrite::kInto;
 }
@@ -2025,6 +2015,12 @@ Storage TensorImpl::detach_gpu_grad_slot(Storage s) {
     if (auto* gpu = std::get_if<GpuStorage>(&s); gpu && gpu->arr) {
         if (auto* owned = std::get_deleter<GpuGradSlot>(gpu->arr))
             gpu->arr = owned->arr;
+    } else if (auto* cpu = std::get_if<CpuStorage>(&s); cpu && cpu->ptr) {
+        std::byte* addr = cpu->ptr.get();
+        if (const auto* ref = std::get_deleter<GradSlotRef>(cpu->ptr); ref && ref->slot)
+            cpu->ptr = std::shared_ptr<std::byte[]>(ref->slot, addr);
+        if (const auto* owned = std::get_deleter<GradSlot>(cpu->ptr); owned && owned->buffer)
+            cpu->ptr = std::shared_ptr<std::byte[]>(owned->buffer, addr);
     }
     return s;
 }
@@ -2459,6 +2455,78 @@ bool TensorImpl::absorbs_phantom_gradient(const Storage& grad) {
     return true;
 }
 
+extern std::shared_ptr<TensorImpl> add_op(const std::shared_ptr<TensorImpl>&,
+                                          const std::shared_ptr<TensorImpl>&);
+
+namespace {
+
+bool tracks_autograd(const std::shared_ptr<TensorImpl>& t) {
+    return t && (t->requires_grad() || t->grad_fn());
+}
+
+std::shared_ptr<TensorImpl> zero_grad_like(const TensorImpl& g) {
+    const std::size_t n = g.nbytes();
+    if (g.device() == Device::GPU) {
+        auto arr = ::mlx::core::zeros(gpu_strided::to_mlx(g.shape()), gpu::to_mlx_dtype(g.dtype()));
+        return std::make_shared<TensorImpl>(Storage{gpu::wrap_mlx_array(std::move(arr), g.dtype())},
+                                            g.shape(), g.dtype(), Device::GPU, false);
+    }
+    CpuStorage cpu;
+    cpu.ptr = allocate_aligned_bytes(n);
+    cpu.nbytes = n;
+    cpu.dtype = g.dtype();
+    if (n > 0)
+        std::memset(cpu.ptr.get(), 0, n);
+    return std::make_shared<TensorImpl>(Storage{std::move(cpu)}, g.shape(), g.dtype(), Device::CPU,
+                                        false);
+}
+
+std::shared_ptr<TensorImpl> clone_grad_impl(std::shared_ptr<TensorImpl> g) {
+    if (!g || g->is_phantom())
+        return g;
+    if (!tracks_autograd(g)) {
+        auto out = zero_grad_like(*g);
+        out->copy_from(*g);
+        return out;
+    }
+    const bool prev_mode = GradMode::is_enabled();
+    GradMode::set_enabled(true);
+    try {
+        auto out = add_op(g, zero_grad_like(*g));
+        GradMode::set_enabled(prev_mode);
+        return out;
+    } catch (...) {
+        GradMode::set_enabled(prev_mode);
+        throw;
+    }
+}
+
+void merge_grad_impl(std::shared_ptr<TensorImpl>& cur, const std::shared_ptr<TensorImpl>& g) {
+    const bool g_tracks = tracks_autograd(g);
+    const bool prev_mode = GradMode::is_enabled();
+    if (tracks_autograd(cur) || g_tracks)
+        GradMode::set_enabled(true);
+    std::shared_ptr<TensorImpl> sum;
+    try {
+        sum = add_op(cur, g);
+        GradMode::set_enabled(prev_mode);
+    } catch (...) {
+        GradMode::set_enabled(prev_mode);
+        throw;
+    }
+    const bool leaf_grad = cur->is_leaf() && cur->requires_grad();
+    if (!g_tracks && !leaf_grad && !cur->is_aliased()) {
+        cur->copy_from(*sum);
+        cur->set_grad_fn(sum->grad_fn());
+        cur->set_grad_output_nr(sum->grad_output_nr());
+        cur->set_requires_grad(sum->requires_grad());
+    } else {
+        cur = std::move(sum);
+    }
+}
+
+}  // namespace
+
 void TensorImpl::accumulate_grad_impl(std::shared_ptr<TensorImpl> g) {
     if (g && absorbs_phantom_gradient(g->raw_storage()))
         return;
@@ -2466,34 +2534,13 @@ void TensorImpl::accumulate_grad_impl(std::shared_ptr<TensorImpl> g) {
     if (!autograd_->grad_impl && autograd_->grad.has_value()) {
         Storage prev = detach_gpu_grad_slot(std::move(*autograd_->grad));
         autograd_->grad.reset();
-        if (auto* cpu = std::get_if<CpuStorage>(&prev); cpu && cpu->ptr) {
-            if (auto* owned = std::get_deleter<GradSlot>(cpu->ptr))
-                cpu->ptr = owned->buffer;
-        }
         autograd_->grad_impl = std::make_shared<TensorImpl>(std::move(prev), meta_.shape,
                                                             meta_.dtype, meta_.device, false);
     }
-    if (!autograd_->grad_impl) {
-        autograd_->grad_impl = std::move(g);
-    } else {
-        // Lazy-include to avoid a circular dependency at the header level.
-        // add_op is defined in ops/bfunc/Add.h which is not included here;
-        // declare it as an extern to keep TensorImpl.cpp independent of the ops layer.
-        extern std::shared_ptr<TensorImpl> add_op(const std::shared_ptr<TensorImpl>&,
-                                                  const std::shared_ptr<TensorImpl>&);
-        const bool prev_mode = GradMode::is_enabled();
-        if (autograd_->grad_impl->requires_grad() || autograd_->grad_impl->grad_fn() ||
-            (g && (g->requires_grad() || g->grad_fn()))) {
-            GradMode::set_enabled(true);
-        }
-        try {
-            autograd_->grad_impl = add_op(autograd_->grad_impl, g);
-            GradMode::set_enabled(prev_mode);
-        } catch (...) {
-            GradMode::set_enabled(prev_mode);
-            throw;
-        }
-    }
+    if (!autograd_->grad_impl)
+        autograd_->grad_impl = clone_grad_impl(g);
+    else
+        merge_grad_impl(autograd_->grad_impl, g);
 }
 
 }  // namespace lucid

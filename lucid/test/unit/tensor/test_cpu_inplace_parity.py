@@ -187,28 +187,32 @@ def test_a_gradient_saved_for_backward_is_not_written() -> None:
     assert w.grad.tolist() == [2.0, 4.0, 6.0]
 
 
-def test_a_gradient_that_is_another_gradient_is_not_written() -> None:
+def test_a_gradient_that_is_another_gradient_is_not_written(device: str) -> None:
     """A hook that returns ``p.grad`` gives ``x`` a copy of it.
 
     The hook runs inside backward now, before the gradient is accumulated,
     and the engine copies what a hook hands back — as the reference's
     accumulator clones it — so ``x.grad`` is a buffer of its own and a
     write to it leaves ``p.grad`` alone.  ``q.grad = p.grad`` shares the
-    buffer instead, so ``q.grad.mul_(s)`` is refused: it would change
-    ``p.grad`` with nothing to show for it.
+    buffer instead, so ``q.grad.mul_(s)`` and ``q.grad.neg_()`` write
+    through to both ``q.grad`` and ``p.grad``, matching ``zero_`` and the
+    reference.
     """
-    p = _with_grad("cpu")
-    x = lucid.tensor([1.0, 1.0, 1.0], requires_grad=True)
+    p = _with_grad(device)
+    x = lucid.tensor([1.0, 1.0, 1.0], device=device, requires_grad=True)
     x.register_hook(lambda g: p.grad)
     (x * 1.0).sum().backward()
     x.grad.mul_(10.0)
     assert x.grad.tolist() == [20.0, 40.0, 60.0]
     assert p.grad.tolist() == [2.0, 4.0, 6.0]
-    q = lucid.zeros(3, requires_grad=True)
+    q = lucid.zeros(3, device=device, requires_grad=True)
     q.grad = p.grad
-    with pytest.raises(RuntimeError, match="gradient"):
-        q.grad.mul_(10.0)
-    assert p.grad.tolist() == [2.0, 4.0, 6.0]
+    q.grad.mul_(10.0)
+    assert q.grad.tolist() == [20.0, 40.0, 60.0]
+    assert p.grad.tolist() == [20.0, 40.0, 60.0]
+    q.grad.neg_()
+    assert q.grad.tolist() == [-20.0, -40.0, -60.0]
+    assert p.grad.tolist() == [-20.0, -40.0, -60.0]
 
 
 def test_a_numpy_array_over_a_gradient_stops_the_write() -> None:

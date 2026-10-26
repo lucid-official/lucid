@@ -84,14 +84,6 @@ def test_set_to_none_drops_the_gradient_and_leaves_the_held_one(
     assert g.tolist() == [2.0, 2.0, 2.0]
 
 
-_LCD_622_HELD = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-622: a gradient held apart from the optimizers' slot can be "
-    "another tensor, so zeroing replaces it instead of writing into it",
-)
-
-
-@_LCD_622_HELD
 @pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
 def test_a_graph_gradient_is_detached_and_zeroed(reset: Reset, device: str) -> None:
     p = nn.Parameter(lucid.ones(3, device=device))
@@ -103,6 +95,10 @@ def test_a_graph_gradient_is_detached_and_zeroed(reset: Reset, device: str) -> N
     assert g.grad_fn is None and not g.requires_grad
     assert p.grad is not None and p.grad.grad_fn is None
     assert p.grad.tolist() == [0.0, 0.0, 0.0]
+    assert _same(g, p.grad)
+    (p * 3).sum().backward()
+    assert g.tolist() == [3.0, 3.0, 3.0]
+    assert _same(g, p.grad)
 
 
 @pytest.mark.parametrize("make", [optim.SGD, optim.Adam], ids=["SGD", "Adam"])
@@ -152,7 +148,6 @@ def test_detaching_the_gradient_detaches_it(device: str) -> None:
     assert p.grad is not None and p.grad.grad_fn is None
 
 
-@_LCD_622_HELD
 def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
     device: str,
 ) -> None:
@@ -163,6 +158,7 @@ def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
     assert w.tolist() == [0.0, 0.0, 0.0] and not w.requires_grad
     assert p.grad is not None and not p.grad.requires_grad
     assert p.grad.tolist() == [0.0, 0.0, 0.0]
+    assert _same(w, p.grad)
 
 
 @pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
@@ -257,18 +253,12 @@ def _maximize(ns: Any, p: Any) -> None:
     ns.optim.SGD([p], lr=0.1, maximize=True).step()
 
 
-_LCD_622_MAXIMIZE = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-622: a maximize step installs the negated gradient and puts "
-    "the original back, so p.grad is a new tensor afterwards",
-)
-
 # Each writer, and what it leaves in a gradient of eights.
 _WRITERS = [
     pytest.param(_clip_norm, [3**-0.5] * 3, id="clip_grad_norm_"),
     pytest.param(_clip_value, [0.5] * 3, id="clip_grad_value_"),
     pytest.param(_unscale, [2.0] * 3, id="GradScaler.unscale_"),
-    pytest.param(_maximize, [8.0] * 3, id="maximize_step", marks=_LCD_622_MAXIMIZE),
+    pytest.param(_maximize, [8.0] * 3, id="maximize_step"),
 ]
 
 
@@ -345,30 +335,57 @@ def _step_after(
     make: Callable[..., optim.Optimizer],
     device: str,
     create_graph: bool,
+    *,
+    in_no_grad: bool = True,
 ) -> list[float]:
     p = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
     o = make([p], lr=0.1)
     (p * p).sum().backward(create_graph=create_graph)
-    with lucid.no_grad():
+    if in_no_grad:
+        with lucid.no_grad():
+            write(p, o)
+    else:
         write(p, o)
     values: list[float] = p.tolist()
     return values
 
 
+@pytest.mark.parametrize("in_no_grad", [True, False], ids=["no_grad", "grad_mode"])
 @pytest.mark.parametrize("make", _OPTIMIZERS.values(), ids=_OPTIMIZERS.keys())
 @pytest.mark.parametrize(("write", "sgd_expected"), _STEPS)
 def test_a_step_reads_what_a_writer_left_in_a_graph_gradient(
     write: Callable[[nn.Parameter, optim.Optimizer], None],
     sgd_expected: list[float],
     make: Callable[..., optim.Optimizer],
+    in_no_grad: bool,
     device: str,
 ) -> None:
     """After ``backward(create_graph=True)`` the step moves as after a first-order one."""
-    moved = _step_after(write, make, device, create_graph=True)
-    assert moved == pytest.approx(_step_after(write, make, device, create_graph=False))
+    moved = _step_after(write, make, device, create_graph=True, in_no_grad=in_no_grad)
+    assert moved == pytest.approx(
+        _step_after(write, make, device, create_graph=False, in_no_grad=in_no_grad)
+    )
     assert moved != pytest.approx([1.0, 2.0, 3.0])
     if make is optim.SGD:
         assert moved == pytest.approx(sgd_expected, abs=1e-5)
+
+
+@pytest.mark.parametrize("make", _OPTIMIZERS.values(), ids=_OPTIMIZERS.keys())
+def test_optimizer_step_moves_parameter_with_create_graph_gradient(
+    make: Callable[..., optim.Optimizer], device: str
+) -> None:
+    p = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
+    o = make([p], lr=0.1)
+    (p * p).sum().backward(create_graph=True)
+    g = p.grad
+    assert g is not None and g.requires_grad
+    o.step()
+    assert _same(g, p.grad)
+    q = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
+    oq = make([q], lr=0.1)
+    (q * q).sum().backward(create_graph=False)
+    oq.step()
+    assert p.tolist() == pytest.approx(q.tolist(), abs=1e-5)
 
 
 def _zero_grad(p: nn.Parameter) -> None:
@@ -391,11 +408,6 @@ _HELD_APART_WRITERS: dict[str, Callable[[nn.Parameter], None]] = {
 }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-622: the engine optimizers read only the plain slot, so a "
-    "gradient held apart from it is written there as a new tensor",
-)
 @pytest.mark.parametrize(
     "write", _HELD_APART_WRITERS.values(), ids=_HELD_APART_WRITERS.keys()
 )

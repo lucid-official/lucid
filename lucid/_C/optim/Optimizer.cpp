@@ -165,10 +165,12 @@ void Optimizer::refuse_phantom_step() const {
         if (!p)
             continue;
         const auto& grad = p->grad_storage();
-        if (p->is_phantom() || (grad.has_value() && storage_is_phantom(*grad)))
+        const auto grad_impl = p->grad_as_impl();
+        const bool has_grad = grad.has_value() || grad_impl != nullptr;
+        if (p->is_phantom() || (grad.has_value() && storage_is_phantom(*grad)) ||
+            (grad_impl && grad_impl->is_phantom()))
             refuse_phantom_read("optimizer step of a phantom parameter");
-        if (grad.has_value() && !p->is_contiguous() &&
-            strided::overlaps_itself(p->shape(), p->stride()))
+        if (has_grad && !p->is_contiguous() && strided::overlaps_itself(p->shape(), p->stride()))
             ErrorBuilder("optimizer step")
                 .invalid_argument("parameter " + std::to_string(i) +
                                   " has overlapping elements (an expanded view, or unfold "
@@ -444,16 +446,18 @@ void Optimizer::step() {
         auto& p = params_[i];
         if (!p)
             continue;
-        const auto& grad = p->grad_storage();
-        if (!grad.has_value())
+        const auto grad_impl = p->grad_as_impl();
+        const auto& grad_slot = p->grad_storage();
+        if (!grad_impl && !grad_slot.has_value())
             continue;
+        const Storage& grad = grad_impl ? grad_impl->storage() : *grad_slot;
         if (!state_initialized_[i]) {
             init_state_slot(i, p);
             state_initialized_[i] = true;
         }
         ++steps_[i];
-        write_elements(p, *grad, "optimizer step", [&](std::shared_ptr<TensorImpl>& elems) {
-            update_one(i, elems, *grad);
+        write_elements(p, grad, "optimizer step", [&](std::shared_ptr<TensorImpl>& elems) {
+            update_one(i, elems, grad);
             // So an autograd node that saved the parameter before the update
             // notices.
             elems->bump_version();
