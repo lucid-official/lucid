@@ -43,6 +43,10 @@ inline void refuse_on_leaf(const TensorImplPtr& a, const char* name) {
     if (GradMode::is_enabled() && a->requires_grad() && a->is_leaf())
         ErrorBuilder(name).fail("a leaf tensor that requires grad cannot be modified in place — "
                                 "wrap the call in no_grad, or use the out-of-place form");
+    if (GradMode::is_enabled() && a->is_custom_function_output())
+        ErrorBuilder(name).fail(
+            "Output of a custom Function is a view and is being modified in place — custom "
+            "Function output views cannot be modified in place; clone() first");
 }
 
 // Whether the op about to run records a node — and so keeps a handle on

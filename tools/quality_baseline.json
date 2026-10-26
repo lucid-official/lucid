@@ -123,7 +123,6 @@
    "by": "chanlee"
   }
  ],
-
  "counts": {
   "clang-tidy": {
    "bugprone-branch-clone": {
@@ -1161,7 +1160,6 @@
     "lucid/_C/engine.pyi": 17
    }
   },
-
   "jscpd": {
    "clone-pair": {
     "lucid/_C/autograd/Engine.cpp": 2,
@@ -1771,7 +1769,7 @@
     "lucid/_C/ops/einops/Einsum.cpp": 46,
     "lucid/_C/ops/gfunc/Gfunc.cpp": 2,
     "lucid/_C/ops/utils/Histogram.cpp": 7,
-    "lucid/_C/ops/utils/InplaceGraph.cpp": 13,
+    "lucid/_C/ops/utils/InplaceGraph.cpp": 9,
     "lucid/_C/utils/tokenizer/Unigram.cpp": 28,
     "lucid/_tensor/_indexing.py": 40,
     "lucid/benchmarks/run_all.py": 1,
@@ -1954,9 +1952,8 @@
     "lucid/_C/bindings/bind_coreml.cpp": 362,
     "lucid/_C/bindings/bind_nn.cpp": 412,
     "lucid/_C/bindings/bind_optim.cpp": 184,
-    "lucid/_C/bindings/bind_tensor.cpp": 234,
+    "lucid/_C/bindings/bind_tensor.cpp": 221,
     "lucid/_C/bindings/bind_ufunc.cpp": 44,
-
     "lucid/_C/bindings/bind_utils.cpp": 47,
     "lucid/_C/compile/CompiledExecutable.mm": 212,
     "lucid/_C/compile/MpsBuilder.mm": 1422,

@@ -1058,6 +1058,10 @@ void check_version_match(const std::weak_ptr<TensorImpl>& live,
                          std::int64_t saved_version,
                          const std::string& what);
 
+void check_version_match(const std::shared_ptr<VersionCounter>& sink,
+                         std::int64_t saved_version,
+                         const std::string& what);
+
 // Whether a node kept an input's values for backward in the slot ``s``.
 //
 // The one rule that decides both which inputs a node's version check guards

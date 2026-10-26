@@ -216,6 +216,9 @@ struct AutogradMeta {
     bool retain_grad = false;
     // A leaf's gradient hooks; the type is complete only in the autograd layer.
     std::shared_ptr<TensorHookSlot> leaf_hooks;
+    // Lazily allocated version counter shared with backward nodes that saved
+    // this tensor as an output without keeping the TensorImpl alive.
+    std::shared_ptr<VersionCounter> version_sink;
 };
 
 }  // namespace lucid

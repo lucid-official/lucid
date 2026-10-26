@@ -839,9 +839,9 @@ TensorImplPtr snapshot_scatter_operand(const TensorImplPtr& t) {
 // the CPU an in-place write into bytes a node also holds is refused at the
 // write, where the reference refuses it at backward with the version error.
 // Once nothing outside the graph holds the result, the backward that needs its
-// values recomputes them (ScatterExtremumNode::result), and a write into it
-// after which nothing held it is not refused — as for every node's saved
-// output (LCD-590).
+// values recomputes them (ScatterExtremumNode::result), and a write into it is
+// detected through ``saved_out_version_sink_`` even after the output TensorImpl
+// has been rebound or dropped (LCD-590).
 struct ScatterReduceNode : Node {
     int dim_ = 0;
     std::array<TensorImplPtr, 3> saved_impl_inputs_;
@@ -849,6 +849,7 @@ struct ScatterReduceNode : Node {
     TensorImplPtr saved_indices_;
     TensorImplPtr saved_src_;
     std::weak_ptr<TensorImpl> saved_out_;
+    std::shared_ptr<VersionCounter> saved_out_version_sink_;
     Shape base_shape_;
     Dtype dtype_ = Dtype::F32;
     Device device_ = Device::CPU;
@@ -867,6 +868,7 @@ struct ScatterReduceNode : Node {
         saved_indices_ = snapshot_scatter_operand(indices);
         saved_src_ = snapshot_scatter_operand(src);
         saved_out_ = out;
+        saved_out_version_sink_ = out->version_sink();
         base_shape_ = base->shape();
         dtype_ = base->dtype();
         device_ = base->device();
@@ -881,7 +883,15 @@ struct ScatterReduceNode : Node {
         check_saved_version(saved_impl_inputs_[1], 1, op, 1);
         check_saved_version(saved_impl_inputs_[2], 2, op, 2);
         if (saved_versions_.size() > 3)
-            check_version_match(saved_out_, saved_versions_[3], op + " output 0");
+            check_version_match(saved_out_version_sink_, saved_versions_[3], op + " output 0");
+    }
+
+    void advance_saved_output_version(std::int64_t v) noexcept override {
+        if (saved_out_version_sink_)
+            saved_out_version_sink_->store(static_cast<std::uint64_t>(v),
+                                           std::memory_order_relaxed);
+        if (saved_versions_.size() > 3)
+            saved_versions_[3] = v;
     }
 
     void release_saved() override {
@@ -891,6 +901,7 @@ struct ScatterReduceNode : Node {
         saved_indices_.reset();
         saved_src_.reset();
         saved_out_.reset();
+        saved_out_version_sink_.reset();
     }
 
     void for_each_owned_tensor(const std::function<void(const TensorImplPtr&)>& fn) const override {
@@ -919,7 +930,8 @@ struct ScatterExtremumNode : ScatterReduceNode {
     // ``allow_mutation_on_saved_tensors`` (where a write into the live result
     // itself is not refused) the two agree bit for bit.
     TensorImplPtr result() const {
-        if (auto out = saved_out_.lock())
+        if (auto out = saved_out_.lock();
+            out && saved_versions_.size() > 3 && out->version() == saved_versions_[3])
             return out;
         auto& be = backend::Dispatcher::for_device(device_);
         Storage s =

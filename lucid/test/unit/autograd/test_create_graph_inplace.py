@@ -355,31 +355,35 @@ def test_a_waived_check_reads_the_values_from_before_the_write(
 
 
 def test_a_saved_output_written_by_a_recorded_op(device: str) -> None:
-    # ``sigmoid`` saves its output, and an output is not version-checked:
-    # eager backward reads the saved one, and graph mode read the written
-    # one until it was rebuilt from the same storage.
+    # ``sigmoid`` saves its output and checks its version at backward, so an
+    # unwaived in-place write into ``y`` raises ``VersionMismatch`` on both
+    # devices; under ``allow_mutation_on_saved_tensors()`` graph mode rebuilds
+    # ``sigmoid``'s output from the saved pre-write storage.
     xs = np.array([1.0, 2.0])
+    s = 1.0 / (1.0 + np.exp(-xs))
     x = lucid.tensor(xs.tolist(), requires_grad=True, device=device)
     y = x.sigmoid()
-    if device == "cpu":
-        with pytest.raises(_C_engine.LucidError, match="shares storage"):
-            y.mul_(2.0)
-        return
     y.mul_(2.0)
-    (g,) = lucid.autograd.grad(y.sum(), x, create_graph=True)
-    s = 1.0 / (1.0 + np.exp(-xs))
+    with pytest.raises(_C_engine.VersionMismatch, match="sigmoid output 0"):
+        lucid.autograd.grad(y.sum(), x, create_graph=True)
+
+    x2 = lucid.tensor(xs.tolist(), requires_grad=True, device=device)
+    y2 = x2.sigmoid()
+    with allow_mutation_on_saved_tensors():
+        y2.mul_(2.0)
+        (g,) = lucid.autograd.grad(y2.sum(), x2, create_graph=True)
+        h = _second(g, x2)
     np.testing.assert_allclose(_np(g), 2.0 * s * (1.0 - s), rtol=1e-5)
     np.testing.assert_allclose(
-        _second(g, x), 2.0 * s * (1.0 - s) * (1.0 - 2.0 * s), rtol=1e-4
+        h, 2.0 * s * (1.0 - s) * (1.0 - 2.0 * s), rtol=1e-4
     )
 
 
 def test_a_write_under_no_grad_into_a_saved_output(device: str) -> None:
-    # No version guards a saved output and a ``no_grad`` write leaves its
-    # grad_fn alone, so nothing on the live tensor told graph mode it had
-    # changed: it differentiated at ``exp(sigmoid(x))``.  Eager backward
-    # reads the saved output, and graph mode now does too.  (The reference
-    # refuses both, having versioned the output.)
+    # ``sigmoid`` versions its saved output, so a ``no_grad`` write into ``y``
+    # raises ``VersionMismatch`` in both eager and graph mode unless waived by
+    # ``allow_mutation_on_saved_tensors()``, where both modes differentiate at
+    # the pre-write saved output.
     xs = np.array([1.0, 2.0])
     s = 1.0 / (1.0 + np.exp(-xs))
     for create_graph in (True, False):
@@ -387,7 +391,17 @@ def test_a_write_under_no_grad_into_a_saved_output(device: str) -> None:
         y = x.sigmoid()
         with lucid.no_grad():
             y.exp_()
-        (g,) = lucid.autograd.grad(y.sum(), x, create_graph=create_graph)
+        with pytest.raises(
+            _C_engine.VersionMismatch, match="sigmoid output 0"
+        ):
+            lucid.autograd.grad(y.sum(), x, create_graph=create_graph)
+
+        x2 = lucid.tensor(xs.tolist(), requires_grad=True, device=device)
+        y2 = x2.sigmoid()
+        with allow_mutation_on_saved_tensors():
+            with lucid.no_grad():
+                y2.exp_()
+            (g,) = lucid.autograd.grad(y2.sum(), x2, create_graph=create_graph)
         np.testing.assert_allclose(_np(g), s * (1.0 - s), rtol=1e-5)
 
 

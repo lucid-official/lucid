@@ -199,6 +199,10 @@ public:
                 check_saved_version(input_tensors_[j], j, Derived::schema_v1.name,
                                     argument_position(j));
         }
+        if (saved_output_version_sink_ && any_needed_gradient()) {
+            check_version_match(saved_output_version_sink_, saved_output_version_,
+                                std::string(Derived::schema_v1.name) + " output 0");
+        }
     }
 
     // The forward argument slot ``j`` stands for, which the error names:
@@ -278,6 +282,8 @@ public:
             s = Storage{CpuStorage{}};
         input_saved_.fill(false);
         saved_output_ = Storage{CpuStorage{}};
+        saved_output_version_sink_.reset();
+        keeps_output_ = false;
         input_tensors_ = {};
         for (auto& p : saved_impl_inputs_)
             p.reset();
@@ -300,12 +306,29 @@ public:
     void keep_output(Storage s) {
         saved_output_ = std::move(s);
         keeps_values_ = true;
+        keeps_output_ = true;
+    }
+    void bind_saved_output(const TensorImplPtr& out) {
+        if (!keeps_output_ || !out)
+            return;
+        saved_output_ = out->saved_output_storage();
+        saved_impl_output_ = out;
+        saved_output_version_ = out->version();
+        saved_output_version_sink_ = out->version_sink();
     }
     // Every input's values at once.
     void keep_inputs(std::array<Storage, N_IN> s) {
         saved_inputs_ = std::move(s);
         input_saved_.fill(true);
         keeps_values_ = true;
+    }
+
+    bool any_needed_gradient() const noexcept {
+        for (const auto& edge : next_edges()) {
+            if (edge.is_valid())
+                return true;
+        }
+        return false;
     }
 
     // Whether some input that takes a gradient has one reading input ``j``.
@@ -382,6 +405,14 @@ public:
         }
     }
 
+    void advance_saved_output_version(std::int64_t v) noexcept override {
+        if (saved_output_version_sink_) {
+            saved_output_version_sink_->store(static_cast<std::uint64_t>(v),
+                                              std::memory_order_relaxed);
+            saved_output_version_ = v;
+        }
+    }
+
     std::array<std::weak_ptr<TensorImpl>, N_IN> input_tensors_;
     std::array<Shape, N_IN> input_shapes_;
     Shape out_shape_;
@@ -392,10 +423,13 @@ public:
     Storage saved_output_;
     std::array<std::shared_ptr<TensorImpl>, N_IN> saved_impl_inputs_;
     std::weak_ptr<TensorImpl> saved_impl_output_;
+    std::shared_ptr<VersionCounter> saved_output_version_sink_;
+    std::int64_t saved_output_version_ = 0;
 
 private:
     // Whether :meth:`keep_input` or :meth:`keep_output` filled a slot.
     bool keeps_values_ = false;
+    bool keeps_output_ = false;
     std::array<bool, N_IN> input_saved_{};
 };
 

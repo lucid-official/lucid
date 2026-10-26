@@ -236,27 +236,25 @@ Storage cpu_cumprod_grad(const CpuStorage& g_in,
 // Private backward node for cumprod.
 //
 // Saved state:
-//   input_shape_ — shape of the forward input.
-//   axis_        — normalised reduction axis.
-//   saved_y_     — copy of the forward output (cumprod) tensor's storage.
+//   input_shape_  — shape of the forward input.
+//   axis_         — normalised reduction axis.
+//   saved_output_ — copy of the forward output (cumprod) tensor's storage.
 class CumprodBackward : public AutogradNode<CumprodBackward, 1> {
 public:
-    static constexpr bool kKeepsOwnValues = true;
     static const OpSchema schema_v1;
 
     Shape input_shape_;
     int axis_;
-    Storage saved_y_;
 
     // From the values saved at forward, under no-grad.
     std::vector<Storage> apply(Storage grad_out) override {
         if (device_ == Device::CPU && !PhantomMode::is_enabled() &&
             std::holds_alternative<CpuStorage>(grad_out) &&
             std::holds_alternative<CpuStorage>(saved_inputs_[0]) &&
-            std::holds_alternative<CpuStorage>(saved_y_)) {
+            std::holds_alternative<CpuStorage>(saved_output_)) {
             const auto& g_cpu = std::get<CpuStorage>(grad_out);
             const auto& x_cpu = std::get<CpuStorage>(saved_inputs_[0]);
-            const auto& y_cpu = std::get<CpuStorage>(saved_y_);
+            const auto& y_cpu = std::get<CpuStorage>(saved_output_);
             if (dtype_ == Dtype::F32) {
                 return {
                     cpu_cumprod_grad<float>(g_cpu, x_cpu, y_cpu, input_shape_, axis_, Dtype::F32)};
@@ -270,7 +268,7 @@ public:
         auto wrap = [this](Storage s) {
             return std::make_shared<TensorImpl>(std::move(s), input_shape_, dtype_, device_, false);
         };
-        return {cumprod_grad(wrap(std::move(grad_out)), wrap(saved_inputs_[0]), wrap(saved_y_),
+        return {cumprod_grad(wrap(std::move(grad_out)), wrap(saved_inputs_[0]), wrap(saved_output_),
                              axis_, false)
                     ->storage()};
     }
@@ -283,8 +281,6 @@ public:
             ErrorBuilder("cumprod").fail("graph-mode backward is missing its saved input");
         return {cumprod_grad(grad_out, x, cumprod_op(x, axis_), axis_, true)};
     }
-
-    void release_own_saved() { clear_saved(saved_y_); }
 };
 
 // KeepInput: scans are valid for integer types; no promotion needed.
@@ -342,7 +338,7 @@ TensorImplPtr cumprod_op(const TensorImplPtr& a_in, int axis) {
     auto bwd = std::make_shared<CumprodBackward>();
     bwd->input_shape_ = a->shape();
     bwd->axis_ = ax;
-    bwd->saved_y_ = out->storage();  // cumprod output, used as the weight
+    bwd->keep_output(out->storage());  // cumprod output, used as the weight
     // The input, needed for the final division in apply(), is saved by the
     // wiring into the slot its version guards.
     kernel::NaryKernel<CumprodBackward, 1>::wire_autograd(std::move(bwd), {a}, out);
@@ -533,18 +529,16 @@ TensorImplPtr scan_ext_graph_backward(const TensorImplPtr& grad_out,
 // Backward node for cummax.
 class CummaxBackward : public AutogradNode<CummaxBackward, 1> {
 public:
-    static constexpr bool kKeepsOwnValues = true;
     static const OpSchema schema_v1;
 
     Shape input_shape_;
     int axis_;
-    Storage saved_y_;  // cummax output — needed to compute is_new_max
 
     std::vector<Storage> apply(Storage grad_out) override {
         // For GPU devices: evaluate MLX arrays, compute loop on CPU, rewrap.
         if (device_ == Device::GPU) {
             const auto& g_gs = std::get<GpuStorage>(grad_out);
-            const auto& y_gs = std::get<GpuStorage>(saved_y_);
+            const auto& y_gs = std::get<GpuStorage>(saved_output_);
             g_gs.arr->eval();
             y_gs.arr->eval();
             auto g_cont = ::mlx::core::contiguous(*g_gs.arr);
@@ -578,31 +572,27 @@ public:
             }
         }
         // CPU path
-        return {cummax_backward_cpu(grad_out, saved_y_, input_shape_, axis_, dtype_)};
+        return {cummax_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
     }
 
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
-        return {scan_ext_graph_backward<true>(grad_out, saved_y_, input_shape_, axis_, dtype_,
+        return {scan_ext_graph_backward<true>(grad_out, saved_output_, input_shape_, axis_, dtype_,
                                               device_, "cummax_backward")};
     }
-
-    void release_own_saved() { clear_saved(saved_y_); }
 };
 
 // Backward node for cummin.
 class CumminBackward : public AutogradNode<CumminBackward, 1> {
 public:
-    static constexpr bool kKeepsOwnValues = true;
     static const OpSchema schema_v1;
 
     Shape input_shape_;
     int axis_;
-    Storage saved_y_;
 
     std::vector<Storage> apply(Storage grad_out) override {
         if (device_ == Device::GPU) {
             const auto& g_gs = std::get<GpuStorage>(grad_out);
-            const auto& y_gs = std::get<GpuStorage>(saved_y_);
+            const auto& y_gs = std::get<GpuStorage>(saved_output_);
             g_gs.arr->eval();
             y_gs.arr->eval();
             auto g_cont = ::mlx::core::contiguous(*g_gs.arr);
@@ -635,15 +625,13 @@ public:
                 return {};
             }
         }
-        return {cummin_backward_cpu(grad_out, saved_y_, input_shape_, axis_, dtype_)};
+        return {cummin_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
     }
 
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
-        return {scan_ext_graph_backward<false>(grad_out, saved_y_, input_shape_, axis_, dtype_,
+        return {scan_ext_graph_backward<false>(grad_out, saved_output_, input_shape_, axis_, dtype_,
                                                device_, "cummin_backward")};
     }
-
-    void release_own_saved() { clear_saved(saved_y_); }
 };
 
 const OpSchema CummaxBackward::schema_v1{"cummax", 1, AmpPolicy::KeepInput, true};
@@ -659,7 +647,7 @@ TensorImplPtr cummax_op(const TensorImplPtr& a, int axis) {
     auto bwd = std::make_shared<CummaxBackward>();
     bwd->input_shape_ = a->shape();
     bwd->axis_ = ax;
-    bwd->saved_y_ = out->storage();
+    bwd->keep_output(out->storage());
     kernel::NaryKernel<CummaxBackward, 1>::wire_autograd(std::move(bwd), {a}, out, false);
     return out;
 }
@@ -672,7 +660,7 @@ TensorImplPtr cummin_op(const TensorImplPtr& a, int axis) {
     auto bwd = std::make_shared<CumminBackward>();
     bwd->input_shape_ = a->shape();
     bwd->axis_ = ax;
-    bwd->saved_y_ = out->storage();
+    bwd->keep_output(out->storage());
     kernel::NaryKernel<CumminBackward, 1>::wire_autograd(std::move(bwd), {a}, out, false);
     return out;
 }

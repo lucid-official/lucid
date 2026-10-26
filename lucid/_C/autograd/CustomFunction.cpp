@@ -47,24 +47,13 @@ namespace {
 // op on ``t`` reaches the version check instead of refusing ``t`` as storage
 // shared outside its views.
 std::shared_ptr<TensorImpl> make_saved_output_alias(const std::shared_ptr<TensorImpl>& t) {
+    Storage split = t->saved_output_storage();
     auto alias = TensorImpl::make_view(t, t->shape(), t->stride(), 0, /*join_family=*/false);
     alias->set_detached_alias(true);
-    auto* t_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(t->raw_storage()));
-    auto* a_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(alias->raw_storage()));
-    if (t_cpu && t_cpu->ptr && a_cpu && a_cpu->ptr) {
-        const std::shared_ptr<std::byte[]> raw_buf = t_cpu->ptr;
-        const std::shared_ptr<void> t_holder(
-            nullptr, [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
-        const std::shared_ptr<void> a_holder(
-            nullptr, [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
-        t_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, raw_buf.get());
-        a_cpu->ptr = std::shared_ptr<std::byte[]>(a_holder, a_cpu->ptr.get());
-        for (const auto& m : t->live_views()) {
-            if (auto* m_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(m->raw_storage()));
-                m_cpu && m_cpu->ptr.get() == raw_buf.get()) {
-                m_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, m_cpu->ptr.get());
-            }
-        }
+    if (auto* a_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(alias->raw_storage()));
+        a_cpu && a_cpu->ptr && std::holds_alternative<CpuStorage>(split)) {
+        a_cpu->ptr =
+            std::shared_ptr<std::byte[]>(std::get<CpuStorage>(split).ptr, a_cpu->ptr.get());
     }
     return alias;
 }
@@ -81,12 +70,13 @@ void FunctionCtx::save_for_backward(std::vector<std::shared_ptr<TensorImpl>> ten
                 make_saved_output_alias(t),
                 t,
                 owner,
+                t->version_sink(),
                 t->grad_output_nr(),
                 t->version(),
                 true,
             });
         } else {
-            saved_.push_back(SavedVariable{std::move(t), {}, {}, 0, 0, false});
+            saved_.push_back(SavedVariable{std::move(t), {}, {}, {}, 0, 0, false});
         }
     }
 }
@@ -101,6 +91,7 @@ void FunctionCtx::set_owner_node(const std::shared_ptr<Node>& owner) {
             entry.data = make_saved_output_alias(t);
             entry.live_output = t;
             entry.grad_fn = owner;
+            entry.version_sink = t->version_sink();
             entry.output_nr = t->grad_output_nr();
             entry.saved_version = t->version();
             entry.is_output = true;
@@ -117,9 +108,13 @@ std::vector<std::shared_ptr<TensorImpl>> FunctionCtx::saved_tensors() const {
             continue;
         }
         const auto fn = entry.grad_fn.lock();
+        const std::int64_t current_version =
+            entry.version_sink ? entry.version_sink->load() : entry.saved_version;
         if (auto live = entry.live_output.lock()) {
-            if (live->version() != entry.saved_version ||
+            if (live->version() != entry.saved_version || current_version != entry.saved_version ||
                 (live->grad_fn() == fn && live->grad_output_nr() == entry.output_nr)) {
+                while (live->version() < current_version)
+                    live->bump_version();
                 out.push_back(std::move(live));
                 continue;
             }
@@ -132,6 +127,8 @@ std::vector<std::shared_ptr<TensorImpl>> FunctionCtx::saved_tensors() const {
             rewrapped->set_leaf(false);
             rewrapped->set_requires_grad(true);
         }
+        while (rewrapped->version() < current_version)
+            rewrapped->bump_version();
         out.push_back(std::move(rewrapped));
     }
     return out;

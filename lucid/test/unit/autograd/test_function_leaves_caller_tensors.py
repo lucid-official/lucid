@@ -31,10 +31,6 @@ import lucid.nn.functional as F
 from lucid.autograd import Function
 from lucid.autograd.checkpoint import checkpoint
 
-_LCD_558 = pytest.mark.xfail(
-    strict=True, reason="LCD-558: unmarked passthrough needs an engine-flagged view"
-)
-
 #: What ``forward`` returns beside ``x * 2`` — built from the input ``m``.
 _KINDS: dict[str, Callable[[object], object]] = {
     "input as-is": lambda m: m,
@@ -58,17 +54,6 @@ def _case_id(case: tuple[str, bool, bool]) -> str:
         f"{kind}-{'marked' if marked else 'unmarked'}-"
         f"{'m needs grad' if needs_grad else 'm needs no grad'}"
     )
-
-
-def _passes_through(case: tuple[str, bool, bool]) -> bool:
-    """Whether ``case`` returns an unmarked input as-is (LCD-558)."""
-    kind, marked, _ = case
-    return kind == "input as-is" and not marked
-
-
-def _pinned(cases: list, deferred: Callable[[object], bool]) -> list:
-    """``cases`` with each one ``deferred`` says waits on LCD-558 so marked."""
-    return [pytest.param(c, marks=_LCD_558) if deferred(c) else c for c in cases]
 
 
 def _function(lib: ModuleType, kind: str, marked: bool) -> type:
@@ -119,7 +104,7 @@ def _grads(lib: ModuleType, case: tuple[str, bool, bool], device: str) -> tuple:
     )
 
 
-@pytest.mark.parametrize("case", _pinned(_CASES, _passes_through), ids=_case_id)
+@pytest.mark.parametrize("case", _CASES, ids=_case_id)
 def test_the_callers_tensors_are_left_alone(
     case: tuple[str, bool, bool], device: str
 ) -> None:
@@ -172,7 +157,7 @@ _REFERENCE_NO_GRAD_VIEW = ("view of the input", True, True)
 @pytest.mark.parity
 @pytest.mark.parametrize(
     "case",
-    _pinned([c for c in _CASES if c != _REFERENCE_NO_GRAD_VIEW], _passes_through),
+    [c for c in _CASES if c != _REFERENCE_NO_GRAD_VIEW],
     ids=_case_id,
 )
 def test_the_outputs_match_the_reference(
@@ -233,11 +218,7 @@ def _untracked_id(case: tuple[str, bool]) -> str:
     return f"{mode}-{'marked' if marked else 'unmarked'}"
 
 
-def _unmarked(case: tuple[str, bool]) -> bool:
-    return not case[1]
-
-
-@pytest.mark.parametrize("case", _pinned(_UNTRACKED, _unmarked), ids=_untracked_id)
+@pytest.mark.parametrize("case", _UNTRACKED, ids=_untracked_id)
 def test_an_untracked_call_hands_back_a_new_tensor(case: tuple[str, bool]) -> None:
     m, before, out = _untracked(lucid, *case)
     assert _state(m) == before
@@ -247,7 +228,7 @@ def test_an_untracked_call_hands_back_a_new_tensor(case: tuple[str, bool]) -> No
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize("case", _pinned(_UNTRACKED, _unmarked), ids=_untracked_id)
+@pytest.mark.parametrize("case", _UNTRACKED, ids=_untracked_id)
 def test_an_untracked_call_matches_the_reference(
     ref: ModuleType, case: tuple[str, bool]
 ) -> None:
@@ -277,7 +258,7 @@ def _keyword_function(kind: str, marked: bool) -> type:
     return Keyword
 
 
-@pytest.mark.parametrize("case", _pinned(_CASES, _passes_through), ids=_case_id)
+@pytest.mark.parametrize("case", _CASES, ids=_case_id)
 def test_a_keyword_tensor_is_left_alone(
     case: tuple[str, bool, bool], device: str
 ) -> None:
@@ -303,16 +284,6 @@ _WRITES = [
     for marked in (True, False)
     for mode in ("recorded", "under no_grad")
 ]
-
-#: Where an unmarked input handed back as itself answers differently from
-#: the reference's view: a write the reference refuses into a custom
-#: ``Function``'s output view, and the leaf's own in-place refusal where the
-#: reference hands back a detached alias.
-_WRITES_WAITING_ON_LCD_558 = {
-    (True, False, "recorded"),
-    (True, False, "under no_grad"),
-    (False, False, "recorded"),
-}
 
 
 def _write_id(case: tuple[bool, bool, str]) -> str:
@@ -356,9 +327,7 @@ def test_a_write_through_a_marked_alias(
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "case", _pinned(_WRITES, _WRITES_WAITING_ON_LCD_558.__contains__), ids=_write_id
-)
+@pytest.mark.parametrize("case", _WRITES, ids=_write_id)
 def test_a_write_through_what_came_back_matches_the_reference(
     ref: ModuleType, case: tuple[bool, bool, str], device: str
 ) -> None:
@@ -420,7 +389,6 @@ def test_a_write_to_the_input_keeps_the_custom_gradient(
 
 
 @pytest.mark.parity
-@_LCD_558
 @pytest.mark.parametrize("write", sorted(_CUSTOM_GRADIENT))
 def test_a_write_to_the_input_is_refused_as_by_the_reference(
     ref: ModuleType, write: str
@@ -484,7 +452,6 @@ class _Twice(Function):
         return grad_a + grad_b
 
 
-@_LCD_558
 def test_a_non_leaf_input_keeps_its_grad_fn(device: str) -> None:
     x = lucid.ones(3, requires_grad=True, device=device)
     h = x * 1
@@ -501,7 +468,6 @@ def test_a_non_leaf_input_returned_as_is_gets_the_custom_gradient(
     assert x.grad.tolist() == [3.0] * 3
 
 
-@_LCD_558
 def test_an_input_returned_twice_is_two_tensors(device: str) -> None:
     x = lucid.ones(3, requires_grad=True, device=device)
     a, b = _Twice.apply(x)
@@ -509,7 +475,6 @@ def test_an_input_returned_twice_is_two_tensors(device: str) -> None:
     assert x.is_leaf and x.grad_fn is None
 
 
-@_LCD_558
 def test_checkpoint_passing_an_input_through_keeps_the_leaf(device: str) -> None:
     x = lucid.ones(3, requires_grad=True, device=device)
     w = lucid.ones(3, requires_grad=True, device=device)

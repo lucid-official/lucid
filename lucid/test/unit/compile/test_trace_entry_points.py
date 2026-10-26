@@ -42,6 +42,7 @@ _FRESH = {
     "grad_to_tensor": "the gradient, which no forward trace computes",
     "grad_as_impl": "the graph-mode gradient, which no forward trace computes",
     "lstm_forward": "builds only the zero initial state; the LSTM op records itself",
+    "custom_function_view": "records a reshape inside TensorImpl::custom_function_view",
 }
 
 #: Bindings that hand values to Python but are not host reads of a value the
@@ -69,6 +70,8 @@ _BARE_MEMBERS = {
     "copy_from",
     "zero_grad",
     "is_aliased",
+    "detach_inplace",
+    "rebind_version_from",
 }
 
 _START = re.compile(

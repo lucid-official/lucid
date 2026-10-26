@@ -167,6 +167,7 @@ private:
         std::shared_ptr<TensorImpl> data;
         std::weak_ptr<TensorImpl> live_output;
         std::weak_ptr<Node> grad_fn;
+        std::shared_ptr<VersionCounter> version_sink;
         std::uint32_t output_nr = 0;
         std::int64_t saved_version = 0;
         bool is_output = false;

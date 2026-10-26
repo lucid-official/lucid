@@ -363,6 +363,26 @@ private:
     std::vector<std::int64_t> src_idx_;
 };
 
+class InvalidatedCustomViewNode : public Node {
+public:
+    void validate_versions() override { fail(); }
+
+    std::vector<Storage> apply(Storage) override { fail(); }
+
+    std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr&) override { fail(); }
+
+    std::string node_name() const override { return "InvalidatedCustomView"; }
+
+private:
+    [[noreturn]] static void fail() {
+        ErrorBuilder("backward")
+            .fail("Output of a custom Function is a view and its base or another view of its "
+                  "base has been modified in place; this view is the output of a function that "
+                  "returns a view of its input, so its gradient cannot be computed after the "
+                  "base is modified in place");
+    }
+};
+
 // Where a tensor's elements sit, in its own row-major order: one run from
 // ``first`` when the tensor is contiguous, one address per element
 // otherwise.  A CPU tensor's addresses are its buffer's; a Metal family
@@ -458,6 +478,37 @@ bool is_identity_mapping(const std::vector<std::int64_t>& src,
     return true;
 }
 
+void finish_rebased_member(const TensorImplPtr& m,
+                           const TensorImplPtr& a,
+                           bool covered,
+                           bool same,
+                           bool differentiable,
+                           std::shared_ptr<CopySlicesBackward> node) {
+    if (m->is_custom_function_output()) {
+        m->set_grad_fn(std::make_shared<InvalidatedCustomViewNode>());
+        m->set_grad_output_nr(0);
+        m->set_requires_grad(true);
+        m->set_leaf(false);
+        if (m->retains_grad())
+            retain_grad(m);
+        return;
+    }
+    if (covered && !differentiable) {
+        cut(m);
+        return;
+    }
+    if (same) {
+        // The same elements in the same order: a reshape of ``a``.
+        kernel::NaryKernel<ViewBackward, 1>::wire_autograd({a}, m, false);
+    } else {
+        attach(m, a, covered, differentiable, std::move(node));
+    }
+    // A member that asked to keep its gradient keeps the one of its new
+    // place in the graph.
+    if (m->retains_grad())
+        retain_grad(m);
+}
+
 }  // namespace
 
 void rebase_views(const TensorImplPtr& a) {
@@ -537,20 +588,7 @@ void rebase_views(const TensorImplPtr& a) {
                                                             a->device());
         }
 
-        if (covered && !differentiable) {
-            cut(m);
-            continue;
-        }
-        if (same) {
-            // The same elements in the same order: a reshape of ``a``.
-            kernel::NaryKernel<ViewBackward, 1>::wire_autograd({a}, m, false);
-        } else {
-            attach(m, a, covered, differentiable, std::move(node));
-        }
-        // A member that asked to keep its gradient keeps the one of its new
-        // place in the graph.
-        if (m->retains_grad())
-            retain_grad(m);
+        finish_rebased_member(m, a, covered, same, differentiable, std::move(node));
     }
 }
 

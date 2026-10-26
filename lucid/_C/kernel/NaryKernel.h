@@ -141,6 +141,7 @@ public:
         }
         bwd->out_shape_ = out->shape();
         capture_inputs(*bwd, inputs, saves);
+        bwd->bind_saved_output(out);
 
         out->set_grad_fn(std::move(bwd));
         out->set_leaf(false);

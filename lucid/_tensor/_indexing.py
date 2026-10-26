@@ -51,7 +51,6 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE
-from lucid._engine_scope import untraced
 from lucid._factories._build import _fill
 from lucid._factories.converters import _to_impl
 
@@ -958,15 +957,10 @@ def _take(t: Tensor, impl: _C_engine.TensorImpl) -> None:
     old = t._impl
     retains = old.retains_grad
     if isinstance(old, _C_engine.TensorImpl):
-        # Bumps ``old``'s version, eager bookkeeping a compile recording
-        # must not take for an op of the traced call, and carries the
-        # bumped version onto ``impl`` so ``t._version`` advances on
-        # non-leaf in-place rebinds as well.
-        with untraced():
-            v0 = _C_engine.TensorImpl._make_view(old, [0], [1], 0)
-            v0.copy_from(v0)
-            while impl.version < old.version:
-                impl.copy_from(impl)
+        # Bumps ``old``'s version and carries the bumped version (plus any
+        # saved-output baseline on ``impl``'s own grad_fn) onto ``impl`` so
+        # ``t._version`` advances on non-leaf in-place rebinds as well.
+        impl.rebind_version_from(old)
     t._impl = impl
     if retains:
         impl.retain_grad_()
@@ -1142,6 +1136,29 @@ def _written_positions(
     return flat, list(target.shape)
 
 
+def _refuse_illegal_setitem_target(impl: _C_engine.TensorImpl) -> None:
+    """Refuse in-place assignment to a grad leaf or custom Function view."""
+    if not _C_engine.grad_enabled():
+        return
+    if impl.requires_grad and impl.is_leaf:
+        # Both paths in _setitem rebind ``t`` to the written result, which
+        # under autograd carries a grad_fn: a Parameter assigned this way
+        # stopped being a leaf and never received ``.grad`` again, so the
+        # optimiser silently left it alone.  The reference refuses the same
+        # write.
+        raise RuntimeError(
+            "__setitem__: a leaf tensor that requires grad cannot be assigned "
+            "in place — wrap the assignment in lucid.no_grad(), or build a new "
+            "tensor"
+        )
+    if impl.is_custom_function_output:
+        raise RuntimeError(
+            "__setitem__: Output of a custom Function is a view and is being "
+            "modified in place — custom Function output views cannot be "
+            "modified in place; clone() first"
+        )
+
+
 def _setitem(t: Tensor, idx: _IndexType, value: TensorOrScalar) -> None:
     """
     In-place assignment using Lucid engine ops only — no numpy.
@@ -1153,16 +1170,7 @@ def _setitem(t: Tensor, idx: _IndexType, value: TensorOrScalar) -> None:
     result lands through :func:`_rebind`.
     """
     impl = t._impl
-    if impl.requires_grad and impl.is_leaf and _C_engine.grad_enabled():
-        # Both paths below rebind ``t`` to the written result, which under
-        # autograd carries a grad_fn: a Parameter assigned this way stopped
-        # being a leaf and never received ``.grad`` again, so the optimiser
-        # silently left it alone.  The reference refuses the same write.
-        raise RuntimeError(
-            "__setitem__: a leaf tensor that requires grad cannot be assigned "
-            "in place — wrap the assignment in lucid.no_grad(), or build a new "
-            "tensor"
-        )
+    _refuse_illegal_setitem_target(impl)
     shape = list(impl.shape)
     key = _normalize_key(idx, shape, impl.device, op="__setitem__")
 

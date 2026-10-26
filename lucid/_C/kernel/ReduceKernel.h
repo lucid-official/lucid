@@ -465,8 +465,10 @@ std::shared_ptr<TensorImpl> ReduceKernel<Derived>::forward(const std::shared_ptr
         bwd->input_tensors_ = {a};
         if constexpr (Derived::kSavesInput)
             bwd->keep_input(0, a_ptr->storage());
-        if constexpr (Derived::kSavesOutput)
+        if constexpr (Derived::kSavesOutput) {
             bwd->keep_output(out->storage());
+            bwd->bind_saved_output(out);
+        }
         bwd->saved_impl_inputs_ = {a};
 
         // Store reduction metadata so grad_formula can invert the shape change.

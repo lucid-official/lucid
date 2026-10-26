@@ -460,6 +460,34 @@ void refuse_write_to_leaf_view(const TensorImpl& t, const char* name) {
                                 "the out-of-place form");
 }
 
+void refuse_custom_function_output_write(const TensorImpl& t, const char* name) {
+    if (GradMode::is_enabled() && t.is_custom_function_output()) {
+        ErrorBuilder(name).fail(
+            "Output of a custom Function is a view and is being modified in place — custom "
+            "Function output views cannot be modified in place; clone() first");
+    }
+}
+
+void init_family_base(const std::shared_ptr<TensorImpl>& base,
+                      std::shared_ptr<ViewFamily>& family,
+                      std::optional<AutogradMeta>& autograd,
+                      const Storage& storage) {
+    if (family)
+        return;
+    family = std::make_shared<ViewFamily>();
+    if (autograd && autograd->version > 0) {
+        family->version.store(static_cast<std::uint64_t>(autograd->version),
+                              std::memory_order_relaxed);
+        autograd->version = 0;
+    }
+    if (autograd && autograd->version_sink)
+        family->version_sink = std::move(autograd->version_sink);
+    family->nbytes = base->allocation_nbytes();
+    family->members.push_back(base);
+    if (storage_is_gpu(storage))
+        family->root = storage;
+}
+
 // Whether a Metal family's root still is the shared buffer ``shared`` its
 // base was built over.
 bool root_is_shared_buffer(const std::optional<SharedStorage>& shared,
@@ -732,6 +760,7 @@ bool TensorImpl::write_lands_in_buffer() const {
 }
 
 void TensorImpl::take_storage_from(TensorImpl& out, const char* name) {
+    refuse_custom_function_output_write(*this, name);
     // Checked here, the one place every in-place op's result lands, and not
     // only in write_through: an expanded view whose base is gone has no live
     // views, so it came down to the swap below and took a dense buffer in
@@ -983,6 +1012,7 @@ void TensorImpl::leave_family() {
     Storage own = storage();
     const auto carried =
         static_cast<std::int64_t>(family_->version.load(std::memory_order_relaxed));
+    auto sink = family_->version_sink;
     {
         std::lock_guard<std::mutex> lock(packed_mu_);
         packed_.reset();
@@ -994,6 +1024,8 @@ void TensorImpl::leave_family() {
     // not move backwards (drop_shared does the same).
     if (carried > 0)
         ensure_autograd()->version += carried;
+    if (sink)
+        ensure_autograd()->version_sink = std::move(sink);
     storage_ = std::move(own);
     meta_.stride = contiguous_stride(meta_.shape, dtype_size(meta_.dtype));
     offset_ = 0;
@@ -2204,6 +2236,7 @@ void TensorImpl::assign_from(const TensorImpl& other, const char* name) {
     if (GradMode::is_enabled() && requires_grad() && is_leaf())
         ErrorBuilder(name).fail("a leaf tensor that requires grad cannot be assigned in place — "
                                 "wrap the call in no_grad, or build a new tensor");
+    refuse_custom_function_output_write(*this, name);
     // A write through a detached alias (``.data``) is untracked by design:
     // the values change and autograd is not told, as with the reference's
     // ``.data`` — refused only when the source carries a graph, which such
@@ -2339,22 +2372,7 @@ std::shared_ptr<TensorImpl> TensorImpl::make_dtype_view(const std::shared_ptr<Te
 
 void TensorImpl::add_to_family(const std::shared_ptr<TensorImpl>& base,
                                const std::shared_ptr<TensorImpl>& view) {
-    if (!base->family_) {
-        base->family_ = std::make_shared<ViewFamily>();
-        if (base->autograd_ && base->autograd_->version > 0) {
-            base->family_->version.store(static_cast<std::uint64_t>(base->autograd_->version),
-                                         std::memory_order_relaxed);
-            base->autograd_->version = 0;
-        }
-        base->family_->nbytes = base->allocation_nbytes();
-        base->family_->members.push_back(base);
-        // A Metal base's value becomes the family's root, which every
-        // member — the base included — reads from now on.  The base keeps
-        // its own copy until the first write (drop_family_caches): an op
-        // may still hold a reference to it from before the view was made.
-        if (storage_is_gpu(base->storage_))
-            base->family_->root = base->storage_;
-    }
+    init_family_base(base, base->family_, base->autograd_, base->storage_);
     view->family_ = base->family_;
     // Every leaf-eligible base on the way, not just this one: the views in
     // between are often temporaries (``w[0:2][0]``), and the leaf behind them
@@ -2534,6 +2552,14 @@ std::shared_ptr<TensorImpl> TensorImpl::data_alias() {
     return compile::traced_derive("detach", self, std::move(alias));
 }
 
+std::shared_ptr<TensorImpl> TensorImpl::clone_with_grad(bool requires_grad) {
+    auto self = shared_from_this();
+    auto alias = make_view(self, shape(), stride(), 0);
+    if (requires_grad)
+        alias->set_requires_grad(true);
+    return compile::traced_derive("detach", self, std::move(alias));
+}
+
 void TensorImpl::detach_inplace() {
     if (auto* trc = compile::current_tracer()) {
         auto self = shared_from_this();
@@ -2549,6 +2575,61 @@ void TensorImpl::detach_inplace() {
         autograd_->is_leaf = true;
     }
     detached_alias_ = true;
+}
+
+std::shared_ptr<TensorImpl> TensorImpl::custom_function_view(bool tracked) {
+    auto self = shared_from_this();
+    auto alias = make_view(self, shape(), stride(), 0);
+    if (tracked) {
+        alias->set_custom_function_output(true);
+    } else {
+        alias->set_detached_alias(true);
+    }
+    compile::traced_derive("reshape", self, alias);
+    if (auto* trc = compile::current_tracer()) {
+        if (trc->sees(alias.get()))
+            trc->on_op_attr("shape", alias->shape());
+    }
+    return alias;
+}
+
+Storage TensorImpl::saved_output_storage() {
+    if (!is_dense())
+        return storage();
+    auto* t_cpu = std::get_if<CpuStorage>(&storage_);
+    if (!t_cpu || !t_cpu->ptr)
+        return storage();
+    const std::shared_ptr<std::byte[]> raw_buf = t_cpu->ptr;
+    const std::shared_ptr<void> t_holder(nullptr,
+                                         [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
+    const std::shared_ptr<void> saved_holder(
+        nullptr, [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
+    t_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, raw_buf.get());
+    for (const auto& m : live_views()) {
+        if (auto* m_cpu = std::get_if<CpuStorage>(&m->storage_);
+            m_cpu && same_owner(m_cpu->ptr, raw_buf)) {
+            m_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, m_cpu->ptr.get());
+        }
+    }
+    CpuStorage saved = *t_cpu;
+    saved.ptr = std::shared_ptr<std::byte[]>(saved_holder, raw_buf.get());
+    return Storage{std::move(saved)};
+}
+
+std::shared_ptr<VersionCounter> TensorImpl::version_sink() {
+    if (family_) {
+        std::lock_guard<std::mutex> lock(family_->mu);
+        if (!family_->version_sink) {
+            family_->version_sink =
+                std::make_shared<VersionCounter>(static_cast<std::uint64_t>(version()));
+        }
+        return family_->version_sink;
+    }
+    auto* ag = ensure_autograd();
+    if (!ag->version_sink) {
+        ag->version_sink = std::make_shared<VersionCounter>(static_cast<std::uint64_t>(version()));
+    }
+    return ag->version_sink;
 }
 
 void TensorImpl::accumulate_grad_impl(std::shared_ptr<TensorImpl> g) {

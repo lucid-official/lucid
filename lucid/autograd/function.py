@@ -398,9 +398,12 @@ class FunctionCtx:
 
 
 def _owned_outputs(
-    entries: list[object], ctx: FunctionCtx
+    entries: list[object],
+    ctx: FunctionCtx,
+    input_impls: list[_C_engine.TensorImpl | None],
+    tracked: bool,
 ) -> tuple[list[object], list[Tensor], list[bool]]:
-    """``forward``'s results, with every non-differentiable one a new tensor.
+    """``forward``'s results, with every non-differentiable or aliased one settled.
 
     An output is non-differentiable when ``forward`` marked it, or when
     its dtype carries no gradient — bool or an integer — as the reference
@@ -411,12 +414,11 @@ def _owned_outputs(
     ``requires_grad``, a module buffer its place — where detaching it in
     place rebound whatever else held it.
 
-    An unmarked input returned as-is is still handed back itself, with the
-    node registered on it.  Neither alias the engine can make keeps both
-    gradients right: a compiled step traces the detached one as a gradient
-    sink, and an in-place write to the input re-derives a view of it from
-    the write, dropping the custom ``backward``.  The reference's view needs
-    a mark the engine does not have yet (LCD-558).
+    An unmarked input returned as-is (or a tensor returned more than once)
+    comes back as a view of it (``TensorImpl.custom_function_view``),
+    leaving the caller's tensor untouched; when ``tracked`` is ``True``, that
+    view is marked with ``is_custom_function_output`` so in-place writes to it
+    or its base are refused as in the reference (LCD-558).
 
     Parameters
     ----------
@@ -424,17 +426,22 @@ def _owned_outputs(
         What ``forward`` returned, one entry per result.
     ctx : FunctionCtx
         The context ``forward`` filled in, with its marks.
+    input_impls : list of TensorImpl or None
+        The ``TensorImpl`` handles of ``apply``'s positional and keyword
+        arguments.
+    tracked : bool
+        Whether the call records a backward node.
 
     Returns
     -------
     tuple
-        The entries with each non-differentiable tensor swapped for its
-        alias, their tensors in order, and whether each tensor is
-        non-differentiable.
+        The settled entries, their tensors in order, and whether each tensor
+        is non-differentiable.
     """
     marked_impls: list[_C_engine.TensorImpl | None] = [
         t._impl for t in ctx._non_differentiable
     ]
+    seen_output_impls: list[_C_engine.TensorImpl | None] = []
     owned: list[object] = []
     tensors: list[Tensor] = []
     marked: list[bool] = []
@@ -447,6 +454,12 @@ def _owned_outputs(
             is_marked = named or _promotion.is_integral(impl.dtype)
             if is_marked:
                 entry = _wrap(impl.data_alias())
+            elif (
+                _position(impl, input_impls) is not None
+                or _position(impl, seen_output_impls) is not None
+            ):
+                entry = _wrap(impl.custom_function_view(tracked))
+            seen_output_impls.append(impl)
             marked.append(is_marked)
             tensors.append(entry)
         owned.append(entry)
@@ -458,6 +471,7 @@ def _wrap_outputs(
     klass: type,
     ctx: FunctionCtx,
     args: tuple[object, ...],
+    kwargs: dict[str, object],
     tracked: bool,
 ) -> object:
     """What ``apply`` hands back for what ``forward`` returned.
@@ -477,6 +491,8 @@ def _wrap_outputs(
         The context ``forward`` filled in.
     args : tuple of object
         ``forward``'s positional arguments, the ones gradients go to.
+    kwargs : dict of str to object
+        ``forward``'s keyword arguments.
     tracked : bool
         Whether this call is recorded — grad mode is on and an input needs
         a gradient.
@@ -490,25 +506,17 @@ def _wrap_outputs(
     """
     is_tuple = isinstance(output, tuple)
     returned = list(output) if isinstance(output, tuple) else [output]
-    entries, tensors, marked = _owned_outputs(returned, ctx)
+    input_impls = [_impl_of(a) for a in (*args, *kwargs.values())]
+    entries, tensors, marked = _owned_outputs(returned, ctx, input_impls, tracked)
     if tracked and not all(marked):
         # ``backward`` is handed one gradient per *tensor* output, zeros for
         # a non-differentiable one.  Its slot goes to a stand-in alias that
         # dies here, so neither what ``forward`` returned nor the detached
         # tensor handed back gets the node.  The stand-in alias is untraced so
-        # it adds no extra ``detach`` op to a grad-mode trace (LCD-612); an
-        # output that already required grad before ``_register`` (an input or
-        # parameter ``forward`` handed back as-is) also gets a stand-in slot
-        # while a tracer is active so an aborted compile recording does not
-        # turn a caller leaf into a non-leaf.
-        tracing = _C_engine.compile.current_tracer() is not None
+        # it adds no extra ``detach`` op to a grad-mode trace (LCD-612).
         with untraced():
             slots = [
-                (
-                    _wrap(t._impl.data_alias())
-                    if is_marked or (tracing and t.requires_grad)
-                    else t
-                )
+                _wrap(t._impl.data_alias()) if is_marked else t
                 for t, is_marked in zip(tensors, marked, strict=True)
             ]
         # Which positional arguments were tensors, so ``backward`` may
@@ -577,14 +585,15 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
         # which sent a gradient to whatever tensor ``forward`` closed over.
         with _C_engine.NoGradGuard():
             output = klass.forward(ctx, *args, **kwargs)
+        tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
+        settled = _wrap_outputs(output, klass, ctx, args, kwargs, tracked)
         if tracer is not None:
             # Imported here: ``lucid.compile`` imports this package.
             from lucid.compile._core.custom_backward import note_applied
 
-            note_applied(tracer, klass, args, output)
+            note_applied(tracer, klass, args, settled)
 
-        tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
-        return cast(_Outputs, _wrap_outputs(output, klass, ctx, args, tracked))
+        return cast(_Outputs, settled)
 
     return classmethod(apply)  # type: ignore[arg-type]
 

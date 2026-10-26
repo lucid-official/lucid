@@ -511,6 +511,16 @@ void check_version_match(const std::weak_ptr<TensorImpl>& live,
         throw VersionMismatch(saved_version, t->version(), what);
 }
 
+void check_version_match(const std::shared_ptr<VersionCounter>& sink,
+                         std::int64_t saved_version,
+                         const std::string& what) {
+    if (g_allow_mutation_on_saved || !sink)
+        return;
+    const auto cur = static_cast<std::int64_t>(sink->load(std::memory_order_relaxed));
+    if (cur != saved_version)
+        throw VersionMismatch(saved_version, cur, what);
+}
+
 void check_version_match(const std::weak_ptr<TensorImpl>& live,
                          std::int64_t saved_version,
                          std::string_view op_name,
@@ -1037,6 +1047,15 @@ Storage random_randint_storage(const Shape& shape,
         ErrorBuilder("random_randint").not_implemented("dtype not supported (I8/I16/I32/I64)");
     }
     return backend::Dispatcher::for_device(device).from_cpu(std::move(cpu), shape);
+}
+
+void TensorImpl::rebind_version_from(TensorImpl& old) noexcept {
+    old.bump_version();
+    const std::int64_t target = old.version();
+    while (version() < target)
+        bump_version();
+    if (auto fn = grad_fn())
+        fn->advance_saved_output_version(version());
 }
 
 }  // namespace lucid

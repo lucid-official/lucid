@@ -515,6 +515,11 @@ public:
     // tensor — that Python's collector cannot see through the engine.
     void release_tensor_hooks() noexcept;
 
+    // Advance any saved-output version baseline recorded on this node to ``v``
+    // when an out-of-place op's result is rebound in-place onto a destination
+    // tensor whose version counter moves to ``v``.
+    virtual void advance_saved_output_version(std::int64_t /*v*/) noexcept {}
+
 protected:
     // Refuse when ``live`` has moved past the version recorded at ``k`` in
     // :attr:`saved_versions_`.  ``input_idx`` names the tensor in the error

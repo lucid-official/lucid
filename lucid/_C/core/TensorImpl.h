@@ -100,6 +100,9 @@ struct ViewFamily {
     std::optional<Storage> root;
     // Set when the Metal family backs one or more leaves' ``.grad`` slots.
     std::vector<std::weak_ptr<const TensorImpl>> grad_owners;
+    // Lazily allocated version counter shared with backward nodes that saved a
+    // member of this family as an output without keeping the TensorImpl alive.
+    std::shared_ptr<VersionCounter> version_sink;
 };
 
 // Persistent parent-linked lineage node recording the leaf-eligible bases a
@@ -356,6 +359,15 @@ public:
 
     // Marks this tensor as a detached alias; see :func:`is_detached_alias`.
     void set_detached_alias(bool v) noexcept { detached_alias_ = v; }
+
+    // Predicate: is this tensor a view returned as an output of a tracked
+    // custom ``Function``?  In-place writes directly into such a view are
+    // refused while grad mode is enabled, and in-place writes into its base or
+    // another view of its family invalidate its ``grad_fn`` (LCD-558).
+    bool is_custom_function_output() const noexcept { return custom_function_output_; }
+
+    // Marks this tensor as a custom ``Function`` output view.
+    void set_custom_function_output(bool v) noexcept { custom_function_output_ = v; }
 
     // Predicate: was this tensor made, through any chain of views, from a
     // live leaf that requires grad?
@@ -746,10 +758,33 @@ public:
     // family with ``detached_alias_`` set so writes through it are untracked.
     std::shared_ptr<TensorImpl> data_alias();
 
+    // Returns a new TensorImpl sharing the same storage and view family with
+    // the requested ``requires_grad`` flag and no ``grad_fn``.
+    std::shared_ptr<TensorImpl> clone_with_grad(bool requires_grad);
+
     // Detaches this TensorImpl in place from the autograd graph so every
     // holder of the same TensorImpl (including ``p.grad``) sees ``grad_fn``
     // cleared and ``requires_grad`` set to ``false``.
     void detach_inplace();
+
+    // Returns a view of this TensorImpl used when a custom ``Function``
+    // returns an input as-is (or returns the same tensor twice).
+    std::shared_ptr<TensorImpl> custom_function_view(bool tracked);
+
+    // Returns a Storage snapshot suitable for saving this TensorImpl as an op's
+    // output on a backward node: on the CPU, splits ``CpuStorage::ptr`` onto a
+    // separate control block so subsequent in-place ops on this tensor are not
+    // refused as shared storage before the version check at backward.
+    Storage saved_output_storage();
+
+    // Returns a shared version counter that tracks every in-place version bump
+    // on this tensor (and its view family) even after this TensorImpl dies.
+    std::shared_ptr<VersionCounter> version_sink();
+
+    // Bumps ``old``'s version counter for an in-place rebind and carries the
+    // bumped version (and any saved-output version baseline on this tensor's
+    // ``grad_fn``) onto this tensor.
+    void rebind_version_from(TensorImpl& old) noexcept;
 
     // Stores a gradient :class:`Storage` directly.
     //
@@ -884,6 +919,12 @@ public:
             family_->version.fetch_add(1, std::memory_order_relaxed);
         else
             ++ensure_autograd()->version;
+        if (family_) {
+            if (family_->version_sink)
+                family_->version_sink->fetch_add(1, std::memory_order_relaxed);
+        } else if (autograd_ && autograd_->version_sink) {
+            autograd_->version_sink->fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -1204,6 +1245,8 @@ private:
     // the family whose writes autograd does not follow.  See
     // is_detached_alias().
     bool detached_alias_ = false;
+    // Set on a view returned by a tracked custom ``Function``.
+    bool custom_function_output_ = false;
     // The leaf-eligible bases this view was made from, linked through a shared
     // parent chain; null for a tensor that is no view or a view of a detached
     // alias.  See views_grad_leaf().

@@ -103,17 +103,15 @@ _BY_VALUE = (
     "into bytes a node holds and Metal never aliases them, so no write reaches it"
 )
 _DERIVED = "computed by the forward; no user tensor aliases it"
-_OUTPUT = "the forward's output by value, read only as data"
 
 #: ``Class::member`` -> why a write after forward cannot corrupt the gradient
 #: through it, or :data:`GUARDED`.
 HELD: dict[str, str] = {
-    # The canonical slots — an input's values live here, guarded by the base.
+    # The canonical slots — an input's or output's values live here, guarded by the base.
     "AutogradNode::saved_inputs_": GUARDED,
     "AutogradNode::saved_impl_inputs_": GUARDED,
-    "AutogradNode::saved_output_": _OUTPUT,
+    "AutogradNode::saved_output_": GUARDED,
     "VariadicKernel::saved_inputs_v_": GUARDED,
-    "VariadicKernel::saved_output_": _OUTPUT,
     # Held by reference and read at backward: the node checks their versions.
     "LstmBackward::saved_input": GUARDED,
     "LstmBackward::saved_h0": GUARDED,
@@ -133,9 +131,6 @@ HELD: dict[str, str] = {
     "EmbeddingBagBackward::saved_indices_": _BY_VALUE,
     "EmbeddingBagBackward::saved_offsets_": _BY_VALUE,
     # Computed by the forward.
-    "CumprodBackward::saved_y_": _OUTPUT,
-    "CummaxBackward::saved_y_": _OUTPUT,
-    "CumminBackward::saved_y_": _OUTPUT,
     "VarBackward::saved_mean_": _DERIVED,
     "IndexScatterBackward::indices_": _DERIVED,
     "AsStridedBackward::indices_": _DERIVED,

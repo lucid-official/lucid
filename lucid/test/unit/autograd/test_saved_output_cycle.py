@@ -73,7 +73,8 @@ class _SavesItsOutput(Function):
 
     @staticmethod
     def backward(ctx: FunctionCtx, g: lucid.Tensor) -> lucid.Tensor:
-        return g * 2.0
+        (y,) = ctx.saved_tensors
+        return g * (y * 0.0 + 2.0)
 
 
 class _SavesBothOutputs(Function):
@@ -85,7 +86,8 @@ class _SavesBothOutputs(Function):
 
     @staticmethod
     def backward(ctx: FunctionCtx, ga: lucid.Tensor, gb: lucid.Tensor) -> lucid.Tensor:
-        return ga * 2.0 + gb * 3.0
+        a, b = ctx.saved_tensors
+        return ga * (a * 0.0 + 2.0) + gb * (b * 0.0 + 3.0)
 
 
 def _vector(device: str) -> lucid.Tensor:
@@ -148,8 +150,14 @@ _SAVES_OUTPUT: dict[
     "SoftmaxBackward": (_rows, lambda x: F.softmax(x, dim=-1)),
     "LogSoftmaxBackward": (_rows, lambda x: F.log_softmax(x, dim=-1)),
     "CumprodBackward": (_vector, lambda x: lucid.cumprod(x, 0)),
-    "CummaxBackward": (_vector, lambda x: lucid.cummax(x, 0)[0]),
-    "CumminBackward": (_vector, lambda x: lucid.cummin(x, 0)[0]),
+    "CummaxBackward": (
+        _vector,
+        lambda x: r[0] if isinstance(r := lucid.cummax(x, 0), tuple) else r,
+    ),
+    "CumminBackward": (
+        _vector,
+        lambda x: r[0] if isinstance(r := lucid.cummin(x, 0), tuple) else r,
+    ),
     "DetBackward": (_spd, lucid.linalg.det),
     "InvBackward": (_spd, lucid.linalg.inv),
     "SolveBackward": (_spd, lambda A: lucid.linalg.solve(A, _rhs(A))),
@@ -402,17 +410,12 @@ def _replace_by_setitem(y: lucid.Tensor) -> lucid.Tensor:
 
 
 def _write_under_no_grad_then_drop(y: lucid.Tensor) -> lucid.Tensor:
-    loss = y.sum()
+    loss = (y * 1.0).sum()
     with lucid.no_grad():
         y.add_(0.0)
     return loss
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-590: a saved output's version does not outlive the tensor, so a "
-    "write after which nothing holds the result is not refused",
-)
 @pytest.mark.parametrize(
     "write",
     [_replace_by_setitem, _write_under_no_grad_then_drop],
@@ -429,3 +432,25 @@ def test_a_write_and_then_dropping_the_result_is_refused(
     del y
     with pytest.raises(_C_engine.VersionMismatch, match=f"scatter_{mode} output 0"):
         loss.backward()
+
+
+@pytest.mark.parametrize(
+    "write",
+    [_replace_by_setitem, _write_under_no_grad_then_drop],
+    ids=["setitem", "no_grad"],
+)
+@pytest.mark.parametrize("node", list(_SAVES_OUTPUT))
+def test_every_saved_output_node_refuses_a_rebind_or_dropped_write(
+    node: str, write: Callable[[lucid.Tensor], lucid.Tensor], device: str
+) -> None:
+    make, forward = _SAVES_OUTPUT[node]
+    x = make(device)
+    y = forward(x)
+    if write is _replace_by_setitem and y.ndim == 0:
+        y[()] = 5.0
+        loss = (y * 1.0).sum()
+    else:
+        loss = write(y)
+    del y
+    with pytest.raises(_C_engine.VersionMismatch, match=r"output [01]"):
+        loss.abs().backward()

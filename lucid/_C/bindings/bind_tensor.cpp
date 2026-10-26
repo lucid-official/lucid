@@ -466,51 +466,38 @@ void register_tensor_impl(py::module_& m) {
             "CPU tensors: no-op.")
         .def(
             "clone_with_grad",
-            [](const std::shared_ptr<TensorImpl>& self,
-               bool requires_grad) -> std::shared_ptr<TensorImpl> {
-                // A second TensorImpl over the same bytes, at the same place in
-                // them, with its own autograd flags and no grad_fn — how a
-                // factory or ``Parameter`` gets a tensor of its own without a
-                // copy.  It joins self's view family, so an in-place write
-                // through either reaches the other, which is what ``.data``
-                // promises; and it keeps self's offset and strides instead of
-                // resetting them.  To change an existing tensor's flag, use
-                // ``_set_requires_grad``: the alias is a different tensor.
-                auto alias = TensorImpl::make_view(self, self->shape(), self->stride(), 0);
-                if (requires_grad)
-                    alias->set_requires_grad(true);
-                // Traced as ``detach``: the same values, a new leaf.
-                return traced_derive("detach", self, std::move(alias));
+            [](TensorImpl& self, bool requires_grad) -> std::shared_ptr<TensorImpl> {
+                return traced_derive("detach", self.shared_from_this(),
+                                     self.clone_with_grad(requires_grad));
             },
             py::arg("requires_grad"),
             "Return a new TensorImpl sharing the same storage but with a different "
             "requires_grad flag.  No data is copied.")
         .def(
             "_set_requires_grad",
-            [](TensorImpl& self, bool requires_grad) {
-                // The flag flips on this TensorImpl itself.  Swapping in a
-                // ``clone_with_grad`` alias instead left every holder of the
-                // old one behind: an engine optimizer kept stepping a tensor
-                // that no longer received gradients, and the gradient already
-                // accumulated stayed on the old one too.  Turning the flag
-                // off keeps the autograd metadata, so ``.grad`` survives.
-                // Private: ``Tensor.requires_grad`` / ``requires_grad_`` are
-                // the entry points, and they hold the leaf rules.
-                self.set_requires_grad(requires_grad);
+            [](TensorImpl& self, bool requires_grad) { self.set_requires_grad(requires_grad); },
+            py::arg("requires_grad"), "Set this tensor's requires_grad flag in place.")
+        .def(
+            "data_alias",
+            [](TensorImpl& self) -> std::shared_ptr<TensorImpl> {
+                return traced_derive("detach", self.shared_from_this(), self.data_alias());
             },
-            py::arg("requires_grad"),
-            "Set this tensor's requires_grad flag in place.  The TensorImpl, its "
-            "storage and its accumulated gradient are kept.  Meant for leaf "
-            "tensors: clearing the flag on a tensor with a grad_fn does not "
-            "detach it, so ``Tensor.requires_grad_`` refuses that case before "
-            "calling this.")
-        .def("data_alias", &TensorImpl::data_alias,
-             "Return the alias ``.data`` hands out: the same storage, no autograd "
-             "state, and writes through it untracked.")
+            "Return the alias ``.data`` hands out: the same storage, no autograd "
+            "state, and writes through it untracked.")
         .def("detach_inplace", &TensorImpl::detach_inplace,
              "Detach this TensorImpl in place from the autograd graph.")
+        .def(
+            "custom_function_view",
+            [](TensorImpl& self, bool tracked) -> std::shared_ptr<TensorImpl> {
+                return self.custom_function_view(tracked);
+            },
+            py::arg("tracked"), "Return a view of this TensorImpl for a custom Function output.")
+        .def_property_readonly(
+            "is_custom_function_output", &TensorImpl::is_custom_function_output,
+            "Whether this TensorImpl is a view returned by a tracked custom Function.")
+        .def("rebind_version_from", &TensorImpl::rebind_version_from, py::arg("old"),
+             "Bump old's version and carry the bumped version onto this TensorImpl.")
         .def("is_aliased", &TensorImpl::is_aliased,
-
              "Whether another live tensor reads this one's buffer as a view of it.")
         .def("set_grad", &set_gradient, py::arg("grad"),
              "Replace this tensor's gradient with grad's values.  grad must have "

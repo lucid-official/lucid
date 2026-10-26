@@ -373,12 +373,12 @@ std::shared_ptr<TensorImpl> UnaryKernel<Derived>::forward(const std::shared_ptr<
         // Conditionally snapshot inputs/output for use in grad_formula.
         if constexpr (Derived::kSavesInput)
             bwd->keep_input(0, a_ptr->storage());
-        if constexpr (Derived::kSavesOutput)
+        if constexpr (Derived::kSavesOutput) {
             bwd->keep_output(out->storage());
+            bwd->bind_saved_output(out);
+        }
         // Always save the original TensorImpl for graph-mode backward.
         bwd->saved_impl_inputs_ = {a};
-        if constexpr (Derived::kSavesOutput)
-            bwd->saved_impl_output_ = out;
 
         std::vector<Edge> edges;
         edges.emplace_back(a_edge, a->grad_output_nr());

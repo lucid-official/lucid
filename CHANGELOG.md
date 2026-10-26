@@ -98,6 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - detach TensorImpl in place and drop RNG override
 
+- version saved outputs and guard Function output views
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

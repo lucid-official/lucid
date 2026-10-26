@@ -84,9 +84,6 @@ namespace kernel {
 //     Snapshots of each input's :class:`Storage` at forward time, one
 //     per input slot (empty for a null input), populated when
 //     :meth:`wire_autograd` is called with ``save_ins=true``.
-// saved_output_ : Storage
-//     Optional snapshot of the output storage for ops whose backward
-//     needs the forward output value (e.g. softmax-style ops).
 //
 // Notes
 // -----
@@ -129,7 +126,6 @@ public:
     // Free the values saved for backward, as AutogradNode does.
     void release_saved() override {
         saved_inputs_v_.clear();
-        saved_output_ = Storage{CpuStorage{}};
         input_tensors_v_.clear();
     }
 
@@ -143,7 +139,7 @@ public:
             if (Derived::kKeepsOwnValues)
                 return SavedKind::kEagerValues;
         }
-        const bool holds = !saved_inputs_v_.empty() || ::lucid::holds_saved_values(saved_output_);
+        const bool holds = !saved_inputs_v_.empty();
         return holds ? SavedKind::kEagerValues : SavedKind::kNothing;
     }
 
@@ -159,9 +155,6 @@ public:
     Device device_ = Device::CPU;
     // Snapshots of each input's Storage at forward time, used by apply().
     std::vector<Storage> saved_inputs_v_;
-    // Optional snapshot of the output storage; populated by ops whose
-    // backward consumes the forward output (e.g. softmax-style).
-    Storage saved_output_;
 
     // Attach an existing backward node to the autograd graph.
     //
