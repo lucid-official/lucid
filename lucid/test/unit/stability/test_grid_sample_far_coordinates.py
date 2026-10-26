@@ -408,3 +408,71 @@ def test_fma_single_rounding_and_gradients(
     i = lucid.tensor([1, 2], dtype=lucid.int32, device=device)
     with pytest.raises(_C_engine.InvalidArgument, match="floating-point"):
         _C_engine.fma(_unwrap(i), _unwrap(i), _unwrap(i))
+
+
+def test_fma_bf16_double_rounding_traps_and_random_corpus(device: str) -> None:
+    """LCD-433: bfloat16 fma avoids f32->bf16 double rounding via round-to-odd."""
+    import lucid
+    from lucid._C import engine as _C_engine
+    from lucid._dispatch import _unwrap, _wrap
+
+    traps = [
+        (17.0 / 16.0, 17.0 / 16.0, 2.0**-40, 1.1328125),
+        (19.0 / 16.0, 17.0 / 16.0, -(2.0**-40), 1.2578125),
+        (-17.0 / 16.0, 17.0 / 16.0, -(2.0**-40), -1.1328125),
+        (-19.0 / 16.0, 17.0 / 16.0, 2.0**-40, -1.2578125),
+        (17.0 / 16.0, 17.0 / 16.0, 2.0**-120, 1.1328125),
+        (19.0 / 16.0, 17.0 / 16.0, -(2.0**-120), 1.2578125),
+    ]
+    a_t = lucid.tensor([r[0] for r in traps], dtype=lucid.bfloat16, device=device)
+    b_t = lucid.tensor([r[1] for r in traps], dtype=lucid.bfloat16, device=device)
+    c_t = lucid.tensor([r[2] for r in traps], dtype=lucid.bfloat16, device=device)
+    got_traps = _wrap(_C_engine.fma(_unwrap(a_t), _unwrap(b_t), _unwrap(c_t)))
+    assert got_traps.to("cpu").tolist() == [r[3] for r in traps]
+
+    rng = np.random.default_rng(433)
+    # 2,000 general finite bf16 triples + 2,000 halfway-product trap triples.
+    exps = rng.integers(-60, 60, size=(3, 2000))
+    mants = rng.integers(128, 256, size=(3, 2000)) / 128.0
+    signs = rng.choice([-1.0, 1.0], size=(3, 2000))
+    gen = signs * mants * (2.0**exps)
+
+    odd_a = (1.0 + (2 * rng.integers(0, 8, size=2000) + 1) / 16.0) * rng.choice(
+        [-1.0, 1.0], size=2000
+    )
+    odd_b = (1.0 + (2 * rng.integers(0, 8, size=2000) + 1) / 16.0) * rng.choice(
+        [-1.0, 1.0], size=2000
+    )
+    tiny_c = rng.choice([-1.0, 1.0], size=2000) * (
+        2.0 ** rng.integers(-120, -10, size=2000)
+    )
+
+    a_all = np.concatenate([gen[0], odd_a])
+    b_all = np.concatenate([gen[1], odd_b])
+    c_all = np.concatenate([gen[2], tiny_c])
+
+    la = lucid.tensor(a_all.tolist(), dtype=lucid.bfloat16, device=device)
+    lb = lucid.tensor(b_all.tolist(), dtype=lucid.bfloat16, device=device)
+    lc = lucid.tensor(c_all.tolist(), dtype=lucid.bfloat16, device=device)
+    got = _wrap(_C_engine.fma(_unwrap(la), _unwrap(lb), _unwrap(lc))).to("cpu").tolist()
+
+    from fractions import Fraction
+
+    qa = la.to("cpu").tolist()
+    qb = lb.to("cpu").tolist()
+    qc = lc.to("cpu").tolist()
+    rto_f32: list[float] = []
+    for x, y, z in zip(qa, qb, qc, strict=True):
+        exact = Fraction(x) * Fraction(y) + Fraction(z)
+        s = float(np.float32(float(exact)))
+        diff = exact - Fraction(s)
+        if diff != 0:
+            s = float(
+                np.nextafter(
+                    np.float32(s),
+                    np.float32(math.inf if diff > 0 else -math.inf),
+                )
+            )
+        rto_f32.append(s)
+    want = lucid.tensor(rto_f32, dtype=lucid.bfloat16).tolist()
+    assert got == want

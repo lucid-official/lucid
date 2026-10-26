@@ -268,7 +268,19 @@ void run_fma_bf16(const void* a, const void* b, const void* c, void* dst, std::s
         const float fa = backend::detail::bfloat16_bits_to_float(pa[i]);
         const float fb = backend::detail::bfloat16_bits_to_float(pb[i]);
         const float fc = backend::detail::bfloat16_bits_to_float(pc[i]);
-        pd[i] = backend::detail::float_to_bfloat16_bits(std::fma(fa, fb, fc));
+        float s = std::fma(fa, fb, fc);
+        std::uint32_t s_bits = 0;
+        std::memcpy(&s_bits, &s, sizeof(float));
+        if ((s_bits & 0x7f800000u) != 0x7f800000u && (s_bits & 0xffffu) == 0x8000u) {
+            const float p = fa * fb;
+            const float err = (std::fabs(p) >= std::fabs(fc)) ? (std::fma(fa, fb, -s) + fc)
+                                                              : std::fma(fa, fb, fc - s);
+            if (err != 0.0f) {
+                s_bits = ((err > 0.0f) == (s > 0.0f)) ? (s_bits | 1u) : (s_bits - 1u);
+                std::memcpy(&s, &s_bits, sizeof(float));
+            }
+        }
+        pd[i] = backend::detail::float_to_bfloat16_bits(s);
     }
 }
 
@@ -322,29 +334,32 @@ GpuStorage fma_gpu(const GpuStorage& a,
                                std::string(backend::unary_elem_index_src()) +
                                    "out[elem] = fma(a[elem], b[elem], c[elem]);\n",
                                "", true, false, mx::CompileOptions{});
+    static const auto kernel_bf16 =
+        mx::fast::metal_kernel("lucid_fma_bf16", {"a", "b", "c"}, {"out"},
+                               std::string(backend::unary_elem_index_src()) + R"(
+        float fa = static_cast<float>(a[elem]);
+        float fb = static_cast<float>(b[elem]);
+        float fc = static_cast<float>(c[elem]);
+        float s = fma(fa, fb, fc);
+        uint s_bits = as_type<uint>(s);
+        if ((s_bits & 0x7f800000u) != 0x7f800000u && (s_bits & 0xffffu) == 0x8000u) {
+            float p = fa * fb;
+            float err = (metal::abs(p) >= metal::abs(fc)) ? (fma(fa, fb, -s) + fc)
+                                                          : fma(fa, fb, fc - s);
+            if (err != 0.0f) {
+                s_bits = ((err > 0.0f) == (s > 0.0f)) ? (s_bits | 1u) : (s_bits - 1u);
+                s = as_type<float>(s_bits);
+            }
+        }
+        out[elem] = static_cast<bfloat>(s);
+        )",
+                               "", true, false, mx::CompileOptions{});
     const auto launch = backend::metal_launch_1d(n);
-    auto outs = kernel({at_shape(a), at_shape(b), at_shape(c)}, {k_shape}, {mlx_dt}, launch.grid,
-                       launch.threadgroup, {}, std::nullopt, false, {});
+    const auto& k = (dt == Dtype::BF16) ? kernel_bf16 : kernel;
+    auto outs = k({at_shape(a), at_shape(b), at_shape(c)}, {k_shape}, {mlx_dt}, launch.grid,
+                  launch.threadgroup, {}, std::nullopt, false, {});
     return gpu::wrap_mlx_array(
         mlx_shape.empty() ? mx::reshape(outs[0], mlx_shape) : std::move(outs[0]), dt);
-}
-
-TensorImplPtr unreduce_to_shape(const TensorImplPtr& grad, const Shape& target) {
-    if (grad->shape() == target)
-        return grad;
-    const Shape& gs = grad->shape();
-    const int ng = static_cast<int>(gs.size());
-    const int nt = static_cast<int>(target.size());
-    std::vector<int> axes;
-    for (int i = 0; i < ng - nt; ++i)
-        axes.push_back(i);
-    for (int i = 0; i < nt; ++i) {
-        if (target[static_cast<std::size_t>(i)] == 1 &&
-            gs[static_cast<std::size_t>(i + ng - nt)] != 1)
-            axes.push_back(i + ng - nt);
-    }
-    auto reduced = axes.empty() ? grad : sum_op(grad, axes, false);
-    return (reduced->shape() == target) ? reduced : reshape_op(reduced, target);
 }
 
 }  // namespace
@@ -398,27 +413,31 @@ std::vector<Storage> FmaBackward::apply(Storage grad_out) {
                                             false);
     };
     Storage da = next_edges_[0].is_valid()
-                     ? unreduce_to_shape(mul_op(g, wrap_saved(1)), input_shapes_[0])->storage()
+                     ? reduce_grad_to_shape(mul_op(g, wrap_saved(1))->storage(), out_shape_,
+                                            input_shapes_[0], dtype_, device_)
                      : Storage{};
     Storage db = next_edges_[1].is_valid()
-                     ? unreduce_to_shape(mul_op(g, wrap_saved(0)), input_shapes_[1])->storage()
+                     ? reduce_grad_to_shape(mul_op(g, wrap_saved(0))->storage(), out_shape_,
+                                            input_shapes_[1], dtype_, device_)
                      : Storage{};
-    Storage dc =
-        next_edges_[2].is_valid() ? unreduce_to_shape(g, input_shapes_[2])->storage() : Storage{};
+    Storage dc = next_edges_[2].is_valid() ? reduce_grad_to_shape(g->storage(), out_shape_,
+                                                                  input_shapes_[2], dtype_, device_)
+                                           : Storage{};
     return {std::move(da), std::move(db), std::move(dc)};
 }
 
 std::vector<TensorImplPtr> FmaBackward::apply_for_graph(const TensorImplPtr& grad_out) {
-    TensorImplPtr da =
-        next_edges_[0].is_valid()
-            ? unreduce_to_shape(mul_op(grad_out, saved_impl_inputs_[1]), input_shapes_[0])
-            : nullptr;
-    TensorImplPtr db =
-        next_edges_[1].is_valid()
-            ? unreduce_to_shape(mul_op(grad_out, saved_impl_inputs_[0]), input_shapes_[1])
-            : nullptr;
-    TensorImplPtr dc =
-        next_edges_[2].is_valid() ? unreduce_to_shape(grad_out, input_shapes_[2]) : nullptr;
+    TensorImplPtr da = next_edges_[0].is_valid()
+                           ? detail::reduce_impl_to_shape(mul_op(grad_out, saved_impl_inputs_[1]),
+                                                          out_shape_, input_shapes_[0])
+                           : nullptr;
+    TensorImplPtr db = next_edges_[1].is_valid()
+                           ? detail::reduce_impl_to_shape(mul_op(grad_out, saved_impl_inputs_[0]),
+                                                          out_shape_, input_shapes_[1])
+                           : nullptr;
+    TensorImplPtr dc = next_edges_[2].is_valid()
+                           ? detail::reduce_impl_to_shape(grad_out, out_shape_, input_shapes_[2])
+                           : nullptr;
     return {std::move(da), std::move(db), std::move(dc)};
 }
 

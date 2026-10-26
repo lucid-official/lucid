@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - unify grad_impl step, accumulation, and shared-grad writes
 
 - refuse mixed float dtypes in matmul family outside autocast
+- avoid f32->bf16 double rounding in bfloat16 fma via round-to-odd (LCD-433)
 
 ### Performance
 

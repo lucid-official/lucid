@@ -68,6 +68,8 @@ LUCID_API TensorImplPtr astype_op(const TensorImplPtr& a, Dtype dst_dtype);
 // promote a 0-d CPU scalar operand to the peer's device while keeping the
 // ToDeviceBackward edge on the autograd graph.
 LUCID_API TensorImplPtr to_device_op(const TensorImplPtr& a, Device target);
+LUCID_API TensorImplPtr sum_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims);
+LUCID_API TensorImplPtr reshape_op(const TensorImplPtr& a, const Shape& shape);
 
 namespace detail {
 
@@ -447,6 +449,33 @@ inline TensorImplPtr graph_grad_to_input_dtype(const TensorImplPtr& g,
 // differentiable cast, so the second derivative reaches the input.
 inline TensorImplPtr graph_input_at_kernel_dtype(const TensorImplPtr& t, Dtype dt) {
     return (!t || t->dtype() == dt) ? t : astype_op(t, dt);
+}
+
+// Reduce a traced ``grad`` tensor from ``grad_shape`` back to ``target_shape``
+// by summing over broadcast axes (leading axes + unit axes in ``target_shape``).
+inline TensorImplPtr reduce_impl_to_shape(const TensorImplPtr& grad,
+                                          const Shape& grad_shape,
+                                          const Shape& target_shape) {
+    if (grad_shape == target_shape)
+        return grad;
+
+    std::vector<int> axes;
+    const int ndim_g = static_cast<int>(grad_shape.size());
+    const int ndim_t = static_cast<int>(target_shape.size());
+    const int leading = ndim_g - ndim_t;
+    for (int i = 0; i < leading; ++i)
+        axes.push_back(i);
+    for (int i = 0; i < ndim_t; ++i) {
+        if (target_shape[static_cast<std::size_t>(i)] == 1 &&
+            grad_shape[static_cast<std::size_t>(i + leading)] != 1)
+            axes.push_back(i + leading);
+    }
+    if (axes.empty())
+        return grad;
+    auto reduced = sum_op(grad, axes, /*keepdims=*/false);
+    if (reduced->shape() != target_shape)
+        reduced = reshape_op(reduced, target_shape);
+    return reduced;
 }
 
 }  // namespace detail
@@ -854,38 +883,7 @@ template <class Derived>
 TensorImplPtr BinaryKernel<Derived>::reduce_impl_to_shape(const TensorImplPtr& grad,
                                                           const Shape& grad_shape,
                                                           const Shape& target_shape) {
-    if (grad_shape == target_shape)
-        return grad;
-
-    // Forward declaration — defined in ops/ufunc/Reductions.cpp.
-    extern TensorImplPtr sum_op(const TensorImplPtr&, const std::vector<int>&, bool);
-    extern TensorImplPtr reshape_op(const TensorImplPtr&, const Shape&);
-
-    // Compute axes that were broadcast: leading axes added by ndim expansion,
-    // plus any axis where target_shape has size 1 but grad_shape does not.
-    std::vector<int> axes;
-    const int ndim_g = static_cast<int>(grad_shape.size());
-    const int ndim_t = static_cast<int>(target_shape.size());
-    const int leading = ndim_g - ndim_t;
-    for (int i = 0; i < leading; ++i)
-        axes.push_back(i);
-    for (int i = 0; i < ndim_t; ++i) {
-        if (target_shape[static_cast<std::size_t>(i)] == 1 &&
-            grad_shape[static_cast<std::size_t>(i + leading)] != 1)
-            axes.push_back(i + leading);
-    }
-
-    if (axes.empty())
-        return grad;
-
-    auto reduced = sum_op(grad, axes, /*keepdims=*/false);
-
-    // After summing, we may have fewer dimensions than target_shape if we
-    // reduced leading axes.  Reshape to match exactly.
-    if (reduced->shape() != target_shape) {
-        reduced = reshape_op(reduced, target_shape);
-    }
-    return reduced;
+    return detail::reduce_impl_to_shape(grad, grad_shape, target_shape);
 }
 
 template <class Derived>
