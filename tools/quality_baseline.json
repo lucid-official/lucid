@@ -2041,7 +2041,7 @@
     "lucid/nn/functional/loss.py": 161,
     "lucid/nn/functional/normalization.py": 23,
     "lucid/nn/functional/positional.py": 7,
-    "lucid/nn/functional/sampling.py": 186,
+    "lucid/nn/functional/sampling.py": 182,
     "lucid/nn/functional/sparse.py": 7,
     "lucid/nn/modules/attention.py": 165,
     "lucid/nn/modules/transformer.py": 17,

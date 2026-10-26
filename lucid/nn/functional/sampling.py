@@ -1183,8 +1183,9 @@ def multi_head_attention_forward(
         kdim = int(k_proj_weight.shape[-1])
         vdim = int(v_proj_weight.shape[-1])
 
-    # Build a temporary module; bind external weights so the call mirrors the
-    # functional contract exactly.
+    # Build a temporary module on ``query``'s device and dtype so any unbound
+    # fallback parameters match the caller's inputs without a round-trip
+    # ``mha.to(...)`` copy.
     mha: MultiheadAttention = MultiheadAttention(
         embed_dim=int(embed_dim_to_check),
         num_heads=int(num_heads),
@@ -1195,14 +1196,9 @@ def multi_head_attention_forward(
         kdim=kdim,
         vdim=vdim,
         batch_first=False,
+        device=query.device,
+        dtype=query.dtype,
     )
-    # The temporary module's parameters are created on the *default*
-    # device, and only the weights the caller supplied get bound over
-    # them.  Given Metal inputs and a partial set of weights, whatever was
-    # left unbound stayed on the CPU and the first projection raised a
-    # device mismatch — so this entry point only worked on Metal if you
-    # passed every weight there is.
-    mha = mha.to(query.device)
     if use_separate_proj_weight:
         assert q_proj_weight is not None
         assert k_proj_weight is not None and v_proj_weight is not None

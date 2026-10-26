@@ -100,6 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - version saved outputs and guard Function output views
 
+- match query dtype in multi_head_attention_forward (LCD-575)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

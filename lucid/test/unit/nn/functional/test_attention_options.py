@@ -63,3 +63,15 @@ def test_keys_already_split_per_head_are_still_refused() -> None:
         F.multi_head_attention_forward(
             x, x, x, E, H, static_k=lucid.randn(N * H, S, E // H)
         )
+
+
+@pytest.mark.parametrize("dtype", [lucid.float64, lucid.float16, lucid.bfloat16])
+def test_partial_weights_match_query_dtype(dtype: lucid.DType) -> None:
+    q = lucid.randn(L, N, E, dtype=dtype)
+    wi = lucid.randn(3 * E, E, dtype=dtype)
+    bi = lucid.randn(3 * E, dtype=dtype)
+    out, weights = F.multi_head_attention_forward(q, q, q, E, H, wi, bi)
+    assert out.dtype == dtype
+    assert weights is not None and weights.dtype == dtype
+    assert tuple(out.shape) == (L, N, E)
+
