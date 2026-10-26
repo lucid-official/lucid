@@ -48,6 +48,8 @@ public:
 class LUCID_API FmodBackward : public BinaryOp<FmodBackward> {
 public:
     static const OpSchema schema_v1;
+    // ``da = g`` reads neither operand; ``db`` reads both.
+    static constexpr GradReads<2> kGradReads{{{false, false}, {true, true}}};
 
     static CpuStorage
     cpu_kernel(const CpuStorage& a, const CpuStorage& b, const Shape& shape, Dtype dt);
@@ -65,6 +67,8 @@ public:
 class LUCID_API RemainderBackward : public BinaryOp<RemainderBackward> {
 public:
     static const OpSchema schema_v1;
+    // ``da = g`` reads neither operand; ``db`` reads both.
+    static constexpr GradReads<2> kGradReads{{{false, false}, {true, true}}};
 
     static CpuStorage
     cpu_kernel(const CpuStorage& a, const CpuStorage& b, const Shape& shape, Dtype dt);

@@ -1261,7 +1261,7 @@
     "lucid/_C/core/TensorImpl.cpp": 4,
     "lucid/_C/coreml/MilProgram.cpp": 1,
     "lucid/_C/kernel/BinaryKernel.h": 1,
-    "lucid/_C/kernel/NaryKernel.h": 4,
+    "lucid/_C/kernel/NaryKernel.h": 2,
     "lucid/_C/kernel/VariadicKernel.h": 3,
     "lucid/_C/nn/ConvNd.cpp": 2,
     "lucid/_C/nn/ConvNd.h": 1,

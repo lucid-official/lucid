@@ -56,8 +56,10 @@ public:
         auto& be = backend::Dispatcher::for_device(device_);
         // Scalar gradient (shape {}) → vector shape {numel_}.
         Storage scaled_grad = be.broadcast(grad_out, Shape{}, vec_shape, dtype_);
-        Storage da = be.mul(saved_inputs_[1], scaled_grad, vec_shape, dtype_);
-        Storage db = be.mul(saved_inputs_[0], scaled_grad, vec_shape, dtype_);
+        Storage da = needs_input_grad(0) ? be.mul(saved_inputs_[1], scaled_grad, vec_shape, dtype_)
+                                         : Storage{};
+        Storage db = needs_input_grad(1) ? be.mul(saved_inputs_[0], scaled_grad, vec_shape, dtype_)
+                                         : Storage{};
         return {std::move(da), std::move(db)};
     }
 
@@ -67,9 +69,11 @@ public:
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
         const auto& a = saved_impl_inputs_[0];
         const auto& b = saved_impl_inputs_[1];
-        if (!a || !b)
+        if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("dot").fail("graph-mode backward is missing its saved inputs");
-        return {mul_op(grad_out, b), mul_op(grad_out, a)};
+        TensorImplPtr da = needs_input_grad(0) ? mul_op(grad_out, b) : nullptr;
+        TensorImplPtr db = needs_input_grad(1) ? mul_op(grad_out, a) : nullptr;
+        return {std::move(da), std::move(db)};
     }
 };
 
@@ -105,8 +109,10 @@ public:
         db_opts.transA = true;
 
         auto& be = backend::Dispatcher::for_device(device_);
-        Storage da = be.matmul(grad_out, saved_inputs_[1], da_opts, dtype_);
-        Storage db = be.matmul(saved_inputs_[0], grad_out, db_opts, dtype_);
+        Storage da = needs_input_grad(0) ? be.matmul(grad_out, saved_inputs_[1], da_opts, dtype_)
+                                         : Storage{};
+        Storage db = needs_input_grad(1) ? be.matmul(saved_inputs_[0], grad_out, db_opts, dtype_)
+                                         : Storage{};
         return {std::move(da), std::move(db)};
     }
 
@@ -114,10 +120,12 @@ public:
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
         const auto& a = saved_impl_inputs_[0];
         const auto& b = saved_impl_inputs_[1];
-        if (!a || !b)
+        if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("dot").fail("graph-mode backward is missing a saved input");
         const std::vector<int> swap{1, 0};
-        return {matmul_op(grad_out, permute_op(b, swap)), matmul_op(permute_op(a, swap), grad_out)};
+        TensorImplPtr da = needs_input_grad(0) ? matmul_op(grad_out, permute_op(b, swap)) : nullptr;
+        TensorImplPtr db = needs_input_grad(1) ? matmul_op(permute_op(a, swap), grad_out) : nullptr;
+        return {std::move(da), std::move(db)};
     }
 };
 

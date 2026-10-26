@@ -75,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make Metal overwrite scatter deterministic (LCD-574)
 
+- save binary/nary inputs only when read by needed grad (LCD-584)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

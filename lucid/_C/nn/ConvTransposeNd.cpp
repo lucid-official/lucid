@@ -219,8 +219,9 @@ std::vector<Storage> ConvTransposeNdBackward<N>::apply(Storage grad_out) {
 
     // Returns [dx, dW, db].
     return backend::Dispatcher::for_device(this->device_)
-        .conv_transpose_nd_backward(grad_out, this->saved_inputs_[0], this->saved_inputs_[1], B,
-                                    Cin, Cout, S, K, O, opts, this->dtype_);
+        .conv_transpose_nd_backward(grad_out, this->saved_or_zeros(0, grad_out),
+                                    this->saved_or_zeros(1, grad_out), B, Cin, Cout, S, K, O, opts,
+                                    this->dtype_);
 }
 
 template <int N>
@@ -233,29 +234,38 @@ ConvTransposeNdBackward<N>::apply_for_graph(const TensorImplPtr& grad_out) {
     // but the output channel.
     const auto& x = this->saved_impl_inputs_[0];
     const auto& W = this->saved_impl_inputs_[1];
-    if (!x || !W)
+    if ((this->needs_input_grad(0) && !W) || (this->needs_input_grad(1) && !x))
         ErrorBuilder("conv_transpose").fail("graph-mode backward is missing a saved input");
 
     const Shape& xs = this->input_shapes_[0];
     const Shape& ws = this->input_shapes_[1];
-    auto no_bias = zeros_op(Shape{xs[1]}, this->dtype_, this->device_);
-    auto dx = ConvNdBackward<N>::forward(grad_out, W, no_bias, this->stride_, this->pad_,
-                                         this->dilation_, this->groups_);
-    // An output_padding of a stride or more — allowed while the dilation is
-    // larger — lets the convolution fit a window past the input's end.
-    for (int i = 0; i < N; ++i)
-        if (dx->shape()[2 + i] != xs[2 + i])
-            dx = narrow_op(dx, 2 + i, 0, xs[2 + i]);
-    auto dW = conv_weight_grad<N>(grad_out, x, this->stride_, this->pad_, this->dilation_,
-                                  this->groups_, ws);
-    std::vector<int> not_channel{0};
-    for (int i = 0; i < N; ++i)
-        not_channel.push_back(2 + i);
-    auto db = sum_op(grad_out, not_channel, /*keepdims=*/false);
-    // ``dx`` reads the weights and the gradient only; with constant weights
-    // it is kept in the graph through the input with derivative zero, as the
-    // reference's convolution backward is an op of the input.
-    return {zero_derivative_through(dx, this->next_edges()[0]), dW, db};
+    TensorImplPtr dx;
+    if (this->needs_input_grad(0)) {
+        auto no_bias = zeros_op(Shape{xs[1]}, this->dtype_, this->device_);
+        dx = ConvNdBackward<N>::forward(grad_out, W, no_bias, this->stride_, this->pad_,
+                                        this->dilation_, this->groups_);
+        // An output_padding of a stride or more — allowed while the dilation is
+        // larger — lets the convolution fit a window past the input's end.
+        for (int i = 0; i < N; ++i)
+            if (dx->shape()[2 + i] != xs[2 + i])
+                dx = narrow_op(dx, 2 + i, 0, xs[2 + i]);
+        // ``dx`` reads the weights and the gradient only; with constant weights
+        // it is kept in the graph through the input with derivative zero, as the
+        // reference's convolution backward is an op of the input.
+        dx = zero_derivative_through(dx, this->next_edges()[0]);
+    }
+    TensorImplPtr dW = this->needs_input_grad(1)
+                           ? conv_weight_grad<N>(grad_out, x, this->stride_, this->pad_,
+                                                 this->dilation_, this->groups_, ws)
+                           : nullptr;
+    TensorImplPtr db;
+    if (this->needs_input_grad(2)) {
+        std::vector<int> not_channel{0};
+        for (int i = 0; i < N; ++i)
+            not_channel.push_back(2 + i);
+        db = sum_op(grad_out, not_channel, /*keepdims=*/false);
+    }
+    return {dx, dW, db};
 }
 
 template class ConvTransposeNdBackward<1>;

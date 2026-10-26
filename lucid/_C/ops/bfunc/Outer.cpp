@@ -55,32 +55,32 @@ public:
     std::vector<Storage> apply(Storage grad_out) override {
         auto& be = backend::Dispatcher::for_device(device_);
 
-        // Reshape saved vectors to column/row for matmul.
-        Shape b_col_shape{N_, 1};
-        Shape a_row_shape{1, M_};
-        Shape da_col_shape{M_, 1};
-        Shape db_row_shape{1, N_};
-        Storage b_col = be.reshape(saved_inputs_[1], Shape{N_}, b_col_shape, dtype_);
-        Storage a_row = be.reshape(saved_inputs_[0], Shape{M_}, a_row_shape, dtype_);
+        Storage da;
+        if (needs_input_grad(0)) {
+            Shape b_col_shape{N_, 1};
+            Shape da_col_shape{M_, 1};
+            Storage b_col = be.reshape(saved_inputs_[1], Shape{N_}, b_col_shape, dtype_);
+            backend::MatmulOpts da_opts;
+            da_opts.M = static_cast<int>(M_);
+            da_opts.K = static_cast<int>(N_);
+            da_opts.N = 1;
+            Storage da_col = be.matmul(grad_out, b_col, da_opts, dtype_);
+            da = be.reshape(da_col, da_col_shape, Shape{M_}, dtype_);
+        }
 
-        // dA = grad_out [M×N] @ b_col [N×1] → [M×1]
-        backend::MatmulOpts da_opts;
-        da_opts.M = static_cast<int>(M_);
-        da_opts.K = static_cast<int>(N_);
-        da_opts.N = 1;
+        Storage db;
+        if (needs_input_grad(1)) {
+            Shape a_row_shape{1, M_};
+            Shape db_row_shape{1, N_};
+            Storage a_row = be.reshape(saved_inputs_[0], Shape{M_}, a_row_shape, dtype_);
+            backend::MatmulOpts db_opts;
+            db_opts.M = 1;
+            db_opts.K = static_cast<int>(M_);
+            db_opts.N = static_cast<int>(N_);
+            Storage db_row = be.matmul(a_row, grad_out, db_opts, dtype_);
+            db = be.reshape(db_row, db_row_shape, Shape{N_}, dtype_);
+        }
 
-        // dB = a_row [1×M] @ grad_out [M×N] → [1×N]
-        backend::MatmulOpts db_opts;
-        db_opts.M = 1;
-        db_opts.K = static_cast<int>(M_);
-        db_opts.N = static_cast<int>(N_);
-
-        Storage da_col = be.matmul(grad_out, b_col, da_opts, dtype_);
-        Storage db_row = be.matmul(a_row, grad_out, db_opts, dtype_);
-
-        // Flatten back to 1-D vectors.
-        Storage da = be.reshape(da_col, da_col_shape, Shape{M_}, dtype_);
-        Storage db = be.reshape(db_row, db_row_shape, Shape{N_}, dtype_);
         return {std::move(da), std::move(db)};
     }
 
@@ -89,12 +89,15 @@ public:
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
         const auto& a = saved_impl_inputs_[0];
         const auto& b = saved_impl_inputs_[1];
-        if (!a || !b)
+        if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("outer").fail("graph-mode backward is missing its saved inputs");
-        auto b_row = reshape_op(b, {1, N_});
-        auto a_col = reshape_op(a, {M_, 1});
-        return {sum_op(mul_op(grad_out, b_row), {1}, false),
-                sum_op(mul_op(grad_out, a_col), {0}, false)};
+        TensorImplPtr da = needs_input_grad(0)
+                               ? sum_op(mul_op(grad_out, reshape_op(b, {1, N_})), {1}, false)
+                               : nullptr;
+        TensorImplPtr db = needs_input_grad(1)
+                               ? sum_op(mul_op(grad_out, reshape_op(a, {M_, 1})), {0}, false)
+                               : nullptr;
+        return {std::move(da), std::move(db)};
     }
 };
 

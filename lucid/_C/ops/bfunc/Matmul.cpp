@@ -210,7 +210,7 @@ TensorImplPtr MatmulBackward::forward(const TensorImplPtr& a, const TensorImplPt
 std::vector<TensorImplPtr> MatmulBackward::apply_for_graph(const TensorImplPtr& grad_out) {
     auto& a = saved_impl_inputs_[0];
     auto& b = saved_impl_inputs_[1];
-    if (!a || !b) {
+    if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a)) {
         throw std::runtime_error("apply_for_graph: saved_impl_inputs_ not set for matmul.");
     }
 
@@ -218,11 +218,8 @@ std::vector<TensorImplPtr> MatmulBackward::apply_for_graph(const TensorImplPtr& 
     extern TensorImplPtr sum_op(const TensorImplPtr&, const std::vector<int>&, bool);
     extern TensorImplPtr reshape_op(const TensorImplPtr&, const Shape&);
 
-    auto da = matmul_op(grad_out, mT_op(b));
-    auto db = matmul_op(mT_op(a), grad_out);
-
     auto reduce = [&](TensorImplPtr g, const Shape& target) -> TensorImplPtr {
-        if (g->shape() == target)
+        if (!g || g->shape() == target)
             return g;
         std::vector<int> axes;
         const int ng = static_cast<int>(g->shape().size());
@@ -241,7 +238,11 @@ std::vector<TensorImplPtr> MatmulBackward::apply_for_graph(const TensorImplPtr& 
         return g;
     };
 
-    return {reduce(da, input_shapes_[0]), reduce(db, input_shapes_[1])};
+    TensorImplPtr da =
+        needs_input_grad(0) ? reduce(matmul_op(grad_out, mT_op(b)), input_shapes_[0]) : nullptr;
+    TensorImplPtr db =
+        needs_input_grad(1) ? reduce(matmul_op(mT_op(a), grad_out), input_shapes_[1]) : nullptr;
+    return {std::move(da), std::move(db)};
 }
 
 TensorImplPtr matmul_op(const TensorImplPtr& a, const TensorImplPtr& b) {

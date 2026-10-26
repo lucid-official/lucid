@@ -60,8 +60,11 @@ std::pair<TensorImplPtr, TensorImplPtr> MulBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
     // da = grad_out * b,  db = grad_out * a.
     // a and b are already broadcast-expanded to out_shape_ by BinaryKernel.
-    return {mul_op(grad_out, is_complex(dtype_) ? conj_op(b) : b),
-            mul_op(grad_out, is_complex(dtype_) ? conj_op(a) : a)};
+    TensorImplPtr da =
+        needs_input_grad(0) ? mul_op(grad_out, is_complex(dtype_) ? conj_op(b) : b) : nullptr;
+    TensorImplPtr db =
+        needs_input_grad(1) ? mul_op(grad_out, is_complex(dtype_) ? conj_op(a) : a) : nullptr;
+    return {std::move(da), std::move(db)};
 }
 
 TensorImplPtr mul_op(const TensorImplPtr& a, const TensorImplPtr& b) {

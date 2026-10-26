@@ -682,6 +682,10 @@ protected:
         const auto& c = std::get<CpuStorage>(this->saved_inputs_[k]);
         return Storage{detail::broadcast_cpu(c, src, this->out_shape_, this->dtype_)};
     }
+
+    // Return saved input ``i`` broadcast to ``out_shape_`` for graph-mode
+    // backward when needed, or ``nullptr`` when no needed gradient reads it.
+    TensorImplPtr broadcast_graph_input(std::size_t i) const;
 };
 
 // Out-of-class definition of :meth:`BinaryKernel::forward`.
@@ -750,14 +754,6 @@ std::shared_ptr<TensorImpl> BinaryKernel<Derived>::forward(const std::shared_ptr
     bwd->grad_dtypes_ = {detail::grad_dtype_for(a_dev, a_ptr),
                          detail::grad_dtype_for(b_dev, b_ptr)};
     bwd->input_tensors_ = {a_dev, b_dev};
-    // saved_inputs_ holds the (possibly cast) pre-broadcast input storages
-    // so that grad_formula can inspect the original per-element values.
-    if constexpr (Derived::kSavesInputs)
-        bwd->keep_inputs({a_ptr->storage(), b_ptr->storage()});
-    // Always save the original TensorImpl pointers (before any dtype cast) so
-    // that apply_for_graph() can invoke forward ops on them and trace the
-    // gradient computation back through the original computation graph.
-    bwd->saved_impl_inputs_ = {a_dev, b_dev};
 
     std::vector<Edge> edges;
     edges.emplace_back(a_edge, a_dev->grad_output_nr());
@@ -765,6 +761,15 @@ std::shared_ptr<TensorImpl> BinaryKernel<Derived>::forward(const std::shared_ptr
     bwd->set_next_edges(std::move(edges));
     // Both input versions are captured to detect in-place mutations.
     bwd->set_saved_versions({a_dev->version(), b_dev->version()});
+
+    // saved_inputs_ holds the (possibly cast) pre-broadcast input storages
+    // so that grad_formula can inspect the original per-element values.
+    // Only inputs that a needed gradient reads are saved: saving an input
+    // whose values no needed gradient reads held a second reference to its
+    // CPU buffer and caused a subsequent in-place write into it (``x * c``
+    // then ``x.mul_(2)``) to be refused by ``storage_is_shared()``.
+    bwd->keep_needed_input(0, a_dev, a_ptr, Derived::kSavesInputs);
+    bwd->keep_needed_input(1, b_dev, b_ptr, Derived::kSavesInputs);
 
     out->set_grad_fn(std::move(bwd));
     out->set_leaf(false);
@@ -883,6 +888,26 @@ TensorImplPtr BinaryKernel<Derived>::reduce_impl_to_shape(const TensorImplPtr& g
     return reduced;
 }
 
+template <class Derived>
+TensorImplPtr BinaryKernel<Derived>::broadcast_graph_input(std::size_t i) const {
+    // Forward declaration — defined in ops/utils/Layout.cpp.
+    extern TensorImplPtr broadcast_to_op(const TensorImplPtr&, const Shape&);
+
+    const bool needed = Derived::kSavesInputs && this->read_by_a_needed_gradient(i);
+    const auto& inp = this->saved_impl_inputs_[i];
+    if (needed && !inp) {
+        throw std::runtime_error(
+            "apply_for_graph called but saved_impl_inputs_ were not set for op '" +
+            std::string(Derived::schema_v1.name) +
+            "'. "
+            "Ensure create_graph=True was set before the forward pass.");
+    }
+    if (!needed && (Derived::kSavesInputs || !inp))
+        return nullptr;
+    const auto k = detail::graph_input_at_kernel_dtype(inp, this->dtype_);
+    return (k->shape() == this->out_shape_) ? k : broadcast_to_op(k, this->out_shape_);
+}
+
 // Out-of-class definition of :meth:`BinaryKernel::apply_for_graph`.
 //
 // Broadcasts each saved input to ``out_shape_`` (when needed) so
@@ -893,26 +918,8 @@ TensorImplPtr BinaryKernel<Derived>::reduce_impl_to_shape(const TensorImplPtr& g
 // :meth:`grad_formula_impl` the base throws with a clear error.
 template <class Derived>
 std::vector<TensorImplPtr> BinaryKernel<Derived>::apply_for_graph(const TensorImplPtr& grad_out) {
-    // Forward declaration — defined in ops/utils/Layout.cpp.
-    extern TensorImplPtr broadcast_to_op(const TensorImplPtr&, const Shape&);
-
-    auto& a = this->saved_impl_inputs_[0];
-    auto& b = this->saved_impl_inputs_[1];
-    if (!a || !b) {
-        throw std::runtime_error(
-            "apply_for_graph called but saved_impl_inputs_ were not set for op '" +
-            std::string(Derived::schema_v1.name) +
-            "'. "
-            "Ensure create_graph=True was set before the forward pass.");
-    }
-
-    const auto a_k = detail::graph_input_at_kernel_dtype(a, this->dtype_);
-    const auto b_k = detail::graph_input_at_kernel_dtype(b, this->dtype_);
-
-    // Broadcast saved inputs to out_shape_ if needed so grad_formula_impl can
-    // do simple element-wise ops without worrying about shape mismatches.
-    auto a_b = (a_k->shape() == this->out_shape_) ? a_k : broadcast_to_op(a_k, this->out_shape_);
-    auto b_b = (b_k->shape() == this->out_shape_) ? b_k : broadcast_to_op(b_k, this->out_shape_);
+    TensorImplPtr a_b = broadcast_graph_input(0);
+    TensorImplPtr b_b = broadcast_graph_input(1);
 
     auto [da, db] = static_cast<Derived*>(this)->grad_formula_impl(grad_out, a_b, b_b);
     auto to_input = [this](const TensorImplPtr& g, std::size_t k) -> TensorImplPtr {

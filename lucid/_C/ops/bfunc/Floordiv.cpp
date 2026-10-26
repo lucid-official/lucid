@@ -149,7 +149,10 @@ std::pair<Storage, Storage> FmodBackward::grad_formula(const Storage& grad_out) 
 
 std::pair<TensorImplPtr, TensorImplPtr> FmodBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
-    return {grad_out, neg_op(mul_op(grad_out, trunc_op(div_op(a, b))))};
+    TensorImplPtr da = needs_input_grad(0) ? grad_out : nullptr;
+    TensorImplPtr db =
+        needs_input_grad(1) ? neg_op(mul_op(grad_out, trunc_op(div_op(a, b)))) : nullptr;
+    return {std::move(da), std::move(db)};
 }
 
 TensorImplPtr fmod_op(const TensorImplPtr& a, const TensorImplPtr& b) {
@@ -190,7 +193,9 @@ std::pair<Storage, Storage> RemainderBackward::grad_formula(const Storage& grad_
 
 std::pair<TensorImplPtr, TensorImplPtr> RemainderBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
-    return {grad_out, neg_op(mul_op(grad_out, floordiv_op(a, b)))};
+    TensorImplPtr da = needs_input_grad(0) ? grad_out : nullptr;
+    TensorImplPtr db = needs_input_grad(1) ? neg_op(mul_op(grad_out, floordiv_op(a, b))) : nullptr;
+    return {std::move(da), std::move(db)};
 }
 
 TensorImplPtr remainder_op(const TensorImplPtr& a, const TensorImplPtr& b) {

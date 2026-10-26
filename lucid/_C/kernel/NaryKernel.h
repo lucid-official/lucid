@@ -140,26 +140,7 @@ public:
             }
         }
         bwd->out_shape_ = out->shape();
-
-        std::vector<Edge> edges;
-        std::vector<std::int64_t> versions;
-        edges.reserve(N);
-        versions.reserve(N);
-
-        for (std::size_t i = 0; i < N; ++i) {
-            const auto& inp = inputs[i];
-            bwd->input_shapes_[i] = inp ? inp->shape() : Shape{};
-            bwd->input_tensors_[i] = inp;
-            if (saves[i] && inp)
-                bwd->keep_input(i, inp->storage());
-            // Always save strong TensorImpl refs for graph-mode backward.
-            bwd->saved_impl_inputs_[i] = inp;
-            edges.emplace_back(detail::ensure_grad_fn(inp), inp ? inp->grad_output_nr() : 0);
-            versions.push_back(inp ? inp->version() : 0);
-        }
-
-        bwd->set_next_edges(std::move(edges));
-        bwd->set_saved_versions(std::move(versions));
+        capture_inputs(*bwd, inputs, saves);
 
         out->set_grad_fn(std::move(bwd));
         out->set_leaf(false);
@@ -167,6 +148,26 @@ public:
         return true;
     }
 
+private:
+    static void capture_inputs(Derived& bwd,
+                               const std::array<TensorImplPtr, N>& inputs,
+                               const std::array<bool, N>& saves) {
+        std::vector<Edge> edges(N);
+        std::vector<std::int64_t> versions(N, 0);
+        for (std::size_t i = 0; i < N; ++i) {
+            const auto& inp = inputs[i];
+            bwd.input_shapes_[i] = inp ? inp->shape() : Shape{};
+            bwd.input_tensors_[i] = inp;
+            edges[i] = Edge{detail::ensure_grad_fn(inp), inp ? inp->grad_output_nr() : 0};
+            versions[i] = inp ? inp->version() : 0;
+        }
+        bwd.set_next_edges(std::move(edges));
+        bwd.set_saved_versions(std::move(versions));
+        for (std::size_t i = 0; i < N; ++i)
+            bwd.keep_needed_input(i, inputs[i], inputs[i], saves[i]);
+    }
+
+public:
     // The same, with every input's values saved (``save_ins``) or none.
     static bool wire_autograd(std::shared_ptr<Derived> bwd,
                               const std::array<TensorImplPtr, N>& inputs,

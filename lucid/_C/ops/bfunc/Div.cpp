@@ -65,14 +65,16 @@ std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
 std::pair<TensorImplPtr, TensorImplPtr> DivBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
     // da = grad_out / b
-    auto ac = is_complex(dtype_) ? conj_op(a) : a;
     auto bc = is_complex(dtype_) ? conj_op(b) : b;
-    auto da = div_op(grad_out, bc);
+    TensorImplPtr da = needs_input_grad(0) ? div_op(grad_out, bc) : nullptr;
+    if (!needs_input_grad(1))
+        return {std::move(da), nullptr};
     // db = -grad_out * a / b^2
+    auto ac = is_complex(dtype_) ? conj_op(a) : a;
     auto b_sq = mul_op(bc, bc);
     auto ga = mul_op(grad_out, ac);
     auto db = neg_op(div_op(ga, b_sq));
-    return {da, db};
+    return {std::move(da), std::move(db)};
 }
 
 TensorImplPtr div_op(const TensorImplPtr& a, const TensorImplPtr& b) {

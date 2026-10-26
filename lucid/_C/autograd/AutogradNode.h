@@ -276,6 +276,7 @@ public:
     void release_saved() override {
         for (auto& s : saved_inputs_)
             s = Storage{CpuStorage{}};
+        input_saved_.fill(false);
         saved_output_ = Storage{CpuStorage{}};
         input_tensors_ = {};
         for (auto& p : saved_impl_inputs_)
@@ -293,6 +294,7 @@ public:
     // reference refuses it.
     void keep_input(std::size_t i, Storage s) {
         saved_inputs_[i] = std::move(s);
+        input_saved_[i] = true;
         keeps_values_ = true;
     }
     void keep_output(Storage s) {
@@ -302,7 +304,47 @@ public:
     // Every input's values at once.
     void keep_inputs(std::array<Storage, N_IN> s) {
         saved_inputs_ = std::move(s);
+        input_saved_.fill(true);
         keeps_values_ = true;
+    }
+
+    // Whether some input that takes a gradient has one reading input ``j``.
+    bool read_by_a_needed_gradient(std::size_t j) const {
+        const auto& edges = next_edges();
+        for (std::size_t i = 0; i < N_IN && i < edges.size(); ++i) {
+            if (edges[i].is_valid() && grad_reads(i, j))
+                return true;
+        }
+        return false;
+    }
+
+    // Keep input ``i`` for backward when ``saves`` is false (recording only
+    // ``impl`` for graph-mode metadata) or when some needed gradient reads
+    // input ``i`` (saving both ``storage_src->storage()`` and ``impl``).
+    void keep_needed_input(std::size_t i,
+                           const TensorImplPtr& impl,
+                           const TensorImplPtr& storage_src,
+                           bool saves) {
+        if (!impl)
+            return;
+        if (!saves) {
+            saved_impl_inputs_[i] = impl;
+        } else if (read_by_a_needed_gradient(i)) {
+            keep_input(i, storage_src->storage());
+            saved_impl_inputs_[i] = impl;
+        }
+    }
+
+    // Return ``saved_inputs_[i]`` when it was kept, or a zero-filled storage
+    // of ``input_shapes_[i]`` when no needed gradient reads input ``i`` (used
+    // by fused multi-output backward kernels whose unneeded output slots are
+    // discarded).
+    Storage saved_or_zeros(std::size_t i, const Storage& grad_out) const {
+        if (input_saved_[i])
+            return saved_inputs_[i];
+        if (storage_is_phantom(grad_out))
+            return phantom_storage(input_shapes_[i], dtype_, device_);
+        return make_zero_storage(input_shapes_[i], dtype_, device_);
     }
 
     // :meth:`apply` reads the values this node kept: those in its slots
@@ -354,16 +396,7 @@ public:
 private:
     // Whether :meth:`keep_input` or :meth:`keep_output` filled a slot.
     bool keeps_values_ = false;
-
-    // Whether some input that takes a gradient has one reading input ``j``.
-    bool read_by_a_needed_gradient(std::size_t j) const {
-        const auto& edges = next_edges();
-        for (std::size_t i = 0; i < N_IN && i < edges.size(); ++i) {
-            if (edges[i].is_valid() && grad_reads(i, j))
-                return true;
-        }
-        return false;
-    }
+    std::array<bool, N_IN> input_saved_{};
 };
 
 }  // namespace lucid

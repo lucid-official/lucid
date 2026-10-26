@@ -36,7 +36,7 @@ from lucid._dispatch import _unwrap, _wrap
 from tools import check_saved_versions
 
 
-def _const(lib: Any, like: Any, values: list[float]) -> Any:
+def _const(lib: Any, like: Any, values: Any) -> Any:
     """A constant beside ``like``, built by ``lib``."""
     return lib.tensor(values, device=like.device)
 
@@ -314,34 +314,221 @@ def test_a_write_into_a_tensor_the_backward_reads_is_refused(
         loss.backward()
 
 
-# name -> the loss from ``x`` and a constant: no gradient that is needed
-# reads ``x``, so neither the reference nor Lucid keeps it guarded.
-CONSTANT_OPERAND: dict[str, Callable[[Any, Any], Any]] = {
-    "mul": lambda lib, x: x * _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
-    "div": lambda lib, x: x / _const(lib, x, [[1.0, 2.0, 4.0], [8.0, 2.0, 1.0]]),
-    "matmul": lambda lib, x: x @ _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
-    "linear": lambda lib, x: _fn(lib, "linear")(
-        x, _const(lib, x, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]])
+# name -> (shape of ``x``, loss from ``x`` and a constant): no gradient that is
+# needed reads ``x``, so neither the reference nor Lucid saves or guards it.
+CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
+    "mul": (
+        (2, 3),
+        lambda lib, x: x * _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+    ),
+    "rmul": (
+        (2, 3),
+        lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * x,
+    ),
+    "div": (
+        (2, 3),
+        lambda lib, x: x / _const(lib, x, [[1.0, 2.0, 4.0], [8.0, 2.0, 1.0]]),
+    ),
+    "fmod": (
+        (2, 3),
+        lambda lib, x: lib.fmod(
+            x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])
+        ),
+    ),
+    "remainder": (
+        (2, 3),
+        lambda lib, x: lib.remainder(
+            x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])
+        ),
+    ),
+    "matmul": (
+        (2, 3),
+        lambda lib, x: x @ _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+    ),
+    "rmatmul": (
+        (3, 2),
+        lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) @ x,
+    ),
+    "mm": (
+        (2, 3),
+        lambda lib, x: lib.mm(
+            x, _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        ),
+    ),
+    "bmm": (
+        (2, 2, 3),
+        lambda lib, x: lib.bmm(
+            x,
+            _const(
+                lib,
+                x,
+                [
+                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+                    [[-1.0, 0.5], [2.0, 1.0], [0.5, -2.0]],
+                ],
+            ),
+        ),
+    ),
+    "mv": (
+        (2, 3),
+        lambda lib, x: lib.mv(x, _const(lib, x, [1.0, 2.0, 3.0])),
+    ),
+    "dot": (
+        (3,),
+        lambda lib, x: x.dot(_const(lib, x, [1.0, 2.0, 3.0])),
+    ),
+    "outer": (
+        (3,),
+        lambda lib, x: x.outer(_const(lib, x, [1.0, 2.0])),
+    ),
+    "linear": (
+        (2, 3),
+        lambda lib, x: _fn(lib, "linear")(
+            x, _const(lib, x, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]])
+        ),
+    ),
+    "linear weight": (
+        (2, 3),
+        lambda lib, w: _fn(lib, "linear")(
+            _const(lib, w, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]]), w
+        ),
+    ),
+    "addcmul": (
+        (2, 3),
+        lambda lib, x: lib.addcmul(
+            _const(lib, x, [[0.5, 1.0, -0.5], [2.0, 0.0, 1.0]]),
+            x,
+            _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        ),
+    ),
+    "where": (
+        (2, 3),
+        lambda lib, x: lib.where(
+            lib.tensor([[True, False, True], [False, True, False]], device=x.device),
+            x,
+            _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        ),
+    ),
+    "ldexp": (
+        (2, 3),
+        lambda lib, x: lib.ldexp(
+            x,
+            lib.tensor([[1, 2, 0], [0, 3, 1]], dtype=lib.int32, device=x.device),
+        ),
+    ),
+}
+
+# Lucid's ConvNdBackward / ConvTransposeNdBackward / NextafterBackward also
+# declare kGradReads / saves=false so ``dx`` does not save ``x`` and ``dW`` does
+# not save ``W`` when the peer is a constant (the reference saves both).
+CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
+    "nextafter": (
+        (2, 3),
+        lambda lib, x: lib.nextafter(
+            x, _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        ),
+    ),
+    "conv2d": (
+        (1, 1, 3, 3),
+        lambda lib, x: _fn(lib, "conv2d")(
+            x, _const(lib, x, [[[[1.0, -0.5], [0.25, 2.0]]]])
+        ),
+    ),
+    "conv2d weight": (
+        (1, 1, 2, 2),
+        lambda lib, w: _fn(lib, "conv2d")(
+            _const(lib, w, [[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]]]),
+            w,
+        ),
+    ),
+    "conv_transpose2d": (
+        (1, 1, 2, 2),
+        lambda lib, x: _fn(lib, "conv_transpose2d")(
+            x, _const(lib, x, [[[[1.0, -0.5], [0.25, 2.0]]]])
+        ),
+    ),
+    "conv_transpose2d weight": (
+        (1, 1, 2, 2),
+        lambda lib, w: _fn(lib, "conv_transpose2d")(
+            _const(lib, w, [[[[1.0, 2.0], [3.0, 4.0]]]]), w
+        ),
     ),
 }
 
 
-def _constant_operand_grad(lib: Any, device: str | None, case: str) -> np.ndarray:
+def _constant_operand_grad(
+    lib: Any,
+    device: str | None,
+    case: str,
+    *,
+    sliced: bool = False,
+    create_graph: bool = False,
+    mutate: bool = True,
+) -> np.ndarray:
     kw = {} if device is None else {"device": device}
-    leaf = _cols(lib, kw, (2, 3), seed=2)
-    x = (leaf * 1.0)[..., :-1]
-    out = CONSTANT_OPERAND[case](lib, x)
-    x.mul_(3.0)
-    (out * out.detach()).sum().backward()
+    table = CONSTANT_OPERAND if case in CONSTANT_OPERAND else CONV_CONSTANT_OPERAND
+    shape, build = table[case]
+    if sliced:
+        leaf = _cols(lib, kw, shape, seed=2)
+        x = (leaf * 1.0)[..., :-1]
+    else:
+        rng = np.random.default_rng(2)
+        leaf = lib.tensor(
+            rng.standard_normal(shape).astype(np.float32), **kw
+        ).requires_grad_()
+        x = leaf * 1.0
+    out = build(lib, x)
+    if mutate:
+        x.mul_(3.0)
+    (out * out.detach()).sum().backward(create_graph=create_graph)
     return np.asarray(leaf.grad.detach().cpu().numpy())
 
 
+@pytest.mark.parametrize("sliced", [False, True], ids=["whole", "sliced"])
 @pytest.mark.parametrize("case", list(CONSTANT_OPERAND))
 def test_a_write_into_an_operand_only_an_unneeded_gradient_reads_is_allowed(
+    case: str, sliced: bool, device: str, ref: ModuleType
+) -> None:
+    got = _constant_operand_grad(lucid, device, case, sliced=sliced)
+    want = _constant_operand_grad(ref, None, case, sliced=sliced)
+    np.testing.assert_allclose(got, want, rtol=1e-5, atol=1e-6)
+
+
+@pytest.mark.parametrize("create_graph", [False, True], ids=["eager", "create_graph"])
+@pytest.mark.parametrize("sliced", [False, True], ids=["whole", "sliced"])
+@pytest.mark.parametrize("case", list(CONV_CONSTANT_OPERAND))
+def test_conv_with_constant_peer_allows_inplace_write(
+    case: str, sliced: bool, create_graph: bool, device: str, ref: ModuleType
+) -> None:
+    got = _constant_operand_grad(
+        lucid, device, case, sliced=sliced, create_graph=create_graph
+    )
+    want = _constant_operand_grad(
+        ref, None, case, sliced=sliced, create_graph=create_graph, mutate=False
+    )
+    np.testing.assert_allclose(got, want, rtol=1e-5, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "mul",
+        "div",
+        "fmod",
+        "remainder",
+        "matmul",
+        "dot",
+        "outer",
+        "linear",
+        "linear weight",
+        "addcmul",
+    ],
+)
+def test_create_graph_backward_with_constant_operand_after_inplace_write(
     case: str, device: str, ref: ModuleType
 ) -> None:
-    got = _constant_operand_grad(lucid, device, case)
-    want = _constant_operand_grad(ref, None, case)
+    got = _constant_operand_grad(lucid, device, case, create_graph=True)
+    want = _constant_operand_grad(ref, None, case, create_graph=True)
     np.testing.assert_allclose(got, want, rtol=1e-5, atol=1e-6)
 
 

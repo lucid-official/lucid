@@ -271,7 +271,7 @@ def test_a_pass_that_does_not_retain_its_graph_frees_what_it_saved(
     x = lucid.randn(_ELEMS, requires_grad=True, device=device)
     y = x
     for _ in range(_STEPS):
-        y = y * 1.0001
+        y = y.sin()
     loss = y.sum()
     lucid.eval(loss)
     gc.collect()
