@@ -814,6 +814,7 @@ std::vector<std::shared_ptr<TensorImpl>> TensorImpl::live_views() const {
     members.erase(std::remove_if(members.begin(), members.end(),
                                  [](const std::weak_ptr<TensorImpl>& w) { return w.expired(); }),
                   members.end());
+    family_->sweep_threshold = std::max<std::size_t>(64, members.size() * 2);
     for (const auto& w : members)
         if (auto m = w.lock(); m && m.get() != this)
             views.push_back(std::move(m));
@@ -925,7 +926,7 @@ void TensorImpl::leave_family() {
         packed_root_.reset();
     }
     family_.reset();
-    view_ancestors_.clear();
+    view_lineage_.reset();
     // The family's counter folds into this tensor's own, so version() does
     // not move backwards (drop_shared does the same).
     if (carried > 0)
@@ -2234,28 +2235,46 @@ void TensorImpl::add_to_family(const std::shared_ptr<TensorImpl>& base,
             base->family_->root = base->storage_;
     }
     view->family_ = base->family_;
-    // Every base on the way, not just this one: the views in between are
-    // often temporaries (``w[0:2][0]``), and the leaf behind them still
-    // takes the write.
+    // Every leaf-eligible base on the way, not just this one: the views in
+    // between are often temporaries (``w[0:2][0]``), and the leaf behind them
+    // still takes the write.  Share the parent chain instead of copying a
+    // vector so an n-view chain takes O(1) time and memory per view.
     if (!base->is_detached_alias()) {
-        auto& chain = view->view_ancestors_;
-        chain.reserve(base->view_ancestors_.size() + 1);
-        for (const auto& w : base->view_ancestors_)
-            if (!w.expired())
-                chain.push_back(w);
-        chain.push_back(base);
+        auto parent = base->view_lineage_;
+        while (parent) {
+            const auto m = parent->self.lock();
+            if (m && !m->is_detached_alias() && m->is_leaf())
+                break;
+            parent = parent->parent;
+        }
+        if (base->is_leaf()) {
+            view->view_lineage_ =
+                std::make_shared<ViewLineage>(ViewLineage{base, std::move(parent)});
+        } else {
+            view->view_lineage_ = std::move(parent);
+        }
     }
     std::lock_guard<std::mutex> lock(view->family_->mu);
-    view->family_->members.push_back(view);
+    auto& members = view->family_->members;
+    if (members.size() >= view->family_->sweep_threshold) {
+        members.erase(
+            std::remove_if(members.begin(), members.end(),
+                           [](const std::weak_ptr<TensorImpl>& w) { return w.expired(); }),
+            members.end());
+        view->family_->sweep_threshold = std::max<std::size_t>(64, members.size() * 2);
+    }
+    members.push_back(view);
 }
 
 // is_leaf(), not a missing grad_fn: a leaf used in a graph holds an
 // AccumulateGrad.
 bool TensorImpl::views_grad_leaf() const {
-    return std::any_of(view_ancestors_.begin(), view_ancestors_.end(), [](const auto& w) {
-        const auto m = w.lock();
-        return m && !m->is_detached_alias() && m->requires_grad() && m->is_leaf();
-    });
+    for (auto cur = view_lineage_; cur; cur = cur->parent) {
+        const auto m = cur->self.lock();
+        if (m && !m->is_detached_alias() && m->requires_grad() && m->is_leaf())
+            return true;
+    }
+    return false;
 }
 
 std::shared_ptr<TensorImpl> TensorImpl::make_block_view(const std::shared_ptr<TensorImpl>& base,

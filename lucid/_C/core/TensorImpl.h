@@ -95,10 +95,27 @@ struct ViewFamily {
     std::size_t nbytes = 0;
     std::mutex mu;
     std::vector<std::weak_ptr<TensorImpl>> members;
+    std::size_t sweep_threshold = 64;
     // Set for a Metal family only.
     std::optional<Storage> root;
     // Set when the Metal family backs a leaf's ``.grad`` slot.
     std::weak_ptr<const TensorImpl> grad_owner;
+};
+
+// Persistent parent-linked lineage node recording the leaf-eligible bases a
+// view was made from.  Shared across views so creating a chain of n views is
+// O(1) per view rather than O(n).
+struct ViewLineage {
+    std::weak_ptr<TensorImpl> self;
+    std::shared_ptr<const ViewLineage> parent;
+
+    ~ViewLineage() {
+        auto cur = std::move(parent);
+        while (cur && cur.use_count() == 1) {
+            auto next = std::move(const_cast<ViewLineage&>(*cur).parent);
+            cur = std::move(next);
+        }
+    }
 };
 
 // Reference-counted tensor implementation owned by every Python-level
@@ -1173,10 +1190,10 @@ private:
     // the family whose writes autograd does not follow.  See
     // is_detached_alias().
     bool detached_alias_ = false;
-    // The bases this view was made from, through every view in between,
-    // that were alive when it was made; empty for a tensor that is no view.
-    // A view of a detached alias records none.  See views_grad_leaf().
-    std::vector<std::weak_ptr<TensorImpl>> view_ancestors_;
+    // The leaf-eligible bases this view was made from, linked through a shared
+    // parent chain; null for a tensor that is no view or a view of a detached
+    // alias.  See views_grad_leaf().
+    std::shared_ptr<const ViewLineage> view_lineage_;
 
     // Writes ``src``'s values into the shared buffer.  False when this
     // tensor no longer is the buffer or ``src`` does not match it.

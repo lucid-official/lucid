@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)
 - route CPU LSTM, mish, RoPE, normal_ via vForce (LCD-608)
+- make view-family lineage and sweep O(1) per view (LCD-577)
 
 ---
 

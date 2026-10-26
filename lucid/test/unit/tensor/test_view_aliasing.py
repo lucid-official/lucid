@@ -8,6 +8,9 @@ buffer instead of a new storage slot, so the others see it.  Where that
 cannot be done safely the write is refused rather than left to diverge.
 """
 
+import gc
+import os
+import time
 from collections.abc import Callable
 
 import pytest
@@ -15,6 +18,12 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+
+_SANITIZED = bool(
+    os.environ.get("ASAN_OPTIONS")
+    or os.environ.get("UBSAN_OPTIONS")
+    or os.environ.get("LUCID_SANITIZE")
+)
 
 
 def _view(base: lucid.Tensor, *shape: int) -> lucid.Tensor:
@@ -628,3 +637,52 @@ def test_a_slice_given_a_graph_leaves_its_base_writable() -> None:
 def test_a_slice_keeps_its_buffer_alive() -> None:
     row = lucid.arange(12).float().reshape(4, 3)[3]
     assert _flat(row) == [9.0, 10.0, 11.0]
+
+
+def _view_chain_seconds(steps: int, device: str, requires_grad: bool, retain_all: bool) -> float:
+    best = float("inf")
+    for _ in range(3):
+        gc.collect()
+        base = lucid.ones(4, device=device, requires_grad=requires_grad)
+        y = base
+        kept: list[lucid.Tensor] = [base] if retain_all else []
+        start = time.perf_counter()
+        for _ in range(steps):
+            y = y.view(4)
+            if retain_all:
+                kept.append(y)
+        best = min(best, time.perf_counter() - start)
+        del y, kept, base
+    return best
+
+
+@pytest.mark.skipif(_SANITIZED, reason="wall-clock scale ratio guard skipped under sanitizers")
+@pytest.mark.parametrize("requires_grad", [False, True], ids=["no-grad", "grad"])
+@pytest.mark.parametrize("retain_all", [False, True], ids=["carried", "retained"])
+def test_view_chain_scales_linearly_in_time(
+    device: str, requires_grad: bool, retain_all: bool
+) -> None:
+    small_n = 2_500 if retain_all else 5_000
+    small = _view_chain_seconds(small_n, device, requires_grad, retain_all)
+    large = _view_chain_seconds(4 * small_n, device, requires_grad, retain_all)
+    assert large < 8 * small + 0.02, f"{small_n}: {small:.4f} s, {4 * small_n}: {large:.4f} s"
+
+
+@pytest.mark.parametrize("requires_grad", [False, True], ids=["no-grad", "grad"])
+def test_100k_view_chain_preserves_leaf_guard_and_backward(
+    device: str, requires_grad: bool
+) -> None:
+    base = lucid.ones(4, device=device, requires_grad=requires_grad)
+    y = base
+    for _ in range(100_000):
+        y = y.view(4)
+    if requires_grad:
+        with pytest.raises(RuntimeError, match="leaf"):
+            y.add_(1.0)
+        y.sum().backward()
+        assert base.grad is not None
+        assert _flat(base.grad) == [1.0, 1.0, 1.0, 1.0]
+    else:
+        y.add_(1.0)
+        assert _flat(base) == [2.0, 2.0, 2.0, 2.0]
+
