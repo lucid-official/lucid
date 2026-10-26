@@ -919,7 +919,9 @@ def index_put(
     accumulate : bool, default False
         If True, add at each position — a position named twice receives
         both; otherwise overwrite — a position named twice keeps the last
-        write on the CPU and an unspecified one of its values on Metal.
+        write on the CPU (and on Metal under
+        :func:`lucid.use_deterministic_algorithms`), and an unspecified
+        one of its values on Metal otherwise.
 
     Returns
     -------
@@ -1012,8 +1014,9 @@ def put(
     refer to the row-major linearisation of ``input``, regardless of its
     shape, and a negative one counts from the end.  ``accumulate=True``
     performs additive scatter (duplicates add).  Otherwise a position
-    named twice keeps the last write on the CPU and one of its values,
-    which one unspecified, on Metal (``scatter`` semantics).
+    named twice keeps the last write on the CPU (and on Metal under
+    :func:`lucid.use_deterministic_algorithms`), and one of its values,
+    which one unspecified, on Metal otherwise (``scatter`` semantics).
 
     Parameters
     ----------
@@ -1094,8 +1097,9 @@ def index_put_(
     accumulate : bool, optional
         When ``True`` add to existing values (duplicate indices sum);
         when ``False`` (default) overwrite — a duplicate index keeps the
-        last write on the CPU, and an unspecified one of its values on
-        Metal.
+        last write on the CPU (and on Metal under
+        :func:`lucid.use_deterministic_algorithms`), and an unspecified
+        one of its values on Metal otherwise.
 
     Returns
     -------

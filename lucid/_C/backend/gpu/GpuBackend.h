@@ -691,7 +691,8 @@ public:
     // along dim.  ``mlx::core::put_along_axis`` is the exact set-mode analogue
     // of ``scatter_add_axis`` (single kernel); ``x[key] = v``, ``scatter`` and
     // ``index_copy`` route through it.  A position named twice takes one of
-    // the values aimed at it, which one unspecified — the GPU threads race.
+    // the values aimed at it, which one unspecified unless deterministic mode
+    // is enabled (``put_along_axis_last_write_wins``, last write wins).
     //
     // An out-of-range index drops its write (policy B, ``gpu_axis_index``).
     // It is aimed at a one-wide sink slab past the end of ``dim`` that is cut

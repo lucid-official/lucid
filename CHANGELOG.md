@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - scatter_reduce saved operands & NaN grads (LCD-603)
 
+- make Metal overwrite scatter deterministic (LCD-574)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

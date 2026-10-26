@@ -321,6 +321,19 @@ def test_a_cpu_view_is_not_linked() -> None:
             assert piece._impl.family_id() == x._impl.family_id() != 0
 
 
+def test_contiguous_returns_self_when_already_contiguous() -> None:
+    for dev in ("cpu", "metal"):
+        x = lucid.arange(12.0, device=dev).reshape(3, 4)
+        assert x.contiguous() is x
+        assert lucid.contiguous(x) is x
+        t = x.t()
+        assert not t.is_contiguous()
+        c = t.contiguous()
+        assert c is not t
+        assert c.is_contiguous()
+        assert c.contiguous() is c
+
+
 def test_the_free_functions_keep_their_signatures() -> None:
     assert list(inspect.signature(lucid.narrow).parameters) == [
         "input",

@@ -393,3 +393,80 @@ def test_complex_amax_is_refused_without_self(device: str) -> None:
     z = lucid.tensor([1 + 1j, 2 + 0j], device=device)
     with pytest.raises(NotImplementedError, match="no order"):
         lucid.scatter_reduce(z, 0, _ix([0], device), z[:1], "amax", include_self=False)
+
+
+# ── deterministic duplicate-index overwrite (last write wins) ──────────────
+
+_DUP_OPS: dict[str, Callable[[ModuleType, str | None], object]] = {
+    "scatter": lambda m, dev: m.scatter(
+        m.zeros(4, **({"device": dev} if dev else {})),
+        0,
+        m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
+        m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
+    ),
+    "scatter_": lambda m, dev: m.zeros(
+        4, **({"device": dev} if dev else {})
+    ).scatter_(
+        0,
+        m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
+        m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
+    ),
+    "scatter-2d-dim1": lambda m, dev: m.scatter(
+        m.zeros(3, 4, **({"device": dev} if dev else {})),
+        1,
+        m.tensor([[2, 0, 2, 1, 2, 0] * 256] * 3, **({"device": dev} if dev else {})),
+        m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(3, 1536),
+    ),
+    "index_copy": lambda m, dev: m.index_copy(
+        m.zeros(4, 3, **({"device": dev} if dev else {})),
+        0,
+        m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),
+        m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
+    ),
+    "index_copy_": lambda m, dev: m.zeros(
+        3, 4, **({"device": dev} if dev else {})
+    ).index_copy_(
+        1,
+        m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),
+        m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(3, 1536),
+    ),
+    "put": lambda m, dev: m.put(
+        m.zeros(2, 2, **({"device": dev} if dev else {})),
+        m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
+        m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
+    ),
+    "put_": lambda m, dev: m.zeros(
+        2, 2, **({"device": dev} if dev else {})
+    ).put_(
+        m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
+        m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
+    ),
+    "index_put": lambda m, dev: m.index_put(
+        m.zeros(4, 3, **({"device": dev} if dev else {})),
+        (m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),),
+        m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
+    ),
+    "index_put_": lambda m, dev: m.zeros(
+        4, 3, **({"device": dev} if dev else {})
+    ).index_put_(
+        (m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),),
+        m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
+    ),
+}
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("name", list(_DUP_OPS))
+def test_duplicate_index_overwrite_is_last_write_wins_under_deterministic(
+    ref: ModuleType, device: str, name: str
+) -> None:
+    fn = _DUP_OPS[name]
+    prev = lucid.are_deterministic_algorithms_enabled()
+    lucid.use_deterministic_algorithms(True)
+    try:
+        got = fn(lucid, device)
+        want = fn(ref, None)
+        assert isinstance(got, lucid.Tensor)
+        assert got.tolist() == want.tolist()
+    finally:
+        lucid.use_deterministic_algorithms(prev)

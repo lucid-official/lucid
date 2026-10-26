@@ -47,6 +47,7 @@
 #include <mlx/ops.h>
 #include <mlx/utils.h>
 
+#include "../../core/Determinism.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "ComplexParts.h"
@@ -471,6 +472,57 @@ inline ::mlx::core::array without_sink_slab(const ::mlx::core::array& padded,
                                             const ::mlx::core::Shape& shape) {
     return ::mlx::core::contiguous(
         ::mlx::core::slice(padded, ::mlx::core::Shape(shape.size(), 0), shape));
+}
+
+// ``put_along_axis`` with last-write-wins tie-breaking along ``d``.
+//
+// When ``i`` names a destination position along ``d`` more than once in the
+// same off-``d`` fibre, ``mlx::core::put_along_axis`` dispatches one GPU
+// thread per update and lets them race.  Under ``set_deterministic(True)``,
+// scattering the update's coordinate ``k in [0, K)`` along ``d`` with
+// ``scatter_max`` selects the highest ``k`` that targeted each destination
+// slot — an associative, order-independent integer reduction — and
+// ``take_along_axis`` reads ``v`` at that ``k``, matching the CPU's
+// sequential ``0 .. K - 1`` overwrite loop.
+inline ::mlx::core::array put_along_axis_last_write_wins(const ::mlx::core::array& b,
+                                                         const ::mlx::core::array& i,
+                                                         const ::mlx::core::array& v,
+                                                         int d) {
+    namespace mx = ::mlx::core;
+    if (b.size() == 0 || i.size() == 0)
+        return b;
+    const int k_ext = i.shape(d);
+    if (k_ext <= 1)
+        return mx::put_along_axis(b, i, v, d);
+    const int ndim = static_cast<int>(b.ndim());
+    int pre = 1;
+    for (int a = 0; a < d; ++a)
+        pre *= b.shape(a);
+    const int e_ext = b.shape(d);
+    int post = 1;
+    for (int a = d + 1; a < ndim; ++a)
+        post *= b.shape(a);
+    auto idx32 = i.dtype() == mx::int32 ? i : mx::astype(i, mx::int32);
+    mx::array last_k = mx::full({e_ext}, -1, mx::int32);
+    if (pre == 1 && post == 1) {
+        auto k_upd = mx::reshape(mx::arange(0, k_ext, 1, mx::int32), {k_ext, 1});
+        last_k =
+            mx::reshape(mx::scatter_max(last_k, mx::reshape(idx32, {k_ext}), k_upd, 0), b.shape());
+    } else {
+        auto base_k = mx::full({pre, e_ext, post}, -1, mx::int32);
+        auto k_upd = mx::broadcast_to(
+            mx::reshape(mx::arange(0, k_ext, 1, mx::int32), {1, k_ext, 1, 1, 1, 1}),
+            {pre, k_ext, post, 1, 1, 1});
+        std::vector<mx::array> idx_list = {
+            mx::reshape(mx::arange(0, pre, 1, mx::int32), {pre, 1, 1}),
+            mx::reshape(idx32, {pre, k_ext, post}),
+            mx::reshape(mx::arange(0, post, 1, mx::int32), {1, 1, post}),
+        };
+        last_k = mx::reshape(mx::scatter_max(base_k, idx_list, k_upd, {0, 1, 2}), b.shape());
+    }
+    const auto zero = mx::array(0, mx::int32);
+    auto picked = mx::take_along_axis(v, mx::maximum(last_k, zero), d);
+    return mx::where(mx::greater_equal(last_k, zero), picked, b);
 }
 
 // MLX's multi-axis scatter (``scatter_add``, ``scatter_max`` and the rest,

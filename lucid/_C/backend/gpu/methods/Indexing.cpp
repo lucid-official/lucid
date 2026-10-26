@@ -159,6 +159,8 @@ Storage GpuBackend::scatter_set(const Storage& base,
     }
     auto out = scatter_on_index_corner(padded, sink, *gs.arr, d,
                                        [d](const auto& b, const auto& i, const auto& v) {
+                                           if (Determinism::is_enabled())
+                                               return put_along_axis_last_write_wins(b, i, v, d);
                                            return ::mlx::core::put_along_axis(b, i, v, d);
                                        });
     return Storage{gpu::wrap_mlx_array(without_sink_slab(out, gb.arr->shape()), dt)};
