@@ -426,3 +426,62 @@ def test_create_graph_grad_assignment_and_clipping_parity(ref: object) -> None:
     lw.grad = lucid.zeros(2)
     assert lw.grad.tolist() == rw.grad.tolist()
     assert lw.grad.requires_grad == rw.grad.requires_grad
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("kind", ["tensor", "slice_view", "shared_grad"])
+def test_assigned_gradient_aliases_source_across_devices_and_reference(
+    device: str, kind: str, ref: object
+) -> None:
+    def _run(lib: object, dev: str | None) -> tuple[list[float], list[float], list[float]]:
+        kw = {"device": dev} if dev is not None else {}
+        if kind == "tensor":
+            p = lib.nn.Parameter(lib.zeros(4, **kw))  # type: ignore[attr-defined]
+            t = lib.ones(4, **kw)  # type: ignore[attr-defined]
+            p.grad = t
+            p.grad.zero_()
+            after_grad_write = t.tolist()
+            t.fill_(7.0)
+            after_src_write = p.grad.tolist()
+            return after_grad_write, after_src_write, p.grad.tolist()
+        if kind == "slice_view":
+            p = lib.nn.Parameter(lib.zeros(4, **kw))  # type: ignore[attr-defined]
+            base = lib.arange(12.0, **kw).reshape(3, 4)  # type: ignore[attr-defined]
+            p.grad = base[1]
+            p.grad.zero_()
+            after_grad_write = base[1].tolist()
+            p.grad.fill_(9.0)
+            after_src_write = base[1].tolist()
+            return after_grad_write, after_src_write, base[0].tolist() + base[2].tolist()
+        p1 = lib.nn.Parameter(lib.zeros(3, **kw))  # type: ignore[attr-defined]
+        p2 = lib.nn.Parameter(lib.zeros(3, **kw))  # type: ignore[attr-defined]
+        shared = lib.tensor([1.0, 2.0, 3.0], **kw)  # type: ignore[attr-defined]
+        p1.grad = shared
+        p2.grad = p1.grad
+        p1.grad.zero_()
+        return p2.grad.tolist(), shared.tolist(), p1.grad.tolist()
+
+    want = _run(ref, None)
+    got = _run(lucid, device)
+    assert got == want
+
+
+@pytest.mark.parametrize("rebind", ["self_assign", "save_restore", "fresh_tensor"])
+def test_reassigned_held_gradient_accumulates_in_place(device: str, rebind: str) -> None:
+    w = lucid.nn.Parameter(lucid.tensor([1.0, 2.0], device=device))
+    (w * 3.0).sum().backward()
+    g = w.grad
+    assert g is not None
+    if rebind == "self_assign":
+        w.grad = g
+    elif rebind == "save_restore":
+        w.grad = None
+        w.grad = g
+    else:
+        g = lucid.tensor([3.0, 3.0], device=device)
+        w.grad = g
+    assert w.grad is not None
+    (w * 5.0).sum().backward()
+    assert g.tolist() == [8.0, 8.0]
+    assert w.grad.tolist() == [8.0, 8.0]
+

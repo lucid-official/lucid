@@ -279,10 +279,10 @@ Storage present_gradient(Storage s) {
     return s;
 }
 
-// Every write of a whole gradient lands here or in a hook's replacement:
-// ``.grad =``, clip_grad and GradScaler writing back.  The slot is a bare
-// Storage — no dtype, shape or device of its own — and ``.grad``, the
-// optimizers and the next backward read it as ``self``'s.  A buffer of any
+// Every write of an assigned gradient lands here or in a hook's replacement:
+// ``.grad =`` and hook returns.  The slot is a bare Storage — no dtype, shape
+// or device of its own — and ``.grad``, the optimizers and the next backward
+// read it as ``self``'s.  A buffer of any
 // other kind was read as if it were one: float32 bits taken for float16
 // values (``[1, 2, 4]`` came back ``[0, 1.875, 1.875]``), three elements read
 // out of a buffer of two, a Metal array labelled CPU.  The reference refuses
@@ -297,6 +297,14 @@ Storage assignable_grad(const TensorImpl& self, const TensorImpl& g) {
     // refuses a phantom, whose buffer it would otherwise hold.
     if (absorbs_phantom_write(self.raw_storage(), g.raw_storage(), "Tensor.grad"))
         return phantom_storage(self.shape(), self.dtype(), self.device());
+    if (storage_is_cpu(g.raw_storage()) && g.is_contiguous() && !g.is_dense()) {
+        const auto& cpu = std::get<CpuStorage>(g.raw_storage());
+        const std::size_t off = g.storage_offset();
+        std::shared_ptr<std::byte[]> view_ptr(cpu.ptr, cpu.ptr.get() + off);
+        return Storage{CpuStorage{std::move(view_ptr), g.nbytes(), g.dtype(), cpu.version,
+                                  cpu.offset_in_allocation + off,
+                                  cpu.allocation_nbytes != 0 ? cpu.allocation_nbytes : cpu.nbytes}};
+    }
     return grad_slot_buffer(err, g);
 }
 

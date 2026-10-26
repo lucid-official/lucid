@@ -98,8 +98,8 @@ struct ViewFamily {
     std::size_t sweep_threshold = 64;
     // Set for a Metal family only.
     std::optional<Storage> root;
-    // Set when the Metal family backs a leaf's ``.grad`` slot.
-    std::weak_ptr<const TensorImpl> grad_owner;
+    // Set when the Metal family backs one or more leaves' ``.grad`` slots.
+    std::vector<std::weak_ptr<const TensorImpl>> grad_owners;
 };
 
 // Persistent parent-linked lineage node recording the leaf-eligible bases a
@@ -754,6 +754,11 @@ public:
         ag->grad = std::move(grad);
         ag->grad_impl.reset();
     }
+
+    // Installs an assigned gradient tensor ``g`` and its validated ``slot``
+    // buffer on this tensor, keeping ``g``'s Metal view family attached so
+    // subsequent in-place writes through ``.grad`` alias ``g``.
+    void install_grad(const std::shared_ptr<TensorImpl>& g, Storage slot);
 
     // Returns the graph-mode gradient as a full :class:`TensorImpl`.
     //

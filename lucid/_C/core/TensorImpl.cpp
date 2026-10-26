@@ -387,10 +387,12 @@ struct GradSlotRef {
 
 struct GpuGradSlot {
     std::shared_ptr<::mlx::core::array> arr;
+    std::shared_ptr<TensorImpl> source;
     std::weak_ptr<TensorImpl> handle;
     std::shared_ptr<ViewFamily> family;
     void operator()(void*) noexcept {
         arr.reset();
+        source.reset();
         family.reset();
     }
 };
@@ -589,19 +591,90 @@ void trace_gpu_member_write(const TensorImpl& dst,
     }
 }
 
+bool same_gpu_root_layout(const TensorImpl& h,
+                          const ViewFamily& family,
+                          const ::mlx::core::array& root_arr) {
+    return h.storage_offset() == 0 && h.is_contiguous() && h.nbytes() == family.nbytes &&
+           root_arr.dtype() == gpu::to_mlx_dtype(h.dtype()) &&
+           root_arr.ndim() == h.shape().size() &&
+           std::equal(h.shape().begin(), h.shape().end(), root_arr.shape().begin());
+}
+
+bool can_alias_gpu_grad(const TensorImpl& g) {
+    return g.is_contiguous() || !strided::overlaps_itself(g.shape(), g.stride());
+}
+
+std::weak_ptr<TensorImpl> current_gpu_grad_handle(const std::optional<AutogradMeta>& autograd,
+                                                  const std::shared_ptr<TensorImpl>& g) {
+    if (!autograd || !autograd->grad.has_value())
+        return {};
+    const auto* cur = std::get_if<GpuStorage>(&*autograd->grad);
+    if (!cur || !cur->arr)
+        return {};
+    const auto* owned = std::get_deleter<GpuGradSlot>(cur->arr);
+    if (owned && owned->handle.lock() == g)
+        return g;
+    return {};
+}
+
+void update_gpu_grad_root(ViewFamily& family,
+                          const TensorImpl* geom,
+                          const std::shared_ptr<::mlx::core::array>& next_arr) {
+    auto& root = std::get<GpuStorage>(*family.root);
+    if (!geom || !root.arr || same_gpu_root_layout(*geom, family, *root.arr)) {
+        root.arr = next_arr;
+        return;
+    }
+    ::mlx::core::array updated = gpu_strided::write(*root.arr, *next_arr, geom->shape(),
+                                                    geom->stride(), geom->storage_offset());
+    root.arr = gpu::wrap_mlx_array(std::move(updated), root.dtype).arr;
+}
+
+void register_gpu_grad_owner(ViewFamily& family,
+                             const TensorImpl* self_ptr,
+                             std::weak_ptr<const TensorImpl> self_weak) {
+    auto& owners = family.grad_owners;
+    owners.erase(std::remove_if(owners.begin(), owners.end(),
+                                [self_ptr](const std::weak_ptr<const TensorImpl>& w) {
+                                    const auto p = w.lock();
+                                    return !p || p.get() == self_ptr;
+                                }),
+                 owners.end());
+    owners.push_back(std::move(self_weak));
+}
+
 void rebind_gpu_grad_slot(const std::shared_ptr<ViewFamily>& family,
                           const std::shared_ptr<::mlx::core::array>& root_arr) {
-    auto owner = family->grad_owner.lock();
-    if (!owner || !owner->grad_storage().has_value())
+    if (!family || !root_arr)
         return;
-    auto& slot = const_cast<std::optional<Storage>&>(owner->grad_storage());
-    auto* slot_gpu = std::get_if<GpuStorage>(&*slot);
-    if (!slot_gpu || !slot_gpu->arr)
-        return;
-    if (auto* owned = std::get_deleter<GpuGradSlot>(slot_gpu->arr);
-        owned && owned->family == family) {
-        const std::shared_ptr<void> record(nullptr, GpuGradSlot{root_arr, owned->handle, family});
-        slot_gpu->arr = std::shared_ptr<::mlx::core::array>(record, root_arr.get());
+    auto& owners = family->grad_owners;
+    owners.erase(
+        std::remove_if(owners.begin(), owners.end(),
+                       [](const std::weak_ptr<const TensorImpl>& w) { return w.expired(); }),
+        owners.end());
+    for (const auto& w : owners) {
+        auto owner = w.lock();
+        if (!owner || !owner->grad_storage().has_value())
+            continue;
+        auto& slot = const_cast<std::optional<Storage>&>(owner->grad_storage());
+        auto* slot_gpu = std::get_if<GpuStorage>(&*slot);
+        if (!slot_gpu || !slot_gpu->arr)
+            continue;
+        auto* owned = std::get_deleter<GpuGradSlot>(slot_gpu->arr);
+        if (!owned || owned->family != family)
+            continue;
+        const auto h = owned->handle.lock();
+        const TensorImpl* geom = h ? h.get() : owned->source.get();
+        std::shared_ptr<::mlx::core::array> slot_arr = root_arr;
+        if (geom != nullptr && !same_gpu_root_layout(*geom, *family, *root_arr)) {
+            ::mlx::core::array elems =
+                gpu_strided::read(*root_arr, geom->shape(), geom->stride(), geom->storage_offset(),
+                                  gpu::to_mlx_dtype(geom->dtype()));
+            slot_arr = gpu::wrap_mlx_array(std::move(elems), geom->dtype()).arr;
+        }
+        const std::shared_ptr<void> record(
+            nullptr, GpuGradSlot{slot_arr, owned->source, owned->handle, family});
+        slot_gpu->arr = std::shared_ptr<::mlx::core::array>(record, slot_arr.get());
     }
 }
 
@@ -1843,15 +1916,55 @@ std::shared_ptr<TensorImpl> TensorImpl::grad_to_tensor() const {
     return h;
 }
 
+void TensorImpl::install_grad(const std::shared_ptr<TensorImpl>& g, Storage slot) {
+    if (!storage_is_phantom(slot) && g && (g->requires_grad() || g->grad_fn())) {
+        set_grad_impl(g);
+        return;
+    }
+    if (meta_.device == Device::GPU && storage_is_gpu(slot) && g && can_alias_gpu_grad(*g)) {
+        const auto handle = current_gpu_grad_handle(autograd_, g);
+        if (!g->family_) {
+            g->family_ = std::make_shared<ViewFamily>();
+            if (g->autograd_ && g->autograd_->version > 0) {
+                g->family_->version.store(static_cast<std::uint64_t>(g->autograd_->version),
+                                          std::memory_order_relaxed);
+                g->autograd_->version = 0;
+            }
+            g->family_->nbytes = g->allocation_nbytes();
+            g->family_->members.push_back(g);
+            g->family_->root = detach_gpu_grad_slot(g->storage_);
+        }
+        register_gpu_grad_owner(*g->family_, this, weak_from_this());
+        auto& gpu = std::get<GpuStorage>(slot);
+        const std::shared_ptr<::mlx::core::array> raw_arr = gpu.arr;
+        const std::shared_ptr<void> record(nullptr, GpuGradSlot{raw_arr, g, handle, g->family_});
+        gpu.arr = std::shared_ptr<::mlx::core::array>(record, raw_arr.get());
+    }
+    set_grad_storage(std::move(slot));
+}
+
 std::shared_ptr<TensorImpl> TensorImpl::gpu_grad_to_tensor(GpuStorage& gpu) const {
     auto* owned = std::get_deleter<GpuGradSlot>(gpu.arr);
     if (owned != nullptr && owned->family && owned->family->root.has_value()) {
-        std::get<GpuStorage>(*owned->family->root).arr = owned->arr;
         if (auto h = owned->handle.lock()) {
-            if (h->family_ == owned->family && h->storage_offset() == 0 && h->is_contiguous() &&
-                h->shape() == meta_.shape && h->dtype() == meta_.dtype)
+            if (h->family_ == owned->family && h->shape() == meta_.shape &&
+                h->dtype() == meta_.dtype)
                 return h;
         }
+        auto h = std::make_shared<TensorImpl>(gpu_placeholder(meta_.dtype), meta_.shape,
+                                              meta_.dtype, meta_.device, false);
+        if (const auto& src = owned->source) {
+            h->meta_.stride = src->stride();
+            h->offset_ = src->storage_offset();
+            h->shared_ = src->shared_;
+        }
+        h->family_ = owned->family;
+        {
+            std::lock_guard<std::mutex> lock(owned->family->mu);
+            owned->family->members.push_back(h);
+        }
+        owned->handle = h;
+        return h;
     }
     const std::shared_ptr<::mlx::core::array> raw_arr = owned != nullptr ? owned->arr : gpu.arr;
     GpuStorage root_gpu = gpu;
@@ -1859,41 +1972,53 @@ std::shared_ptr<TensorImpl> TensorImpl::gpu_grad_to_tensor(GpuStorage& gpu) cons
     auto fam = std::make_shared<ViewFamily>();
     fam->nbytes = gpu.nbytes;
     fam->root = Storage{std::move(root_gpu)};
-    fam->grad_owner = weak_from_this();
+    fam->grad_owners.push_back(weak_from_this());
     auto h = std::make_shared<TensorImpl>(gpu_placeholder(meta_.dtype), meta_.shape, meta_.dtype,
                                           meta_.device, false);
     h->family_ = fam;
     fam->members.push_back(h);
-    const std::shared_ptr<void> record(nullptr, GpuGradSlot{raw_arr, h, fam});
+    const std::shared_ptr<void> record(nullptr, GpuGradSlot{raw_arr, nullptr, h, fam});
     gpu.arr = std::shared_ptr<::mlx::core::array>(record, raw_arr.get());
     return h;
 }
 
 void TensorImpl::sync_gpu_grad_slot(GpuStorage& slot,
                                     std::shared_ptr<::mlx::core::array> next_arr) {
-    if (auto* owned = slot.arr ? std::get_deleter<GpuGradSlot>(slot.arr) : nullptr) {
-        if (owned->family && owned->family->root.has_value()) {
-            std::get<GpuStorage>(*owned->family->root).arr = next_arr;
-            owned->family->version.fetch_add(1, std::memory_order_relaxed);
-            std::vector<std::shared_ptr<TensorImpl>> members;
+    auto* owned = slot.arr ? std::get_deleter<GpuGradSlot>(slot.arr) : nullptr;
+    if (!owned) {
+        slot.arr = std::move(next_arr);
+        return;
+    }
+    const auto family = owned->family;
+    const auto source = owned->source;
+    const auto handle = owned->handle;
+    if (family && family->root.has_value()) {
+        const auto h = handle.lock();
+        update_gpu_grad_root(*family, h ? h.get() : source.get(), next_arr);
+        family->version.fetch_add(1, std::memory_order_relaxed);
+        std::vector<std::shared_ptr<TensorImpl>> members;
+        {
+            std::lock_guard<std::mutex> lock(family->mu);
+            for (const auto& w : family->members)
+                if (auto m = w.lock())
+                    members.push_back(std::move(m));
+        }
+        for (const auto& m : members) {
             {
-                std::lock_guard<std::mutex> lock(owned->family->mu);
-                for (const auto& w : owned->family->members)
-                    if (auto m = w.lock())
-                        members.push_back(std::move(m));
-            }
-            for (const auto& m : members) {
                 std::lock_guard<std::mutex> lock(m->packed_mu_);
                 m->packed_.reset();
                 m->packed_root_.reset();
             }
+            if (const auto* g = std::get_if<GpuStorage>(&m->storage_); g && g->arr)
+                m->storage_ = gpu_placeholder(m->meta_.dtype);
         }
-        const std::shared_ptr<void> record(nullptr,
-                                           GpuGradSlot{next_arr, owned->handle, owned->family});
-        slot.arr = std::shared_ptr<::mlx::core::array>(record, next_arr.get());
-    } else {
-        slot.arr = std::move(next_arr);
+        rebind_gpu_grad_slot(family, std::get<GpuStorage>(*family->root).arr);
+        if (auto* refreshed = std::get_deleter<GpuGradSlot>(slot.arr);
+            refreshed && refreshed->arr == next_arr)
+            return;
     }
+    const std::shared_ptr<void> record(nullptr, GpuGradSlot{next_arr, source, handle, family});
+    slot.arr = std::shared_ptr<::mlx::core::array>(record, next_arr.get());
 }
 
 Storage TensorImpl::detach_gpu_grad_slot(Storage s) {

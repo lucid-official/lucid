@@ -83,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - match eager special-exponent table in pow emitters (LCD-576)
 
+- alias source view family on Metal grad assignment (LCD-623)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

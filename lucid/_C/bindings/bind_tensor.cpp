@@ -145,18 +145,14 @@ make_shared_tensor(const std::vector<std::int64_t>& shape, lucid::Dtype dtype, b
 
 // Puts g's buffer in self's gradient slot, replacing any gradient there;
 // refused, with the slot as it was, unless g has self's dtype, device and
-// shape (assignable_grad).  Backs ``Tensor.grad = g``; clip_grad and
-// GradScaler write their results back through it too.  A phantom's slot is
+// shape (assignable_grad).  Backs ``Tensor.grad = g``.  A phantom's slot is
 // the phantom assignable_grad gives, never g's graph.
 void set_gradient(lucid::TensorImpl& self, const std::shared_ptr<lucid::TensorImpl>& g) {
     if (!g)
         lucid::ErrorBuilder("Tensor.grad")
             .invalid_argument("expected a tensor; zero_grad() clears a gradient");
     lucid::Storage slot = lucid::assignable_grad(self, *g);
-    if (!lucid::storage_is_phantom(slot) && (g->requires_grad() || g->grad_fn()))
-        self.set_grad_impl(g);
-    else
-        self.set_grad_storage(std::move(slot));
+    self.install_grad(g, std::move(slot));
 }
 
 std::shared_ptr<lucid::TensorImpl>
