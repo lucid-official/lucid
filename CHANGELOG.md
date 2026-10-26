@@ -81,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - route custom Metal elementwise kernels via 64-bit launch (LCD-591)
 
+- match eager special-exponent table in pow emitters (LCD-576)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

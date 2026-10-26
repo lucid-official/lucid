@@ -659,3 +659,54 @@ def test_normalize_matches_the_reference(
     np.testing.assert_allclose(_values(t.grad), rt.grad.numpy(), rtol=1e-5, atol=1e-7)
     if p != 3.0:
         np.testing.assert_array_equal(_values(out)[0], rout.detach().numpy()[0])
+
+
+# ── compiled pow matches eager bitwise on special exponents (LCD-576) ────────
+
+
+@pytest.mark.skipif(not metal_available(), reason="Metal only")
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.bfloat16])
+@pytest.mark.parametrize("e", _EXACT + _FORMULA)
+def test_compiled_scalar_and_tensor_special_exponents_match_eager_bitwise(
+    dtype: lucid.dtype, e: float
+) -> None:
+    x = _bases(dtype)
+    if dtype is lucid.bfloat16 and e == 1.0:
+        x = _metal_flush(x, "metal", dtype)
+    t = _on(x, dtype, "metal")
+    fn_scalar = lucid.compile(lambda x: x**e)
+    np.testing.assert_array_equal(
+        _values(fn_scalar(t)), _values(t**e), err_msg=f"compiled x ** {e} ({dtype})"
+    )
+
+    if dtype is not lucid.float16:
+        ex = lucid.full_like(t, e)
+        fn_tensor = lucid.compile(lambda x, y: x**y)
+        np.testing.assert_array_equal(
+            _values(fn_tensor(t, ex)),
+            _values(t**ex),
+            err_msg=f"compiled x ** tensor({e}) ({dtype})",
+        )
+
+
+@pytest.mark.skipif(not metal_available(), reason="Metal only")
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.bfloat16])
+@pytest.mark.parametrize("base", [2.0, 3.0, 0.5, 10.0])
+def test_compiled_rpow_special_exponents_match_eager_bitwise(
+    dtype: lucid.dtype, base: float
+) -> None:
+    exps = _on(np.array(_EXACT + _FORMULA, dtype=np.float64), dtype, "metal")
+    fn_rpow = lucid.compile(lambda t: base**t)
+    np.testing.assert_array_equal(
+        _values(fn_rpow(exps)),
+        _values(base**exps),
+        err_msg=f"compiled {base} ** t ({dtype})",
+    )
+    fn_engine_rpow = lucid.compile(
+        lambda t: lucid._dispatch._wrap(lucid._C.engine.rpow_scalar(base, t._impl))
+    )
+    np.testing.assert_array_equal(
+        _values(fn_engine_rpow(exps)),
+        _values(lucid._dispatch._wrap(lucid._C.engine.rpow_scalar(base, exps._impl))),
+        err_msg=f"compiled rpow_scalar({base}, t) ({dtype})",
+    )
