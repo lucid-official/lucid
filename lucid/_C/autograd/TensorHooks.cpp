@@ -595,8 +595,7 @@ extern "C" int function_ctx_tp_traverse(PyObject* self, visitproc visit, void* a
             if (int r = region.report(kv.second))
                 return r;
         }
-        for (const auto& t : ctx->saved_tensors())
-            region.offer(t);
+        ctx->for_each_owned_tensor([&region](const TensorImplPtr& t) { region.offer(t); });
         if (int r = region.drain())
             return r;
     }

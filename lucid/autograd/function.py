@@ -188,13 +188,12 @@ class FunctionCtx:
         Writes inside ``forward`` itself are fine — the version is taken
         once ``forward`` has returned.
 
-        ``forward``'s own outputs may be saved too: the graph node holds
-        them, not this context, so a call that runs no backward does not
-        keep them alive.  Such a call is freed by Python's cyclic garbage
-        collector on its next pass, rather than the moment its last output
-        is dropped.  A tensor assigned to an attribute of the context
-        (``ctx.out = y``) gets none of this — save tensors through this
-        method.
+        ``forward``'s own outputs may be saved too: the engine context holds
+        their data and a weak reference to the node (re-attaching the node on
+        read), so a call that runs no backward is freed by refcounting the
+        moment its last output is dropped.  A tensor assigned to an attribute
+        of the context (``ctx.out = y``) gets none of this — save tensors
+        through this method.
         """
         self._saved_tensors = list(tensors)
 
@@ -229,16 +228,11 @@ class FunctionCtx:
         write.
 
         Every saved impl goes to ``carrier``, and this context keeps no
-        reference to one of the node's outputs.  It used to keep the tensor
-        itself, which closed output → node → ``backward`` closure → context
-        → output: a cycle the engine's collector hooks see through only from
-        a node that a single output owns, so a ``forward`` saving two of its
-        outputs and running no backward was never freed (LCD-588).  Held by
-        the carrier, every output and their shared node sit in the one
-        region its hook reports, and the collector frees them together.
-        Plain refcounting would free them at once, as the reference's saved
-        variables do — that needs the node held weakly and re-attached on
-        read, which the engine cannot do yet (LCD-602).
+        reference to one of the node's outputs.  ``carrier`` stores an output
+        as a detached storage alias plus a weak reference to the node and its
+        output index (re-attaching the node when :attr:`saved_tensors` is
+        read), so dropping the outputs of a forward-only call frees both the
+        outputs and the node immediately by refcount (LCD-588, LCD-602).
         """
         input_impls = [_impl_of(a) for a in inputs]
         output_impls = [_impl_of(o) for o in returned]

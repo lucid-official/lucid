@@ -174,13 +174,16 @@ _SAVES_OUTPUT: dict[
     "cholesky (_CholeskyAutograd)": (_spd, lucid.linalg.cholesky),
     "lu_factor (_LUFactorGrad)": (_spd, lambda A: lucid.linalg.lu_factor(A)[0]),
     "ldl_factor (_LDLFactorGrad)": (_spd, lambda A: lucid.linalg.ldl_factor(A)[0]),
-    # A node two outputs share: freed by the collector through the engine
-    # context that holds them (LCD-588).
+    # A node two or more outputs share: freed by refcounting through the engine
+    # context's SavedVariable entries (LCD-588 / LCD-602).
     "custom Function saving both of its outputs": (
         _vector,
         lambda x: _SavesBothOutputs.apply(x)[0],
     ),
     "eig (_Eig)": (_spd, lambda A: lucid.linalg.eig(A)[1]),
+    "eigh (_Eigh)": (_spd, lambda A: lucid.linalg.eigh(A)[1]),
+    "svd (_SVD)": (_spd, lambda A: lucid.linalg.svd(A, full_matrices=False)[0]),
+    "qr (_QR)": (_spd, lambda A: lucid.linalg.qr(A)[0]),
 }
 
 

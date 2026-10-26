@@ -29,9 +29,9 @@
 // stream — MLX has no native Metal SVD kernel yet, see H3 carve-out).
 //
 // Autograd is **not** wired at the C++ level.  Differentiation is handled by
-// three Python-side ``Function`` wrappers (``_SVDUGrad`` / ``_SVDSGrad`` /
-// ``_SVDVhGrad``) that implement the Giles 2008 closed form in terms of the
-// Loewner matrix $F_{ij} = \sigma_i / (\sigma_i^2 - \sigma_j^2)$.  That
+// the Python-side ``_SVD`` multi-output ``Function`` wrapper that implements
+// the Giles 2008 closed form in terms of the Loewner matrix
+// $F_{ij} = \sigma_i / (\sigma_i^2 - \sigma_j^2)$.  That
 // closed form is well-conditioned for distinct singular values but diverges
 // near repeated $\sigma$'s; caller responsibility to regularise in that
 // regime (e.g. by adding a small diagonal jitter to $A$).

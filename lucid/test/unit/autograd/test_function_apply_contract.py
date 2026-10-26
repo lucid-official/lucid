@@ -2,14 +2,13 @@
 
 Three defects with one owner, ``lucid/autograd/function.py``:
 
-* LCD-588 — a ``forward`` that saved two or more of its own outputs and ran
-  no backward was never freed.  The context held the outputs, each output
-  owned the node, and the node owned the context; the engine's collector
-  hooks see through a node only from a region that owns all of it, and no
-  single output does.  ``linalg.eig`` with ``requires_grad`` kept 33 KB per
-  call at 64×64.  The saved tensors now live in the node's own engine
-  context, which owns them all, so the collector frees the call on its next
-  pass.  Freeing it by plain refcounting, as the reference does, is LCD-602.
+* LCD-588 / LCD-602 — a ``forward`` that saved its own outputs and ran no
+  backward was never freed when two or more outputs were saved, or had to wait
+  for the cyclic GC when one was saved.  The saved tensors live in the node's
+  engine context (LCD-588), and each saved output is stored as a detached
+  storage view plus a weak pointer to the node and its ``output_nr``
+  (LCD-602), so dropping all outputs frees the node, its context, and the
+  saved buffers immediately by plain reference counting.
 * LCD-555 — ``forward`` ran with grad mode on.  Each call built a graph that
   registration then threw away, and an untracked call kept it, sending a
   gradient to a tensor ``forward`` closed over.  ``forward`` now runs under
@@ -97,15 +96,12 @@ def test_a_call_that_runs_no_backward_is_freed(
     assert grown < _ELEMS * 4, f"{_CALLS} forwards left {grown} bytes alive"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-602: saved outputs are freed by the cyclic GC, not by refcount",
-)
-def test_a_call_that_runs_no_backward_is_freed_by_refcount(device: str) -> None:
-    # The reference frees these the moment the outputs are dropped; here the
-    # output <-> node cycle waits for the collector, so with it switched off
-    # every call stays alive.
-    fn = _scaled(2, "all outputs")
+@pytest.mark.parametrize("saves", ("one output", "all outputs"))
+@pytest.mark.parametrize("n_out", [1, 2, 3])
+def test_a_call_that_runs_no_backward_is_freed_by_refcount(
+    n_out: int, saves: str, device: str
+) -> None:
+    fn = _scaled(n_out, saves)
     x = lucid.randn(_ELEMS, requires_grad=True, device=device)
     lucid.eval(_first(fn.apply(x)))
     gc.collect()
@@ -128,7 +124,8 @@ def _square(device: str) -> lucid.Tensor:
     return (a @ a.mT + _SIDE * lucid.eye(_SIDE, device=device)).requires_grad_()
 
 
-#: Lucid's own ``Function``s, the multi-output one (``eig``) among them.
+#: Lucid's own ``Function``s, the multi-output ones (``eig``, ``eigh``, ``svd``,
+#: ``qr``) among them.
 _IN_TREE: dict[str, Callable[[lucid.Tensor], object]] = {
     "eig": lucid.linalg.eig,
     "eigh": lucid.linalg.eigh,
@@ -151,6 +148,28 @@ def test_an_in_tree_function_is_freed_without_a_backward(
     assert _first(run(A)).grad_fn is not None, "the case records no graph"
     grown = _retained(lambda: run(A), device)
     assert grown < _SIDE * _SIDE * 4, f"{name}: {_CALLS} calls left {grown} bytes"
+
+
+@pytest.mark.parametrize("name", list(_IN_TREE))
+def test_an_in_tree_function_is_freed_by_refcount(name: str, device: str) -> None:
+    A = _square(device)
+    run = _IN_TREE[name]
+    lucid.eval(_first(run(A)))
+    gc.collect()
+    gc.disable()
+    try:
+        before = live_bytes(device)
+        for _ in range(4):
+            out = run(A)
+            lucid.eval(_first(out))
+            del out
+        grown = live_bytes(device) - before
+    finally:
+        gc.enable()
+        gc.collect()
+    assert grown < _SIDE * _SIDE * 4, (
+        f"{name}: 4 forwards left {grown} bytes alive without a GC"
+    )
 
 
 class _ReadsBoth(Function):

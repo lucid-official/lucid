@@ -37,9 +37,117 @@ FunctionCtx::~FunctionCtx() {
     clear();
 }
 
+namespace {
+
+// Build a non-family detached alias of ``t`` for a saved output slot so the
+// node's context does not keep ``t`` (and through ``t->grad_fn()``, the node
+// itself) alive.  On the CPU, rebind ``t``'s and the alias's ``CpuStorage::ptr``
+// onto distinct control blocks that each own the underlying buffer: ``t``'s
+// own ``ptr.use_count()`` stays equal to its view-family count so an in-place
+// op on ``t`` reaches the version check instead of refusing ``t`` as storage
+// shared outside its views.
+std::shared_ptr<TensorImpl> make_saved_output_alias(const std::shared_ptr<TensorImpl>& t) {
+    auto alias = TensorImpl::make_view(t, t->shape(), t->stride(), 0, /*join_family=*/false);
+    alias->set_detached_alias(true);
+    auto* t_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(t->raw_storage()));
+    auto* a_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(alias->raw_storage()));
+    if (t_cpu && t_cpu->ptr && a_cpu && a_cpu->ptr) {
+        const std::shared_ptr<std::byte[]> raw_buf = t_cpu->ptr;
+        const std::shared_ptr<void> t_holder(
+            nullptr, [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
+        const std::shared_ptr<void> a_holder(
+            nullptr, [buf = raw_buf](void*) mutable noexcept { buf.reset(); });
+        t_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, raw_buf.get());
+        a_cpu->ptr = std::shared_ptr<std::byte[]>(a_holder, a_cpu->ptr.get());
+        for (const auto& m : t->live_views()) {
+            if (auto* m_cpu = std::get_if<CpuStorage>(&const_cast<Storage&>(m->raw_storage()));
+                m_cpu && m_cpu->ptr.get() == raw_buf.get()) {
+                m_cpu->ptr = std::shared_ptr<std::byte[]>(t_holder, m_cpu->ptr.get());
+            }
+        }
+    }
+    return alias;
+}
+
+}  // namespace
+
+void FunctionCtx::save_for_backward(std::vector<std::shared_ptr<TensorImpl>> tensors) {
+    const auto owner = owner_node_.lock();
+    saved_.clear();
+    saved_.reserve(tensors.size());
+    for (auto& t : tensors) {
+        if (t && owner && t->grad_fn() == owner) {
+            saved_.push_back(SavedVariable{
+                make_saved_output_alias(t),
+                t,
+                owner,
+                t->grad_output_nr(),
+                t->version(),
+                true,
+            });
+        } else {
+            saved_.push_back(SavedVariable{std::move(t), {}, {}, 0, 0, false});
+        }
+    }
+}
+
+void FunctionCtx::set_owner_node(const std::shared_ptr<Node>& owner) {
+    owner_node_ = owner;
+    if (!owner)
+        return;
+    for (auto& entry : saved_) {
+        if (!entry.is_output && entry.data && entry.data->grad_fn() == owner) {
+            auto t = std::move(entry.data);
+            entry.data = make_saved_output_alias(t);
+            entry.live_output = t;
+            entry.grad_fn = owner;
+            entry.output_nr = t->grad_output_nr();
+            entry.saved_version = t->version();
+            entry.is_output = true;
+        }
+    }
+}
+
+std::vector<std::shared_ptr<TensorImpl>> FunctionCtx::saved_tensors() const {
+    std::vector<std::shared_ptr<TensorImpl>> out;
+    out.reserve(saved_.size());
+    for (const auto& entry : saved_) {
+        if (!entry.is_output || !entry.data) {
+            out.push_back(entry.data);
+            continue;
+        }
+        const auto fn = entry.grad_fn.lock();
+        if (auto live = entry.live_output.lock()) {
+            if (live->version() != entry.saved_version ||
+                (live->grad_fn() == fn && live->grad_output_nr() == entry.output_nr)) {
+                out.push_back(std::move(live));
+                continue;
+            }
+        }
+        auto rewrapped = TensorImpl::make_view(entry.data, entry.data->shape(),
+                                               entry.data->stride(), 0, /*join_family=*/false);
+        if (fn) {
+            rewrapped->set_grad_fn(fn);
+            rewrapped->set_grad_output_nr(entry.output_nr);
+            rewrapped->set_leaf(false);
+            rewrapped->set_requires_grad(true);
+        }
+        out.push_back(std::move(rewrapped));
+    }
+    return out;
+}
+
+void FunctionCtx::for_each_owned_tensor(const std::function<void(const TensorImplPtr&)>& fn) const {
+    for (const auto& entry : saved_) {
+        if (entry.data)
+            fn(entry.data);
+    }
+}
+
 void FunctionCtx::clear() noexcept {
-    auto saved = std::move(saved_tensors_);
-    saved_tensors_.clear();
+    auto saved = std::move(saved_);
+    saved_.clear();
+    owner_node_.reset();
     auto ext = std::move(extras_);
     extras_.clear();
     saved.clear();
@@ -167,9 +275,15 @@ std::vector<Storage> PythonBackwardNode::apply_barrier() {
     }
     enter_pass();
 
+    const bool mat = !py_ctx || !py::isinstance<FunctionCtx>(py_ctx) ||
+                     py::cast<const FunctionCtx&>(py_ctx).materialize_grads();
     const std::size_t n = out_shapes.size();
     py::tuple grads(n);
     for (std::size_t i = 0; i < n; ++i) {
+        if (!slots_.eager[i].has_value() && !mat) {
+            grads[i] = py::none();
+            continue;
+        }
         // An output the loss never used contributes nothing, but ``backward``
         // is still written against a fixed argument list, so give it zeros
         // rather than ``None`` and let the arithmetic take care of itself.
@@ -206,12 +320,18 @@ std::vector<TensorImplPtr> PythonBackwardNode::apply_barrier_for_graph() {
                              "once_differentiable — it does not record its own graph");
     enter_pass();
 
+    const bool mat = !py_ctx || !py::isinstance<FunctionCtx>(py_ctx) ||
+                     py::cast<const FunctionCtx&>(py_ctx).materialize_grads();
     const std::size_t n = out_shapes.size();
     py::tuple grads(n);
     for (std::size_t i = 0; i < n; ++i) {
         // An output no gradient reached is handed zeros, as in apply_barrier;
         // they are a constant, so nothing differentiates through them.
         TensorImplPtr g = std::move(slots_.graph[i]);
+        if (!g && !mat) {
+            grads[i] = py::none();
+            continue;
+        }
         if (!g)
             g = std::make_shared<TensorImpl>(
                 make_zero_storage(out_shapes[i], out_dtypes[i], out_devices[i]), out_shapes[i],
@@ -263,6 +383,57 @@ std::vector<Storage> PythonBackwardNode::invoke_backward(const py::tuple& grads)
 // pybind11 bindings
 // -------------------------------------------------------------------------
 
+namespace {
+
+void record_python_output_metas(const std::vector<std::shared_ptr<TensorImpl>>& outputs,
+                                PythonBackwardNode& node) {
+    // Single-output metadata is kept as-is so that path stays on the engine's
+    // direct (non-barrier) route.  The vectors are what make the node a
+    // barrier, and they are filled for multi-output calls.
+    node.out_shape = outputs.front()->shape();
+    node.out_dtype = outputs.front()->dtype();
+    node.out_device = outputs.front()->device();
+
+    node.out_shapes.clear();
+    node.out_dtypes.clear();
+    node.out_devices.clear();
+    if (outputs.size() > 1) {
+        node.out_shapes.reserve(outputs.size());
+        node.out_dtypes.reserve(outputs.size());
+        node.out_devices.reserve(outputs.size());
+        for (const auto& out : outputs) {
+            node.out_shapes.push_back(out->shape());
+            node.out_dtypes.push_back(out->dtype());
+            node.out_devices.push_back(out->device());
+        }
+    }
+}
+
+void record_python_input_edges(const std::vector<std::shared_ptr<TensorImpl>>& inputs,
+                               PythonBackwardNode& node) {
+    std::vector<Edge> edges;
+    edges.reserve(inputs.size());
+    std::vector<std::int64_t> versions;
+    versions.reserve(inputs.size());
+
+    for (const auto& inp : inputs) {
+        if (!inp || !inp->requires_grad()) {
+            edges.emplace_back(nullptr, 0);
+            versions.push_back(0);
+            continue;
+        }
+        if (inp->is_leaf() && !inp->grad_fn())
+            inp->set_grad_fn(std::make_shared<AccumulateGrad>(inp));
+        edges.emplace_back(inp->grad_fn(), inp->grad_output_nr());
+        versions.push_back(inp->version());
+    }
+
+    node.set_next_edges(std::move(edges));
+    node.set_saved_versions(std::move(versions));
+}
+
+}  // namespace
+
 void register_custom_function(py::module_& m) {
     // FunctionCtx — Python-visible as lucid._C.engine.FunctionCtx.
     // save_for_backward accepts *args of tensors (TensorImpl or Python
@@ -284,9 +455,10 @@ void register_custom_function(py::module_& m) {
         .def_property_readonly(
             "saved_tensors",
             [](const FunctionCtx& ctx) -> py::tuple {
-                py::tuple t(ctx.saved_tensors().size());
-                for (std::size_t i = 0; i < ctx.saved_tensors().size(); ++i)
-                    t[i] = py::cast(ctx.saved_tensors()[i]);
+                const auto saved = ctx.saved_tensors();
+                py::tuple t(saved.size());
+                for (std::size_t i = 0; i < saved.size(); ++i)
+                    t[i] = py::cast(saved[i]);
                 return t;
             },
             "Tuple of tensors saved during forward.")
@@ -331,51 +503,8 @@ void register_custom_function(py::module_& m) {
                     ErrorBuilder("_register_python_backward_node").fail("null argument");
             }
 
-            // Single-output metadata is kept as-is so that path stays on the
-            // engine's direct (non-barrier) route.  The vectors are what make
-            // the node a barrier, and they are filled for every arity so the
-            // barrier branch has complete information when it applies.
-            node->out_shape = outputs.front()->shape();
-            node->out_dtype = outputs.front()->dtype();
-            node->out_device = outputs.front()->device();
-
-            node->out_shapes.clear();
-            node->out_dtypes.clear();
-            node->out_devices.clear();
-            if (outputs.size() > 1) {
-                node->out_shapes.reserve(outputs.size());
-                node->out_dtypes.reserve(outputs.size());
-                node->out_devices.reserve(outputs.size());
-                for (const auto& out : outputs) {
-                    node->out_shapes.push_back(out->shape());
-                    node->out_dtypes.push_back(out->dtype());
-                    node->out_devices.push_back(out->device());
-                }
-            }
-
-            std::vector<Edge> edges;
-            edges.reserve(inputs.size());
-            std::vector<std::int64_t> versions;
-            versions.reserve(inputs.size());
-
-            for (const auto& inp : inputs) {
-                if (!inp || !inp->requires_grad()) {
-                    edges.emplace_back(nullptr, 0);
-                    versions.push_back(0);
-                    continue;
-                }
-                if (inp->is_leaf()) {
-                    // Ensure a leaf has an AccumulateGrad node so that
-                    // gradients flowing to it will be accumulated into .grad.
-                    if (!inp->grad_fn())
-                        inp->set_grad_fn(std::make_shared<AccumulateGrad>(inp));
-                }
-                edges.emplace_back(inp->grad_fn(), inp->grad_output_nr());
-                versions.push_back(inp->version());
-            }
-
-            node->set_next_edges(std::move(edges));
-            node->set_saved_versions(std::move(versions));
+            record_python_output_metas(outputs, *node);
+            record_python_input_edges(inputs, *node);
 
             // Every output shares the one node; ``grad_output_nr`` is what
             // tells the engine which slot an arriving gradient belongs to,
@@ -385,6 +514,9 @@ void register_custom_function(py::module_& m) {
                 outputs[i]->set_grad_output_nr(static_cast<std::uint32_t>(i));
                 outputs[i]->set_leaf(false);
                 outputs[i]->set_requires_grad(true);
+            }
+            if (node->py_ctx && py::isinstance<FunctionCtx>(node->py_ctx)) {
+                py::cast<FunctionCtx&>(node->py_ctx).set_owner_node(node);
             }
         },
         py::arg("outputs"), py::arg("node"), py::arg("inputs"),

@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - refuse mixed float dtypes in matmul family outside autocast
 - avoid f32->bf16 double rounding in bfloat16 fma via round-to-odd (LCD-433)
 
+- free saved custom Function outputs by refcount (LCD-602)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

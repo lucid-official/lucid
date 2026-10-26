@@ -21,6 +21,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -79,10 +80,13 @@ public:
 
     // Save tensors needed for the backward pass.
     //
-    // Stores strong ``shared_ptr`` references so that the underlying
-    // :class:`TensorImpl` buffers remain alive until backward completes,
-    // even if the Python-side handle goes out of scope.  Mirrors the
-    // semantics of :meth:`lucid.autograd.FunctionCtx.save_for_backward`.
+    // Non-output tensors are stored by strong ``shared_ptr<TensorImpl>``.
+    // Outputs of this context's own :class:`PythonBackwardNode` are stored as
+    // a detached storage alias plus a weak pointer to the live output, a weak
+    // pointer to the node, and the output slot index (the reference
+    // framework's ``SavedVariable`` for outputs), breaking the
+    // ``output -> node -> ctx -> output`` cycle so forward-only calls are
+    // freed immediately by refcount without waiting for cyclic GC.
     //
     // Parameters
     // ----------
@@ -95,18 +99,27 @@ public:
     // Each call overwrites the previously saved list; saving twice does not
     // accumulate.  To stash non-tensor data (shapes, axes, scalars) use the
     // :func:`store` / :func:`load` extras bag instead.
-    void save_for_backward(std::vector<std::shared_ptr<TensorImpl>> tensors) {
-        saved_tensors_ = std::move(tensors);
-    }
+    void save_for_backward(std::vector<std::shared_ptr<TensorImpl>> tensors);
+
+    // Record the owning :class:`PythonBackwardNode` so :func:`save_for_backward`
+    // can recognise outputs that belong to this node and hold the node weakly.
+    void set_owner_node(const std::shared_ptr<Node>& owner);
 
     // Read back the tensors persisted by :func:`save_for_backward`.
     //
     // Returns
     // -------
-    // const std::vector<std::shared_ptr<TensorImpl>>&
-    //     The saved tensors in registration order.  Empty when nothing was
-    //     saved.
-    const std::vector<std::shared_ptr<TensorImpl>>& saved_tensors() const { return saved_tensors_; }
+    // std::vector<std::shared_ptr<TensorImpl>>
+    //     The saved tensors in registration order, re-attaching the owning
+    //     node to any saved output whose Python handle has already been
+    //     dropped.  Empty when nothing was saved.
+    std::vector<std::shared_ptr<TensorImpl>> saved_tensors() const;
+
+    // Visit each owned :class:`TensorImpl` held in ``saved_`` for cyclic GC
+    // traversal without constructing temporary ``shared_ptr`` copies.
+    void for_each_owned_tensor(const std::function<void(const TensorImplPtr&)>& fn) const;
+
+    bool materialize_grads() const noexcept { return materialize_grads_; }
 
     // Store an arbitrary Python object under a string key.
     //
@@ -119,7 +132,13 @@ public:
     //     Attribute name.
     // val : py::object
     //     Value to store; ownership is transferred into the extras map.
-    void store(const std::string& key, py::object val) { extras_[key] = std::move(val); }
+    void store(const std::string& key, py::object val) {
+        if (key == "_materialize_grads") {
+            materialize_grads_ = py::cast<bool>(val);
+            return;
+        }
+        extras_[key] = std::move(val);
+    }
 
     // Retrieve a previously stored Python object.
     //
@@ -144,7 +163,18 @@ public:
     void clear() noexcept;
 
 private:
-    std::vector<std::shared_ptr<TensorImpl>> saved_tensors_;
+    struct SavedVariable {
+        std::shared_ptr<TensorImpl> data;
+        std::weak_ptr<TensorImpl> live_output;
+        std::weak_ptr<Node> grad_fn;
+        std::uint32_t output_nr = 0;
+        std::int64_t saved_version = 0;
+        bool is_output = false;
+    };
+
+    std::vector<SavedVariable> saved_;
+    std::weak_ptr<Node> owner_node_;
+    bool materialize_grads_ = true;
     std::unordered_map<std::string, py::object> extras_;
 };
 

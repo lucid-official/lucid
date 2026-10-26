@@ -1036,7 +1036,7 @@
     "lucid/coreml/_emit.py": 1167,
     "lucid/distributions/transforms.py": 37,
     "lucid/fft/__init__.py": 377,
-    "lucid/linalg/__init__.py": 2067,
+    "lucid/linalg/__init__.py": 1945,
     "lucid/models/_utils/_detection.py": 1332,
     "lucid/models/generative/diamond/_model.py": 719,
     "lucid/models/generative/rectified_flow/_model.py": 278,
@@ -1072,7 +1072,7 @@
     "lucid/distributions/discrete.py": 2,
     "lucid/distributions/extra.py": 1,
     "lucid/distributions/relaxed.py": 2,
-    "lucid/linalg/__init__.py": 19,
+    "lucid/linalg/__init__.py": 2,
     "lucid/metal/__init__.py": 4,
     "lucid/models/_output.py": 3,
     "lucid/models/vision/sknet/_model.py": 3,
@@ -1330,7 +1330,6 @@
     "lucid/distributions/uniform.py": 2,
     "lucid/fft/__init__.py": 13,
     "lucid/func/__init__.py": 2,
-    "lucid/linalg/__init__.py": 1,
     "lucid/models/_auto.py": 1,
     "lucid/models/_base.py": 2,
     "lucid/models/_mixins.py": 3,
@@ -1613,7 +1612,6 @@
   },
   "lizard": {
    "function-ccn": {
-    "lucid/_C/autograd/CustomFunction.cpp": 1,
     "lucid/_C/backend/cpu/Pool.cpp": 3,
     "lucid/_C/backend/cpu/methods/Binary.cpp": 4,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,
@@ -1719,7 +1717,6 @@
     "lucid/utils/transforms/_misc.py": 1
    },
    "function-ccn-excess": {
-    "lucid/_C/autograd/CustomFunction.cpp": 1,
     "lucid/_C/backend/cpu/Pool.cpp": 4,
     "lucid/_C/backend/cpu/methods/Binary.cpp": 19,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 1,
@@ -1825,7 +1822,6 @@
     "lucid/utils/transforms/_misc.py": 6
    },
    "function-length": {
-    "lucid/_C/autograd/CustomFunction.cpp": 1,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 2,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 2,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 2,
@@ -1951,7 +1947,6 @@
     "lucid/utils/transforms/_autoaugment.py": 1
    },
    "function-length-excess": {
-    "lucid/_C/autograd/CustomFunction.cpp": 27,
     "lucid/_C/backend/cpu/methods/Conv.cpp": 55,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 102,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 30,

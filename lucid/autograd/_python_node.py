@@ -16,7 +16,7 @@ from lucid.dtypes import dtype as _DType
 class _FunctionClass(Protocol):
     @classmethod
     def backward(
-        cls, ctx: object, *grad_outputs: Tensor
+        cls, ctx: object, *grad_outputs: Tensor | None
     ) -> Tensor | tuple[Tensor | None, ...] | list[Tensor | None]: ...
 
 
@@ -224,10 +224,13 @@ def _register(
     )
 
     def backward_fn(
-        _cpp_ctx: object, *grad_impls: _C_engine.TensorImpl
+        _cpp_ctx: object, *grad_impls: _C_engine.TensorImpl | None
     ) -> list[_C_engine.TensorImpl | None]:
         """Called by C++ engine: (cpp_ctx, *grad_impls) → list[TensorImpl | None]"""
-        grads = fn_class.backward(py_ctx, *(_wrap(g) for g in grad_impls))
+        grads = fn_class.backward(
+            py_ctx,
+            *(None if g is None else _wrap(g) for g in grad_impls),
+        )
         returned: list[object] = (
             list(grads) if isinstance(grads, (list, tuple)) else [grads]
         )
@@ -240,6 +243,8 @@ def _register(
             result.append(None if checked is None else _unwrap(checked))
         return result
 
+    if not getattr(fn_class, "_materialize_grads", True):
+        cpp_ctx._materialize_grads = False
     node = _C_engine._PythonBackwardNode()
     node.ctx = cpp_ctx
     node.backward_fn = backward_fn

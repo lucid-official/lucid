@@ -522,17 +522,6 @@ def _scaled(
 
 # ── SVD with backward ─────────────────────────────────────────────────────────
 #
-# The SVD returns three tensors (U, S, Vh).  Lucid's Python Function
-# mechanism supports only single-output backward registration, so we use one
-# Function per output.  Gradients from each path accumulate correctly
-# (dA from U-path + dA from S-path + dA from Vh-path = total dA).
-#
-# KEY DESIGN: pre-computed TensorImpl objects (not Tensor) are passed as
-# extra args so the engine never sees them as differentiable inputs.
-# Only `A` (the first arg) is a Tensor with requires_grad=True; the others
-# are TensorImpl and are skipped by `isinstance(a, Tensor)` in _make_apply.
-# This avoids spurious graph edges between the three Function wrappers.
-#
 # Backward formula (Giles 2008, extended to rectangular A(m×n), k=min(m,n)):
 #   F[i,j] = 1 / (s_j² - s_i²)  for i≠j,  F[i,i] = 0
 #   dA from S:  U diag(G_S) Vh
@@ -554,105 +543,55 @@ def _svd_loewner(S: Tensor) -> Tensor:
 
 
 @final
-class _SVDSGrad(_AutogradFunction):
-    """Backward: singular-value contribution  dA = U diag(G_S) Vh."""
+class _SVD(_AutogradFunction):
+    """Reduced SVD with Giles' (2008) backward across ``(U, S, Vh)``."""
+
+    _materialize_grads = False
 
     @override
     @staticmethod
-    def forward(
+    def forward(ctx: FunctionCtx, A: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        u_impl, s_impl, vh_impl = _la.svd(_unwrap(A))
+        U, S, Vh = _wrap(u_impl), _wrap(s_impl), _wrap(vh_impl)
+        ctx.save_for_backward(U, S, Vh)
+        return U, S, Vh
+
+    @override
+    @staticmethod
+    def backward(
         ctx: FunctionCtx,
-        A: Tensor,
-        u_impl: _C_engine.TensorImpl,
-        s_impl: _C_engine.TensorImpl,
-        vh_impl: _C_engine.TensorImpl,
+        G_U: Tensor | None,
+        G_S: Tensor | None,
+        G_Vh: Tensor | None,
     ) -> Tensor:
-        # Save TensorImpl references (not Tensor) to avoid autograd entanglement.
-        ctx.u_impl = u_impl
-        ctx.vh_impl = vh_impl
-        return _wrap(s_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_S: Tensor) -> Tensor:
-        U = _wrap(ctx.u_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        Vh = _wrap(ctx.vh_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        return U @ lucid.diag_embed(G_S) @ Vh
-
-
-@final
-class _SVDUGrad(_AutogradFunction):
-    """Backward: left-singular-vector contribution to dA."""
-
-    @override
-    @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        u_impl: _C_engine.TensorImpl,
-        s_impl: _C_engine.TensorImpl,
-        vh_impl: _C_engine.TensorImpl,
-    ) -> Tensor:
-        ctx.u_impl = u_impl
-        ctx.s_impl = s_impl
-        ctx.vh_impl = vh_impl
-        return _wrap(u_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_U: Tensor) -> Tensor:
-        U = _wrap(ctx.u_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        S = _wrap(ctx.s_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        Vh = _wrap(ctx.vh_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        k = int(S.shape[-1])
-        m = int(U.shape[-2])
-        F = _svd_loewner(S)
-        UtgU = U.mT @ G_U  # (..., k, k)
-        J = F * UtgU
-        # Symmetrised, then scaled by s_j along the columns.
-        dA = U @ ((J + J.mT) * S.unsqueeze(-2)) @ Vh
-        if m > k:
-            S_inv = lucid.diag_embed(1.0 / S)
-            proj_gU = G_U - U @ UtgU
-            dA = dA + proj_gU @ S_inv @ Vh
-        return dA
-
-
-@final
-class _SVDVhGrad(_AutogradFunction):
-    """Backward: right-singular-vector (Vh) contribution to dA."""
-
-    @override
-    @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        u_impl: _C_engine.TensorImpl,
-        s_impl: _C_engine.TensorImpl,
-        vh_impl: _C_engine.TensorImpl,
-    ) -> Tensor:
-        ctx.u_impl = u_impl
-        ctx.s_impl = s_impl
-        ctx.vh_impl = vh_impl
-        return _wrap(vh_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_Vh: Tensor) -> Tensor:
-        U = _wrap(ctx.u_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        S = _wrap(ctx.s_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        Vh = _wrap(ctx.vh_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        k = int(S.shape[-1])
-        n = int(Vh.shape[-1])
-        F = _svd_loewner(S)
-        gV = G_Vh.mT  # (..., n, k)
-        K = F * (Vh @ gV)  # (..., k, k)
-        # The mirror of the U path: symmetrised, scaled by s_i along the
-        # rows rather than s_j along the columns.
-        dA = U @ (S.unsqueeze(-1) * (K + K.mT)) @ Vh
-        if n > k:
-            S_inv = lucid.diag_embed(1.0 / S)
-            proj_gVh = G_Vh - (G_Vh @ Vh.mT) @ Vh
-            dA = dA + U @ S_inv @ proj_gVh
+        U, S, Vh = ctx.saved_tensors
+        dA: Tensor | None = None
+        if G_S is not None:
+            dA = U @ lucid.diag_embed(G_S) @ Vh
+        if G_U is not None or G_Vh is not None:
+            k = int(S.shape[-1])
+            F = _svd_loewner(S)
+            if G_U is not None:
+                m = int(U.shape[-2])
+                UtgU = U.mT @ G_U  # (..., k, k)
+                J = F * UtgU
+                dA_U = U @ ((J + J.mT) * S.unsqueeze(-2)) @ Vh
+                if m > k:
+                    S_inv = lucid.diag_embed(1.0 / S)
+                    proj_gU = G_U - U @ UtgU
+                    dA_U = dA_U + proj_gU @ S_inv @ Vh
+                dA = dA_U if dA is None else dA + dA_U
+            if G_Vh is not None:
+                n = int(Vh.shape[-1])
+                gV = G_Vh.mT  # (..., n, k)
+                K = F * (Vh @ gV)  # (..., k, k)
+                dA_Vh = U @ (S.unsqueeze(-1) * (K + K.mT)) @ Vh
+                if n > k:
+                    S_inv = lucid.diag_embed(1.0 / S)
+                    proj_gVh = G_Vh - (G_Vh @ Vh.mT) @ Vh
+                    dA_Vh = dA_Vh + U @ S_inv @ proj_gVh
+                dA = dA_Vh if dA is None else dA + dA_Vh
+        assert dA is not None
         return dA
 
 
@@ -699,13 +638,12 @@ def svd(
 
     Notes
     -----
-    Backward is implemented via three separate ``Function`` wrappers —
-    one per output — so gradients from :math:`U`, :math:`S`, and
-    :math:`V^\top` accumulate into the input via Giles' (2008) formula
-    using the Loewner matrix :math:`F_{ij} = \sigma_i / (\sigma_i^2 -
-    \sigma_j^2)`.  Gradients blow up when singular values are nearly
-    repeated — degenerate or rank-deficient inputs are not
-    differentiation-friendly.
+    Backward is implemented via the multi-output ``_SVD`` ``Function``
+    wrapper so gradients from :math:`U`, :math:`S`, and :math:`V^\top`
+    accumulate into the input via Giles' (2008) formula using the
+    Loewner matrix :math:`F_{ij} = \sigma_i / (\sigma_i^2 - \sigma_j^2)`.
+    Gradients blow up when singular values are nearly repeated —
+    degenerate or rank-deficient inputs are not differentiation-friendly.
 
     Cost is :math:`O(\min(m,n)^2 \cdot \max(m,n))`.
 
@@ -721,14 +659,14 @@ def svd(
     unsupported_if(driver is not None, "svd", "driver", driver)
     with _autocast_entry("svd", _unwrap(A)) as (a_impl,):
         A_cast = _wrap(a_impl)
-        u_impl, s_impl, vh_impl = _la.svd(a_impl)
         if not _C_engine.grad_enabled() or not A_cast.requires_grad:
+            u_impl, s_impl, vh_impl = _la.svd(a_impl)
             return _complete_svd_factors(
                 A_cast, _wrap(u_impl), _wrap(s_impl), _wrap(vh_impl), full_matrices
             )
-        U = _SVDUGrad.apply(A_cast, u_impl, s_impl, vh_impl)
-        S = _SVDSGrad.apply(A_cast, u_impl, s_impl, vh_impl)
-        Vh = _SVDVhGrad.apply(A_cast, u_impl, s_impl, vh_impl)
+        out = _SVD.apply(A_cast)
+        assert isinstance(out, tuple)
+        U, S, Vh = out
         return _complete_svd_factors(A_cast, U, S, Vh, full_matrices)
 
 
@@ -852,97 +790,59 @@ def _qr_wide_backward(
     return lucid.cat([gX, gY], -1)
 
 
+def _qr_tall_r_backward(A: Tensor, R: Tensor, G_R: Tensor) -> Tensor:
+    """R contribution to ``dA`` via the Cholesky factor of ``A^T A`` (``m >= n``)."""
+    n = int(R.shape[-1])
+    diag_R = R.diagonal(dim1=-2, dim2=-1)
+    abs_d = diag_R.abs()
+    safe_abs_d = lucid.where(abs_d < 1e-12, lucid.ones_like(abs_d), abs_d)
+    sign_d = diag_R / safe_abs_d
+    D = lucid.diag_embed(sign_d)
+    # L = R.mT @ D  (lower triangular, positive diagonal).  Kept on the graph
+    # so second derivatives through R retain R's dependence on A.
+    L = R.mT @ D
+    G_L = G_R.mT @ D
+    eye_n = lucid.eye(n, dtype=L.dtype, device=L.device)
+    M = L.mT @ G_L
+    Phi = lucid.tril(M) - 0.5 * (M * eye_n)
+    Y = solve_triangular(L.mT, Phi, upper=True)
+    Z = solve_triangular(L.mT, Y.mT, upper=True).mT
+    G_B = (Z + Z.mT) * 0.5
+    return (2.0 * A) @ G_B
+
+
 @final
-class _QRRGradWithA(_AutogradFunction):
-    """Backward: R contribution to dA via Cholesky of A^T A."""
+class _QR(_AutogradFunction):
+    """Reduced QR with combined ``(Q, R)`` backward."""
+
+    _materialize_grads = False
 
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        q_impl: _C_engine.TensorImpl,
-        r_impl: _C_engine.TensorImpl,
+    def forward(ctx: FunctionCtx, A: Tensor) -> tuple[Tensor, Tensor]:
+        q_impl, r_impl = _la.qr(_unwrap(A))
+        Q, R = _wrap(q_impl), _wrap(r_impl)
+        ctx.save_for_backward(A, Q, R)
+        return Q, R
+
+    @override
+    @staticmethod
+    def backward(
+        ctx: FunctionCtx, G_Q: Tensor | None, G_R: Tensor | None
     ) -> Tensor:
-        ctx.A_impl = _unwrap(A)  # store A as TensorImpl
-        ctx.q_impl = q_impl
-        ctx.r_impl = r_impl
-        return _wrap(r_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_R: Tensor) -> Tensor:
-        A = _wrap(ctx.A_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        R = _wrap(ctx.r_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
+        A, Q, R = ctx.saved_tensors
         if int(A.shape[-2]) < int(A.shape[-1]):
-            Q = _wrap(ctx.q_impl)  # type: ignore[arg-type]  # TensorImpl at runtime
-            return _qr_wide_backward(A, Q, R, None, G_R)
-        n = int(R.shape[-1])
-        # D = sign matrix of R diagonal
-        diag_R = R.diagonal(dim1=-2, dim2=-1)
-        abs_d = diag_R.abs()
-        safe_abs_d = lucid.where(abs_d < 1e-12, lucid.ones_like(abs_d), abs_d)
-        sign_d = diag_R / safe_abs_d
-        D = lucid.diag_embed(sign_d)
-        # L = R.mT @ D  (lower triangular, positive diagonal)
-        # Derivation: R_pos = D @ R (sign-normalised), L = R_pos^T = R^T D = R.mT @ D
-        # Kept on the graph: detached, L froze R's dependence on A and the
-        # second derivative through R lost that term.
-        L = R.mT @ D
-        # G_L = G_R_pos^T = (D @ G_R)^T = G_R^T @ D  (since D is symmetric)
-        G_L = G_R.mT @ D
-        # Murray's Cholesky backward → G_B = sym(L^{-T} Phi(L^T G_L) L^{-1})
-        eye_n = lucid.eye(n, dtype=L.dtype, device=L.device)
-        M = L.mT @ G_L
-        Phi = lucid.tril(M) - 0.5 * (M * eye_n)
-        Y = solve_triangular(L.mT, Phi, upper=True)
-        Z = solve_triangular(L.mT, Y.mT, upper=True).mT
-        G_B = (Z + Z.mT) * 0.5
-        # dA = 2 A G_B  (from B = A^T A)
-        return (2.0 * A) @ G_B
-
-
-@final
-class _QRQGrad(_AutogradFunction):
-    """Backward: Q contribution to dA.
-
-    From A = Q R with Q^T Q = I (Stiefel manifold constraint):
-      dA from G_Q = (G_Q + Q copyltu(-G_Q^T Q)) R^{-T}
-    where copyltu(M) mirrors the strict lower triangle into the upper one
-    and keeps the diagonal:
-      copyltu(M) = tril(M, -1) + tril(M, -1)^T + diag(diag(M)).
-
-    copyltu is *not* the same as sym(M) = (M + M^T)/2 — they agree only for
-    symmetric M, and Q^T G_Q is not symmetric in general.  This form is exact
-    for square and tall (m >= n) reduced QR, so no separate off-range term is
-    needed; a wide input (m < n) goes through ``_qr_wide_backward``.
-    """
-
-    @override
-    @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        q_impl: _C_engine.TensorImpl,
-        r_impl: _C_engine.TensorImpl,
-    ) -> Tensor:
-        ctx.A_impl = _unwrap(A)
-        ctx.q_impl = q_impl
-        ctx.r_impl = r_impl
-        return _wrap(q_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_Q: Tensor) -> Tensor:
-        Q = _wrap(ctx.q_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        R = _wrap(ctx.r_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        if int(Q.shape[-1]) < int(R.shape[-1]):
-            A = _wrap(ctx.A_impl)  # type: ignore[arg-type]  # TensorImpl at runtime
-            return _qr_wide_backward(A, Q, R, G_Q, None)
-        # M = -G_Q^T Q, then mirror its strict lower triangle upward.
-        M = -(G_Q.mT @ Q)  # n×n
-        numerator = G_Q + Q @ _copyltu(M)  # m×n
-        return solve_triangular(R, numerator.mT, upper=True).mT
+            return _qr_wide_backward(A, Q, R, G_Q, G_R)
+        dA: Tensor | None = None
+        if G_Q is not None:
+            M = -(G_Q.mT @ Q)
+            numerator = G_Q + Q @ _copyltu(M)
+            dA = solve_triangular(R, numerator.mT, upper=True).mT
+        if G_R is not None:
+            dA_R = _qr_tall_r_backward(A, R, G_R)
+            dA = dA_R if dA is None else dA + dA_R
+        assert dA is not None
+        return dA
 
 
 def qr(A: Tensor, mode: str = "reduced") -> tuple[Tensor, Tensor]:
@@ -1002,12 +902,12 @@ def qr(A: Tensor, mode: str = "reduced") -> tuple[Tensor, Tensor]:
     """
     with _autocast_entry("qr", _unwrap(A)) as (a_impl,):
         A_cast = _wrap(a_impl)
-        q_impl, r_impl = _la.qr(a_impl)
         if not _C_engine.grad_enabled() or not A_cast.requires_grad:
+            q_impl, r_impl = _la.qr(a_impl)
             return _complete_qr_factors(A_cast, _wrap(q_impl), _wrap(r_impl), mode)
-        Q = _QRQGrad.apply(A_cast, q_impl, r_impl)
-        R = _QRRGradWithA.apply(A_cast, q_impl, r_impl)
-        assert isinstance(Q, Tensor) and isinstance(R, Tensor)
+        out = _QR.apply(A_cast)
+        assert isinstance(out, tuple)
+        Q, R = out
         return _complete_qr_factors(A_cast, Q, R, mode)
 
 
@@ -1436,66 +1336,44 @@ class _Eig(_AutogradFunction):
 
 
 @final
-class _EighWGrad(_AutogradFunction):
-    """Backward: eigenvalue contribution  dA = V diag(G_w) V^T.
+class _Eigh(_AutogradFunction):
+    """Symmetric / Hermitian eigendecomposition with Loewner backward."""
 
-    w_impl / V_impl are passed as TensorImpl (not Tensor) so _make_apply
-    skips them in the differentiable-input scan — only A gets a gradient edge.
-    """
+    _materialize_grads = False
 
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        w_impl: _C_engine.TensorImpl,
-        V_impl: _C_engine.TensorImpl,
+    def forward(ctx: FunctionCtx, A: Tensor, UPLO: str) -> tuple[Tensor, Tensor]:
+        w_impl, V_impl = _la.eigh(_unwrap(A), UPLO)
+        w, V = _wrap(w_impl), _wrap(V_impl)
+        ctx.save_for_backward(w, V)
+        return w, V
+
+    @override
+    @staticmethod
+    def backward(
+        ctx: FunctionCtx, G_w: Tensor | None, G_V: Tensor | None
     ) -> Tensor:
-        ctx.V_impl = V_impl  # store TensorImpl, not Tensor
-        return _wrap(w_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_w: Tensor) -> Tensor:
-        V = _wrap(ctx.V_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        return V @ lucid.diag_embed(G_w) @ V.mT
-
-
-@final
-class _EighVGrad(_AutogradFunction):
-    """Backward: eigenvector contribution  dA = sym(V (F ⊙ V^T G_V) V^T)."""
-
-    @override
-    @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        A: Tensor,
-        w_impl: _C_engine.TensorImpl,
-        V_impl: _C_engine.TensorImpl,
-    ) -> Tensor:
-        ctx.w_impl = w_impl
-        ctx.V_impl = V_impl
-        return _wrap(V_impl)
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, G_V: Tensor) -> Tensor:
-        w = _wrap(ctx.w_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        V = _wrap(ctx.V_impl)  # type: ignore[arg-type]  # ctx attr is TensorImpl at runtime
-        k = int(w.shape[-1])
-        Wi = w.unsqueeze(-1)
-        Wj = w.unsqueeze(-2)
-        # F[i, j] = 1 / (w[j] - w[i]).  The difference ran the other way,
-        # so every eigenvector gradient came out negated — a wrong-signed
-        # gradient in training, where eigenvalue-only losses hid it.
-        denom = Wj - Wi
-        eye_k = lucid.eye(k, dtype=w.dtype, device=w.device)
-        safe_denom = denom + eye_k
-        F = (1.0 / safe_denom) * (1.0 - eye_k)
-        VtGV = V.mT @ G_V
-        inner = F * VtGV
-        dA = V @ inner @ V.mT
-        return (dA + dA.mT) * 0.5
+        w, V = ctx.saved_tensors
+        dA: Tensor | None = None
+        if G_w is not None:
+            dA = V @ lucid.diag_embed(G_w) @ V.mT
+        if G_V is not None:
+            k = int(w.shape[-1])
+            Wi = w.unsqueeze(-1)
+            Wj = w.unsqueeze(-2)
+            # F[i, j] = 1 / (w[j] - w[i]).
+            denom = Wj - Wi
+            eye_k = lucid.eye(k, dtype=w.dtype, device=w.device)
+            safe_denom = denom + eye_k
+            F = (1.0 / safe_denom) * (1.0 - eye_k)
+            VtGV = V.mT @ G_V
+            inner = F * VtGV
+            dA_V = V @ inner @ V.mT
+            dA_V = (dA_V + dA_V.mT) * 0.5
+            dA = dA_V if dA is None else dA + dA_V
+        assert dA is not None
+        return dA
 
 
 def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:
@@ -1562,12 +1440,12 @@ def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:
     """
     with _autocast_entry("eigh", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
-        w_impl, V_impl = _la.eigh(a_impl, UPLO)
         if not _C_engine.grad_enabled() or not A_cast.requires_grad:
+            w_impl, V_impl = _la.eigh(a_impl, UPLO)
             return _EighResult(_wrap(w_impl), _wrap(V_impl))
-        w = _EighWGrad.apply(A_cast, w_impl, V_impl)
-        V = _EighVGrad.apply(A_cast, w_impl, V_impl)
-        assert isinstance(w, Tensor) and isinstance(V, Tensor)
+        out = _Eigh.apply(A_cast, UPLO)
+        assert isinstance(out, tuple)
+        w, V = out
         return _EighResult(w, V)
 
 
