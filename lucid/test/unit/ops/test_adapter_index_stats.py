@@ -515,3 +515,123 @@ def test_searchsorted_1m_by_1m_completes_in_bounded_memory() -> None:
     assert out.dtype == lucid.int64
     assert int(out[0].item()) == 0
     assert int(out[-1].item()) == 1_000_000
+
+
+@pytest.mark.parametrize(
+    "dtype_name",
+    ["float16", "bfloat16", "float32", "int8", "int16", "int32", "int64", "bool"],
+)
+@pytest.mark.parametrize("right", [False, True])
+@pytest.mark.parametrize("out_int32", [False, True])
+def test_searchsorted_and_bucketize_metal_zero_host_sync_and_compiled_parity(
+    ref: ModuleType, dtype_name: str, right: bool, out_int32: bool
+) -> None:
+    dt = getattr(lucid, dtype_name)
+    ref_dt = getattr(ref, dtype_name)
+    if dtype_name == "bool":
+        seq_vals: list[object] = [False, False, True, True]
+        q_vals: list[object] = [[False, True], [True, False]]
+    elif dtype_name == "int64":
+        base = 1 << 40
+        seq_vals = [base + 1, base + 3, base + 3, base + 7]
+        q_vals = [[base, base + 3], [base + 5, base + 9]]
+    elif dtype_name.startswith("int"):
+        seq_vals = [-5, -1, -1, 3, 10]
+        q_vals = [[-6, -1], [0, 12]]
+    else:
+        seq_vals = [-2.5, 0.0, 0.0, 3.5, NAN]
+        q_vals = [[-3.0, 0.0], [1.25, NAN]]
+
+    seq = lucid.tensor(seq_vals, dtype=dt, device="metal")
+    q = lucid.tensor(q_vals, dtype=dt, device="metal")
+    rseq = ref.tensor(seq_vals, dtype=ref_dt)
+    rq = ref.tensor(q_vals, dtype=ref_dt)
+    side = "right" if right else "left"
+
+    lucid.metal.synchronize()
+    before = _C_engine.host_sync_count()
+    got_ss = lucid.searchsorted(seq, q, out_int32=out_int32, side=side)
+    got_bk = lucid.bucketize(q, seq, out_int32=out_int32, right=right)
+    assert _C_engine.host_sync_count() == before
+
+    rseq_cmp = rseq.to(ref.uint8) if dtype_name == "bool" else rseq
+    rq_cmp = rq.to(ref.uint8) if dtype_name == "bool" else rq
+    want_ss = ref.searchsorted(rseq_cmp, rq_cmp, out_int32=out_int32, side=side)
+    want_bk = ref.bucketize(rq_cmp, rseq_cmp, out_int32=out_int32, right=right)
+    _same(got_ss, want_ss)
+    _same(got_bk, want_bk)
+
+    c_ss = lucid.compile(
+        lambda s, v: lucid.searchsorted(s, v, out_int32=out_int32, side=side)
+    )
+    c_bk = lucid.compile(
+        lambda v, b: lucid.bucketize(v, b, out_int32=out_int32, right=right)
+    )
+    got_c_ss = c_ss(seq, q)
+    got_c_bk = c_bk(q, seq)
+    lucid.metal.synchronize()
+    before_replay = _C_engine.host_sync_count()
+    got_c_ss2 = c_ss(seq, q)
+    got_c_bk2 = c_bk(q, seq)
+    assert _C_engine.host_sync_count() == before_replay
+    _same(got_c_ss, want_ss)
+    _same(got_c_bk, want_bk)
+    _same(got_c_ss2, want_ss)
+    _same(got_c_bk2, want_bk)
+
+
+@pytest.mark.parametrize("right", [False, True])
+def test_searchsorted_sorter_nd_scalar_strided_and_empty_compiled(
+    ref: ModuleType, right: bool
+) -> None:
+    # Unsorted 2-D sequence with sorter + strided query view on Metal.
+    unsorted_vals = [[4.0, 1.0, 3.0, 2.0], [20.0, 10.0, 40.0, 30.0]]
+    sorter_vals = [[1, 3, 2, 0], [1, 0, 3, 2]]
+    q_full_vals = [
+        [[0.5, 99.0], [2.0, 99.0], [3.5, 99.0]],
+        [[5.0, 99.0], [25.0, 99.0], [45.0, 99.0]],
+    ]
+    unsorted = lucid.tensor(unsorted_vals, device="metal")
+    sorter = lucid.tensor(sorter_vals, dtype=lucid.int64, device="metal")
+    q_strided = lucid.tensor(q_full_vals, device="metal")[:, :, 0]
+    runs = ref.tensor(unsorted_vals)
+    rsorter = ref.tensor(sorter_vals, dtype=ref.int64)
+    rq = ref.tensor(q_full_vals)[:, :, 0]
+
+    lucid.metal.synchronize()
+    before = _C_engine.host_sync_count()
+    got = lucid.searchsorted(unsorted, q_strided, right=right, sorter=sorter)
+    assert _C_engine.host_sync_count() == before
+    want = ref.searchsorted(runs, rq, right=right, sorter=rsorter)
+    _same(got, want)
+
+    c_fn = lucid.compile(
+        lambda u, v, s: lucid.searchsorted(u, v, right=right, sorter=s)
+    )
+    _same(c_fn(unsorted, q_strided, sorter), want)
+
+    # 0-D scalar query and empty sequence / empty query under compile.
+    seq_1d = lucid.tensor([1.0, 3.0, 3.0, 5.0], device="metal")
+    rseq_1d = ref.tensor([1.0, 3.0, 3.0, 5.0])
+    q_0d = lucid.tensor(3.0, device="metal")
+    rq_0d = ref.tensor(3.0)
+    c_scalar = lucid.compile(lambda s, v: lucid.searchsorted(s, v, right=right))
+    _same(c_scalar(seq_1d, q_0d), ref.searchsorted(rseq_1d, rq_0d, right=right))
+
+    empty_seq = lucid.zeros(0, device="metal")
+    rempty_seq = ref.zeros(0)
+    q_1d = lucid.tensor([0.0, 2.0], device="metal")
+    rq_1d = ref.tensor([0.0, 2.0])
+    c_empty_seq = lucid.compile(lambda s, v: lucid.searchsorted(s, v, right=right))
+    _same(
+        c_empty_seq(empty_seq, q_1d),
+        ref.searchsorted(rempty_seq, rq_1d, right=right),
+    )
+
+    empty_q = lucid.zeros(2, 0, device="metal")
+    rempty_q = ref.zeros(2, 0)
+    c_empty_q = lucid.compile(lambda s, v: lucid.searchsorted(s, v, right=right))
+    _same(
+        c_empty_q(seq_1d, empty_q),
+        ref.searchsorted(rseq_1d, rempty_q, right=right),
+    )

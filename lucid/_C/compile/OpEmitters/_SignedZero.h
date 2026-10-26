@@ -82,8 +82,19 @@ inline bool is_neg_one_splat(const BuilderContext& ctx, TensorId id) {
     return ctx.resolve_saved(id, kNegOneSplatSlot) != nullptr;
 }
 
+inline MPSGraphTensor* constant_splat_like(MPSGraph* g, MPSGraphTensor* t, double value) {
+    MPSGraphTensor* c = [g constantWithScalar:value dataType:t.dataType];
+    if (t.shape == nil || t.shape.count == 0)
+        return c;
+    for (NSNumber* dim in t.shape) {
+        if (dim.longLongValue <= 0)
+            return [g broadcastTensor:c toShapeTensor:[g shapeOfTensor:t name:nil] name:nil];
+    }
+    return [g constantWithScalar:value shape:t.shape dataType:t.dataType];
+}
+
 inline MPSGraphTensor* zero_splat_like(MPSGraph* g, MPSGraphTensor* t) {
-    return [g constantWithScalar:0.0 shape:t.shape dataType:t.dataType];
+    return constant_splat_like(g, t, 0.0);
 }
 
 // ``x + pos_zero`` as IEEE computes it, where ``pos_zero`` is a +0 splat (it

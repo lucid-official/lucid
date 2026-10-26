@@ -297,7 +297,7 @@ emit_pow_scalar_roots(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* xf, float 
 inline MPSGraphTensor* emit_pow_special_scalar(MPSGraph* g, MPSGraphTensor* a, float e) {
     const MPSDataType orig_dt = a.dataType;
     if (e == 0.0f)
-        return [g constantWithScalar:1.0 shape:a.shape dataType:orig_dt];
+        return constant_splat_like(g, a, 1.0);
     if (e == 1.0f)
         return [g identityWithTensor:a name:@"pow_one"];
     MPSGraphTensor* xf =
@@ -453,9 +453,10 @@ inline MPSGraphTensor* emit_pow_tensor(MPSGraph* g, MPSGraphTensor* a, MPSGraphT
     MPSGraphTensor* native_pow = [g powerWithPrimaryTensor:xf secondaryTensor:yf name:nil];
     MPSGraphTensor* res = emit_pow_tensor_special_f32(g, x, y, native_pow);
     MPSGraphTensor* res_dt = cast_from_f32_if_needed(g, res, orig_dt);
-    MPSGraphTensor* a_bcast = (a.shape != nil && [a.shape isEqualToArray:res_dt.shape])
-                                  ? a
-                                  : [g broadcastTensor:a toShape:res_dt.shape name:nil];
+    MPSGraphTensor* a_bcast =
+        (a.shape != nil && res_dt.shape != nil && [a.shape isEqualToArray:res_dt.shape])
+            ? a
+            : [g broadcastTensor:a toShapeTensor:[g shapeOfTensor:res_dt name:nil] name:nil];
     res_dt = [g selectWithPredicateTensor:[g equalWithPrimaryTensor:y
                                                     secondaryTensor:c_one
                                                                name:nil]
