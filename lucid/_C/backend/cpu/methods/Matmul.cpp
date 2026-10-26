@@ -409,6 +409,10 @@ Storage CpuBackend::inner(const Storage& a,
     else if (dt == Dtype::F64)
         run(reinterpret_cast<double*>(ptr.get()), reinterpret_cast<const double*>(ca.ptr.get()),
             reinterpret_cast<const double*>(cb.ptr.get()));
+    else if (dt == Dtype::C64)
+        run(reinterpret_cast<std::complex<float>*>(ptr.get()),
+            reinterpret_cast<const std::complex<float>*>(ca.ptr.get()),
+            reinterpret_cast<const std::complex<float>*>(cb.ptr.get()));
     else
         ErrorBuilder("cpu_backend::inner").not_implemented("dtype not supported");
     return Storage{CpuStorage{ptr, nb, dt}};

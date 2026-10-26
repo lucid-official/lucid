@@ -53,31 +53,35 @@ TensorImplPtr kron_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     const TensorImplPtr& b = cast[1];
     const auto& sa = a->shape();
     const auto& sb = b->shape();
-    if (sa.size() != sb.size())
-        ErrorBuilder("kron").fail("operands must share rank");
 
-    // Interleave size-1 placeholders so the multiply broadcasts to the full
-    // 2·ndim-rank block tensor.
-    const std::size_t ndim = sa.size();
+    // Pad the lower-rank operand's shape with leading 1s to the common rank,
+    // then interleave size-1 placeholders so the multiply broadcasts to the
+    // full 2·ndim-rank block tensor.
+    const std::size_t ndim = std::max(sa.size(), sb.size());
+    Shape a_padded(ndim - sa.size(), 1);
+    a_padded.insert(a_padded.end(), sa.begin(), sa.end());
+    Shape b_padded(ndim - sb.size(), 1);
+    b_padded.insert(b_padded.end(), sb.begin(), sb.end());
+
     Shape a_expanded;
     Shape b_expanded;
     a_expanded.reserve(2 * ndim);
     b_expanded.reserve(2 * ndim);
     for (std::size_t i = 0; i < ndim; ++i) {
-        a_expanded.push_back(sa[i]);
+        a_expanded.push_back(a_padded[i]);
         a_expanded.push_back(1);
         b_expanded.push_back(1);
-        b_expanded.push_back(sb[i]);
+        b_expanded.push_back(b_padded[i]);
     }
     auto a_r = reshape_op(a, a_expanded);
     auto b_r = reshape_op(b, b_expanded);
     auto product = mul_op(a_r, b_r);
 
-    // Collapse each (sa[i], sb[i]) pair into a single sa[i]·sb[i] axis.
+    // Collapse each (a_padded[i], b_padded[i]) pair into a single axis.
     Shape out_shape;
     out_shape.reserve(ndim);
     for (std::size_t i = 0; i < ndim; ++i)
-        out_shape.push_back(sa[i] * sb[i]);
+        out_shape.push_back(a_padded[i] * b_padded[i]);
     return reshape_op(product, out_shape);
 }
 

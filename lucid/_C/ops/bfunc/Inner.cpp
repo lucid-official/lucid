@@ -24,6 +24,7 @@
 #include "../ufunc/Transpose.h"
 #include "../utils/View.h"
 #include "Matmul.h"
+#include "Mul.h"
 #include "_Detail.h"
 
 namespace lucid {
@@ -65,20 +66,26 @@ std::string inner_einsum_pattern(std::size_t na, std::size_t nb) {
 TensorImplPtr inner_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     validate_pair(a, b, "inner");
 
+    const Dtype dt = a->dtype();
+    const Device device = a->device();
+    const auto& sa = a->shape();
+    const auto& sb = b->shape();
+
+    // When either operand is a 0-D scalar, inner(a, b) is elementwise a * b
+    // (after refusing bool, matching the non-scalar contract).
+    if (dt == Dtype::Bool)
+        ErrorBuilder("inner").not_implemented("not implemented for bool");
+    if (sa.empty() || sb.empty())
+        return mul_op(a, b);
+    if (sa.back() != sb.back())
+        throw ShapeMismatch(sa, sb, "inner");
+
     // When gradient tracking is enabled, delegate to einsum_op so that the
     // backward pass is handled automatically by the einsum backward node.
     if (GradMode::is_enabled() && (a->requires_grad() || b->requires_grad())) {
-        return einsum_op(inner_einsum_pattern(a->shape().size(), b->shape().size()), {a, b});
+        return einsum_op(inner_einsum_pattern(sa.size(), sb.size()), {a, b});
     }
 
-    const Dtype dt = a->dtype();
-    const Device device = a->device();
-
-    const auto& sa = a->shape();
-    const auto& sb = b->shape();
-    // Both tensors must be non-scalar and have the same last-axis size.
-    if (sa.empty() || sb.empty() || sa.back() != sb.back())
-        throw ShapeMismatch(sa, sb, "inner");
     // Output shape: all-but-last dims of A followed by all-but-last dims of B.
     Shape out_shape(sa.begin(), sa.end() - 1);
     out_shape.insert(out_shape.end(), sb.begin(), sb.end() - 1);
@@ -86,13 +93,13 @@ TensorImplPtr inner_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     // Integers have no BLAS or MLX inner kernel: the CPU refused them and
     // Metal passed MLX's own ValueError through.  The same contraction runs
     // as ``A @ B^T`` over the flattened leading axes, and matmul takes
-    // integers on both devices.  Bool is refused, as the reference refuses it.
-    if (dt == Dtype::Bool)
-        ErrorBuilder("inner").not_implemented("not implemented for bool");
+    // integers on both devices.
     if (!is_floating_point(dt) && !is_complex(dt)) {
         const std::int64_t k = sa.back();
-        const std::int64_t rows_a = k == 0 ? 0 : static_cast<std::int64_t>(shape_numel(sa)) / k;
-        const std::int64_t rows_b = k == 0 ? 0 : static_cast<std::int64_t>(shape_numel(sb)) / k;
+        const std::int64_t rows_a =
+            static_cast<std::int64_t>(shape_numel(Shape(sa.begin(), sa.end() - 1)));
+        const std::int64_t rows_b =
+            static_cast<std::int64_t>(shape_numel(Shape(sb.begin(), sb.end() - 1)));
         auto a2 = reshape_op(a, Shape{rows_a, k});
         auto b2 = reshape_op(b, Shape{rows_b, k});
         return reshape_op(matmul_op(a2, swapaxes_op(b2, 0, 1)), out_shape);

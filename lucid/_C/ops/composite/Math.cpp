@@ -280,8 +280,16 @@ TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     auto abs_b = abs_op(b);
     auto big = maximum_op(abs_a, abs_b);
     auto small = minimum_op(abs_a, abs_b);
-    auto safe = maximum_op(big, full_like_op(big, std::numeric_limits<double>::min()));
-    auto ratio = div_op(small, safe);
+    const double smallest_normal =
+        big->dtype() == Dtype::F64
+            ? std::numeric_limits<double>::min()
+            : (big->dtype() == Dtype::F16 ? 6.103515625e-05
+                                          : static_cast<double>(std::numeric_limits<float>::min()));
+    auto big_inf = isinf_op(big);
+    auto safe = where_op(big_inf, full_like_op(big, 1.0),
+                         maximum_op(big, full_like_op(big, smallest_normal)));
+    auto safe_small = where_op(big_inf, full_like_op(small, 0.0), small);
+    auto ratio = div_op(safe_small, safe);
     auto one = full_like_op(ratio, 1.0);
     return mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
 }
@@ -296,8 +304,9 @@ TensorImplPtr logaddexp_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in)
     const AmpScope amp{"logaddexp", a_dev->device()};
     const auto [a, b] = cast_operands(amp, a_dev, b_dev);
     auto m = maximum_op(a, b);
-    auto exp_a = exp_op(sub_op(a, m));
-    auto exp_b = exp_op(sub_op(b, m));
+    auto safe_m = where_op(isinf_op(m), full_like_op(m, 0.0), m);
+    auto exp_a = exp_op(sub_op(a, safe_m));
+    auto exp_b = exp_op(sub_op(b, safe_m));
     return add_op(m, log_op(add_op(exp_a, exp_b)));
 }
 
@@ -320,12 +329,15 @@ isclose_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in, double rtol, do
         // Take the difference exactly in an integer type, then compare in
         // float32 the way a floating input would.
         auto as_int = [](const TensorImplPtr& t) {
-            return t->dtype() == Dtype::Bool ? astype_op(t, Dtype::I32) : t;
+            return (t->dtype() == Dtype::Bool || t->dtype() == Dtype::I8 ||
+                    t->dtype() == Dtype::I16)
+                       ? astype_op(t, Dtype::I32)
+                       : t;
         };
         const auto ai = as_int(a);
         const auto bi = as_int(b);
-        diff = astype_op(abs_op(sub_op(ai, bi)), Dtype::F32);
-        abs_b = astype_op(abs_op(bi), Dtype::F32);
+        diff = abs_op(astype_op(sub_op(ai, bi), Dtype::F32));
+        abs_b = abs_op(astype_op(bi, Dtype::F32));
     } else {
         diff = abs_op(sub_op(a, b));
         abs_b = abs_op(b);
@@ -334,7 +346,8 @@ isclose_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in, double rtol, do
     auto scaled = mul_op(rtol_t, abs_b);
     auto atol_t = full_like_op(scaled, atol);
     auto tol = add_op(atol_t, scaled);
-    return less_equal_op(diff, tol);
+    auto within_tol = logical_and_op(isfinite_op(diff), less_equal_op(diff, tol));
+    return logical_or_op(equal_op(a, b), within_tol);
 }
 
 }  // namespace lucid

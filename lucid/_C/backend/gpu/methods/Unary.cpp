@@ -35,6 +35,8 @@ Storage GpuBackend::neg(const Storage& a, const Shape& shape, Dtype dt) {
 }
 
 Storage GpuBackend::sign(const Storage& a, const Shape& shape, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::sign").not_implemented("complex not supported");
     return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::sign(x); });
 }
 

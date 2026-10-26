@@ -104,6 +104,8 @@ TensorImplPtr cartesian_prod_op(const std::vector<TensorImplPtr>& tensors) {
         if (t->shape().size() != 1)
             ErrorBuilder("cartesian_prod").fail("inputs must be 1-D");
     }
+    if (tensors.size() == 1)
+        return reshape_op(tensors[0], tensors[0]->shape());
 
     // ``meshgrid`` with ``ij`` indexing produces n-D grids whose flattened
     // form gives every combination in a stable order.

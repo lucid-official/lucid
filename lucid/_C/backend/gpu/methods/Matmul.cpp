@@ -230,6 +230,16 @@ Storage GpuBackend::tensordot(const Storage& a,
                               Dtype dt) {
     const auto& ga = std::get<GpuStorage>(a);
     const auto& gb = std::get<GpuStorage>(b);
+    const bool discrete = dt != Dtype::F16 && dt != Dtype::BF16 && dt != Dtype::F32 &&
+                          dt != Dtype::F64 && dt != Dtype::C64;
+    if (discrete) {
+        auto a_arr = ::mlx::core::astype(*ga.arr, ::mlx::core::float32);
+        auto b_arr = ::mlx::core::astype(*gb.arr, ::mlx::core::float32);
+        auto wide = ::mlx::core::tensordot(a_arr, b_arr, axes_a, axes_b);
+        auto rounded = ::mlx::core::round(wide);
+        return Storage{
+            gpu::wrap_mlx_array(::mlx::core::astype(rounded, gpu::to_mlx_dtype(dt)), dt)};
+    }
     auto out = ::mlx::core::tensordot(*ga.arr, *gb.arr, axes_a, axes_b);
     return Storage{gpu::wrap_mlx_array(std::move(out), dt)};
 }

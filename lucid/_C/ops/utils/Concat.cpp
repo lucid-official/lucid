@@ -473,23 +473,40 @@ TensorImplPtr stack_op(const std::vector<TensorImplPtr>& xs, int axis) {
 }
 
 // hstack: concatenate along axis 1 for >=2-D inputs (column-wise), or
-// along axis 0 for 1-D inputs (element-wise) to match NumPy/reference semantics.
+// along axis 0 for 1-D / promoted 0-D inputs (element-wise) to match
+// NumPy/reference semantics.
 TensorImplPtr hstack_op(const std::vector<TensorImplPtr>& xs) {
     if (xs.empty())
         ErrorBuilder("hstack").fail("empty input");
-    return concatenate_op(xs, xs[0]->shape().size() <= 1 ? 0 : 1);
+    std::vector<TensorImplPtr> promoted;
+    promoted.reserve(xs.size());
+    for (const auto& t : xs) {
+        if (!t)
+            ErrorBuilder("hstack").fail("null input");
+        promoted.push_back(t->shape().empty() ? reshape_op(t, Shape{1}) : t);
+    }
+    return concatenate_op(promoted, promoted[0]->shape().size() == 1 ? 0 : 1);
 }
 
-// vstack: concatenate along axis 0 for >=2-D inputs (row-wise), but for 1-D
-// inputs call stack_op(xs, 0) to produce a 2-D matrix where each input
-// becomes a row.  This mirrors the NumPy/reference framework vstack convention.
+// vstack: concatenate along axis 0 for >=2-D inputs (row-wise), promoting
+// 0-D inputs to [1, 1] and 1-D inputs to [1, N] to match NumPy/reference
+// semantics.
 TensorImplPtr vstack_op(const std::vector<TensorImplPtr>& xs) {
     if (xs.empty())
         ErrorBuilder("vstack").fail("empty input");
-    if (xs[0]->shape().size() == 1) {
-        return stack_op(xs, 0);
+    std::vector<TensorImplPtr> promoted;
+    promoted.reserve(xs.size());
+    for (const auto& t : xs) {
+        if (!t)
+            ErrorBuilder("vstack").fail("null input");
+        if (t->shape().empty())
+            promoted.push_back(reshape_op(t, Shape{1, 1}));
+        else if (t->shape().size() == 1)
+            promoted.push_back(reshape_op(t, Shape{1, t->shape()[0]}));
+        else
+            promoted.push_back(t);
     }
-    return concatenate_op(xs, 0);
+    return concatenate_op(promoted, 0);
 }
 
 // Divide `a` into `num_splits` equal-sized pieces along `axis`.  The size of

@@ -6,6 +6,8 @@ namespace lucid {
 namespace backend {
 
 Storage GpuBackend::sigmoid(const Storage& a, const Shape& shape, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::sigmoid").not_implemented("dtype not supported");
     return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::sigmoid(x); });
 }
 
@@ -21,6 +23,8 @@ Storage GpuBackend::relu(const Storage& a, const Shape& shape, Dtype dt) {
 }
 
 Storage GpuBackend::silu(const Storage& a, const Shape&, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::silu").not_implemented("dtype not supported");
     return mlx_unary_fused(a, dt, [](const ::mlx::core::array& x) {
         return ::mlx::core::multiply(x, ::mlx::core::sigmoid(x));
     });

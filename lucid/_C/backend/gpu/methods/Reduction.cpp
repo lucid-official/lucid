@@ -33,6 +33,8 @@ GpuBackend::reduce_mean(const Storage& a, const Shape& in_shape, const ReduceOpt
 }
 
 Storage GpuBackend::variance(const Storage& a, const Shape&, const ReduceOpts& opts, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::variance").not_implemented("complex not supported");
     const auto& gs = std::get<GpuStorage>(a);
     auto result = var_widened(*gs.arr, opts.axes, opts.keepdims, 0);
     // PERF: var() produces contiguous output; drop defensive wrap.
@@ -41,6 +43,8 @@ Storage GpuBackend::variance(const Storage& a, const Shape&, const ReduceOpts& o
 
 Storage
 GpuBackend::reduce_max(const Storage& a, const Shape& in_shape, const ReduceOpts& opts, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::reduce_max").not_implemented("complex not supported");
     return mlx_reduce(a, in_shape, opts, dt, [](auto& x, auto& axes, bool keepdims) {
         if (x.size() == 0)
             return empty_extreme(x, axes, keepdims, x.dtype());
@@ -50,6 +54,8 @@ GpuBackend::reduce_max(const Storage& a, const Shape& in_shape, const ReduceOpts
 
 Storage
 GpuBackend::reduce_min(const Storage& a, const Shape& in_shape, const ReduceOpts& opts, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::reduce_min").not_implemented("complex not supported");
     return mlx_reduce(a, in_shape, opts, dt, [](auto& x, auto& axes, bool keepdims) {
         if (x.size() == 0)
             return empty_extreme(x, axes, keepdims, x.dtype());
@@ -85,12 +91,16 @@ Storage GpuBackend::cumprod(const Storage& a, const Shape&, int axis, Dtype dt) 
 }
 
 Storage GpuBackend::cummax(const Storage& a, const Shape&, int axis, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::cummax").not_implemented("complex not supported");
     const auto& gs = std::get<GpuStorage>(a);
     auto out = ::mlx::core::cummax(*gs.arr, axis);
     return Storage{gpu::wrap_mlx_array(poison_after_nan(*gs.arr, out, axis), dt)};
 }
 
 Storage GpuBackend::cummin(const Storage& a, const Shape&, int axis, Dtype dt) {
+    if (is_complex(dt))
+        ErrorBuilder("gpu_backend::cummin").not_implemented("complex not supported");
     const auto& gs = std::get<GpuStorage>(a);
     auto out = ::mlx::core::cummin(*gs.arr, axis);
     return Storage{gpu::wrap_mlx_array(poison_after_nan(*gs.arr, out, axis), dt)};
@@ -124,9 +134,10 @@ Storage GpuBackend::arg_reduce_index(
     // ground that "the largest of these booleans" is a question about
     // ordering that bool does not answer.  Refuse for the same reason
     // rather than let MLX pick one.
-    if (dt == Dtype::Bool)
+    if (dt == Dtype::Bool || is_complex(dt))
         ErrorBuilder("gpu_backend::arg_reduce_index")
-            .not_implemented("argmax / argmin do not accept bool — cast to an integer dtype");
+            .not_implemented(
+                "argmax / argmin do not accept bool or complex — cast to an integer or real dtype");
     const auto& ga = std::get<GpuStorage>(a);
     if (ga.arr->size() == 0)
         return Storage{gpu::wrap_mlx_array(

@@ -71,7 +71,7 @@ check_operands(const char* op, const TensorImplPtr& a_in, const TensorImplPtr& b
         ErrorBuilder(op).not_implemented(std::string("dtype ") + std::string(dtype_name(dt)) +
                                          " is not supported; " + op +
                                          " takes integer or real floating-point operands");
-    if (is_integral(dt) && b->device() == Device::CPU && !b->is_phantom()) {
+    if (is_integral(dt) && a->numel() > 0 && b->device() == Device::CPU && !b->is_phantom()) {
         if (backend::cpu::any_zero_integer(std::get<CpuStorage>(b->storage()), b->numel(), dt))
             ErrorBuilder(op).fail("ZeroDivisionError: integer division by zero");
     }

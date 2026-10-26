@@ -7,6 +7,8 @@
 
 #include "Tensordot.h"
 
+#include <complex>
+#include <cstdint>
 #include <numeric>
 #include <set>
 #include <string>
@@ -91,14 +93,126 @@ std::string tensordot_einsum_pattern(std::size_t na,
     return a_lhs + "," + b_lhs + "->" + rhs;
 }
 
+void validate_tensordot_axes(const Shape& sa,
+                             const Shape& sb,
+                             std::vector<int>& axes_a,
+                             std::vector<int>& axes_b) {
+    if (axes_a.size() != axes_b.size())
+        ErrorBuilder("tensordot").invalid_argument("axes_a and axes_b must have equal length");
+    const int na = static_cast<int>(sa.size());
+    const int nb = static_cast<int>(sb.size());
+    std::vector<bool> seen_a(sa.size(), false);
+    std::vector<bool> seen_b(sb.size(), false);
+    for (std::size_t i = 0; i < axes_a.size(); ++i) {
+        int pa = axes_a[i] < 0 ? axes_a[i] + na : axes_a[i];
+        int pb = axes_b[i] < 0 ? axes_b[i] + nb : axes_b[i];
+        if (pa < 0 || pa >= na || pb < 0 || pb >= nb)
+            ErrorBuilder("tensordot").index_error("axis out of range");
+        if (seen_a[static_cast<std::size_t>(pa)] || seen_b[static_cast<std::size_t>(pb)])
+            ErrorBuilder("tensordot").invalid_argument("duplicate contracted axis");
+        seen_a[static_cast<std::size_t>(pa)] = true;
+        seen_b[static_cast<std::size_t>(pb)] = true;
+        if (sa[static_cast<std::size_t>(pa)] != sb[static_cast<std::size_t>(pb)])
+            throw ShapeMismatch(sa, sb, "tensordot: contracted dim sizes don't match");
+        axes_a[i] = pa;
+        axes_b[i] = pb;
+    }
+}
+
+std::tuple<CpuStorage, std::vector<std::int64_t>, std::int64_t> contract_tensordot_operand(
+    const TensorImplPtr& t, const std::vector<int>& axes_contract, bool put_first, Dtype dt) {
+    const std::size_t nd = t->shape().size();
+    std::vector<bool> is_c(nd, false);
+    for (int ax : axes_contract)
+        is_c[static_cast<std::size_t>(ax)] = true;
+    std::vector<int> perm;
+    std::vector<std::int64_t> kept;
+    std::int64_t contract_size = 1;
+    for (int ax : axes_contract)
+        contract_size *= t->shape()[static_cast<std::size_t>(ax)];
+    for (std::size_t d = 0; d < nd; ++d) {
+        if (!is_c[d])
+            kept.push_back(t->shape()[d]);
+    }
+    if (put_first) {
+        perm.insert(perm.end(), axes_contract.begin(), axes_contract.end());
+        for (std::size_t d = 0; d < nd; ++d)
+            if (!is_c[d])
+                perm.push_back(static_cast<int>(d));
+    } else {
+        for (std::size_t d = 0; d < nd; ++d)
+            if (!is_c[d])
+                perm.push_back(static_cast<int>(d));
+        perm.insert(perm.end(), axes_contract.begin(), axes_contract.end());
+    }
+    CpuStorage dst = backend::Dispatcher::for_device(Device::CPU)
+                         .permute_cpu(storage_cpu(t->storage()), t->shape(), perm, dt);
+    return {std::move(dst), std::move(kept), contract_size};
+}
+
+template <typename T>
+void gemm_loop(CpuStorage& out_cpu,
+               const CpuStorage& a_cpu,
+               const CpuStorage& b_cpu,
+               std::int64_t M,
+               std::int64_t K,
+               std::int64_t N) {
+    auto* op = reinterpret_cast<T*>(out_cpu.ptr.get());
+    const auto* ap = reinterpret_cast<const T*>(a_cpu.ptr.get());
+    const auto* bp = reinterpret_cast<const T*>(b_cpu.ptr.get());
+    for (std::int64_t i = 0; i < M; ++i)
+        for (std::int64_t j = 0; j < N; ++j) {
+            T s{};
+            for (std::int64_t k = 0; k < K; ++k)
+                s = s + ap[i * K + k] * bp[k * N + j];
+            op[i * N + j] = s;
+        }
+}
+
+void run_cpu_tensordot_gemm(CpuStorage& out_cpu,
+                            const CpuStorage& a_cpu,
+                            const CpuStorage& b_cpu,
+                            std::int64_t M,
+                            std::int64_t K,
+                            std::int64_t N,
+                            Dtype dt) {
+    switch (dt) {
+    case Dtype::F32:
+        gemm_loop<float>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::F64:
+        gemm_loop<double>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::C64:
+        gemm_loop<std::complex<float>>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::I8:
+        gemm_loop<std::int8_t>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::I16:
+        gemm_loop<std::int16_t>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::I32:
+        gemm_loop<std::int32_t>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    case Dtype::I64:
+        gemm_loop<std::int64_t>(out_cpu, a_cpu, b_cpu, M, K, N);
+        break;
+    default:
+        ErrorBuilder("tensordot").not_implemented("dtype not supported");
+    }
+}
+
 // The contraction, for operands the entry below has already cast.
 TensorImplPtr contraction(const TensorImplPtr& a,
                           const TensorImplPtr& b,
                           std::vector<int> axes_a,
                           std::vector<int> axes_b) {
     validate_pair(a, b, "tensordot");
-    if (axes_a.size() != axes_b.size())
-        ErrorBuilder("tensordot").fail("axes_a and axes_b must have equal length");
+    const Dtype dt = a->dtype();
+    if (dt == Dtype::Bool)
+        ErrorBuilder("tensordot").not_implemented("not implemented for bool");
+    validate_tensordot_axes(a->shape(), b->shape(), axes_a, axes_b);
 
     // Autograd path: express the contraction as an einsum so that the einsum
     // backward node handles gradient computation.
@@ -107,151 +221,47 @@ TensorImplPtr contraction(const TensorImplPtr& a,
             tensordot_einsum_pattern(a->shape().size(), b->shape().size(), axes_a, axes_b), {a, b});
     }
 
-    const Dtype dt = a->dtype();
     const Device device = a->device();
-
-    // Accelerate has no half GEMM, and the loop below is written out for
-    // float and double only — so the pair widens at the door and the
-    // result rounds back, which is the route every other CPU entry point
-    // takes for these two formats.  Metal ran float16 and the CPU did
-    // not, which made a half-precision contraction a device-dependent
-    // proposition.
     if (device == Device::CPU && is_half_float(dt))
         return astype_op(
             contraction(astype_op(a, Dtype::F32), astype_op(b, Dtype::F32), axes_a, axes_b), dt);
 
     OpScopeFull scope{"tensordot", device, dt, Shape{}};
     {
-        std::vector<std::int64_t> ax_a, ax_b;
-        for (int v : axes_a)
-            ax_a.push_back(static_cast<std::int64_t>(v));
-        for (int v : axes_b)
-            ax_b.push_back(static_cast<std::int64_t>(v));
+        std::vector<std::int64_t> ax_a(axes_a.begin(), axes_a.end());
+        std::vector<std::int64_t> ax_b(axes_b.begin(), axes_b.end());
         scope.set_attr("axes_a", std::move(ax_a));
         scope.set_attr("axes_b", std::move(ax_b));
     }
 
-    // GPU inference path: delegate to the backend tensordot primitive.
     if (device == Device::GPU) {
         auto out_storage = backend::Dispatcher::for_device(device).tensordot(
             a->storage(), b->storage(), a->shape(), b->shape(), Shape{}, axes_a, axes_b, dt);
-        // Read the actual output shape from the MLX array because the backend
-        // may have resolved trailing scalar squeezes.
         const auto& gs = storage_gpu(out_storage);
-        Shape out_shape;
-        for (auto d : gs.arr->shape())
-            out_shape.push_back(static_cast<std::int64_t>(d));
+        Shape out_shape(gs.arr->shape().begin(), gs.arr->shape().end());
         auto result = fresh(std::move(out_storage), std::move(out_shape), dt, device);
-        if (auto* trc = ::lucid::compile::current_tracer()) {
+        if (auto* trc = ::lucid::compile::current_tracer())
             trc->on_op_io({a, b}, result);
-        }
         return result;
     }
 
-    // CPU inference path: manually permute and reshape both tensors into 2-D
-    // matrices [free_dims × contract_dims] and [contract_dims × free_dims],
-    // then execute a scalar GEMM.
-    //
-    // contract() permutes the axes of t so that either the contracted axes come
-    // first (put_first=true) or last (put_first=false), then flattens contracted
-    // and free axes into a 2-D CpuStorage.  Returns the permuted storage, the
-    // list of kept (free) dimension sizes, and the product of contracted dims.
-    auto contract = [&](const TensorImplPtr& t, const std::vector<int>& axes_contract,
-                        bool put_first) {
-        const std::size_t nd = t->shape().size();
-        std::vector<bool> is_c(nd, false);
-        for (auto ax : axes_contract) {
-            int p = ax < 0 ? ax + (int)nd : ax;
-            if (p < 0 || p >= (int)nd)
-                ErrorBuilder("tensordot").index_error("axis out of range");
-            is_c[p] = true;
-        }
-        std::vector<int> perm;
-        std::vector<std::int64_t> kept;
-        std::int64_t contract_size = 1;
-        if (put_first) {
-            // Contracted axes first, then free axes — used for B so the
-            // resulting matrix is [K × N_free].
-            for (auto ax : axes_contract) {
-                int p = ax < 0 ? ax + (int)nd : ax;
-                perm.push_back(p);
-                contract_size *= t->shape()[p];
-            }
-            for (std::size_t d = 0; d < nd; ++d)
-                if (!is_c[d]) {
-                    perm.push_back((int)d);
-                    kept.push_back(t->shape()[d]);
-                }
-        } else {
-            // Free axes first, then contracted axes — used for A so the
-            // resulting matrix is [M_free × K].
-            for (std::size_t d = 0; d < nd; ++d)
-                if (!is_c[d]) {
-                    perm.push_back((int)d);
-                    kept.push_back(t->shape()[d]);
-                }
-            for (auto ax : axes_contract) {
-                int p = ax < 0 ? ax + (int)nd : ax;
-                perm.push_back(p);
-                contract_size *= t->shape()[p];
-            }
-        }
-        Shape src_shape = t->shape();
-        const auto& cs = storage_cpu(t->storage());
-        auto& be = backend::Dispatcher::for_device(Device::CPU);
-        CpuStorage dst = be.permute_cpu(cs, src_shape, perm, dt);
-        return std::tuple<CpuStorage, std::vector<std::int64_t>, std::int64_t>{
-            std::move(dst), std::move(kept), contract_size};
-    };
-
-    // A is arranged as [M × K]; B is arranged as [K × N].
-    auto [a_cpu, a_kept, a_contract] = contract(a, axes_a, false);
-    auto [b_cpu, b_kept, b_contract] = contract(b, axes_b, true);
-    if (a_contract != b_contract)
-        ErrorBuilder("tensordot").fail("contracted dim sizes don't match");
+    auto [a_cpu, a_kept, a_contract] = contract_tensordot_operand(a, axes_a, false, dt);
+    auto [b_cpu, b_kept, b_contract] = contract_tensordot_operand(b, axes_b, true, dt);
+    (void)b_contract;
 
     const std::int64_t M =
         std::accumulate(a_kept.begin(), a_kept.end(), (std::int64_t)1, std::multiplies<>());
-    const std::int64_t K = a_contract;
     const std::int64_t N =
         std::accumulate(b_kept.begin(), b_kept.end(), (std::int64_t)1, std::multiplies<>());
 
     Shape out_shape(a_kept.begin(), a_kept.end());
     out_shape.insert(out_shape.end(), b_kept.begin(), b_kept.end());
     auto out_cpu = allocate_cpu(out_shape, dt);
-
-    // Scalar GEMM: C[i,j] = Σ_k A[i,k] * B[k,j].
-    // This is used only when gradient tracking is off; for autograd the call
-    // is routed through einsum_op above.
-    auto gemm = [&](auto* op, const auto* ap, const auto* bp) {
-        using T = std::remove_pointer_t<decltype(op)>;
-        for (std::int64_t i = 0; i < M; ++i)
-            for (std::int64_t j = 0; j < N; ++j) {
-                T s{};
-                for (std::int64_t k = 0; k < K; ++k)
-                    s = s + ap[i * K + k] * bp[k * N + j];
-                op[i * N + j] = s;
-            }
-    };
-    if (dt == Dtype::F32)
-        gemm(reinterpret_cast<float*>(out_cpu.ptr.get()),
-             reinterpret_cast<const float*>(a_cpu.ptr.get()),
-             reinterpret_cast<const float*>(b_cpu.ptr.get()));
-    else if (dt == Dtype::F64)
-        gemm(reinterpret_cast<double*>(out_cpu.ptr.get()),
-             reinterpret_cast<const double*>(a_cpu.ptr.get()),
-             reinterpret_cast<const double*>(b_cpu.ptr.get()));
-    else
-        ErrorBuilder("tensordot").not_implemented("dtype not supported");
+    run_cpu_tensordot_gemm(out_cpu, a_cpu, b_cpu, M, a_contract, N, dt);
 
     auto result = fresh(Storage{std::move(out_cpu)}, std::move(out_shape), dt, device);
-    // Recorded as the GPU path is.  Without it a CPU trace never saw the
-    // contraction: a Core ML export took its result for a constant — the
-    // example's answer, frozen — or, with nothing else reading the input,
-    // refused it as unread.
-    if (auto* trc = ::lucid::compile::current_tracer()) {
+    if (auto* trc = ::lucid::compile::current_tracer())
         trc->on_op_io({a, b}, result);
-    }
     return result;
 }
 

@@ -361,7 +361,7 @@ def _broadcast_with_mask(op: str, a_impl: _Impl, mask: _Impl) -> tuple[_Impl, _I
                 f"{op}: input shape {tuple(a_shape)} and mask shape "
                 f"{tuple(m_shape)} do not broadcast (dimension {i}: {x} vs {y})"
             )
-        shape.append(max(x, y))
+        shape.append(0 if 0 in (x, y) else max(x, y))
     if a_shape != shape:
         a_impl = _C_engine.broadcast_to(a_impl, shape)
     if m_shape != shape:
@@ -927,9 +927,9 @@ def _tensordot_adapter(
     """tensordot(a, b, dims=2) — an int, or a pair of axis lists."""
     dims = _promotion.as_number(dims)
     if isinstance(dims, int):
-        ra = len(a_impl.shape)
-        axes_a = list(range(ra - int(dims), ra))
-        axes_b = list(range(int(dims)))
+        n, ra = int(dims), len(a_impl.shape)
+        axes_a = [ra] if n < 0 or n > ra else list(range(ra - n, ra))
+        axes_b = list(range(n))
     else:
         axes_a = [int(d) for d in dims[0]]
         axes_b = [int(d) for d in dims[1]]
