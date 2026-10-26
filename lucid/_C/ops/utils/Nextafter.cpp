@@ -21,6 +21,7 @@
 #include <mlx/ops.h>
 
 #include "../../backend/Dispatcher.h"
+#include "../../backend/gpu/BinaryKernelLoad.h"
 #include "../../backend/gpu/MlxBridge.h"
 #include "../../core/Half.h"
 #include "../../core/OpRegistry.h"
@@ -311,22 +312,21 @@ GpuStorage fma_gpu(const GpuStorage& a,
     const std::size_t n = shape_numel(out_shape);
     if (n == 0)
         return gpu::wrap_mlx_array(mx::zeros(mlx_shape, mlx_dt), dt);
-    auto to_1d = [&](const GpuStorage& s) {
+    const mx::Shape k_shape = mlx_shape.empty() ? mx::Shape{1} : mlx_shape;
+    auto at_shape = [&](const GpuStorage& s) {
         const auto& arr = *s.arr;
-        auto bcast = (arr.shape() == mlx_shape) ? arr : mx::broadcast_to(arr, mlx_shape);
-        return mx::reshape(bcast, {static_cast<int>(n)});
+        return (arr.shape() == k_shape) ? arr : mx::broadcast_to(arr, k_shape);
     };
-    static auto kernel = mx::fast::metal_kernel("lucid_fma", {"a", "b", "c"}, {"out"},
-                                                "uint elem = thread_position_in_grid.x;\n"
-                                                "if (elem < static_cast<uint>(a_shape[0])) {\n"
-                                                "    out[elem] = fma(a[elem], b[elem], c[elem]);\n"
-                                                "}",
-                                                "", true, false, mx::CompileOptions{});
-    const int n_i = static_cast<int>(n);
-    const int tg = static_cast<int>(std::min<std::size_t>(n, 256));
-    auto outs = kernel({to_1d(a), to_1d(b), to_1d(c)}, {{n_i}}, {mlx_dt}, {n_i, 1, 1}, {tg, 1, 1},
-                       {}, std::nullopt, false, {});
-    return gpu::wrap_mlx_array(mx::reshape(outs[0], mlx_shape), dt);
+    static const auto kernel =
+        mx::fast::metal_kernel("lucid_fma", {"a", "b", "c"}, {"out"},
+                               std::string(backend::unary_elem_index_src()) +
+                                   "out[elem] = fma(a[elem], b[elem], c[elem]);\n",
+                               "", true, false, mx::CompileOptions{});
+    const auto launch = backend::metal_launch_1d(n);
+    auto outs = kernel({at_shape(a), at_shape(b), at_shape(c)}, {k_shape}, {mlx_dt}, launch.grid,
+                       launch.threadgroup, {}, std::nullopt, false, {});
+    return gpu::wrap_mlx_array(
+        mlx_shape.empty() ? mx::reshape(outs[0], mlx_shape) : std::move(outs[0]), dt);
 }
 
 TensorImplPtr unreduce_to_shape(const TensorImplPtr& grad, const Shape& target) {

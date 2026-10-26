@@ -50,6 +50,18 @@ MAX_INLINE_BODY_LINES = 10
 _STD_LIBM_RE = re.compile(
     r"\bstd::(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|erf)\b"
 )
+_METAL_NARROW_RE = re.compile(
+    r"\bfits_one_launch\b|\bstatic_cast<\s*(?:std::)?int(?:32_t)?\s*>\s*\(\s*n\s*\)"
+)
+_CPP_RAW_STR_RE = re.compile(r'R"([A-Za-z0-9_]*)\(.*?\)\1"', re.DOTALL)
+
+
+def _strip_cpp_noncode(raw: str) -> str:
+    blanked = _CPP_RAW_STR_RE.sub(
+        lambda m: '""' + "".join("\n" if c == "\n" else " " for c in m.group(0)[2:]),
+        raw,
+    )
+    return backend_split.strip_noncode(blanked)
 
 #: Strict ratchet allow-list of permitted ``std::<fn>`` sites in ``lucid/_C/backend/cpu/``:
 #: ``(rel_path, fn_name) -> (count, reason)``.
@@ -315,6 +327,34 @@ def scan_backend_layout(
                             f"found {actual_count}; lower the allow-list entry",
                         )
                     )
+
+    for scan_rel in ("lucid/_C/backend/gpu", "lucid/_C/ops"):
+        scan_dir = root / scan_rel
+        if not scan_dir.is_dir():
+            continue
+        for src_file in sorted(scan_dir.rglob("*")):
+            if (
+                not src_file.is_file()
+                or src_file.suffix not in (".h", ".hpp", ".cpp", ".mm")
+                or src_file.name == "HalfAccumulation.h"
+            ):
+                continue
+            rel_path = src_file.relative_to(root).as_posix()
+            raw = src_file.read_text(encoding="utf-8")
+            stripped = _strip_cpp_noncode(raw)
+            if "metal_kernel" not in stripped and "fits_one_launch" not in stripped:
+                continue
+            for m_narrow in _METAL_NARROW_RE.finditer(stripped):
+                line = stripped.count("\n", 0, m_narrow.start()) + 1
+                violations.append(
+                    LayoutViolation(
+                        rel_path,
+                        line,
+                        "metal-narrow-launch",
+                        f"{m_narrow.group(0)!r} in {rel_path}; route custom Metal kernel "
+                        f"launches through metal_launch_1d(n) in BinaryKernelLoad.h (LCD-591)",
+                    )
+                )
 
     return violations
 

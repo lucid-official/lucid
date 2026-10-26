@@ -157,13 +157,12 @@ inline mx::array run_contig(const mx::array& a_in,
                             const mx::array& b_in,
                             const mx::Shape& out_shape,
                             int mode_int,
-                            int threads,
-                            int tg) {
+                            const MetalLaunch1D& launch) {
     const mx::Dtype dt = a_in.dtype();
     const bool is_float = mx::issubdtype(dt, mx::floating);
     const mx::Shape k_shape = out_shape.empty() ? mx::Shape{1} : out_shape;
     auto outs = divmod_kernel(is_float, false)({as_1d_if_scalar(a_in), as_1d_if_scalar(b_in)},
-                                               {k_shape}, {dt}, {threads, 1, 1}, {tg, 1, 1},
+                                               {k_shape}, {dt}, launch.grid, launch.threadgroup,
                                                {{"T", dt},
                                                 {"Mode", mode_int},
                                                 {"AScalar", a_in.size() == 1},
@@ -182,20 +181,14 @@ mx::array run(const mx::array& a_in, const mx::array& b_in) {
     const std::size_t n = a.size();
     if (n == 0)
         return mx::zeros(out_shape, dt);
-    // No MLX op answers these exactly, so a tensor past one launch is
-    // refused rather than computed inexactly.
-    if (!fits_one_launch(n))
-        ErrorBuilder("gpu_divmod")
-            .not_implemented("//, % and fmod on Metal take at most 2**31 - 1 elements per call");
     const int mode_int = (M == DivMod::FloorDiv) ? 0 : ((M == DivMod::Remainder) ? 1 : 2);
-    const int threads = static_cast<int>(n);
-    const int tg = static_cast<int>(std::min<std::size_t>(n, 256));
+    const auto launch = metal_launch_1d(n);
     if ((a_in.shape() == out_shape || a_in.size() == 1) &&
         (b_in.shape() == out_shape || b_in.size() == 1))
-        return run_contig(a_in, b_in, out_shape, mode_int, threads, tg);
+        return run_contig(a_in, b_in, out_shape, mode_int, launch);
     const mx::array b = (b_in.shape() == out_shape) ? b_in : mx::broadcast_to(b_in, out_shape);
     auto outs = divmod_kernel(mx::issubdtype(dt, mx::floating),
-                              true)({a, b}, {out_shape}, {dt}, {threads, 1, 1}, {tg, 1, 1},
+                              true)({a, b}, {out_shape}, {dt}, launch.grid, launch.threadgroup,
                                     {{"T", dt}, {"Mode", mode_int}}, std::nullopt, false, {});
     return outs[0];
 }

@@ -166,3 +166,17 @@ def test_rejects_untracked_cpp_non_member_and_extra_include(tmp_path: Path) -> N
     )
     violations = check_backend_layout.scan_backend_layout(tmp_path, tracked)
     assert [v.rule for v in violations] == ["cpu-scalar-libm", "cpu-scalar-libm"]
+    cpu_bin.write_text(_CLEAN_CPU_BINARY, encoding="utf-8")
+
+    # 5. Narrowing custom Metal kernel element count to int (LCD-591)
+    gpu_k = tmp_path / "lucid/_C/backend/gpu/Pow.h"
+    gpu_k.write_text(
+        "void run(std::size_t n) {\n"
+        "    auto k = mx::fast::metal_kernel(\"k\", {\"a\"}, {\"out\"}, \"\");\n"
+        "    int threads = static_cast<int>(n);\n"
+        "    (void)k; (void)threads;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    violations = check_backend_layout.scan_backend_layout(tmp_path, tracked)
+    assert [v.rule for v in violations] == ["metal-narrow-launch"]

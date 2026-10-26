@@ -227,16 +227,13 @@ inline mx::array run(const mx::array& a, const mx::array& b_in, Exponent ex) {
         n *= static_cast<std::size_t>(d);
     if (n == 0)
         return mx::zeros(out_shape, dt);
-    if (!fits_one_launch(n))
-        return mx::power(a, b);
-    const int threads = static_cast<int>(n);
-    const int tg = static_cast<int>(std::min<std::size_t>(n, 256));
+    const auto launch = metal_launch_1d(n);
     if (reads_flat(a, out_shape) && reads_flat(b, out_shape)) {
         const mx::Shape k_shape = out_shape.empty() ? mx::Shape{1} : out_shape;
         const bool a_one = is_one_value(a);
         const bool b_one = is_one_value(b);
         auto outs = pow_kernel(false)({a_one ? one_value(a) : a, b_one ? one_value(b) : b},
-                                      {k_shape}, {dt}, {threads, 1, 1}, {tg, 1, 1},
+                                      {k_shape}, {dt}, launch.grid, launch.threadgroup,
                                       {{"T", dt},
                                        {"AScalar", a_one},
                                        {"BScalar", b_one},
@@ -249,7 +246,7 @@ inline mx::array run(const mx::array& a, const mx::array& b_in, Exponent ex) {
     const mx::array ab = (a.shape() == out_shape) ? a : mx::broadcast_to(a, out_shape);
     const mx::array bb = (b.shape() == out_shape) ? b : mx::broadcast_to(b, out_shape);
     auto outs = pow_kernel(true)(
-        {ab, bb}, {out_shape}, {dt}, {threads, 1, 1}, {tg, 1, 1},
+        {ab, bb}, {out_shape}, {dt}, launch.grid, launch.threadgroup,
         {{"T", dt}, {"FixedY", ex.fixed}, {"YBits", ex.bits}, {"YNeg", ex.negative}}, std::nullopt,
         false, {});
     return outs[0];

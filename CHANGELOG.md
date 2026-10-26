@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - fail closed when prior baseline at ref is malformed (LCD-522)
 
+- route custom Metal elementwise kernels via 64-bit launch (LCD-591)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

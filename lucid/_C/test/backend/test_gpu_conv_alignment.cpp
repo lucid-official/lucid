@@ -21,6 +21,9 @@
 
 #include "backend/Dispatcher.h"
 #include "backend/IBackend.h"
+#include "backend/gpu/BinaryKernelLoad.h"
+#include "backend/gpu/DivMod.h"
+#include "backend/gpu/Pow.h"
 #include "core/Storage.h"
 
 using namespace lucid;
@@ -116,4 +119,79 @@ TEST(GpuConvAlignment, Conv2dUnalignedIntoAligned) {
 // Three-channel video input, unaligned output channels: MLX would pad both.
 TEST(GpuConvAlignment, Conv3dRgbIntoTwentyFour) {
     check({3, 3, 24, 6});
+}
+
+// LCD-591: 64-bit elementwise Metal launch helper index math past INT32_MAX.
+TEST(GpuConvAlignment, MetalLaunch1DCoversPastInt32Max) {
+    constexpr std::size_t two_pow_31 = 1ULL << 31;
+    for (std::size_t k : {0ULL, 1ULL, 7ULL, 255ULL, 256ULL, 1000003ULL, (1ULL << 31) + 19ULL}) {
+        const std::size_t n = two_pow_31 + k;
+        const auto launch = backend::metal_launch_1d(n);
+        const auto [gx, gy, gz] = launch.grid;
+        const auto [tx, ty, tz] = launch.threadgroup;
+        EXPECT_GT(gx, 0);
+        EXPECT_GT(gy, 1);
+        EXPECT_EQ(gz, 1);
+        EXPECT_EQ(tx, 256);
+        EXPECT_EQ(ty, 1);
+        EXPECT_EQ(tz, 1);
+
+        const auto ugx = static_cast<std::uint32_t>(gx);
+        const auto ugy = static_cast<std::uint32_t>(gy);
+        EXPECT_GE(static_cast<std::uint64_t>(ugx) * static_cast<std::uint64_t>(ugy), n);
+        EXPECT_EQ(backend::metal_linear_elem(0u, 0u, ugx), 0u);
+        EXPECT_EQ(backend::metal_linear_elem(ugx - 1u, 0u, ugx), ugx - 1u);
+        EXPECT_EQ(backend::metal_linear_elem(0u, 1u, ugx), ugx);
+
+        const auto last_y = static_cast<std::uint32_t>((n - 1) / ugx);
+        const auto last_x = static_cast<std::uint32_t>((n - 1) % ugx);
+        EXPECT_LT(last_y, ugy);
+        EXPECT_LT(last_x, ugx);
+        EXPECT_EQ(backend::metal_linear_elem(last_x, last_y, ugx), n - 1);
+
+        const auto oob_y = static_cast<std::uint32_t>(n / ugx);
+        const auto oob_x = static_cast<std::uint32_t>(n % ugx);
+        EXPECT_EQ(backend::metal_linear_elem(oob_x, oob_y, ugx), n);
+    }
+}
+
+// LCD-591: synthetic small-memory check of the 2-D multi-row shader path
+// (``threads_per_grid.y > 1`` with tail threads that must early-return).
+TEST(GpuConvAlignment, MetalLaunch1DSyntheticMultiRowGuardsTailThreads) {
+    namespace mx = ::mlx::core;
+    const std::size_t n = 10;
+    const auto launch = backend::metal_launch_1d(n, /*max_tg=*/4, /*max_grid_x=*/4);
+    const auto [gx, gy, gz] = launch.grid;
+    EXPECT_EQ(gx, 4);
+    EXPECT_EQ(gy, 3);
+    EXPECT_EQ(gz, 1);
+
+    const mx::Shape shape{2, 5};
+    auto a = mx::reshape(mx::arange(1, 11, mx::float32), shape);
+    auto b = mx::full({1}, 2.0f, mx::float32);
+
+    auto contig_out = backend::gpu_pow_detail::pow_kernel(false)({a, b}, {shape}, {mx::float32},
+                                                                 launch.grid, launch.threadgroup,
+                                                                 {{"T", mx::float32},
+                                                                  {"AScalar", false},
+                                                                  {"BScalar", true},
+                                                                  {"FixedY", false},
+                                                                  {"YBits", 0},
+                                                                  {"YNeg", false}},
+                                                                 std::nullopt, false, {})[0];
+    contig_out.eval();
+    const float* cp = contig_out.data<float>();
+    for (int i = 0; i < 10; ++i) {
+        const float v = static_cast<float>(i + 1);
+        EXPECT_FLOAT_EQ(cp[i], v * v);
+    }
+
+    auto strided_out = backend::gpu_divmod_detail::divmod_kernel(true, true)(
+        {a, mx::broadcast_to(b, shape)}, {shape}, {mx::float32}, launch.grid, launch.threadgroup,
+        {{"T", mx::float32}, {"Mode", 0}}, std::nullopt, false, {})[0];
+    strided_out.eval();
+    const float* sp = strided_out.data<float>();
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_FLOAT_EQ(sp[i], std::floor(static_cast<float>(i + 1) / 2.0f));
+    }
 }
