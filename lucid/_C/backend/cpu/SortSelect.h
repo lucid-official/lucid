@@ -24,6 +24,7 @@
 #include "../../core/Dtype.h"
 #include "../../core/Shape.h"
 #include "../../core/Storage.h"
+#include "Parallel.h"
 
 namespace lucid::backend::cpu {
 
@@ -84,6 +85,11 @@ struct KeyPos {
     Pos pos;
 };
 
+template <typename T>
+constexpr std::size_t radix_min_len() noexcept {
+    return sizeof(typename SortKeyTrait<T>::Key) == 8 ? 512 : 256;
+}
+
 template <typename T, typename Pos = std::uint32_t>
 const KeyPos<typename SortKeyTrait<T>::Key, Pos>*
 radix_sort_line(const T* src_line,
@@ -94,7 +100,7 @@ radix_sort_line(const T* src_line,
                 std::vector<KeyPos<typename SortKeyTrait<T>::Key, Pos>>& buf1) {
     using Key = typename SortKeyTrait<T>::Key;
     constexpr std::size_t kPasses = sizeof(Key);
-    std::size_t hist[kPasses][256] = {};
+    Pos hist[kPasses][256] = {};
     for (std::size_t i = 0; i < L; ++i) {
         const Key k = SortKeyTrait<T>::encode(src_line[i * stride], descending);
         buf0[i] = {k, static_cast<Pos>(i)};
@@ -106,11 +112,11 @@ radix_sort_line(const T* src_line,
     const Key first_key = cur[0].key;
     for (std::size_t p = 0; p < kPasses; ++p) {
         const std::size_t shift = p * 8;
-        if (hist[p][(first_key >> shift) & 0xFFu] == L)
+        if (hist[p][(first_key >> shift) & 0xFFu] == static_cast<Pos>(L))
             continue;
-        std::size_t sum = 0;
+        Pos sum = 0;
         for (std::size_t b = 0; b < 256; ++b) {
-            const std::size_t c = hist[p][b];
+            const Pos c = hist[p][b];
             hist[p][b] = sum;
             sum += c;
         }
@@ -130,7 +136,7 @@ sort_line_keys(const T* src_line,
                bool descending,
                std::vector<KeyPos<typename SortKeyTrait<T>::Key, Pos>>& buf0,
                std::vector<KeyPos<typename SortKeyTrait<T>::Key, Pos>>& buf1) {
-    if (K == L && L >= 64)
+    if (K == L && L >= radix_min_len<T>())
         return radix_sort_line<T, Pos>(src_line, L, stride, descending, buf0, buf1);
     for (std::size_t i = 0; i < L; ++i)
         buf0[i] = {SortKeyTrait<T>::encode(src_line[i * stride], descending), static_cast<Pos>(i)};
@@ -220,15 +226,20 @@ std::pair<CpuStorage, CpuStorage> sort_select_cpu(const CpuStorage& input,
         return {std::move(values), std::move(indices)};
 
     using Key = typename SortKeyTrait<T>::Key;
-    std::vector<KeyPos<Key>> buf0(L);
-    std::vector<KeyPos<Key>> buf1(K == L && L >= 64 ? L : 0);
-    for (std::size_t o = 0; o < outer; ++o) {
-        for (std::size_t j = 0; j < inner; ++j) {
+    const std::size_t total_lines = outer * inner;
+    const std::size_t line_grain = std::max<std::size_t>(1, 4096 / std::max<std::size_t>(L, 1));
+    const std::size_t buf1_len = K == L && L >= radix_min_len<T>() ? L : 0;
+    parallel_for(total_lines, line_grain, [&](std::size_t begin, std::size_t end) {
+        std::vector<KeyPos<Key>> buf0(L);
+        std::vector<KeyPos<Key>> buf1(buf1_len);
+        for (std::size_t line = begin; line < end; ++line) {
+            const std::size_t o = line / inner;
+            const std::size_t j = line % inner;
             const T* src_line = src + o * L * inner + j;
             const auto* sorted = sort_line_keys<T>(src_line, L, inner, K, descending, buf0, buf1);
             write_sorted_line(src_line, sorted, dst, idx_dst, o, j, K, inner);
         }
-    }
+    });
     return {std::move(values), std::move(indices)};
 }
 

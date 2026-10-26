@@ -7,5 +7,8 @@
   "sum_4096_cpu": 0.005,
   "softmax_1024_cpu": 0.020,
   "tanh_1m_cpu": 0.010,
-  "gelu_tanh_1m_cpu": 0.015
+  "gelu_tanh_1m_cpu": 0.015,
+  "argsort_100k_cpu": 0.004,
+  "unique_100k_cpu": 0.0064,
+  "argsort_16384x64_int64_cpu": 0.010
 }
