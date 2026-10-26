@@ -479,6 +479,48 @@ def _cumprod_adapter(
     )
 
 
+def _cumext_adapter(
+    engine_fn: Callable[[_Impl, int], _Impl], x_impl: _Impl, dim: int = -1
+) -> _ValuesIndices[_Impl]:
+    """Shared body of ``cummax`` and ``cummin``: ``(values, indices)`` along ``dim``."""
+    axis = operator.index(dim)
+    values = engine_fn(x_impl, axis)
+    shape = list(x_impl.shape)
+    ndim = len(shape)
+    if ndim == 0 or math.prod(shape) == 0 or x_impl.is_phantom:
+        return _ValuesIndices(
+            (values, _C_engine.zeros(shape, _C_engine.I64, x_impl.device))
+        )
+    d = axis + ndim if axis < 0 else axis
+    hit = _C_engine.equal(x_impl, values)
+    if not _promotion.is_integral(x_impl.dtype):
+        hit = _C_engine.logical_or(hit, _C_engine.isnan(x_impl))
+    if _C_engine.compile.current_tracer() is not None:
+        ones = _C_engine.ones_like(_C_engine.astype(hit, _C_engine.I64))
+        pos = _C_engine.sub(_C_engine.cumsum(ones, d), ones)
+        zero = _C_engine.zeros_like(ones)
+    else:
+        n = shape[d]
+        pos_shape = [n if i == d else 1 for i in range(ndim)]
+        pos = _C_engine.reshape(
+            _C_engine.arange(0.0, float(n), 1.0, _C_engine.I64, x_impl.device),
+            pos_shape,
+        )
+        zero = _C_engine.zeros([], _C_engine.I64, x_impl.device)
+    indices = _C_engine.cummax(_C_engine.where(hit, pos, zero), d)
+    return _ValuesIndices((values, indices))
+
+
+def _cummax_adapter(x_impl: _Impl, dim: int = -1) -> _ValuesIndices[_Impl]:
+    """cummax(x, dim=-1) — ``(values, indices)`` along ``dim``."""
+    return _cumext_adapter(_C_engine.cummax, x_impl, dim)
+
+
+def _cummin_adapter(x_impl: _Impl, dim: int = -1) -> _ValuesIndices[_Impl]:
+    """cummin(x, dim=-1) — ``(values, indices)`` along ``dim``."""
+    return _cumext_adapter(_C_engine.cummin, x_impl, dim)
+
+
 def _softmax_adapter(
     x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None
 ) -> _Impl:

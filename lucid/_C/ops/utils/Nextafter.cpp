@@ -23,6 +23,7 @@
 #include "../../backend/Dispatcher.h"
 #include "../../backend/gpu/BinaryKernelLoad.h"
 #include "../../backend/gpu/MlxBridge.h"
+#include "../../compile/Tracer.h"
 #include "../../core/Half.h"
 #include "../../core/OpRegistry.h"
 #include "../../core/Profiler.h"
@@ -211,18 +212,26 @@ TensorImplPtr bitcast_op(const TensorImplPtr& a, Dtype dtype) {
         ErrorBuilder("bitcast").invalid_argument("bitcast requires equal element byte widths");
     if (a->dtype() == dtype)
         return a;
-    if (a->is_phantom())
-        return fresh(Storage{PhantomStorage{0, dtype, a->device()}}, a->shape(), dtype,
-                     a->device());
-    if (a->device() == Device::GPU) {
+    const auto& shape = a->shape();
+    OpScopeFull scope{"bitcast", a->device(), dtype, shape};
+    TensorImplPtr out_impl;
+    if (a->is_phantom()) {
+        out_impl = fresh(Storage{PhantomStorage{0, dtype, a->device()}}, shape, dtype, a->device());
+    } else if (a->device() == Device::GPU) {
         const auto& ga = std::get<GpuStorage>(a->storage());
         auto out = ::mlx::core::view(*ga.arr, gpu::to_mlx_dtype(dtype));
-        return fresh(Storage{gpu::wrap_mlx_array(std::move(out), dtype)}, a->shape(), dtype,
-                     Device::GPU);
+        out_impl =
+            fresh(Storage{gpu::wrap_mlx_array(std::move(out), dtype)}, shape, dtype, Device::GPU);
+    } else {
+        CpuStorage cpu = to_cpu(a);
+        cpu.dtype = dtype;
+        out_impl = fresh(Storage{std::move(cpu)}, shape, dtype, Device::CPU);
     }
-    CpuStorage cpu = to_cpu(a);
-    cpu.dtype = dtype;
-    return fresh(Storage{std::move(cpu)}, a->shape(), dtype, Device::CPU);
+    if (auto* trc = ::lucid::compile::current_tracer()) {
+        trc->on_op_io({a}, out_impl);
+        trc->on_op_attr("dst_dtype", static_cast<std::int64_t>(static_cast<int>(dtype)));
+    }
+    return out_impl;
 }
 
 namespace {

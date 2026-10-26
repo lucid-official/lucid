@@ -21,9 +21,9 @@ from lucid.autograd import grad
 from lucid.test._fixtures.devices import metal_available
 
 CASES: list[tuple[str, tuple[int, ...], Callable[[lucid.Tensor], lucid.Tensor]]] = [
-    ("cummax axis 0", (7, 3), lambda x: lucid.cummax(x, 0)),
-    ("cummax last axis", (2, 3, 6), lambda x: x.cummax(-1)),
-    ("cummin axis 1", (3, 8, 2), lambda x: lucid.cummin(x, 1)),
+    ("cummax axis 0", (7, 3), lambda x: lucid.cummax(x, 0).values),
+    ("cummax last axis", (2, 3, 6), lambda x: x.cummax(-1).values),
+    ("cummin axis 1", (3, 8, 2), lambda x: lucid.cummin(x, 1).values),
 ]
 
 
@@ -72,7 +72,7 @@ def test_a_tie_credits_the_earlier_position_in_both_modes() -> None:
     grads = []
     for create_graph in (False, True):
         x = lucid.tensor(values, requires_grad=True)
-        (g,) = grad(lucid.cummax(x, 0).sum(), [x], create_graph=create_graph)
+        (g,) = grad(lucid.cummax(x, 0).values.sum(), [x], create_graph=create_graph)
         grads.append(np.asarray(g.numpy()))
     np.testing.assert_array_equal(grads[0], [3.0, 0.0, 0.0, 2.0, 0.0])
     np.testing.assert_array_equal(grads[1], grads[0])
@@ -85,7 +85,7 @@ def test_metal_differentiates_twice_as_the_cpu_does() -> None:
     answers = {}
     for device in ("cpu", "metal"):
         x = lucid.tensor(x0, device=device, requires_grad=True)
-        y = lucid.cummax(x, 1)
+        y = lucid.cummax(x, 1).values
         (g,) = grad((y * y).sum(), [x], create_graph=True)
         (hvp,) = grad((g * g).sum(), [x])
         answers[device] = hvp.numpy()

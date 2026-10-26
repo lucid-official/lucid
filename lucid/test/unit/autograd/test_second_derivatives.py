@@ -226,7 +226,7 @@ class TestANodeIsNamed:
             # These live in an anonymous namespace inside ``lucid``, which
             # mangles differently again and was the worse of the two.
             ("dot 2-D", lambda x: x.dot(x)),
-            ("cummax", lambda x: lucid.cummax(x, dim=1)),
+            ("cummax", lambda x: lucid.cummax(x, dim=1).values),
         ],
     )
     def test_the_name_is_the_op_not_its_mangling(self, label, build) -> None:

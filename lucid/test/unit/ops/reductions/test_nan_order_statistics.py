@@ -341,6 +341,33 @@ def test_max_and_min_dim_return_values_and_indices_namedtuple(
     assert isinstance(fn_l(x, dim=(0, 1), keepdim=keepdim), lucid.Tensor)
 
 
+@pytest.mark.parametrize("op", ("cummax", "cummin"))
+@pytest.mark.parametrize("dim", (0, 1, -1), ids=lambda d: f"dim{d}")
+@pytest.mark.parametrize("dtype", _DTYPES)
+def test_cummax_and_cummin_return_values_and_indices_namedtuple(
+    ref: ModuleType, device: str, dtype: str, dim: int, op: str
+) -> None:
+    for data in (_TIES, _DATA["no_nan"]):
+        x, want_x = _pair(ref, data, dtype, device, False)
+        fn_l = getattr(lucid, op)
+        fn_r = getattr(ref, op)
+        result = fn_l(x, dim=dim)
+        values, indices = result
+        assert values is result.values and indices is result.indices
+        m_res = getattr(x, op)(dim=dim)
+        _same(m_res.values, values)
+        _same(m_res.indices, indices)
+        want_res = fn_r(want_x, dim=dim)
+        _same(values, want_res.values)
+        _same(indices, want_res.indices)
+    if dtype != "int64":
+        x, want_x = _pair(ref, _DATA["some_nan"], dtype, device, False)
+        result = getattr(lucid, op)(x, dim=dim)
+        want_res = getattr(ref, op)(want_x, dim=dim)
+        _same(result.values, want_res.values)
+        _same(result.indices, want_res.indices)
+
+
 @pytest.mark.parametrize("dtype", _DTYPES)
 def test_msort_matches_reference(ref: ModuleType, device: str, dtype: str) -> None:
     grad = dtype != "int64"

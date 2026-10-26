@@ -66,6 +66,10 @@ const std::unordered_set<std::string>& no_grad_ops() {
         // None.  MPSGraph's autodiff would differentiate straight through
         // the identity, so it stays off that fallback's safe list.
         "detach",
+        // bitcast — raw IEEE-754 bit reinterpretation (used in no_grad
+        // subnormal normalization/restoration on Metal); never carries a
+        // gradient across the bit boundary.
+        "bitcast",
     };
     return s;
 }
@@ -82,8 +86,11 @@ bool carries_gradient(const OpNode& node) {
 
 std::unordered_set<TensorId> param_dependents(const std::vector<OpNode>& ops,
                                               const std::vector<TensorId>& param_ids) {
+    const auto& sink = no_grad_ops();
     std::unordered_set<TensorId> depends(param_ids.begin(), param_ids.end());
     for (const auto& node : ops) {
+        if (sink.find(node.name) != sink.end() || !carries_gradient(node))
+            continue;
         bool dep = false;
         for (TensorId in : node.inputs)
             if (in >= 0 && depends.count(in) != 0) {

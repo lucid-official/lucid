@@ -40,8 +40,9 @@ is exact for an integral exponent, and ``d/de`` is within a few ulp,
 wherever the gradient is a normal number.  A subnormal gradient flushes on
 Metal, as every Metal backward flushes one.  Everywhere else the ops are
 the plain differentiable compositions: the CPU with an exponent that needs
-no gradient, and any ``lucid.compile`` trace.  A trace records no bitcast,
-so float32 subnormals flush there.
+no gradient, and any ``lucid.compile`` trace (where ``bitcast`` lowers to
+MPSGraph's ``reinterpretCastTensor:toType:`` so Metal float32 subnormals
+are preserved in compiled forward graphs too).
 """
 
 import math
@@ -102,14 +103,13 @@ def _traced() -> bool:
 def _reads_bits(work: Tensor) -> bool:
     """Whether ``work``'s float32 subnormals are read from its bits.
 
-    Only eager Metal does this.  A trace records no bitcast, and a phantom
-    tensor has no bits to read.
+    Metal float32 reads and writes subnormals through ``_bitcast``; a
+    phantom tensor has no bits to read.
     """
     return (
         work.device.type == "metal"
         and work.dtype == lucid.float32
         and not work._impl.is_phantom
-        and not _traced()
     )
 
 
@@ -162,7 +162,7 @@ def _restore_metal_f32_subnormals(
             & (scaled >= 0.5)
             & (scaled <= float(1 << 23))
         )
-        sign_bit = (bits & (-0x80000000)).broadcast_to(out.shape)
+        sign_bit = bits & (-0x80000000)
         sub_bits = sign_bit | lucid.round(scaled).to(dtype=lucid.int32)
         sub_f32 = _wrap(_C_engine._bitcast(sub_bits._impl, _C_engine.Dtype.F32))
     return lucid.where(flushed, sub_f32, out)
@@ -307,9 +307,11 @@ def _ldexp(work: Tensor, other: Tensor | Scalar) -> Tensor:
         value = _promotion.as_number(other)
         integral = float(value).is_integer()
         exp_t = lucid.tensor(value, dtype=work.dtype, device=work.device)
-    if _reads_bits(work) or (
-        exp_t.requires_grad and lucid.is_grad_enabled() and not _traced()
-    ):
+    if _traced():
+        if _reads_bits(work):
+            return _metal_f32_ldexp(work, exp_t, integral)
+        return _scale_pow2(work, exp_t, _limit(work))
+    if _reads_bits(work) or (exp_t.requires_grad and lucid.is_grad_enabled()):
         out = _Ldexp.apply(work, exp_t, integral)
         assert isinstance(out, Tensor)
         return out
@@ -320,6 +322,10 @@ def _frexp_parts(work: Tensor) -> tuple[Tensor, Tensor]:
     """``(m, e)`` with ``work = m * 2**e``, with ``e`` a float of ``work``'s dtype."""
     if not _reads_bits(work):
         return _frexp_arith(work)
+    if _traced():
+        x_n, shift, _ = _normalize_metal_f32(work)
+        m, e = _frexp_arith(x_n)
+        return m, e - shift
     out = _MetalFrexp.apply(work)
     assert isinstance(out, tuple)
     m, e = out

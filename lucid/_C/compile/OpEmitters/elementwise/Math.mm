@@ -213,7 +213,9 @@ public:
     std::string_view op_name() const override { return "round"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_unary_math(ctx, node, [](MPSGraph* g, MPSGraphTensor* x) {
-            return [g roundWithTensor:x name:@"round"];
+            if ((x.dataType & MPSDataTypeFloatBit) == 0)
+                return [g identityWithTensor:x name:@"round"];
+            return [g rintWithTensor:x name:@"round"];
         });
     }
 };

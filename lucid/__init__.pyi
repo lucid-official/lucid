@@ -1521,13 +1521,13 @@ def cumprod(input: Tensor, dim: _int = ..., *, dtype: DTypeLike | None = ...) ->
     Tensor([ 1.,  2.,  6., 24.])
     """
     ...
-def cummax(input: Tensor, dim: DimLike = ...) -> Tensor: ...
-def cummin(input: Tensor, dim: DimLike = ...) -> Tensor:
-    r"""    Return the running minimum of ``input`` along ``dim``.
+def cummax(input: Tensor, dim: _int = ...) -> _ValuesIndices[Tensor]: ...
+def cummin(input: Tensor, dim: _int = ...) -> _ValuesIndices[Tensor]:
+    r"""    Return the running minimum and indices of ``input`` along ``dim``.
     
-    Output ``i`` along ``dim`` is the minimum of elements ``0..i``.  Only the
-    values come back; the reference framework also returns the index of
-    each running minimum, which is not computed here.
+    Output ``i`` along ``dim`` is the minimum of elements ``0..i`` and the
+    index along ``dim`` where that running minimum was reached (on ties, the
+    latest index).
     
     Parameters
     ----------
@@ -1538,8 +1538,9 @@ def cummin(input: Tensor, dim: DimLike = ...) -> Tensor:
     
     Returns
     -------
-    Tensor
-        Same shape and dtype as ``input``.
+    _ValuesIndices[Tensor]
+        A ``(values, indices)`` pair with ``.values`` and ``.indices``
+        attributes.
     
     Notes
     -----
@@ -1550,7 +1551,7 @@ def cummin(input: Tensor, dim: DimLike = ...) -> Tensor:
     --------
     >>> import lucid
     >>> x = lucid.tensor([1.0, 3.0, 2.0, 4.0])
-    >>> lucid.cummin(x, dim=0)
+    >>> lucid.cummin(x, dim=0).values
     Tensor([1., 1., 1., 1.])
     """
     ...

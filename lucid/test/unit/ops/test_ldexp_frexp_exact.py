@@ -486,11 +486,6 @@ def test_compiled_ldexp_and_frexp_match_eager_bits_on_normal_values(
 
 
 @_needs_metal
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-573: compiled ldexp/frexp take the arithmetic path (no traced "
-    "bitcast), so the GPU flushes subnormals",
-)
 def test_compiled_ldexp_and_frexp_match_eager_bits_on_subnormals(
     ref: ModuleType,
 ) -> None:

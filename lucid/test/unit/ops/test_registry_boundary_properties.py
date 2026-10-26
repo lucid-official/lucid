@@ -271,13 +271,10 @@ def _assert_matches_ref(
     got_tensors = _extract_tensors(got_obj)
     if not got_tensors:
         return
-    if op_name in ("cummax", "cummin") and isinstance(ref_obj, (tuple, list)):
-        _assert_single_tensor_matches(op_name, got_tensors[0], ref_obj[0], device)
-        return
     if isinstance(ref_obj, (tuple, list)):
         assert len(got_tensors) == len(ref_obj)
         for idx, (g, r) in enumerate(zip(got_tensors, ref_obj, strict=True)):
-            sub_name = "argsort" if idx == 1 and op_name in ("sort", "topk", "kthvalue") else op_name
+            sub_name = "argsort" if idx == 1 and op_name in ("sort", "topk", "kthvalue", "cummax", "cummin") else op_name
             _assert_single_tensor_matches(sub_name, g, r, device)
         return
     _assert_single_tensor_matches(op_name, got_tensors[0], ref_obj, device)

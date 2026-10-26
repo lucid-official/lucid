@@ -374,10 +374,8 @@ REFS: dict[str, Ref] = {
     "logsumexp": lambda x, c: np.log(np.exp(_f(x)).sum(axis=1)),
     "cumsum": lambda x, c: np.cumsum(x, axis=0),
     "cumprod": lambda x, c: np.cumprod(x, axis=1),
-    # Lucid's cummax / cummin return the running values only (the
-    # reference framework adds the indices) — an API difference, not a defect.
-    "cummax": lambda x, c: _cumext(x, 0, True)[0],
-    "cummin": lambda x, c: _cumext(x, 1, False)[0],
+    "cummax": lambda x, c: _cumext(x, 0, True),
+    "cummin": lambda x, c: _cumext(x, 1, False),
     "all": lambda x, c: np.all(x),
     "any": lambda x, c: np.any(x),
     "norm": lambda x, c: np.sqrt((_f(x) ** 2).sum()),
