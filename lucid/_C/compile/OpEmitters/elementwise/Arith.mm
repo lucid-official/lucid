@@ -428,12 +428,13 @@ inline MPSGraphTensor* emit_pow_tensor_special_f32(MPSGraph* g,
                                    name:nil];
 }
 
-// Match ``gpu_pow(a, b)`` in ``lucid/_C/backend/gpu/Pow.h``: float32 and
-// bfloat16 evaluate the special-exponent table element-by-element in float32,
-// while float16, integer, and complex dtypes use ``powerWithPrimaryTensor``.
+// Match ``gpu_pow(a, b)`` in ``lucid/_C/backend/gpu/Pow.h``: float32,
+// float16, and bfloat16 evaluate the special-exponent table element-by-element
+// in float32, while integer and complex dtypes use ``powerWithPrimaryTensor``.
 inline MPSGraphTensor* emit_pow_tensor(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
     const MPSDataType orig_dt = a.dataType;
-    if (orig_dt != MPSDataTypeFloat32 && orig_dt != MPSDataTypeBFloat16) {
+    if (orig_dt != MPSDataTypeFloat32 && orig_dt != MPSDataTypeFloat16 &&
+        orig_dt != MPSDataTypeBFloat16) {
         return [g powerWithPrimaryTensor:a secondaryTensor:b name:@"pow"];
     }
     MPSGraphTensor* xf =

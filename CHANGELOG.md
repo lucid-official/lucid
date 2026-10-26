@@ -103,6 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - match query dtype in multi_head_attention_forward (LCD-575)
 
+- add <=1-ulp float32 pow and exact f16 specials (LCD-557)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

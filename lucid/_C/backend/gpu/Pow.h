@@ -21,22 +21,18 @@
 //     backend answers the same.
 //   * -2 squares the reciprocal when ``x * x`` would be subnormal, since Metal
 //     flushes it to zero and ``1 / 0`` is inf where the answer is finite.
-//   * Every other exponent is ``metal::pow`` in the operands' own dtype, bit
-//     for bit the ``mx::power`` answer, including its IEEE special values;
-//     a scalar exponent of that kind skips the kernel and calls
-//     ``mx::power`` itself.  That keeps its up-to-3-ulp error (``0.5 ** 4``,
-//     ``2 ** -3``, ``10 ** 7``): LCD-557.  An exact path for a power-of-two
-//     base raised to an integer cost ``2 ** x`` with a float ``x`` 1.2-1.9x,
-//     every element of such a base paying the integer test.
+//   * Every other float32 exponent runs double-float ``exp2(b * log2(|a|))``
+//     (<= 1 ulp, 99.97% 0 ulp, and exact on representable powers such as
+//     ``0.5 ** 4``, ``2 ** -3``, ``3 ** -4``, ``10 ** 7``, ``3 ** 9``:
+//     LCD-557), delegating IEEE special values and negative bases with
+//     non-integer exponents to ``metal::precise::pow``.  The 16-bit floats
+//     use ``metal::pow`` in their native precision (already <= 1 ulp).
 //   * The special exponents are computed in float32 and rounded once, so a
-//     16-bit float gets the correctly rounded value.
-//   * A scalar special exponent is a compile-time constant of the kernel
-//     (``FixedY``), so the kernel is that one operation: testing it per
-//     element, the small cases are if-converted and every element computes
-//     all of them.
-//   * A float16 tensor exponent stays ``mx::power`` (``takes_tensor_exponent``):
-//     float16's half pow is within 1 ulp of the special exponents' exact
-//     answer (LCD-557), and the per-element dispatch cost it 1.6x.
+//     16-bit float gets the correctly rounded value.  In the tensor-exponent
+//     path, ``metal::simd_any`` guards the special-exponent block so general
+//     SIMD groups skip the divide/sqrt path completely (LCD-557).
+//   * A scalar exponent in float32 or a special scalar exponent in any
+//     floating dtype is a compile-time constant of the kernel (``FixedY``).
 //
 // Metal flushes float32 subnormals to zero, so a subnormal operand reads as
 // a signed zero and a subnormal answer comes back zero.  ``x ** 1`` copies
@@ -76,6 +72,12 @@ inline bool lucid_pow_is_special(float y) {
 // Four divides and two sqrts cost a general bfloat16 exponent 17%.
 inline float lucid_pow_special(float x, float y) {
     float sq = x * x;
+    if (!metal::simd_any(y != 2.0f && y != 3.0f))
+        return (y == 2.0f) ? sq : sq * x;
+    if (!metal::simd_any(y != -1.0f))
+        return metal::precise::divide(1.0f, x);
+    if (!metal::simd_any(y != 0.5f))
+        return (x == -INFINITY) ? INFINITY : metal::precise::sqrt(x) + 0.0f;
     float s = metal::precise::sqrt(x);
     bool tiny = (y == -2.0f) && !(sq >= 0x1p-126f);
     float inv = metal::precise::divide(1.0f, (y == -2.0f) ? (tiny ? x : sq) : ((y == -0.5f) ? s : x));
@@ -96,12 +98,137 @@ inline float lucid_pow_special(float x, float y) {
 )";
 }
 
-// Any other exponent: ``metal::pow`` in the operands' dtype, as
-// ``mx::power`` computes it (float16 in half, bfloat16 through float32).
+// Double-float ``log2(ax)`` for normal positive float32 ``ax`` (LCD-557).
+inline const char* f32_log2_src() {
+    return R"(
+inline float2 lucid_log2_df(float ax) {
+    uint ux = as_type<uint>(ax);
+    int exp_i = int((ux >> 23) & 0xffu) - 127;
+    float m = as_type<float>((ux & 0x007fffffu) | 0x3f800000u);
+    if (m >= 1.41421356f) {
+        m *= 0.5f;
+        exp_i += 1;
+    }
+    float ef = float(exp_i);
+
+    float u = m - 1.0f;
+    float v_hi = m + 1.0f;
+    float v_lo = m - (v_hi - 1.0f);
+    float rcp = 1.0f / v_hi;
+    float t0 = u * rcp;
+    float t1 = (metal::fma(-t0, v_hi, u) - t0 * v_lo) * rcp;
+    float t_hi = t0 + t1;
+    float t_lo = (t0 - t_hi) + t1;
+
+    float s_hi = t_hi * t_hi;
+    float s_lo = metal::fma(t_hi, t_hi, -s_hi) + 2.0f * t_hi * t_lo;
+    float t3_hi = s_hi * t_hi;
+    float t3_lo = metal::fma(s_hi, t_hi, -t3_hi) + s_lo * t_hi + s_hi * t_lo;
+
+    const float c3_hi = 0.9617967009544373f;
+    const float c3_lo = -7.028191294579134e-09f;
+    const float c5_hi = 0.5770780444145203f;
+    const float c5_lo = -2.805797798502579e-08f;
+    const float c7 = 0.412198583112f;
+    const float c9 = 0.320598897976f;
+    const float c11 = 0.262308188524f;
+    const float c13 = 0.221953082597f;
+    float p7 = metal::fma(s_hi, metal::fma(s_hi, metal::fma(s_hi, c13, c11), c9), c7);
+    float t5_hi = t3_hi * s_hi;
+    float t5_lo = metal::fma(t3_hi, s_hi, -t5_hi) + t3_lo * s_hi + t3_hi * s_lo;
+    float tail5 = metal::fma(t5_hi * s_hi, p7, c5_hi * t5_lo + c5_lo * t5_hi);
+    float c5_term = c5_hi * t5_hi;
+    float c3_term_hi = c3_hi * t3_hi;
+    float c3_term_lo = metal::fma(c3_hi, t3_hi, -c3_term_hi) + c3_hi * t3_lo + c3_lo * t3_hi;
+    float poly_hi = c3_term_hi + c5_term;
+    float poly_lo = (c5_term - (poly_hi - c3_term_hi)) + c3_term_lo + tail5;
+
+    const float c1_hi = 2.885390043258667f;
+    const float c1_lo = 3.273447448356849e-08f;
+    float l1_hi = c1_hi * t_hi;
+    float l1_lo = metal::fma(c1_hi, t_hi, -l1_hi) + metal::fma(c1_hi, t_lo, c1_lo * t_hi);
+
+    float lm_hi = l1_hi + poly_hi;
+    float zm = lm_hi - l1_hi;
+    float lm_lo = (l1_hi - (lm_hi - zm)) + (poly_hi - zm) + l1_lo + poly_lo;
+
+    float L0 = ef + lm_hi;
+    float z = L0 - ef;
+    float L1 = (ef - (L0 - z)) + (lm_hi - z) + lm_lo;
+    float L_hi = L0 + L1;
+    return float2(L_hi, (L0 - L_hi) + L1);
+}
+)";
+}
+
+// Any other exponent: double-float ``exp2(b * log2(|a|))`` in float32 (<= 1 ulp,
+// 99.97% 0 ulp, and exact on representable powers; LCD-557), and ``metal::pow``
+// in the 16-bit dtypes (float16 in half, bfloat16 through float32).
 inline const char* general_src() {
     return R"(
 inline float lucid_pow_native(float a, float b) {
-    return metal::precise::pow(a, b);
+    float ax = metal::fabs(a);
+    float rb = metal::rint(b);
+    if (!(ax >= 0x1p-126f && ax < INFINITY && metal::isfinite(b)) || (a < 0.0f && rb != b))
+        return metal::precise::pow(a, b);
+    bool neg = (a < 0.0f) && (metal::rint(0.5f * b) != 0.5f * b);
+    float2 L = lucid_log2_df(ax);
+    float p0 = b * L.x;
+    float p1 = metal::fma(b, L.x, -p0) + b * L.y;
+    float p_hi = p0 + p1;
+    float p_lo = (p0 - p_hi) + p1;
+
+    if (p_hi > 128.0f)
+        return neg ? -INFINITY : INFINITY;
+    if (p_hi < -127.0f)
+        return neg ? -0.0f : 0.0f;
+
+    float k = metal::rint(p_hi);
+    float r_hi = p_hi - k;
+    float r = r_hi + p_lo;
+    float r_lo = (r_hi - r) + p_lo;
+
+    const float ln2_hi = 0.6931471824645996f;
+    const float ln2_lo = -1.904654323148236e-09f;
+    const float d2_hi = 0.24022650718688965f;
+    const float d2_lo = -2.277889376645144e-10f;
+    const float d3_hi = 0.05550410971045494f;
+    const float d3_lo = -1.0456333622217998e-09f;
+    const float d4 = 0.009618129107628477f;
+    const float d5 = 0.0013333558146428443f;
+    const float d6 = 0.0001540353039338161f;
+    const float d7 = 1.525273380405984e-05f;
+    const float d8 = 1.321548679014431e-06f;
+    float q4 = metal::fma(r, metal::fma(r, metal::fma(r, metal::fma(r, d8, d7), d6), d5), d4);
+    float r2_hi = r * r;
+    float r2_lo = metal::fma(r, r, -r2_hi) + 2.0f * r * r_lo;
+    float r3_hi = r2_hi * r;
+    float r3_lo = metal::fma(r2_hi, r, -r3_hi) + r2_lo * r + r2_hi * r_lo;
+    float d3_term_hi = d3_hi * r3_hi;
+    float d3_term_lo = metal::fma(d3_hi, r3_hi, -d3_term_hi) + d3_hi * r3_lo + d3_lo * r3_hi +
+                       (r2_hi * r2_hi) * q4;
+    float d2_term_hi = d2_hi * r2_hi;
+    float d2_term_lo = metal::fma(d2_hi, r2_hi, -d2_term_hi) + d2_hi * r2_lo + d2_lo * r2_hi;
+    float q2_hi = d2_term_hi + d3_term_hi;
+    float q2_lo = (d3_term_hi - (q2_hi - d2_term_hi)) + d2_term_lo + d3_term_lo;
+
+    float t_lin = r * ln2_hi;
+    float t_lin_lo = metal::fma(r, ln2_hi, -t_lin) + (r_lo * ln2_hi + r * ln2_lo);
+    float s1 = 1.0f + t_lin;
+    float e1 = (t_lin - (s1 - 1.0f)) + t_lin_lo;
+    float s2 = s1 + q2_hi;
+    float e2 = (q2_hi - (s2 - s1)) + e1 + q2_lo;
+    float exp2_r = s2 + e2;
+
+    int ki = int(k);
+    int k1 = ki >> 1;
+    int k2 = ki - k1;
+    float s_k1 = as_type<float>(uint(k1 + 127) << 23);
+    float s_k2 = as_type<float>(uint(k2 + 127) << 23);
+    float mag = (exp2_r * s_k1) * s_k2;
+    if (!(mag >= 0x1p-126f))
+        mag = 0.0f;
+    return neg ? -mag : mag;
 }
 
 inline half lucid_pow_native(half a, half b) {
@@ -112,7 +239,11 @@ inline bfloat16_t lucid_pow_native(bfloat16_t a, bfloat16_t b) {
     return static_cast<bfloat16_t>(
         metal::precise::pow(static_cast<float>(a), static_cast<float>(b)));
 }
+)";
+}
 
+inline const char* dispatch_src() {
+    return R"(
 template <typename T>
 inline T lucid_pow_special_in(T a, float x, float y) {
     return static_cast<T>(lucid_pow_special(x, y));
@@ -132,12 +263,13 @@ inline half lucid_pow_special_in<half>(half a, float x, float y) {
 
 template <typename T>
 inline T lucid_pow(T a, float y) {
+    if (y == 1.0f)
+        return a;
     float x = static_cast<float>(a);
     if (y == 0.0f || x == 1.0f)
         return static_cast<T>(1.0f);
-    if (y == 1.0f)
-        return a;
-    if (lucid_pow_is_special(y))
+    bool is_spec = lucid_pow_is_special(y);
+    if (metal::simd_any(is_spec) && is_spec)
         return lucid_pow_special_in(a, x, y);
     return lucid_pow_native(a, static_cast<T>(y));
 }
@@ -145,7 +277,7 @@ inline T lucid_pow(T a, float y) {
 }
 
 inline std::string header_src() {
-    return std::string(special_src()) + general_src();
+    return std::string(special_src()) + f32_log2_src() + general_src() + dispatch_src();
 }
 
 // ``FixedY``: the exponent is the constant with float32 magnitude bits
@@ -170,14 +302,11 @@ inline const mx::fast::CustomKernelFunction& pow_kernel(bool strided) {
     return strided ? k_strided : k_contig;
 }
 
-// The dtypes whose per-element exponent runs the kernel.  float16 is not
-// one: its own power is cheap enough (``mx::power`` sits at the memory
-// floor) that the special operations, which every element pays for once
-// the compiler predicates them, cost 1.6x, and a SIMD-uniform skip still
-// 1.3x.  float16's half pow is within 1 ulp there (LCD-557); a scalar
-// special exponent still takes the kernel in every dtype.
+// The dtypes whose per-element exponent runs the kernel (float32, float16,
+// and bfloat16; ``metal::simd_any`` skips the special-exponent block for
+// non-special SIMD groups: LCD-557).
 inline bool takes_tensor_exponent(mx::Dtype dt) {
-    return dt == mx::float32 || dt == mx::bfloat16;
+    return dt == mx::float32 || dt == mx::float16 || dt == mx::bfloat16;
 }
 
 inline bool is_kernel_dtype(mx::Dtype dt) {
@@ -270,18 +399,18 @@ inline bool is_special_exponent(float e) {
 }  // namespace gpu_pow_detail
 
 // ``a ** b`` element-wise and broadcast, ``b`` a tensor (or ``a`` a scalar
-// base).  float32 and bfloat16 run the kernel above; float16 (see
-// ``takes_tensor_exponent``), integer and complex dtypes stay ``mx::power``
-// (exact integer powers by squaring, and the complex principal branch).
+// base).  float32, float16, and bfloat16 run the kernel above; integer and
+// complex dtypes stay ``mx::power`` (exact integer powers by squaring, and
+// the complex principal branch).
 inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, const ::mlx::core::array& b) {
     if (!gpu_pow_detail::takes_tensor_exponent(a.dtype()))
         return ::mlx::core::power(a, b);
     return gpu_pow_detail::run(a, b, {});
 }
 
-// ``a ** exponent`` for a scalar exponent.  A special exponent is compiled
-// into the kernel; any other is ``mx::power``, which is what the kernel
-// would compute.
+// ``a ** exponent`` for a scalar exponent.  Every float32 exponent and every
+// special exponent in the 16-bit floats is compiled into the kernel; any
+// other 16-bit scalar exponent is ``mx::power``.
 inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, double exponent) {
     namespace mx = ::mlx::core;
     const mx::Dtype dt = a.dtype();
@@ -289,7 +418,7 @@ inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, double exponent) 
     if (!gpu_pow_detail::is_kernel_dtype(dt))
         return mx::power(a, b);
     const float e = gpu_pow_detail::rounded_exponent(exponent, dt);
-    if (gpu_pow_detail::is_special_exponent(e)) {
+    if (dt == mx::float32 || gpu_pow_detail::is_special_exponent(e)) {
         const auto bits = std::bit_cast<std::uint32_t>(e);
         return gpu_pow_detail::run(
             a, b, {true, static_cast<int>(bits & 0x7fffffffu), (bits >> 31) != 0u});

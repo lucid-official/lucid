@@ -24,18 +24,12 @@ takes the operations the scalar exponent takes.
   devices; within 1 ulp of ``exact`` in the 16-bit floats.  Where ``x * x``
   is subnormal Metal flushes it, so -2 squares ``1 / x`` there instead,
   within 2 ulp of ``exact``.
-* Every other exponent: ``metal::pow``, as before, which is within 3 ulp of
-  ``exact`` on Metal float32 (the measured bound on 6e5 values; LCD-557
-  tracks a correctly rounded kernel).  The CPU (vForce) and the 16-bit floats
-  are within 1 ulp.  Metal computes the special exponents of a 16-bit float
-  in float32 and rounds once.
+* Every other exponent: within 1 ulp of ``exact`` on both devices and in every
+  floating dtype (Metal float32 uses double-float ``exp2(b * log2(|a|))``:
+  LCD-557).  Metal computes the special exponents of a 16-bit float in float32
+  and rounds once, for both scalar and tensor exponents (LCD-557).
 * An exact power of two raised to an integer (``2 ** n``, ``0.5 ** 4``) is
-  exact on the CPU and in the 16-bit floats; Metal float32 is metal::pow
-  there (LCD-557, pinned strict-xfail).
-* A Metal float16 tensor exponent stays MLX's half pow, which is at the
-  memory floor; the per-element dispatch cost it 1.6x.  Its specials are
-  within 1 ulp there, and the cases these values hit are pinned
-  strict-xfail (LCD-557).  A scalar float16 exponent is exact.
+  exact on both devices and in every floating dtype (LCD-557, LCD-581).
 
 Metal flushes float32 subnormals, and so bfloat16 ones, to zero.  A
 subnormal operand reads as a signed zero, and a subnormal answer comes back
@@ -220,12 +214,7 @@ def _assert_power(
         exact = _exact(ref, x, e, dtype, device)
         _assert_within(got[sq], exact[sq], x[sq], dtype, 2, what + " (x*x flushed)")
         return
-    if e in _EXACT:
-        tol = 0
-    elif e in _FORMULA or dtype is not lucid.float32 or device == "cpu":
-        tol = 1
-    else:
-        tol = 3
+    tol = 0 if e in _EXACT else 1
     _assert_within(got, _exact(ref, x, e, dtype, device), x, dtype, tol, what)
 
 
@@ -236,10 +225,6 @@ def _values(t: lucid.Tensor) -> np.ndarray:
 
 def _on(x: np.ndarray, dtype: lucid.dtype, device: str) -> lucid.Tensor:
     return lucid.tensor(x).to(dtype).to(device)
-
-
-def _strict_xfail(broken: bool, reason: str) -> list[pytest.MarkDecorator]:
-    return [pytest.mark.xfail(strict=True, reason=reason)] if broken else []
 
 
 # ── the reported values ──────────────────────────────────────────────────────
@@ -280,22 +265,12 @@ def test_scalar_exponent_matches_the_reference(
         _assert_power(ref, _values(out), x, er, dtype, device, f"x {name} {e}")
 
 
-_F16_TENSOR = (
-    "LCD-557: float16 tensor-exponent specials ride MLX's half pow (<=1 ulp on "
-    "80/28/46/24/5 of 65536 values for 2/3/-1/-2/0.5)"
-)
-
-
 def _tensor_exponent_params() -> list[ParameterSet]:
-    # Metal float16 keeps MLX's half pow for a tensor exponent: these bases
-    # meet its misses at 2 and 3 (-1, -2 and 0.5 miss on other values).
     out = []
     for p in device_dtype_params(_DTYPES):
         device, dtype = p.values
         for e in _EXPONENTS:
-            broken = device == "metal" and dtype is lucid.float16 and e in (2.0, 3.0)
-            marks = _strict_xfail(broken, _F16_TENSOR)
-            out.append(pytest.param(device, dtype, e, marks=marks, id=f"{p.id}-{e}"))
+            out.append(pytest.param(device, dtype, e, id=f"{p.id}-{e}"))
     return out
 
 
@@ -404,9 +379,7 @@ def _tie_params() -> list[ParameterSet]:
     out = []
     for device in ["cpu", "metal"] if metal_available() else ["cpu"]:
         for form in ("scalar", "tensor"):
-            broken = device == "metal" and form == "tensor"
-            marks = _strict_xfail(broken, _F16_TENSOR)
-            out.append(pytest.param(device, form, marks=marks, id=f"{device}-{form}"))
+            out.append(pytest.param(device, form, id=f"{device}-{form}"))
     return out
 
 
@@ -485,8 +458,27 @@ def test_other_scalar_bases_match_the_reference(
         got = _values(base ** _on(e, dtype, device))
         raw = ref.tensor(b, dtype=ref.float64) ** ref.tensor(e.astype(np.float64))
         want = _metal_flush(_round_to(raw.numpy(), dtype), device, dtype)
-        tol = 3 if (device == "metal" and dtype is lucid.float32) else 1
-        _assert_within(got, want, e, dtype, tol, f"{base} ** e")
+        _assert_within(got, want, e, dtype, 1, f"{base} ** e")
+
+
+def test_representable_integer_exponents_are_exact_in_float32(device: str) -> None:
+    cases = [
+        (0.5, 4.0, 0.0625),
+        (2.0, -3.0, 0.125),
+        (3.0, -4.0, float(np.float32(1.0 / 81.0))),
+        (10.0, 7.0, 10000000.0),
+        (3.0, 9.0, 19683.0),
+        (-2.0, 4.0, 16.0),
+        (-2.0, 5.0, -32.0),
+        (-3.0, -4.0, float(np.float32(1.0 / 81.0))),
+    ]
+    for base, exp, want in cases:
+        b_t = lucid.tensor([base], dtype=lucid.float32, device=device)
+        e_t = lucid.tensor([exp], dtype=lucid.float32, device=device)
+        assert (b_t**exp).item() == want, f"{base} ** {exp} (scalar)"
+        assert (b_t**e_t).item() == want, f"{base} ** {exp} (tensor)"
+        if base > 0:
+            assert (base**e_t).item() == want, f"{base} ** {exp} (rpow)"
 
 
 # ── layouts: views, broadcasts, 0-d, empty ───────────────────────────────────
@@ -679,14 +671,13 @@ def test_compiled_scalar_and_tensor_special_exponents_match_eager_bitwise(
         _values(fn_scalar(t)), _values(t**e), err_msg=f"compiled x ** {e} ({dtype})"
     )
 
-    if dtype is not lucid.float16:
-        ex = lucid.full_like(t, e)
-        fn_tensor = lucid.compile(lambda x, y: x**y)
-        np.testing.assert_array_equal(
-            _values(fn_tensor(t, ex)),
-            _values(t**ex),
-            err_msg=f"compiled x ** tensor({e}) ({dtype})",
-        )
+    ex = lucid.full_like(t, e)
+    fn_tensor = lucid.compile(lambda x, y: x**y)
+    np.testing.assert_array_equal(
+        _values(fn_tensor(t, ex)),
+        _values(t**ex),
+        err_msg=f"compiled x ** tensor({e}) ({dtype})",
+    )
 
 
 @pytest.mark.skipif(not metal_available(), reason="Metal only")
