@@ -41,6 +41,7 @@
 #include "../ops/ufunc/Astype.h"
 #include "../ops/ufunc/Reductions.h"
 #include "../ops/ufunc/Transpose.h"
+#include "../ops/utils/Promote.h"
 #include "../ops/utils/View.h"
 #include "ConvTransposeNd.h"
 
@@ -103,11 +104,10 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
     // would be dropped under AMP.  ``astype_op`` returns the input
     // unchanged when dtypes already match, so the F32 baseline incurs
     // zero overhead.
-    SchemaGuard sg{ConvNdBackward<N>::schema_v1, x->dtype(), x->device()};
-    const Dtype eff_dt = sg.effective_dtype();
-    const TensorImplPtr x_eff = astype_op(x, eff_dt);
-    const TensorImplPtr W_eff = astype_op(W, eff_dt);
-    const TensorImplPtr b_eff = astype_op(b, eff_dt);
+    const auto [x_eff, W_eff, b_eff] =
+        promote_and_check_layer_operands(ConvNdBackward<N>::schema_v1, x, W, b);
+    SchemaGuard sg{ConvNdBackward<N>::schema_v1, x_eff->dtype(), x_eff->device()};
+    const Dtype eff_dt = x_eff->dtype();
 
     const int B = static_cast<int>(x_eff->shape()[0]);
     const int Cin = static_cast<int>(x_eff->shape()[1]);

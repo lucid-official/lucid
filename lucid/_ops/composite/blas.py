@@ -5,15 +5,26 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._autocast import _autocast_entry, _autocast_suspended
+from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 import lucid.linalg as _la
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-def _scaled_add(input: Tensor, beta: float, prod: Tensor, alpha: float) -> Tensor:
+def _scaled_add(
+    input: Tensor,
+    beta: float,
+    prod: Tensor,
+    alpha: float,
+    *,
+    op: str | None = None,
+) -> Tensor:
     """``beta * input + alpha * prod``, skipping ``input``'s values when ``beta == 0``."""
+    if op is not None and input.dtype != prod.dtype:
+        raise _C_engine.DtypeMismatch(
+            f"DtypeMismatch ({op}): expected {input.dtype._name}, got {prod.dtype._name}"
+        )
     if beta == 0:
         acc = (
             lucid.where(lucid.zeros_like(input, dtype=lucid.bool_), input, 0)
@@ -24,6 +35,7 @@ def _scaled_add(input: Tensor, beta: float, prod: Tensor, alpha: float) -> Tenso
     return input * beta + prod * alpha
 
 
+@_amp_op("addmm")
 def addmm(
     input: Tensor,
     mat1: Tensor,
@@ -78,15 +90,10 @@ def addmm(
     >>> lucid.addmm(M, a, b, beta=0.0, alpha=1.0)
     tensor([[19., 22.], [43., 50.]])
     """
-    with _autocast_entry("addmm", _unwrap(input), _unwrap(mat1), _unwrap(mat2)) as (
-        inp,
-        m1,
-        m2,
-    ):
-        input, mat1, mat2 = _wrap(inp), _wrap(m1), _wrap(m2)
-        return _scaled_add(input, beta, lucid.matmul(mat1, mat2), alpha)
+    return _scaled_add(input, beta, lucid.matmul(mat1, mat2), alpha, op="addmm")
 
 
+@_amp_op("addbmm")
 def addbmm(
     input: Tensor,
     batch1: Tensor,
@@ -142,13 +149,12 @@ def addbmm(
     >>> lucid.addbmm(M, b1, b2)
     tensor([[12., 12.], [12., 12.]])
     """
-    with _autocast_entry(
-        "addbmm", _unwrap(input), _unwrap(batch1), _unwrap(batch2)
-    ) as (inp, b1, b2):
-        input, batch1, batch2 = _wrap(inp), _wrap(b1), _wrap(b2)
-        return _scaled_add(input, beta, lucid.sum(lucid.bmm(batch1, batch2), 0), alpha)
+    return _scaled_add(
+        input, beta, lucid.sum(lucid.bmm(batch1, batch2), 0), alpha, op="addbmm"
+    )
 
 
+@_amp_op("baddbmm")
 def baddbmm(
     input: Tensor,
     batch1: Tensor,
@@ -203,13 +209,10 @@ def baddbmm(
     >>> lucid.baddbmm(M, b1, b2).shape
     (3, 2, 2)
     """
-    with _autocast_entry(
-        "baddbmm", _unwrap(input), _unwrap(batch1), _unwrap(batch2)
-    ) as (inp, b1, b2):
-        input, batch1, batch2 = _wrap(inp), _wrap(b1), _wrap(b2)
-        return _scaled_add(input, beta, lucid.bmm(batch1, batch2), alpha)
+    return _scaled_add(input, beta, lucid.bmm(batch1, batch2), alpha, op="baddbmm")
 
 
+@_amp_op("addmv")
 def addmv(
     input: Tensor,
     mat: Tensor,
@@ -263,16 +266,11 @@ def addmv(
     >>> lucid.addmv(M, A, v)
     tensor([17., 39.])
     """
-    with _autocast_entry("addmv", _unwrap(input), _unwrap(mat), _unwrap(vec)) as (
-        inp,
-        m,
-        v,
-    ):
-        input, mat, vec = _wrap(inp), _wrap(m), _wrap(v)
-        mv_out = lucid.matmul(mat, vec.unsqueeze(-1)).squeeze(-1)
-        return _scaled_add(input, beta, mv_out, alpha)
+    mv_out = lucid.matmul(mat, vec.unsqueeze(-1)).squeeze(-1)
+    return _scaled_add(input, beta, mv_out, alpha, op="addmv")
 
 
+@_amp_op("addr")
 def addr(
     input: Tensor,
     vec1: Tensor,
@@ -327,14 +325,7 @@ def addr(
     >>> lucid.addr(M, u, v)
     tensor([[3., 4., 5.], [6., 8., 10.]])
     """
-    with _autocast_entry("addr", _unwrap(input), _unwrap(vec1), _unwrap(vec2)) as (
-        inp,
-        v1,
-        v2,
-    ):
-        input, vec1, vec2 = _wrap(inp), _wrap(v1), _wrap(v2)
-        out = lucid.matmul(vec1.unsqueeze(-1), vec2.unsqueeze(0))
-        return _scaled_add(input, beta, out, alpha)
+    return _scaled_add(input, beta, lucid.linalg.outer(vec1, vec2), alpha)
 
 
 def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
@@ -369,13 +360,11 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         )
     if end.dtype != input.dtype:
         raise _C_engine.DtypeMismatch(
-            f"DtypeMismatch (lerp: input/end): "
-            f"expected {input.dtype._name}, got {end.dtype._name}"
+            f"DtypeMismatch (lerp: input/end): expected {input.dtype._name}, got {end.dtype._name}"
         )
     if not _can_mix_devices(input, end):
         raise _C_engine.DeviceMismatch(
-            f"DeviceMismatch (lerp: input/end): "
-            f"expected {input.device.type}, got {end.device.type}"
+            f"DeviceMismatch (lerp: input/end): expected {input.device.type}, got {end.device.type}"
         )
     diff = _wrap(_C_engine.sub(_unwrap(end), _unwrap(input)))
     if isinstance(weight, lucid.Tensor):
@@ -461,7 +450,11 @@ def addcmul(
     _check_ternary_devices("addcmul", input, tensor1, tensor2)
     with _autocast_entry(
         "addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)
-    ) as (inp, t1, t2):
+    ) as (
+        inp,
+        t1,
+        t2,
+    ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
         return input + (tensor1 * tensor2) * value
 
@@ -523,16 +516,20 @@ def addcdiv(
         _unwrap(tensor2).dtype
     ):
         raise RuntimeError(
-            "Integer division with addcdiv is no longer supported; "
-            "use floor_divide instead."
+            "Integer division with addcdiv is no longer supported; use floor_divide instead."
         )
     with _autocast_entry(
         "addcdiv", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)
-    ) as (inp, t1, t2):
+    ) as (
+        inp,
+        t1,
+        t2,
+    ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
         return input + (tensor1 / tensor2) * value
 
 
+@_amp_op("mv")
 def mv(input: Tensor, vec: Tensor) -> Tensor:
     r"""Matrix-vector product.
 
@@ -572,9 +569,7 @@ def mv(input: Tensor, vec: Tensor) -> Tensor:
     >>> lucid.mv(M, v)
     tensor([17., 39.])
     """
-    with _autocast_entry("mv", _unwrap(input), _unwrap(vec)) as (inp, v):
-        input, vec = _wrap(inp), _wrap(v)
-        return lucid.matmul(input, vec.unsqueeze(-1)).squeeze(-1)
+    return lucid.matmul(input, vec.unsqueeze(-1)).squeeze(-1)
 
 
 def ger(input: Tensor, vec2: Tensor) -> Tensor:

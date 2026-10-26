@@ -263,6 +263,8 @@ TensorImplPtr tensordot_op(const TensorImplPtr& a,
                            std::vector<int> axes_b) {
     if (!a || !b)
         ErrorBuilder("tensordot").fail("null input");
+    if (a->device() == Device::CPU)
+        validate_pair(a, b, "tensordot");
     // The row: WIDEST under Metal autocast, LOWER under the CPU's.  The
     // contraction runs as an einsum or a GEMM, and neither applies its own
     // row inside the scope.

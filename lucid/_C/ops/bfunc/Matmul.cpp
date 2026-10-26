@@ -25,6 +25,7 @@
 #include "../../kernel/primitives/BatchedMatmul.h"
 #include "../bfunc/_BinaryOp.h"
 #include "../ufunc/Astype.h"
+#include "../utils/Promote.h"
 #include "../utils/View.h"
 
 using lucid::kernel::primitives::NdMatmulInfo;
@@ -108,27 +109,6 @@ std::vector<Storage> MatmulBackward::apply(Storage grad_out) {
     return {std::move(dA_s), std::move(dB_s)};
 }
 
-namespace {
-
-// The dtype two matmul operands meet at: complex over float over integer
-// over bool, and the wider within a kind — the rule the Python operators
-// already follow for every other arithmetic op.  Two different 16-bit
-// floats meet at float32.
-Dtype common_dtype(Dtype a, Dtype b) {
-    if (a == b)
-        return a;
-    const auto kind = [](Dtype d) {
-        return is_complex(d) ? 3 : is_floating_point(d) ? 2 : is_integral(d) ? 1 : 0;
-    };
-    if (kind(a) != kind(b))
-        return kind(a) > kind(b) ? a : b;
-    if (dtype_size(a) != dtype_size(b))
-        return dtype_size(a) > dtype_size(b) ? a : b;
-    return Dtype::F32;
-}
-
-}  // namespace
-
 // Execute the forward matmul, open a profiler scope, compute FLOPs, and wire
 // the backward node if gradient tracking is active.
 //
@@ -161,29 +141,19 @@ TensorImplPtr MatmulBackward::forward(const TensorImplPtr& a, const TensorImplPt
     }
 
     // 3.3 AMP plumbing: schema_v1.amp_policy == Promote.  Under
-    // ``AutocastGuard(F16)`` SchemaGuard resolves ``eff_dt`` to the
-    // autocast target (F32 on CPU per Accelerate-no-F16 carve-out;
-    // F16 on GPU where ``mlx::core::matmul`` runs natively at half
-    // throughput).  Cast precedes the dtype-match check so a/b can
-    // arrive at differing dtypes under autocast (e.g. a from an upstream
-    // Conv cast to F16, b a Parameter still F32).
-    //
-    // ``astype_op`` is autograd-aware (wires ``AstypeBackward`` when the
-    // input has requires_grad), which keeps the backward chain intact
-    // through the AMP cast.  ``maybe_cast_for_kernel`` would produce a
-    // requires_grad=false cast tensor → wire_autograd would short-circuit
-    // → backward would drop every gradient.  No-op fast path on F32.
-    // The operands meet at their common dtype.  The guard used to key off
-    // ``a`` alone, so ``int @ float`` cast the float operand to int and
-    // truncated it (``[[1, 2]] @ [[0.5], [0.25]]`` was 0) while
-    // ``float @ int`` was right.
-    SchemaGuard sg{MatmulBackward::schema_v1, common_dtype(a->dtype(), b->dtype()), a->device()};
-    const Dtype eff_dt = sg.effective_dtype();
-    const TensorImplPtr a_eff = astype_op(a, eff_dt);
-    const TensorImplPtr b_eff = astype_op(b, eff_dt);
+    // ``AutocastGuard(F16)`` each eligible floating operand is cast to the
+    // autocast target (F32 on CPU per Accelerate-no-F16 carve-out; F16 on
+    // GPU where ``mlx::core::matmul`` runs natively at half throughput).
+    // Outside autocast no operand is cast, so mixed dtypes raise
+    // ``DtypeMismatch`` as the reference does (LCD-575).
+    const auto operands = promote_for_schema(MatmulBackward::schema_v1, {a, b});
+    const TensorImplPtr& a_eff = operands[0];
+    const TensorImplPtr& b_eff = operands[1];
+    SchemaGuard sg{MatmulBackward::schema_v1, a_eff->dtype(), a_eff->device()};
     if (a_eff->dtype() != b_eff->dtype())
         throw DtypeMismatch(std::string(dtype_name(a_eff->dtype())),
                             std::string(dtype_name(b_eff->dtype())), "matmul");
+    const Dtype eff_dt = a_eff->dtype();
 
     const auto info = plan_nd_matmul(a_eff->shape(), b_eff->shape());
     const int M = info.M, N = info.N, K = info.K;

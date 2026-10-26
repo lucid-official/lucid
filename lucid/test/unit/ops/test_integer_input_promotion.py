@@ -46,13 +46,15 @@ def test_norm_of_integers_is_refused(device: str) -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_matmul_promotes_an_integer_operand(device: str) -> None:
+def test_matmul_refuses_an_integer_with_a_float_operand(device: str) -> None:
     a = lucid.tensor([[1, 2]], dtype=lucid.int64, device=device)
     b = lucid.tensor([[0.5], [0.25]], device=device)
-    assert (a @ b).dtype == lucid.float32
-    assert (a @ b).tolist() == [[1.0]]
-    assert lucid.matmul(a, b).tolist() == [[1.0]]
-    assert (b.reshape(1, 2) @ a.reshape(2, 1)).tolist() == [[1.0]]
+    with pytest.raises(TypeError, match="DtypeMismatch"):
+        _ = a @ b
+    with pytest.raises(TypeError, match="DtypeMismatch"):
+        _ = lucid.matmul(a, b)
+    with pytest.raises(TypeError, match="DtypeMismatch"):
+        _ = b.reshape(1, 2) @ a.reshape(2, 1)
 
 
 @pytest.mark.parametrize("device", _DEVICES)

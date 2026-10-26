@@ -5,7 +5,9 @@
 
 #pragma once
 
+#include <array>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -14,6 +16,7 @@
 #include "../../core/OpSchema.h"
 #include "../../core/SchemaGuard.h"
 #include "../../core/TensorImpl.h"
+#include "../../core/Validate.h"
 #include "../ufunc/Astype.h"
 
 namespace lucid {
@@ -182,6 +185,19 @@ inline std::vector<TensorImplPtr> promote_for_schema(const OpSchema& schema,
         return operands;
     const AmpScope amp{schema.name, *device};
     return amp.cast_widest(std::move(operands));
+}
+
+// Promote ``(x, W, b)`` under ``schema`` (linear / conv / conv_transpose) and
+// require all three to share one dtype after any autocast conversion.
+inline std::array<TensorImplPtr, 3> promote_and_check_layer_operands(const OpSchema& schema,
+                                                                     const TensorImplPtr& x,
+                                                                     const TensorImplPtr& W,
+                                                                     const TensorImplPtr& b) {
+    const auto operands = promote_for_schema(schema, {x, W, b});
+    const std::string op(schema.name);
+    Validator::pair(operands[0], operands[1], op + ": x/weight").same_dtype();
+    Validator::pair(operands[0], operands[2], op + ": x/bias").same_dtype();
+    return {operands[0], operands[1], operands[2]};
 }
 
 }  // namespace lucid

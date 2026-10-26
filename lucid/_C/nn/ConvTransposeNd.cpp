@@ -31,6 +31,7 @@
 #include "../ops/gfunc/Gfunc.h"
 #include "../ops/ufunc/Astype.h"
 #include "../ops/ufunc/Reductions.h"
+#include "../ops/utils/Promote.h"
 #include "ConvNd.h"
 
 namespace lucid {
@@ -84,13 +85,6 @@ void validate_conv_transpose_params(const std::string& op,
     }
 }
 
-std::array<TensorImplPtr, 3> cast_conv_transpose_operands(const TensorImplPtr& x,
-                                                          const TensorImplPtr& W,
-                                                          const TensorImplPtr& b,
-                                                          Dtype eff_dt) {
-    return {astype_op(x, eff_dt), astype_op(W, eff_dt), astype_op(b, eff_dt)};
-}
-
 template <int N>
 TensorImplPtr finish_conv_transpose_forward(Storage out_storage,
                                             Shape out_shape,
@@ -137,9 +131,10 @@ TensorImplPtr ConvTransposeNdBackward<N>::forward(const TensorImplPtr& x,
     require_rank(W->shape(), N + 2, op + ": weight",
                  channels_first_layout(N, "C_in", "C_out/groups"));
 
-    SchemaGuard sg{ConvTransposeNdBackward<N>::schema_v1, x->dtype(), x->device()};
-    const Dtype eff_dt = sg.effective_dtype();
-    const auto ins = cast_conv_transpose_operands(x, W, b, eff_dt);
+    const auto ins =
+        promote_and_check_layer_operands(ConvTransposeNdBackward<N>::schema_v1, x, W, b);
+    SchemaGuard sg{ConvTransposeNdBackward<N>::schema_v1, ins[0]->dtype(), ins[0]->device()};
+    const Dtype eff_dt = ins[0]->dtype();
 
     const int B = static_cast<int>(x->shape()[0]);
     const int Cin = static_cast<int>(x->shape()[1]);

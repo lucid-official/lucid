@@ -29,7 +29,7 @@ from typing import SupportsIndex
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._C.engine import einops as _C_einops
-from lucid._dispatch import _REAL_FLOATS, _promote_impls, _unwrap, _wrap
+from lucid._dispatch import _REAL_FLOATS, _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._tensor.tensor import Tensor
 from lucid.einops import _einsum, _recipe
@@ -345,13 +345,8 @@ def einsum(equation: str, *operands: Tensor) -> Tensor:
     >>> lucid.einops.einsum("ii->", m)
     tensor(5.)
     """
-    # The engine contracts operands of one dtype only, so an integer operand
-    # beside a float one raised ``DtypeMismatch``.  They meet at their common
-    # dtype first, as in ``a * b``; all-integer operands are left as they
-    # are and keep the exact integer path.
     raw_impls = [_unwrap(t) for t in operands]
-    impl_list = _promote_impls(raw_impls)
-    explicit, impl_list = _einsum.normalise(equation, impl_list)
+    explicit, impl_list = _einsum.normalise(equation, raw_impls)
     return _wrap_own(_C_einops.einsum(explicit, impl_list), *raw_impls)
 
 

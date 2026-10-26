@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - unify grad_impl step, accumulation, and shared-grad writes
 
+- refuse mixed float dtypes in matmul family outside autocast
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

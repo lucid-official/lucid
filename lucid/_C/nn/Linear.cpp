@@ -31,6 +31,7 @@
 #include "../ops/ufunc/Astype.h"
 #include "../ops/ufunc/Reductions.h"
 #include "../ops/ufunc/Transpose.h"
+#include "../ops/utils/Promote.h"
 #include "../ops/utils/View.h"
 
 namespace lucid {
@@ -88,11 +89,9 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
     // false → the entire backward chain breaks at every AMP cast
     // boundary.  ``astype_op`` is a same-dtype no-op (returns input as
     // ``shared_ptr``), so the F32 baseline pays no cost.
-    SchemaGuard sg{schema_v1, x->dtype(), x->device()};
-    const Dtype eff_dt = sg.effective_dtype();
-    const TensorImplPtr x_eff = astype_op(x, eff_dt);
-    const TensorImplPtr W_eff = astype_op(W, eff_dt);
-    const TensorImplPtr b_eff = astype_op(b, eff_dt);
+    const auto [x_eff, W_eff, b_eff] = promote_and_check_layer_operands(schema_v1, x, W, b);
+    SchemaGuard sg{schema_v1, x_eff->dtype(), x_eff->device()};
+    const Dtype eff_dt = x_eff->dtype();
 
     const auto fx = flatten_x(x_eff->shape());
     const std::size_t M = fx.M;
