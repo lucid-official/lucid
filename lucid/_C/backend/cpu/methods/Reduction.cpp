@@ -23,12 +23,11 @@ CpuBackend::reduce_mean(const Storage& a, const Shape& in_shape, const ReduceOpt
 
 Storage
 CpuBackend::variance(const Storage& a, const Shape& in_shape, const ReduceOpts& opts, Dtype dt) {
-    // Accelerate has no half kernels, so the whole family widens at the door,
-    // reuses the float path and rounds once on the way out.  as_f32 /
-    // back_to_f16 key off each storage's own dtype, so index and mask
-    // operands travel through untouched.  See detail::widen_half.
+    // Accelerate has no half kernels, so half inputs widen at the door and
+    // return float32 so Bessel correction and std's square root round to
+    // half only once at the caller boundary.
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(variance(detail::as_f32(a), in_shape, opts, Dtype::F32), dt);
+        return variance(detail::as_f32(a), in_shape, opts, Dtype::F32);
     const auto& cs = std::get<CpuStorage>(a);
     auto is_reduced_axis = [&](std::size_t d) {
         return std::find(opts.axes.begin(), opts.axes.end(), static_cast<int>(d)) !=

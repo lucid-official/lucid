@@ -690,16 +690,33 @@ def _calls_the_owner() -> set[str]:
     for path in sorted(_FUNCTIONAL.glob("*.py")):
         if path.name == _OWNER:
             continue
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        callees_by_fn: dict[str, set[str]] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
                 continue
-            for call in ast.walk(node):
+            callees_by_fn[node.name] = {
+                call.func.id
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+            }
+        reaches_owner = set(owner_names)
+        changed = True
+        while changed:
+            changed = False
+            for fn_name, callees in callees_by_fn.items():
                 if (
-                    isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Name)
-                    and call.func.id in owner_names
+                    fn_name.startswith("_")
+                    and fn_name not in reaches_owner
+                    and callees & reaches_owner
                 ):
-                    found.add(node.name)
+                    reaches_owner.add(fn_name)
+                    changed = True
+        found.update(
+            fn_name
+            for fn_name, callees in callees_by_fn.items()
+            if not fn_name.startswith("_") and callees & reaches_owner
+        )
     return found
 
 

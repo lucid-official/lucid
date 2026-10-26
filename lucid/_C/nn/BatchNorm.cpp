@@ -569,6 +569,7 @@ void batch_norm_update_running_stats(std::shared_ptr<TensorImpl> running_mean,
 
     Storage batch_mean = be.reduce_mean(x_eff, x_shape, opts, buf_dt);
     Storage batch_var = be.variance(x_eff, x_shape, opts, buf_dt);
+    const Dtype var_dt = is_half_float(buf_dt) ? Dtype::F32 : buf_dt;
 
     const double eff = momentum;
     const double unbiased_factor =
@@ -583,7 +584,9 @@ void batch_norm_update_running_stats(std::shared_ptr<TensorImpl> running_mean,
     // new_rv = (1-eff) * running_var + (eff * unbiased_factor) * batch_var
     Storage rv_scaled =
         be.mul_scalar(running_var->storage(), running_var->shape(), buf_dt, 1.0 - eff);
-    Storage bv_scaled = be.mul_scalar(batch_var, stat_shape, buf_dt, eff * unbiased_factor);
+    Storage bv_scaled = be.mul_scalar(batch_var, stat_shape, var_dt, eff * unbiased_factor);
+    if (var_dt != buf_dt)
+        bv_scaled = be.astype(bv_scaled, stat_shape, var_dt, buf_dt);
     Storage new_rv = be.add(rv_scaled, bv_scaled, stat_shape, buf_dt);
 
     // Into the buffers' own elements: the TensorImpl identity is preserved

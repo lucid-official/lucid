@@ -331,14 +331,13 @@ def _corrected_variance(
 ) -> _Impl:
     """The variance over ``axes`` divided by ``max(N - correction, 0)``.
 
-    A half input is widened to float32 before the reduction and Bessel
-    correction so ``var``, ``std``, ``var_mean`` and ``std_mean`` evaluate
-    in float32 opmath and round back to the half dtype once at the caller's
-    boundary (avoiding rounding the variance to half before ``sqrt``).
+    ``_C_engine.var`` returns ``F32`` for half inputs while reading ``x_impl``
+    at its native half width, so ``var``, ``std``, ``var_mean`` and ``std_mean``
+    evaluate in float32 opmath without a float32 widening copy of ``x_impl``
+    and round back to the half dtype once at the caller's boundary.
     """
-    work = _C_engine.astype(x_impl, _C_engine.F32) if x_impl.dtype in _HALF else x_impl
-    biased = _C_engine.var(work, axes, keepdim)
-    return _bessel_correct(biased, work, axes, correction, name)
+    biased = _C_engine.var(x_impl, axes, keepdim)
+    return _bessel_correct(biased, x_impl, axes, correction, name)
 
 
 def _variance(

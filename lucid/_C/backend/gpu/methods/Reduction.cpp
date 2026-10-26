@@ -36,9 +36,10 @@ Storage GpuBackend::variance(const Storage& a, const Shape&, const ReduceOpts& o
     if (is_complex(dt))
         ErrorBuilder("gpu_backend::variance").not_implemented("complex not supported");
     const auto& gs = std::get<GpuStorage>(a);
+    const Dtype out_dt = is_half_float(dt) ? Dtype::F32 : dt;
     auto result = var_widened(*gs.arr, opts.axes, opts.keepdims, 0);
     // PERF: var() produces contiguous output; drop defensive wrap.
-    return Storage{gpu::wrap_mlx_array(std::move(result), dt)};
+    return Storage{gpu::wrap_mlx_array(std::move(result), out_dt)};
 }
 
 Storage

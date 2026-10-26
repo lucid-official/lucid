@@ -10,12 +10,27 @@
 // statistics use custom ``mlx::core::fast::metal_kernel`` shaders that read
 // float16 / bfloat16 at native width, accumulate in float32 registers and
 // threadgroup memory, and round once into the output dtype.
+//
+// The contract every plan keeps: a half reduction is the float32 reduction
+// of the widened input, rounded once.  A sum or mean kernel may differ from
+// MLX's float32 one only in summation order; a variance kernel is a different
+// algorithm — shifted sums per group of threads, merged by moments (see
+// ``kMomentsMetal``) — with its own error bound.  GPU float32 arithmetic
+// flushes subnormals, so a bfloat16 subnormal result of a sum of two or more
+// elements, or of any mean or variance, is a signed zero, as it is for float32
+// and in ``lucid.compile``'s graphs (LCD-452).  A float16 subnormal is a
+// normal float32 and survives everywhere.
+//
+// One deliberate departure from the reference's GPU stream, which flushes a
+// one-element float32 / bfloat16 sum too: here that sum is a copy and keeps a
+// subnormal, bit-identical to MLX's float32 sum and to the compiled graph.
 #pragma once
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -245,23 +260,117 @@ inline const ::mlx::core::fast::CustomKernelFunction& krk_sum_kernel() {
     return k;
 }
 
+// Metal helpers of the variance and normalisation-statistics kernels.
+//
+// A group of threads sums the deviations ``d`` of its n values from one
+// anchor a: s1 = sum(d), s2 = sum(d^2), and ``lucid_moments`` takes M2 = s2 -
+// s1^2 / n.  The rounding of the sums is magnified by s2 / M2 = 1 + n (a -
+// mean)^2 / M2, and if a is the mean of k of the group's values,
+// Cauchy-Schwarz gives (a - mean)^2 <= M2 / k: the magnification is at most
+// 1 + n / k whatever the data.  The rounding itself grows with the values
+// one thread sums in a row, so the error is about eps * run * (1 + n / k).
+// The anchor used to be the first element of the whole reduction, so an
+// outlier there magnified it by the reduction's size.  Now:
+//
+//   * a row kernel simdgroup anchors at the mean of its row's first 32
+//     values: n <= 4096, so at most 129;
+//   * a split-kernel simdgroup anchors at the mean of its lanes' first
+//     values: at most 1 + n / 32 over the simdgroup's n, an eighth of its
+//     threadgroup's, on every route, the one-threadgroup route too;
+//   * a column-kernel thread re-anchors at the first of every 64 of its
+//     rows: at most 65, however many rows.
+//
+// The groups' moments (count, mean, M2) merge by Chan, Golub and LeVeque's
+// update (``lucid_merge``) or about a pivot mean (``lucid_simd_combine``),
+// adding no cancellation of their own.  A sample is scaled down before it is
+// summed, so k of them cannot overflow.  The bandwidth-bound loops of the row
+// and split kernels are the ones a single anchor needs (per-thread moments in
+// them held more registers and cost occupancy: a variance of 32M float16
+// values went from 437 to 612 us on an M1 Pro).  What the sampled anchor
+// still costs is its wait: the loop starts once the lanes' first loads are in.
+//
+// ``lucid_nonneg`` clamps M2 at +0: ``s2 - s1 * md`` is contracted into an fma
+// that can round a flushed square to -0, and a variance has no sign.
+inline constexpr const char* kMomentsMetal = R"(
+struct LucidMoments { float n; float mean; float m2; };
+
+inline float lucid_nonneg(float m2) { return (m2 > 0.0f || isnan(m2)) ? m2 : 0.0f; }
+
+// A non-finite first value would turn every deviation into NaN, while the
+// mean of an input holding one infinity is that infinity.
+inline float lucid_anchor(float v) { return isfinite(v) ? v : 0.0f; }
+
+// The mean of a simdgroup's samples, ``k`` of whose lanes hold one.
+inline float lucid_simd_anchor(bool has, float v, uint k) {
+    float s = simd_sum(has ? lucid_anchor(v) * 0.03125f : 0.0f);
+    return (k > 0u) ? s * (32.0f / float(k)) : 0.0f;
+}
+
+inline LucidMoments lucid_moments(float n, float anchor, float s1, float s2) {
+    if (!(n > 0.0f)) return {0.0f, 0.0f, 0.0f};
+    float md = s1 / n;
+    return {n, anchor + md, lucid_nonneg(s2 - s1 * md)};
+}
+
+inline LucidMoments lucid_merge(LucidMoments a, LucidMoments b) {
+    if (b.n == 0.0f) return a;
+    if (a.n == 0.0f) return b;
+    float n = a.n + b.n, wb = b.n / n, delta = b.mean - a.mean;
+    float mean = isfinite(delta) ? metal::fma(delta, wb, a.mean)
+                                 : a.mean * (a.n / n) + b.mean * wb;
+    return {n, mean, a.m2 + b.m2 + delta * delta * a.n * wb};
+}
+
+// A simdgroup's moments.  M2 adds the spread of the lanes' means about lane
+// 0's, the first group's, which always holds values; any pivot gives the
+// same M2 in exact arithmetic, and one of the means keeps the correction
+// small.  The mean is the plain weighted sum, which keeps an infinity.  The
+// sums are independent and reduce side by side.
+inline LucidMoments lucid_simd_combine(LucidMoments t) {
+    bool has = t.n > 0.0f;
+    float c = simd_broadcast_first(t.mean), dm = has ? t.mean - c : 0.0f;
+    float n = simd_sum(t.n), total = simd_sum(has ? t.n * t.mean : 0.0f), sa = simd_sum(t.m2);
+    float sb = simd_sum(t.n * dm * dm), sc = simd_sum(t.n * dm);
+    float mean = (n > 0.0f) ? total / n : 0.0f;
+    return {n, mean, sa + lucid_nonneg(sb - sc * ((n > 0.0f) ? sc / n : 0.0f))};
+}
+
+inline float lucid_variance(LucidMoments r, int ddof) {
+    float denom = r.n - float(ddof);
+    return denom > 0.0f ? r.m2 / denom : NAN;
+}
+
+// How many of [0, I) fall at offsets [lo, lo + 32) of the 256-wide blocks
+// b with b % step == first (step = 1: every block).
+inline uint lucid_lanes_count(uint I, uint lo, uint first, uint step) {
+    uint full = I >> 8, rest = I & 255u;
+    uint blocks = (full > first) ? (full - first - 1u) / step + 1u : 0u;
+    uint tail = (rest > lo && full % step == first) ? min(rest - lo, 32u) : 0u;
+    return blocks * 32u + tail;
+}
+)";
+
 inline const ::mlx::core::fast::CustomKernelFunction& row_var_kernel() {
     namespace mx = ::mlx::core;
     static const auto k = mx::fast::metal_kernel(
         "lucid_half_row_var", {"x"}, {"out"},
         "uint lane=thread_index_in_simdgroup,sg=simdgroup_index_in_threadgroup;"
         "uint m=threadgroup_position_in_grid.x*8u+sg,M=uint(x_shape[1]),I=uint(x_shape[2]);"
-        "if(m>=M)return;uint base=m*I;float anchor=float(x[base]);"
-        "if(!isfinite(anchor))anchor=0.0f;float s1=0.0f,s2=0.0f;"
+        "if(m>=M)return;uint base=m*I;"
+        "float anchor=lucid_simd_anchor(lane<I,float(x[base+min(lane,I-1u)]),min(I,32u));"
+        "float s1=0.0f,s2=0.0f;"
         "for(uint i=lane;i<I;i+=32u){float d=float(x[base+i])-anchor;s1+=d;s2=metal::fma(d,d,s2);}"
         "s1=simd_sum(s1);s2=simd_sum(s2);"
-        "if(lane==0u){float md=s1/float(I);"
-        "float m2=isfinite(s1)?(isinf(s2)?INFINITY:(s2-s1*md)):NAN;if(m2<0.0f)m2=0.0f;"
-        "out[m]=OutT((int(I)>Ddof)?(m2/float(int(I)-Ddof)):NAN);}",
-        "", true, false, mx::CompileOptions{});
+        "if(lane==0u){out[m]=OutT(lucid_variance(lucid_moments(float(I),anchor,s1,s2),Ddof));}",
+        kMomentsMetal, true, false, mx::CompileOptions{});
     return k;
 }
 
+// Moments over (O, ., I) per middle index ``m``, as ``G`` partials per ``m``:
+// ``p`` is (M, G, 3) of (count, mean, M2).  A threadgroup covers whole
+// 256-wide blocks of a row — every block of ``ceil((O - g) / G)`` rows when
+// G <= O, else the blocks of its one row congruent to ``g % (G / O)`` — so
+// a simdgroup's count has a closed form and the loop counts nothing.
 inline const ::mlx::core::fast::CustomKernelFunction& omi_stats_s1_kernel() {
     namespace mx = ::mlx::core;
     static const auto k = mx::fast::metal_kernel(
@@ -269,67 +378,86 @@ inline const ::mlx::core::fast::CustomKernelFunction& omi_stats_s1_kernel() {
         "uint tid=thread_position_in_threadgroup.x,lane=thread_index_in_simdgroup;"
         "uint sg=simdgroup_index_in_threadgroup,g=threadgroup_position_in_grid.x;"
         "uint m=threadgroup_position_in_grid.y,G=threadgroups_per_grid.x;"
-        "uint O=uint(x_shape[0]),M=uint(x_shape[1]),I=uint(x_shape[2]);"
-        "float anchor=float(x[m*I]);if(!isfinite(anchor))anchor=0.0f;float s1=0.0f,s2=0.0f;"
+        "uint O=uint(x_shape[0]),M=uint(x_shape[1]),I=uint(x_shape[2]),lo=sg*32u,row,start,n;"
+        "if(G<=O){row=g;start=tid;n=((O-g+G-1u)/G)*lucid_lanes_count(I,lo,0u,1u);}"
+        "else{uint gpo=G/O;row=g/gpo;start=((g%gpo)<<8)+tid;"
+        "n=lucid_lanes_count(I,lo,g%gpo,gpo);}"
+        "uint s0=start-lane,k=(I>s0)?min(I-s0,32u):0u;"
+        "float anchor=lucid_simd_anchor(start<I,float(x[(row*M+m)*I+min(start,I-1u)]),k);"
+        "float s1=0.0f,s2=0.0f;"
         "if(G<=O){for(uint o=g;o<O;o+=G){uint base=(o*M+m)*I;"
-        "for(uint i=tid;i<I;i+=256u){float "
-        "d=float(x[base+i])-anchor;s1+=d;s2=metal::fma(d,d,s2);}}}"
-        "else{uint gpo=G/O,o=g/gpo,gi=g%gpo;if(o<O){uint base=(o*M+m)*I,step=gpo<<8;"
-        "for(uint i=(gi<<8)+tid;i<I;i+=step){"
+        "for(uint i=tid;i<I;i+=256u){"
         "float d=float(x[base+i])-anchor;s1+=d;s2=metal::fma(d,d,s2);}}}"
-        "s1=simd_sum(s1);s2=simd_sum(s2);threadgroup float sh1[8],sh2[8];"
-        "if(lane==0u){sh1[sg]=s1;sh2[sg]=s2;}"
-        "threadgroup_barrier(mem_flags::mem_threadgroup);"
-        "if(sg==0u){s1=(lane<8u)?sh1[lane]:0.0f;s2=(lane<8u)?sh2[lane]:0.0f;"
+        "else{uint gpo=G/O,base=(row*M+m)*I,step=gpo<<8;"
+        "for(uint i=start;i<I;i+=step){"
+        "float d=float(x[base+i])-anchor;s1+=d;s2=metal::fma(d,d,s2);}}"
         "s1=simd_sum(s1);s2=simd_sum(s2);"
-        "if(lane==0u){uint idx=(m*G+g)*2u;p[idx]=s1;p[idx+1u]=s2;}}",
-        "", true, false, mx::CompileOptions{});
+        "threadgroup LucidMoments sh[8];if(lane==0u)sh[sg]=lucid_moments(float(n),anchor,s1,s2);"
+        "threadgroup_barrier(mem_flags::mem_threadgroup);"
+        "if(sg==0u){LucidMoments v=lucid_simd_combine((lane<8u)?sh[lane]:"
+        "LucidMoments{0.0f,0.0f,0.0f});"
+        "if(lane==0u){uint idx=(m*G+g)*3u;p[idx]=v.n;p[idx+1u]=v.mean;p[idx+2u]=v.m2;}}",
+        kMomentsMetal, true, false, mx::CompileOptions{});
     return k;
 }
+
+// The merge of ``omi_stats_s1_kernel``'s partials ``p`` into one moment set
+// ``v`` per ``m`` by a single simdgroup (launched as 32 threads per ``m``; one
+// partial is the answer as it stands), valid in lane 0 — the body every kernel
+// reading ``p`` starts with.  ``p`` is read inline: MLX binds a small input in
+// the ``constant`` address space, a large one in ``device``.
+inline constexpr const char* kMergePartialsMetal =
+    "uint lane=thread_index_in_simdgroup,m=threadgroup_position_in_grid.y;"
+    "uint G=uint(p_shape[1]);LucidMoments v={p[m*G*3u],p[m*G*3u+1u],p[m*G*3u+2u]};"
+    "if(G>1u){LucidMoments a={0.0f,0.0f,0.0f};"
+    "for(uint g=lane;g<G;g+=32u){uint i=(m*G+g)*3u;"
+    "a=lucid_merge(a,LucidMoments{p[i],p[i+1u],p[i+2u]});}"
+    "v=lucid_simd_combine(a);}";
 
 inline const ::mlx::core::fast::CustomKernelFunction& omi_var_s2_kernel() {
     namespace mx = ::mlx::core;
     static const auto k = mx::fast::metal_kernel(
-        "lucid_half_omi_var_s2", {"p", "x"}, {"out"},
-        "uint tid=thread_position_in_threadgroup.x,lane=thread_index_in_simdgroup;"
-        "uint sg=simdgroup_index_in_threadgroup,m=threadgroup_position_in_grid.y;"
-        "uint G=uint(p_shape[1]),O=uint(x_shape[0]),I=uint(x_shape[2]),base=m*G*2u;"
-        "float s1=0.0f,s2=0.0f;"
-        "for(uint g=tid;g<G;g+=256u){s1+=p[base+g*2u];s2+=p[base+g*2u+1u];}"
-        "s1=simd_sum(s1);s2=simd_sum(s2);threadgroup float sh1[8],sh2[8];"
-        "if(lane==0u){sh1[sg]=s1;sh2[sg]=s2;}"
-        "threadgroup_barrier(mem_flags::mem_threadgroup);"
-        "if(sg==0u){s1=(lane<8u)?sh1[lane]:0.0f;s2=(lane<8u)?sh2[lane]:0.0f;"
-        "s1=simd_sum(s1);s2=simd_sum(s2);"
-        "if(lane==0u){float n=float(O)*float(I),md=s1/n;"
-        "float m2=isfinite(s1)?(isinf(s2)?INFINITY:(s2-s1*md)):NAN;if(m2<0.0f)m2=0.0f;"
-        "float denom=n-float(Ddof);out[m]=OutT((denom>0.0f)?(m2/denom):NAN);}}",
-        "", true, false, mx::CompileOptions{});
+        "lucid_half_omi_var_s2", {"p"}, {"out"},
+        std::string(kMergePartialsMetal) + "if(lane==0u){out[m]=OutT(lucid_variance(v,Ddof));}",
+        kMomentsMetal, true, false, mx::CompileOptions{});
     return k;
 }
 
+// One column per ``tx``, its rows split over the 32 ``ty``.  A thread sums
+// its rows in runs of 64, each anchored at its first row, and merges the
+// runs' moments.  The column then takes two passes over shared floats: the
+// mean, then each thread's M2 plus n (its mean - the mean)^2.  Merging the
+// threads' moments pairwise in shared memory instead cost 2.6x.
 inline const ::mlx::core::fast::CustomKernelFunction& krk_var_kernel() {
     namespace mx = ::mlx::core;
     static const auto k = mx::fast::metal_kernel(
         "lucid_half_krk_var", {"x"}, {"out"},
         "uint tid=thread_position_in_threadgroup.x,tx=tid&7u,ty=tid>>3;"
         "uint gm=threadgroup_position_in_grid.x,bo=threadgroup_position_in_grid.y;"
-        "uint R=uint(x_shape[1]),K=uint(x_shape[2]),col=(gm<<3)+tx;float s1=0.0f,s2=0.0f;"
-        "if(col<K){uint base=bo*R*K+col;float anchor=float(x[base]);"
-        "if(!isfinite(anchor))anchor=0.0f;"
-        "for(uint r=ty;r<R;r+=32u){float d=float(x[base+r*K])-anchor;s1+=d;s2=metal::fma(d,d,s2);}}"
-        "threadgroup float sh1[32][9],sh2[32][9];sh1[ty][tx]=s1;sh2[ty][tx]=s2;"
+        "uint R=uint(x_shape[1]),K=uint(x_shape[2]),col=(gm<<3)+tx;"
+        "LucidMoments t={0.0f,0.0f,0.0f};"
+        "if(col<K){uint base=bo*R*K+col;"
+        "for(uint r0=ty;r0<R;r0+=2048u){uint end=min(R,r0+2048u);"
+        "float anchor=lucid_anchor(float(x[base+r0*K])),s1=0.0f,s2=0.0f;"
+        "for(uint r=r0;r<end;r+=32u){float "
+        "d=float(x[base+r*K])-anchor;s1+=d;s2=metal::fma(d,d,s2);}"
+        "t=lucid_merge(t,lucid_moments(float((end-r0+31u)/32u),anchor,s1,s2));}}"
+        "threadgroup float sh[32][9],mean_of[8];sh[ty][tx]=t.n*t.mean;"
         "threadgroup_barrier(mem_flags::mem_threadgroup);"
-        "if(ty<8u){sh1[ty][tx]+=sh1[ty+8u][tx]+sh1[ty+16u][tx]+sh1[ty+24u][tx];"
-        "sh2[ty][tx]+=sh2[ty+8u][tx]+sh2[ty+16u][tx]+sh2[ty+24u][tx];}"
+        "if(ty<8u){sh[ty][tx]+=sh[ty+8u][tx]+sh[ty+16u][tx]+sh[ty+24u][tx];}"
         "threadgroup_barrier(mem_flags::mem_threadgroup);"
-        "if(ty==0u&&col<K){float t1=(sh1[0][tx]+sh1[1][tx])+(sh1[2][tx]+sh1[3][tx])+"
-        "(sh1[4][tx]+sh1[5][tx])+(sh1[6][tx]+sh1[7][tx]);"
-        "float t2=(sh2[0][tx]+sh2[1][tx])+(sh2[2][tx]+sh2[3][tx])+"
-        "(sh2[4][tx]+sh2[5][tx])+(sh2[6][tx]+sh2[7][tx]);"
-        "float md=t1/float(R);float m2=isfinite(t1)?(isinf(t2)?INFINITY:(t2-t1*md)):NAN;"
-        "if(m2<0.0f)m2=0.0f;out[bo*K+col]=OutT((int(R)>Ddof)?(m2/float(int(R)-Ddof)):NAN);}",
-        "", true, false, mx::CompileOptions{});
+        "if(ty==0u){mean_of[tx]=((sh[0][tx]+sh[1][tx])+(sh[2][tx]+sh[3][tx])+"
+        "(sh[4][tx]+sh[5][tx])+(sh[6][tx]+sh[7][tx]))/float(R);}"
+        "threadgroup_barrier(mem_flags::mem_threadgroup);"
+        "float "
+        "mean=mean_of[tx],dm=t.mean-mean;sh[ty][tx]=(t.n>0.0f)?metal::fma(t.n*dm,dm,t.m2):0.0f;"
+        "threadgroup_barrier(mem_flags::mem_threadgroup);"
+        "if(ty<8u){sh[ty][tx]+=sh[ty+8u][tx]+sh[ty+16u][tx]+sh[ty+24u][tx];}"
+        "threadgroup_barrier(mem_flags::mem_threadgroup);"
+        "if(ty==0u&&col<K){float m2=(sh[0][tx]+sh[1][tx])+(sh[2][tx]+sh[3][tx])+"
+        "(sh[4][tx]+sh[5][tx])+(sh[6][tx]+sh[7][tx]);"
+        "out[bo*K+col]=OutT(lucid_variance(LucidMoments{float(R),mean,m2},Ddof));}",
+        kMomentsMetal, true, false, mx::CompileOptions{});
     return k;
 }
 
@@ -366,14 +494,15 @@ inline ::mlx::core::array
 run_krk_kernel(const ::mlx::core::fast::CustomKernelFunction& fn,
                const ::mlx::core::array& x,
                const ReducePlan& plan,
-               const std::vector<std::pair<std::string, ::mlx::core::fast::TemplateArg>>& targs) {
+               const std::vector<std::pair<std::string, ::mlx::core::fast::TemplateArg>>& targs,
+               ::mlx::core::Dtype out_dt) {
     namespace mx = ::mlx::core;
     auto x3 = reshape_contig(
         x, {static_cast<int>(plan.O), static_cast<int>(plan.M), static_cast<int>(plan.I)});
     const int gm = static_cast<int>((plan.I + 7) / 8);
     const int bo = static_cast<int>(plan.O);
     const int m_out = static_cast<int>(plan.O * plan.I);
-    auto out = fn({x3}, {{m_out}}, {x.dtype()}, {gm * 256, bo, 1}, {256, 1, 1}, targs, std::nullopt,
+    auto out = fn({x3}, {{m_out}}, {out_dt}, {gm * 256, bo, 1}, {256, 1, 1}, targs, std::nullopt,
                   false, {})[0];
     return mx::reshape(out, plan.out_shape);
 }
@@ -388,6 +517,30 @@ plan_half_reduction(const ::mlx::core::array& x, const std::vector<int>& axes, b
     return plan;
 }
 
+// The one-element plan, element-wise in ``x``'s dtype — what the widened
+// float32 op computes, without its float32 copy.  A sum is a copy.  A mean
+// still multiplies by 1/1, which flushes a bfloat16 subnormal on the GPU (the
+// ``x * 1`` that LCD-452 pins eager against compiled); a float16 subnormal is
+// a normal float32, so a float16 mean is the element too.
+inline ::mlx::core::array one_element_mean_or_sum(const ::mlx::core::array& x, bool scale_mean) {
+    namespace mx = ::mlx::core;
+    if (!scale_mean || x.dtype() == mx::float16)
+        return x;
+    return mx::multiply(x, mx::array(1.0f, x.dtype()));
+}
+
+// The one-element variance: ``x - x`` is +0, or NaN for an infinity or NaN,
+// and flushes as the widened ``var`` does; with ``ddof >= 1`` the divisor
+// ``1 - ddof`` leaves only NaN.
+inline ::mlx::core::array
+one_element_variance(const ::mlx::core::array& x, int ddof, ::mlx::core::Dtype out_dt) {
+    namespace mx = ::mlx::core;
+    if (ddof >= 1)
+        return mx::full(x.shape(), std::numeric_limits<float>::quiet_NaN(), out_dt);
+    auto diff = mx::subtract(x, x);
+    return diff.dtype() == out_dt ? diff : mx::astype(diff, out_dt);
+}
+
 inline std::optional<::mlx::core::array> half_reduce_sum_or_mean(const ::mlx::core::array& x,
                                                                  const std::vector<int>& axes,
                                                                  bool keepdims,
@@ -398,50 +551,49 @@ inline std::optional<::mlx::core::array> half_reduce_sum_or_mean(const ::mlx::co
         return std::nullopt;
     const auto& plan = *maybe;
     if (plan.kind == ReducePlan::Kind::Identity)
-        return mx::reshape(x, plan.out_shape);
+        return mx::reshape(one_element_mean_or_sum(x, scale_mean), plan.out_shape);
     if (plan.kind == ReducePlan::Kind::Omi) {
         auto out = run_omi_sum(x, plan.O, plan.M, plan.I, scale_mean, x.dtype());
         return mx::reshape(out, plan.out_shape);
     }
     return run_krk_kernel(krk_sum_kernel(), x, plan,
-                          {{"T", x.dtype()}, {"OutT", x.dtype()}, {"ScaleMean", scale_mean}});
+                          {{"T", x.dtype()}, {"OutT", x.dtype()}, {"ScaleMean", scale_mean}},
+                          x.dtype());
 }
 
 inline std::optional<::mlx::core::array> half_reduce_var(const ::mlx::core::array& x,
                                                          const std::vector<int>& axes,
                                                          bool keepdims,
-                                                         int ddof) {
+                                                         int ddof,
+                                                         ::mlx::core::Dtype out_dt) {
     namespace mx = ::mlx::core;
     auto maybe = plan_half_reduction(x, axes, keepdims);
     if (!maybe)
         return std::nullopt;
     const auto& plan = *maybe;
-    if (plan.kind == ReducePlan::Kind::Identity) {
-        return (1 > ddof)
-                   ? mx::zeros(plan.out_shape, x.dtype())
-                   : mx::full(plan.out_shape, std::numeric_limits<float>::quiet_NaN(), x.dtype());
-    }
+    if (plan.kind == ReducePlan::Kind::Identity)
+        return mx::reshape(one_element_variance(x, ddof, out_dt), plan.out_shape);
     if (plan.kind == ReducePlan::Kind::Omi) {
         auto x3 = reshape_contig(
             x, {static_cast<int>(plan.O), static_cast<int>(plan.M), static_cast<int>(plan.I)});
         const int m_i = static_cast<int>(plan.M);
         if (plan.O == 1 && plan.M >= 256 && plan.I <= 4096) {
             const int tgs = (m_i + 7) / 8;
-            auto out = row_var_kernel()({x3}, {{m_i}}, {x.dtype()}, {tgs * 256, 1, 1}, {256, 1, 1},
-                                        {{"T", x.dtype()}, {"OutT", x.dtype()}, {"Ddof", ddof}},
+            auto out = row_var_kernel()({x3}, {{m_i}}, {out_dt}, {tgs * 256, 1, 1}, {256, 1, 1},
+                                        {{"T", x.dtype()}, {"OutT", out_dt}, {"Ddof", ddof}},
                                         std::nullopt, false, {})[0];
             return mx::reshape(out, plan.out_shape);
         }
         const int G = pick_omi_groups(plan.O, plan.M, plan.I);
-        auto p = omi_stats_s1_kernel()({x3}, {{m_i, G, 2}}, {mx::float32}, {G * 256, m_i, 1},
+        auto p = omi_stats_s1_kernel()({x3}, {{m_i, G, 3}}, {mx::float32}, {G * 256, m_i, 1},
                                        {256, 1, 1}, {{"T", x.dtype()}}, std::nullopt, false, {})[0];
         auto out =
-            omi_var_s2_kernel()({p, x3}, {{m_i}}, {x.dtype()}, {256, m_i, 1}, {256, 1, 1},
-                                {{"OutT", x.dtype()}, {"Ddof", ddof}}, std::nullopt, false, {})[0];
+            omi_var_s2_kernel()({p}, {{m_i}}, {out_dt}, {32, m_i, 1}, {32, 1, 1},
+                                {{"OutT", out_dt}, {"Ddof", ddof}}, std::nullopt, false, {})[0];
         return mx::reshape(out, plan.out_shape);
     }
     return run_krk_kernel(krk_var_kernel(), x, plan,
-                          {{"T", x.dtype()}, {"OutT", x.dtype()}, {"Ddof", ddof}});
+                          {{"T", x.dtype()}, {"OutT", out_dt}, {"Ddof", ddof}}, out_dt);
 }
 
 // ``sum`` accumulated in float32 for a half input, returned in its dtype.
@@ -462,15 +614,17 @@ mean_widened(const ::mlx::core::array& x, const std::vector<int>& axes, bool kee
         x, [&](const ::mlx::core::array& w) { return ::mlx::core::mean(w, axes, keepdims); });
 }
 
-// ``var`` accumulated in float32 for a half input, returned in its dtype.
+// ``var`` accumulated in float32 for a half input, returned in float32 so
+// Bessel correction and ``std``'s square root round to half only once.
 inline ::mlx::core::array var_widened(const ::mlx::core::array& x,
                                       const std::vector<int>& axes,
                                       bool keepdims,
                                       int ddof = 0) {
-    if (auto custom = half_reduce_var(x, axes, keepdims, ddof))
+    if (auto custom = half_reduce_var(x, axes, keepdims, ddof, ::mlx::core::float32))
         return *std::move(custom);
-    return reduce_widened(
-        x, [&](const ::mlx::core::array& w) { return ::mlx::core::var(w, axes, keepdims, ddof); });
+    if (!is_half(x.dtype()))
+        return ::mlx::core::var(x, axes, keepdims, ddof);
+    return ::mlx::core::var(::mlx::core::astype(x, ::mlx::core::float32), axes, keepdims, ddof);
 }
 
 // Full-tensor sum in float32 without widening a half input first.
@@ -487,26 +641,14 @@ inline ::mlx::core::array sum_all_f32(const ::mlx::core::array& x) {
 inline const ::mlx::core::fast::CustomKernelFunction& omi_norm_stats_s2_kernel() {
     namespace mx = ::mlx::core;
     static const auto k = mx::fast::metal_kernel(
-        "lucid_omi_norm_stats_s2", {"p", "x", "eps"}, {"stats_f32", "saved_mean", "saved_rstd"},
-        "uint tid=thread_position_in_threadgroup.x,lane=thread_index_in_simdgroup;"
-        "uint sg=simdgroup_index_in_threadgroup,m=threadgroup_position_in_grid.y;"
-        "uint M=uint(x_shape[1]),G=uint(p_shape[1]),O=uint(x_shape[0]),I=uint(x_shape[2]);"
-        "uint base=m*G*2u;float s1=0.0f,s2=0.0f;"
-        "for(uint g=tid;g<G;g+=256u){s1+=p[base+g*2u];s2+=p[base+g*2u+1u];}"
-        "s1=simd_sum(s1);s2=simd_sum(s2);threadgroup float sh1[8],sh2[8];"
-        "if(lane==0u){sh1[sg]=s1;sh2[sg]=s2;}"
-        "threadgroup_barrier(mem_flags::mem_threadgroup);"
-        "if(sg==0u){s1=(lane<8u)?sh1[lane]:0.0f;s2=(lane<8u)?sh2[lane]:0.0f;"
-        "s1=simd_sum(s1);s2=simd_sum(s2);"
-        "if(lane==0u){float anchor=float(x[m*I]);if(!isfinite(anchor))anchor=0.0f;"
-        "float n=float(O)*float(I),md=metal::precise::divide(s1,n),mean=anchor+md;"
-        "float m2=isfinite(s1)?(isinf(s2)?INFINITY:(s2-s1*md)):NAN;if(m2<0.0f)m2=0.0f;"
-        "float "
-        "rstd=metal::precise::divide(1.0f,metal::precise::sqrt(metal::precise::divide(m2,n)+eps[0])"
-        ");"
-        "stats_f32[m]=mean;stats_f32[M+m]=rstd;"
-        "saved_mean[m]=OutT(mean);saved_rstd[m]=OutT(rstd);}}",
-        "", true, false, mx::CompileOptions{});
+        "lucid_omi_norm_stats_s2", {"p", "eps"}, {"stats_f32", "saved_mean", "saved_rstd"},
+        std::string(kMergePartialsMetal) +
+            "if(lane==0u){uint M=uint(p_shape[0]);float "
+            "rstd=metal::precise::divide(1.0f,metal::precise::sqrt(metal::precise::divide(v.m2,v.n)"
+            "+eps[0]));"
+            "stats_f32[m]=v.mean;stats_f32[M+m]=rstd;"
+            "saved_mean[m]=OutT(v.mean);saved_rstd[m]=OutT(rstd);}",
+        kMomentsMetal, true, false, mx::CompileOptions{});
     return k;
 }
 
@@ -597,12 +739,12 @@ inline std::vector<::mlx::core::array> omi_norm_stats(const ::mlx::core::array& 
     namespace mx = ::mlx::core;
     auto x3 = reshape_contig(x, {O, M, I});
     const int G = pick_omi_groups(O, M, I);
-    auto p = omi_stats_s1_kernel()({x3}, {{M, G, 2}}, {mx::float32}, {G * 256, M, 1}, {256, 1, 1},
+    auto p = omi_stats_s1_kernel()({x3}, {{M, G, 3}}, {mx::float32}, {G * 256, M, 1}, {256, 1, 1},
                                    {{"T", x.dtype()}}, std::nullopt, false, {})[0];
     mx::array eps_arr({static_cast<float>(eps)}, {1}, mx::float32);
-    return omi_norm_stats_s2_kernel()(
-        {p, x3, eps_arr}, {{2, M}, saved_shape, saved_shape}, {mx::float32, x.dtype(), x.dtype()},
-        {256, M, 1}, {256, 1, 1}, {{"T", x.dtype()}, {"OutT", x.dtype()}}, std::nullopt, false, {});
+    return omi_norm_stats_s2_kernel()({p, eps_arr}, {{2, M}, saved_shape, saved_shape},
+                                      {mx::float32, x.dtype(), x.dtype()}, {32, M, 1}, {32, 1, 1},
+                                      {{"OutT", x.dtype()}}, std::nullopt, false, {});
 }
 
 // Fuse an element-wise composite with any number of inputs and outputs

@@ -164,18 +164,7 @@ class TestCompiledSubnormalIdentityFlush:
         dtype: lucid.dtype,
         vals: list[float],
         name: str,
-        request: pytest.FixtureRequest,
     ) -> None:
-        if name == "mean" and dtype == lucid.bfloat16:
-            # Compiled Metal bf16 ``mean`` flushes the subnormal to 0 where
-            # eager keeps it; the fix is the engine's half-reduction contract,
-            # which needs an engine rebuild.
-            request.applymarker(
-                pytest.mark.xfail(
-                    strict=True,
-                    reason="LCD-121: compiled bf16 mean flushes a subnormal",
-                )
-            )
         fn = _SUBNORMAL_OPS[name]
         x = lucid.tensor(vals, dtype=dtype, device=COMPILE_DEVICE)
         _C_engine.compile.session_cache_clear()

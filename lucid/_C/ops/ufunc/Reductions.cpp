@@ -645,7 +645,8 @@ GpuStorage ProdBackward::gpu_kernel(
 //   std = sqrt(var(x, axes, keepdims))
 // No new backward node is required; SqrtBackward and VarBackward cover it.
 TensorImplPtr std_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims) {
-    return sqrt_op(var_op(a, axes, keepdims));
+    auto out = sqrt_op(var_op(a, axes, keepdims));
+    return (a && is_half_float(a->dtype())) ? astype_op(out, a->dtype()) : out;
 }
 
 }  // namespace lucid

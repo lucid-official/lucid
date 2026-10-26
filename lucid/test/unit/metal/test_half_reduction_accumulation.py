@@ -325,6 +325,54 @@ def test_linear_bias_gradient_is_summed_in_float32(dtype: lucid.dtype) -> None:
     _assert_within_ulp(lin.bias.grad, np.full(2, 0.5 * _N))
 
 
+# ── a variance whose first value is an outlier ───────────────────────────────
+
+#: (shape, dims) — every route of a half variance on Metal.
+_VARIANCE_ROUTES = [
+    ((4096,), None),  # everything: per-threadgroup partials, merged after
+    ((300, 16), (1,)),  # one row per simdgroup
+    ((300, 4096), (1,)),
+    ((4096, 96), (0,)),  # a leading block, a column per thread column
+    ((65536, 64), (0,)),  # 2048 rows per thread column
+    ((64, 8, 56, 56), (0, 2, 3)),  # per channel, as a BatchNorm reduces
+    ((32, 64, 56, 56), (0, 2, 3)),  # two of the 32 batch rows per threadgroup
+    ((8, 512, 4096), (0, 2)),  # one threadgroup per channel
+    ((512, 32768), (1,)),  # one threadgroup per row
+]
+
+
+def _outlier_first(shape: tuple[int, ...], dims: tuple[int, ...] | None) -> np.ndarray:
+    """Standard normal values with the first of every reduced set 1000."""
+    values = _RNG.standard_normal(shape)
+    first = tuple(
+        0 if dims is None or d in dims else slice(None) for d in range(len(shape))
+    )
+    values[first] = 1000.0
+    return values
+
+
+@pytest.mark.parametrize("dtype", _HALVES, ids=_name)
+@pytest.mark.parametrize("correction", [0, 1])
+@pytest.mark.parametrize(
+    "shape,dims", _VARIANCE_ROUTES, ids=[str(r[0]) for r in _VARIANCE_ROUTES]
+)
+def test_variance_with_an_outlier_first_is_the_rounded_exact_answer(
+    shape: tuple[int, ...],
+    dims: tuple[int, ...] | None,
+    correction: int,
+    dtype: lucid.dtype,
+) -> None:
+    """The kernels took their deviations from the first element of the
+    whole reduction, so M2 was the difference of two sums of the outlier's
+    squared distance: 2 float16 ulp off over 4096 values, 44 per channel of
+    a (64, 8, 56, 56) map, 13 with one threadgroup per channel, 42 over
+    65536 rows of a column.  The Bessel factor rounds once more."""
+    x = _half(_outlier_first(shape, dims), dtype)
+    got = x.var(dim=dims, correction=correction)
+    truth = _exact(x).var(axis=dims, ddof=correction)
+    _assert_within_ulp(got, truth, ulps=1 + correction)
+
+
 # ── normalisation layers ─────────────────────────────────────────────────────
 
 
@@ -374,6 +422,22 @@ def test_half_batchnorm_trains_one_step(dtype: lucid.dtype) -> None:
         h, f = _exact(getattr(half, name)), _exact(getattr(full, name))
         assert np.all(np.isfinite(h)), (name, h)
         np.testing.assert_allclose(h, f, rtol=2.0 ** -_FORMAT[dtype][0] * 2)
+
+
+@pytest.mark.parametrize("dtype", _HALVES, ids=_name)
+@pytest.mark.parametrize("shape", [(64, 4, 32, 32), (8, 512, 32, 32)], ids=str)
+def test_half_batchnorm_statistics_with_an_outlier_first(
+    shape: tuple[int, ...], dtype: lucid.dtype
+) -> None:
+    """The BatchNorm statistics share the variance kernels' partials; 512
+    channels take one threadgroup each."""
+    x = _half(_outlier_first(shape, (0, 2, 3)), dtype)
+    bn = nn.BatchNorm2d(shape[1], momentum=1.0).to("metal").to(dtype)
+    bn.train()
+    bn(x)
+    exact = _exact(x)
+    _assert_within_ulp(bn.running_mean, exact.mean(axis=(0, 2, 3)))
+    _assert_within_ulp(bn.running_var, exact.var(axis=(0, 2, 3), ddof=1), ulps=2)
 
 
 @pytest.mark.parametrize("dtype", _HALVES, ids=_name)

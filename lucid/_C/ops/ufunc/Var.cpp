@@ -72,6 +72,10 @@ public:
     // dL/dx = (2/N) * (x - mean) * broadcast_back(dL/dy).
     std::vector<Storage> apply(Storage grad_out) override {
         const std::size_t n = shape_numel(input_shape_);
+        if (is_half_float(dtype_)) {
+            auto& be = backend::Dispatcher::for_device(device_);
+            grad_out = be.astype(grad_out, out_shape_, Dtype::F32, dtype_);
+        }
         // (x - mean): mean is already broadcast to input shape from forward.
         Storage centered = subtract_storages(saved_inputs_[0], saved_mean_, n, dtype_, device_);
         // Expand the reduced gradient back to the full input shape.
@@ -95,7 +99,8 @@ public:
         auto centered = sub_op(x, mean);
 
         // Put the reduced gradient back onto the input's shape.
-        TensorImplPtr g = grad_out;
+        TensorImplPtr g =
+            grad_out->dtype() == x->dtype() ? grad_out : astype_op(grad_out, x->dtype());
         if (!keepdims_ && !axes_.empty()) {
             std::vector<std::int64_t> keep(input_shape_.begin(), input_shape_.end());
             for (int ax : axes_)
@@ -130,10 +135,11 @@ TensorImplPtr var_op(const TensorImplPtr& a, const std::vector<int>& axes_user, 
     // answered 0 on Metal while the CPU raised.
     const TensorImplPtr x = promote_for_schema(VarBackward::schema_v1, a);
     const Dtype dt = x->dtype();
+    const Dtype out_dt = is_half_float(dt) ? Dtype::F32 : dt;
     const Device device = x->device();
     const auto axes = normalize_axes(axes_user, static_cast<int>(x->shape().size()), "var");
     const Shape out_shape = reduce_output_shape(x->shape(), axes, keepdims);
-    OpScopeFull scope{"var", device, dt, out_shape};
+    OpScopeFull scope{"var", device, out_dt, out_shape};
     {
         std::vector<std::int64_t> dims_attr(axes.begin(), axes.end());
         scope.set_attr("dims", dims_attr);
@@ -144,7 +150,7 @@ TensorImplPtr var_op(const TensorImplPtr& a, const std::vector<int>& axes_user, 
     auto& be = backend::Dispatcher::for_device(device);
 
     Storage out_storage = be.variance(x->storage(), x->shape(), reduce_opts, dt);
-    TensorImplPtr out = fresh(std::move(out_storage), out_shape, dt, device);
+    TensorImplPtr out = fresh(std::move(out_storage), out_shape, out_dt, device);
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({x}, out);
     }
