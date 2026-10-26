@@ -300,17 +300,39 @@ jobs:
           python -m coverage run --parallel-mode --source=lucid -m pytest lucid/test/ $IGNORES --ignore=$COREML --continue-on-collection-errors -q
           python -m coverage run --parallel-mode --source=lucid -m pytest $COREML --ignore=$SMOKE --continue-on-collection-errors -q
           python -m coverage run --parallel-mode --source=lucid -m pytest $SMOKE --continue-on-collection-errors -q
+          MODEL_TESTS=$(python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          changed = subprocess.run(
+              ["git", "diff", "--name-only", "origin/main...HEAD"],
+              capture_output=True, text=True, check=False,
+          ).stdout.splitlines()
+          tests: set[str] = set()
+          for rel in changed:
+              if rel.startswith("lucid/test/unit/models/") and rel.endswith(".py") and Path(rel).is_file():
+                  tests.add(rel)
+              elif rel.startswith("lucid/models/") and rel.endswith(".py"):
+                  parts = Path(rel).parts
+                  if len(parts) >= 4:
+                      cand = Path("lucid/test/unit/models") / parts[2] / f"test_{parts[3]}.py"
+                      if cand.is_file():
+                          tests.add(str(cand))
+          print(" ".join(sorted(tests)))
+          PY
+          )
+          if [ -n "$MODEL_TESTS" ]; then
+            python -m coverage run --parallel-mode --source=lucid -m pytest $MODEL_TESTS --continue-on-collection-errors -q
+          fi
           python -m coverage combine
           python -m coverage xml -o build/coverage/coverage.xml
           python -m coverage report
-          if git rev-parse --verify origin/main >/dev/null 2>&1; then
-            python -m diff_cover.diff_cover_tool build/coverage/coverage.xml \
-              --compare-branch=origin/main \
-              --fail-under=90 \
-              --show-uncovered \
-              --include "lucid/**" \
-              --exclude "lucid/test/**" "lucid/models/**" "lucid/benchmarks/**" "**/*.pyi"
-          fi
+          python -m diff_cover.diff_cover_tool build/coverage/coverage.xml \
+            --compare-branch=origin/main \
+            --fail-under=90 \
+            --show-uncovered \
+            --include "lucid/**" \
+            --exclude "lucid/test/**" "lucid/benchmarks/**" "**/*.pyi"
 
       - uses: actions/upload-artifact@v4
         with:

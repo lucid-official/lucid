@@ -107,7 +107,7 @@ DIFF_COVER_THRESHOLD = 90
 # diff-cover's own verdict for --fail-under.  Any other non-zero exit means
 # it never measured (module missing, git error, unreadable XML).
 DIFF_COVER_BELOW = "Coverage is below"
-COVERAGE_OMIT_PREFIXES = ("lucid/test/", "lucid/models/", "lucid/benchmarks/")
+COVERAGE_OMIT_PREFIXES = ("lucid/test/", "lucid/benchmarks/")
 
 # Machine-local and outside the synced project tree: locks must never travel
 # to the other Mac through .sync.
@@ -1003,6 +1003,8 @@ def cmd_land(args: argparse.Namespace) -> int:
     with held_lock(LAND_LOCK, f"land {wt.name}", wait=True):
         # 1. Rebase onto the current main.  Claims make this conflict-free except
         #    for generated files, which the merge driver settles (setup).
+        pre_fork = git("merge-base", MAIN_BRANCH, "HEAD", cwd=wt).strip()
+        pre_mtimes = _snapshot_file_mtimes(wt, diff_names(wt, pre_fork, "HEAD"))
         rebase = subprocess.run(
             ["git", "rebase", MAIN_BRANCH],
             cwd=wt,
@@ -1019,6 +1021,7 @@ def cmd_land(args: argparse.Namespace) -> int:
                 "aborted, nothing changed. Resume the worker to rebase and resolve.",
                 code=3,
             )
+        _restore_unchanged_mtimes(wt, pre_mtimes)
         if needs_bootstrap(wt):
             bootstrap(wt, main.path)
             py = str(venv_py) if venv_py.exists() else sys.executable
@@ -1058,6 +1061,14 @@ def cmd_land(args: argparse.Namespace) -> int:
         if judge_slop(wt, py, MAIN_BRANCH, args.allow_slop):
             raise WorkspaceError(
                 "quality gate refused the land (SLOP DELTA above)", code=SLOP_EXIT
+            )
+
+        # 2c. Changed-line coverage ratchet (LCD-269): fail-closed on missing or
+        #     stale coverage data as well as changed-line coverage below 90%.
+        cov_rc = judge_coverage(wt, py, MAIN_BRANCH, touched, args.allow_slop)
+        if cov_rc:
+            raise WorkspaceError(
+                "diff-cover refused the land (see above)", code=cov_rc
             )
 
         # 3. CHANGELOG: on branches the post-commit hook stands down, so the
@@ -1280,19 +1291,12 @@ def _coverage(
 _COVERAGE_XMLS = ("build/coverage/coverage.xml", "coverage.xml")
 
 
-def _has_coverage_data(wt: Path) -> bool:
-    return (wt / ".coverage").is_file() or any(wt.glob(".coverage.*"))
-
-
 def _touched_tests(wt: Path, touched: set[str]) -> list[str]:
     """The changed ``lucid/test/`` files a coverage run of *wt* hands pytest.
 
     Test modules and helpers alike (``conftest.py``, ``_fixtures/``,
     ``audit/_specs.py``): which of them hold a test that runs is pytest's
-    to say, with its own collection rules and markers.  When it runs none
-    (only helpers changed, or every touched test is deselected by a
-    marker) :func:`_resolve_coverage_xml` counts that as nothing to measure
-    from, not as a failure.
+    to say, with its own collection rules and markers.
     """
     if not (wt / "pyproject.toml").is_file():
         return []
@@ -1303,41 +1307,81 @@ def _touched_tests(wt: Path, touched: set[str]) -> list[str]:
     )
 
 
-def _nothing_to_measure_from(wt: Path, touched: set[str]) -> bool:
-    """No coverage.xml, no coverage data, and no touched test to produce one."""
-    return (
-        not any((wt / rel).is_file() for rel in _COVERAGE_XMLS)
-        and not _has_coverage_data(wt)
-        and not _touched_tests(wt, touched)
-    )
+def _snapshot_file_mtimes(
+    wt: Path, rels: set[str]
+) -> dict[str, tuple[bytes, int, int]]:
+    snap: dict[str, tuple[bytes, int, int]] = {}
+    for rel in rels:
+        path = wt / rel
+        if path.is_file():
+            st = path.stat()
+            digest = hashlib.sha256(path.read_bytes()).digest()
+            snap[rel] = (digest, st.st_atime_ns, st.st_mtime_ns)
+    return snap
 
 
-def _resolve_coverage_xml(
-    wt: Path, py: str, touched: set[str]
+def _restore_unchanged_mtimes(
+    wt: Path, snap: dict[str, tuple[bytes, int, int]]
+) -> None:
+    for rel, (digest, atime_ns, mtime_ns) in snap.items():
+        path = wt / rel
+        if path.is_file() and hashlib.sha256(path.read_bytes()).digest() == digest:
+            os.utime(path, ns=(atime_ns, mtime_ns))
+
+
+def _newest_touched_mtime_ns(wt: Path, touched: set[str]) -> tuple[int, str]:
+    """Newest ``(st_mtime_ns, rel_path)`` among changed measurable or test files."""
+    newest_ns = 0
+    newest_rel = ""
+    candidates = set(_measurable_lucid_py(touched)) | set(_touched_tests(wt, touched))
+    for rel in sorted(candidates):
+        path = wt / rel
+        if path.is_file():
+            mtime_ns = path.stat().st_mtime_ns
+            if mtime_ns > newest_ns:
+                newest_ns = mtime_ns
+                newest_rel = rel
+    return newest_ns, newest_rel
+
+
+def _fresh_existing_xml(
+    wt: Path, newest_ns: int, newest_rel: str
 ) -> tuple[Path | None, str]:
-    """Locate or generate a Cobertura ``coverage.xml`` for *wt*.
-
-    ``(xml, "")``; ``(None, why)`` naming the step that could not measure;
-    or ``(None, "")`` when the touched files hold no test that runs — the
-    same "nothing to measure from" :func:`_nothing_to_measure_from` decides
-    for everything that can be told without running pytest.
-    """
+    stale = ""
     for rel in _COVERAGE_XMLS:
         cand = wt / rel
-        if cand.is_file():
-            return cand, ""
-    out_xml = STATE_DIR / f"coverage-{wt.name}.xml"
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    why = "no coverage data"
-    if _has_coverage_data(wt):
-        if any(wt.glob(".coverage.*")):
-            _coverage(py, wt, "combine")  # a failure shows in the xml step
-        _, why = _coverage(py, wt, "xml", "-o", str(out_xml))
-        if not why and out_xml.is_file():
-            return out_xml, ""
+        if not cand.is_file():
+            continue
+        if newest_ns and cand.stat().st_mtime_ns < newest_ns:
+            stale = f"stale {rel} (older than {newest_rel})"
+            continue
+        return cand, ""
+    return None, stale
+
+
+def _xml_from_coverage_data(
+    wt: Path, py: str, out_xml: Path, newest_ns: int, newest_rel: str
+) -> tuple[Path | None, str]:
+    cov_files = [wt / ".coverage"] if (wt / ".coverage").is_file() else []
+    cov_files.extend(sorted(wt.glob(".coverage.*")))
+    if not cov_files:
+        return None, ""
+    if newest_ns and max(f.stat().st_mtime_ns for f in cov_files) < newest_ns:
+        return None, f"stale .coverage data (older than {newest_rel})"
+    if any(wt.glob(".coverage.*")):
+        _coverage(py, wt, "combine")  # a failure shows in the xml step
+    _, why = _coverage(py, wt, "xml", "-o", str(out_xml))
+    if not why and out_xml.is_file():
+        return out_xml, ""
+    return None, why or "failed to export coverage.xml from .coverage"
+
+
+def _xml_from_touched_tests(
+    wt: Path, py: str, out_xml: Path, touched: set[str]
+) -> tuple[Path | None, str]:
     tests = _touched_tests(wt, touched)
     if not tests:
-        return None, why
+        return None, ""
     data_file = STATE_DIR / f".coverage-{wt.name}"
     data_file.unlink(missing_ok=True)
     env = {**repo_env(), "COVERAGE_FILE": str(data_file)}
@@ -1346,7 +1390,10 @@ def _resolve_coverage_xml(
             py, wt, "run", "--source=lucid", "-m", "pytest", "-q", *tests, env=env
         )
         if status == PYTEST_NO_TESTS_COLLECTED:
-            return None, ""
+            return (
+                None,
+                "touched test files ran no tests (pytest exited 5) and no coverage.xml is present",
+            )
         if not why:
             _, why = _coverage(py, wt, "xml", "-o", str(out_xml), env=env)
     finally:
@@ -1354,6 +1401,34 @@ def _resolve_coverage_xml(
     if not why and out_xml.is_file():
         return out_xml, ""
     return None, why or "the touched tests left no coverage.xml"
+
+
+def _resolve_coverage_xml(
+    wt: Path, py: str, touched: set[str]
+) -> tuple[Path | None, str]:
+    """Locate or generate a fresh Cobertura ``coverage.xml`` for *wt*.
+
+    Returns ``(xml, "")`` on success or ``(None, why)`` naming why no fresh
+    ``coverage.xml`` could be obtained.
+    """
+    newest_ns, newest_rel = _newest_touched_mtime_ns(wt, touched)
+    xml, stale_xml = _fresh_existing_xml(wt, newest_ns, newest_rel)
+    if xml is not None:
+        return xml, ""
+    out_xml = STATE_DIR / f"coverage-{wt.name}.xml"
+    out_xml.unlink(missing_ok=True)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    xml, data_why = _xml_from_coverage_data(wt, py, out_xml, newest_ns, newest_rel)
+    if xml is not None:
+        return xml, ""
+    xml, test_why = _xml_from_touched_tests(wt, py, out_xml, touched)
+    if xml is not None:
+        return xml, ""
+    reasons = [r for r in (stale_xml, data_why, test_why) if r]
+    why = "; ".join(reasons) or (
+        "no coverage.xml, no .coverage data, and no touched tests"
+    )
+    return None, why
 
 
 def _diff_cover_unimportable(py: str) -> str:
@@ -1376,26 +1451,16 @@ def diff_coverage_report(
 ) -> tuple[int, str]:
     """Run ``diff-cover`` on *wt* against *base* when ``lucid/*.py`` changed (LCD-269).
 
-    Exit 0 when there is nothing to measure: no changed ``lucid/*.py``, or no
-    coverage data and no touched test that runs to produce it — a property
-    of the branch, reported as a note, and decided before any tool is asked
-    for.  An attempt that could not measure (a tool missing, the coverage
-    run or diff-cover failing) is DIFF_COVER_UNMEASURED_EXIT, never a pass
-    and never "coverage below the threshold"; only diff-cover's own verdict
-    is DIFF_COVER_EXIT.
+    Exit 0 only when there are no changed ``lucid/*.py`` files under coverage,
+    or when ``diff-cover`` measures at least ``DIFF_COVER_THRESHOLD``% on them.
+    Missing or stale coverage data, a missing tool, or a failed coverage/test
+    run fails closed with ``DIFF_COVER_UNMEASURED_EXIT``; only ``diff-cover``'s
+    own ``--fail-under`` verdict returns ``DIFF_COVER_EXIT``.
     """
-    measured = _measurable_lucid_py(touched)
+    measured = [p for p in _measurable_lucid_py(touched) if (wt / p).is_file()]
     if not measured:
         return 0, "(no covered lucid/*.py changes — diff-cover skipped)"
-    nothing = (
-        0,
-        f"(diff-cover: {len(measured)} lucid/*.py file(s) changed; no coverage.xml or touched tests to measure)",
-    )
-    if _nothing_to_measure_from(wt, touched):
-        return nothing
     xml_path, failed = _resolve_coverage_xml(wt, py, touched)
-    if xml_path is None and not failed:
-        return nothing
     if xml_path is None:
         return (
             DIFF_COVER_UNMEASURED_EXIT,
@@ -1421,7 +1486,6 @@ def diff_coverage_report(
             "lucid/**",
             "--exclude",
             "lucid/test/**",
-            "lucid/models/**",
             "lucid/benchmarks/**",
             "**/*.pyi",
         ],
@@ -1505,6 +1569,25 @@ def judge_slop(wt: Path, py: str, base: str, allow: str | None) -> int:
         "orchestrator lands anyway with --allow-slop \"<reason>\"."
     )
     return SLOP_EXIT
+
+
+def judge_coverage(
+    wt: Path, py: str, base: str, touched: set[str], allow: str | None
+) -> int:
+    """Print the diff-cover report; 0 to go on, cov_rc to refuse.  ``allow`` overrides, logged."""
+    cov_rc, cov_out = diff_coverage_report(wt, py, base, touched)
+    if cov_out:
+        print(cov_out)
+    if cov_rc == 0:
+        return 0
+    if allow:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with SLOP_LOG.open("a") as log:
+            log.write(f"{stamp}\t{wt.name}\tdiff-cover exit {cov_rc}\t{allow}\n")
+        print(f"⚠️  diff-cover overridden (--allow-slop): {allow!r} — logged to {SLOP_LOG}")
+        return 0
+    return cov_rc
 
 
 def main(argv: list[str] | None = None) -> int:

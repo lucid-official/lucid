@@ -531,18 +531,25 @@ def test_land_check_on_a_diff_cover_crash_cannot_measure_rather_than_fail_covera
     assert "below 90%" not in out
 
 
-def test_land_check_with_nothing_to_measure_from_passes_with_a_note(
+def test_land_check_with_missing_coverage_xml_fails_closed(
     scratch: Scratch,
 ) -> None:
-    """LCD-561: exit 0 without a measurement is kept for a branch that has
-    nothing to measure from — no coverage.xml, no coverage data, no touched
-    test — and is decided before any tool is looked for."""
-    commit_a_measured_lucid_change(scratch)
+    """LCD-269: a branch that changes covered ``lucid/*.py`` with no coverage.xml,
+    no .coverage data, and no touched tests fails closed with exit 9 rather than
+    passing without measurement; a branch with no covered ``lucid/*.py`` changes
+    still skips diff-cover with exit 0."""
+    assert scratch.commit(scratch.a, "a.txt", "staged").returncode == 0
+    no_lucid = land(scratch, "--check")
+    no_lucid_out = no_lucid.stdout + no_lucid.stderr
+    assert no_lucid.returncode == 0, no_lucid_out
+    assert "no covered lucid/*.py changes — diff-cover skipped" in no_lucid_out
 
+    commit_a_measured_lucid_change(scratch)
     result = land(scratch, "--check")
     out = result.stdout + result.stderr
-    assert result.returncode == 0, out
-    assert "no coverage.xml or touched tests to measure" in out
+    assert result.returncode == 9, out
+    assert "diff-cover cannot measure" in out
+    assert "no coverage.xml, no .coverage data, and no touched tests" in out
 
 
 #: A pytest config that, like Lucid's, deselects a marker by default.
@@ -597,18 +604,78 @@ def test_land_check_whose_touched_test_fails_under_coverage_cannot_measure(
     ],
     ids=["helpers-only", "all-deselected"],
 )
-def test_land_check_whose_touched_files_run_no_test_has_nothing_to_measure(
+def test_land_check_whose_touched_files_run_no_test_fails_closed(
     scratch: Scratch, files: dict[str, str]
 ) -> None:
-    """LCD-561: when the touched ``lucid/test/`` files run no test — helpers
-    only, or every test deselected by a marker — pytest exits 5, and that is
-    nothing to measure from (exit 0 with the note), not a failed run."""
-    # Asking pytest needs `coverage`; without it the run is a "cannot measure".
+    """LCD-269: when covered ``lucid/*.py`` changed and the touched ``lucid/test/``
+    files run no test (pytest exits 5) with no coverage.xml present, ``land --check``
+    fails closed with exit 9 rather than passing unmeasured."""
     pytest.importorskip("coverage")
     commit_a_measured_lucid_change(scratch)
     commit_test_files(scratch, files)
 
     result = land(scratch, "--check")
     out = result.stdout + result.stderr
-    assert result.returncode == 0, out
-    assert "no coverage.xml or touched tests to measure" in out
+    assert result.returncode == 9, out
+    assert "touched test files ran no tests (pytest exited 5)" in out
+
+
+def test_land_check_rejects_stale_coverage_xml(scratch: Scratch) -> None:
+    """LCD-269: a coverage.xml older than a modified ``lucid/*.py`` file is rejected
+    as stale rather than reused."""
+    pytest.importorskip("diff_cover")
+    cov_dir = commit_a_measured_lucid_change(scratch)
+    xml_file = cov_dir / "coverage.xml"
+    xml_file.write_text(_COVERAGE_XML.format(hits=1))
+    mod_py = scratch.a / "lucid" / "mod.py"
+    stale_time = mod_py.stat().st_mtime - 60.0
+    os.utime(xml_file, (stale_time, stale_time))
+
+    stale = land(scratch, "--check")
+    stale_out = stale.stdout + stale.stderr
+    assert stale.returncode == 9, stale_out
+    assert "stale build/coverage/coverage.xml (older than lucid/mod.py)" in stale_out
+
+
+def test_land_measures_lucid_models_and_enforces_diff_cover_at_land(
+    scratch: Scratch,
+) -> None:
+    """LCD-269: ``lucid/models/*.py`` is included in coverage and diff-cover, and
+    non-``--check`` ``land`` also enforces diff-cover before fast-forwarding main."""
+    pytest.importorskip("diff_cover")
+    (scratch.main / ".gitignore").write_text("build/\ncoverage.xml\n.venv/\n")
+    model_rel = "lucid/models/vision/tiny.py"
+    (scratch.main / "lucid" / "models" / "vision").mkdir(parents=True, exist_ok=True)
+    (scratch.main / model_rel).write_text("def forward(x: int) -> int:\n    return x\n")
+    assert scratch.git(scratch.main, "add", ".gitignore", model_rel).returncode == 0
+    assert scratch.git(scratch.main, "commit", "-q", "-m", "add model").returncode == 0
+    assert scratch.git(scratch.a, "rebase", "main").returncode == 0
+
+    (scratch.a / model_rel).write_text(
+        "def forward(x: int) -> int:\n    y = x + 1\n    return y\n"
+    )
+    assert scratch.git(scratch.a, "add", model_rel).returncode == 0
+    assert scratch.git(scratch.a, "commit", "-q", "-m", "change model").returncode == 0
+
+    # Without coverage.xml, non-check `land` refuses with exit 9:
+    before = main_tip(scratch)
+    unmeasured = land(scratch, "--skip-stub-check")
+    assert unmeasured.returncode == 9, unmeasured.stdout + unmeasured.stderr
+    assert main_tip(scratch) == before
+
+    # With 0% coverage on lucid/models/vision/tiny.py, `land` refuses with exit 8:
+    cov_dir = scratch.a / "build" / "coverage"
+    cov_dir.mkdir(parents=True, exist_ok=True)
+    model_xml = _COVERAGE_XML.replace("lucid/mod.py", model_rel).replace("mod.py", "tiny.py")
+    (cov_dir / "coverage.xml").write_text(model_xml.format(hits=0))
+    low = land(scratch, "--skip-stub-check")
+    low_out = low.stdout + low.stderr
+    assert low.returncode == 8, low_out
+    assert model_rel in low_out
+    assert main_tip(scratch) == before
+
+    # With 100% coverage on lucid/models/vision/tiny.py, `land` succeeds:
+    (cov_dir / "coverage.xml").write_text(model_xml.format(hits=1))
+    ok = land(scratch, "--skip-stub-check")
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    assert main_tip(scratch) != before

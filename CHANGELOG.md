@@ -94,6 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - enforce strict registry boundary properties and fix edge bugs
 
+- make diff-cover ratchet fail-closed and include lucid/models
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

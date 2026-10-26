@@ -264,12 +264,6 @@ source = ["lucid"]
 omit = [
     # The tests themselves.
     "lucid/test/*",
-    # The model zoo is built *on* the framework rather than beside it: it
-    # introduces no primitive of its own, and some configs are several
-    # billion parameters and cannot be instantiated on a laptop.  A
-    # framework that is sound underneath carries the zoo with it, so the
-    # zoo does not belong in this measurement.
-    "lucid/models/*",
     # Benchmark harnesses.  Covering these means running the benchmarks,
     # which is a deliberate, heavy, separately-invoked activity — not
     # something a regression gate should trigger.
@@ -282,7 +276,6 @@ omit = [
 # otherwise still count the omitted files.
 omit = [
     "lucid/test/*",
-    "lucid/models/*",
     "lucid/benchmarks/*",
 ]
 exclude_also = [
@@ -298,7 +291,6 @@ show_uncovered = true
 include = ["lucid/**"]
 exclude = [
     "lucid/test/**",
-    "lucid/models/**",
     "lucid/benchmarks/**",
     "**/*.pyi",
 ]
