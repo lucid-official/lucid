@@ -504,25 +504,13 @@ void register_tensor_impl(py::module_& m) {
             "tensors: clearing the flag on a tensor with a grad_fn does not "
             "detach it, so ``Tensor.requires_grad_`` refuses that case before "
             "calling this.")
-        .def(
-            "data_alias",
-            [](const std::shared_ptr<TensorImpl>& self) -> std::shared_ptr<TensorImpl> {
-                // What ``.data`` hands out: a member of self's view family that
-                // autograd does not follow, so a write through it is untracked.
-                // Only ``.data`` is marked — clone_with_grad also makes the
-                // tensor a factory returns, which must stay an ordinary member.
-                auto alias = TensorImpl::make_view(self, self->shape(), self->stride(), 0);
-                alias->set_detached_alias(true);
-                // Traced as ``detach``: the value, cut from the gradient.
-                // Untraced, the alias reached the next op as a fresh feed and
-                // was pinned at its trace-time value — every compiled call
-                // replayed the first call's detached tensor, so a straight-
-                // through estimator (VQ-VAE, hard Gumbel) returned stale output.
-                return traced_derive("detach", self, std::move(alias));
-            },
-            "Return the alias ``.data`` hands out: the same storage, no autograd "
-            "state, and writes through it untracked.")
+        .def("data_alias", &TensorImpl::data_alias,
+             "Return the alias ``.data`` hands out: the same storage, no autograd "
+             "state, and writes through it untracked.")
+        .def("detach_inplace", &TensorImpl::detach_inplace,
+             "Detach this TensorImpl in place from the autograd graph.")
         .def("is_aliased", &TensorImpl::is_aliased,
+
              "Whether another live tensor reads this one's buffer as a view of it.")
         .def("set_grad", &set_gradient, py::arg("grad"),
              "Replace this tensor's gradient with grad's values.  grad must have "

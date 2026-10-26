@@ -126,8 +126,8 @@ DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Genera
                                                    a->device(), false);
         compile::RngRecipe r;
         r.kind = compile::RngRecipe::Kind::DropoutMask;
-        r.engine_default = true;
         r.a = 1.0 - p;
+
         r.b = scale;
         r.shape = a->shape();
         r.dtype = a->dtype();
@@ -259,8 +259,8 @@ TensorImplPtr traced_mask_multiply(std::string_view name,
         std::make_shared<TensorImpl>(std::move(scaled), mask_shape, a->dtype(), a->device(), false);
     compile::RngRecipe r;
     r.kind = compile::RngRecipe::Kind::DropoutMask;
-    r.engine_default = true;
     r.a = keep;
+
     r.b = scale;
     r.shape = mask_shape;
     r.dtype = a->dtype();

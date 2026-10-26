@@ -22,7 +22,6 @@
 
 #include "Generator.h"
 
-#include <atomic>
 #include <cstring>
 
 namespace lucid {
@@ -132,19 +131,6 @@ float Generator::next_uniform_float() {
 Generator& default_generator() {
     static Generator g{0};
     return g;
-}
-
-namespace {
-std::atomic<Generator*> g_default_override{nullptr};
-}  // namespace
-
-void set_default_override(Generator* g) noexcept {
-    g_default_override.store(g, std::memory_order_release);
-}
-
-Generator& current_default_generator() noexcept {
-    Generator* g = g_default_override.load(std::memory_order_acquire);
-    return g ? *g : default_generator();
 }
 
 }  // namespace lucid

@@ -96,6 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make diff-cover ratchet fail-closed and include lucid/models
 
+- detach TensorImpl in place and drop RNG override
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

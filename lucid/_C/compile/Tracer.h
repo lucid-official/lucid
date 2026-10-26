@@ -365,10 +365,10 @@ public:
         return (it != impl_to_id_.end()) ? it->second : TraceId::external_feed();
     }
 
-private:
-    // An op's output, a feed, or an argument of the traced call.
+    // Whether ``impl`` is an op's output, a feed, or an argument of the traced call.
     bool sees(const TensorImpl* impl) const;
 
+private:
     // ``on_op_io`` for an op the recording keeps.
     void record_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output);
     // With folding on, whether this ``on_op_io`` call is absorbed: every

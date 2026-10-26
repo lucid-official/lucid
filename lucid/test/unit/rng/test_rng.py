@@ -95,3 +95,7 @@ class TestGenerator:
         _ = lucid.rand(100, generator=g)
         same = lucid.rand(4).numpy()
         np.testing.assert_array_equal(baseline, same)
+
+    def test_no_default_override_binding(self) -> None:
+        assert not hasattr(lucid._C_engine, "_set_default_override")
+

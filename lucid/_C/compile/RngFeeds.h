@@ -37,15 +37,11 @@ namespace lucid::compile {
 // mean / std (normal), p (bernoulli) or keep probability / scale (a
 // dropout mask, drawn as dropout draws it and scaled by 1/keep);
 // ``lo`` / ``hi`` bound randint.
-//
-// ``engine_default`` says which generator eager reads.  The factories
-// read the one Python installed (:func:`current_default_generator`);
-// dropout names none and reads the engine's own (:func:`default_generator`).
 struct RngRecipe {
     enum class Kind : std::uint8_t { Uniform, Normal, Randint, Bernoulli, DropoutMask };
     Kind kind = Kind::Uniform;
-    bool engine_default = false;
     double a = 0.0;
+
     double b = 0.0;
     std::int64_t lo = 0;
     std::int64_t hi = 0;

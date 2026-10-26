@@ -2515,7 +2515,7 @@ void merge_grad_impl(std::shared_ptr<TensorImpl>& cur, const std::shared_ptr<Ten
         throw;
     }
     const bool leaf_grad = cur->is_leaf() && cur->requires_grad();
-    if (!g_tracks && !leaf_grad && !cur->is_aliased()) {
+    if (!g_tracks && !leaf_grad && (!cur->is_aliased() || !tracks_autograd(cur))) {
         cur->copy_from(*sum);
         cur->set_grad_fn(sum->grad_fn());
         cur->set_grad_output_nr(sum->grad_output_nr());
@@ -2526,6 +2526,30 @@ void merge_grad_impl(std::shared_ptr<TensorImpl>& cur, const std::shared_ptr<Ten
 }
 
 }  // namespace
+
+std::shared_ptr<TensorImpl> TensorImpl::data_alias() {
+    auto self = shared_from_this();
+    auto alias = make_view(self, shape(), stride(), 0);
+    alias->set_detached_alias(true);
+    return compile::traced_derive("detach", self, std::move(alias));
+}
+
+void TensorImpl::detach_inplace() {
+    if (auto* trc = compile::current_tracer()) {
+        auto self = shared_from_this();
+        if (trc->sees(self.get())) {
+            trc->on_op_enter("detach", meta_.device, meta_.dtype, meta_.shape);
+            trc->on_op_io({self}, self);
+        }
+    }
+    if (autograd_) {
+        autograd_->grad_fn.reset();
+        autograd_->grad_output_nr = 0;
+        autograd_->requires_grad = false;
+        autograd_->is_leaf = true;
+    }
+    detached_alias_ = true;
+}
 
 void TensorImpl::accumulate_grad_impl(std::shared_ptr<TensorImpl> g) {
     if (g && absorbs_phantom_gradient(g->raw_storage()))

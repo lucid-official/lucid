@@ -39,10 +39,8 @@ Registry& registry() {
     return r;
 }
 
-// Through the generator eager would read now — see
-// ``current_default_generator``.
 TensorImplPtr draw(const RngRecipe& r) {
-    Generator* gen = r.engine_default ? &default_generator() : &current_default_generator();
+    Generator* gen = &default_generator();
     switch (r.kind) {
     case RngRecipe::Kind::DropoutMask: {
         Storage mask = bernoulli_mask_storage_shape(r.a, r.shape, r.dtype, r.device, *gen);

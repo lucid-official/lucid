@@ -742,6 +742,15 @@ public:
             autograd_->grad_fn.reset();
     }
 
+    // Returns the alias ``.data`` hands out: a member of this tensor's view
+    // family with ``detached_alias_`` set so writes through it are untracked.
+    std::shared_ptr<TensorImpl> data_alias();
+
+    // Detaches this TensorImpl in place from the autograd graph so every
+    // holder of the same TensorImpl (including ``p.grad``) sees ``grad_fn``
+    // cleared and ``requires_grad`` set to ``false``.
+    void detach_inplace();
+
     // Stores a gradient :class:`Storage` directly.
     //
     // Parameters

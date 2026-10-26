@@ -74,13 +74,8 @@ void register_random(py::module_& m) {
     // generator; Python must not delete it.
     m.def("default_generator", &default_generator, py::return_value_policy::reference);
 
-    // Registers the generator Python's default draws read (see
-    // ``set_default_override``); Python keeps it alive while registered.
-    m.def(
-        "_set_default_override", [](Generator* g) { set_default_override(g); },
-        py::arg("generator").none(true));
-
     m.def("set_deterministic", &Determinism::set_enabled, py::arg("value"));
+
     m.def("is_deterministic", &Determinism::is_enabled);
 
     // Each random op converts the Python int-list shape to the internal Shape

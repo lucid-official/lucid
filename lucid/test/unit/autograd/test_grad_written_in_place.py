@@ -134,18 +134,49 @@ _HELD_APART: dict[str, Callable[[nn.Parameter], None]] = {
 }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-621: Tensor.detach_ rebinds only its own wrapper",
-)
 def test_detaching_the_gradient_detaches_it(device: str) -> None:
     p = nn.Parameter(lucid.ones(3, device=device))
     (p * p).sum().backward(create_graph=True)
     g = p.grad
     assert g is not None
+    v = g.view_as(g)
+    ver_before = g._version
     g.detach_()
+    assert g._version == ver_before
     assert _same(g, p.grad)
     assert p.grad is not None and p.grad.grad_fn is None
+    assert not p.grad.requires_grad and not g.requires_grad
+    assert v.grad_fn is not None
+
+    # A subsequent non-graph backward accumulates into the detached grad in place.
+    (p * 3.0).sum().backward()
+    assert g._version == ver_before + 1
+    assert v._version == ver_before + 1
+    assert p.grad.tolist() == [5.0, 5.0, 5.0]
+    assert v.tolist() == [5.0, 5.0, 5.0]
+
+
+def test_detach_in_place_detaches_every_holder_of_the_same_impl(
+    device: str,
+) -> None:
+    x = lucid.tensor([1.0, 2.0, 3.0], device=device, requires_grad=True)
+    y = x * 2.0
+    holder = lucid.Tensor.__new_from_impl__(y._impl)
+    v = y[1:]
+    v_holder = lucid.Tensor.__new_from_impl__(v._impl)
+
+    ver_v = v._version
+    v.detach_()
+    assert v._version == ver_v
+    assert v.grad_fn is None and not v.requires_grad and v.is_leaf
+    assert v_holder.grad_fn is None and not v_holder.requires_grad and v_holder.is_leaf
+
+    ver_y = y._version
+    holder.detach_()
+    assert y._version == ver_y
+    assert y.grad_fn is None and not y.requires_grad and y.is_leaf
+    assert holder.grad_fn is None and not holder.requires_grad and holder.is_leaf
+
 
 
 def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(

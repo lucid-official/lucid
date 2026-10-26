@@ -251,19 +251,4 @@ private:
 // :func:`lucid.manual_seed` — Python convenience wrapper.
 LUCID_API Generator& default_generator();
 
-// The generator a draw that names none actually reads, as Python sees it.
-//
-// ``lucid.manual_seed`` and ``lucid.set_rng_state`` install a generator
-// of their own and pass it to every draw that names none; the singleton
-// above is only kept in step.  A compiled function re-draws its random
-// feeds on every run (see :file:`compile/RngFeeds.h`) and must read the
-// generator eager would read *then* — not the one the trace saw, which a
-// later ``manual_seed`` replaces — so Python registers each one it
-// installs.  ``nullptr`` clears the override.  The caller keeps the
-// registered generator alive for as long as it stays registered.
-LUCID_API void set_default_override(Generator* g) noexcept;
-
-// The registered override, or :func:`default_generator` when there is none.
-LUCID_API Generator& current_default_generator() noexcept;
-
 }  // namespace lucid
