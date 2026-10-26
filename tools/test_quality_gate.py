@@ -536,7 +536,9 @@ def test_rebase_over_a_rebaseline_combines_deltas_without_hand_edit(tmp_path: Pa
     root = tmp_path / "repo"
     (root / "lucid" / "pkg").mkdir(parents=True)
     (root / "tools").mkdir()
-    ig = lambda n: "".join(f"x{i} = 1  # type: ignore[misc]\n" for i in range(n))
+    def ig(n: int) -> str:
+        return "".join(f"x{i} = 1  # type: ignore[misc]\n" for i in range(n))
+
     spacer = "".join(f"line_{i} = {i}\n" for i in range(8))
     (root / "lucid" / "pkg" / "a.py").write_text(CLEAN + spacer + ig(3))
     (root / "lucid" / "pkg" / "b.py").write_text(CLEAN + ig(3))
@@ -592,6 +594,23 @@ def test_unrecorded_baseline_raise_fails_check_update_and_diff(repo: Path) -> No
     diff = gate(repo, "--diff", "HEAD~1", "--collectors", FAST)
     assert diff.returncode == 1, diff.stdout + diff.stderr
     assert "without a rebaselines entry" in diff.stdout
+
+
+def test_malformed_prior_baseline_fails_closed(repo: Path) -> None:
+    """LCD-522: a corrupted or schema-invalid baseline committed at *ref*
+    must fail the gate with ``GateError`` (exit 2), never fail open as ``{}``."""
+    bl_path = repo / "tools" / "quality_baseline.json"
+    good_text = bl_path.read_text()
+
+    for bad_text in ("{not json\n", json.dumps({"version": 999}) + "\n", ""):
+        bl_path.write_text(bad_text)
+        git(repo, "commit", "-qam", "corrupt baseline at HEAD")
+        bl_path.write_text(good_text)
+        for args in (("--fast",), ("--update", "--fast"), ("--diff", "HEAD", "--collectors", FAST)):
+            out = gate(repo, *args)
+            assert out.returncode == 2, out.stdout + out.stderr
+            assert "cannot measure: " in out.stderr
+            assert "tools/quality_baseline.json" in out.stderr
 
 
 @pytest.mark.skipif(

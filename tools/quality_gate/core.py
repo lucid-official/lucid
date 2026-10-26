@@ -337,13 +337,16 @@ def baseline_raises(root: Path, current: Baseline, ref: str = "HEAD") -> dict[Ke
     """Keys raised in *current* above *ref*'s baseline without a new ``rebaselines`` entry."""
     if not is_git_tree(root):
         return {}
-    raw = git(root, "show", f"{ref}:{config.BASELINE_PATH}", check=False)
-    if not raw:
+    spec = f"{ref}:{config.BASELINE_PATH}"
+    if git(root, "cat-file", "-t", spec, check=False).strip() != "blob":
         return {}
+    raw = git(root, "show", spec)
     try:
         prior = baseline_from_json(json.loads(raw))
-    except (GateError, json.JSONDecodeError):
-        return {}
+    except json.JSONDecodeError as exc:
+        raise GateError(f"{spec}: not JSON ({exc})") from exc
+    except GateError as exc:
+        raise GateError(f"{spec}: {exc}") from exc
     if current.counts == prior.counts:
         return {}
     prior_hist = {json.dumps(e, sort_keys=True) for e in prior.rebaselines}

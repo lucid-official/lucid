@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - save binary/nary inputs only when read by needed grad (LCD-584)
 
+- fail closed when prior baseline at ref is malformed (LCD-522)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)
