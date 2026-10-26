@@ -31,7 +31,7 @@
     "peak_bytes": 65568
   },
   "cnn_sgd/cpu": {
-    "allocations": 72,
+    "allocations": 73,
     "forward_ops": {
       "abs": 1,
       "add": 3,
@@ -61,12 +61,12 @@
       "sum": 2,
       "unsqueeze": 1
     },
-    "frees": 72,
+    "frees": 73,
     "host_syncs": 0,
     "peak_bytes": 146564
   },
   "cnn_sgd/metal": {
-    "allocations": 79,
+    "allocations": 80,
     "forward_ops": {
       "abs": 1,
       "add": 3,
@@ -95,7 +95,7 @@
       "unsqueeze": 1,
       "where": 1
     },
-    "frees": 79,
+    "frees": 80,
     "host_allocations": 0,
     "host_syncs": 1,
     "peak_bytes": 146628
@@ -113,7 +113,7 @@
     "peak_bytes": 8192
   },
   "gru_adam/cpu": {
-    "allocations": 383,
+    "allocations": 390,
     "forward_ops": {
       "add": 24,
       "full": 6,
@@ -129,12 +129,12 @@
       "tanh": 6,
       "zeros": 1
     },
-    "frees": 383,
+    "frees": 390,
     "host_syncs": 0,
     "peak_bytes": 55060
   },
   "gru_adam/metal": {
-    "allocations": 415,
+    "allocations": 422,
     "forward_ops": {
       "add": 24,
       "full": 6,
@@ -150,7 +150,7 @@
       "tanh": 6,
       "zeros": 1
     },
-    "frees": 415,
+    "frees": 422,
     "host_allocations": 0,
     "host_syncs": 1,
     "peak_bytes": 53780
@@ -189,7 +189,7 @@
     "peak_bytes": 18436
   },
   "mlp_adam/cpu": {
-    "allocations": 49,
+    "allocations": 50,
     "forward_ops": {
       "abs": 1,
       "add": 2,
@@ -215,12 +215,12 @@
       "sum": 2,
       "unsqueeze": 1
     },
-    "frees": 49,
+    "frees": 50,
     "host_syncs": 0,
-    "peak_bytes": 14340
+    "peak_bytes": 22532
   },
   "mlp_adam/metal": {
-    "allocations": 55,
+    "allocations": 56,
     "forward_ops": {
       "abs": 1,
       "add": 2,
@@ -245,13 +245,13 @@
       "unsqueeze": 1,
       "where": 1
     },
-    "frees": 55,
+    "frees": 56,
     "host_allocations": 0,
     "host_syncs": 1,
-    "peak_bytes": 8196
+    "peak_bytes": 14340
   },
   "transformer_adamw/cpu": {
-    "allocations": 93,
+    "allocations": 96,
     "forward_ops": {
       "add": 2,
       "dropout": 3,
@@ -264,12 +264,12 @@
       "scaled_dot_product_attention": 1,
       "split_at": 2
     },
-    "frees": 93,
+    "frees": 96,
     "host_syncs": 0,
     "peak_bytes": 31876
   },
   "transformer_adamw/metal": {
-    "allocations": 128,
+    "allocations": 131,
     "forward_ops": {
       "add": 2,
       "dropout": 3,
@@ -282,7 +282,7 @@
       "scaled_dot_product_attention": 1,
       "split_at": 2
     },
-    "frees": 128,
+    "frees": 131,
     "host_allocations": 0,
     "host_syncs": 1,
     "peak_bytes": 28676

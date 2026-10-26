@@ -31,13 +31,18 @@ namespace lucid::backend::cpu {
 namespace divmod_detail {
 
 // Elements per parallel chunk: an integer division costs a few cycles, so a
-// chunk this size outweighs the dispatch.
+// chunk this size outweighs the dispatch.  Floating chunks are aligned to
+// 16-element boundaries (``kBlock``) so ``vvfmodf`` / ``vvfmod`` always sees
+// the same SIMD blocks at any core count (LCD-596).
 constexpr std::size_t kGrain = std::size_t{1} << 16;
+constexpr std::size_t kBlock = 16;
 
 template <typename T>
 void vector_fmod(T* out, const T* a, const T* b, std::size_t n) {
-    // vForce counts in ``int``.
-    constexpr std::size_t kChunk = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    // vForce counts in ``int``, rounded down to a multiple of ``kBlock`` so
+    // any multi-chunk call keeps ``kBlock`` alignment.
+    constexpr std::size_t kChunk =
+        (static_cast<std::size_t>(std::numeric_limits<int>::max()) / kBlock) * kBlock;
     for (std::size_t off = 0; off < n; off += kChunk) {
         const int m = static_cast<int>(std::min(kChunk, n - off));
         if constexpr (std::is_same_v<T, float>)
@@ -50,7 +55,10 @@ void vector_fmod(T* out, const T* a, const T* b, std::size_t n) {
 template <DivMod M, typename T>
 void run(T* out, const T* a, const T* b, std::size_t n) {
     if constexpr (std::is_floating_point_v<T>) {
-        parallel_for(n, kGrain, [&](std::size_t lo, std::size_t hi) {
+        const std::size_t blocks = (n + kBlock - 1) / kBlock;
+        parallel_for(blocks, kGrain / kBlock, [&](std::size_t b_lo, std::size_t b_hi) {
+            const std::size_t lo = b_lo * kBlock;
+            const std::size_t hi = std::min(b_hi * kBlock, n);
             vector_fmod(out + lo, a + lo, b + lo, hi - lo);
             if constexpr (M != DivMod::Fmod) {
                 for (std::size_t i = lo; i < hi; ++i)

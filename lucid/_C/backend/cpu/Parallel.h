@@ -11,9 +11,11 @@
 //
 // The loops split into contiguous chunks on libdispatch's global concurrent
 // queue, the pool Accelerate itself uses, so no thread of Lucid's own is
-// created.  Every chunk writes only its own range, and the work inside one
-// is exactly what the serial loop did, so the result is bitwise the same at
-// any core count — parallel only changes when each element is computed.
+// created.  Every chunk writes only its own range; when each iteration is
+// independent (or when a block-grouped vForce entry is chunked on its block
+// boundary, as in ``Vforce.cpp`` and ``DivMod.h``), the result is bitwise
+// the same at any core count — parallel only changes when each element is
+// computed.
 
 #pragma once
 

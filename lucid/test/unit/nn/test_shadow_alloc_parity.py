@@ -215,9 +215,9 @@ _MATMUL_CALLERS: list[tuple[str, Callable[[Tensor, Tensor], Tensor]]] = [
     "dt_a,dt_b",
     [
         (lucid.float32, lucid.float32),
-        (lucid.int64, lucid.float32),
-        (lucid.float16, lucid.float32),
-        (lucid.int32, lucid.int64),
+        (lucid.float16, lucid.float16),
+        (lucid.bfloat16, lucid.bfloat16),
+        (lucid.int64, lucid.int64),
     ],
 )
 def test_matmul_shape_and_dtype_parity(

@@ -92,7 +92,7 @@ def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_erro
         for line in ci_yml.splitlines()
         if "coverage run --parallel-mode" in line
     ]
-    assert len(cov_lines) == 3
+    assert len(cov_lines) == 4
     for line in cov_lines:
         assert "--continue-on-collection-errors" in line
 

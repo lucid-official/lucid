@@ -20,7 +20,9 @@ import lucid.nn as nn
 
 
 def _x(shape=(2, 4)):
-    return lucid.tensor(np.random.default_rng(0).standard_normal(shape))
+    return lucid.tensor(
+        np.random.default_rng(0).standard_normal(shape), dtype=lucid.float32
+    )
 
 
 class Tiny(nn.Module):
@@ -131,7 +133,7 @@ def test_a_forward_pre_hook_can_replace_the_input():
     model = Tiny()
     model.register_forward_pre_hook(lambda mod, args: (args[0] * 0.0,))
     zeroed = np.asarray(model(_x()).numpy())
-    direct = np.asarray(model(lucid.tensor(np.zeros((2, 4)))).numpy())
+    direct = np.asarray(model(lucid.zeros((2, 4))).numpy())
     assert np.allclose(zeroed, direct)
 
 

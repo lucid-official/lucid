@@ -145,9 +145,20 @@ inline float min_magnitude(const float* x, std::size_t n) {
     return m;
 }
 
+// Not vDSP_minmgvD, which took 0.32 ms on 1e6 doubles (one core) against
+// 0.10 ms for this loop, and made the gate cost +26% on vvcos.  The float
+// entry measured the same as a NEON loop and stays.
 inline double min_magnitude(const double* x, std::size_t n) {
-    double m = 0.0;
-    vDSP_minmgvD(x, 1, &m, n);
+    float64x2_t a = vdupq_n_f64(INFINITY);
+    float64x2_t b = a;
+    std::size_t i = 0;
+    for (; i + 4 <= n; i += 4) {
+        a = vminq_f64(a, vabsq_f64(vld1q_f64(x + i)));
+        b = vminq_f64(b, vabsq_f64(vld1q_f64(x + i + 2)));
+    }
+    double m = vminvq_f64(vminq_f64(a, b));
+    for (; i < n; ++i)
+        m = std::fmin(m, std::fabs(x[i]));
     return m;
 }
 
@@ -184,11 +195,12 @@ select_edges(const double* x, const double* y, double* out, std::size_t n, doubl
 
 // split() with the edge post-fix, a tile at a time.  A select over every
 // element cost +31% on vvcosf (1e6, one core); most tiles have no |x| under
-// the limit, so a vDSP_minmgv scan sends those straight through vForce and
-// the cost drops to +10% (cos) and +6% (tanh).  A tile that needs the fix
-// computes into a stack buffer, so a caller working in place (GELU's tanh)
-// still has x to compare against.  Tiles start on block boundaries, so
-// either way a value gets the bits one whole call would give it.
+// the limit, so a min_magnitude scan sends those straight through vForce
+// and the cost drops to +10% (cos) and +6% (tanh) in float.  A tile that
+// needs the fix computes into a stack buffer, so a caller working in place
+// (GELU's tanh) still has x to compare against.  Tiles start on block
+// boundaries, so either way a value gets the bits one whole call would give
+// it.
 template <EdgeSpec kSpec, class T, class F>
 inline void split_edges(const T* in, T* out, std::size_t n, F&& fn) {
     static_assert(kEdgeTile % kVforceBlock == 0);

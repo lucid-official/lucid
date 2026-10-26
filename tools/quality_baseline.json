@@ -1951,7 +1951,7 @@
     "lucid/_C/bindings/bind_coreml.cpp": 362,
     "lucid/_C/bindings/bind_nn.cpp": 412,
     "lucid/_C/bindings/bind_optim.cpp": 184,
-    "lucid/_C/bindings/bind_tensor.cpp": 221,
+    "lucid/_C/bindings/bind_tensor.cpp": 211,
     "lucid/_C/bindings/bind_ufunc.cpp": 44,
     "lucid/_C/bindings/bind_utils.cpp": 47,
     "lucid/_C/compile/CompiledExecutable.mm": 212,

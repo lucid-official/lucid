@@ -109,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - make view-family lineage and sweep O(1) per view (LCD-577)
 - run Metal searchsorted/bucketize on GPU and add compile emitter (LCD-581)
 - parallelize CPU sort/argsort lines and raise short-row radix threshold (LCD-360)
+- gate f64 vForce trig via NEON min_magnitude (LCD-596)
 
 ---
 

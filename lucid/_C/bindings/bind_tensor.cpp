@@ -464,26 +464,16 @@ void register_tensor_impl(py::module_& m) {
             "Force evaluation of this tensor's lazy MLX graph.\n"
             "GPU tensors: calls mlx::core::eval() on the underlying array.\n"
             "CPU tensors: no-op.")
-        .def(
-            "clone_with_grad",
-            [](TensorImpl& self, bool requires_grad) -> std::shared_ptr<TensorImpl> {
-                return traced_derive("detach", self.shared_from_this(),
-                                     self.clone_with_grad(requires_grad));
-            },
-            py::arg("requires_grad"),
-            "Return a new TensorImpl sharing the same storage but with a different "
-            "requires_grad flag.  No data is copied.")
+        .def("clone_with_grad", &TensorImpl::clone_with_grad, py::arg("requires_grad"),
+             "Return a new TensorImpl sharing the same storage but with a different "
+             "requires_grad flag.  No data is copied.")
         .def(
             "_set_requires_grad",
             [](TensorImpl& self, bool requires_grad) { self.set_requires_grad(requires_grad); },
             py::arg("requires_grad"), "Set this tensor's requires_grad flag in place.")
-        .def(
-            "data_alias",
-            [](TensorImpl& self) -> std::shared_ptr<TensorImpl> {
-                return traced_derive("detach", self.shared_from_this(), self.data_alias());
-            },
-            "Return the alias ``.data`` hands out: the same storage, no autograd "
-            "state, and writes through it untracked.")
+        .def("data_alias", &TensorImpl::data_alias,
+             "Return the alias ``.data`` hands out: the same storage, no autograd "
+             "state, and writes through it untracked.")
         .def("detach_inplace", &TensorImpl::detach_inplace,
              "Detach this TensorImpl in place from the autograd graph.")
         .def(

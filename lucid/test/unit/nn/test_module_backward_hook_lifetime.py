@@ -242,7 +242,7 @@ def test_a_live_downstream_branch_keeps_a_cyclic_hooked_module_alive_until_dropp
 @pytest.mark.parametrize(
     "run_backward",
     [
-        pytest.param(False, marks=_JOINTLY_OWNED_LEAK, id="no-backward"),
+        pytest.param(False, id="no-backward"),
         pytest.param(True, id="backward"),
     ],
 )
