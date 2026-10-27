@@ -130,7 +130,7 @@ export function getAllModuleSlugs(): string[] {
     return fs
       .readdirSync(API_DATA_DIR)
       .filter((f: string) => f.endsWith(".json") && !f.startsWith("_"))
-      .map((f: string) => f.replace(".json", ""));
+      .map((f: string) => encodeURIComponent(f.slice(0, -5)));
   } catch {
     return [];
   }

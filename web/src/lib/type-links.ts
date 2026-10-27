@@ -33,7 +33,7 @@ function _buildTypeLinkMap(): ReadonlyMap<string, string> {
       if (isApiClassModule(data)) {
         // ``lucid.tensor`` exposes ``Tensor`` — case-sensitive,
         // single canonical form.
-        map.set(data.name, `/api/${slug}`);
+        map.set(data.name, `/api/${encodeURIComponent(slug)}`);
       } else if (isApiModule(data)) {
         for (const m of data.members) {
           if (isApiClass(m)) {
@@ -42,7 +42,10 @@ function _buildTypeLinkMap(): ReadonlyMap<string, string> {
             // module that appears first in the slug list.  In
             // practice every Lucid class name is unique.
             if (!map.has(m.name)) {
-              map.set(m.name, `/api/${slug}/${m.name}`);
+              map.set(
+                m.name,
+                `/api/${encodeURIComponent(slug)}/${encodeURIComponent(m.name)}`,
+              );
             }
           }
         }

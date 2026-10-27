@@ -87,7 +87,7 @@ export function NotFoundSuggestions({ slugs }: NotFoundSuggestionsProps) {
         {matches.map((slug) => (
           <li key={slug}>
             <Link
-              href={`/api/${slug}`}
+              href={`/api/${encodeURIComponent(slug)}`}
               className="font-mono text-sm text-lucid-primary hover:text-lucid-primary-light hover:underline"
             >
               {slug}
