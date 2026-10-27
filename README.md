@@ -19,8 +19,10 @@
 ![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)
 ![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-432530-purple)
 
-**[Documentation](https://lucid-official.github.io/lucid/)** ·
-**[Model Zoo](https://lucid-official.github.io/lucid/)** ·
+**[Documentation](https://lucid-official.github.io/lucid/docs)** ·
+**[API Reference](https://lucid-official.github.io/lucid/api)** ·
+**[Model Zoo](https://lucid-official.github.io/lucid/api/lucid.models)** ·
+**[Architecture](https://lucid-official.github.io/lucid/architecture)** ·
 **[Hugging Face](https://huggingface.co/ChanLumerico/lucid)** ·
 **[Changelog](CHANGELOG.md)** ·
 **[Contributing](CONTRIBUTING.md)**
@@ -152,7 +154,7 @@ factory to use instead of quietly handing back random weights. Needs the `[model
 | Detection | YOLO v1–v4, R-CNN, Fast R-CNN, Faster R-CNN, EfficientDet, DETR |
 | Segmentation | U-Net, ResU-Net, Attention U-Net, FCN, MaskFormer, Mask2Former, Mask R-CNN |
 | Generative | DDPM, NCSN, RealNVP, NICE, VAE, Flow Matching, Rectified Flow, Neural ODE |
-| Language | BERT, RoFormer, GPT, GPT-2, Transformer |
+| Language | BERT, RoFormer, GPT, GPT-2, T5, Transformer |
 
 ## 🏗️ Architecture
 
