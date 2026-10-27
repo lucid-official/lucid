@@ -97,9 +97,7 @@ def mask2former_swin_tiny(
     150
     """
     entry = weights_mod.resolve_weights(Mask2FormerSwinTinyWeights, pretrained, weights)
-    model = Mask2FormerForSemanticSegmentation(
-        apply_overrides(_CFG_SWIN_TINY, overrides)
-    )
+    model = Mask2FormerForSemanticSegmentation(apply_overrides(_CFG_SWIN_TINY, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mask2former_swin_tiny")
     return model
@@ -151,12 +149,8 @@ def mask2former_swin_small(
     >>> out.logits.shape[1]
     150
     """
-    entry = weights_mod.resolve_weights(
-        Mask2FormerSwinSmallWeights, pretrained, weights
-    )
-    model = Mask2FormerForSemanticSegmentation(
-        apply_overrides(_CFG_SWIN_SMALL, overrides)
-    )
+    entry = weights_mod.resolve_weights(Mask2FormerSwinSmallWeights, pretrained, weights)
+    model = Mask2FormerForSemanticSegmentation(apply_overrides(_CFG_SWIN_SMALL, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mask2former_swin_small")
     return model
@@ -208,9 +202,7 @@ def mask2former_swin_base(
     150
     """
     entry = weights_mod.resolve_weights(Mask2FormerSwinBaseWeights, pretrained, weights)
-    model = Mask2FormerForSemanticSegmentation(
-        apply_overrides(_CFG_SWIN_BASE, overrides)
-    )
+    model = Mask2FormerForSemanticSegmentation(apply_overrides(_CFG_SWIN_BASE, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mask2former_swin_base")
     return model
@@ -262,12 +254,8 @@ def mask2former_swin_large(
     >>> out.logits.shape[1]
     150
     """
-    entry = weights_mod.resolve_weights(
-        Mask2FormerSwinLargeWeights, pretrained, weights
-    )
-    model = Mask2FormerForSemanticSegmentation(
-        apply_overrides(_CFG_SWIN_LARGE, overrides)
-    )
+    entry = weights_mod.resolve_weights(Mask2FormerSwinLargeWeights, pretrained, weights)
+    model = Mask2FormerForSemanticSegmentation(apply_overrides(_CFG_SWIN_LARGE, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mask2former_swin_large")
     return model

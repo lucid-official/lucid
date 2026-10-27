@@ -457,8 +457,7 @@ class BERTLargeQAWeights(WeightsEnum):
         meta={
             "tag": _SQUAD_TAG,
             "source": (
-                "transformers/google-bert/"
-                "bert-large-uncased-whole-word-masking-finetuned-squad"
+                "transformers/google-bert/" "bert-large-uncased-whole-word-masking-finetuned-squad"
             ),
             "license": "apache-2.0",
             "num_params": 335_143_938,

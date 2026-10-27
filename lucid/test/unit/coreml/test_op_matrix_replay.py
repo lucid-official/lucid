@@ -86,9 +86,7 @@ def _inputs(case: M.Case) -> tuple[lucid.Tensor, lucid.Tensor]:
 
 
 @pytest.mark.parametrize("name", _names())
-def test_a_package_answers_a_new_input_as_eager_does(
-    name: str, tmp_path: object
-) -> None:
+def test_a_package_answers_a_new_input_as_eager_does(name: str, tmp_path: object) -> None:
     case = M.CASE_BY_NAME[name]
     with M.on_device("cpu"):
         traced_on, asked = _inputs(case)

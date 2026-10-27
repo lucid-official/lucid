@@ -310,9 +310,7 @@ def vjepa2_vit_large_cls(
     400
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "vjepa2_vit_large_cls", alternative="vjepa2_vit_large"
-        )
+        reject_unavailable_pretrained("vjepa2_vit_large_cls", alternative="vjepa2_vit_large")
     return VJEPA2ForVideoClassification(apply_overrides(_CFG_LARGE, overrides))
 
 
@@ -361,9 +359,7 @@ def vjepa2_vit_huge_cls(
     (3, 400)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "vjepa2_vit_huge_cls", alternative="vjepa2_vit_huge"
-        )
+        reject_unavailable_pretrained("vjepa2_vit_huge_cls", alternative="vjepa2_vit_huge")
     return VJEPA2ForVideoClassification(apply_overrides(_CFG_HUGE, overrides))
 
 
@@ -412,9 +408,7 @@ def vjepa2_vit_giant_cls(
     (3, 400)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "vjepa2_vit_giant_cls", alternative="vjepa2_vit_giant"
-        )
+        reject_unavailable_pretrained("vjepa2_vit_giant_cls", alternative="vjepa2_vit_giant")
     return VJEPA2ForVideoClassification(apply_overrides(_CFG_GIANT, overrides))
 
 

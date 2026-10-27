@@ -114,9 +114,7 @@ def _amp_op[**P, R](row: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """
 
     def decorate(fn: Callable[P, R]) -> Callable[P, R]:
-        signature = inspect.signature(
-            fn, annotation_format=annotationlib.Format.FORWARDREF
-        )
+        signature = inspect.signature(fn, annotation_format=annotationlib.Format.FORWARDREF)
 
         @functools.wraps(fn)
         def at_entry(*args: P.args, **kwargs: P.kwargs) -> R:

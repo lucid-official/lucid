@@ -16,12 +16,8 @@ _THRESHOLDS = load_thresholds(Path(__file__).parent)
 @pytest.mark.perf
 class TestMLPForwardBackward:
     def test_mlp_step(self, bench, device: str) -> None:
-        x = lucid.tensor(
-            np.random.standard_normal((64, 32)).astype(np.float32), device=device
-        )
-        y = lucid.tensor(
-            np.random.standard_normal((64, 1)).astype(np.float32), device=device
-        )
+        x = lucid.tensor(np.random.standard_normal((64, 32)).astype(np.float32), device=device)
+        y = lucid.tensor(np.random.standard_normal((64, 1)).astype(np.float32), device=device)
         model = nn.Sequential(
             nn.Linear(32, 64),
             nn.ReLU(),
@@ -46,15 +42,11 @@ class TestMLPForwardBackward:
 @pytest.mark.perf
 class TestTransformerForward:
     def test_block_forward(self, bench, device: str) -> None:
-        x = lucid.tensor(
-            np.random.standard_normal((4, 32, 64)).astype(np.float32), device=device
-        )
+        x = lucid.tensor(np.random.standard_normal((4, 32, 64)).astype(np.float32), device=device)
         block = nn.TransformerEncoderLayer(
             d_model=64, nhead=4, dim_feedforward=128, batch_first=True
         ).to(device=device)
 
         bench(lambda: block(x))
         if hasattr(bench, "last_elapsed"):
-            assert_no_regression(
-                f"transformer_block_fwd_{device}", bench.last_elapsed, _THRESHOLDS
-            )
+            assert_no_regression(f"transformer_block_fwd_{device}", bench.last_elapsed, _THRESHOLDS)

@@ -56,9 +56,7 @@ class TestAnImagePackageSurvivesReloading:
         pixels = _pixels()
         path = f"{tmp_path}/image.mlpackage"
 
-        exported = cml.export(
-            model, pixels, path, image_input=cml.ImageInput(scale=1 / 255.0)
-        )
+        exported = cml.export(model, pixels, path, image_input=cml.ImageInput(scale=1 / 255.0))
         wanted = exported.predict(pixels)
         exported.close()
 
@@ -82,9 +80,7 @@ class TestAnImagePackageSurvivesReloading:
         pixels = _pixels()
         path = f"{tmp_path}/unknown_scale.mlpackage"
 
-        exported = cml.export(
-            model, pixels, path, image_input=cml.ImageInput(scale=1 / 255.0)
-        )
+        exported = cml.export(model, pixels, path, image_input=cml.ImageInput(scale=1 / 255.0))
         # The handle that wrote it can compare, because it knows.
         assert exported.verify(model, pixels, relative=True) < 1e-5
         exported.close()
@@ -173,9 +169,7 @@ class TestAFailedExportLeavesTheOldPackageAlone:
 
         lucid.manual_seed(0)
         with pytest.raises(Exception):
-            cml.export(
-                _Samples().eval(), lucid.zeros(1, 3), f"{tmp_path}/never.mlpackage"
-            )
+            cml.export(_Samples().eval(), lucid.zeros(1, 3), f"{tmp_path}/never.mlpackage")
         assert os.listdir(str(tmp_path)) == []
 
 

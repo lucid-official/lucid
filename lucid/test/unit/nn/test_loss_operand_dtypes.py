@@ -259,8 +259,7 @@ _LENIENT: dict[tuple[str, str, str], str] = {
     },
     **{
         (name, "target", width): (
-            "Lucid takes class indices of any integer width; the reference "
-            "only int64"
+            "Lucid takes class indices of any integer width; the reference " "only int64"
         )
         for name in (
             "cross_entropy",
@@ -304,9 +303,7 @@ def _name(dtype: object) -> str:
 
 @pytest.mark.parity
 @pytest.mark.parametrize(("name", "sweep", "dtype"), CELLS)
-def test_the_rule_is_the_references(
-    ref: ModuleType, name: str, sweep: str, dtype: str
-) -> None:
+def test_the_rule_is_the_references(ref: ModuleType, name: str, sweep: str, dtype: str) -> None:
     def make_ref(values: object, d: str) -> object:
         return ref.tensor(values).to(getattr(ref, d))
 

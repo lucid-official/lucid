@@ -219,10 +219,7 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
 
     total = sum(op_counts.values())
     if not uncovered:
-        rec = (
-            "100% manual VJP coverage — no fallback expected under "
-            "LUCID_MANUAL_VJP_REQUIRE=1."
-        )
+        rec = "100% manual VJP coverage — no fallback expected under " "LUCID_MANUAL_VJP_REQUIRE=1."
     else:
         names = ", ".join(f"{i.name} (x{i.count})" for i in uncovered)
         rec = (

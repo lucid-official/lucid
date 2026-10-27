@@ -47,9 +47,7 @@ class TestScaledNoise:
 
 class TestNoisyLinearFunctional:
     def test_shapes(self) -> None:
-        out = F.noisy_linear(
-            lucid.zeros((2, 4)), lucid.zeros((3, 4)), lucid.ones((3, 4))
-        )
+        out = F.noisy_linear(lucid.zeros((2, 4)), lucid.zeros((3, 4)), lucid.ones((3, 4)))
         assert out.shape == (2, 3)
 
     def test_zero_sigma_is_an_ordinary_linear(self) -> None:
@@ -102,9 +100,7 @@ class TestNoisyLinearModule:
         layer = nn.NoisyLinear(16, 5, sigma_zero=0.5)
         bound = 1.0 / math.sqrt(16)
         assert float(layer.weight_mu.abs().max().item()) <= bound + 1e-6
-        assert float(layer.weight_sigma[0, 0].item()) == pytest.approx(
-            0.5 / math.sqrt(16)
-        )
+        assert float(layer.weight_sigma[0, 0].item()) == pytest.approx(0.5 / math.sqrt(16))
 
     def test_the_sample_is_held_until_asked(self) -> None:
         """Two forwards must be the same network."""
@@ -131,12 +127,7 @@ class TestNoisyLinearModule:
         layer.eval()
         x = lucid.randn((2, 4))
         assert (
-            float(
-                (layer(x) - F.linear(x, layer.weight_mu, layer.bias_mu))
-                .abs()
-                .max()
-                .item()
-            )
+            float((layer(x) - F.linear(x, layer.weight_mu, layer.bias_mu)).abs().max().item())
             < 1e-6
         )
 

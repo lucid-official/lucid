@@ -38,14 +38,10 @@ from lucid._C import engine as E
 _INSTANCES = {
     "TensorImpl": "obj = lucid.randn(3)._impl",
     "Node": "x = lucid.randn(3, requires_grad=True)\nobj = (x * 2).grad_fn",
-    "AccumulateGrad": (
-        "x = lucid.randn(3, requires_grad=True)\ny = x * 2\nobj = x._impl.grad_fn"
-    ),
+    "AccumulateGrad": ("x = lucid.randn(3, requires_grad=True)\ny = x * 2\nobj = x._impl.grad_fn"),
     "_PythonBackwardNode": "obj = E._PythonBackwardNode()\nobj.ctx = E.FunctionCtx()",
     "FunctionCtx": "obj = E.FunctionCtx()\nobj.payload = [1, 2]",
-    "_ModuleBackwardHookState": (
-        "obj = E._create_module_backward_hook_state(1, None, None)"
-    ),
+    "_ModuleBackwardHookState": ("obj = E._create_module_backward_hook_state(1, None, None)"),
 }
 
 # A Python subclass resolves to its pybind11 base; a C++ subclass does not.
@@ -78,8 +74,7 @@ def _run(body: str) -> subprocess.CompletedProcess[str]:
 
 def _assert_survived(proc: subprocess.CompletedProcess[str]) -> None:
     assert proc.returncode == 0 and "survived" in proc.stdout, (
-        f"exit {proc.returncode} (negative: killed by that signal)\n"
-        f"{proc.stderr[-3000:]}"
+        f"exit {proc.returncode} (negative: killed by that signal)\n" f"{proc.stderr[-3000:]}"
     )
 
 

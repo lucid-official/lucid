@@ -215,9 +215,7 @@ class _DETRDecoderLayer(nn.Module):
 class _DETREncoder(nn.Module):
     """Stack of encoder layers — NO final norm (reference removes it)."""
 
-    def __init__(
-        self, d_model: int, n_head: int, dim_ff: int, dropout: float, depth: int
-    ) -> None:
+    def __init__(self, d_model: int, n_head: int, dim_ff: int, dropout: float, depth: int) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
             [_DETREncoderLayer(d_model, n_head, dim_ff, dropout) for _ in range(depth)]
@@ -249,9 +247,7 @@ class _DETRDecoder(nn.Module):
     single-output path returns, so inference is unaffected either way.
     """
 
-    def __init__(
-        self, d_model: int, n_head: int, dim_ff: int, dropout: float, depth: int
-    ) -> None:
+    def __init__(self, d_model: int, n_head: int, dim_ff: int, dropout: float, depth: int) -> None:
         super().__init__()
         self.layers = nn.ModuleList(
             [_DETRDecoderLayer(d_model, n_head, dim_ff, dropout) for _ in range(depth)]
@@ -312,12 +308,8 @@ class _DETRTransformer(nn.Module):
     ) -> None:
         super().__init__()
         self.d_model = d_model
-        self.encoder = _DETREncoder(
-            d_model, n_head, dim_feedforward, dropout, num_encoder_layers
-        )
-        self.decoder = _DETRDecoder(
-            d_model, n_head, dim_feedforward, dropout, num_decoder_layers
-        )
+        self.encoder = _DETREncoder(d_model, n_head, dim_feedforward, dropout, num_encoder_layers)
+        self.decoder = _DETRDecoder(d_model, n_head, dim_feedforward, dropout, num_decoder_layers)
         self._reset_parameters()
 
     def _reset_parameters(self) -> None:
@@ -379,9 +371,7 @@ class _DETRTransformer(nn.Module):
 class _MLP(nn.Module):
     """Simple N-layer MLP with ReLU activations (last layer has no activation)."""
 
-    def __init__(
-        self, in_dim: int, hidden_dim: int, out_dim: int, n_layers: int
-    ) -> None:
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, n_layers: int) -> None:
         super().__init__()
         dims = [in_dim] + [hidden_dim] * (n_layers - 1) + [out_dim]
         layers: list[nn.Module] = []
@@ -826,9 +816,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
             gt_xyxy = box_cxcywh_to_xyxy(gt_matched)  # (P, 4)
             giou_mat = generalized_box_iou(pred_xyxy, gt_xyxy)  # (P, P)
             n_match = len(pred_idx)
-            diag = lucid.tensor(
-                [i * n_match + i for i in range(n_match)], device=dev
-            ).long()
+            diag = lucid.tensor([i * n_match + i for i in range(n_match)], device=dev).long()
             giou_diag = giou_mat.reshape(-1).index_select(0, diag)  # (P,)
             giou_losses.append((1.0 - giou_diag).sum())
 
@@ -926,9 +914,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
                 ]
                 keep_boxes.append(lucid.tensor(box_data, device=dev))
                 keep_scores.append(lucid.tensor([[best_sc]], device=dev))
-                keep_labels.append(
-                    lucid.tensor([[best_cls]], dtype=lucid.int64, device=dev)
-                )
+                keep_labels.append(lucid.tensor([[best_cls]], dtype=lucid.int64, device=dev))
 
             if keep_boxes:
                 results.append(

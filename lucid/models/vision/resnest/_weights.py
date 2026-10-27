@@ -45,9 +45,7 @@ class ResNeSt50Weights(WeightsEnum):
         url=f"{HUB_BASE}/resnest-50/resolve/main/IN1K/model.safetensors",
         sha256="e9609ee480a096682e04c34acf0b13e2161258862060f09a1bacddd7eddf8b48",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=224, resize_size=256, interpolation="bilinear"
-        ),
+        transforms=ImageClassification(crop_size=224, resize_size=256, interpolation="bilinear"),
         meta={
             "tag": "IN1K",
             "source": "timm/resnest50d.in1k",
@@ -86,9 +84,7 @@ class ResNeSt101Weights(WeightsEnum):
         url=f"{HUB_BASE}/resnest-101/resolve/main/IN1K/model.safetensors",
         sha256="b3403d554ee27612f25bd646c7202b0520f697e8150227538ae7ec5474a8479b",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=256, resize_size=292, interpolation="bilinear"
-        ),
+        transforms=ImageClassification(crop_size=256, resize_size=292, interpolation="bilinear"),
         meta={
             "tag": "IN1K",
             "source": "timm/resnest101e.in1k",
@@ -127,9 +123,7 @@ class ResNeSt200Weights(WeightsEnum):
         url=f"{HUB_BASE}/resnest-200/resolve/main/IN1K/model.safetensors",
         sha256="9adc2f6282549bce1b1289a42fa4ddbc722ec5759b2e8d0decf154575ec5a065",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=320, resize_size=352, interpolation="bicubic"
-        ),
+        transforms=ImageClassification(crop_size=320, resize_size=352, interpolation="bicubic"),
         meta={
             "tag": "IN1K",
             "source": "timm/resnest200e.in1k",
@@ -177,9 +171,7 @@ class ResNeSt269Weights(WeightsEnum):
         url=f"{HUB_BASE}/resnest-269/resolve/main/IN1K/model.safetensors",
         sha256="8ddfb4eb21e96a48a27fcf9d0b66105514cbfcab37a2b5289fa349dbb9e88034",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=416, resize_size=448, interpolation="bicubic"
-        ),
+        transforms=ImageClassification(crop_size=416, resize_size=448, interpolation="bicubic"),
         meta={
             "tag": "IN1K",
             "source": "timm/resnest269e.in1k",

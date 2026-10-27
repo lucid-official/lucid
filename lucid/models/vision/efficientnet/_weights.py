@@ -28,35 +28,19 @@ used as the :attr:`DEFAULT` for consistency across the family.
 from lucid.utils.transforms import ImageClassification
 from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 
-_PRESET_B0 = ImageClassification(
-    crop_size=224, resize_size=256, interpolation="bicubic"
-)
-_PRESET_B1 = ImageClassification(
-    crop_size=240, resize_size=256, interpolation="bicubic"
-)
+_PRESET_B0 = ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic")
+_PRESET_B1 = ImageClassification(crop_size=240, resize_size=256, interpolation="bicubic")
 # Divergence, deliberate: the paper's compound-scaling table puts B2 at
 # 260x260, but the checkpoint this preset serves was trained and published
 # at 288 — evaluating it at 260 measures a resolution it never saw.  The
 # eval preset follows the weights; ``EfficientNetConfig`` still carries the
 # paper's 260 for anyone training from scratch.
-_PRESET_B2 = ImageClassification(
-    crop_size=288, resize_size=288, interpolation="bicubic"
-)
-_PRESET_B3 = ImageClassification(
-    crop_size=300, resize_size=320, interpolation="bicubic"
-)
-_PRESET_B4 = ImageClassification(
-    crop_size=380, resize_size=384, interpolation="bicubic"
-)
-_PRESET_B5 = ImageClassification(
-    crop_size=456, resize_size=456, interpolation="bicubic"
-)
-_PRESET_B6 = ImageClassification(
-    crop_size=528, resize_size=528, interpolation="bicubic"
-)
-_PRESET_B7 = ImageClassification(
-    crop_size=600, resize_size=600, interpolation="bicubic"
-)
+_PRESET_B2 = ImageClassification(crop_size=288, resize_size=288, interpolation="bicubic")
+_PRESET_B3 = ImageClassification(crop_size=300, resize_size=320, interpolation="bicubic")
+_PRESET_B4 = ImageClassification(crop_size=380, resize_size=384, interpolation="bicubic")
+_PRESET_B5 = ImageClassification(crop_size=456, resize_size=456, interpolation="bicubic")
+_PRESET_B6 = ImageClassification(crop_size=528, resize_size=528, interpolation="bicubic")
+_PRESET_B7 = ImageClassification(crop_size=600, resize_size=600, interpolation="bicubic")
 
 
 @register_weights("efficientnet_b0_cls")

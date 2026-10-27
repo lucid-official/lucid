@@ -82,10 +82,7 @@ def test_config_defaults_match_the_released_cifar_configuration() -> None:
 
 def test_data_dim() -> None:
     assert RectifiedFlowConfig(sample_size=32, in_channels=3).data_dim == 3072
-    assert (
-        RectifiedFlowConfig(sample_size=(4, 8), in_channels=1, out_channels=1).data_dim
-        == 32
-    )
+    assert RectifiedFlowConfig(sample_size=(4, 8), in_channels=1, out_channels=1).data_dim == 32
 
 
 @pytest.mark.parametrize(
@@ -171,10 +168,7 @@ def test_is_flow_matching_optimal_transport_at_sigma_min_zero() -> None:
     x0 = lucid.randn((4, 3, 8, 8))
     t = lucid.tensor([0.0, 0.25, 0.5, 1.0])
     assert _worst(rf.path_sample(x1, x0, t), fm.path_sample(x1, x0, t)) == 0.0
-    assert (
-        _worst(rf.conditional_target(x1, x0, t), fm.conditional_target(x1, x0, t))
-        == 0.0
-    )
+    assert _worst(rf.conditional_target(x1, x0, t), fm.conditional_target(x1, x0, t)) == 0.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,10 +324,7 @@ def test_adaptive_solve_runs_and_costs_more_than_nothing() -> None:
 def test_sample_accepts_a_fixed_starting_point() -> None:
     model = RectifiedFlowModel(_cfg(init_scale=1.0)).eval()
     noise = lucid.randn((2, 3, 8, 8))
-    assert (
-        _worst(model.sample(noise=noise, steps=4), model.sample(noise=noise, steps=4))
-        == 0.0
-    )
+    assert _worst(model.sample(noise=noise, steps=4), model.sample(noise=noise, steps=4)) == 0.0
 
 
 def test_reflow_pairs_returns_the_coupling_it_solved() -> None:
@@ -468,17 +459,13 @@ def _reference_upfirdn2d(
     out = np.zeros((n, c, oh, ow))
     for i in range(oh):
         for j in range(ow):
-            out[:, :, i, j] = (grid[:, :, i : i + size, j : j + size] * flipped).sum(
-                axis=(2, 3)
-            )
+            out[:, :, i, j] = (grid[:, :, i : i + size, j : j + size] * flipped).sum(axis=(2, 3))
     return out[:, :, ::down, ::down]
 
 
 @pytest.mark.parametrize("taps", [(1, 3, 3, 1), (1, 2, 5, 1)])
 @pytest.mark.parametrize("up", [True, False])
-def test_fir_matches_an_independent_transcription(
-    taps: tuple[int, ...], up: bool
-) -> None:
+def test_fir_matches_an_independent_transcription(taps: tuple[int, ...], up: bool) -> None:
     """The asymmetric filter is what catches a missing kernel flip."""
     data = np.random.default_rng(0).standard_normal((2, 3, 8, 8)).astype(np.float32)
     module = _FIRResample(3, taps, up=up).eval()
@@ -531,9 +518,7 @@ def test_field_accepts_the_scalar_time_a_solver_passes() -> None:
     assert batched.shape == (2, 3, 8, 8)
     lucid.manual_seed(0)
     x = lucid.randn((2, 3, 8, 8))
-    assert (
-        _worst(field(x, lucid.tensor(0.4)), field(x, lucid.tensor([0.4, 0.4]))) == 0.0
-    )
+    assert _worst(field(x, lucid.tensor(0.4)), field(x, lucid.tensor([0.4, 0.4]))) == 0.0
 
 
 def test_high_resolution_path_runs_and_stays_finite() -> None:
@@ -550,9 +535,7 @@ def test_high_resolution_path_runs_and_stays_finite() -> None:
         embedding_type="fourier",
         init_scale=1.0,
     )
-    out = _VelocityField(cfg).eval()(
-        lucid.randn((2, 3, 16, 16)), lucid.tensor([0.5, 0.5])
-    )
+    out = _VelocityField(cfg).eval()(lucid.randn((2, 3, 16, 16)), lucid.tensor([0.5, 0.5]))
     assert out.shape == (2, 3, 16, 16)
     assert bool(lucid.isfinite(out).all())
 
@@ -723,8 +706,6 @@ def test_high_resolution_factories_carry_the_pyramid() -> None:
 
 
 def test_overrides_reach_the_config() -> None:
-    model = create_model(
-        "rectified_flow_cifar", sample_size=8, base_channels=16, t_schedule="t1"
-    )
+    model = create_model("rectified_flow_cifar", sample_size=8, base_channels=16, t_schedule="t1")
     assert model.config.sample_size == 8
     assert model.t_schedule == "t1"

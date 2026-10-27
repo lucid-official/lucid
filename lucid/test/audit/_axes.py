@@ -140,9 +140,7 @@ class Axis:
             return False
         return True
 
-    def run(
-        self, symbol: Symbol, ctx: Context
-    ) -> Finding:  # pragma: no cover - abstract
+    def run(self, symbol: Symbol, ctx: Context) -> Finding:  # pragma: no cover - abstract
         raise NotImplementedError
 
     # ── shared helpers ───────────────────────────────────────────────────────
@@ -261,9 +259,7 @@ class Axis:
             return False
         try:
             first = _probe.to_numpy(fn(*call.with_primary(base).args, **call.kwargs))
-            other = _probe.to_numpy(
-                fn(*call.with_primary(base * 2.0 + 1.0).args, **call.kwargs)
-            )
+            other = _probe.to_numpy(fn(*call.with_primary(base * 2.0 + 1.0).args, **call.kwargs))
         except Exception:  # noqa: BLE001 - surveying, not asserting
             return False
         if first is None or other is None or first.shape != other.shape:
@@ -288,17 +284,12 @@ class Axis:
     #: can be taken of.
     _NO_TENSOR_OUTPUT = "op did not return a tensor"
 
-    def _refusal(
-        self, symbol: Symbol, detail: str, call: Call | None = None
-    ) -> Finding:
+    def _refusal(self, symbol: Symbol, detail: str, call: Call | None = None) -> Finding:
         """UNSUPPORTED, unless the op had nothing this axis could use."""
         if (
             call is not None
             and not self._primary_is_a_tensor(call)
-            and (
-                "incompatible function arguments" in detail
-                or "AttributeError" in detail
-            )
+            and ("incompatible function arguments" in detail or "AttributeError" in detail)
         ):
             # ``zeros((2, 4))`` takes a shape and ``pad_packed_sequence``
             # takes a ``PackedSequence``; ``Call.base`` reads both as
@@ -457,9 +448,7 @@ class _DifferenceAxis(Axis):
 
     def _differentiates_a_factorization(self, fn: Any) -> bool:
         try:
-            signature = inspect.signature(
-                fn, annotation_format=annotationlib.Format.STRING
-            )
+            signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
         except (TypeError, ValueError, NameError):
             return False
         first = next(iter(signature.parameters), "")
@@ -756,9 +745,7 @@ class GradientAxis(_DifferenceAxis):
                 "— a loss through this op trains nothing",
             )
         if x.grad is None:
-            return self._finding(
-                symbol, Status.UNSUPPORTED, "no gradient reached the input"
-            )
+            return self._finding(symbol, Status.UNSUPPORTED, "no gradient reached the input")
 
         # An op that overwrote its input is asking two different
         # questions of the two methods.  ``nn.init.eye(x)`` writes into
@@ -788,9 +775,7 @@ class GradientAxis(_DifferenceAxis):
 
         analytic = np.asarray(x.grad.numpy(), dtype=np.float64).reshape(-1)
         if not np.isfinite(analytic).all():
-            return self._finding(
-                symbol, Status.SKIP, f"non-finite gradient on '{domain}'"
-            )
+            return self._finding(symbol, Status.SKIP, f"non-finite gradient on '{domain}'")
         if np.abs(analytic).max(initial=0.0) == 0.0:
             return self._finding(
                 symbol,
@@ -801,9 +786,7 @@ class GradientAxis(_DifferenceAxis):
         try:
             coarse = _probe.finite_difference(scalar, base, ctx.step)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.SKIP, f"fd failed: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.SKIP, f"fd failed: {type(exc).__name__}")
 
         # A non-finite difference quotient is the probe leaving the op's
         # domain, not a wrong derivative.  ``log`` and ``sqrt`` are only
@@ -820,9 +803,7 @@ class GradientAxis(_DifferenceAxis):
 
         rel = _probe.relative(analytic, coarse.reshape(analytic.shape))
         if rel < ctx.tolerance:
-            return self._finding(
-                symbol, Status.PASS, f"{domain}: rel {rel:.2e}", rel=rel
-            )
+            return self._finding(symbol, Status.PASS, f"{domain}: rel {rel:.2e}", rel=rel)
 
         # Interrogate before reporting.  Truncation falls like h**2.
         try:
@@ -993,15 +974,11 @@ class SecondGradientAxis(_DifferenceAxis):
     ) -> Finding:
         """Judge a first gradient with no path back to its input."""
         try:
-            fd = _probe.finite_difference(
-                lambda a: float(directional(a)[1]), base, ctx.step
-            )
+            fd = _probe.finite_difference(lambda a: float(directional(a)[1]), base, ctx.step)
         except Exception:  # noqa: BLE001
             return self._refusal(symbol, detail, call)
         if not np.isfinite(fd).all():
-            return self._finding(
-                symbol, Status.SKIP, "the second difference left the op's domain"
-            )
+            return self._finding(symbol, Status.SKIP, "the second difference left the op's domain")
         largest = float(np.abs(fd).max(initial=0.0))
         if largest == 0.0:
             return self._finding(
@@ -1066,9 +1043,7 @@ class SecondGradientAxis(_DifferenceAxis):
 
         try:
             x, scalar, first = directional(base)
-            first_scale = float(
-                np.abs(np.asarray(first.numpy(), dtype=np.float64)).max()
-            )
+            first_scale = float(np.abs(np.asarray(first.numpy(), dtype=np.float64)).max())
         except Exception as exc:  # noqa: BLE001
             return self._refusal(symbol, f"{type(exc).__name__}: {str(exc)[:80]}", call)
         try:
@@ -1087,23 +1062,14 @@ class SecondGradientAxis(_DifferenceAxis):
             # ``allow_unused=True`` comes back as zero, silently.  Every
             # one of these was once filed as the op's refusal, 351 cells,
             # the right answers and the wrong ones together.
-            return self._unreachable_second(
-                symbol, directional, base, ctx, detail, call
-            )
+            return self._unreachable_second(symbol, directional, base, ctx, detail, call)
 
         try:
-            fd = _probe.finite_difference(
-                lambda a: float(directional(a)[1]), base, ctx.step
-            )
+            fd = _probe.finite_difference(lambda a: float(directional(a)[1]), base, ctx.step)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.SKIP, f"fd failed: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.SKIP, f"fd failed: {type(exc).__name__}")
 
-        if (
-            np.abs(analytic).max(initial=0.0) == 0.0
-            and np.abs(fd).max(initial=0.0) == 0.0
-        ):
+        if np.abs(analytic).max(initial=0.0) == 0.0 and np.abs(fd).max(initial=0.0) == 0.0:
             return self._finding(
                 symbol,
                 Status.PASS,
@@ -1115,10 +1081,7 @@ class SecondGradientAxis(_DifferenceAxis):
         # "rel 1.00" from 1e-10 against 3e-9, the first cell of its kind
         # once the covector stopped truncating larger operands.
         negligible = 1e-6 * max(1.0, first_scale)
-        if (
-            max(np.abs(analytic).max(initial=0.0), np.abs(fd).max(initial=0.0))
-            <= negligible
-        ):
+        if max(np.abs(analytic).max(initial=0.0), np.abs(fd).max(initial=0.0)) <= negligible:
             return self._finding(
                 symbol,
                 Status.PASS,
@@ -1141,9 +1104,7 @@ class SecondGradientAxis(_DifferenceAxis):
 
         rel = _probe.relative(analytic, fd.reshape(analytic.shape))
         if rel < 1e-4:
-            return self._finding(
-                symbol, Status.PASS, f"{domain}: rel {rel:.2e}", rel=rel
-            )
+            return self._finding(symbol, Status.PASS, f"{domain}: rel {rel:.2e}", rel=rel)
         # A symmetric input read from one triangle — ``eigh``,
         # ``eigvalsh``.  The op never sees the other triangle, so those
         # coordinates difference to exactly zero, while the gradient is
@@ -1298,9 +1259,7 @@ class CreateGraphAxis(Axis):
             if np.abs(reference).max(initial=0.0) != 0.0:
                 break
         if np.abs(reference).max(initial=0.0) == 0.0:
-            return self._finding(
-                symbol, Status.VACUOUS, "reference gradient is identically zero"
-            )
+            return self._finding(symbol, Status.VACUOUS, "reference gradient is identically zero")
 
         try:
             x_probe, loss2 = loss_of(base)
@@ -1362,11 +1321,7 @@ class CreateGraphAxis(Axis):
     def _gradient_lanes(gradient: Any) -> np.ndarray:
         values = np.asarray(gradient.numpy())
         if np.iscomplexobj(values):
-            return (
-                np.ascontiguousarray(values, dtype=np.complex128)
-                .reshape(-1)
-                .view(np.float64)
-            )
+            return np.ascontiguousarray(values, dtype=np.complex128).reshape(-1).view(np.float64)
         return values.astype(np.float64).reshape(-1)
 
 
@@ -1437,9 +1392,7 @@ class EntryPointAxis(Axis):
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         routes = list(_surface.counterparts(symbol))
         if len(routes) < 2:
-            return self._finding(
-                symbol, Status.NOT_APPLICABLE, "only one entry point to compare"
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "only one entry point to compare")
 
         results: dict[str, Any] = {}
         errors: dict[str, str] = {}
@@ -1452,9 +1405,7 @@ class EntryPointAxis(Axis):
         # random.  Under one seed the same op draws the same numbers.
         stochastic = "stochastic" in symbol.flags
         for domain in ctx.domains:
-            for call in _specs.invocations(
-                symbol.short, domain, symbol.qualname, probe_fn
-            ):
+            for call in _specs.invocations(symbol.short, domain, symbol.qualname, probe_fn):
                 results.clear()
                 errors.clear()
                 for label, fn in routes:
@@ -1478,11 +1429,7 @@ class EntryPointAxis(Axis):
                     # Operands of its own per spelling, or an in-place one
                     # hands the next spelling what it wrote.
                     own = call.fresh()
-                    args = (
-                        own.args
-                        if label != "method"
-                        else own.args[:at] + own.args[at + 1 :]
-                    )
+                    args = own.args if label != "method" else own.args[:at] + own.args[at + 1 :]
                     target = own.args[at] if label == "method" else None
                     if stochastic:
                         lucid.manual_seed(self._SEED)
@@ -1509,8 +1456,7 @@ class EntryPointAxis(Axis):
                 return self._finding(
                     symbol,
                     Status.FAIL,
-                    f"reachable one way but not another: ok={sorted(results)} "
-                    f"failed={errors}",
+                    f"reachable one way but not another: ok={sorted(results)} " f"failed={errors}",
                 )
             return self._finding(symbol, Status.SKIP, f"no shared invocation: {errors}")
 
@@ -1577,9 +1523,7 @@ class DeviceAxis(Axis):
                 fn, annotation_format=annotationlib.Format.FORWARDREF
             ).parameters
         except Exception:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.NOT_APPLICABLE, "builds from no tensor input"
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "builds from no tensor input")
         if "device" not in parameters:
             return self._finding(
                 symbol,
@@ -1646,11 +1590,7 @@ class DeviceAxis(Axis):
                         # Narrowed *before* the move, not after: ``.to(metal)``
                         # on a float64 tensor is the call that raises, so a
                         # cast afterwards never runs.
-                        narrowed = (
-                            a.to(lucid.float32)
-                            if str(a.dtype).endswith("float64")
-                            else a
-                        )
+                        narrowed = a.to(lucid.float32) if str(a.dtype).endswith("float64") else a
                         args.append(narrowed.to(device))
                 else:
                     args.append(a)
@@ -1708,9 +1648,7 @@ class DeviceAxis(Axis):
                     f"every tensor input was moved to {want}, and the output "
                     f"came back on {device}",
                 )
-            return self._finding(
-                symbol, Status.NOT_APPLICABLE, "builds from no tensor input"
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "builds from no tensor input")
 
         a, b = _probe.to_numpy(cpu_out), _probe.to_numpy(metal_out)
         if a is None or b is None or a.shape != b.shape:
@@ -1786,9 +1724,7 @@ class DeviceAxis(Axis):
                 f"{differ.size} of {left.size} positions "
                 f"(index {where.tolist()}: cpu {left[where]}, metal {right[where]})",
             )
-        return self._finding(
-            symbol, Status.PASS, f"{domain}: finite and non-finite agree"
-        )
+        return self._finding(symbol, Status.PASS, f"{domain}: finite and non-finite agree")
 
 
 class NonFiniteAxis(Axis):
@@ -2108,9 +2044,7 @@ class BroadcastAxis(Axis):
                 atol=1e-8,
                 equal_nan=True,
             ):
-                drift = float(
-                    np.abs(self._comparable(got) - self._comparable(expanded)).max()
-                )
+                drift = float(np.abs(self._comparable(got) - self._comparable(expanded)).max())
                 failures.append(
                     f"{sa}x{sb}: broadcasting differs from expanding first by {drift:.3e}"
                 )
@@ -2136,9 +2070,7 @@ class BroadcastAxis(Axis):
                 "shaped by one argument, not broadcast between them",
             )
         if failures:
-            return self._finding(
-                symbol, Status.FAIL, "; ".join(failures[:4]), failures=failures
-            )
+            return self._finding(symbol, Status.FAIL, "; ".join(failures[:4]), failures=failures)
         return self._finding(symbol, Status.PASS, f"{len(self._PAIRS)} directions")
 
 
@@ -2191,9 +2123,7 @@ class DtypeAxis(Axis):
         the caller can fall through to its own answer.
         """
         try:
-            signature = inspect.signature(
-                fn, annotation_format=annotationlib.Format.STRING
-            )
+            signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
         except (TypeError, ValueError, NameError):
             return None
         if "dtype" not in signature.parameters:
@@ -2220,9 +2150,7 @@ class DtypeAxis(Axis):
             honoured.append(name)
         if not honoured:
             return None
-        return self._finding(
-            symbol, Status.PASS, f"honours dtype= for {len(honoured)} dtypes"
-        )
+        return self._finding(symbol, Status.PASS, f"honours dtype= for {len(honoured)} dtypes")
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         fn = _surface.resolve(symbol)
@@ -2349,9 +2277,7 @@ class EdgeAxis(Axis):
         # its shape is asked rather than listed: run it once at full size
         # and see.
         reference_out = _probe.to_numpy(fn(*call.args, **call.kwargs))
-        shape_preserving = reference_out is not None and tuple(
-            reference_out.shape
-        ) == tuple(shape)
+        shape_preserving = reference_out is not None and tuple(reference_out.shape) == tuple(shape)
 
         # The primary is resized together with every operand the call
         # declares to share its shape (``Call.resized``): a loss's target
@@ -2386,9 +2312,7 @@ class EdgeAxis(Axis):
                         Status.NOT_APPLICABLE,
                         "another operand is still full size and supplies the shape",
                     )
-                return self._finding(
-                    symbol, Status.FAIL, f"empty input produced shape {out.shape}"
-                )
+                return self._finding(symbol, Status.FAIL, f"empty input produced shape {out.shape}")
         except Exception as exc:  # noqa: BLE001
             notes.append(f"empty: {type(exc).__name__}")
 
@@ -2400,9 +2324,7 @@ class EdgeAxis(Axis):
 
         if len(notes) == 2:
             return self._refusal(symbol, "; ".join(notes), call)
-        return self._finding(
-            symbol, Status.PASS, "; ".join(notes) or "empty and size-1 accepted"
-        )
+        return self._finding(symbol, Status.PASS, "; ".join(notes) or "empty and size-1 accepted")
 
 
 # ── structural axes ──────────────────────────────────────────────────────────
@@ -2456,9 +2378,9 @@ class ModuleAxis(Axis):
         # iterate manually."`` — so identity against ``Module.forward``
         # missed all six of them and they were reported as unreachable
         # rather than as inapplicable, which are opposite claims.
-        if getattr(type(module), "forward", None) is getattr(
-            lucid.nn.Module, "forward", None
-        ) or (why is not None and "NotImplementedError" in why):
+        if getattr(type(module), "forward", None) is getattr(lucid.nn.Module, "forward", None) or (
+            why is not None and "NotImplementedError" in why
+        ):
             return self._finding(
                 symbol,
                 Status.NOT_APPLICABLE,
@@ -2474,9 +2396,7 @@ class ModuleAxis(Axis):
         # thirteen lazy classes look like they had lost their state, with
         # a message blaming a doubly-registered submodule.
         params = [
-            p
-            for p in module.parameters()
-            if not isinstance(p, lucid.nn.UninitializedParameter)
+            p for p in module.parameters() if not isinstance(p, lucid.nn.UninitializedParameter)
         ]
         # Non-persistent buffers are excluded from ``state_dict`` on
         # purpose — a positional-encoding table or a rotary cache is
@@ -2485,9 +2405,7 @@ class ModuleAxis(Axis):
         # same distinction.  Counting them made ``RotaryEmbedding`` and
         # ``SinusoidalEmbedding`` look like they had lost their state.
         non_persistent = getattr(module, "_non_persistent_buffers", set())
-        buffers = [
-            name for name, _ in module.named_buffers() if name not in non_persistent
-        ]
+        buffers = [name for name, _ in module.named_buffers() if name not in non_persistent]
         state = module.state_dict()
         if len(state) != len(params) + len(buffers):
             return self._finding(
@@ -2554,9 +2472,7 @@ class ModuleAxis(Axis):
                     Status.UNSUPPORTED,
                     f"backward: {type(exc).__name__}: {str(exc)[:60]}",
                 )
-        return self._finding(
-            symbol, Status.PASS, f"{len(params)} params, {len(state)} state keys"
-        )
+        return self._finding(symbol, Status.PASS, f"{len(params)} params, {len(state)} state keys")
 
 
 class OptimAxis(Axis):
@@ -2578,9 +2494,7 @@ class OptimAxis(Axis):
                 optimiser = cls([weight], **kwargs)
                 break
         if optimiser is None:
-            if getattr(cls, "__abstractmethods__", frozenset()) or cls.__name__ == (
-                "Optimizer"
-            ):
+            if getattr(cls, "__abstractmethods__", frozenset()) or cls.__name__ == ("Optimizer"):
                 # The base every optimizer derives from.  It has no
                 # update rule of its own, which is why it cannot be
                 # constructed — every concrete subclass is audited in
@@ -2806,9 +2720,7 @@ def _default_qconfig() -> Any:
     """
     import lucid.quantization as quantization
 
-    return quantization.QConfig(
-        quantization.MinMaxObserver, quantization.MinMaxObserver
-    )
+    return quantization.QConfig(quantization.MinMaxObserver, quantization.MinMaxObserver)
 
 
 def _default_qscheme() -> Any:
@@ -2862,9 +2774,7 @@ def _default_submodule(name: str, rank: int = 2) -> Any:
         # ``ParametrizationList(modules, original)`` (LCD-624): the chain
         # of steps the original passes through, as the installer builds it.
         "modules": lambda: [nn.Identity()],
-        "original": lambda: nn.Parameter(
-            _probe.as_f32(_probe.sample("moderate", (4, 4)))
-        ),
+        "original": lambda: nn.Parameter(_probe.as_f32(_probe.sample("moderate", (4, 4)))),
         "encoder_layer": lambda: nn.TransformerEncoderLayer(4, 2),
         "decoder_layer": lambda: nn.TransformerDecoderLayer(4, 2),
     }[name]()
@@ -3026,9 +2936,7 @@ def _construct_module(cls: Any, depth: int = 0, fill_optional: bool = False) -> 
         # ``FORWARDREF`` resolves the names it can and returns the rest as
         # forward references, which the annotation fallback below reads as
         # text in any case.
-        signature = inspect.signature(
-            cls, annotation_format=annotationlib.Format.FORWARDREF
-        )
+        signature = inspect.signature(cls, annotation_format=annotationlib.Format.FORWARDREF)
     except Exception:  # noqa: BLE001 - an unreadable signature is not a finding
         return None
 
@@ -3203,11 +3111,7 @@ def _module_input_shapes(module: Any) -> list[tuple[int, ...]]:
     # input can say what the input is.
     try:
         first = next(
-            (
-                p
-                for p in module.parameters()
-                if not isinstance(p, lucid.nn.UninitializedParameter)
-            ),
+            (p for p in module.parameters() if not isinstance(p, lucid.nn.UninitializedParameter)),
             None,
         )
     except Exception:  # noqa: BLE001
@@ -3283,9 +3187,7 @@ def _forward_parameters(module: Any) -> list[inspect.Parameter] | None:
     if forward is None:
         return None
     try:
-        signature = inspect.signature(
-            forward, annotation_format=annotationlib.Format.STRING
-        )
+        signature = inspect.signature(forward, annotation_format=annotationlib.Format.STRING)
     except Exception:  # noqa: BLE001 - an unreadable signature is not a finding
         return None
     return [
@@ -3422,12 +3324,8 @@ def _ctc_arguments(cast: Any) -> list[list[Any]]:
     it.  The same lesson as ``lu_solve``'s pivots.
     """
     time_steps, batch, classes, labels = 6, 2, 5, 2
-    log_probs = cast(
-        _probe.rng(_probe.SEED_X).standard_normal((time_steps, batch, classes)) - 2.0
-    )
-    targets = _probe.as_int(
-        _probe.rng(_probe.SEED_B).integers(1, classes, (batch, labels))
-    )
+    log_probs = cast(_probe.rng(_probe.SEED_X).standard_normal((time_steps, batch, classes)) - 2.0)
+    targets = _probe.as_int(_probe.rng(_probe.SEED_B).integers(1, classes, (batch, labels)))
     return [
         [
             log_probs,
@@ -3444,15 +3342,11 @@ def _ctc_arguments(cast: Any) -> list[list[Any]]:
 #: is what keeps this from becoming the hand-maintained table the rest of
 #: this module exists to avoid.
 _JOINT_FORWARDS: dict[frozenset[str], Any] = {
-    frozenset(
-        {"log_probs", "targets", "input_lengths", "target_lengths"}
-    ): _ctc_arguments,
+    frozenset({"log_probs", "targets", "input_lengths", "target_lengths"}): _ctc_arguments,
 }
 
 
-def _forward_from_signature(
-    module: Any, shape: tuple[int, ...], cast: Any
-) -> list[list[Any]]:
+def _forward_from_signature(module: Any, shape: tuple[int, ...], cast: Any) -> list[list[Any]]:
     """Argument lists derived from ``forward``'s own parameter list.
 
     The fixed ladder below tries one, two and three tensors of the probe
@@ -3476,9 +3370,7 @@ def _forward_from_signature(
         # three reported ``forward() takes 1 positional argument but 2
         # were given`` — an arity the ladder could not express rather
         # than a module that could not run.
-        return (
-            [[]] if not parameters else [[], [cast(_probe.sample("moderate", shape))]]
-        )
+        return [[]] if not parameters else [[], [cast(_probe.sample("moderate", shape))]]
 
     primary = cast(_probe.sample("moderate", shape))
     candidates: list[list[Any]] = [[primary]]
@@ -3498,9 +3390,7 @@ def _forward_from_signature(
         choices = _forward_companion(parameter.name, module, primary, shape, cast)
         if not choices:
             return []
-        candidates = [
-            [*prefix, choice] for prefix in candidates for choice in choices[:4]
-        ][:8]
+        candidates = [[*prefix, choice] for prefix in candidates for choice in choices[:4]][:8]
     if trailing:
         candidates = [[*args, *trailing] for args in candidates] + candidates
     return candidates

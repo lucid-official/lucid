@@ -108,12 +108,8 @@ class TestRotaryParity:
 class TestAxisSplitParity:
     """One third of a head per axis, rounded down to an even width."""
 
-    @pytest.mark.parametrize(
-        ("head_dim", "axis"), [(64, 20), (48, 16), (32, 10), (16, 4), (8, 2)]
-    )
-    def test_each_axis_takes_the_released_width(
-        self, ref: Any, head_dim: int, axis: int
-    ) -> None:
+    @pytest.mark.parametrize(("head_dim", "axis"), [(64, 20), (48, 16), (32, 10), (16, 4), (8, 2)])
+    def test_each_axis_takes_the_released_width(self, ref: Any, head_dim: int, axis: int) -> None:
         attention = _RoPEAttention(
             head_dim * 2,
             2,
@@ -240,9 +236,7 @@ class TestGatedFeedForwardParity:
                     module.bias.numpy()
                 )
 
-            gated = ref.nn.functional.silu(linear(layer.fc1, value)) * linear(
-                layer.fc2, value
-            )
+            gated = ref.nn.functional.silu(linear(layer.fc1, value)) * linear(layer.fc2, value)
             theirs = linear(layer.fc3, gated).numpy()
 
         assert np.abs(ours - theirs).max() < 1e-5

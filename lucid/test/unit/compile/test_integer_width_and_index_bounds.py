@@ -222,9 +222,7 @@ def _run(program: str) -> dict[str, dict[str, object]]:
     assert (
         done.returncode == 0
     ), f"the program died with rc {done.returncode}:\n{done.stderr[-3000:]}"
-    records = [
-        json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")
-    ]
+    records = [json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")]
     return {str(r["case"]): r for r in records}
 
 
@@ -240,9 +238,7 @@ class TestIntegerWidth:
         and arithmetic op, inside one fused step — the LCD-270 repro
         (``argmax(...) != -100``) included in each."""
         widths = ["int64", "int32", "bool"]
-        _assert_all_ok(
-            _run(_INTEGER_PROGRAM), [f"{a}-{b}" for a in widths for b in widths]
-        )
+        _assert_all_ok(_run(_INTEGER_PROGRAM), [f"{a}-{b}" for a in widths for b in widths])
 
 
 class TestIndexBounds:

@@ -11,9 +11,7 @@ from lucid.test.audit._result import Status
 from lucid.test._fixtures.devices import metal_available
 
 
-@pytest.mark.parametrize(
-    "dtype", [lucid.int64, lucid.float16, lucid.complex64, lucid.complex128]
-)
+@pytest.mark.parametrize("dtype", [lucid.int64, lucid.float16, lucid.complex64, lucid.complex128])
 def test_layout_probe_preserves_values_dtype_and_uses_an_offset_view(
     monkeypatch: pytest.MonkeyPatch,
     dtype: lucid.dtype,
@@ -34,9 +32,7 @@ def test_layout_probe_preserves_values_dtype_and_uses_an_offset_view(
 
     axis = ContiguityAxis()
     monkeypatch.setattr(axis, "_working_call", lambda *args: (call, "moderate", None))
-    finding = axis.run(
-        _surface.Symbol("lucid.identity", "lucid", "op", identity), Context()
-    )
+    finding = axis.run(_surface.Symbol("lucid.identity", "lucid", "op", identity), Context())
     assert finding.status == Status.PASS, finding.detail
     assert seen_views and all(offset > 0 for offset in seen_views)
 

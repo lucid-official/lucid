@@ -143,16 +143,12 @@ def test_general_hamming_reproduces_hamming_and_hann():
     """The two named windows are the same family at two alphas; if the
     generalisation disagrees with them, one of the three is wrong."""
     assert np.allclose(_v(W.general_hamming(32)), _v(W.hamming(32)), atol=1e-6)
-    assert np.allclose(
-        _v(W.general_hamming(32, alpha=0.54)), _v(W.hamming(32)), atol=1e-6
-    )
+    assert np.allclose(_v(W.general_hamming(32, alpha=0.54)), _v(W.hamming(32)), atol=1e-6)
     assert np.allclose(_v(W.general_hamming(32, alpha=0.5)), _v(W.hann(32)), atol=1e-6)
 
 
 def test_general_cosine_reproduces_blackman():
-    assert np.allclose(
-        _v(W.general_cosine(32, [0.42, 0.5, 0.08])), _v(W.blackman(32)), atol=1e-6
-    )
+    assert np.allclose(_v(W.general_cosine(32, [0.42, 0.5, 0.08])), _v(W.blackman(32)), atol=1e-6)
 
 
 def test_general_cosine_reproduces_nuttall():
@@ -288,8 +284,7 @@ def test_the_windows_are_ordered_by_how_hard_they_taper():
     """Nuttall tapers hardest, then Blackman, then Hann — the ordering
     the coefficient tables exist to produce."""
     energy = {
-        name: _v(getattr(W, name)(64)).sum()
-        for name in ("nuttall", "blackman", "hann", "hamming")
+        name: _v(getattr(W, name)(64)).sum() for name in ("nuttall", "blackman", "hann", "hamming")
     }
     assert energy["nuttall"] < energy["blackman"] < energy["hann"] < energy["hamming"]
 

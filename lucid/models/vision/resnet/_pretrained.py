@@ -27,12 +27,8 @@ _CFG_152 = ResNetConfig(block_type="bottleneck", layers=(3, 8, 36, 3))
 
 # Wide ResNet-50-2 / 101-2: 2× width multiplier on bottleneck inner channels.
 # Stage output channels remain the same as standard ResNet (256/512/1024/2048).
-_CFG_WIDE50 = ResNetConfig(
-    block_type="bottleneck", layers=(3, 4, 6, 3), bottleneck_width_mult=2
-)
-_CFG_WIDE101 = ResNetConfig(
-    block_type="bottleneck", layers=(3, 4, 23, 3), bottleneck_width_mult=2
-)
+_CFG_WIDE50 = ResNetConfig(block_type="bottleneck", layers=(3, 4, 6, 3), bottleneck_width_mult=2)
+_CFG_WIDE101 = ResNetConfig(block_type="bottleneck", layers=(3, 4, 23, 3), bottleneck_width_mult=2)
 
 # ResNet-200 / ResNet-269: deeper bottleneck variants
 _CFG_200 = ResNetConfig(block_type="bottleneck", layers=(3, 24, 36, 3))
@@ -777,9 +773,7 @@ def wide_resnet_50(pretrained: bool = False, **overrides: object) -> ResNet:
     (1, 2048, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "wide_resnet_50", alternative="wide_resnet_50_cls"
-        )
+        reject_unavailable_pretrained("wide_resnet_50", alternative="wide_resnet_50_cls")
     cfg = apply_overrides(_CFG_WIDE50, overrides)
     return ResNet(cfg)
 
@@ -900,9 +894,7 @@ def wide_resnet_101(pretrained: bool = False, **overrides: object) -> ResNet:
     (1, 2048, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "wide_resnet_101", alternative="wide_resnet_101_cls"
-        )
+        reject_unavailable_pretrained("wide_resnet_101", alternative="wide_resnet_101_cls")
     cfg = apply_overrides(_CFG_WIDE101, overrides)
     return ResNet(cfg)
 
@@ -1041,9 +1033,7 @@ def resnet_200(pretrained: bool = False, **overrides: object) -> ResNet:
     default_config=_CFG_200,
     params=64673832,
 )
-def resnet_200_cls(
-    pretrained: bool = False, **overrides: object
-) -> ResNetForImageClassification:
+def resnet_200_cls(pretrained: bool = False, **overrides: object) -> ResNetForImageClassification:
     r"""ResNet-200 image classifier (backbone + GAP + linear head).
 
     Builds a :class:`ResNetForImageClassification` with the deep
@@ -1147,9 +1137,7 @@ def resnet_269(pretrained: bool = False, **overrides: object) -> ResNet:
     default_config=_CFG_269,
     params=102073384,
 )
-def resnet_269_cls(
-    pretrained: bool = False, **overrides: object
-) -> ResNetForImageClassification:
+def resnet_269_cls(pretrained: bool = False, **overrides: object) -> ResNetForImageClassification:
     r"""ResNet-269 image classifier (backbone + GAP + linear head).
 
     Builds a :class:`ResNetForImageClassification` with the very deep

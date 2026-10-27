@@ -57,9 +57,7 @@ class _Bad:
     stricter: frozenset[str] = frozenset()
 
 
-def _same(
-    kind: type[Exception], ops: frozenset[str] | set[str]
-) -> dict[str, type[Exception]]:
+def _same(kind: type[Exception], ops: frozenset[str] | set[str]) -> dict[str, type[Exception]]:
     return dict.fromkeys(ops, kind)
 
 
@@ -76,14 +74,11 @@ def _names(message: str, op: str) -> bool:
 def _build(bad: _Bad, m: ModuleType, device: str) -> tuple[object, ...]:
     args = bad.make(m)
     return tuple(
-        a if i in bad.cpu_args or not hasattr(a, "to") else a.to(device)
-        for i, a in enumerate(args)
+        a if i in bad.cpu_args or not hasattr(a, "to") else a.to(device) for i, a in enumerate(args)
     )
 
 
-def _cells(
-    table: Mapping[str, _Bad], spellings: Mapping[str, _Call], *lead: str
-) -> list[object]:
+def _cells(table: Mapping[str, _Bad], spellings: Mapping[str, _Call], *lead: str) -> list[object]:
     """One cell per spelling, case and device; ``lead`` goes first in each."""
     cells: list[object] = []
     for case, bad in table.items():
@@ -168,12 +163,8 @@ _BAD: dict[str, _Bad] = {
         lambda m: (m.zeros(5, 3), 0, m.zeros(0, 1, dtype=m.int64), m.ones(0, 3)),
         _RANK,
     ),
-    "float-index": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor([0.0, 1.0]), m.ones(2, 3)), _DTYPE
-    ),
-    "bool-index": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor([True, False]), m.ones(2, 3)), _DTYPE
-    ),
+    "float-index": _Bad(lambda m: (m.zeros(5, 3), 0, m.tensor([0.0, 1.0]), m.ones(2, 3)), _DTYPE),
+    "bool-index": _Bad(lambda m: (m.zeros(5, 3), 0, m.tensor([True, False]), m.ones(2, 3)), _DTYPE),
     "dim-past-the-last": _Bad(
         lambda m: (m.zeros(5, 3), 2, m.tensor([0, 2]), m.ones(2, 3)), _same(_I, _ALL)
     ),
@@ -294,9 +285,7 @@ def test_the_recorded_family_classes_are_the_reference_s(
 
 
 @pytest.mark.parametrize("name", ["index_copy_", "index_add_", "index_fill_"])
-def test_a_refused_in_place_write_leaves_its_input_alone(
-    device: str, name: str
-) -> None:
+def test_a_refused_in_place_write_leaves_its_input_alone(device: str, name: str) -> None:
     x = lucid.zeros(5, 3, device=device)
     index = lucid.tensor([[0, 1], [2, 3]], device=device)
     args = (2.0,) if name == "index_fill_" else (lucid.ones(4, 3, device=device),)
@@ -425,18 +414,12 @@ def _valid_cells(with_device: bool) -> list[object]:
                 cells.append(pytest.param(spelling, case, id=f"{spelling}-{case}"))
                 continue
             for device in _DEVICES:
-                cells.append(
-                    pytest.param(
-                        spelling, case, device, id=f"{spelling}-{case}-{device}"
-                    )
-                )
+                cells.append(pytest.param(spelling, case, device, id=f"{spelling}-{case}-{device}"))
     return cells
 
 
 @pytest.mark.parametrize(("spelling", "case", "device"), _valid_cells(with_device=True))
-def test_a_valid_index_answers_as_the_reference(
-    spelling: str, case: str, device: str
-) -> None:
+def test_a_valid_index_answers_as_the_reference(spelling: str, case: str, device: str) -> None:
     valid = _VALID[case]
     shape, values = valid.want[_op(spelling)]
     args = tuple(a.to(device) if hasattr(a, "to") else a for a in valid.make(lucid))
@@ -480,18 +463,12 @@ _PUTS: dict[str, _Call] = {
 _PUT = frozenset({"put"})
 
 _PUT_BAD: dict[str, _Bad] = {
-    "float-index": _Bad(
-        lambda m: (m.zeros(4, 3), 0, m.tensor([0.0, 1.0]), m.ones(2)), {"put": _R}
-    ),
+    "float-index": _Bad(lambda m: (m.zeros(4, 3), 0, m.tensor([0.0, 1.0]), m.ones(2)), {"put": _R}),
     "bool-index": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([True, False]), m.ones(2)), {"put": _R}
     ),
-    "source-size": _Bad(
-        lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(3)), {"put": _I}
-    ),
-    "empty-input": _Bad(
-        lambda m: (m.zeros(0), 0, m.tensor([0]), m.ones(1)), {"put": _I}
-    ),
+    "source-size": _Bad(lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(3)), {"put": _I}),
+    "empty-input": _Bad(lambda m: (m.zeros(0), 0, m.tensor([0]), m.ones(1)), {"put": _I}),
     "index-value-past-the-end": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([12]), m.ones(1)),
         {"put": _I},
@@ -518,12 +495,8 @@ _SCATTERS: dict[str, _Call] = {
     "scatter_reduce-amax-noself": lambda m, x, d, i, s: m.scatter_reduce(
         x, d, i, s, "amax", include_self=False
     ),
-    "Tensor.scatter_reduce-prod": lambda m, x, d, i, s: x.scatter_reduce(
-        d, i, s, "prod"
-    ),
-    "Tensor.scatter_reduce_-amin": lambda m, x, d, i, s: x.clone().scatter_reduce_(
-        d, i, s, "amin"
-    ),
+    "Tensor.scatter_reduce-prod": lambda m, x, d, i, s: x.scatter_reduce(d, i, s, "prod"),
+    "Tensor.scatter_reduce_-amin": lambda m, x, d, i, s: x.clone().scatter_reduce_(d, i, s, "amin"),
 }
 
 _SCATTER_BAD: dict[str, _Bad] = {
@@ -629,9 +602,7 @@ def test_the_recorded_sibling_classes_are_the_reference_s(
 
 # ── empty-index scatter family (LCD-609) ────────────────────────────────────
 
-_EMPTY_SCATTER_OPS: dict[
-    str, Callable[[ModuleType, object, int, object, object], object]
-] = {
+_EMPTY_SCATTER_OPS: dict[str, Callable[[ModuleType, object, int, object, object], object]] = {
     "scatter": lambda m, b, d, i, s: m.scatter(b, d, i, s),
     "scatter_add": lambda m, b, d, i, s: m.scatter_add(b, d, i, s),
     "scatter_reduce-sum": lambda m, b, d, i, s: m.scatter_reduce(b, d, i, s, "sum"),

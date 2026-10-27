@@ -27,9 +27,7 @@ from lucid.test._fixtures.devices import metal_available
 
 
 def _out(arr: np.ndarray, device: str = "cpu") -> np.ndarray:
-    return np.asarray(
-        F.normalize(lucid.tensor(arr, device=device), dim=-1).numpy()
-    ).ravel()
+    return np.asarray(F.normalize(lucid.tensor(arr, device=device), dim=-1).numpy()).ravel()
 
 
 @pytest.mark.parametrize(

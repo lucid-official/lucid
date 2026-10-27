@@ -365,9 +365,7 @@ def test_a_family_representative_exports_and_matches(factory, shape, tmp_path):
         exported.close()
 
 
-@pytest.mark.parametrize(
-    ("factory", "shape"), TOKEN_FAMILIES, ids=[f for f, _s in TOKEN_FAMILIES]
-)
+@pytest.mark.parametrize(("factory", "shape"), TOKEN_FAMILIES, ids=[f for f, _s in TOKEN_FAMILIES])
 def test_a_token_model_exports_and_matches(factory, shape, tmp_path):
     """Indices in, not pixels — a different feed dtype end to end."""
     lucid.manual_seed(0)
@@ -413,9 +411,7 @@ def _without_zero_initialised_parameters(factory: str) -> object:
     return perturbed
 
 
-@pytest.mark.parametrize(
-    ("factory", "shape"), MULTI_OUTPUT, ids=[f for f, _s in MULTI_OUTPUT]
-)
+@pytest.mark.parametrize(("factory", "shape"), MULTI_OUTPUT, ids=[f for f, _s in MULTI_OUTPUT])
 def test_a_multi_output_family_exports_and_matches(factory, shape, tmp_path):
     """One tensor in, several out — compared through ``verify``.
 
@@ -435,9 +431,7 @@ def test_a_multi_output_family_exports_and_matches(factory, shape, tmp_path):
         exported.close()
 
 
-@pytest.mark.parametrize(
-    ("factory", "make_inputs"), MULTI_INPUT, ids=[f for f, _m in MULTI_INPUT]
-)
+@pytest.mark.parametrize(("factory", "make_inputs"), MULTI_INPUT, ids=[f for f, _m in MULTI_INPUT])
 def test_a_multi_input_family_exports_and_matches(factory, make_inputs, tmp_path):
     """A network of a sample and a time, or of two token streams.
 
@@ -456,12 +450,8 @@ def test_a_multi_input_family_exports_and_matches(factory, make_inputs, tmp_path
         exported.close()
 
 
-@pytest.mark.parametrize(
-    ("factory", "make_inputs"), SAMPLING, ids=[f for f, _m in SAMPLING]
-)
-def test_a_sampling_family_exports_with_its_draws_lifted(
-    factory, make_inputs, tmp_path
-):
+@pytest.mark.parametrize(("factory", "make_inputs"), SAMPLING, ids=[f for f, _m in SAMPLING])
+def test_a_sampling_family_exports_with_its_draws_lifted(factory, make_inputs, tmp_path):
     """A draw is not part of the network, so it can be an input."""
     lucid.manual_seed(0)
     model = _without_zero_initialised_parameters(factory)
@@ -513,6 +503,5 @@ def test_every_family_is_either_covered_or_named():
     families = {re.split(r"[_\d]", n)[0] for n in M.list_models()}
     missing = families - covered - NOT_SINGLE_IMAGE
     assert not missing, (
-        f"architecture families with no export coverage and no reason given: "
-        f"{sorted(missing)}"
+        f"architecture families with no export coverage and no reason given: " f"{sorted(missing)}"
     )

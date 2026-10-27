@@ -56,9 +56,7 @@ def _second(x, g):
 def test_first_derivative_matches_the_reference(name, fn, ref_name, ref) -> None:
     _, _, got = _first(fn)
     r = ref.from_numpy(X.copy()).requires_grad_(True)
-    (rg,) = ref.autograd.grad(
-        getattr(ref.nn.functional, ref_name)(r).sum(), [r], create_graph=True
-    )
+    (rg,) = ref.autograd.grad(getattr(ref.nn.functional, ref_name)(r).sum(), [r], create_graph=True)
     assert np.allclose(got, np.asarray(rg.tolist()), atol=1e-6)
 
 
@@ -98,9 +96,7 @@ B = np.array([-1.0, 0.5, -0.5, 2.5, 1.0])
 def test_comparison_first_derivative(name, lf, rf, wrt, ref) -> None:
     a = lucid.tensor(A.copy(), requires_grad=True)
     b = lucid.tensor(B.copy(), requires_grad=True)
-    (g,) = lucid.autograd.grad(
-        lf(a, b).sum(), [a if wrt == "a" else b], create_graph=True
-    )
+    (g,) = lucid.autograd.grad(lf(a, b).sum(), [a if wrt == "a" else b], create_graph=True)
     ra = ref.from_numpy(A.copy()).requires_grad_(True)
     rb = ref.from_numpy(B.copy()).requires_grad_(True)
     (rg,) = ref.autograd.grad(
@@ -128,9 +124,7 @@ def test_gather_is_differentiable_twice(ref) -> None:
 
     x = lucid.tensor(values.copy(), requires_grad=True)
     idx = lucid.tensor(indices, dtype=lucid.int32)
-    (g,) = lucid.autograd.grad(
-        (lucid.gather(x, 1, idx) ** 2).sum(), [x], create_graph=True
-    )
+    (g,) = lucid.autograd.grad((lucid.gather(x, 1, idx) ** 2).sum(), [x], create_graph=True)
 
     r = ref.from_numpy(values.copy()).requires_grad_(True)
     (rg,) = ref.autograd.grad(

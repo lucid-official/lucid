@@ -106,9 +106,9 @@ def test_unary_shape_preserved(
     device: str,
 ) -> None:
     np.random.seed(0)
-    x = np.random.uniform(
-        rng[0] if rng else -1.0, rng[1] if rng else 1.0, size=(2, 3)
-    ).astype(np.float32)
+    x = np.random.uniform(rng[0] if rng else -1.0, rng[1] if rng else 1.0, size=(2, 3)).astype(
+        np.float32
+    )
     t = lucid.tensor(x.copy(), device=device)
     out = lucid_fn(t)
     assert out.shape == t.shape
@@ -120,30 +120,22 @@ def test_unary_shape_preserved(
 @pytest.mark.stability
 class TestStability:
     def test_isfinite(self, device: str) -> None:
-        t = lucid.tensor(
-            [1.0, float("inf"), float("-inf"), float("nan")], device=device
-        )
+        t = lucid.tensor([1.0, float("inf"), float("-inf"), float("nan")], device=device)
         out = lucid.isfinite(t).numpy()
         np.testing.assert_array_equal(out, [True, False, False, False])
 
     def test_isinf(self, device: str) -> None:
-        t = lucid.tensor(
-            [1.0, float("inf"), float("-inf"), float("nan")], device=device
-        )
+        t = lucid.tensor([1.0, float("inf"), float("-inf"), float("nan")], device=device)
         out = lucid.isinf(t).numpy()
         np.testing.assert_array_equal(out, [False, True, True, False])
 
     def test_isnan(self, device: str) -> None:
-        t = lucid.tensor(
-            [1.0, float("inf"), float("-inf"), float("nan")], device=device
-        )
+        t = lucid.tensor([1.0, float("inf"), float("-inf"), float("nan")], device=device)
         out = lucid.isnan(t).numpy()
         np.testing.assert_array_equal(out, [False, False, False, True])
 
     def test_nan_to_num_default(self, device: str) -> None:
-        t = lucid.tensor(
-            [1.0, float("nan"), float("inf"), float("-inf")], device=device
-        )
+        t = lucid.tensor([1.0, float("nan"), float("inf"), float("-inf")], device=device)
         out = lucid.nan_to_num(t).numpy()
         # ``nan`` → 0.0 by default; ``inf`` and ``-inf`` clamp to the
         # dtype's min/max.

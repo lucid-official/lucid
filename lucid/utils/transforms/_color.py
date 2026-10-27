@@ -225,9 +225,7 @@ class RandomGamma(PhotometricTransform[ScalarParams]):
     (3, 32, 32)
     """
 
-    def __init__(
-        self, gamma_limit: tuple[int, int] = (80, 120), p: float = 0.5
-    ) -> None:
+    def __init__(self, gamma_limit: tuple[int, int] = (80, 120), p: float = 0.5) -> None:
         super().__init__(p=p)
         self.gamma_limit = gamma_limit
 
@@ -247,9 +245,7 @@ class RandomGamma(PhotometricTransform[ScalarParams]):
             from ``gamma_limit`` and divided by 100 to convert the
             integer-percent input to a real exponent.
         """
-        return ScalarParams(
-            value=_random.uniform(self.gamma_limit[0], self.gamma_limit[1]) / 100.0
-        )
+        return ScalarParams(value=_random.uniform(self.gamma_limit[0], self.gamma_limit[1]) / 100.0)
 
     @override
     def _apply_image(self, img: Tensor, params: ScalarParams) -> Tensor:
@@ -428,9 +424,7 @@ class RGBShift(PhotometricTransform[TripletParams]):
     @override
     def _apply_image(self, img: Tensor, params: TripletParams) -> Tensor:
         self._require_channels(img, 3)
-        shift = lucid.tensor(
-            [params.a, params.b, params.c], dtype=img.dtype, device=img.device
-        )
+        shift = lucid.tensor([params.a, params.b, params.c], dtype=img.dtype, device=img.device)
         shift = shift.reshape(1, 3, 1, 1) if img.ndim == 4 else shift.reshape(3, 1, 1)
         return lucid.clip(img + shift, 0.0, 1.0)
 
@@ -587,9 +581,7 @@ class ChannelDropout(PhotometricTransform[ChannelDropParams]):
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"ChannelDropout(channel_drop_range={self.channel_drop_range}, p={self.p})"
-        )
+        return f"ChannelDropout(channel_drop_range={self.channel_drop_range}, p={self.p})"
 
 
 # ── histogram-based ─────────────────────────────────────────────────
@@ -722,9 +714,7 @@ class Solarize(PhotometricTransform[ScalarParams]):
     (3, 32, 32)
     """
 
-    def __init__(
-        self, threshold: float | tuple[float, float] = 128, p: float = 0.5
-    ) -> None:
+    def __init__(self, threshold: float | tuple[float, float] = 128, p: float = 0.5) -> None:
         super().__init__(p=p)
         self.threshold = (
             (threshold, threshold) if isinstance(threshold, (int, float)) else threshold
@@ -1227,9 +1217,7 @@ class RandomBrightness(PhotometricTransform[ScalarParams]):
     (3, 32, 32)
     """
 
-    def __init__(
-        self, limit: float | tuple[float, float] = 0.2, p: float = 0.5
-    ) -> None:
+    def __init__(self, limit: float | tuple[float, float] = 0.2, p: float = 0.5) -> None:
         super().__init__(p=p)
         self.limit = _rng(limit)
 
@@ -1285,9 +1273,7 @@ class RandomContrast(PhotometricTransform[ScalarParams]):
     (3, 32, 32)
     """
 
-    def __init__(
-        self, limit: float | tuple[float, float] = 0.2, p: float = 0.5
-    ) -> None:
+    def __init__(self, limit: float | tuple[float, float] = 0.2, p: float = 0.5) -> None:
         super().__init__(p=p)
         self.limit = _rng(limit)
 
@@ -1411,9 +1397,7 @@ class UnsharpMask(PhotometricTransform[TripletParams]):
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"UnsharpMask(blur_limit={self.blur_limit}, alpha={self.alpha}, p={self.p})"
-        )
+        return f"UnsharpMask(blur_limit={self.blur_limit}, alpha={self.alpha}, p={self.p})"
 
 
 class RingingOvershoot(PhotometricTransform[Empty]):
@@ -1545,9 +1529,7 @@ class FancyPCA(PhotometricTransform[Empty]):
         flat = img.reshape(c, -1)  # (3, N)
         mean = lucid.mean(flat, dim=[1], keepdim=True)
         centered = flat - mean
-        cov = lucid.matmul(centered, lucid.swapaxes(centered, 0, 1)) / float(
-            flat.shape[1]
-        )
+        cov = lucid.matmul(centered, lucid.swapaxes(centered, 0, 1)) / float(flat.shape[1])
         evals, evecs = lucid.linalg.eigh(cov)
         alphas = [self.alpha * _random.uniform(-1.0, 1.0) for _ in range(c)]
         scaled = lucid.tensor(
@@ -1635,9 +1617,7 @@ class PixelDropout(PhotometricTransform[PixelMaskParams]):
         """
         c, h, w = int(img.shape[-3]), *F._spatial_hw(img)
         shape = (c, h, w) if self.per_channel else (1, h, w)
-        keep = (lucid.rand(*shape, device=img.device) >= self.dropout_prob).to(
-            img.dtype
-        )
+        keep = (lucid.rand(*shape, device=img.device) >= self.dropout_prob).to(img.dtype)
         return PixelMaskParams(mask=keep)
 
     @override
@@ -1732,15 +1712,11 @@ class XYMasking(PhotometricTransform[BandParams]):
         """
         h, w = F._spatial_hw(img)
         cols = tuple(
-            (lambda s: (s, min(s + self.mask_x_length, w)))(
-                _random.randint(0, max(w - 1, 1))
-            )
+            (lambda s: (s, min(s + self.mask_x_length, w)))(_random.randint(0, max(w - 1, 1)))
             for _ in range(self.num_masks_x)
         )
         rows = tuple(
-            (lambda s: (s, min(s + self.mask_y_length, h)))(
-                _random.randint(0, max(h - 1, 1))
-            )
+            (lambda s: (s, min(s + self.mask_y_length, h)))(_random.randint(0, max(h - 1, 1)))
             for _ in range(self.num_masks_y)
         )
         return BandParams(rows=rows, cols=cols)

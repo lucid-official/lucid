@@ -43,9 +43,7 @@ def _float64_sinusoid(steps: list[int], in_dim: int, flip: bool) -> np.ndarray:
 
 
 @pytest.mark.parametrize(("device", "dtype"), _CASES)
-def test_the_embedding_and_the_output_take_the_layer_dtype(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_the_embedding_and_the_output_take_the_layer_dtype(device: str, dtype: lucid.dtype) -> None:
     layer = _layer(device, dtype)
     steps = lucid.tensor(_STEPS, device=device)
     assert layer._sinusoidal(steps).dtype == dtype

@@ -411,8 +411,7 @@ def _publish_signatures() -> None:
         sig = inspect.signature(fn)
         fn.__dict__["__signature__"] = sig.replace(
             parameters=[
-                p.replace(annotation=_tensor_typed(p.annotation))
-                for p in sig.parameters.values()
+                p.replace(annotation=_tensor_typed(p.annotation)) for p in sig.parameters.values()
             ],
             return_annotation=_tensor_typed(sig.return_annotation),
         )

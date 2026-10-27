@@ -67,9 +67,7 @@ class _WrongSecondGradient(lucid.autograd.Function):
 
 def test_a_wrong_gradient_of_a_constant_is_not_checked():
     y = lucid.tensor([1.5, -2.0, 0.25], dtype=lucid.float64)
-    assert gradcheck(
-        lambda x, y: _WrongSecondGradient.apply(x, y).sum(), [_x(lucid), y]
-    )
+    assert gradcheck(lambda x, y: _WrongSecondGradient.apply(x, y).sum(), [_x(lucid), y])
     with pytest.raises(AssertionError, match="input 1"):
         gradcheck(
             lambda x, y: _WrongSecondGradient.apply(x, y).sum(),
@@ -79,15 +77,11 @@ def test_a_wrong_gradient_of_a_constant_is_not_checked():
 
 @pytest.mark.parametrize("check", [gradcheck, gradgradcheck], ids=lambda f: f.__name__)
 def test_a_call_where_nothing_requires_grad_is_refused(check):
-    with pytest.raises(
-        ValueError, match="at least one input tensor to require gradient"
-    ):
+    with pytest.raises(ValueError, match="at least one input tensor to require gradient"):
         check(lambda x: (x * x).sum(), [_x(lucid).detach()])
 
 
 @pytest.mark.parity
 def test_the_reference_refuses_it_too(ref):
-    with pytest.raises(
-        ValueError, match="at least one input tensor to require gradient"
-    ):
+    with pytest.raises(ValueError, match="at least one input tensor to require gradient"):
         ref.autograd.gradcheck(lambda x: (x * x).sum(), (_x(ref).detach(),))

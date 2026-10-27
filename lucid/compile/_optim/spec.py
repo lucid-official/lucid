@@ -14,7 +14,5 @@ def _hp(g: Mapping[str, object], key: str, default: float) -> float:
     if v is None:
         return default
     if not isinstance(v, (int, float, bool)):
-        raise TypeError(
-            f"hyperparameter {key!r} must be numeric, got {type(v).__name__}"
-        )
+        raise TypeError(f"hyperparameter {key!r} must be numeric, got {type(v).__name__}")
     return float(v)

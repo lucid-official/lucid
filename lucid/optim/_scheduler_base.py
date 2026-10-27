@@ -78,9 +78,7 @@ class _CheckpointState:
             Attribute snapshot; feed it back to :meth:`load_state_dict`.
         """
         return {
-            k: v
-            for k, v in self.__dict__.items()
-            if k != "optimizer" and not _holds_a_callable(v)
+            k: v for k, v in self.__dict__.items() if k != "optimizer" and not _holds_a_callable(v)
         }
 
     def load_state_dict(self, state_dict: dict[str, object]) -> None:
@@ -182,9 +180,7 @@ class _LRScheduler(_CheckpointState):
     #: because the reference's does not.
     _checks_step_order: ClassVar[bool] = True
 
-    def __init__(
-        self, optimizer: Optimizer, last_epoch: int = -1, verbose: bool = False
-    ) -> None:
+    def __init__(self, optimizer: Optimizer, last_epoch: int = -1, verbose: bool = False) -> None:
         self.optimizer = optimizer
         _watch_steps(optimizer)
         # After N step() calls, last_epoch == N (the constructor's initial
@@ -363,9 +359,7 @@ class _LRScheduler(_CheckpointState):
         """
         if is_verbose:
             for i, lr in enumerate(lrs):
-                print(
-                    f"Epoch {epoch}: adjusting learning rate of group {i} to {lr:.4e}."
-                )
+                print(f"Epoch {epoch}: adjusting learning rate of group {i} to {lr:.4e}.")
 
 
 class _CompositeSchedulerMixin:
@@ -436,9 +430,7 @@ def _check_schedulers(
                 _CompositeSchedulerMixin: "SequentialLR or ChainedScheduler",
             }
             names = " or ".join(kinds.get(t, t.__name__) for t in accepted)
-            raise TypeError(
-                f"{owner} at index {i}: expected {names}, got {type(sched).__name__}"
-            )
+            raise TypeError(f"{owner} at index {i}: expected {names}, got {type(sched).__name__}")
     shared = optimizer or schedulers[0].optimizer
     for i, sched in enumerate(schedulers):
         if sched.optimizer is not shared:
@@ -449,9 +441,7 @@ def _check_schedulers(
     return shared
 
 
-def _require_group_keys(
-    owner: str, optimizer: Optimizer, keys: tuple[str, ...]
-) -> None:
+def _require_group_keys(owner: str, optimizer: Optimizer, keys: tuple[str, ...]) -> None:
     """Refuse a step whose schedule reads ``keys`` off a group that lacks them.
 
     The schedule sets them on the groups it was built over, so a group added
@@ -471,9 +461,7 @@ def _require_group_keys(
 def _reset_to_base(optimizer: Optimizer) -> None:
     """Put each group back at the rate it had before any scheduler touched it."""
     for group in optimizer.param_groups:
-        group["lr"] = _group_float(
-            group, "initial_lr" if "initial_lr" in group else "lr"
-        )
+        group["lr"] = _group_float(group, "initial_lr" if "initial_lr" in group else "lr")
 
 
 def _scheduler_tree(

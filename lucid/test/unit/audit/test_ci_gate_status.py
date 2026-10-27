@@ -63,22 +63,13 @@ def test_required_ci_stage_preserves_failure(
 
 def _function(script: str, name: str) -> str:
     """The text of shell function ``name`` in ``script``, header to brace."""
-    return (
-        f"{name}() {{"
-        + script.split(f"\n{name}() {{", 1)[1].split("\n}", 1)[0]
-        + "\n}\n"
-    )
+    return f"{name}() {{" + script.split(f"\n{name}() {{", 1)[1].split("\n}", 1)[0] + "\n}\n"
 
 
-def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_error() -> (
-    None
-):
+def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_error() -> None:
     root = Path(__file__).resolve().parents[4]
     ci_full = (root / "scripts/ci_full.sh").read_text()
-    assert (
-        "\nFAST_TIER_FAILURES=(--maxfail=50 --continue-on-collection-errors)\n"
-        in ci_full
-    )
+    assert "\nFAST_TIER_FAILURES=(--maxfail=50 --continue-on-collection-errors)\n" in ci_full
     for part in ("part_core", "part_coreml"):
         body = _function(ci_full, part)
         commands = [c for c in _logical_lines(body) if "-m pytest" in c]
@@ -88,9 +79,7 @@ def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_erro
 
     ci_yml = (root / ".github/workflows/ci.yml").read_text()
     cov_lines = [
-        line.strip()
-        for line in ci_yml.splitlines()
-        if "coverage run --parallel-mode" in line
+        line.strip() for line in ci_yml.splitlines() if "coverage run --parallel-mode" in line
     ]
     assert len(cov_lines) == 4
     for line in cov_lines:
@@ -118,10 +107,7 @@ def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(
         if line.startswith(("COREML_TESTS=", "EXPORT_SMOKE=", "FAST_TIER_FAILURES="))
     )
     script = (
-        "set -euo pipefail\n"
-        + definitions
-        + _function(ci_full, "part_coreml")
-        + "part_coreml\n"
+        "set -euo pipefail\n" + definitions + _function(ci_full, "part_coreml") + "part_coreml\n"
     )
     result = subprocess.run(
         ["bash", "-c", script],
@@ -133,9 +119,7 @@ def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(
     assert result.returncode == 1, result.stdout + result.stderr
     ran = calls.read_text().splitlines()
     assert len(ran) == 2, ran
-    assert ran[1].startswith(
-        "-m pytest lucid/test/unit/coreml/test_family_export_smoke.py"
-    ), ran
+    assert ran[1].startswith("-m pytest lucid/test/unit/coreml/test_family_export_smoke.py"), ran
 
 
 #: A pytest flag that ends the run at its first failure.
@@ -145,8 +129,7 @@ _STOP_AT_FIRST = re.compile(r"-[qvsl]*x[qvsl]*|--exitfirst|--maxfail=1")
 def _stops_at_first(args: list[str]) -> bool:
     """Whether pytest ``args`` end the run at its first failure."""
     return any(
-        _STOP_AT_FIRST.fullmatch(arg)
-        or (arg == "--maxfail" and args[i + 1 : i + 2] == ["1"])
+        _STOP_AT_FIRST.fullmatch(arg) or (arg == "--maxfail" and args[i + 1 : i + 2] == ["1"])
         for i, arg in enumerate(args)
     )
 
@@ -245,9 +228,7 @@ def test_part_checks_stage_helper_continues_and_exits_one_at_end(
     part_checks = ci_full.split("part_checks() {", 1)[1].split("\npart_zoo()", 1)[0]
     stage_def = part_checks.split("# ── 3. Parity tier", 1)[0]
     summary_tail = '    if [ "${#failed_stages[@]}" -ne 0 ]; then' + (
-        part_checks.split('    if [ "${#failed_stages[@]}" -ne 0 ]; then', 1)[1].rsplit(
-            "\n}", 1
-        )[0]
+        part_checks.split('    if [ "${#failed_stages[@]}" -ne 0 ]; then', 1)[1].rsplit("\n}", 1)[0]
     )
     summary_file = tmp_path / "step_summary.md"
     script = (
@@ -282,6 +263,4 @@ def test_pyproject_test_extra_includes_quality_gate_collectors() -> None:
     quality_deps = data["dependency-groups"]["quality"]
     for pkg in ("lizard", "vulture"):
         pinned = next(d for d in quality_deps if d.startswith(f"{pkg}=="))
-        assert (
-            pinned in test_deps
-        ), f"{pinned!r} missing from [project.optional-dependencies].test"
+        assert pinned in test_deps, f"{pinned!r} missing from [project.optional-dependencies].test"

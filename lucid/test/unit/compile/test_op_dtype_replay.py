@@ -49,16 +49,12 @@ pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 def test_compiled_matches_eager(name: str, dtype: str) -> None:
     outcome = run(CASE_BY_NAME[name], dtype)
     if outcome.status == "rejected":
-        pytest.fail(
-            f"eager rejects {dtype}, not listed in EAGER_REJECTS: {outcome.detail}"
-        )
+        pytest.fail(f"eager rejects {dtype}, not listed in EAGER_REJECTS: {outcome.detail}")
     listed = (name, dtype) in EXPECTED_EAGER
     if outcome.status == "eager":
         if listed:
             return
-        pytest.fail(
-            f"fell back to eager, not listed in EXPECTED_EAGER: {outcome.detail}"
-        )
+        pytest.fail(f"fell back to eager, not listed in EXPECTED_EAGER: {outcome.detail}")
     # A listed case that compiles now is a stale entry — ``meshgrid`` and
     # training-mode dropout sat here long after they compiled.
     assert not listed, "compiles now; remove it from EXPECTED_EAGER"

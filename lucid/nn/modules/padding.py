@@ -252,9 +252,7 @@ class ConstantPad3d(_ConstantPadNd):
 
     _dims = 6
 
-    def __init__(
-        self, padding: int | tuple[int, int, int, int, int, int], value: float
-    ) -> None:
+    def __init__(self, padding: int | tuple[int, int, int, int, int, int], value: float) -> None:
         """Initialise the ConstantPad3d module. See the class docstring for parameter semantics."""
         super().__init__(padding, value)
 
@@ -491,9 +489,7 @@ class ReflectionPad1d(Module):
     def __init__(self, padding: _Size2d) -> None:
         """Initialise the ReflectionPad1d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.padding = (
-            (padding, padding) if isinstance(padding, int) else tuple(padding)
-        )
+        self.padding = (padding, padding) if isinstance(padding, int) else tuple(padding)
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -669,9 +665,7 @@ class ReplicationPad1d(Module):
     def __init__(self, padding: _Size2d) -> None:
         """Initialise the ReplicationPad1d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.padding = (
-            (padding, padding) if isinstance(padding, int) else tuple(padding)
-        )
+        self.padding = (padding, padding) if isinstance(padding, int) else tuple(padding)
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -997,9 +991,7 @@ class CircularPad1d(Module):
     def __init__(self, padding: _Size2d) -> None:
         """Initialise the CircularPad1d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.padding = (
-            (padding, padding) if isinstance(padding, int) else tuple(padding)
-        )
+        self.padding = (padding, padding) if isinstance(padding, int) else tuple(padding)
 
     @override
     def forward(self, input: Tensor) -> Tensor:

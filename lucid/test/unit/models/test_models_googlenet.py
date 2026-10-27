@@ -216,9 +216,7 @@ class TestGoogLeNetWeightsEnums(unittest.TestCase):
         from lucid.models.weights import GoogLeNetWeights
 
         meta = GoogLeNetWeights.IMAGENET1K_V1.meta
-        self.assertEqual(
-            meta["source"], "reference_vision/GoogLeNet_Weights.IMAGENET1K_V1"
-        )
+        self.assertEqual(meta["source"], "reference_vision/GoogLeNet_Weights.IMAGENET1K_V1")
         self.assertEqual(meta["num_params"], 13_004_888)
         self.assertEqual(meta["license"], "bsd-3-clause")
         self.assertAlmostEqual(meta["metrics"]["ImageNet-1k"]["acc@1"], 69.778)

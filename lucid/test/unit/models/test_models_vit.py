@@ -204,9 +204,7 @@ class TestViTResolutionBoundary(unittest.TestCase):
         model = models.create_model("vit_base_16_cls", **self._SMALL).eval()
         for side in (32, 36, 39):
             with self.subTest(side=side), lucid.no_grad():
-                self.assertEqual(
-                    model(lucid.randn(1, 3, side, side)).logits.shape, (1, 1000)
-                )
+                self.assertEqual(model(lucid.randn(1, 3, side, side)).logits.shape, (1, 1000))
 
 
 class TestViTRegistry(unittest.TestCase):

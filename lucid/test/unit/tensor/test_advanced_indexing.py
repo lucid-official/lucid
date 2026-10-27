@@ -359,9 +359,7 @@ SET_CASES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "assign,expect", [c[1:] for c in SET_CASES], ids=[c[0] for c in SET_CASES]
-)
+@pytest.mark.parametrize("assign,expect", [c[1:] for c in SET_CASES], ids=[c[0] for c in SET_CASES])
 def test_assignment_writes_where_reading_would_have_read(assign, expect):
     """Assignment used to re-derive the target set instead of reusing the
     reading path, and got it wrong in two ways that wrote a *superset*:
@@ -404,9 +402,7 @@ def test_a_reversed_slice_assigns_in_reverse():
             lambda n: n.__setitem__((Ellipsis, 0), 9.0),
         ),
         (
-            lambda t: t.__setitem__(
-                (slice(None), _i(I1), slice(None), _i([1, 2, 3])), 9.0
-            ),
+            lambda t: t.__setitem__((slice(None), _i(I1), slice(None), _i([1, 2, 3])), 9.0),
             lambda n: n.__setitem__((slice(None), I1, slice(None), [1, 2, 3]), 9.0),
         ),
     ],

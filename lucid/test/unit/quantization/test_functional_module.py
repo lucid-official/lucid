@@ -31,9 +31,7 @@ class TestFloatFunctional:
         assert np.allclose(ff.add(a, b).numpy(), (a + b).numpy())
         assert np.allclose(ff.mul(a, b).numpy(), (a * b).numpy())
         assert np.allclose(ff.add_relu(a, b).numpy(), F.relu(a + b).numpy())
-        assert np.allclose(
-            ff.cat([a, b], dim=0).numpy(), lucid.cat([a, b], dim=0).numpy()
-        )
+        assert np.allclose(ff.cat([a, b], dim=0).numpy(), lucid.cat([a, b], dim=0).numpy())
 
     def test_scalar_ops(self) -> None:
         lucid.manual_seed(1)

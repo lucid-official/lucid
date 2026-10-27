@@ -55,9 +55,7 @@ _EINSUM_PAIRS: list[tuple[str, tuple[int, ...], tuple[int, ...]]] = [
 
 
 class TestEinsum:
-    @pytest.mark.parametrize(
-        "eq,sa,sb", _EINSUM_PAIRS, ids=[p[0] for p in _EINSUM_PAIRS]
-    )
+    @pytest.mark.parametrize("eq,sa,sb", _EINSUM_PAIRS, ids=[p[0] for p in _EINSUM_PAIRS])
     def test_two_operand_matches_reference(
         self, eq: str, sa: tuple[int, ...], sb: tuple[int, ...], device: str
     ) -> None:
@@ -90,9 +88,7 @@ class TestEinsum:
             lucid.tensor(y.copy(), device=device),
             lucid.tensor(z.copy(), device=device),
         )
-        np.testing.assert_allclose(
-            out.numpy(), np.einsum("ij,jk,kl->il", x, y, z), atol=1e-4
-        )
+        np.testing.assert_allclose(out.numpy(), np.einsum("ij,jk,kl->il", x, y, z), atol=1e-4)
 
     def test_integer_is_exact(self, device: str) -> None:
         # Integer einsum must stay on the exact mul+sum path (GEMM is
@@ -107,9 +103,7 @@ class TestEinsum:
         np.testing.assert_array_equal(out.numpy(), np.einsum("ij,jk->ik", a, b))
         assert out.dtype == lucid.int64
 
-    def test_mixed_dtypes_refuse_on_contraction_and_promote_on_outer(
-        self, device: str
-    ) -> None:
+    def test_mixed_dtypes_refuse_on_contraction_and_promote_on_outer(self, device: str) -> None:
         # Contractions refuse mixed dtypes outside autocast (matching the
         # reference), while non-contracted outer / Hadamard products promote.
         a = np.arange(6).reshape(2, 3).astype(np.int64)
@@ -137,12 +131,8 @@ class TestEinsum:
         lb = lucid.tensor(b.copy(), device=device, requires_grad=True)
         lucid.einops.einsum("bij,bjk->bik", la, lb).sum().backward()
         go = np.ones((2, 4, 6), np.float32)
-        np.testing.assert_allclose(
-            la.grad.numpy(), np.einsum("bik,bjk->bij", go, b), atol=1e-4
-        )
-        np.testing.assert_allclose(
-            lb.grad.numpy(), np.einsum("bik,bij->bjk", go, a), atol=1e-4
-        )
+        np.testing.assert_allclose(la.grad.numpy(), np.einsum("bik,bjk->bij", go, b), atol=1e-4)
+        np.testing.assert_allclose(lb.grad.numpy(), np.einsum("bik,bij->bjk", go, a), atol=1e-4)
 
 
 class TestIdentityPatternsReturnDistinctTensor:

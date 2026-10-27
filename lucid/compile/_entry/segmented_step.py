@@ -136,9 +136,7 @@ def _sig(x: Tensor, fingerprint: ParamFingerprint) -> _SegKey:
     return (tuple(x.shape), str(x.dtype), bool(x.requires_grad), held)
 
 
-def _match_param_ids(
-    ext: dict[int, object], param_impls: Sequence[object]
-) -> list[int] | None:
+def _match_param_ids(ext: dict[int, object], param_impls: Sequence[object]) -> list[int] | None:
     """Map each parameter impl to its trace feed id (by pointer identity).
 
     Returns ``None`` if any parameter was not observed in the trace (segment
@@ -337,16 +335,12 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     if fwd_param_ids is None:
         return None
 
-    fwd_exe = _lower_segment_forward(
-        t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids)
-    )
+    fwd_exe = _lower_segment_forward(t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids))
     if fwd_exe is None:
         return None
 
     fwd_pid_to_idx = {pid: i for i, pid in enumerate(fwd_param_ids)}
-    fwd_plan = _build_feed_plan(
-        list(fwd_exe.input_ids), ext_fwd, x_id_fwd, None, fwd_pid_to_idx
-    )
+    fwd_plan = _build_feed_plan(list(fwd_exe.input_ids), ext_fwd, x_id_fwd, None, fwd_pid_to_idx)
     if fwd_plan is None:
         return None
 
@@ -354,9 +348,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     # ``grad_out`` is a fresh leaf feed shaped like ``y``; the backward feeds the
     # upstream cotangent into this slot.
     go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
-    traced_bwd = _trace_segment_fn(
-        (x, seg.state), lambda: (seg.forward_fn(x) * go).sum()
-    )
+    traced_bwd = _trace_segment_fn((x, seg.state), lambda: (seg.forward_fn(x) * go).sum())
     if traced_bwd is None:
         return None
     t_bwd, _ = traced_bwd
@@ -400,9 +392,7 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     )
 
 
-def _compile_into(
-    seg: _Segment, x: Tensor, fingerprint: ParamFingerprint
-) -> _SegCompiled:
+def _compile_into(seg: _Segment, x: Tensor, fingerprint: ParamFingerprint) -> _SegCompiled:
     """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
     traces read; raise :class:`_SegmentCompileError` if it does not compile."""
     from lucid.compile._core.trace_context import compile_attempt
@@ -490,9 +480,7 @@ class _SegmentFunction(Function):
             idx += 1
         else:
             grad_x = None
-        grad_params = [
-            _wrap(cast(_C_engine.TensorImpl, outs[idx + i])) for i in range(n_params)
-        ]
+        grad_params = [_wrap(cast(_C_engine.TensorImpl, outs[idx + i])) for i in range(n_params)]
         return tuple([grad_x, *grad_params])
 
 
@@ -695,14 +683,11 @@ def _stand_ins(x_args: tuple[object, ...]) -> tuple[object, ...]:
     from lucid._tensor.tensor import Tensor
 
     return tuple(
-        a.detach().requires_grad_(a.requires_grad) if isinstance(a, Tensor) else a
-        for a in x_args
+        a.detach().requires_grad_(a.requires_grad) if isinstance(a, Tensor) else a for a in x_args
     )
 
 
-def _probe_one(
-    model: Module, seg_step: Callable[..., Tensor], x_args: tuple[object, ...]
-) -> float:
+def _probe_one(model: Module, seg_step: Callable[..., Tensor], x_args: tuple[object, ...]) -> float:
     """Median fwd+bwd wall-time (ms) of ``seg_step`` over a few warm runs.
 
     The backward is taken with :func:`lucid.autograd.grad`, which hands the
@@ -789,8 +774,7 @@ def make_autoseg_step(
     n_children = len(list(model))
     if n_children < 2:
         raise ValueError(
-            'make_step(segments="auto"): model has fewer than 2 child modules '
-            "to split"
+            'make_step(segments="auto"): model has fewer than 2 child modules ' "to split"
         )
     cand_list = candidates if candidates is not None else _auto_candidates(n_children)
 

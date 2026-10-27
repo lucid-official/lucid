@@ -125,12 +125,9 @@ def _contract_device_safe(out: lucid.Tensor) -> lucid.Tensor:
     w_t = _probe.tensor_of(weights.astype(np_dt), dtype=work_dt, device=str(out.device))
     if flat.is_complex():
         imag_w = _probe.rng(_probe.SEED_A + 1).standard_normal(max(n, 1))[:n]
-        wi_t = _probe.tensor_of(
-            imag_w.astype(np_dt), dtype=work_dt, device=str(out.device)
-        )
+        wi_t = _probe.tensor_of(imag_w.astype(np_dt), dtype=work_dt, device=str(out.device))
         return (
-            lucid.real(flat).astype(work_dt) * w_t
-            + lucid.imag(flat).astype(work_dt) * wi_t
+            lucid.real(flat).astype(work_dt) * w_t + lucid.imag(flat).astype(work_dt) * wi_t
         ).sum()
     return (flat.astype(work_dt) * w_t).sum()
 
@@ -292,9 +289,7 @@ def generate_digest(
     }
 
 
-def compare_digests(
-    before: dict[str, Any], after: dict[str, Any]
-) -> tuple[list[str], list[str]]:
+def compare_digests(before: dict[str, Any], after: dict[str, Any]) -> tuple[list[str], list[str]]:
     """Return ``(diffs, unstable_skipped)`` between ``before`` and ``after``."""
     unstable = set(before.get("unstable", [])) | set(after.get("unstable", []))
     b_cells: dict[str, Any] = before.get("cells", {})
@@ -363,11 +358,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.out:
         ap.error("Either --out or --compare is required")
 
-    sym_filter = (
-        {s.strip() for s in args.symbols.split(",") if s.strip()}
-        if args.symbols
-        else None
-    )
+    sym_filter = {s.strip() for s in args.symbols.split(",") if s.strip()} if args.symbols else None
     plan_data = None
     if args.plan and args.plan.exists():
         plan_data = json.loads(args.plan.read_text(encoding="utf-8")).get("plan")

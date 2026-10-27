@@ -45,9 +45,7 @@ def _flags(module):
 def test_parameters_keep_the_module_flag_and_buffers_their_own(buffers_grad, frozen):
     target = nn.BatchNorm1d(3)
     target.weight.requires_grad_(not frozen)
-    target.load_state_dict(
-        _state(nn.BatchNorm1d(3), lucid, buffers_grad=buffers_grad), assign=True
-    )
+    target.load_state_dict(_state(nn.BatchNorm1d(3), lucid, buffers_grad=buffers_grad), assign=True)
     flags = _flags(target)
     assert flags["weight"] == (not frozen, "Parameter")
     assert flags["bias"] == (True, "Parameter")

@@ -335,13 +335,9 @@ def from_xyxy(xyxy: Tensor, fmt: str, canvas: tuple[int, int]) -> Tensor:
     return _cat([(x1 + x2) / 2 / w, (y1 + y2) / 2 / h, (x2 - x1) / w, (y2 - y1) / h], 1)
 
 
-def _rebuild(
-    boxes: BoundingBoxes, xyxy: Tensor, canvas: tuple[int, int]
-) -> BoundingBoxes:
+def _rebuild(boxes: BoundingBoxes, xyxy: Tensor, canvas: tuple[int, int]) -> BoundingBoxes:
     """Re-wrap transformed xyxy coords back into the original format + labels."""
-    return BoundingBoxes(
-        from_xyxy(xyxy, boxes.format, canvas), boxes.format, canvas, boxes.labels
-    )
+    return BoundingBoxes(from_xyxy(xyxy, boxes.format, canvas), boxes.format, canvas, boxes.labels)
 
 
 def flip_boxes(boxes: BoundingBoxes, *, horizontal: bool) -> BoundingBoxes:
@@ -409,9 +405,7 @@ def resize_boxes(boxes: BoundingBoxes, new_h: int, new_w: int) -> BoundingBoxes:
     return _rebuild(boxes, new, (new_h, new_w))
 
 
-def crop_boxes(
-    boxes: BoundingBoxes, top: int, left: int, height: int, width: int
-) -> BoundingBoxes:
+def crop_boxes(boxes: BoundingBoxes, top: int, left: int, height: int, width: int) -> BoundingBoxes:
     r"""Translate boxes into a crop window and clip to its bounds.
 
     Geometric companion to :class:`Crop` / :class:`CenterCrop` /
@@ -449,9 +443,7 @@ def crop_boxes(
     return _rebuild(boxes, new, (height, width))
 
 
-def pad_boxes(
-    boxes: BoundingBoxes, left: int, top: int, new_h: int, new_w: int
-) -> BoundingBoxes:
+def pad_boxes(boxes: BoundingBoxes, left: int, top: int, new_h: int, new_w: int) -> BoundingBoxes:
     r"""Shift boxes by a pad offset onto a larger canvas.
 
     Geometric companion to ``Pad`` / :class:`PadIfNeeded`.  Adds
@@ -496,9 +488,7 @@ def _kp_xy_rest(kps: Keypoints) -> tuple[Tensor, Tensor, Tensor | None]:
     return x, y, rest
 
 
-def _kp_rebuild(
-    x: Tensor, y: Tensor, rest: Tensor | None, canvas: tuple[int, int]
-) -> Keypoints:
+def _kp_rebuild(x: Tensor, y: Tensor, rest: Tensor | None, canvas: tuple[int, int]) -> Keypoints:
     cols = [x, y] if rest is None else [x, y, rest]
     return Keypoints(_cat(cols, 1), canvas)
 
@@ -562,9 +552,7 @@ def resize_keypoints(kps: Keypoints, new_h: int, new_w: int) -> Keypoints:
     return _kp_rebuild(x * (new_w / w), y * (new_h / h), rest, (new_h, new_w))
 
 
-def crop_keypoints(
-    kps: Keypoints, top: int, left: int, height: int, width: int
-) -> Keypoints:
+def crop_keypoints(kps: Keypoints, top: int, left: int, height: int, width: int) -> Keypoints:
     r"""Translate keypoints into a crop window (canvas to crop size).
 
     Geometric companion to :class:`Crop` / :class:`CenterCrop` /
@@ -597,9 +585,7 @@ def crop_keypoints(
     return _kp_rebuild(x - left, y - top, rest, (height, width))
 
 
-def pad_keypoints(
-    kps: Keypoints, left: int, top: int, new_h: int, new_w: int
-) -> Keypoints:
+def pad_keypoints(kps: Keypoints, left: int, top: int, new_h: int, new_w: int) -> Keypoints:
     r"""Shift keypoints by a pad offset onto a larger canvas.
 
     Geometric companion to ``Pad`` / :class:`PadIfNeeded` for the
@@ -632,9 +618,7 @@ def pad_keypoints(
 # ── affine / transpose / rot90 (boxes + keypoints) ──────────────────
 
 
-def _clip_xyxy(
-    x1: Tensor, y1: Tensor, x2: Tensor, y2: Tensor, h: int, w: int
-) -> Tensor:
+def _clip_xyxy(x1: Tensor, y1: Tensor, x2: Tensor, y2: Tensor, h: int, w: int) -> Tensor:
     return _cat(
         [
             lucid.clip(x1, 0.0, float(w)),
@@ -646,9 +630,7 @@ def _clip_xyxy(
     )
 
 
-def affine_boxes(
-    boxes: BoundingBoxes, matrix: Tensor, out_hw: tuple[int, int]
-) -> BoundingBoxes:
+def affine_boxes(boxes: BoundingBoxes, matrix: Tensor, out_hw: tuple[int, int]) -> BoundingBoxes:
     r"""Warp boxes by a forward affine matrix and re-axis-align them.
 
     Geometric companion to :class:`Affine` / :class:`Rotate` /
@@ -707,9 +689,7 @@ def affine_boxes(
     return _rebuild(boxes, new, out_hw)
 
 
-def affine_keypoints(
-    kps: Keypoints, matrix: Tensor, out_hw: tuple[int, int]
-) -> Keypoints:
+def affine_keypoints(kps: Keypoints, matrix: Tensor, out_hw: tuple[int, int]) -> Keypoints:
     r"""Warp keypoint coordinates by a forward affine matrix.
 
     Geometric companion to :class:`Affine` / :class:`Rotate` /
@@ -983,9 +963,5 @@ def filter_boxes(
         return BoundingBoxes(boxes.data[:0], boxes.format, boxes.canvas_size, empty_lbl)
 
     data = _cat([boxes.data[i : i + 1] for i in keep], 0)
-    labels = (
-        _cat([boxes.labels[i : i + 1] for i in keep], 0)
-        if boxes.labels is not None
-        else None
-    )
+    labels = _cat([boxes.labels[i : i + 1] for i in keep], 0) if boxes.labels is not None else None
     return BoundingBoxes(data, boxes.format, boxes.canvas_size, labels)

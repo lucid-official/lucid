@@ -136,9 +136,7 @@ def test_vmap_grad_per_sample_losses_parity(
     grad_r = ref.func.grad(r_fn, argnums=(0, 1))
 
     gw_auto, gx_auto = func.vmap(grad_l, in_dims=(None, 0, 0))(w_l, x_l, t_l)
-    gw_iso, gx_iso = func.vmap(grad_l, in_dims=(None, 0, 0), strategy="isolated")(
-        w_l, x_l, t_l
-    )
+    gw_iso, gx_iso = func.vmap(grad_l, in_dims=(None, 0, 0), strategy="isolated")(w_l, x_l, t_l)
     gw_ref, gx_ref = ref.func.vmap(grad_r, in_dims=(None, 0, 0))(w_r, x_r, t_r)
 
     assert tuple(gw_auto.shape) == (b_sz, d_in, n_cls)
@@ -179,12 +177,8 @@ def _make_forward_loss_pair(
         )
     if loss_name == "binary_cross_entropy":
         return (
-            lambda x, t: F.binary_cross_entropy(
-                lucid.sigmoid(x), t, reduction=reduction
-            ),
-            lambda x, t: rf.binary_cross_entropy(
-                ref.sigmoid(x), t, reduction=reduction
-            ),
+            lambda x, t: F.binary_cross_entropy(lucid.sigmoid(x), t, reduction=reduction),
+            lambda x, t: rf.binary_cross_entropy(ref.sigmoid(x), t, reduction=reduction),
             False,
         )
     return (
@@ -253,21 +247,17 @@ def test_vmap_grad_cross_entropy_with_unsqueeze0(
     t_r = ref.tensor(t_np, dtype=ref.int64)
 
     def loss_l(w: lucid.Tensor, x: lucid.Tensor, t: lucid.Tensor) -> lucid.Tensor:
-        return F.cross_entropy(
-            (x @ w).unsqueeze(0), t.unsqueeze(0), reduction=reduction
-        )
+        return F.cross_entropy((x @ w).unsqueeze(0), t.unsqueeze(0), reduction=reduction)
 
     def loss_r(w: object, x: object, t: object) -> object:
         return ref.nn.functional.cross_entropy(
             (x @ w).unsqueeze(0), t.unsqueeze(0), reduction=reduction
         )
 
-    gw_l, gx_l = func.vmap(func.grad(loss_l, argnums=(0, 1)), in_dims=(None, 0, 0))(
-        w_l, x_l, t_l
+    gw_l, gx_l = func.vmap(func.grad(loss_l, argnums=(0, 1)), in_dims=(None, 0, 0))(w_l, x_l, t_l)
+    gw_r, gx_r = ref.func.vmap(ref.func.grad(loss_r, argnums=(0, 1)), in_dims=(None, 0, 0))(
+        w_r, x_r, t_r
     )
-    gw_r, gx_r = ref.func.vmap(
-        ref.func.grad(loss_r, argnums=(0, 1)), in_dims=(None, 0, 0)
-    )(w_r, x_r, t_r)
 
     assert_close(gw_l, gw_r, atol=1e-5)
     assert_close(gx_l, gx_r, atol=1e-5)
@@ -306,9 +296,7 @@ def test_vmap_mixed_in_dims_unbatched_target_bce(
         in_dims=(0, None),
     )(p_l, y_l)
     out_logits_r = ref.func.vmap(
-        lambda x, t: ref.nn.functional.binary_cross_entropy_with_logits(
-            x, t, reduction=reduction
-        ),
+        lambda x, t: ref.nn.functional.binary_cross_entropy_with_logits(x, t, reduction=reduction),
         in_dims=(0, None),
     )(p_r, y_r)
     assert_close(out_logits_l, out_logits_r, atol=1e-5)
@@ -361,9 +349,7 @@ def test_vmap_composes_with_grad_and_value_vjp_jvp(
     y_r = ref.tensor(y_np)
 
     gv_l = func.grad_and_value(lambda a, b: F.mse_loss(a, b, reduction="mean"))
-    gv_r = ref.func.grad_and_value(
-        lambda a, b: ref.nn.functional.mse_loss(a, b, reduction="mean")
-    )
+    gv_r = ref.func.grad_and_value(lambda a, b: ref.nn.functional.mse_loss(a, b, reduction="mean"))
     g_l, v_l = func.vmap(gv_l)(x_l, y_l)
     g_r, v_r = ref.func.vmap(gv_r)(x_r, y_r)
     assert_close(g_l, g_r, atol=1e-5)
@@ -383,7 +369,5 @@ def test_vmap_composes_with_grad_and_value_vjp_jvp(
         return dy
 
     dy_l = func.vmap(jvp_step)(x_l, y_l)
-    dy_r = ref.func.vmap(lambda a, t: ref.func.jvp(lambda z: z.mean(), (a,), (t,))[1])(
-        x_r, y_r
-    )
+    dy_r = ref.func.vmap(lambda a, t: ref.func.jvp(lambda z: z.mean(), (a,), (t,))[1])(x_r, y_r)
     assert_close(dy_l, dy_r, atol=1e-5)

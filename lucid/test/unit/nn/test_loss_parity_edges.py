@@ -151,9 +151,7 @@ class TestBinaryCrossEntropyWithLogitsAtZero:
         assert _close(head.bias.grad.item(), -0.5)
 
     def test_saturated_logits_stay_finite(self, device: str) -> None:
-        z = lucid.tensor(
-            [100.0, -100.0, 30.0, -30.0], requires_grad=True, device=device
-        )
+        z = lucid.tensor([100.0, -100.0, 30.0, -30.0], requires_grad=True, device=device)
         y = lucid.tensor([0.0, 1.0, 1.0, 0.0], device=device)
         out = F.binary_cross_entropy_with_logits(z, y, reduction="none")
         out.sum().backward()
@@ -176,9 +174,7 @@ class TestBinaryCrossEntropyWithLogitsAtZero:
                     ly,
                     weight=lucid.tensor(w, device=device),
                     pos_weight=(
-                        None
-                        if pos_weight is None
-                        else lucid.tensor(pos_weight, device=device)
+                        None if pos_weight is None else lucid.tensor(pos_weight, device=device)
                     ),
                     reduction=reduction,
                 )
@@ -221,9 +217,7 @@ class TestKLDivWithZeroTargets:
         x = lucid.log(lucid.tensor(self.P, device=device))
         q = lucid.tensor(self.Q, device=device)
         out = F.kl_div(x, q, reduction="none")
-        assert _close(
-            _vals(out), [[0.35667494, 0.0, 0.0], [0.25541281, 0.25541281, 0.0]]
-        )
+        assert _close(_vals(out), [[0.35667494, 0.0, 0.0], [0.25541281, 0.25541281, 0.0]])
 
     def test_the_module_and_every_reduction_are_finite(self, device: str) -> None:
         x = lucid.log(lucid.tensor(self.P, device=device)).requires_grad_()
@@ -433,17 +427,11 @@ class TestABatchWithEveryTargetIgnored:
         assert _vals(lin.bias.grad) == [0.0] * 3
 
     @pytest.mark.parametrize("option", ["plain", "weight", "smoothing"])
-    def test_every_option_keeps_the_gradient_finite(
-        self, device: str, option: str
-    ) -> None:
-        x = lucid.tensor(
-            [[1.0, 2.0, 3.0], [0.5, 0.1, 0.2]], requires_grad=True, device=device
-        )
+    def test_every_option_keeps_the_gradient_finite(self, device: str, option: str) -> None:
+        x = lucid.tensor([[1.0, 2.0, 3.0], [0.5, 0.1, 0.2]], requires_grad=True, device=device)
         t = lucid.tensor([-100, -100], device=device)
         if option == "weight":
-            loss = F.cross_entropy(
-                x, t, weight=lucid.tensor([1.0, 2.0, 3.0], device=device)
-            )
+            loss = F.cross_entropy(x, t, weight=lucid.tensor([1.0, 2.0, 3.0], device=device))
         elif option == "smoothing":
             loss = F.cross_entropy(x, t, label_smoothing=0.1)
         else:
@@ -480,9 +468,7 @@ class TestABatchWithEveryTargetIgnored:
         rt = R.tensor([-100, -100])  # type: ignore[attr-defined]
         rf = R.nn.functional  # type: ignore[attr-defined]
         if option == "weight":
-            lo = F.cross_entropy(
-                lx, lt, weight=lucid.tensor([1.0, 2.0, 3.0], device=device)
-            )
+            lo = F.cross_entropy(lx, lt, weight=lucid.tensor([1.0, 2.0, 3.0], device=device))
             ro = rf.cross_entropy(rx, rt, weight=R.tensor([1.0, 2.0, 3.0]))  # type: ignore[attr-defined]
         elif option == "smoothing":
             lo = F.cross_entropy(lx, lt, label_smoothing=0.1)
@@ -584,9 +570,7 @@ class TestMultilabelMarginStopsAtTheFirstMinusOne:
         with pytest.raises(IndexError, match="Target 5 is out of bounds"):
             F.multilabel_margin_loss(x, lucid.tensor([[5, -1, 0, 0]]))
         # After the pad, anything goes — it is never read.
-        assert _close(
-            F.multilabel_margin_loss(x, lucid.tensor([[3, -1, 9, -7]])).item(), 0.325
-        )
+        assert _close(F.multilabel_margin_loss(x, lucid.tensor([[3, -1, 9, -7]])).item(), 0.325)
 
     @pytest.mark.parity
     def test_matches_the_reference(self, ref: object, device: str) -> None:
@@ -595,9 +579,7 @@ class TestMultilabelMarginStopsAtTheFirstMinusOne:
         ts = [[3, 0, -1, 1], [2, 2, 0, -1], [-1, 1, 2, 3]]
         for reduction in ("none", "mean", "sum"):
             lx = lucid.tensor(xs, requires_grad=True, device=device)
-            lo = F.multilabel_margin_loss(
-                lx, lucid.tensor(ts, device=device), reduction=reduction
-            )
+            lo = F.multilabel_margin_loss(lx, lucid.tensor(ts, device=device), reduction=reduction)
             lo.sum().backward()
             rx = R.tensor(xs, requires_grad=True)  # type: ignore[attr-defined]
             ro = R.nn.functional.multilabel_margin_loss(  # type: ignore[attr-defined]
@@ -655,9 +637,7 @@ class TestGaussianNLLVariance:
         )
         assert _close(loss.item(), 0.5)
 
-    @pytest.mark.parametrize(
-        ("x_shape", "var_shape"), [((2, 3), (3, 2)), ((4, 3, 5), (1, 1, 5))]
-    )
+    @pytest.mark.parametrize(("x_shape", "var_shape"), [((2, 3), (3, 2)), ((4, 3, 5), (1, 1, 5))])
     def test_a_variance_of_another_shape_is_refused(
         self, device: str, x_shape: tuple[int, ...], var_shape: tuple[int, ...]
     ) -> None:
@@ -679,9 +659,7 @@ class TestGaussianNLLVariance:
 
     def test_a_negative_cpu_variance_raises(self) -> None:
         with pytest.raises(ValueError, match="negative"):
-            F.gaussian_nll_loss(
-                lucid.zeros(2), lucid.ones(2), lucid.tensor([-1.0, 4.0])
-            )
+            F.gaussian_nll_loss(lucid.zeros(2), lucid.ones(2), lucid.tensor([-1.0, 4.0]))
         with pytest.raises(ValueError, match="negative"):
             F.gaussian_nll_loss(lucid.zeros(2), lucid.ones(2), -1.0)
 
@@ -718,9 +696,7 @@ class TestGaussianNLLVariance:
             for full in (False, True):
                 lv = lucid.tensor(vs, requires_grad=True, device=device)
                 lx = lucid.tensor(xs, requires_grad=True, device=device)
-                lo = F.gaussian_nll_loss(
-                    lx, lucid.tensor(ys, device=device), lv, full=full
-                )
+                lo = F.gaussian_nll_loss(lx, lucid.tensor(ys, device=device), lv, full=full)
                 lo.backward()
                 rv = R.tensor(vs, requires_grad=True)  # type: ignore[attr-defined]
                 rx = R.tensor(xs, requires_grad=True)  # type: ignore[attr-defined]
@@ -777,9 +753,7 @@ class TestCrossEntropyWithClassProbabilities:
     Q = [[0.2, 0.3, 0.5], [1.0, 0.0, 0.0]]
 
     @staticmethod
-    def _by_hand(
-        x: list[list[float]], q: list[list[float]], w: list[float]
-    ) -> list[float]:
+    def _by_hand(x: list[list[float]], q: list[list[float]], w: list[float]) -> list[float]:
         out = []
         for row, probs in zip(x, q):
             lse = math.log(sum(math.exp(v) for v in row))
@@ -801,14 +775,10 @@ class TestCrossEntropyWithClassProbabilities:
         got = F.cross_entropy(x, q, weight=lucid.tensor(w, device=device))
         assert _close(got.item(), sum(per) / 2)
 
-    def test_a_one_hot_probability_target_is_the_index_target(
-        self, device: str
-    ) -> None:
+    def test_a_one_hot_probability_target_is_the_index_target(self, device: str) -> None:
         x = lucid.tensor(self.X, device=device)
         hard = F.cross_entropy(x, lucid.tensor([2, 0], device=device))
-        soft = F.cross_entropy(
-            x, lucid.tensor([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]], device=device)
-        )
+        soft = F.cross_entropy(x, lucid.tensor([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]], device=device))
         assert _close(soft.item(), hard.item())
 
     def test_a_k_d_probability_target(self, device: str) -> None:
@@ -836,9 +806,7 @@ class TestCrossEntropyWithClassProbabilities:
         rq = R.tensor(self.Q)  # type: ignore[attr-defined]
         rf = R.nn.functional  # type: ignore[attr-defined]
         if option == "weight":
-            lo = F.cross_entropy(
-                lx, lq, weight=lucid.tensor([1.0, 2.0, 3.0], device=device)
-            )
+            lo = F.cross_entropy(lx, lq, weight=lucid.tensor([1.0, 2.0, 3.0], device=device))
             ro = rf.cross_entropy(rx, rq, weight=R.tensor([1.0, 2.0, 3.0]))  # type: ignore[attr-defined]
         elif option == "smoothing":
             lo = F.cross_entropy(lx, lq, label_smoothing=0.2)
@@ -875,9 +843,7 @@ class TestUnbatchedInputs:
         assert _close(out.item(), lse - 2.0)
         soft = F.cross_entropy(x, lucid.tensor([0.0, 1.0, 0.0], device=device))
         assert _close(soft.item(), lse - 2.0)
-        assert _close(
-            nn.CrossEntropyLoss()(x, lucid.tensor([1], device=device)).item(), lse - 2.0
-        )
+        assert _close(nn.CrossEntropyLoss()(x, lucid.tensor([1], device=device)).item(), lse - 2.0)
 
     def test_nll_loss_on_one_sample(self, device: str) -> None:
         x = lucid.tensor([-1.0, -2.0, -3.0], device=device)
@@ -885,30 +851,20 @@ class TestUnbatchedInputs:
         assert out.shape == () and _close(out.item(), 2.0)
         assert math.isnan(F.nll_loss(x, lucid.tensor(-100, device=device)).item())
 
-    def test_multi_margin_on_one_sample_keeps_the_target_shape(
-        self, device: str
-    ) -> None:
+    def test_multi_margin_on_one_sample_keeps_the_target_shape(self, device: str) -> None:
         x = lucid.tensor([0.1, 0.2, 0.4], device=device)
-        scalar = F.multi_margin_loss(
-            x, lucid.tensor(2, device=device), reduction="none"
-        )
-        single = F.multi_margin_loss(
-            x, lucid.tensor([2], device=device), reduction="none"
-        )
+        scalar = F.multi_margin_loss(x, lucid.tensor(2, device=device), reduction="none")
+        single = F.multi_margin_loss(x, lucid.tensor([2], device=device), reduction="none")
         assert scalar.shape == () and single.shape == (1,)
         assert _close(scalar.item(), 0.5)
         w = lucid.tensor([1.0, 2.0, 3.0], device=device)
-        assert _close(
-            F.multi_margin_loss(x, lucid.tensor(2, device=device), weight=w).item(), 1.5
-        )
+        assert _close(F.multi_margin_loss(x, lucid.tensor(2, device=device), weight=w).item(), 1.5)
 
     def test_ctc_on_one_sequence(self, device: str) -> None:
         lp = F.log_softmax(lucid.randn(5, 4, device=device), dim=1)
         target = lucid.tensor([1, 2], device=device)
         one = F.ctc_loss(lp, target, lucid.tensor(5), lucid.tensor(2), reduction="none")
-        batched = F.ctc_loss(
-            lp.unsqueeze(1), target.reshape(1, 2), [5], [2], reduction="none"
-        )
+        batched = F.ctc_loss(lp.unsqueeze(1), target.reshape(1, 2), [5], [2], reduction="none")
         assert one.shape == ()
         assert _close(one.item(), batched.tolist()[0])
         mean = F.ctc_loss(lp, target, lucid.tensor(5), lucid.tensor(2))
@@ -952,9 +908,7 @@ class TestUnbatchedInputs:
                 reduction=reduction,
             )
             ro = rf.ctc_loss(rp, R.tensor([1, 2]), R.tensor(5), R.tensor(2), reduction=reduction)  # type: ignore[attr-defined]
-            assert lo.shape == tuple(ro.shape) and _close(
-                lo.item(), ro.item(), tol=1e-4
-            )
+            assert lo.shape == tuple(ro.shape) and _close(lo.item(), ro.item(), tol=1e-4)
 
 
 # ── CHA-88 ─────────────────────────────────────────────────────────────────
@@ -1055,9 +1009,7 @@ class TestLossWeightsAreBuffers:
             def __init__(self) -> None:
                 super().__init__()
                 self.fc = nn.Linear(4, 3)
-                self.criterion = nn.CrossEntropyLoss(
-                    weight=lucid.tensor([1.0, 2.0, 3.0])
-                )
+                self.criterion = nn.CrossEntropyLoss(weight=lucid.tensor([1.0, 2.0, 3.0]))
 
         model = Head()
         assert sorted(model.state_dict()) == [
@@ -1078,9 +1030,7 @@ class TestLossWeightsAreBuffers:
         assert sorted(theirs.state_dict()) == sorted(module.state_dict())
         # And their checkpoint loads into ours, strictly.
         fresh = type(module)(**{k: lucid.zeros(3) for k in keys})
-        fresh.load_state_dict(
-            {k: lucid.tensor(v.tolist()) for k, v in theirs.state_dict().items()}
-        )
+        fresh.load_state_dict({k: lucid.tensor(v.tolist()) for k, v in theirs.state_dict().items()})
         for key in keys:
             assert _vals(getattr(fresh, key)) == _vals(getattr(module, key))
 
@@ -1098,9 +1048,7 @@ def _autocast_loss(name: str, pred: lucid.Tensor, target: lucid.Tensor) -> lucid
     if name == "gaussian_nll_loss":
         return F.gaussian_nll_loss(pred, target, pred.exp())
     if name == "kl_div":
-        return F.kl_div(
-            F.log_softmax(pred, dim=1), F.softmax(target, dim=1), reduction="batchmean"
-        )
+        return F.kl_div(F.log_softmax(pred, dim=1), F.softmax(target, dim=1), reduction="batchmean")
     if name == "multi_margin_loss":
         return F.multi_margin_loss(pred, target.argmax(dim=1))
     raise AssertionError(name)

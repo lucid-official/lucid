@@ -415,10 +415,7 @@ def _init_reference_weights(model: nn.Module) -> None:
             nn.init.zeros_(module.fc.bias)
 
     aux_params = {
-        id(p)
-        for m in model.modules()
-        if isinstance(m, _InceptionAux)
-        for p in m.parameters()
+        id(p) for m in model.modules() if isinstance(m, _InceptionAux) for p in m.parameters()
     }
     for module in model.modules():
         if isinstance(module, (nn.Conv2d, nn.Linear)):
@@ -581,9 +578,7 @@ class InceptionV3(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class InceptionV3ForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class InceptionV3ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""Inception v3 image classifier with optional auxiliary classifier.
 
     Combines an :class:`InceptionV3` backbone with a global-average-pool

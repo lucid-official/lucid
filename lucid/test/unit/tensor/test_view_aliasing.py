@@ -685,4 +685,3 @@ def test_100k_view_chain_preserves_leaf_guard_and_backward(
     else:
         y.add_(1.0)
         assert _flat(base) == [2.0, 2.0, 2.0, 2.0]
-

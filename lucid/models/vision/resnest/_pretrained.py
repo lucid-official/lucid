@@ -366,9 +366,7 @@ def resnest_269(pretrained: bool = False, **overrides: object) -> ResNeSt:
     default_config=_CFG_14,
     params=10611688,
 )
-def resnest_14_cls(
-    pretrained: bool = False, **overrides: object
-) -> ResNeStForImageClassification:
+def resnest_14_cls(pretrained: bool = False, **overrides: object) -> ResNeStForImageClassification:
     r"""ResNeSt-14 image classifier (backbone + GAP + linear head).
 
     Builds a :class:`ResNeStForImageClassification` with the
@@ -421,9 +419,7 @@ def resnest_14_cls(
     default_config=_CFG_26,
     params=17069448,
 )
-def resnest_26_cls(
-    pretrained: bool = False, **overrides: object
-) -> ResNeStForImageClassification:
+def resnest_26_cls(pretrained: bool = False, **overrides: object) -> ResNeStForImageClassification:
     r"""ResNeSt-26 image classifier (backbone + GAP + linear head).
 
     Builds a :class:`ResNeStForImageClassification` with the

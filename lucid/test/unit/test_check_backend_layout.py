@@ -172,7 +172,7 @@ def test_rejects_untracked_cpp_non_member_and_extra_include(tmp_path: Path) -> N
     gpu_k = tmp_path / "lucid/_C/backend/gpu/Pow.h"
     gpu_k.write_text(
         "void run(std::size_t n) {\n"
-        "    auto k = mx::fast::metal_kernel(\"k\", {\"a\"}, {\"out\"}, \"\");\n"
+        '    auto k = mx::fast::metal_kernel("k", {"a"}, {"out"}, "");\n'
         "    int threads = static_cast<int>(n);\n"
         "    (void)k; (void)threads;\n"
         "}\n",

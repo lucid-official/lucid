@@ -73,10 +73,7 @@ def _is_vector(op: str, a_batch: tuple[int, ...], b: tuple[int, ...]) -> bool:
 
 
 _GOOD_PAIRS = [
-    (op, case)
-    for op in _OPS
-    for case in _GOOD
-    if op == "solve" or case not in _SOLVE_ONLY
+    (op, case) for op in _OPS for case in _GOOD if op == "solve" or case not in _SOLVE_ONLY
 ]
 _BAD_PAIRS = [(op, case) for op in _OPS for case in _BAD] + [
     (op, case) for op in _OPS if op != "solve" for case in _SOLVE_ONLY
@@ -142,9 +139,7 @@ def test_forward_matches_the_reference_reading(op: str, case: str, device: str) 
 def test_a_malformed_rhs_is_refused(op: str, case: str, device: str) -> None:
     a_batch, b_shape = _shapes(case)
     dt = _dtype(device)
-    A = lucid.tensor(
-        _operand(op, _well_conditioned(a_batch, 0)), dtype=dt, device=device
-    )
+    A = lucid.tensor(_operand(op, _well_conditioned(a_batch, 0)), dtype=dt, device=device)
     B = lucid.zeros(*b_shape, dtype=dt, device=device)
     with pytest.raises(_C_engine.ShapeMismatch, match=op):
         _call(op, A, B)
@@ -161,9 +156,7 @@ def test_lu_solve_refuses_pivots_of_another_shape() -> None:
 # ── gradients ───────────────────────────────────────────────────────────────
 
 
-def _gradcheck_case(
-    op: str, case: str
-) -> tuple[Callable[..., lucid.Tensor], list[lucid.Tensor]]:
+def _gradcheck_case(op: str, case: str) -> tuple[Callable[..., lucid.Tensor], list[lucid.Tensor]]:
     a_batch, b_shape = _GOOD[case]
     A = lucid.tensor(_operand(op, _well_conditioned(a_batch, 2)))
     B = lucid.tensor(np.random.default_rng(3).standard_normal(b_shape))
@@ -249,20 +242,12 @@ def test_kl_between_an_unbatched_and_a_batched_mvn_matches_the_reference(
 
     Lp = np.linalg.cholesky(np.eye(N) * 2 + 0.1)
     Lq = np.linalg.cholesky(np.stack([np.eye(N) * (i + 1) + 0.1 for i in range(N)]))
-    p = MultivariateNormal(
-        lucid.zeros(N, dtype=lucid.float64), scale_tril=lucid.tensor(Lp)
-    )
-    q = MultivariateNormal(
-        lucid.zeros(N, N, dtype=lucid.float64), scale_tril=lucid.tensor(Lq)
-    )
+    p = MultivariateNormal(lucid.zeros(N, dtype=lucid.float64), scale_tril=lucid.tensor(Lp))
+    q = MultivariateNormal(lucid.zeros(N, N, dtype=lucid.float64), scale_tril=lucid.tensor(Lq))
     dist = ref.distributions
     want = dist.kl_divergence(
-        dist.MultivariateNormal(
-            ref.zeros(N, dtype=ref.float64), scale_tril=ref.tensor(Lp)
-        ),
-        dist.MultivariateNormal(
-            ref.zeros(N, N, dtype=ref.float64), scale_tril=ref.tensor(Lq)
-        ),
+        dist.MultivariateNormal(ref.zeros(N, dtype=ref.float64), scale_tril=ref.tensor(Lp)),
+        dist.MultivariateNormal(ref.zeros(N, N, dtype=ref.float64), scale_tril=ref.tensor(Lq)),
     )
     got = kl_divergence(p, q)
     assert got.shape == tuple(want.shape)
@@ -292,9 +277,7 @@ def _cofactor(A: np.ndarray) -> np.ndarray:
 
 @pytest.mark.parametrize("device", _devices())
 @pytest.mark.parametrize("case", list(_SINGULAR))
-def test_det_gradient_at_a_singular_matrix_is_the_cofactor(
-    case: str, device: str
-) -> None:
+def test_det_gradient_at_a_singular_matrix_is_the_cofactor(case: str, device: str) -> None:
     M = np.array(_SINGULAR[case])
     A = lucid.tensor(M, dtype=_dtype(device), device=device).requires_grad_()
     LA.det(A).backward()
@@ -342,9 +325,7 @@ def test_slogdet_gradient_at_a_singular_matrix_is_inf_along_the_adjugate(
     grad = A.grad.numpy()
     assert np.isinf(grad).all()
     pattern = np.sign(grad)
-    assert (
-        pattern == np.sign(_cofactor(np.array(_SINGULAR["rank 1 of 2"])))
-    ).all() or (
+    assert (pattern == np.sign(_cofactor(np.array(_SINGULAR["rank 1 of 2"])))).all() or (
         pattern == -np.sign(_cofactor(np.array(_SINGULAR["rank 1 of 2"])))
     ).all()
 
@@ -356,15 +337,11 @@ def test_slogdet_gradient_at_a_singular_matrix_is_inf_along_the_adjugate(
 def test_slogdet_at_a_singular_matrix_keeps_the_signed_zero(device: str) -> None:
     """The reference: det = -0.0 (one row swap), so the grad is [-inf, inf, inf, -inf]."""
     A, _, _ = _singular_slogdet(device)
-    np.testing.assert_array_equal(
-        A.grad.numpy(), [[-np.inf, np.inf], [np.inf, -np.inf]]
-    )
+    np.testing.assert_array_equal(A.grad.numpy(), [[-np.inf, np.inf], [np.inf, -np.inf]])
 
 
 def test_slogdet_gradient_at_an_invertible_matrix_is_the_inverse_transpose() -> None:
     M = _well_conditioned((2,), 9)
     A = lucid.tensor(M).requires_grad_()
     LA.slogdet(A)[1].sum().backward()
-    np.testing.assert_allclose(
-        A.grad.numpy(), np.linalg.inv(M).swapaxes(-1, -2), rtol=1e-10
-    )
+    np.testing.assert_allclose(A.grad.numpy(), np.linalg.inv(M).swapaxes(-1, -2), rtol=1e-10)

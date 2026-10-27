@@ -59,9 +59,7 @@ def _sync_params(src: nn.Module, dst: nn.Module) -> None:
             p_d.copy_(p_s)
 
 
-def _train_eager(
-    model: nn.Module, x: lucid.Tensor, y: lucid.Tensor, n_steps: int
-) -> list[float]:
+def _train_eager(model: nn.Module, x: lucid.Tensor, y: lucid.Tensor, n_steps: int) -> list[float]:
     opt = optim.Adam(list(model.parameters()), lr=0.01)
     losses: list[float] = []
     for _ in range(n_steps):
@@ -89,9 +87,7 @@ def _train_compile_optimizer(
     return losses
 
 
-def _train_fused(
-    model: nn.Module, x: lucid.Tensor, y: lucid.Tensor, n_steps: int
-) -> list[float]:
+def _train_fused(model: nn.Module, x: lucid.Tensor, y: lucid.Tensor, n_steps: int) -> list[float]:
     """End-to-end fused: forward + loss + backward + update in one executable."""
     opt = optim.Adam(list(model.parameters()), lr=0.01)
     step = fused_step(model, F.mse_loss, opt)
@@ -130,12 +126,8 @@ def test_compile_optimizer_long_run() -> None:
 
     step, abs_diff, rel_diff = _max_step_diff(losses_eager, losses_comp)
     # Loss must decrease (training is effective)
-    assert (
-        losses_eager[0] > losses_eager[-1]
-    ), f"eager training stalled: {losses_eager[:3]}"
-    assert (
-        losses_comp[0] > losses_comp[-1]
-    ), f"compile training stalled: {losses_comp[:3]}"
+    assert losses_eager[0] > losses_eager[-1], f"eager training stalled: {losses_eager[:3]}"
+    assert losses_comp[0] > losses_comp[-1], f"compile training stalled: {losses_comp[:3]}"
     # Trajectories must agree to fp32 tolerance — the optimizer update
     # is bit-exact apart from MPSGraph's reduction reordering, so the
     # compounded drift over 100 steps stays small.
@@ -187,9 +179,7 @@ def test_long_run_final_param_drift() -> None:
     _train_compile_optimizer(model_comp, x, y, n_steps=100)
 
     worst = 0.0
-    for (n, p_e), (_, p_c) in zip(
-        model_eager.named_parameters(), model_comp.named_parameters()
-    ):
+    for (n, p_e), (_, p_c) in zip(model_eager.named_parameters(), model_comp.named_parameters()):
         d = float((p_e - p_c).abs().max().item())
         scale = float(p_e.abs().max().item())
         rel = d / max(scale, 1e-9)

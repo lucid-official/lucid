@@ -40,9 +40,7 @@ def forced_path(monkeypatch: pytest.MonkeyPatch, path: str) -> Iterator[None]:
         ran += 1
         return real_dense(x, axis, plan)
 
-    def gathers(
-        x: lucid.Tensor, axis: int, taps: _interpolate._FrozenTaps
-    ) -> lucid.Tensor:
+    def gathers(x: lucid.Tensor, axis: int, taps: _interpolate._FrozenTaps) -> lucid.Tensor:
         nonlocal ran
         # Nearest has no weights and always gathers; it says nothing about
         # which path a weighted axis takes.

@@ -74,9 +74,7 @@ class _InceptionDWConv2d(nn.Module):
 
         pad = band_kernel // 2
         # Named exactly as timm's InceptionDWConv2d
-        self.dwconv_hw = nn.Conv2d(
-            gc, gc, square_kernel, padding=square_kernel // 2, groups=gc
-        )
+        self.dwconv_hw = nn.Conv2d(gc, gc, square_kernel, padding=square_kernel // 2, groups=gc)
         self.dwconv_w = nn.Conv2d(gc, gc, (1, band_kernel), padding=(0, pad), groups=gc)
         self.dwconv_h = nn.Conv2d(gc, gc, (band_kernel, 1), padding=(pad, 0), groups=gc)
 
@@ -145,9 +143,7 @@ class _MetaNeXtBlock(nn.Module):
         square_kernel: int = 3,
     ) -> None:
         super().__init__()
-        self.token_mixer = _InceptionDWConv2d(
-            dim, band_kernel, branch_ratio, square_kernel
-        )
+        self.token_mixer = _InceptionDWConv2d(dim, band_kernel, branch_ratio, square_kernel)
         self.norm = nn.BatchNorm2d(dim)
         self.mlp = _ConvMlp(dim, mlp_ratio)
         self.gamma = nn.Parameter(lucid.full((dim,), layer_scale_init))
@@ -478,9 +474,7 @@ class InceptionNeXtForImageClassification(ImageClassificationModel):
         stem, stages, _, out_dim = _build_inception_next(config)
         self.stem = stem
         self.stages = stages
-        self.head = _MlpClassifierHead(
-            out_dim, config.num_classes, drop_rate=config.drop_rate
-        )
+        self.head = _MlpClassifierHead(out_dim, config.num_classes, drop_rate=config.drop_rate)
         init_transformer_trunc_normal(self)
 
     @override

@@ -40,14 +40,11 @@ def _require_differentiable(inputs: tuple[Tensor, ...], where: str) -> None:
     for item in inputs:
         if not lucid.is_floating_point(item):
             raise TypeError(
-                f"{where}: only a floating-point input can be differentiated, "
-                f"got {item.dtype}"
+                f"{where}: only a floating-point input can be differentiated, " f"got {item.dtype}"
             )
 
 
-def _differentiable_inputs(
-    inputs: tuple[Tensor, ...], create_graph: bool
-) -> list[Tensor]:
+def _differentiable_inputs(inputs: tuple[Tensor, ...], create_graph: bool) -> list[Tensor]:
     """The tensors to differentiate ``func`` at, leaving the caller's alone.
 
     Each is a fresh leaf that requires grad and shares the input's
@@ -57,11 +54,7 @@ def _differentiable_inputs(
     with respect to it.
     """
     return [
-        (
-            x.view_as(x)
-            if create_graph and x.requires_grad
-            else x.detach().requires_grad_(True)
-        )
+        (x.view_as(x) if create_graph and x.requires_grad else x.detach().requires_grad_(True))
         for x in inputs
     ]
 
@@ -69,9 +62,7 @@ def _differentiable_inputs(
 _OUT_NAME = "outputs of the user-provided function"
 
 
-def _as_tuple(
-    value: object, arg_name: str, where: str
-) -> tuple[tuple[Tensor, ...], bool]:
+def _as_tuple(value: object, arg_name: str, where: str) -> tuple[tuple[Tensor, ...], bool]:
     """``value`` as a tuple of tensors, and whether it was one tensor."""
     from lucid._tensor.tensor import Tensor as _Tensor
 
@@ -93,10 +84,7 @@ def _as_tuple(
 
 def _or_zeros(grads: Sequence[Tensor | None], like: Sequence[Tensor]) -> list[Tensor]:
     """Each gradient, or zeros shaped like its tensor where it is unused."""
-    return [
-        lucid.zeros_like(t) if g is None else g
-        for g, t in zip(grads, like, strict=True)
-    ]
+    return [lucid.zeros_like(t) if g is None else g for g, t in zip(grads, like, strict=True)]
 
 
 def _pack(items: Sequence[Tensor], one: bool) -> Tensor | tuple[Tensor, ...]:
@@ -147,9 +135,7 @@ _INDEPENDENT = {
         "the grad_outputs when using the double backward trick to compute "
         "forward mode gradients."
     ),
-    "double_back": (
-        "The jacobian of the user-provided function is independent of input {i}."
-    ),
+    "double_back": ("The jacobian of the user-provided function is independent of input {i}."),
     "double_back_trick": (
         "The hessian of the user-provided function is independent of entry {i} "
         "in the grad_jacobian."
@@ -171,8 +157,7 @@ def _filled(
         for i, g in enumerate(grads):
             if g is None:
                 raise RuntimeError(
-                    f"{_INDEPENDENT[stage].format(i=i)} This is not allowed in "
-                    "strict mode."
+                    f"{_INDEPENDENT[stage].format(i=i)} This is not allowed in " "strict mode."
                 )
             if create_graph and not g.requires_grad:
                 what = "hessian" if stage.startswith("double") else "jacobian"
@@ -189,9 +174,7 @@ def _single_element(out: object, where: str) -> Tensor:
     outs, one_output = _as_tuple(out, _OUT_NAME, where)
     if not one_output or outs[0].numel() != 1:
         got = f"shape {tuple(outs[0].shape)}" if one_output else "tuple"
-        raise RuntimeError(
-            f"{where}: func must return a single tensor of one element, got {got}"
-        )
+        raise RuntimeError(f"{where}: func must return a single tensor of one element, got {got}")
     return outs[0]
 
 
@@ -212,8 +195,7 @@ def _seeds(
         return list(_as_tuple(v, "v", where)[0])
     if len(like) != 1 or like[0].numel() != 1:
         raise RuntimeError(
-            f"The vector v can only be None if {subject} a single Tensor with "
-            "a single element."
+            f"The vector v can only be None if {subject} a single Tensor with " "a single element."
         )
     return [lucid.ones_like(like[0])]
 
@@ -251,11 +233,7 @@ def _jacobian_blocks(
         for row, g in zip(rows, _or_zeros(grads, xs), strict=True):
             row.append(g.reshape(-1))
     return [
-        (
-            lucid.stack(row)
-            if row
-            else lucid.zeros(0, x.numel(), dtype=x.dtype, device=x.device)
-        )
+        (lucid.stack(row) if row else lucid.zeros(0, x.numel(), dtype=x.dtype, device=x.device))
         for row, x in zip(rows, xs, strict=True)
     ]
 
@@ -397,9 +375,7 @@ def jacobian(
     return per_output[0] if one_output else tuple(per_output)
 
 
-def _shaped(
-    blocks: Sequence[Tensor], output: Tensor, xs: Sequence[Tensor]
-) -> list[Tensor]:
+def _shaped(blocks: Sequence[Tensor], output: Tensor, xs: Sequence[Tensor]) -> list[Tensor]:
     """Each flat ``(numel(output), numel(x))`` block as ``output.shape +
     x.shape`` — the shape the reference gives a Jacobian block."""
     return [b.reshape(output.shape + x.shape) for b, x in zip(blocks, xs, strict=True)]
@@ -586,9 +562,7 @@ def vjp(
     xs = _differentiable_inputs(inputs_t, create_graph)
     with enable_grad():
         outputs: Tensor | tuple[Tensor, ...] = func(*xs)
-        outs, one_output = _as_tuple(
-            outputs, "outputs of the user-provided function", "vjp"
-        )
+        outs, one_output = _as_tuple(outputs, "outputs of the user-provided function", "vjp")
         _require_tracked(outs, "outputs", strict)
         seeds = _seeds(v, outs, "the user-provided function returns", "vjp")
         grads = _grad(
@@ -607,9 +581,7 @@ def vjp(
     return outputs, _pack(vjps, one_input)
 
 
-def _detach_outputs(
-    outs: tuple[Tensor, ...], one_output: bool
-) -> Tensor | tuple[Tensor, ...]:
+def _detach_outputs(outs: tuple[Tensor, ...], one_output: bool) -> Tensor | tuple[Tensor, ...]:
     """Detach ``outs``, preserving whether it was a single tensor.
 
     ``vjp`` and its callers accept one tensor or a tuple of them, and the
@@ -725,9 +697,7 @@ def _jvp_pass(
     xs = _differentiable_inputs(inputs_t, create_graph)
     with enable_grad():
         outputs: Tensor | tuple[Tensor, ...] = func(*xs)
-        outs, one_output = _as_tuple(
-            outputs, "outputs of the user-provided function", "jvp"
-        )
+        outs, one_output = _as_tuple(outputs, "outputs of the user-provided function", "jvp")
         _require_tracked(outs, "outputs", strict)
         tangents = _forward_by_double_back(outs, xs, v_t, create_graph, strict)
     tangents_out = _filled(tangents, outs, "back_trick", strict, create_graph)
@@ -759,9 +729,7 @@ def _forward_by_double_back(
     """
     us = [lucid.zeros_like(o).requires_grad_(True) for o in outs]
     try:
-        firsts = _grad(
-            list(outs), list(xs), grad_outputs=us, create_graph=True, allow_unused=True
-        )
+        firsts = _grad(list(outs), list(xs), grad_outputs=us, create_graph=True, allow_unused=True)
     except NotImplementedError:
         return _forward_by_rows(outs, xs, v, create_graph, strict)
     _require_tracked(firsts, "grad_inputs", strict)
@@ -827,9 +795,7 @@ def _forward_by_rows(
     return tuple(tangents)
 
 
-def _dot_rows(
-    rows: Sequence[Tensor | None], v: Sequence[Tensor], out: Tensor
-) -> Tensor:
+def _dot_rows(rows: Sequence[Tensor | None], v: Sequence[Tensor], out: Tensor) -> Tensor:
     """``sum_i <rows[i], v[i]>`` in ``out``'s dtype — one element of ``J v``.
 
     A row that is ``None`` (its input does not reach this element) adds

@@ -427,16 +427,12 @@ class PretrainedModel(nn.Module):
             )
 
         if cls.config_class is None:
-            raise TypeError(
-                f"{cls.__name__} must set config_class before calling from_pretrained"
-            )
+            raise TypeError(f"{cls.__name__} must set config_class before calling from_pretrained")
         config = cls.config_class.load(str(config_file))
         model = cls(config)
         sd = _lucid.load(str(weights_file), weights_only=True)
         if not isinstance(sd, dict):
-            raise TypeError(
-                f"Weights file did not contain a state_dict, got {type(sd).__name__}"
-            )
+            raise TypeError(f"Weights file did not contain a state_dict, got {type(sd).__name__}")
         model.load_state_dict(sd, strict=strict)
         return model
 

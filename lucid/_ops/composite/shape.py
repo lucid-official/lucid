@@ -171,9 +171,7 @@ def moveaxis(
     >>> lucid.moveaxis(x, [0, 1], [-1, -2]).shape
     (4, 5, 3, 2)
     """
-    source, destination = _promotion.as_number(source), _promotion.as_number(
-        destination
-    )
+    source, destination = _promotion.as_number(source), _promotion.as_number(destination)
     _src = list(source) if not isinstance(source, int) else source
     _dst = list(destination) if not isinstance(destination, int) else destination
     return lucid.movedim(input, _src, _dst)
@@ -628,16 +626,13 @@ def _split_along(
     dim = _wrap_dim(dim, x.ndim, op)
     _require_real_axis(
         x.ndim,
-        f"{op} expected at least a 1-dimensional tensor, but got a tensor "
-        "with 0 dims",
+        f"{op} expected at least a 1-dimensional tensor, but got a tensor " "with 0 dims",
     )
     n = _dim_size(x.shape, dim)
     k = _section_count(indices_or_sections, op)
     if k is not None:
         if k <= 0:
-            raise _C_engine.InvalidArgument(
-                f"number of sections must be larger than 0, got {k}"
-            )
+            raise _C_engine.InvalidArgument(f"number of sections must be larger than 0, got {k}")
         base, extra = divmod(n, k)
         return lucid.split(x, [base + 1] * extra + [base] * (k - extra), dim)
     if isinstance(indices_or_sections, lucid.Tensor):
@@ -968,9 +963,7 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
         )
     dim = _wrap_dim(dim, input.ndim, "take_along_dim")
     if input.ndim == 0:
-        raise IndexError(
-            "take_along_dim: dimension specified as 0 but tensor has no dimensions"
-        )
+        raise IndexError("take_along_dim: dimension specified as 0 but tensor has no dimensions")
     x_shape = list(input.shape)
     i_shape = list(indices.shape)
     x_shape[dim] = i_shape[dim] = 1
@@ -979,9 +972,7 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
     x_to[dim] = int(input.shape[dim])
     i_to = list(shape)
     i_to[dim] = int(indices.shape[dim])
-    return lucid.gather(
-        input.broadcast_to(tuple(x_to)), dim, indices.broadcast_to(tuple(i_to))
-    )
+    return lucid.gather(input.broadcast_to(tuple(x_to)), dim, indices.broadcast_to(tuple(i_to)))
 
 
 def _triangle_indices(
@@ -1007,9 +998,7 @@ def _triangle_indices(
     keep = diagonal <= offset if lower else diagonal >= offset
     coords = lucid.nonzero(keep).transpose(0, 1).contiguous()
     out_dtype: DTypeLike = dtype if dtype is not None else lucid.int64
-    return coords.to(
-        dtype=out_dtype, device=device if device is not None else get_default_device()
-    )
+    return coords.to(dtype=out_dtype, device=device if device is not None else get_default_device())
 
 
 def tril_indices(
@@ -1127,9 +1116,7 @@ def combinations(
     tensor([[1, 2], [1, 3], [2, 3]], dtype=lucid.int64)
     """
     if input.ndim != 1:
-        raise ValueError(
-            f"combinations: input must be 1-D, got shape {tuple(input.shape)}"
-        )
+        raise ValueError(f"combinations: input must be 1-D, got shape {tuple(input.shape)}")
     if r < 0:
         raise ValueError(f"combinations: r must be non-negative, got {r}")
     if r == 0:
@@ -1284,9 +1271,7 @@ def diag_embed(
     rows = _wrap_dim(dim1, out_ndim, "diag_embed")
     cols = _wrap_dim(dim2, out_ndim, "diag_embed")
     if rows == cols:
-        raise ValueError(
-            f"diag_embed: dim1 and dim2 name the same dim ({dim1}, {dim2})"
-        )
+        raise ValueError(f"diag_embed: dim1 and dim2 name the same dim ({dim1}, {dim2})")
     n = int(input.shape[-1])
     size = n + abs(offset)
     batch_shape = list(input.shape[:-1])

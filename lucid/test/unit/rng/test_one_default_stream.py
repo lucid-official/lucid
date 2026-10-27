@@ -36,64 +36,42 @@ _WITH_GENERATOR: dict[str, Draw] = {
     "randn": lambda d, g: lucid.randn(5, device=d, **_kw(g)),
     "randint": lambda d, g: lucid.randint(0, 1 << 20, (5,), device=d, **_kw(g)),
     "normal": lambda d, g: lucid.normal(2.0, 3.0, size=(5,), device=d, **_kw(g)),
-    "bernoulli": lambda d, g: lucid.bernoulli(
-        lucid.full((32,), 0.5, device=d), **_kw(g)
-    ),
-    "bernoulli_p": lambda d, g: lucid.bernoulli(
-        lucid.zeros(32, device=d), 0.5, **_kw(g)
-    ),
-    "Tensor.bernoulli_": lambda d, g: lucid.zeros(32, device=d).bernoulli_(
-        0.5, **_kw(g)
-    ),
+    "bernoulli": lambda d, g: lucid.bernoulli(lucid.full((32,), 0.5, device=d), **_kw(g)),
+    "bernoulli_p": lambda d, g: lucid.bernoulli(lucid.zeros(32, device=d), 0.5, **_kw(g)),
+    "Tensor.bernoulli_": lambda d, g: lucid.zeros(32, device=d).bernoulli_(0.5, **_kw(g)),
     "randperm": lambda d, g: lucid.randperm(16, device=d, **_kw(g)),
     "rand_like": lambda d, g: lucid.rand_like(lucid.zeros(5, device=d), **_kw(g)),
     "randn_like": lambda d, g: lucid.randn_like(lucid.zeros(5, device=d), **_kw(g)),
     "poisson": lambda d, g: lucid.poisson(lucid.full((8,), 4.0, device=d), **_kw(g)),
-    "init.uniform_": lambda d, g: init.uniform_(
-        lucid.empty(5, device=d), -1.0, 1.0, **_kw(g)
-    ),
+    "init.uniform_": lambda d, g: init.uniform_(lucid.empty(5, device=d), -1.0, 1.0, **_kw(g)),
     "init.normal_": lambda d, g: init.normal_(lucid.empty(5, device=d), **_kw(g)),
-    "init.trunc_normal_": lambda d, g: init.trunc_normal_(
-        lucid.empty(5, device=d), **_kw(g)
-    ),
+    "init.trunc_normal_": lambda d, g: init.trunc_normal_(lucid.empty(5, device=d), **_kw(g)),
     "init.xavier_uniform_": lambda d, g: init.xavier_uniform_(
         lucid.empty(4, 5, device=d), **_kw(g)
     ),
-    "init.xavier_normal_": lambda d, g: init.xavier_normal_(
-        lucid.empty(4, 5, device=d), **_kw(g)
-    ),
+    "init.xavier_normal_": lambda d, g: init.xavier_normal_(lucid.empty(4, 5, device=d), **_kw(g)),
     "init.kaiming_uniform_": lambda d, g: init.kaiming_uniform_(
         lucid.empty(4, 5, device=d), **_kw(g)
     ),
     "init.kaiming_normal_": lambda d, g: init.kaiming_normal_(
         lucid.empty(4, 5, device=d), **_kw(g)
     ),
-    "init.orthogonal_": lambda d, g: init.orthogonal_(
-        lucid.empty(4, 5, device=d), **_kw(g)
-    ),
-    "init.sparse_": lambda d, g: init.sparse_(
-        lucid.empty(6, 5, device=d), 0.5, **_kw(g)
-    ),
+    "init.orthogonal_": lambda d, g: init.orthogonal_(lucid.empty(4, 5, device=d), **_kw(g)),
+    "init.sparse_": lambda d, g: init.sparse_(lucid.empty(6, 5, device=d), 0.5, **_kw(g)),
 }
 
 # These take no generator, as in the reference: the default stream is the
 # only one they can read.
 _DEFAULT_ONLY: dict[str, Callable[[str], lucid.Tensor]] = {
     "F.dropout": lambda d: F.dropout(lucid.ones(64, device=d), 0.5, training=True),
-    "F.dropout2d": lambda d: F.dropout2d(
-        lucid.ones(4, 8, 2, 2, device=d), 0.5, training=True
-    ),
-    "F.alpha_dropout": lambda d: F.alpha_dropout(
-        lucid.ones(64, device=d), 0.5, training=True
-    ),
+    "F.dropout2d": lambda d: F.dropout2d(lucid.ones(4, 8, 2, 2, device=d), 0.5, training=True),
+    "F.alpha_dropout": lambda d: F.alpha_dropout(lucid.ones(64, device=d), 0.5, training=True),
     "F.feature_alpha_dropout": lambda d: F.feature_alpha_dropout(
         lucid.ones(4, 8, 2, 2, device=d), 0.5, training=True
     ),
     "F.rrelu": lambda d: F.rrelu(-lucid.ones(64, device=d), training=True),
     "F.gumbel_softmax": lambda d: F.gumbel_softmax(lucid.zeros(4, 8, device=d)),
-    "Normal.sample": lambda d: D.Normal(
-        lucid.zeros(5, device=d), lucid.ones(5, device=d)
-    ).sample(),
+    "Normal.sample": lambda d: D.Normal(lucid.zeros(5, device=d), lucid.ones(5, device=d)).sample(),
 }
 
 _EVERY_DRAW: dict[str, Callable[[str], lucid.Tensor]] = {

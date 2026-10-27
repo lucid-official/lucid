@@ -103,9 +103,7 @@ def _lucid_fwd_and_grads(call, value, device, dtype):
 def _check(ref, device, dtype_name, value, lucid_call, ref_call):
     if device == "metal" and dtype_name == "float64":
         pytest.skip("Metal has no float64")
-    want_fwd, want = _reference_fwd_and_grad(
-        ref, ref_call, value, getattr(ref, dtype_name)
-    )
+    want_fwd, want = _reference_fwd_and_grad(ref, ref_call, value, getattr(ref, dtype_name))
     got_fwd, eager, graph = _lucid_fwd_and_grads(
         lucid_call, value, device, getattr(lucid, dtype_name)
     )

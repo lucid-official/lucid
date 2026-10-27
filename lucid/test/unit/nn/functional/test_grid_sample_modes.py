@@ -79,9 +79,7 @@ class TestNearestGridGradient:
 class TestRefusedByName:
     def test_unknown_mode(self) -> None:
         with pytest.raises(ValueError, match="'cubic'"):
-            F.grid_sample(
-                lucid.randn(1, 1, 2, 2), lucid.zeros(1, 1, 1, 2), mode="cubic"
-            )
+            F.grid_sample(lucid.randn(1, 1, 2, 2), lucid.zeros(1, 1, 1, 2), mode="cubic")
 
     def test_unknown_padding(self) -> None:
         with pytest.raises(ValueError, match="'circular'"):
@@ -93,9 +91,7 @@ class TestRefusedByName:
 
     def test_bicubic_volumetric(self) -> None:
         with pytest.raises(ValueError, match="bicubic"):
-            F.grid_sample(
-                lucid.randn(1, 1, 2, 2, 2), lucid.zeros(1, 1, 1, 1, 3), mode="bicubic"
-            )
+            F.grid_sample(lucid.randn(1, 1, 2, 2, 2), lucid.zeros(1, 1, 1, 1, 3), mode="bicubic")
 
     def test_rank(self) -> None:
         with pytest.raises(ValueError, match="4-D"):
@@ -123,9 +119,7 @@ class TestAffineGridSizes:
         assert tuple(F.affine_grid(theta, (2, 1, 3, 4, 5)).shape) == (2, 3, 4, 5, 3)
 
     def test_identity_volume_reaches_every_voxel_centre(self) -> None:
-        theta = lucid.tensor(
-            [[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]]
-        )
+        theta = lucid.tensor([[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]])
         x = lucid.randn(1, 2, 3, 4, 5)
         grid = F.affine_grid(theta, (1, 2, 3, 4, 5), align_corners=False)
         out = F.grid_sample(x, grid, align_corners=False)

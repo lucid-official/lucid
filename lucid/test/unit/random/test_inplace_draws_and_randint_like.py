@@ -21,9 +21,7 @@ import lucid
 
 
 @pytest.mark.parametrize("method", ["normal_", "uniform_"])
-def test_an_inplace_draw_returns_self_and_follows_the_seed(
-    device: str, method: str
-) -> None:
+def test_an_inplace_draw_returns_self_and_follows_the_seed(device: str, method: str) -> None:
     x = lucid.zeros(64, device=device)
     lucid.manual_seed(7)
     assert getattr(x, method)() is x
@@ -196,9 +194,7 @@ def test_randint_draws_only_what_the_dtype_holds(
         lucid.randint(0, 5, (8,), dtype=lucid.bool, device=device)
 
 
-@pytest.mark.parametrize(
-    "dtype,most", [("int8", 128), ("int16", 2**15), ("float16", 2049)]
-)
+@pytest.mark.parametrize("dtype,most", [("int8", 128), ("int16", 2**15), ("float16", 2049)])
 def test_randperm_refuses_what_the_dtype_cannot_hold_exactly(
     device: str, dtype: str, most: int
 ) -> None:
@@ -244,17 +240,13 @@ def _rand_after(seed: int, fill: Callable[[], object]) -> list[float]:
 
 
 @pytest.mark.parametrize("dtype,parts", [("float32", 1), ("complex64", 2)])
-def test_equal_bounds_move_the_stream_as_any_bounds_do(
-    device: str, dtype: str, parts: int
-) -> None:
+def test_equal_bounds_move_the_stream_as_any_bounds_do(device: str, dtype: str, parts: int) -> None:
     dt = getattr(lucid, dtype)
     as_rand = _rand_after(9, lambda: lucid.rand(6 * parts, device=device))
     fills = (
         lambda: lucid.empty(6, dtype=dt, device=device).uniform_(1.5, 1.5),
         lambda: lucid.empty(6, dtype=dt, device=device).uniform_(0.0, 1.0),
-        lambda: lucid.nn.init.uniform_(
-            lucid.empty(6, dtype=dt, device=device), 1.5, 1.5
-        ),
+        lambda: lucid.nn.init.uniform_(lucid.empty(6, dtype=dt, device=device), 1.5, 1.5),
     )
     for fill in fills:
         assert _rand_after(9, fill) == as_rand

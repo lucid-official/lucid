@@ -87,9 +87,9 @@ def _cnn_inference(device: str) -> Callable[[], object]:
 
 
 def _transformer_adamw(device: str) -> Callable[[], object]:
-    layer = nn.TransformerEncoderLayer(
-        32, 4, dim_feedforward=64, dropout=0.0, batch_first=True
-    ).to(device)
+    layer = nn.TransformerEncoderLayer(32, 4, dim_feedforward=64, dropout=0.0, batch_first=True).to(
+        device
+    )
     opt = optim.AdamW(layer.parameters(), lr=1e-3)
     x = lucid.randn(2, 8, 32, device=device)
     target = lucid.randn(2, 8, 32, device=device)
@@ -104,9 +104,7 @@ def _transformer_adamw(device: str) -> Callable[[], object]:
     return step
 
 
-def _recurrent_adam(
-    cls: type[nn.LSTM] | type[nn.GRU], device: str
-) -> Callable[[], object]:
+def _recurrent_adam(cls: type[nn.LSTM] | type[nn.GRU], device: str) -> Callable[[], object]:
     rnn = cls(16, 32, batch_first=True).to(device)
     head = nn.Linear(32, 1).to(device)
     opt = optim.Adam(list(rnn.parameters()) + list(head.parameters()), lr=1e-3)
@@ -196,9 +194,7 @@ def measure(workload: Workload, device: str) -> dict[str, object]:
             gc.enable()
     # The backward pass and each node it runs are events too, marked as
     # backward work; the budget counts the ops the step dispatched.
-    ops = collections.Counter(
-        event.name for event in prof.events() if not event.backward
-    )
+    ops = collections.Counter(event.name for event in prof.events() if not event.backward)
     cost: dict[str, object] = {
         "allocations": after.alloc_count - before.alloc_count,
         "frees": after.free_count - before.free_count,
@@ -222,8 +218,4 @@ def measure(workload: Workload, device: str) -> dict[str, object]:
 
 
 def measure_all() -> dict[str, dict[str, object]]:
-    return {
-        f"{w.name}/{device}": measure(w, device)
-        for w in WORKLOADS
-        for device in w.devices
-    }
+    return {f"{w.name}/{device}": measure(w, device) for w in WORKLOADS for device in w.devices}

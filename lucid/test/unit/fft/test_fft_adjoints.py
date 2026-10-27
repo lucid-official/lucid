@@ -50,9 +50,7 @@ def _numpy_adjoint_of_rfft(arr: np.ndarray) -> np.ndarray:
 @pytest.mark.parametrize("n", [4, 5, 6, 7, 8, 12])
 def test_rfft_adjoint_matches_the_written_out_matrix(n) -> None:
     arr = np.arange(1.0, n + 1, dtype=np.float32)
-    assert np.allclose(
-        _grad(lucid.fft.rfft, arr), _numpy_adjoint_of_rfft(arr), atol=1e-4
-    )
+    assert np.allclose(_grad(lucid.fft.rfft, arr), _numpy_adjoint_of_rfft(arr), atol=1e-4)
 
 
 def test_rfft_interior_bins_are_not_doubled() -> None:

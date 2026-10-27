@@ -158,9 +158,7 @@ def _gen(cfg: TVMConfig, overrides: dict[str, object]) -> TVMForImageGeneration:
     params=678_000_000,
     summary="auto",
 )
-def tvm_imagenet256_gen(
-    pretrained: bool = False, **overrides: object
-) -> TVMForImageGeneration:
+def tvm_imagenet256_gen(pretrained: bool = False, **overrides: object) -> TVMForImageGeneration:
     """:func:`tvm_imagenet256` with its objective and sampler.
 
     Parameters
@@ -201,9 +199,7 @@ def tvm_imagenet256_gen(
     params=678_000_000,
     summary="auto",
 )
-def tvm_imagenet512_gen(
-    pretrained: bool = False, **overrides: object
-) -> TVMForImageGeneration:
+def tvm_imagenet512_gen(pretrained: bool = False, **overrides: object) -> TVMForImageGeneration:
     """:func:`tvm_imagenet512` with its objective and sampler.
 
     Parameters

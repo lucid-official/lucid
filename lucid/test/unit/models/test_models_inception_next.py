@@ -112,9 +112,7 @@ class TestInceptionNeXtRegistry(unittest.TestCase):
         self.assertIsInstance(cfg, InceptionNeXtConfig)
 
     def test_auto_model_for_classification(self) -> None:
-        m = models.AutoModelForImageClassification.from_pretrained(
-            "inception_next_tiny_cls"
-        )
+        m = models.AutoModelForImageClassification.from_pretrained("inception_next_tiny_cls")
         self.assertIsInstance(m, InceptionNeXtForImageClassification)
 
 

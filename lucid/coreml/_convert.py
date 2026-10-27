@@ -202,9 +202,7 @@ def scatter_along_axis(
     norm_axis = axis % rank if rank else 0
     for a in range(rank):
         if 0 < idx_shape[a] < upd_shape[a]:
-            updates, _, upd_shape = _split_prefix(
-                b, updates, upd_shape, a, idx_shape[a]
-            )
+            updates, _, upd_shape = _split_prefix(b, updates, upd_shape, a, idx_shape[a])
     tails: list[tuple[int, str, list[int]]] = []
     for a in range(rank):
         if a != norm_axis and 0 < idx_shape[a] < cur_shape[a]:
@@ -252,9 +250,7 @@ def _broadcast_f32(b: Builder, val: str, peer: str, dims: _flex.Dims) -> str:
     return b.emit("mul", [("x", val), ("y", one_peer)], dims, dtype=_spec.FLOAT32)
 
 
-def _emit_f32_fmod_bindings(
-    b: Builder, a: str, b_val: str, dims: _flex.Dims
-) -> EmitResult:
+def _emit_f32_fmod_bindings(b: Builder, a: str, b_val: str, dims: _flex.Dims) -> EmitResult:
     """Exact ``fmod(a, b_val)`` in float32 for equal-shape operands ``a`` and ``b_val``."""
     f32 = _spec.FLOAT32
     c_zero = b.const_float32(0.0)
@@ -268,15 +264,11 @@ def _emit_f32_fmod_bindings(
         c_2k = b.const_float32(float(2**k))
         bk = b.emit("mul", [("x", abs_b), ("y", c_2k)], dims, dtype=f32)
         bk_fin = b.emit("less", [("x", bk), ("y", c_inf)], dims, dtype=_MIL_BOOL)
-        step = b.emit(
-            "select", [("cond", bk_fin), ("a", bk), ("b", abs_b)], dims, dtype=f32
-        )
+        step = b.emit("select", [("cond", bk_fin), ("a", bk), ("b", abs_b)], dims, dtype=f32)
         rn = b.emit("mod", [("x", r), ("y", step)], dims, dtype=f32)
         rn_neg = b.emit("less", [("x", rn), ("y", c_zero)], dims, dtype=_MIL_BOOL)
         rn_fix = b.emit("add", [("x", rn), ("y", step)], dims, dtype=f32)
-        r = b.emit(
-            "select", [("cond", rn_neg), ("a", rn_fix), ("b", rn)], dims, dtype=f32
-        )
+        r = b.emit("select", [("cond", rn_neg), ("a", rn_fix), ("b", rn)], dims, dtype=f32)
     rn = b.emit("mod", [("x", r), ("y", abs_b)], dims, dtype=f32)
     rn_neg = b.emit("less", [("x", rn), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     rn_fix = b.emit("add", [("x", rn), ("y", abs_b)], dims, dtype=f32)
@@ -284,19 +276,13 @@ def _emit_f32_fmod_bindings(
     a_diff = b.emit("sub", [("x", abs_a), ("y", abs_a)], dims, dtype=f32)
     a_fin = b.emit("equal", [("x", a_diff), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     b_inf = b.emit("equal", [("x", abs_b), ("y", c_inf)], dims, dtype=_MIL_BOOL)
-    fin_over_inf = b.emit(
-        "logical_and", [("x", a_fin), ("y", b_inf)], dims, dtype=_MIL_BOOL
-    )
-    r = b.emit(
-        "select", [("cond", fin_over_inf), ("a", abs_a), ("b", r)], dims, dtype=f32
-    )
+    fin_over_inf = b.emit("logical_and", [("x", a_fin), ("y", b_inf)], dims, dtype=_MIL_BOOL)
+    r = b.emit("select", [("cond", fin_over_inf), ("a", abs_a), ("b", r)], dims, dtype=f32)
     a_lt = b.emit("less", [("x", a), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     a_eq = b.emit("equal", [("x", a), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     inv_a = b.emit("real_div", [("x", c_one), ("y", a)], dims, dtype=f32)
     inv_neg = b.emit("less", [("x", inv_a), ("y", c_zero)], dims, dtype=_MIL_BOOL)
-    neg_zero = b.emit(
-        "logical_and", [("x", a_eq), ("y", inv_neg)], dims, dtype=_MIL_BOOL
-    )
+    neg_zero = b.emit("logical_and", [("x", a_eq), ("y", inv_neg)], dims, dtype=_MIL_BOOL)
     a_sign = b.emit("logical_or", [("x", a_lt), ("y", neg_zero)], dims, dtype=_MIL_BOOL)
     neg_r = b.emit("mul", [("x", r), ("y", c_neg_one)], dims, dtype=f32)
     return "select", [("cond", a_sign), ("a", neg_r), ("b", r)]
@@ -329,9 +315,7 @@ def _emit_f32_floordiv_bindings(
     frac = b.emit("sub", [("x", div), ("y", whole)], dims, dtype=f32)
     round_up = b.emit("greater", [("x", frac), ("y", c_half)], dims, dtype=_MIL_BOOL)
     whole_inc = b.emit("add", [("x", whole), ("y", c_one)], dims, dtype=f32)
-    whole = b.emit(
-        "select", [("cond", round_up), ("a", whole_inc), ("b", whole)], dims, dtype=f32
-    )
+    whole = b.emit("select", [("cond", round_up), ("a", whole_inc), ("b", whole)], dims, dtype=f32)
     signed_zero = b.emit("mul", [("x", raw_div), ("y", c_zero)], dims, dtype=f32)
     div_zero = b.emit("equal", [("x", div), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     res = b.emit(
@@ -344,9 +328,7 @@ def _emit_f32_floordiv_bindings(
     return "select", [("cond", b_zero), ("a", raw_div), ("b", res)]
 
 
-def _emit_float_divmod(
-    b: Builder, op: TracedOp, lhs: str, rhs: str, target: int
-) -> EmitResult:
+def _emit_float_divmod(b: Builder, op: TracedOp, lhs: str, rhs: str, target: int) -> EmitResult:
     """Emit floating-point ``floordiv``, ``remainder``, or ``fmod`` in float32."""
     f32 = _spec.FLOAT32
     dims = b.result_dims(op)
@@ -365,12 +347,8 @@ def _emit_float_divmod(
     mod_nz = b.emit("not_equal", [("x", mod_val), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     mod_neg = b.emit("less", [("x", mod_val), ("y", c_zero)], dims, dtype=_MIL_BOOL)
     b_neg = b.emit("less", [("x", b_val), ("y", c_zero)], dims, dtype=_MIL_BOOL)
-    diff_sign = b.emit(
-        "logical_xor", [("x", mod_neg), ("y", b_neg)], dims, dtype=_MIL_BOOL
-    )
-    adjust = b.emit(
-        "logical_and", [("x", mod_nz), ("y", diff_sign)], dims, dtype=_MIL_BOOL
-    )
+    diff_sign = b.emit("logical_xor", [("x", mod_neg), ("y", b_neg)], dims, dtype=_MIL_BOOL)
+    adjust = b.emit("logical_and", [("x", mod_nz), ("y", diff_sign)], dims, dtype=_MIL_BOOL)
     if op.name == "remainder":
         mod_plus_b = b.emit("add", [("x", mod_val), ("y", b_val)], dims, dtype=f32)
         rem_res: EmitResult = (
@@ -438,12 +416,8 @@ def _emit_int_divmod(b: Builder, op: TracedOp, lhs: str, rhs: str) -> EmitResult
     r_nz = b.emit("not_equal", [("x", r), ("y", zero)], dims, dtype=_MIL_BOOL)
     r_neg = b.emit("less", [("x", r), ("y", zero)], dims, dtype=_MIL_BOOL)
     y_neg = b.emit("less", [("x", y), ("y", zero)], b.shape_of(y), dtype=_MIL_BOOL)
-    diff_sign = b.emit(
-        "logical_xor", [("x", r_neg), ("y", y_neg)], dims, dtype=_MIL_BOOL
-    )
-    adjust = b.emit(
-        "logical_and", [("x", r_nz), ("y", diff_sign)], dims, dtype=_MIL_BOOL
-    )
+    diff_sign = b.emit("logical_xor", [("x", r_neg), ("y", y_neg)], dims, dtype=_MIL_BOOL)
+    adjust = b.emit("logical_and", [("x", r_nz), ("y", diff_sign)], dims, dtype=_MIL_BOOL)
     return "select", [("cond", adjust), ("a", r_plus_y), ("b", r)]
 
 

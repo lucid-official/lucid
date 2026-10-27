@@ -67,9 +67,7 @@ def _tensors_of(output: Any) -> list[tuple[str, lucid.Tensor]]:
     if isinstance(output, lucid.Tensor):
         return [("output", output)]
     if isinstance(output, (tuple, list)):
-        return [
-            (f"[{i}]", v) for i, v in enumerate(output) if isinstance(v, lucid.Tensor)
-        ]
+        return [(f"[{i}]", v) for i, v in enumerate(output) if isinstance(v, lucid.Tensor)]
     if dataclasses.is_dataclass(output) and not isinstance(output, type):
         found = []
         for field in dataclasses.fields(output):
@@ -212,9 +210,7 @@ def _trace_cases() -> list[Any]:
         marks = list(getattr(case, "marks", ()))
         if family in _COLD_TRACE_DIFFERS:
             reason = _COLD_TRACE_DIFFERS[family]
-            marks.append(
-                pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
-            )
+            marks.append(pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason))
         picked.append(pytest.param(*_values_of(case), id=family, marks=marks))
     return picked
 
@@ -236,9 +232,7 @@ def _only_in(cold: list[str], warm: list[str]) -> str:
     )
 
 
-@pytest.mark.parametrize(
-    ("family", "factory", "overrides", "make_inputs"), _trace_cases()
-)
+@pytest.mark.parametrize(("family", "factory", "overrides", "make_inputs"), _trace_cases())
 def test_a_trace_records_the_same_graph_cold_or_warm(
     family: str,
     factory: str,

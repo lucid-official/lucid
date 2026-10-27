@@ -75,9 +75,7 @@ class _Fit(nn.Module):
 def _view(
     base: lucid.Tensor, shape: tuple[int, ...], stride: tuple[int, ...], offset: int
 ) -> lucid.Tensor:
-    return _wrap(
-        _C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset)
-    )
+    return _wrap(_C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset))
 
 
 def _flat(t: lucid.Tensor) -> np.ndarray:
@@ -153,9 +151,7 @@ _CASES = [
 ]
 
 
-@pytest.mark.filterwarnings(
-    "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
-)
+@pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
 @pytest.mark.parametrize("opt_name", list(_OPTIMIZERS))
 @pytest.mark.parametrize("layout_name", list(_LAYOUTS))
 @pytest.mark.parametrize("entry, device", _CASES)

@@ -187,12 +187,8 @@ class YOLOV3Config(ModelConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "anchors", tuple(tuple(a) for a in self.anchors))
         object.__setattr__(self, "strides", tuple(self.strides))
-        object.__setattr__(
-            self, "anchor_masks", tuple(tuple(m) for m in self.anchor_masks)
-        )
-        _check_scale_table(
-            type(self).__name__, self.anchors, self.strides, self.anchor_masks
-        )
+        object.__setattr__(self, "anchor_masks", tuple(tuple(m) for m in self.anchor_masks))
+        _check_scale_table(type(self).__name__, self.anchors, self.strides, self.anchor_masks)
 
 
 def _check_scale_table(
@@ -288,9 +284,7 @@ class _ConvBnLeaky(nn.Module):
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
-        self.conv = nn.Conv2d(
-            in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False
-        )
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False)
         self.bn = nn.BatchNorm2d(out_ch)
 
     @override
@@ -633,14 +627,8 @@ def _gt_rows(
     """
     flat = target["boxes"].float().reshape(-1).tolist()
     ids = target["labels"].long().reshape(-1).tolist()
-    coords = (
-        [float(v) for v in flat if isinstance(v, float)]
-        if isinstance(flat, list)
-        else []
-    )
-    labels = (
-        [int(v) for v in ids if isinstance(v, int)] if isinstance(ids, list) else []
-    )
+    coords = [float(v) for v in flat if isinstance(v, float)] if isinstance(flat, list) else []
+    labels = [int(v) for v in ids if isinstance(v, int)] if isinstance(ids, list) else []
     if len(coords) != 4 * len(labels):
         raise ValueError(
             f"target has {len(coords) / 4:g} boxes but {len(labels)} labels; "
@@ -681,9 +669,7 @@ def _yolov3_loss(
 
     # The model refused a config whose scale count is not its head count, so
     # the two lists are the same length by construction.
-    for raw, (anchor_idx_triple, anchors_wh, stride) in zip(
-        raw_preds, scales, strict=True
-    ):
+    for raw, (anchor_idx_triple, anchors_wh, stride) in zip(raw_preds, scales, strict=True):
         fH = int(raw.shape[2])
         fW = int(raw.shape[3])
         nA = len(anchor_idx_triple)
@@ -729,8 +715,7 @@ def _yolov3_loss(
                     [[0.0] * fW for _ in range(fH)] for _ in range(nA)
                 ]
                 cls_arr: list[list[list[list[float]]]] = [
-                    [[[0.0] * C for _ in range(fW)] for _ in range(fH)]
-                    for _ in range(nA)
+                    [[[0.0] * C for _ in range(fW)] for _ in range(fH)] for _ in range(nA)
                 ]
                 mask_arr: list[list[list[float]]] = [
                     [[0.0] * fW for _ in range(fH)] for _ in range(nA)
@@ -820,26 +805,20 @@ def _yolov3_loss(
             box_loss = (box_loss_sx + box_loss_sy + box_loss_w + box_loss_h).sum()
 
             # Objectness BCE
-            obj_bce = F.binary_cross_entropy_with_logits(
-                pred_tc, tgt_obj, reduction="none"
-            )
+            obj_bce = F.binary_cross_entropy_with_logits(pred_tc, tgt_obj, reduction="none")
             # Paper §2.1: "If the bounding box prior is not the best but does
             # overlap a ground truth object by more than some threshold we
             # ignore the prediction ... We use the threshold of .5."  Without
             # this, a near-perfect box that merely lost the argmax is punished
             # as background, and with ~10k anchors that term dominates.
-            ignore = _ignore_mask(pred_boxes[b], gt_boxes, _IGNORE_IOU_THRESH).reshape(
-                nA, fH, fW
-            )
+            ignore = _ignore_mask(pred_boxes[b], gt_boxes, _IGNORE_IOU_THRESH).reshape(nA, fH, fW)
             noobj_mask = (1.0 - obj_mask) * (1.0 - ignore)
             # v3 drops v1's lambda weighting — "we use sum of squared error
             # loss" — and lets the ignore mask do the negative balancing.
             obj_loss = (obj_bce * obj_mask + obj_bce * noobj_mask).sum()
 
             # Class BCE (positive anchors only)
-            cls_bce = F.binary_cross_entropy_with_logits(
-                pred_cls_logits, tgt_cls, reduction="none"
-            )
+            cls_bce = F.binary_cross_entropy_with_logits(pred_cls_logits, tgt_cls, reduction="none")
             cls_loss = (cls_bce * obj_mask[..., None]).sum()
 
             # The two families of term scale with different things, so they
@@ -965,9 +944,7 @@ def _postprocess_detections(
             continue
 
         results.append(
-            detection_result(
-                det_boxes[keep_idx], det_scores[keep_idx], det_labels[keep_idx]
-            )
+            detection_result(det_boxes[keep_idx], det_scores[keep_idx], det_labels[keep_idx])
         )
 
     return results
@@ -1231,9 +1208,7 @@ class YOLOV3TinyForObjectDetection(ObjectDetectionModel):
         # expansion — ``conv 128 1x1`` -> upsample -> route(concat layer 8,
         # 256ch) = 384ch -> ``conv 256 3x3`` -> ``conv 255 1x1``.
         self.p5_to_p4_conv = _ConvBnLeaky(256, 128, 1)
-        self.p4_compress, self.p4_predict = _make_tiny_detection_head(
-            256 + 128, 256, nA4, C
-        )
+        self.p4_compress, self.p4_predict = _make_tiny_detection_head(256 + 128, 256, nA4, C)
 
     @override
     def forward(

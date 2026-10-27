@@ -97,9 +97,7 @@ _MACH_TASK_BASIC_INFO = 20
 _INFO_COUNT = ctypes.sizeof(_MachTaskBasicInfo) // ctypes.sizeof(ctypes.c_uint)
 
 try:
-    _libc: ctypes.CDLL | None = ctypes.CDLL(
-        ctypes.util.find_library("c"), use_errno=True
-    )
+    _libc: ctypes.CDLL | None = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
     _task_self = _libc.mach_task_self()  # type: ignore[union-attr]
 except Exception:  # noqa: BLE001 - a governor that cannot read is a no-op
     _libc = None
@@ -276,7 +274,5 @@ class Governor:
                 f"machine was short of memory, so this run checked less than a "
                 f"full one:"
             )
-            lines.extend(
-                f"    {nodeid}  ({free:.0f} MB free)" for nodeid, free in self.skipped
-            )
+            lines.extend(f"    {nodeid}  ({free:.0f} MB free)" for nodeid, free in self.skipped)
         return lines

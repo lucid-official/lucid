@@ -97,9 +97,7 @@ class StabilityAxis(Axis):
         # Where the reference is finite.  Absent means "not measured", and
         # an unmeasured op is checked at every scale as before — the table
         # narrows the claim, it does not gate it.
-        reference_finite = _stability_contract().get(
-            _surface.recorded_as(symbol.qualname)
-        )
+        reference_finite = _stability_contract().get(_surface.recorded_as(symbol.qualname))
 
         # What the check is actually about: does *changing the magnitude*
         # introduce a NaN?  A NaN that was there before anything was scaled
@@ -214,9 +212,7 @@ class ExtremeValueAxis(Axis):
             if problem:
                 failures.append(f"{label}: {problem}")
         if failures:
-            return self._finding(
-                symbol, Status.FAIL, "; ".join(failures[:3]), failures=failures
-            )
+            return self._finding(symbol, Status.FAIL, "; ".join(failures[:3]), failures=failures)
         if not checked:
             return self._finding(symbol, Status.SKIP, "no case ran")
         return self._finding(symbol, Status.PASS, f"{checked} extreme cases")
@@ -389,9 +385,7 @@ class ContiguityAxis(Axis):
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         if symbol.qualname in self._REPORTS_LAYOUT:
-            return self._finding(
-                symbol, Status.NOT_APPLICABLE, "reports the layout itself"
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "reports the layout itself")
         fn = _surface.resolve(symbol)
         if fn is None:
             return self._finding(symbol, Status.SKIP, "not resolvable")
@@ -404,9 +398,7 @@ class ContiguityAxis(Axis):
                 Status.NOT_APPLICABLE,
                 "two identical calls disagree — this measures the draw, not the op",
             )
-        original = (
-            call.args[call.primary] if 0 <= call.primary < len(call.args) else None
-        )
+        original = call.args[call.primary] if 0 <= call.primary < len(call.args) else None
         base = _probe.to_numpy(original)
         if base is None:
             return self._finding(
@@ -438,9 +430,7 @@ class ContiguityAxis(Axis):
         try:
             if not isinstance(original, lucid.Tensor):
                 original = lucid.tensor(base)
-            packed_probe = lucid.tensor(
-                base, dtype=original.dtype, device=original.device
-            )
+            packed_probe = lucid.tensor(base, dtype=original.dtype, device=original.device)
             big = lucid.tensor(padded, dtype=original.dtype, device=original.device)
             # A positive-step slice is a view on either device: every
             # second element of ``big``'s buffer, so an op that assumes a
@@ -452,9 +442,7 @@ class ContiguityAxis(Axis):
             else:
                 view = big[..., 1:][..., ::2]
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.SKIP, f"could not build a view: {exc!r}"
-            )
+            return self._finding(symbol, Status.SKIP, f"could not build a view: {exc!r}")
 
         # Before the operands are compared, the view has to *be* the probe.
         # Every second column of ``padded`` is a sentinel, so a slice
@@ -604,9 +592,7 @@ class DeterminismAxis(Axis):
                         # same-seed check, so it is never more lenient.
                         quiet = True
                         continue
-                    return self._finding(
-                        symbol, Status.PASS, "reproducible and seed-sensitive"
-                    )
+                    return self._finding(symbol, Status.PASS, "reproducible and seed-sensitive")
         if quiet:
             return self._finding(
                 symbol,
@@ -688,9 +674,7 @@ class RankAxis(Axis):
         try:
             args = list(call.with_primary(flat).args)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.SKIP, f"could not rebuild the call: {exc!r}"
-            )
+            return self._finding(symbol, Status.SKIP, f"could not rebuild the call: {exc!r}")
 
         try:
             out = fn(*args, **call.kwargs)

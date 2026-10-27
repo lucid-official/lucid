@@ -189,9 +189,7 @@ _CASES: dict[str, _Case] = {
         "float32",
     ),
     "grid_sample_5d": _Case(
-        lambda F, m: F.grid_sample(
-            m(1, 2, 2, 3, 3), _grid(m, 1, 2, 2, 2, 3), align_corners=False
-        ),
+        lambda F, m: F.grid_sample(m(1, 2, 2, 3, 3), _grid(m, 1, 2, 2, 2, 3), align_corners=False),
         "half",
         "float32",
     ),
@@ -229,25 +227,17 @@ _CASES: dict[str, _Case] = {
         "half",
     ),
     "interpolate_bilinear_antialias": _Case(
-        lambda F, m: F.interpolate(
-            m(1, 1, 8, 8), size=(3, 3), mode="bilinear", antialias=True
-        ),
+        lambda F, m: F.interpolate(m(1, 1, 8, 8), size=(3, 3), mode="bilinear", antialias=True),
         "half",
         "half",
     ),
     "interpolate_bicubic_antialias": _Case(
-        lambda F, m: F.interpolate(
-            m(1, 1, 8, 8), size=(3, 3), mode="bicubic", antialias=True
-        ),
+        lambda F, m: F.interpolate(m(1, 1, 8, 8), size=(3, 3), mode="bicubic", antialias=True),
         "half",
         "half",
     ),
-    "normalize_dims": _Case(
-        lambda F, m: F.normalize(m(2, 3, 4), dim=(1, 2)), "half", "half"
-    ),
-    "normalize_all": _Case(
-        lambda F, m: F.normalize(m(2, 3, 4), dim=(0, 1, 2)), "half", "half"
-    ),
+    "normalize_dims": _Case(lambda F, m: F.normalize(m(2, 3, 4), dim=(1, 2)), "half", "half"),
+    "normalize_all": _Case(lambda F, m: F.normalize(m(2, 3, 4), dim=(0, 1, 2)), "half", "half"),
     "embedding_max_norm": _Case(
         lambda F, m: F.embedding(m.ints([0, 2, 1, 2]), m(4, 3), max_norm=0.5),
         "half",
@@ -318,25 +308,17 @@ def _ce_target(m: _Make) -> Any:
 
 #: Keyed by (the function, a variant); every loss in ``F.__all__`` is here.
 _LOSSES: dict[tuple[str, str], _Loss] = {
-    ("mse_loss", ""): _Loss(
-        lambda F, m, r: F.mse_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
-    ),
+    ("mse_loss", ""): _Loss(lambda F, m, r: F.mse_loss(m(4, 4), m(4, 4, seed=1), reduction=r)),
     # Weighted, the reference's mse_loss and l1_loss are composites: ``pow``
     # is FP32 on MPS, ``abs`` and ``mul`` have no row, ``sum`` is FP32 on MPS.
     ("mse_loss", "weighted"): _Loss(
-        lambda F, m, r: F.mse_loss(
-            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
-        ),
+        lambda F, m, r: F.mse_loss(m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)),
         cpu="half",
         decomposed=True,
     ),
-    ("l1_loss", ""): _Loss(
-        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
-    ),
+    ("l1_loss", ""): _Loss(lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r)),
     ("l1_loss", "weighted"): _Loss(
-        lambda F, m, r: F.l1_loss(
-            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
-        ),
+        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)),
         metal={"none": "half", "mean": _F32, "sum": _F32},
         cpu="half",
         decomposed=True,
@@ -346,17 +328,11 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         mixed=True,
     ),
     ("smooth_l1_loss", ""): _Loss(
-        lambda F, m, r: F.smooth_l1_loss(
-            m(4, 4), m(4, 4, seed=1), reduction=r, beta=0.5
-        )
+        lambda F, m, r: F.smooth_l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r, beta=0.5)
     ),
-    ("huber_loss", ""): _Loss(
-        lambda F, m, r: F.huber_loss(m(4, 4), m(4, 4, seed=1), reduction=r)
-    ),
+    ("huber_loss", ""): _Loss(lambda F, m, r: F.huber_loss(m(4, 4), m(4, 4, seed=1), reduction=r)),
     ("huber_loss", "weighted"): _Loss(
-        lambda F, m, r: F.huber_loss(
-            m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4)
-        )
+        lambda F, m, r: F.huber_loss(m(4, 4), m(4, 4, seed=1), reduction=r, weight=m.pos(4, 4))
     ),
     ("cross_entropy", ""): _Loss(
         lambda F, m, r: F.cross_entropy(m(3, 4), _ce_target(m), reduction=r)
@@ -370,14 +346,10 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         lambda F, m, r: F.cross_entropy(m(3, 4), m.unit(3, 4), reduction=r)
     ),
     ("cross_entropy", "float32_weight"): _Loss(
-        lambda F, m, r: F.cross_entropy(
-            m(3, 4), _ce_target(m), m.pos(4).float(), reduction=r
-        ),
+        lambda F, m, r: F.cross_entropy(m(3, 4), _ce_target(m), m.pos(4).float(), reduction=r),
         mixed=True,
     ),
-    ("nll_loss", ""): _Loss(
-        lambda F, m, r: F.nll_loss(m(3, 4), _ce_target(m), reduction=r)
-    ),
+    ("nll_loss", ""): _Loss(lambda F, m, r: F.nll_loss(m(3, 4), _ce_target(m), reduction=r)),
     ("nll_loss", "weighted"): _Loss(
         lambda F, m, r: F.nll_loss(m(3, 4), _ce_target(m), m.pos(4), reduction=r)
     ),
@@ -392,9 +364,7 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         metal="half",
     ),
     ("binary_cross_entropy_with_logits", ""): _Loss(
-        lambda F, m, r: F.binary_cross_entropy_with_logits(
-            m(4, 4), m.unit(4, 4), reduction=r
-        )
+        lambda F, m, r: F.binary_cross_entropy_with_logits(m(4, 4), m.unit(4, 4), reduction=r)
     ),
     ("binary_cross_entropy_with_logits", "weighted"): _Loss(
         lambda F, m, r: F.binary_cross_entropy_with_logits(
@@ -427,27 +397,19 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         decomposed=True,
     ),
     ("cosine_embedding_loss", ""): _Loss(
-        lambda F, m, r: F.cosine_embedding_loss(
-            m(4, 4), m(4, 4, seed=1), m.signs(4), reduction=r
-        )
+        lambda F, m, r: F.cosine_embedding_loss(m(4, 4), m(4, 4, seed=1), m.signs(4), reduction=r)
     ),
     ("margin_ranking_loss", ""): _Loss(
-        lambda F, m, r: F.margin_ranking_loss(
-            m(4), m(4, seed=1), m.signs(4), reduction=r
-        )
+        lambda F, m, r: F.margin_ranking_loss(m(4), m(4, seed=1), m.signs(4), reduction=r)
     ),
     ("hinge_embedding_loss", ""): _Loss(
-        lambda F, m, r: F.hinge_embedding_loss(
-            m(4, 4), m.signs(16).reshape(4, 4), reduction=r
-        )
+        lambda F, m, r: F.hinge_embedding_loss(m(4, 4), m.signs(16).reshape(4, 4), reduction=r)
     ),
     ("poisson_nll_loss", ""): _Loss(
         lambda F, m, r: F.poisson_nll_loss(m(4, 4), m.unit(4, 4), reduction=r)
     ),
     ("gaussian_nll_loss", ""): _Loss(
-        lambda F, m, r: F.gaussian_nll_loss(
-            m(4, 4), m(4, 4, seed=1), m.pos(4, 4), reduction=r
-        ),
+        lambda F, m, r: F.gaussian_nll_loss(m(4, 4), m(4, 4, seed=1), m.pos(4, 4), reduction=r),
         cpu="half",
     ),
     # Lucid's Metal row is FP32 too; the reference has no MPS kernel.
@@ -464,9 +426,7 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         lambda F, m, r: F.multi_margin_loss(m(3, 4), _ce_target(m), reduction=r)
     ),
     ("multi_margin_loss", "weighted"): _Loss(
-        lambda F, m, r: F.multi_margin_loss(
-            m(3, 4), _ce_target(m), weight=m.pos(4), reduction=r
-        )
+        lambda F, m, r: F.multi_margin_loss(m(3, 4), _ce_target(m), weight=m.pos(4), reduction=r)
     ),
     ("multilabel_margin_loss", ""): _Loss(
         lambda F, m, r: F.multilabel_margin_loss(
@@ -476,22 +436,16 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         )
     ),
     ("soft_margin_loss", ""): _Loss(
-        lambda F, m, r: F.soft_margin_loss(
-            m(4, 4), m.signs(16).reshape(4, 4), reduction=r
-        )
+        lambda F, m, r: F.soft_margin_loss(m(4, 4), m.signs(16).reshape(4, 4), reduction=r)
     ),
     # No row; the reference's parts are logsigmoid and a sum, FP32 on MPS.
     ("multilabel_soft_margin_loss", ""): _Loss(
-        lambda F, m, r: F.multilabel_soft_margin_loss(
-            m(3, 4), m.unit(3, 4), reduction=r
-        ),
+        lambda F, m, r: F.multilabel_soft_margin_loss(m(3, 4), m.unit(3, 4), reduction=r),
         cpu="half",
         decomposed=True,
     ),
     ("multilabel_soft_margin_loss", "weighted"): _Loss(
-        lambda F, m, r: F.multilabel_soft_margin_loss(
-            m(3, 4), m.unit(3, 4), m.pos(4), reduction=r
-        ),
+        lambda F, m, r: F.multilabel_soft_margin_loss(m(3, 4), m.unit(3, 4), m.pos(4), reduction=r),
         cpu="half",
         decomposed=True,
     ),
@@ -574,9 +528,7 @@ def test_a_composite_under_autocast_runs_and_keeps_its_values(
     # Outside autocast, on the same values held at the dtype the output has.
     dtype = _input_dtype(lucid, autocast_dt, input_dt)
     with lucid.no_grad():
-        want = case.fn(
-            lucid.nn.functional, _Make(lucid, device, dtype, compute=out.dtype)
-        )
+        want = case.fn(lucid.nn.functional, _Make(lucid, device, dtype, compute=out.dtype))
     # A row applied at the entry runs the same ops as the call outside; a
     # decomposed case's parts apply theirs, so it rounds between them.
     tol = _TOL[autocast_dt] if case.decomposed else _EXACT
@@ -654,9 +606,7 @@ def test_embedding_max_norm_renormalises_a_half_table_in_place(
     half = getattr(lucid, autocast_dt)
     weight = (lucid.randn(4, 3, device=device) * 3).to(half)
     with autocast(device_type=device, dtype=half):
-        lucid.nn.functional.embedding(
-            lucid.tensor([0, 2], device=device), weight, max_norm=1.0
-        )
+        lucid.nn.functional.embedding(lucid.tensor([0, 2], device=device), weight, max_norm=1.0)
     assert weight.dtype == half
     norms = lucid.linalg.vector_norm(weight.float(), dim=1)
     assert float(norms[0].item()) <= 1.0 + _TOL[autocast_dt]
@@ -698,9 +648,7 @@ def test_the_dtype_matches_the_reference(
 _ENTRY_FUNCTIONS = frozenset({"_autocast_entry", "amp_cast_inputs", "_amp_op"})
 # Call sites whose name is built at run time, with every name each passes.
 _COMPUTED_NAMES: dict[tuple[str, str], frozenset[str]] = {
-    ("lucid/fft/_transforms.py", "_transform"): frozenset(
-        {"fftn", "ifftn", "rfftn", "irfftn"}
-    ),
+    ("lucid/fft/_transforms.py", "_transform"): frozenset({"fftn", "ifftn", "rfftn", "irfftn"}),
     ("lucid/nn/functional/_pool_core.py", "_pool_autocast"): _pool_core._POOL_ROWS,
 }
 # The entries themselves, which hand on their caller's name.
@@ -742,9 +690,7 @@ def _entry_calls() -> Iterator[tuple[str, str, int, ast.expr]]:
     for path in sorted(root.rglob("*.py")):
         rel = path.relative_to(root.parent).as_posix()
         text = path.read_text(encoding="utf-8")
-        if rel.startswith("lucid/test/") or not any(
-            f in text for f in _ENTRY_FUNCTIONS
-        ):
+        if rel.startswith("lucid/test/") or not any(f in text for f in _ENTRY_FUNCTIONS):
             continue
         visitor = _EntryCalls(rel)
         visitor.visit(ast.parse(text))

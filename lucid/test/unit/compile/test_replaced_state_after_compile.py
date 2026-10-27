@@ -93,9 +93,7 @@ _CHANGES: dict[str, _Change] = {
     "parameter-setattr": lambda m, d: setattr(
         m.inp, "weight", nn.Parameter(_values((4, 4), 0.3, d))
     ),
-    "parameter-data": lambda m, d: setattr(
-        m.inp.weight, "data", _values((4, 4), 0.3, d)
-    ),
+    "parameter-data": lambda m, d: setattr(m.inp.weight, "data", _values((4, 4), 0.3, d)),
     "parameter-register_parameter": lambda m, d: m.out.register_parameter(
         "bias", nn.Parameter(_values((4,), 0.9, d))
     ),
@@ -106,9 +104,7 @@ _CHANGES: dict[str, _Change] = {
     "parameter-assign-load": _assign_load,
     "buffer-setattr": lambda m, d: setattr(m, "shift", _values((4,), -0.6, d)),
     "buffer-data": lambda m, d: setattr(m.shift, "data", _values((4,), -0.6, d)),
-    "buffer-register_buffer": lambda m, d: m.register_buffer(
-        "shift", _values((4,), 0.8, d)
-    ),
+    "buffer-register_buffer": lambda m, d: m.register_buffer("shift", _values((4,), 0.8, d)),
     "submodule-with-parameters": lambda m, d: setattr(m, "inp", _linear(7, d)),
     # Tanh and Sigmoid key alike: neither has a flag or a scalar attribute.
     "submodule-without-parameters": lambda m, d: setattr(m, "act", nn.Sigmoid()),
@@ -167,9 +163,7 @@ def _global_net_call(x: lucid.Tensor) -> lucid.Tensor:
     return _GLOBAL_NET(x)
 
 
-def _compiled(
-    model: nn.Module, entry: str
-) -> CompiledModule[[lucid.Tensor], lucid.Tensor]:
+def _compiled(model: nn.Module, entry: str) -> CompiledModule[[lucid.Tensor], lucid.Tensor]:
     """``lucid.compile`` of the model, of its bound forward, of a closure, or
     of a function that reads it as a global."""
     global _GLOBAL_NET
@@ -220,9 +214,7 @@ def _assert_compiled(cache: object, eager_only: object) -> None:
     assert cache and not eager_only, (cache, eager_only)
 
 
-def _make_step_run(
-    model: _Net, change: str, when: str, device: str, compiled: bool
-) -> list[float]:
+def _make_step_run(model: _Net, change: str, when: str, device: str, compiled: bool) -> list[float]:
     x, t = _data(device)
     step = make_step(model, F.mse_loss) if compiled else None
     opt = optim.SGD(model.parameters(), lr=0.1)
@@ -245,9 +237,7 @@ def _make_step_run(
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("when", list(_WHEN))
 @pytest.mark.parametrize("change", list(_CHANGES))
-def test_make_step_trains_what_the_model_holds_now(
-    change: str, when: str, device: str
-) -> None:
+def test_make_step_trains_what_the_model_holds_now(change: str, when: str, device: str) -> None:
     model, ref = _net(device), _net(device)
     losses = _make_step_run(model, change, when, device, compiled=True)
     ref_losses = _make_step_run(ref, change, when, device, compiled=False)
@@ -323,9 +313,7 @@ _SEQ_CHANGES: dict[str, Callable[[nn.Sequential, str], None]] = {
     "parameter-setattr": lambda m, d: setattr(
         m[0], "weight", nn.Parameter(_values((4, 4), 0.3, d))
     ),
-    "parameter-data": lambda m, d: setattr(
-        m[0].weight, "data", _values((4, 4), 0.3, d)
-    ),
+    "parameter-data": lambda m, d: setattr(m[0].weight, "data", _values((4, 4), 0.3, d)),
     "submodule-with-parameters": lambda m, d: m.__setitem__(2, _linear(7, d)),
     "submodule-without-parameters": lambda m, d: m.__setitem__(1, nn.Sigmoid()),
 }
@@ -351,14 +339,10 @@ def test_a_segmented_step_trains_what_the_model_holds_now(
         loss.backward()
         ref_loss = F.mse_loss(ref(x), t)
         ref_loss.backward()
-        np.testing.assert_allclose(
-            float(loss.item()), float(ref_loss.item()), rtol=_TOL, atol=_TOL
-        )
+        np.testing.assert_allclose(float(loss.item()), float(ref_loss.item()), rtol=_TOL, atol=_TOL)
         for p, rp in zip(model.parameters(), ref.parameters(), strict=True):
             assert p.grad is not None and rp.grad is not None
-            np.testing.assert_allclose(
-                p.grad.numpy(), rp.grad.numpy(), rtol=_TOL, atol=_TOL
-            )
+            np.testing.assert_allclose(p.grad.numpy(), rp.grad.numpy(), rtol=_TOL, atol=_TOL)
     if device == "metal":
         segment_caches = step.cache  # type: ignore[attr-defined]
         eager = step.eager_only["flag"]  # type: ignore[attr-defined]
@@ -506,9 +490,7 @@ def _reads_rebound(x: lucid.Tensor) -> lucid.Tensor:
 @_METAL
 @pytest.mark.parametrize("reach", ["closure", "global"])
 @pytest.mark.parametrize("rebound", ["module", "tensor"])
-def test_a_function_whose_name_is_bound_to_another_one(
-    rebound: str, reach: str
-) -> None:
+def test_a_function_whose_name_is_bound_to_another_one(rebound: str, reach: str) -> None:
     """A closure cell or a global given another module or tensor moves no tree
     version; what the function reaches is compared on every call instead.
     The two modules have the same structure and so the same key."""
@@ -670,9 +652,7 @@ def _storing_function(
 
 
 @_METAL
-@pytest.mark.parametrize(
-    "entry", ["module", "bound-method", "closure", "global", "make_step"]
-)
+@pytest.mark.parametrize("entry", ["module", "bound-method", "closure", "global", "make_step"])
 @pytest.mark.parametrize("kind", ["attribute", "nonlocal", "global"])
 def test_a_forward_that_keeps_its_input_is_traced_once(
     kind: str, entry: str, monkeypatch: pytest.MonkeyPatch

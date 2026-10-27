@@ -125,10 +125,7 @@ def _step_keeps(model: Any, args: Any, kwargs: Any, dtype: lucid.dtype) -> None:
 _ROLLOUTS = {f for f, spec in zoo.SPECS.items() if spec.skip is not None}
 
 _PAIRS = [
-    (family, task)
-    for task in zoo.TASKS
-    for family in zoo.families(task)
-    if family not in _ROLLOUTS
+    (family, task) for task in zoo.TASKS for family in zoo.families(task) if family not in _ROLLOUTS
 ]
 
 _DETECTOR = {"backbone_layers": (1, 1, 1, 1), "fpn_out_channels": 32}
@@ -163,9 +160,7 @@ _HALF_DEVICE = "metal" if metal_available() else "cpu"
 _EVAL = [("cpu", _F64), (_HALF_DEVICE, _F16)]
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL]
-)
+@pytest.mark.parametrize(("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL])
 @pytest.mark.parametrize(("family", "task"), _PAIRS, ids=[f for f, _ in _PAIRS])
 def test_a_forward_answers_in_the_dtype_it_is_given(
     family: str,
@@ -512,9 +507,7 @@ def _sampled_in(answer: Any, dtype: lucid.dtype, what: str) -> None:
     ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
 )
 @pytest.mark.parametrize("family", zoo.families("image-generation"))
-def test_generate_answers_in_the_model_dtype(
-    family: str, device: str, dtype: lucid.dtype
-) -> None:
+def test_generate_answers_in_the_model_dtype(family: str, device: str, dtype: lucid.dtype) -> None:
     """The start noise, the step's own draws and its coefficients follow it.
 
     A float32 start widened the whole reverse chain of a half model, and
@@ -604,9 +597,7 @@ def test_a_half_dit_samples_where_half_rounds_alpha_bar_to_one() -> None:
     _ROLLOUT_DTYPES,
     ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
 )
-def test_tvm_latent_whitening_keeps_the_latent_dtype(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_tvm_latent_whitening_keeps_the_latent_dtype(device: str, dtype: lucid.dtype) -> None:
     """Its per-channel mean and std were built at the default dtype."""
     _need(device)
     model = _generator("tvm", device, dtype)
@@ -632,9 +623,7 @@ def test_a_half_dit_training_step_noises_where_half_rounds_alpha_bar_to_one() ->
     added = []
     for model, x in ((wide, x0), (narrow, x0.to(_F16))):
         seen: list[lucid.Tensor] = []
-        handle = model.dit.register_forward_pre_hook(
-            lambda _module, args: seen.append(args[0])
-        )
+        handle = model.dit.register_forward_pre_hook(lambda _module, args: seen.append(args[0]))
         lucid.manual_seed(2)  # the same steps and the same noise, rounded
         with lucid.no_grad():
             model(x)
@@ -646,9 +635,7 @@ def test_a_half_dit_training_step_noises_where_half_rounds_alpha_bar_to_one() ->
     assert float(np.abs(got - want).max()) < _TOL[_F16] * scale
 
 
-@pytest.mark.parametrize(
-    "conditioning", ["adaln_zero", "adaln", "cross_attention", "in_context"]
-)
+@pytest.mark.parametrize("conditioning", ["adaln_zero", "adaln", "cross_attention", "in_context"])
 def test_every_dit_conditioning_answers_in_half(conditioning: str) -> None:
     """The ungated adaLN block multiplied by a float32 ``ones`` gate.
 
@@ -759,8 +746,7 @@ def test_a_training_step_keeps_the_model_dtype(
 def _square(side: int, lo: int, hi: int) -> lucid.Tensor:
     """A ``(1, side, side)`` binary mask holding one square."""
     grid = [
-        [1.0 if lo <= r < hi and lo <= c < hi else 0.0 for c in range(side)]
-        for r in range(side)
+        [1.0 if lo <= r < hi and lo <= c < hi else 0.0 for c in range(side)] for r in range(side)
     ]
     return lucid.tensor([grid])
 
@@ -884,9 +870,7 @@ def _paired(factory: str, device: str, dtype: lucid.dtype) -> tuple[Any, Any]:
     return wide.to(device), narrow.to(device).to(dtype)
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype"), _INFER, ids=[f"{d}-{_name(t)}" for d, t in _INFER]
-)
+@pytest.mark.parametrize(("device", "dtype"), _INFER, ids=[f"{d}-{_name(t)}" for d, t in _INFER])
 @pytest.mark.parametrize("factory", sorted(_SMALL))
 def test_detr_and_maskformer_infer_in_reduced_and_double_precision(
     factory: str, device: str, dtype: lucid.dtype

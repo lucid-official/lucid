@@ -295,9 +295,7 @@ def mean_flow_xlarge_2(pretrained: bool = False, **overrides: object) -> MeanFlo
     return MeanFlowModel(apply_overrides(_CFG_XLARGE_2, overrides))
 
 
-def _gen(
-    cfg: MeanFlowConfig, overrides: dict[str, object]
-) -> MeanFlowForImageGeneration:
+def _gen(cfg: MeanFlowConfig, overrides: dict[str, object]) -> MeanFlowForImageGeneration:
     return MeanFlowForImageGeneration(apply_overrides(cfg, overrides))
 
 

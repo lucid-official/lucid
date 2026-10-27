@@ -140,9 +140,7 @@ class Embedding(nn.Module):
     @override
     def forward(self, indices: Tensor) -> Tensor:
         """Dequantize the table and look up ``indices``."""
-        weight = dequantize(
-            self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=0
-        )
+        weight = dequantize(self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=0)
         return F.embedding(indices, weight, self.padding_idx)
 
     @classmethod
@@ -157,9 +155,7 @@ class Embedding(nn.Module):
             from lucid.quantization._functional import quantize
             from lucid.quantization._qscheme import per_channel_symmetric
 
-            obs = PerChannelMinMaxObserver(
-                ch_axis=0, qscheme=per_channel_symmetric, qdtype=qint8
-            )
+            obs = PerChannelMinMaxObserver(ch_axis=0, qscheme=per_channel_symmetric, qdtype=qint8)
             obs(f.weight)
             scale, zero_point = obs.calculate_qparams()
             codes = quantize(f.weight, scale, zero_point, qint8, ch_axis=0)
@@ -172,9 +168,7 @@ class Embedding(nn.Module):
 
     @override
     def extra_repr(self) -> str:
-        return (
-            f"num_embeddings={self.num_embeddings}, embedding_dim={self.embedding_dim}"
-        )
+        return f"num_embeddings={self.num_embeddings}, embedding_dim={self.embedding_dim}"
 
 
 class EmbeddingBag(nn.Module):
@@ -301,9 +295,7 @@ class EmbeddingBag(nn.Module):
             raise NotImplementedError(
                 "quantized.EmbeddingBag: compressed_indices_mapping is not supported"
             )
-        weight = dequantize(
-            self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=0
-        )
+        weight = dequantize(self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=0)
         return F.embedding_bag(
             indices,
             weight,
@@ -328,9 +320,7 @@ class EmbeddingBag(nn.Module):
             from lucid.quantization._qscheme import per_channel_symmetric
             from lucid.quantization.observer import PerChannelMinMaxObserver
 
-            obs = PerChannelMinMaxObserver(
-                ch_axis=0, qscheme=per_channel_symmetric, qdtype=qint8
-            )
+            obs = PerChannelMinMaxObserver(ch_axis=0, qscheme=per_channel_symmetric, qdtype=qint8)
             obs(f.weight)
             scale, zero_point = obs.calculate_qparams()
             codes = quantize(f.weight, scale, zero_point, qint8, ch_axis=0)

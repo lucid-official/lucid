@@ -64,9 +64,7 @@ def test_addmm_beta_zero_ignores_nonfinite_input(
     m2_np = np.array([[2.0, -1.0], [0.5, 3.0], [1.5, 2.0]], dtype=np.float32)
     inp_ref = ref.full((2, 2), fill, dtype=ref.float32)
     inp_luc = lucid.full((2, 2), fill, dtype=lucid.float32, device=device)
-    want = ref.addmm(
-        inp_ref, ref.tensor(m1_np), ref.tensor(m2_np), beta=0.0, alpha=alpha
-    )
+    want = ref.addmm(inp_ref, ref.tensor(m1_np), ref.tensor(m2_np), beta=0.0, alpha=alpha)
     got = lucid.addmm(
         inp_luc,
         lucid.tensor(m1_np, device=device),
@@ -206,9 +204,7 @@ def test_cholesky_backward_matches_reference_symmetry(
 
 
 @pytest.mark.parity
-def test_scalar_constructed_distributions_score_on_device(
-    ref: ModuleType, device: str
-) -> None:
+def test_scalar_constructed_distributions_score_on_device(ref: ModuleType, device: str) -> None:
     x_pos_np = np.array([0.4, 1.2, 2.5], dtype=np.float32)
     x_unit_np = np.array([0.2, 0.5, 0.8], dtype=np.float32)
     x_int_np = np.array([0.0, 1.0, 3.0], dtype=np.float32)
@@ -259,9 +255,7 @@ def test_scalar_constructed_distributions_score_on_device(
 
 
 @pytest.mark.parity
-def test_lkj_cholesky_scalar_concentration_scores_on_device(
-    ref: ModuleType, device: str
-) -> None:
+def test_lkj_cholesky_scalar_concentration_scores_on_device(ref: ModuleType, device: str) -> None:
     dist_luc = D.LKJCholesky(3, 2.0)
     dist_ref = ref.distributions.LKJCholesky(3, 2.0)
     sample_ref = dist_ref.sample((2,))

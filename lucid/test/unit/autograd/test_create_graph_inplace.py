@@ -247,12 +247,8 @@ def test_the_node_does_not_keep_the_tensor_it_writes_alive(
 
 def _recorded_writes() -> dict[str, Callable[[lucid.Tensor], object]]:
     return {
-        "mul_": lambda t: t.mul_(
-            lucid.full(t.shape, 3.0, requires_grad=True, device=t.device)
-        ),
-        "add_": lambda t: t.add_(
-            lucid.ones(t.shape, requires_grad=True, device=t.device)
-        ),
+        "mul_": lambda t: t.mul_(lucid.full(t.shape, 3.0, requires_grad=True, device=t.device)),
+        "add_": lambda t: t.add_(lucid.ones(t.shape, requires_grad=True, device=t.device)),
         "exp_": lambda t: t.exp_(),
         "relu_": lambda t: t.relu_(),
     }
@@ -374,9 +370,7 @@ def test_a_saved_output_written_by_a_recorded_op(device: str) -> None:
         (g,) = lucid.autograd.grad(y2.sum(), x2, create_graph=True)
         h = _second(g, x2)
     np.testing.assert_allclose(_np(g), 2.0 * s * (1.0 - s), rtol=1e-5)
-    np.testing.assert_allclose(
-        h, 2.0 * s * (1.0 - s) * (1.0 - 2.0 * s), rtol=1e-4
-    )
+    np.testing.assert_allclose(h, 2.0 * s * (1.0 - s) * (1.0 - 2.0 * s), rtol=1e-4)
 
 
 def test_a_write_under_no_grad_into_a_saved_output(device: str) -> None:
@@ -391,9 +385,7 @@ def test_a_write_under_no_grad_into_a_saved_output(device: str) -> None:
         y = x.sigmoid()
         with lucid.no_grad():
             y.exp_()
-        with pytest.raises(
-            _C_engine.VersionMismatch, match="sigmoid output 0"
-        ):
+        with pytest.raises(_C_engine.VersionMismatch, match="sigmoid output 0"):
             lucid.autograd.grad(y.sum(), x, create_graph=create_graph)
 
         x2 = lucid.tensor(xs.tolist(), requires_grad=True, device=device)
@@ -416,9 +408,7 @@ _GRAD_WRITTEN = {"mul_": 2.0 * V, "add_": 2.0 + V, "sub_": 2.0 - V, "div_": 2.0 
 
 
 @pytest.mark.parametrize("op", OPS)
-def test_a_write_into_a_gradient_with_an_operand_that_requires_grad(
-    op: str, device: str
-) -> None:
+def test_a_write_into_a_gradient_with_an_operand_that_requires_grad(op: str, device: str) -> None:
     first, _ = DERIVATIVES[op]
     p = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True, device=device)
     (p * 2.0).sum().backward()

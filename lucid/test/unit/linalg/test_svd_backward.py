@@ -61,14 +61,11 @@ def test_svd_backward_matches_its_own_forward(shape, path: str) -> None:
         up[i] += step
         down[i] -= step
         difference.ravel()[i] = (
-            _loss(up.reshape(shape), weight, path)
-            - _loss(down.reshape(shape), weight, path)
+            _loss(up.reshape(shape), weight, path) - _loss(down.reshape(shape), weight, path)
         ) / (2 * step)
 
     worst = float(np.max(np.abs(analytic - difference)))
-    assert (
-        worst < 1e-5
-    ), f"{shape} {path}: analytic and difference differ by {worst:.3e}"
+    assert worst < 1e-5, f"{shape} {path}: analytic and difference differ by {worst:.3e}"
 
 
 def test_svd_reconstructs_what_it_decomposed() -> None:
@@ -76,9 +73,7 @@ def test_svd_reconstructs_what_it_decomposed() -> None:
     rng = np.random.default_rng(3)
     matrix = rng.random((4, 3))
     u, s, vh = lucid.linalg.svd(lucid.tensor(matrix), full_matrices=False)
-    rebuilt = (
-        np.asarray(u.numpy()) @ np.diag(np.asarray(s.numpy())) @ np.asarray(vh.numpy())
-    )
+    rebuilt = np.asarray(u.numpy()) @ np.diag(np.asarray(s.numpy())) @ np.asarray(vh.numpy())
     assert np.allclose(rebuilt, matrix, atol=1e-10)
 
 
@@ -101,9 +96,7 @@ def test_norm_does_not_overflow_on_the_way_to_a_finite_answer(values, expected) 
     unscaled evaluation answered inf.  The other end underflowed to 0.
     The reference does both; this is a place Lucid can simply be right.
     """
-    got = float(
-        np.asarray(lucid.linalg.norm(lucid.tensor(np.array(values))).numpy()).ravel()[0]
-    )
+    got = float(np.asarray(lucid.linalg.norm(lucid.tensor(np.array(values))).numpy()).ravel()[0])
     assert np.isfinite(got), got
     if expected == 0.0:
         assert got == 0.0

@@ -95,9 +95,7 @@ class TestRandomErasingApplyParity:
             (1, 1, 2, 2, 0.7),  # tiny rectangle
         ],
     )
-    def test_constant_scalar_fill(
-        self, i: int, j: int, h: int, w: int, fill_value: float
-    ) -> None:
+    def test_constant_scalar_fill(self, i: int, j: int, h: int, w: int, fill_value: float) -> None:
         """Scalar constant fill — identical rect must produce identical pixels."""
         lucid_img, ref_img = _matched_image(seed=0)
         c = int(lucid_img.shape[0])
@@ -241,9 +239,7 @@ def _sample_ref_rects(
     rects: list[tuple[int, int, int, int]] = []
     for _ in range(n):
         # Reference signature: get_params(img, scale, ratio, value).
-        x, y, h, w, _v = tf.get_params(
-            img, scale=list(scale), ratio=list(ratio), value=[0.0]
-        )
+        x, y, h, w, _v = tf.get_params(img, scale=list(scale), ratio=list(ratio), value=[0.0])
         if h > 0 and w > 0 and h < img_h and w < img_w:
             rects.append((y, x, h, w))
     return rects
@@ -287,9 +283,7 @@ class TestRandomErasingDistribution:
         hi = self.RATIO[1] * 2.0
         for top, left, h, w in rects:
             aspect = h / w  # eh / ew, matching the sampler convention
-            assert (
-                lo <= aspect <= hi
-            ), f"aspect {aspect:.3f} outside [{lo:.3f}, {hi:.3f}]"
+            assert lo <= aspect <= hi, f"aspect {aspect:.3f} outside [{lo:.3f}, {hi:.3f}]"
 
     def test_mean_area_matches_reference(self) -> None:
         """Mean erase area across many samples agrees with the reference impl."""
@@ -311,8 +305,7 @@ class TestRandomErasingDistribution:
         # of the same uniform scale distribution should land much closer
         # than this, but allow Monte-Carlo headroom.
         assert rel <= 0.05, (
-            f"mean area mismatch: lucid={lucid_area:.1f} ref={ref_area:.1f} "
-            f"(rel {rel:.3%})"
+            f"mean area mismatch: lucid={lucid_area:.1f} ref={ref_area:.1f} " f"(rel {rel:.3%})"
         )
 
     def test_mean_aspect_matches_reference(self) -> None:
@@ -326,9 +319,7 @@ class TestRandomErasingDistribution:
         # Compare in log-space because both samplers draw the aspect
         # ratio from a *log*-uniform distribution; the geometric mean is
         # the natural summary statistic.
-        lucid_log_aspect = float(
-            np.mean([math.log(h / w) for _, _, h, w in lucid_rects])
-        )
+        lucid_log_aspect = float(np.mean([math.log(h / w) for _, _, h, w in lucid_rects]))
         ref_log_aspect = float(np.mean([math.log(h / w) for _, _, h, w in ref_rects]))
         # Theoretical mean of log-uniform on [log(0.3), log(3.3)] is 0;
         # check both sample means are close to each other (and to 0).

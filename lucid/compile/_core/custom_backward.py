@@ -91,14 +91,10 @@ class _Applied:
 
 
 #: Every call noted, per tracer — gone with the tracer.
-_APPLIED: weakref.WeakKeyDictionary[Tracer, list[_Applied]] = (
-    weakref.WeakKeyDictionary()
-)
+_APPLIED: weakref.WeakKeyDictionary[Tracer, list[_Applied]] = weakref.WeakKeyDictionary()
 
 
-def _impls(
-    values: tuple[object, ...], *, floating: bool
-) -> tuple[_C_engine.TensorImpl, ...]:
+def _impls(values: tuple[object, ...], *, floating: bool) -> tuple[_C_engine.TensorImpl, ...]:
     """The impls of the tensors among ``values`` — only floating ones if asked."""
     return tuple(
         v._impl
@@ -109,14 +105,10 @@ def _impls(
 
 def _ids(tracer: Tracer, impls: tuple[_C_engine.TensorImpl, ...]) -> frozenset[int]:
     """The trace ids ``tracer`` has for ``impls`` now; one it has none for is left out."""
-    return frozenset(
-        int(tid) for tid in map(tracer.lookup_id, impls) if tid is not None
-    )
+    return frozenset(int(tid) for tid in map(tracer.lookup_id, impls) if tid is not None)
 
 
-def note_applied(
-    tracer: Tracer, function: type, args: tuple[object, ...], output: object
-) -> None:
+def note_applied(tracer: Tracer, function: type, args: tuple[object, ...], output: object) -> None:
     """Record that ``function``'s ``forward`` ran while ``tracer`` recorded.
 
     Called by ``Function.apply`` as soon as ``forward`` returns, whatever the
@@ -181,9 +173,7 @@ def _descendants(graph: TraceGraph, source_ids: list[int]) -> set[int]:
         if status(node.name) == sink:
             continue
         if any(int(i) in reached for i in node.inputs):
-            reached.update(
-                int(meta.id) for meta in node.outputs if meta.dtype in GRADIENT_DTYPES
-            )
+            reached.update(int(meta.id) for meta in node.outputs if meta.dtype in GRADIENT_DTYPES)
     return reached
 
 

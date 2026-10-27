@@ -33,9 +33,7 @@ pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
     ("dtype", "np_dtype"),
     [(lucid.int64, np.int64), (lucid.int32, np.int32), (lucid.float32, np.float32)],
 )
-def test_numpy_of_a_compiled_output_keeps_its_dtype(
-    dtype: object, np_dtype: type
-) -> None:
+def test_numpy_of_a_compiled_output_keeps_its_dtype(dtype: object, np_dtype: type) -> None:
     lucid.manual_seed(0)
     x = lucid.randint(-9, 9, (4, 6)).to(dtype).to(COMPILE_DEVICE)  # type: ignore[arg-type]
     fn = lambda t: t * 2 + 1  # noqa: E731

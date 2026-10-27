@@ -131,9 +131,7 @@ class _CouplingNet(nn.Module):
         super().__init__()
         self._act_name = config.act_fn
         wn = config.use_weight_norm
-        self.stem = _maybe_weight_norm(
-            nn.Conv2d(channels, dim, kernel_size=3, padding=1), wn
-        )
+        self.stem = _maybe_weight_norm(nn.Conv2d(channels, dim, kernel_size=3, padding=1), wn)
         self.blocks = nn.ModuleList(
             [
                 _ResBlock(dim, config.act_fn, config.use_batch_norm, wn)
@@ -276,12 +274,8 @@ class _FlowBatchNorm(nn.Module):
         a compiled flow went on reading the statistics it was traced with.
         """
         with lucid.no_grad():
-            self.running_mean = (
-                1.0 - self._momentum
-            ) * self.running_mean + self._momentum * mean
-            self.running_var = (
-                1.0 - self._momentum
-            ) * self.running_var + self._momentum * var
+            self.running_mean = (1.0 - self._momentum) * self.running_mean + self._momentum * mean
+            self.running_var = (1.0 - self._momentum) * self.running_var + self._momentum * var
 
     @override
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -464,9 +458,7 @@ class RealNVPModel(PretrainedModel):
                     stages.append(
                         _FlowBatchNorm(
                             channels,
-                            use_running_stats=(
-                                config.batch_norm_running_stats_in_training
-                            ),
+                            use_running_stats=(config.batch_norm_running_stats_in_training),
                         )
                     )
 
@@ -497,9 +489,7 @@ class RealNVPModel(PretrainedModel):
                         stages.append(
                             _FlowBatchNorm(
                                 squeezed,
-                                use_running_stats=(
-                                    config.batch_norm_running_stats_in_training
-                                ),
+                                use_running_stats=(config.batch_norm_running_stats_in_training),
                             )
                         )
                 # Half the channels are factored out; the rest carry on.
@@ -523,8 +513,7 @@ class RealNVPModel(PretrainedModel):
         c, h, w = self._image_shape
         if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (c, h, w):
             raise ValueError(
-                f"RealNVP expects (B, {c}, {h}, {w}) samples, "
-                f"got shape {tuple(x.shape)}"
+                f"RealNVP expects (B, {c}, {h}, {w}) samples, " f"got shape {tuple(x.shape)}"
             )
 
     def encode(self, x: Tensor) -> tuple[Tensor, Tensor]:
@@ -584,8 +573,7 @@ class RealNVPModel(PretrainedModel):
         """
         if z.ndim != 2 or int(z.shape[1]) != self._input_dim:
             raise ValueError(
-                f"RealNVP expects (B, {self._input_dim}) latents, "
-                f"got shape {tuple(z.shape)}"
+                f"RealNVP expects (B, {self._input_dim}) latents, " f"got shape {tuple(z.shape)}"
             )
         batch = int(z.shape[0])
 

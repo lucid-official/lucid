@@ -99,9 +99,7 @@ def _ref_coupling_net(ref: ModuleType, net: Any, x: Any) -> tuple[Any, Any]:
     return log_scale, out[:, channels:]
 
 
-def _ref_encode(
-    ref: ModuleType, model: RealNVPModel, x_np: np.ndarray
-) -> tuple[Any, Any]:
+def _ref_encode(ref: ModuleType, model: RealNVPModel, x_np: np.ndarray) -> tuple[Any, Any]:
     """Reference forward direction — returns ``(z, log_det)``."""
     cfg = model.config
     constraint = float(cfg.data_constraint)  # type: ignore[attr-defined]
@@ -112,11 +110,7 @@ def _ref_encode(
     s = (x - 0.5) * constraint + 0.5
     h = ref.log(s) - ref.log(1.0 - s)
     log_det = (
-        (
-            ref.nn.functional.softplus(h)
-            + ref.nn.functional.softplus(-h)
-            + math.log(constraint)
-        )
+        (ref.nn.functional.softplus(h) + ref.nn.functional.softplus(-h) + math.log(constraint))
         .reshape(batch, -1)
         .sum(dim=-1)
     )
@@ -270,8 +264,6 @@ def test_loss_parity(ref: ModuleType) -> None:
     # ``bits_per_dim`` — the head applies it so the reported loss is on the
     # paper's scale.
     expected = float(
-        (-_ref_log_prob(ref, model, x_np) / (cfg.input_dim * math.log(2.0)))
-        .mean()
-        .item()
+        (-_ref_log_prob(ref, model, x_np) / (cfg.input_dim * math.log(2.0))).mean().item()
     ) + float(cfg.num_bits)
     assert abs(float(out.loss.item()) - expected) < 1e-3

@@ -81,9 +81,7 @@ class TestTrainedAgreement:
         finally:
             exported.close()
 
-    def test_int8_holds_the_top_result_and_costs_the_rest(
-        self, tmp_path: object
-    ) -> None:
+    def test_int8_holds_the_top_result_and_costs_the_rest(self, tmp_path: object) -> None:
         """Quantization is a trade, and this is which half is paid.
 
         Measured across three trained families: the winning class

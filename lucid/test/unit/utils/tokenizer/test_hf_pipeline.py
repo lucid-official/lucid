@@ -276,9 +276,7 @@ class TestPreTokenizers:
 
     def test_metaspace_first_marks_only_the_start(self) -> None:
         """With ``first``, words after a whitespace split get no marker."""
-        seq = PreTokenizerSequence(
-            [WhitespaceSplit(), Metaspace(prepend_scheme="first")]
-        )
+        seq = PreTokenizerSequence([WhitespaceSplit(), Metaspace(prepend_scheme="first")])
         assert _chunks(seq, "a  b c ") == ["▁a", "b", "c"]
 
     def test_metaspace_replaces_only_the_ascii_space(self) -> None:
@@ -494,9 +492,7 @@ class TestNormalizers:
             Precompiled(struct.pack("<I", 400) + b"\0" * 8)
 
     def test_precompiled_empty_config_is_identity(self) -> None:
-        norm = normalizer_from_config(
-            {"type": "Precompiled", "precompiled_charsmap": ""}
-        )
+        norm = normalizer_from_config({"type": "Precompiled", "precompiled_charsmap": ""})
         assert norm is not None and norm("Ｆｕｌｌ") == "Ｆｕｌｌ"
 
     def test_from_config(self) -> None:
@@ -516,9 +512,7 @@ class TestNormalizers:
         with pytest.raises(ValueError, match="unsupported"):
             normalizer_from_config({"type": "ByteLevel"})
         with pytest.raises(ValueError, match="does not compile"):
-            normalizer_from_config(
-                {"type": "Replace", "pattern": {"Regex": "("}, "content": ""}
-            )
+            normalizer_from_config({"type": "Replace", "pattern": {"Regex": "("}, "content": ""})
 
     def test_matches_hugging_face(self) -> None:
         normalizers = pytest.importorskip("tokenizers.normalizers")
@@ -840,15 +834,11 @@ class TestT5SmallParity:
                 expected = theirs.decode(ids, skip_special_tokens=skip)  # type: ignore[attr-defined]
                 assert fast.decode(ids, skip_special_tokens=skip) == expected  # type: ignore[attr-defined]
 
-    def test_reported_case_has_no_bos(
-        self, t5_pair: tuple[object, object, object]
-    ) -> None:
+    def test_reported_case_has_no_bos(self, t5_pair: tuple[object, object, object]) -> None:
         _, _, fast = t5_pair
         assert fast.encode("hi") == [7102, 1]  # type: ignore[attr-defined]
 
-    def test_precompiled_normalizer_fuzz(
-        self, t5_pair: tuple[object, object, object]
-    ) -> None:
+    def test_precompiled_normalizer_fuzz(self, t5_pair: tuple[object, object, object]) -> None:
         """Random code points, seeded, through both normalizers."""
         theirs, _, fast = t5_pair
         ours = fast._normalizer  # type: ignore[attr-defined]

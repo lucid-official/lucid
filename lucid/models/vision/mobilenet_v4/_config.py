@@ -164,9 +164,7 @@ class MobileNetV4Config(ModelConfig):
                 f"{MOBILENET_V4_VARIANTS}, got {self.variant!r}"
             )
         if not 0.0 <= self.dropout < 1.0:
-            raise ValueError(
-                f"MobileNetV4Config.dropout must lie in [0, 1), got {self.dropout}"
-            )
+            raise ValueError(f"MobileNetV4Config.dropout must lie in [0, 1), got {self.dropout}")
         if not 0.0 <= self.drop_path_rate < 1.0:
             raise ValueError(
                 f"MobileNetV4Config.drop_path_rate must lie in [0, 1), got "

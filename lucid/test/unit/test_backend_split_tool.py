@@ -143,17 +143,13 @@ def test_synthetic_move_and_verify_covers_all_cpp_constructs(tmp_path: Path) -> 
     assert "CpuBackend::AxisScatterWalk CpuBackend::axis_scatter_walk(" in indexing_cpp
     assert "static " not in indexing_cpp
 
-    linalg_cpp = (work_dir / "lucid/_C/backend/cpu/methods/Linalg.cpp").read_text(
-        encoding="utf-8"
-    )
+    linalg_cpp = (work_dir / "lucid/_C/backend/cpu/methods/Linalg.cpp").read_text(encoding="utf-8")
     assert "bool upper)" in linalg_cpp
     assert "= false" not in linalg_cpp
     assert "override" not in linalg_cpp
 
     # Doc comments remain in header above declarations
-    hdr_after = (work_dir / "lucid/_C/backend/cpu/CpuBackend.h").read_text(
-        encoding="utf-8"
-    )
+    hdr_after = (work_dir / "lucid/_C/backend/cpu/CpuBackend.h").read_text(encoding="utf-8")
     assert "// Doc comment for add." in hdr_after
     assert "bool upper = false) override;" in hdr_after
 
@@ -207,9 +203,7 @@ def test_parse_header_rejects_class_scope_ifdef_and_raw_string() -> None:
         "class CpuBackend final : public IBackend {\npublic:",
         "class CpuBackend final : public IBackend {\npublic:\n#ifdef FOO\n#endif",
     )
-    with pytest.raises(
-        ValueError, match="Preprocessor directive #ifdef at class scope"
-    ):
+    with pytest.raises(ValueError, match="Preprocessor directive #ifdef at class scope"):
         backend_split.parse_header(with_class_ifdef, "CpuBackend")
 
     with_raw_str = _SYNTHETIC_CPU_HEADER.replace(

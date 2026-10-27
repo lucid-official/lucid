@@ -59,9 +59,7 @@ class _PatchEmbed(nn.Module):
         The single projection convolution with ``kernel_size=stride=patch_size``.
     """
 
-    def __init__(
-        self, in_channels: int, patch_size: int, dim: int, image_size: int
-    ) -> None:
+    def __init__(self, in_channels: int, patch_size: int, dim: int, image_size: int) -> None:
         super().__init__()
         # A Conv2d with kernel=stride=patch_size extracts patches in one op.
         self.proj = nn.Conv2d(in_channels, dim, patch_size, stride=patch_size)
@@ -150,9 +148,7 @@ class _Attention(nn.Module):
         Dropout on the output projection (Appendix B.1).
     """
 
-    def __init__(
-        self, dim: int, num_heads: int, attn_drop: float, proj_drop: float = 0.0
-    ) -> None:
+    def __init__(self, dim: int, num_heads: int, attn_drop: float, proj_drop: float = 0.0) -> None:
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
@@ -295,9 +291,7 @@ class _ViTBlock(nn.Module):
     ) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(dim, eps=eps)
-        self.attn = _Attention(
-            dim, num_heads, attn_drop=attention_dropout, proj_drop=dropout
-        )
+        self.attn = _Attention(dim, num_heads, attn_drop=attention_dropout, proj_drop=dropout)
         self.norm2 = nn.LayerNorm(dim, eps=eps)
         self.mlp = _MLP(dim, mlp_dim, dropout)
 

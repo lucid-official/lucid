@@ -54,9 +54,7 @@ def assert_as_the_reference(
     # The reference refuses with a strict zip's ValueError, a KeyError on a
     # group (OneCycleLR) or a ZeroDivisionError (ConstantLR at factor 0);
     # Lucid with one typed ValueError.
-    want, want_err = run(
-        ref, build, add_at, (ValueError, KeyError, ZeroDivisionError), keys
-    )
+    want, want_err = run(ref, build, add_at, (ValueError, KeyError, ZeroDivisionError), keys)
     got, got_err = run(lucid, build, add_at, (ValueError,), keys)
     assert (got_err is None) == (want_err is None), (got_err, want_err)
     assert len(got) == len(want)

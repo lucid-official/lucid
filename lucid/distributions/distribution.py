@@ -33,9 +33,7 @@ from lucid.distributions.constraints import Constraint, unit_interval
 _VALIDATING: ContextVar[object] = ContextVar("_VALIDATING", default=None)
 
 
-def _validated(
-    method: Callable[..., Tensor], *, probability: bool
-) -> Callable[..., Tensor]:
+def _validated(method: Callable[..., Tensor], *, probability: bool) -> Callable[..., Tensor]:
     """``method`` checking its value first, when its distribution validates.
 
     ``probability`` selects the check: an ``icdf`` takes a probability, any
@@ -46,9 +44,7 @@ def _validated(
     # Any further arguments a subclass's scorer takes are passed through
     # untouched; only ``value`` is checked.
     @functools.wraps(method)
-    def validated(
-        self: Distribution, value: Tensor, *args: object, **kwargs: object
-    ) -> Tensor:
+    def validated(self: Distribution, value: Tensor, *args: object, **kwargs: object) -> Tensor:
         if not self._validate_args or _VALIDATING.get() is self:
             return method(self, value, *args, **kwargs)
         if probability:
@@ -373,9 +369,7 @@ class Distribution:
         """
         return tuple(sample_shape) + self._batch_shape + self._event_shape
 
-    def _get_checked_instance(
-        self, cls: type[Distribution], _instance: Self | None = None
-    ) -> Self:
+    def _get_checked_instance(self, cls: type[Distribution], _instance: Self | None = None) -> Self:
         """Allocate or reuse an instance for :meth:`expand`, verifying ``__init__``.
 
         Raises
@@ -767,13 +761,9 @@ class Distribution:
         and ``event_shape``.
         """
         cardinality = int(values.shape[0])
-        values = values.reshape(
-            (cardinality,) + (1,) * len(self._batch_shape) + self._event_shape
-        )
+        values = values.reshape((cardinality,) + (1,) * len(self._batch_shape) + self._event_shape)
         if expand:
-            values = values.broadcast_to(
-                (cardinality,) + self._batch_shape + self._event_shape
-            )
+            values = values.broadcast_to((cardinality,) + self._batch_shape + self._event_shape)
         return values
 
     def enumerate_support(self, expand: bool = True) -> Tensor:

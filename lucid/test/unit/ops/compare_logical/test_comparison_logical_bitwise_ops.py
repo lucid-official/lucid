@@ -53,29 +53,21 @@ class TestLogical:
     def test_logical_and(self, device: str) -> None:
         a = lucid.tensor([True, True, False], dtype=lucid.bool_, device=device)
         b = lucid.tensor([True, False, False], dtype=lucid.bool_, device=device)
-        np.testing.assert_array_equal(
-            lucid.logical_and(a, b).numpy(), [True, False, False]
-        )
+        np.testing.assert_array_equal(lucid.logical_and(a, b).numpy(), [True, False, False])
 
     def test_logical_or(self, device: str) -> None:
         a = lucid.tensor([True, False, False], dtype=lucid.bool_, device=device)
         b = lucid.tensor([False, True, False], dtype=lucid.bool_, device=device)
-        np.testing.assert_array_equal(
-            lucid.logical_or(a, b).numpy(), [True, True, False]
-        )
+        np.testing.assert_array_equal(lucid.logical_or(a, b).numpy(), [True, True, False])
 
     def test_logical_xor(self, device: str) -> None:
         a = lucid.tensor([True, True, False], dtype=lucid.bool_, device=device)
         b = lucid.tensor([True, False, False], dtype=lucid.bool_, device=device)
-        np.testing.assert_array_equal(
-            lucid.logical_xor(a, b).numpy(), [False, True, False]
-        )
+        np.testing.assert_array_equal(lucid.logical_xor(a, b).numpy(), [False, True, False])
 
     def test_logical_not(self, device: str) -> None:
         a = lucid.tensor([True, False, True], dtype=lucid.bool_, device=device)
-        np.testing.assert_array_equal(
-            lucid.logical_not(a).numpy(), [False, True, False]
-        )
+        np.testing.assert_array_equal(lucid.logical_not(a).numpy(), [False, True, False])
 
 
 # ── bitwise (integer / bool) ────────────────────────────────────────────
@@ -107,16 +99,12 @@ class TestShifts:
     def test_left_shift(self, device: str) -> None:
         a = lucid.tensor([1, 2, 4, 8], dtype=lucid.int32, device=device)
         b = lucid.tensor([1, 1, 2, 3], dtype=lucid.int32, device=device)
-        np.testing.assert_array_equal(
-            lucid.bitwise_left_shift(a, b).numpy(), [2, 4, 16, 64]
-        )
+        np.testing.assert_array_equal(lucid.bitwise_left_shift(a, b).numpy(), [2, 4, 16, 64])
 
     def test_right_shift(self, device: str) -> None:
         a = lucid.tensor([8, 16, 64], dtype=lucid.int32, device=device)
         b = lucid.tensor([1, 2, 3], dtype=lucid.int32, device=device)
-        np.testing.assert_array_equal(
-            lucid.bitwise_right_shift(a, b).numpy(), [4, 4, 8]
-        )
+        np.testing.assert_array_equal(lucid.bitwise_right_shift(a, b).numpy(), [4, 4, 8])
 
     def test_oob_clamps_to_zero_cpu(self, device_cpu_only: str) -> None:
         # OOB shift contract is CPU-only: the CPU kernel explicitly

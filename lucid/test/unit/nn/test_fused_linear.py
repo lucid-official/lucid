@@ -213,9 +213,7 @@ class TestFusedKernelEveryDevice:
     @pytest.mark.parametrize("dtype", _DTYPES, ids=["f32", "f16", "bf16"])
     @pytest.mark.parametrize("device", _DEVICES)
     @pytest.mark.parametrize("act", sorted(_FUSED))
-    def test_the_module_runs_in_eval(
-        self, act: str, device: str, dtype: lucid.dtype
-    ) -> None:
+    def test_the_module_runs_in_eval(self, act: str, device: str, dtype: lucid.dtype) -> None:
         m = nn.FusedLinear(8, 4, activation=act).to(device).to(dtype).eval()
         x = lucid.randn(3, 8).to(device).to(dtype)
         with lucid.no_grad():

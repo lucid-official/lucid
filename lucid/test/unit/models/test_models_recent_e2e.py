@@ -58,11 +58,7 @@ def _assert_finite_grads(named: list[tuple[str, lucid.Tensor]]) -> None:
     (LCD-205): a NaN loss still backpropagates, it just carries NaN into
     every gradient, and a training step on it ruins the weights.
     """
-    bad = [
-        n
-        for n, p in named
-        if p.grad is not None and not bool(p.grad.isfinite().all().item())
-    ]
+    bad = [n for n, p in named if p.grad is not None and not bool(p.grad.isfinite().all().item())]
     assert not bad, f"non-finite gradient in {len(bad)} parameter(s): {bad[:5]}"
 
 
@@ -260,9 +256,7 @@ class TestDiT:
     def test_generation_returns_a_finite_sample(self) -> None:
         model = models.dit_small_2_gen(**self.CONFIG).eval()  # type: ignore[arg-type]
         with lucid.no_grad():
-            out = model.generate(
-                2, labels=lucid.tensor([0, 1], dtype=lucid.int64), steps=2
-            )
+            out = model.generate(2, labels=lucid.tensor([0, 1], dtype=lucid.int64), steps=2)
         _assert_finite(out.samples, (2, 4, 8, 8))
 
 
@@ -353,9 +347,7 @@ class TestStableDiffusion:
     def test_a_training_step_reaches_the_unet(self) -> None:
         """Only the U-Net is trained; the autoencoder stays frozen."""
         model = models.stable_diffusion(**self.CONFIG)  # type: ignore[arg-type]
-        out = model(
-            lucid.randn((1, 3, 32, 32)), lucid.randn((1, 8, 16)), return_loss=True
-        )
+        out = model(lucid.randn((1, 3, 32, 32)), lucid.randn((1, 8, 16)), return_loss=True)
         out.loss.backward()
         _assert_trained(model.unet, out.loss)
 
@@ -418,9 +410,7 @@ class _DreamerCase:
         model.backward(out)
         inner = getattr(model, self.ATTR)
         missing = [n for n, p in inner.named_parameters() if p.grad is None]
-        unexpected = [
-            n for n in missing if not (self.EMA_ONLY and n.startswith(self.EMA_ONLY))
-        ]
+        unexpected = [n for n in missing if not (self.EMA_ONLY and n.startswith(self.EMA_ONLY))]
         assert not unexpected, f"no gradient: {unexpected}"
         assert bool(out.loss.isfinite().item())
         _assert_finite_grads(list(inner.named_parameters()))
@@ -499,9 +489,7 @@ class TestDIAMONDAtari:
     def test_the_reward_and_termination_model_trains(self) -> None:
         model = models.diamond_world_model(**self.CONFIG)  # type: ignore[arg-type]
         frames, actions = self._batch()
-        loss = model.reward_end_loss(
-            frames, actions, lucid.randn((2, 4)), lucid.zeros((2, 4))
-        )
+        loss = model.reward_end_loss(frames, actions, lucid.randn((2, 4)), lucid.zeros((2, 4)))
         loss.backward()
         _assert_trained(model.diamond.reward_end, loss)
 
@@ -597,9 +585,7 @@ class TestDIAMONDCSGO:
         frames = lucid.randn((1, 4, 3, 30, 56))
         actions = lucid.zeros((1, 4), dtype=lucid.int64)
         with lucid.no_grad():
-            frame = model.denoise(
-                lucid.randn((1, 3, 30, 56)), lucid.tensor([1.0]), frames, actions
-            )
+            frame = model.denoise(lucid.randn((1, 3, 30, 56)), lucid.tensor([1.0]), frames, actions)
         assert float(frame.min().item()) >= -1.0
         assert float(frame.max().item()) <= 1.0
         steps = (frame + 1.0) / 2.0 * 255.0

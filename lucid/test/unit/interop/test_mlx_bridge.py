@@ -65,9 +65,7 @@ class TestLucidToMlx:
         del t
         gc.collect()
 
-        np.testing.assert_array_equal(
-            _host_view(a).ravel(), np.arange(6, dtype=np.float32)
-        )
+        np.testing.assert_array_equal(_host_view(a).ravel(), np.arange(6, dtype=np.float32))
 
     @pytest.mark.parametrize(
         "dtype",

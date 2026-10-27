@@ -86,13 +86,9 @@ class _VisionTransformer(nn.Module):
         )
         # Created at zeros and filled by :meth:`CLIPModel._init_weights`.
         self.class_embedding = nn.Parameter(lucid.zeros((width,)))
-        self.positional_embedding = nn.Parameter(
-            lucid.zeros((self.num_patches + 1, width))
-        )
+        self.positional_embedding = nn.Parameter(lucid.zeros((self.num_patches + 1, width)))
         self.ln_pre = nn.LayerNorm(width)
-        self.transformer = TransformerTower(
-            width, config.vision_layers, config.vision_heads
-        )
+        self.transformer = TransformerTower(width, config.vision_layers, config.vision_heads)
         self.ln_post = nn.LayerNorm(width)
         self.proj = nn.Parameter(lucid.zeros((width, config.embed_dim)))
 
@@ -144,9 +140,7 @@ class _TextTransformer(nn.Module):
         self.context_length = config.context_length
 
         self.token_embedding = nn.Embedding(config.vocab_size, width)
-        self.positional_embedding = nn.Parameter(
-            lucid.zeros((config.context_length, width))
-        )
+        self.positional_embedding = nn.Parameter(lucid.zeros((config.context_length, width)))
         self.transformer = TransformerTower(
             width, config.text_layers, config.text_heads, causal=True
         )
@@ -384,9 +378,7 @@ class CLIPModel(PretrainedModel):
                     nn.init.normal_(cast(nn.Linear, block.mlp[0]).weight, std=fc_std)
                     nn.init.normal_(cast(nn.Linear, block.mlp[2]).weight, std=proj_std)
 
-            self.logit_scale[:] = lucid.full(
-                (1,), math.log(1.0 / config.logit_scale_init)
-            )
+            self.logit_scale[:] = lucid.full((1,), math.log(1.0 / config.logit_scale_init))
 
     @property
     def scale(self) -> Tensor:
@@ -405,9 +397,7 @@ class CLIPModel(PretrainedModel):
         writes its own loop — which is where the published implementation
         puts it and therefore where it is easy to omit.
         """
-        return lucid.clip(
-            lucid.exp(self.logit_scale), None, self.config.logit_scale_max
-        )
+        return lucid.clip(lucid.exp(self.logit_scale), None, self.config.logit_scale_max)
 
     def encode_image(self, pixel_values: Tensor) -> Tensor:
         """Embed images into the joint space, L2-normalised.
@@ -597,9 +587,7 @@ class CLIPForZeroShotImageClassification(ImageClassificationModel):
         image_embeds = self.clip.encode_image(pixel_values)
         text_embeds = self.clip.encode_text(prompt_ids)
         logits = self.clip.scale * (image_embeds @ text_embeds.T)
-        return CLIPZeroShotOutput(
-            logits=logits, image_embeds=image_embeds, text_embeds=text_embeds
-        )
+        return CLIPZeroShotOutput(logits=logits, image_embeds=image_embeds, text_embeds=text_embeds)
 
 
 def _l2_normalise(x: Tensor) -> Tensor:

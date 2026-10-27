@@ -196,9 +196,7 @@ class TestRealNVPModel:
         # z is the flattened factor-out stack; compare against the logit
         # output routed through the same squeeze / split path.
         assert tuple(z.shape) == (2, 192)
-        assert (
-            abs(float(z.abs().sum().item()) - float(expected.abs().sum().item())) < 1e-3
-        )
+        assert abs(float(z.abs().sum().item()) - float(expected.abs().sum().item())) < 1e-3
 
     def test_log_prob_decomposition(self) -> None:
         from lucid.models._utils import flow_prior_log_prob
@@ -257,9 +255,7 @@ class TestRealNVPForImageGeneration:
         out = m(x)
         assert out.loss is not None
         expected = float(
-            (-out.log_prob / (cfg.input_dim * math.log(2.0)) + cfg.num_bits)
-            .mean()
-            .item()
+            (-out.log_prob / (cfg.input_dim * math.log(2.0)) + cfg.num_bits).mean().item()
         )
         assert abs(float(out.loss.item()) - expected) < 1e-6
 
@@ -305,9 +301,7 @@ class TestRealNVPTraining:
         def batch(n: int = 16) -> lucid.Tensor:
             # Left half bright, right half dark — structure a flow can find.
             base = lucid.tensor([[[[0.8, 0.8, 0.2, 0.2]] * 4] * 3])
-            return (base.expand(n, 3, 4, 4) + lucid.randn((n, 3, 4, 4)) * 0.02).clip(
-                0.01, 0.99
-            )
+            return (base.expand(n, 3, 4, 4) + lucid.randn((n, 3, 4, 4)) * 0.02).clip(0.01, 0.99)
 
         first: float | None = None
         for step in range(60):
@@ -391,9 +385,7 @@ class TestRealNVPRegistry:
         from lucid.models import AutoModelForImageGeneration
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "realnvp_cifar_gen", task=AutoModelForImageGeneration._task
-        )
+        entry = _registry_lookup("realnvp_cifar_gen", task=AutoModelForImageGeneration._task)
         assert entry.model_class is RealNVPForImageGeneration
 
 

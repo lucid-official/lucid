@@ -356,13 +356,9 @@ class GenieConfig(GenerativeModelConfig):
             )
         if self.mlp_ratio <= 0.0:
             raise ValueError(f"mlp_ratio must be positive, got {self.mlp_ratio}")
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "every decoder's frame"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "every decoder's frame")
         if self.commitment_cost < 0.0:
-            raise ValueError(
-                f"commitment_cost must be non-negative, got {self.commitment_cost}"
-            )
+            raise ValueError(f"commitment_cost must be non-negative, got {self.commitment_cost}")
         if not 0.0 <= self.code_reset_threshold <= 1.0:
             raise ValueError(
                 f"code_reset_threshold is a fraction of a code's fair share, "

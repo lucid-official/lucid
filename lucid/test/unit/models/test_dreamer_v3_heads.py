@@ -113,9 +113,7 @@ class TestAgainstSquaredError:
         inputs, targets, large = self._mixed()
         _fit(head, inputs, targets, steps)
         with lucid.no_grad():
-            predicted = (
-                head.predict(inputs) if isinstance(head, TwoHotHead) else head(inputs)
-            )
+            predicted = head.predict(inputs) if isinstance(head, TwoHotHead) else head(inputs)
             small_error = (
                 float(
                     ((predicted - 0.01).abs() * (1.0 - large)).sum().item()
@@ -125,8 +123,7 @@ class TestAgainstSquaredError:
             )
             large_error = (
                 float(
-                    ((predicted - 10000.0).abs() * large).sum().item()
-                    / float(large.sum().item())
+                    ((predicted - 10000.0).abs() * large).sum().item() / float(large.sum().item())
                 )
                 / 10000.0
             )

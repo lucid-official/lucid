@@ -106,9 +106,7 @@ class TestLinalgNewOpsParity:
         A_np = _spd()
         b_np = np.random.default_rng(0).standard_normal((4, 2)).astype(np.float32)
         lx, linfo = LA.solve_ex(lucid.tensor(A_np.copy()), lucid.tensor(b_np.copy()))
-        rx, rinfo = ref.linalg.solve_ex(
-            ref.tensor(A_np.copy()), ref.tensor(b_np.copy())
-        )
+        rx, rinfo = ref.linalg.solve_ex(ref.tensor(A_np.copy()), ref.tensor(b_np.copy()))
         assert_close(lx, rx, atol=1e-3)
         assert linfo.item() == rinfo.item()
 

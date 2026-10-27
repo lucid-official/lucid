@@ -73,13 +73,9 @@ _VISION_CASES = [
     ),
     pytest.param(lambda: M.resnet_18(num_classes=10), _img, id="resnet_18"),
     pytest.param(lambda: M.vgg_11(num_classes=10), _img, id="vgg_11"),
-    pytest.param(
-        lambda: M.mobilenet_v3_small(num_classes=10), _img, id="mobilenet_v3_small"
-    ),
+    pytest.param(lambda: M.mobilenet_v3_small(num_classes=10), _img, id="mobilenet_v3_small"),
     pytest.param(lambda: M.densenet_121(num_classes=10), _img, id="densenet_121"),
-    pytest.param(
-        lambda: M.vit_base_16(image_size=64, num_classes=10), _img, id="vit_base_16"
-    ),
+    pytest.param(lambda: M.vit_base_16(image_size=64, num_classes=10), _img, id="vit_base_16"),
 ]
 
 _TEXT_CASES = [

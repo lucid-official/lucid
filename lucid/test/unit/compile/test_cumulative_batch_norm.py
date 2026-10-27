@@ -56,9 +56,7 @@ from lucid.compile._core.bn_runstats import model_has_cumulative_bn
 def test_only_a_cumulative_batch_norm_is_detected(
     layer: Callable[[], nn.Module], cumulative: bool
 ) -> None:
-    assert (
-        model_has_cumulative_bn(nn.Sequential(nn.Linear(3, 3), layer())) is cumulative
-    )
+    assert model_has_cumulative_bn(nn.Sequential(nn.Linear(3, 3), layer())) is cumulative
 
 
 _NORMS: dict[str, Callable[[], nn.Module]] = {
@@ -130,9 +128,7 @@ def test_the_step_matches_eager_and_only_a_cumulative_batch_norm_runs_eager(
     # momentum into its running buffers.
     if device == "metal":
         expected_eager = (
-            norm in ("batch-none", "instance-0.1")
-            if entry == "fused"
-            else (norm == "batch-none")
+            norm in ("batch-none", "instance-0.1") if entry == "fused" else (norm == "batch-none")
         )
         assert ran_eager is expected_eager
 

@@ -35,20 +35,12 @@ _ADD_AT = [None, 0, 3, 6]
 # Each step scales the rate the group has: a late group is carried along.
 _CHAINABLE: dict[str, Build] = {
     "StepLR": lambda S, o, **kw: S.StepLR(o, step_size=2, gamma=0.5, **kw),
-    "MultiStepLR": lambda S, o, **kw: S.MultiStepLR(
-        o, milestones=[2, 5, 5], gamma=0.5, **kw
-    ),
+    "MultiStepLR": lambda S, o, **kw: S.MultiStepLR(o, milestones=[2, 5, 5], gamma=0.5, **kw),
     "ExponentialLR": lambda S, o, **kw: S.ExponentialLR(o, gamma=0.9, **kw),
     "ConstantLR": lambda S, o, **kw: S.ConstantLR(o, factor=0.5, total_iters=4, **kw),
-    "LinearLR": lambda S, o, **kw: S.LinearLR(
-        o, start_factor=0.25, total_iters=4, **kw
-    ),
-    "CosineAnnealingLR": lambda S, o, **kw: S.CosineAnnealingLR(
-        o, T_max=10, eta_min=0.01, **kw
-    ),
-    "PolynomialLR": lambda S, o, **kw: S.PolynomialLR(
-        o, total_iters=6, power=2.0, **kw
-    ),
+    "LinearLR": lambda S, o, **kw: S.LinearLR(o, start_factor=0.25, total_iters=4, **kw),
+    "CosineAnnealingLR": lambda S, o, **kw: S.CosineAnnealingLR(o, T_max=10, eta_min=0.01, **kw),
+    "PolynomialLR": lambda S, o, **kw: S.PolynomialLR(o, total_iters=6, power=2.0, **kw),
 }
 
 # Each rate comes from what was captured at construction: a late group has
@@ -108,9 +100,7 @@ _PAIRS = _CHAINABLE_PAIRS + _MIXED_PAIRS
 
 @pytest.mark.parity
 @pytest.mark.parametrize("add_at", _ADD_AT)
-@pytest.mark.parametrize(
-    ("first", "second"), _PAIRS, ids=[f"{a}+{b}" for a, b in _PAIRS]
-)
+@pytest.mark.parametrize(("first", "second"), _PAIRS, ids=[f"{a}+{b}" for a, b in _PAIRS])
 def test_a_chain_composes_its_children_on_every_group(
     first: str, second: str, add_at: int | None, ref: Any
 ) -> None:
@@ -119,9 +109,7 @@ def test_a_chain_composes_its_children_on_every_group(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("add_at", _ADD_AT)
-@pytest.mark.parametrize(
-    ("first", "second"), _PAIRS, ids=[f"{a}|{b}" for a, b in _PAIRS]
-)
+@pytest.mark.parametrize(("first", "second"), _PAIRS, ids=[f"{a}|{b}" for a, b in _PAIRS])
 def test_sequential_hands_over_at_its_milestone_from_the_base(
     first: str, second: str, add_at: int | None, ref: Any
 ) -> None:
@@ -220,9 +208,7 @@ _ZERO_FACTOR: dict[str, Build] = {
 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", list(_ZERO_FACTOR))
-def test_a_zero_constant_factor_is_refused_only_where_it_is_undone(
-    case: str, ref: Any
-) -> None:
+def test_a_zero_constant_factor_is_refused_only_where_it_is_undone(case: str, ref: Any) -> None:
     assert_as_the_reference(_ZERO_FACTOR[case], None, ref)
 
 
@@ -237,9 +223,7 @@ def test_a_zero_constant_factor_names_the_way_out() -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_CHAINABLE))
-def test_a_resumed_chainable_schedule_does_not_step_on_construction(
-    name: str, ref: Any
-) -> None:
+def test_a_resumed_chainable_schedule_does_not_step_on_construction(name: str, ref: Any) -> None:
     """Built with ``last_epoch``, it leaves the rate a checkpoint restored."""
 
     def resumed(S: Any, o: Any) -> Any:

@@ -21,9 +21,7 @@ def _check_unet_widths(widths: tuple[int, ...], head_dim: int) -> None:
             f"which splits into cosine and sine halves: it must be even"
         )
     if any(w % head_dim != 0 for w in widths):
-        raise ValueError(
-            f"attention_head_dim {head_dim} must divide every U-Net width {widths}"
-        )
+        raise ValueError(f"attention_head_dim {head_dim} must divide every U-Net width {widths}")
 
 
 @model_family_meta(
@@ -210,12 +208,8 @@ class StableDiffusionConfig(DiffusionModelConfig):
         check_sample_space_channels(
             self.in_channels, self.out_channels, "the first stage's reconstruction"
         )
-        object.__setattr__(
-            self, "vae_block_out_channels", tuple(self.vae_block_out_channels)
-        )
-        object.__setattr__(
-            self, "unet_block_out_channels", tuple(self.unet_block_out_channels)
-        )
+        object.__setattr__(self, "vae_block_out_channels", tuple(self.vae_block_out_channels))
+        object.__setattr__(self, "unet_block_out_channels", tuple(self.unet_block_out_channels))
 
         expected = 2 ** (len(self.vae_block_out_channels) - 1)
         if self.downsample_factor != expected:
@@ -227,8 +221,7 @@ class StableDiffusionConfig(DiffusionModelConfig):
             )
         if not isinstance(self.sample_size, int):
             raise TypeError(
-                f"sample_size must be a square int for this family, got "
-                f"{self.sample_size}"
+                f"sample_size must be a square int for this family, got " f"{self.sample_size}"
             )
         if self.sample_size % self.downsample_factor != 0:
             raise ValueError(
@@ -256,8 +249,7 @@ class StableDiffusionConfig(DiffusionModelConfig):
         _check_unet_widths(self.unet_block_out_channels, self.attention_head_dim)
         if self.beta_schedule not in ("linear", "scaled_linear"):
             raise ValueError(
-                f"beta_schedule must be 'linear' or 'scaled_linear', got "
-                f"{self.beta_schedule!r}"
+                f"beta_schedule must be 'linear' or 'scaled_linear', got " f"{self.beta_schedule!r}"
             )
         if not 0.0 < self.beta_start < self.beta_end < 1.0:
             raise ValueError(
@@ -265,6 +257,4 @@ class StableDiffusionConfig(DiffusionModelConfig):
                 f"{self.beta_start} and {self.beta_end}"
             )
         if self.context_length < 1:
-            raise ValueError(
-                f"context_length must be positive, got {self.context_length}"
-            )
+            raise ValueError(f"context_length must be positive, got {self.context_length}")

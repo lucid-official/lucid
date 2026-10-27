@@ -96,8 +96,7 @@ def parse_options(options: dict[str, object] | None) -> FixedOptions:
     else:
         if isinstance(raw_step, bool) or not isinstance(raw_step, (int, float)):
             raise ValueError(
-                f"option 'step_size' must be a real number, "
-                f"got {type(raw_step).__name__}"
+                f"option 'step_size' must be a real number, " f"got {type(raw_step).__name__}"
             )
         step = abs(float(raw_step))
         if step == 0.0 or not math.isfinite(step):
@@ -115,9 +114,7 @@ def parse_options(options: dict[str, object] | None) -> FixedOptions:
 
     perturb = options.get("perturb", False)
     if not isinstance(perturb, bool):
-        raise TypeError(
-            f"option 'perturb' must be a bool, got {type(perturb).__name__}"
-        )
+        raise TypeError(f"option 'perturb' must be a bool, got {type(perturb).__name__}")
 
     return FixedOptions(
         step_size=step,
@@ -163,9 +160,7 @@ def build_grid(
         if isinstance(built, Tensor):
             grid = [float(v) for v in cast(list[SupportsFloat], built.tolist())]
         else:
-            grid = [
-                float(cast(SupportsFloat, v)) for v in cast(Sequence[object], built)
-            ]
+            grid = [float(cast(SupportsFloat, v)) for v in cast(Sequence[object], built)]
         if len(grid) < 2 or grid[0] != t[0] or grid[-1] != t[-1]:
             raise ValueError(
                 f"grid_constructor must return a grid spanning t[0]..t[-1] "
@@ -192,9 +187,7 @@ def _interp_fit_linear(y0: Tensor, y1: Tensor) -> list[Tensor]:
     return [_fused.lincomb([y1, y0], [1.0, -1.0]), y0]
 
 
-def _interp_fit_cubic(
-    y0: Tensor, y1: Tensor, f0: Tensor, f1: Tensor, dt: float
-) -> list[Tensor]:
+def _interp_fit_cubic(y0: Tensor, y1: Tensor, f0: Tensor, f1: Tensor, dt: float) -> list[Tensor]:
     r"""Coefficients of the cubic Hermite through a step's endpoints and slopes.
 
     Parameters
@@ -227,9 +220,7 @@ def _interp_fit_cubic(
     ]
 
 
-def _interp_evaluate(
-    coeffs: Sequence[Tensor], t0: float, t1: float, t: float
-) -> Tensor:
+def _interp_evaluate(coeffs: Sequence[Tensor], t0: float, t1: float, t: float) -> Tensor:
     """Evaluate a fitted step polynomial at a time inside the step."""
     return _fused.poly_eval(coeffs, t0, t1, t)
 

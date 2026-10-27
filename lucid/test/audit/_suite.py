@@ -478,9 +478,7 @@ def _read_coverage(
         )
         payload = json.loads(out.read_text())
     except (subprocess.CalledProcessError, OSError, json.JSONDecodeError) as exc:
-        console.always(
-            console.paint(f"  could not read the coverage data: {exc!r}", "grey")
-        )
+        console.always(console.paint(f"  could not read the coverage data: {exc!r}", "grey"))
         return
 
     totals = payload["totals"]
@@ -571,9 +569,7 @@ def report_line_coverage_diff(
         )
         if now > was + _TOTAL_TOLERANCE:
             console.always(
-                console.paint(
-                    "  run with --update-suite to record the new floor", "grey"
-                )
+                console.paint("  run with --update-suite to record the new floor", "grey")
             )
         return 0
 
@@ -581,9 +577,7 @@ def report_line_coverage_diff(
     if now < was - _TOTAL_TOLERANCE:
         console.always(console.paint(f"  TOTAL  {was:.2f}% → {now:.2f}%", "red"))
     for name, before, after in sorted(lost, key=lambda r: r[1] - r[2], reverse=True):
-        console.always(
-            console.paint(f"  LOST   {name}  {before:.1f}% → {after:.1f}%", "red")
-        )
+        console.always(console.paint(f"  LOST   {name}  {before:.1f}% → {after:.1f}%", "red"))
     console.always(
         console.paint(
             "  a module that stopped being exercised is what a refactor "
@@ -591,9 +585,7 @@ def report_line_coverage_diff(
             "grey",
         )
     )
-    console.always(
-        console.paint("  run with --update-suite to accept the new floor", "grey")
-    )
+    console.always(console.paint("  run with --update-suite to accept the new floor", "grey"))
     return len(lost) or 1
 
 
@@ -664,8 +656,7 @@ def report_suite(result: SuiteResult, console: Console) -> None:
         console.always(
             console.paint("  line coverage".ljust(22), "grey")
             + console.paint(
-                f"{result.percent:.2f}%  "
-                f"({result.line_covered}/{result.line_total})",
+                f"{result.percent:.2f}%  " f"({result.line_covered}/{result.line_total})",
                 "cyan",
             )
         )
@@ -675,9 +666,7 @@ def report_suite(result: SuiteResult, console: Console) -> None:
         for nodeid in result.failures[:40]:
             console.always(console.paint(f"  FAIL  {nodeid}", "red"))
         if len(result.failures) > 40:
-            console.always(
-                console.paint(f"  … and {len(result.failures) - 40} more", "grey")
-            )
+            console.always(console.paint(f"  … and {len(result.failures) - 40} more", "grey"))
     elif result.broken:
         # Counts said something broke but no nodeid was parsed — say so
         # rather than printing a clean list and implying there is none.

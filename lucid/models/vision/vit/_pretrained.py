@@ -537,9 +537,7 @@ def vit_large_32_cls(
     model_class=ViTForImageClassification,
     default_config=_CFG_H14,
 )
-def vit_huge_14_cls(
-    pretrained: bool = False, **overrides: object
-) -> ViTForImageClassification:
+def vit_huge_14_cls(pretrained: bool = False, **overrides: object) -> ViTForImageClassification:
     r"""ViT-Huge/14 image classifier (Dosovitskiy et al., 2020).
 
     Combines the :func:`vit_huge_14` backbone (``dim=1280``, ``depth=32``,

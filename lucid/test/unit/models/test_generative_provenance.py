@@ -72,8 +72,7 @@ PLANET: dict[str, tuple[Any, str]] = {
     "mean_only": (False, _MEAN_ONLY),
     "act_fn": (
         "relu",
-        'paper: Appendix A, "two fully connected layers of size 200 with '
-        'ReLU activations"',
+        'paper: Appendix A, "two fully connected layers of size 200 with ' 'ReLU activations"',
     ),
     "stoch_size": (
         30,
@@ -82,8 +81,7 @@ PLANET: dict[str, tuple[Any, str]] = {
     ),
     "deter_size": (
         200,
-        'paper: Appendix A, "a GRU with 200 units as deterministic path in '
-        'the dynamics model"',
+        'paper: Appendix A, "a GRU with 200 units as deterministic path in ' 'the dynamics model"',
     ),
     "hidden_size": (
         200,
@@ -207,13 +205,11 @@ DREAMER: dict[str, tuple[Any, str]] = {
     ),
     "actor_init_std": (
         5.0,
-        "code: dreamer.py action_init_std = 5.0, threaded into "
-        "models.py ActionDecoder init_std",
+        "code: dreamer.py action_init_std = 5.0, threaded into " "models.py ActionDecoder init_std",
     ),
     "actor_mean_scale": (
         5.0,
-        'paper: Appendix A, "The action model outputs a tanh mean scaled by '
-        'a factor of 5"',
+        'paper: Appendix A, "The action model outputs a tanh mean scaled by ' 'a factor of 5"',
     ),
     "detach_actor_input": (
         True,
@@ -271,8 +267,7 @@ DREAMER_V2: dict[str, tuple[Any, str]] = {
     ),
     "kl_weight": (
         1.0,
-        "code: configs.yaml loss_scales.kl 1.0.  Table D.1's beta = 0.1 is "
-        "the Atari column",
+        "code: configs.yaml loss_scales.kl 1.0.  Table D.1's beta = 0.1 is " "the Atari column",
     ),
     "kl_balance": (0.8, "paper: Table D.1, KL balancing alpha = 0.8"),
     "reward_hidden": (400, "paper: Table D.1, MLP number of units 400"),
@@ -290,8 +285,7 @@ DREAMER_V2: dict[str, tuple[Any, str]] = {
     "lambda_": (0.95, "paper: Table D.1, lambda-target parameter 0.95"),
     "actor_grad": (
         "auto",
-        "code: configs.yaml actor_grad: auto — dynamics for a box, reinforce "
-        "for buttons",
+        "code: configs.yaml actor_grad: auto — dynamics for a box, reinforce " "for buttons",
     ),
     "actor_grad_mix": (
         0.1,
@@ -446,8 +440,7 @@ SCORE_SDE: dict[str, tuple[Any, str]] = {
     ),
     "snr": (
         0.16,
-        "code: the reference configs' Predictor-Corrector signal-to-noise "
-        "ratio for CIFAR-10",
+        "code: the reference configs' Predictor-Corrector signal-to-noise " "ratio for CIFAR-10",
     ),
     "corrector_steps": (
         1,
@@ -491,8 +484,7 @@ GENIE: dict[str, tuple[Any, str]] = {
     "out_channels": (3, _RGB),
     "act_fn": (
         "gelu",
-        "lucid: not stated — GELU, as in the ViT encoders the ST-ViViT "
-        "tokenizer is built from",
+        "lucid: not stated — GELU, as in the ViT encoders the ST-ViViT " "tokenizer is built from",
     ),
     "num_frames": (
         16,
@@ -548,8 +540,7 @@ GENIE: dict[str, tuple[Any, str]] = {
     "dynamics_head_dim": (128, "paper: Table 12, k/q size 128"),
     "dynamics_qk_norm": (
         True,
-        'paper: Section 3, "we employ bfloat16 and QK norm for training our '
-        'dynamics model"',
+        'paper: Section 3, "we employ bfloat16 and QK norm for training our ' 'dynamics model"',
     ),
     "mask_ratio_min": (
         0.5,
@@ -607,8 +598,7 @@ class TestProvenance:
             f"add it to the table with a paper:/code:/lucid: citation"
         )
         assert not recorded - declared, (
-            f"{name}: table names fields that no longer exist: "
-            f"{sorted(recorded - declared)}"
+            f"{name}: table names fields that no longer exist: " f"{sorted(recorded - declared)}"
         )
 
     def test_every_recorded_value_is_the_configured_one(
@@ -656,12 +646,9 @@ class TestTheTableIsNotVacuous:
     def test_most_fields_trace_to_a_source_outside_lucid(
         self, name: str, _: type, table: dict[str, tuple[Any, str]]
     ) -> None:
-        external = sum(
-            1 for _, citation in table.values() if not citation.startswith("lucid:")
-        )
+        external = sum(1 for _, citation in table.values() if not citation.startswith("lucid:"))
         assert external / len(table) > 0.6, (
-            f"{name}: only {external}/{len(table)} fields trace to a paper or "
-            f"a released config"
+            f"{name}: only {external}/{len(table)} fields trace to a paper or " f"a released config"
         )
 
     @pytest.mark.parametrize("name,config_class,table", _FAMILIES)

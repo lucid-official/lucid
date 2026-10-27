@@ -66,9 +66,7 @@ def lambda_return(
     """
     horizon = int(reward.shape[1]) - 1
     if horizon < 1:
-        raise ValueError(
-            f"lambda-returns need at least two states, got {int(reward.shape[1])}"
-        )
+        raise ValueError(f"lambda-returns need at least two states, got {int(reward.shape[1])}")
 
     agg = value[:, horizon]
     out: list[Tensor] = []

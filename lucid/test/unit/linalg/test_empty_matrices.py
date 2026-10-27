@@ -77,9 +77,7 @@ def test_svdvals_and_rank(shape) -> None:
     assert float(np.asarray(L.matrix_rank(_t(shape)).numpy()).ravel()[0]) == 0.0
 
 
-@pytest.mark.parametrize(
-    "shape,expected", [((0, 0), (0, 0)), ((0, 3), (3, 0)), ((3, 0), (0, 3))]
-)
+@pytest.mark.parametrize("shape,expected", [((0, 0), (0, 0)), ((0, 3), (3, 0)), ((3, 0), (0, 3))])
 def test_pinv_transposes_the_matrix_axes(shape, expected) -> None:
     assert tuple(L.pinv(_t(shape)).shape) == expected
 
@@ -115,9 +113,7 @@ def test_square_ops_on_the_zero_by_zero_matrix(fn, expected) -> None:
     assert tuple(fn(_t((0, 0))).shape) == expected
 
 
-@pytest.mark.parametrize(
-    "fn,expected", [(L.eig, [(0,), (0, 0)]), (L.eigh, [(0,), (0, 0)])]
-)
+@pytest.mark.parametrize("fn,expected", [(L.eig, [(0,), (0, 0)]), (L.eigh, [(0,), (0, 0)])])
 def test_eigendecompositions(fn, expected) -> None:
     assert _shapes(fn(_t((0, 0)))) == expected
 

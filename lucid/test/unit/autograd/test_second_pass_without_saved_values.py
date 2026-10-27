@@ -32,9 +32,7 @@ def _values(t: object) -> object:
     return [round(float(v), 5) for v in t.detach().cpu().reshape(-1).tolist()]
 
 
-def _outcome(
-    m: ModuleType, device: str, scenario: Callable[[ModuleType, str], object]
-) -> object:
+def _outcome(m: ModuleType, device: str, scenario: Callable[[ModuleType, str], object]) -> object:
     try:
         return {"value": scenario(m, device)}
     except RuntimeError as e:
@@ -91,9 +89,7 @@ _SAVE_EMPTY: dict[str, Build] = {
     "div": lambda m, x: (x / (x + 1.0)).sum(),
     "matmul": lambda m, x: (x.reshape(0, 2) @ m.ones(2, 3, device=x.device)).sum(),
     "softmax": lambda m, x: m.nn.functional.softmax(x.reshape(0, 3), dim=1).sum(),
-    "log-softmax": lambda m, x: m.nn.functional.log_softmax(
-        x.reshape(0, 3), dim=1
-    ).sum(),
+    "log-softmax": lambda m, x: m.nn.functional.log_softmax(x.reshape(0, 3), dim=1).sum(),
 }
 
 
@@ -181,9 +177,7 @@ def test_a_graph_that_saved_a_tensor_of_no_elements_is_still_refused(
 
 
 @pytest.mark.parametrize("graph", list(_SAVE_NOTHING))
-def test_the_same_graph_without_a_second_pass_is_unchanged(
-    graph: str, device: str
-) -> None:
+def test_the_same_graph_without_a_second_pass_is_unchanged(graph: str, device: str) -> None:
     x = _leaf(lucid, device)
     _SAVE_NOTHING[graph](lucid, x).backward()
     once = _values(x.grad)
@@ -198,9 +192,7 @@ def test_the_same_graph_without_a_second_pass_is_unchanged(
     [
         _SAVE_NOTHING["add-scalar"],
         _SAVE_NOTHING["cat"],
-        lambda m, x: m.nn.functional.linear(
-            x.reshape(2, 3), m.ones(4, 3, device=x.device)
-        ).sum(),
+        lambda m, x: m.nn.functional.linear(x.reshape(2, 3), m.ones(4, 3, device=x.device)).sum(),
         lambda m, x: m.nn.functional.mse_loss(x, m.zeros(6, device=x.device)),
     ],
     ids=["add-scalar", "cat-of-add", "linear", "mse-loss"],
@@ -240,9 +232,7 @@ def test_a_pass_that_freed_values_cuts_at_the_freed_frontier(device: str) -> Non
         lucid.autograd.grad(y, x)
 
 
-def test_grad_to_an_interior_tensor_behind_save_free_nodes(
-    ref: ModuleType, device: str
-) -> None:
+def test_grad_to_an_interior_tensor_behind_save_free_nodes(ref: ModuleType, device: str) -> None:
     def scenario(m: ModuleType, dev: str) -> object:
         a = m.ones(2, requires_grad=True, device=dev)
         h = a * a

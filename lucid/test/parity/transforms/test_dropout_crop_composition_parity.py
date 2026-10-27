@@ -46,9 +46,7 @@ pytest.importorskip("cv2")
 # ── helpers ─────────────────────────────────────────────────────────
 
 
-def _image(
-    seed: int = 0, h: int = 40, w: int = 40, c: int = 3
-) -> tuple[lucid.Tensor, np.ndarray]:
+def _image(seed: int = 0, h: int = 40, w: int = 40, c: int = 3) -> tuple[lucid.Tensor, np.ndarray]:
     """A matched ``(Lucid CHW tensor, Albu HWC array)`` random image pair."""
     hwc = np.random.default_rng(seed).random((h, w, c), dtype=np.float32)
     chw = lucid.tensor(np.transpose(hwc, (2, 0, 1)).tolist())
@@ -115,9 +113,7 @@ class TestCropDeterministic:
             (24, 18, 12, 18),  # only height needs padding
         ],
     )
-    def test_pad_if_needed_centered(
-        self, min_h: int, min_w: int, src_h: int, src_w: int
-    ) -> None:
+    def test_pad_if_needed_centered(self, min_h: int, min_w: int, src_h: int, src_w: int) -> None:
         """``PadIfNeeded`` centers + constant-pads to ``(min_h, min_w)``."""
         chw, hwc = _image(seed=2, h=src_h, w=src_w)
         got = _run_lucid_img(
@@ -516,9 +512,7 @@ class TestComposition:
             is_v = np.allclose(got, v_out, atol=0.0)
             assert is_h or is_v, f"seed {seed}: OneOf output matches neither child"
             # And not both (they differ for a generic image).
-            assert not (
-                is_h and is_v
-            ), f"seed {seed}: both branches indistinguishable (test bug?)"
+            assert not (is_h and is_v), f"seed {seed}: both branches indistinguishable (test bug?)"
 
     def test_one_of_gate_pass_through(self) -> None:
         """``OneOf(p=0)`` is the identity (gate fails)."""

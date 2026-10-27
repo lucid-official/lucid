@@ -61,9 +61,7 @@ class _ResBlock(nn.Module):
     from another.
     """
 
-    def __init__(
-        self, in_channels: int, out_channels: int, time_dim: int, groups: int
-    ) -> None:
+    def __init__(self, in_channels: int, out_channels: int, time_dim: int, groups: int) -> None:
         """Initialise the block. See the class docstring for parameters."""
         super().__init__()
         self.norm1 = nn.GroupNorm(groups, in_channels)
@@ -185,9 +183,7 @@ class _TransformerBlock(nn.Module):
         # SD's attention projections carry no bias — the released
         # checkpoint has ``to_q.weight`` and ``to_k.weight`` with no
         # matching ``.bias`` entries.
-        self.attn1 = nn.MultiheadAttention(
-            channels, heads, bias=False, batch_first=True
-        )
+        self.attn1 = nn.MultiheadAttention(channels, heads, bias=False, batch_first=True)
         self.norm2 = nn.LayerNorm(channels)
         self.attn2 = nn.MultiheadAttention(
             channels,
@@ -350,16 +346,12 @@ class UNet2DConditionModel(nn.Module):
         self.time_mlp = nn.Sequential(
             nn.Linear(widths[0], time_dim), nn.SiLU(), nn.Linear(time_dim, time_dim)
         )
-        self.conv_in = nn.Conv2d(
-            config.latent_channels, widths[0], kernel_size=3, padding=1
-        )
+        self.conv_in = nn.Conv2d(config.latent_channels, widths[0], kernel_size=3, padding=1)
 
         # Down path.  ``_attn`` mirrors ``down`` and holds either a
         # transformer or None, so the forward can stay a plain zip.
         self.down_blocks: nn.ModuleList[_ResBlock] = nn.ModuleList()
-        self.down_attns: nn.ModuleList[_SpatialTransformer | nn.Identity] = (
-            nn.ModuleList()
-        )
+        self.down_attns: nn.ModuleList[_SpatialTransformer | nn.Identity] = nn.ModuleList()
         self.downsamplers: nn.ModuleList[nn.Conv2d | nn.Identity] = nn.ModuleList()
         self.skip_channels: list[int] = [widths[0]]
         current = widths[0]
@@ -388,17 +380,13 @@ class UNet2DConditionModel(nn.Module):
 
         # Up path — one extra block per level for the extra skip.
         self.up_blocks: nn.ModuleList[_ResBlock] = nn.ModuleList()
-        self.up_attns: nn.ModuleList[_SpatialTransformer | nn.Identity] = (
-            nn.ModuleList()
-        )
+        self.up_attns: nn.ModuleList[_SpatialTransformer | nn.Identity] = nn.ModuleList()
         self.upsamplers: nn.ModuleList[nn.Conv2d | nn.Identity] = nn.ModuleList()
         skips = list(self.skip_channels)
         for level, width in enumerate(reversed(widths)):
             first = level == 0
             for _ in range(config.unet_layers_per_block + 1):
-                self.up_blocks.append(
-                    _ResBlock(current + skips.pop(), width, time_dim, groups)
-                )
+                self.up_blocks.append(_ResBlock(current + skips.pop(), width, time_dim, groups))
                 current = width
                 self.up_attns.append(
                     nn.Identity()
@@ -412,9 +400,7 @@ class UNet2DConditionModel(nn.Module):
             )
 
         self.norm_out = nn.GroupNorm(groups, current)
-        self.conv_out = nn.Conv2d(
-            current, config.latent_channels, kernel_size=3, padding=1
-        )
+        self.conv_out = nn.Conv2d(current, config.latent_channels, kernel_size=3, padding=1)
         self.act = nn.SiLU()
         self.upsample = nn.Upsample(scale_factor=2.0, mode="nearest")
 

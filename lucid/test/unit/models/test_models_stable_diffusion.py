@@ -150,21 +150,11 @@ class TestThePosterior:
         vae = AutoencoderKL(_tiny()).eval()
         x = lucid.randn((1, 3, 32, 32))
         assert (
-            float(
-                (vae(x, sample=False).latent - vae(x, sample=False).latent)
-                .abs()
-                .max()
-                .item()
-            )
+            float((vae(x, sample=False).latent - vae(x, sample=False).latent).abs().max().item())
             == 0.0
         )
         assert (
-            float(
-                (vae(x, sample=True).latent - vae(x, sample=True).latent)
-                .abs()
-                .max()
-                .item()
-            )
+            float((vae(x, sample=True).latent - vae(x, sample=True).latent).abs().max().item())
             > 0.0
         )
 
@@ -204,9 +194,7 @@ class TestCrossAttentionHasADirection:
     def test_a_context_of_the_wrong_width_is_refused(self) -> None:
         unet = UNet2DConditionModel(_tiny()).eval()
         with pytest.raises(ValueError, match="cross_attention_dim"):
-            unet(
-                lucid.randn((1, 4, 8, 8)), lucid.tensor([1.0]), lucid.randn((1, 4, 99))
-            )
+            unet(lucid.randn((1, 4, 8, 8)), lucid.tensor([1.0]), lucid.randn((1, 4, 99)))
 
     def test_the_conditioning_may_be_any_length(self) -> None:
         """Cross-attention does not constrain the sequence length, and a
@@ -277,9 +265,7 @@ class TestTheSchedule:
         latent = lucid.zeros((1, 4, 8, 8))
         noise = lucid.ones((1, 4, 8, 8))
         released = scheduler.step(noise, 1, -1, latent)
-        one = DDIMScheduler(StableDiffusionConfig(set_alpha_to_one=True)).step(
-            noise, 1, -1, latent
-        )
+        one = DDIMScheduler(StableDiffusionConfig(set_alpha_to_one=True)).step(noise, 1, -1, latent)
         assert float((released - one).abs().max().item()) > 1e-6
 
     def test_more_steps_than_the_schedule_is_refused(self) -> None:
@@ -350,15 +336,9 @@ class TestGuidance:
         model = StableDiffusionForImageGeneration(_tiny()).eval()
         context, uncond = lucid.randn((1, 4, 16)), lucid.randn((1, 4, 16))
         start = lucid.zeros((1, 4, 8, 8))
-        one = model.generate(
-            context, uncond, 3, guidance_scale=1.0, latent=start
-        ).samples
-        two = model.generate(
-            context, uncond, 3, guidance_scale=2.0, latent=start
-        ).samples
-        seven = model.generate(
-            context, uncond, 3, guidance_scale=7.5, latent=start
-        ).samples
+        one = model.generate(context, uncond, 3, guidance_scale=1.0, latent=start).samples
+        two = model.generate(context, uncond, 3, guidance_scale=2.0, latent=start).samples
+        seven = model.generate(context, uncond, 3, guidance_scale=7.5, latent=start).samples
         assert float((one - seven).abs().max().item()) > 1e-2
         assert float((two - seven).abs().max().item()) > 1e-2
 
@@ -381,9 +361,7 @@ class TestGuidance:
         context, uncond = lucid.randn((1, 4, 16)), lucid.randn((1, 4, 16))
         start = lucid.zeros((1, 4, 8, 8))
 
-        guided = model.generate(
-            context, uncond, 3, guidance_scale=1.0 + 1e-4, latent=start
-        ).samples
+        guided = model.generate(context, uncond, 3, guidance_scale=1.0 + 1e-4, latent=start).samples
         conditional = model.generate(context, None, 3, latent=start).samples
         unconditional = model.generate(uncond, None, 3, latent=start).samples
 
@@ -411,9 +389,7 @@ class TestGuidance:
         uncond = lucid.randn((2, 4, 16))
         start = lucid.randn((2, 4, 8, 8))
 
-        together = model.generate(
-            context, uncond, 3, guidance_scale=7.5, latent=start
-        ).samples
+        together = model.generate(context, uncond, 3, guidance_scale=7.5, latent=start).samples
         for row in range(2):
             alone = model.generate(
                 context[row : row + 1],
@@ -440,16 +416,12 @@ class TestTheAssembledModel:
     def test_a_training_step_produces_a_loss_with_gradient(self) -> None:
         lucid.manual_seed(0)
         model = StableDiffusionModel(_tiny())
-        out = model(
-            lucid.randn((2, 3, 32, 32)), lucid.randn((2, 4, 16)), return_loss=True
-        )
+        out = model(lucid.randn((2, 3, 32, 32)), lucid.randn((2, 4, 16)), return_loss=True)
         assert out.noise_pred.shape == (2, 4, 8, 8)
         assert out.loss is not None
         out.loss.backward()
         total = sum(
-            float(p.grad.abs().sum().item())
-            for p in model.parameters()
-            if p.grad is not None
+            float(p.grad.abs().sum().item()) for p in model.parameters() if p.grad is not None
         )
         assert total > 0.0
 
@@ -533,8 +505,7 @@ class TestTheSamplingDefaultsAreTheReleases:
         import inspect
 
         return {
-            name: parameter.default
-            for name, parameter in inspect.signature(fn).parameters.items()
+            name: parameter.default for name, parameter in inspect.signature(fn).parameters.items()
         }
 
     def test_generate_matches_the_released_pipeline(self) -> None:
@@ -594,9 +565,7 @@ class TestVariants:
         entry = StableDiffusionWeights.DEFAULT.value
         with shadow_alloc():
             model = M.stable_diffusion()
-            total = sum(
-                math.prod(tuple(int(s) for s in p.shape)) for p in model.parameters()
-            )
+            total = sum(math.prod(tuple(int(s) for s in p.shape)) for p in model.parameters())
         assert entry.meta["num_params"] == total
         assert entry.url.endswith("CompVis_LAION/model.safetensors")
         assert len(entry.sha256) == 64
@@ -811,9 +780,7 @@ class TestPNDMIsWhatTheReleaseShips:
         is the difference between a benchmark that matches the reference's
         cost and one that looks 2 % faster for free."""
         for count in (10, 20, 50):
-            assert len(PNDMScheduler(StableDiffusionConfig()).timesteps(count)) == (
-                count + 1
-            )
+            assert len(PNDMScheduler(StableDiffusionConfig()).timesteps(count)) == (count + 1)
 
     def test_the_repeat_starts_from_the_same_sample_twice(self) -> None:
         """Both halves of the opener step from the latent the first one
@@ -917,9 +884,7 @@ class TestPNDMIsWhatTheReleaseShips:
         for step in steps:
             latent = scheduler.step(lucid.ones_like(latent) * 0.5, step, latent)
 
-        assert float(latent.mean().item()) == pytest.approx(
-            _REFERENCE_PNDM_MEAN, rel=1e-5
-        )
+        assert float(latent.mean().item()) == pytest.approx(_REFERENCE_PNDM_MEAN, rel=1e-5)
 
     def test_generation_defaults_to_pndm(self) -> None:
         """The default has to be the released pipeline's, or prompts tuned

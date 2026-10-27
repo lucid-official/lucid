@@ -134,9 +134,7 @@ def test_division_edge_cases(dtype: type) -> None:
 
 
 @pytest.mark.parametrize("dtype", [np.float64, np.float32])
-@pytest.mark.parametrize(
-    "s", [0.001, 0.3, 3.0, -7.0, 1e-300, 5e-324, -0.0, math.inf, math.nan]
-)
+@pytest.mark.parametrize("s", [0.001, 0.3, 3.0, -7.0, 1e-300, 5e-324, -0.0, math.inf, math.nan])
 def test_division_by_and_of_a_python_scalar(dtype: type, s: float) -> None:
     # A Python float is weak: it takes the tensor's dtype, so the oracle
     # rounds it to that dtype first.
@@ -151,15 +149,11 @@ def test_float64_quotients_match_python() -> None:
     got = (_t(a) / _t(b)).numpy().tolist()
     ref = [x / y for x, y in zip(a.tolist(), b.tolist(), strict=True)]
     assert got == ref
-    one, milli, tiny = (
-        lucid.tensor(v, dtype=lucid.float64) for v in (1.0, 0.001, 5e-324)
-    )
+    one, milli, tiny = (lucid.tensor(v, dtype=lucid.float64) for v in (1.0, 0.001, 5e-324))
     assert (one / milli).item() == 1000.0
     assert (1.0 / milli).item() == 1000.0
     assert (one / 0.001).item() == 1000.0
-    assert (
-        math.copysign(1.0, (lucid.zeros((), dtype=lucid.float64) / tiny).item()) == 1.0
-    )
+    assert math.copysign(1.0, (lucid.zeros((), dtype=lucid.float64) / tiny).item()) == 1.0
     assert (lucid.zeros((), dtype=lucid.float64) / tiny).item() == 0.0
     assert (one / tiny).item() == math.inf
     assert (-one / tiny).item() == -math.inf
@@ -284,9 +278,7 @@ def test_metal_mean_matches_sum_divided_by_n_and_pool() -> None:
         _assert_bits(c.mean().cpu().numpy(), (c.sum() / n).cpu().numpy())
         r = lucid.tensor(rng.standard_normal(n).astype(np.float32), device="metal")
         _assert_bits(r.mean().cpu().numpy(), (r.sum() / n).cpu().numpy())
-        r2 = lucid.tensor(
-            rng.standard_normal((m, n)).astype(np.float32), device="metal"
-        )
+        r2 = lucid.tensor(rng.standard_normal((m, n)).astype(np.float32), device="metal")
         _assert_bits(r2.mean().cpu().numpy(), (r2.sum() / (m * n)).cpu().numpy())
         _assert_bits(r2.mean(dim=0).cpu().numpy(), (r2.sum(dim=0) / m).cpu().numpy())
         _assert_bits(r2.mean(dim=1).cpu().numpy(), (r2.sum(dim=1) / n).cpu().numpy())
@@ -301,9 +293,7 @@ def test_metal_mean_matches_sum_divided_by_n_and_pool() -> None:
 
 
 def test_metal_rsqrt_matches_reference_and_neg_half_power() -> None:
-    x = np.concatenate(
-        [np.abs(_gauss(100_000, np.float32, 13)), np.array(_F32_EDGES, np.float32)]
-    )
+    x = np.concatenate([np.abs(_gauss(100_000, np.float32, 13)), np.array(_F32_EDGES, np.float32)])
     xm = lucid.tensor(x, dtype=lucid.float32, device="metal")
     tiny = np.finfo(np.float32).tiny
     x_ftz = np.where(np.abs(x) < tiny, np.copysign(np.float32(0.0), x), x)
@@ -317,9 +307,6 @@ def test_metal_rsqrt_matches_reference_and_neg_half_power() -> None:
     with np.errstate(all="ignore"):
         want_f16 = _ref_rsqrt(xf16.astype(np.float32)).astype(np.float16)
     _assert_bits(
-        lucid.rsqrt(lucid.tensor(xf16, dtype=lucid.float16, device="metal"))
-        .cpu()
-        .numpy(),
+        lucid.rsqrt(lucid.tensor(xf16, dtype=lucid.float16, device="metal")).cpu().numpy(),
         want_f16,
     )
-

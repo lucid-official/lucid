@@ -188,9 +188,7 @@ class EfficientDetConfig(ModelConfig):
     max_detections: int = 100
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "backbone_in_channels", tuple(self.backbone_in_channels)
-        )
+        object.__setattr__(self, "backbone_in_channels", tuple(self.backbone_in_channels))
         object.__setattr__(self, "anchor_scales", tuple(self.anchor_scales))
         object.__setattr__(self, "anchor_ratios", tuple(self.anchor_ratios))
         object.__setattr__(self, "anchor_base_sizes", tuple(self.anchor_base_sizes))

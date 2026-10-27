@@ -121,9 +121,7 @@ def _run_lucid(
     with lucid.amp.autocast(device, dtype=_DTYPES[dtype]):
         out = fn(F, operand, consts)
     assert isinstance(out, lucid.Tensor)
-    weight = lucid.tensor(
-        rng.standard_normal(out.shape).astype(np.float32), device=device
-    )
+    weight = lucid.tensor(rng.standard_normal(out.shape).astype(np.float32), device=device)
     (out.float() * weight).sum().backward()
     return x, seen, operand
 
@@ -131,15 +129,11 @@ def _run_lucid(
 @pytest.mark.parametrize("dtype", list(_DTYPES))
 @pytest.mark.parametrize("path", list(_PATHS))
 @pytest.mark.parametrize("op", list(_OPS))
-def test_operand_gradient_keeps_operand_dtype(
-    op: str, path: str, dtype: str, device: str
-) -> None:
+def test_operand_gradient_keeps_operand_dtype(op: str, path: str, dtype: str, device: str) -> None:
     x, seen, operand = _run_lucid(op, path, dtype, device, seed=0)
     assert x.grad is not None
     assert x.grad.dtype == lucid.float32
-    assert all(g.dtype == operand.dtype == lucid.float32 for g in seen), [
-        g.dtype for g in seen
-    ]
+    assert all(g.dtype == operand.dtype == lucid.float32 for g in seen), [g.dtype for g in seen]
     assert len(seen) == (0 if path == "leaf" else 1)
 
 
@@ -201,9 +195,7 @@ def test_half_operand_gradient_keeps_half_dtype(
     assert all(g.dtype == half for g in seen), [g.dtype for g in seen]
     used = x.detach().float().numpy()[_used(path)].astype(np.float64)
     want = {"exp": np.exp(used), "prod": np.prod(used) / used, "mul": 2 * used}[op]
-    np.testing.assert_allclose(
-        x.grad.float().numpy()[_used(path)], want, rtol=2e-2, atol=2e-2
-    )
+    np.testing.assert_allclose(x.grad.float().numpy()[_used(path)], want, rtol=2e-2, atol=2e-2)
 
 
 def _used(path: str) -> tuple[slice, ...]:
@@ -214,9 +206,7 @@ def _used(path: str) -> tuple[slice, ...]:
 # ── create_graph: the cast-back is differentiable ──
 
 
-def test_second_derivative_through_an_autocast_cast(
-    ref: ModuleType, device: str
-) -> None:
+def test_second_derivative_through_an_autocast_cast(ref: ModuleType, device: str) -> None:
     rng = np.random.default_rng(3)
     x_np = rng.standard_normal((3, 4)).astype(np.float32)
 
@@ -234,7 +224,5 @@ def test_second_derivative_through_an_autocast_cast(
     (rg * rg).sum().backward()
 
     assert x.grad is not None and x.grad.dtype == lucid.float32
-    np.testing.assert_allclose(
-        g.detach().numpy(), rg.detach().numpy(), rtol=5e-2, atol=5e-2
-    )
+    np.testing.assert_allclose(g.detach().numpy(), rg.detach().numpy(), rtol=5e-2, atol=5e-2)
     np.testing.assert_allclose(x.grad.numpy(), rx.grad.numpy(), rtol=5e-2, atol=1e-1)

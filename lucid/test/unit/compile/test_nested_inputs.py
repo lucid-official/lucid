@@ -47,9 +47,7 @@ class _DictIn(nn.Module):
         super().__init__()
         self.lin = nn.Linear(4, 4)
 
-    def forward(
-        self, x: lucid.Tensor, *, extra: dict[str, lucid.Tensor]
-    ) -> lucid.Tensor:
+    def forward(self, x: lucid.Tensor, *, extra: dict[str, lucid.Tensor]) -> lucid.Tensor:
         return self.lin(x) * extra["scale"] + extra["shift"]
 
 
@@ -72,9 +70,7 @@ def test_dict_keyword_argument_is_fresh_every_call() -> None:
     cm = lucid.compile(model)
     cm(_t(2, 4), extra={"shift": _t(2, 4), "scale": _t(2, 4)})
     x, extra = _t(2, 4), {"shift": _t(2, 4), "scale": _t(2, 4)}
-    assert np.allclose(
-        cm(x, extra=extra).numpy(), model(x, extra=extra).numpy(), atol=1e-5
-    )
+    assert np.allclose(cm(x, extra=extra).numpy(), model(x, extra=extra).numpy(), atol=1e-5)
 
 
 @pytest.mark.usefixtures("inference")

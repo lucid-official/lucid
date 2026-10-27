@@ -61,15 +61,11 @@ def _rect23() -> lucid.Tensor:
 
 class TestCholeskyBackward:
     def test_2x2_lower(self) -> None:
-        ok = gradcheck(
-            lambda A: LA.cholesky(_sym(A)).sum(), [_spd2()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: LA.cholesky(_sym(A)).sum(), [_spd2()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_3x3_lower(self) -> None:
-        ok = gradcheck(
-            lambda A: LA.cholesky(_sym(A)).sum(), [_spd3()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: LA.cholesky(_sym(A)).sum(), [_spd3()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_upper(self) -> None:
@@ -99,15 +95,11 @@ class TestSVDBackward:
         assert ok
 
     def test_U_only_rect(self) -> None:
-        ok = gradcheck(
-            lambda A: (LA.svd(A)[0] ** 2).sum(), [_rect23()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: (LA.svd(A)[0] ** 2).sum(), [_rect23()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_Vh_only_rect(self) -> None:
-        ok = gradcheck(
-            lambda A: (LA.svd(A)[2] ** 2).sum(), [_rect23()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: (LA.svd(A)[2] ** 2).sum(), [_rect23()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_all_three_rect(self) -> None:
@@ -136,9 +128,7 @@ class TestEighBackward:
         assert ok
 
     def test_eigenvectors_2x2(self) -> None:
-        ok = gradcheck(
-            lambda A: (LA.eigh(A)[1] ** 2).sum(), [_spd2()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: (LA.eigh(A)[1] ** 2).sum(), [_spd2()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_both_2x2(self) -> None:
@@ -171,15 +161,11 @@ class TestQRBackward:
         assert ok
 
     def test_Q_square(self) -> None:
-        ok = gradcheck(
-            lambda A: (LA.qr(A)[0] ** 2).sum(), [_sq2()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: (LA.qr(A)[0] ** 2).sum(), [_sq2()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_Q_rect(self) -> None:
-        ok = gradcheck(
-            lambda A: (LA.qr(A)[0] ** 2).sum(), [_rect32()], eps=1e-5, atol=2e-3
-        )
+        ok = gradcheck(lambda A: (LA.qr(A)[0] ** 2).sum(), [_rect32()], eps=1e-5, atol=2e-3)
         assert ok
 
     def test_both_square(self) -> None:

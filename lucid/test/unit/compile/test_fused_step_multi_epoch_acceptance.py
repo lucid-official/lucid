@@ -189,6 +189,5 @@ def test_fused_step_cifar_block_50_steps_matches_eager() -> None:
 
     # Sanity: both paths converged.
     assert eager_losses[0] > eager_losses[-1], (
-        f"eager loss didn't decrease (start={eager_losses[0]:.4f}, "
-        f"end={eager_losses[-1]:.4f})"
+        f"eager loss didn't decrease (start={eager_losses[0]:.4f}, " f"end={eager_losses[-1]:.4f})"
     )

@@ -69,9 +69,7 @@ def _fuse_run(mods: Sequence[nn.Module]) -> list[nn.Module]:
     if isinstance(first, _CONV_TYPES):
         conv: nn.Module = first
         rest = list(mods[1:])
-        if rest and isinstance(
-            rest[0], (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
-        ):
+        if rest and isinstance(rest[0], (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
             conv = cast("nn.Module", fuse_conv_bn_eval(conv, rest.pop(0)))
         if rest and isinstance(rest[0], nn.ReLU):
             rest.pop(0)
@@ -80,9 +78,7 @@ def _fuse_run(mods: Sequence[nn.Module]) -> list[nn.Module]:
     # Linear + ReLU
     if isinstance(first, nn.Linear) and len(mods) == 2 and isinstance(mods[1], nn.ReLU):
         return [nni.LinearReLU(first, nn.ReLU()), *ids]
-    raise ValueError(
-        f"fuse_modules: unsupported fusion pattern {[type(m).__name__ for m in mods]}"
-    )
+    raise ValueError(f"fuse_modules: unsupported fusion pattern {[type(m).__name__ for m in mods]}")
 
 
 def fuse_modules(
@@ -193,9 +189,7 @@ def _fuse_run_qat(mods: Sequence[nn.Module], qconfig: QConfig) -> list[nn.Module
             bn = rest.pop(0)
             relu = bool(rest and isinstance(rest[0], nn.ReLU))
             plain = (nniqat.ConvBn1d, nniqat.ConvBn2d, nniqat.ConvBn3d)[rank - 1]
-            fused = (nniqat.ConvBnReLU1d, nniqat.ConvBnReLU2d, nniqat.ConvBnReLU3d)[
-                rank - 1
-            ]
+            fused = (nniqat.ConvBnReLU1d, nniqat.ConvBnReLU2d, nniqat.ConvBnReLU3d)[rank - 1]
             cls = fused if relu else plain
             return [cast("nn.Module", cls(first, bn, qconfig=qconfig)), *ids]
         # Conv (+ ReLU), no BN → plain intrinsic fused; prepare_qat makes it qat.
@@ -206,9 +200,7 @@ def _fuse_run_qat(mods: Sequence[nn.Module], qconfig: QConfig) -> list[nn.Module
         import lucid.nn.intrinsic as nni
 
         return [nni.LinearReLU(first, nn.ReLU()), *ids]
-    raise ValueError(
-        f"fuse_modules_qat: unsupported pattern {[type(m).__name__ for m in mods]}"
-    )
+    raise ValueError(f"fuse_modules_qat: unsupported pattern {[type(m).__name__ for m in mods]}")
 
 
 def fuse_modules_qat(

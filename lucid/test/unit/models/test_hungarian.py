@@ -159,9 +159,7 @@ class TestDETRMatcher(unittest.TestCase):
 
     def test_returns_pred_then_gt_and_pairs_correctly(self) -> None:
         pred_logits, pred_boxes, gt_labels, gt_boxes = self._case()
-        pred_idx, gt_idx = _hungarian_match(
-            pred_logits, pred_boxes, gt_labels, gt_boxes
-        )
+        pred_idx, gt_idx = _hungarian_match(pred_logits, pred_boxes, gt_labels, gt_boxes)
         # Order of the returned tuple is (pred, gt) — swapping them would
         # still typecheck and still have length 2, so pin the pairing, which
         # is the only thing that distinguishes them.  Query 2 sits on GT 0
@@ -202,9 +200,7 @@ class TestDETRMatcher(unittest.TestCase):
         gt_labels = lucid.tensor([0]).long()
         gt_boxes = lucid.tensor([[0.25, 0.25, 0.30, 0.30]])
 
-        pred_idx, gt_idx = _hungarian_match(
-            pred_logits, pred_boxes, gt_labels, gt_boxes
-        )
+        pred_idx, gt_idx = _hungarian_match(pred_logits, pred_boxes, gt_labels, gt_boxes)
         self.assertEqual((pred_idx, gt_idx), ([2], [0]))
 
         flipped_pred, flipped_gt = _hungarian_match(

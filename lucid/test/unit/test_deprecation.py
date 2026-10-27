@@ -28,9 +28,7 @@ class _Renamed(_Base):
 
 
 def test_a_deprecated_function_warns_and_still_answers() -> None:
-    with pytest.warns(
-        LucidDeprecationWarning, match=r"removed in 3\.18\.0; use lucid\.new"
-    ):
+    with pytest.warns(LucidDeprecationWarning, match=r"removed in 3\.18\.0; use lucid\.new"):
         assert _old(3, scale=4) == 12
 
 

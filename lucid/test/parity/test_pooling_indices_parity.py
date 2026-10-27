@@ -39,9 +39,7 @@ def test_values_and_indices_match_the_reference(
     ref: Any, op: str, shape: tuple[int, ...], kwargs: dict[str, Any]
 ) -> None:
     x = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
-    got, got_idx = getattr(F, op)(
-        lucid.from_numpy(x.copy()), return_indices=True, **kwargs
-    )
+    got, got_idx = getattr(F, op)(lucid.from_numpy(x.copy()), return_indices=True, **kwargs)
     want, want_idx = getattr(ref.nn.functional, op)(
         ref.from_numpy(x.copy()), return_indices=True, **kwargs
     )
@@ -53,9 +51,7 @@ def test_values_and_indices_match_the_reference(
 def test_the_indices_round_trip_through_max_unpool2d(ref: Any) -> None:
     x = np.random.default_rng(1).standard_normal((2, 3, 8, 10)).astype(np.float32)
     pooled, idx = F.max_pool2d(lucid.from_numpy(x.copy()), 2, return_indices=True)
-    rpooled, ridx = ref.nn.functional.max_pool2d(
-        ref.from_numpy(x.copy()), 2, return_indices=True
-    )
+    rpooled, ridx = ref.nn.functional.max_pool2d(ref.from_numpy(x.copy()), 2, return_indices=True)
     got = F.max_unpool2d(pooled, idx, 2, output_size=(8, 10)).numpy()
     want = ref.nn.functional.max_unpool2d(rpooled, ridx, 2, output_size=(8, 10))
     np.testing.assert_array_equal(got, want.numpy())
@@ -98,9 +94,7 @@ def test_unpooling_infers_the_output_size_the_reference_does(ref: Any, n: int) -
     shape = (1, 2) + (9,) * n
     x = np.random.default_rng(2).standard_normal(shape).astype(np.float32)
     kw: dict[str, Any] = {"kernel_size": 3, "stride": 2, "padding": 1}
-    out, idx = getattr(F, f"max_pool{n}d")(
-        lucid.from_numpy(x.copy()), return_indices=True, **kw
-    )
+    out, idx = getattr(F, f"max_pool{n}d")(lucid.from_numpy(x.copy()), return_indices=True, **kw)
     rout, ridx = getattr(ref.nn.functional, f"max_pool{n}d")(
         ref.from_numpy(x.copy()), return_indices=True, **kw
     )

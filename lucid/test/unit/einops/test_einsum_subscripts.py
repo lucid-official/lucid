@@ -85,9 +85,7 @@ class TestEinsumSubscripts:
     @pytest.mark.parametrize(
         "eq,shapes", _NUMPY_CASES, ids=[f"{c[0]}|{len(c[1])}" for c in _NUMPY_CASES]
     )
-    def test_matches_numpy(
-        self, device: str, eq: str, shapes: list[tuple[int, ...]]
-    ) -> None:
+    def test_matches_numpy(self, device: str, eq: str, shapes: list[tuple[int, ...]]) -> None:
         arrays = _arrays(shapes, seed=0)
         out = lucid.einops.einsum(eq, *[lucid.tensor(a, device=device) for a in arrays])
         expected = np.einsum(eq, *arrays)
@@ -110,9 +108,7 @@ class TestEinsumSubscripts:
 
 @pytest.mark.parity
 class TestEinsumSubscriptsParity:
-    @pytest.mark.parametrize(
-        "eq,shapes", _CASES, ids=[f"{c[0]}|{len(c[1])}" for c in _CASES]
-    )
+    @pytest.mark.parametrize("eq,shapes", _CASES, ids=[f"{c[0]}|{len(c[1])}" for c in _CASES])
     def test_value_and_grad(
         self, ref: Any, device: str, eq: str, shapes: list[tuple[int, ...]]
     ) -> None:
@@ -140,12 +136,8 @@ class TestEinsumSubscriptsParity:
         assert out.dtype == lucid.int64
         assert out.item() == expected.item()
 
-    @pytest.mark.parametrize(
-        "eq,shapes", _REFUSED, ids=[f"{c[0]}|{c[1]}" for c in _REFUSED]
-    )
-    def test_refused_like_reference(
-        self, ref: Any, eq: str, shapes: list[tuple[int, ...]]
-    ) -> None:
+    @pytest.mark.parametrize("eq,shapes", _REFUSED, ids=[f"{c[0]}|{c[1]}" for c in _REFUSED])
+    def test_refused_like_reference(self, ref: Any, eq: str, shapes: list[tuple[int, ...]]) -> None:
         arrays = _arrays(shapes, seed=0)
         with pytest.raises(RuntimeError):
             ref.einsum(eq, *[ref.tensor(a) for a in arrays])

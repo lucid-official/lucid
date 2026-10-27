@@ -665,9 +665,7 @@ class PlaNetForWorldModeling(WorldModelingModel):
         (1, 2)
         """
         if elites > candidates:
-            raise ValueError(
-                f"elites ({elites}) cannot exceed candidates ({candidates})"
-            )
+            raise ValueError(f"elites ({elites}) cannot exceed candidates ({candidates})")
         for name, value in (
             ("horizon", horizon),
             ("iterations", iterations),

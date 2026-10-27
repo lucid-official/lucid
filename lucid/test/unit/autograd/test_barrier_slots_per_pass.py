@@ -137,9 +137,7 @@ def test_matches_the_reference(name: str, ref: ModuleType, device: str) -> None:
 
 
 @pytest.mark.parametrize("hook_on", ["output", "hidden"])
-def test_a_nested_pass_through_an_lstm_leaves_the_outer_gradient(
-    hook_on: str, device: str
-) -> None:
+def test_a_nested_pass_through_an_lstm_leaves_the_outer_gradient(hook_on: str, device: str) -> None:
     lucid.manual_seed(0)
     lstm = lucid.nn.LSTM(3, 4).to(device)
     x = lucid.randn(2, 1, 3, device=device).requires_grad_(True)

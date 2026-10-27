@@ -222,13 +222,11 @@ class NeuralODEConfig(NormalizingFlowConfig):
             raise ValueError(f"num_blocks must be positive, got {self.num_blocks}")
         if self.rtol <= 0.0 or self.atol <= 0.0:
             raise ValueError(
-                f"solver tolerances must be positive, got rtol={self.rtol}, "
-                f"atol={self.atol}"
+                f"solver tolerances must be positive, got rtol={self.rtol}, " f"atol={self.atol}"
             )
         if self.exact_trace_max_dim < 1:
             raise ValueError(
-                f"exact_trace_max_dim must be at least 1, got "
-                f"{self.exact_trace_max_dim}"
+                f"exact_trace_max_dim must be at least 1, got " f"{self.exact_trace_max_dim}"
             )
 
 

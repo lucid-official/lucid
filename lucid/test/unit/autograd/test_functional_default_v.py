@@ -19,9 +19,7 @@ _DATA = [1.0, -2.0, 3.0]
 
 
 @pytest.mark.parametrize("keep", [False, True], ids=["0-d", "shape-1"])
-def test_vjp_seeds_a_single_element_output(
-    ref: ModuleType, device: str, keep: bool
-) -> None:
+def test_vjp_seeds_a_single_element_output(ref: ModuleType, device: str, keep: bool) -> None:
     def cube_sum(x: lucid.Tensor) -> lucid.Tensor:
         s = (x * x * x).sum()
         return s.reshape(1) if keep else s
@@ -39,9 +37,7 @@ def test_jvp_seeds_a_single_element_input(
 ) -> None:
     x = lucid.full(shape, 3.0, device=device)
     out, tangent = jvp(lambda t: t * t * t, x)
-    want_out, want_tangent = ref.autograd.functional.jvp(
-        lambda t: t * t * t, ref.full(shape, 3.0)
-    )
+    want_out, want_tangent = ref.autograd.functional.jvp(lambda t: t * t * t, ref.full(shape, 3.0))
     assert tangent.shape == tuple(want_tangent.shape)
     assert tangent.tolist() == pytest.approx(want_tangent.tolist())
     assert out.tolist() == pytest.approx(want_out.tolist())

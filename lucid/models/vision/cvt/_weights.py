@@ -10,12 +10,8 @@ ImageNet-22k pretrain → ImageNet-1k finetune at 384×384.
 from lucid.utils.transforms import ImageClassification
 from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 
-_PRESET_224 = ImageClassification(
-    crop_size=224, resize_size=256, interpolation="bicubic"
-)
-_PRESET_384 = ImageClassification(
-    crop_size=384, resize_size=439, interpolation="bicubic"
-)
+_PRESET_224 = ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic")
+_PRESET_384 = ImageClassification(crop_size=384, resize_size=439, interpolation="bicubic")
 
 
 @register_weights("cvt_13_cls")

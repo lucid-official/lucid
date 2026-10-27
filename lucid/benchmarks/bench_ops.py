@@ -73,9 +73,7 @@ def _run_op_suite(n_elements: int = 10_000_000) -> list[dict[str, object]]:
             mlx_r = BenchResult(f"{name}_mlx", mlx_ns)
             r["mlx_mean_us"] = mlx_r.mean_us
             # Overhead (%) — (lucid_gpu - mlx) / mlx * 100
-            overhead = (
-                (gpu_r.mean_us - mlx_r.mean_us) / max(mlx_r.mean_us, 0.001) * 100.0
-            )
+            overhead = (gpu_r.mean_us - mlx_r.mean_us) / max(mlx_r.mean_us, 0.001) * 100.0
             r["layer_overhead_pct"] = round(overhead, 1)
         return r
 
@@ -83,9 +81,7 @@ def _run_op_suite(n_elements: int = 10_000_000) -> list[dict[str, object]]:
     cpu_ns = bench_cpu(lambda: lucid.relu(cpu_a))
     gpu_ns = bench_gpu_lucid(lambda: lucid.relu(gpu_a)) if has_gpu else None
     mlx_ns = bench_gpu_mlx(lambda: mx.maximum(mlx_a, 0.0)) if has_gpu else None
-    results.append(
-        _make_entry(f"relu_{n_elements//1_000_000}M", cpu_ns, gpu_ns, mlx_ns)
-    )
+    results.append(_make_entry(f"relu_{n_elements//1_000_000}M", cpu_ns, gpu_ns, mlx_ns))
 
     # ── add ───────────────────────────────────────────────────────────────────
     cpu_ns = bench_cpu(lambda: lucid.add(cpu_a, cpu_b))
@@ -114,15 +110,9 @@ def _run_op_suite(n_elements: int = 10_000_000) -> list[dict[str, object]]:
     # ── matmul 1024×1024 ──────────────────────────────────────────────────────
     cpu_ns = bench_cpu(lambda: lucid.matmul(cpu_mat_a, cpu_mat_b), iters=20)
     gpu_ns = (
-        bench_gpu_lucid(lambda: lucid.matmul(gpu_mat_a, gpu_mat_b), iters=20)
-        if has_gpu
-        else None
+        bench_gpu_lucid(lambda: lucid.matmul(gpu_mat_a, gpu_mat_b), iters=20) if has_gpu else None
     )
-    mlx_ns = (
-        bench_gpu_mlx(lambda: mx.matmul(mlx_mat_a, mlx_mat_b), iters=20)
-        if has_gpu
-        else None
-    )
+    mlx_ns = bench_gpu_mlx(lambda: mx.matmul(mlx_mat_a, mlx_mat_b), iters=20) if has_gpu else None
     results.append(_make_entry(f"matmul_{mat_n}x{mat_n}", cpu_ns, gpu_ns, mlx_ns))
 
     return results
@@ -174,11 +164,7 @@ def _print_table(results: list[dict[str, object]]) -> None:
         if has_mlx:
             row += [
                 f"{r.get('mlx_mean_us', '-'):.1f}" if "mlx_mean_us" in r else "-",
-                (
-                    f"{r.get('layer_overhead_pct', '-'):+.1f}%"
-                    if "layer_overhead_pct" in r
-                    else "-"
-                ),
+                (f"{r.get('layer_overhead_pct', '-'):+.1f}%" if "layer_overhead_pct" in r else "-"),
             ]
         rows.append(tuple(row))
 

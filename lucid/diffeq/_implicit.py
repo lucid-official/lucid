@@ -120,9 +120,7 @@ def parse_options(options: dict[str, object] | None) -> ImplicitOptions:
         raise ValueError(f"max_iters must be >= 1, got {raw}")
 
     fixed_part = {k: v for k, v in options.items() if k not in _IMPLICIT_KEYS}
-    return ImplicitOptions(
-        max_iters=raw, fixed=_fixed.parse_options(fixed_part or None)
-    )
+    return ImplicitOptions(max_iters=raw, fixed=_fixed.parse_options(fixed_part or None))
 
 
 def _tolerance(y: Tensor) -> float:
@@ -406,9 +404,7 @@ def integrate(
             (grid[target_index] - t1) * (1.0 if dt > 0 else -1.0) <= 0.0
         ):
             if return_trajectory:
-                trajectory.append(
-                    _fixed._interp_evaluate(coeffs, t0, t1, grid[target_index])
-                )
+                trajectory.append(_fixed._interp_evaluate(coeffs, t0, t1, grid[target_index]))
             target_index += 1
         y = y_next
 

@@ -81,12 +81,8 @@ _START = re.compile(
 )
 _IMPL = r"(?:std::shared_ptr<(?:lucid::)?TensorImpl>|(?:lucid::)?TensorImplPtr)"
 _RETURNS_IMPL = re.compile(rf"->\s*{_IMPL}\s*\{{")
-_CREATES = re.compile(
-    r"make_shared<(?:lucid::)?TensorImpl>|make_view\(|->transfer_to_device\("
-)
-_EXPOSES = re.compile(
-    r"(?:->|\.)(?:tolist|item|data_as_python|to_bytes)\(\)|metal_to_dlpack\("
-)
+_CREATES = re.compile(r"make_shared<(?:lucid::)?TensorImpl>|make_view\(|->transfer_to_device\(")
+_EXPOSES = re.compile(r"(?:->|\.)(?:tolist|item|data_as_python|to_bytes)\(\)|metal_to_dlpack\(")
 _BARE = re.compile(r'^\.def(?:_static)?\(\s*"\w*",\s*&(?:lucid::)?TensorImpl::')
 
 
@@ -124,10 +120,7 @@ def underived(root: Path = _BINDINGS) -> list[str]:
     return [
         f"{file}: {name}"
         for file, name, src in _bindings(root)
-        if (
-            _CREATES.search(src)
-            or (file in _TENSOR_FILES and _RETURNS_IMPL.search(src))
-        )
+        if (_CREATES.search(src) or (file in _TENSOR_FILES and _RETURNS_IMPL.search(src)))
         and name not in _FRESH
         and "traced_derive(" not in src
     ]
@@ -138,9 +131,7 @@ def unnoted(root: Path = _BINDINGS) -> list[str]:
     return [
         f"{file}: {name}"
         for file, name, src in _bindings(root)
-        if _EXPOSES.search(src)
-        and name not in _NOT_A_READ
-        and "note_host_read(" not in src
+        if _EXPOSES.search(src) and name not in _NOT_A_READ and "note_host_read(" not in src
     ]
 
 

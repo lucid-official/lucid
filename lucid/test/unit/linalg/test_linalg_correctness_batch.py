@@ -93,13 +93,9 @@ def test_eigvalsh_reads_the_triangle_uplo_names(
     uplo: str, requires_grad: bool, batch: tuple[int, ...], device: str, ref: Any
 ) -> None:
     a = _lopsided(1, batch)
-    got = LA.eigvalsh(
-        lucid.tensor(a, device=device, requires_grad=requires_grad), UPLO=uplo
-    )
+    got = LA.eigvalsh(lucid.tensor(a, device=device, requires_grad=requires_grad), UPLO=uplo)
     want = ref.linalg.eigvalsh(ref.tensor(a), UPLO=uplo)
-    np.testing.assert_allclose(
-        _np(got.detach()), want.numpy(), rtol=_rtol(device), atol=1e-3
-    )
+    np.testing.assert_allclose(_np(got.detach()), want.numpy(), rtol=_rtol(device), atol=1e-3)
 
 
 @pytest.mark.parity
@@ -146,22 +142,16 @@ def test_inv_ex_keeps_the_matrices_that_succeeded(device: str, ref: Any) -> None
     assert _np(info).tolist() == rinfo.numpy().tolist() == [0, 2, 0]
     assert info.dtype == lucid.int32
     ok = [0, 2]
-    np.testing.assert_allclose(
-        _np(out)[ok], rout.numpy()[ok], rtol=_rtol(device), atol=1e-5
-    )
+    np.testing.assert_allclose(_np(out)[ok], rout.numpy()[ok], rtol=_rtol(device), atol=1e-5)
     np.testing.assert_array_equal(_np(out)[1], np.zeros((2, 2)))
 
 
 @pytest.mark.parity
 @pytest.mark.parametrize("rhs", ["matrix", "vector"])
-def test_solve_ex_keeps_the_systems_that_succeeded(
-    rhs: str, device: str, ref: Any
-) -> None:
+def test_solve_ex_keeps_the_systems_that_succeeded(rhs: str, device: str, ref: Any) -> None:
     a = _batch(np.eye(2), _SINGULAR)
     b = np.ones((2, 2, 1) if rhs == "matrix" else (2, 2), dtype=np.float32)
-    out, info = LA.solve_ex(
-        lucid.tensor(a, device=device), lucid.tensor(b, device=device)
-    )
+    out, info = LA.solve_ex(lucid.tensor(a, device=device), lucid.tensor(b, device=device))
     rout, rinfo = ref.linalg.solve_ex(ref.tensor(a), ref.tensor(b))
     assert _np(info).tolist() == rinfo.numpy().tolist() == [0, 2]
     assert tuple(out.shape) == tuple(rout.shape)
@@ -176,9 +166,7 @@ def test_cholesky_ex_keeps_the_factors_that_succeeded(device: str, ref: Any) -> 
     rout, rinfo = ref.linalg.cholesky_ex(ref.tensor(a))
     assert _np(info).tolist() == rinfo.numpy().tolist() == [0, 2, 0]
     ok = [0, 2]
-    np.testing.assert_allclose(
-        _np(out)[ok], rout.numpy()[ok], rtol=_rtol(device), atol=1e-6
-    )
+    np.testing.assert_allclose(_np(out)[ok], rout.numpy()[ok], rtol=_rtol(device), atol=1e-6)
     # The failed one holds only the leading factor LAPACK defines (LCD-395).
     np.testing.assert_allclose(_np(out)[1], [[1.0, 0.0], [0.0, 0.0]])
 
@@ -196,9 +184,7 @@ def test_cholesky_ex_keeps_the_factors_that_succeeded(device: str, ref: Any) -> 
         ("cholesky_ex", [[float("nan"), 0.0], [0.0, 4.0]]),
     ],
 )
-def test_ex_info_is_the_lapack_code(
-    op: str, matrix: Any, device: str, ref: Any
-) -> None:
+def test_ex_info_is_the_lapack_code(op: str, matrix: Any, device: str, ref: Any) -> None:
     """Not a bare non-zero flag: the pivot / leading-minor order."""
     a = np.asarray(matrix, dtype=np.float32)
     _, info = getattr(LA, op)(lucid.tensor(a, device=device))
@@ -209,9 +195,7 @@ def test_ex_info_is_the_lapack_code(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("size", [2, 5, 16, 33])
-def test_cholesky_ex_finds_scattered_failures_in_a_batch(
-    size: int, device: str, ref: Any
-) -> None:
+def test_cholesky_ex_finds_scattered_failures_in_a_batch(size: int, device: str, ref: Any) -> None:
     """The failures are located by bisecting the batch; each one's order by
     bisecting its leading blocks.  Both must land where LAPACK's do."""
     rng = np.random.default_rng(size)
@@ -253,9 +237,7 @@ def test_solve_ex_check_errors_raises(device: str) -> None:
 
 
 @pytest.mark.parametrize("op", ["inv_ex", "cholesky_ex"])
-def test_ex_gradient_reaches_only_the_matrices_that_succeeded(
-    op: str, device: str
-) -> None:
+def test_ex_gradient_reaches_only_the_matrices_that_succeeded(op: str, device: str) -> None:
     good = np.array([[4.0, 1.0], [1.0, 3.0]], dtype=np.float32)
     bad = np.asarray(_SINGULAR if op == "inv_ex" else _NOT_PD, dtype=np.float32)
     x = lucid.tensor(_batch(good, bad), device=device, requires_grad=True)
@@ -264,9 +246,7 @@ def test_ex_gradient_reaches_only_the_matrices_that_succeeded(
 
     alone = lucid.tensor(good, device=device, requires_grad=True)
     (LA.inv(alone) if op == "inv_ex" else LA.cholesky(alone)).sum().backward()
-    np.testing.assert_allclose(
-        _np(x.grad)[0], _np(alone.grad), rtol=_rtol(device), atol=1e-6
-    )
+    np.testing.assert_allclose(_np(x.grad)[0], _np(alone.grad), rtol=_rtol(device), atol=1e-6)
     np.testing.assert_array_equal(_np(x.grad)[1], np.zeros((2, 2)))
 
 
@@ -370,9 +350,7 @@ def test_ldl_solve_is_differentiable_in_b() -> None:
     b = lucid.tensor(np.ones((4, 1)), requires_grad=True)
     LA.ldl_solve(ld, piv, b).sum().backward()
     # d(1ᵀ A⁻¹ b)/db = A⁻ᵀ 1 = A⁻¹ 1 for symmetric A.
-    np.testing.assert_allclose(
-        _np(b.grad), np.linalg.solve(s, np.ones((4, 1))), atol=1e-10
-    )
+    np.testing.assert_allclose(_np(b.grad), np.linalg.solve(s, np.ones((4, 1))), atol=1e-10)
 
 
 def test_ldl_solve_differentiates_through_a_2x2_block() -> None:
@@ -384,9 +362,7 @@ def test_ldl_solve_differentiates_through_a_2x2_block() -> None:
     ld = lucid.tensor(_np(ld), requires_grad=True)
     b = lucid.tensor(rng.standard_normal((5, 2)), requires_grad=True)
     w = lucid.tensor(rng.standard_normal((5, 2)))
-    assert lucid.autograd.gradcheck(
-        lambda L, B: (LA.ldl_solve(L, piv, B) * w).sum(), (ld, b)
-    )
+    assert lucid.autograd.gradcheck(lambda L, B: (LA.ldl_solve(L, piv, B) * w).sum(), (ld, b))
 
 
 @pytest.mark.parametrize(
@@ -422,9 +398,7 @@ def test_lu_and_lu_factor_gradient_take_a_batch(device: str) -> None:
     for i in range(3):
         one = lucid.tensor(a[i], device=device, requires_grad=True)
         LA.lu_factor(one)[0].sum().backward()
-        np.testing.assert_allclose(
-            _np(x.grad)[i], _np(one.grad), rtol=_rtol(device), atol=1e-5
-        )
+        np.testing.assert_allclose(_np(x.grad)[i], _np(one.grad), rtol=_rtol(device), atol=1e-5)
 
 
 def test_pivot_paths_run_without_numpy() -> None:
@@ -506,9 +480,7 @@ def test_wide_qr_gradient_matches_the_reference(
     _qr_loss(rq, rr, ref.tensor(wq), ref.tensor(wr), path).backward()
     # Same LAPACK factorization, same signs, so Q and R agree as they stand.
     np.testing.assert_allclose(_np(r.detach()), rr.detach().numpy(), atol=1e-4)
-    np.testing.assert_allclose(
-        _np(x.grad), t.grad.numpy(), rtol=_rtol(device), atol=1e-4
-    )
+    np.testing.assert_allclose(_np(x.grad), t.grad.numpy(), rtol=_rtol(device), atol=1e-4)
 
 
 @pytest.mark.parametrize("output", [0, 1])
@@ -517,9 +489,7 @@ def test_wide_qr_differentiates_twice(output: int) -> None:
     x = lucid.tensor(rng.standard_normal((3, 5)), requires_grad=True)
     w = lucid.tensor(rng.standard_normal((3, 3) if output == 0 else (3, 5)))
     assert lucid.autograd.gradcheck(lambda t: (LA.qr(t)[output] * w).sum(), (x,))
-    assert lucid.autograd.gradgradcheck(
-        lambda t: (LA.qr(t)[output] ** 2 * w).sum(), (x,)
-    )
+    assert lucid.autograd.gradgradcheck(lambda t: (LA.qr(t)[output] ** 2 * w).sum(), (x,))
 
 
 # ── CHA-146: matrix_power at 0 and 1 ─────────────────────────────────────────
@@ -531,9 +501,7 @@ def test_matrix_power_zero_is_a_fresh_identity_on_the_input_device(
     x = lucid.rand(2, 3, 3, device=device, requires_grad=True)
     y = LA.matrix_power(x, 0)
     assert y.device == x.device
-    np.testing.assert_array_equal(
-        _np(y.detach()), np.broadcast_to(np.eye(3), (2, 3, 3))
-    )
+    np.testing.assert_array_equal(_np(y.detach()), np.broadcast_to(np.eye(3), (2, 3, 3)))
     assert y.grad_fn is not None
     (y * 3).sum().backward()
     np.testing.assert_array_equal(_np(x.grad), np.zeros((2, 3, 3)))
@@ -594,9 +562,7 @@ def test_cond_of_a_zero_matrix(p: Any, device: str, ref: Any) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("shape", [(0, 0), (2, 0, 0), (3, 0)])
-def test_cond_of_an_empty_matrix_is_zero(
-    shape: tuple[int, ...], device: str, ref: Any
-) -> None:
+def test_cond_of_an_empty_matrix_is_zero(shape: tuple[int, ...], device: str, ref: Any) -> None:
     got = LA.cond(lucid.zeros(*shape, device=device))
     want = ref.linalg.cond(ref.zeros(*shape)).numpy()
     assert tuple(got.shape) == want.shape
@@ -627,9 +593,7 @@ def test_cond_rectangular_spectral() -> None:
 
 def _complex(seed: int, shape: tuple[int, ...]) -> np.ndarray:
     rng = np.random.default_rng(seed)
-    return (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)).astype(
-        np.complex64
-    )
+    return (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)).astype(np.complex64)
 
 
 def _np_complex(t: lucid.Tensor) -> np.ndarray:
@@ -653,17 +617,13 @@ def test_vecdot_conjugates_its_first_operand(device: str, ref: Any) -> None:
 
 def test_vecdot_of_a_complex_vector_with_itself_is_real(device: str) -> None:
     x = _complex(2, (5,))
-    got = _np_complex(
-        LA.vecdot(lucid.tensor(x, device=device), lucid.tensor(x, device=device))
-    )
+    got = _np_complex(LA.vecdot(lucid.tensor(x, device=device), lucid.tensor(x, device=device)))
     np.testing.assert_allclose(got, np.sum(np.abs(x) ** 2), rtol=1e-5)
 
 
 @pytest.mark.parity
 @pytest.mark.parametrize("ord", [2, 1, 3, 0.5, float("inf"), float("-inf"), 0])
-def test_vector_norm_of_a_complex_input_is_real(
-    ord: float, device: str, ref: Any
-) -> None:
+def test_vector_norm_of_a_complex_input_is_real(ord: float, device: str, ref: Any) -> None:
     x = _complex(3, (3, 5))
     got = LA.vector_norm(lucid.tensor(x, device=device), ord=ord, dim=-1)
     want = ref.linalg.vector_norm(ref.tensor(x), ord=ord, dim=-1).numpy()

@@ -78,9 +78,7 @@ def _rotate_queries_or_keys(x: Tensor, positions: Tensor, base: float) -> Tensor
     if head_dim % 2 != 0:
         raise ValueError(f"rotary head dimension must be even, got {head_dim}")
     half = head_dim // 2
-    omega = 1.0 / (
-        base ** (lucid.arange(half, device=positions.device).to(x.dtype) / float(half))
-    )
+    omega = 1.0 / (base ** (lucid.arange(half, device=positions.device).to(x.dtype) / float(half)))
     omega = omega.reshape((1,) * positions.ndim + (half,))
     freq = positions.to(x.dtype).unsqueeze(-1) * omega
     sin = lucid.sin(freq).repeat(*(1 for _ in range(positions.ndim)), 2)
@@ -124,9 +122,7 @@ class _RoPEAttention(nn.Module):
     ) -> None:
         super().__init__()
         if dim % num_heads != 0:
-            raise ValueError(
-                f"dim must be divisible by num_heads, got {dim} and {num_heads}"
-            )
+            raise ValueError(f"dim must be divisible by num_heads, got {dim} and {num_heads}")
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.grid_size = grid_size
@@ -248,14 +244,10 @@ class _RoPEAttention(nn.Module):
         frame_tokens = height * width
         expected = temporal * (action_tokens + frame_tokens)
         if count != expected:
-            raise ValueError(
-                f"action-conditioned sequence has {count} tokens, expected {expected}"
-            )
+            raise ValueError(f"action-conditioned sequence has {count} tokens, expected {expected}")
         q = q.reshape(batch, heads, temporal, action_tokens + frame_tokens, head_dim)
         k = k.reshape(batch, heads, temporal, action_tokens + frame_tokens, head_dim)
-        value = value.reshape(
-            batch, heads, temporal, action_tokens + frame_tokens, head_dim
-        )
+        value = value.reshape(batch, heads, temporal, action_tokens + frame_tokens, head_dim)
         action_q: list[Tensor] = []
         action_k: list[Tensor] = []
         action_v: list[Tensor] = []
@@ -269,12 +261,8 @@ class _RoPEAttention(nn.Module):
             k_depth = _rotate_queries_or_keys(
                 k_action[..., : self.depth_dim], temporal_positions, self.rope_base
             )
-            action_q.append(
-                lucid.cat([q_depth, q_action[..., self.depth_dim :]], dim=-1)
-            )
-            action_k.append(
-                lucid.cat([k_depth, k_action[..., self.depth_dim :]], dim=-1)
-            )
+            action_q.append(lucid.cat([q_depth, q_action[..., self.depth_dim :]], dim=-1))
+            action_k.append(lucid.cat([k_depth, k_action[..., self.depth_dim :]], dim=-1))
             action_v.append(value[:, :, :, index, :])
         frame_q = q[:, :, :, action_tokens:, :].reshape(
             batch, heads, temporal * frame_tokens, head_dim
@@ -316,15 +304,11 @@ class _RoPEAttention(nn.Module):
         action_q_tensor = lucid.stack(action_q, dim=3)
         action_k_tensor = lucid.stack(action_k, dim=3)
         action_v_tensor = lucid.stack(action_v, dim=3)
-        q = lucid.cat([action_q_tensor, frame_q], dim=3).reshape(
+        q = lucid.cat([action_q_tensor, frame_q], dim=3).reshape(batch, heads, count, head_dim)
+        k = lucid.cat([action_k_tensor, frame_k], dim=3).reshape(batch, heads, count, head_dim)
+        value = lucid.cat([action_v_tensor, value[:, :, :, action_tokens:, :]], dim=3).reshape(
             batch, heads, count, head_dim
         )
-        k = lucid.cat([action_k_tensor, frame_k], dim=3).reshape(
-            batch, heads, count, head_dim
-        )
-        value = lucid.cat(
-            [action_v_tensor, value[:, :, :, action_tokens:, :]], dim=3
-        ).reshape(batch, heads, count, head_dim)
         attended = F.scaled_dot_product_attention(
             q, k, value, attn_mask=attn_mask, dropout_p=self._dropout_p()
         )
@@ -584,10 +568,7 @@ class _RoPEVideoPredictor(nn.Module):
         self.use_rope = use_rope
         self.predictor_embed = nn.Linear(dim, predictor_dim)
         self.mask_tokens = nn.ParameterList(
-            [
-                nn.Parameter(lucid.zeros(1, 1, predictor_dim))
-                for _ in range(num_mask_tokens)
-            ]
+            [nn.Parameter(lucid.zeros(1, 1, predictor_dim)) for _ in range(num_mask_tokens)]
         )
         hidden = int(predictor_dim * mlp_ratio)
         rates = [drop_path_rate * i / max(depth - 1, 1) for i in range(depth)]
@@ -767,23 +748,11 @@ class _ActionConditionedPredictor(nn.Module):
             )
         steps = token_count // spatial
         for name, tensor in (("actions", actions), ("states", states)):
-            if (
-                tensor.ndim != 3
-                or int(tensor.shape[0]) != batch
-                or int(tensor.shape[1]) != steps
-            ):
-                raise ValueError(
-                    f"{name} must have shape (B, {steps}, width), got {tensor.shape}"
-                )
+            if tensor.ndim != 3 or int(tensor.shape[0]) != batch or int(tensor.shape[1]) != steps:
+                raise ValueError(f"{name} must have shape (B, {steps}, width), got {tensor.shape}")
         if self.use_extrinsics:
-            if (
-                extrinsics is None
-                or extrinsics.ndim != 3
-                or int(extrinsics.shape[1]) != steps
-            ):
-                raise ValueError(
-                    f"extrinsics must have shape (B, {steps}, width) when enabled"
-                )
+            if extrinsics is None or extrinsics.ndim != 3 or int(extrinsics.shape[1]) != steps:
+                raise ValueError(f"extrinsics must have shape (B, {steps}, width) when enabled")
         hidden = self.predictor_embed(x)
         hidden = hidden.reshape(batch, steps, spatial, self.predictor_dim)
         action = self.action_encoder(actions).unsqueeze(2)
@@ -798,9 +767,7 @@ class _ActionConditionedPredictor(nn.Module):
         )
         cond = len(pieces) - 1
         total_per_step = spatial + cond
-        masks = _action_attention_mask(
-            steps, total_per_step, hidden.device, self.frame_causal
-        )
+        masks = _action_attention_mask(steps, total_per_step, hidden.device, self.frame_causal)
         # The conditioning tokens are not part of the spatial rotary grid.  A
         # token index of the same frame is sufficient for the causal attention
         # path; spatial token positions are reconstructed inside each block.
@@ -997,9 +964,7 @@ class _AttentivePooler(nn.Module):
         self.key = nn.Linear(config.dim, config.dim)
         self.value = nn.Linear(config.dim, config.dim)
         self.norm_out = nn.LayerNorm(config.dim, eps=config.layer_norm_eps)
-        self.mlp = _FeedForward(
-            config.dim, int(config.dim * config.mlp_ratio), False, False
-        )
+        self.mlp = _FeedForward(config.dim, int(config.dim * config.mlp_ratio), False, False)
 
         # The probe is a tower and is initialised as one — the same
         # truncated normal and the same depth-scaled residual outputs the
@@ -1028,9 +993,7 @@ class _AttentivePooler(nn.Module):
         keys = self.norm_keys(tokens)
 
         def split_heads(value: Tensor, length: int) -> Tensor:
-            return value.reshape(batch, length, self.num_heads, self.head_dim).permute(
-                0, 2, 1, 3
-            )
+            return value.reshape(batch, length, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         query_input = self.query_token.repeat(batch, 1, 1)
         query = split_heads(self.query(query_input), 1)
@@ -1206,9 +1169,7 @@ class VJEPA2Model(PretrainedModel, BackboneMixin):
         """Run representation extraction or a masked prediction step."""
         self._check_clip(x)
         if (context_indices is None) != (target_indices is None):
-            raise ValueError(
-                "context_indices and target_indices must be supplied together"
-            )
+            raise ValueError("context_indices and target_indices must be supplied together")
         if context_indices is None or target_indices is None:
             return VJEPA2Output(tokens=self.tokens(x))
 
@@ -1281,9 +1242,7 @@ class VJEPA2ForVideoClassification(ImageClassificationModel, ClassificationHeadM
         self.head = nn.Linear(config.dim, config.num_classes)
 
     @override
-    def forward(
-        self, x: Tensor, labels: Tensor | None = None
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         """Classify a clip and optionally return cross-entropy loss.
 
         The backbone is the frozen target encoder, which is what the

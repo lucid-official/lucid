@@ -25,11 +25,7 @@ _KEEPS = [
 def test_minus_one_keeps_the_aligned_size(
     device: str, shape: tuple[int, ...], size: tuple[int, ...]
 ) -> None:
-    x = (
-        lucid.zeros(*shape, device=device)
-        if shape
-        else lucid.tensor(1.0, device=device)
-    )
+    x = lucid.zeros(*shape, device=device) if shape else lucid.tensor(1.0, device=device)
     lead = len(size) - len(shape)
     want = tuple(shape[i - lead] if s == -1 else s for i, s in enumerate(size))
     assert lucid.broadcast_to(x, size).shape == want

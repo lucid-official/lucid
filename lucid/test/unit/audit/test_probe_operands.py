@@ -176,9 +176,7 @@ def test_a_regression_loss_is_not_probed_at_its_own_minimum() -> None:
 
 def test_deterministic_symbols_are_not_flagged_stochastic() -> None:
     """A resampler is not a sampler."""
-    flagged = {
-        s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags
-    }
+    flagged = {s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags}
     for name in (
         "F.normalize",
         "F.grid_sample",
@@ -192,9 +190,7 @@ def test_deterministic_symbols_are_not_flagged_stochastic() -> None:
 
 
 def test_the_samplers_are_still_flagged() -> None:
-    flagged = {
-        s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags
-    }
+    flagged = {s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags}
     for name in (
         "lucid.rand",
         "lucid.randn",
@@ -215,9 +211,7 @@ def test_the_samplers_are_still_flagged() -> None:
 
 def test_empty_is_not_asked_to_respect_a_seed() -> None:
     """It returns uninitialised memory, not a draw."""
-    flagged = {
-        s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags
-    }
+    flagged = {s.qualname for s in _surface.enumerate_surface() if "stochastic" in s.flags}
     for name in ("lucid.empty", "lucid.empty_like", "Tensor.new_empty"):
         assert name not in flagged, name
 

@@ -34,8 +34,7 @@ def _flat(t: object) -> list[float]:
 
 def _close(got: list[float], want: list[float], tol: float) -> bool:
     return len(got) == len(want) and all(
-        math.isclose(g, w, rel_tol=tol, abs_tol=tol)
-        for g, w in zip(got, want, strict=True)
+        math.isclose(g, w, rel_tol=tol, abs_tol=tol) for g, w in zip(got, want, strict=True)
     )
 
 
@@ -82,23 +81,15 @@ def m_hess(m: ModuleType) -> Callable[..., object]:
 
 @pytest.mark.parametrize("name", list(_CASES))
 def test_float64_matches_the_reference_exactly(name: str, ref: ModuleType) -> None:
-    got = _CASES[name](
-        lucid, _as(lucid, _X, "cpu", "float64"), _as(lucid, _V, "cpu", "float64")
-    )
-    want = _CASES[name](
-        ref, _as(ref, _X, "cpu", "float64"), _as(ref, _V, "cpu", "float64")
-    )
+    got = _CASES[name](lucid, _as(lucid, _X, "cpu", "float64"), _as(lucid, _V, "cpu", "float64"))
+    want = _CASES[name](ref, _as(ref, _X, "cpu", "float64"), _as(ref, _V, "cpu", "float64"))
     assert _close(_flat(got), _flat(want), _TIGHT), (_flat(got), _flat(want))
 
 
 @pytest.mark.parametrize("name", list(_CASES))
 def test_float32_matches_the_reference(name: str, ref: ModuleType, device: str) -> None:
-    got = _CASES[name](
-        lucid, _as(lucid, _X, device, "float32"), _as(lucid, _V, device, "float32")
-    )
-    want = _CASES[name](
-        ref, _as(ref, _X, "cpu", "float32"), _as(ref, _V, "cpu", "float32")
-    )
+    got = _CASES[name](lucid, _as(lucid, _X, device, "float32"), _as(lucid, _V, device, "float32"))
+    want = _CASES[name](ref, _as(ref, _X, "cpu", "float32"), _as(ref, _V, "cpu", "float32"))
     assert _close(_flat(got), _flat(want), 1e-5), (_flat(got), _flat(want))
 
 
@@ -110,9 +101,7 @@ def test_jvp_is_exact_without_the_reference() -> None:
     sv = sum(_V)
     sx = sum(_X)
     want = [
-        (3 * math.exp(3 * a) * math.sin(a) + math.exp(3 * a) * math.cos(a)) * b
-        + b * sx
-        + a * sv
+        (3 * math.exp(3 * a) * math.sin(a) + math.exp(3 * a) * math.cos(a)) * b + b * sx + a * sv
         for a, b in zip(_X, _V, strict=True)
     ]
     assert _close(_flat(tangent), want, _TIGHT)
@@ -142,9 +131,7 @@ def test_tuple_outputs(ref: ModuleType) -> None:
 
 
 @pytest.mark.parametrize("name", ["jvp", "vjp", "jacobian", "hessian"])
-def test_create_graph_results_differentiate_back_to_the_input(
-    name: str, ref: ModuleType
-) -> None:
+def test_create_graph_results_differentiate_back_to_the_input(name: str, ref: ModuleType) -> None:
     def run(m: ModuleType) -> list[float]:
         x = _as(m, _X, "cpu", "float64").requires_grad_(True)
         v = _as(m, _V, "cpu", "float64")

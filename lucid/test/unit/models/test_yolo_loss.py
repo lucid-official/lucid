@@ -124,9 +124,7 @@ def _ref_v1(raw: Tensor, targets: list[dict], cfg: YOLOConfig, hw) -> float:
                     wh += (p[2] - sw) ** 2 + (p[3] - sh) ** 2
                     co += (p[4] - v) ** 2
                     cls = cell[row][col][B * 5 :]
-                    cl += sum(
-                        (s - (1.0 if k == c else 0.0)) ** 2 for k, s in enumerate(cls)
-                    )
+                    cl += sum((s - (1.0 if k == c else 0.0)) ** 2 for k, s in enumerate(cls))
         total += cfg.lambda_coord * (xy + wh) + co + cfg.lambda_noobj * cn + cl
     return total / len(targets)
 
@@ -229,9 +227,7 @@ def test_ignore_mask_matches_the_scalar_reference() -> None:
     want = [float(max(_iou(tuple(b), g) for g in gts) > 0.5) for b in boxes[0].tolist()]
     assert got == want
     assert sum(want) >= 3
-    assert _ignore_mask(boxes[0], lucid.zeros((0, 4)), 0.5).tolist() == [0.0] * len(
-        want
-    )
+    assert _ignore_mask(boxes[0], lucid.zeros((0, 4)), 0.5).tolist() == [0.0] * len(want)
 
 
 # ── no per-element host reads ───────────────────────────────────────────────
@@ -245,9 +241,7 @@ class _HostReads:
         for name in self.calls:
             original = getattr(Tensor, name)
 
-            def counted(
-                t: Tensor, *a: object, _n: str = name, _f=original, **k: object
-            ):
+            def counted(t: Tensor, *a: object, _n: str = name, _f=original, **k: object):
                 self.calls[_n] += 1
                 return _f(t, *a, **k)
 
@@ -287,13 +281,9 @@ def test_v1_v2_losses_read_nothing_per_predictor(
     assert small["tolist"] == 0 and small["numpy"] == 0
 
 
-def _v3_v4_reads(
-    version: str, monkeypatch: pytest.MonkeyPatch, grid: int
-) -> dict[str, int]:
+def _v3_v4_reads(version: str, monkeypatch: pytest.MonkeyPatch, grid: int) -> dict[str, int]:
     C, B = 3, 2
-    cfg = (
-        YOLOV3Config(num_classes=C) if version == "v3" else YOLOV4Config(num_classes=C)
-    )
+    cfg = YOLOV3Config(num_classes=C) if version == "v3" else YOLOV4Config(num_classes=C)
     loss_fn = _yolov3_loss if version == "v3" else _yolov4_loss
     lucid.manual_seed(5)
     raws = [lucid.randn(B, 3 * (5 + C), grid * s, grid * s) for s in (1, 2, 4)]
@@ -339,9 +329,7 @@ def test_yolo_postprocess_labels_are_int64(empty: bool) -> None:
     thresh = 1e3 if empty else 0.0  # no score clears 1e3
     out = _det_output(12, 4)
     v1 = _stub(YOLOForObjectDetection, YOLOConfig(num_classes=4, score_thresh=thresh))
-    v2 = _stub(
-        YOLOV2ForObjectDetection, YOLOV2Config(num_classes=4, score_thresh=thresh)
-    )
+    v2 = _stub(YOLOV2ForObjectDetection, YOLOV2Config(num_classes=4, score_thresh=thresh))
     results = [
         YOLOForObjectDetection.postprocess(v1, out, (96, 96))[0],
         YOLOV2ForObjectDetection.postprocess(v2, out, (96, 96))[0],

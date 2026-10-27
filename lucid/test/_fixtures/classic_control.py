@@ -233,9 +233,7 @@ class Pendulum:
         """
         inertia = self.mass * self.length**2 / 3.0
         kinetic = 0.5 * inertia * self.omega**2
-        potential = (
-            self.mass * self.gravity * (self.length / 2.0) * math.cos(self.theta)
-        )
+        potential = self.mass * self.gravity * (self.length / 2.0) * math.cos(self.theta)
         return kinetic + potential
 
     def _integrate(self, action: float) -> None:
@@ -243,9 +241,7 @@ class Pendulum:
 
         def rhs(_: Tensor, state: Tensor) -> Tensor:
             theta, omega = float(state[0].item()), float(state[1].item())
-            return lucid.stack(
-                [state[1], lucid.tensor(self.acceleration(theta, omega, action))]
-            )
+            return lucid.stack([state[1], lucid.tensor(self.acceleration(theta, omega, action))])
 
         with lucid.no_grad():
             path = odeint(

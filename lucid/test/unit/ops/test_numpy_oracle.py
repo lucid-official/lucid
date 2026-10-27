@@ -92,17 +92,14 @@ def _eager(name: str, dtype: str, device: str) -> tuple[object, np.ndarray]:
             return case.fn(x), x.numpy()
         except Exception as e:  # noqa: BLE001 — eager decides which dtypes exist
             pytest.fail(
-                f"eager {dtype} raised {type(e).__name__}: {e} — not listed in "
-                "EAGER_REJECTS"
+                f"eager {dtype} raised {type(e).__name__}: {e} — not listed in " "EAGER_REJECTS"
             )
 
 
 def _assert_matches(name: str, dtype: str, got: object, want: object) -> None:
     g_leaves = [t for t in _leaves(got) if isinstance(t, lucid.Tensor)]
     w_leaves = [np.asarray(w) for w in _leaves(want)]
-    assert len(g_leaves) == len(
-        w_leaves
-    ), f"{len(g_leaves)} outputs, want {len(w_leaves)}"
+    assert len(g_leaves) == len(w_leaves), f"{len(g_leaves)} outputs, want {len(w_leaves)}"
     for i, (g, w) in enumerate(zip(g_leaves, w_leaves)):
         gn = g.numpy()
         assert gn.shape == w.shape, f"out[{i}] shape {gn.shape}, want {w.shape}"
@@ -114,9 +111,7 @@ def _assert_matches(name: str, dtype: str, got: object, want: object) -> None:
             assert np.array_equal(
                 gn.view(np.int32), w.astype(gn.dtype).view(np.int32)
             ), f"out[{i}] not bit-exact: {gn.ravel()[:6]} vs {w.ravel()[:6]}"
-        elif np.issubdtype(w.dtype, np.floating) or np.issubdtype(
-            gn.dtype, np.floating
-        ):
+        elif np.issubdtype(w.dtype, np.floating) or np.issubdtype(gn.dtype, np.floating):
             assert np.allclose(
                 gn.astype(np.float64),
                 w.astype(np.float64),
@@ -136,12 +131,8 @@ def _assert_matches(name: str, dtype: str, got: object, want: object) -> None:
 
 def test_every_case_is_accounted_for() -> None:
     """A case is either held to a reference or listed with the reason it is not."""
-    unaccounted = [
-        c.name for c in M.CASES if c.name not in REFS and c.name not in NO_REF
-    ]
-    assert (
-        not unaccounted
-    ), f"cases with neither a reference nor a reason: {unaccounted}"
+    unaccounted = [c.name for c in M.CASES if c.name not in REFS and c.name not in NO_REF]
+    assert not unaccounted, f"cases with neither a reference nor a reason: {unaccounted}"
 
 
 @pytest.mark.parametrize(("name", "dtype", "device"), _params(), ids=str)

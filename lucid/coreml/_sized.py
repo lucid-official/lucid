@@ -41,9 +41,7 @@ def declared(shape: Sequence[int]) -> list[int]:
     return [int(d) for d in shape]
 
 
-def split_at_run_time(
-    b: Builder, op: TracedOp, x: str, traced_axis: int, axis: int
-) -> list[str]:
+def split_at_run_time(b: Builder, op: TracedOp, x: str, traced_axis: int, axis: int) -> list[str]:
     """A split whose sections follow the input: one ``slice_by_size`` each.
 
     ``pos_table[:, :T]`` for a sequence of ``T`` is a split of the table

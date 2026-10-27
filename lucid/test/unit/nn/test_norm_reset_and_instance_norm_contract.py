@@ -239,9 +239,7 @@ def test_lazy_instance_norm_defaults_match_reference(ref, cls_name, shape, devic
     x_np = _input(shape)
     out = ours(lucid.tensor(x_np, device=device))
     ref_out = theirs(ref.tensor(x_np))
-    np.testing.assert_allclose(
-        _host(out), ref_out.detach().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(_host(out), ref_out.detach().numpy(), rtol=1e-5, atol=1e-5)
     assert set(ours.state_dict()) == set(theirs.state_dict())
 
 

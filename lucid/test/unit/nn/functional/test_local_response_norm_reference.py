@@ -43,9 +43,7 @@ def _values(shape: tuple[int, ...], seed: int) -> np.ndarray:
     return np.random.default_rng(seed).standard_normal(shape) * 2.0
 
 
-def _definition(
-    x: np.ndarray, size: int, alpha: float, beta: float, k: float
-) -> np.ndarray:
+def _definition(x: np.ndarray, size: int, alpha: float, beta: float, k: float) -> np.ndarray:
     """The rule written out channel by channel, in float64."""
     channels = x.shape[1]
     out = np.empty_like(x)
@@ -74,17 +72,13 @@ def test_matches_the_definition(rank: str, size: int, params: str) -> None:
     np.testing.assert_array_equal(got_m, got_f)
 
 
-def _derivatives(
-    lib: Any, fn: Any, a: np.ndarray, v: np.ndarray, w: np.ndarray, **tkw: Any
-):
+def _derivatives(lib: Any, fn: Any, a: np.ndarray, v: np.ndarray, w: np.ndarray, **tkw: Any):
     """Forward, ``d<y, v>/dx`` and ``d<d<y, v>/dx, w>/dx``."""
     x = lib.tensor(a, **tkw).requires_grad_(True)
     y = fn(x)
     (g1,) = lib.autograd.grad((y * lib.tensor(v, **tkw)).sum(), x, create_graph=True)
     (g2,) = lib.autograd.grad((g1 * lib.tensor(w, **tkw)).sum(), x)
-    return [
-        t.detach().cpu().numpy() if lib is not lucid else t.numpy() for t in (y, g1, g2)
-    ]
+    return [t.detach().cpu().numpy() if lib is not lucid else t.numpy() for t in (y, g1, g2)]
 
 
 @pytest.mark.parity
@@ -115,7 +109,5 @@ def test_forward_and_derivatives_match_reference(
         ref, lambda x: ref.nn.functional.local_response_norm(x, size, **kw), a, v, w
     )
     tol = _TOL[dtype]
-    for label, g, r in zip(
-        ("forward", "gradient", "second derivative"), got, want, strict=True
-    ):
+    for label, g, r in zip(("forward", "gradient", "second derivative"), got, want, strict=True):
         np.testing.assert_allclose(g, r, rtol=tol, atol=tol, err_msg=label)

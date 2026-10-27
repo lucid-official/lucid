@@ -364,9 +364,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         from lucid.models._utils._detection import BalancedPositiveNegativeSampler
 
         cfg = cast(FastRCNNConfig, self.config)
-        sampler = BalancedPositiveNegativeSampler(
-            cfg.batch_size_per_image, cfg.positive_fraction
-        )
+        sampler = BalancedPositiveNegativeSampler(cfg.batch_size_per_image, cfg.positive_fraction)
         # The sampler speaks 1/0/-1; class ids carry more than that.
         binary = lucid.where(
             labels > 0,
@@ -415,9 +413,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
             gt_boxes = tgt["boxes"]
             gt_labels = tgt["labels"]
 
-            labels_i, matched_boxes_i = self._assign_proposals(
-                props, gt_boxes, gt_labels
-            )
+            labels_i, matched_boxes_i = self._assign_proposals(props, gt_boxes, gt_labels)
 
             # §2.3's minibatch.  Everything downstream sees only these RoIs.
             keep = self._sample_proposals(labels_i)
@@ -638,9 +634,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
                 bx_class = bx_i[:, c - 1, :]  # (N_i, 4)
 
                 mask: list[int] = [
-                    i
-                    for i, row in enumerate(host_scores)
-                    if row[c] >= self._score_thresh
+                    i for i, row in enumerate(host_scores) if row[c] >= self._score_thresh
                 ]
                 if not mask:
                     continue
@@ -667,9 +661,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
                 )
 
             results.append(
-                merge_class_detections(
-                    keep_boxes, keep_scores, keep_labels, dev, self._max_det
-                )
+                merge_class_detections(keep_boxes, keep_scores, keep_labels, dev, self._max_det)
             )
 
         return results

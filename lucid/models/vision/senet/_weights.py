@@ -14,12 +14,8 @@ standard ImageNet stats.  SE-ResNet-18 and SE-ResNet-50 evaluate with
 from lucid.utils.transforms import ImageClassification
 from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 
-_PRESET_BICUBIC = ImageClassification(
-    crop_size=224, resize_size=256, interpolation="bicubic"
-)
-_PRESET_BILINEAR = ImageClassification(
-    crop_size=224, resize_size=256, interpolation="bilinear"
-)
+_PRESET_BICUBIC = ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic")
+_PRESET_BILINEAR = ImageClassification(crop_size=224, resize_size=256, interpolation="bilinear")
 
 
 @register_weights("se_resnet_18_cls")

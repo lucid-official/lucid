@@ -110,9 +110,7 @@ class ResidualAttentionBlock(nn.Module):
         if heads < 1:
             raise ValueError(f"heads must be positive, got {heads}")
         if width % heads != 0:
-            raise ValueError(
-                f"width must be divisible by heads, got {width} and {heads}"
-            )
+            raise ValueError(f"width must be divisible by heads, got {width} and {heads}")
         super().__init__()
         self.causal = causal
         self.ln_1 = nn.LayerNorm(width)
@@ -139,9 +137,7 @@ class ResidualAttentionBlock(nn.Module):
             ``(B, T, width)``.
         """
         normed = self.ln_1(x)
-        attended, _ = self.attn(
-            normed, normed, normed, need_weights=False, is_causal=self.causal
-        )
+        attended, _ = self.attn(normed, normed, normed, need_weights=False, is_causal=self.causal)
         x = x + attended
         return x + self.mlp(self.ln_2(x))
 
@@ -176,9 +172,7 @@ class TransformerTower(nn.Module):
     (1, 6, 32)
     """
 
-    def __init__(
-        self, width: int, layers: int, heads: int, causal: bool = False
-    ) -> None:
+    def __init__(self, width: int, layers: int, heads: int, causal: bool = False) -> None:
         """Initialise the stack. See the class docstring for parameters."""
         if layers < 1:
             raise ValueError(f"layers must be positive, got {layers}")

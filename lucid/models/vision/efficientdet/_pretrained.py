@@ -59,9 +59,7 @@ def efficientdet_d0(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d0")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=0), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=0), overrides))
 
 
 @register_model(
@@ -112,9 +110,7 @@ def efficientdet_d1(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d1")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=1), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=1), overrides))
 
 
 @register_model(
@@ -165,9 +161,7 @@ def efficientdet_d2(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d2")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=2), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=2), overrides))
 
 
 @register_model(
@@ -218,9 +212,7 @@ def efficientdet_d3(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d3")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=3), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=3), overrides))
 
 
 @register_model(
@@ -271,9 +263,7 @@ def efficientdet_d4(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d4")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=4), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=4), overrides))
 
 
 @register_model(
@@ -324,9 +314,7 @@ def efficientdet_d5(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d5")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=5), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=5), overrides))
 
 
 @register_model(
@@ -377,9 +365,7 @@ def efficientdet_d6(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d6")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=6), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=6), overrides))
 
 
 @register_model(
@@ -433,6 +419,4 @@ def efficientdet_d7(
     """
     if pretrained:
         reject_unavailable_pretrained("efficientdet_d7")
-    return EfficientDetForObjectDetection(
-        apply_overrides(_efficientdet_config(phi=7), overrides)
-    )
+    return EfficientDetForObjectDetection(apply_overrides(_efficientdet_config(phi=7), overrides))

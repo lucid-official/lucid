@@ -172,12 +172,8 @@ def test_the_second_derivative_matches_central_differences(
         plus = projected_gradient(xv + step[0], wv + step[1])
         minus = projected_gradient(xv - step[0], wv - step[1])
         numeric = (plus - minus) / (2 * h)
-        exact = (
-            0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
-        )
-        assert exact == pytest.approx(
-            numeric, rel=1e-6, abs=1e-6
-        ), f"d/d{label} <d/d{first} L, u>"
+        exact = 0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
+        assert exact == pytest.approx(numeric, rel=1e-6, abs=1e-6), f"d/d{label} <d/d{first} L, u>"
 
 
 def test_the_checks_above_see_a_curved_loss() -> None:
@@ -186,9 +182,7 @@ def test_the_checks_above_see_a_curved_loss() -> None:
     # returning zeros would pass.
     name, op, xs, ws, nb, kw = CASES[2]
     rng = np.random.default_rng(0)
-    x, w = _t(rng.standard_normal(xs), grad_=True), _t(
-        rng.standard_normal(ws), grad_=True
-    )
+    x, w = _t(rng.standard_normal(xs), grad_=True), _t(rng.standard_normal(ws), grad_=True)
     b = _t(rng.standard_normal(nb))
     r = _t(rng.standard_normal(op(x, w, b, **kw).shape))
     (g,) = grad(_loss(op, x, w, b, r, kw), [x], create_graph=True)

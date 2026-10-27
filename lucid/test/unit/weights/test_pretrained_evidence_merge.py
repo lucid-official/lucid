@@ -9,9 +9,7 @@ from tools.merge_pretrained_evidence import merge
 
 
 def _report(path: Path, rows: list[dict[str, object]]) -> Path:
-    path.write_text(
-        json.dumps({"evidence": rows, "finished": False, "complete": False})
-    )
+    path.write_text(json.dumps({"evidence": rows, "finished": False, "complete": False}))
     return path
 
 
@@ -51,12 +49,8 @@ def test_later_failure_or_unverified_observation_supersedes_pass(
 
 
 @pytest.mark.parametrize("difference", [float("nan"), float("inf"), -1, True, "0"])
-def test_invalid_numeric_evidence_never_passes(
-    tmp_path: Path, difference: object
-) -> None:
-    report = _report(
-        tmp_path / "invalid.json", [{**_pass("a"), "max_diff": difference}]
-    )
+def test_invalid_numeric_evidence_never_passes(tmp_path: Path, difference: object) -> None:
+    report = _report(tmp_path / "invalid.json", [{**_pass("a"), "max_diff": difference}])
     result = merge([report], {"a"})
     assert result["complete"] is False
     assert result["problems"]

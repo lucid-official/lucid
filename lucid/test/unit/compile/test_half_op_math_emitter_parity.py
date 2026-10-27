@@ -152,9 +152,7 @@ def test_coreml_float16_op_math_matches_eager_bit_for_bit(
     model = _ScalarOpModule(OPS[op_name], scalar).eval()
     want = model(x)
 
-    pkg_path = (
-        tmp_path / f"{op_name}_{scalar_val}_{as_0d_tensor}_{precision.value}.mlpackage"
-    )
+    pkg_path = tmp_path / f"{op_name}_{scalar_val}_{as_0d_tensor}_{precision.value}.mlpackage"
     exported = cml.export(
         model,
         x,

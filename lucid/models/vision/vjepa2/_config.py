@@ -193,8 +193,7 @@ class VJEPA2Config(ModelConfig):
             )
         if self.dim % self.num_heads != 0:
             raise ValueError(
-                f"dim must be divisible by num_heads, got {self.dim} and "
-                f"{self.num_heads}"
+                f"dim must be divisible by num_heads, got {self.dim} and " f"{self.num_heads}"
             )
         if self.predictor_dim % self.predictor_heads != 0:
             raise ValueError(
@@ -203,8 +202,7 @@ class VJEPA2Config(ModelConfig):
             )
         if self.predictor_mlp_ratio <= 0.0:
             raise ValueError(
-                "predictor_mlp_ratio must be positive, got "
-                f"{self.predictor_mlp_ratio}"
+                "predictor_mlp_ratio must be positive, got " f"{self.predictor_mlp_ratio}"
             )
         if self.predictor_output_dim <= 0:
             raise ValueError(
@@ -219,17 +217,12 @@ class VJEPA2Config(ModelConfig):
         if not 0.0 <= self.drop_rate < 1.0:
             raise ValueError(f"drop_rate must lie in [0, 1), got {self.drop_rate}")
         if not 0.0 <= self.attn_drop_rate < 1.0:
-            raise ValueError(
-                f"attn_drop_rate must lie in [0, 1), got {self.attn_drop_rate}"
-            )
+            raise ValueError(f"attn_drop_rate must lie in [0, 1), got {self.attn_drop_rate}")
         if not 0.0 <= self.drop_path_rate < 1.0:
-            raise ValueError(
-                f"drop_path_rate must lie in [0, 1), got {self.drop_path_rate}"
-            )
+            raise ValueError(f"drop_path_rate must lie in [0, 1), got {self.drop_path_rate}")
         if self.objective not in {"l1", "l2", "smooth_l1"}:
             raise ValueError(
-                "objective must be one of {'l1', 'l2', 'smooth_l1'}, got "
-                f"{self.objective!r}"
+                "objective must be one of {'l1', 'l2', 'smooth_l1'}, got " f"{self.objective!r}"
             )
         if self.num_pooler_layers < 0:
             raise ValueError(
@@ -238,9 +231,7 @@ class VJEPA2Config(ModelConfig):
         if len(self.ema) != 2 or not all(0.0 <= value <= 1.0 for value in self.ema):
             raise ValueError(f"ema must be two values in [0, 1], got {self.ema}")
         if self.ema_schedule_scale <= 0.0:
-            raise ValueError(
-                f"ema_schedule_scale must be positive, got {self.ema_schedule_scale}"
-            )
+            raise ValueError(f"ema_schedule_scale must be positive, got {self.ema_schedule_scale}")
 
 
 __all__ = ["VJEPA2Config"]

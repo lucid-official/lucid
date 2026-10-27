@@ -75,9 +75,7 @@ class TestNICEConfig:
             ("init_range", 0.0, "init_range"),
         ],
     )
-    def test_non_positive_knobs_rejected(
-        self, field: str, value: object, match: str
-    ) -> None:
+    def test_non_positive_knobs_rejected(self, field: str, value: object, match: str) -> None:
         with pytest.raises(ValueError, match=match):
             _tiny_cfg(**{field: value})
 
@@ -396,7 +394,5 @@ class TestNICERegistry:
         from lucid.models import AutoModelForImageGeneration
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "nice_mnist_gen", task=AutoModelForImageGeneration._task
-        )
+        entry = _registry_lookup("nice_mnist_gen", task=AutoModelForImageGeneration._task)
         assert entry.model_class is NICEForImageGeneration

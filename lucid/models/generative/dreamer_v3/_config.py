@@ -324,8 +324,7 @@ class DreamerV3Config(WorldModelConfig):
             raise ValueError(f"blocks must be at least 1, got {self.blocks}")
         if self.deter_size % self.blocks:
             raise ValueError(
-                f"blocks must divide deter_size, got {self.deter_size} and "
-                f"{self.blocks}"
+                f"blocks must divide deter_size, got {self.deter_size} and " f"{self.blocks}"
             )
         if not 0.0 <= self.unimix < 1.0:
             raise ValueError(f"unimix must be in [0, 1), got {self.unimix}")
@@ -343,9 +342,7 @@ class DreamerV3Config(WorldModelConfig):
         if not 0.0 < self.critic_ema <= 1.0:
             raise ValueError(f"critic_ema must be in (0, 1], got {self.critic_ema}")
         if not 0.0 <= self.return_ema_decay < 1.0:
-            raise ValueError(
-                f"return_ema_decay must be in [0, 1), got {self.return_ema_decay}"
-            )
+            raise ValueError(f"return_ema_decay must be in [0, 1), got {self.return_ema_decay}")
         for label, scale in (
             ("dyn_scale", self.dyn_scale),
             ("rep_scale", self.rep_scale),
@@ -359,8 +356,7 @@ class DreamerV3Config(WorldModelConfig):
                 raise ValueError(f"{label} must be non-negative, got {scale}")
         if self.action_space not in ("continuous", "discrete"):
             raise ValueError(
-                f"action_space must be 'continuous' or 'discrete', got "
-                f"{self.action_space!r}"
+                f"action_space must be 'continuous' or 'discrete', got " f"{self.action_space!r}"
             )
 
     @property

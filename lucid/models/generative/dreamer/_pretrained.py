@@ -133,9 +133,7 @@ def dreamer(pretrained: bool = False, **overrides: object) -> DreamerModel:
     model_class=DreamerForWorldModeling,
     default_config=_CFG_DREAMER,
 )
-def dreamer_world_model(
-    pretrained: bool = False, **overrides: object
-) -> DreamerForWorldModeling:
+def dreamer_world_model(pretrained: bool = False, **overrides: object) -> DreamerForWorldModeling:
     r"""Construct Dreamer with all three of its objectives.
 
     Same trunk as :func:`dreamer`, wrapped with the world-model bound of

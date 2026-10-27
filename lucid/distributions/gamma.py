@@ -32,9 +32,7 @@ from lucid.distributions._util import (
 from lucid.special import gammainc, xlog1py
 
 
-def _sample_standard_gamma(
-    concentration: Tensor, sample_shape: tuple[int, ...]
-) -> Tensor:
+def _sample_standard_gamma(concentration: Tensor, sample_shape: tuple[int, ...]) -> Tensor:
     """Sample ``Gamma(concentration, 1)`` via Marsaglia & Tsang.
 
     Detached — the engine has no reparameterisation kernel for Gamma.
@@ -70,9 +68,9 @@ def _sample_standard_gamma(
             break
 
     # Apply the α<1 transform: x_α = x_{α+1} · U^{1/α}.
-    boost_factor = boost * lucid.rand(
-        *out_shape, dtype=alpha.dtype, device=alpha.device
-    ).clip(1e-30, 1.0) ** (1.0 / alpha.clip(1e-30, float("inf"))) + (
+    boost_factor = boost * lucid.rand(*out_shape, dtype=alpha.dtype, device=alpha.device).clip(
+        1e-30, 1.0
+    ) ** (1.0 / alpha.clip(1e-30, float("inf"))) + (
         1.0 - boost
     )  # No-op factor when α ≥ 1.
     return accepted * boost_factor
@@ -138,9 +136,7 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
         series1 = series1 + numer / denom
         series2 = series2 + numer / (denom * denom)
     small_x_res = (
-        -x
-        * x.clamp(max=20.0).exp()
-        * ((log_x - lucid.digamma(alpha)) * series1 - series2)
+        -x * x.clamp(max=20.0).exp() * ((log_x - lucid.digamma(alpha)) * series1 - series2)
     )
 
     # 2. Rice saddle-point expansion (alpha > 8.0).
@@ -163,9 +159,7 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
     rad = (x - alpha - alpha * u_ratio).clamp(min=1e-12)
     term3 = rad.pow(-1.5)
     term23 = lucid.where(x < alpha, term2 - term3, term2 + term3)
-    term1 = u_ratio * term23 - (2.0 / alpha).sqrt() * (alpha + x) / (
-        diff_safe * diff_safe
-    )
+    term1 = u_ratio * term23 - (2.0 / alpha).sqrt() * (alpha + x) / (diff_safe * diff_safe)
     stirling = 1.0 + (1.0 / (12.0 * alpha)) * (1.0 + 1.0 / (24.0 * alpha))
     rice_far = -stirling * (x * term1) / denom_r
     rice_res = lucid.where(near_mode, rice_near, rice_far)
@@ -350,9 +344,7 @@ class Gamma(ExponentialFamily):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Gamma` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_attributes(
-            Gamma, batch_shape, _instance, "concentration", "rate"
-        )
+        return self._expand_attributes(Gamma, batch_shape, _instance, "concentration", "rate")
 
     @override
     @property
@@ -425,9 +417,7 @@ class Gamma(ExponentialFamily):
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
         r"""Draw reparameterised samples from the Gamma distribution via implicit reparameterisation."""
         shape = self._extended_shape(sample_shape)
-        return _standard_gamma(self.concentration.expand(shape)) / self.rate.expand(
-            shape
-        )
+        return _standard_gamma(self.concentration.expand(shape)) / self.rate.expand(shape)
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -1175,9 +1165,7 @@ class Dirichlet(ExponentialFamily):
         interior = excess / excess.sum(dim=-1, keepdim=True)
         all_below = (self.concentration < 1.0).min(dim=-1).values.unsqueeze(-1)
         k = int(self.concentration.shape[-1])
-        first_vertex = (lucid.arange(k, device=self.concentration.device) == 0).to(
-            interior.dtype
-        )
+        first_vertex = (lucid.arange(k, device=self.concentration.device) == 0).to(interior.dtype)
         return lucid.where(all_below, first_vertex, interior)
 
     @override
@@ -1281,11 +1269,7 @@ class Dirichlet(ExponentialFamily):
         # Each term of the formula once: ψ(α₀) appears only in
         # ``(α₀ − K) ψ(α₀)``.  Writing the last sum as
         # ``Σ (αᵢ − 1)(ψ(αᵢ) − ψ(α₀))`` counted it a second time.
-        return (
-            log_b
-            + (s - k) * lucid.digamma(s)
-            - ((a - 1.0) * lucid.digamma(a)).sum(dim=-1)
-        )
+        return log_b + (s - k) * lucid.digamma(s) - ((a - 1.0) * lucid.digamma(a)).sum(dim=-1)
 
     @override
     @property

@@ -43,10 +43,7 @@ class EfficientFormerL1Weights(WeightsEnum):
     """
 
     SNAP_DIST_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/efficientformer-l1/resolve/main/"
-            "SNAP_DIST_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/efficientformer-l1/resolve/main/" "SNAP_DIST_IN1K/model.safetensors"),
         sha256="cb1320ef1279f7e3d257785660e64c44a43bb6e50e75fbb326d0b171b4ef731c",
         num_classes=1000,
         transforms=_PRESET,
@@ -85,10 +82,7 @@ class EfficientFormerL3Weights(WeightsEnum):
     """
 
     SNAP_DIST_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/efficientformer-l3/resolve/main/"
-            "SNAP_DIST_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/efficientformer-l3/resolve/main/" "SNAP_DIST_IN1K/model.safetensors"),
         sha256="3de48cd9b1d94c90441d230034e629e7eb927d39b3ea01766c25606ec2ac5b5a",
         num_classes=1000,
         transforms=_PRESET,
@@ -127,10 +121,7 @@ class EfficientFormerL7Weights(WeightsEnum):
     """
 
     SNAP_DIST_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/efficientformer-l7/resolve/main/"
-            "SNAP_DIST_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/efficientformer-l7/resolve/main/" "SNAP_DIST_IN1K/model.safetensors"),
         sha256="66b10e5952a853b758bc8647110e0526a8a8c79ef45bd201c379bd24b1cd445c",
         num_classes=1000,
         transforms=_PRESET,

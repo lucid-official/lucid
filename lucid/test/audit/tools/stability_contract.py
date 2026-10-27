@@ -56,9 +56,7 @@ def measure(ref: Any, verbose: bool = False) -> dict[str, list[str]]:
         call = None
         with _probe.preserved_globals():
             for domain in ctx.domains:
-                for candidate in _specs.invocations(
-                    symbol.short, domain, symbol.qualname, fn
-                ):
+                for candidate in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
                     try:
                         out = fn(*candidate.args, **candidate.kwargs)
                     except Exception:  # noqa: BLE001 - surveying, not asserting
@@ -142,9 +140,7 @@ def main() -> None:
     ref = require_ref()
     finite = measure(ref, verbose=args.verbose)
 
-    path = (
-        args.output or pathlib.Path(__file__).parent.parent / "stability_contract.json"
-    )
+    path = args.output or pathlib.Path(__file__).parent.parent / "stability_contract.json"
     payload = {
         "_comment": [
             "Which input scales the reference framework answers finitely at,",

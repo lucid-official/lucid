@@ -115,9 +115,7 @@ class _QuantizedConvNd(nn.Module):
         """Convolve as the float module would, ``"same"`` and ``padding_mode``
         included — ``"same"`` depends on the input's spatial size, which is
         why the module carries the string rather than a baked-in number."""
-        args = _ConvArgs(
-            self.stride, self.padding_str or self.padding, self.dilation, self.groups
-        )
+        args = _ConvArgs(self.stride, self.padding_str or self.padding, self.dilation, self.groups)
         return _convnd(x, weight, self.bias, args, self._rank, self.padding_mode)
 
     def _activation(self, y: Tensor) -> Tensor:

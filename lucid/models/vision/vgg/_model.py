@@ -27,9 +27,7 @@ from lucid.models.vision.vgg._config import VGGConfig
 _CHANNELS = (64, 128, 256, 512, 512)
 
 
-def _make_block(
-    in_ch: int, out_ch: int, num_convs: int, batch_norm: bool
-) -> list[nn.Module]:
+def _make_block(in_ch: int, out_ch: int, num_convs: int, batch_norm: bool) -> list[nn.Module]:
     layers: list[nn.Module] = []
     for _ in range(num_convs):
         layers.append(nn.Conv2d(in_ch, out_ch, 3, padding=1))

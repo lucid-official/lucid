@@ -101,9 +101,7 @@ def test_persistent_workers_draw_new_values_each_epoch():
     """A persistent pool is seeded once; its streams must carry on rather
     than restart, or every epoch repeats the first one's augmentations."""
     lucid.manual_seed(0)
-    loader = _loader(
-        wd.Draws(6), batch_size=None, collate_fn=wd.as_is, persistent_workers=True
-    )
+    loader = _loader(wd.Draws(6), batch_size=None, collate_fn=wd.as_is, persistent_workers=True)
     first, second = _draws(loader), _draws(loader)
     assert not {s[0] for s in first} & {s[0] for s in second}
     workers = _by_worker(second, 0)
@@ -214,9 +212,7 @@ def test_breaking_out_of_an_epoch_does_not_leak_into_the_next(persistent):
     — 1 and 11 twice, 4 and 8 never — because the abandoned epoch's
     batches were still queued under the same sequence numbers."""
     lucid.manual_seed(0)
-    loader = _loader(
-        wd.Indices(12), batch_size=1, shuffle=True, persistent_workers=persistent
-    )
+    loader = _loader(wd.Indices(12), batch_size=1, shuffle=True, persistent_workers=persistent)
     for _ in range(2):
         for i, _batch in enumerate(loader):
             if i == 2:
@@ -261,9 +257,7 @@ def _local_exception_type():
         (_NeedsTwoArgs("bad", 1), RuntimeError),
     ],
 )
-def test_a_worker_error_falls_back_to_runtime_error_when_its_type_cannot_cross(
-    raised, expected
-):
+def test_a_worker_error_falls_back_to_runtime_error_when_its_type_cannot_cross(raised, expected):
     from lucid.utils.data.dataloader import _WorkerError
 
     rebuilt = _WorkerError(raised, "in a test").to_exception()
@@ -296,9 +290,7 @@ def test_stop_iteration_from_a_map_dataset_is_an_error_not_an_end():
     ``num_workers=2`` gave ``[0, 1, 2, 4, 5]``.  With or without workers
     it is now the same error."""
     for num_workers in (0, _WORKERS):
-        loader = DataLoader(
-            wd.StopsAt(6, bad=3), batch_size=None, num_workers=num_workers
-        )
+        loader = DataLoader(wd.StopsAt(6, bad=3), batch_size=None, num_workers=num_workers)
         with pytest.raises(RuntimeError, match="raised StopIteration"):
             list(loader)
 

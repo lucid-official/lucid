@@ -99,13 +99,9 @@ class RandomErasing(PhotometricTransform[_ErasingParams]):
     ) -> None:
         super().__init__(p=p)
         if not (0.0 <= scale[0] <= scale[1] <= 1.0):
-            raise ValueError(
-                f"scale must satisfy 0 <= scale[0] <= scale[1] <= 1, got {scale}"
-            )
+            raise ValueError(f"scale must satisfy 0 <= scale[0] <= scale[1] <= 1, got {scale}")
         if not (0.0 < ratio[0] <= ratio[1]):
-            raise ValueError(
-                f"ratio must satisfy 0 < ratio[0] <= ratio[1], got {ratio}"
-            )
+            raise ValueError(f"ratio must satisfy 0 < ratio[0] <= ratio[1], got {ratio}")
         if isinstance(value, str) and value != "random":
             raise ValueError(f"value string must be 'random', got {value!r}")
         self.scale = scale

@@ -147,9 +147,7 @@ class TestMultinomial:
         assert (arr != 1).all()  # a zero weight is never drawn
         assert abs((arr == 2).mean() - 0.75) < 0.03
 
-    def test_without_replacement_draws_distinct_positive_categories(
-        self, device: str
-    ) -> None:
+    def test_without_replacement_draws_distinct_positive_categories(self, device: str) -> None:
         lucid.manual_seed(0)
         probs = lucid.tensor([[1.0, 0.0, 2.0, 3.0]] * 2000, device=device)
         rows = lucid.multinomial(probs, 3).tolist()

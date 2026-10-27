@@ -83,9 +83,7 @@ def resnext_50_32x4d(pretrained: bool = False, **overrides: object) -> ResNeXt:
     (1, 2048, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "resnext_50_32x4d", alternative="resnext_50_32x4d_cls"
-        )
+        reject_unavailable_pretrained("resnext_50_32x4d", alternative="resnext_50_32x4d_cls")
     cfg = apply_overrides(_CFG_50_32x4d, overrides)
     return ResNeXt(cfg)
 
@@ -139,9 +137,7 @@ def resnext_101_32x4d(pretrained: bool = False, **overrides: object) -> ResNeXt:
     (1, 2048, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "resnext_101_32x4d", alternative="resnext_101_32x4d_cls"
-        )
+        reject_unavailable_pretrained("resnext_101_32x4d", alternative="resnext_101_32x4d_cls")
     cfg = apply_overrides(_CFG_101_32x4d, overrides)
     return ResNeXt(cfg)
 
@@ -198,9 +194,7 @@ def resnext_101_32x8d(pretrained: bool = False, **overrides: object) -> ResNeXt:
     (1, 2048, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "resnext_101_32x8d", alternative="resnext_101_32x8d_cls"
-        )
+        reject_unavailable_pretrained("resnext_101_32x8d", alternative="resnext_101_32x8d_cls")
     cfg = apply_overrides(_CFG_101_32x8d, overrides)
     return ResNeXt(cfg)
 

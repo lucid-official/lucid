@@ -91,8 +91,7 @@ def sinusoidal_embedding(
     """
     if embedding_dim % 2 != 0:
         raise ValueError(
-            f"sinusoidal_embedding requires an even embedding_dim, "
-            f"got {embedding_dim}"
+            f"sinusoidal_embedding requires an even embedding_dim, " f"got {embedding_dim}"
         )
     half = embedding_dim // 2
 

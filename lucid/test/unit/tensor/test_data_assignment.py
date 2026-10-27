@@ -151,9 +151,7 @@ def test_module_apply_and_load_state_dict_on_a_view_parameter(device):
 
     base2 = lucid.zeros(2, 3, device=device)
     module.weight.data = base2[1:]
-    module.load_state_dict(
-        {"weight": lucid.full((1, 3), 7.0, device=device)}, assign=True
-    )
+    module.load_state_dict({"weight": lucid.full((1, 3), 7.0, device=device)}, assign=True)
     with lucid.no_grad():
         module.weight.add_(1.0)
     assert module.weight.tolist() == [[8.0, 8.0, 8.0]]

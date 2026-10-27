@@ -184,12 +184,8 @@ def test_metal_float_binary_broadcast_forward_and_backward_parity(
     op_name: str, layout: str, requires_grad: bool
 ) -> None:
     fn = FLOAT_OPS[op_name]
-    a_cpu_leaf, b_cpu_leaf, a_cpu, b_cpu = _build_float_pair(
-        layout, "cpu", requires_grad
-    )
-    a_gpu_leaf, b_gpu_leaf, a_gpu, b_gpu = _build_float_pair(
-        layout, "metal", requires_grad
-    )
+    a_cpu_leaf, b_cpu_leaf, a_cpu, b_cpu = _build_float_pair(layout, "cpu", requires_grad)
+    a_gpu_leaf, b_gpu_leaf, a_gpu, b_gpu = _build_float_pair(layout, "metal", requires_grad)
 
     out_cpu = fn(a_cpu, b_cpu)
     out_gpu = fn(a_gpu, b_gpu)
@@ -265,13 +261,9 @@ def test_metal_integer_and_bitwise_broadcast_parity(op_name: str, layout: str) -
     np.testing.assert_array_equal(rev_gpu.numpy(), rev_cpu.numpy())
 
 
-@pytest.mark.parametrize(
-    "op_name", ["add", "sub", "mul", "div", "pow", "maximum", "minimum"]
-)
+@pytest.mark.parametrize("op_name", ["add", "sub", "mul", "div", "pow", "maximum", "minimum"])
 @pytest.mark.parametrize("layout", ["scalar_0d", "row_1xN", "col_Mx1", "broadcast_3d"])
-def test_metal_binary_broadcast_create_graph_second_derivative(
-    op_name: str, layout: str
-) -> None:
+def test_metal_binary_broadcast_create_graph_second_derivative(op_name: str, layout: str) -> None:
     fn = FLOAT_OPS[op_name]
 
     def grads(device: str) -> tuple[np.ndarray, np.ndarray]:

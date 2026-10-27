@@ -35,16 +35,10 @@ def _scale_sequence(
     trajectories (one entry per step, read after that step's ``update()``).
     """
     lucid.manual_seed(seed)
-    eager_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(
-        COMPILE_DEVICE
-    )
-    comp_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(
-        COMPILE_DEVICE
-    )
+    eager_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(COMPILE_DEVICE)
+    comp_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(COMPILE_DEVICE)
     with lucid.no_grad():
-        for pe, pc in zip(
-            eager_model.parameters(), comp_model.parameters(), strict=True
-        ):
+        for pe, pc in zip(eager_model.parameters(), comp_model.parameters(), strict=True):
             pc.copy_(pe.detach().clone())
 
     opt_eager = optim.AdamW(list(eager_model.parameters()), lr=1e-2)
@@ -84,12 +78,8 @@ def test_skip_sequence_matches_away_from_known_boundary(init_scale_exp: int) -> 
     "seed,init_scale_exp",
     [(1, 18), (1, 19), (36, 17), (36, 18), (36, 19)],
 )
-def test_skip_sequence_matches_at_overflow_boundary(
-    seed: int, init_scale_exp: int
-) -> None:
-    eager_scales, comp_scales = _scale_sequence(
-        seed=seed, init_scale=2.0**init_scale_exp
-    )
+def test_skip_sequence_matches_at_overflow_boundary(seed: int, init_scale_exp: int) -> None:
+    eager_scales, comp_scales = _scale_sequence(seed=seed, init_scale=2.0**init_scale_exp)
     assert eager_scales == comp_scales
 
 

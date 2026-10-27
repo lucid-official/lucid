@@ -172,9 +172,7 @@ def _mlx_dynamic_builder() -> _DynFromFloat:
         gs = _mlx_group_size(cast("nn.Linear", child).in_features)
         if gs is None:
             return nnqd.Linear.from_float(child, dtype)
-        return QuantizedLinearMLX.from_float(
-            child, bits=dtype.bits, group_size=gs, relu=False
-        )
+        return QuantizedLinearMLX.from_float(child, bits=dtype.bits, group_size=gs, relu=False)
 
     return build
 
@@ -414,9 +412,7 @@ def convert(model: nn.Module, inplace: bool = False) -> nn.Module:
         mapping[nni.LinearReLU] = _mlx_linear_builder(relu=True)
         mapping[nnqat.Linear] = _mlx_linear_builder(relu=False)
     # DeQuantStub + Embedding(Bag) convert without calibration (no activation obs).
-    _convert_recursive(
-        model, mapping, always=(nnq.DeQuantStub, nn.Embedding, nn.EmbeddingBag)
-    )
+    _convert_recursive(model, mapping, always=(nnq.DeQuantStub, nn.Embedding, nn.EmbeddingBag))
     model.eval()
     return model
 

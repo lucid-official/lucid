@@ -280,9 +280,7 @@ def test_a_gradient_for_an_input_that_takes_none_is_refused(device: str) -> None
             return x * mask
 
     m = Masked()
-    m.register_full_backward_hook(
-        lambda mod, gi, go: (gi[0], lucid.ones(*_SHAPE, device=device))
-    )
+    m.register_full_backward_hook(lambda mod, gi, go: (gi[0], lucid.ones(*_SHAPE, device=device)))
     x = _leaf(device)
     with pytest.raises(RuntimeError, match="grad_input\\[1\\].*where none flows"):
         m(x, lucid.ones(*_SHAPE, device=device)).sum().backward()
@@ -311,9 +309,7 @@ def test_a_module_whose_inputs_take_no_gradient_hands_its_hooks_none(
     assert seen == [(None,)]
 
     m2 = Scaled()
-    m2.register_full_backward_hook(
-        lambda mod, gi, go: (lucid.ones(*_SHAPE, device=device),)
-    )
+    m2.register_full_backward_hook(lambda mod, gi, go: (lucid.ones(*_SHAPE, device=device),))
     with pytest.raises(RuntimeError, match="where none flows"):
         m2(frozen).sum().backward()
 
@@ -390,9 +386,7 @@ def test_a_backward_that_hands_the_engine_a_non_tensor_is_a_type_error() -> None
     node.ctx = _C_engine.FunctionCtx()
     node.backward_fn = lambda ctx, *grads: [3]
     _C_engine._register_python_backward_node([_unwrap(out)], node, [_unwrap(x)])
-    with pytest.raises(
-        TypeError, match="backward result must be a tensor or None, got int"
-    ):
+    with pytest.raises(TypeError, match="backward result must be a tensor or None, got int"):
         out.sum().backward()
     assert x.grad is None
 
@@ -400,7 +394,5 @@ def test_a_backward_that_hands_the_engine_a_non_tensor_is_a_type_error() -> None
 def test_save_for_backward_refuses_a_non_tensor() -> None:
     ctx = _C_engine.FunctionCtx()
     ctx.save_for_backward(_unwrap(lucid.ones(1)), None)
-    with pytest.raises(
-        TypeError, match="save_for_backward must be a tensor or None, got str"
-    ):
+    with pytest.raises(TypeError, match="save_for_backward must be a tensor or None, got str"):
         ctx.save_for_backward("x")  # type: ignore[arg-type]

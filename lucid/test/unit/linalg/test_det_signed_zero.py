@@ -79,9 +79,7 @@ def test_the_slogdet_gradient_takes_the_sign_of_the_zero(
 @pytest.mark.parametrize(("device", "dtype"), _placements())
 def test_a_batch_mixing_singular_and_regular_matrices(device: str, dtype: str) -> None:
     rows = [_SINGULAR["one row swap"][0], [[3.0, 1.0], [1.0, 2.0]]]
-    singular, regular = (
-        lucid.linalg.det(_tensor(rows, device, dtype)).to("cpu").tolist()
-    )
+    singular, regular = lucid.linalg.det(_tensor(rows, device, dtype)).to("cpu").tolist()
     assert singular == 0.0 and math.copysign(1.0, singular) == -1.0
     assert math.isclose(regular, 5.0, rel_tol=1e-6)
 

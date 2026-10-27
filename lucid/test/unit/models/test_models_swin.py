@@ -59,12 +59,8 @@ class TestSwinParamCounts(unittest.TestCase):
         self.assertEqual(swin_base_cls().num_parameters(), 87_768_224)
 
     def test_larger_has_more_params(self) -> None:
-        self.assertGreater(
-            swin_small_cls().num_parameters(), swin_tiny_cls().num_parameters()
-        )
-        self.assertGreater(
-            swin_base_cls().num_parameters(), swin_small_cls().num_parameters()
-        )
+        self.assertGreater(swin_small_cls().num_parameters(), swin_tiny_cls().num_parameters())
+        self.assertGreater(swin_base_cls().num_parameters(), swin_small_cls().num_parameters())
 
 
 class TestSwinBackbone(unittest.TestCase):

@@ -382,9 +382,7 @@ class MobileNetV3(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class MobileNetV3ForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class MobileNetV3ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""MobileNet v3 image classifier with the redesigned inverted head.
 
     Combines a :class:`MobileNetV3` feature stack with the paper's

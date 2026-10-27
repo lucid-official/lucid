@@ -53,16 +53,12 @@ _PRECISION = np.array([[2.0, 0.6], [0.6, 1.0]])
 _PRECISION_3 = np.array([[2.0, 0.3, 0.1], [0.3, 1.5, -0.2], [0.1, -0.2, 1.0]])
 
 
-def _mvn_log_prob_from_precision(
-    x: np.ndarray, loc: np.ndarray, precision: np.ndarray
-) -> float:
+def _mvn_log_prob_from_precision(x: np.ndarray, loc: np.ndarray, precision: np.ndarray) -> float:
     """``log N(x; loc, P⁻¹)`` written with ``P`` directly — no factorisation."""
     diff = x - loc
     _, logdet = np.linalg.slogdet(precision)
     d = len(loc)
-    return float(
-        -0.5 * diff @ precision @ diff + 0.5 * logdet - 0.5 * d * np.log(2 * np.pi)
-    )
+    return float(-0.5 * diff @ precision @ diff + 0.5 * logdet - 0.5 * d * np.log(2 * np.pi))
 
 
 def _continuous_bernoulli_moments(lam: float) -> tuple[float, float]:
@@ -95,9 +91,7 @@ class TestFormulaErrors:
 
         Before: -2.53343 for the 2-d case, against -3.07553.
         """
-        d = D.MultivariateNormal(
-            _t(loc, device), precision_matrix=_t(precision, device)
-        )
+        d = D.MultivariateNormal(_t(loc, device), precision_matrix=_t(precision, device))
         got = float(_np(d.log_prob(_t(x, device))))
         want = _mvn_log_prob_from_precision(np.array(x), np.array(loc), precision)
         assert got == pytest.approx(want, abs=1e-5)
@@ -123,13 +117,10 @@ class TestFormulaErrors:
 
     def test_mvn_precision_batched(self, device: str) -> None:
         precisions = np.stack([_PRECISION, np.array([[1.5, -0.3], [-0.3, 0.8]])])
-        d = D.MultivariateNormal(
-            _t([0.0, 0.0], device), precision_matrix=_t(precisions, device)
-        )
+        d = D.MultivariateNormal(_t([0.0, 0.0], device), precision_matrix=_t(precisions, device))
         got = _np(d.log_prob(_t([1.0, 0.3], device)))
         want = [
-            _mvn_log_prob_from_precision(np.array([1.0, 0.3]), np.zeros(2), p)
-            for p in precisions
+            _mvn_log_prob_from_precision(np.array([1.0, 0.3]), np.zeros(2), p) for p in precisions
         ]
         np.testing.assert_allclose(got, want, atol=1e-5)
 
@@ -147,9 +138,7 @@ class TestFormulaErrors:
         """``Dirichlet(1, …, 1)`` is uniform on the simplex: ``H = −log((K−1)!)``."""
         for k in (2, 3, 5):
             got = float(_np(D.Dirichlet(_t(np.ones(k), device)).entropy()))
-            assert got == pytest.approx(
-                -np.log(float(np.prod(np.arange(1, k)))), abs=1e-5
-            )
+            assert got == pytest.approx(-np.log(float(np.prod(np.arange(1, k)))), abs=1e-5)
 
     def test_relaxed_bernoulli_log_prob(self, device: str) -> None:
         """Before: ``[-0.357, -3.251, -6.947]`` — an exponent of ``τ+1`` and no
@@ -233,9 +222,7 @@ class TestFormulaErrors:
         lucid_mvn = D.MultivariateNormal(
             _t([0.5, -1.0], device), precision_matrix=_t(_PRECISION, device)
         )
-        ref_mvn = RD.MultivariateNormal(
-            rt([0.5, -1.0]), precision_matrix=rt(_PRECISION)
-        )
+        ref_mvn = RD.MultivariateNormal(rt([0.5, -1.0]), precision_matrix=rt(_PRECISION))
         np.testing.assert_allclose(
             _np(lucid_mvn.log_prob(_t([1.0, 0.3], device))),
             _ref_np(ref_mvn.log_prob(rt([1.0, 0.3]))),
@@ -254,11 +241,7 @@ class TestFormulaErrors:
 
         y = [0.05, 0.3, 0.5, 0.9]
         np.testing.assert_allclose(
-            _np(
-                D.RelaxedBernoulli(_t(0.7, device), probs=_t(0.3, device)).log_prob(
-                    _t(y, device)
-                )
-            ),
+            _np(D.RelaxedBernoulli(_t(0.7, device), probs=_t(0.3, device)).log_prob(_t(y, device))),
             _ref_np(RD.RelaxedBernoulli(rt(0.7), probs=rt(0.3)).log_prob(rt(y))),
             atol=1e-5,
         )
@@ -268,9 +251,7 @@ class TestFormulaErrors:
         lucid_cb = D.ContinuousBernoulli(probs=_t(probs, device))
         ref_cb = RD.ContinuousBernoulli(probs=rt(probs))
         np.testing.assert_allclose(_np(lucid_cb.mean), _ref_np(ref_cb.mean), atol=1e-5)
-        np.testing.assert_allclose(
-            _np(lucid_cb.variance), _ref_np(ref_cb.variance), atol=1e-5
-        )
+        np.testing.assert_allclose(_np(lucid_cb.variance), _ref_np(ref_cb.variance), atol=1e-5)
 
 
 # ── CHA-144: support boundaries ──────────────────────────────────────────────
@@ -331,9 +312,7 @@ class TestSupportBoundaries:
             atol=1e-5,
         )
         chi2 = D.Chi2(_t(2.0, device))
-        np.testing.assert_allclose(
-            _np(chi2.log_prob(_t(0.0, device))), -0.69314718, atol=1e-5
-        )
+        np.testing.assert_allclose(_np(chi2.log_prob(_t(0.0, device))), -0.69314718, atol=1e-5)
 
     def test_beta_and_dirichlet_at_the_boundary(self, device: str) -> None:
         flat = D.Beta(_t(1.0, device), _t(1.0, device))
@@ -364,16 +343,12 @@ class TestSupportBoundaries:
 
         alpha = _t(1.0, device)
         alpha.requires_grad_(True)
-        D.Gamma(alpha, _t(1.0, device)).log_prob(
-            _t([0.0, 2.0], device)
-        ).sum().backward()
+        D.Gamma(alpha, _t(1.0, device)).log_prob(_t([0.0, 2.0], device)).sum().backward()
         # Σ over both values of d/dα = log β + log x − ψ(α), at α = β = 1:
         # x = 0 contributes only −ψ(1) (its log x term is held at 0), x = 2
         # contributes log 2 − ψ(1).
         euler = 0.5772156649015329
-        assert float(_np(alpha.grad).sum()) == pytest.approx(
-            np.log(2.0) + 2 * euler, abs=1e-4
-        )
+        assert float(_np(alpha.grad).sum()) == pytest.approx(np.log(2.0) + 2 * euler, abs=1e-4)
 
     def test_poisson_geometric_negative_binomial_at_zero(self, device: str) -> None:
         """Built with default validation: these domains are the reference's
@@ -428,9 +403,7 @@ class TestSupportBoundaries:
         logits.requires_grad_(True)
         d = D.Categorical(logits=logits)
         index = lucid.tensor([1, 0], dtype=lucid.int64, device=device)
-        np.testing.assert_allclose(
-            _np(d.log_prob(index)), [-np.log1p(np.e), -_INF], atol=1e-5
-        )
+        np.testing.assert_allclose(_np(d.log_prob(index)), [-np.log1p(np.e), -_INF], atol=1e-5)
         entropy = d.entropy()
         p = np.exp([0.0, 1.0]) / np.exp([0.0, 1.0]).sum()
         np.testing.assert_allclose(_np(entropy), -(p * np.log(p)).sum(), atol=1e-6)
@@ -459,12 +432,8 @@ class TestSupportBoundaries:
         by_probs = D.Multinomial(5, probs=_t([0.0, 0.5, 0.5], device))
         by_logits = D.Multinomial(5, logits=_t([-_INF, 0.0, 0.0], device))
         counts = _t([0.0, 2.0, 3.0], device)
-        np.testing.assert_allclose(
-            _np(by_probs.log_prob(counts)), -1.16315079, atol=1e-5
-        )
-        np.testing.assert_allclose(
-            _np(by_logits.log_prob(counts)), -1.16315079, atol=1e-5
-        )
+        np.testing.assert_allclose(_np(by_probs.log_prob(counts)), -1.16315079, atol=1e-5)
+        np.testing.assert_allclose(_np(by_logits.log_prob(counts)), -1.16315079, atol=1e-5)
 
     def test_continuous_bernoulli_large_logits(self, device: str) -> None:
         """``log(1 + exp(l))`` and a normaliser computed through ``λ`` gave
@@ -481,9 +450,7 @@ class TestSupportBoundaries:
         rt = lambda v: ref.tensor(np.asarray(v, dtype=np.float32))  # noqa: E731
 
         def same(lucid_value: lucid.Tensor, ref_value: Any) -> None:
-            np.testing.assert_allclose(
-                _np(lucid_value), _ref_np(ref_value), atol=1e-5, rtol=1e-5
-            )
+            np.testing.assert_allclose(_np(lucid_value), _ref_np(ref_value), atol=1e-5, rtol=1e-5)
 
         for logits in ([100.0, -100.0, 3.0], [0.0, 20.0, -40.0]):
             for v in ([1.0, 1.0, 1.0], [0.0, 0.0, 0.0]):
@@ -511,9 +478,7 @@ class TestSupportBoundaries:
             RD.Gamma(rt([1.0, 2.0]), rt([2.5, 1.0])).log_prob(rt([0.0, 0.0])),
         )
         same(
-            D.Beta(_t([1.0, 1.0], device), _t([1.0, 3.0], device)).log_prob(
-                _t([0.0, 1.0], device)
-            ),
+            D.Beta(_t([1.0, 1.0], device), _t([1.0, 3.0], device)).log_prob(_t([0.0, 1.0], device)),
             RD.Beta(rt([1.0, 1.0]), rt([1.0, 3.0])).log_prob(rt([0.0, 1.0])),
         )
         same(
@@ -521,12 +486,10 @@ class TestSupportBoundaries:
             RD.Poisson(rt([0.0, 2.0])).log_prob(rt([0.0, 3.0])),
         )
         same(
-            D.NegativeBinomial(
-                _t(3.0, device), logits=_t([-100.0, 100.0, 0.5], device)
-            ).log_prob(_t(2.0, device)),
-            RD.NegativeBinomial(rt(3.0), logits=rt([-100.0, 100.0, 0.5])).log_prob(
-                rt(2.0)
+            D.NegativeBinomial(_t(3.0, device), logits=_t([-100.0, 100.0, 0.5], device)).log_prob(
+                _t(2.0, device)
             ),
+            RD.NegativeBinomial(rt(3.0), logits=rt([-100.0, 100.0, 0.5])).log_prob(rt(2.0)),
         )
         same(
             D.FisherSnedecor(_t(7.0, device), _t(3.0, device)).log_prob(
@@ -551,14 +514,10 @@ class TestSupportBoundaries:
                     D.Categorical(**lucid_kw),
                     D.Categorical(probs=_t(q_probs, device)),
                 ),
-                RD.kl_divergence(
-                    RD.Categorical(**ref_kw), RD.Categorical(probs=rt(q_probs))
-                ),
+                RD.kl_divergence(RD.Categorical(**ref_kw), RD.Categorical(probs=rt(q_probs))),
             )
         same(
-            D.ContinuousBernoulli(logits=_t([0.5, -3.0, 8.0], device)).log_prob(
-                _t(0.3, device)
-            ),
+            D.ContinuousBernoulli(logits=_t([0.5, -3.0, 8.0], device)).log_prob(_t(0.3, device)),
             RD.ContinuousBernoulli(logits=rt([0.5, -3.0, 8.0])).log_prob(rt(0.3)),
         )
 
@@ -619,9 +578,7 @@ class TestReferenceDomains:
         """A 1e-7 clip made ``KL(Bernoulli(0.3) || Bernoulli(0))`` 4.22."""
         p = [0.0, 0.0, 0.0, 0.3, 0.3, 0.3, 1.0, 1.0, 1.0]
         q = [0.0, 0.3, 1.0, 0.0, 0.3, 1.0, 0.0, 0.3, 1.0]
-        kl = D.kl_divergence(
-            D.Bernoulli(probs=_t(p, device)), D.Bernoulli(probs=_t(q, device))
-        )
+        kl = D.kl_divergence(D.Bernoulli(probs=_t(p, device)), D.Bernoulli(probs=_t(q, device)))
         want = [0.0, -np.log(0.7), _INF, _INF, 0.0, _INF, _INF, -np.log(0.3), 0.0]
         np.testing.assert_allclose(_np(kl), want, atol=1e-6)
 
@@ -671,9 +628,7 @@ class TestReferenceDomains:
         nb.log_prob(_t(0.0, device)).backward()
         assert np.isfinite(_np(r.grad)).all()
 
-    def test_relaxed_bernoulli_at_degenerate_probs_and_the_ends(
-        self, device: str
-    ) -> None:
+    def test_relaxed_bernoulli_at_degenerate_probs_and_the_ends(self, device: str) -> None:
         """An unclamped probability of 0 or 1 gave an infinite logit, and the
         ends of the support ``log 0``: NaN either way."""
         d = D.RelaxedBernoulli(_t(0.5, device), probs=_t([0.0, 1.0, 0.3], device))
@@ -682,15 +637,9 @@ class TestReferenceDomains:
 
     def test_kumaraswamy_at_the_ends(self, device: str) -> None:
         """The density's limits, by shape; ``(a, b) = (1, 1)`` is uniform."""
-        d = D.Kumaraswamy(
-            _t([1.0, 0.5, 2.0, 2.0], device), _t([1.0, 2.0, 0.5, 3.0], device)
-        )
-        np.testing.assert_allclose(
-            _np(d.log_prob(_t(0.0, device))), [0.0, _INF, -_INF, -_INF]
-        )
-        np.testing.assert_allclose(
-            _np(d.log_prob(_t(1.0, device))), [0.0, -_INF, _INF, -_INF]
-        )
+        d = D.Kumaraswamy(_t([1.0, 0.5, 2.0, 2.0], device), _t([1.0, 2.0, 0.5, 3.0], device))
+        np.testing.assert_allclose(_np(d.log_prob(_t(0.0, device))), [0.0, _INF, -_INF, -_INF])
+        np.testing.assert_allclose(_np(d.log_prob(_t(1.0, device))), [0.0, -_INF, _INF, -_INF])
 
     def test_supports_have_the_reference_edges(self, device: str) -> None:
         # ``Exponential.log_prob`` validates its value; ``positive`` refused 0.
@@ -767,42 +716,32 @@ class TestReferenceDomains:
         rt = lambda v: ref.tensor(np.asarray(v, dtype=np.float32))  # noqa: E731
 
         def same(lucid_value: lucid.Tensor, ref_value: Any) -> None:
-            np.testing.assert_allclose(
-                _np(lucid_value), _ref_np(ref_value), atol=1e-5, rtol=1e-5
-            )
+            np.testing.assert_allclose(_np(lucid_value), _ref_np(ref_value), atol=1e-5, rtol=1e-5)
 
         p = [0.0, 0.0, 0.0, 0.3, 0.3, 0.3, 1.0, 1.0, 1.0]
         q = [0.0, 0.3, 1.0, 0.0, 0.3, 1.0, 0.0, 0.3, 1.0]
         same(
-            D.kl_divergence(
-                D.Bernoulli(probs=_t(p, device)), D.Bernoulli(probs=_t(q, device))
-            ),
+            D.kl_divergence(D.Bernoulli(probs=_t(p, device)), D.Bernoulli(probs=_t(q, device))),
             RD.kl_divergence(RD.Bernoulli(probs=rt(p)), RD.Bernoulli(probs=rt(q))),
         )
         # Not a ``q`` whose probability rounds to 1: the reference answers
         # ``inf`` there, from ``q.probs == 1``, where the logits say ~20.
         lp, lq = [0.0, 3.0, -20.0, 15.0], [15.0, -4.0, 10.0, 0.0]
         same(
-            D.kl_divergence(
-                D.Bernoulli(logits=_t(lp, device)), D.Bernoulli(logits=_t(lq, device))
-            ),
+            D.kl_divergence(D.Bernoulli(logits=_t(lp, device)), D.Bernoulli(logits=_t(lq, device))),
             RD.kl_divergence(RD.Bernoulli(logits=rt(lp)), RD.Bernoulli(logits=rt(lq))),
         )
         # Only where the reference is right: it answers NaN at rate 0 and
         # ``inf`` for KL(Geometric(1) || Geometric(1)).
         same(
-            D.kl_divergence(
-                D.Poisson(_t([1.5, 2.0], device)), D.Poisson(_t([0.0, 0.5], device))
-            ),
+            D.kl_divergence(D.Poisson(_t([1.5, 2.0], device)), D.Poisson(_t([0.0, 0.5], device))),
             RD.kl_divergence(RD.Poisson(rt([1.5, 2.0])), RD.Poisson(rt([0.0, 0.5]))),
         )
         same(
             D.kl_divergence(
                 D.Geometric(_t([1.0, 0.3], device)), D.Geometric(_t([0.3, 1.0], device))
             ),
-            RD.kl_divergence(
-                RD.Geometric(rt([1.0, 0.3])), RD.Geometric(rt([0.3, 1.0]))
-            ),
+            RD.kl_divergence(RD.Geometric(rt([1.0, 0.3])), RD.Geometric(rt([0.3, 1.0]))),
         )
         counts = [0.0, 1.0, 2.0]
         for r, probs in ((0.0, 0.5), (3.0, 0.0)):

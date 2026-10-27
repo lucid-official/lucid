@@ -114,9 +114,7 @@ def test_matmul_parity(ref: Any) -> None:
     np.random.seed(0)
     a = np.random.uniform(-1.0, 1.0, size=(8, 16)).astype(np.float32)
     b = np.random.uniform(-1.0, 1.0, size=(16, 4)).astype(np.float32)
-    assert_close(
-        lucid.tensor(a) @ lucid.tensor(b), ref.tensor(a) @ ref.tensor(b), atol=1e-4
-    )
+    assert_close(lucid.tensor(a) @ lucid.tensor(b), ref.tensor(a) @ ref.tensor(b), atol=1e-4)
 
 
 @pytest.mark.parity

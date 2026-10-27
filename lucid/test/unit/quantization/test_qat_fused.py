@@ -32,9 +32,7 @@ class TestQATFusedConvReLU:
             conv = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](3, 8, 3, padding=1)
             shape = {1: (2, 3, 8), 2: (2, 3, 8, 8), 3: (2, 3, 4, 4, 4)}[rank]
             q_relu = {1: nnq.ConvReLU1d, 2: nnq.ConvReLU2d, 3: nnq.ConvReLU3d}[rank]
-            qat_relu = {1: nnqat.ConvReLU1d, 2: nnqat.ConvReLU2d, 3: nnqat.ConvReLU3d}[
-                rank
-            ]
+            qat_relu = {1: nnqat.ConvReLU1d, 2: nnqat.ConvReLU2d, 3: nnqat.ConvReLU3d}[rank]
             lucid.manual_seed(rank)
             m = nn.Sequential(conv, nn.ReLU())
             fused = Q.fuse_modules(m, [["0", "1"]])

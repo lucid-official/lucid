@@ -328,9 +328,7 @@ class UpsamplingBilinear2d(Upsample):
         scale_factor: float | tuple[float, float] | None = None,
     ) -> None:
         """Initialise the UpsamplingBilinear2d module. See the class docstring for parameter semantics."""
-        super().__init__(
-            size=size, scale_factor=scale_factor, mode="bilinear", align_corners=True
-        )
+        super().__init__(size=size, scale_factor=scale_factor, mode="bilinear", align_corners=True)
 
 
 class PixelShuffle(Module):

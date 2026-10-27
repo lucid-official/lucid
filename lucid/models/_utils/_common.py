@@ -177,9 +177,7 @@ def transform_input_imagenet_to_tf(x: Tensor) -> Tensor:
     """
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)
-    chans = [
-        x[:, c : c + 1] * (std[c] / 0.5) + ((mean[c] - 0.5) / 0.5) for c in range(3)
-    ]
+    chans = [x[:, c : c + 1] * (std[c] / 0.5) + ((mean[c] - 0.5) / 0.5) for c in range(3)]
     return lucid.cat(chans, dim=1)
 
 
@@ -228,9 +226,7 @@ def init_cnn_fan_out(model: nn.Module, *, linear_std: float | None = None) -> No
             nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-        elif isinstance(
-            m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)
-        ):
+        elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d, nn.GroupNorm)):
             if m.weight is not None:
                 nn.init.ones_(m.weight)
             if m.bias is not None:
@@ -241,9 +237,7 @@ def init_cnn_fan_out(model: nn.Module, *, linear_std: float | None = None) -> No
                 nn.init.zeros_(m.bias)
 
 
-def zero_init_last_bn(
-    model: nn.Module, block_types: tuple[type, ...], attr: str = "bn3"
-) -> None:
+def zero_init_last_bn(model: nn.Module, block_types: tuple[type, ...], attr: str = "bn3") -> None:
     r"""Zero the final BatchNorm gamma of every residual block.
 
     "Zero-initialize the last BN in each residual branch, so the block starts
@@ -406,18 +400,14 @@ def reject_unavailable_pretrained(factory_name: str, *, alternative: str = "") -
     to be pretrained, and naming the alternative saves the caller from
     guessing which entry does have weights.
     """
-    hint = (
-        f"  Use ``{alternative}`` for the checkpointed variant." if alternative else ""
-    )
+    hint = f"  Use ``{alternative}`` for the checkpointed variant." if alternative else ""
     raise NotImplementedError(
         f"No pretrained weights are published for ``{factory_name}``; "
         f"``{factory_name}(pretrained=True)`` cannot be honoured.{hint}"
     )
 
 
-def update_averages(
-    live: nn.Module, averages: Sequence[tuple[nn.Module, float]]
-) -> None:
+def update_averages(live: nn.Module, averages: Sequence[tuple[nn.Module, float]]) -> None:
     r"""Move each weight average one step toward the live network.
 
     :math:`\bar\theta \leftarrow d\,\bar\theta + (1 - d)\,\theta` for every

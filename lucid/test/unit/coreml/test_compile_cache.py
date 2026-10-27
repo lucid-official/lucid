@@ -101,9 +101,7 @@ class TestAReloadOpensWhatTheFirstLoadCompiled:
     ) -> None:
         before = bundles_under(core_ml_home) if core_ml_home is not None else set()
         path = _write(tmp_path / "m.mlpackage")
-        first_load = (
-            bundles_under(core_ml_home) - before if core_ml_home is not None else set()
-        )
+        first_load = bundles_under(core_ml_home) - before if core_ml_home is not None else set()
 
         opened = []
         for _ in range(3):
@@ -138,9 +136,7 @@ class TestAReloadOpensWhatTheFirstLoadCompiled:
             assert reopened.compute_plan().total_compute > 0
         assert compiles.calls == 0
 
-    def test_the_kept_model_outlives_the_handle(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_the_kept_model_outlives_the_handle(self, tmp_path: Path, cache: Path) -> None:
         path = _write(tmp_path / "m.mlpackage")
         (entry,) = _entries(cache)
         assert (entry / "coremldata.bin").is_file()
@@ -150,9 +146,7 @@ class TestAReloadOpensWhatTheFirstLoadCompiled:
 
 
 class TestTheKeyIsTheContent:
-    def test_the_same_bytes_elsewhere_are_the_same_entry(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_the_same_bytes_elsewhere_are_the_same_entry(self, tmp_path: Path, cache: Path) -> None:
         path = _write(tmp_path / "m.mlpackage")
         moved = shutil.copytree(path, tmp_path / "copy.mlpackage")
         with cml.load(path) as one, cml.load(str(moved)) as other:
@@ -226,9 +220,7 @@ class TestTheCacheKeepsToItsLimit:
             # Of the three only the held one and the newest survive.
             assert len(left) == 2
 
-    def test_another_process_holding_a_model_keeps_it(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_another_process_holding_a_model_keeps_it(self, tmp_path: Path, cache: Path) -> None:
         path = _write(tmp_path / "m.mlpackage")
         (entry,) = _entries(cache)
         holder = subprocess.Popen(
@@ -315,16 +307,12 @@ class TestTheCacheKeepsToItsLimit:
 
 
 class TestWhereItLives:
-    def test_the_default_is_beside_the_weights(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_default_is_beside_the_weights(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("LUCID_COREML_CACHE_DIR", raising=False)
         monkeypatch.delenv("LUCID_HOME", raising=False)
         assert _cache.cache_dir() == os.path.expanduser("~/.cache/lucid/coreml")
 
-    def test_lucid_home_moves_it(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_lucid_home_moves_it(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.delenv("LUCID_COREML_CACHE_DIR", raising=False)
         monkeypatch.setenv("LUCID_HOME", str(tmp_path))
         assert _cache.cache_dir() == str(tmp_path / "coreml")
@@ -391,9 +379,7 @@ class TestTwoLoadsAtOnce:
             shutil.move(real(package), entry)
             return real(package)
 
-        monkeypatch.setattr(
-            _C_engine.coreml, "compile_model", compile_while_another_wins
-        )
+        monkeypatch.setattr(_C_engine.coreml, "compile_model", compile_while_another_wins)
         with cml.load(path) as handle:
             assert handle._lease.path == str(entry)
             assert tuple(handle.predict(lucid.randn(*_X_SHAPE)).shape) == (1, 4)
@@ -424,9 +410,7 @@ class TestADiskTooFullForCoreML:
         monkeypatch.setattr(_C_engine.coreml, "compile_model", compiles)
         lucid.manual_seed(0)
         with pytest.raises(OSError) as raised:
-            cml.export(
-                _Small().eval(), lucid.randn(*_X_SHAPE), str(tmp_path / "m.mlpackage")
-            )
+            cml.export(_Small().eval(), lucid.randn(*_X_SHAPE), str(tmp_path / "m.mlpackage"))
         assert raised.value.errno == errno.ENOSPC
         message = str(raised.value)
         assert "lucid.coreml" in message and "m.mlpackage" in message
@@ -513,9 +497,7 @@ class TestItTouchesOnlyWhatItWrote:
 
 
 class TestWhatADeadProcessLeft:
-    def test_old_scratch_and_orphaned_locks_are_swept(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_old_scratch_and_orphaned_locks_are_swept(self, tmp_path: Path, cache: Path) -> None:
         _write(tmp_path / "m.mlpackage")
         store = _store(cache)
         hex32, orphan = "c" * 32, "d" * 64
@@ -581,9 +563,7 @@ class TestAFailedLoadLeavesNoLock:
     remove, for the rest of the process.
     """
 
-    def test_compute_units_that_are_not_compute_units(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_compute_units_that_are_not_compute_units(self, tmp_path: Path, cache: Path) -> None:
         path = _write(tmp_path / "m.mlpackage")
         with pytest.raises(KeyError):
             cml.load(path, compute_units="ALL")  # type: ignore[arg-type]
@@ -631,9 +611,7 @@ class TestTheLockLastsAsLongAsTheModel:
     ``close`` — so the files it may read are not evicted under it.
     """
 
-    def test_the_engine_holds_it_until_the_model_goes(
-        self, tmp_path: Path, cache: Path
-    ) -> None:
+    def test_the_engine_holds_it_until_the_model_goes(self, tmp_path: Path, cache: Path) -> None:
         path = _write(tmp_path / "m.mlpackage")
         handle = cml.load(path)
         handle._release()  # this side's lock only

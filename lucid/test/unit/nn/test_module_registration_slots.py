@@ -128,9 +128,7 @@ def test_an_in_place_update_leaves_a_layers_parameters_in_order(device):
     with lucid.no_grad():
         layer.weight += 1.0
     assert [name for name, _ in layer.named_parameters()] == ["weight", "bias"]
-    assert all(
-        now is then for now, then in zip(layer.parameters(), before, strict=True)
-    )
+    assert all(now is then for now, then in zip(layer.parameters(), before, strict=True))
     assert list(layer.state_dict()) == ["weight", "bias"]
 
 
@@ -170,17 +168,11 @@ def test_a_name_deleted_and_assigned_again_is_registered_at_the_end():
 # ── a value of another kind for a registered name ───────────────────────────
 
 _REFUSALS = [
-    pytest.param(
-        "parameter", lambda d: lucid.zeros(2, device=d), id="parameter-tensor"
-    ),
+    pytest.param("parameter", lambda d: lucid.zeros(2, device=d), id="parameter-tensor"),
     pytest.param("parameter", lambda d: 3, id="parameter-int"),
-    pytest.param(
-        "parameter", lambda d: nn.Linear(2, 2, device=d), id="parameter-module"
-    ),
+    pytest.param("parameter", lambda d: nn.Linear(2, 2, device=d), id="parameter-module"),
     pytest.param("buffer", lambda d: 3, id="buffer-int"),
-    pytest.param(
-        "submodule", lambda d: lucid.zeros(2, device=d), id="submodule-tensor"
-    ),
+    pytest.param("submodule", lambda d: lucid.zeros(2, device=d), id="submodule-tensor"),
     pytest.param("submodule", lambda d: 3, id="submodule-int"),
 ]
 
@@ -376,13 +368,9 @@ def test_each_transition_matches_the_reference(ref, transition):
 
 def _container(lib: ModuleType, kind: str) -> object:
     if kind == "Sequential":
-        return lib.nn.Sequential(
-            lib.nn.Linear(1, 1), lib.nn.ReLU(), lib.nn.Linear(1, 1)
-        )
+        return lib.nn.Sequential(lib.nn.Linear(1, 1), lib.nn.ReLU(), lib.nn.Linear(1, 1))
     if kind == "ModuleList":
-        return lib.nn.ModuleList(
-            [lib.nn.Linear(1, 1), lib.nn.ReLU(), lib.nn.Linear(1, 1)]
-        )
+        return lib.nn.ModuleList([lib.nn.Linear(1, 1), lib.nn.ReLU(), lib.nn.Linear(1, 1)])
     return lib.nn.ParameterList([lib.nn.Parameter(lib.zeros(1)) for _ in range(3)])
 
 

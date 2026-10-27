@@ -86,9 +86,7 @@ def _as_array(v: object) -> np.ndarray:
 def _assert_bit_identical(a: list[np.ndarray], b: list[np.ndarray], what: str) -> None:
     for i, (x, y) in enumerate(zip(a, b)):
         assert x.dtype == y.dtype and x.shape == y.shape, f"{what}: param {i}"
-        assert np.array_equal(
-            x, y
-        ), f"{what}: param {i} differs by {np.max(np.abs(x - y))}"
+        assert np.array_equal(x, y), f"{what}: param {i} differs by {np.max(np.abs(x - y))}"
 
 
 # (class, kwargs) — the options that change which state an optimizer keeps,
@@ -126,9 +124,7 @@ def _case_id(case: tuple[str, dict[str, object]]) -> str:
 _CASE_PARAMS = [pytest.param(c, id=_case_id(c)) for c in _CASES]
 
 
-def _make(
-    name: str, kw: dict[str, object], params: list[nn.Parameter]
-) -> optim.Optimizer:
+def _make(name: str, kw: dict[str, object], params: list[nn.Parameter]) -> optim.Optimizer:
     return getattr(optim, name)(params, **kw)
 
 
@@ -169,9 +165,7 @@ def _resume(
         opt.step()
         _feed(resumed, g, device)
         opt2.step()
-        _assert_bit_identical(
-            _values(live), _values(resumed), f"{name} step {_N_BEFORE + k + 1}"
-        )
+        _assert_bit_identical(_values(live), _values(resumed), f"{name} step {_N_BEFORE + k + 1}")
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
@@ -243,9 +237,7 @@ _EngineFactory = Callable[[list[Any]], Any]
 
 
 def _engine_rmsprop_centered(momentum: float) -> _EngineFactory:
-    return lambda impls: _C_engine.RMSprop(
-        impls, lr=1e-2, momentum=momentum, centered=True
-    )
+    return lambda impls: _C_engine.RMSprop(impls, lr=1e-2, momentum=momentum, centered=True)
 
 
 def _engine_asgd_averaging() -> _EngineFactory:
@@ -272,9 +264,7 @@ def _engine_asgd_averaging() -> _EngineFactory:
         ),
     ],
 )
-def test_engine_state_round_trips(
-    make: _EngineFactory, keys: set[str], device: str
-) -> None:
+def test_engine_state_round_trips(make: _EngineFactory, keys: set[str], device: str) -> None:
     # state_buffers -> load_state_buffers on the engine itself, without the
     # Python loader in between.
     grads = _grads()
@@ -303,9 +293,7 @@ _STEP_USERS = ["Adam", "AdamW", "Adamax", "NAdam", "RAdam"]
 
 
 @pytest.mark.parametrize("name", _STEP_USERS)
-def test_a_frozen_first_parameter_does_not_stall_the_others(
-    name: str, device: str
-) -> None:
+def test_a_frozen_first_parameter_does_not_stall_the_others(name: str, device: str) -> None:
     # The step counter used to advance only when slot 0 updated, so freezing
     # the first parameter left every other one at step 0 — and 1 - beta1**0
     # is a zero denominator.
@@ -357,19 +345,13 @@ def test_a_late_parameter_follows_the_reference_trajectory(
     )
     for p, rp in zip(params, ref_params):
         np.testing.assert_allclose(p.numpy(), rp.detach().numpy(), rtol=1e-5, atol=1e-6)
-    steps = [
-        int(_as_array(e["step"])) for _, e in sorted(opt.state_dict()["state"].items())
-    ]
-    ref_steps = [
-        int(e["step"]) for _, e in sorted(ref_opt.state_dict()["state"].items())
-    ]
+    steps = [int(_as_array(e["step"])) for _, e in sorted(opt.state_dict()["state"].items())]
+    ref_steps = [int(e["step"]) for _, e in sorted(ref_opt.state_dict()["state"].items())]
     assert steps == ref_steps == [3, 5, 5]
 
 
 @pytest.mark.parametrize("name", _STEP_USERS)
-def test_uneven_step_counts_round_trip_through_the_engine(
-    name: str, device: str
-) -> None:
+def test_uneven_step_counts_round_trip_through_the_engine(name: str, device: str) -> None:
     # The engine saves and restores each parameter's own count.
     grads = _grads()
     live = _params(_init(), device)

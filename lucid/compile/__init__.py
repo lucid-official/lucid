@@ -284,9 +284,7 @@ def load_compiled(path: str) -> object:
             """One line per feed slot: what shape and dtype it expects."""
             return "\n".join(
                 f"  slot {i}: shape {tuple(sh)} dtype {dt}"
-                for i, (sh, dt) in enumerate(
-                    zip(self.input_shapes, self.input_dtypes, strict=True)
-                )
+                for i, (sh, dt) in enumerate(zip(self.input_shapes, self.input_dtypes, strict=True))
             )
 
         def __call__(self, *args: object) -> object:
@@ -680,8 +678,7 @@ def _compile_model[**P, R](
     if callable(model):
         return cast(_CM[P, R], _CM(_CallableModule(model), dynamic=dyn))
     raise TypeError(
-        f"lucid.compile: model must be an nn.Module or a callable, "
-        f"got {type(model).__name__}"
+        f"lucid.compile: model must be an nn.Module or a callable, " f"got {type(model).__name__}"
     )
 
 
@@ -752,9 +749,7 @@ def _compile_decorator_factory(
 
     def _decorator(target: object) -> object:
         """Apply :func:`compile` to ``target`` with the captured ``dynamic`` flag."""
-        return compile(
-            cast(Callable[..., object], target), dynamic=dynamic, disable=disable
-        )
+        return compile(cast(Callable[..., object], target), dynamic=dynamic, disable=disable)
 
     return _decorator
 

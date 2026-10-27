@@ -108,9 +108,7 @@ def _make_checkpoint_fn(
 
         @override
         @staticmethod
-        def backward(
-            ctx: FunctionCtx, *grad_outputs: Tensor
-        ) -> tuple[Tensor | None, ...]:
+        def backward(ctx: FunctionCtx, *grad_outputs: Tensor) -> tuple[Tensor | None, ...]:
             inputs = ctx.saved_tensors
 
             # Detach inputs so the re-run doesn't accumulate into their .grad
@@ -208,9 +206,7 @@ def checkpoint(
     # Non-reentrant mode appends one extra input (see below), so backward
     # has to know how many gradients the caller is actually owed.
     n_inputs = n_args if use_reentrant else n_args + 1
-    checkpoint_fn = _make_checkpoint_fn(
-        function, kwargs, n_args, n_inputs, preserve_rng_state
-    )
+    checkpoint_fn = _make_checkpoint_fn(function, kwargs, n_args, n_inputs, preserve_rng_state)
 
     if use_reentrant:
         return cast(Tensor | tuple[Tensor, ...], checkpoint_fn.apply(*args))

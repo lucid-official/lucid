@@ -159,9 +159,7 @@ def _pieces_from_model(model: dict[str, object], path: str) -> list[tuple[str, f
     """Read ``[(piece, log_prob), ...]`` out of a parsed ``model`` block."""
     vocab = model.get("vocab", [])
     if not isinstance(vocab, list):
-        raise TypeError(
-            f"_load_unigram_pieces_json: model.vocab is not a list in {path}"
-        )
+        raise TypeError(f"_load_unigram_pieces_json: model.vocab is not a list in {path}")
     out: list[tuple[str, float]] = []
     for entry in vocab:
         if isinstance(entry, list) and len(entry) == 2:
@@ -170,8 +168,7 @@ def _pieces_from_model(model: dict[str, object], path: str) -> list[tuple[str, f
             out.append((str(entry["piece"]), float(entry["score"])))
         else:
             raise ValueError(
-                f"_load_unigram_pieces_json: malformed vocab entry "
-                f"{entry!r} in {path}"
+                f"_load_unigram_pieces_json: malformed vocab entry " f"{entry!r} in {path}"
             )
     return out
 
@@ -248,9 +245,7 @@ def _read_unigram_config(directory: str, who: str) -> _UnigramFileConfig:
     """
     path = os.path.join(directory, "tokenizer.json")
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"{who}.from_file: tokenizer.json not found in {directory}"
-        )
+        raise FileNotFoundError(f"{who}.from_file: tokenizer.json not found in {directory}")
     data = _read_json_object(path)
     raw_model = data.get("model", {})
     if not isinstance(raw_model, dict):
@@ -365,9 +360,7 @@ class _UnigramCommonMixin(Tokenizer):
                 self._unk_piece_id = i
             if self._byte_fallback and len(piece) == 6 and piece.startswith("<0x"):
                 digits = piece[3:5]
-                if piece.endswith(">") and all(
-                    c in "0123456789ABCDEFabcdef" for c in digits
-                ):
+                if piece.endswith(">") and all(c in "0123456789ABCDEFabcdef" for c in digits):
                     self._byte_piece_ids.setdefault(int(digits, 16), i)
 
     @abstractmethod
@@ -394,19 +387,13 @@ class _UnigramCommonMixin(Tokenizer):
                 out.append(token_id)
                 continue
             normalized = normalizer(segment) if normalizer is not None else segment
-            for piece, piece_id, piece_start in self._added.split_normalized(
-                normalized
-            ):
+            for piece, piece_id, piece_start in self._added.split_normalized(normalized):
                 if piece_id is not None:
                     out.append(piece_id)
                     continue
-                chunks = self._pre_tokenizer._pre_tokenize_at(
-                    piece, start + piece_start
-                )
+                chunks = self._pre_tokenizer._pre_tokenize_at(piece, start + piece_start)
                 for chunk, _ in chunks:
-                    out.extend(
-                        self._handle_unknowns(chunk, self._encode_chunk_ids(chunk))
-                    )
+                    out.extend(self._handle_unknowns(chunk, self._encode_chunk_ids(chunk)))
         return out
 
     def _handle_unknowns(self, chunk: str, ids: list[int]) -> list[int]:
@@ -433,11 +420,7 @@ class _UnigramCommonMixin(Tokenizer):
         pos = 0
         for tid in ids:
             if tid == unk:
-                width = (
-                    len(self._unk_token)
-                    if chunk.startswith(self._unk_token, pos)
-                    else 1
-                )
+                width = len(self._unk_token) if chunk.startswith(self._unk_token, pos) else 1
             else:
                 width = len(self._id_to_piece.get(tid, ""))
             spans.append((tid, pos, pos + width))
@@ -755,9 +738,7 @@ class UnigramTokenizer(_UnigramCommonMixin, Tokenizer):
         """Recompute piece-to-id maps + max-piece byte cache."""
         self._piece_to_id = {p: i for i, (p, _) in enumerate(self._pieces)}
         self._id_to_piece = {i: p for i, (p, _) in enumerate(self._pieces)}
-        self._max_piece_bytes = max(
-            (len(p.encode("utf-8")) for p, _ in self._pieces), default=0
-        )
+        self._max_piece_bytes = max((len(p.encode("utf-8")) for p, _ in self._pieces), default=0)
         self._index_unk()
 
     @override

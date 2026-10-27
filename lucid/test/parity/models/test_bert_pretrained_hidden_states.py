@@ -13,9 +13,7 @@ def test_bert_tiny_pretrained_hidden_states(ref) -> None:
     transformers = pytest.importorskip("transformers")
     try:
         ours = create_model("bert_tiny", pretrained=True).eval()
-        source = transformers.AutoModel.from_pretrained(
-            "google/bert_uncased_L-2_H-128_A-2"
-        ).eval()
+        source = transformers.AutoModel.from_pretrained("google/bert_uncased_L-2_H-128_A-2").eval()
     except OSError as exc:
         pytest.skip(f"pretrained download unavailable: {exc}")
     # Include padding IDs: a trained embedding row must not be zeroed during
@@ -26,9 +24,7 @@ def test_bert_tiny_pretrained_hidden_states(ref) -> None:
         wanted = source(ref.from_numpy(ids), output_hidden_states=True)
     assert got.hidden_states is not None
     assert len(got.hidden_states) == len(wanted.hidden_states) == 3
-    for index, (actual, expected) in enumerate(
-        zip(got.hidden_states, wanted.hidden_states)
-    ):
+    for index, (actual, expected) in enumerate(zip(got.hidden_states, wanted.hidden_states)):
         np.testing.assert_allclose(
             actual.numpy(),
             expected.numpy(),

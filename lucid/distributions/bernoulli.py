@@ -187,9 +187,7 @@ class Bernoulli(ExponentialFamily):
         else:
             self.logits = _as_tensor(logits)  # type: ignore[arg-type]
             self._is_logits = True
-        shape = (
-            tuple(self.probs.shape) if not self._is_logits else tuple(self.logits.shape)
-        )
+        shape = tuple(self.probs.shape) if not self._is_logits else tuple(self.logits.shape)
         super().__init__(batch_shape=shape, event_shape=(), validate_args=validate_args)
 
     @override
@@ -356,9 +354,7 @@ class Bernoulli(ExponentialFamily):
         """
         shape = self._extended_shape(sample_shape)
         u = lucid.rand(*shape, dtype=self._probs.dtype, device=self._probs.device)
-        p = self._probs + lucid.zeros(
-            shape, dtype=self._probs.dtype, device=self._probs.device
-        )
+        p = self._probs + lucid.zeros(shape, dtype=self._probs.dtype, device=self._probs.device)
         out = (u < p).to(self._probs.dtype)
         return out.detach()
 

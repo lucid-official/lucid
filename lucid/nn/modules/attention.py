@@ -319,8 +319,7 @@ class MultiheadAttention(Module):
         super().__init__()
         if embed_dim % num_heads != 0:
             raise ValueError(
-                f"embed_dim ({embed_dim}) must be divisible by num_heads "
-                f"({num_heads})"
+                f"embed_dim ({embed_dim}) must be divisible by num_heads " f"({num_heads})"
             )
         self.embed_dim: int = embed_dim
         self.num_heads: int = num_heads
@@ -328,9 +327,7 @@ class MultiheadAttention(Module):
         # ``num_heads`` key/value heads (``None`` → standard MHA = num_heads).
         # Each K/V head is shared by ``num_heads // num_kv_heads`` query heads,
         # shrinking the K/V projection and the K/V cache.
-        self.num_kv_heads: int = (
-            num_heads if num_kv_heads is None else int(num_kv_heads)
-        )
+        self.num_kv_heads: int = num_heads if num_kv_heads is None else int(num_kv_heads)
         if num_heads % self.num_kv_heads != 0:
             raise ValueError(
                 f"num_heads ({num_heads}) must be divisible by num_kv_heads "
@@ -347,9 +344,7 @@ class MultiheadAttention(Module):
         # ``embed_dim → embed_dim`` from one source; GQA (fewer K/V heads) or a
         # differing ``kdim``/``vdim`` forces the separate-projection layout.
         self._qkv_same_embed_dim: bool = (
-            self.kdim == embed_dim
-            and self.vdim == embed_dim
-            and self.num_kv_heads == num_heads
+            self.kdim == embed_dim and self.vdim == embed_dim and self.num_kv_heads == num_heads
         )
 
         if self._qkv_same_embed_dim:
@@ -364,9 +359,7 @@ class MultiheadAttention(Module):
             # different feature dims, or under GQA where K/V project to fewer
             # heads (``_kv_dim`` < ``embed_dim``).  ``in_proj_weight`` is unset.
             self.in_proj_weight = None
-            self.q_proj_weight = Parameter(
-                empty(embed_dim, embed_dim, dtype=dtype, device=device)
-            )
+            self.q_proj_weight = Parameter(empty(embed_dim, embed_dim, dtype=dtype, device=device))
             self.k_proj_weight = Parameter(
                 empty(self._kv_dim, self.kdim, dtype=dtype, device=device)
             )
@@ -624,8 +617,7 @@ class MultiheadAttention(Module):
         is_batched = query.ndim == 3
         if query.ndim not in (2, 3):
             raise ValueError(
-                "MultiheadAttention: expected query to be 2-D or 3-D, "
-                f"got {query.ndim}-D"
+                "MultiheadAttention: expected query to be 2-D or 3-D, " f"got {query.ndim}-D"
             )
         if is_batched:
             if key.ndim != 3 or value.ndim != 3:
@@ -697,9 +689,7 @@ class MultiheadAttention(Module):
 
             # ── add_zero_attn: append a zero row to K / V ───────────────────
             if self.add_zero_attn:
-                zero_kv: Tensor = _lucid.zeros(
-                    B, 1, self._kv_dim, dtype=k.dtype, device=k.device
-                )
+                zero_kv: Tensor = _lucid.zeros(B, 1, self._kv_dim, dtype=k.dtype, device=k.device)
                 k = _lucid.cat([k, zero_kv], 1)
                 v = _lucid.cat([v, zero_kv], 1)
 
@@ -724,12 +714,8 @@ class MultiheadAttention(Module):
             # Self-attention grows the cache; cross-attention fills it once from
             # the (constant) encoder memory (the reuse path is handled above).
             if use_cache and past_key_value is not None:
-                if is_cross_attention and isinstance(
-                    past_key_value, EncoderDecoderCache
-                ):
-                    kh, vh = past_key_value.cross_attention_cache.update(
-                        kh, vh, layer_idx
-                    )
+                if is_cross_attention and isinstance(past_key_value, EncoderDecoderCache):
+                    kh, vh = past_key_value.cross_attention_cache.update(kh, vh, layer_idx)
                     past_key_value.is_updated[layer_idx] = True
                 else:
                     self_cache = (
@@ -779,9 +765,7 @@ class MultiheadAttention(Module):
             causal_add = _causal_additive_mask(
                 Tq, Tk, Tk - Tq if cached else 0, qh.dtype, qh.device
             ).reshape(1, 1, Tq, Tk)
-            merged_mask = (
-                causal_add if merged_mask is None else merged_mask + causal_add
-            )
+            merged_mask = causal_add if merged_mask is None else merged_mask + causal_add
             is_causal = False
 
         attn_weights: Tensor | None

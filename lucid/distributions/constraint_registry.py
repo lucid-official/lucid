@@ -243,17 +243,13 @@ class CatTransform(Transform):
     @property
     def domain(self) -> Constraint:
         """Concatenated domain constraint across all partition transforms."""
-        return constraints.cat(
-            [t.domain for t in self.transforms], self.dim, self.lengths
-        )
+        return constraints.cat([t.domain for t in self.transforms], self.dim, self.lengths)
 
     @override
     @property
     def codomain(self) -> Constraint:
         """Concatenated codomain constraint across all partition transforms."""
-        return constraints.cat(
-            [t.codomain for t in self.transforms], self.dim, self.lengths
-        )
+        return constraints.cat([t.codomain for t in self.transforms], self.dim, self.lengths)
 
     def _split(self, x: Tensor) -> list[Tensor]:
         """Split ``x`` along ``self.dim`` into pieces of ``self.lengths``."""
@@ -271,10 +267,7 @@ class CatTransform(Transform):
     def _inverse(self, y: Tensor) -> Tensor:
         """Split ``y`` along ``dim``, apply each inverse, and concatenate."""
         return lucid.cat(
-            [
-                t._inverse(p)
-                for t, p in zip(self.transforms, self._split(y), strict=True)
-            ],
+            [t._inverse(p) for t, p in zip(self.transforms, self._split(y), strict=True)],
             dim=self.dim,
         )
 
@@ -327,9 +320,7 @@ class ConstraintRegistry:
 
     def __init__(self) -> None:
         """Initialise an empty constraint-to-transform registry."""
-        self._registry: dict[
-            Constraint | type[Constraint], Callable[[Constraint], Transform]
-        ] = {}
+        self._registry: dict[Constraint | type[Constraint], Callable[[Constraint], Transform]] = {}
 
     def register(
         self,
@@ -398,16 +389,12 @@ def _transform_to_greater_than(
 ) -> Transform:
     if _is_scalar_number(constraint.lower_bound, 0.0):
         return ExpTransform()
-    return ComposeTransform(
-        [ExpTransform(), AffineTransform(constraint.lower_bound, 1.0)]
-    )
+    return ComposeTransform([ExpTransform(), AffineTransform(constraint.lower_bound, 1.0)])
 
 
 @_register(biject_to, transform_to, _LessThan)
 def _transform_to_less_than(constraint: _LessThan) -> Transform:
-    return ComposeTransform(
-        [ExpTransform(), AffineTransform(constraint.upper_bound, -1.0)]
-    )
+    return ComposeTransform([ExpTransform(), AffineTransform(constraint.upper_bound, -1.0)])
 
 
 @_register(biject_to, transform_to, _Interval)

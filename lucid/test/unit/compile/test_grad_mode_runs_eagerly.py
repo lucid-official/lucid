@@ -61,9 +61,7 @@ def _conv(device: str) -> nn.Module:
 
 def _bn_train(device: str) -> nn.Module:
     lucid.manual_seed(0)
-    model = nn.Sequential(
-        nn.Linear(4, 8), nn.BatchNorm1d(8), nn.ReLU(), nn.Linear(8, 3)
-    )
+    model = nn.Sequential(nn.Linear(4, 8), nn.BatchNorm1d(8), nn.ReLU(), nn.Linear(8, 3))
     return model.to(device).train()
 
 
@@ -201,9 +199,7 @@ def _where(name: str, device: str) -> _Where:
     if name in ("bound-method", "dynamic"):
         model = _mlp(device)
         target = model.forward if name == "bound-method" else model
-        return _Where(
-            target, lambda f: f(x), tuple(model.parameters()), name == "dynamic"
-        )
+        return _Where(target, lambda f: f(x), tuple(model.parameters()), name == "dynamic")
     if name == "tuple-input":
         return _Where(lambda p: (p[0] * p[1]).tanh(), lambda f: f((grad, x)), (grad,))
     if name == "dict-input":
@@ -446,9 +442,7 @@ def test_a_call_that_runs_eagerly_anyway_checks_no_gradients(
 
 def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    monkeypatch.setattr(
-        "lucid.compile._core.fallback._NOTICED", set(_NOTICED) - {"autograd"}
-    )
+    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set(_NOTICED) - {"autograd"})
     device = "metal" if metal_available() else "cpu"
     first, second = lucid.compile(_mlp(device)), lucid.compile(_conv(device))
     with warnings.catch_warnings(record=True) as caught:
@@ -459,8 +453,7 @@ def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None
     notices = [
         str(w.message)
         for w in caught
-        if issubclass(w.category, CompileFallbackWarning)
-        and "needs gradients" in str(w.message)
+        if issubclass(w.category, CompileFallbackWarning) and "needs gradients" in str(w.message)
     ]
     assert len(notices) == 1, notices
     assert "lucid.no_grad()" in notices[0] and "make_step" in notices[0]
@@ -477,9 +470,7 @@ def test_reference_keeps_autograd_the_same_way(ref: ModuleType) -> None:
     model = nn.Sequential(nn.Linear(4, 3)).to(device)
     compiled = lucid.compile(model)
 
-    def cases(
-        lib: ModuleType, m: Any, call: Callable[[Any], Any], **where: str
-    ) -> list[bool]:
+    def cases(lib: ModuleType, m: Any, call: Callable[[Any], Any], **where: str) -> list[bool]:
         x = lib.randn(2, 4, **where)
         out = [call(x).requires_grad]
         m.eval()

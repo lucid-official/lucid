@@ -79,26 +79,21 @@ def main(argv: list[str] | None = None) -> int:
         compute_units=ComputeUnits(args.units),
     )
     print(
-        f"[export] saved  precision={args.precision} weights={args.weights} "
-        f"units={args.units}"
+        f"[export] saved  precision={args.precision} weights={args.weights} " f"units={args.units}"
     )
 
     plan = exported.compute_plan()
     if plan.total_compute:
         placement = ", ".join(f"{d}={n}" for d, n in sorted(plan.compute.items()))
         print(f"[plan]   {placement}  ({plan.constants} constants)")
-        print(
-            f"[plan]   Neural Engine takes {plan.ane_fraction:.0%} of the computation"
-        )
+        print(f"[plan]   Neural Engine takes {plan.ane_fraction:.0%} of the computation")
         if args.units == ComputeUnits.CPU_AND_NE.value and plan.ane_fraction == 0.0:
             print(
                 "[plan]   nothing was scheduled on the Neural Engine — it only runs "
                 "float16; re-export with --precision FLOAT16"
             )
     else:
-        print(
-            "[plan]   unavailable (needs macOS 14.4+) — this is unknown, not unaccelerated"
-        )
+        print("[plan]   unavailable (needs macOS 14.4+) — this is unknown, not unaccelerated")
 
     print(f"[export] inputs {exported.input_names} -> outputs {exported.output_names}")
 

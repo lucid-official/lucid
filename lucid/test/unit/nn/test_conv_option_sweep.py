@@ -23,9 +23,7 @@ RANKS = [1, 2, 3]
 
 def _input(rank: int, channels: int = 3, size: int = 8, batch: int = 2):
     shape = (batch, channels) + (size,) * rank
-    return lucid.tensor(
-        np.random.default_rng(rank).standard_normal(shape).astype(np.float32)
-    )
+    return lucid.tensor(np.random.default_rng(rank).standard_normal(shape).astype(np.float32))
 
 
 def _out_size(size, kernel, stride, padding, dilation):
@@ -64,9 +62,7 @@ def test_grouped_convolution(rank, groups):
 @pytest.mark.parametrize("padding", ["same", "valid"])
 def test_string_padding_modes(rank, padding):
     """``same`` keeps the spatial size; ``valid`` is no padding at all."""
-    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](
-        3, 4, kernel_size=3, padding=padding
-    )
+    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](3, 4, kernel_size=3, padding=padding)
     out = layer(_input(rank))
     expected = 8 if padding == "same" else 6
     assert tuple(out.shape) == (2, 4) + (expected,) * rank
@@ -76,9 +72,7 @@ def test_string_padding_modes(rank, padding):
 def test_same_padding_with_an_even_kernel(rank):
     """An even kernel cannot pad symmetrically, so the split is uneven —
     the branch that computes ``pad_lo`` separately from ``pad_hi``."""
-    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](
-        3, 4, kernel_size=4, padding="same"
-    )
+    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](3, 4, kernel_size=4, padding="same")
     assert tuple(layer(_input(rank)).shape) == (2, 4) + (8,) * rank
 
 
@@ -118,9 +112,7 @@ def test_conv_transpose_output_shape(rank, stride, output_padding):
 @pytest.mark.parametrize(
     ("stride", "dilation", "output_padding"), [(1, 1, 1), (2, 1, 2), (2, 1, -1)]
 )
-def test_output_padding_outside_the_stride_is_refused(
-    rank, stride, dilation, output_padding
-):
+def test_output_padding_outside_the_stride_is_refused(rank, stride, dilation, output_padding):
     """``output_padding`` must be non-negative and below the stride or dilation.
 
     It picks one of the ``stride`` input sizes a strided convolution maps to
@@ -202,9 +194,7 @@ def test_every_parameter_receives_a_gradient(rank, transposed):
 
 @pytest.mark.parametrize("rank", RANKS)
 def test_functional_matches_the_module(rank):
-    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](
-        3, 4, kernel_size=3, padding=1
-    )
+    layer = {1: nn.Conv1d, 2: nn.Conv2d, 3: nn.Conv3d}[rank](3, 4, kernel_size=3, padding=1)
     fn = {1: F.conv1d, 2: F.conv2d, 3: F.conv3d}[rank]
     x = _input(rank)
     assert np.allclose(
@@ -256,9 +246,7 @@ def test_grouped_convolution_agrees_across_devices(rank, groups):
     bias = lucid.tensor(np.zeros(4, dtype=np.float32))
 
     cpu = fn(x, weight, bias, padding=1, groups=groups)
-    metal = fn(
-        x.to("metal"), weight.to("metal"), bias.to("metal"), padding=1, groups=groups
-    )
+    metal = fn(x.to("metal"), weight.to("metal"), bias.to("metal"), padding=1, groups=groups)
     assert tuple(metal.shape) == tuple(cpu.shape)
     scale = max(float(cpu.abs().max().item()), 1e-30)
     assert float((cpu - metal.to("cpu")).abs().max().item()) / scale < 1e-5

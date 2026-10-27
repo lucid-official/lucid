@@ -74,9 +74,7 @@ def _arrays(seed: int, shape: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
 def _split(g) -> np.ndarray:
     g = g.to("cpu")
     if g.is_complex():
-        return np.asarray(lucid.real(g).numpy()) + 1j * np.asarray(
-            lucid.imag(g).numpy()
-        )
+        return np.asarray(lucid.real(g).numpy()) + 1j * np.asarray(lucid.imag(g).numpy())
     return np.asarray(g.numpy())
 
 
@@ -157,9 +155,7 @@ def test_the_hessian_vector_product_matches_the_reference(
     assert got.shape == want.shape, (got.shape, want.shape)
     scale = float(np.abs(want).max())
     assert scale > 0.0, "the case has no curvature, so it checks nothing"
-    np.testing.assert_allclose(
-        got, want, rtol=2e-3, atol=2e-4 * scale, err_msg=f"{name} {kwargs}"
-    )
+    np.testing.assert_allclose(got, want, rtol=2e-3, atol=2e-4 * scale, err_msg=f"{name} {kwargs}")
 
 
 @pytest.mark.parametrize("name,shape,kwargs,complex_in", _params())

@@ -161,9 +161,7 @@ class Conv1d(nn.Conv1d):
     weight_fake_quant: FakeQuantize
     activation_post_process: FakeQuantize
 
-    def __init__(
-        self, *args: object, qconfig: QConfig | None = None, **kwargs: object
-    ) -> None:
+    def __init__(self, *args: object, qconfig: QConfig | None = None, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]  # forwarded to nn.Conv1d
         if qconfig is None:
             raise ValueError("qat conv requires a qconfig")
@@ -174,9 +172,7 @@ class Conv1d(nn.Conv1d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv1d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv1d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(y)
 
     @classmethod
@@ -302,9 +298,7 @@ class Conv2d(nn.Conv2d):
     weight_fake_quant: FakeQuantize
     activation_post_process: FakeQuantize
 
-    def __init__(
-        self, *args: object, qconfig: QConfig | None = None, **kwargs: object
-    ) -> None:
+    def __init__(self, *args: object, qconfig: QConfig | None = None, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]  # forwarded to nn.Conv2d
         if qconfig is None:
             raise ValueError("qat conv requires a qconfig")
@@ -315,9 +309,7 @@ class Conv2d(nn.Conv2d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv2d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv2d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(y)
 
     @classmethod
@@ -443,9 +435,7 @@ class Conv3d(nn.Conv3d):
     weight_fake_quant: FakeQuantize
     activation_post_process: FakeQuantize
 
-    def __init__(
-        self, *args: object, qconfig: QConfig | None = None, **kwargs: object
-    ) -> None:
+    def __init__(self, *args: object, qconfig: QConfig | None = None, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]  # forwarded to nn.Conv3d
         if qconfig is None:
             raise ValueError("qat conv requires a qconfig")
@@ -456,9 +446,7 @@ class Conv3d(nn.Conv3d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv3d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv3d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(y)
 
     @classmethod
@@ -572,9 +560,7 @@ class ConvReLU1d(Conv1d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv1d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv1d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(F.relu(y))
 
     @classmethod
@@ -683,9 +669,7 @@ class ConvReLU2d(Conv2d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv2d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv2d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(F.relu(y))
 
     @classmethod
@@ -793,9 +777,7 @@ class ConvReLU3d(Conv3d):
     @override
     def forward(self, x: Tensor) -> Tensor:
         w_q = self.weight_fake_quant(self.weight)
-        y = F.conv3d(
-            x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        y = F.conv3d(x, w_q, self.bias, self.stride, self.padding, self.dilation, self.groups)
         return self.activation_post_process(F.relu(y))
 
     @classmethod

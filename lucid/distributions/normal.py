@@ -302,9 +302,7 @@ class Normal(ExponentialFamily):
         Tensor
             Probabilities in :math:`(0, 1)`.
         """
-        return 0.5 * (
-            1.0 + lucid.erf((value - self.loc) / (self.scale * math.sqrt(2.0)))
-        )
+        return 0.5 * (1.0 + lucid.erf((value - self.loc) / (self.scale * math.sqrt(2.0))))
 
     @override
     def icdf(self, value: Tensor) -> Tensor:

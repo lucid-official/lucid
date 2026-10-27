@@ -51,16 +51,10 @@ def test_axis_filter_does_not_report_unrequested_cells_as_lost() -> None:
     scoped = _scoped_coverage(recorded, args)
     assert scoped == {"layout::lucid.exp": "pass"}
     assert (
-        report_coverage_diff(
-            _report(("layout", "lucid.exp", Status.PASS)), scoped, _quiet()
-        )
-        == 0
+        report_coverage_diff(_report(("layout", "lucid.exp", Status.PASS)), scoped, _quiet()) == 0
     )
     assert (
-        report_coverage_diff(
-            _report(("layout", "lucid.exp", Status.SKIP)), scoped, _quiet()
-        )
-        == 1
+        report_coverage_diff(_report(("layout", "lucid.exp", Status.SKIP)), scoped, _quiet()) == 1
     )
 
 
@@ -69,9 +63,7 @@ def test_full_sweep_keeps_removed_symbols_in_the_baseline() -> None:
     assert _scoped_coverage(recorded, build_parser().parse_args([])) == recorded
 
 
-@pytest.mark.parametrize(
-    "selection", [["--axis", "layout"], ["--limit", "1"], ["--quick"]]
-)
+@pytest.mark.parametrize("selection", [["--axis", "layout"], ["--limit", "1"], ["--quick"]])
 def test_partial_sweep_cannot_overwrite_full_coverage_baseline(
     selection: list[str],
 ) -> None:
@@ -203,9 +195,7 @@ def public_probe(monkeypatch: pytest.MonkeyPatch):
 
     def withdraw(module: object) -> None:
         monkeypatch.delattr(module, _PROBE)
-        monkeypatch.setattr(
-            module, "__all__", [n for n in module.__all__ if n != _PROBE]
-        )
+        monkeypatch.setattr(module, "__all__", [n for n in module.__all__ if n != _PROBE])
 
     return publish, withdraw
 
@@ -274,9 +264,7 @@ def test_no_removal_is_claimed_while_a_module_fails_to_import(
     assert "LOST" in capsys.readouterr().out
 
 
-def test_an_entry_cell_goes_with_the_spelling_it_was_compared_with(
-    public_probe, capsys
-) -> None:
+def test_an_entry_cell_goes_with_the_spelling_it_was_compared_with(public_probe, capsys) -> None:
     """``entry::F.pad`` answered by comparing ``F.pad`` with ``lucid.pad``;
     with the free spelling removed there is one entry point and no question."""
     publish, _ = public_probe
@@ -289,9 +277,7 @@ def test_an_entry_cell_goes_with_the_spelling_it_was_compared_with(
     assert f"lucid.{_PROBE}, is gone" in out
 
 
-@pytest.mark.parametrize(
-    "status", [Status.SKIP, Status.UNSUPPORTED], ids=["skip", "unsupported"]
-)
+@pytest.mark.parametrize("status", [Status.SKIP, Status.UNSUPPORTED], ids=["skip", "unsupported"])
 def test_an_entry_cell_that_still_has_its_question_stays_lost(
     public_probe, capsys, status: Status
 ) -> None:
@@ -305,9 +291,7 @@ def test_an_entry_cell_that_still_has_its_question_stays_lost(
     assert "LOST" in capsys.readouterr().out
 
 
-def test_an_entry_cell_with_no_removed_spelling_stays_lost(
-    public_probe, capsys
-) -> None:
+def test_an_entry_cell_with_no_removed_spelling_stays_lost(public_probe, capsys) -> None:
     publish, _ = public_probe
     publish("lucid.nn.functional")
     recorded = {f"entry::F.{_PROBE}": "pass"}

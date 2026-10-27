@@ -422,9 +422,7 @@ class Categorical(Distribution):
     def enumerate_support(self, expand: bool = True) -> Tensor:
         r"""Category indices :math:`0, \ldots, K - 1` along axis 0, in ``int64``."""
         param = self.logits if self._is_logits else self.probs
-        values = lucid.arange(
-            0, self._num_events, 1, dtype=lucid.int64, device=param.device
-        )
+        values = lucid.arange(0, self._num_events, 1, dtype=lucid.int64, device=param.device)
         return self._expand_support(values, expand)
 
 
@@ -595,9 +593,7 @@ class OneHotCategorical(Distribution):
         idx = self._cat.sample(sample_shape)
         from lucid.nn.functional.sparse import one_hot
 
-        return one_hot(idx, num_classes=self._cat._num_events).to(
-            self._cat._probs.dtype
-        )
+        return one_hot(idx, num_classes=self._cat._num_events).to(self._cat._probs.dtype)
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
@@ -689,9 +685,7 @@ class OneHotCategorical(Distribution):
         from lucid.nn.functional.sparse import one_hot
 
         probs = self._cat._probs
-        return one_hot(self._cat.mode, num_classes=self._cat._num_events).to(
-            probs.dtype
-        )
+        return one_hot(self._cat.mode, num_classes=self._cat._num_events).to(probs.dtype)
 
     @override
     @property

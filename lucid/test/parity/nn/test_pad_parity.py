@@ -53,9 +53,7 @@ class TestFPadParity:
     def test_constant_nonzero_value(self, ref: Any) -> None:
         x = np.ones((1, 1, 3), dtype=np.float32)
         l_out = F.pad(lucid.tensor(x.copy()), (2, 2), mode="constant", value=-1.0)
-        r_out = ref.nn.functional.pad(
-            ref.tensor(x.copy()), (2, 2), mode="constant", value=-1.0
-        )
+        r_out = ref.nn.functional.pad(ref.tensor(x.copy()), (2, 2), mode="constant", value=-1.0)
         assert_close(l_out, r_out, atol=1e-6)
 
 
@@ -75,12 +73,8 @@ class TestConvPaddingModeParity:
         r_conv = ref.nn.Conv2d(2, 4, 3, padding=1, padding_mode=padding_mode)
 
         # Copy weights
-        l_conv.weight._impl = _C_engine.TensorImpl(
-            w_np.copy(), _C_engine.Device.CPU, True
-        )
-        l_conv.bias._impl = _C_engine.TensorImpl(
-            b_np.copy(), _C_engine.Device.CPU, True
-        )
+        l_conv.weight._impl = _C_engine.TensorImpl(w_np.copy(), _C_engine.Device.CPU, True)
+        l_conv.bias._impl = _C_engine.TensorImpl(b_np.copy(), _C_engine.Device.CPU, True)
         r_conv.weight.data = ref.tensor(w_np.copy())
         r_conv.bias.data = ref.tensor(b_np.copy())
 
@@ -88,9 +82,7 @@ class TestConvPaddingModeParity:
         r_y = r_conv(ref.tensor(x_np.copy()))
         return l_y, r_y
 
-    @pytest.mark.parametrize(
-        "padding_mode", ["zeros", "reflect", "replicate", "circular"]
-    )
+    @pytest.mark.parametrize("padding_mode", ["zeros", "reflect", "replicate", "circular"])
     def test_conv2d_padding_mode(self, ref: Any, padding_mode: str) -> None:
         l_y, r_y = self._run(ref, padding_mode)
         assert_close(l_y, r_y, atol=1e-4)

@@ -148,9 +148,7 @@ def test_a_returned_gradient_replaces_the_real_one():
     """Everything below rests on this.  A framework that fired the hook
     and dropped its return value would pass every test above."""
     hooked, plain = _twins()
-    hooked.register_full_backward_hook(
-        lambda mod, gi, go: tuple(lucid.zeros_like(g) for g in gi)
-    )
+    hooked.register_full_backward_hook(lambda mod, gi, go: tuple(lucid.zeros_like(g) for g in gi))
     got, _ = _grads(hooked, plain)
     assert np.allclose(got, 0.0)
 
@@ -168,9 +166,7 @@ def test_gradient_reversal_negates_exactly():
 @pytest.mark.parametrize("factor", [0.5, 3.0, -2.0])
 def test_a_scaling_hook_scales_exactly(factor):
     hooked, plain = _twins()
-    hooked.register_full_backward_hook(
-        lambda mod, gi, go: tuple(g * factor for g in gi)
-    )
+    hooked.register_full_backward_hook(lambda mod, gi, go: tuple(g * factor for g in gi))
     got, want = _grads(hooked, plain)
     assert np.allclose(got, factor * want, atol=1e-6)
 
@@ -217,9 +213,7 @@ def test_a_replacement_reaches_layers_further_back():
     receives."""
     first = nn.Linear(4, 4)
     second = nn.Linear(4, 3)
-    second.register_full_backward_hook(
-        lambda mod, gi, go: tuple(lucid.zeros_like(g) for g in gi)
-    )
+    second.register_full_backward_hook(lambda mod, gi, go: tuple(lucid.zeros_like(g) for g in gi))
     nn.Sequential(first, second)(_x()).sum().backward()
     assert np.allclose(_v(first.weight.grad), 0.0)
 

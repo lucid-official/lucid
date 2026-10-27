@@ -86,9 +86,7 @@ def test_bitwise_ops(n: int, dtype: type) -> None:
     right = np.where(
         s64 < 0,
         0,
-        np.where(
-            s64 >= bits, np.where(a < 0, -1, 0), a >> np.clip(shifts, 0, bits - 1)
-        ),
+        np.where(s64 >= bits, np.where(a < 0, -1, 0), a >> np.clip(shifts, 0, bits - 1)),
     ).astype(dtype)
     np.testing.assert_array_equal((la << ls).numpy(), left)
     np.testing.assert_array_equal((la >> ls).numpy(), right)
@@ -178,9 +176,7 @@ def test_axis_reductions_keep_their_answers(shape: tuple[int, ...], axis: int) -
     np.testing.assert_array_equal(t.max(dim=axis).values.numpy(), np.max(x, axis=axis))
     np.testing.assert_array_equal(t.min(dim=axis).values.numpy(), np.min(x, axis=axis))
     np.testing.assert_allclose(t.sum(dim=axis).numpy(), np.sum(x, axis=axis), rtol=1e-6)
-    np.testing.assert_allclose(
-        t.prod(dim=axis).numpy(), np.prod(x, axis=axis), rtol=1e-5
-    )
+    np.testing.assert_allclose(t.prod(dim=axis).numpy(), np.prod(x, axis=axis), rtol=1e-5)
     np.testing.assert_array_equal(t.argmax(dim=axis).numpy(), np.argmax(x, axis=axis))
 
 

@@ -60,9 +60,7 @@ class _MiniGPT2Block(nn.Module):
         d_model = 768
         n_heads = 12
         self.ln1 = nn.LayerNorm(d_model)
-        self.attn = nn.MultiheadAttention(
-            embed_dim=d_model, num_heads=n_heads, batch_first=True
-        )
+        self.attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, batch_first=True)
         self.ln2 = nn.LayerNorm(d_model)
         self.mlp = nn.Sequential(
             nn.Linear(d_model, d_model * 4),

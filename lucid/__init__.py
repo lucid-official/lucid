@@ -450,9 +450,7 @@ def _load_predicates() -> dict[str, object]:
     }
     _FLOAT_DTYPES = frozenset(e for e, k in _KINDS.items() if k == "float")
     _COMPLEX_DTYPES = frozenset(e for e, k in _KINDS.items() if k == "complex")
-    _SIGNED_DTYPES = frozenset(
-        e for e, k in _KINDS.items() if k in ("float", "complex", "int")
-    )
+    _SIGNED_DTYPES = frozenset(e for e, k in _KINDS.items() if k in ("float", "complex", "int"))
 
     def is_tensor(obj: object, /) -> _py_bool:
         """Return True if *obj* is a lucid Tensor."""
@@ -554,9 +552,7 @@ def _load_method_aliases() -> dict[str, object]:
         # forwarding body accepts, for ``inspect`` and ``help()``.
         own = inspect.signature(getattr(_T, method_name))
         first, *rest = own.parameters.values()
-        _fn.__dict__["__signature__"] = own.replace(
-            parameters=[first.replace(name="input"), *rest]
-        )
+        _fn.__dict__["__signature__"] = own.replace(parameters=[first.replace(name="input"), *rest])
         return _fn
 
     return {n: _make(n) for n in _METHOD_ALIASES}

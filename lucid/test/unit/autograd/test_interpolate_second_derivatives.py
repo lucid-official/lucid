@@ -29,9 +29,7 @@ CASES = [
 ]
 
 
-def _resize(
-    x: lucid.Tensor, size: tuple[int, ...], mode: str, align: bool
-) -> lucid.Tensor:
+def _resize(x: lucid.Tensor, size: tuple[int, ...], mode: str, align: bool) -> lucid.Tensor:
     return F.interpolate(x, size=size, mode=mode, align_corners=align)
 
 
@@ -61,12 +59,8 @@ def test_the_second_derivative_matches_central_differences(
     (hvp,) = grad((g * lucid.tensor(u)).sum(), [x])
     e = rng.standard_normal(shape)
     h = 1e-6
-    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (
-        2 * h
-    )
-    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(
-        numeric, rel=1e-6, abs=1e-6
-    )
+    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (2 * h)
+    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(numeric, rel=1e-6, abs=1e-6)
     assert np.abs(np.asarray(hvp.numpy())).max() > 1e-3  # not a zero that passes
 
 

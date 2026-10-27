@@ -109,21 +109,13 @@ class LanguageModelConfig(ModelConfig):
         if self.vocab_size <= 0:
             raise ValueError(f"vocab_size must be positive, got {self.vocab_size}")
         if self.num_hidden_layers <= 0:
-            raise ValueError(
-                f"num_hidden_layers must be positive, got {self.num_hidden_layers}"
-            )
+            raise ValueError(f"num_hidden_layers must be positive, got {self.num_hidden_layers}")
         if not 0.0 <= self.hidden_dropout < 1.0:
-            raise ValueError(
-                f"hidden_dropout must be in [0, 1), got {self.hidden_dropout}"
-            )
+            raise ValueError(f"hidden_dropout must be in [0, 1), got {self.hidden_dropout}")
         if not 0.0 <= self.attention_dropout < 1.0:
-            raise ValueError(
-                f"attention_dropout must be in [0, 1), got {self.attention_dropout}"
-            )
+            raise ValueError(f"attention_dropout must be in [0, 1), got {self.attention_dropout}")
         if self.layer_norm_eps <= 0.0:
-            raise ValueError(
-                f"layer_norm_eps must be positive, got {self.layer_norm_eps}"
-            )
+            raise ValueError(f"layer_norm_eps must be positive, got {self.layer_norm_eps}")
 
 
 # Common config field aliases — keeps the import surface small.

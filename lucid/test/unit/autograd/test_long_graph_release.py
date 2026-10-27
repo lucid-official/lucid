@@ -77,8 +77,7 @@ def _run(body: str) -> tuple[object, str]:
         check=False,
     )
     assert proc.returncode == 0 and "survived" in proc.stdout, (
-        f"exit {proc.returncode} (negative: killed by that signal)\n"
-        f"{proc.stderr[-3000:]}"
+        f"exit {proc.returncode} (negative: killed by that signal)\n" f"{proc.stderr[-3000:]}"
     )
     result = json.loads(proc.stdout.splitlines()[0])
     assert result is not None, proc.stderr[-3000:]

@@ -84,9 +84,7 @@ def _pad_rows(x: Tensor, total: int) -> Tensor:
     bs = int(x.shape[0])
     if bs >= total:
         return x
-    pad = zeros(
-        total - bs, *tuple(int(v) for v in x.shape[1:]), device=x.device, dtype=x.dtype
-    )
+    pad = zeros(total - bs, *tuple(int(v) for v in x.shape[1:]), device=x.device, dtype=x.dtype)
     return _lucid.cat([x, pad], 0)
 
 
@@ -115,9 +113,7 @@ def _gru_step(x: Tensor, h: Tensor, w: _Weights) -> Tensor:
 def _check_nonlinearity(nonlinearity: str) -> str:
     """Refuse an activation the Elman recurrence does not have."""
     if nonlinearity not in ("tanh", "relu"):
-        raise ValueError(
-            f"Unknown nonlinearity {nonlinearity!r}. Select from 'tanh' or 'relu'."
-        )
+        raise ValueError(f"Unknown nonlinearity {nonlinearity!r}. Select from 'tanh' or 'relu'.")
     return nonlinearity
 
 
@@ -221,9 +217,7 @@ class _FlatRecurrent(Module):
                 outs: list[Tensor] = []
                 for t in range(T - 1, -1, -1) if direction == 1 else range(T):
                     bs = batch_sizes[t]
-                    step = self._step(
-                        _slice(inp[t], slice(0, bs)), _slice(h, slice(0, bs)), w
-                    )
+                    step = self._step(_slice(inp[t], slice(0, bs)), _slice(h, slice(0, bs)), w)
                     h = _carry(h, step, bs)
                     outs.append(_pad_rows(step, B))
                 if direction == 1:
@@ -231,9 +225,7 @@ class _FlatRecurrent(Module):
                 h_n.append(h)
                 dir_outs.append(outs)
             if dirs == 2:
-                layer_out = stack(
-                    [_cat_last(dir_outs[0][t], dir_outs[1][t]) for t in range(T)], 0
-                )
+                layer_out = stack([_cat_last(dir_outs[0][t], dir_outs[1][t]) for t in range(T)], 0)
             else:
                 layer_out = stack(dir_outs[0], 0)
             inp = _inter_layer_dropout(
@@ -463,8 +455,7 @@ class LSTM(Module):
             raise ValueError(f"proj_size must be >= 0, got {proj_size}")
         if proj_size >= hidden_size and proj_size > 0:
             raise ValueError(
-                f"proj_size ({proj_size}) must be smaller than hidden_size "
-                f"({hidden_size})"
+                f"proj_size ({proj_size}) must be smaller than hidden_size " f"({hidden_size})"
             )
         # proj_size > 0 with multi-layer / bidirectional configurations is
         # composed in Python by looping single-layer engine calls — see
@@ -491,14 +482,10 @@ class LSTM(Module):
         for layer in range(num_layers):
             for direction in range(num_directions):
                 suffix: str = "_reverse" if direction == 1 else ""
-                layer_input: int = (
-                    input_size if layer == 0 else rec_size * num_directions
-                )
+                layer_input: int = input_size if layer == 0 else rec_size * num_directions
                 self.register_parameter(
                     f"weight_ih_l{layer}{suffix}",
-                    Parameter(
-                        empty(gate_size, layer_input, dtype=dtype, device=device)
-                    ),
+                    Parameter(empty(gate_size, layer_input, dtype=dtype, device=device)),
                 )
                 self.register_parameter(
                     f"weight_hh_l{layer}{suffix}",
@@ -517,9 +504,7 @@ class LSTM(Module):
                     # Projection W_hr: (proj_size × hidden_size).
                     self.register_parameter(
                         f"weight_hr_l{layer}{suffix}",
-                        Parameter(
-                            empty(proj_size, hidden_size, dtype=dtype, device=device)
-                        ),
+                        Parameter(empty(proj_size, hidden_size, dtype=dtype, device=device)),
                     )
         self._init_weights()
 
@@ -546,15 +531,11 @@ class LSTM(Module):
         """
         # Reverse range [T-1, T-2, …, 0] built on the engine.
         T: int = int(x.shape[0])
-        rev_1d: Tensor = _lucid.arange(
-            T - 1, -1, -1, dtype=_lucid.int32, device=x.device
-        )
+        rev_1d: Tensor = _lucid.arange(T - 1, -1, -1, dtype=_lucid.int32, device=x.device)
         target_shape: list[int] = [1] * x.ndim
         target_shape[0] = T
         bcast_shape: list[int] = [int(s) for s in x.shape]
-        idx: Tensor = (
-            rev_1d.reshape(target_shape).broadcast_to(tuple(bcast_shape)).contiguous()
-        )
+        idx: Tensor = rev_1d.reshape(target_shape).broadcast_to(tuple(bcast_shape)).contiguous()
         return _lucid.gather(x, 0, idx)
 
     def _run_direction(
@@ -624,11 +605,7 @@ class LSTM(Module):
             blocks.append((t0, out))
 
         blocks.sort(key=lambda pair: pair[0])
-        stacked = (
-            blocks[0][1]
-            if len(blocks) == 1
-            else _lucid.cat([blk for _, blk in blocks], 0)
-        )
+        stacked = blocks[0][1] if len(blocks) == 1 else _lucid.cat([blk for _, blk in blocks], 0)
         return stacked, h, c
 
     def _run_single_layer_engine(
@@ -652,9 +629,7 @@ class LSTM(Module):
             biases = [param("bias_ih"), param("bias_hh")]
         else:
             # The engine requires every operand in the input's dtype.
-            zero_b = _C_engine.zeros(
-                [4 * self.hidden_size], x_impl.dtype, x_impl.device
-            )
+            zero_b = _C_engine.zeros([4 * self.hidden_size], x_impl.dtype, x_impl.device)
             biases = [zero_b, zero_b]
         weights = [param("weight_ih"), param("weight_hh"), *biases]
         if self.proj_size > 0:
@@ -861,12 +836,8 @@ class RNNCell(Module):
         self.hidden_size = hidden_size
         self.bias = bias
         self.nonlinearity = _check_nonlinearity(nonlinearity)
-        self.weight_ih = Parameter(
-            empty(hidden_size, input_size, dtype=dtype, device=device)
-        )
-        self.weight_hh = Parameter(
-            empty(hidden_size, hidden_size, dtype=dtype, device=device)
-        )
+        self.weight_ih = Parameter(empty(hidden_size, input_size, dtype=dtype, device=device))
+        self.weight_hh = Parameter(empty(hidden_size, hidden_size, dtype=dtype, device=device))
         self.bias_ih: Parameter | None = (
             Parameter(empty(hidden_size, dtype=dtype, device=device)) if bias else None
         )
@@ -897,18 +868,14 @@ class RNNCell(Module):
         Tensor or tuple of Tensor
             Output and (optionally) the new hidden state; see the class docstring.
         """
-        unbatched, x, (h0,) = _cell_batch(
-            "RNNCell", input, (("hx", hx),), self.hidden_size
-        )
+        unbatched, x, (h0,) = _cell_batch("RNNCell", input, (("hx", hx),), self.hidden_size)
         w = (self.weight_ih, self.weight_hh, self.bias_ih, self.bias_hh)
         return _cell_unbatch(unbatched, _rnn_step(x, h0, w, self.nonlinearity))
 
     @override
     def extra_repr(self) -> str:
         """Return a string representation of the layer's configuration."""
-        return (
-            f"{self.input_size}, {self.hidden_size}, nonlinearity={self.nonlinearity!r}"
-        )
+        return f"{self.input_size}, {self.hidden_size}, nonlinearity={self.nonlinearity!r}"
 
 
 class LSTMCell(Module):
@@ -1022,21 +989,13 @@ class LSTMCell(Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.bias = bias
-        self.weight_ih = Parameter(
-            empty(4 * hidden_size, input_size, dtype=dtype, device=device)
-        )
-        self.weight_hh = Parameter(
-            empty(4 * hidden_size, hidden_size, dtype=dtype, device=device)
-        )
+        self.weight_ih = Parameter(empty(4 * hidden_size, input_size, dtype=dtype, device=device))
+        self.weight_hh = Parameter(empty(4 * hidden_size, hidden_size, dtype=dtype, device=device))
         self.bias_ih: Parameter | None = (
-            Parameter(empty(4 * hidden_size, dtype=dtype, device=device))
-            if bias
-            else None
+            Parameter(empty(4 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
         self.bias_hh: Parameter | None = (
-            Parameter(empty(4 * hidden_size, dtype=dtype, device=device))
-            if bias
-            else None
+            Parameter(empty(4 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
         self._init_weights()
 
@@ -1194,21 +1153,13 @@ class GRUCell(Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.bias = bias
-        self.weight_ih = Parameter(
-            empty(3 * hidden_size, input_size, dtype=dtype, device=device)
-        )
-        self.weight_hh = Parameter(
-            empty(3 * hidden_size, hidden_size, dtype=dtype, device=device)
-        )
+        self.weight_ih = Parameter(empty(3 * hidden_size, input_size, dtype=dtype, device=device))
+        self.weight_hh = Parameter(empty(3 * hidden_size, hidden_size, dtype=dtype, device=device))
         self.bias_ih: Parameter | None = (
-            Parameter(empty(3 * hidden_size, dtype=dtype, device=device))
-            if bias
-            else None
+            Parameter(empty(3 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
         self.bias_hh: Parameter | None = (
-            Parameter(empty(3 * hidden_size, dtype=dtype, device=device))
-            if bias
-            else None
+            Parameter(empty(3 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
         self._init_weights()
 
@@ -1234,9 +1185,7 @@ class GRUCell(Module):
         Tensor or tuple of Tensor
             Output and (optionally) the new hidden state; see the class docstring.
         """
-        unbatched, x, (h0,) = _cell_batch(
-            "GRUCell", input, (("hx", hx),), self.hidden_size
-        )
+        unbatched, x, (h0,) = _cell_batch("GRUCell", input, (("hx", hx),), self.hidden_size)
         w = (self.weight_ih, self.weight_hh, self.bias_ih, self.bias_hh)
         return _cell_unbatch(unbatched, _gru_step(x, h0, w))
 

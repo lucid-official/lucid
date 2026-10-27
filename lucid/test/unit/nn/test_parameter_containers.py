@@ -91,9 +91,7 @@ def test_parameter_list_getitem_returns_none_for_a_cleared_slot():
 
 
 def test_parameter_list_iteration_includes_a_cleared_slot():
-    params = nn.ParameterList(
-        [nn.Parameter(lucid.zeros(2)), nn.Parameter(lucid.ones(2))]
-    )
+    params = nn.ParameterList([nn.Parameter(lucid.zeros(2)), nn.Parameter(lucid.ones(2))])
     params[0] = None
     seen = list(params)
     assert seen[0] is None

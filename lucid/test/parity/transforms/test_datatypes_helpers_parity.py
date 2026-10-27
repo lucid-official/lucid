@@ -44,9 +44,7 @@ pytest.importorskip("cv2")
 # ── helpers ─────────────────────────────────────────────────────────
 
 
-def _make_boxes(
-    coords_xyxy: list[list[float]], h: int = 100, w: int = 100
-) -> T.BoundingBoxes:
+def _make_boxes(coords_xyxy: list[list[float]], h: int = 100, w: int = 100) -> T.BoundingBoxes:
     """Build a ``BoundingBoxes`` (xyxy) on an ``(h, w)`` canvas."""
     return T.BoundingBoxes(lucid.tensor(coords_xyxy), "xyxy", (h, w))
 
@@ -65,23 +63,17 @@ class TestFlipBoxes:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = flip_boxes(boxes, horizontal=True)
         # x → W - x → (70, 20, 90, 40)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[70.0, 20.0, 90.0, 40.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[70.0, 20.0, 90.0, 40.0]], atol=1e-5)
         assert out.canvas_size == (100, 100)
 
     def test_vertical(self) -> None:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = flip_boxes(boxes, horizontal=False)
         # y → H - y → (10, 60, 30, 80)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[10.0, 60.0, 30.0, 80.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[10.0, 60.0, 30.0, 80.0]], atol=1e-5)
 
     def test_horizontal_multi(self) -> None:
-        boxes = _make_boxes(
-            [[0.0, 0.0, 10.0, 10.0], [50.0, 50.0, 80.0, 90.0]], h=100, w=100
-        )
+        boxes = _make_boxes([[0.0, 0.0, 10.0, 10.0], [50.0, 50.0, 80.0, 90.0]], h=100, w=100)
         out = flip_boxes(boxes, horizontal=True)
         expected = [[90.0, 0.0, 100.0, 10.0], [20.0, 50.0, 50.0, 90.0]]
         np.testing.assert_allclose(out.data.numpy(), expected, atol=1e-5)
@@ -95,18 +87,14 @@ class TestResizeBoxes:
     def test_double(self) -> None:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = resize_boxes(boxes, new_h=200, new_w=200)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 40.0, 60.0, 80.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 40.0, 60.0, 80.0]], atol=1e-5)
         assert out.canvas_size == (200, 200)
 
     def test_non_uniform(self) -> None:
         # 100x100 → 50x200: sx = 2.0, sy = 0.5
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = resize_boxes(boxes, new_h=50, new_w=200)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 10.0, 60.0, 20.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 10.0, 60.0, 20.0]], atol=1e-5)
         assert out.canvas_size == (50, 200)
 
 
@@ -118,9 +106,7 @@ class TestCropBoxes:
     def test_inside(self) -> None:
         boxes = _make_boxes([[20.0, 30.0, 50.0, 60.0]], h=100, w=100)
         out = crop_boxes(boxes, top=10, left=15, height=70, width=70)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[5.0, 20.0, 35.0, 50.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[5.0, 20.0, 35.0, 50.0]], atol=1e-5)
         assert out.canvas_size == (70, 70)
 
     def test_clipped(self) -> None:
@@ -128,9 +114,7 @@ class TestCropBoxes:
         boxes = _make_boxes([[5.0, 5.0, 60.0, 60.0]], h=100, w=100)
         out = crop_boxes(boxes, top=10, left=10, height=40, width=40)
         # raw shifted: (-5, -5, 50, 50) → clip to (0, 0, 40, 40)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[0.0, 0.0, 40.0, 40.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[0.0, 0.0, 40.0, 40.0]], atol=1e-5)
 
 
 # ── BBox: pad ───────────────────────────────────────────────────────
@@ -141,9 +125,7 @@ class TestPadBoxes:
     def test_translate(self) -> None:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = pad_boxes(boxes, left=5, top=8, new_h=108, new_w=110)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[15.0, 28.0, 35.0, 48.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[15.0, 28.0, 35.0, 48.0]], atol=1e-5)
         assert out.canvas_size == (108, 110)
 
 
@@ -156,9 +138,7 @@ class TestTransposeBoxes:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=80)
         out = transpose_boxes(boxes)
         # (x1, y1, x2, y2) → (y1, x1, y2, x2); canvas (H, W) → (W, H)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 10.0, 40.0, 30.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 10.0, 40.0, 30.0]], atol=1e-5)
         assert out.canvas_size == (80, 100)
 
 
@@ -170,9 +150,7 @@ class TestRot90Boxes:
     def test_k0_noop(self) -> None:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = rot90_boxes(boxes, k=0)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5)
 
     def test_k1_ccw(self) -> None:
         # H=100, W=100. CCW one quarter:
@@ -180,9 +158,7 @@ class TestRot90Boxes:
         # = (20, 69, 40, 89)
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         out = rot90_boxes(boxes, k=1)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 69.0, 40.0, 89.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 69.0, 40.0, 89.0]], atol=1e-5)
         assert out.canvas_size == (100, 100)
 
     def test_k2_full_round_trip(self) -> None:
@@ -195,9 +171,7 @@ class TestRot90Boxes:
     def test_k4_identity(self) -> None:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=80)
         out = rot90_boxes(boxes, k=4)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5)
         assert out.canvas_size == (100, 80)
 
 
@@ -210,18 +184,14 @@ class TestAffineBoxes:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         eye = lucid.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
         out = affine_boxes(boxes, eye, out_hw=(100, 100))
-        np.testing.assert_allclose(
-            out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[10.0, 20.0, 30.0, 40.0]], atol=1e-5)
 
     def test_translation(self) -> None:
         # Pure translation by (+5, +8); enlarge output canvas so no clip.
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         mat = lucid.tensor([[1.0, 0.0, 5.0], [0.0, 1.0, 8.0], [0.0, 0.0, 1.0]])
         out = affine_boxes(boxes, mat, out_hw=(200, 200))
-        np.testing.assert_allclose(
-            out.data.numpy(), [[15.0, 28.0, 35.0, 48.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[15.0, 28.0, 35.0, 48.0]], atol=1e-5)
         assert out.canvas_size == (200, 200)
 
     def test_90deg_rotation(self) -> None:
@@ -233,9 +203,7 @@ class TestAffineBoxes:
         mat = lucid.tensor([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
         out = affine_boxes(boxes, mat, out_hw=(100, 100))
         # x clipped to 0; y unchanged
-        np.testing.assert_allclose(
-            out.data.numpy(), [[0.0, 10.0, 0.0, 30.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[0.0, 10.0, 0.0, 30.0]], atol=1e-5)
 
     def test_rotation_via_helper(self) -> None:
         # ``rotation_matrix(angle_deg=90)`` follows the image-space CW
@@ -250,9 +218,7 @@ class TestAffineBoxes:
         boxes = _make_boxes([[10.0, 20.0, 30.0, 40.0]], h=100, w=100)
         mat = TF.rotation_matrix(angle_deg=90.0, cx=49.5, cy=49.5)
         out = affine_boxes(boxes, mat, out_hw=(100, 100))
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 69.0, 40.0, 89.0]], atol=1e-4
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 69.0, 40.0, 89.0]], atol=1e-4)
 
 
 # ── Keypoints: flip ─────────────────────────────────────────────────
@@ -305,9 +271,7 @@ class TestCropKeypoints:
         # their (possibly negative) coords.
         kps = _make_kps([[20.0, 30.0], [5.0, 5.0]], h=100, w=100)
         out = crop_keypoints(kps, top=10, left=15, height=70, width=70)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[5.0, 20.0], [-10.0, -5.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[5.0, 20.0], [-10.0, -5.0]], atol=1e-5)
         assert out.canvas_size == (70, 70)
 
 
@@ -337,9 +301,7 @@ class TestTransposeKeypoints:
     def test_extras_preserved(self) -> None:
         kps = _make_kps([[10.0, 20.0, 0.5, 3.0]], h=100, w=80)
         out = transpose_keypoints(kps)
-        np.testing.assert_allclose(
-            out.data.numpy(), [[20.0, 10.0, 0.5, 3.0]], atol=1e-5
-        )
+        np.testing.assert_allclose(out.data.numpy(), [[20.0, 10.0, 0.5, 3.0]], atol=1e-5)
 
 
 # ── Keypoints: rot90 ────────────────────────────────────────────────

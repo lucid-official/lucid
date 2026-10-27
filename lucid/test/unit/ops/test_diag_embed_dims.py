@@ -16,11 +16,7 @@ import lucid
 
 
 def _dim_pairs(nd: int) -> list[tuple[int, int]]:
-    return [
-        (d1, d2)
-        for d1, d2 in itertools.permutations(range(-nd, nd), 2)
-        if (d1 - d2) % nd
-    ]
+    return [(d1, d2) for d1, d2 in itertools.permutations(range(-nd, nd), 2) if (d1 - d2) % nd]
 
 
 @pytest.mark.parametrize("shape", [(3,), (2, 3), (2, 2, 3)], ids=str)

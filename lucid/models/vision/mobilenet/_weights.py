@@ -49,10 +49,7 @@ class MobileNetWeights(WeightsEnum):
     """
 
     RA4_E3600_R224_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/mobilenet-v1/resolve/main/"
-            "RA4_E3600_R224_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/mobilenet-v1/resolve/main/" "RA4_E3600_R224_IN1K/model.safetensors"),
         sha256="967fd814112842854b83875655502eacb87ed18dd808566eb84e686c058096aa",
         num_classes=1000,
         transforms=_PRESET,

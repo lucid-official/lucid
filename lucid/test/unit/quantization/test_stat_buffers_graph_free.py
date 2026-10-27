@@ -59,9 +59,7 @@ _STATEFUL: dict[str, Callable[[], nn.Module]] = {
         Q.MovingAveragePerChannelMinMaxObserver, **_PER_CHANNEL
     ),
     "FakeQuantize[Histogram]": _fq(Q.HistogramObserver, bins=64),
-    "FakeQuantize[FixedQParams]": _fq(
-        Q.FixedQParamsObserver, scale=1.0 / 256.0, zero_point=0
-    ),
+    "FakeQuantize[FixedQParams]": _fq(Q.FixedQParamsObserver, scale=1.0 / 256.0, zero_point=0),
 }
 
 
@@ -72,9 +70,7 @@ def _qat_linear() -> nn.Module:
 
 def _qat_conv_bn() -> nn.Module:
     conv = nn.Conv1d(_SHAPE[0], 8, 3, padding=1, bias=False)
-    return nniqat.ConvBnReLU1d(
-        conv, nn.BatchNorm1d(8), qconfig=Q.get_default_qat_qconfig()
-    )
+    return nniqat.ConvBnReLU1d(conv, nn.BatchNorm1d(8), qconfig=Q.get_default_qat_qconfig())
 
 
 _MODELS: dict[str, Callable[[], nn.Module]] = {
@@ -127,8 +123,7 @@ def test_training_steps_keep_no_activation_alive(name: str, device: str) -> None
     grown = live_bytes(device) - before
     one_activation = 4 * _SHAPE[0] * _SHAPE[1]
     assert grown < one_activation, (
-        f"{name}: {_STEPS} steps left {grown} bytes alive "
-        f"(one activation is {one_activation})"
+        f"{name}: {_STEPS} steps left {grown} bytes alive " f"(one activation is {one_activation})"
     )
 
 
@@ -148,18 +143,14 @@ def _ref_cases(ref: Any) -> dict[str, tuple[Callable[[], nn.Module], Any]]:
         "MinMaxObserver": (Q.MinMaxObserver, lambda: obs.MinMaxObserver(**per_tensor)),
         "MovingAverageMinMaxObserver": (
             lambda: Q.MovingAverageMinMaxObserver(averaging_constant=0.1),
-            lambda: obs.MovingAverageMinMaxObserver(
-                averaging_constant=0.1, **per_tensor
-            ),
+            lambda: obs.MovingAverageMinMaxObserver(averaging_constant=0.1, **per_tensor),
         ),
         "PerChannelMinMaxObserver": (
             lambda: Q.PerChannelMinMaxObserver(ch_axis=1),
             lambda: obs.PerChannelMinMaxObserver(**per_channel),
         ),
         "MovingAveragePerChannelMinMaxObserver": (
-            lambda: Q.MovingAveragePerChannelMinMaxObserver(
-                ch_axis=1, averaging_constant=0.1
-            ),
+            lambda: Q.MovingAveragePerChannelMinMaxObserver(ch_axis=1, averaging_constant=0.1),
             lambda: obs.MovingAveragePerChannelMinMaxObserver(
                 averaging_constant=0.1, **per_channel
             ),

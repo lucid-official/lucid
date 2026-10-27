@@ -307,9 +307,7 @@ class Exponential(ExponentialFamily):
         instead.
         """
         below = value < 0.0
-        return lucid.where(
-            below, lucid.zeros_like(value), 1.0 - (-self.rate * value).exp()
-        )
+        return lucid.where(below, lucid.zeros_like(value), 1.0 - (-self.rate * value).exp())
 
     @override
     def icdf(self, value: Tensor) -> Tensor:

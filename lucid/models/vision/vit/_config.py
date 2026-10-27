@@ -182,9 +182,7 @@ class ViTConfig(ModelConfig):
 
     def __post_init__(self) -> None:
         if self.classifier not in ("token", "gap"):
-            raise ValueError(
-                f"classifier must be 'token' or 'gap', got {self.classifier!r}"
-            )
+            raise ValueError(f"classifier must be 'token' or 'gap', got {self.classifier!r}")
         if self.representation_size is not None and self.representation_size <= 0:
             raise ValueError(
                 "representation_size is the width of the pre-logits hidden "

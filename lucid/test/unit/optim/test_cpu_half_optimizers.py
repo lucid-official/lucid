@@ -105,9 +105,7 @@ _HALF_DTYPES = [
 
 @pytest.mark.parametrize("dtype, rtol, atol", _HALF_DTYPES)
 def test_sgd_cpu_half_repro(dtype: lucid.dtype, rtol: float, atol: float) -> None:
-    p = nn.Parameter(
-        lucid.tensor([1.0, 2.0, 3.0], dtype=dtype, device="cpu", requires_grad=True)
-    )
+    p = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], dtype=dtype, device="cpu", requires_grad=True))
     loss = (p * 2.0).sum()
     loss.backward()
     optim.SGD([p], lr=0.1).step()

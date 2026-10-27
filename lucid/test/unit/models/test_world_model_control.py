@@ -306,9 +306,7 @@ class TestDiscountHeadEndToEnd:
         assert out.behavior is not None and out.behavior.imagined_pcont is not None
 
         model.backward(out)
-        grads = [
-            p.grad for p in model.dreamer.pcont_head.parameters() if p.grad is not None
-        ]
+        grads = [p.grad for p in model.dreamer.pcont_head.parameters() if p.grad is not None]
         assert grads and sum(float(g.abs().sum().item()) for g in grads) > 0
 
     def test_a_truncating_environment_leaves_the_discount_alone(self) -> None:
@@ -478,8 +476,7 @@ class TestPendulumEnvironment:
         """
         env = Pendulum()
         best = max(
-            rollout(env, _FixedAction(lucid.tensor([v])))[1]
-            for v in (-1.0, -0.5, 0.0, 0.5, 1.0)
+            rollout(env, _FixedAction(lucid.tensor([v])))[1] for v in (-1.0, -0.5, 0.0, 0.5, 1.0)
         )
         oracle = rollout(env, _PendulumOracle(env))[1]
         assert oracle > 5.0 * best
@@ -522,9 +519,7 @@ class TestPendulumEnvironment:
         assert isinstance(total, float)
 
     @pytest.mark.parametrize("torque", [0.0, 1.0, 1.5])
-    def test_it_rejects_a_torque_that_removes_the_challenge(
-        self, torque: float
-    ) -> None:
+    def test_it_rejects_a_torque_that_removes_the_challenge(self, torque: float) -> None:
         with pytest.raises(ValueError):
             Pendulum(torque=torque)
 
@@ -641,9 +636,7 @@ class TestDreamerV3EndToEnd:
             ("value", model.value_parameters()),
             ("actor", model.actor_parameters()),
         ):
-            total = sum(
-                float(p.grad.abs().sum().item()) for p in group if p.grad is not None
-            )
+            total = sum(float(p.grad.abs().sum().item()) for p in group if p.grad is not None)
             assert total > 0.0, f"{name} received no gradient"
 
     def test_the_reward_head_calibrates_to_the_task(self) -> None:
@@ -835,9 +828,7 @@ class TestTheDynamicsGradientCanLearn:
         action = actor.distribution(feature).rsample()
         action[..., 0].mean().backward()
         total = sum(
-            float((p.grad**2).sum().item())
-            for p in actor.parameters()
-            if p.grad is not None
+            float((p.grad**2).sum().item()) for p in actor.parameters() if p.grad is not None
         )
         assert total > 0.0, "no gradient reached the actor through rsample()"
 
@@ -860,8 +851,7 @@ class TestTheDynamicsGradientCanLearn:
             opt.step()
         after = self._mode(actor, feature)
         assert after > before + 0.5, (
-            f"the mode did not climb the pathwise score: "
-            f"{before:+.4f} -> {after:+.4f}"
+            f"the mode did not climb the pathwise score: " f"{before:+.4f} -> {after:+.4f}"
         )
         assert after > 0.9, f"did not approach the optimum: {after:+.4f}"
 
@@ -935,8 +925,7 @@ class TestTheActorObjectiveCanLearn:
     def test_a_continuous_policy_climbs(self) -> None:
         before, after = self._ascend(discrete=False)
         assert after > before + 0.5, (
-            f"the mode did not move toward the paid action: "
-            f"{before:+.4f} -> {after:+.4f}"
+            f"the mode did not move toward the paid action: " f"{before:+.4f} -> {after:+.4f}"
         )
         assert after > 0.9, f"did not approach the optimum: {after:+.4f}"
 

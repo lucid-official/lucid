@@ -54,9 +54,7 @@ def test_dequant_linear_compiles_and_reacts_to_input() -> None:
     """in_features=48 (not group-divisible) → dequantize path → must compile."""
     lucid.manual_seed(0)
     x = lucid.randn(8, 48, device="metal")
-    cm = _prep_convert(
-        nn.Sequential(nn.Linear(48, 24), nn.ReLU(), nn.Linear(24, 12)), x
-    )
+    cm = _prep_convert(nn.Sequential(nn.Linear(48, 24), nn.ReLU(), nn.Linear(24, 12)), x)
     assert type(cm[0]).__name__ == "Linear"  # dequantize sidecar, not the MLX GEMM
 
     comp = lucid.compile(cm)

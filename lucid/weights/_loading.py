@@ -53,8 +53,7 @@ def resolve_weights(
     if weights is not None:
         if not isinstance(weights, enum_cls):
             raise TypeError(
-                f"resolve_weights: weights {weights!r} is not a member of "
-                f"{enum_cls.__name__}"
+                f"resolve_weights: weights {weights!r} is not a member of " f"{enum_cls.__name__}"
             )
         return weights
     if pretrained is False:
@@ -70,8 +69,7 @@ def resolve_weights(
                 f"{pretrained!r}. Available: {[m.name for m in enum_cls]}"
             ) from None
     raise TypeError(
-        f"resolve_weights: pretrained must be bool or str, got "
-        f"{type(pretrained).__name__}"
+        f"resolve_weights: pretrained must be bool or str, got " f"{type(pretrained).__name__}"
     )
 
 

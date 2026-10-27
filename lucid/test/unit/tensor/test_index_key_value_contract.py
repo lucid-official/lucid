@@ -123,9 +123,7 @@ def _run(lib: ModuleType, key: str, value: str, op: str, device: str) -> object:
 @pytest.mark.parametrize("op", ["get", "set"])
 @pytest.mark.parametrize("value", list(_VALUES))
 @pytest.mark.parametrize("key", list(_KEYS))
-def test_matches_the_reference(
-    ref: ModuleType, device: str, key: str, value: str, op: str
-) -> None:
+def test_matches_the_reference(ref: ModuleType, device: str, key: str, value: str, op: str) -> None:
     if value == "other-device-tensor" and not metal_available():
         pytest.skip("needs a second device")
     if op == "get" and value not in ("float", "complex"):
@@ -285,9 +283,7 @@ def test_pad_packed_sequence_backpropagates(device: str) -> None:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "key", [slice(None), Ellipsis, 0], ids=["slice", "ellipsis", "int"]
-)
+@pytest.mark.parametrize("key", [slice(None), Ellipsis, 0], ids=["slice", "ellipsis", "int"])
 @pytest.mark.parametrize("value", ["scalar", "tensor"])
 def test_a_constant_write_cuts_the_gradient(
     ref: ModuleType, device: str, key: object, value: str
@@ -340,11 +336,7 @@ def test_scalar_key_spellings_view_and_write_through_match_reference(
 ) -> None:
     def run(lib: ModuleType, dev: str) -> tuple[tuple[int, ...], object, object]:
         x = lib.arange(12.0, device=dev).reshape(3, 4)
-        make_t = (
-            (lambda v: _lucid_tensor(v).to(dev))
-            if lib is lucid
-            else (lambda v: lib.tensor(v))
-        )
+        make_t = (lambda v: _lucid_tensor(v).to(dev)) if lib is lucid else (lambda v: lib.tensor(v))
         v = x[_SCALAR_KEY_SPELLINGS[name](make_t)]
         read = v.tolist()
         v.add_(10.0)

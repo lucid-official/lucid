@@ -138,9 +138,7 @@ def test_the_module_and_its_states_are_freed(kind: str, mode: str, device: str) 
 
 @pytest.mark.parametrize("mode", _MODES)
 @pytest.mark.parametrize("kind", _KINDS)
-def test_one_module_called_many_times_holds_no_state(
-    kind: str, mode: str, device: str
-) -> None:
+def test_one_module_called_many_times_holds_no_state(kind: str, mode: str, device: str) -> None:
     with _global_hook(kind):
         module = _hooked_linear(kind, device)
         for _ in range(10):
@@ -354,13 +352,9 @@ def _hook_all(lib: ModuleType, lin: object, log: list[object]) -> None:
         return tuple(3.0 * g for g in grad_output)  # type: ignore[operator]
 
     def full_record(module: object, grad_input: object, grad_output: object) -> None:
-        log.append(
-            ["full", type(module).__name__, _plain(grad_input), _plain(grad_output)]
-        )
+        log.append(["full", type(module).__name__, _plain(grad_input), _plain(grad_output)])
 
-    def full_negate(
-        module: object, grad_input: tuple[object, ...], grad_output: object
-    ) -> object:
+    def full_negate(module: object, grad_input: tuple[object, ...], grad_output: object) -> object:
         del module, grad_output
         return tuple(None if g is None else -g for g in grad_input)  # type: ignore[operator]
 

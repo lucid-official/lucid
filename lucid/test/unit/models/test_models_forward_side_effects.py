@@ -117,17 +117,13 @@ def test_another_resolution_leaves_the_model_unchanged(
         _assert_refused_at_the_boundary(factory, refusal, str(height + _GROWTH))
 
 
-def _assert_refused_at_the_boundary(
-    factory: str, refusal: ValueError, size: str
-) -> None:
+def _assert_refused_at_the_boundary(factory: str, refusal: ValueError, size: str) -> None:
     # ``ShapeMismatch`` is a ValueError too, so the class alone does not tell
     # a refusal at the boundary from a crash inside the engine.
     assert not isinstance(
         refusal, _C_engine.LucidError
     ), f"{factory}: refused from inside the engine: {refusal}"
-    assert size in str(
-        refusal
-    ), f"{factory}: the refusal does not name the input size: {refusal}"
+    assert size in str(refusal), f"{factory}: the refusal does not name the input size: {refusal}"
 
 
 _GRID = {"sample_size": 8, "hidden_size": 32, "depth": 1, "num_heads": 4}

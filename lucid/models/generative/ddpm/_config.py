@@ -174,31 +174,21 @@ class DDPMConfig(DiffusionModelConfig):
         # Refused rather than derived: a config that names a width must be
         # the network it builds, and the value it was given is the one a
         # caller reads back (LCD-631).  DiT holds the same rule.
-        check_noise_prediction_channels(
-            self.in_channels, self.out_channels, self.learn_sigma
-        )
+        check_noise_prediction_channels(self.in_channels, self.out_channels, self.learn_sigma)
         if self.base_channels <= 0:
-            raise ValueError(
-                f"base_channels must be positive, got {self.base_channels}"
-            )
+            raise ValueError(f"base_channels must be positive, got {self.base_channels}")
         if not self.channel_mult:
             raise ValueError("channel_mult must have at least one stage")
         if any(m <= 0 for m in self.channel_mult):
-            raise ValueError(
-                f"channel_mult entries must be positive, got {self.channel_mult}"
-            )
+            raise ValueError(f"channel_mult entries must be positive, got {self.channel_mult}")
         if self.num_res_blocks <= 0:
-            raise ValueError(
-                f"num_res_blocks must be positive, got {self.num_res_blocks}"
-            )
+            raise ValueError(f"num_res_blocks must be positive, got {self.num_res_blocks}")
         if self.num_heads <= 0:
             raise ValueError(f"num_heads must be positive, got {self.num_heads}")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError(f"dropout must be in [0, 1), got {self.dropout}")
         if self.resnet_groups <= 0:
-            raise ValueError(
-                f"resnet_groups must be positive, got {self.resnet_groups}"
-            )
+            raise ValueError(f"resnet_groups must be positive, got {self.resnet_groups}")
         if self.vlb_weight < 0.0:
             raise ValueError(f"vlb_weight must be non-negative, got {self.vlb_weight}")
 

@@ -28,9 +28,7 @@ pytestmark = pytest.mark.skipif(
 
 
 class TestFlexibleBatch:
-    def test_every_enumerated_batch_size_runs_and_agrees(
-        self, tmp_path: object
-    ) -> None:
+    def test_every_enumerated_batch_size_runs_and_agrees(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         sizes = (1, 2, 4)
         exported = cml.export(
@@ -65,9 +63,7 @@ class TestFlexibleBatch:
         finally:
             exported.close()
 
-    def test_flexibility_does_not_cost_the_neural_engine(
-        self, tmp_path: object
-    ) -> None:
+    def test_flexibility_does_not_cost_the_neural_engine(self, tmp_path: object) -> None:
         """Worth asserting: a flexible package that fell back to the CPU
         would still be correct, and would quietly lose the reason this
         subsystem exists."""
@@ -211,9 +207,7 @@ class TestShapeRange:
         finally:
             exported.close()
 
-    def test_a_transposed_convolution_infers_its_own_output_size(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_transposed_convolution_infers_its_own_output_size(self, tmp_path: object) -> None:
         """U-Net's decoder is the case that made this necessary.
 
         A transposed convolution's `output_shape` disambiguates a result
@@ -269,9 +263,7 @@ class TestShapeRange:
 
 
 class TestShapeRangeRefusals:
-    def test_naming_both_kinds_of_flexibility_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_naming_both_kinds_of_flexibility_is_refused(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         with pytest.raises(ValueError, match="Give one"):
             cml.export(
@@ -282,9 +274,7 @@ class TestShapeRangeRefusals:
                 shape_range={0: (1, 8)},
             )
 
-    def test_an_example_outside_its_own_range_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_example_outside_its_own_range_is_refused(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         with pytest.raises(ValueError, match="outside the range"):
             cml.export(

@@ -47,12 +47,8 @@ def test_doctor_reports_failed_or_crashed_runtime(
     capsys: pytest.CaptureFixture[str],
     returncode: int,
 ) -> None:
-    def failed_probe(
-        *args: object, **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            ["python"], returncode, "", "native load failed"
-        )
+    def failed_probe(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(["python"], returncode, "", "native load failed")
 
     monkeypatch.setattr(doctor.subprocess, "run", failed_probe)
     assert doctor.main(["--json"]) == 1
@@ -68,9 +64,7 @@ def test_doctor_reports_hung_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
         raise subprocess.TimeoutExpired("python", 0.1)
 
     monkeypatch.setattr(doctor.subprocess, "run", hung_probe)
-    runtime = next(
-        check for check in doctor.diagnose(0.1) if check["name"] == "runtime"
-    )
+    runtime = next(check for check in doctor.diagnose(0.1) if check["name"] == "runtime")
     assert runtime["status"] == "error"
     assert "timed out" in runtime["detail"]
 
@@ -119,9 +113,7 @@ def test_an_engine_on_another_mlx_names_the_rebuild(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def probe(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            ["python"], 0, '{"mlx_runtime": "0.32.0"}', ""
-        )
+        return subprocess.CompletedProcess(["python"], 0, '{"mlx_runtime": "0.32.0"}', "")
 
     monkeypatch.setattr(doctor.subprocess, "run", probe)
     check = _named(doctor._runtime_checks(_PIN, 1.0), "mlx_runtime")
@@ -139,13 +131,9 @@ def test_a_missing_cache_entry_names_fetch_mlx(
     assert "tools/fetch_mlx.py" in check["detail"]
 
 
-def test_a_broken_engine_link_is_an_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_a_broken_engine_link_is_an_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("LUCID_MLX_CACHE", str(tmp_path))
-    monkeypatch.setattr(
-        doctor.check_engine_link, "default_engine", lambda: tmp_path / "engine.so"
-    )
+    monkeypatch.setattr(doctor.check_engine_link, "default_engine", lambda: tmp_path / "engine.so")
     monkeypatch.setattr(
         doctor.check_engine_link,
         "check",

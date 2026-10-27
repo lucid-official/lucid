@@ -102,13 +102,9 @@ class TestConvGroupedParity:
         ],
         ids=["g2", "g4", "depthwise"],
     )
-    def test_conv2d_grouped_forward(
-        self, ref: Any, in_ch: int, out_ch: int, groups: int
-    ) -> None:
+    def test_conv2d_grouped_forward(self, ref: Any, in_ch: int, out_ch: int, groups: int) -> None:
         np.random.seed(in_ch * 31 + groups)
-        w = np.random.standard_normal((out_ch, in_ch // groups, 3, 3)).astype(
-            np.float32
-        )
+        w = np.random.standard_normal((out_ch, in_ch // groups, 3, 3)).astype(np.float32)
         b = np.random.standard_normal((out_ch,)).astype(np.float32)
         x = np.random.standard_normal((2, in_ch, 8, 8)).astype(np.float32)
 
@@ -138,13 +134,9 @@ class TestConvGroupedParity:
         ],
         ids=["g2", "g4", "depthwise"],
     )
-    def test_conv2d_grouped_backward(
-        self, ref: Any, in_ch: int, out_ch: int, groups: int
-    ) -> None:
+    def test_conv2d_grouped_backward(self, ref: Any, in_ch: int, out_ch: int, groups: int) -> None:
         np.random.seed(in_ch * 17 + groups + 1)
-        w = np.random.standard_normal((out_ch, in_ch // groups, 3, 3)).astype(
-            np.float32
-        )
+        w = np.random.standard_normal((out_ch, in_ch // groups, 3, 3)).astype(np.float32)
         b = np.random.standard_normal((out_ch,)).astype(np.float32)
         x = np.random.standard_normal((2, in_ch, 8, 8)).astype(np.float32)
 

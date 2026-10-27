@@ -47,9 +47,7 @@ def _written(tracer: Tracer) -> list[tuple[int, object]]:
     return [(int(tid), impl) for tid, impl in tracer.outside_writes()]
 
 
-def outside_writes(
-    tracer: Tracer, arguments: set[int]
-) -> tuple[list[int], list[object]] | str:
+def outside_writes(tracer: Tracer, arguments: set[int]) -> tuple[list[int], list[object]] | str:
     """Put the written tensors back; return what the executable must carry.
 
     Parameters

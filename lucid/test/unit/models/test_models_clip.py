@@ -181,8 +181,7 @@ class TestEmbeddingsAreNormalised:
         raw = model.visual(images)
         norms = (raw**2).sum(dim=-1) ** 0.5
         assert float((norms - 1.0).abs().max().item()) > 1e-3, (
-            "the image tower already emits unit rows, so normalising it "
-            "proves nothing"
+            "the image tower already emits unit rows, so normalising it " "proves nothing"
         )
 
 
@@ -194,9 +193,7 @@ class TestTheLossIsSymmetric:
     def test_chance_scores_log_n(self) -> None:
         """With no information the loss is ``ln N`` in both directions."""
         flat = lucid.zeros((4, 4))
-        assert float(_contrastive_loss(flat, flat).item()) == pytest.approx(
-            math.log(4.0), abs=1e-5
-        )
+        assert float(_contrastive_loss(flat, flat).item()) == pytest.approx(math.log(4.0), abs=1e-5)
 
     def test_it_reads_both_directions(self) -> None:
         """Guards the two above.
@@ -500,9 +497,7 @@ class TestItRunsOnBothDevices:
         assert out.loss is not None
         out.loss.backward()
         total = sum(
-            float(p.grad.abs().sum().item())
-            for p in model.parameters()
-            if p.grad is not None
+            float(p.grad.abs().sum().item()) for p in model.parameters() if p.grad is not None
         )
         assert total > 0.0
 
@@ -562,9 +557,7 @@ class TestItLearnsToMatch:
         return model, images, captions, pairs
 
     @staticmethod
-    def _rank1(
-        model: CLIPModel, images: lucid.Tensor, captions: lucid.Tensor, n: int
-    ) -> float:
+    def _rank1(model: CLIPModel, images: lucid.Tensor, captions: lucid.Tensor, n: int) -> float:
         with lucid.no_grad():
             predicted = model(images, captions).logits_per_image.argmax(dim=-1)
             target = lucid.arange(n, dtype=lucid.int64, device=predicted.device.type)
@@ -630,9 +623,7 @@ class TestWeightsAreDeclaredConsistently:
             ("clip_vit_large_14_336", CLIPViTLarge14_336Weights),
         ],
     )
-    def test_declared_parameter_count_matches_the_model(
-        self, factory: str, enum: object
-    ) -> None:
+    def test_declared_parameter_count_matches_the_model(self, factory: str, enum: object) -> None:
         entry = enum.DEFAULT.value  # type: ignore[attr-defined]
         assert entry.meta["num_params"] == M.create_model(factory).num_parameters()
 
@@ -718,18 +709,14 @@ class TestTheFastTokenizerAgrees:
             CLIPTokenizerFast(vocab=vocab, merges=merges),
         )
 
-    @pytest.mark.parametrize(
-        "text", ["ab", "cab", "a", "ab ab", "AB", "", "hello world 42!"]
-    )
+    @pytest.mark.parametrize("text", ["ab", "cab", "a", "ab ab", "AB", "", "hello world 42!"])
     def test_it_matches_the_python_path(self, text: str) -> None:
         slow, fast = self._pair()
         assert fast.encode(text) == slow.encode(text)
 
     def test_it_matches_through_framing(self) -> None:
         slow, fast = self._pair()
-        assert fast.tokenize("cab", context_length=6) == slow.tokenize(
-            "cab", context_length=6
-        )
+        assert fast.tokenize("cab", context_length=6) == slow.tokenize("cab", context_length=6)
 
     def test_the_fold_is_needed(self) -> None:
         """Guards the tests above.

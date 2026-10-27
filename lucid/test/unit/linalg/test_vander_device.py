@@ -20,12 +20,8 @@ DEVICES = ["cpu", "metal"]
 @pytest.mark.parametrize("n_cols", [None, 3, 5])
 def test_vander_matches_numpy(device, increasing, n_cols):
     values = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
-    got = LA.vander(
-        lucid.tensor(values, device=device), N=n_cols, increasing=increasing
-    )
-    ref = np.vander(
-        values, n_cols if n_cols is not None else len(values), increasing=increasing
-    )
+    got = LA.vander(lucid.tensor(values, device=device), N=n_cols, increasing=increasing)
+    ref = np.vander(values, n_cols if n_cols is not None else len(values), increasing=increasing)
     assert str(got.device) == f"device('{device}')"
     assert got.shape == ref.shape
     assert np.abs(got.numpy() - ref).max() / max(np.abs(ref).max(), 1.0) < 1e-6

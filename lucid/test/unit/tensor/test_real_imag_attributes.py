@@ -30,12 +30,8 @@ def test_imag_of_a_real_tensor_is_refused(device: str) -> None:
         lucid.imag(x)
 
 
-@pytest.mark.parametrize(
-    "dtype,part", [("complex64", "float32"), ("complex128", "float64")]
-)
-def test_the_parts_are_views_of_the_complex_storage(
-    device: str, dtype: str, part: str
-) -> None:
+@pytest.mark.parametrize("dtype,part", [("complex64", "float32"), ("complex128", "float64")])
+def test_the_parts_are_views_of_the_complex_storage(device: str, dtype: str, part: str) -> None:
     if device == "metal" and dtype == "complex128":
         pytest.skip("Metal holds no complex128")
     z = lucid.tensor([1 + 2j, 3 - 4j], dtype=getattr(lucid, dtype), device=device)

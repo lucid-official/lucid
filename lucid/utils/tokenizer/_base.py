@@ -426,10 +426,7 @@ class Tokenizer(ABC):
         skip_special_tokens: bool = True,
     ) -> list[str]:
         """Vectorised :meth:`decode` over a list of id sequences."""
-        return [
-            self.decode(ids, skip_special_tokens=skip_special_tokens)
-            for ids in batch_ids
-        ]
+        return [self.decode(ids, skip_special_tokens=skip_special_tokens) for ids in batch_ids]
 
     @property
     def post_processor(self) -> PostProcessor | None:
@@ -535,9 +532,7 @@ class Tokenizer(ABC):
             ]
 
         single = framed("A", head)
-        return TemplateProcessing._from_pieces(
-            single, single + framed("B", pair_head), specials
-        )
+        return TemplateProcessing._from_pieces(single, single + framed("B", pair_head), specials)
 
     def _build_inputs_with_special_tokens(
         self, ids: list[int], pair_ids: list[int] | None = None
@@ -632,10 +627,7 @@ class Tokenizer(ABC):
                         f"no room for the {self.num_special_tokens_to_add()} "
                         f"special tokens this tokenizer adds."
                     )
-                encoded = [
-                    self._build_inputs_with_special_tokens(ids[:budget])
-                    for ids in content
-                ]
+                encoded = [self._build_inputs_with_special_tokens(ids[:budget]) for ids in content]
             else:
                 encoded = [ids[:max_length] for ids in content]
         else:
@@ -662,8 +654,7 @@ class Tokenizer(ABC):
         elif padding == "max_length":
             if max_length is None:
                 raise ValueError(
-                    "Tokenizer.__call__: padding='max_length' requires "
-                    "max_length to be set."
+                    "Tokenizer.__call__: padding='max_length' requires " "max_length to be set."
                 )
             attention_masks = []
             for i, ids in enumerate(encoded):

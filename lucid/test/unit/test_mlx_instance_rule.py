@@ -111,9 +111,7 @@ def _python_files(under: Path) -> list[Path]:
 
 
 def _checked_files() -> list[Path]:
-    return [
-        p for p in _python_files(ROOT) if not any(p.is_relative_to(a) for a in _ALLOWED)
-    ]
+    return [p for p in _python_files(ROOT) if not any(p.is_relative_to(a) for a in _ALLOWED)]
 
 
 def test_only_interop_tests_load_the_mlx_package() -> None:
@@ -122,16 +120,13 @@ def test_only_interop_tests_load_the_mlx_package() -> None:
     hits = _scan(files)
     assert not hits, (
         "the `mlx` package is a different MLX instance from the engine's; use the "
-        "engine bindings (lucid._C.engine.metal_* / synchronize_gpu):\n"
-        + "\n".join(hits)
+        "engine bindings (lucid._C.engine.metal_* / synchronize_gpu):\n" + "\n".join(hits)
     )
 
 
 def test_the_rule_fires_where_mlx_is_loaded_on_purpose() -> None:
     """A positive control: without it, a scanner that never fires would pass."""
-    assert _scan(
-        _python_files(_INTEROP)
-    ), "the interop tests load mlx; the scan saw none"
+    assert _scan(_python_files(_INTEROP)), "the interop tests load mlx; the scan saw none"
 
 
 # Assembled so that this file does not trip its own rule.

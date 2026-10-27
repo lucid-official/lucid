@@ -15,9 +15,7 @@ import lucid.nn as nn
 
 
 class _Accumulates(nn.Module):
-    def forward(
-        self, x: lucid.Tensor, cache: lucid.Tensor
-    ) -> tuple[lucid.Tensor, lucid.Tensor]:
+    def forward(self, x: lucid.Tensor, cache: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
         cache.add_(x)
         return cache, cache * 2.0
 
@@ -47,9 +45,7 @@ def test_a_state_is_seeded_read_and_restored(stateful) -> None:  # type: ignore[
 
     stateful.predict(lucid.ones(1, 4))
     stateful.write_state(name, saved)  # back to the saved point
-    assert stateful.read_state(name).to(lucid.float32).tolist() == [
-        [11.0, 21.0, 31.0, 41.0]
-    ]
+    assert stateful.read_state(name).to(lucid.float32).tolist() == [[11.0, 21.0, 31.0, 41.0]]
 
 
 def test_a_value_at_an_offset_is_read_from_its_first_element(stateful) -> None:  # type: ignore[no-untyped-def]

@@ -52,9 +52,7 @@ def _parse_term(term: str, where: str) -> _Term:
             i += 3
             continue
         if c not in string.ascii_letters:
-            raise _invalid(
-                f"invalid subscript {c!r} in {where}; subscripts must be in [a-zA-Z]"
-            )
+            raise _invalid(f"invalid subscript {c!r} in {where}; subscripts must be in [a-zA-Z]")
         tokens.append(c)
         i += 1
     return tokens
@@ -93,9 +91,7 @@ def _expand(term: _Term, ell: list[str]) -> list[str]:
     return out
 
 
-def _output_labels(
-    rhs: str | None, labels: list[list[str]], ell: list[str]
-) -> list[str]:
+def _output_labels(rhs: str | None, labels: list[list[str]], ell: list[str]) -> list[str]:
     """Spell the output out — implicit form included — and validate it."""
     if rhs is None:
         counts: dict[str, int] = {}
@@ -136,9 +132,7 @@ def _take_diagonals(
     return impl, labels
 
 
-def _label_sizes(
-    impls: list[_C_engine.TensorImpl], labels: list[list[str]]
-) -> dict[str, int]:
+def _label_sizes(impls: list[_C_engine.TensorImpl], labels: list[list[str]]) -> dict[str, int]:
     """Broadcast each label's size across operands (equal, or 1)."""
     sizes: dict[str, int] = {}
     for k, (impl, term) in enumerate(zip(impls, labels, strict=True)):
@@ -202,17 +196,13 @@ def normalise(
     raw_terms = lhs.split(",")
     if len(raw_terms) != len(impls):
         raise _invalid(
-            f"the equation names {len(raw_terms)} operand(s) but "
-            f"{len(impls)} were given"
+            f"the equation names {len(raw_terms)} operand(s) but " f"{len(impls)} were given"
         )
     terms = [_parse_term(t, f"operand {k}") for k, t in enumerate(raw_terms)]
     ell_dims = _ellipsis_dims(terms, impls)
     used = {c for c in lhs + (rhs or "") if c in string.ascii_letters}
     ell = _fresh_labels(used, max(ell_dims, default=0))
-    labels = [
-        _expand(term, ell[len(ell) - n :])
-        for term, n in zip(terms, ell_dims, strict=True)
-    ]
+    labels = [_expand(term, ell[len(ell) - n :]) for term, n in zip(terms, ell_dims, strict=True)]
     out = _output_labels(rhs, labels, ell)
 
     diag = [

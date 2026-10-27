@@ -27,9 +27,7 @@ class HoleParams:
     holes: list[tuple[int, int, int, int]] = field(default_factory=list)
 
 
-def _apply_holes(
-    img: Tensor, holes: list[tuple[int, int, int, int]], fill_value: float
-) -> Tensor:
+def _apply_holes(img: Tensor, holes: list[tuple[int, int, int, int]], fill_value: float) -> Tensor:
     """Blank each ``(top, left, h, w)`` hole via a multiplicative keep-mask."""
     if not holes:
         return img
@@ -167,6 +165,4 @@ class GridDropout(PhotometricTransform[HoleParams]):
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"GridDropout(ratio={self.ratio}, unit_size={self.unit_size}, p={self.p})"
-        )
+        return f"GridDropout(ratio={self.ratio}, unit_size={self.unit_size}, p={self.p})"

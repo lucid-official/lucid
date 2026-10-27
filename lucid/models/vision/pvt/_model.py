@@ -70,9 +70,7 @@ class _OverlapPatchEmbed(nn.Module):
     ) -> None:
         super().__init__()
         padding = patch_size // 2
-        self.proj = nn.Conv2d(
-            in_ch, embed_dim, patch_size, stride=stride, padding=padding
-        )
+        self.proj = nn.Conv2d(in_ch, embed_dim, patch_size, stride=stride, padding=padding)
         self.norm = nn.LayerNorm(embed_dim)
 
     @override
@@ -153,9 +151,7 @@ class _SRAttention(nn.Module):
             # Linear SRA (§3.3/§3.5): pool to a fixed P x P grid, then a 1x1
             # projection + norm + GELU.  Independent of ``sr_ratio``, which
             # is why B2-Li uses P_i = 7 at every stage instead of R_i.
-            self.pool: nn.AdaptiveAvgPool2d | None = nn.AdaptiveAvgPool2d(
-                (pool_size, pool_size)
-            )
+            self.pool: nn.AdaptiveAvgPool2d | None = nn.AdaptiveAvgPool2d((pool_size, pool_size))
             self.sr = nn.Conv2d(dim, dim, 1, stride=1)
             self.norm = nn.LayerNorm(dim)
         elif sr_ratio > 1:

@@ -421,9 +421,7 @@ class MinMaxObserver(ObserverBase):
 
     @override
     def calculate_qparams(self) -> tuple[Tensor, Tensor]:
-        return calculate_qparams(
-            self.min_val, self.max_val, self.qscheme, self.qdtype, self.eps
-        )
+        return calculate_qparams(self.min_val, self.max_val, self.qscheme, self.qdtype, self.eps)
 
 
 class MovingAverageMinMaxObserver(MinMaxObserver):
@@ -545,12 +543,8 @@ class MovingAverageMinMaxObserver(MinMaxObserver):
         cur_min, cur_max = x.min(), x.max()
         # On the first batch (min == +inf) seed directly; else EMA toward cur.
         first = lucid.isinf(self.min_val)
-        new_min = lucid.where(
-            first, cur_min, self.min_val + c * (cur_min - self.min_val)
-        )
-        new_max = lucid.where(
-            first, cur_max, self.max_val + c * (cur_max - self.max_val)
-        )
+        new_min = lucid.where(first, cur_min, self.min_val + c * (cur_min - self.min_val))
+        new_max = lucid.where(first, cur_max, self.max_val + c * (cur_max - self.max_val))
         _store_running_stat(self, "min_val", new_min)
         _store_running_stat(self, "max_val", new_max)
         return x
@@ -698,9 +692,7 @@ class PerChannelMinMaxObserver(ObserverBase):
 
     @override
     def calculate_qparams(self) -> tuple[Tensor, Tensor]:
-        return calculate_qparams(
-            self.min_val, self.max_val, self.qscheme, self.qdtype, self.eps
-        )
+        return calculate_qparams(self.min_val, self.max_val, self.qscheme, self.qdtype, self.eps)
 
 
 class HistogramObserver(ObserverBase):
@@ -859,10 +851,7 @@ class HistogramObserver(ObserverBase):
         # raised ``bad_variant_access``, which is the latent bug becoming
         # visible rather than a new one.
         device = hist.device
-        centers = (
-            old_min
-            + (lucid.arange(bins, device=device).to(lucid.float32) + 0.5) * old_width
-        )
+        centers = old_min + (lucid.arange(bins, device=device).to(lucid.float32) + 0.5) * old_width
         # Clip in the float domain (CPU has no integer clamp kernel) then cast.
         raw = lucid.clip((centers - new_min) / new_width, 0.0, float(bins - 1))
         dst = raw.to(lucid.int64)
@@ -884,9 +873,7 @@ class HistogramObserver(ObserverBase):
             if new_min == old_min and new_max == old_max:
                 hist = hist + self.histogram
             else:
-                hist = hist + self._rebin(
-                    self.histogram, old_min, old_max, new_min, new_max
-                )
+                hist = hist + self._rebin(self.histogram, old_min, old_max, new_min, new_max)
         device = x.device
         _store_running_stat(self, "min_val", lucid.tensor(new_min, device=device))
         _store_running_stat(self, "max_val", lucid.tensor(new_max, device=device))

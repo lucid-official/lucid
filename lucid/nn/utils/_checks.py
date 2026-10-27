@@ -17,7 +17,5 @@ def _require_parameter(module: Module, name: str, action: str) -> Parameter:
         raise AttributeError(f"module has no parameter '{name}'")
     weight = getattr(module, name)
     if not isinstance(weight, Parameter):
-        raise TypeError(
-            f"'{name}' must be a Parameter to {action}, got {type(weight).__name__}"
-        )
+        raise TypeError(f"'{name}' must be a Parameter to {action}, got {type(weight).__name__}")
     return weight

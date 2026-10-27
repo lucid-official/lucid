@@ -112,9 +112,7 @@ def _stub_defs(path: Path, cls: str | None) -> dict[str, list[ast.FunctionDef]]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     body = tree.body
     if cls is not None:
-        body = next(
-            n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls
-        ).body
+        body = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls).body
     defs: dict[str, list[ast.FunctionDef]] = {}
     for node in body:
         if not isinstance(node, ast.FunctionDef) or node.name.startswith("_"):

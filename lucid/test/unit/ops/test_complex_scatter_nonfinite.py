@@ -30,12 +30,8 @@ Scatter = Callable[[lucid.Tensor, lucid.Tensor, lucid.Tensor], lucid.Tensor]
 _OPS: dict[str, Scatter] = {
     "scatter_add": lambda base, idx, src: base.scatter_add(0, idx, src),
     "index_add": lambda base, idx, src: lucid.index_add(base, 0, idx, src),
-    "scatter_reduce_sum": lambda base, idx, src: lucid.scatter_reduce(
-        base, 0, idx, src, "sum"
-    ),
-    "index_put_accumulate": lambda base, idx, src: base.index_put(
-        (idx,), src, accumulate=True
-    ),
+    "scatter_reduce_sum": lambda base, idx, src: lucid.scatter_reduce(base, 0, idx, src, "sum"),
+    "index_put_accumulate": lambda base, idx, src: base.index_put((idx,), src, accumulate=True),
 }
 
 

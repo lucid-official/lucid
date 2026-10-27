@@ -44,9 +44,7 @@ def _input(name: str) -> np.ndarray:
     return np.random.default_rng(128).standard_normal(shape).astype(np.float32) + 3.0
 
 
-def _kept_and_dropped(
-    name: str, x: np.ndarray, p: float
-) -> tuple[np.ndarray, np.ndarray]:
+def _kept_and_dropped(name: str, x: np.ndarray, p: float) -> tuple[np.ndarray, np.ndarray]:
     """The value each element takes if kept, and if dropped."""
     if "alpha" not in name:
         return x / (1.0 - p), np.zeros_like(x)
@@ -111,9 +109,7 @@ def test_the_module_runs_at_p_one(name: str, device: str) -> None:
 
 @pytest.mark.parametrize("p", [-0.1, 1.5, float("nan")])
 @pytest.mark.parametrize("name", list(_FUNCTIONS))
-def test_a_probability_outside_the_unit_interval_is_refused(
-    name: str, p: float
-) -> None:
+def test_a_probability_outside_the_unit_interval_is_refused(name: str, p: float) -> None:
     x = lucid.tensor(_input(name))
     for train in (True, False):
         with pytest.raises(ValueError, match="between 0 and 1"):

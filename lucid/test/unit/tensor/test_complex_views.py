@@ -55,9 +55,7 @@ def test_real_and_imag_are_strided_views_both_ways(device: str) -> None:
 
 @pytest.mark.parametrize("device", _DEVICES)
 def test_view_as_real_and_view_as_complex_share_storage_both_ways(device: str) -> None:
-    c = lucid.tensor(
-        [[1.0 + 2.0j, 3.0 + 4.0j], [5.0 + 6.0j, 7.0 + 8.0j]], device=device
-    )
+    c = lucid.tensor([[1.0 + 2.0j, 3.0 + 4.0j], [5.0 + 6.0j, 7.0 + 8.0j]], device=device)
     vr = lucid.view_as_real(c)
     assert vr.dtype == lucid.float32
     assert vr.shape == (2, 2, 2)

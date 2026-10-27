@@ -71,9 +71,7 @@ class DynamicCache(Cache):
         """Return the ``(keys, values)`` pair cached for ``layer_idx``."""
         if 0 <= layer_idx < len(self.key_cache):
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
-        raise KeyError(
-            f"Cache has {len(self.key_cache)} layers; no entry for layer {layer_idx}."
-        )
+        raise KeyError(f"Cache has {len(self.key_cache)} layers; no entry for layer {layer_idx}.")
 
     def __iter__(self) -> Iterator[tuple[Tensor, Tensor]]:
         """Iterate ``(keys, values)`` pairs in layer order."""
@@ -147,12 +145,8 @@ class DynamicCache(Cache):
         """Reindex every layer's keys/values along the batch dimension with
         ``beam_idx`` (in place) to keep beams aligned after a beam permutation."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, beam_idx
-            )
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, beam_idx
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
 
     def reset(self) -> None:
         """Empty the cache in place so the same object can be reused for a
@@ -176,17 +170,13 @@ class DynamicCache(Cache):
         self._seen_tokens = max_length
         for layer_idx in range(len(self.key_cache)):
             self.key_cache[layer_idx] = self.key_cache[layer_idx][:, :, :max_length, :]
-            self.value_cache[layer_idx] = self.value_cache[layer_idx][
-                :, :, :max_length, :
-            ]
+            self.value_cache[layer_idx] = self.value_cache[layer_idx][:, :, :max_length, :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat every batch row ``repeats`` times along the batch dimension
         (in place) — e.g. to fan one prompt out into ``repeats`` samples."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(
-                repeats, dim=0
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
             self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(
                 repeats, dim=0
             )
@@ -195,12 +185,8 @@ class DynamicCache(Cache):
         """Keep only the batch rows named by ``indices`` along the batch
         dimension (in place)."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, indices
-            )
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, indices
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, indices)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, indices)
 
     def to_legacy_cache(self) -> tuple[tuple[Tensor, Tensor], ...]:
         """Convert to the legacy ``tuple(tuple(key, value), ...)`` format.

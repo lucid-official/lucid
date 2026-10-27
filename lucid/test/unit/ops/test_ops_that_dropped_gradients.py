@@ -35,8 +35,7 @@ def _directional(f, x0: np.ndarray, rng: np.random.Generator) -> tuple[float, fl
     (g,) = grad(f(x), [x])
     e = rng.standard_normal(x0.shape)
     num = (
-        float(f(lucid.tensor(x0 + H * e)).item())
-        - float(f(lucid.tensor(x0 - H * e)).item())
+        float(f(lucid.tensor(x0 + H * e)).item()) - float(f(lucid.tensor(x0 - H * e)).item())
     ) / (2 * H)
     return float((g.numpy() * e).sum()), num
 
@@ -53,9 +52,7 @@ def test_masked_select_broadcasts_and_differentiates(device: str) -> None:
     assert y.tolist() == [0.0, 2.0, 3.0, 5.0]
     (y * lucid.tensor([1.0, 2.0, 3.0, 4.0], device=device)).sum().backward()
     assert x.grad.tolist() == [[1.0, 0.0, 2.0], [3.0, 0.0, 4.0]]
-    col = lucid.tensor(
-        np.array([[True, False, True], [False, True, True]]), device=device
-    )
+    col = lucid.tensor(np.array([[True, False, True], [False, True, True]]), device=device)
     assert lucid.masked_select(
         lucid.tensor(np.arange(3.0, dtype=np.float32), device=device), col
     ).tolist() == [0.0, 2.0, 1.0, 2.0]
@@ -88,9 +85,7 @@ def test_ctc_infeasible_alignment_is_infinite_unless_zeroed() -> None:
     short = [10, 7, 2]  # three labels cannot fit in two frames
     losses = F.ctc_loss(lp, lucid.tensor(padded), short, tl, reduction="none").numpy()
     assert np.isinf(losses[2]) and np.isfinite(losses[:2]).all()
-    zeroed = F.ctc_loss(
-        lp, lucid.tensor(padded), short, tl, reduction="none", zero_infinity=True
-    )
+    zeroed = F.ctc_loss(lp, lucid.tensor(padded), short, tl, reduction="none", zero_infinity=True)
     assert float(zeroed.numpy()[2]) == 0.0
 
 
@@ -168,9 +163,7 @@ def test_lstsq_is_the_minimum_norm_solution_and_differentiates(shape) -> None:  
     if shape != "rank-deficient":  # a rank change has no derivative
         w = rng.standard_normal(got.shape)
         analytic, numeric = _directional(
-            lambda x: (
-                lucid.linalg.lstsq(x, lucid.tensor(b))[0] * lucid.tensor(w)
-            ).sum(),
+            lambda x: (lucid.linalg.lstsq(x, lucid.tensor(b))[0] * lucid.tensor(w)).sum(),
             a,
             rng,
         )
@@ -205,26 +198,20 @@ def test_householder_product_differentiates_in_both_inputs() -> None:
     h0, t0 = rng.standard_normal((5, 3)), rng.uniform(0.2, 1.8, 3)
     w = rng.standard_normal((5, 3))
     np.testing.assert_allclose(
-        lucid.linalg.householder_product(
-            lucid.tensor(h0, requires_grad=True), lucid.tensor(t0)
-        )
+        lucid.linalg.householder_product(lucid.tensor(h0, requires_grad=True), lucid.tensor(t0))
         .detach()
         .numpy(),
         lucid.linalg.householder_product(lucid.tensor(h0), lucid.tensor(t0)).numpy(),
         atol=1e-12,
     )
     analytic, numeric = _directional(
-        lambda x: (
-            lucid.linalg.householder_product(x, lucid.tensor(t0)) * lucid.tensor(w)
-        ).sum(),
+        lambda x: (lucid.linalg.householder_product(x, lucid.tensor(t0)) * lucid.tensor(w)).sum(),
         h0,
         rng,
     )
     assert analytic == pytest.approx(numeric, rel=1e-6, abs=1e-8)
     analytic, numeric = _directional(
-        lambda t: (
-            lucid.linalg.householder_product(lucid.tensor(h0), t) * lucid.tensor(w)
-        ).sum(),
+        lambda t: (lucid.linalg.householder_product(lucid.tensor(h0), t) * lucid.tensor(w)).sum(),
         t0,
         rng,
     )

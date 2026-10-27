@@ -35,10 +35,7 @@ def _symmetric(n: int, seed: int) -> list[list[float]]:
 def _spd(n: int, seed: int) -> list[list[float]]:
     a = _symmetric(n, seed)
     return [
-        [
-            sum(a[i][k] * a[j][k] for k in range(n)) + (n if i == j else 0.0)
-            for j in range(n)
-        ]
+        [sum(a[i][k] * a[j][k] for k in range(n)) + (n if i == j else 0.0) for j in range(n)]
         for i in range(n)
     ]
 
@@ -79,9 +76,7 @@ def test_first_and_second_order_match_central_differences(op: str, name: str) ->
 
 
 @pytest.mark.parametrize("op", ["ldl_factor", "ldl_factor_ex"])
-def test_an_input_that_requires_grad_never_gets_a_detached_factor(
-    op: str, device: str
-) -> None:
+def test_an_input_that_requires_grad_never_gets_a_detached_factor(op: str, device: str) -> None:
     A = lucid.tensor(_SWAPS_AND_2X2, device=device, requires_grad=True)
     LD, piv, *_ = getattr(LA, op)(A)
     assert LD.requires_grad and LD.grad_fn is not None

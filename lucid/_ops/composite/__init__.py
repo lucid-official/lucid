@@ -67,9 +67,7 @@ _names: list[str] = []
 for _m in _SUBMODULES:
     for _n in getattr(_m, "__all__", ()):
         if _n in _seen:
-            raise RuntimeError(
-                f"composite name collision: {_n!r} appears in multiple submodules"
-            )
+            raise RuntimeError(f"composite name collision: {_n!r} appears in multiple submodules")
         _seen.add(_n)
         _names.append(_n)
         globals()[_n] = getattr(_m, _n)

@@ -31,9 +31,7 @@ _UPSTREAM = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
 
 
 def _close(a: list[list[float]], b: list[list[float]]) -> bool:
-    flat = [
-        (p, q) for ra, rb in zip(a, b, strict=True) for p, q in zip(ra, rb, strict=True)
-    ]
+    flat = [(p, q) for ra, rb in zip(a, b, strict=True) for p, q in zip(ra, rb, strict=True)]
     return all(abs(p - q) < 1e-5 for p, q in flat)
 
 
@@ -74,9 +72,7 @@ def _ref_bag(
             bags.append(rows[kept].mean(0))
     out = ref.stack(bags)
     if not scale:
-        direct = rf.embedding_bag(
-            idx, w.detach(), ref.tensor(_OFFSETS), mode=mode, padding_idx=pad
-        )
+        direct = rf.embedding_bag(idx, w.detach(), ref.tensor(_OFFSETS), mode=mode, padding_idx=pad)
         assert _close(direct.tolist(), out.tolist())
     (out * ref.tensor(_UPSTREAM)).sum().backward()
     return out.tolist(), w.grad.tolist(), w.detach().tolist()
@@ -170,9 +166,7 @@ def test_sparse_is_refused(call: Callable[[], object]) -> None:
 
 @pytest.mark.parametrize("mode", ["sum", "mean"])
 def test_module_passes_every_flag_on(mode: str, device: str) -> None:
-    bag = nn.EmbeddingBag(
-        5, 2, max_norm=1.0, scale_grad_by_freq=True, mode=mode, device=device
-    )
+    bag = nn.EmbeddingBag(5, 2, max_norm=1.0, scale_grad_by_freq=True, mode=mode, device=device)
     with lucid.no_grad():
         bag.weight.copy_(lucid.tensor(_TABLE, device=device))
     out = bag(lucid.tensor(_IDX, device=device), lucid.tensor(_OFFSETS, device=device))

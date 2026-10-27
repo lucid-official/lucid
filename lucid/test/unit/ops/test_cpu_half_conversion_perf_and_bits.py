@@ -94,9 +94,7 @@ def test_f32_to_f16_special_subnormal_and_ties() -> None:
     assert np.array_equal(got_u16, expected_u16)
 
     # Signaling and quiet NaNs must stay NaN (including tiny payload in bit 0)
-    nan_u32 = _f32_from_u32(
-        [0x7FC00000, 0x7F800001, 0x7FFFFFFF, 0xFFC00000, 0xFF800001]
-    )
+    nan_u32 = _f32_from_u32([0x7FC00000, 0x7F800001, 0x7FFFFFFF, 0xFFC00000, 0xFF800001])
     nan_u16 = _u16_of_f16_tensor(lucid.from_numpy(nan_u32).to(lucid.float16))
     assert np.all((nan_u16 & 0x7C00) == 0x7C00)
     assert np.all((nan_u16 & 0x03FF) != 0)
@@ -139,9 +137,7 @@ def test_f32_to_bf16_and_back_special_ties_and_nans() -> None:
     nan_f32 = _f32_from_u32(
         [0x7FC00000, 0x7F800001, 0x7FFFFFFF, 0xFFC00000, 0xFF800001, 0xFFFFFFFF]
     )
-    nan_rt = _u32_of_f32_tensor(
-        lucid.from_numpy(nan_f32).to(lucid.bfloat16).to(lucid.float32)
-    )
+    nan_rt = _u32_of_f32_tensor(lucid.from_numpy(nan_f32).to(lucid.bfloat16).to(lucid.float32))
     assert np.all((nan_rt & 0x7F800000) == 0x7F800000)
     assert np.all((nan_rt & 0x007FFFFF) != 0)
 
@@ -152,11 +148,7 @@ def test_empty_scalar_and_widen_narrow_ops(dtype: lucid.Dtype) -> None:
     assert empty.shape == (0, 4)
     assert empty.to(lucid.float32).shape == (0, 4)
 
-    scalar = (
-        lucid.tensor(-0.0, dtype=lucid.float32, device="cpu")
-        .to(dtype)
-        .to(lucid.float32)
-    )
+    scalar = lucid.tensor(-0.0, dtype=lucid.float32, device="cpu").to(dtype).to(lucid.float32)
     assert np.copysign(1.0, scalar.item()) == -1.0
 
     # Exercise unary_op, binary_op, and axis reduction widen/narrow paths on CPU.

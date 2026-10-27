@@ -107,9 +107,7 @@ def _coordinate_scale(
     return _opmath(ratio, wide)
 
 
-def _source_index(
-    ratio: float, dst: int, align_corners: bool, cubic: bool, wide: bool
-) -> float:
+def _source_index(ratio: float, dst: int, align_corners: bool, cubic: bool, wide: bool) -> float:
     """Input coordinate output sample ``dst`` is centred on.
 
     Half-pixel centres unless the corners are aligned.  Linear filters
@@ -156,10 +154,7 @@ def _nearest_indices(
     last = in_size - 1
     ratio = _coordinate_scale(in_size, out_size, False, scale, wide)
     if exact:
-        return [
-            min(_floor_index(_opmath((d + 0.5) * ratio, wide)), last)
-            for d in range(out_size)
-        ]
+        return [min(_floor_index(_opmath((d + 0.5) * ratio, wide)), last) for d in range(out_size)]
     if pins and out_size == in_size:
         return list(range(out_size))
     if pins and out_size == 2 * in_size:
@@ -316,9 +311,7 @@ def _is_identity(taps: _Taps, in_size: int) -> bool:
     return True
 
 
-def _dense_entries(
-    taps: _Taps, in_size: int
-) -> tuple[tuple[int, ...], tuple[float, ...]]:
+def _dense_entries(taps: _Taps, in_size: int) -> tuple[tuple[int, ...], tuple[float, ...]]:
     """The taps as matrix entries; taps clamped onto one sample add up."""
     entries: dict[int, float] = {}
     for indices, weights in taps:
@@ -335,15 +328,13 @@ def _dense_entries(
 # resizing every image to one size rebuilds the same few.  Bounded, since
 # each entry holds an (out, in) matrix on its device.
 @functools.lru_cache(maxsize=16)
-def _dense_matrix(
-    plan: _AxisPlan, in_size: int, device: str, dtype: _lucid.dtype
-) -> Tensor:
+def _dense_matrix(plan: _AxisPlan, in_size: int, device: str, dtype: _lucid.dtype) -> Tensor:
     assert plan.dense is not None
     positions, weights = plan.dense
     out_size = len(plan.taps[0][0])
     matrix = _lucid.zeros(out_size * in_size, dtype=dtype, device=device)
-    matrix[_lucid.tensor(list(positions), dtype=_lucid.int64, device=device)] = (
-        _lucid.tensor(list(weights), dtype=dtype, device=device)
+    matrix[_lucid.tensor(list(positions), dtype=_lucid.int64, device=device)] = _lucid.tensor(
+        list(weights), dtype=dtype, device=device
     )
     return matrix.reshape(out_size, in_size)
 
@@ -371,17 +362,15 @@ def _apply_gathers(x: Tensor, axis: int, taps: _FrozenTaps) -> Tensor:
             axis, _lucid.tensor(list(indices), dtype=_lucid.int64, device=device)
         )
         if weights is not None:
-            taken = taken * _lucid.tensor(
-                list(weights), dtype=x.dtype, device=device
-            ).reshape(tuple(shape))
+            taken = taken * _lucid.tensor(list(weights), dtype=x.dtype, device=device).reshape(
+                tuple(shape)
+            )
         total = taken if total is None else total + taken
     assert total is not None
     return total
 
 
-def _per_axis(
-    name: str, value: float | Sequence[float], spatial: list[int]
-) -> list[float]:
+def _per_axis(name: str, value: float | Sequence[float], spatial: list[int]) -> list[float]:
     """One entry per spatial axis: a number is repeated, a sequence checked."""
     val_num = _promotion.as_number(value)
     if isinstance(val_num, (int, float)):
@@ -405,15 +394,12 @@ def _resolve(
     """Output size of each spatial axis, and the scale its mapping uses."""
     spatial = [int(s) for s in x.shape[2:]]
     if (size is None) == (scale_factor is None):
-        raise ValueError(
-            "interpolate: either size or scale_factor must be given, not both"
-        )
+        raise ValueError("interpolate: either size or scale_factor must be given, not both")
     scales: list[float | None] = [None] * len(spatial)
     if size is not None:
         if recompute_scale_factor:
             raise ValueError(
-                "interpolate: recompute_scale_factor is not meaningful with an "
-                "explicit size"
+                "interpolate: recompute_scale_factor is not meaningful with an " "explicit size"
             )
         sizes = [int(n) for n in _per_axis("size", size, spatial)]
     else:
@@ -437,13 +423,9 @@ def _check_lanczos(align_corners: bool | None, antialias: bool) -> None:
         raise ValueError("Lanczos mode requires antialias=True")
 
 
-def _check_mode(
-    x: Tensor, mode: str, align_corners: bool | None, antialias: bool
-) -> None:
+def _check_mode(x: Tensor, mode: str, align_corners: bool | None, antialias: bool) -> None:
     if mode not in _RANKS:
-        raise ValueError(
-            f"interpolate: unknown mode {mode!r}; expected one of {sorted(_RANKS)}"
-        )
+        raise ValueError(f"interpolate: unknown mode {mode!r}; expected one of {sorted(_RANKS)}")
     rank = x.ndim - 2
     if rank not in _RANKS[mode]:
         raise ValueError(
@@ -463,14 +445,10 @@ def _check_mode(
             f"on 4-D input, not {mode!r}"
         )
     if mode not in ("nearest", "nearest-exact") and not x.is_floating_point():
-        raise TypeError(
-            f"interpolate: mode {mode!r} needs a floating-point input, got {x.dtype}"
-        )
+        raise TypeError(f"interpolate: mode {mode!r} needs a floating-point input, got {x.dtype}")
 
 
-def _engine_resample(
-    x: Tensor, mode: str, sizes: list[int], align_corners: bool
-) -> Tensor:
+def _engine_resample(x: Tensor, mode: str, sizes: list[int], align_corners: bool) -> Tensor:
     """The size-only kernel; a 1-D axis rides through as a unit-height plane."""
     impl = _unwrap(x)
     if len(sizes) == 1:
@@ -535,9 +513,7 @@ class _Filter:
 
 
 @functools.lru_cache(maxsize=256)
-def _axis_plan(
-    rule: _Filter, in_size: int, out_size: int, scale: float | None
-) -> _AxisPlan:
+def _axis_plan(rule: _Filter, in_size: int, out_size: int, scale: float | None) -> _AxisPlan:
     """How to resample one axis, frozen so the cache can hand it out again.
 
     Building them is a Python loop over the output samples (and, for the

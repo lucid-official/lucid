@@ -367,9 +367,7 @@ def i1e(input: Tensor) -> Tensor:
 
 def _i1e_as_fit(x: Tensor) -> Tensor:
     ax = lucid.abs(x)
-    small = lucid.exp(-lucid.clamp(ax, max=3.75)) * _i1_as_fit(
-        lucid.clip(x, -3.75, 3.75)
-    )
+    small = lucid.exp(-lucid.clamp(ax, max=3.75)) * _i1_as_fit(lucid.clip(x, -3.75, 3.75))
     big = lucid.clamp(ax, min=3.75)
     y = 3.75 / big
     poly = lucid.full_like(x, _I1_LARGE_COEFFS[0])
@@ -607,8 +605,7 @@ def _ndtri(p: Tensor) -> Tensor:
     r_central = q * q
     num_c = (
         (
-            ((_NDTRI_A[0] * r_central + _NDTRI_A[1]) * r_central + _NDTRI_A[2])
-            * r_central
+            ((_NDTRI_A[0] * r_central + _NDTRI_A[1]) * r_central + _NDTRI_A[2]) * r_central
             + _NDTRI_A[3]
         )
         * r_central
@@ -616,8 +613,7 @@ def _ndtri(p: Tensor) -> Tensor:
     ) * r_central + _NDTRI_A[5]
     den_c = (
         (
-            ((_NDTRI_B[0] * r_central + _NDTRI_B[1]) * r_central + _NDTRI_B[2])
-            * r_central
+            ((_NDTRI_B[0] * r_central + _NDTRI_B[1]) * r_central + _NDTRI_B[2]) * r_central
             + _NDTRI_B[3]
         )
         * r_central
@@ -628,16 +624,12 @@ def _ndtri(p: Tensor) -> Tensor:
     p_tail_in = lucid.where(p_safe < 0.5, p_safe, 1.0 - p_safe)
     r_tail = lucid.sqrt(-2.0 * lucid.log(p_tail_in))
     num_t = (
-        (
-            ((_NDTRI_C[0] * r_tail + _NDTRI_C[1]) * r_tail + _NDTRI_C[2]) * r_tail
-            + _NDTRI_C[3]
-        )
+        (((_NDTRI_C[0] * r_tail + _NDTRI_C[1]) * r_tail + _NDTRI_C[2]) * r_tail + _NDTRI_C[3])
         * r_tail
         + _NDTRI_C[4]
     ) * r_tail + _NDTRI_C[5]
     den_t = (
-        ((_NDTRI_D[0] * r_tail + _NDTRI_D[1]) * r_tail + _NDTRI_D[2]) * r_tail
-        + _NDTRI_D[3]
+        ((_NDTRI_D[0] * r_tail + _NDTRI_D[1]) * r_tail + _NDTRI_D[2]) * r_tail + _NDTRI_D[3]
     ) * r_tail + 1.0
     tail_low = num_t / den_t
     tail = lucid.where(p_safe < 0.5, tail_low, -tail_low)
@@ -649,9 +641,7 @@ def _ndtri(p: Tensor) -> Tensor:
     boundary = lucid.where(
         p == 0.0,
         lucid.full_like(p, -math.inf),
-        lucid.where(
-            p == 1.0, lucid.full_like(p, math.inf), lucid.full_like(p, math.nan)
-        ),
+        lucid.where(p == 1.0, lucid.full_like(p, math.inf), lucid.full_like(p, math.nan)),
     )
     return lucid.where(in_open, inside, boundary)
 
@@ -1215,12 +1205,10 @@ _TWO_OVER_PI = 2.0 / math.pi
 def _bessel_y0_small(x: Tensor) -> Tensor:
     y = x * x
     num = -2957821389.0 + y * (
-        7062834065.0
-        + y * (-512359803.6 + y * (10879881.29 + y * (-86327.92757 + y * 228.4622733)))
+        7062834065.0 + y * (-512359803.6 + y * (10879881.29 + y * (-86327.92757 + y * 228.4622733)))
     )
     den = 40076544269.0 + y * (
-        745249964.8
-        + y * (7189466.438 + y * (47447.26470 + y * (226.1030244 + y * 1.0)))
+        745249964.8 + y * (7189466.438 + y * (47447.26470 + y * (226.1030244 + y * 1.0)))
     )
     return num / den + _TWO_OVER_PI * lucid.log(x) * bessel_j0(x)
 
@@ -1229,12 +1217,10 @@ def _bessel_y0_large(x: Tensor) -> Tensor:
     z = 8.0 / x
     y = z * z
     p = 1.0 + y * (
-        -0.1098628627e-2
-        + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6))
+        -0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6))
     )
     q = -0.1562499995e-1 + y * (
-        0.1430488765e-3
-        + y * (-0.6911147651e-5 + y * (0.7621095161e-6 + y * (-0.934935152e-7)))
+        0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 + y * (-0.934935152e-7)))
     )
     xx = x - 0.785398164
     return lucid.sqrt(0.636619772 / x) * (lucid.sin(xx) * p + z * lucid.cos(xx) * q)
@@ -1289,9 +1275,7 @@ def bessel_y0(input: Tensor) -> Tensor:
     """
     if input.dtype == lucid.float64:
         return _bessel._y0(input)
-    return _half_line_split(
-        _real(input), 8.0, _bessel_y0_small, _bessel_y0_large, -math.inf
-    )
+    return _half_line_split(_real(input), 8.0, _bessel_y0_small, _bessel_y0_large, -math.inf)
 
 
 def _bessel_y1_small(x: Tensor) -> Tensor:
@@ -1302,10 +1286,7 @@ def _bessel_y1_small(x: Tensor) -> Tensor:
         * (
             0.1275274390e13
             + y
-            * (
-                -0.5153438139e11
-                + y * (0.7349264551e9 + y * (-0.4237922726e7 + y * 0.8511937935e4))
-            )
+            * (-0.5153438139e11 + y * (0.7349264551e9 + y * (-0.4237922726e7 + y * 0.8511937935e4)))
         )
     )
     den = 0.2499580570e14 + y * (
@@ -1313,8 +1294,7 @@ def _bessel_y1_small(x: Tensor) -> Tensor:
         + y
         * (
             0.3733650367e10
-            + y
-            * (0.2245904002e8 + y * (0.1020426050e6 + y * (0.3549632885e3 + y * 1.0)))
+            + y * (0.2245904002e8 + y * (0.1020426050e6 + y * (0.3549632885e3 + y * 1.0)))
         )
     )
     return num / den + _TWO_OVER_PI * (lucid.log(x) * bessel_j1(x) - 1.0 / x)
@@ -1324,12 +1304,10 @@ def _bessel_y1_large(x: Tensor) -> Tensor:
     z = 8.0 / x
     y = z * z
     p = 1.0 + y * (
-        0.183105e-2
-        + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6)))
+        0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6)))
     )
     q = 0.04687499995 + y * (
-        -0.2002690873e-3
-        + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6))
+        -0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6))
     )
     xx = x - 2.356194491
     return lucid.sqrt(0.636619772 / x) * (lucid.sin(xx) * p + z * lucid.cos(xx) * q)
@@ -1379,9 +1357,7 @@ def bessel_y1(input: Tensor) -> Tensor:
     """
     if input.dtype == lucid.float64:
         return _bessel._y1(input)
-    return _half_line_split(
-        _real(input), 8.0, _bessel_y1_small, _bessel_y1_large, -math.inf
-    )
+    return _half_line_split(_real(input), 8.0, _bessel_y1_small, _bessel_y1_large, -math.inf)
 
 
 def _modified_bessel_k0_small(x: Tensor) -> Tensor:

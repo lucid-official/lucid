@@ -81,9 +81,7 @@ class TestConvTranspose3dCompiles:
         ],
         ids=["plain", "strided", "strided-padded", "output-padding"],
     )
-    def test_it_compiles_and_matches(
-        self, name: str, kwargs: dict[str, object]
-    ) -> None:
+    def test_it_compiles_and_matches(self, name: str, kwargs: dict[str, object]) -> None:
         compiled, difference, rank = _run((2, 3, 5, 6, 7), **kwargs)
         assert compiled, f"{name} fell back to eager"
         assert difference < 1e-5, f"{name} disagrees by {difference:.3e}"

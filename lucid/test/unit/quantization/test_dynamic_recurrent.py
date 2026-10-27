@@ -119,9 +119,7 @@ def test_quantized_module_follows_a_device_move(case: str) -> None:
 
 def test_default_spec_quantizes_every_recurrent_type() -> None:
     lucid.manual_seed(2)
-    model = nn.Sequential(
-        nn.GRU(4, 4), nn.LSTMCell(4, 4), nn.GRUCell(4, 4), nn.RNNCell(4, 4)
-    )
+    model = nn.Sequential(nn.GRU(4, 4), nn.LSTMCell(4, 4), nn.GRUCell(4, 4), nn.RNNCell(4, 4))
     qmodel = Q.quantize_dynamic(model)
     assert [type(m) for m in qmodel] == [
         nnqd.GRU,
@@ -146,9 +144,7 @@ def test_named_type_without_a_dynamic_form_warns(named: type) -> None:
     assert [type(m) for m in qmodel] == [nn.Conv2d, nn.RNN, nn.Linear]
 
 
-@pytest.mark.parametrize(
-    "case", ["LSTM", "GRU-2layer-bidir", "LSTMCell", "RNNCell-relu"]
-)
+@pytest.mark.parametrize("case", ["LSTM", "GRU-2layer-bidir", "LSTMCell", "RNNCell-relu"])
 def test_from_float_leaves_the_float_module_alone(case: str) -> None:
     make, inp, qtype = _CASES[case]
     lucid.manual_seed(3)
@@ -216,9 +212,7 @@ def test_output_matches_the_reference(case: str, ref: Any) -> None:
     ref.manual_seed(0)
     float_ref = make(ref).eval()
     model = make(lucid)
-    model.load_state_dict(
-        {k: lucid.tensor(v.numpy()) for k, v in float_ref.state_dict().items()}
-    )
+    model.load_state_dict({k: lucid.tensor(v.numpy()) for k, v in float_ref.state_dict().items()})
     model.eval()
     with _ref_qengine(ref), warnings.catch_warnings():
         warnings.simplefilter("ignore")

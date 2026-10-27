@@ -191,9 +191,7 @@ class _BiFPNLayer(nn.Module):
             down = self.down(out[-1])
             if i < L - 1:
                 fused_l: Tensor = (
-                    (wl[0] / wlsum) * features[i]
-                    + (wl[1] / wlsum) * td[i]
-                    + (wl[2] / wlsum) * down
+                    (wl[0] / wlsum) * features[i] + (wl[1] / wlsum) * td[i] + (wl[2] / wlsum) * down
                 )
             else:
                 # Coarsest level: no top-down intermediate exists here.
@@ -385,10 +383,7 @@ class _PredictionHead(nn.Module):
             ]
         )
         self.pw_convs: nn.ModuleList[nn.Conv2d] = nn.ModuleList(
-            [
-                nn.Conv2d(in_channels, in_channels, 1, bias=False)
-                for _ in range(num_repeats)
-            ]
+            [nn.Conv2d(in_channels, in_channels, 1, bias=False) for _ in range(num_repeats)]
         )
         # Separate BN per level per depth
         self.bns: nn.ModuleList[nn.ModuleList[nn.BatchNorm2d]] = nn.ModuleList(
@@ -671,19 +666,13 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         )
 
         # Prediction heads
-        self.cls_head = _PredictionHead(
-            W, K * num_anchors, config.head_repeats, num_levels
-        )
-        self.box_head = _PredictionHead(
-            W, 4 * num_anchors, config.head_repeats, num_levels
-        )
+        self.cls_head = _PredictionHead(W, K * num_anchors, config.head_repeats, num_levels)
+        self.box_head = _PredictionHead(W, 4 * num_anchors, config.head_repeats, num_levels)
         # Focal-loss prior on the class predictor's bias: at initialisation
         # every anchor should predict p ~= prior (0.01), not 0.5, or the first
         # steps are swamped by ~10^5 background slots.  The box predictor's
         # bias starts at zero, as in the reference.
-        _init_head_priors(
-            self.cls_head, self.box_head, prior_prob=config.focal_prior_prob
-        )
+        _init_head_priors(self.cls_head, self.box_head, prior_prob=config.focal_prior_prob)
 
         # Anchor generator (5 levels; one base size per level)
         tuple(
@@ -698,9 +687,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         )
         # Build anchors with all scales × ratios
         all_sizes: tuple[tuple[int, ...], ...] = tuple(
-            tuple(
-                int(config.anchor_base_sizes[lvl] * sc) for sc in config.anchor_scales
-            )
+            tuple(int(config.anchor_base_sizes[lvl] * sc) for sc in config.anchor_scales)
             for lvl in range(num_levels)
         )
         self._anchor_gen = AnchorGenerator(
@@ -1017,9 +1004,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
                 keep_boxes.append(bx_sel[keep])
                 keep_scores.append(sc_sel[keep])
                 keep_labels.append(
-                    lucid.full(
-                        (int(keep.shape[0]),), c + 1, dtype=lucid.int64, device=dev
-                    )
+                    lucid.full((int(keep.shape[0]),), c + 1, dtype=lucid.int64, device=dev)
                 )
 
             results.append(

@@ -158,9 +158,7 @@ class _WordPieceCommonMixin(Tokenizer):
         special_tokens: SpecialTokens | None = None,
     ) -> Self:
         """Load from a BERT-style directory containing ``vocab.txt``."""
-        vocab, st = _load_vocab_txt_and_specials(
-            directory, special_tokens, cls.__name__
-        )
+        vocab, st = _load_vocab_txt_and_specials(directory, special_tokens, cls.__name__)
         return cls(
             vocab,
             unk_token=unk_token,

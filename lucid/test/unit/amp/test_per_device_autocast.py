@@ -97,9 +97,7 @@ def test_cpu_autocast_does_not_cast_metal_ops() -> None:
     for op_name, dt in metal_dtypes.items():
         assert dt == lucid.float32, f"Metal {op_name} was cast under CPU autocast: {dt}"
     for op_name, dt in cpu_dtypes.items():
-        assert (
-            dt == lucid.bfloat16
-        ), f"CPU {op_name} was not cast under CPU autocast: {dt}"
+        assert dt == lucid.bfloat16, f"CPU {op_name} was not cast under CPU autocast: {dt}"
     assert adds == (lucid.float32, lucid.float32)
     # Neither device casts batch_norm here: Metal is not under autocast, and
     # the CPU column keeps the input.
@@ -134,9 +132,7 @@ def test_metal_autocast_does_not_cast_cpu_ops() -> None:
     assert cpu_bn == lucid.bfloat16
     assert (cpu_rm, cpu_rv) == (lucid.float32, lucid.float32)
     for op_name, dt in metal_dtypes.items():
-        assert (
-            dt == lucid.bfloat16
-        ), f"Metal {op_name} was not cast under Metal autocast: {dt}"
+        assert dt == lucid.bfloat16, f"Metal {op_name} was not cast under Metal autocast: {dt}"
     if metal_available():
         assert metal_bn == lucid.float32
         assert (metal_rm, metal_rv) == (lucid.float32, lucid.float32)
@@ -211,16 +207,12 @@ def test_inner_disabled_scope_only_disables_target_device() -> None:
         pytest.param(
             "metal",
             lucid.float16,
-            marks=pytest.mark.skipif(
-                not metal_available(), reason="Metal not available"
-            ),
+            marks=pytest.mark.skipif(not metal_available(), reason="Metal not available"),
         ),
         pytest.param(
             "metal",
             lucid.bfloat16,
-            marks=pytest.mark.skipif(
-                not metal_available(), reason="Metal not available"
-            ),
+            marks=pytest.mark.skipif(not metal_available(), reason="Metal not available"),
         ),
     ],
 )
@@ -234,9 +226,7 @@ def test_var_std_logsumexp_float32_stay_float32_under_autocast(
     """LCD-120: ``var``, ``std``, and ``logsumexp`` of float32 inputs stay float32
     under autocast even though their composite steps use elementwise helpers."""
     vals = [[1.0, 2.5, -0.5, 4.0], [0.25, -1.5, 3.25, 2.0]]
-    x = lucid.tensor(
-        vals, dtype=lucid.float32, device=device, requires_grad=requires_grad
-    )
+    x = lucid.tensor(vals, dtype=lucid.float32, device=device, requires_grad=requires_grad)
     rx = ref.tensor(vals, dtype=ref.float32, requires_grad=requires_grad)  # type: ignore[attr-defined]
 
     with autocast(device_type=device, dtype=amp_dtype):
@@ -259,12 +249,8 @@ def test_var_std_logsumexp_float32_stay_float32_under_autocast(
         ("std(unbiased=False)", s_biased, rs_biased),
         ("logsumexp", lse, rlse),
     ]:
-        assert (
-            got.dtype == lucid.float32
-        ), f"{name} returned {got.dtype}, expected float32"
-        np.testing.assert_allclose(
-            got.numpy(), want.detach().numpy(), rtol=1e-5, atol=1e-5
-        )
+        assert got.dtype == lucid.float32, f"{name} returned {got.dtype}, expected float32"
+        np.testing.assert_allclose(got.numpy(), want.detach().numpy(), rtol=1e-5, atol=1e-5)
 
     if requires_grad:
         total = (v_unbiased + s_unbiased + lse).sum()
@@ -272,9 +258,7 @@ def test_var_std_logsumexp_float32_stay_float32_under_autocast(
         assert x.grad is not None and x.grad.dtype == lucid.float32
         rtotal = (rv_unbiased + rs_unbiased + rlse).sum()
         rtotal.backward()
-        np.testing.assert_allclose(
-            x.grad.numpy(), rx.grad.numpy(), rtol=1e-5, atol=1e-5
-        )
+        np.testing.assert_allclose(x.grad.numpy(), rx.grad.numpy(), rtol=1e-5, atol=1e-5)
 
 
 def test_autocast_default_dtypes_match_reference(ref: object) -> None:

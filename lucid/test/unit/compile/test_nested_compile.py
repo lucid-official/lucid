@@ -108,9 +108,7 @@ def test_a_compiled_module_child_of_a_compiled_parent_matches_eager() -> None:
     compiled_parent = lucid.compile(parent)
 
     eager = _Parent().eval()
-    for (_, p1), (_, p2) in zip(
-        parent.named_parameters(), eager.named_parameters(), strict=True
-    ):
+    for (_, p1), (_, p2) in zip(parent.named_parameters(), eager.named_parameters(), strict=True):
         p2.data = p1.data.clone()
 
     with lucid.no_grad():
@@ -130,9 +128,7 @@ def test_gradients_through_a_nested_compiled_call_match_eager() -> None:
     parent.body = lucid.compile(parent.body)
 
     eager = _Parent()
-    for (_, p1), (_, p2) in zip(
-        parent.named_parameters(), eager.named_parameters(), strict=True
-    ):
+    for (_, p1), (_, p2) in zip(parent.named_parameters(), eager.named_parameters(), strict=True):
         p2.data = p1.data.clone()
 
     x = _t(4, 8)
@@ -147,9 +143,7 @@ def test_gradients_through_a_nested_compiled_call_match_eager() -> None:
     loss_eager.backward()
 
     np.testing.assert_allclose(loss.numpy(), loss_eager.numpy(), atol=1e-4)
-    for (n1, p1), (n2, p2) in zip(
-        parent.named_parameters(), eager.named_parameters(), strict=True
-    ):
+    for (n1, p1), (n2, p2) in zip(parent.named_parameters(), eager.named_parameters(), strict=True):
         assert n1 == n2
         assert p1.grad is not None and p2.grad is not None
         np.testing.assert_allclose(p1.grad.numpy(), p2.grad.numpy(), atol=1e-4)

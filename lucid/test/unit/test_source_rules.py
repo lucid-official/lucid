@@ -59,9 +59,7 @@ def test_h5_only_the_fixture_imports_the_reference_framework() -> None:
 
 def test_h5_the_reference_framework_is_named_in_one_file() -> None:
     hits = _hits("ref-name")
-    assert not hits, "H5 — use the ref fixture or 'reference framework':\n" + "\n".join(
-        hits
-    )
+    assert not hits, "H5 — use the ref fixture or 'reference framework':\n" + "\n".join(hits)
 
 
 def test_h6_no_other_gpu_api_is_named() -> None:
@@ -85,9 +83,7 @@ def test_no_prose_names_a_dead_lucid_path() -> None:
         for v in _tree()
         if v.rule == "dead-path" and rules.excuse_for(v.path, _dead_name(v)) is None
     ]
-    assert (
-        not hits
-    ), "Name what owns it now, or say the path was deleted:\n" + "\n".join(hits)
+    assert not hits, "Name what owns it now, or say the path was deleted:\n" + "\n".join(hits)
 
 
 @pytest.mark.parametrize("excuse", rules.EXCUSES, ids=lambda e: e.pattern)
@@ -147,9 +143,7 @@ def test_the_fixture_may_name_and_import_the_reference_framework() -> None:
 
 def test_tools_are_held_to_h1_only() -> None:
     # tools/ converts the reference framework's checkpoints, so it may name it.
-    future = rules.check(
-        [("tools/x.py", "from __future__ import annotations\n")], _NAME
-    )
+    future = rules.check([("tools/x.py", "from __future__ import annotations\n")], _NAME)
     assert {v.rule for v in future} == {"future-annotations"}
     assert rules.check([("tools/x.py", f"import {_NAME}  # {_NAME}\n")], _NAME) == []
 
@@ -169,8 +163,7 @@ _MODULES = {
     # A lazy module that says what it serves: __all__, or a stub.
     "lucid/listed.py": "__all__ = ['served']\ndef __getattr__(name: str) -> object: ...\n",
     "lucid/stubbed.py": (
-        "def plain(): ...\n"
-        "def __getattr__(name: str) -> object:\n    globals()[name] = 1\n"
+        "def plain(): ...\n" "def __getattr__(name: str) -> object:\n    globals()[name] = 1\n"
     ),
     "lucid/stubbed.pyi": "def lazy() -> None: ...\n",
     "lucid/_C/engine.pyi": "class Op: ...\nlinalg: object\n",
@@ -229,17 +222,14 @@ def test_a_live_path_history_or_excuse_is_not_reported(source: str) -> None:
 
 def test_a_dead_path_is_reported_on_its_line() -> None:
     source = (
-        "import lucid\n\n\ndef f() -> None:\n"
-        '    """Title.\n\n    Via lucid.pkg.gone.\n    """\n'
+        "import lucid\n\n\ndef f() -> None:\n" '    """Title.\n\n    Via lucid.pkg.gone.\n    """\n'
     )
     (found,) = rules.check([("lucid/x.py", source)], _NAME, _INDEX)
     assert (found.line, _dead_name(found)) == (7, "lucid.pkg.gone")
 
 
 def test_an_excuse_can_be_held_to_one_file() -> None:
-    excuse = rules.Excuse(
-        r"lucid\.pkg\.gone", "pending: held by another branch", "lucid/x.py"
-    )
+    excuse = rules.Excuse(r"lucid\.pkg\.gone", "pending: held by another branch", "lucid/x.py")
     source = "# lucid.pkg.gone\n"
     assert rules.check([("lucid/x.py", source)], _NAME, _INDEX, (excuse,)) == []
     assert rules.check([("lucid/y.py", source)], _NAME, _INDEX, (excuse,)) != []

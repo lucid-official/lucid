@@ -9,15 +9,11 @@ from lucid.test._fixtures import perf
 
 
 @pytest.mark.parametrize("provider", ["fallback", "plugin", "plugin-disabled"])
-def test_benchmark_provider_observes_output_and_exposes_elapsed(
-    monkeypatch, provider: str
-) -> None:
+def test_benchmark_provider_observes_output_and_exposes_elapsed(monkeypatch, provider: str) -> None:
     from tools import _bench_timing
 
     events = []
-    monkeypatch.setattr(
-        _bench_timing.lucid.metal, "synchronize", lambda: events.append("sync")
-    )
+    monkeypatch.setattr(_bench_timing.lucid.metal, "synchronize", lambda: events.append("sync"))
     monkeypatch.setattr(
         _bench_timing,
         "materialize",

@@ -85,9 +85,7 @@ class Actor(nn.Module):
         # A one-hot needs one score per alternative; a truncated Gaussian
         # needs a location and a scale per dimension.
         width = action_dim if discrete else 2 * action_dim
-        self.head = DenseHead(
-            latent_size, hidden, layers, out_features=width, act_fn=act_fn
-        )
+        self.head = DenseHead(latent_size, hidden, layers, out_features=width, act_fn=act_fn)
 
     def distribution(self, feature: Tensor) -> TruncatedNormal | OneHotCategorical:
         """Return the policy at a state.

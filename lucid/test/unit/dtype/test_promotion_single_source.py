@@ -159,12 +159,8 @@ _OPS: dict[str, _Op] = {
     "&": _Op(operator.and_, lucid.bitwise_and, "bitwise_and", _integral),
     "|": _Op(operator.or_, lucid.bitwise_or, "bitwise_or", _integral),
     "^": _Op(operator.xor, lucid.bitwise_xor, "bitwise_xor", _integral),
-    "<<": _Op(
-        operator.lshift, lucid.bitwise_left_shift, "bitwise_left_shift", _integer
-    ),
-    ">>": _Op(
-        operator.rshift, lucid.bitwise_right_shift, "bitwise_right_shift", _integer
-    ),
+    "<<": _Op(operator.lshift, lucid.bitwise_left_shift, "bitwise_left_shift", _integer),
+    ">>": _Op(operator.rshift, lucid.bitwise_right_shift, "bitwise_right_shift", _integer),
     "==": _Op(operator.eq, lucid.eq, "eq", _any, compare=True),
     "!=": _Op(operator.ne, lucid.ne, "ne", _any, compare=True),
     "<": _Op(operator.lt, lucid.lt, "lt", _real, compare=True),
@@ -225,9 +221,7 @@ def _expected(op: _Op, a: Operand, b: Operand) -> lucid.dtype:
 
 
 def _is_bool_operand(x: Operand) -> bool:
-    return isinstance(x, bool) or (
-        isinstance(x, lucid.Tensor) and x.dtype is lucid.bool_
-    )
+    return isinstance(x, bool) or (isinstance(x, lucid.Tensor) and x.dtype is lucid.bool_)
 
 
 @pytest.mark.parametrize("symbol", list(_OPS))
@@ -274,11 +268,7 @@ def test_every_spelling_answers_at_the_promoted_dtype(symbol: str, device: str) 
             else:
                 want_inplace_val = repr(op.dunder(a, b).to(a.dtype).tolist())
                 for k, o in inplace.items():
-                    if (
-                        o[0] != "ok"
-                        or o[1] != a.dtype
-                        or repr(o[2]) != want_inplace_val
-                    ):
+                    if o[0] != "ok" or o[1] != a.dtype or repr(o[2]) != want_inplace_val:
                         problems.append(
                             f"{label}: {k} expected ('ok', {a.dtype}, {want_inplace_val}), got {o}"
                         )
@@ -308,9 +298,7 @@ def test_result_type_is_the_references(ref: ModuleType) -> None:
     for label, a, b in _cells("cpu"):
         if not isinstance(a, lucid.Tensor) and not isinstance(b, lucid.Tensor):
             continue
-        want = _ref_dtype_name(
-            ref, ref.result_type(_ref_operand(ref, a), _ref_operand(ref, b))
-        )
+        want = _ref_dtype_name(ref, ref.result_type(_ref_operand(ref, a), _ref_operand(ref, b)))
         got = _lucid_dtype_name(lucid.result_type(a, b))
         if got != want:
             problems.append(f"{label}: lucid {got}, reference {want}")
@@ -363,13 +351,9 @@ def test_inplace_promotion_matches_reference(symbol: str, ref: ModuleType) -> No
             o = _outcome(call)
             if not ref_ok:
                 if o[:2] != ("refused", "RuntimeError"):
-                    problems.append(
-                        f"{label} ({k}): expected RuntimeError, got {o[:2]}"
-                    )
+                    problems.append(f"{label} ({k}): expected RuntimeError, got {o[:2]}")
             elif o[0] == "ok" and o[1] != a.dtype:
-                problems.append(
-                    f"{label} ({k}): mutated dtype from {a.dtype} to {o[1]}"
-                )
+                problems.append(f"{label} ({k}): mutated dtype from {a.dtype} to {o[1]}")
     assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:30])
 
 
@@ -378,9 +362,7 @@ def test_promote_types_and_can_cast_read_the_same_lattice(ref: ModuleType) -> No
         for db in _DTYPES:
             p = lucid.promote_types(da, db)
             assert p == lucid.promote_types(db, da)
-            assert p == lucid.result_type(
-                _make(da, False, "cpu"), _make(db, False, "cpu")
-            )
+            assert p == lucid.result_type(_make(da, False, "cpu"), _make(db, False, "cpu"))
             assert lucid.can_cast(da, db) == ref.can_cast(
                 getattr(ref, _lucid_dtype_name(da)),
                 getattr(ref, _lucid_dtype_name(db)),
@@ -392,9 +374,7 @@ def test_promote_types_and_can_cast_read_the_same_lattice(ref: ModuleType) -> No
 #: Each dtype spelling a table key may use, and the category it belongs to.
 _KEY_CATEGORY = {
     **dict.fromkeys(["Bool", "bool_"], "bool"),
-    **dict.fromkeys(
-        ["I8", "I16", "I32", "I64", "int8", "int16", "int32", "int64"], "int"
-    ),
+    **dict.fromkeys(["I8", "I16", "I32", "I64", "int8", "int16", "int32", "int64"], "int"),
     **dict.fromkeys(
         ["F16", "BF16", "F32", "F64", "float16", "bfloat16", "float32", "float64"],
         "float",
@@ -435,9 +415,7 @@ def _is_promotion_table(node: ast.AST) -> bool:
     names = [_key_name(k) for k in node.keys]
     categories = [_KEY_CATEGORY[n] for n in names if n in _KEY_CATEGORY]
     return (
-        len(categories) >= 4
-        and len(set(categories)) >= 2
-        and all(_is_rank(v) for v in node.values)
+        len(categories) >= 4 and len(set(categories)) >= 2 and all(_is_rank(v) for v in node.values)
     )
 
 

@@ -359,9 +359,7 @@ def _longest_prefix(path: str) -> tuple[str, str] | None:
     best: tuple[str, str] | None = None
     best_len = -1
     for key, (mod_path, kind) in SUBSYSTEMS.items():
-        if (path == mod_path or path.startswith(mod_path + ".")) and len(
-            mod_path
-        ) > best_len:
+        if (path == mod_path or path.startswith(mod_path + ".")) and len(mod_path) > best_len:
             best, best_len = (key, kind), len(mod_path)
     return best
 
@@ -578,11 +576,7 @@ def counterparts(symbol: Symbol) -> Iterator[tuple[str, Any]]:
     if split and not is_functional:
         return
     functional = getattr(F, name, None)
-    if (
-        callable(functional)
-        and not isinstance(functional, type)
-        and functional is not free
-    ):
+    if callable(functional) and not isinstance(functional, type) and functional is not free:
         yield "functional", functional
 
 

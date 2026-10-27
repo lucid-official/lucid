@@ -34,21 +34,15 @@ def _photo(w: int, h: int) -> np.ndarray:
 
 @pytest.mark.parametrize("size", [(500, 375), (375, 500), (333, 499)])
 @pytest.mark.parametrize("interpolation", ["bicubic", "bilinear"])
-def test_integer_pixels_resize_as_pil_does(
-    size: tuple[int, int], interpolation: str
-) -> None:
+def test_integer_pixels_resize_as_pil_does(size: tuple[int, int], interpolation: str) -> None:
     w, h = size
     arr = _photo(w, h)
-    preset = ImageClassification(
-        crop_size=224, resize_size=256, interpolation=interpolation
-    )
+    preset = ImageClassification(crop_size=224, resize_size=256, interpolation=interpolation)
     got = np.asarray(preset(lucid.tensor(arr).permute(2, 0, 1)).numpy())
     # PIL's own resize, then the same crop and normalisation by hand.
     nh, nw = (256, int(256 * w / h)) if h <= w else (int(256 * h / w), 256)
     mode = Image.BICUBIC if interpolation == "bicubic" else Image.BILINEAR
-    resized = (
-        np.asarray(Image.fromarray(arr).resize((nw, nh), mode), dtype=np.float32) / 255
-    )
+    resized = np.asarray(Image.fromarray(arr).resize((nw, nh), mode), dtype=np.float32) / 255
     top, left = int(round((nh - 224) / 2)), int(round((nw - 224) / 2))
     crop = resized[top : top + 224, left : left + 224].transpose(2, 0, 1)
     mean = np.array([0.485, 0.456, 0.406], np.float32)[:, None, None]
@@ -62,9 +56,7 @@ def test_integer_pixels_resize_as_pil_does(
 
 def test_float_input_is_unchanged() -> None:
     arr = _photo(400, 300).astype(np.float32) / 255
-    preset = ImageClassification(
-        crop_size=224, resize_size=256, interpolation="bicubic"
-    )
+    preset = ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic")
     out = np.asarray(preset(lucid.tensor(arr).permute(2, 0, 1)).numpy())
     assert out.dtype == np.float32 and out.shape == (3, 224, 224)
     # No 8-bit rounding: values fall between the 1/255 steps.

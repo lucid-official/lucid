@@ -93,9 +93,7 @@ def efficientnet_b0(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 1280, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b0", alternative="efficientnet_b0_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b0", alternative="efficientnet_b0_cls")
     return EfficientNet(apply_overrides(_CFGS["b0"], overrides))
 
 
@@ -147,9 +145,7 @@ def efficientnet_b1(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 1280, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b1", alternative="efficientnet_b1_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b1", alternative="efficientnet_b1_cls")
     return EfficientNet(apply_overrides(_CFGS["b1"], overrides))
 
 
@@ -201,9 +197,7 @@ def efficientnet_b2(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 1408, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b2", alternative="efficientnet_b2_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b2", alternative="efficientnet_b2_cls")
     return EfficientNet(apply_overrides(_CFGS["b2"], overrides))
 
 
@@ -255,9 +249,7 @@ def efficientnet_b3(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 1536, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b3", alternative="efficientnet_b3_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b3", alternative="efficientnet_b3_cls")
     return EfficientNet(apply_overrides(_CFGS["b3"], overrides))
 
 
@@ -309,9 +301,7 @@ def efficientnet_b4(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 1792, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b4", alternative="efficientnet_b4_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b4", alternative="efficientnet_b4_cls")
     return EfficientNet(apply_overrides(_CFGS["b4"], overrides))
 
 
@@ -363,9 +353,7 @@ def efficientnet_b5(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 2048, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b5", alternative="efficientnet_b5_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b5", alternative="efficientnet_b5_cls")
     return EfficientNet(apply_overrides(_CFGS["b5"], overrides))
 
 
@@ -417,9 +405,7 @@ def efficientnet_b6(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 2304, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b6", alternative="efficientnet_b6_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b6", alternative="efficientnet_b6_cls")
     return EfficientNet(apply_overrides(_CFGS["b6"], overrides))
 
 
@@ -473,9 +459,7 @@ def efficientnet_b7(pretrained: bool = False, **overrides: object) -> EfficientN
     (1, 2560, 1, 1)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientnet_b7", alternative="efficientnet_b7_cls"
-        )
+        reject_unavailable_pretrained("efficientnet_b7", alternative="efficientnet_b7_cls")
     return EfficientNet(apply_overrides(_CFGS["b7"], overrides))
 
 

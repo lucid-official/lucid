@@ -12,9 +12,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.nn.functional.normalization import normalize
 
 
-def cosine_similarity(
-    x1: Tensor, x2: Tensor, dim: int = 1, eps: float = 1e-8
-) -> Tensor:
+def cosine_similarity(x1: Tensor, x2: Tensor, dim: int = 1, eps: float = 1e-8) -> Tensor:
     r"""Cosine similarity between two tensors along a dimension.
 
     Measures the angle between two vectors irrespective of their

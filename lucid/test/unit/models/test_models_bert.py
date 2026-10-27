@@ -124,17 +124,12 @@ class TestBERTForMaskedLM:
 
     def test_decoder_weight_is_tied(self) -> None:
         m = BERTForMaskedLM(_tiny_config()).eval()
-        assert (
-            m.cls.predictions.decoder.weight is m.bert.embeddings.word_embeddings.weight
-        )
+        assert m.cls.predictions.decoder.weight is m.bert.embeddings.word_embeddings.weight
 
     def test_untied_when_disabled(self) -> None:
         cfg = _tiny_config(tie_word_embeddings=False)
         m = BERTForMaskedLM(cfg).eval()
-        assert (
-            m.cls.predictions.decoder.weight
-            is not m.bert.embeddings.word_embeddings.weight
-        )
+        assert m.cls.predictions.decoder.weight is not m.bert.embeddings.word_embeddings.weight
 
 
 class TestBERTForSequenceClassification:
@@ -417,18 +412,12 @@ class TestBERTForPreTraining:
         cfg = _tiny_config()
         m = BERTForPreTraining(cfg).eval()
         ids, attn, tt = _ids(B=2, T=8)
-        mlm_labels = lucid.tensor(
-            [[3, -100, 5, -100, -100, -100, -100, -100]] * 2
-        ).long()
+        mlm_labels = lucid.tensor([[3, -100, 5, -100, -100, -100, -100, -100]] * 2).long()
         nsp_labels = lucid.tensor([1, 0]).long()
         out = m(ids, attn, tt, labels=mlm_labels, next_sentence_label=nsp_labels)
         assert tuple(out.prediction_logits.shape) == (2, 8, _VOCAB)
         assert tuple(out.seq_relationship_logits.shape) == (2, 2)
-        assert (
-            out.loss is not None
-            and out.mlm_loss is not None
-            and out.nsp_loss is not None
-        )
+        assert out.loss is not None and out.mlm_loss is not None and out.nsp_loss is not None
 
     def test_mlm_only(self) -> None:
         m = BERTForPreTraining(_tiny_config()).eval()
@@ -440,9 +429,7 @@ class TestBERTForPreTraining:
 
     def test_tied_decoder(self) -> None:
         m = BERTForPreTraining(_tiny_config()).eval()
-        assert (
-            m.cls.predictions.decoder.weight is m.bert.embeddings.word_embeddings.weight
-        )
+        assert m.cls.predictions.decoder.weight is m.bert.embeddings.word_embeddings.weight
 
 
 class TestBERTForNextSentencePrediction:

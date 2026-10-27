@@ -65,9 +65,7 @@ class TestFakeQuantize:
     def test_ste_gradient_per_tensor(self) -> None:
         # Gradient is 1 inside the grid, 0 where the value saturates.
         xg = lucid.tensor([-100.0, 0.2, 0.5, 100.0], requires_grad=True)
-        Q.fake_quantize(
-            xg, 0.05, 0.0, Q.qint8.quant_min, Q.qint8.quant_max
-        ).sum().backward()
+        Q.fake_quantize(xg, 0.05, 0.0, Q.qint8.quant_min, Q.qint8.quant_max).sum().backward()
         assert xg.grad.numpy().tolist() == [0.0, 1.0, 1.0, 0.0]
 
     def test_ste_gradient_per_channel(self) -> None:

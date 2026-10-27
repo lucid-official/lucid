@@ -31,9 +31,7 @@ _RUNTIME = (
 
 
 def _wheel(tmp_path: Path, members: tuple[str, ...]) -> Path:
-    path = (
-        tmp_path / f"lucid_dl-0.0.0-cp314-cp314-{check_wheel.platform_tag(_FLOOR)}.whl"
-    )
+    path = tmp_path / f"lucid_dl-0.0.0-cp314-cp314-{check_wheel.platform_tag(_FLOOR)}.whl"
     with zipfile.ZipFile(path, "w") as archive:
         for name in members:
             archive.writestr(name, b"")
@@ -57,9 +55,7 @@ def test_runtime_files_and_metadata_pass(tmp_path: Path) -> None:
 def test_the_test_and_benchmark_trees_are_refused(tmp_path: Path, entry: str) -> None:
     # Their .py files too: packages.find excluding them is one setting away.
     problems, _ = check_wheel.check(_wheel(tmp_path, (*_RUNTIME, entry)), _FLOOR)
-    assert problems == [
-        f"ships {entry}: the test and benchmark trees stay in the checkout"
-    ]
+    assert problems == [f"ships {entry}: the test and benchmark trees stay in the checkout"]
 
 
 @pytest.mark.parametrize(
@@ -81,7 +77,5 @@ def test_source_build_and_cache_files_are_refused(tmp_path: Path, entry: str) ->
 
 def test_a_foreign_mlx_library_is_refused_once(tmp_path: Path) -> None:
     # It is not a runtime file either; the gate says the reason that matters.
-    problems, _ = check_wheel.check(
-        _wheel(tmp_path, (*_RUNTIME, "lucid/_C/libmlx.dylib")), _FLOOR
-    )
+    problems, _ = check_wheel.check(_wheel(tmp_path, (*_RUNTIME, "lucid/_C/libmlx.dylib")), _FLOOR)
     assert len(problems) == 1 and "dyld would share" in problems[0], problems

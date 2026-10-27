@@ -74,9 +74,7 @@ def test_erfinv_agrees_across_devices():
 def test_gather_with_integer_indices(device):
     values = np.arange(20, dtype=np.float32).reshape(4, 5)
     idx = np.array([[0, 1, 2, 3, 4], [4, 3, 2, 1, 0]] * 2, dtype=np.int64)
-    got = lucid.tensor(values, device=device).gather(
-        1, lucid.tensor(idx, device=device)
-    )
+    got = lucid.tensor(values, device=device).gather(1, lucid.tensor(idx, device=device))
     assert np.abs(got.numpy() - np.take_along_axis(values, idx, axis=1)).max() == 0.0
 
 

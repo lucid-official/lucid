@@ -100,9 +100,7 @@ def _as_index(index: Tensor) -> Tensor:
     return index.to(dtype=_lucid.int64)
 
 
-def _in_range(
-    index: Tensor, extent: int, counted: Tensor | None = None
-) -> tuple[Tensor, Tensor]:
+def _in_range(index: Tensor, extent: int, counted: Tensor | None = None) -> tuple[Tensor, Tensor]:
     """``index`` clamped into ``[0, extent)``, and where that changed nothing.
 
     Returns ``(clamped, usable)``. ``clamped`` is what a gather can read
@@ -123,9 +121,7 @@ def _in_range(
     return clamped, usable
 
 
-def _guard(
-    index: Tensor, extent: int, counted: Tensor | None = None
-) -> tuple[Tensor, Tensor]:
+def _guard(index: Tensor, extent: int, counted: Tensor | None = None) -> tuple[Tensor, Tensor]:
     """``(index, usable)`` for a guard whose clamp nothing reads: ``index``
     as an integer tensor, and where it lies inside ``[0, extent)``.
 
@@ -164,9 +160,7 @@ def _refuse(index: Tensor, usable: Tensor, message: Callable[[object], str]) -> 
     first = _host_read(
         lambda: next(
             value
-            for value, ok in zip(
-                _flat(index.tolist()), _flat(usable.tolist()), strict=True
-            )
+            for value, ok in zip(_flat(index.tolist()), _flat(usable.tolist()), strict=True)
             if not ok
         )
     )
@@ -242,13 +236,9 @@ def _class_targets(
 
 
 @overload
-def _poison(
-    scale: Tensor, usable: Tensor | None, like: Tensor, dtype: _dtype
-) -> Tensor: ...
+def _poison(scale: Tensor, usable: Tensor | None, like: Tensor, dtype: _dtype) -> Tensor: ...
 @overload
-def _poison(
-    scale: None, usable: Tensor | None, like: Tensor, dtype: _dtype
-) -> Tensor | None: ...
+def _poison(scale: None, usable: Tensor | None, like: Tensor, dtype: _dtype) -> Tensor | None: ...
 def _poison(
     scale: Tensor | None,
     usable: Tensor | None,
@@ -294,8 +284,7 @@ def _check_indices(
         index,
         usable,
         lambda v: (
-            f"{op}: {what} {v} is out of range for {axis} "
-            f"(valid range [0, {extent - 1}])"
+            f"{op}: {what} {v} is out of range for {axis} " f"(valid range [0, {extent - 1}])"
         ),
     )
 
@@ -383,9 +372,7 @@ def _check_unpool(
         axis=f"output_size {output_spatial} ({spatial_numel} elements)",
     )
     idx = (
-        indices
-        if indices.dtype in (_lucid.int32, _lucid.int64)
-        else indices.to(dtype=_lucid.int64)
+        indices if indices.dtype in (_lucid.int32, _lucid.int64) else indices.to(dtype=_lucid.int64)
     )
     if idx.device != "cpu" and idx.numel() > 0:
         idx = _lucid.where(idx < 0, spatial_numel, idx)
@@ -404,9 +391,7 @@ def _padding_index(padding_idx: int | None, weight: Tensor, op: str) -> int | No
         return None
     rows = int(weight.shape[0])
     if not -rows <= padding_idx < rows:
-        raise ValueError(
-            f"{op}: padding_idx must be within [-{rows}, {rows}); got {padding_idx}"
-        )
+        raise ValueError(f"{op}: padding_idx must be within [-{rows}, {rows}); got {padding_idx}")
     return padding_idx + rows if padding_idx < 0 else padding_idx
 
 
@@ -423,8 +408,7 @@ def _check_offsets(offsets: Tensor, length: int, op: str) -> None:
     """
     if offsets.ndim != 1:
         raise ValueError(
-            f"{op}: offsets must be 1-D, got shape "
-            f"{tuple(int(d) for d in offsets.shape)}"
+            f"{op}: offsets must be 1-D, got shape " f"{tuple(int(d) for d in offsets.shape)}"
         )
     if offsets._impl.is_phantom:
         return
@@ -439,9 +423,7 @@ def _check_offsets(offsets: Tensor, length: int, op: str) -> None:
         raise ValueError(f"{op}: offsets[0] must be 0, got {bounds[0]}")
     for before, after in pairwise(bounds):
         if after < before:
-            raise ValueError(
-                f"{op}: offsets must not decrease, got {after} after {before}"
-            )
+            raise ValueError(f"{op}: offsets must not decrease, got {after} after {before}")
 
 
 # ── ctc_loss ────────────────────────────────────────────────────────────────
@@ -460,8 +442,7 @@ def _check_lengths(
     shape = tuple(int(d) for d in lengths.shape)
     if shape != (batch,):
         raise ValueError(
-            f"{op}: {name} must hold one length per sequence, shape "
-            f"({batch},), got {shape}"
+            f"{op}: {name} must hold one length per sequence, shape " f"({batch},), got {shape}"
         )
     values = [int(cast(int, v)) for v in _flat(_host_read(lengths.tolist))]
     for v in values:

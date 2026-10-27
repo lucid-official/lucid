@@ -98,9 +98,7 @@ def _ids(values: list[object]) -> list[str]:
 
 @pytest.mark.parametrize("op", _ARITHMETIC + _COMPARISON, ids=lambda f: f.__name__)
 @pytest.mark.parametrize("scalar", _REAL, ids=_ids(_REAL))
-@pytest.mark.parametrize(
-    "dtype", [lucid.float32, lucid.float16, lucid.int32, lucid.bool]
-)
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.int32, lucid.bool])
 def test_an_operator_takes_a_numpy_scalar_as_its_number(
     device: str, dtype: lucid.dtype, scalar: np.generic, op: Callable[..., object]
 ) -> None:

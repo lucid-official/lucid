@@ -177,9 +177,7 @@ def coatnet_0(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_0,
     params=25_000_000,
 )
-def coatnet_0_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_0_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-0 image classifier (Dai et al., 2021).
 
     Combines the :func:`coatnet_0` backbone with the standard CoAtNet
@@ -285,9 +283,7 @@ def coatnet_1(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_1,
     params=42_000_000,
 )
-def coatnet_1_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_1_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-1 image classifier (Dai et al., 2021).
 
     Backbone + standard CoAtNet head (GAP → LayerNorm → Linear+Tanh →
@@ -373,9 +369,7 @@ def coatnet_2(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_2,
     params=75_000_000,
 )
-def coatnet_2_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_2_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-2 image classifier (Dai et al., 2021).
 
     Wider variant — ``dims=(128, 256, 512, 1024)`` — with the standard
@@ -462,9 +456,7 @@ def coatnet_3(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_3,
     params=168_000_000,
 )
-def coatnet_3_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_3_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-3 image classifier (Dai et al., 2021).
 
     Larger variant — ``dims=(192, 384, 768, 1536)`` — with the standard
@@ -551,9 +543,7 @@ def coatnet_4(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_4,
     params=275_000_000,
 )
-def coatnet_4_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_4_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-4 image classifier (Dai et al., 2021).
 
     Deepest of the CoAtNet-0..4 series — same dims as CoAtNet-3 but with
@@ -648,9 +638,7 @@ def coatnet_5(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_5,
     params=688_000_000,
 )
-def coatnet_5_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_5_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-5 image classifier (Dai et al., 2021).
 
     Widest paper-cited variant — ``dims=(256, 512, 1280, 2048)`` — with
@@ -752,9 +740,7 @@ def coatnet_6(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_6,
     params=1_470_000_000,
 )
-def coatnet_6_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_6_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-6 image classifier (Dai et al., 2021).
 
     Mixed-S3 variant.  Approximately **1.5B parameters**.
@@ -848,9 +834,7 @@ def coatnet_7(pretrained: bool = False, **overrides: object) -> CoAtNet:
     default_config=_CFG_7,
     params=2_440_000_000,
 )
-def coatnet_7_cls(
-    pretrained: bool = False, **overrides: object
-) -> CoAtNetForImageClassification:
+def coatnet_7_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-7 image classifier (Dai et al., 2021).
 
     Widest mixed-S3 variant.  Approximately **2.4B parameters**.

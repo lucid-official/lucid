@@ -112,8 +112,7 @@ def _set_requires_grad(t: Tensor, requires_grad: bool, *, setter: bool) -> None:
         hint = (
             ""
             if requires_grad
-            else "; to use a computed tensor without gradient tracking, "
-            "take x.detach()"
+            else "; to use a computed tensor without gradient tracking, " "take x.detach()"
         )
         raise RuntimeError(f"requires_grad can only be changed on a leaf tensor{hint}.")
     impl._set_requires_grad(requires_grad)
@@ -1156,9 +1155,7 @@ class Tensor:
             )
         self._impl.retain_grad_()
 
-    def register_hook(
-        self, hook: Callable[[Tensor], Tensor | None]
-    ) -> _RemovableHandle:
+    def register_hook(self, hook: Callable[[Tensor], Tensor | None]) -> _RemovableHandle:
         r"""Register a hook that runs on this tensor's gradient during backward.
 
         The hook receives the gradient of ``self`` in the current backward
@@ -2017,9 +2014,7 @@ class Tensor:
         RuntimeError: Boolean value of Tensor with more than one element is ambiguous
         """
         if self._impl.numel() != 1:
-            raise RuntimeError(
-                "Boolean value of Tensor with more than one element is ambiguous"
-            )
+            raise RuntimeError("Boolean value of Tensor with more than one element is ambiguous")
         return bool(self.item())
 
     def __repr__(self) -> str:
@@ -2818,9 +2813,7 @@ class Tensor:
         result. A view is returned when the source is contiguous;
         otherwise a contiguous copy is materialised first.
         """
-        return Tensor.__new_from_impl__(
-            _C_engine.reshape(self._impl, list(other._impl.shape))
-        )
+        return Tensor.__new_from_impl__(_C_engine.reshape(self._impl, list(other._impl.shape)))
 
     @final
     class _UntypedStorage:
@@ -3007,14 +3000,8 @@ class Tensor:
         >>> x.tolist()
         [0.5, 0.5, 0.5]
         """
-        filled = _C_engine.full(
-            list(self._impl.shape), value, self._impl.dtype, self._impl.device
-        )
-        if (
-            self._impl.requires_grad
-            and not self._impl.is_leaf
-            and _C_engine.grad_enabled()
-        ):
+        filled = _C_engine.full(list(self._impl.shape), value, self._impl.dtype, self._impl.device)
+        if self._impl.requires_grad and not self._impl.is_leaf and _C_engine.grad_enabled():
             # The result no longer depends on the old values, but it stays in
             # the graph with that zero derivative, as the reference keeps it:
             # detached, a loss built from it could not be differentiated.
@@ -3101,9 +3088,7 @@ class Tensor:
     # share, with the result's place in the autograd graph, refused on a leaf
     # that requires grad while autograd records — as ``fill_`` and ``copy_``.
 
-    def index_add(
-        self, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0
-    ) -> Tensor:
+    def index_add(self, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0) -> Tensor:
         r"""Return a copy of ``self`` with ``alpha * source`` added at ``index`` along ``dim``.
 
         Slice ``i`` of ``source`` along ``dim`` is added to slice
@@ -3151,9 +3136,7 @@ class Tensor:
 
         return _index_add(self, dim, index, source, alpha=alpha)
 
-    def index_add_(
-        self, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0
-    ) -> Self:
+    def index_add_(self, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0) -> Self:
         r"""Add ``alpha * source`` into ``self`` at ``index`` along ``dim``, in place.
 
         In-place form of :meth:`index_add`: the sums are written into
@@ -3411,9 +3394,7 @@ class Tensor:
         """
         from lucid._ops.composite.indexing import _write_inplace, index_fill
 
-        return _write_inplace(
-            self, "index_fill_", lambda base: index_fill(base, dim, index, value)
-        )
+        return _write_inplace(self, "index_fill_", lambda base: index_fill(base, dim, index, value))
 
     def index_put(
         self,
@@ -3569,9 +3550,7 @@ class Tensor:
         >>> x.expand_as(proto).shape
         (4, 3)
         """
-        return Tensor.__new_from_impl__(
-            _C_engine.expand(self._impl, list(other._impl.shape))
-        )
+        return Tensor.__new_from_impl__(_C_engine.expand(self._impl, list(other._impl.shape)))
 
     def view_as(self, other: Tensor) -> Tensor:
         r"""Return a view of ``self`` with the same shape as ``other``.
@@ -3604,9 +3583,7 @@ class Tensor:
         >>> x.view_as(proto).shape
         (2, 3)
         """
-        return Tensor.__new_from_impl__(
-            _C_engine.view(self._impl, list(other._impl.shape))
-        )
+        return Tensor.__new_from_impl__(_C_engine.view(self._impl, list(other._impl.shape)))
 
     def type_as(self, other: Tensor) -> Tensor:
         r"""Cast ``self`` to the dtype and device of ``other``.
@@ -3811,9 +3788,7 @@ class Tensor:
 
         return _diff(self, n=n, dim=dim, prepend=prepend, append=append)
 
-    def addmm(
-        self, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
-    ) -> Tensor:
+    def addmm(self, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0) -> Tensor:
         r"""Fused matrix multiply-add.
 
         Computes
@@ -3967,9 +3942,7 @@ def _tensor_unpickle(
     from lucid._dtype import _resolve_dtype_name, to_engine_dtype
 
     eng_dtype = to_engine_dtype(_resolve_dtype_name(dtype_name))
-    impl = _C_engine.TensorImpl.from_bytes(
-        raw_bytes, list(shape), eng_dtype, device, requires_grad
-    )
+    impl = _C_engine.TensorImpl.from_bytes(raw_bytes, list(shape), eng_dtype, device, requires_grad)
     return Tensor.__new_from_impl__(impl)
 
 

@@ -215,19 +215,13 @@ class _SwinAttention(nn.Module):
         nw = int(x.shape[0])
         seq = int(x.shape[1])
         q: Tensor = (
-            self.q_proj(x)
-            .reshape(nw, seq, self.num_heads, self.head_dim)
-            .permute(0, 2, 1, 3)
+            self.q_proj(x).reshape(nw, seq, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         )
         k: Tensor = (
-            self.k_proj(x)
-            .reshape(nw, seq, self.num_heads, self.head_dim)
-            .permute(0, 2, 1, 3)
+            self.k_proj(x).reshape(nw, seq, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         )
         v: Tensor = (
-            self.v_proj(x)
-            .reshape(nw, seq, self.num_heads, self.head_dim)
-            .permute(0, 2, 1, 3)
+            self.v_proj(x).reshape(nw, seq, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         )
 
         attn: Tensor = lucid.matmul(q * self.scaling, k.permute(0, 1, 3, 2))
@@ -277,9 +271,7 @@ def _window_partition(x: Tensor, window_size: int) -> Tensor:
 def _window_reverse(windows: Tensor, window_size: int, h: int, w: int) -> Tensor:
     """(num_windows*B, window_size, window_size, C) -> (B, H, W, C)."""
     c = int(windows.shape[-1])
-    x = windows.reshape(
-        -1, h // window_size, w // window_size, window_size, window_size, c
-    )
+    x = windows.reshape(-1, h // window_size, w // window_size, window_size, window_size, c)
     x = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, h, w, c)
     return x
 
@@ -306,12 +298,10 @@ def _build_swin_attn_mask(
                 for j in range(ws, we):
                     img_mask[i][j] = float(count)
             count += 1
-    mask_t: Tensor = lucid.tensor(
-        img_mask, dtype=like.dtype, device=like.device
-    ).reshape(1, height, width, 1)
-    mask_windows = _window_partition(mask_t, window_size).reshape(
-        -1, window_size * window_size
+    mask_t: Tensor = lucid.tensor(img_mask, dtype=like.dtype, device=like.device).reshape(
+        1, height, width, 1
     )
+    mask_windows = _window_partition(mask_t, window_size).reshape(-1, window_size * window_size)
     # (nW, 1, seq) - (nW, seq, 1) -> (nW, seq, seq)
     diff = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
     nonzero = (diff != 0.0).to(like.dtype)
@@ -414,14 +404,10 @@ class _SwinStage(nn.Module):
             shift = 0 if (i % 2 == 0) else window_size // 2
             blocks.append(_SwinLayer(dim, num_heads, window_size, shift, mlp_ratio))
         self.blocks: nn.ModuleList[_SwinLayer] = nn.ModuleList(blocks)
-        self.downsample: _SwinPatchMerging | None = (
-            _SwinPatchMerging(dim) if downsample else None
-        )
+        self.downsample: _SwinPatchMerging | None = _SwinPatchMerging(dim) if downsample else None
 
     @override
-    def forward(
-        self, x: Tensor, dims: tuple[int, int]
-    ) -> tuple[Tensor, Tensor, tuple[int, int]]:
+    def forward(self, x: Tensor, dims: tuple[int, int]) -> tuple[Tensor, Tensor, tuple[int, int]]:
         h, w = dims
         for block in self.blocks:
             blk = block
@@ -468,9 +454,7 @@ class _SwinEncoder(nn.Module):
         self.layers: nn.ModuleList[_SwinStage] = nn.ModuleList(stages)
 
     @override
-    def forward(
-        self, x: Tensor, dims: tuple[int, int]
-    ) -> list[tuple[Tensor, tuple[int, int]]]:
+    def forward(self, x: Tensor, dims: tuple[int, int]) -> list[tuple[Tensor, tuple[int, int]]]:
         """Return per-stage (before-downsample hidden state, spatial dims)."""
         out: list[tuple[Tensor, tuple[int, int]]] = []
         for stage in self.layers:
@@ -496,9 +480,7 @@ class _SwinModel(nn.Module):
     ) -> None:
         super().__init__()
         self.embeddings = _SwinEmbeddings(in_channels, embed_dim)
-        self.encoder = _SwinEncoder(
-            embed_dim, depths, num_heads, window_size, mlp_ratio
-        )
+        self.encoder = _SwinEncoder(embed_dim, depths, num_heads, window_size, mlp_ratio)
 
     @override
     def forward(self, x: Tensor) -> list[tuple[Tensor, tuple[int, int]]]:
@@ -524,9 +506,7 @@ class _SwinBackbone(nn.Module):
         mlp_ratio: float,
     ) -> None:
         super().__init__()
-        self.swin = _SwinModel(
-            in_channels, embed_dim, depths, num_heads, window_size, mlp_ratio
-        )
+        self.swin = _SwinModel(in_channels, embed_dim, depths, num_heads, window_size, mlp_ratio)
         channels = [int(embed_dim * 2**i) for i in range(len(depths))]
         self.out_channels: list[int] = channels
         norms: dict[str, nn.LayerNorm] = {}
@@ -558,17 +538,13 @@ class _SwinBackbone(nn.Module):
 class _DeformableAttention(nn.Module):
     """Multi-scale deformable attention (reference layer)."""
 
-    def __init__(
-        self, embed_dim: int, num_heads: int, n_levels: int, n_points: int
-    ) -> None:
+    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int) -> None:
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.n_levels = n_levels
         self.n_points = n_points
-        self.sampling_offsets = nn.Linear(
-            embed_dim, num_heads * n_levels * n_points * 2
-        )
+        self.sampling_offsets = nn.Linear(embed_dim, num_heads * n_levels * n_points * 2)
         self.attention_weights = nn.Linear(embed_dim, num_heads * n_levels * n_points)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
         self.output_proj = nn.Linear(embed_dim, embed_dim)
@@ -641,12 +617,8 @@ class _DeformableAttention(nn.Module):
         )
 
         # offset_normalizer: [[W, H], ...] per level
-        normalizer: list[list[float]] = [
-            [float(w), float(h)] for (h, w) in spatial_shapes
-        ]
-        norm_t: Tensor = lucid.tensor(
-            normalizer, dtype=hs.dtype, device=hs.device
-        )  # (n_levels, 2)
+        normalizer: list[list[float]] = [[float(w), float(h)] for (h, w) in spatial_shapes]
+        norm_t: Tensor = lucid.tensor(normalizer, dtype=hs.dtype, device=hs.device)  # (n_levels, 2)
         # sampling_locations — ref[:, :, None, :, None, :] + offsets / norm[None,None,None,:,None,:]
         ref_exp: Tensor = reference_points[:, :, None, :, None, :]
         norm_exp: Tensor = norm_t[None, None, None, :, None, :]
@@ -701,21 +673,14 @@ class _PixelDecoderEncoderLayer(nn.Module):
 class _PixelDecoderEncoder(nn.Module):
     """Stack of deformable-encoder layers (``layers``)."""
 
-    def __init__(
-        self, embed_dim: int, num_heads: int, ffn_dim: int, depth: int
-    ) -> None:
+    def __init__(self, embed_dim: int, num_heads: int, ffn_dim: int, depth: int) -> None:
         super().__init__()
         self.layers: nn.ModuleList[_PixelDecoderEncoderLayer] = nn.ModuleList(
-            [
-                _PixelDecoderEncoderLayer(embed_dim, num_heads, ffn_dim)
-                for _ in range(depth)
-            ]
+            [_PixelDecoderEncoderLayer(embed_dim, num_heads, ffn_dim) for _ in range(depth)]
         )
 
     @staticmethod
-    def get_reference_points(
-        spatial_shapes: list[tuple[int, int]], like: Tensor
-    ) -> Tensor:
+    def get_reference_points(spatial_shapes: list[tuple[int, int]], like: Tensor) -> Tensor:
         """Per-level reference points (valid_ratios are all 1 at inference)."""
         ref_list: list[Tensor] = []
         n_levels = len(spatial_shapes)
@@ -773,12 +738,8 @@ class _PixelDecoder(nn.Module):
     ) -> None:
         super().__init__()
         self.num_feature_levels = 3
-        self.position_embedding = SinePositionEmbedding(
-            num_position_features=feature_dim // 2
-        )
-        self.level_embed = nn.Parameter(
-            lucid.zeros(self.num_feature_levels, feature_dim)
-        )
+        self.position_embedding = SinePositionEmbedding(num_position_features=feature_dim // 2)
+        self.level_embed = nn.Parameter(lucid.zeros(self.num_feature_levels, feature_dim))
 
         # Input projections: highest-stride first (reversed last 3 channels)
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
@@ -792,9 +753,7 @@ class _PixelDecoder(nn.Module):
             )
         self.input_projections = nn.ModuleList(projections)
 
-        self.encoder = _PixelDecoderEncoder(
-            feature_dim, num_heads, ffn_dim, encoder_depth
-        )
+        self.encoder = _PixelDecoderEncoder(feature_dim, num_heads, ffn_dim, encoder_depth)
         self.mask_projection = nn.Conv2d(feature_dim, mask_dim, kernel_size=1)
 
         # Extra FPN levels
@@ -812,9 +771,7 @@ class _PixelDecoder(nn.Module):
                 nn.GroupNorm(32, feature_dim),
             )
             output = nn.Sequential(
-                nn.Conv2d(
-                    feature_dim, feature_dim, kernel_size=3, padding=1, bias=False
-                ),
+                nn.Conv2d(feature_dim, feature_dim, kernel_size=3, padding=1, bias=False),
                 nn.GroupNorm(32, feature_dim),
                 nn.ReLU(),
             )
@@ -862,9 +819,7 @@ class _PixelDecoder(nn.Module):
         input_embeds_flat: Tensor = lucid.cat(flat_embeds, dim=1)
         level_pos_flat: Tensor = lucid.cat(flat_pos, dim=1)
 
-        encoded: Tensor = self.encoder(
-            input_embeds_flat, level_pos_flat, spatial_shapes
-        )
+        encoded: Tensor = self.encoder(input_embeds_flat, level_pos_flat, spatial_shapes)
 
         # Split back to per-level spatial maps
         outputs: list[Tensor] = []
@@ -1053,14 +1008,10 @@ class _MaskPredictor(nn.Module):
     decoder layer's masked cross-attention.
     """
 
-    def __init__(
-        self, hidden_size: int, num_heads: int, mask_feature_size: int
-    ) -> None:
+    def __init__(self, hidden_size: int, num_heads: int, mask_feature_size: int) -> None:
         super().__init__()
         self.num_heads = num_heads
-        self.mask_embedder = _MLPPredictionHead(
-            hidden_size, hidden_size, mask_feature_size
-        )
+        self.mask_embedder = _MLPPredictionHead(hidden_size, hidden_size, mask_feature_size)
 
     @override
     def forward(
@@ -1077,9 +1028,7 @@ class _MaskPredictor(nn.Module):
         pw = int(pixel_embeddings.shape[3])
         n = int(mask_embeddings.shape[1])
         pix_flat = pixel_embeddings.reshape(b, c, ph * pw)
-        outputs_mask: Tensor = lucid.matmul(mask_embeddings, pix_flat).reshape(
-            b, n, ph, pw
-        )
+        outputs_mask: Tensor = lucid.matmul(mask_embeddings, pix_flat).reshape(b, n, ph, pw)
 
         # attention mask at target size
         th, tw = target_size
@@ -1108,9 +1057,7 @@ class _MaskedAttentionDecoder(nn.Module):
         self.decoder_layers = config.num_decoder_layers - 1
         self.layers = nn.ModuleList(
             [
-                _MaskedAttentionDecoderLayer(
-                    config.d_model, config.n_head, config.dim_feedforward
-                )
+                _MaskedAttentionDecoderLayer(config.d_model, config.n_head, config.dim_feedforward)
                 for _ in range(self.decoder_layers)
             ]
         )
@@ -1333,9 +1280,7 @@ def _m2f_stage_loss(
         # Matching uses uniform points; the loss re-samples with the
         # importance sampler, as the reference does.
         match_coords = sample_point_coords(cfg.train_num_points, device=dev)
-        pred_idx, gt_idx = _m2f_match(
-            cls_i, msk_i, gt_labels, gt_masks, match_coords, cfg
-        )
+        pred_idx, gt_idx = _m2f_match(cls_i, msk_i, gt_labels, gt_masks, match_coords, cfg)
 
         pred_t = lucid.tensor(pred_idx, device=dev).long()
         gt_t = lucid.tensor(gt_idx, device=dev).long()
@@ -1467,9 +1412,7 @@ class Mask2FormerForSemanticSegmentation(SemanticSegmentationModel):
 
         # 3. Class + mask logits from the LAST decoder stage
         last_hidden: Tensor = intermediate[-1]  # (N, B, C)
-        class_logits: Tensor = self.class_predictor(
-            last_hidden.permute(1, 0, 2)
-        )  # (B, N, K+1)
+        class_logits: Tensor = self.class_predictor(last_hidden.permute(1, 0, 2))  # (B, N, K+1)
         mask_logits: Tensor = mask_predictions[-1]  # (B, N, H/4, W/4)
 
         # 4. Semantic post-processing:
@@ -1507,21 +1450,13 @@ class Mask2FormerForSemanticSegmentation(SemanticSegmentationModel):
             # Deep supervision: 3.2.2 applies the criterion after every
             # decoder layer, not only the last.  ``intermediate`` already
             # carries them, so the auxiliary terms cost no extra forward.
-            stages = (
-                range(len(intermediate))
-                if cfg.deep_supervision
-                else [len(intermediate) - 1]
-            )
+            stages = range(len(intermediate)) if cfg.deep_supervision else [len(intermediate) - 1]
             parts: list[Tensor] = []
             for si in stages:
                 stage_cls = self.class_predictor(intermediate[si].permute(1, 0, 2))
-                cls_l, ce_l, dice_l = _m2f_stage_loss(
-                    stage_cls, mask_predictions[si], targets, cfg
-                )
+                cls_l, ce_l, dice_l = _m2f_stage_loss(stage_cls, mask_predictions[si], targets, cfg)
                 parts.append(
-                    cfg.class_weight * cls_l
-                    + cfg.mask_weight * ce_l
-                    + cfg.dice_weight * dice_l
+                    cfg.class_weight * cls_l + cfg.mask_weight * ce_l + cfg.dice_weight * dice_l
                 )
             loss = lucid.cat([t.reshape(1) for t in parts]).sum()
 

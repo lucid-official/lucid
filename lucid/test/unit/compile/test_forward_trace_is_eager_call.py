@@ -169,9 +169,5 @@ def test_nested_compiled_inlines_into_outer_trace_and_matches_eager() -> None:
         want2 = (x2 + 1.0).sin() * 3.0
 
     assert outer.cache_info()["entries"] == 1
-    np.testing.assert_allclose(
-        y1.cpu().numpy(), want1.cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
-    np.testing.assert_allclose(
-        y2.cpu().numpy(), want2.cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(y1.cpu().numpy(), want1.cpu().numpy(), rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(y2.cpu().numpy(), want2.cpu().numpy(), rtol=1e-5, atol=1e-5)

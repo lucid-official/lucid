@@ -201,9 +201,7 @@ class _lazy_param(property):
     def __get__(self, instance: object, owner: type | None = None) -> Tensor: ...
 
     @override
-    def __get__(
-        self, instance: object | None, owner: type | None = None
-    ) -> Self | Tensor:
+    def __get__(self, instance: object | None, owner: type | None = None) -> Self | Tensor:
         if instance is None:
             return self
         stored: Tensor | None = vars(instance).get(self._name)

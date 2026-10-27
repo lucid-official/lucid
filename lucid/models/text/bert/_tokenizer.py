@@ -158,14 +158,10 @@ class BERTTokenizer(WordPieceTokenizer):
             normalizer=(
                 normalizer
                 if normalizer is not None
-                else BERTNormalizer(
-                    lowercase=do_lower_case, strip_accents=do_lower_case
-                )
+                else BERTNormalizer(lowercase=do_lower_case, strip_accents=do_lower_case)
             ),
             pre_tokenizer=(
-                pre_tokenizer
-                if pre_tokenizer is not None
-                else WhitespacePunctuationSplit()
+                pre_tokenizer if pre_tokenizer is not None else WhitespacePunctuationSplit()
             ),
             special_tokens=(
                 special_tokens if special_tokens is not None else _bert_special_tokens()
@@ -221,14 +217,10 @@ class BERTTokenizerFast(WordPieceTokenizerFast):
             normalizer=(
                 normalizer
                 if normalizer is not None
-                else BERTNormalizer(
-                    lowercase=do_lower_case, strip_accents=do_lower_case
-                )
+                else BERTNormalizer(lowercase=do_lower_case, strip_accents=do_lower_case)
             ),
             pre_tokenizer=(
-                pre_tokenizer
-                if pre_tokenizer is not None
-                else WhitespacePunctuationSplit()
+                pre_tokenizer if pre_tokenizer is not None else WhitespacePunctuationSplit()
             ),
             special_tokens=(
                 special_tokens if special_tokens is not None else _bert_special_tokens()

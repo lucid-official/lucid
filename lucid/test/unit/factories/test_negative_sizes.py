@@ -77,9 +77,7 @@ ENTRY_POINTS: dict[str, Builder] = {
     "new_full": lambda m, dev, s: _x(m, dev).new_full(s, 1.0),
     "repeat": lambda m, dev, s: _x(m, dev).repeat(*_pair(s)),
     "tile": lambda m, dev, s: _x(m, dev).tile(_pair(s)),
-    "repeat_interleave": lambda m, dev, s: _x(m, dev).repeat_interleave(
-        _first_negative(s), dim=0
-    ),
+    "repeat_interleave": lambda m, dev, s: _x(m, dev).repeat_interleave(_first_negative(s), dim=0),
     "expand": lambda m, dev, s: _x(m, dev).expand(*_no_keep(s)),
     "broadcast_to": lambda m, dev, s: m.broadcast_to(_x(m, dev), _no_keep(s)),
     "view": lambda m, dev, s: _x(m, dev).view(*_reshape_target(s)),
@@ -99,9 +97,7 @@ def _cases(check: str) -> list[object]:
     for name in ENTRY_POINTS:
         for sizes in SIZES:
             for dev in DEVICES:
-                params.append(
-                    pytest.param(name, sizes, dev, id=f"{name}-{sizes}-{dev}")
-                )
+                params.append(pytest.param(name, sizes, dev, id=f"{name}-{sizes}-{dev}"))
     return params
 
 
@@ -115,9 +111,7 @@ def _refusal(name: str, sizes: tuple[int, ...], dev: str) -> Exception:
 
 
 @pytest.mark.parametrize(("name", "sizes", "dev"), _cases("class"))
-def test_negative_size_raises_invalid_argument(
-    name: str, sizes: tuple[int, ...], dev: str
-) -> None:
+def test_negative_size_raises_invalid_argument(name: str, sizes: tuple[int, ...], dev: str) -> None:
     err = _refusal(name, sizes, dev)
     assert type(err) is _C_engine.InvalidArgument, f"{type(err).__name__}: {err}"
     assert isinstance(err, RuntimeError)
@@ -133,9 +127,7 @@ _NAMES_THE_SIZE = re.compile(
 
 
 @pytest.mark.parametrize(("name", "sizes", "dev"), _cases("message"))
-def test_refusal_names_the_op_and_the_size(
-    name: str, sizes: tuple[int, ...], dev: str
-) -> None:
+def test_refusal_names_the_op_and_the_size(name: str, sizes: tuple[int, ...], dev: str) -> None:
     msg = str(_refusal(name, sizes, dev))
     assert _NAMES_THE_SIZE.match(msg), msg
 
@@ -146,9 +138,7 @@ def test_tile_message_is_the_reference_wording(dev: str) -> None:
         pytest.skip("Metal device not available on this host")
     with pytest.raises(
         _C_engine.InvalidArgument,
-        match=re.escape(
-            "tile: Trying to create tensor with negative dimension -9: [4, -9]"
-        ),
+        match=re.escape("tile: Trying to create tensor with negative dimension -9: [4, -9]"),
     ):
         lucid.ones(2, 3, device=dev).tile((2, -3))
 
@@ -156,9 +146,7 @@ def test_tile_message_is_the_reference_wording(dev: str) -> None:
 def test_factory_message_is_the_reference_wording() -> None:
     with pytest.raises(
         _C_engine.InvalidArgument,
-        match=re.escape(
-            "zeros: Trying to create tensor with negative dimension -3: [2, -3]"
-        ),
+        match=re.escape("zeros: Trying to create tensor with negative dimension -3: [2, -3]"),
     ):
         lucid.zeros(2, -3)
 
@@ -220,8 +208,6 @@ def test_negative_size_cannot_crash_the_process() -> None:
         "except _C_engine.InvalidArgument:\n"
         "    print('refused')\n"
     )
-    proc = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
-    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, f"rc={proc.returncode}: {proc.stderr[-500:]}"
     assert proc.stdout.strip() == "refused"

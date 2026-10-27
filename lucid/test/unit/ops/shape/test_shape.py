@@ -41,9 +41,7 @@ class TestTranspose:
     def test_swapaxes(self, device: str) -> None:
         # ``swapaxes`` is the explicit-axis form.
         t = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
-        np.testing.assert_array_equal(
-            lucid.swapaxes(t, 0, 1).numpy(), [[1.0, 3.0], [2.0, 4.0]]
-        )
+        np.testing.assert_array_equal(lucid.swapaxes(t, 0, 1).numpy(), [[1.0, 3.0], [2.0, 4.0]])
 
     def test_mT_property(self, device: str) -> None:
         t = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
@@ -109,9 +107,7 @@ class TestCatStack:
             "row_stack",
         ],
     )
-    def test_mixed_dtypes_join_at_the_common_dtype(
-        self, device: str, join: str
-    ) -> None:
+    def test_mixed_dtypes_join_at_the_common_dtype(self, device: str, join: str) -> None:
         # The engine joins one dtype only, so an int64 beside a float32
         # raised DtypeMismatch; the reference joins them in float32.
         ints = lucid.tensor([1, 2], dtype=lucid.int64, device=device)

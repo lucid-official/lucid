@@ -90,9 +90,7 @@ def _inputs(device: str) -> dict[str, lucid.Tensor]:
         "sign": lucid.tensor([1.0, -1.0, 1.0, -1.0], device=device),
         "s1": lucid.randn(N, device=device),
         "s2": lucid.randn(N, device=device),
-        "labels": lucid.tensor(
-            [[0, -1, 0], [1, 2, -1], [2, -1, 1], [0, 1, 2]], device=device
-        ),
+        "labels": lucid.tensor([[0, -1, 0], [1, 2, -1], [2, -1, 1], [0, 1, 2]], device=device),
         "log_probs": F.log_softmax(lucid.randn(5, 2, C, device=device), dim=2),
         "ctc_targets": lucid.tensor([[1, 2], [2, 1]], device=device),
     }
@@ -223,17 +221,14 @@ def _weight_rows() -> list[Bad]:
         ]
     for name in sorted(ELEMENT_WEIGHT):
         rows += [
-            Bad(
-                name, "weight-not-broadcast", _set(weight=_ones(C + 1)), match="weight"
-            ),
+            Bad(name, "weight-not-broadcast", _set(weight=_ones(C + 1)), match="weight"),
             Bad(
                 name,
                 "weight-enlarges",
                 _set(weight=_ones(2, N, C)),
                 match="weight",
                 stricter=(
-                    "the reference broadcasts the per-class loss up to the "
-                    "weight's shape"
+                    "the reference broadcasts the per-class loss up to the " "weight's shape"
                     if name == "multilabel_soft_margin_loss"
                     else ""
                 ),
@@ -304,10 +299,7 @@ _SPECIFIC: list[Bad] = [
         _set(input=lambda d: lucid.randn(N, C, 2, device=d)),
         match="input",
     ),
-    *(
-        Bad("multi_margin_loss", f"p-{p}", _set(p=p), match="p == 1")
-        for p in (0, 3, -1)
-    ),
+    *(Bad("multi_margin_loss", f"p-{p}", _set(p=p), match="p == 1") for p in (0, 3, -1)),
     *(
         Bad(
             "cross_entropy",
@@ -383,9 +375,7 @@ _SPECIFIC: list[Bad] = [
         _set(input2=lambda d: lucid.randn(N + 1, C, device=d)),
         match="inputs",
     ),
-    Bad(
-        "margin_ranking_loss", "label-2d", _set(target=_ones(1, N)), match="dimensions"
-    ),
+    Bad("margin_ranking_loss", "label-2d", _set(target=_ones(1, N)), match="dimensions"),
     Bad(
         "margin_ranking_loss",
         "scores-mismatch",
@@ -493,8 +483,7 @@ def _target_rows() -> list[Bad]:
                     _target_shaped(name, _enlarged),
                     match="target",
                     stricter=(
-                        "the reference broadcasts the per-class loss up to the "
-                        "target's shape"
+                        "the reference broadcasts the per-class loss up to the " "target's shape"
                         if name == "multilabel_soft_margin_loss"
                         else ""
                     ),
@@ -774,9 +763,7 @@ def test_cross_entropy_under_autocast_past_65504_targets(
 
 _AUTOCAST_SUMS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "l1_loss": lambda x: F.l1_loss(x, lucid.zeros_like(x), reduction="sum"),
-    "smooth_l1_loss": lambda x: F.smooth_l1_loss(
-        x, lucid.zeros_like(x), beta=0.5, reduction="sum"
-    ),
+    "smooth_l1_loss": lambda x: F.smooth_l1_loss(x, lucid.zeros_like(x), beta=0.5, reduction="sum"),
     "binary_cross_entropy_with_logits": lambda x: (
         F.binary_cross_entropy_with_logits(x, lucid.zeros_like(x), reduction="sum")
     ),
@@ -903,9 +890,7 @@ def _whole_reductions(tree: ast.Module) -> list[tuple[str, int]]:
         ("t.all()", False),
     ],
 )
-def test_the_guard_tells_a_whole_reduction_from_a_per_dim_one(
-    source: str, whole: bool
-) -> None:
+def test_the_guard_tells_a_whole_reduction_from_a_per_dim_one(source: str, whole: bool) -> None:
     call = ast.parse(source, mode="eval").body
     assert isinstance(call, ast.Call)
     assert _reduces_everything(call) == whole

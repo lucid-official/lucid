@@ -92,10 +92,7 @@ class TestResolveWeights:
         assert W.resolve_weights(ResNet18Weights, False, None) is None
 
     def test_true_returns_default(self) -> None:
-        assert (
-            W.resolve_weights(ResNet18Weights, True, None)
-            is ResNet18Weights.IMAGENET1K_V1
-        )
+        assert W.resolve_weights(ResNet18Weights, True, None) is ResNet18Weights.IMAGENET1K_V1
 
     def test_string_tag(self) -> None:
         assert (
@@ -281,9 +278,7 @@ class TestARenamedCheckpointLoads:
         monkeypatch.setattr(loading, "download", lambda *a, **k: "unused")
         monkeypatch.setattr(serialization, "load_safetensors", lambda _p: state)
 
-    def test_the_rename_lands_the_weights(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_rename_lands_the_weights(self, monkeypatch: pytest.MonkeyPatch) -> None:
         model = lucid.nn.Sequential(lucid.nn.Dropout(0.2), lucid.nn.Linear(3, 2))
         flat = {"1.weight": lucid.ones(2, 3), "1.bias": lucid.zeros(2)}
         self._patch(monkeypatch, {"weight": flat["1.weight"], "bias": flat["1.bias"]})
@@ -294,18 +289,14 @@ class TestARenamedCheckpointLoads:
         )
         assert float(model[1].weight.sum().item()) == 6.0
 
-    def test_an_entry_without_a_map_is_untouched(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_an_entry_without_a_map_is_untouched(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The overwhelming majority of entries, and they must not change."""
         model = lucid.nn.Linear(3, 2)
         self._patch(monkeypatch, {"weight": lucid.ones(2, 3), "bias": lucid.zeros(2)})
         W.load_weight_entry(model, self._entry({}), name="plain")
         assert float(model.weight.sum().item()) == 6.0
 
-    def test_a_map_the_checkpoint_outgrew_is_refused(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_map_the_checkpoint_outgrew_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Silently skipping a stale rename is the dangerous reading.
 
         If the checkpoint is re-uploaded with corrected names, a map
@@ -381,17 +372,13 @@ class TestAnEntryDeclaresTheArchitectureItNeeds:
         """
         model = self._model(min_attn_channels=32)
         with pytest.raises(RuntimeError, match="built as min_attn_channels=32"):
-            W.load_weight_entry(
-                model, self._entry({"min_attn_channels": 16}), name="drifted"
-            )
+            W.load_weight_entry(model, self._entry({"min_attn_channels": 16}), name="drifted")
 
     def test_a_field_the_config_lost_is_an_error_too(self) -> None:
         """A declaration matching nothing reads as a check while being none."""
         model = self._model(something_else=1)
         with pytest.raises(RuntimeError, match="does not have"):
-            W.load_weight_entry(
-                model, self._entry({"min_attn_channels": 16}), name="renamed"
-            )
+            W.load_weight_entry(model, self._entry({"min_attn_channels": 16}), name="renamed")
 
     def test_a_model_without_a_config_cannot_be_checked(self) -> None:
         with pytest.raises(RuntimeError, match="no config"):
@@ -416,12 +403,8 @@ class TestAnEntryDeclaresTheArchitectureItNeeds:
         from lucid.models.vision.maskformer import MaskFormerResNet50Weights
         from lucid.models.vision.sknet import SKResNet18Weights
 
-        assert SKResNet18Weights.DEFAULT.entry.requires_config == {
-            "min_attn_channels": 16
-        }
-        assert MaskFormerResNet50Weights.DEFAULT.entry.requires_config == {
-            "num_encoder_layers": 0
-        }
+        assert SKResNet18Weights.DEFAULT.entry.requires_config == {"min_attn_channels": 16}
+        assert MaskFormerResNet50Weights.DEFAULT.entry.requires_config == {"num_encoder_layers": 0}
         assert CSPResNet50Weights.DEFAULT.entry.requires_config == {
             "cross_linear": (True, True, True, True)
         }

@@ -73,9 +73,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     ("LogisticNormal", lambda t: D.LogisticNormal(t([0.0, 0.5]), t([1.0, 0.8]))),
     (
         "LowRankMultivariateNormal",
-        lambda t: D.LowRankMultivariateNormal(
-            t([0.5, -0.5]), t([[1.0], [0.5]]), t([0.8, 1.2])
-        ),
+        lambda t: D.LowRankMultivariateNormal(t([0.5, -0.5]), t([[1.0], [0.5]]), t([0.8, 1.2])),
     ),
     (
         "MixtureSameFamily",
@@ -87,9 +85,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     ("Multinomial", lambda t: D.Multinomial(4, probs=t([0.2, 0.3, 0.5]))),
     (
         "MultivariateNormal",
-        lambda t: D.MultivariateNormal(
-            t([0.5, -0.5]), scale_tril=t([[1.0, 0.0], [0.3, 1.2]])
-        ),
+        lambda t: D.MultivariateNormal(t([0.5, -0.5]), scale_tril=t([[1.0, 0.0], [0.3, 1.2]])),
     ),
     ("NegativeBinomial", lambda t: D.NegativeBinomial(t(3.0), probs=t(0.4))),
     ("Normal", lambda t: D.Normal(t(0.5), t(1.2))),
@@ -108,9 +104,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     ("StudentT", lambda t: D.StudentT(t(5.0), t(0.5), t(1.2))),
     (
         "TransformedDistribution",
-        lambda t: D.TransformedDistribution(
-            D.Normal(t(0.2), t(0.8)), [T.ExpTransform()]
-        ),
+        lambda t: D.TransformedDistribution(D.Normal(t(0.2), t(0.8)), [T.ExpTransform()]),
     ),
     ("Uniform", lambda t: D.Uniform(t(-1.0), t(2.0))),
     ("VonMises", lambda t: D.VonMises(t(0.3), t(2.5))),
@@ -134,9 +128,7 @@ def test_expand_builders_cover_every_concrete_distribution() -> None:
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize(
-    "name,build", _EXPAND_BUILDERS, ids=[n for n, _ in _EXPAND_BUILDERS]
-)
+@pytest.mark.parametrize("name,build", _EXPAND_BUILDERS, ids=[n for n, _ in _EXPAND_BUILDERS])
 def test_expand_preserves_event_shape_and_matches_unexpanded_scoring(
     name: str, build: Callable[[Callable[[Any], Any]], Any], device: str
 ) -> None:
@@ -169,9 +161,7 @@ def test_get_checked_instance_refuses_unimplemented_subclass_expand() -> None:
 def test_perplexity_and_set_default_validate_args(ref: Any) -> None:
     d_ours = D.Normal(_lt([0.0, 1.0]), _lt([1.0, 2.0]))
     d_ref = ref.distributions.Normal(_rt(ref, [0.0, 1.0]), _rt(ref, [1.0, 2.0]))
-    np.testing.assert_allclose(
-        _np(d_ours.perplexity()), _np(d_ref.perplexity()), rtol=1e-6
-    )
+    np.testing.assert_allclose(_np(d_ours.perplexity()), _np(d_ref.perplexity()), rtol=1e-6)
 
     try:
         D.set_default_validate_args(False)
@@ -187,9 +177,7 @@ def test_perplexity_and_set_default_validate_args(ref: Any) -> None:
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_standard_gamma_grad_matches_reference_across_regimes(
-    device: str, ref: Any
-) -> None:
+def test_standard_gamma_grad_matches_reference_across_regimes(device: str, ref: Any) -> None:
     dtype = np.float64 if device == "cpu" else np.float32
     alphas = [0.02, 0.15, 0.6, 1.0, 2.5, 7.5, 15.0, 50.0]
     xs = [0.01, 0.08, 0.4, 0.9, 2.2, 6.8, 14.2, 48.5]
@@ -325,15 +313,9 @@ def test_low_rank_multivariate_normal_parity(device: str, ref: Any) -> None:
 
 
 def test_low_rank_multivariate_normal_kl_divergence(ref: Any) -> None:
-    p_l = D.LowRankMultivariateNormal(
-        _lt([0.5, -0.5]), _lt([[0.6], [0.3]]), _lt([0.8, 1.2])
-    )
-    q_l = D.LowRankMultivariateNormal(
-        _lt([-0.2, 0.4]), _lt([[0.4], [-0.5]]), _lt([1.1, 0.9])
-    )
-    m_l = D.MultivariateNormal(
-        _lt([0.1, 0.2]), scale_tril=_lt([[1.1, 0.0], [0.25, 0.9]])
-    )
+    p_l = D.LowRankMultivariateNormal(_lt([0.5, -0.5]), _lt([[0.6], [0.3]]), _lt([0.8, 1.2]))
+    q_l = D.LowRankMultivariateNormal(_lt([-0.2, 0.4]), _lt([[0.4], [-0.5]]), _lt([1.1, 0.9]))
+    m_l = D.MultivariateNormal(_lt([0.1, 0.2]), scale_tril=_lt([[1.1, 0.0], [0.25, 0.9]]))
     p_r = ref.distributions.LowRankMultivariateNormal(
         _rt(ref, [0.5, -0.5]), _rt(ref, [[0.6], [0.3]]), _rt(ref, [0.8, 1.2])
     )
@@ -360,9 +342,7 @@ def test_low_rank_multivariate_normal_kl_divergence(ref: Any) -> None:
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_logistic_normal_generalized_pareto_and_von_mises(
-    device: str, ref: Any
-) -> None:
+def test_logistic_normal_generalized_pareto_and_von_mises(device: str, ref: Any) -> None:
     ln_l = D.LogisticNormal(_lt([0.2, -0.3], device), _lt([0.8, 1.1], device))
     ln_r = ref.distributions.LogisticNormal(_rt(ref, [0.2, -0.3]), _rt(ref, [0.8, 1.1]))
     y = [0.25, 0.35, 0.40]
@@ -371,12 +351,8 @@ def test_logistic_normal_generalized_pareto_and_von_mises(
     )
 
     for conc in [0.25, 0.0, -0.25]:
-        gp_l = D.GeneralizedPareto(
-            _lt(1.0, device), _lt(2.0, device), _lt(conc, device)
-        )
-        gp_r = ref.distributions.GeneralizedPareto(
-            _rt(ref, 1.0), _rt(ref, 2.0), _rt(ref, conc)
-        )
+        gp_l = D.GeneralizedPareto(_lt(1.0, device), _lt(2.0, device), _lt(conc, device))
+        gp_r = ref.distributions.GeneralizedPareto(_rt(ref, 1.0), _rt(ref, 2.0), _rt(ref, conc))
         x = 1.8
         for actual, expected in (
             (gp_l.log_prob(_lt(x, device)), gp_r.log_prob(_rt(ref, x))),
@@ -399,9 +375,7 @@ def test_logistic_normal_generalized_pareto_and_von_mises(
     vm_l = D.VonMises(_lt([0.4, -0.5], device), _lt([0.3, 12.0], device))
     vm_r = ref.distributions.VonMises(_rt(ref, [0.4, -0.5]), _rt(ref, [0.3, 12.0]))
     for attr in ("mean", "mode", "variance"):
-        np.testing.assert_allclose(
-            _np(getattr(vm_l, attr)), _np(getattr(vm_r, attr)), rtol=1e-5
-        )
+        np.testing.assert_allclose(_np(getattr(vm_l, attr)), _np(getattr(vm_r, attr)), rtol=1e-5)
     np.testing.assert_allclose(
         _np(vm_l.log_prob(_lt([0.2, -0.4], device))),
         _np(vm_r.log_prob(_rt(ref, [0.2, -0.4]))),
@@ -518,13 +492,9 @@ def test_biject_to_and_transform_to_cover_constraints(device: str) -> None:
         t_bij = D.biject_to(constraint)
         y_bij = t_bij(inp)
         assert bool(constraint.check(y_bij).all().item())
-        np.testing.assert_allclose(
-            _np(t_bij.inv(y_bij)), _np(inp), rtol=1e-4, atol=1e-5
-        )
+        np.testing.assert_allclose(_np(t_bij.inv(y_bij)), _np(inp), rtol=1e-4, atol=1e-5)
 
         t_tr = D.transform_to(constraint)
         y_tr = t_tr(inp)
         assert bool(constraint.check(y_tr).all().item())
-        np.testing.assert_allclose(
-            _np(t_tr(t_tr.inv(y_tr))), _np(y_tr), rtol=1e-4, atol=1e-5
-        )
+        np.testing.assert_allclose(_np(t_tr(t_tr.inv(y_tr))), _np(y_tr), rtol=1e-4, atol=1e-5)

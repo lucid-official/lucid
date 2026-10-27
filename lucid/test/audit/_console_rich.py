@@ -136,9 +136,7 @@ class RichReporter:
         )
         self._footer = Text("")
         self._defects = 0
-        self._overall_task = self._overall.add_task(
-            "overall", total=sum(self._totals.values())
-        )
+        self._overall_task = self._overall.add_task("overall", total=sum(self._totals.values()))
         self._console = RichConsole(file=sys.stdout)
 
         # Only as many bars as the terminal can hold.
@@ -294,9 +292,7 @@ class RichReporter:
         return Group(*parts)
 
 
-def build(
-    console: Console, axes: Sequence[Axis], symbols: Sequence[Symbol]
-) -> RichReporter | None:
+def build(console: Console, axes: Sequence[Axis], symbols: Sequence[Symbol]) -> RichReporter | None:
     """A live reporter, or ``None`` to keep the stdlib display.
 
     ``console.live`` already encodes "a terminal that can be animated and

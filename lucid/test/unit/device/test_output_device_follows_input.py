@@ -29,9 +29,7 @@ MATRIX = np.random.default_rng(0).standard_normal((4, 4)).astype(np.float32)
 # ── the dtype contract that caused it ─────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "dtype,expected", [(lucid.float32, "float32"), (lucid.float64, "float64")]
-)
+@pytest.mark.parametrize("dtype,expected", [(lucid.float32, "float32"), (lucid.float64, "float64")])
 def test_histc_reports_in_the_input_dtype(dtype, expected) -> None:
     values = np.random.default_rng(0).standard_normal(20)
     out = lucid.histc(lucid.tensor(values, dtype=dtype), bins=5)
@@ -63,9 +61,7 @@ def test_histc_refuses_integer_input() -> None:
 
 def test_matrix_rank_value_is_unchanged() -> None:
     singular = np.array([[1.0, 2.0], [2.0, 4.0]])  # rank 1
-    assert (
-        int(np.asarray(lucid.linalg.matrix_rank(lucid.tensor(singular)).numpy())) == 1
-    )
+    assert int(np.asarray(lucid.linalg.matrix_rank(lucid.tensor(singular)).numpy())) == 1
     full = np.eye(4)
     assert int(np.asarray(lucid.linalg.matrix_rank(lucid.tensor(full)).numpy())) == 4
 
@@ -100,12 +96,8 @@ def test_the_two_devices_agree_on_the_values() -> None:
     cpu = np.asarray(lucid.histc(lucid.tensor(MATRIX, device="cpu")).numpy())
     metal = np.asarray(lucid.histc(lucid.tensor(MATRIX, device="metal")).numpy())
     assert np.allclose(cpu, metal)
-    cpu_rank = np.asarray(
-        lucid.linalg.matrix_rank(lucid.tensor(MATRIX, device="cpu")).numpy()
-    )
-    metal_rank = np.asarray(
-        lucid.linalg.matrix_rank(lucid.tensor(MATRIX, device="metal")).numpy()
-    )
+    cpu_rank = np.asarray(lucid.linalg.matrix_rank(lucid.tensor(MATRIX, device="cpu")).numpy())
+    metal_rank = np.asarray(lucid.linalg.matrix_rank(lucid.tensor(MATRIX, device="metal")).numpy())
     assert np.array_equal(cpu_rank, metal_rank)
 
 

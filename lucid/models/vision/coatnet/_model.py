@@ -308,9 +308,7 @@ class _RelAttnBlock(nn.Module):
         self.grid_w = grid_w
 
         # Relative position bias: table is (2H-1) × (2W-1) per head
-        self.rel_bias = nn.Parameter(
-            lucid.zeros(num_heads, (2 * grid_h - 1) * (2 * grid_w - 1))
-        )
+        self.rel_bias = nn.Parameter(lucid.zeros(num_heads, (2 * grid_h - 1) * (2 * grid_w - 1)))
 
         # Eqn (4): ``x <- Proj(Pool(x)) + Attention(Pool(Norm(x)))``.  The
         # identity branch projects the pooled input to the new width, and the
@@ -354,8 +352,7 @@ class _RelAttnBlock(nn.Module):
         """
         if grid_h < 1 or grid_w < 1:
             raise ValueError(
-                f"resample_rel_pos needs a positive attention grid, got "
-                f"({grid_h}, {grid_w})"
+                f"resample_rel_pos needs a positive attention grid, got " f"({grid_h}, {grid_w})"
             )
         if (grid_h, grid_w) == (self.grid_h, self.grid_w):
             return
@@ -373,9 +370,7 @@ class _RelAttnBlock(nn.Module):
         """The ``(num_heads, N, N)`` bias for attention on ``grid``."""
         table: Tensor = self.rel_bias
         if grid != (self.grid_h, self.grid_w):
-            table = _resize_rel_table(
-                table, self.num_heads, (self.grid_h, self.grid_w), grid
-            )
+            table = _resize_rel_table(table, self.num_heads, (self.grid_h, self.grid_w), grid)
         # Looked up by the table's device on every call, so a model moved to
         # another device reads an index that lives there.
         idx = _relative_index(grid[0], grid[1], self.rel_bias.device.type)
@@ -544,10 +539,7 @@ def _build_body(
     _total_blocks = sum(n) + (
         config.mixed_s3[0] + config.mixed_s3[1] if config.mixed_s3 is not None else 0
     )
-    _dpr = [
-        config.drop_path_rate * k / max(_total_blocks - 1, 1)
-        for k in range(_total_blocks)
-    ]
+    _dpr = [config.drop_path_rate * k / max(_total_blocks - 1, 1) for k in range(_total_blocks)]
     _cursor = [0]
 
     def _next_dp() -> float:
@@ -559,25 +551,17 @@ def _build_body(
 
     # ------------------------------------------------------------------ S1
     s1_layers: list[nn.Module] = []
-    s1_layers.append(
-        _MBConv(stem_ch, d[0], expand=exp, stride=2, drop_path_rate=_next_dp())
-    )
+    s1_layers.append(_MBConv(stem_ch, d[0], expand=exp, stride=2, drop_path_rate=_next_dp()))
     for _ in range(1, n[0]):
-        s1_layers.append(
-            _MBConv(d[0], d[0], expand=exp, stride=1, drop_path_rate=_next_dp())
-        )
+        s1_layers.append(_MBConv(d[0], d[0], expand=exp, stride=1, drop_path_rate=_next_dp()))
     s1 = nn.Sequential(*s1_layers)
     # After S1: H/4 × W/4
 
     # ------------------------------------------------------------------ S2
     s2_layers: list[nn.Module] = []
-    s2_layers.append(
-        _MBConv(d[0], d[1], expand=exp, stride=2, drop_path_rate=_next_dp())
-    )
+    s2_layers.append(_MBConv(d[0], d[1], expand=exp, stride=2, drop_path_rate=_next_dp()))
     for _ in range(1, n[1]):
-        s2_layers.append(
-            _MBConv(d[1], d[1], expand=exp, stride=1, drop_path_rate=_next_dp())
-        )
+        s2_layers.append(_MBConv(d[1], d[1], expand=exp, stride=1, drop_path_rate=_next_dp()))
     s2 = nn.Sequential(*s2_layers)
     # After S2: H/8 × W/8
 

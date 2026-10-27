@@ -421,9 +421,7 @@ class Sparsify:
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.ratio < 1.0:
-            raise ValueError(
-                f"lucid.coreml: sparsity is a fraction in [0, 1); got {self.ratio}"
-            )
+            raise ValueError(f"lucid.coreml: sparsity is a fraction in [0, 1); got {self.ratio}")
 
 
 class ColorSpace(enum.Enum):

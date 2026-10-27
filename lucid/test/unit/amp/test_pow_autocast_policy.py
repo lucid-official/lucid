@@ -95,9 +95,7 @@ def test_pow_schema_is_force_fp32() -> None:
 
 @_metal_only
 @pytest.mark.parametrize("spelling", sorted(_TENSOR_SPELLINGS))
-@pytest.mark.parametrize(
-    "dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str
-)
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str)
 def test_tensor_pow_under_metal_autocast_runs_in_float32(
     ref: ModuleType, dtype: lucid.dtype, spelling: str
 ) -> None:
@@ -145,9 +143,7 @@ def test_half_scalar_pow_under_metal_autocast_runs_in_float32(
     assert got.dtype == lucid.float32
     _assert_matches(got, want)
 
-    x = lucid.tensor(
-        [0.5, 1.25, 2.0, 3.0], dtype=dtype, device="metal", requires_grad=True
-    )
+    x = lucid.tensor([0.5, 1.25, 2.0, 3.0], dtype=dtype, device="metal", requires_grad=True)
     with autocast(device_type="metal", dtype=lucid.float16):
         y_pow = _C_engine.pow_scalar(x._impl, exponent)
         y_rpow = _C_engine.rpow_scalar(2.0, x._impl)
@@ -156,9 +152,7 @@ def test_half_scalar_pow_under_metal_autocast_runs_in_float32(
 
 
 @_metal_only
-@pytest.mark.parametrize(
-    "dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str
-)
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str)
 def test_local_response_norm_under_metal_autocast_runs_in_float32(
     ref: ModuleType, dtype: lucid.dtype
 ) -> None:
@@ -185,9 +179,7 @@ def test_local_response_norm_under_metal_autocast_runs_in_float32(
 
 @_metal_only
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16], ids=str)
-def test_half_pow_gradient_under_metal_autocast(
-    ref: ModuleType, dtype: lucid.dtype
-) -> None:
+def test_half_pow_gradient_under_metal_autocast(ref: ModuleType, dtype: lucid.dtype) -> None:
     rdev = _ref_device(ref, "metal")
     rdt = _ref_dtype(ref, dtype)
     a = lucid.tensor(_BASES, dtype=dtype, device="metal", requires_grad=True)
@@ -217,9 +209,7 @@ def test_integer_pow_keeps_its_dtype_and_is_exact(
     half = 1 << (bits - 1)
     bases = [0, 1, -1, 2, -2, 3, 5, 7]
     exps = [3, 0, 5, bits - 2, 3, 4, 3, 2]
-    want = [
-        ((x**e + half) % (1 << bits)) - half for x, e in zip(bases, exps, strict=True)
-    ]
+    want = [((x**e + half) % (1 << bits)) - half for x, e in zip(bases, exps, strict=True)]
     a = lucid.tensor(bases, dtype=dtype, device=device)
     b = lucid.tensor(exps, dtype=dtype, device=device)
     with autocast(device_type=device, dtype=_amp_dtype(device), enabled=amp):
@@ -238,10 +228,7 @@ def test_int64_pow_past_float64_mantissa_is_exact(device: str, amp: bool) -> Non
     b = lucid.tensor(exps, dtype=lucid.int64, device=device)
     with autocast(device_type=device, dtype=_amp_dtype(device), enabled=amp):
         got = a**b
-    want = [
-        ((x**e + (1 << 63)) % (1 << 64)) - (1 << 63)
-        for x, e in zip(bases, exps, strict=True)
-    ]
+    want = [((x**e + (1 << 63)) % (1 << 64)) - (1 << 63) for x, e in zip(bases, exps, strict=True)]
     assert got.dtype == lucid.int64 and got.tolist() == want
 
 

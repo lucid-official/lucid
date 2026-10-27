@@ -203,9 +203,7 @@ _NESTED_CASES = [
 @pytest.mark.parametrize(
     "recipe,key", _NESTED_CASES, ids=[f"{r.__name__}:{k}" for r, k in _NESTED_CASES]
 )
-def test_a_key_inside_a_known_prefix_is_still_refused(
-    recipe: type[Architecture], key: str
-) -> None:
+def test_a_key_inside_a_known_prefix_is_still_refused(recipe: type[Architecture], key: str) -> None:
     with pytest.raises(UnknownSourceKey):
         _bare(recipe).map_key(key)
 
@@ -260,9 +258,7 @@ class _Persistent:
 
 
 @pytest.fixture
-def hook(
-    ref: ModuleType, monkeypatch: pytest.MonkeyPatch
-) -> Callable[[object], object]:
+def hook(ref: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Callable[[object], object]:
     """The persistence hook, importable under the name the release uses.
 
     Calling it fails the test: the unpickler must substitute its own.
@@ -298,9 +294,7 @@ def _release(
     modulation = ref.nn.Sequential(ref.nn.SiLU(), ref.nn.Linear(4, 24))
     final = ref.nn.Linear(4, 4)
     attn = _Persistent(hook, qkv=qkv, num_heads=num_heads)
-    block = _Persistent(
-        hook, attn=attn, adaLN_modulation=modulation, do_mod_norm=do_mod_norm
-    )
+    block = _Persistent(hook, attn=attn, adaLN_modulation=modulation, do_mod_norm=do_mod_norm)
     network = _Persistent(
         hook,
         blocks=_Persistent(hook, **{"0": block}),
@@ -423,22 +417,14 @@ def _disallowed(ref_name: str) -> dict[str, bytes]:
     return {
         "eval": _calling("builtins", "eval", "1 + 1"),
         "getcwd": _calling("os", "getcwd"),
-        "numpy runstring": _calling(
-            "numpy.testing._private.utils", "runstring", "x = 1", {}
-        ),
-        "unrestricted load": _calling(
-            f"{ref_name}.serialization", "load", "/nonexistent.pt"
-        ),
-        "nested storage naming getcwd": _calling(
-            f"{ref_name}.storage", "_load_from_bytes", nested
-        ),
+        "numpy runstring": _calling("numpy.testing._private.utils", "runstring", "x = 1", {}),
+        "unrestricted load": _calling(f"{ref_name}.serialization", "load", "/nonexistent.pt"),
+        "nested storage naming getcwd": _calling(f"{ref_name}.storage", "_load_from_bytes", nested),
     }
 
 
 @pytest.mark.parametrize("name", sorted(_disallowed("ref")))
-def test_a_global_outside_the_tables_is_refused(
-    ref: ModuleType, tmp_path: Path, name: str
-) -> None:
+def test_a_global_outside_the_tables_is_refused(ref: ModuleType, tmp_path: Path, name: str) -> None:
     path = tmp_path / "checkpoint.pkl"
     path.write_bytes(_disallowed(ref.__name__)[name])
     with pytest.raises(pickle.UnpicklingError):
@@ -464,9 +450,7 @@ def test_an_old_framework_reads_no_storage(
         ("2.13.0", (2, 13)),
     ],
 )
-def test_a_release_is_compared_as_numbers(
-    version: str, release: tuple[int, int]
-) -> None:
+def test_a_release_is_compared_as_numbers(version: str, release: tuple[int, int]) -> None:
     assert convert_tvm._release_of(version) == release
     assert (convert_tvm._release_of(version) >= (2, 6)) == (release >= (2, 6))
 

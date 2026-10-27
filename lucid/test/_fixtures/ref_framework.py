@@ -127,9 +127,7 @@ def require_ref_ode(submodule: str = "") -> ModuleType:
         The imported module.
     """
     name = "torchdiffeq" + (f".{submodule}" if submodule else "")
-    return pytest.importorskip(
-        name, reason="the reference ODE package is not installed"
-    )
+    return pytest.importorskip(name, reason="the reference ODE package is not installed")
 
 
 def require_ref(*, module_level: bool = False) -> ModuleType:
@@ -197,7 +195,6 @@ def collect_skip_if_missing() -> None:
     missing.  Call from ``parity/conftest.py``'s collection hook."""
     if ref_module() is None:
         pytest.skip(
-            f"reference framework ({_REF_NAME}) not installed — "
-            "parity tier auto-skipped",
+            f"reference framework ({_REF_NAME}) not installed — " "parity tier auto-skipped",
             allow_module_level=True,
         )

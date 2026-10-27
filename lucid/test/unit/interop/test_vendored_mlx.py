@@ -31,9 +31,7 @@ from lucid.test._fixtures.devices import metal_available
 
 _PYPROJECT = Path(lucid.__file__).resolve().parent.parent / "pyproject.toml"
 
-_requires_metal = pytest.mark.skipif(
-    not metal_available(), reason="needs a Metal device"
-)
+_requires_metal = pytest.mark.skipif(not metal_available(), reason="needs a Metal device")
 
 
 def _pinned_version() -> str:
@@ -44,9 +42,7 @@ def _pinned_version() -> str:
     # passes the pin it was built with.
     pin = os.environ.get("LUCID_MLX_PIN")
     if not pin:
-        pytest.skip(
-            "pyproject.toml is not beside the lucid package and LUCID_MLX_PIN is unset"
-        )
+        pytest.skip("pyproject.toml is not beside the lucid package and LUCID_MLX_PIN is unset")
     return pin
 
 

@@ -45,9 +45,7 @@ def test_the_surface_reaches_every_public_object() -> None:
     logic, so the two can only agree by both being right.
     """
     reached = {id(s.obj) for s in _surface.enumerate_surface()}
-    absent = sorted(
-        name for oid, name in _surface.independent_walk().items() if oid not in reached
-    )
+    absent = sorted(name for oid, name in _surface.independent_walk().items() if oid not in reached)
     assert not absent, f"public objects outside the audit surface: {absent[:20]}"
 
 
@@ -179,17 +177,12 @@ def test_the_families_that_used_to_be_skipped_have_specs(name: str) -> None:
 
 def test_invocations_always_offer_a_fallback() -> None:
     """An unknown name must still get the generic ladder, not an empty iterator."""
-    assert (
-        next(_specs.invocations("a_name_that_does_not_exist", "moderate"), None)
-        is not None
-    )
+    assert next(_specs.invocations("a_name_that_does_not_exist", "moderate"), None) is not None
 
 
 def test_call_replaces_only_the_primary_argument() -> None:
     call = next(_specs.invocations("conv2d", "moderate"))
-    swapped = call.with_primary(
-        np.zeros(_probe.to_numpy(call.args[call.primary]).shape)
-    )
+    swapped = call.with_primary(np.zeros(_probe.to_numpy(call.args[call.primary]).shape))
     assert float(lucid.abs(swapped.args[swapped.primary]).max()) == 0.0
     assert len(swapped.args) == len(call.args)
 
@@ -232,14 +225,10 @@ _AXIS_PROBES = [
 
 
 @pytest.mark.parametrize("axis_name,qualname,obj", _AXIS_PROBES)
-def test_axis_runs_and_returns_a_finding(
-    axis_name: str, qualname: str, obj: object
-) -> None:
+def test_axis_runs_and_returns_a_finding(axis_name: str, qualname: str, obj: object) -> None:
     axis = _axes.axis_by_name(axis_name)
     assert axis is not None
-    finding = axis.run(
-        _surface.Symbol(qualname, "lucid", "op", obj), _axes.Context(quick=True)
-    )
+    finding = axis.run(_surface.Symbol(qualname, "lucid", "op", obj), _axes.Context(quick=True))
     assert isinstance(finding, Finding)
     assert finding.axis == axis_name
     assert finding.status is not Status.ERROR, finding.detail
@@ -337,9 +326,7 @@ def test_inplace_tensor_methods_resize_tensor_peers_and_index_put_runs() -> None
     assert edge is not None and entry is not None
     ctx = _axes.Context(quick=True)
     for name in _INPLACE_PEER_METHODS:
-        sym = _surface.Symbol(
-            f"Tensor.{name}", "tensor", "method", getattr(lucid.Tensor, name)
-        )
+        sym = _surface.Symbol(f"Tensor.{name}", "tensor", "method", getattr(lucid.Tensor, name))
         finding = edge.run(sym, ctx)
         assert finding.status is Status.PASS, (name, finding)
         assert finding.detail == "empty and size-1 accepted", (name, finding)
@@ -514,11 +501,9 @@ def test_the_unproven_list_does_not_grow_silently() -> None:
 
     unproven = _mutants.unproven_axes()
     assert len(unproven) <= 4, (
-        f"{len(unproven)} axes have no mutant and nothing shows they can fail: "
-        f"{unproven}"
+        f"{len(unproven)} axes have no mutant and nothing shows they can fail: " f"{unproven}"
     )
     unexplained = [name for name in unproven if name not in _mutants.UNPROVEN_REASONS]
     assert not unexplained, (
-        "an axis may go unproven, and not silently — say why in "
-        f"UNPROVEN_REASONS: {unexplained}"
+        "an axis may go unproven, and not silently — say why in " f"UNPROVEN_REASONS: {unexplained}"
     )

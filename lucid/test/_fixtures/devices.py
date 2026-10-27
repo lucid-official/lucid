@@ -84,9 +84,7 @@ def cross_device_pair() -> Iterator[tuple[str, str]]:
 # to native MLX dtypes and are held.  ``test_metal_dtype_support.py``
 # checks this set against the engine in both directions, so a dtype that
 # MLX learns (or loses) fails there instead of going quietly untested.
-METAL_UNSUPPORTED_DTYPES: frozenset[lucid.dtype] = frozenset(
-    {lucid.float64, lucid.complex128}
-)
+METAL_UNSUPPORTED_DTYPES: frozenset[lucid.dtype] = frozenset({lucid.float64, lucid.complex128})
 
 
 def device_supports(device: str, dtype: lucid.dtype) -> bool:
@@ -160,9 +158,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         return
     argnames = ["device", *dtype_names]
     explicit = {
-        name
-        for mark in metafunc.definition.iter_markers("parametrize")
-        for name in _argnames(mark)
+        name for mark in metafunc.definition.iter_markers("parametrize") for name in _argnames(mark)
     }
     if explicit.intersection(argnames):
         return

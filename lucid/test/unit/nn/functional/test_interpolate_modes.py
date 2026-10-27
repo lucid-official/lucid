@@ -34,16 +34,12 @@ class TestCoordinateMapping:
         assert float(out[0, 0, 1].item()) == pytest.approx(1.5 / 1.7 - 0.5, abs=1e-6)
 
     def test_recompute_steps_by_the_size_ratio(self) -> None:
-        out = F.interpolate(
-            _ramp(5), scale_factor=1.7, mode="linear", recompute_scale_factor=True
-        )
+        out = F.interpolate(_ramp(5), scale_factor=1.7, mode="linear", recompute_scale_factor=True)
         assert float(out[0, 0, 1].item()) == pytest.approx(1.5 * 5 / 8 - 0.5, abs=1e-6)
 
     def test_nearest_exact_is_not_nearest(self) -> None:
         near = F.interpolate(_ramp(5), size=9, mode="nearest").reshape(-1).tolist()
-        exact = (
-            F.interpolate(_ramp(5), size=9, mode="nearest-exact").reshape(-1).tolist()
-        )
+        exact = F.interpolate(_ramp(5), size=9, mode="nearest-exact").reshape(-1).tolist()
         assert near == [0, 0, 1, 1, 2, 2, 3, 3, 4]
         assert exact == [0, 0, 1, 1, 2, 3, 3, 4, 4]
 
@@ -130,9 +126,7 @@ class TestEngineStandIn:
         wide: bool,
         expected: bool,
     ) -> None:
-        got = _interpolate._engine_maps_like(
-            mode, spatial, sizes, scales, corners, wide
-        )
+        got = _interpolate._engine_maps_like(mode, spatial, sizes, scales, corners, wide)
         assert got is expected
 
     @pytest.mark.parametrize(
@@ -274,9 +268,7 @@ def test_the_composite_differentiates_twice(
 def _second_derivative_matches(mode: str, scale: float, antialias: bool) -> None:
     rng = np.random.default_rng(0)
     x0 = rng.standard_normal((1, 2, 5, 7))
-    out = F.interpolate(
-        lucid.tensor(x0), scale_factor=scale, mode=mode, antialias=antialias
-    )
+    out = F.interpolate(lucid.tensor(x0), scale_factor=scale, mode=mode, antialias=antialias)
     r0 = lucid.tensor(rng.standard_normal(tuple(out.shape)))
     u = rng.standard_normal(x0.shape)
     e = rng.standard_normal(x0.shape)
@@ -294,28 +286,17 @@ def _second_derivative_matches(mode: str, scale: float, antialias: bool) -> None
     (g,) = grad(loss(x), [x], create_graph=True)
     (hvp,) = grad((g * lucid.tensor(u)).sum(), [x])
     h = 1e-6
-    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (
-        2 * h
-    )
-    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(
-        numeric, rel=1e-6
-    )
+    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (2 * h)
+    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(numeric, rel=1e-6)
 
 
 class TestUpsampleForwardsEveryOption:
     def test_recompute_scale_factor_reaches_interpolate(self) -> None:
         x = lucid.randn(1, 2, 5, 7)
         up = nn.Upsample(scale_factor=1.7, mode="bilinear", recompute_scale_factor=True)
-        expected = F.interpolate(
-            x, scale_factor=1.7, mode="bilinear", recompute_scale_factor=True
-        )
+        expected = F.interpolate(x, scale_factor=1.7, mode="bilinear", recompute_scale_factor=True)
         assert float((up(x) - expected).abs().max().item()) == 0.0
         assert (
-            float(
-                (up(x) - F.interpolate(x, scale_factor=1.7, mode="bilinear"))
-                .abs()
-                .max()
-                .item()
-            )
+            float((up(x) - F.interpolate(x, scale_factor=1.7, mode="bilinear")).abs().max().item())
             > 1e-3
         )

@@ -67,9 +67,7 @@ def _expected(target: str, name: str) -> list[float]:
 @pytest.mark.parametrize("name", list(WRITES))
 @pytest.mark.parametrize("target", ["base", "view", "reshape"])
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-def test_a_reader_built_before_a_write_keeps_its_value(
-    device: str, target: str, name: str
-) -> None:
+def test_a_reader_built_before_a_write_keeps_its_value(device: str, target: str, name: str) -> None:
     g = _buffer().to(device)
     y = g * 2.0 + 1.0
     t = _member(g, target)
@@ -83,9 +81,7 @@ def test_a_reader_built_before_a_write_keeps_its_value(
 
 @pytest.mark.parametrize("name", list(WRITES))
 @pytest.mark.parametrize("target", ["base", "view", "reshape"])
-def test_a_write_through_the_cpu_alias_waits_for_metal_readers(
-    target: str, name: str
-) -> None:
+def test_a_write_through_the_cpu_alias_waits_for_metal_readers(target: str, name: str) -> None:
     s = _buffer()
     g = s.to("metal")
     y = g * 2.0 + 1.0
@@ -106,9 +102,7 @@ def test_a_reader_of_a_reshape_member_keeps_its_value() -> None:
 #: Engine view-family members whose geometry is not a run of the buffer.
 FAMILY_MEMBERS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "strided": lambda g: _wrap(_C_engine.TensorImpl._make_view(g._impl, [2], [2], 0)),
-    "transpose": lambda g: _wrap(
-        _C_engine.TensorImpl._make_view(g._impl, [2, 2], [1, 2], 0)
-    ),
+    "transpose": lambda g: _wrap(_C_engine.TensorImpl._make_view(g._impl, [2, 2], [1, 2], 0)),
 }
 #: The same geometries, made by ops: values of their own on Metal so far.
 OP_VIEWS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {

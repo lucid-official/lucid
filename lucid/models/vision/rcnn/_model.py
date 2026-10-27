@@ -447,9 +447,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
             [i * k_classes + max(0, c - 1) for i, c in enumerate(rows)], device=dev
         ).long()
         pred = per_class.reshape(len(keep) * k_classes, 4)[offsets]
-        reg_loss = F.smooth_l1_loss(pred, reg_targets, reduction="sum") / float(
-            len(keep)
-        )
+        reg_loss = F.smooth_l1_loss(pred, reg_targets, reduction="sum") / float(len(keep))
         return cls_loss, reg_loss
 
     @override
@@ -532,9 +530,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
             all_boxes.append(boxes_i)
 
             if targets is not None:
-                cls_loss, reg_loss = self._stage_losses(
-                    logits_i, deltas_i, props, targets[b]
-                )
+                cls_loss, reg_loss = self._stage_losses(logits_i, deltas_i, props, targets[b])
                 loss_parts.append((cls_loss + reg_loss).reshape(1))
 
         # Concatenate across batch (flat)
@@ -615,9 +611,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
 
                 # Score threshold
                 mask: list[int] = [
-                    i
-                    for i, row in enumerate(host_scores)
-                    if row[c] >= self._score_thresh
+                    i for i, row in enumerate(host_scores) if row[c] >= self._score_thresh
                 ]
                 if not mask:
                     continue
@@ -630,9 +624,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
                 keep = batched_nms(
                     bx_c,
                     sc_c,
-                    lucid.zeros(
-                        int(sc_c.shape[0]), device=dev
-                    ),  # single class → no offset
+                    lucid.zeros(int(sc_c.shape[0]), device=dev),  # single class → no offset
                     self._nms_thresh,
                 )
                 # ``max_detections`` is a *per image* limit applied once after a
@@ -647,9 +639,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
                 )
 
             results.append(
-                merge_class_detections(
-                    keep_boxes, keep_scores, keep_labels, dev, self._max_det
-                )
+                merge_class_detections(keep_boxes, keep_scores, keep_labels, dev, self._max_det)
             )
 
         return results

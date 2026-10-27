@@ -100,7 +100,5 @@ def test_descriptors_are_not_leaked() -> None:
         "        os.write(1, b'x')\n"
         "os.write(2, str(n() - before).encode())\n"
     )
-    done = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
-    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert done.stderr.strip() == "0", done.stderr

@@ -220,9 +220,7 @@ def _dtype_name(d: object) -> str:
     return str(d).rsplit(".", 1)[-1]
 
 
-def _scenarios(
-    make: Callable[..., object], mm: Callable[[], str]
-) -> dict[str, list[str]]:
+def _scenarios(make: Callable[..., object], mm: Callable[[], str]) -> dict[str, list[str]]:
     """The matmul dtype seen at each point of each scenario."""
     out: dict[str, list[str]] = {}
 
@@ -266,16 +264,12 @@ def _scenarios(
 def test_scoping_matches_the_reference_on_cpu(ref) -> None:
     c = lucid.randn(4, 4)
     got = _scenarios(
-        lambda enabled=True: autocast(
-            device_type="cpu", dtype=lucid.bfloat16, enabled=enabled
-        ),
+        lambda enabled=True: autocast(device_type="cpu", dtype=lucid.bfloat16, enabled=enabled),
         lambda: _dtype_name((c @ c).dtype),
     )
     r = ref.randn(4, 4)
     want = _scenarios(
-        lambda enabled=True: ref.autocast(
-            device_type="cpu", dtype=ref.bfloat16, enabled=enabled
-        ),
+        lambda enabled=True: ref.autocast(device_type="cpu", dtype=ref.bfloat16, enabled=enabled),
         lambda: _dtype_name((r @ r).dtype),
     )
     assert got == want

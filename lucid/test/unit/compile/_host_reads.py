@@ -98,8 +98,7 @@ HOST_READS: dict[str, Callable[[Apply, lucid.Tensor], lucid.Tensor]] = {
     # has to know the copy holds its value, or the read goes unnoticed.
     "moved-tolist": lambda m, x: x * 0 + _list_total(x.to(_elsewhere(x))),
     "moved-numpy": lambda m, x: x * 0 + _numpy_total(x.to(_elsewhere(x))),
-    "detached-moved-tolist": lambda m, x: x * 0
-    + _list_total(x.detach().to(_elsewhere(x))),
+    "detached-moved-tolist": lambda m, x: x * 0 + _list_total(x.detach().to(_elsewhere(x))),
     "shared-tolist": lambda m, x: x * 0 + _list_total(lucid.metal.to_shared(x)),
     "deepcopy": lambda m, x: x * 0 + _list_total(copy.deepcopy(x)),
     # The values handed out as bytes or a DLPack capsule.

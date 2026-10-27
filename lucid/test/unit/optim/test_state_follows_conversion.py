@@ -80,9 +80,7 @@ def _convert(model: Any, how: str) -> None:
 class _Run:
     """One model and optimizer in ``lib`` (Lucid or the reference)."""
 
-    def __init__(
-        self, lib: Any, name: str, kwargs: dict[str, Any], device: str
-    ) -> None:
+    def __init__(self, lib: Any, name: str, kwargs: dict[str, Any], device: str) -> None:
         self.lib = lib
         self.name = name
         if name == "SparseAdam":

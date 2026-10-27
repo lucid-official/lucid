@@ -108,9 +108,7 @@ def test_apply_visits_every_module_including_the_root():
     seen = []
     model = _model()
     model.apply(lambda module: seen.append(id(module)))
-    assert seen == [id(m) for m in model.modules()][::-1] or len(seen) == len(
-        list(model.modules())
-    )
+    assert seen == [id(m) for m in model.modules()][::-1] or len(seen) == len(list(model.modules()))
 
 
 def test_apply_returns_the_module_so_it_chains():
@@ -170,9 +168,7 @@ def test_the_optimiser_zero_grad_agrees_with_the_module_one():
     model = nn.Linear(4, 4)
     model(_x()).sum().backward()
     lucid.optim.SGD(model.parameters(), lr=0.1).zero_grad(set_to_none=False)
-    assert all(
-        p.grad is not None and np.allclose(_v(p.grad), 0.0) for p in model.parameters()
-    )
+    assert all(p.grad is not None and np.allclose(_v(p.grad), 0.0) for p in model.parameters())
 
 
 def test_zeroing_then_one_backward_equals_one_backward():

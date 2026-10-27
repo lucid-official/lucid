@@ -133,9 +133,7 @@ class TestMatmul:
         out = (a @ b).numpy()
         assert out.shape == (0, 3)
         # empty inner dim too
-        c = (
-            lucid.zeros(2, 0, device=device) @ lucid.zeros(0, 3, device=device)
-        ).numpy()
+        c = (lucid.zeros(2, 0, device=device) @ lucid.zeros(0, 3, device=device)).numpy()
         assert c.shape == (2, 3)
 
 
@@ -155,9 +153,7 @@ class TestIntegerRemainder:
     def test_float_unchanged(self, device: str) -> None:
         a = lucid.tensor([-7.0, 7.0], device=device)
         b = lucid.tensor([3.0, -3.0], device=device)
-        np.testing.assert_allclose(
-            lucid.remainder(a, b).numpy(), [2.0, -2.0], atol=1e-6
-        )
+        np.testing.assert_allclose(lucid.remainder(a, b).numpy(), [2.0, -2.0], atol=1e-6)
 
 
 _TRUE_DIVISIONS = pytest.mark.parametrize(
@@ -225,9 +221,7 @@ class TestBinaryBackward:
 
 @pytest.mark.parametrize("op", ["maximum", "minimum"])
 @pytest.mark.parametrize("bound", ["0-d", "one-element", "view"])
-def test_minmax_gradient_against_a_broadcast_operand(
-    op: str, bound: str, device: str
-) -> None:
+def test_minmax_gradient_against_a_broadcast_operand(op: str, bound: str, device: str) -> None:
     """The gradient mask compares the operands at the output's shape.
 
     It read them at their own shapes over the output's length, so a
@@ -236,9 +230,7 @@ def test_minmax_gradient_against_a_broadcast_operand(
     whatever lay there.  ``F.two_hot`` clamps exactly that way.
     """
     grid = lucid.tensor([-2.0, -1.0, 0.0, 1.0, 2.0], device=device)
-    b = {"0-d": grid[4].clone(), "one-element": grid[1:2].clone(), "view": grid[4]}[
-        bound
-    ]
+    b = {"0-d": grid[4].clone(), "one-element": grid[1:2].clone(), "view": grid[4]}[bound]
     x = lucid.tensor([-3.0, -1.5, 0.5, 1.5, 3.0], device=device).requires_grad_(True)
     getattr(lucid, op)(x, b).sum().backward()
     bv = float(b.reshape(-1)[0].item())

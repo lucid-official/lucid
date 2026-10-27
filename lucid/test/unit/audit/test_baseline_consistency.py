@@ -35,9 +35,7 @@ def _coverage(cells: int, answered: dict[str, str]) -> str:
 
 GOOD = {
     COVERAGE: _coverage(2, {"grad::lucid.exp": "pass", "grad::lucid.log": "vacuous"}),
-    DOCTEST: json.dumps(
-        {"failed": 3, "attempted": 10, "failing": {"lucid.a": 1, "lucid.b": 2}}
-    ),
+    DOCTEST: json.dumps({"failed": 3, "attempted": 10, "failing": {"lucid.a": 1, "lucid.b": 2}}),
     SUITE: json.dumps(
         {
             "line_covered": 3,
@@ -55,9 +53,7 @@ GOOD = {
 def test_the_repository_baselines_agree_with_themselves() -> None:
     found = on_disk(REPO)
     assert set(found) == set(BASELINES), "a baseline is missing from this checkout"
-    assert {rel: problems(rel, text) for rel, text in found.items()} == {
-        rel: [] for rel in found
-    }
+    assert {rel: problems(rel, text) for rel, text in found.items()} == {rel: [] for rel in found}
 
 
 @pytest.mark.parametrize("rel", sorted(GOOD))
@@ -157,9 +153,7 @@ INCONSISTENT = [
 
 
 @pytest.mark.parametrize(("rel", "text", "expected"), INCONSISTENT)
-def test_an_inconsistent_baseline_is_refused(
-    rel: str, text: str, expected: str
-) -> None:
+def test_an_inconsistent_baseline_is_refused(rel: str, text: str, expected: str) -> None:
     found = problems(rel, text)
     assert any(expected in line for line in found), found
 
@@ -173,13 +167,9 @@ def scratch(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     hook = REPO / ".githooks" / "pre-commit"
     if not hook.exists() or shutil.which("git") is None:
         pytest.skip("needs git and the repository's hooks")
-    env = {
-        k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "LUCID_SKIP"))
-    }
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "LUCID_SKIP"))}
     # Only the gate under test: the badge refresh would write a README.
-    env.update(
-        GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", LUCID_SKIP_LOC_BADGE="1"
-    )
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", LUCID_SKIP_LOC_BADGE="1")
     root = tmp_path / "repo"
     (root / "tools").mkdir(parents=True)
     (root / "hooks").mkdir()
@@ -211,9 +201,7 @@ def scratch(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return root, env
 
 
-def _commit(
-    root: Path, env: dict[str, str], mode: str
-) -> subprocess.CompletedProcess[str]:
+def _commit(root: Path, env: dict[str, str], mode: str) -> subprocess.CompletedProcess[str]:
     def git(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["git", *args],
@@ -260,12 +248,7 @@ def test_the_hook_judges_the_index_not_the_working_tree(
 ) -> None:
     root, env = scratch
     (root / COVERAGE).write_text(_coverage(1, {"grad::lucid.exp": "pass"}))
-    assert (
-        subprocess.run(
-            ["git", "add", COVERAGE], cwd=root, env=env, check=False
-        ).returncode
-        == 0
-    )
+    assert subprocess.run(["git", "add", COVERAGE], cwd=root, env=env, check=False).returncode == 0
     (root / COVERAGE).write_text("{ an unstaged edit that is not even JSON")
     result = subprocess.run(
         ["git", "commit", "-q", "-m", "baseline"],

@@ -43,11 +43,7 @@ class _Deep(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.stack = nn.Sequential(
-            *[
-                layer
-                for _ in range(6)
-                for layer in (nn.Conv2d(16, 16, 3, padding=1), nn.ReLU())
-            ]
+            *[layer for _ in range(6) for layer in (nn.Conv2d(16, 16, 3, padding=1), nn.ReLU())]
         )
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:

@@ -90,9 +90,7 @@ def test_an_elementwise_log_det_is_the_log_derivative(transform, x):
     """Element-wise, so the Jacobian is diagonal and the log-determinant
     is the elementwise ``log|dy/dx|`` rather than a sum."""
     h = 1e-6
-    numeric = np.log(
-        np.abs((_v(transform(_t(x + h))) - _v(transform(_t(x - h)))) / (2 * h))
-    )
+    numeric = np.log(np.abs((_v(transform(_t(x + h))) - _v(transform(_t(x - h)))) / (2 * h)))
     assert np.allclose(
         _v(transform.log_abs_det_jacobian(_t(x), transform(_t(x)))), numeric, atol=1e-5
     )
@@ -255,9 +253,7 @@ def test_lower_cholesky_log_det_is_the_jacobian():
 
     matrix = np.zeros((dim, dim))
     matrix[lower] = free
-    got = float(
-        _v(transform.log_abs_det_jacobian(_t(matrix), transform(_t(matrix)))).ravel()[0]
-    )
+    got = float(_v(transform.log_abs_det_jacobian(_t(matrix), transform(_t(matrix)))).ravel()[0])
     assert np.isclose(got, _numeric_logdet(forward, free), atol=1e-5)
 
 
@@ -295,9 +291,7 @@ def test_corr_cholesky_log_det_is_the_jacobian(dim):
     transform = T.CorrCholeskyTransform(dim)
     lower = np.tril_indices(dim, -1)
     free = np.random.default_rng(dim).standard_normal(dim * (dim - 1) // 2)
-    got = float(
-        _v(transform.log_abs_det_jacobian(_t(free), transform(_t(free)))).ravel()[0]
-    )
+    got = float(_v(transform.log_abs_det_jacobian(_t(free), transform(_t(free)))).ravel()[0])
     numeric = _numeric_logdet(lambda z: _v(transform(_t(z)))[lower], free)
     assert np.isclose(got, numeric, atol=1e-5)
 
@@ -557,20 +551,14 @@ def _transform_constraint_cases(ref):
         ),
         (
             "CatTransform",
-            T.CatTransform(
-                [T.ExpTransform(), T.SigmoidTransform()], dim=-1, lengths=[2, 1]
-            ),
-            rt.CatTransform(
-                [rt.ExpTransform(), rt.SigmoidTransform()], dim=-1, lengths=[2, 1]
-            ),
+            T.CatTransform([T.ExpTransform(), T.SigmoidTransform()], dim=-1, lengths=[2, 1]),
+            rt.CatTransform([rt.ExpTransform(), rt.SigmoidTransform()], dim=-1, lengths=[2, 1]),
             [[-1.0, 0.0, 1.0], [2.0, -2.0, 0.0]],
             [[1.5, 0.5, 0.5], [-1.0, 0.5, 0.5], [1.5, 0.5, 1.5]],
         ),
         (
             "ComposeTransform",
-            T.ComposeTransform(
-                [T.ExpTransform(), T.IndependentTransform(T.SigmoidTransform(), 1)]
-            ),
+            T.ComposeTransform([T.ExpTransform(), T.IndependentTransform(T.SigmoidTransform(), 1)]),
             rt.ComposeTransform(
                 [rt.ExpTransform(), rt.IndependentTransform(rt.SigmoidTransform(), 1)]
             ),
@@ -589,15 +577,9 @@ def _transform_constraint_cases(ref):
 
 def test_every_transform_declares_matching_domain_and_codomain(ref):
     for name, ours, theirs, dom_vals, cod_vals in _transform_constraint_cases(ref):
-        assert (
-            ours.domain.event_dim == theirs.domain.event_dim
-        ), f"{name} domain.event_dim"
-        assert (
-            ours.domain.is_discrete == theirs.domain.is_discrete
-        ), f"{name} domain.is_discrete"
-        assert (
-            ours.codomain.event_dim == theirs.codomain.event_dim
-        ), f"{name} codomain.event_dim"
+        assert ours.domain.event_dim == theirs.domain.event_dim, f"{name} domain.event_dim"
+        assert ours.domain.is_discrete == theirs.domain.is_discrete, f"{name} domain.is_discrete"
+        assert ours.codomain.event_dim == theirs.codomain.event_dim, f"{name} codomain.event_dim"
         assert (
             ours.codomain.is_discrete == theirs.codomain.is_discrete
         ), f"{name} codomain.is_discrete"
@@ -703,17 +685,13 @@ def test_sum_rightmost_matches_the_reference(ref, device, shape, dim, perm):
     want = ref.distributions.utils._sum_rightmost(theirs, dim)
     assert got.device.type == device
     assert tuple(got.shape) == tuple(want.shape)
-    np.testing.assert_allclose(
-        got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6
-    )
+    np.testing.assert_allclose(got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6)
     if dim == 0:
         assert got is ours
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-@pytest.mark.parametrize(
-    ("shape", "dim", "want"), [((0, 3), 1, (0,)), ((2, 0, 3), 1, (2, 0))]
-)
+@pytest.mark.parametrize(("shape", "dim", "want"), [((0, 3), 1, (0,)), ((2, 0, 3), 1, (2, 0))])
 def test_sum_rightmost_sums_an_empty_batch_to_an_empty_batch(device, shape, dim, want):
     """The documented departure from the reference.
 
@@ -754,9 +732,7 @@ def test_a_log_det_of_lower_rank_than_the_event_is_summed_whole(ref):
     )
     theirs = rd.TransformedDistribution(
         rd.Independent(
-            rd.Normal(
-                ref.zeros(4, 3, dtype=ref.float64), ref.ones(4, 3, dtype=ref.float64)
-            ),
+            rd.Normal(ref.zeros(4, 3, dtype=ref.float64), ref.ones(4, 3, dtype=ref.float64)),
             2,
         ),
         [_RefConstantLogDet(0.0, 2.0)],
@@ -797,9 +773,7 @@ def test_independent_transform_with_event_dim_inner_matches_reference(
 
     assert got.device.type == device
     assert tuple(got.shape) == tuple(want.shape) == (2, 3)[: 2 - reinterpreted_ndims]
-    np.testing.assert_allclose(
-        got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6
-    )
+    np.testing.assert_allclose(got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6)
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
@@ -833,6 +807,4 @@ def test_cat_transform_mixed_event_dim_matches_reference(ref, device, dim, lengt
 
     assert got.device.type == device
     assert tuple(got.shape) == tuple(want.shape) == (3,)
-    np.testing.assert_allclose(
-        got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6
-    )
+    np.testing.assert_allclose(got.to("cpu").numpy(), want.numpy(), rtol=1e-5, atol=1e-6)

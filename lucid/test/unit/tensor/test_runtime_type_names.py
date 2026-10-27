@@ -110,11 +110,7 @@ def _unsafe_sites(path: pathlib.Path) -> list[str]:
     risky = _type_checking_only(tree)
     if not risky:
         return []
-    functions = [
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
-    ]
+    functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)]
     found: list[str] = []
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
@@ -124,18 +120,11 @@ def _unsafe_sites(path: pathlib.Path) -> list[str]:
         # cast() evaluates its first argument; isinstance() its second.
         arguments = node.args[:1] if node.func.id == "cast" else node.args[1:]
         used = {
-            sub.id
-            for arg in arguments
-            for sub in ast.walk(arg)
-            if isinstance(sub, ast.Name)
+            sub.id for arg in arguments for sub in ast.walk(arg) if isinstance(sub, ast.Name)
         } & risky
         if not used:
             continue
-        enclosing = [
-            f
-            for f in functions
-            if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)
-        ]
+        enclosing = [f for f in functions if f.lineno <= node.lineno <= (f.end_lineno or f.lineno)]
         if any(used <= _locally_imported(f) for f in enclosing):
             continue  # a function-local import binds it
         found.append(f"{path}:{node.lineno} {node.func.id}({sorted(used)[0]}, ...)")
@@ -156,9 +145,7 @@ def test_no_runtime_use_of_a_type_checking_only_name() -> None:
         if "/test/" in str(path):
             continue
         offenders.extend(_unsafe_sites(path))
-    assert not offenders, "runtime use of a TYPE_CHECKING-only name:\n  " + "\n  ".join(
-        offenders
-    )
+    assert not offenders, "runtime use of a TYPE_CHECKING-only name:\n  " + "\n  ".join(offenders)
 
 
 def test_the_guard_can_actually_fail(tmp_path: pathlib.Path) -> None:

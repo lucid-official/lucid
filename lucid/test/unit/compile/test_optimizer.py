@@ -66,9 +66,7 @@ OPTIMIZER_FACTORIES = [
     pytest.param(lambda p: optim.Adam(p, lr=0.05, amsgrad=True), id="Adam_amsgrad"),
     pytest.param(lambda p: optim.AdamW(p, lr=0.05, amsgrad=True), id="AdamW_amsgrad"),
     pytest.param(lambda p: optim.RMSprop(p, lr=0.05), id="RMSprop"),
-    pytest.param(
-        lambda p: optim.RMSprop(p, lr=0.05, centered=True), id="RMSprop_centered"
-    ),
+    pytest.param(lambda p: optim.RMSprop(p, lr=0.05, centered=True), id="RMSprop_centered"),
     pytest.param(lambda p: optim.Adagrad(p, lr=0.05), id="Adagrad"),
     pytest.param(
         lambda p: optim.Adagrad(p, lr=0.05, initial_accumulator_value=0.1),
@@ -143,9 +141,7 @@ def test_compile_optimizer_step_parity(mk_opt: object) -> None:
     model_eager = _tiny_model()
     state = _clone_state(model_eager)
     model_comp = _tiny_model()
-    for (n, p), (_, q) in zip(
-        model_eager.named_parameters(), model_comp.named_parameters()
-    ):
+    for (n, p), (_, q) in zip(model_eager.named_parameters(), model_comp.named_parameters()):
         with lucid.no_grad():
             p.copy_(state[n])
             q.copy_(state[n])
@@ -180,9 +176,7 @@ def test_fused_step_parity(mk_opt: object) -> None:
     model_eager = _tiny_model()
     state = _clone_state(model_eager)
     model_comp = _tiny_model()
-    for (n, p), (_, q) in zip(
-        model_eager.named_parameters(), model_comp.named_parameters()
-    ):
+    for (n, p), (_, q) in zip(model_eager.named_parameters(), model_comp.named_parameters()):
         with lucid.no_grad():
             p.copy_(state[n])
             q.copy_(state[n])
@@ -218,9 +212,7 @@ def test_compiled_amsgrad_tracks_the_running_maximum(cls: object) -> None:
 
     def run(compiled: bool, amsgrad: bool) -> lucid.Tensor:
         p = nn.Parameter(w0.to(COMPILE_DEVICE).detach().clone())
-        opt = cls(  # type: ignore[operator]
-            [p], lr=0.1, betas=(0.9, 0.5), amsgrad=amsgrad
-        )
+        opt = cls([p], lr=0.1, betas=(0.9, 0.5), amsgrad=amsgrad)  # type: ignore[operator]
         stepper = compile_optimizer(opt) if compiled else opt
         for g in grads:
             p.grad = g.to(COMPILE_DEVICE)
@@ -238,17 +230,13 @@ def test_compiled_amsgrad_tracks_the_running_maximum(cls: object) -> None:
 # Options whose effect shows only over several steps: a decaying step size,
 # a schedule that switches at t0, a running mean that needs history.
 MULTI_STEP_FACTORIES = [
-    pytest.param(
-        lambda p: optim.RMSprop(p, lr=0.01, centered=True), id="RMSprop_centered"
-    ),
+    pytest.param(lambda p: optim.RMSprop(p, lr=0.01, centered=True), id="RMSprop_centered"),
     pytest.param(
         lambda p: optim.RMSprop(p, lr=0.01, centered=True, momentum=0.9, alpha=0.3),
         id="RMSprop_centered_momentum",
     ),
     pytest.param(
-        lambda p: optim.Adagrad(
-            p, lr=0.05, lr_decay=0.1, initial_accumulator_value=0.1
-        ),
+        lambda p: optim.Adagrad(p, lr=0.05, lr_decay=0.1, initial_accumulator_value=0.1),
         id="Adagrad_lr_decay",
     ),
     pytest.param(lambda p: optim.ASGD(p, lr=0.05, lambd=0.1), id="ASGD"),

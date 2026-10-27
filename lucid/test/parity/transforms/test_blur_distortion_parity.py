@@ -181,9 +181,7 @@ class TestNoiseStatistical:
         for seed in range(self.N_SEEDS):
             chw, hwc = _image(seed, h=32, w=40)
             lucid.manual_seed(seed)
-            got = _run_lucid(
-                _blur.GaussNoise(var_limit=(50.0, 50.0), mean=0.0, p=1.0), chw
-            )
+            got = _run_lucid(_blur.GaussNoise(var_limit=(50.0, 50.0), mean=0.0, p=1.0), chw)
             ref = _run_albu(
                 A.GaussNoise(
                     std_range=(np.sqrt(50.0) / 255.0,) * 2,
@@ -207,9 +205,7 @@ class TestNoiseStatistical:
         for seed in range(self.N_SEEDS):
             chw, hwc = _image(seed, h=32, w=40)
             lucid.manual_seed(seed)
-            got = _run_lucid(
-                _blur.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1.0), chw
-            )
+            got = _run_lucid(_blur.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1.0), chw)
             ref = _run_albu(A.MultiplicativeNoise(multiplier=(0.9, 1.1), p=1.0), hwc)
             assert got.shape == ref.shape == hwc.shape
             assert 0.0 <= got.min() and got.max() <= 1.0
@@ -344,9 +340,7 @@ class TestDistortion:
         # k=0 (distort_limit=0) and shift=0 -> factor = 1.0 -> identity
         # field.  Output equals input (up to grid_sample rounding).
         chw, hwc = _image(9, h=32, w=40)
-        lucid_tf = _distortion.OpticalDistortion(
-            distort_limit=0.0, shift_limit=0.0, p=1.0
-        )
+        lucid_tf = _distortion.OpticalDistortion(distort_limit=0.0, shift_limit=0.0, p=1.0)
         lucid.manual_seed(0)
         got = _run_lucid(lucid_tf, chw)
         assert got.shape == hwc.shape
@@ -365,9 +359,7 @@ class TestDistortion:
             _distortion.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0),
             chw,
         )
-        ref = _run_albu(
-            A.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0), hwc
-        )
+        ref = _run_albu(A.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0), hwc)
         assert got.shape == ref.shape == hwc.shape
         assert 0.0 <= got.min() and got.max() <= 1.0
         # Elastic deformation is volume-preserving on average — mean

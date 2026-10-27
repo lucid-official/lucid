@@ -101,6 +101,4 @@ def as_interpolation(mode: str | int | Interpolation) -> Interpolation:
         return Interpolation(mode)
     except ValueError:
         valid = ", ".join(m.value for m in Interpolation)
-        raise ValueError(
-            f"unknown interpolation {mode!r}; expected one of: {valid}"
-        ) from None
+        raise ValueError(f"unknown interpolation {mode!r}; expected one of: {valid}") from None

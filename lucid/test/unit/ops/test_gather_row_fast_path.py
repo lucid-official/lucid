@@ -42,9 +42,7 @@ def test_gather_matches_take_along_axis(name: str, dim: int) -> None:
     rng = np.random.default_rng(dim)
     index = rng.integers(-a.shape[dim], a.shape[dim], size=a.shape)
     got = lucid.gather(lucid.tensor(a), dim, lucid.tensor(index)).numpy()
-    np.testing.assert_array_equal(
-        got, np.take_along_axis(a, index % a.shape[dim], axis=dim)
-    )
+    np.testing.assert_array_equal(got, np.take_along_axis(a, index % a.shape[dim], axis=dim))
 
 
 def test_a_narrower_output_still_takes_the_general_walk() -> None:
@@ -63,9 +61,7 @@ def test_repeated_rows_accumulate_their_gradient() -> None:
     x = lucid.tensor(BASE, requires_grad=True)
     index = [1, 1, 3, -1]
     weight = np.random.default_rng(4).standard_normal((3, 4, 4))
-    (
-        lucid.index_select(x, 1, lucid.tensor(index)) * lucid.tensor(weight)
-    ).sum().backward()
+    (lucid.index_select(x, 1, lucid.tensor(index)) * lucid.tensor(weight)).sum().backward()
     want = np.zeros_like(BASE)
     np.add.at(want, (slice(None), np.array(index) % 5), weight)
     np.testing.assert_allclose(x.grad.numpy(), want, rtol=1e-12)

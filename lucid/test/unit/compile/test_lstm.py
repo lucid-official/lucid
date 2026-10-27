@@ -30,9 +30,7 @@ from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
 pytestmark = pytest.mark.usefixtures("inference")
 
 
-def _compile_and_check(
-    model: nn.Module, x: lucid.Tensor, *, should_compile: bool
-) -> None:
+def _compile_and_check(model: nn.Module, x: lucid.Tensor, *, should_compile: bool) -> None:
     """Compile ``model``, assert compile-vs-eager parity + the compile state."""
     model.to(COMPILE_DEVICE).eval()
     x = x.to(COMPILE_DEVICE)
@@ -70,18 +68,12 @@ def test_lstm_single_layer_compiles() -> None:
 
 
 def test_lstm_multi_layer_compiles() -> None:
-    _compile_and_check(
-        _LSTMHead(num_layers=2), metal_tensor(8, 4, 16), should_compile=True
-    )
-    _compile_and_check(
-        _LSTMHead(num_layers=3), metal_tensor(8, 4, 16), should_compile=True
-    )
+    _compile_and_check(_LSTMHead(num_layers=2), metal_tensor(8, 4, 16), should_compile=True)
+    _compile_and_check(_LSTMHead(num_layers=3), metal_tensor(8, 4, 16), should_compile=True)
 
 
 def test_lstm_bidirectional_compiles() -> None:
-    _compile_and_check(
-        _LSTMHead(bidirectional=True), metal_tensor(8, 4, 16), should_compile=True
-    )
+    _compile_and_check(_LSTMHead(bidirectional=True), metal_tensor(8, 4, 16), should_compile=True)
 
 
 def test_lstm_multi_layer_bidirectional_compiles() -> None:

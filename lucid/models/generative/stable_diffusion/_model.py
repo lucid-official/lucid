@@ -439,9 +439,7 @@ class StableDiffusionForImageGeneration(ImageGenerationModel):
         False
         """
         if guidance_scale < 0.0:
-            raise ValueError(
-                f"guidance_scale must be non-negative, got {guidance_scale}"
-            )
+            raise ValueError(f"guidance_scale must be non-negative, got {guidance_scale}")
         if sampler not in ("pndm", "ddim"):
             raise ValueError(f"sampler must be 'pndm' or 'ddim', got {sampler!r}")
 
@@ -450,9 +448,7 @@ class StableDiffusionForImageGeneration(ImageGenerationModel):
         batch = int(context.shape[0])
         side = config.latent_size
 
-        if uncond_context is not None and tuple(uncond_context.shape) != tuple(
-            context.shape
-        ):
+        if uncond_context is not None and tuple(uncond_context.shape) != tuple(context.shape):
             raise ValueError(
                 f"uncond_context {tuple(uncond_context.shape)} must match "
                 f"context {tuple(context.shape)}"
@@ -481,9 +477,7 @@ class StableDiffusionForImageGeneration(ImageGenerationModel):
                 pair = lucid.cat([latent, latent], dim=0)
                 both = inner.unet(pair, timestep, both_context)
                 unconditional, conditional = both[:batch], both[batch:]
-                prediction = unconditional + guidance_scale * (
-                    conditional - unconditional
-                )
+                prediction = unconditional + guidance_scale * (conditional - unconditional)
             if pndm is not None:
                 latent = pndm.step(prediction, step, latent)
             else:

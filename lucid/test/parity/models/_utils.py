@@ -182,8 +182,7 @@ def _run_parity(spec: ParitySpec) -> None:
                 )
         else:
             pytest.skip(
-                f"alignment incomplete: {result.summary()} — "
-                f"{pct:.0f}% of keys unmatched"
+                f"alignment incomplete: {result.summary()} — " f"{pct:.0f}% of keys unmatched"
             )
 
     rng = np.random.default_rng(0)
@@ -193,9 +192,7 @@ def _run_parity(spec: ParitySpec) -> None:
         y_ref = timm_model(_ref.from_numpy(x_np.copy())).numpy()
 
     lucid_out = lucid_model(lucid.from_numpy(x_np.copy()))
-    y_lucid = (
-        lucid_out.logits.numpy() if hasattr(lucid_out, "logits") else lucid_out.numpy()
-    )
+    y_lucid = lucid_out.logits.numpy() if hasattr(lucid_out, "logits") else lucid_out.numpy()
 
     scale = float(np.abs(y_ref).max())
     if scale > _REF_SCALE_CEILING:
@@ -263,9 +260,7 @@ def _run_self_consistency(spec: ParitySpec) -> None:
     y1 = out1.logits.numpy() if hasattr(out1, "logits") else out1.numpy()
     y2 = out2.logits.numpy() if hasattr(out2, "logits") else out2.numpy()
 
-    assert_close(
-        y1, y2, atol=0.0, rtol=0.0, msg=f"{spec.id}: forward pass is not deterministic"
-    )
+    assert_close(y1, y2, atol=0.0, rtol=0.0, msg=f"{spec.id}: forward pass is not deterministic")
     assert np.isfinite(y1).all(), f"{spec.id}: logits contain NaN or Inf"
 
 
@@ -289,9 +284,7 @@ def _copy_lucid_to_ref(lucid_model: nn.Module, ref_model: Any) -> None:
     for lp, rp in zip(lucid_params, ref_params):
         arr = lp.data.numpy()
         if arr.shape != tuple(rp.shape):
-            raise AssertionError(
-                f"shape mismatch: lucid={arr.shape} ref={tuple(rp.shape)}"
-            )
+            raise AssertionError(f"shape mismatch: lucid={arr.shape} ref={tuple(rp.shape)}")
         rp.data.copy_(_ref.from_numpy(arr))
 
 
@@ -333,13 +326,9 @@ def run_parity(
         y_ref = timm_model(_ref.from_numpy(x_np)).numpy()
 
     lucid_out = lucid_model(lucid.from_numpy(x_np))
-    y_lucid = (
-        lucid_out.logits.numpy() if hasattr(lucid_out, "logits") else lucid_out.numpy()
-    )
+    y_lucid = lucid_out.logits.numpy() if hasattr(lucid_out, "logits") else lucid_out.numpy()
 
-    assert_close(
-        y_lucid, y_ref, atol=atol, rtol=rtol, msg=f"parity failed for timm:{timm_name}"
-    )
+    assert_close(y_lucid, y_ref, atol=atol, rtol=rtol, msg=f"parity failed for timm:{timm_name}")
 
 
 def run_self_consistency(
@@ -393,8 +382,6 @@ def run_block_parity(
         y_ref = ref_block(_ref.from_numpy(x_np)).numpy()
 
     y_lucid_out = lucid_block(lucid.from_numpy(x_np))
-    y_lucid = (
-        y_lucid_out.numpy() if hasattr(y_lucid_out, "numpy") else np.array(y_lucid_out)
-    )
+    y_lucid = y_lucid_out.numpy() if hasattr(y_lucid_out, "numpy") else np.array(y_lucid_out)
 
     assert_close(y_lucid, y_ref, atol=atol, rtol=rtol, msg="block parity failed")

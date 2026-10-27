@@ -291,9 +291,7 @@ def build_ref_vit(ref: ModuleType) -> Any:
             self.patch = nn_ref.Conv2d(1, EMBED_DIM, PATCH, stride=PATCH)
             self.pos = nn_ref.Parameter(ref.zeros(1, (32 // PATCH) ** 2, EMBED_DIM))
             self.ln1 = nn_ref.LayerNorm(EMBED_DIM)
-            self.attn = nn_ref.MultiheadAttention(
-                EMBED_DIM, NUM_HEADS, batch_first=True
-            )
+            self.attn = nn_ref.MultiheadAttention(EMBED_DIM, NUM_HEADS, batch_first=True)
             self.ln2 = nn_ref.LayerNorm(EMBED_DIM)
             self.fc1 = nn_ref.Linear(EMBED_DIM, 2 * EMBED_DIM)
             self.fc2 = nn_ref.Linear(2 * EMBED_DIM, EMBED_DIM)

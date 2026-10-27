@@ -59,8 +59,7 @@ def _replays(fn: object, x1: lucid.Tensor, x2: lucid.Tensor) -> None:
     want = fn(x2).numpy()  # type: ignore[operator]
     _captured(compiled)
     assert np.array_equal(got, want), (
-        f"compiled replay does not follow its input: got {got.tolist()}, "
-        f"want {want.tolist()}"
+        f"compiled replay does not follow its input: got {got.tolist()}, " f"want {want.tolist()}"
     )
 
 
@@ -119,9 +118,7 @@ def test_nextafter_steps_one_ulp() -> None:
     ("sa", "sb"),
     [((6,), (6,)), ((4, 6), (4, 6)), ((4, 6), (3, 6)), ((2, 3, 6), (5, 6))],
 )
-def test_inner_contracts_the_last_axis(
-    sa: tuple[int, ...], sb: tuple[int, ...]
-) -> None:
+def test_inner_contracts_the_last_axis(sa: tuple[int, ...], sb: tuple[int, ...]) -> None:
     """[M, K] · [M, K] is [M, M]; the old emitter gave [M]."""
     lucid.manual_seed(0)
     a = lucid.randn(*sa).to(COMPILE_DEVICE)

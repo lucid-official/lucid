@@ -108,12 +108,8 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
         lambda M, t: M.LogNormal(t([0.0, 0.5]), t([1.5, 1.2])),
     ),
     "LowRankMultivariateNormal": (
-        lambda M, t: M.LowRankMultivariateNormal(
-            t([0.0, 1.0]), t([[1.0], [0.5]]), t([1.0, 2.0])
-        ),
-        lambda M, t: M.LowRankMultivariateNormal(
-            t([0.5, -0.5]), t([[0.8], [-0.3]]), t([1.5, 1.0])
-        ),
+        lambda M, t: M.LowRankMultivariateNormal(t([0.0, 1.0]), t([[1.0], [0.5]]), t([1.0, 2.0])),
+        lambda M, t: M.LowRankMultivariateNormal(t([0.5, -0.5]), t([[0.8], [-0.3]]), t([1.5, 1.0])),
     ),
     "MixtureSameFamily": (
         lambda M, t: M.MixtureSameFamily(
@@ -530,9 +526,7 @@ def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(
     # 3. Every concrete ExponentialFamily subclass in Lucid: batched KL equals
     #    the per-slice unbatched KL.
     exp_cases: list[
-        tuple[
-            D.Distribution, D.Distribution, list[tuple[D.Distribution, D.Distribution]]
-        ]
+        tuple[D.Distribution, D.Distribution, list[tuple[D.Distribution, D.Distribution]]]
     ] = [
         (
             D.Bernoulli(probs=t([0.2, 0.7])),

@@ -228,9 +228,7 @@ class _ConvBnLeaky(nn.Module):
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
-        self.conv = nn.Conv2d(
-            in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False
-        )
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False)
         self.bn = nn.BatchNorm2d(out_ch)
 
     @override
@@ -256,9 +254,7 @@ class _ConvBnMish(nn.Module):
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
-        self.conv = nn.Conv2d(
-            in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False
-        )
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=pad, bias=False)
         self.bn = nn.BatchNorm2d(out_ch)
         self.act = nn.Mish()
 
@@ -548,9 +544,7 @@ class _PANetNeck(nn.Module):
         p5_lat = self.p5_lateral(p5_spp)  # (B, 256, H/32, W/32)
         fH4 = int(p4.shape[2])
         fW4 = int(p4.shape[3])
-        p5_up = F.interpolate(
-            p5_lat, size=(fH4, fW4), mode="nearest"
-        )  # (B, 256, H/16, W/16)
+        p5_up = F.interpolate(p5_lat, size=(fH4, fW4), mode="nearest")  # (B, 256, H/16, W/16)
         p4_comp = self.p4_lateral(p4)  # (B, 256, H/16, W/16)
         p4_cat = lucid.cat([p5_up, p4_comp], dim=1)  # (B, 512, H/16, W/16)
         p4_td_out = self.p4_td(p4_cat)  # (B, 256, H/16, W/16)
@@ -559,9 +553,7 @@ class _PANetNeck(nn.Module):
         p4_lat = self.p4_td_lat(p4_td_out)  # (B, 128, H/16, W/16)
         fH3 = int(p3.shape[2])
         fW3 = int(p3.shape[3])
-        p4_up = F.interpolate(
-            p4_lat, size=(fH3, fW3), mode="nearest"
-        )  # (B, 128, H/8, W/8)
+        p4_up = F.interpolate(p4_lat, size=(fH3, fW3), mode="nearest")  # (B, 128, H/8, W/8)
         p3_lat = self.p3_lateral(p3)  # (B, 128, H/8, W/8)
         p3_cat = lucid.cat([p4_up, p3_lat], dim=1)  # (B, 256, H/8, W/8)
         p3_td_out = self.p3_td(p3_cat)  # (B, 128, H/8, W/8)
@@ -778,15 +770,11 @@ def _yolov4_loss(
             M = int(gt_boxes.shape[0])
 
             # Build target arrays
-            obj_arr: list[list[list[float]]] = [
-                [[0.0] * fW for _ in range(fH)] for _ in range(nA)
-            ]
+            obj_arr: list[list[list[float]]] = [[[0.0] * fW for _ in range(fH)] for _ in range(nA)]
             cls_arr: list[list[list[list[float]]]] = [
                 [[[0.0] * C for _ in range(fW)] for _ in range(fH)] for _ in range(nA)
             ]
-            mask_arr: list[list[list[float]]] = [
-                [[0.0] * fW for _ in range(fH)] for _ in range(nA)
-            ]
+            mask_arr: list[list[list[float]]] = [[[0.0] * fW for _ in range(fH)] for _ in range(nA)]
 
             # Collect positive assignments for CIoU.  Only *indices* and the
             # matched anchor sizes are recorded here — the predicted box itself
@@ -840,24 +828,16 @@ def _yolov4_loss(
             pred_cls_logits = pred_b[..., 5:]  # (nA, fH, fW, C)
 
             # Objectness BCE
-            obj_bce = F.binary_cross_entropy_with_logits(
-                pred_tc, tgt_obj, reduction="none"
-            )
+            obj_bce = F.binary_cross_entropy_with_logits(pred_tc, tgt_obj, reduction="none")
             # yolov4.cfg sets ``ignore_thresh = .7`` on every [yolo] layer:
             # a non-assigned anchor that already overlaps a GT well is excluded
             # from the background term rather than pushed toward zero.
-            ignore = _ignore_mask(pred_boxes[b], gt_boxes, _IGNORE_IOU_THRESH).reshape(
-                nA, fH, fW
-            )
+            ignore = _ignore_mask(pred_boxes[b], gt_boxes, _IGNORE_IOU_THRESH).reshape(nA, fH, fW)
             noobj_mask = (1.0 - obj_mask) * (1.0 - ignore)
-            obj_loss = (
-                obj_bce * obj_mask + obj_bce * noobj_mask * config.lambda_noobj
-            ).sum()
+            obj_loss = (obj_bce * obj_mask + obj_bce * noobj_mask * config.lambda_noobj).sum()
 
             # Class BCE
-            cls_bce = F.binary_cross_entropy_with_logits(
-                pred_cls_logits, tgt_cls, reduction="none"
-            )
+            cls_bce = F.binary_cross_entropy_with_logits(pred_cls_logits, tgt_cls, reduction="none")
             cls_loss = (cls_bce * obj_mask[..., None]).sum()
 
             # CIoU loss for positive anchors.  Decode σ(t_x)/σ(t_y)/exp(t_w)/
@@ -865,9 +845,7 @@ def _yolov4_loss(
             if pos_cells:
 
                 tx, ty, tw, th = [
-                    lucid.cat(
-                        [pred_b[a, r, c, j].reshape(1) for (a, r, c) in pos_cells]
-                    )
+                    lucid.cat([pred_b[a, r, c, j].reshape(1) for (a, r, c) in pos_cells])
                     for j in range(4)
                 ]
                 cells = lucid.tensor(pos_cells, dtype=dt, device=dev)  # (a, r, c)
@@ -1056,9 +1034,7 @@ class YOLOV4ForObjectDetection(ObjectDetectionModel):
         all_boxes: list[Tensor] = []
         all_conf: list[Tensor] = []
 
-        for raw_pred, (_, anch_wh, stride) in zip(
-            raw_preds, _v4_scales(cfg), strict=True
-        ):
+        for raw_pred, (_, anch_wh, stride) in zip(raw_preds, _v4_scales(cfg), strict=True):
             logits_s, boxes_s, conf_s = _decode_predictions(raw_pred, anch_wh, stride)
             all_logits.append(logits_s)
             all_boxes.append(boxes_s)

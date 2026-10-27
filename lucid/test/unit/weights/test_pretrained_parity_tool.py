@@ -41,15 +41,10 @@ def test_semantic_class_axis_is_channels_not_image_width() -> None:
     assert result["top1_agrees"] is True
     assert result["max_diff"] < result["tolerance"]
     assert (
-        parity._compare_fields([("semantic_logits", wanted, wanted[:, ::-1])])[
-            "top1_agrees"
-        ]
+        parity._compare_fields([("semantic_logits", wanted, wanted[:, ::-1])])["top1_agrees"]
         is False
     )
-    assert (
-        parity._compare_fields([("masks_queries_logits", wanted, got)])["top1_agrees"]
-        is True
-    )
+    assert parity._compare_fields([("masks_queries_logits", wanted, got)])["top1_agrees"] is True
 
 
 def test_parameter_limit_applies_to_vision_before_loading(
@@ -68,9 +63,7 @@ def test_default_selection_and_partial_evidence_survive_interruption(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "progress.json"
-    wrong = SimpleNamespace(
-        value=SimpleNamespace(meta={"source": "timm/wrong", "num_params": 1})
-    )
+    wrong = SimpleNamespace(value=SimpleNamespace(meta={"source": "timm/wrong", "num_params": 1}))
     correct = SimpleNamespace(
         value=SimpleNamespace(meta={"source": "timm/default", "num_params": 1})
     )
@@ -111,9 +104,7 @@ def test_reference_io_is_read_only_bounded_and_restores_caller_settings(
 
     current = [timeout]
     monkeypatch.setattr(socket, "getdefaulttimeout", lambda: current[0])
-    monkeypatch.setattr(
-        socket, "setdefaulttimeout", lambda value: current.__setitem__(0, value)
-    )
+    monkeypatch.setattr(socket, "setdefaulttimeout", lambda value: current.__setitem__(0, value))
     if previous is None:
         monkeypatch.delenv("DISABLE_SAFETENSORS_CONVERSION", raising=False)
     else:
@@ -121,9 +112,7 @@ def test_reference_io_is_read_only_bounded_and_restores_caller_settings(
     with pytest.raises(KeyboardInterrupt) if interrupted else nullcontext():
         with parity._reference_io():
             assert parity.os.environ["DISABLE_SAFETENSORS_CONVERSION"] == "1"
-            assert socket.getdefaulttimeout() == (
-                60.0 if timeout is None else min(timeout, 60.0)
-            )
+            assert socket.getdefaulttimeout() == (60.0 if timeout is None else min(timeout, 60.0))
             if interrupted:
                 raise KeyboardInterrupt
     assert socket.getdefaulttimeout() == timeout
@@ -146,9 +135,7 @@ def test_reference_io_is_read_only_bounded_and_restores_caller_settings(
         ),
     ],
 )
-def test_existing_checkpoint_sources_select_their_actual_adapter(
-    source, kind, identifier
-) -> None:
+def test_existing_checkpoint_sources_select_their_actual_adapter(source, kind, identifier) -> None:
     assert parity._reference_for(source) == (kind, identifier)
 
 
@@ -169,11 +156,7 @@ def test_denoising_adapter_uses_identical_samples_and_fixed_timestep(
             seen.append(
                 (
                     values.numpy(),
-                    (
-                        int(timestep.item())
-                        if isinstance(timestep, lucid.Tensor)
-                        else timestep
-                    ),
+                    (int(timestep.item()) if isinstance(timestep, lucid.Tensor) else timestep),
                 )
             )
             return SimpleNamespace(sample=values)
@@ -195,16 +178,12 @@ def test_denoising_adapter_uses_identical_samples_and_fixed_timestep(
         parity.importlib,
         "import_module",
         lambda name: (
-            SimpleNamespace(
-                UNet2DModel=SimpleNamespace(from_pretrained=lambda repo: model)
-            )
+            SimpleNamespace(UNet2DModel=SimpleNamespace(from_pretrained=lambda repo: model))
             if name == "diffusers"
             else original_import(name)
         ),
     )
-    result = parity._compare(
-        "ddpm", "diffusers/google/ddpm-cifar10-32", (1, 3, 4, 4), 1
-    )
+    result = parity._compare("ddpm", "diffusers/google/ddpm-cifar10-32", (1, 3, 4, 4), 1)
     assert result["max_diff"] == 0
     assert result["fields"] == ["denoising_sample_t500"]
     assert seen[0][1] == seen[1][1] == 500
@@ -304,13 +283,8 @@ def test_stable_diffusion_wrapper_weights_are_discoverable() -> None:
     from lucid.weights import list_pretrained, weights_for
 
     assert weights_for("stable_diffusion_gen") is StableDiffusionWeights
-    assert list_pretrained("stable_diffusion_gen") == list_pretrained(
-        "stable_diffusion"
-    )
-    assert (
-        parity._factory_default("stable_diffusion_gen")
-        is StableDiffusionWeights.DEFAULT
-    )
+    assert list_pretrained("stable_diffusion_gen") == list_pretrained("stable_diffusion")
+    assert parity._factory_default("stable_diffusion_gen") is StableDiffusionWeights.DEFAULT
 
 
 @pytest.mark.parametrize(
@@ -343,9 +317,7 @@ def test_missing_darknet_reader_is_unverified_not_a_conversion_failure(
         parity.importlib,
         "import_module",
         lambda name: (
-            SimpleNamespace(dnn=SimpleNamespace())
-            if name == "cv2"
-            else original_import(name)
+            SimpleNamespace(dnn=SimpleNamespace()) if name == "cv2" else original_import(name)
         ),
     )
     result = parity._compare_darknet("yolo_v3_tiny", (1, 3, 224, 224))
@@ -364,9 +336,7 @@ def test_darknet_epsilon_is_adapted_before_import_without_editing_checkpoint(
     path.write_bytes(original)
     got = parity._darknet_oracle_blob(path, [(2, 3, True), (1, 1, False)])
     result = np.frombuffer(got, dtype="<f4", offset=20)
-    np.testing.assert_allclose(
-        result[6:8] + 1e-6, payload[6:8] + 1e-5, rtol=0, atol=1e-6
-    )
+    np.testing.assert_allclose(result[6:8] + 1e-6, payload[6:8] + 1e-5, rtol=0, atol=1e-6)
     np.testing.assert_array_equal(result[:6], payload[:6])
     np.testing.assert_array_equal(result[8:], payload[8:])
     assert path.read_bytes() == original
@@ -386,11 +356,7 @@ def test_original_diamond_modules_are_isolated_and_removed_on_failure(
     def fetch(url, *, timeout):
         seen.append(url)
         assert timeout == 30
-        source = (
-            b"VALUE = 17\n"
-            if url.endswith("blocks.py")
-            else b"from ..blocks import VALUE\n"
-        )
+        source = b"VALUE = 17\n" if url.endswith("blocks.py") else b"from ..blocks import VALUE\n"
         return io.BytesIO(source)
 
     monkeypatch.setattr(parity.urllib.request, "urlopen", fetch)
@@ -404,9 +370,7 @@ def test_original_diamond_modules_are_isolated_and_removed_on_failure(
     assert all("/pinned-revision/" in url for url in seen)
 
 
-def test_darknet_download_has_a_read_timeout_and_verifies_bytes(
-    monkeypatch, tmp_path
-) -> None:
+def test_darknet_download_has_a_read_timeout_and_verifies_bytes(monkeypatch, tmp_path) -> None:
     import hashlib
     import importlib
     import io

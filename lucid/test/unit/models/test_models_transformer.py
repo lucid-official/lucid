@@ -59,9 +59,7 @@ class TestTransformerConfig:
         # A separate target vocabulary only makes sense with sharing off --
         # sharing one matrix across two vocabularies is a contradiction, and
         # __post_init__ rejects it (see the next test).
-        cfg = TransformerConfig(
-            vocab_size=1000, decoder_vocab_size=2000, share_embeddings=False
-        )
+        cfg = TransformerConfig(vocab_size=1000, decoder_vocab_size=2000, share_embeddings=False)
         assert cfg.effective_decoder_vocab_size == 2000
 
     def test_embeddings_are_shared_by_default(self) -> None:
@@ -71,9 +69,7 @@ class TestTransformerConfig:
 
     def test_share_embeddings_requires_matching_vocab(self) -> None:
         with pytest.raises(ValueError, match="share_embeddings"):
-            TransformerConfig(
-                vocab_size=1000, decoder_vocab_size=2000, share_embeddings=True
-            )
+            TransformerConfig(vocab_size=1000, decoder_vocab_size=2000, share_embeddings=True)
 
     def test_invalid_num_decoder_layers(self) -> None:
         with pytest.raises(ValueError, match="num_decoder_layers"):
@@ -160,9 +156,7 @@ class TestTransformerForSeq2SeqLM:
     def test_generate_eos_stops_and_pads(self) -> None:
         m = TransformerForSeq2SeqLM(_tiny_config()).eval()
         src = lucid.tensor([[1, 2, 3]]).long()
-        out = m.generate(
-            src, max_length=8, bos_token_id=0, eos_token_id=0, pad_token_id=99
-        )
+        out = m.generate(src, max_length=8, bos_token_id=0, eos_token_id=0, pad_token_id=99)
         # Greedy can hit EOS=0 at random spots given untrained weights, but the
         # function must always return a (B, T) tensor of valid token ids.
         assert tuple(out.shape) == (1, 8) or out.shape[1] <= 8

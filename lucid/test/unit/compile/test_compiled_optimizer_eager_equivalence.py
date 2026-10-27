@@ -124,9 +124,7 @@ COMPILED_MODES = ["compiled", "fused"]
 SCHEDULED = [
     pytest.param(lambda m: optim.SGD(m.parameters(), lr=0.3, momentum=0.9), id="SGD"),
     pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05), id="Adam"),
-    pytest.param(
-        lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"
-    ),
+    pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"),
 ]
 SCHEDULERS = [
     pytest.param(lambda o: StepLR(o, step_size=1, gamma=0.3), id="StepLR"),
@@ -317,9 +315,7 @@ def test_a_rejected_edit_stops_the_compiled_step(mode: str) -> None:
 
 
 @pytest.mark.parametrize("mode", COMPILED_MODES)
-def test_an_edit_is_checked_once_not_every_step(
-    mode: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_edit_is_checked_once_not_every_step(mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
     x, t = _data()
     runner = _run(mode, lambda m: optim.Adam(m.parameters(), lr=0.05))
     opt = runner.opt
@@ -355,9 +351,7 @@ MULTI_GROUP = [
         lambda m: _no_decay_groups(m, optim.AdamW, lr=0.05, weight_decay=0.1),
         id="AdamW",
     ),
-    pytest.param(
-        lambda m: _no_decay_groups(m, optim.Adam, lr=0.05, weight_decay=0.1), id="Adam"
-    ),
+    pytest.param(lambda m: _no_decay_groups(m, optim.Adam, lr=0.05, weight_decay=0.1), id="Adam"),
     pytest.param(
         lambda m: _no_decay_groups(m, optim.Adamax, lr=0.05, weight_decay=0.1),
         id="Adamax",
@@ -382,9 +376,7 @@ MULTI_GROUP = [
         id="Rprop",
     ),
     pytest.param(
-        lambda m: _no_decay_groups(
-            m, optim.SGD, lr=0.2, momentum=0.9, weight_decay=0.05
-        ),
+        lambda m: _no_decay_groups(m, optim.SGD, lr=0.2, momentum=0.9, weight_decay=0.05),
         id="SGD",
     ),
 ]
@@ -442,9 +434,7 @@ def test_group_counts_do_not_share_an_executable() -> None:
 STATEFUL = [
     pytest.param(lambda m: optim.SGD(m.parameters(), lr=0.2, momentum=0.9), id="SGD"),
     pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05), id="Adam"),
-    pytest.param(
-        lambda m: optim.Adam(m.parameters(), lr=0.05, amsgrad=True), id="Adam_amsgrad"
-    ),
+    pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05, amsgrad=True), id="Adam_amsgrad"),
     pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05), id="AdamW"),
     pytest.param(
         lambda m: optim.RMSprop(m.parameters(), lr=0.01, momentum=0.9, centered=True),
@@ -455,9 +445,7 @@ STATEFUL = [
     pytest.param(lambda m: optim.Adamax(m.parameters(), lr=0.05), id="Adamax"),
     pytest.param(lambda m: optim.NAdam(m.parameters(), lr=0.05), id="NAdam"),
     pytest.param(lambda m: optim.RAdam(m.parameters(), lr=0.05), id="RAdam"),
-    pytest.param(
-        lambda m: optim.ASGD(m.parameters(), lr=0.05, lambd=0.1, t0=1.0), id="ASGD"
-    ),
+    pytest.param(lambda m: optim.ASGD(m.parameters(), lr=0.05, lambd=0.1, t0=1.0), id="ASGD"),
     pytest.param(lambda m: optim.Rprop(m.parameters(), lr=0.01), id="Rprop"),
 ]
 
@@ -662,9 +650,7 @@ def test_every_state_entry_point_has_one_owner(make_opt: OptFactory) -> None:
             assert getattr(bound, "__self__", None) is opt, name
         else:
             assert getattr(bound, "__self__", None) is wrapper, name
-            assert getattr(bound, "__func__", None) is getattr(
-                type(wrapper), name
-            ), name
+            assert getattr(bound, "__func__", None) is getattr(type(wrapper), name), name
 
 
 def test_lbfgs_keeps_its_eager_state_and_step() -> None:
@@ -706,12 +692,8 @@ FREEZABLE = [
         lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1),
         id="SGD",
     ),
-    pytest.param(
-        lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"
-    ),
-    pytest.param(
-        lambda m: optim.Adam(m.parameters(), lr=0.05, weight_decay=0.1), id="Adam"
-    ),
+    pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"),
+    pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05, weight_decay=0.1), id="Adam"),
     pytest.param(lambda m: optim.NAdam(m.parameters(), lr=0.05), id="NAdam"),
 ]
 
@@ -736,9 +718,7 @@ def test_a_frozen_parameter_stays_put(make_opt: OptFactory, mode: str) -> None:
 
 @pytest.mark.parametrize("mode", COMPILED_MODES)
 @pytest.mark.parametrize("make_opt", FREEZABLE)
-def test_freezing_and_unfreezing_mid_run_follows_eager(
-    make_opt: OptFactory, mode: str
-) -> None:
+def test_freezing_and_unfreezing_mid_run_follows_eager(make_opt: OptFactory, mode: str) -> None:
     """Train, freeze the first layer, unfreeze it: each parameter keeps its own
     step count, so bias corrections after the unfreeze match eager too."""
     x, t = _data()
@@ -913,17 +893,13 @@ GATED_OPTS = [
         lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1),
         id="SGD",
     ),
-    pytest.param(
-        lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"
-    ),
+    pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"),
 ]
 
 
 @pytest.mark.parametrize("make_opt", GATED_OPTS)
 @pytest.mark.parametrize("gate", sorted(GATES))
-def test_fused_step_skips_a_parameter_with_no_gradient(
-    gate: str, make_opt: OptFactory
-) -> None:
+def test_fused_step_skips_a_parameter_with_no_gradient(gate: str, make_opt: OptFactory) -> None:
     """Used to raise "manual_vjp: no gradient produced for param id …": the
     reach test followed data, through ``detach`` and comparisons alike.
     Weight decay and momentum move a parameter fed a zero gradient, so only
@@ -956,9 +932,7 @@ def test_make_step_leaves_a_gradient_none_where_eager_does(gate: str) -> None:
     model = _Gated(gate).to(COMPILE_DEVICE)
     x, t = _data()
     F.mse_loss(model(x), t).backward()
-    eager = [
-        None if p.grad is None else p.grad.detach().clone() for p in model.parameters()
-    ]
+    eager = [None if p.grad is None else p.grad.detach().clone() for p in model.parameters()]
     model.zero_grad()
     for p in model.parameters():
         p.grad = None

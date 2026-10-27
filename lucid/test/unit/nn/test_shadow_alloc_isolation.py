@@ -214,9 +214,7 @@ def test_the_last_exit_leaves_no_stand_in_bound(
     scenario: Callable[[], None], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     engine_before = {
-        name: getattr(_C_engine, name)
-        for name in dir(_C_engine)
-        if not name.startswith("_")
+        name: getattr(_C_engine, name) for name in dir(_C_engine) if not name.startswith("_")
     }
     registry_before = [entry.engine_fn for entry in _REGISTRY]
     assert not _foreign_unwraps()
@@ -228,14 +226,11 @@ def test_the_last_exit_leaves_no_stand_in_bound(
     assert not is_active()
     assert _C_engine.zeros is engine_before["zeros"]
     changed = [
-        name
-        for name, value in engine_before.items()
-        if getattr(_C_engine, name) is not value
+        name for name, value in engine_before.items() if getattr(_C_engine, name) is not value
     ]
     assert not changed
     assert all(
-        entry.engine_fn is before
-        for entry, before in zip(_REGISTRY, registry_before, strict=True)
+        entry.engine_fn is before for entry, before in zip(_REGISTRY, registry_before, strict=True)
     )
     assert not _foreign_unwraps()
     late = sys.modules[_LATE_MODULE]

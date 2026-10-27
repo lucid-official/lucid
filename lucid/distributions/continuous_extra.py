@@ -142,9 +142,7 @@ class Pareto(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Pareto` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_attributes(
-            Pareto, batch_shape, _instance, "scale", "alpha", "_base"
-        )
+        return self._expand_attributes(Pareto, batch_shape, _instance, "scale", "alpha", "_base")
 
     @override
     @property
@@ -163,9 +161,7 @@ class Pareto(Distribution):
         # Only valid for α > 1; at or below it the first moment diverges
         # and the bare formula changes sign instead of blowing up.
         closed = self.alpha * self.scale / (self.alpha - 1.0)
-        return lucid.where(
-            self.alpha > 1.0, closed, lucid.full_like(closed, float("inf"))
-        )
+        return lucid.where(self.alpha > 1.0, closed, lucid.full_like(closed, float("inf")))
 
     @override
     @property
@@ -237,11 +233,7 @@ class Pareto(Distribution):
         Tensor
             Log-density values of the same shape as ``value``.
         """
-        return (
-            self.alpha.log()
-            + self.alpha * self.scale.log()
-            - (self.alpha + 1.0) * value.log()
-        )
+        return self.alpha.log() + self.alpha * self.scale.log() - (self.alpha + 1.0) * value.log()
 
     @override
     def entropy(self) -> Tensor:
@@ -672,9 +664,7 @@ class HalfNormal(Distribution):
         from lucid.distributions.normal import Normal
 
         self.scale = _as_tensor(scale)
-        self._base = Normal(
-            lucid.zeros_like(self.scale), self.scale, validate_args=False
-        )
+        self._base = Normal(lucid.zeros_like(self.scale), self.scale, validate_args=False)
         super().__init__(
             batch_shape=tuple(self.scale.shape),
             event_shape=(),
@@ -696,9 +686,7 @@ class HalfNormal(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`HalfNormal` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_attributes(
-            HalfNormal, batch_shape, _instance, "scale", "_base"
-        )
+        return self._expand_attributes(HalfNormal, batch_shape, _instance, "scale", "_base")
 
     @override
     @property
@@ -896,9 +884,7 @@ class HalfCauchy(Distribution):
         from lucid.distributions.exponential import Cauchy
 
         self.scale = _as_tensor(scale)
-        self._base = Cauchy(
-            lucid.zeros_like(self.scale), self.scale, validate_args=False
-        )
+        self._base = Cauchy(lucid.zeros_like(self.scale), self.scale, validate_args=False)
         super().__init__(
             batch_shape=tuple(self.scale.shape),
             event_shape=(),
@@ -927,9 +913,7 @@ class HalfCauchy(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`HalfCauchy` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_attributes(
-            HalfCauchy, batch_shape, _instance, "scale", "_base"
-        )
+        return self._expand_attributes(HalfCauchy, batch_shape, _instance, "scale", "_base")
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
@@ -1278,9 +1262,7 @@ class FisherSnedecor(Distribution):
         half1: Tensor = self.df1 * 0.5
         half2: Tensor = self.df2 * 0.5
         ratio: Tensor = self.df1 / self.df2
-        log_beta: Tensor = (
-            lucid.lgamma(half1) + lucid.lgamma(half2) - lucid.lgamma(half1 + half2)
-        )
+        log_beta: Tensor = lucid.lgamma(half1) + lucid.lgamma(half2) - lucid.lgamma(half1 + half2)
         return (
             half1 * ratio.log()
             + lucid.xlogy(half1 - 1.0, value)

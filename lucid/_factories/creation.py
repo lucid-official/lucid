@@ -288,9 +288,7 @@ def empty_strided(
         )
     for n in sz:
         if n < 0:
-            raise RuntimeError(
-                f"Trying to create tensor with negative dimension {n}: {list(sz)}"
-            )
+            raise RuntimeError(f"Trying to create tensor with negative dimension {n}: {list(sz)}")
     for s in st:
         if s < 0:
             raise RuntimeError(
@@ -387,9 +385,7 @@ def full(
     instead).
     """
     val = _python_scalar(fill_value)
-    _dt_arg = (
-        _scalar_dtype(val, _default_dtype_enum_cached()) if dtype is None else dtype
-    )
+    _dt_arg = _scalar_dtype(val, _default_dtype_enum_cached()) if dtype is None else dtype
     _dt, _dev, _rg = normalize_factory_kwargs(_dt_arg, device, requires_grad)
     shape = list(size) if isinstance(size, (list, tuple)) else [size]
     return _wrap(_leaf(_fill(shape, val, _dt, _dev), _rg))
@@ -516,13 +512,10 @@ def _exact_int64_arange(
         low, high = sorted((values[0], values[-1]))
         if low < _INT64_MIN or high > _INT64_MAX:
             raise OverflowError(
-                f"arange: values from {values[0]} to {values[-1]} do not fit "
-                "in int64"
+                f"arange: values from {values[0]} to {values[-1]} do not fit " "in int64"
             )
     packed = struct.pack(f"={len(values)}q", *values)
-    return _C_engine.TensorImpl.from_bytes(
-        packed, [len(values)], _C_engine.I64, device, False
-    )
+    return _C_engine.TensorImpl.from_bytes(packed, [len(values)], _C_engine.I64, device, False)
 
 
 def arange(

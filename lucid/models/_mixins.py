@@ -289,9 +289,7 @@ class ClassificationHeadMixin:
                     in_features = int(m.in_features)
                     self.classifier[i] = nn.Linear(in_features, num_classes)
                     return
-            raise RuntimeError(
-                "reset_classifier: no Linear layer found in classifier Sequential"
-            )
+            raise RuntimeError("reset_classifier: no Linear layer found in classifier Sequential")
         raise NotImplementedError(
             f"reset_classifier not implemented for " f"{type(self.classifier).__name__}"
         )
@@ -611,9 +609,7 @@ class CausalLMMixin:
         if use_cache:
             if cache_implementation == "static":
                 past = StaticCache(
-                    max_cache_len=(
-                        max_cache_len if max_cache_len is not None else stop_len
-                    )
+                    max_cache_len=(max_cache_len if max_cache_len is not None else stop_len)
                 )
             else:
                 past = DynamicCache()
@@ -634,12 +630,8 @@ class CausalLMMixin:
                     outputs = model(lucid.stack(out_tokens, dim=1))
             else:
                 outputs = model(lucid.stack(out_tokens, dim=1))
-            logits = cast(
-                Tensor, outputs.logits if hasattr(outputs, "logits") else outputs
-            )
-            finished = _select_next_ondevice(
-                logits[:, -1, :], out_tokens, finished, sampling
-            )
+            logits = cast(Tensor, outputs.logits if hasattr(outputs, "logits") else outputs)
+            finished = _select_next_ondevice(logits[:, -1, :], out_tokens, finished, sampling)
             if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
                 break
 
@@ -780,9 +772,7 @@ class DiffusionMixin:
             sample_size = getattr(cfg, "sample_size", None)
             in_channels = getattr(cfg, "in_channels", None)
             if sample_size is None or in_channels is None:
-                raise RuntimeError(
-                    "model.config must provide sample_size and in_channels"
-                )
+                raise RuntimeError("model.config must provide sample_size and in_channels")
             if isinstance(sample_size, tuple):
                 H, W = int(sample_size[0]), int(sample_size[1])
             else:

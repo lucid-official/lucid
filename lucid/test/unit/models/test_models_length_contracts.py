@@ -85,9 +85,7 @@ def test_per_stage_tuples_must_agree(
 def test_rcnn_anchor_sizes_are_one_per_fpn_level(
     config_class: type[ModelConfig],
 ) -> None:
-    with pytest.raises(
-        ValueError, match=r"one anchor size per FPN level .* emits 5 .*got 4"
-    ):
+    with pytest.raises(ValueError, match=r"one anchor size per FPN level .* emits 5 .*got 4"):
         config_class(rpn_anchor_sizes=(32, 64, 128, 256))
 
 
@@ -153,18 +151,14 @@ def test_detectors_want_one_target_per_image(
         kwargs: dict[str, Any] = {"targets": _targets(n, normalised=normalised)}
         if name in ("rcnn", "fast_rcnn"):
             kwargs["proposals"] = [lucid.tensor([[8.0, 8.0, 40.0, 40.0]])] * 2
-        with pytest.raises(
-            ValueError, match=rf"got 2 images but {n} entries in targets"
-        ):
+        with pytest.raises(ValueError, match=rf"got 2 images but {n} entries in targets"):
             model(x, **kwargs)
 
 
 @pytest.mark.parametrize(
     ("name", "overrides"), [("rcnn", {"num_classes": 3}), ("faster_rcnn", _RCNN)]
 )
-def test_detectors_want_one_proposal_set_per_image(
-    name: str, overrides: dict[str, Any]
-) -> None:
+def test_detectors_want_one_proposal_set_per_image(name: str, overrides: dict[str, Any]) -> None:
     model = models.create_model(name, **overrides).train()
     x = lucid.randn(2, 3, _SIDE, _SIDE)
     proposals = [lucid.tensor([[8.0, 8.0, 40.0, 40.0]])]

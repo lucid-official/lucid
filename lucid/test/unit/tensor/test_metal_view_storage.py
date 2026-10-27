@@ -107,9 +107,7 @@ FOLLOWS: dict[str, _View] = {
 
 @pytest.mark.parametrize("follow", list(FOLLOWS), ids=list(FOLLOWS))
 @pytest.mark.parametrize("key", list(KEYS), ids=list(KEYS))
-def test_a_write_through_a_key_reaches_the_base_as_on_the_cpu(
-    key: str, follow: str
-) -> None:
+def test_a_write_through_a_key_reaches_the_base_as_on_the_cpu(key: str, follow: str) -> None:
     want = _written("cpu", KEYS[key], FOLLOWS[follow])
     assert _written("metal", KEYS[key], FOLLOWS[follow]) == want
 
@@ -126,9 +124,7 @@ def test_view_of_a_key_is_refused_only_where_the_cpu_refuses_it(key: str) -> Non
     assert _viewed("metal", KEYS[key]) == _viewed("cpu", KEYS[key])
 
 
-@pytest.mark.parametrize(
-    "key", ["reversed-then-int", "reversed-then-slice", "reversed-then-none"]
-)
+@pytest.mark.parametrize("key", ["reversed-then-int", "reversed-then-slice", "reversed-then-none"])
 def test_a_key_past_a_reversed_slice_views_the_copy_as_on_the_cpu(key: str) -> None:
     # The CPU gathers what the key has read so far and views that copy with
     # the rest of the key: the view's layout, and a window of it, are the
@@ -255,9 +251,7 @@ def _reads_outside(make: _View, args: tuple[object, ...], ref: Any) -> bool:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(WINDOWS), ids=list(WINDOWS))
-def test_the_table_says_which_windows_read_outside_their_view(
-    name: str, ref: Any
-) -> None:
+def test_the_table_says_which_windows_read_outside_their_view(name: str, ref: Any) -> None:
     window = WINDOWS[name]
     assert _reads_outside(window.view, window.args, ref) == window.outside
 
@@ -298,9 +292,7 @@ def test_a_window_past_a_view_nothing_holds_writes_its_base() -> None:
 def test_the_free_function_reads_the_window_the_method_does() -> None:
     y = _grid(lucid, "metal")
     assert lucid.as_strided(y.t(), (2,), (1,)).tolist() == [0.0, 1.0]
-    assert lucid.as_strided(
-        y.t(), size=(2,), stride=(6,), storage_offset=1
-    ).tolist() == [
+    assert lucid.as_strided(y.t(), size=(2,), stride=(6,), storage_offset=1).tolist() == [
         1.0,
         7.0,
     ]
@@ -352,9 +344,7 @@ ONE_D: dict[str, _View] = {
 
 @pytest.mark.parity
 @pytest.mark.parametrize("source", list(ONE_D), ids=list(ONE_D))
-def test_sliding_windows_from_a_views_stride_match_the_reference(
-    source: str, ref: Any
-) -> None:
+def test_sliding_windows_from_a_views_stride_match_the_reference(source: str, ref: Any) -> None:
     want = _sliding(ONE_D[source](_grid(ref, "cpu")), 2).tolist()
     for device in ("cpu", "metal"):
         assert _sliding(ONE_D[source](_grid(lucid, device)), 2).tolist() == want, device
@@ -380,17 +370,13 @@ def test_a_sliding_window_over_rows_of_a_transposed_view(ref: Any) -> None:
     [lambda t: t.t(), lambda t: t[:, ::2], lambda t: t[1:3]],
     ids=["transposed", "stepped", "rows"],
 )
-def test_a_gradient_through_a_window_of_a_view_is_the_references(
-    make: _View, ref: Any
-) -> None:
+def test_a_gradient_through_a_window_of_a_view_is_the_references(make: _View, ref: Any) -> None:
     def grad(module: Any, device: str) -> list[object]:
         w = module.arange(24.0, device=device).reshape(4, 6).requires_grad_()
         v = make(w)
         size = (2, 2)
         stride = (v.stride(0), v.stride(1))
-        (
-            v.as_strided(size, stride) * module.tensor([1.0, 2.0], device=device)
-        ).sum().backward()
+        (v.as_strided(size, stride) * module.tensor([1.0, 2.0], device=device)).sum().backward()
         assert w.grad is not None
         return w.grad.tolist()
 
@@ -572,9 +558,7 @@ OVERLAPPED: dict[str, tuple[_View, _View]] = {
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(OVERLAPPED), ids=list(OVERLAPPED))
-def test_a_write_into_a_view_of_an_overlapping_view_is_the_references(
-    name: str, ref: Any
-) -> None:
+def test_a_write_into_a_view_of_an_overlapping_view_is_the_references(name: str, ref: Any) -> None:
     outer, inner = OVERLAPPED[name]
 
     def run(module: Any, device: str) -> tuple[object, ...]:

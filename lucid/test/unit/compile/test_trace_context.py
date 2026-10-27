@@ -190,9 +190,7 @@ def test_compiled_step_refuses_grad_gated_ste_and_restores_rng() -> None:
     np.testing.assert_array_equal(gen.get_state().numpy(), g0)
 
 
-def test_compiled_step_compiles_function_less_grad_branch_and_advances_rng_once() -> (
-    None
-):
+def test_compiled_step_compiles_function_less_grad_branch_and_advances_rng_once() -> None:
     class _GradBranchModel(nn.Module):
         def __init__(self) -> None:
             super().__init__()

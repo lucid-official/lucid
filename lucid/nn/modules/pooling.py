@@ -959,10 +959,7 @@ class MaxPool3d(Module):
     @override
     def extra_repr(self) -> str:
         """Return a string representation of the layer's configuration."""
-        return (
-            f"kernel_size={self.kernel_size}, stride={self.stride}, "
-            f"padding={self.padding}"
-        )
+        return f"kernel_size={self.kernel_size}, stride={self.stride}, " f"padding={self.padding}"
 
 
 class AvgPool3d(Module):
@@ -1463,9 +1460,7 @@ class LPPool1d(Module):
         Tensor
             Pooled output tensor.
         """
-        return lp_pool1d(
-            input, self.norm_type, self.kernel_size, self.stride, self.ceil_mode
-        )
+        return lp_pool1d(input, self.norm_type, self.kernel_size, self.stride, self.ceil_mode)
 
     @override
     def extra_repr(self) -> str:
@@ -1708,8 +1703,7 @@ class LPPool3d(Module):
     def extra_repr(self) -> str:
         """Return a string representation of the layer's configuration."""
         return (
-            f"norm_type={self.norm_type}, kernel_size={self.kernel_size}, "
-            f"stride={self.stride}"
+            f"norm_type={self.norm_type}, kernel_size={self.kernel_size}, " f"stride={self.stride}"
         )
 
 
@@ -1741,10 +1735,7 @@ class _MaxUnpoolNd[S = int](Module):
     @override
     def extra_repr(self) -> str:
         """Return a string representation of the layer's configuration."""
-        return (
-            f"kernel_size={self.kernel_size}, stride={self.stride}, "
-            f"padding={self.padding}"
-        )
+        return f"kernel_size={self.kernel_size}, stride={self.stride}, " f"padding={self.padding}"
 
 
 class MaxUnpool1d(_MaxUnpoolNd[int]):

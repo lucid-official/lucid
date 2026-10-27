@@ -121,9 +121,7 @@ def measure(ref: Any, verbose: bool = False) -> tuple[dict[str, list[str]], list
         call = None
         with _probe.preserved_globals():
             for domain in ctx.domains:
-                for candidate in _specs.invocations(
-                    symbol.short, domain, symbol.qualname, fn
-                ):
+                for candidate in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
                     try:
                         out = fn(*candidate.args, **candidate.kwargs)
                     except Exception:  # noqa: BLE001 - surveying, not asserting

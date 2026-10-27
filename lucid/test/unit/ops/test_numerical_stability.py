@@ -152,9 +152,7 @@ def test_i0e_and_i1e_agree_with_their_unscaled_forms() -> None:
     x = np.array([0.1, 1.0, 3.0, 3.75, 4.0, 8.0])
     for scaled, plain in ((sp.i0e, lucid.i0), (sp.i1e, sp.i1)):
         got = np.asarray(scaled(lucid.tensor(x)).numpy(), dtype=np.float64)
-        want = np.asarray(plain(lucid.tensor(x)).numpy(), dtype=np.float64) * np.exp(
-            -np.abs(x)
-        )
+        want = np.asarray(plain(lucid.tensor(x)).numpy(), dtype=np.float64) * np.exp(-np.abs(x))
         assert np.allclose(got, want, rtol=1e-5), f"{got} != {want}"
 
 
@@ -250,9 +248,7 @@ def test_threshold_keeps_a_nan() -> None:
     for device in _DEVICES:
         got = np.asarray(
             F.threshold(
-                lucid.tensor(
-                    np.ascontiguousarray(x), dtype=lucid.float32, device=device
-                ),
+                lucid.tensor(np.ascontiguousarray(x), dtype=lucid.float32, device=device),
                 1.0,
                 9.0,
             ).numpy(),
@@ -276,9 +272,7 @@ def test_entr_is_negative_infinity_below_zero_and_nan_at_nan() -> None:
     for device in _DEVICES:
         got = np.asarray(
             lucid.special.entr(
-                lucid.tensor(
-                    np.ascontiguousarray(x), dtype=lucid.float32, device=device
-                )
+                lucid.tensor(np.ascontiguousarray(x), dtype=lucid.float32, device=device)
             ).numpy(),
             dtype=np.float64,
         )
@@ -303,9 +297,7 @@ def test_unfold_padding_stays_zero_when_the_data_is_nan() -> None:
     for device in _DEVICES:
         got = np.asarray(
             F.unfold(
-                lucid.tensor(
-                    np.ascontiguousarray(x), dtype=lucid.float32, device=device
-                ),
+                lucid.tensor(np.ascontiguousarray(x), dtype=lucid.float32, device=device),
                 2,
                 padding=1,
             ).numpy(),
@@ -367,13 +359,9 @@ def test_cholesky_refuses_a_matrix_it_cannot_factor(label, matrix) -> None:
     """
     values = np.array(matrix, dtype=np.float32)
     for device in _DEVICES:
-        with pytest.raises(
-            Exception
-        ):  # noqa: B017 - the two backends raise differently
+        with pytest.raises(Exception):  # noqa: B017 - the two backends raise differently
             lucid.linalg.cholesky(
-                lucid.tensor(
-                    np.ascontiguousarray(values), dtype=lucid.float32, device=device
-                )
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device)
             )
 
 
@@ -397,9 +385,7 @@ def test_cholesky_ex_reports_failure_on_both_devices(label, matrix, failed) -> N
     infos, factors = [], []
     for device in _DEVICES:
         factor, info = lucid.linalg.cholesky_ex(
-            lucid.tensor(
-                np.ascontiguousarray(values), dtype=lucid.float32, device=device
-            )
+            lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device)
         )
         infos.append(int(np.asarray(info.numpy()).ravel()[0]))
         factors.append(np.asarray(factor.numpy(), dtype=np.float64))
@@ -426,9 +412,7 @@ def test_embedding_bag_sums_without_a_one_hot_matmul() -> None:
     for device in _DEVICES:
         got = F.embedding_bag(
             lucid.tensor(index, dtype=lucid.int64, device=device),
-            lucid.tensor(
-                np.ascontiguousarray(weight), dtype=lucid.float32, device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(weight), dtype=lucid.float32, device=device),
             lucid.tensor(offsets, dtype=lucid.int64, device=device),
             mode="sum",
         )
@@ -449,9 +433,7 @@ def test_embedding_bag_modes_agree_across_devices(mode: str) -> None:
     for device in _DEVICES:
         got = F.embedding_bag(
             lucid.tensor(index, dtype=lucid.int64, device=device),
-            lucid.tensor(
-                np.ascontiguousarray(weight), dtype=lucid.float32, device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(weight), dtype=lucid.float32, device=device),
             lucid.tensor(offsets, dtype=lucid.int64, device=device),
             mode=mode,
         )
@@ -510,12 +492,8 @@ def test_polar_carries_an_infinite_radius() -> None:
     outs = []
     for device in _DEVICES:
         got = lucid.polar(
-            lucid.tensor(
-                np.ascontiguousarray(radius), dtype=lucid.float32, device=device
-            ),
-            lucid.tensor(
-                np.ascontiguousarray(angle), dtype=lucid.float32, device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(radius), dtype=lucid.float32, device=device),
+            lucid.tensor(np.ascontiguousarray(angle), dtype=lucid.float32, device=device),
         )
         outs.append(np.asarray(got.numpy()))
     for out in outs:
@@ -534,9 +512,7 @@ def test_posterize_carries_a_nan_pixel() -> None:
     for device in _DEVICES:
         got = np.asarray(
             lucid.utils.transforms.functional.posterize(
-                lucid.tensor(
-                    np.ascontiguousarray(values), dtype=lucid.float32, device=device
-                ),
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device),
                 4,
             ).numpy(),
             dtype=np.float64,

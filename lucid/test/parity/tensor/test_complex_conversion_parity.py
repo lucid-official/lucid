@@ -28,15 +28,11 @@ def _same(got: list[Any], want: list[Any]) -> bool:
             return math.isnan(a)
         return bool(a == b)
 
-    return len(got) == len(want) and all(
-        eq(a, b) for a, b in zip(got, want, strict=True)
-    )
+    return len(got) == len(want) and all(eq(a, b) for a, b in zip(got, want, strict=True))
 
 
 def _pair(ref: Any, device: str) -> tuple[lucid.Tensor, Any]:
-    z = lucid.complex(
-        lucid.tensor(_REAL, device=device), lucid.tensor(_IMAG, device=device)
-    )
+    z = lucid.complex(lucid.tensor(_REAL, device=device), lucid.tensor(_IMAG, device=device))
     return z, ref.complex(ref.tensor(_REAL), ref.tensor(_IMAG))
 
 

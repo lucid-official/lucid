@@ -45,10 +45,7 @@ class ResNeXt50_32x4dWeights(WeightsEnum):
     """
 
     IMAGENET1K_V2 = WeightEntry(
-        url=(
-            f"{HUB_BASE}/resnext-50-32x4d/resolve/main/"
-            "IMAGENET1K_V2/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/resnext-50-32x4d/resolve/main/" "IMAGENET1K_V2/model.safetensors"),
         sha256="95ab469ce4c14c1a7e1e517f8eeb140ea9b7747946d9ccd0258dd65f869fc704",
         num_classes=1000,
         transforms=ImageClassification(crop_size=224, resize_size=232),
@@ -90,10 +87,7 @@ class ResNeXt101_32x8dWeights(WeightsEnum):
     """
 
     IMAGENET1K_V2 = WeightEntry(
-        url=(
-            f"{HUB_BASE}/resnext-101-32x8d/resolve/main/"
-            "IMAGENET1K_V2/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/resnext-101-32x8d/resolve/main/" "IMAGENET1K_V2/model.safetensors"),
         sha256="39ddf40a89a715f0d9a4df83d94a3e338151076972917f6f1a29b3d7ebddccdb",
         num_classes=1000,
         transforms=ImageClassification(crop_size=224, resize_size=232),
@@ -138,14 +132,10 @@ class ResNeXt101_32x4dWeights(WeightsEnum):
     """
 
     GLUON_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/resnext-101-32x4d/resolve/main/" "GLUON_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/resnext-101-32x4d/resolve/main/" "GLUON_IN1K/model.safetensors"),
         sha256="20e585e08b43f2771202755e1947e0f3ed5a98e6875061b765e994ef16216b6d",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=224, resize_size=256, interpolation="bicubic"
-        ),
+        transforms=ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic"),
         meta={
             "tag": "GLUON_IN1K",
             "source": "timm/resnext101_32x4d.gluon_in1k",

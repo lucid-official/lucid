@@ -39,9 +39,7 @@ class _SamplingParams:
     dev: str
 
 
-def _next_token(
-    next_logits: Tensor, out_tokens: list[Tensor], params: _SamplingParams
-) -> Tensor:
+def _next_token(next_logits: Tensor, out_tokens: list[Tensor], params: _SamplingParams) -> Tensor:
     r"""Compute the ``(B,)`` next-token ids (before finish/pad masking), on device.
 
     Applies the repetition penalty over the running prefix, then greedy
@@ -64,9 +62,7 @@ def _next_token(
     """
     if params.repetition_penalty != 1.0:
         prefix = lucid.stack(out_tokens, dim=1)
-        next_logits = _apply_repetition_penalty(
-            next_logits, prefix, params.repetition_penalty
-        )
+        next_logits = _apply_repetition_penalty(next_logits, prefix, params.repetition_penalty)
 
     if not params.do_sample:
         return lucid.argmax(next_logits, dim=-1)  # (B,)

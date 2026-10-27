@@ -56,6 +56,4 @@ class TestPlaceholderNoop:
 
     def test_noop_is_placeholder(self) -> None:
         assert issubclass(Q.NoopObserver, Q.PlaceholderObserver)
-        assert np.allclose(
-            Q.NoopObserver()(lucid.ones(3)).numpy(), lucid.ones(3).numpy()
-        )
+        assert np.allclose(Q.NoopObserver()(lucid.ones(3)).numpy(), lucid.ones(3).numpy())

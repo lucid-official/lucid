@@ -115,8 +115,7 @@ class StepLR(_LRScheduler):
     def _get_closed_form_lr(self) -> list[float]:
         """The rates at ``last_epoch`` from ``base_lrs``."""
         return [
-            base_lr * self.gamma ** (self.last_epoch // self.step_size)
-            for base_lr in self.base_lrs
+            base_lr * self.gamma ** (self.last_epoch // self.step_size) for base_lr in self.base_lrs
         ]
 
 
@@ -386,9 +385,7 @@ class CosineAnnealingLR(_LRScheduler):
         """The rates at ``last_epoch`` from ``base_lrs``."""
         return [
             self.eta_min
-            + (base_lr - self.eta_min)
-            * (1 + math.cos(math.pi * self.last_epoch / self.T_max))
-            / 2
+            + (base_lr - self.eta_min) * (1 + math.cos(math.pi * self.last_epoch / self.T_max)) / 2
             for base_lr in self.base_lrs
         ]
 
@@ -716,18 +713,10 @@ class ReduceLROnPlateau(_CheckpointState):
         """Update the scheduler with the latest monitored metric value."""
         rel = self.threshold_mode == "rel"
         if self.mode == "min":
-            bound = (
-                self._best * (1.0 - self.threshold)
-                if rel
-                else self._best - self.threshold
-            )
+            bound = self._best * (1.0 - self.threshold) if rel else self._best - self.threshold
             improved = metrics < bound
         else:
-            bound = (
-                self._best * (1.0 + self.threshold)
-                if rel
-                else self._best + self.threshold
-            )
+            bound = self._best * (1.0 + self.threshold) if rel else self._best + self.threshold
             improved = metrics > bound
 
         if improved:
@@ -827,9 +816,7 @@ class NoamScheduler(_LRScheduler):
             documented in the class docstring.
         """
         step = max(1, self.last_epoch)
-        scale = self.d_model ** (-0.5) * min(
-            step ** (-0.5), step * self.warmup_steps ** (-1.5)
-        )
+        scale = self.d_model ** (-0.5) * min(step ** (-0.5), step * self.warmup_steps ** (-1.5))
         return [scale] * len(self.optimizer.param_groups)
 
 
@@ -994,13 +981,9 @@ class LinearLR(_LRScheduler):
         # Each step scales the current rate by the factor's growth since the
         # last one, which a start of zero has no ratio to.
         if not 0.0 < start_factor <= 1.0:
-            raise ValueError(
-                f"LinearLR: start_factor must be in (0, 1], got {start_factor}"
-            )
+            raise ValueError(f"LinearLR: start_factor must be in (0, 1], got {start_factor}")
         if not 0.0 <= end_factor <= 1.0:
-            raise ValueError(
-                f"LinearLR: end_factor must be in [0, 1], got {end_factor}"
-            )
+            raise ValueError(f"LinearLR: end_factor must be in [0, 1], got {end_factor}")
         self.start_factor = start_factor
         self.end_factor = end_factor
         self.total_iters = total_iters
@@ -1029,10 +1012,7 @@ class LinearLR(_LRScheduler):
     def _get_closed_form_lr(self) -> list[float]:
         """The rates at ``last_epoch`` from ``base_lrs``."""
         t = min(self.last_epoch, self.total_iters)
-        factor = (
-            self.start_factor
-            + (self.end_factor - self.start_factor) * t / self.total_iters
-        )
+        factor = self.start_factor + (self.end_factor - self.start_factor) * t / self.total_iters
         return [base_lr * factor for base_lr in self.base_lrs]
 
 
@@ -1243,8 +1223,7 @@ class PolynomialLR(_LRScheduler):
         """The rates at ``last_epoch`` from ``base_lrs``."""
         t = min(self.last_epoch, self.total_iters)
         return [
-            (base_lr - self.eta_min) * ((1 - t / self.total_iters) ** self.power)
-            + self.eta_min
+            (base_lr - self.eta_min) * ((1 - t / self.total_iters) ** self.power) + self.eta_min
             for base_lr in self.base_lrs
         ]
 
@@ -1385,9 +1364,7 @@ class CosineAnnealingWarmRestarts(_LRScheduler):
         """
         return [
             self.eta_min
-            + (base_lr - self.eta_min)
-            * (1 + math.cos(math.pi * self._T_cur / self._T_i))
-            / 2
+            + (base_lr - self.eta_min) * (1 + math.cos(math.pi * self._T_cur / self._T_i)) / 2
             for base_lr in self.base_lrs
         ]
 
@@ -1592,9 +1569,7 @@ class SequentialLR(_CompositeSchedulerMixin):
         last_epoch: int = -1,
     ) -> None:
         """Initialise the SequentialLR.  See the class docstring for parameter semantics."""
-        _check_schedulers(
-            "SequentialLR", schedulers, optimizer, (_LRScheduler, ChainedScheduler)
-        )
+        _check_schedulers("SequentialLR", schedulers, optimizer, (_LRScheduler, ChainedScheduler))
         if len(milestones) != len(schedulers) - 1:
             raise ValueError(
                 f"SequentialLR expects one milestone fewer than schedulers, got "

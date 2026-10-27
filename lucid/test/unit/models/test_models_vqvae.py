@@ -153,9 +153,7 @@ class TestVQVAEForward:
         assert out.indices.shape == (1, 2, 4)
 
     def test_zero_residual_layers(self) -> None:
-        out = VQVAEModel(_tiny_cfg(num_residual_layers=0)).eval()(
-            lucid.randn((1, 3, 16, 16))
-        )
+        out = VQVAEModel(_tiny_cfg(num_residual_layers=0)).eval()(lucid.randn((1, 3, 16, 16)))
         assert out.sample.shape == (1, 3, 16, 16)
 
 

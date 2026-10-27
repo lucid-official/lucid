@@ -58,12 +58,7 @@ class TestPrecisionParity:
 
     def test_exp(self, device: str) -> None:
         x = np.linspace(-2.0, 2.0, 32, dtype=np.float64)
-        out32 = (
-            lucid.tensor(x.astype(np.float32), device=device)
-            .exp()
-            .numpy()
-            .astype(np.float64)
-        )
+        out32 = lucid.tensor(x.astype(np.float32), device=device).exp().numpy().astype(np.float64)
         out64 = lucid.tensor(x, dtype=lucid.float64, device="cpu").exp().numpy()
         np.testing.assert_allclose(out32, out64, atol=1e-5)
 
@@ -107,10 +102,7 @@ class TestF32SanityFloor:
         x = np.random.uniform(-1.0, 1.0, size=(1024,)).astype(np.float32)
         y = np.random.uniform(-1.0, 1.0, size=(1024,)).astype(np.float32)
         out = (
-            (
-                lucid.tensor(x.copy(), device=device)
-                * lucid.tensor(y.copy(), device=device)
-            )
+            (lucid.tensor(x.copy(), device=device) * lucid.tensor(y.copy(), device=device))
             .sum()
             .item()
         )

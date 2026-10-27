@@ -354,9 +354,7 @@ def test_clip_grad_value_caps_each_entry():
 def test_parameters_round_trip_through_a_flat_vector():
     source = nn.Linear(5, 3)
     target = nn.Linear(5, 3)
-    U.vector_to_parameters(
-        U.parameters_to_vector(source.parameters()), target.parameters()
-    )
+    U.vector_to_parameters(U.parameters_to_vector(source.parameters()), target.parameters())
     x = _x(2, 5)
     assert np.allclose(_v(source(x)), _v(target(x)), atol=1e-6)
 
@@ -418,9 +416,7 @@ def test_chaining_keeps_exactly_one_trainable_leaf():
     container = layer.parametrizations["weight"]
     assert len(container) == 2
     assert isinstance(container.original, nn.Parameter)
-    assert [n for n, _ in layer.named_parameters()] == [
-        "parametrizations.weight.original"
-    ]
+    assert [n for n, _ in layer.named_parameters()] == ["parametrizations.weight.original"]
 
     layer(_x(2, 4)).sum().backward()
     assert np.abs(_v(container.original.grad)).max() > 0

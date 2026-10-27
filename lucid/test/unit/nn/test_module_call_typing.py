@@ -61,10 +61,7 @@ _CLIENT = textwrap.dedent("""
 _LINES = _CLIENT.splitlines()
 _BAD_LINE = _LINES.index('lin("bad")  # the only error expected') + 1
 _REVEAL_LINE = (
-    _LINES.index(
-        "reveal_type(compiled)  # the compiled module keeps forward's signature"
-    )
-    + 1
+    _LINES.index("reveal_type(compiled)  # the compiled module keeps forward's signature") + 1
 )
 
 

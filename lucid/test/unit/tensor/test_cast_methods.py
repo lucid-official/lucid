@@ -103,6 +103,4 @@ def test_every_reference_cast_method_is_here(ref: ModuleType) -> None:
     assert len(theirs) >= 10  # the docstring scan found them
     assert sorted(theirs) == sorted(_CASTS | _REFUSED)
     for name, dtype in _CASTS.items():
-        assert getattr(ref.ones(1), name)().dtype == getattr(
-            ref, dtype.removesuffix("_")
-        )
+        assert getattr(ref.ones(1), name)().dtype == getattr(ref, dtype.removesuffix("_"))

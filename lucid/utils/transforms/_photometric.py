@@ -108,9 +108,7 @@ class FromFloat(_NoParams, PhotometricTransform[Empty]):
     file holds.
     """
 
-    def __init__(
-        self, max_value: float = 255.0, dtype: str = "uint8", p: float = 1.0
-    ) -> None:
+    def __init__(self, max_value: float = 255.0, dtype: str = "uint8", p: float = 1.0) -> None:
         super().__init__(p=p)
         self.max_value = max_value
         self.dtype = dtype
@@ -245,10 +243,7 @@ class ColorJitter(PhotometricTransform[ColorJitterParams]):
 
     @override
     def make_params(self, img: Tensor) -> ColorJitterParams:
-        factors = [
-            None if rng is None else _random.uniform(rng[0], rng[1])
-            for rng in self._ranges
-        ]
+        factors = [None if rng is None else _random.uniform(rng[0], rng[1]) for rng in self._ranges]
         order = list(range(4))
         for i in range(len(order) - 1, 0, -1):  # Fisher-Yates via Lucid RNG
             j = _random.randint(0, i + 1)
@@ -273,7 +268,4 @@ class ColorJitter(PhotometricTransform[ColorJitterParams]):
     @override
     def __repr__(self) -> str:
         b, c, s, h = self._ranges
-        return (
-            f"ColorJitter(brightness={b}, contrast={c}, saturation={s}, "
-            f"hue={h}, p={self.p})"
-        )
+        return f"ColorJitter(brightness={b}, contrast={c}, saturation={s}, " f"hue={h}, p={self.p})"

@@ -67,10 +67,7 @@ def _grads(lib, call, columns, **kw):
 
 def _graph_grads(call, columns, device):
     ts = [lucid.tensor(c, device=device, requires_grad=True) for c in columns]
-    return [
-        g.tolist()
-        for g in lucid.autograd.grad(call(lucid, *ts).sum(), ts, create_graph=True)
-    ]
+    return [g.tolist() for g in lucid.autograd.grad(call(lucid, *ts).sum(), ts, create_graph=True)]
 
 
 # ── clamp with a scalar bound ───────────────────────────────────────────────

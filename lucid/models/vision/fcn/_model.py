@@ -117,9 +117,7 @@ def _make_layer(
             nn.BatchNorm2d(out_ch),
         )
     blocks: list[nn.Module] = [
-        _Bottleneck(
-            in_ch, mid_ch, stride=stride, dilation=first_dilation, downsample=ds
-        )
+        _Bottleneck(in_ch, mid_ch, stride=stride, dilation=first_dilation, downsample=ds)
     ]
     for _ in range(1, num_blocks):
         blocks.append(_Bottleneck(out_ch, mid_ch, dilation=dilation))
@@ -158,13 +156,9 @@ class _DilatedResNet(nn.Module):
         self.layer1, c2 = _make_layer(64, 64, layers[0], stride=1)
         self.layer2, c3 = _make_layer(c2, 128, layers[1], stride=2)
         # layer3: stride→dilation 2; first block keeps the previous dilation 1
-        self.layer3, c4 = _make_layer(
-            c3, 256, layers[2], stride=1, dilation=2, first_dilation=1
-        )
+        self.layer3, c4 = _make_layer(c3, 256, layers[2], stride=1, dilation=2, first_dilation=1)
         # layer4: stride→dilation 4; first block keeps the previous dilation 2
-        self.layer4, c5 = _make_layer(
-            c4, 512, layers[3], stride=1, dilation=4, first_dilation=2
-        )
+        self.layer4, c5 = _make_layer(c4, 512, layers[3], stride=1, dilation=4, first_dilation=2)
 
         self.c4_channels: int = c4
         self.c5_channels: int = c5
@@ -405,13 +399,9 @@ class FCNForSemanticSegmentation(SemanticSegmentationModel):
         loss: Tensor | None = None
         if targets is not None:
             ignore_index = self._cfg.ignore_index
-            main_loss: Tensor = F.cross_entropy(
-                logits, targets, ignore_index=ignore_index
-            )
+            main_loss: Tensor = F.cross_entropy(logits, targets, ignore_index=ignore_index)
 
-            aux_loss: Tensor = F.cross_entropy(
-                aux_logits, targets, ignore_index=ignore_index
-            )
+            aux_loss: Tensor = F.cross_entropy(aux_logits, targets, ignore_index=ignore_index)
             # The paper has no auxiliary head at all, so the recipe that
             # trained these checkpoints is the only authority: it weights
             # the aux term at 0.5.  0.4 is the PSPNet / mmsegmentation

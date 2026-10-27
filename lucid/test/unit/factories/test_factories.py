@@ -106,9 +106,7 @@ class TestArangeDtype:
         [(5.0,), (0, 5.0), (0, 5, 0.5), (0.0, 5, 1)],
         ids=["one-argument", "end", "step", "start"],
     )
-    def test_one_float_gives_the_default_float(
-        self, device: str, args: tuple[float, ...]
-    ) -> None:
+    def test_one_float_gives_the_default_float(self, device: str, args: tuple[float, ...]) -> None:
         t = lucid.arange(*args, device=device)
         assert t.dtype == lucid.get_default_dtype()
         assert_close(t, np.arange(*args))
@@ -167,9 +165,7 @@ class TestArangeDtype:
             "float-tensor",
         ],
     )
-    def test_other_scalars_count_as_what_they_hold(
-        self, make: object, integral: bool
-    ) -> None:
+    def test_other_scalars_count_as_what_they_hold(self, make: object, integral: bool) -> None:
         bound = make()  # type: ignore[operator]
         expected = lucid.int64 if integral else lucid.get_default_dtype()
         assert lucid.arange(bound).dtype == expected

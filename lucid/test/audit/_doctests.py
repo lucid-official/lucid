@@ -77,9 +77,7 @@ def _modules() -> Iterator[Any]:
         # shipped whatever the module is called.
         try:
             yield importlib.import_module(name)
-        except (
-            Exception
-        ):  # noqa: BLE001 - an unimportable module is the sweep's finding
+        except Exception:  # noqa: BLE001 - an unimportable module is the sweep's finding
             continue
 
 
@@ -150,9 +148,7 @@ def run() -> DoctestResult:
         if outcome.failed:
             per_module[module.__name__] = outcome.failed
     more_failed, more_attempted = _run_installed(modules, per_module)
-    return DoctestResult(
-        failed + more_failed, attempted + more_attempted, per_module, ran=True
-    )
+    return DoctestResult(failed + more_failed, attempted + more_attempted, per_module, ran=True)
 
 
 def load_floor(path: Path) -> dict[str, int] | None:
@@ -186,9 +182,7 @@ def save_floor(path: Path, result: DoctestResult) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
-def regressions(
-    result: DoctestResult, floor: dict[str, int]
-) -> list[tuple[str, int, int]]:
+def regressions(result: DoctestResult, floor: dict[str, int]) -> list[tuple[str, int, int]]:
     """``(module, was, now)`` for every module that got worse."""
     out: list[tuple[str, int, int]] = []
     for name, now in sorted(result.per_module.items()):

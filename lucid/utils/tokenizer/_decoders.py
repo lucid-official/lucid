@@ -124,9 +124,7 @@ class Metaspace(Decoder):
             Stored for serialisation.
         """
         if len(replacement) != 1:
-            raise ValueError(
-                f"Metaspace: replacement must be one character, got {replacement!r}"
-            )
+            raise ValueError(f"Metaspace: replacement must be one character, got {replacement!r}")
         if prepend_scheme not in ("always", "first", "never"):
             raise ValueError(f"Metaspace: unknown prepend_scheme {prepend_scheme!r}")
         self._replacement = replacement
@@ -295,15 +293,11 @@ class Strip(Decoder):
         out: list[str] = []
         for token in tokens:
             begin = 0
-            while (
-                begin < min(self._start, len(token)) and token[begin] == self._content
-            ):
+            while begin < min(self._start, len(token)) and token[begin] == self._content:
                 begin += 1
             end = len(token)
             removed = 0
-            while (
-                removed < self._stop and end > begin and token[end - 1] == self._content
-            ):
+            while removed < self._stop and end > begin and token[end - 1] == self._content:
                 end -= 1
                 removed += 1
             out.append(token[begin:end])

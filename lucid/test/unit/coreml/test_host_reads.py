@@ -35,9 +35,7 @@ pytestmark = pytest.mark.skipif(
 def test_a_host_read_is_refused(name: str, tmp_path: object) -> None:
     first, _second = inputs()
     with pytest.raises(ValueError, match="read on the host"):
-        cml.export(
-            Apply(HOST_READS[name]).eval(), first, f"{tmp_path}/{name}.mlpackage"
-        )
+        cml.export(Apply(HOST_READS[name]).eval(), first, f"{tmp_path}/{name}.mlpackage")
 
 
 _EXPORTABLE = {**CONSTANT_READS, **{n: HOST_READS[n] for n in STATE_READS}}
@@ -56,9 +54,7 @@ def test_a_read_of_a_constant_exports(name: str, tmp_path: object) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(FUSED_KERNELS))
-def test_a_fused_kernel_exports_and_follows_the_input(
-    name: str, tmp_path: object
-) -> None:
+def test_a_fused_kernel_exports_and_follows_the_input(name: str, tmp_path: object) -> None:
     """``F.fused_linear_relu(x, w, b) * 2 + x.sum()`` exported with the
     example's kernel output baked in, off from eager by about 4 on another
     input (LCD-345). The kernel is recorded, and translates to MIL's linear
@@ -69,6 +65,4 @@ def test_a_fused_kernel_exports_and_follows_the_input(
     want = model(second)
     got = exported.predict(second)
     assert isinstance(got, lucid.Tensor)
-    assert float((got - want).abs().max().item()) <= 1e-4 * float(
-        want.abs().max().item()
-    )
+    assert float((got - want).abs().max().item()) <= 1e-4 * float(want.abs().max().item())

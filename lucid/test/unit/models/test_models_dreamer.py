@@ -115,9 +115,7 @@ class TestDreamerConfig:
         promoted = set(WorldModelConfig.__annotations__) - {"model_type"}
         assert "act_fn" not in promoted
         planet, dreamer = PlaNetConfig(), DreamerConfig()
-        differing = {
-            name for name in promoted if getattr(planet, name) != getattr(dreamer, name)
-        }
+        differing = {name for name in promoted if getattr(planet, name) != getattr(dreamer, name)}
         assert not differing, f"shared base disagrees with a family on {differing}"
 
     @pytest.mark.parametrize(
@@ -208,9 +206,7 @@ class TestActorHead:
 
 class TestLambdaReturn:
     @staticmethod
-    def _closed_form(
-        r: list[float], v: list[float], gamma: float, lam: float
-    ) -> list[float]:
+    def _closed_form(r: list[float], v: list[float], gamma: float, lam: float) -> list[float]:
         """The paper's definition, built directly from n-step returns."""
         horizon = len(r) - 1
 
@@ -220,9 +216,7 @@ class TestLambdaReturn:
         out = []
         for t in range(horizon):
             longest = horizon - t
-            value = sum(
-                (1 - lam) * lam ** (n - 1) * n_step(t, n) for n in range(1, longest)
-            )
+            value = sum((1 - lam) * lam ** (n - 1) * n_step(t, n) for n in range(1, longest))
             out.append(value + lam ** (longest - 1) * n_step(t, longest))
         return out
 
@@ -355,9 +349,7 @@ class TestMeanOnly:
         second = model(obs, actions, rewards)
         assert first.behavior is not None and second.behavior is not None
         assert float(first.loss.item()) == float(second.loss.item())
-        assert float(first.behavior.actor_loss.item()) == float(
-            second.behavior.actor_loss.item()
-        )
+        assert float(first.behavior.actor_loss.item()) == float(second.behavior.actor_loss.item())
 
 
 class TestObjective:
@@ -497,9 +489,7 @@ class TestActorInputDetach:
     """
 
     def _actor_grads(self, detach: bool, weights: object) -> list[lucid.Tensor]:
-        model = DreamerForWorldModeling(
-            _tiny_cfg(detach_actor_input=detach, mean_only=True)
-        )
+        model = DreamerForWorldModeling(_tiny_cfg(detach_actor_input=detach, mean_only=True))
         model.load_state_dict(weights)
         out = model(*_batch())
         assert out.behavior is not None
@@ -625,9 +615,7 @@ class TestComposition:
         for act_fn in ("elu", "silu", "gelu"):
             other = DreamerModel(_tiny_cfg(act_fn=act_fn))
             other.load_state_dict(weights)
-            spread = float(
-                (baseline - other.actor.distribution(feature)[0]).abs().max()
-            )
+            spread = float((baseline - other.actor.distribution(feature)[0]).abs().max())
             assert spread > 1e-4, f"{act_fn} is indistinguishable from relu"
 
 
@@ -778,10 +766,7 @@ class TestTrainingStep:
             opt.step()
 
         for name, params in groups.items():
-            moved = any(
-                float(abs(p.data - old).sum()) > 0
-                for p, old in zip(params, before[name])
-            )
+            moved = any(float(abs(p.data - old).sum()) > 0 for p, old in zip(params, before[name]))
             assert moved, f"{name} did not move"
 
     def test_losses_fall_over_a_short_run(self) -> None:
@@ -838,9 +823,7 @@ class TestDiscreteControl:
     @staticmethod
     def _actions(b: int = 2, t: int = 3, action_dim: int = 4) -> lucid.Tensor:
         index = lucid.zeros((b, t)).to(lucid.int32)
-        return lucid.nn.functional.one_hot(index, num_classes=action_dim).to(
-            lucid.float32
-        )
+        return lucid.nn.functional.one_hot(index, num_classes=action_dim).to(lucid.float32)
 
     def test_the_action_is_a_one_hot(self) -> None:
         lucid.manual_seed(0)
@@ -947,11 +930,7 @@ class TestDiscreteRegistry:
 
         base = create_model("dreamer", action_dim=18).config
         discrete = create_model("dreamer_discrete", action_dim=18).config
-        moved = {
-            f.name
-            for f in fields(base)
-            if getattr(base, f.name) != getattr(discrete, f.name)
-        }
+        moved = {f.name for f in fields(base) if getattr(base, f.name) != getattr(discrete, f.name)}
         assert moved == {"action_space", "horizon", "kl_weight", "pcont"}
 
     def test_both_tasks_are_registered(self) -> None:

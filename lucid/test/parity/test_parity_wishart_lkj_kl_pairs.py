@@ -167,16 +167,12 @@ class TestNewKLPairsParity:
 
     def test_geometric_geometric(self, ref: Any) -> None:
         lucid_kl = self._kl(D.Geometric(probs=0.3), D.Geometric(probs=0.5))
-        ref_kl = _ref_kl(
-            ref, ref.distributions.Geometric(0.3), ref.distributions.Geometric(0.5)
-        )
+        ref_kl = _ref_kl(ref, ref.distributions.Geometric(0.3), ref.distributions.Geometric(0.5))
         assert abs(lucid_kl - ref_kl) < 1e-4
 
     def test_halfnormal_halfnormal(self, ref: Any) -> None:
         lucid_kl = self._kl(D.HalfNormal(1.0), D.HalfNormal(2.0))
-        ref_kl = _ref_kl(
-            ref, ref.distributions.HalfNormal(1.0), ref.distributions.HalfNormal(2.0)
-        )
+        ref_kl = _ref_kl(ref, ref.distributions.HalfNormal(1.0), ref.distributions.HalfNormal(2.0))
         assert abs(lucid_kl - ref_kl) < 1e-5
 
     def test_lognormal_lognormal(self, ref: Any) -> None:
@@ -190,9 +186,7 @@ class TestNewKLPairsParity:
 
     def test_independent_independent(self, ref: Any) -> None:
         p_lucid = D.Independent(D.Normal(lucid.zeros(3), lucid.ones(3)), 1)
-        q_lucid = D.Independent(
-            D.Normal(lucid.tensor([0.5, 0.5, 0.5]), lucid.ones(3)), 1
-        )
+        q_lucid = D.Independent(D.Normal(lucid.tensor([0.5, 0.5, 0.5]), lucid.ones(3)), 1)
         lucid_kl = self._kl(p_lucid, q_lucid)
 
         p_ref = ref.distributions.Independent(

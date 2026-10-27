@@ -86,9 +86,7 @@ def _scaled(n_out: int, saves: str) -> type[Function]:
 
 @pytest.mark.parametrize("saves", _SAVES)
 @pytest.mark.parametrize("n_out", [1, 2, 3])
-def test_a_call_that_runs_no_backward_is_freed(
-    n_out: int, saves: str, device: str
-) -> None:
+def test_a_call_that_runs_no_backward_is_freed(n_out: int, saves: str, device: str) -> None:
     fn = _scaled(n_out, saves)
     x = lucid.randn(_ELEMS, requires_grad=True, device=device)
     assert _first(fn.apply(x)).grad_fn is not None, "the case records no graph"
@@ -140,9 +138,7 @@ _IN_TREE: dict[str, Callable[[lucid.Tensor], object]] = {
 
 
 @pytest.mark.parametrize("name", list(_IN_TREE))
-def test_an_in_tree_function_is_freed_without_a_backward(
-    name: str, device: str
-) -> None:
+def test_an_in_tree_function_is_freed_without_a_backward(name: str, device: str) -> None:
     A = _square(device)
     run = _IN_TREE[name]
     assert _first(run(A)).grad_fn is not None, "the case records no graph"
@@ -167,9 +163,7 @@ def test_an_in_tree_function_is_freed_by_refcount(name: str, device: str) -> Non
     finally:
         gc.enable()
         gc.collect()
-    assert grown < _SIDE * _SIDE * 4, (
-        f"{name}: 4 forwards left {grown} bytes alive without a GC"
-    )
+    assert grown < _SIDE * _SIDE * 4, f"{name}: 4 forwards left {grown} bytes alive without a GC"
 
 
 class _ReadsBoth(Function):
@@ -236,9 +230,7 @@ def _pair_loss(x: lucid.Tensor) -> lucid.Tensor:
     return (y * y).sum() + z.sum()  # 2 e^{2x}: f'' = 8 e^{2x}
 
 
-@pytest.mark.parametrize(
-    "loss,scale", [(_exp_loss, 4.0), (_pair_loss, 8.0)], ids=["one", "two"]
-)
+@pytest.mark.parametrize("loss,scale", [(_exp_loss, 4.0), (_pair_loss, 8.0)], ids=["one", "two"])
 def test_a_second_derivative_runs_through_saved_outputs(
     loss: Callable[[lucid.Tensor], lucid.Tensor], scale: float, device: str
 ) -> None:
@@ -254,9 +246,7 @@ def test_a_second_derivative_runs_through_saved_outputs(
 
 @pytest.mark.parametrize("grad_mode", [False, True], ids=["no_grad", "grad"])
 @pytest.mark.parametrize("n_out", [1, 2])
-def test_a_write_into_a_saved_output_is_refused(
-    n_out: int, grad_mode: bool, device: str
-) -> None:
+def test_a_write_into_a_saved_output_is_refused(n_out: int, grad_mode: bool, device: str) -> None:
     fn = _scaled(n_out, "all outputs")
     x = lucid.tensor([1.0, 2.0], requires_grad=True, device=device)
     outs = fn.apply(x)
@@ -268,9 +258,7 @@ def test_a_write_into_a_saved_output_is_refused(
             roots[-1].mul_(2.0)
     # Seeded at the outputs themselves: an op consuming one records its
     # version too and would refuse first, before the node's own check ran.
-    with pytest.raises(
-        _C_engine.VersionMismatch, match=rf"\(Scaled output {n_out - 1}\)"
-    ):
+    with pytest.raises(_C_engine.VersionMismatch, match=rf"\(Scaled output {n_out - 1}\)"):
         lucid.autograd.backward(roots, [lucid.ones_like(r) for r in roots])
 
 
@@ -365,11 +353,7 @@ def test_forward_allocates_no_graph_node(device: str) -> None:
 
 
 def _index_of(x: lucid.Tensor, dtype: lucid.dtype) -> lucid.Tensor:
-    return (
-        (x > 0.0)
-        if dtype == lucid.bool_
-        else lucid.arange(3, device=x.device).to(dtype)
-    )
+    return (x > 0.0) if dtype == lucid.bool_ else lucid.arange(3, device=x.device).to(dtype)
 
 
 @pytest.mark.parametrize("marked", [False, True], ids=["unmarked", "marked"])
@@ -381,18 +365,14 @@ def test_an_integer_output_is_not_differentiable(
 
     class WithIndex(Function):
         @staticmethod
-        def forward(
-            ctx: FunctionCtx, x: lucid.Tensor
-        ) -> tuple[lucid.Tensor, lucid.Tensor]:
+        def forward(ctx: FunctionCtx, x: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
             idx = _index_of(x, dtype)
             if marked:
                 ctx.mark_non_differentiable(idx)
             return x * 2.0, idx
 
         @staticmethod
-        def backward(
-            ctx: FunctionCtx, g: lucid.Tensor, g_idx: lucid.Tensor
-        ) -> lucid.Tensor:
+        def backward(ctx: FunctionCtx, g: lucid.Tensor, g_idx: lucid.Tensor) -> lucid.Tensor:
             grads.append(g_idx)
             return g * 2.0
 
@@ -457,9 +437,7 @@ def test_an_integer_input_passed_through_is_left_alone(device: str) -> None:
 
 
 @pytest.mark.parametrize("tracked", [False, True], ids=["untracked", "tracked"])
-def test_a_marked_tensor_forward_did_not_make_is_left_alone(
-    tracked: bool, device: str
-) -> None:
+def test_a_marked_tensor_forward_did_not_make_is_left_alone(tracked: bool, device: str) -> None:
     # A module buffer, say: marking it used to detach it in place, rebinding
     # the object the module still holds.
     buf = lucid.ones(3, device=device)
@@ -467,16 +445,12 @@ def test_a_marked_tensor_forward_did_not_make_is_left_alone(
 
     class WithBuffer(Function):
         @staticmethod
-        def forward(
-            ctx: FunctionCtx, x: lucid.Tensor
-        ) -> tuple[lucid.Tensor, lucid.Tensor]:
+        def forward(ctx: FunctionCtx, x: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
             ctx.mark_non_differentiable(buf)
             return x * 2.0, buf
 
         @staticmethod
-        def backward(
-            ctx: FunctionCtx, g: lucid.Tensor, g_buf: lucid.Tensor
-        ) -> lucid.Tensor:
+        def backward(ctx: FunctionCtx, g: lucid.Tensor, g_buf: lucid.Tensor) -> lucid.Tensor:
             return g * 2.0
 
     x = lucid.randn(3, requires_grad=tracked, device=device)

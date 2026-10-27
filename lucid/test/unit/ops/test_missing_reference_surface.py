@@ -64,9 +64,7 @@ def test_logcumsumexp_matches_reference(ref: Any, device: str) -> None:
     lucid.logcumsumexp(lg, dim=0).sum().backward()
     ref.logcumsumexp(rg, dim=0).sum().backward()
     assert lg.grad is not None
-    np.testing.assert_allclose(
-        lg.grad.cpu().numpy(), rg.grad.numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(lg.grad.cpu().numpy(), rg.grad.numpy(), rtol=1e-5, atol=1e-5)
 
     with pytest.raises(NotImplementedError):
         lucid.logcumsumexp(lucid.tensor([1, 2, 3], device=device), dim=0)
@@ -120,9 +118,7 @@ def test_renorm_matches_reference(ref: Any, device: str) -> None:
         lo.sum().backward()
         ro.sum().backward()
         assert lx.grad is not None
-        np.testing.assert_allclose(
-            lx.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-5, atol=1e-5
-        )
+        np.testing.assert_allclose(lx.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-5, atol=1e-5)
         lx.grad = None
         rx.grad = None
 
@@ -135,9 +131,7 @@ def test_renorm_matches_reference(ref: Any, device: str) -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_trapezoid_and_cumulative_trapezoid_match_reference(
-    ref: Any, device: str
-) -> None:
+def test_trapezoid_and_cumulative_trapezoid_match_reference(ref: Any, device: str) -> None:
     y_vals = [[1.0, 2.0, 4.0, 7.0], [2.0, 4.0, 8.0, 14.0]]
     x_1d = [0.0, 1.0, 3.0, 6.0]
     ly = lucid.tensor(y_vals, device=device, requires_grad=True)
@@ -157,9 +151,7 @@ def test_trapezoid_and_cumulative_trapezoid_match_reference(
         lo1.sum().backward()
         ro1.sum().backward()
         assert ly.grad is not None
-        np.testing.assert_allclose(
-            ly.grad.cpu().numpy(), ry.grad.numpy(), rtol=1e-5, atol=1e-5
-        )
+        np.testing.assert_allclose(ly.grad.cpu().numpy(), ry.grad.numpy(), rtol=1e-5, atol=1e-5)
         ly.grad = None
         ry.grad = None
 
@@ -224,15 +216,11 @@ def test_clamp_min_max_and_tensor_methods(ref: Any, device: str) -> None:
     x = lucid.tensor([-2.0, 0.5, 3.0], device=device, requires_grad=True)
     rx = ref.tensor([-2.0, 0.5, 3.0], requires_grad=True)
 
-    cmin = lucid.clamp_min(x, 0.0) + x.clamp_min(
-        lucid.tensor([0.0, 1.0, 2.0], device=device)
-    )
+    cmin = lucid.clamp_min(x, 0.0) + x.clamp_min(lucid.tensor([0.0, 1.0, 2.0], device=device))
     rcmin = ref.clamp_min(rx, 0.0) + rx.clamp_min(ref.tensor([0.0, 1.0, 2.0]))
     np.testing.assert_allclose(cmin.detach().cpu().numpy(), rcmin.detach().numpy())
 
-    cmax = lucid.clamp_max(x, 1.0) + x.clamp_max(
-        lucid.tensor([0.0, 1.0, 2.0], device=device)
-    )
+    cmax = lucid.clamp_max(x, 1.0) + x.clamp_max(lucid.tensor([0.0, 1.0, 2.0], device=device))
     rcmax = ref.clamp_max(rx, 1.0) + rx.clamp_max(ref.tensor([0.0, 1.0, 2.0]))
     np.testing.assert_allclose(cmax.detach().cpu().numpy(), rcmax.detach().numpy())
 
@@ -259,9 +247,7 @@ def test_clamp_min_max_and_tensor_methods(ref: Any, device: str) -> None:
 
 @pytest.mark.parametrize("device", _DEVICES)
 def test_empty_strided_and_is_set_to(ref: Any, device: str) -> None:
-    t = lucid.empty_strided(
-        (2, 3), (1, 2), dtype=lucid.float32, device=device, requires_grad=True
-    )
+    t = lucid.empty_strided((2, 3), (1, 2), dtype=lucid.float32, device=device, requires_grad=True)
     rt = ref.empty_strided((2, 3), (1, 2), dtype=ref.float32, requires_grad=True)
     assert t.shape == tuple(rt.shape)
     assert t.stride() == rt.stride()
@@ -286,7 +272,5 @@ def test_empty_strided_and_is_set_to(ref: Any, device: str) -> None:
     assert not base.is_set_to(base.view(3, 2))
     assert not base.is_set_to(base.t())
     assert not base.is_set_to(base.clone())
-    assert not lucid.zeros((0,), device=device).is_set_to(
-        lucid.zeros((0,), device=device)
-    )
+    assert not lucid.zeros((0,), device=device).is_set_to(lucid.zeros((0,), device=device))
     assert base[:0].is_set_to(base[:0])

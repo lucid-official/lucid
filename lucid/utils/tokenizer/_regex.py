@@ -84,9 +84,7 @@ class _RegexPersistenceMixin(_VocabTokenizer):
     def save(self, directory: str) -> None:
         """Persist vocab + regex pattern + unified ``tokenizer.json``."""
         os.makedirs(directory, exist_ok=True)
-        with open(
-            os.path.join(directory, "regex_pattern.txt"), "w", encoding="utf-8"
-        ) as f:
+        with open(os.path.join(directory, "regex_pattern.txt"), "w", encoding="utf-8") as f:
             f.write(self._pattern_str)
         super().save(directory)
 
@@ -113,8 +111,7 @@ class _RegexPersistenceMixin(_VocabTokenizer):
         pat_path = os.path.join(directory, "regex_pattern.txt")
         if not os.path.isfile(pat_path):
             raise FileNotFoundError(
-                f"{cls.__name__}.from_file: regex_pattern.txt not found "
-                f"in {directory}"
+                f"{cls.__name__}.from_file: regex_pattern.txt not found " f"in {directory}"
             )
         with open(pat_path, encoding="utf-8") as f:
             pattern = f.read()

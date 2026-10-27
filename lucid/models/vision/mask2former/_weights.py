@@ -51,8 +51,7 @@ class Mask2FormerSwinTinyWeights(WeightsEnum):
     """
 
     ADE20K = WeightEntry(
-        url=f"{HUB_BASE}/mask2former-swin-tiny-ade/resolve/main/"
-        "ADE20K/model.safetensors",
+        url=f"{HUB_BASE}/mask2former-swin-tiny-ade/resolve/main/" "ADE20K/model.safetensors",
         sha256="f374059bb4a26507b7c243c86684591724b07712616a665cd5beb3fcdf662b8f",
         num_classes=150,
         transforms=_PRESET,
@@ -92,8 +91,7 @@ class Mask2FormerSwinSmallWeights(WeightsEnum):
     """
 
     ADE20K = WeightEntry(
-        url=f"{HUB_BASE}/mask2former-swin-small-ade/resolve/main/"
-        "ADE20K/model.safetensors",
+        url=f"{HUB_BASE}/mask2former-swin-small-ade/resolve/main/" "ADE20K/model.safetensors",
         sha256="94bc512d971caaa956c541a54e26f11d1eea68fd36af23c3df3b94576705335e",
         num_classes=150,
         transforms=_PRESET,
@@ -128,8 +126,7 @@ class Mask2FormerSwinBaseWeights(WeightsEnum):
     """
 
     ADE20K = WeightEntry(
-        url=f"{HUB_BASE}/mask2former-swin-base-ade/resolve/main/"
-        "ADE20K/model.safetensors",
+        url=f"{HUB_BASE}/mask2former-swin-base-ade/resolve/main/" "ADE20K/model.safetensors",
         sha256="3185a471a980cdb9a53c22d7995a8bb6afe4363723bd1d9bfef8d9bf7ebee447",
         num_classes=150,
         transforms=_PRESET,
@@ -168,8 +165,7 @@ class Mask2FormerSwinLargeWeights(WeightsEnum):
     """
 
     ADE20K = WeightEntry(
-        url=f"{HUB_BASE}/mask2former-swin-large-ade/resolve/main/"
-        "ADE20K/model.safetensors",
+        url=f"{HUB_BASE}/mask2former-swin-large-ade/resolve/main/" "ADE20K/model.safetensors",
         sha256="b6979833993857fbe2f20d1c8a207a465278c6974e300f49ff353b4da732d34c",
         num_classes=150,
         transforms=_PRESET,

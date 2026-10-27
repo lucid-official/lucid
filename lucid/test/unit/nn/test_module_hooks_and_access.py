@@ -20,9 +20,7 @@ import lucid.nn as nn
 
 
 def _x(shape=(2, 4)):
-    return lucid.tensor(
-        np.random.default_rng(0).standard_normal(shape), dtype=lucid.float32
-    )
+    return lucid.tensor(np.random.default_rng(0).standard_normal(shape), dtype=lucid.float32)
 
 
 class Tiny(nn.Module):
@@ -188,9 +186,7 @@ def test_a_failing_always_call_hook_does_not_skip_the_next_one(first_is_global):
         handle = register_module_forward_hook(failing, always_call=True)
     else:
         handle = model.register_forward_hook(failing, always_call=True)
-    model.register_forward_hook(
-        lambda mod, args, out: calls.append("next"), always_call=True
-    )
+    model.register_forward_hook(lambda mod, args, out: calls.append("next"), always_call=True)
     try:
         with pytest.warns(RuntimeWarning, match="hook failed"):
             with pytest.raises(ValueError, match="forward failed"):
@@ -264,9 +260,7 @@ def test_a_full_backward_hook_sees_the_gradients():
 
 def test_a_backward_pre_hook_sees_the_output_gradient():
     model, seen = Tiny(), []
-    model.register_full_backward_pre_hook(
-        lambda mod, grad_output: seen.append(grad_output)
-    )
+    model.register_full_backward_pre_hook(lambda mod, grad_output: seen.append(grad_output))
     model(_x()).sum().backward()
     assert len(seen) == 1
 

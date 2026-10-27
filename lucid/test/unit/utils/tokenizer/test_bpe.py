@@ -115,8 +115,7 @@ def test_bpe_python_fast_parity_simple() -> None:
         ids_slow = slow.encode(text, add_special_tokens=False)
         ids_fast = fast.encode(text, add_special_tokens=False)
         assert ids_slow == ids_fast, (
-            f"Python ↔ Fast parity broken on {text!r}: "
-            f"slow={ids_slow}, fast={ids_fast}"
+            f"Python ↔ Fast parity broken on {text!r}: " f"slow={ids_slow}, fast={ids_fast}"
         )
 
 
@@ -266,9 +265,7 @@ def test_call_batched_padding_longest() -> None:
     # First sequence should be shorter → padded with pad_id at end.
     assert rows[0][-1] == tok.pad_token_id
     # Attention masks: 1 for real, 0 for padding.
-    assert sum(out["attention_mask"][0]) == len(
-        [r for r in rows[0] if r != tok.pad_token_id]
-    )
+    assert sum(out["attention_mask"][0]) == len([r for r in rows[0] if r != tok.pad_token_id])
 
 
 def test_call_return_tensors_lucid() -> None:
@@ -335,9 +332,7 @@ def test_bpe_with_byte_level_pre_tokenizer() -> None:
     """ByteLevel pre-tokenizer encodes raw bytes into the
     GPT-2-printable mapping; the tokenizer sees no whitespace at
     all in chunks."""
-    tok = BPETokenizer(
-        vocab={}, merges=[], pre_tokenizer=ByteLevel(add_prefix_space=False)
-    )
+    tok = BPETokenizer(vocab={}, merges=[], pre_tokenizer=ByteLevel(add_prefix_space=False))
     tok.train(["hello world hello"], vocab_size=30)
     ids = tok.encode("hello world", add_special_tokens=False)
     assert isinstance(ids, list)

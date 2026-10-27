@@ -84,11 +84,7 @@ class _ResBlock(nn.Module):
         g_in = groups
         if in_channels % g_in != 0:
             g_in = next(
-                (
-                    g
-                    for g in range(min(groups, in_channels), 0, -1)
-                    if in_channels % g == 0
-                ),
+                (g for g in range(min(groups, in_channels), 0, -1) if in_channels % g == 0),
                 1,
             )
         g_out = min(groups, out_channels) if out_channels % groups != 0 else groups
@@ -99,9 +95,7 @@ class _ResBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
         self._scale_shift = scale_shift
         # FiLM needs two vectors per channel; additive needs one.
-        self.time_proj = nn.Linear(
-            time_emb_dim, out_channels * 2 if scale_shift else out_channels
-        )
+        self.time_proj = nn.Linear(time_emb_dim, out_channels * 2 if scale_shift else out_channels)
         self.norm2 = nn.GroupNorm(g_out, out_channels, eps=1e-6)
         self.dropout = nn.Dropout(p=dropout)
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1)
@@ -153,9 +147,7 @@ class _AttentionBlock(nn.Module):
     ) -> None:
         super().__init__()
         if channels % num_heads != 0:
-            raise ValueError(
-                f"channels ({channels}) must be divisible by num_heads ({num_heads})"
-            )
+            raise ValueError(f"channels ({channels}) must be divisible by num_heads ({num_heads})")
         g = min(groups, channels) if channels % groups != 0 else groups
         self.norm = nn.GroupNorm(g, channels, eps=1e-6)
         self.qkv = nn.Conv2d(channels, channels * 3, 1)
@@ -324,9 +316,7 @@ class _DDPMUNet(nn.Module):
 
         # Ho 2020 / diffusers DDPM use the [sin, cos] ordering (flip_sin_to_cos
         # = False); required for checkpoint parity.
-        self.time_mlp = nn.TimestepEmbedding(
-            in_dim=base, out_dim=time_dim, flip_sin_to_cos=False
-        )
+        self.time_mlp = nn.TimestepEmbedding(in_dim=base, out_dim=time_dim, flip_sin_to_cos=False)
 
         self.conv_in = nn.Conv2d(config.in_channels, base, 3, padding=1)
 
@@ -457,9 +447,7 @@ class _DDPMUNet(nn.Module):
         # 1.0 disables the rescale entirely, so the common T=1000 case pays
         # nothing for the flag existing.
         self._timestep_scale = (
-            1000.0 / float(config.num_train_timesteps)
-            if config.rescale_timesteps
-            else 1.0
+            1000.0 / float(config.num_train_timesteps) if config.rescale_timesteps else 1.0
         )
         self._blocks_per_up_stage = config.num_res_blocks + 1
 
@@ -948,6 +936,4 @@ class DDPMForImageGeneration(ImageGenerationModel, DiffusionMixin):
         # ``vlb`` is one term L_t at a uniformly drawn t, so its expectation
         # is L_vlb/T; scaling by λ·T recovers the paper's λ·L_vlb.
         loss = loss_simple + (self._vlb_weight * self._num_train_timesteps) * vlb
-        return DDPMOutput(
-            sample=mean_pred, loss=loss, loss_simple=loss_simple, loss_vlb=vlb
-        )
+        return DDPMOutput(sample=mean_pred, loss=loss, loss_simple=loss_simple, loss_vlb=vlb)

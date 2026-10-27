@@ -189,11 +189,7 @@ def test_a_compiled_step_carries_a_buffer_view_write() -> None:
     def run(compiled: bool) -> list[list[float]]:
         lucid.manual_seed(0)
         model = Counter().to("metal")
-        step = (
-            lucid.compile.make_step(model, lambda out: (out * out).mean())
-            if compiled
-            else None
-        )
+        step = lucid.compile.make_step(model, lambda out: (out * out).mean()) if compiled else None
         for _ in range(3):
             x = lucid.randn(2, 4).to("metal")
             loss = step(x) if step is not None else (model(x) ** 2).mean()

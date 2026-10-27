@@ -22,9 +22,7 @@ _I, _H, _T, _B = 4, 6, 7, 3
 
 def _x(device: str) -> lucid.Tensor:
     rng = np.random.default_rng(128)
-    return lucid.tensor(
-        rng.standard_normal((_T, _B, _I)).astype(np.float32), device=device
-    )
+    return lucid.tensor(rng.standard_normal((_T, _B, _I)).astype(np.float32), device=device)
 
 
 def _final_hidden(kind: str, state: object) -> np.ndarray:
@@ -41,9 +39,7 @@ def test_train_mode_draws_a_fresh_mask_per_call(kind: str, device: str) -> None:
     out_b, state_b = module(x)
     assert not np.allclose(out_a.numpy(), out_b.numpy())
     # The mask sits between the layers: layer 0's own state never sees it.
-    np.testing.assert_array_equal(
-        _final_hidden(kind, state_a)[0], _final_hidden(kind, state_b)[0]
-    )
+    np.testing.assert_array_equal(_final_hidden(kind, state_a)[0], _final_hidden(kind, state_b)[0])
 
 
 @pytest.mark.parametrize("kind", _KINDS)
@@ -104,9 +100,7 @@ def test_a_single_layer_warns_that_dropout_has_nowhere_to_go(kind: str) -> None:
 
 @pytest.mark.parametrize("dropout", [-0.1, 1.5, float("nan"), True])
 @pytest.mark.parametrize("kind", _KINDS)
-def test_dropout_outside_the_unit_interval_is_refused(
-    kind: str, dropout: float
-) -> None:
+def test_dropout_outside_the_unit_interval_is_refused(kind: str, dropout: float) -> None:
     with pytest.raises(ValueError, match="dropout"):
         getattr(nn, kind)(_I, _H, num_layers=2, dropout=dropout)
 
@@ -132,9 +126,7 @@ def test_dropout_one_matches_the_reference(
     x = _x("cpu").numpy()
     got_out, got_state = ours(lucid.tensor(x, device=device))
     want_out, want_state = theirs(ref.tensor(x))
-    np.testing.assert_allclose(
-        got_out.numpy(), want_out.detach().numpy(), rtol=1e-5, atol=1e-6
-    )
+    np.testing.assert_allclose(got_out.numpy(), want_out.detach().numpy(), rtol=1e-5, atol=1e-6)
     np.testing.assert_allclose(
         _final_hidden(kind, got_state),
         (want_state[0] if kind == "LSTM" else want_state).detach().numpy(),

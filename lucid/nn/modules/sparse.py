@@ -145,9 +145,7 @@ class Embedding(Module):
     ) -> None:
         """Initialise the Embedding module. See the class docstring for parameter semantics."""
         super().__init__()
-        if padding_idx is not None and not (
-            -num_embeddings <= padding_idx < num_embeddings
-        ):
+        if padding_idx is not None and not (-num_embeddings <= padding_idx < num_embeddings):
             raise ValueError(
                 f"padding_idx must be within [-{num_embeddings}, "
                 f"{num_embeddings}); got {padding_idx}"
@@ -554,9 +552,7 @@ class VectorQuantizer(Module):
         if embedding_dim <= 0:
             raise ValueError(f"embedding_dim must be positive, got {embedding_dim}")
         if commitment_cost < 0.0:
-            raise ValueError(
-                f"commitment_cost must be non-negative, got {commitment_cost}"
-            )
+            raise ValueError(f"commitment_cost must be non-negative, got {commitment_cost}")
 
         self.num_embeddings: int = num_embeddings
         self.embedding_dim: int = embedding_dim
@@ -592,9 +588,7 @@ class VectorQuantizer(Module):
         codebook_loss = ((hard - x.detach()) ** 2).mean()
         commitment_loss = ((x - hard.detach()) ** 2).mean()
 
-        onehot = one_hot(indices.reshape(-1), num_classes=self.num_embeddings).to(
-            x.dtype
-        )
+        onehot = one_hot(indices.reshape(-1), num_classes=self.num_embeddings).to(x.dtype)
         probs = onehot.mean(dim=0)
         perplexity = _lucid.exp(-(probs * (probs + 1e-10).log()).sum())
 

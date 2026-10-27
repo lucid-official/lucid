@@ -133,14 +133,10 @@ class _QuantizedConvTransposeNd(nn.Module):
             f.groups,
             bias=f.bias is not None,
         )
-        wobs = PerChannelMinMaxObserver(
-            ch_axis=1, qscheme=per_channel_symmetric, qdtype=qint8
-        )
+        wobs = PerChannelMinMaxObserver(ch_axis=1, qscheme=per_channel_symmetric, qdtype=qint8)
         wobs(f.weight)
         w_scale, w_zp = wobs.calculate_qparams()
-        qmod.register_buffer(
-            "weight_int8", quantize(f.weight, w_scale, w_zp, qint8, ch_axis=1)
-        )
+        qmod.register_buffer("weight_int8", quantize(f.weight, w_scale, w_zp, qint8, ch_axis=1))
         qmod.register_buffer("weight_scale", w_scale)
         qmod.register_buffer("weight_zero_point", w_zp)
         if f.bias is not None:

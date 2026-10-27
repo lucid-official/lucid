@@ -33,9 +33,7 @@ from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 
 
 def _preset(crop: int, resize: int) -> ImageClassification:
-    return ImageClassification(
-        crop_size=crop, resize_size=resize, interpolation="bicubic"
-    )
+    return ImageClassification(crop_size=crop, resize_size=resize, interpolation="bicubic")
 
 
 @register_weights("mobilenet_v4_conv_small_cls")
@@ -71,8 +69,7 @@ class MobileNetV4ConvSmallWeights(WeightsEnum):
 
     E2400_R224_IN1K = WeightEntry(
         url=(
-            f"{HUB_BASE}/mobilenet-v4-conv-small/resolve/main/"
-            "E2400_R224_IN1K/model.safetensors"
+            f"{HUB_BASE}/mobilenet-v4-conv-small/resolve/main/" "E2400_R224_IN1K/model.safetensors"
         ),
         sha256="dcf957719673adfa8c7a603fbfce50d6e3fe275e5a6be3a0379f1be6cfe517b6",
         num_classes=1000,
@@ -123,8 +120,7 @@ class MobileNetV4ConvMediumWeights(WeightsEnum):
 
     E500_R256_IN1K = WeightEntry(
         url=(
-            f"{HUB_BASE}/mobilenet-v4-conv-medium/resolve/main/"
-            "E500_R256_IN1K/model.safetensors"
+            f"{HUB_BASE}/mobilenet-v4-conv-medium/resolve/main/" "E500_R256_IN1K/model.safetensors"
         ),
         sha256="464e837e7d41ed0ec24bac989d056994cccacd212cc600d8bd886bafcb0d00a5",
         num_classes=1000,
@@ -171,8 +167,7 @@ class MobileNetV4ConvLargeWeights(WeightsEnum):
 
     E600_R384_IN1K = WeightEntry(
         url=(
-            f"{HUB_BASE}/mobilenet-v4-conv-large/resolve/main/"
-            "E600_R384_IN1K/model.safetensors"
+            f"{HUB_BASE}/mobilenet-v4-conv-large/resolve/main/" "E600_R384_IN1K/model.safetensors"
         ),
         sha256="927da55b458d00a3438a396b9a68e1133c7c982a1d960a5882ec7160d6ae7809",
         num_classes=1000,

@@ -69,9 +69,7 @@ class TestShardedRoundTrip:
             sd = _tiny_state_dict()
             lucid.save_sharded(sd, tmp)
             loaded = lucid.load_sharded(tmp, weights_only=False)
-            np.testing.assert_array_equal(
-                loaded["weight"].numpy(), sd["weight"].numpy()
-            )
+            np.testing.assert_array_equal(loaded["weight"].numpy(), sd["weight"].numpy())
             np.testing.assert_array_equal(loaded["bias"].numpy(), sd["bias"].numpy())
 
     def test_key_order_preserved(self) -> None:
@@ -84,9 +82,7 @@ class TestShardedRoundTrip:
 
     def test_dtype_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            sd: OrderedDict = OrderedDict(
-                [("x", lucid.tensor([1, 2, 3], dtype=lucid.int64))]
-            )
+            sd: OrderedDict = OrderedDict([("x", lucid.tensor([1, 2, 3], dtype=lucid.int64))])
             lucid.save_sharded(sd, tmp)
             loaded = lucid.load_sharded(tmp, weights_only=False)
             assert loaded["x"].dtype == lucid.int64
@@ -204,9 +200,7 @@ class TestErrorHandling:
         with tempfile.TemporaryDirectory() as tmp:
             bad = {"not_a_lucid_index": True}
             (Path(tmp) / "index.json").write_text(json.dumps(bad))
-            with pytest.raises(
-                RuntimeError, match="not a valid Lucid sharded checkpoint"
-            ):
+            with pytest.raises(RuntimeError, match="not a valid Lucid sharded checkpoint"):
                 lucid.load_sharded(tmp)
 
     def test_directory_created_automatically(self) -> None:

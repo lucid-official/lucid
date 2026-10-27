@@ -32,8 +32,5 @@ def test_the_retyped_signatures_keep_their_shape() -> None:
     sig = inspect.signature(lucid.nonzero)
     assert list(sig.parameters) == ["input", "as_tuple"]
     assert sig.return_annotation == lucid.Tensor | tuple[lucid.Tensor, ...]
-    assert (
-        inspect.signature(lucid.contiguous).parameters["input"].annotation
-        is lucid.Tensor
-    )
+    assert inspect.signature(lucid.contiguous).parameters["input"].annotation is lucid.Tensor
     assert inspect.signature(lucid.split).return_annotation == list[lucid.Tensor]

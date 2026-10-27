@@ -125,9 +125,7 @@ def test_an_unformatted_file_needs_format(tmp_path: Path, clang_format: str) -> 
     assert "NEEDS FORMAT: lucid/_C/a.cpp" in done.stdout
 
 
-def test_a_style_clang_format_cannot_read_cannot_check(
-    tmp_path: Path, clang_format: str
-) -> None:
+def test_a_style_clang_format_cannot_read_cannot_check(tmp_path: Path, clang_format: str) -> None:
     # The tool runs, but fails before it compares anything: no verdict.
     done = _run(_checkout(tmp_path, _FORMATTED, style="NoSuchKey: 3\n"), clang_format)
     assert done.returncode == 2, done

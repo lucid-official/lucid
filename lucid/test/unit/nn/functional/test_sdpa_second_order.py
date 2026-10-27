@@ -54,9 +54,7 @@ def _explicit(
 
 
 def _close(a: lucid.Tensor, b: lucid.Tensor) -> bool:
-    return float((a - b).abs().max().item()) <= _TOL * (
-        1.0 + float(b.abs().max().item())
-    )
+    return float((a - b).abs().max().item()) <= _TOL * (1.0 + float(b.abs().max().item()))
 
 
 def _second_order(out: lucid.Tensor, wrt: list[lucid.Tensor]) -> list[lucid.Tensor]:

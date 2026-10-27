@@ -197,9 +197,7 @@ def _run_entry(
         if p.grad is not None
     }
     eager_opt.step()
-    want_params = {
-        n: p.detach().cpu().numpy().copy() for n, p in eager.named_parameters()
-    }
+    want_params = {n: p.detach().cpu().numpy().copy() for n, p in eager.named_parameters()}
 
     # Compiled step under the requested entry point
     model = model_factory()
@@ -333,9 +331,7 @@ def test_requires_grad_guarded_hook_or_retain_grad_falls_back_to_eager(
     ],
 )
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
-def test_bookkeeping_trace_forms_compile_and_match_eager(
-    kind: str, op_kind: str
-) -> None:
+def test_bookkeeping_trace_forms_compile_and_match_eager(kind: str, op_kind: str) -> None:
     _run_entry(
         kind,
         lambda: _seq_model(lambda: _BookkeepingBlock(op_kind)),
@@ -390,9 +386,7 @@ def test_bn_relu_inplace_cnn_compiles_and_matches_eager(kind: str) -> None:
     np.testing.assert_allclose(
         float(got_loss.item()), float(want_loss.item()), rtol=1e-4, atol=1e-5
     )
-    for (n, p), (_, want_p) in zip(
-        model.named_parameters(), eager.named_parameters(), strict=True
-    ):
+    for (n, p), (_, want_p) in zip(model.named_parameters(), eager.named_parameters(), strict=True):
         np.testing.assert_allclose(
             p.detach().cpu().numpy(),
             want_p.detach().cpu().numpy(),
@@ -401,9 +395,7 @@ def test_bn_relu_inplace_cnn_compiles_and_matches_eager(kind: str) -> None:
             err_msg=n,
         )
     if kind != "segments_2":
-        for (n, b), (_, want_b) in zip(
-            model.named_buffers(), eager.named_buffers(), strict=True
-        ):
+        for (n, b), (_, want_b) in zip(model.named_buffers(), eager.named_buffers(), strict=True):
             np.testing.assert_allclose(
                 b.detach().cpu().numpy(),
                 want_b.detach().cpu().numpy(),
@@ -441,9 +433,7 @@ class _RandomLinearBlock(nn.Module):
         ("fused_step", True),
     ],
 )
-def test_rng_bit_equal_on_first_second_and_refused_calls(
-    kind: str, refuse_compile: bool
-) -> None:
+def test_rng_bit_equal_on_first_second_and_refused_calls(kind: str, refuse_compile: bool) -> None:
     def build() -> nn.Sequential:
         lucid.manual_seed(0)
         return nn.Sequential(

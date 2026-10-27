@@ -67,17 +67,13 @@ def _state_tensor(g: _C_engine.Generator) -> Tensor:
     """``[key, counter]`` as an ``int64`` tensor, each in two's complement."""
     words = [_key(g), int(g.counter)]
     with untraced():
-        return tensor(
-            [w - _UNSIGNED_64 if w >= _SIGNED_64 else w for w in words], dtype=int64
-        )
+        return tensor([w - _UNSIGNED_64 if w >= _SIGNED_64 else w for w in words], dtype=int64)
 
 
 def _unpack_state(state: Tensor, op: str) -> tuple[int, int]:
     """``(key, counter)`` from a state tensor :func:`_state_tensor` made."""
     if int(state.numel()) != 2:
-        raise ValueError(
-            f"{op}: expected a length-2 state tensor, got shape={tuple(state.shape)}"
-        )
+        raise ValueError(f"{op}: expected a length-2 state tensor, got shape={tuple(state.shape)}")
     with untraced():
         flat = state.reshape(-1)
         return int(flat[0].item()) % _UNSIGNED_64, int(flat[1].item()) % _UNSIGNED_64

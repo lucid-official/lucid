@@ -73,12 +73,8 @@ def test_the_module_matches_with_any_mask(ref: Any, config: str, masks: str) -> 
         mine_kw["attn_mask"] = lucid.from_numpy(attn)
         ref_kw["attn_mask"] = ref.from_numpy(attn)
     with ref.no_grad():
-        want, want_w = theirs(
-            ref.from_numpy(q), ref.from_numpy(kv), ref.from_numpy(kv), **ref_kw
-        )
-    got, got_w = ours(
-        lucid.from_numpy(q), lucid.from_numpy(kv), lucid.from_numpy(kv), **mine_kw
-    )
+        want, want_w = theirs(ref.from_numpy(q), ref.from_numpy(kv), ref.from_numpy(kv), **ref_kw)
+    got, got_w = ours(lucid.from_numpy(q), lucid.from_numpy(kv), lucid.from_numpy(kv), **mine_kw)
     np.testing.assert_allclose(got.numpy(), want.numpy(), rtol=0, atol=1e-5)
     np.testing.assert_allclose(got_w.numpy(), want_w.numpy(), rtol=0, atol=1e-6)
 

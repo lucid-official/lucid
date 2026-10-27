@@ -44,9 +44,7 @@ class TestDeterministicCoords:
             "kps": _kps([[1.0, 2.0], [9.0, 0.0], [4.5, 7.5]], (8, 10)),
         }
         out = T.HorizontalFlip(p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx(
-            [(9.0, 2.0), (1.0, 0.0), (5.5, 7.5)], abs=1e-5
-        )
+        assert _xy(out["kps"]) == pytest.approx([(9.0, 2.0), (1.0, 0.0), (5.5, 7.5)], abs=1e-5)
 
     def test_vertical_flip(self) -> None:
         s = {
@@ -54,9 +52,7 @@ class TestDeterministicCoords:
             "kps": _kps([[1.0, 2.0], [9.0, 0.0], [4.5, 7.5]], (8, 10)),
         }
         out = T.VerticalFlip(p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx(
-            [(1.0, 6.0), (9.0, 8.0), (4.5, 0.5)], abs=1e-5
-        )
+        assert _xy(out["kps"]) == pytest.approx([(1.0, 6.0), (9.0, 8.0), (4.5, 0.5)], abs=1e-5)
 
     def test_transpose_swaps_xy(self) -> None:
         s = {
@@ -95,9 +91,7 @@ class TestDeterministicCoords:
         }
         # Resize(8, 16) → scale (8/16, 16/32) = (0.5, 0.5).
         out = T.Resize(8, 16, p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx(
-            [(0.0, 0.0), (8.0, 4.0), (15.5, 7.5)], abs=1e-5
-        )
+        assert _xy(out["kps"]) == pytest.approx([(0.0, 0.0), (8.0, 4.0), (15.5, 7.5)], abs=1e-5)
 
     def test_rot90_k_equals_one(self) -> None:
         s = {

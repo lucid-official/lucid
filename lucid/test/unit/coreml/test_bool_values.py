@@ -140,9 +140,7 @@ class _Fn(nn.Module):
     "precision", [cml.Precision.FLOAT32, cml.Precision.FLOAT16], ids=["fp32", "fp16"]
 )
 @pytest.mark.parametrize("case", sorted(CASES))
-def test_a_bool_value_matches_eager(
-    case: str, precision: cml.Precision, tmp_path: object
-) -> None:
+def test_a_bool_value_matches_eager(case: str, precision: cml.Precision, tmp_path: object) -> None:
     lucid.manual_seed(0)
     x = lucid.randn(5, 5)
     model = _Fn(CASES[case]).eval()

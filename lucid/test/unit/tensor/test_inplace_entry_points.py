@@ -92,9 +92,7 @@ def test_the_operator_writes_into_self(device: str, dunder: str) -> None:
     alias = a
     # ``_impl.version``: Lucid has no ``Tensor._version`` yet (LCD-488).
     impl, version = a._impl, a._impl.version
-    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(
-        operand
-    ).tolist()
+    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(operand).tolist()
 
     out = _augment(a, symbol, operand)
 
@@ -110,23 +108,17 @@ def test_a_view_of_self_sees_the_write(device: str, dunder: str) -> None:
     symbol, dtype, operand = AUGMENTED[dunder]
     a = _base(lucid, dtype).to(device)
     view = a[:2]
-    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(
-        operand
-    ).tolist()
+    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(operand).tolist()
     _augment(a, symbol, operand)
     assert view.tolist() == expected[:2]
 
 
 @pytest.mark.parametrize("dunder", list(AUGMENTED))
-def test_the_operator_on_a_view_writes_through_to_its_base(
-    device: str, dunder: str
-) -> None:
+def test_the_operator_on_a_view_writes_through_to_its_base(device: str, dunder: str) -> None:
     symbol, dtype, operand = AUGMENTED[dunder]
     a = _base(lucid, dtype).to(device)
     view = a[1:3]
-    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(
-        operand
-    ).tolist()
+    expected = getattr(_base(lucid, dtype).to(device), "__" + dunder[3:])(operand).tolist()
     _augment(view, symbol, operand)
     assert a.tolist() == [5, *expected[1:3], 8]
 
@@ -155,11 +147,7 @@ def test_an_integer_self_refuses_a_float_result_as_the_reference_does(
 
     theirs = _refusal(write(ref, None))
     a = _base(lucid, "int64").to(device)
-    other = (
-        lucid.tensor([1.5, 2.5, 3.5, 4.5]).to(device)
-        if operand == "tensor"
-        else operand
-    )
+    other = lucid.tensor([1.5, 2.5, 3.5, 4.5]).to(device) if operand == "tensor" else operand
     ours = _refusal(lambda: _augment(a, symbol, other))
     assert isinstance(ours, type(theirs))
     assert _CANNOT_CAST.search(str(theirs))
@@ -176,9 +164,7 @@ def _floats(lib: ModuleType, values: list[float]) -> object:
 
 #: Each in-place method with its ``self`` and its arguments, built for
 #: either library.  ``self`` holds four elements.
-METHODS: dict[
-    str, tuple[Callable[[ModuleType], object], Callable[[ModuleType], tuple]]
-] = {
+METHODS: dict[str, tuple[Callable[[ModuleType], object], Callable[[ModuleType], tuple]]] = {
     "add_": (lambda lib: _floats(lib, [1, 2, 3, 4]), lambda lib: (2.5,)),
     "sub_": (lambda lib: _floats(lib, [1, 2, 3, 4]), lambda lib: (2.5,)),
     "mul_": (lambda lib: _floats(lib, [1, 2, 3, 4]), lambda lib: (2.5,)),
@@ -424,17 +410,13 @@ def test_every_reference_inplace_twin_of_a_lucid_op_is_defined(ref: ModuleType) 
 
 
 @pytest.mark.parametrize("name", list(METHODS))
-def test_lucid_has_every_in_place_method_the_table_names(
-    ref: ModuleType, name: str
-) -> None:
+def test_lucid_has_every_in_place_method_the_table_names(ref: ModuleType, name: str) -> None:
     assert hasattr(ref.Tensor, name)
     assert hasattr(lucid.Tensor, name)
 
 
 @pytest.mark.parametrize("name", list(_BINARY_INPLACE_TWINS))
-def test_the_stub_scalar_claim_matches_what_the_method_accepts(
-    device: str, name: str
-) -> None:
+def test_the_stub_scalar_claim_matches_what_the_method_accepts(device: str, name: str) -> None:
     """LCD-644: a scalar ``other`` works exactly where the generated stub
     says it does. The 22 binary in-place twins used to share one blanket
     ``other: TensorOrScalar`` stub regardless of the op; ``gcd_``/``lcm_``
@@ -445,9 +427,7 @@ def test_the_stub_scalar_claim_matches_what_the_method_accepts(
     """
     tensor_only = name in _BINARY_INPLACE_TENSOR_ONLY
     base = (
-        lucid.tensor([12, 18, 20, 15])
-        if tensor_only
-        else _floats(lucid, [1.5, 2.5, 3.5, 4.5])
+        lucid.tensor([12, 18, 20, 15]) if tensor_only else _floats(lucid, [1.5, 2.5, 3.5, 4.5])
     ).to(device)
     scalar = 2 if tensor_only else 2.0
 
@@ -498,9 +478,7 @@ def test_non_elementwise_inplace_method_writes_into_self_as_the_reference_does(
 
 
 @pytest.mark.parametrize("name", list(METHODS))
-def test_the_method_on_a_view_writes_through_to_its_base(
-    device: str, name: str
-) -> None:
+def test_the_method_on_a_view_writes_through_to_its_base(device: str, name: str) -> None:
     make, args = METHODS[name]
     whole = getattr(make(lucid).to(device), name)(*_on(device, args(lucid))).tolist()
     a = make(lucid).to(device)
@@ -513,9 +491,7 @@ def test_the_method_on_a_view_writes_through_to_its_base(
 
 
 @pytest.mark.parametrize("name", list(METHODS))
-def test_a_view_of_self_sees_the_methods_write_on_the_cpu(
-    device: str, name: str
-) -> None:
+def test_a_view_of_self_sees_the_methods_write_on_the_cpu(device: str, name: str) -> None:
     make, args = METHODS[name]
     a = make(lucid).to(device)
     view = a[:2]
@@ -528,9 +504,7 @@ def test_an_integer_self_refuses_a_float_result_before_writing(
     ref: ModuleType, device: str, name: str
 ) -> None:
     method = name.split()[0]
-    theirs = _refusal(
-        lambda: getattr(ref.tensor([0, 1, 2, 3]), method)(*KIND_DOWN[name](ref))
-    )
+    theirs = _refusal(lambda: getattr(ref.tensor([0, 1, 2, 3]), method)(*KIND_DOWN[name](ref)))
     a = lucid.tensor([0, 1, 2, 3]).to(device)
     ours = _refusal(lambda: getattr(a, method)(*_on(device, KIND_DOWN[name](lucid))))
     assert isinstance(ours, type(theirs))
@@ -541,14 +515,10 @@ def test_an_integer_self_refuses_a_float_result_before_writing(
 
 def test_ldexp_into_an_integer_self_is_refused(ref: ModuleType, device: str) -> None:
     theirs = _refusal(
-        lambda: ref.tensor([0, 1, 2, 3]).ldexp_(
-            ref.tensor([1, 2, 1, 2], dtype=ref.int32)
-        )
+        lambda: ref.tensor([0, 1, 2, 3]).ldexp_(ref.tensor([1, 2, 1, 2], dtype=ref.int32))
     )
     a = lucid.tensor([0, 1, 2, 3]).to(device)
-    ours = _refusal(
-        lambda: a.ldexp_(lucid.tensor([1, 2, 1, 2], dtype=lucid.int32).to(device))
-    )
+    ours = _refusal(lambda: a.ldexp_(lucid.tensor([1, 2, 1, 2], dtype=lucid.int32).to(device)))
     assert isinstance(ours, type(theirs))
     assert "can't be cast to the desired output type" in str(theirs)
     assert _CANNOT_CAST.search(str(ours))
@@ -624,9 +594,7 @@ def test_a_leaf_that_requires_grad_is_not_written(device: str, name: str) -> Non
     with lucid.no_grad():
         getattr(leaf, name)(*_on(device, args(lucid)))
     assert leaf.is_leaf and leaf.requires_grad
-    f16_leaf = lucid.tensor(
-        [1.0, 2.0], dtype=lucid.float16, device=device, requires_grad=True
-    )
+    f16_leaf = lucid.tensor([1.0, 2.0], dtype=lucid.float16, device=device, requires_grad=True)
     with pytest.raises(RuntimeError, match="leaf"):
         f16_leaf.add_(lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device))
     assert f16_leaf.is_leaf and f16_leaf.tolist() == [1.0, 2.0]

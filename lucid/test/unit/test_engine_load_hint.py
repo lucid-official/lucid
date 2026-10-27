@@ -51,6 +51,4 @@ def test_a_missing_bundled_mlx_points_at_fetch_mlx() -> None:
 
 
 def test_an_unknown_failure_gets_no_hint() -> None:
-    assert (
-        _engine_load_hint("symbol not found in flat namespace '__ZN3mlx4core'") is None
-    )
+    assert _engine_load_hint("symbol not found in flat namespace '__ZN3mlx4core'") is None

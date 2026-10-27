@@ -458,9 +458,7 @@ def huber_loss(
     x, target = _operands(op, input, target, promote=False, weight=weight)
     x, target = _broadcast_operands(x, target, _check_target(x, target, op))
     if weight is not None:
-        raw = _C_engine.nn.huber_loss(
-            _unwrap(x), _unwrap(target), delta, _KERNEL_REDUCTION["none"]
-        )
+        raw = _C_engine.nn.huber_loss(_unwrap(x), _unwrap(target), delta, _KERNEL_REDUCTION["none"])
         return _reduce(_wrap(raw) * weight, reduction)
     red: int = _KERNEL_REDUCTION[reduction]
     return _wrap(_C_engine.nn.huber_loss(_unwrap(x), _unwrap(target), delta, red))
@@ -509,9 +507,7 @@ def _class_nll(
     # ``None`` when every sample counts once.
     sample_weight: Tensor | None = None
     if weight is not None:
-        sample_weight = _lucid.index_select(weight, 0, safe.reshape(-1)).reshape(
-            list(safe.shape)
-        )
+        sample_weight = _lucid.index_select(weight, 0, safe.reshape(-1)).reshape(list(safe.shape))
     if keep is not None:
         sample_weight = keep if sample_weight is None else sample_weight * keep
     if sample_weight is not None:
@@ -666,15 +662,11 @@ def cross_entropy(
     out: Tensor
     if soft:
         # Class dim is 1 for both (N, C) and (N, C, *) inputs.
-        out = _soft_target_nll(
-            _log_softmax(x, dim=1), target, weight, reduction, label_smoothing
-        )
+        out = _soft_target_nll(_log_softmax(x, dim=1), target, weight, reduction, label_smoothing)
     else:
         # The targets are checked before the first kernel runs.
         targets = _class_targets(target, num_classes, op, ignore_index=ignore_index)
-        out = _class_nll(
-            _log_softmax(x, dim=1), targets, weight, reduction, label_smoothing
-        )
+        out = _class_nll(_log_softmax(x, dim=1), targets, weight, reduction, label_smoothing)
     return out.reshape([]) if unbatched and reduction == "none" else out
 
 
@@ -777,14 +769,10 @@ def nll_loss(
         target = target.reshape([1])
     targets = _class_targets(target, num_classes, op, ignore_index=ignore_index)
     out: Tensor = _class_nll(x, targets, weight, reduction, 0.0)
-    return _keep_in_graph(
-        out.reshape([]) if unbatched and reduction == "none" else out, input
-    )
+    return _keep_in_graph(out.reshape([]) if unbatched and reduction == "none" else out, input)
 
 
-def _bce_elementwise(
-    x: Tensor, target: Tensor, out_dtype: _dtype, acc: _dtype
-) -> Tensor:
+def _bce_elementwise(x: Tensor, target: Tensor, out_dtype: _dtype, acc: _dtype) -> Tensor:
     # The probability used to be clamped to [1e-12, 1 - 1e-12], and in
     # float32 ``1 - 1e-12`` rounds to 1.0: a sigmoid of a logit above ~17
     # is exactly 1, ``log(1 - 1)`` is -inf, and ``0 * -inf`` made the loss
@@ -1009,9 +997,7 @@ def binary_cross_entropy_with_logits(
     _check_broadcasts_to(weight, _shape(x), "weight", op)
     _check_broadcasts_to(pos_weight, _shape(x), "pos_weight", op)
     out_dtype = x.dtype
-    loss: Tensor = _bce_with_logits_elementwise(
-        x, target, pos_weight, _accumulation_dtype(x)
-    )
+    loss: Tensor = _bce_with_logits_elementwise(x, target, pos_weight, _accumulation_dtype(x))
     if weight is not None:
         loss = loss * weight
     return _reduce(loss, reduction, out_dtype)
@@ -1091,9 +1077,7 @@ def kl_div(
     >>> kl_div(log_q, p, reduction="batchmean")
     tensor(0.02391)
     """
-    reduction = _legacy_reduction(
-        size_average, reduce, reduction, "kl_div", batchmean=True
-    )
+    reduction = _legacy_reduction(size_average, reduce, reduction, "kl_div", batchmean=True)
     x, target = _operands("kl_div", input, target)
     _check_target(x, target, "kl_div")
     # `x` is log_q (log of predicted probability) per the standard contract.
@@ -1204,9 +1188,7 @@ def triplet_margin_loss(
     reduction = _legacy_reduction(size_average, reduce, reduction, "triplet_margin_loss")
     d_ap, d_an = _triplet_distances(anchor, positive, negative, p, eps, swap)
     margin_t = _C_engine.full(d_ap.shape, margin, d_ap.dtype, d_ap.device)
-    loss = _C_engine.clip(
-        _C_engine.add(_C_engine.sub(d_ap, d_an), margin_t), 0.0, math.inf
-    )
+    loss = _C_engine.clip(_C_engine.add(_C_engine.sub(d_ap, d_an), margin_t), 0.0, math.inf)
     return _reduce(_wrap(loss), reduction)
 
 
@@ -1289,9 +1271,7 @@ def triplet_margin_with_distance_loss(
 
     op = "triplet_margin_with_distance_loss"
     _check_reduction(reduction, op)
-    _check_same_rank(
-        op, broadcast=False, anchor=anchor, positive=positive, negative=negative
-    )
+    _check_same_rank(op, broadcast=False, anchor=anchor, positive=positive, negative=negative)
     df: object = distance_function
     if df is None:
         # A distance function of the caller's own decides which dtypes it
@@ -1531,9 +1511,7 @@ def hinge_embedding_loss(
     >>> hinge_embedding_loss(dist, y, margin=1.0)
     tensor(0.2)
     """
-    reduction = _legacy_reduction(
-        size_average, reduce, reduction, "hinge_embedding_loss"
-    )
+    reduction = _legacy_reduction(size_average, reduce, reduction, "hinge_embedding_loss")
     x, y = _operands("hinge_embedding_loss", input, target, promote=False)
     _check_target(x, y, "hinge_embedding_loss")
     zero: Tensor = _lucid.zeros_like(x)
@@ -1851,11 +1829,7 @@ def ctc_loss(
     _check_dtypes(op, log_probs=log_probs)
 
     def _as_lengths(v: Tensor | Sequence[int]) -> Tensor:
-        return (
-            v
-            if isinstance(v, _lucid.Tensor)
-            else _lucid.tensor(list(v), dtype=_lucid.int64)
-        )
+        return v if isinstance(v, _lucid.Tensor) else _lucid.tensor(list(v), dtype=_lucid.int64)
 
     input_lengths = _as_lengths(input_lengths)
     target_lengths = _as_lengths(target_lengths)
@@ -1873,9 +1847,7 @@ def ctc_loss(
     # ``input_lengths`` past the input, a ``target_lengths`` past its row
     # and a label or ``blank`` outside the classes were all read as given,
     # past the end of their axis.
-    rows: list[int] = _check_ctc(
-        log_probs, targets, input_lengths, target_lengths, blank, op
-    )
+    rows: list[int] = _check_ctc(log_probs, targets, input_lengths, target_lengths, blank, op)
 
     tgt_impl = _unwrap(targets)
     if len(list(tgt_impl.shape)) > 1:
@@ -1908,9 +1880,7 @@ def ctc_loss(
     )
 
     per_sample: Tensor = _wrap(
-        _C_engine.nn.ctc_loss(
-            _unwrap(log_probs), tgt_impl, il_impl, tl_impl, blank, zero_infinity
-        )
+        _C_engine.nn.ctc_loss(_unwrap(log_probs), tgt_impl, il_impl, tl_impl, blank, zero_infinity)
     )
     if reduction == "mean":
         # Each sample over its own target length first — ctc's definition
@@ -2046,9 +2016,7 @@ def multi_margin_loss(
     """
     op = "multi_margin_loss"
     reduction = _legacy_reduction(size_average, reduce, reduction, op)
-    return _reduce(
-        _multi_margin_per_sample(input, target, p, margin, weight, op), reduction
-    )
+    return _reduce(_multi_margin_per_sample(input, target, p, margin, weight, op), reduction)
 
 
 def _multilabel_margin_per_sample(x: Tensor, target: Tensor, op: str) -> Tensor:
@@ -2078,9 +2046,7 @@ def _multilabel_margin_per_sample(x: Tensor, target: Tensor, op: str) -> Tensor:
     # How many times each class is listed.  A class listed twice counts
     # twice as a positive, as in the reference; it is a target class (not
     # one of the negatives) once listed at all.
-    counts: Tensor = _lucid.scatter_add(
-        _lucid.zeros_like(xb), 1, safe.to(dtype=_lucid.int64), src
-    )
+    counts: Tensor = _lucid.scatter_add(_lucid.zeros_like(xb), 1, safe.to(dtype=_lucid.int64), src)
     negative: Tensor = 1.0 - counts.clamp(max=1.0)
 
     # hinge[i, t, j] = max(0, 1 - x[i, t] + x[i, j]), for each positive t

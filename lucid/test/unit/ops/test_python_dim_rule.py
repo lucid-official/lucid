@@ -36,9 +36,7 @@ def test_the_python_rule_is_the_engines(ndim):
         assert _wrap_dim(dim, ndim, "op") == dim % max(ndim, 1)
 
 
-@pytest.mark.parametrize(
-    ("dims", "ndim"), [((0, -1), 0), ((1, -1), 2), ((0, 0), 3)], ids=str
-)
+@pytest.mark.parametrize(("dims", "ndim"), [((0, -1), 0), ((1, -1), 2), ((0, 0), 3)], ids=str)
 def test_an_axis_named_twice_is_refused(dims, ndim):
     with pytest.raises(RuntimeError, match="appears multiple times"):
         _wrap_dims(dims, ndim, "op")
@@ -104,9 +102,7 @@ def test_an_axis_past_the_last_is_refused(ref, device, op, shape):
 
 _STRAGGLERS = {
     "Tensor.diff": lambda lib, d: lib.tensor([1.0, 2.0, 4.0]).diff(dim=d),
-    "linalg.cross": lambda lib, d: lib.linalg.cross(
-        lib.ones(3, 3), lib.ones(3, 3), dim=d
-    ),
+    "linalg.cross": lambda lib, d: lib.linalg.cross(lib.ones(3, 3), lib.ones(3, 3), dim=d),
 }
 
 
@@ -282,9 +278,7 @@ def test_cross_refuses_0d_and_non_3_axes(ref, device, dim):
 def test_take_along_dim_on_a_0d_tensor(ref, device):
     x = lucid.tensor(5.0, device=device, requires_grad=True)
     xr = ref.tensor(5.0, requires_grad=True)
-    got = lucid.take_along_dim(
-        x, lucid.tensor(0, dtype=lucid.int64, device=device), dim=None
-    )
+    got = lucid.take_along_dim(x, lucid.tensor(0, dtype=lucid.int64, device=device), dim=None)
     want = ref.take_along_dim(xr, ref.tensor(0, dtype=ref.int64), dim=None)
     assert tuple(got.shape) == tuple(want.shape) == (1,)
     np.testing.assert_allclose(got.numpy(), want.detach().numpy())

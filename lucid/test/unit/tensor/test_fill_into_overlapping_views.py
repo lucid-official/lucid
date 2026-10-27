@@ -23,9 +23,7 @@ from lucid.test._fixtures.devices import metal_available
 _NO_METAL = pytest.mark.skipif(not metal_available(), reason="needs Metal")
 
 #: name -> (base values, the overlapping view of the base, base indices it reads)
-_VIEWS: dict[
-    str, tuple[list[float], Callable[[lucid.Tensor], lucid.Tensor], set[int]]
-] = {
+_VIEWS: dict[str, tuple[list[float], Callable[[lucid.Tensor], lucid.Tensor], set[int]]] = {
     "expand": ([1.0, 2.0, 3.0], lambda b: b.reshape(1, 3).expand(2, 3), {0, 1, 2}),
     "unfold": (
         [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
@@ -59,9 +57,7 @@ def _devices() -> list[object]:
 @pytest.mark.parametrize("device", _devices())
 @pytest.mark.parametrize("fill", list(_FILLS))
 @pytest.mark.parametrize("view", list(_VIEWS))
-def test_a_fill_reaches_every_element_the_view_reads(
-    view: str, fill: str, device: str
-) -> None:
+def test_a_fill_reaches_every_element_the_view_reads(view: str, fill: str, device: str) -> None:
     values, make, read = _VIEWS[view]
     write, value = _FILLS[fill]
     base = lucid.tensor(values, device=device)

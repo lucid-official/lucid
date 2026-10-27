@@ -117,9 +117,7 @@ class TestCosineEmbeddingLossLabelParity:
         assert _close(_vals(lx1.grad), rx1.grad.tolist(), tol=1e-4)
         assert _close(_vals(lx2.grad), rx2.grad.tolist(), tol=1e-4)
 
-    def test_1d_inputs_with_non_binary_scalar_target_give_zero(
-        self, device: str
-    ) -> None:
+    def test_1d_inputs_with_non_binary_scalar_target_give_zero(self, device: str) -> None:
         x1 = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True, device=device)
         x2 = lucid.tensor([2.0, 1.0, 0.5], requires_grad=True, device=device)
         y = lucid.tensor(0, device=device)
@@ -199,9 +197,7 @@ class TestHingeEmbeddingLossLabelParity:
         assert _close(_vals(x.grad), [0.0, 0.0])
 
     @pytest.mark.parity
-    def test_hinge_boundary_at_margin_matches_ref(
-        self, ref: object, device: str
-    ) -> None:
+    def test_hinge_boundary_at_margin_matches_ref(self, ref: object, device: str) -> None:
         R = ref
         x = lucid.tensor([1.0, 1.0], requires_grad=True, device=device)
         y = lucid.tensor([-1, 0], device=device)
@@ -226,9 +222,7 @@ class TestLossModuleConstructionValidation:
 
     @pytest.mark.parametrize("bad_p", [0, 3, -1, 1.5, True, False, "1"])
     @pytest.mark.parity
-    def test_multi_margin_loss_invalid_p_refused_at_init(
-        self, ref: object, bad_p: object
-    ) -> None:
+    def test_multi_margin_loss_invalid_p_refused_at_init(self, ref: object, bad_p: object) -> None:
         R = ref
         with pytest.raises((ValueError, TypeError)):
             nn.MultiMarginLoss(p=bad_p)  # type: ignore[arg-type]

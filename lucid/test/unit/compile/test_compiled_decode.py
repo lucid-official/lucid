@@ -67,9 +67,7 @@ class _MaskedDecoder(nn.Module):
         return self.o(ctx.permute(0, 2, 1, 3).reshape(bsz, 1, _D))
 
 
-def _decode(
-    model: _MaskedDecoder, compiled: bool, n_steps: int
-) -> tuple[list[lucid.Tensor], int]:
+def _decode(model: _MaskedDecoder, compiled: bool, n_steps: int) -> tuple[list[lucid.Tensor], int]:
     cache = StaticCache(_L)
 
     def fwd(h: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
@@ -186,9 +184,7 @@ def test_a_step_under_grad_mode_answers_as_eager(frozen: bool) -> None:
     got, want = runs
     assert [t.requires_grad for t in got] == [t.requires_grad for t in want]
     assert [t.requires_grad for t in want] == [not frozen] * 4
-    worst = max(
-        float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True)
-    )
+    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True))
     assert worst < 1e-4
 
 
@@ -226,7 +222,5 @@ def test_a_host_read_of_the_models_state_runs_the_step_eagerly() -> None:
             outs.append(step(h, lucid.tensor([pos], device=COMPILE_DEVICE).long()))
         runs.append(outs)
     got, want = runs
-    worst = max(
-        float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True)
-    )
+    worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True))
     assert worst < 1e-4

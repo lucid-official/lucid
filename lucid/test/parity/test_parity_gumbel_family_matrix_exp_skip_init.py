@@ -99,9 +99,7 @@ class TestInverseGammaParity:
     def test_sample_positive(self, ref: Any) -> None:  # noqa: ARG002
         lucid.manual_seed(1)
         samp = D.InverseGamma(2.0, 1.0).sample((40,))
-        assert bool(
-            (samp > 0).all().item()
-        ), "All InverseGamma samples must be positive"
+        assert bool((samp > 0).all().item()), "All InverseGamma samples must be positive"
 
 
 # ── Kumaraswamy ───────────────────────────────────────────────────────────────
@@ -207,9 +205,7 @@ class TestContinuousBernoulliParity:
     def test_log_prob_probs(self, ref: Any) -> None:
         p = 0.3
         x = np.array([0.1, 0.3, 0.5, 0.7, 0.9], dtype=np.float32)
-        lucid_lp = (
-            D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
-        )
+        lucid_lp = D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
         ref_lp = (
             ref.distributions.ContinuousBernoulli(probs=p)
             .log_prob(ref.tensor(x.copy()))
@@ -222,9 +218,7 @@ class TestContinuousBernoulliParity:
     def test_log_prob_far_from_half(self, ref: Any) -> None:
         p = 0.8
         x = np.array([0.2, 0.5, 0.8], dtype=np.float32)
-        lucid_lp = (
-            D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
-        )
+        lucid_lp = D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
         ref_lp = (
             ref.distributions.ContinuousBernoulli(probs=p)
             .log_prob(ref.tensor(x.copy()))
@@ -237,9 +231,7 @@ class TestContinuousBernoulliParity:
     def test_log_prob_near_half(self, ref: Any) -> None:
         p = 0.5
         x = np.array([0.2, 0.5, 0.8], dtype=np.float32)
-        lucid_lp = (
-            D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
-        )
+        lucid_lp = D.ContinuousBernoulli(probs=p).log_prob(lucid.tensor(x.copy())).numpy()
         ref_lp = (
             ref.distributions.ContinuousBernoulli(probs=p)
             .log_prob(ref.tensor(x.copy()))

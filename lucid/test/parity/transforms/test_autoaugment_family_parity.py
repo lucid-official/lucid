@@ -136,9 +136,7 @@ class TestApplyOpDispatchParity:
     # up at the same integer pixel in both impls.  NEAREST eliminates
     # the bilinear-grid divergence so per-pixel positions match.
 
-    def _marker_image(
-        self, src_y: int, src_x: int, size: int = 24
-    ) -> tuple[lucid.Tensor, object]:
+    def _marker_image(self, src_y: int, src_x: int, size: int = 24) -> tuple[lucid.Tensor, object]:
         """Build a matched ``(lucid, ref)`` image with a single high pixel."""
         arr = np.zeros((1, size, size), dtype=np.float32)
         arr[0, src_y, src_x] = 1.0
@@ -152,9 +150,7 @@ class TestApplyOpDispatchParity:
         return (idx // out_np.shape[-1], idx % out_np.shape[-1])
 
     @staticmethod
-    def _within_one_pixel(
-        p1: tuple[int, int] | None, p2: tuple[int, int] | None
-    ) -> bool:
+    def _within_one_pixel(p1: tuple[int, int] | None, p2: tuple[int, int] | None) -> bool:
         """``True`` if both markers landed within 1 pixel of each other,
         or both fell out of frame."""
         if p1 is None and p2 is None:
@@ -323,9 +319,7 @@ class TestApplyOpDispatchParity:
         ]
         for op_name, mag in cases:
             mag_ref = mag if "Translate" not in op_name else int(mag * 32)
-            out_l = apply_op(
-                chw_l, op_name, mag, interpolation=Interpolation.BILINEAR
-            ).numpy()
+            out_l = apply_op(chw_l, op_name, mag, interpolation=Interpolation.BILINEAR).numpy()
             out_t = np.asarray(
                 ref_apply_op(
                     chw_t,
@@ -477,9 +471,7 @@ class TestApplyOpDispatchParity:
         # tolerance + cap the max diff fraction.
         diff = np.abs(out_l.numpy() - out_t_f.detach().cpu().numpy())
         # > 90% of pixels within 4 / 256, mean diff within 2 / 256.
-        assert (
-            float(diff.mean()) < 4.0 / 256
-        ), f"equalize mean diff {diff.mean():.4f} > 4/256"
+        assert float(diff.mean()) < 4.0 / 256, f"equalize mean diff {diff.mean():.4f} > 4/256"
         assert (
             float((diff < 8.0 / 256).mean()) > 0.85
         ), f"equalize: only {(diff < 8.0 / 256).mean():.2%} pixels within 8/256"
@@ -722,10 +714,7 @@ class TestTrivialAugmentWideDistribution:
         _ref.manual_seed(1234)
         tf_t = T_ref.TrivialAugmentWide()
         t_imgs = np.stack(
-            [
-                tf_t(chw_u8).numpy().astype(np.float32) / 255.0
-                for _ in range(_N_SAMPLES)
-            ],
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
             axis=0,
         )
 
@@ -796,18 +785,14 @@ class TestRandAugmentDistribution:
         _ref.manual_seed(99)
         tf_t = T_ref.RandAugment(num_ops=2, magnitude=9)
         t_imgs = np.stack(
-            [
-                tf_t(chw_u8).numpy().astype(np.float32) / 255.0
-                for _ in range(_N_SAMPLES)
-            ],
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
             axis=0,
         )
 
         l_mean_all = float(l_imgs.mean())
         t_mean_all = float(t_imgs.mean())
         assert abs(l_mean_all - t_mean_all) < 5e-2, (
-            f"RandAugment overall mean: lucid={l_mean_all:.4f} vs "
-            f"ref={t_mean_all:.4f}"
+            f"RandAugment overall mean: lucid={l_mean_all:.4f} vs " f"ref={t_mean_all:.4f}"
         )
 
 
@@ -890,18 +875,14 @@ class TestAutoAugmentDistribution:
         _ref.manual_seed(2026)
         tf_t = T_ref.AutoAugment(policy=AutoAugmentPolicy.IMAGENET)
         t_imgs = np.stack(
-            [
-                tf_t(chw_u8).numpy().astype(np.float32) / 255.0
-                for _ in range(_N_SAMPLES)
-            ],
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
             axis=0,
         )
 
         l_mean = float(l_imgs.mean())
         t_mean = float(t_imgs.mean())
         assert abs(l_mean - t_mean) < 5e-2, (
-            f"AutoAugment-imagenet overall mean: lucid={l_mean:.4f} vs "
-            f"ref={t_mean:.4f}"
+            f"AutoAugment-imagenet overall mean: lucid={l_mean:.4f} vs " f"ref={t_mean:.4f}"
         )
 
 
@@ -909,9 +890,7 @@ class TestAutoAugmentDistribution:
 
 
 def _normalize_ref_table(
-    ref_table: list[
-        tuple[tuple[str, float, int | None], tuple[str, float, int | None]]
-    ],
+    ref_table: list[tuple[tuple[str, float, int | None], tuple[str, float, int | None]]],
 ) -> tuple[tuple[tuple[str, float, int], tuple[str, float, int]], ...]:
     """Replace reference framework's ``magnitude_id=None`` (signalling
     "no magnitude") with ``0`` so each sub-op triple has the same
@@ -1011,9 +990,7 @@ class TestAutoAugmentPolicyTable:
         assert len(lucid_norm) == 25
         assert len(ref_norm) == 25
         for i, (l_sub, r_sub) in enumerate(zip(lucid_norm, ref_norm)):
-            assert l_sub == r_sub, (
-                f"svhn sub-policy {i} mismatch: " f"lucid={l_sub} vs ref={r_sub}"
-            )
+            assert l_sub == r_sub, f"svhn sub-policy {i} mismatch: " f"lucid={l_sub} vs ref={r_sub}"
 
 
 if __name__ == "__main__":

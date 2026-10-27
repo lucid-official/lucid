@@ -197,9 +197,7 @@ def test_tvm_samples_round_trip_through_the_vae_latent_whitening(device: str) ->
     std = lucid.tensor(list(model.config.latent_std), device=device)
     expected = samples * std.reshape(1, -1, 1, 1) + mean.reshape(1, -1, 1, 1)
     assert _max_abs(latent - expected) <= 1e-5 * max(1.0, _max_abs(expected))
-    assert _max_abs(model.from_vae_latent(latent) - samples) <= 1e-5 * max(
-        1.0, _max_abs(samples)
-    )
+    assert _max_abs(model.from_vae_latent(latent) - samples) <= 1e-5 * max(1.0, _max_abs(samples))
 
 
 def _tvm_averages(model: TVMForImageGeneration) -> list[tuple[str, lucid.nn.Module]]:
@@ -355,9 +353,7 @@ _SAMPLE_SHAPES = {
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("name", sorted(_SAMPLE_SHAPES))
-def test_generation_returns_finite_samples_on_the_device(
-    name: str, device: str
-) -> None:
+def test_generation_returns_finite_samples_on_the_device(name: str, device: str) -> None:
     lucid.manual_seed(0)
     model = _build(name, device).eval()
     out = _generate(name, model, device)

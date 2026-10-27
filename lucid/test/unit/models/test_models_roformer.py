@@ -142,10 +142,7 @@ class TestRoFormerMaskedLM:
 
     def test_decoder_tied(self) -> None:
         m = RoFormerForMaskedLM(_tiny_config()).eval()
-        assert (
-            m.cls.predictions.decoder.weight
-            is m.roformer.embeddings.word_embeddings.weight
-        )
+        assert m.cls.predictions.decoder.weight is m.roformer.embeddings.word_embeddings.weight
 
 
 class TestRoFormerClassifiers:
@@ -230,9 +227,7 @@ class TestRoFormerExtras:
     def test_multiple_choice(self) -> None:
         cfg = _tiny_config()
         m = RoFormerForMultipleChoice(cfg).eval()
-        ids = lucid.tensor(
-            [[[1, 2, 3], [4, 5, 6], [7, 8, 9]]]
-        ).long()  # (N=1, C=3, L=3)
+        ids = lucid.tensor([[[1, 2, 3], [4, 5, 6], [7, 8, 9]]]).long()  # (N=1, C=3, L=3)
         out = m(ids, labels=lucid.tensor([1]).long())
         assert tuple(out.logits.shape) == (1, 3)
         assert out.loss is not None

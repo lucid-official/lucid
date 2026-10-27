@@ -160,9 +160,7 @@ def test_result_shapes(kwargs, shape) -> None:
 def test_singular_value_orders_survive_a_transposed_axis_pair() -> None:
     """``dim=(2, 0)`` names the plane in the other order; the SVD is the same."""
     got = _v(L.norm(lucid.tensor(B), ord=2, dim=(2, 0)))
-    expected = [
-        float(np.linalg.svd(B[:, i, :].T, compute_uv=False)[0]) for i in range(2)
-    ]
+    expected = [float(np.linalg.svd(B[:, i, :].T, compute_uv=False)[0]) for i in range(2)]
     assert np.allclose(got, expected)
 
 

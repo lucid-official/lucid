@@ -103,6 +103,5 @@ class TestMetalLazyTransposeBridge:
             v_out = float(y_gelu.numpy().flat[i])
             expected = 0.5 * v_in * (1.0 + math.erf(v_in / math.sqrt(2.0)))
             assert abs(v_out - expected) < 1e-5, (
-                f"gelu_exact mismatch at idx {i}: "
-                f"input={v_in} got={v_out} expected={expected}"
+                f"gelu_exact mismatch at idx {i}: " f"input={v_in} got={v_out} expected={expected}"
             )

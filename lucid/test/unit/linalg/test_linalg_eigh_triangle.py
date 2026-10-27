@@ -85,9 +85,7 @@ def _tol(dtype: lucid.dtype) -> dict[str, float]:
     return {"rtol": 1e-4, "atol": 1e-3}
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64])
-)
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64]))
 @pytest.mark.parametrize("name", list(_INPUTS))
 @pytest.mark.parametrize("path", list(_PATHS))
 @pytest.mark.parametrize("uplo", ["L", "U"])
@@ -102,9 +100,7 @@ def test_uplo_names_the_triangle_read(
     np.testing.assert_allclose(got, want, **_tol(dtype))
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64])
-)
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64]))
 @pytest.mark.parametrize("name", list(_INPUTS))
 @pytest.mark.parametrize("uplo", ["L", "U"])
 def test_the_kernel_reads_the_triangle_linalg_assumes(

@@ -81,10 +81,7 @@ class TestNeuralODEConfig:
 
     def test_data_dim_flattens_the_sample(self) -> None:
         assert NeuralODEConfig(sample_size=32, in_channels=3).data_dim == 3072
-        assert (
-            NeuralODEConfig(sample_size=(1, 2), in_channels=1, out_channels=1).data_dim
-            == 2
-        )
+        assert NeuralODEConfig(sample_size=(1, 2), in_channels=1, out_channels=1).data_dim == 2
 
     def test_trace_method_follows_the_dimension(self) -> None:
         # Exact where the paper's method is affordable, estimated above it.
@@ -162,8 +159,7 @@ class TestNeuralODEModel:
         total = 0.0
         for index, y in enumerate(axis):
             row = [
-                math.exp(v)
-                for v in _flat(model.log_prob(lucid.tensor([[[[x, y]]] for x in axis])))
+                math.exp(v) for v in _flat(model.log_prob(lucid.tensor([[[[x, y]]] for x in axis])))
             ]
             strip = (sum(row) - 0.5 * (row[0] + row[-1])) * step
             edge = 0.5 if index in (0, count - 1) else 1.0
@@ -287,9 +283,7 @@ class TestNeuralODERegistry:
         assert is_model(name)
 
     def test_create_model_applies_overrides(self) -> None:
-        model = create_model(
-            "neural_ode", sample_size=(1, 2), in_channels=1, out_channels=1
-        )
+        model = create_model("neural_ode", sample_size=(1, 2), in_channels=1, out_channels=1)
         assert isinstance(model, NeuralODEModel)
         assert model.input_dim == 2
         assert model.trace_method == "exact"

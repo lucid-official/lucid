@@ -40,9 +40,7 @@ _OPERATIONS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
 
 
 class _ThroughIntegers(nn.Module):
-    def __init__(
-        self, dtype: lucid.dtype, fn: Callable[[lucid.Tensor], lucid.Tensor]
-    ) -> None:
+    def __init__(self, dtype: lucid.dtype, fn: Callable[[lucid.Tensor], lucid.Tensor]) -> None:
         super().__init__()
         self.dtype = dtype
         self.fn = fn
@@ -74,9 +72,7 @@ def test_an_integer_operand_exports_and_predicts_exactly(
 
 
 @pytest.mark.parametrize("dtype_name", ["int32", "int64"])
-def test_an_integer_input_is_clamped_in_its_own_type(
-    dtype_name: str, tmp_path: object
-) -> None:
+def test_an_integer_input_is_clamped_in_its_own_type(dtype_name: str, tmp_path: object) -> None:
     class Clamp(nn.Module):
         def forward(self, x: lucid.Tensor) -> lucid.Tensor:
             return lucid.clamp(x, -5, 5)

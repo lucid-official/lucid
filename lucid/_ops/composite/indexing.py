@@ -147,9 +147,7 @@ def _scatter_add(base: Tensor, dim: int, index: Tensor, src: Tensor) -> Tensor:
     The engine op directly, not ``Tensor.scatter_add``, whose adapter
     narrows an ``int64`` index to ``int32`` on the way.
     """
-    return _wrap(
-        _C_engine.scatter_add(_unwrap(base), _unwrap(index), _unwrap(src), dim)
-    )
+    return _wrap(_C_engine.scatter_add(_unwrap(base), _unwrap(index), _unwrap(src), dim))
 
 
 def _require_device(name: str, input: Tensor, other: Tensor, what: str) -> None:
@@ -223,8 +221,7 @@ def _positions(
     count = index.numel()
     if count and _dim_size(list(input.shape), dim) == 0:
         raise _C_engine.IndexError(
-            f"{name}: index out of range: dim {dim} of input has size 0, got "
-            f"{count} indices"
+            f"{name}: index out of range: dim {dim} of input has size 0, got " f"{count} indices"
         )
     return dim, _C_engine.reshape(_unwrap(index), [-1])
 
@@ -298,16 +295,12 @@ def _write_slices(
     src = _as_vector(_unwrap(source))
     out = _call_engine(
         name,
-        lambda: write(
-            _as_vector(_unwrap(input)), _along(positions, dim, list(src.shape)), src
-        ),
+        lambda: write(_as_vector(_unwrap(input)), _along(positions, dim, list(src.shape)), src),
     )
     return _wrap(_C_engine.reshape(out, []) if input.ndim == 0 else out)
 
 
-def _along(
-    positions: _C_engine.TensorImpl, dim: int, shape: list[int]
-) -> _C_engine.TensorImpl:
+def _along(positions: _C_engine.TensorImpl, dim: int, shape: list[int]) -> _C_engine.TensorImpl:
     """1-D ``positions`` along ``dim``, broadcast to ``shape``.
 
     The index every slice-wise write (``index_add``, ``index_copy``)
@@ -658,14 +651,10 @@ def index_copy(
         )
 
 
-def _scatter_into(
-    base: Tensor, dim: int, index: Tensor, src: Tensor, reduce: str
-) -> Tensor:
+def _scatter_into(base: Tensor, dim: int, index: Tensor, src: Tensor, reduce: str) -> Tensor:
     """``src`` reduced into ``base`` by ``reduce`` — a ``'mean'`` as its sum."""
     if reduce in ("sum", "mean"):
-        return _call_engine(
-            "scatter_reduce", lambda: _scatter_add(base, dim, index, src)
-        )
+        return _call_engine("scatter_reduce", lambda: _scatter_add(base, dim, index, src))
     _fn = {
         "amax": _C_engine.scatter_amax,
         "amin": _C_engine.scatter_amin,
@@ -714,9 +703,7 @@ def _reduce_identity(reduce: str, input: Tensor) -> bool | float:
     if reduce == "prod":
         return 1.0
     if input.is_complex():
-        raise NotImplementedError(
-            f"scatter_reduce: {reduce} has no order on complex values"
-        )
+        raise NotImplementedError(f"scatter_reduce: {reduce} has no order on complex values")
     if input.is_floating_point():
         return float("-inf") if reduce == "amax" else float("inf")
     if input.dtype == lucid.bool_:
@@ -994,9 +981,7 @@ def _put_flat(
         impl = _C_engine.contiguous(impl)
     flat = _C_engine.reshape(impl, [int(input.numel())])
     if accumulate:
-        out = _call_engine(
-            name, lambda: _C_engine.scatter_add(flat, positions, values, 0)
-        )
+        out = _call_engine(name, lambda: _C_engine.scatter_add(flat, positions, values, 0))
     else:
         out = _call_engine(name, lambda: _C_engine.scatter(flat, 0, positions, values))
     return _wrap(_C_engine.reshape(out, shape))
@@ -1061,8 +1046,7 @@ def put(
         )
     if index.numel() and input.numel() == 0:
         raise _C_engine.IndexError(
-            f"put: index out of range: input has no elements, got "
-            f"{index.numel()} indices"
+            f"put: index out of range: input has no elements, got " f"{index.numel()} indices"
         )
     positions = _C_engine.reshape(_unwrap(index), [-1])
     values = _C_engine.reshape(_C_engine.contiguous(_unwrap(source)), [-1])

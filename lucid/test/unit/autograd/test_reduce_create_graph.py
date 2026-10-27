@@ -127,8 +127,7 @@ def test_prod_second_derivative_matches_finite_differences() -> None:
         plus[i] += step
         minus[i] -= step
         fd[i] = (
-            float(directional(plus.reshape(2, 3))[1])
-            - float(directional(minus.reshape(2, 3))[1])
+            float(directional(plus.reshape(2, 3))[1]) - float(directional(minus.reshape(2, 3))[1])
         ) / (2 * step)
 
     analytic = second.numpy().reshape(-1)

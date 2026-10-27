@@ -170,6 +170,4 @@ class SwinConfig(ModelConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "depths", tuple(self.depths))
         object.__setattr__(self, "num_heads", tuple(self.num_heads))
-        check_stage_lengths(
-            type(self).__name__, depths=self.depths, num_heads=self.num_heads
-        )
+        check_stage_lengths(type(self).__name__, depths=self.depths, num_heads=self.num_heads)

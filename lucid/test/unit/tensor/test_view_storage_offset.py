@@ -34,9 +34,7 @@ def test_cpu_block_view_as_strided_reads_and_writes_root_allocation() -> None:
     assert x.tolist() == [[-5.0, -5.0, 2.0], [3.0, 4.0, 5.0]]
 
 
-def test_cpu_block_view_inplace_after_dropping_root_preserves_allocation_frame() -> (
-    None
-):
+def test_cpu_block_view_inplace_after_dropping_root_preserves_allocation_frame() -> None:
     x = lucid.arange(6.0).reshape(2, 3)
     row1 = x[1]
     del x

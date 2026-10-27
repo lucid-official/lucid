@@ -162,9 +162,7 @@ __all__ = [
 def _features(value: object) -> list[tuple[str, tuple[int, ...]]]:
     """The feature names and shapes as ``build_package`` reports them."""
     if not isinstance(value, list):
-        raise TypeError(
-            f"lucid.coreml: expected a feature list, got {type(value).__name__}"
-        )
+        raise TypeError(f"lucid.coreml: expected a feature list, got {type(value).__name__}")
     return [(str(name), tuple(int(d) for d in shape)) for name, shape in value]
 
 
@@ -402,9 +400,7 @@ def export(
 
     """
     if getattr(model, "training", False):
-        raise ValueError(
-            "lucid.coreml: model is in training mode; call model.eval() first"
-        )
+        raise ValueError("lucid.coreml: model is in training mode; call model.eval() first")
 
     inner = getattr(model, "model", None)
     if inner is not None and type(model).__name__ == "CompiledModule":
@@ -560,9 +556,7 @@ def _export_prepared(
         image_input=image_input,
         classifier=classifier,
         deployment_target=info["deployment_target"],
-        noise=cast(
-            "list[tuple[str, tuple[int, ...], str, Tensor | None]]", info["noise"]
-        ),
+        noise=cast("list[tuple[str, tuple[int, ...], str, Tensor | None]]", info["noise"]),
         traced_outputs=cast("dict[str, Tensor]", info["traced_outputs"]),
     )
 
@@ -657,8 +651,7 @@ def export_functions(
     chosen = default if default is not None else next(iter(functions))
     if chosen not in functions:
         raise ValueError(
-            f"lucid.coreml: the default function {chosen!r} is not one of "
-            f"{sorted(functions)}"
+            f"lucid.coreml: the default function {chosen!r} is not one of " f"{sorted(functions)}"
         )
 
     from lucid._C import engine as _C_engine

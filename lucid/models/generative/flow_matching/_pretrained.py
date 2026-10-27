@@ -93,9 +93,7 @@ _CFG_IMAGENET128 = FlowMatchingConfig(
     model_class=FlowMatchingModel,
     default_config=_CFG_CIFAR,
 )
-def flow_matching_cifar(
-    pretrained: bool = False, **overrides: object
-) -> FlowMatchingModel:
+def flow_matching_cifar(pretrained: bool = False, **overrides: object) -> FlowMatchingModel:
     r"""Flow Matching velocity field for the CIFAR-10 setup.
 
     Trained by regressing onto the optimal-transport conditional field —
@@ -147,9 +145,7 @@ def flow_matching_cifar(
     model_class=FlowMatchingModel,
     default_config=_CFG_IMAGENET32,
 )
-def flow_matching_imagenet32(
-    pretrained: bool = False, **overrides: object
-) -> FlowMatchingModel:
+def flow_matching_imagenet32(pretrained: bool = False, **overrides: object) -> FlowMatchingModel:
     r"""Flow Matching velocity field for ImageNet ``32 x 32``.
 
     Parameters
@@ -190,9 +186,7 @@ def flow_matching_imagenet32(
     model_class=FlowMatchingModel,
     default_config=_CFG_IMAGENET64,
 )
-def flow_matching_imagenet64(
-    pretrained: bool = False, **overrides: object
-) -> FlowMatchingModel:
+def flow_matching_imagenet64(pretrained: bool = False, **overrides: object) -> FlowMatchingModel:
     r"""Flow Matching velocity field for ImageNet ``64 x 64``.
 
     Parameters
@@ -233,9 +227,7 @@ def flow_matching_imagenet64(
     model_class=FlowMatchingModel,
     default_config=_CFG_IMAGENET128,
 )
-def flow_matching_imagenet128(
-    pretrained: bool = False, **overrides: object
-) -> FlowMatchingModel:
+def flow_matching_imagenet128(pretrained: bool = False, **overrides: object) -> FlowMatchingModel:
     r"""Flow Matching velocity field for ImageNet ``128 x 128``.
 
     Parameters

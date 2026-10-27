@@ -32,9 +32,7 @@ _COUNTS = [0, 1, 1, 3, 3, 3, 7]
 def test_bincount_counts_as_the_reference(
     ref: ModuleType, device: str, minlength: int, index_dtype: str
 ) -> None:
-    want = ref.bincount(
-        ref.tensor(_COUNTS, dtype=getattr(ref, index_dtype)), minlength=minlength
-    )
+    want = ref.bincount(ref.tensor(_COUNTS, dtype=getattr(ref, index_dtype)), minlength=minlength)
     got = lucid.bincount(
         lucid.tensor(_COUNTS, dtype=getattr(lucid, index_dtype), device=device),
         minlength=minlength,
@@ -60,9 +58,7 @@ def test_bincount_sums_weights_in_the_reference_dtype(
     )
     got = lucid.bincount(
         lucid.tensor(_COUNTS, device=device),
-        weights=lucid.tensor(
-            weights, dtype=getattr(lucid, weight_dtype), device=device
-        ),
+        weights=lucid.tensor(weights, dtype=getattr(lucid, weight_dtype), device=device),
     )
     # The reference sums anything but float32 / float64 in float64, which
     # Metal does not hold: there the sums are float32.
@@ -125,13 +121,9 @@ _HISTOGRAMS: dict[str, Callable[[ModuleType, object], object]] = {
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_HISTOGRAMS))
-def test_histogram_matches_the_reference(
-    ref: ModuleType, device: str, name: str
-) -> None:
+def test_histogram_matches_the_reference(ref: ModuleType, device: str, name: str) -> None:
     want_hist, want_edges = _HISTOGRAMS[name](ref, ref.tensor(_VALUES))
-    hist, edges = _HISTOGRAMS[name](
-        _OnDevice(device), lucid.tensor(_VALUES, device=device)
-    )
+    hist, edges = _HISTOGRAMS[name](_OnDevice(device), lucid.tensor(_VALUES, device=device))
     for got in (hist, edges):
         assert got.dtype == lucid.float32
         assert got.device.type == device
@@ -140,12 +132,8 @@ def test_histogram_matches_the_reference(
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "values", [[1.0, 1.0], [], [3.0]], ids=["equal", "empty", "single"]
-)
-def test_histogram_of_a_point_or_nothing(
-    ref: ModuleType, device: str, values: list[float]
-) -> None:
+@pytest.mark.parametrize("values", [[1.0, 1.0], [], [3.0]], ids=["equal", "empty", "single"])
+def test_histogram_of_a_point_or_nothing(ref: ModuleType, device: str, values: list[float]) -> None:
     want_hist, want_edges = ref.histogram(ref.tensor(values), bins=2)
     hist, edges = lucid.histogram(lucid.tensor(values, device=device), bins=2)
     assert hist.tolist() == want_hist.tolist()
@@ -172,9 +160,7 @@ def test_histogram_refuses_what_the_reference_refuses(
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
-def test_a_range_read_from_non_finite_values_gives_nan_bins(
-    device: str, bad: float
-) -> None:
+def test_a_range_read_from_non_finite_values_gives_nan_bins(device: str, bad: float) -> None:
     # The reference refuses; refusing would read the extremes back to the
     # host, which the histogram does not do.  NaN bins say it instead.
     hist, _ = lucid.histogram(lucid.tensor([1.0, bad], device=device), bins=3)
@@ -274,9 +260,7 @@ _BULK: dict[str, Callable[[str, int], object]] = {
     "histogram-edges": lambda d, n: lucid.histogram(
         lucid.arange(float(n), device=d), bins=[0.0, 5.0, float(n)]
     ),
-    "combinations": lambda d, n: lucid.combinations(
-        lucid.arange(float(n), device=d), 3
-    ),
+    "combinations": lambda d, n: lucid.combinations(lucid.arange(float(n), device=d), 3),
     "tril_indices": lambda d, n: lucid.tril_indices(n, n, device=d),
 }
 

@@ -70,9 +70,7 @@ def _base(device: str, integral: bool) -> lucid.Tensor:
 
 class TestScalarOperandAccepted:
     @pytest.mark.parametrize("name", _FLOAT_OPS)
-    def test_method_and_free_function_take_a_scalar(
-        self, device: str, name: str
-    ) -> None:
+    def test_method_and_free_function_take_a_scalar(self, device: str, name: str) -> None:
         t = _base(device, integral=False)
         method = getattr(t, name)(2.0)
         free = getattr(lucid, name)(t, 2.0)
@@ -138,9 +136,7 @@ class TestScalarPromotion:
         assert out.tolist() == [3, 4]
 
     @pytest.mark.parametrize("scalar", [True, 2, 1.5])
-    def test_a_scalar_never_widens_a_float_tensor(
-        self, device: str, scalar: object
-    ) -> None:
+    def test_a_scalar_never_widens_a_float_tensor(self, device: str, scalar: object) -> None:
         # float32 stays float32 even beside a Python float, which is a
         # double: the scalar contributes no width of its own.
         t = lucid.tensor([2.0, 3.0], dtype=lucid.float32, device=device)

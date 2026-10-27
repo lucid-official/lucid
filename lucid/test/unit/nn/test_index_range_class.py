@@ -188,9 +188,7 @@ def _unpool_rows(n: int) -> list[Row]:
             id=f"{name}-index{bad}",
             consumer=name,
             call=lambda d, b=bad: {
-                "input": lucid.arange(
-                    1, count + 1, dtype=lucid.float32, device=d
-                ).reshape(*shape),
+                "input": lucid.arange(1, count + 1, dtype=lucid.float32, device=d).reshape(*shape),
                 "indices": _ids([*range(count - 1), b], d).reshape(*shape),
                 "kernel_size": 2,
             },
@@ -206,9 +204,7 @@ def _unpool_rows(n: int) -> list[Row]:
             id=f"{name}-output_size-index{3**n}",
             consumer=name,
             call=lambda d: {
-                "input": lucid.arange(
-                    1, count + 1, dtype=lucid.float32, device=d
-                ).reshape(*shape),
+                "input": lucid.arange(1, count + 1, dtype=lucid.float32, device=d).reshape(*shape),
                 "indices": _ids([*range(count - 1), 3**n], d).reshape(*shape),
                 "kernel_size": 2,
                 "output_size": (3,) * n,
@@ -412,9 +408,7 @@ def test_every_row_has_a_unique_id() -> None:
 # ── CPU: refused before the consumer's kernel ──────────────────────────────
 
 
-def _invoke(
-    fn: Callable[..., lucid.Tensor], kwargs: Kwargs, **extra: object
-) -> lucid.Tensor:
+def _invoke(fn: Callable[..., lucid.Tensor], kwargs: Kwargs, **extra: object) -> lucid.Tensor:
     kw = {**kwargs, **extra}
     args = [kw.pop("tensor")] if "tensor" in kw else []
     return fn(*args, **kw)
@@ -444,18 +438,12 @@ def test_the_cpu_refuses_before_any_kernel(row: Row) -> None:
         ("multilabel_margin_loss", 2**31),
     ],
 )
-def test_a_cpu_int64_target_past_int32_is_refused_not_wrapped(
-    consumer: str, wide: int
-) -> None:
+def test_a_cpu_int64_target_past_int32_is_refused_not_wrapped(consumer: str, wide: int) -> None:
     # 2**40 cast to int32 is 0, and used to be scored as class 0.  A CPU
     # target is checked at its own width.  (Metal checks at the int32 its
     # gather reads with; the owner's docstring says why.)
     x = _scores("cpu")
-    values = (
-        [[wide, 0, -1, 0], [0, -1, 0, 0]]
-        if consumer.startswith("multil")
-        else [1, wide]
-    )
+    values = [[wide, 0, -1, 0], [0, -1, 0, 0]] if consumer.startswith("multil") else [1, wide]
     target = _ids(values, "cpu")
     with lucid.profiler.profile() as prof:
         with pytest.raises(IndexError, match=f"Target {wide} is out of bounds"):
@@ -543,9 +531,7 @@ def test_the_ignore_index_and_the_pad_are_not_indices(device: str) -> None:
     t = _ids([[1, -1, 9, -7], [2, 3, -1, 99]], device)
     assert math.isfinite(float(F.multilabel_margin_loss(x, t).item()))
     # Past a ctc row's target length, nothing is read either.
-    out = F.ctc_loss(
-        _log_probs(device), _ids([[1, 99], [2, 3]], device), [T, T], [1, 2]
-    )
+    out = F.ctc_loss(_log_probs(device), _ids([[1, 99], [2, 3]], device), [T, T], [1, 2])
     assert math.isfinite(float(out.item()))
 
 
@@ -562,9 +548,7 @@ def test_the_ends_of_every_axis_are_taken(device: str) -> None:
     for n in (1, 2, 3):
         shape = (1, 1) + (2,) * n
         count, extent = 2**n, 4**n
-        vals = lucid.arange(1, count + 1, dtype=lucid.float32, device=device).reshape(
-            *shape
-        )
+        vals = lucid.arange(1, count + 1, dtype=lucid.float32, device=device).reshape(*shape)
         ends = _ids([0, *range(1, count - 1), extent - 1], device).reshape(*shape)
         unpooled = _flat(getattr(F, f"max_unpool{n}d")(vals, ends, 2).tolist())
         assert unpooled[0] == 1.0 and unpooled[-1] == float(count)
@@ -599,15 +583,11 @@ def test_max_unpool_modules_follow_the_same_rule(device: str, n: int) -> None:
     mod = cls(kernel_size=2)
     shape = (1, 1) + (2,) * n
     count, extent = 2**n, 4**n
-    vals = lucid.arange(1, count + 1, dtype=lucid.float32, device=device).reshape(
-        *shape
-    )
+    vals = lucid.arange(1, count + 1, dtype=lucid.float32, device=device).reshape(*shape)
     for bad in (-5, extent):
         idx = _ids([*range(count - 1), bad], device).reshape(*shape)
         if device == "cpu":
-            with pytest.raises(
-                IndexError, match=rf"max_unpool{n}d: index {bad} is out of range"
-            ):
+            with pytest.raises(IndexError, match=rf"max_unpool{n}d: index {bad} is out of range"):
                 mod(vals, idx)
         else:
             syncs = _C_engine.host_sync_count()
@@ -656,9 +636,7 @@ def test_ctc_refuses_a_shape_it_would_read_past(
     match: str,
 ) -> None:
     with pytest.raises(ValueError, match=match):
-        F.ctc_loss(
-            _log_probs(device), _ids(targets, device), input_lengths, target_lengths
-        )
+        F.ctc_loss(_log_probs(device), _ids(targets, device), input_lengths, target_lengths)
 
 
 def test_ctc_accepts_an_empty_input_sequence(device: str) -> None:
@@ -683,9 +661,10 @@ _OWNER = Path(_index_checks.__file__).name
 
 def _calls_the_owner() -> set[str]:
     """Every public ``nn.functional`` function that calls into the owner."""
-    owner_names = {
-        name for name in vars(_index_checks) if name.startswith("_check")
-    } | {"_class_targets", "check_embedding_indices"}
+    owner_names = {name for name in vars(_index_checks) if name.startswith("_check")} | {
+        "_class_targets",
+        "check_embedding_indices",
+    }
     found: set[str] = set()
     for path in sorted(_FUNCTIONAL.glob("*.py")):
         if path.name == _OWNER:
@@ -777,16 +756,12 @@ def test_the_reference_refuses_the_same_rows(ref: ModuleType, row: Row) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("blank", [0, C - 1])
-def test_ctc_at_the_ends_of_its_axes_matches_the_reference(
-    ref: ModuleType, blank: int
-) -> None:
+def test_ctc_at_the_ends_of_its_axes_matches_the_reference(ref: ModuleType, blank: int) -> None:
     R = ref
     lp = _log_probs("cpu")
     targets = [[1, 2], [2, 1]] if blank == 0 else [[0, 2], [2, 1]]
     for il, tl in (([T, T], [2, 2]), ([T, 2], [2, 0]), ([3, T], [2, 1])):
-        got = F.ctc_loss(
-            lp, _ids(targets, "cpu"), il, tl, blank=blank, reduction="none"
-        )
+        got = F.ctc_loss(lp, _ids(targets, "cpu"), il, tl, blank=blank, reduction="none")
         want = R.nn.functional.ctc_loss(
             R.tensor(lp.tolist()),
             R.tensor(targets),

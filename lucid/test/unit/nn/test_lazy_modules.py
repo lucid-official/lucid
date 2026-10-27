@@ -58,9 +58,7 @@ def _x(shape):
 
 
 def _noisy(shape):
-    return lucid.tensor(
-        np.random.default_rng(len(shape)).standard_normal(shape).astype(np.float32)
-    )
+    return lucid.tensor(np.random.default_rng(len(shape)).standard_normal(shape).astype(np.float32))
 
 
 def _params(module):
@@ -335,9 +333,7 @@ def test_a_dry_run_first_makes_the_layer_train():
 
 
 def test_has_uninitialized_parameters_sees_through_a_container():
-    lazy = nn.Sequential(
-        nn.Conv2d(3, 4, 3), nn.LazyConv2d(out_channels=2, kernel_size=3)
-    )
+    lazy = nn.Sequential(nn.Conv2d(3, 4, 3), nn.LazyConv2d(out_channels=2, kernel_size=3))
     eager = nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv2d(4, 2, 3))
     assert lazy.has_uninitialized_parameters()
     assert not eager.has_uninitialized_parameters()

@@ -38,8 +38,7 @@ def _ntuple(value: int | Sequence[int], n: int, op: str, arg: str) -> tuple[int,
         items = items * n
     if len(items) != n:
         raise ValueError(
-            f"{op}: expected {arg} to be a single integer or {n} integers, "
-            f"got {value!r}"
+            f"{op}: expected {arg} to be a single integer or {n} integers, " f"got {value!r}"
         )
     return tuple(int(v) for v in items)
 
@@ -109,13 +108,10 @@ def _check_string_padding(padding: str, stride: tuple[int, ...], op: str) -> Non
     stride of 1 can do.
     """
     if padding not in ("same", "valid"):
-        raise ValueError(
-            f"{op}: invalid padding string {padding!r}, expected 'same' or 'valid'"
-        )
+        raise ValueError(f"{op}: invalid padding string {padding!r}, expected 'same' or 'valid'")
     if padding == "same" and any(s != 1 for s in stride):
         raise ValueError(
-            f"{op}: padding='same' is not supported for strided convolutions "
-            f"(stride={stride})"
+            f"{op}: padding='same' is not supported for strided convolutions " f"(stride={stride})"
         )
 
 

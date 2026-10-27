@@ -59,9 +59,7 @@ def _params(obj: object) -> list[str] | None:
     if isinstance(obj, property) or not callable(obj):
         return None
     try:
-        signature = inspect.signature(
-            obj, annotation_format=annotationlib.Format.FORWARDREF
-        )
+        signature = inspect.signature(obj, annotation_format=annotationlib.Format.FORWARDREF)
     except (ValueError, TypeError):
         return None  # a builtin: its existence is still held
     return [
@@ -86,9 +84,7 @@ def _owner(cls: type, name: str) -> type | None:
     return None
 
 
-def _members(
-    qualname: str, cls: type, out: Surface, held: Collection[type] = ()
-) -> None:
+def _members(qualname: str, cls: type, out: Surface, held: Collection[type] = ()) -> None:
     """The public methods a caller reaches on ``cls`` — ``forward``, ``step``.
 
     A caller can call what attribute lookup resolves, wherever in the MRO
@@ -111,9 +107,7 @@ def _members(
         ):
             continue
         member = vars(owner)[name]
-        if inspect.isfunction(member) or isinstance(
-            member, staticmethod | classmethod | property
-        ):
+        if inspect.isfunction(member) or isinstance(member, staticmethod | classmethod | property):
             out[f"{qualname}.{name}"] = _entry(member)
 
 
@@ -123,9 +117,7 @@ def _symbols() -> list[tuple[str, object]]:
     found = [(symbol.qualname, symbol.obj) for symbol in _surface.enumerate_surface()]
     # The zoo is outside the audit's surface but not outside the promise:
     # its factory names are what user code spells most often.
-    found += [
-        (f"lucid.models.{name}", getattr(models, name)) for name in models.__all__
-    ]
+    found += [(f"lucid.models.{name}", getattr(models, name)) for name in models.__all__]
     return found
 
 
@@ -140,9 +132,7 @@ def collect(*, inherited: bool = True) -> Surface:
     """
     symbols = _symbols()
     classes = {
-        obj
-        for _, obj in symbols
-        if isinstance(obj, type) and obj.__module__.startswith("lucid.")
+        obj for _, obj in symbols if isinstance(obj, type) and obj.__module__.startswith("lucid.")
     }
     held: set[type] = set() if inherited else {*classes, lucid.Tensor}
     out: Surface = {}
@@ -215,9 +205,7 @@ def _removal(name: str, released: Mapping[str, dict[str, Any]]) -> str | None:
     return None
 
 
-def breaks(
-    released: Mapping[str, dict[str, Any]], current: Surface, version: str
-) -> list[str]:
+def breaks(released: Mapping[str, dict[str, Any]], current: Surface, version: str) -> list[str]:
     """Every released call that ``current`` would stop accepting at ``version``."""
     now = _version(version)
     problems = []
@@ -244,15 +232,9 @@ def load() -> dict[str, Any]:
 
 def _write(version: str, surface: Surface) -> None:
     # One name per line, so a release's diff reads as the API it changed.
-    lines = [
-        f"  {json.dumps(name)}: {json.dumps(entry)}" for name, entry in surface.items()
-    ]
+    lines = [f"  {json.dumps(name)}: {json.dumps(entry)}" for name, entry in surface.items()]
     SNAPSHOT.write_text(
-        '{\n"version": '
-        + json.dumps(version)
-        + ',\n"symbols": {\n'
-        + ",\n".join(lines)
-        + "\n}}\n"
+        '{\n"version": ' + json.dumps(version) + ',\n"symbols": {\n' + ",\n".join(lines) + "\n}}\n"
     )
 
 

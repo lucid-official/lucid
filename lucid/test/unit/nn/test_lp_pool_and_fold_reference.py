@@ -29,9 +29,7 @@ def _signed(*shape: int, seed: int = 0) -> np.ndarray:
 def _close(got: lucid.Tensor, want: object) -> None:
     want_np = want.detach().numpy()
     assert tuple(got.shape) == tuple(want_np.shape)
-    np.testing.assert_allclose(
-        got.numpy(), want_np, rtol=1e-4, atol=1e-5, equal_nan=True
-    )
+    np.testing.assert_allclose(got.numpy(), want_np, rtol=1e-4, atol=1e-5, equal_nan=True)
 
 
 def _run_both(
@@ -71,9 +69,7 @@ def test_lp_pool_signed_input_matches_the_reference(
 
 
 @pytest.mark.parametrize("p", [1.0, 2.0, 3.0], ids=lambda p: f"p{p}")
-def test_lp_pool_zero_sum_window_has_zero_gradient(
-    ref: ModuleType, device: str, p: float
-) -> None:
+def test_lp_pool_zero_sum_window_has_zero_gradient(ref: ModuleType, device: str, p: float) -> None:
     # Windows ``(1, -1)`` (odd p sums to zero) and ``(0, 0)`` (every p does):
     # the root's derivative is infinite there, the reference's gradient 0.
     x = np.array([[[1.0, -1.0, 0.0, 0.0, 2.0, -3.0]]], dtype=np.float32)

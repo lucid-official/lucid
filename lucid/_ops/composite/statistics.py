@@ -66,9 +66,7 @@ def _quantile_sorted(
                 if dim is None
                 else sorted_x.index_select(
                     dim,
-                    lucid.tensor(
-                        [round(idx_f)], dtype=lucid.int64, device=sorted_x.device
-                    ),
+                    lucid.tensor([round(idx_f)], dtype=lucid.int64, device=sorted_x.device),
                 ).squeeze(dim)
             )
         else:
@@ -205,17 +203,13 @@ def quantile(
             flat = input.reshape(-1)
             sorted_x = lucid.sort(flat).values
             n = flat.shape[0]
-            results = _quantile_sorted(
-                sorted_x, q_list, None, keepdim, interpolation, n
-            )
+            results = _quantile_sorted(sorted_x, q_list, None, keepdim, interpolation, n)
             nans = lucid.isnan(flat).sum()
         else:
             if input.ndim == 0:
                 # A 0-d tensor's notional axis is the whole of it, with or
                 # without ``keepdim``: the quantile of its one-element view.
-                return quantile(
-                    input.reshape(1), q, 0, False, interpolation=interpolation
-                )
+                return quantile(input.reshape(1), q, 0, False, interpolation=interpolation)
             sorted_x = lucid.sort(input, dim).values
             n = input.shape[dim]
             results = _quantile_sorted(sorted_x, q_list, dim, keepdim, interpolation, n)
@@ -223,9 +217,7 @@ def quantile(
         # An integer input holds no NaN, and an ``interpolation="lower"`` result
         # of one is an integer tensor that could not hold the NaN fill anyway.
         if lucid.is_floating_point(input):
-            results = [
-                lucid.where(nans == 0, r, lucid.full_like(r, math.nan)) for r in results
-            ]
+            results = [lucid.where(nans == 0, r, lucid.full_like(r, math.nan)) for r in results]
 
         return _pack_quantile_results(results, scalar_q, input.ndim, dim, keepdim)
 
@@ -299,9 +291,7 @@ def nanquantile(
         # The whole tensor is the one slice of its flattening, so it takes the
         # per-slice path: the count stays a tensor on the device, and an all-NaN
         # input reads its first NaN with the gradient attached.
-        x, along = (
-            (input.reshape(-1), 0) if dim is None or input.ndim == 0 else (input, dim)
-        )
+        x, along = (input.reshape(-1), 0) if dim is None or input.ndim == 0 else (input, dim)
         # The engine's sort already puts every NaN after the numbers.
         sorted_x = lucid.sort(x, along).values
         non_nan_count = (~lucid.isnan(x)).sum(dim=along, keepdim=True).to(x.dtype)
@@ -330,11 +320,7 @@ def _cov_weights(
     """Validate ``fweights`` and ``aweights`` for :func:`cov`."""
     w = lucid.ones((1, n_obs), dtype=dtype, device=device)
     if fweights is not None:
-        if (
-            fweights.is_floating_point()
-            or fweights.is_complex()
-            or fweights.dtype == lucid.bool_
-        ):
+        if fweights.is_floating_point() or fweights.is_complex() or fweights.dtype == lucid.bool_:
             raise _C_engine.InvalidArgument(
                 f"cov(): expected fweights to have integral dtype but got {fweights.dtype}"
             )
@@ -552,9 +538,7 @@ def cdist(
                 _C_engine.not_equal(abs_diff, _C_engine.zeros_like(abs_diff)),
                 _C_engine.logical_not(_C_engine.isnan(abs_diff)),
             )
-            return _wrap(
-                _C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype)
-            )
+            return _wrap(_C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype))
         # Every other order — 1, inf, and the general p whose root used to give
         # coincident points a nan gradient — is the shared vector p-norm.
         return _wrap(_p_norm(diff, float(p), last, False))
@@ -627,9 +611,7 @@ def bincount(
     if n:
         lowest, highest = _extremes(input)
         if lowest < 0:
-            raise ValueError(
-                f"bincount: input must hold non-negative integers, got {lowest}"
-            )
+            raise ValueError(f"bincount: input must hold non-negative integers, got {lowest}")
         length = max(int(highest) + 1, minlength)
     device = input.device
     idx = input if input.dtype in (lucid.int32, lucid.int64) else input.to(lucid.int64)
@@ -663,9 +645,7 @@ def _bincount_dtype(weights: Tensor) -> DTypeLike:
 _MULTINOMIAL_CHUNK = 1 << 24
 
 
-def _validate_multinomial_weights(
-    rows: Tensor, num_samples: int, replacement: bool
-) -> None:
+def _validate_multinomial_weights(rows: Tensor, num_samples: int, replacement: bool) -> None:
     """Validate that ``rows`` contains finite, non-negative weights with sufficient support."""
     if rows._impl.is_phantom:
         return
@@ -738,9 +718,7 @@ def multinomial(
         raise ValueError(f"multinomial: input must be 1-D or 2-D, got {input.ndim}-D")
     k = int(input.shape[-1])
     if num_samples < 1:
-        raise ValueError(
-            f"multinomial: num_samples must be positive, got {num_samples}"
-        )
+        raise ValueError(f"multinomial: num_samples must be positive, got {num_samples}")
     if not replacement and num_samples > k:
         raise ValueError(
             f"multinomial: cannot draw {num_samples} samples without replacement "
@@ -780,9 +758,7 @@ def multinomial(
         # Gumbel noise and keeping the first num_samples draws them without
         # replacement, in the order one-at-a-time draws would pick them.  A
         # zero weight's key is -inf, so it is never kept.
-        u = lucid.rand(
-            batch, k, dtype=rows.dtype, device=rows.device, generator=generator
-        )
+        u = lucid.rand(batch, k, dtype=rows.dtype, device=rows.device, generator=generator)
         gumbel = -(-u.clamp(min=1e-30).log()).log()
         _, idx = lucid.topk(rows.log() + gumbel, num_samples, dim=-1)
 
@@ -841,9 +817,7 @@ def poisson(
     for i in range(n):
         r: float = float(flat[i].item())
         if r < 0.0:
-            raise ValueError(
-                f"poisson: rate must be non-negative, got {r} at flat index {i}"
-            )
+            raise ValueError(f"poisson: rate must be non-negative, got {r} at flat index {i}")
         if r == 0.0:
             out.append(0)
             continue
@@ -878,9 +852,7 @@ def poisson(
     # Knuth sampling runs on the host, but the result must ride the input's
     # device — a CPU return device-mismatched every downstream op (e.g.
     # ``Poisson.log_prob`` combining the sample with a Metal ``rate``).
-    return lucid.tensor(out, dtype=lucid.int64, device=input.device).reshape(
-        input.shape
-    )
+    return lucid.tensor(out, dtype=lucid.int64, device=input.device).reshape(input.shape)
 
 
 def histogram2d(
@@ -985,9 +957,7 @@ def _histogramdd_weighted(
         inside = inside & (col >= edges[0]) & (col <= edges[-1])
         b_d = _uniform_bucket(col, edges, nb).clamp(0, nb - 1)
         flat_idx = flat_idx * nb + b_d
-    mass = lucid.where(
-        inside, weight.to(dtype), lucid.zeros(n_samples, dtype=dtype, device=device)
-    )
+    mass = lucid.where(inside, weight.to(dtype), lucid.zeros(n_samples, dtype=dtype, device=device))
     counts_flat = _scatter_add(
         lucid.zeros(total_bins, dtype=dtype, device=device), 0, flat_idx, mass
     )
@@ -1040,9 +1010,7 @@ def histogramdd(
     from lucid._dispatch import _unwrap, _wrap
 
     if input.ndim != 2:
-        raise ValueError(
-            f"histogramdd: expected (N, D) input, got shape {tuple(input.shape)}"
-        )
+        raise ValueError(f"histogramdd: expected (N, D) input, got shape {tuple(input.shape)}")
     D: int = int(input.shape[1])
     if isinstance(bins := _promotion.as_number(bins), int):
         bins_seq: list[int] = [int(bins)] * D
@@ -1056,9 +1024,7 @@ def histogramdd(
 
     # ``range`` shadows the Python builtin in this function's signature,
     # so capture the builtin once for use below.
-    py_range = (
-        __builtins__["range"] if isinstance(__builtins__, dict) else __builtins__.range
-    )
+    py_range = __builtins__["range"] if isinstance(__builtins__, dict) else __builtins__.range
 
     if range is None:
         ranges: list[tuple[float, float]] = []
@@ -1073,8 +1039,7 @@ def histogramdd(
         ranges = [(float(lo), float(hi)) for (lo, hi) in range]
         if len(ranges) != D:
             raise ValueError(
-                f"histogramdd: range must be a length-{D} sequence, "
-                f"got length {len(ranges)}"
+                f"histogramdd: range must be a length-{D} sequence, " f"got length {len(ranges)}"
             )
 
     counts_impl, edges_impl = _C_engine.histogramdd(
@@ -1173,9 +1138,7 @@ def histogram(
         mass = weight.reshape(-1).to(dtype)
     mass = lucid.where(inside, mass, lucid.zeros_like(mass))
     bucket = bucket.clamp(0, n_bins - 1)
-    hist = _scatter_add(
-        lucid.zeros(n_bins, dtype=dtype, device=device), 0, bucket, mass
-    )
+    hist = _scatter_add(lucid.zeros(n_bins, dtype=dtype, device=device), 0, bucket, mass)
     if density:
         hist = hist / (hist.sum() * (edges[1:] - edges[:-1]))
     if finite is not None:
@@ -1234,9 +1197,7 @@ def _histogram_range(
     )
 
 
-def _uniform_edges(
-    lo: float | Tensor, hi: float | Tensor, bins: int, like: Tensor
-) -> Tensor:
+def _uniform_edges(lo: float | Tensor, hi: float | Tensor, bins: int, like: Tensor) -> Tensor:
     """``bins + 1`` equally spaced edges from ``lo`` to ``hi``, both exact."""
     if isinstance(lo, float) and isinstance(hi, float):
         return lucid.linspace(lo, hi, bins + 1, dtype=like.dtype, device=like.device)

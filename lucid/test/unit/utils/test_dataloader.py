@@ -101,16 +101,12 @@ def test_shuffle_is_a_permutation_and_not_a_resample():
     """Sampling with replacement would have the right length and lose a
     third of the data to duplicates."""
     lucid.manual_seed(0)
-    assert sorted(_seen(DataLoader(_dataset(20), batch_size=3, shuffle=True))) == list(
-        range(20)
-    )
+    assert sorted(_seen(DataLoader(_dataset(20), batch_size=3, shuffle=True))) == list(range(20))
 
 
 def test_shuffle_actually_changes_the_order():
     lucid.manual_seed(0)
-    assert _seen(DataLoader(_dataset(50), batch_size=5, shuffle=True)) != list(
-        range(50)
-    )
+    assert _seen(DataLoader(_dataset(50), batch_size=5, shuffle=True)) != list(range(50))
 
 
 def test_each_epoch_reshuffles():
@@ -135,9 +131,7 @@ def test_shuffle_and_an_explicit_sampler_are_mutually_exclusive():
 
 
 def test_an_explicit_sampler_decides_which_samples_appear():
-    loader = DataLoader(
-        _dataset(10), batch_size=2, sampler=SubsetRandomSampler([0, 2, 4, 6])
-    )
+    loader = DataLoader(_dataset(10), batch_size=2, sampler=SubsetRandomSampler([0, 2, 4, 6]))
     assert sorted(_seen(loader)) == [0, 2, 4, 6]
 
 
@@ -200,10 +194,7 @@ def test_an_iterable_dataset_streams():
     """The class docstring always said both dataset styles were accepted.
     Until now the constructor built a ``SequentialSampler`` regardless and
     the first iteration died on ``len()``."""
-    batches = [
-        np.asarray(b.numpy()).tolist()
-        for b in DataLoader(_Counting(0, 7), batch_size=3)
-    ]
+    batches = [np.asarray(b.numpy()).tolist() for b in DataLoader(_Counting(0, 7), batch_size=3)]
     assert batches == [[0, 1, 2], [3, 4, 5], [6]]
 
 
@@ -222,11 +213,7 @@ def test_an_empty_iterable_dataset_yields_nothing():
 
 def test_a_chained_iterable_dataset_streams_through_the_loader():
     chained = ChainDataset([_Counting(0, 3), _Counting(10, 12)])
-    flat = [
-        v
-        for b in DataLoader(chained, batch_size=2)
-        for v in np.asarray(b.numpy()).ravel()
-    ]
+    flat = [v for b in DataLoader(chained, batch_size=2) for v in np.asarray(b.numpy()).ravel()]
     assert flat == [0, 1, 2, 10, 11]
 
 
@@ -247,9 +234,7 @@ def test_shuffling_an_iterable_dataset_is_refused():
 
 def test_a_sampler_over_an_iterable_dataset_is_refused():
     with pytest.raises(ValueError, match="sampler"):
-        DataLoader(
-            _Counting(0, 5), batch_size=2, sampler=SequentialSampler(_dataset(5))
-        )
+        DataLoader(_Counting(0, 5), batch_size=2, sampler=SequentialSampler(_dataset(5)))
 
 
 def test_the_length_of_an_iterable_loader_is_refused_rather_than_guessed():
@@ -270,9 +255,7 @@ def test_a_loader_feeds_a_training_loop():
     optimiser = lucid.optim.SGD(model.parameters(), lr=0.05)
 
     def epoch_loss():
-        return sum(
-            float(np.asarray(((model(x) - y) ** 2).mean().numpy())) for x, y in loader
-        )
+        return sum(float(np.asarray(((model(x) - y) ** 2).mean().numpy())) for x, y in loader)
 
     first = epoch_loss()
     for _ in range(5):

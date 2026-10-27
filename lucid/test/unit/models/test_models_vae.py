@@ -120,12 +120,8 @@ class TestVAEForImageGeneration:
         # Higher β → loss is more KL-dominated.  Verify the *decomposition*
         # contract holds for both (architecture is initialised fresh per
         # model so absolute values diverge; we only check the formula).
-        diff_a = float(
-            (out_a.loss - out_a.recon_loss - cfg_a.kl_weight * out_a.kl_loss).item()
-        )
-        diff_b = float(
-            (out_b.loss - out_b.recon_loss - cfg_b.kl_weight * out_b.kl_loss).item()
-        )
+        diff_a = float((out_a.loss - out_a.recon_loss - cfg_a.kl_weight * out_a.kl_loss).item())
+        diff_b = float((out_b.loss - out_b.recon_loss - cfg_b.kl_weight * out_b.kl_loss).item())
         assert abs(diff_a) < 1e-3 and abs(diff_b) < 1e-3
 
     def test_generate_shape(self) -> None:

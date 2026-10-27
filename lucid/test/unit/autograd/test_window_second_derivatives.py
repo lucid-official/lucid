@@ -25,16 +25,12 @@ CASES: list[tuple[str, tuple[int, ...], Callable[[lucid.Tensor], lucid.Tensor]]]
     (
         "unfold",
         (2, 2, 6, 7),
-        lambda x: F.unfold(
-            x, kernel_size=(3, 2), stride=(2, 1), padding=1, dilation=(1, 2)
-        ),
+        lambda x: F.unfold(x, kernel_size=(3, 2), stride=(2, 1), padding=1, dilation=(1, 2)),
     ),
     (
         "fold",
         (2, 2 * 3 * 2, 9),
-        lambda x: F.fold(
-            x, output_size=(5, 5), kernel_size=(3, 2), stride=(1, 2), padding=(0, 1)
-        ),
+        lambda x: F.fold(x, output_size=(5, 5), kernel_size=(3, 2), stride=(1, 2), padding=(0, 1)),
     ),
     ("Tensor.unfold overlapping", (3, 9, 2), lambda x: x.unfold(1, 4, 2)),
     ("Tensor.unfold last axis", (2, 3, 10), lambda x: x.unfold(-1, 3, 3)),
@@ -73,10 +69,6 @@ def test_the_second_derivative_matches_central_differences(
     (hvp,) = grad((g * lucid.tensor(u)).sum(), [x])
     e = rng.standard_normal(shape)
     h = 1e-6
-    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (
-        2 * h
-    )
-    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(
-        numeric, rel=1e-6, abs=1e-6
-    )
+    numeric = (projected_gradient(x0 + h * e) - projected_gradient(x0 - h * e)) / (2 * h)
+    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(numeric, rel=1e-6, abs=1e-6)
     assert np.abs(np.asarray(hvp.numpy())).max() > 1e-3

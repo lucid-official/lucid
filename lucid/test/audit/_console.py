@@ -202,9 +202,7 @@ class Console:
         self.write(self.paint(left + "─" * max(w - len(left), 0), style))
 
     def kv(self, key: str, value: str, key_width: int = 22) -> None:
-        self.write(
-            "  " + self.paint(key.ljust(key_width), "grey") + self.paint(value, "white")
-        )
+        self.write("  " + self.paint(key.ljust(key_width), "grey") + self.paint(value, "white"))
 
     def table(
         self,

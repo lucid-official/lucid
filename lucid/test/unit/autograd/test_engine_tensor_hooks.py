@@ -109,9 +109,7 @@ def _hooked_linear(lib: ModuleType, device: str) -> object:
 # ── scenarios: run on Lucid and on the reference ──────────────────────────
 
 
-def _consumers_before_and_after(
-    lib: ModuleType, device: str, hook: Register
-) -> dict[str, object]:
+def _consumers_before_and_after(lib: ModuleType, device: str, hook: Register) -> dict[str, object]:
     # A consumer made before the hook still sends its gradient through it:
     # the hook is on y's producer, not on the edges out of y.
     x = _x(lib, device)
@@ -124,9 +122,7 @@ def _consumers_before_and_after(
     return {"seen": seen, "x": x.grad}  # type: ignore[attr-defined]
 
 
-def _return_value_flows_upstream(
-    lib: ModuleType, device: str, hook: Register
-) -> dict[str, object]:
+def _return_value_flows_upstream(lib: ModuleType, device: str, hook: Register) -> dict[str, object]:
     x = _x(lib, device)
     y = x * 2
     hook(y, lambda g: g * 10)  # type: ignore[operator]
@@ -242,9 +238,7 @@ def _module_output(lib: ModuleType, device: str, hook: Register) -> dict[str, ob
     return {"seen": seen, "x": x.grad}  # type: ignore[attr-defined]
 
 
-def _hook_before_retain(
-    lib: ModuleType, device: str, hook: Register
-) -> dict[str, object]:
+def _hook_before_retain(lib: ModuleType, device: str, hook: Register) -> dict[str, object]:
     x = _x(lib, device)
     y = x * 2
     y.retain_grad()  # type: ignore[attr-defined]
@@ -253,9 +247,7 @@ def _hook_before_retain(
     return {"y": y.grad, "x": x.grad}  # type: ignore[attr-defined]
 
 
-def _before_an_in_place_write(
-    lib: ModuleType, device: str, hook: Register
-) -> dict[str, object]:
+def _before_an_in_place_write(lib: ModuleType, device: str, hook: Register) -> dict[str, object]:
     # A hook registered before an in-place op stays with the values it was
     # registered on: it sees the gradient with respect to y before the write.
     x = _x(lib, device)
@@ -284,9 +276,7 @@ _SCENARIOS: dict[str, Callable[[ModuleType, str, Register], dict[str, object]]] 
 
 @pytest.mark.parametrize("name", list(_SCENARIOS))
 def test_matches_the_reference(name: str, ref: ModuleType, device: str) -> None:
-    _compare(
-        _SCENARIOS[name](lucid, device, _hook), _SCENARIOS[name](ref, "cpu", _ref_hook)
-    )
+    _compare(_SCENARIOS[name](lucid, device, _hook), _SCENARIOS[name](ref, "cpu", _ref_hook))
 
 
 # ── the engine's contract, without the reference ───────────────────────────
@@ -520,9 +510,7 @@ _NESTED = [
 ]
 
 
-@pytest.mark.parametrize(
-    ("outer", "inner"), _NESTED, ids=[f"{o}-around-{i}" for o, i in _NESTED]
-)
+@pytest.mark.parametrize(("outer", "inner"), _NESTED, ids=[f"{o}-around-{i}" for o, i in _NESTED])
 def test_a_hook_that_frees_its_own_node_is_refused_cleanly(
     outer: str, inner: str, device: str, ref: ModuleType
 ) -> None:
@@ -532,9 +520,7 @@ def test_a_hook_that_frees_its_own_node_is_refused_cleanly(
         text=True,
         timeout=300,
     )
-    assert (
-        child.returncode == 0
-    ), f"the process died ({child.returncode}):\n{child.stderr[-2000:]}"
+    assert child.returncode == 0, f"the process died ({child.returncode}):\n{child.stderr[-2000:]}"
     got = json.loads(child.stdout.strip().splitlines()[-1])
     assert got == {"raised": True, "second_pass": True}
     assert _nested_backward_outcome(ref, "cpu", _ref_hook, outer, inner) == got

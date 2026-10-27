@@ -180,9 +180,7 @@ class TestParameterGradAndStorageSharing:
 
     def test_parameter_class_and_requires_grad_preserved(self, device: str) -> None:
         p_grad = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
-        p_nograd = nn.Parameter(
-            lucid.tensor([4.0, 5.0], device=device), requires_grad=False
-        )
+        p_nograd = nn.Parameter(lucid.tensor([4.0, 5.0], device=device), requires_grad=False)
         t_grad = lucid.tensor([6.0, 7.0], device=device, requires_grad=True)
         t_nograd = lucid.tensor([8.0, 9.0], device=device, requires_grad=False)
 
@@ -265,9 +263,7 @@ class TestParameterGradAndStorageSharing:
         r["base"][0, 2] = 55.0
         assert r["t"][2, 0].item() == 55.0
 
-    def test_optimizer_state_dict_loads_with_weights_only_true(
-        self, device: str
-    ) -> None:
+    def test_optimizer_state_dict_loads_with_weights_only_true(self, device: str) -> None:
         w = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
         opt = lucid.optim.Adam([w], lr=0.1)
         (w * 2.0).sum().backward()

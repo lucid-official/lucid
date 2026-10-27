@@ -51,16 +51,12 @@ _SHAPES = {
 }
 
 
-def _sample(
-    x: lucid.Tensor, g: lucid.Tensor, mode: str, pad: str, align: bool
-) -> lucid.Tensor:
+def _sample(x: lucid.Tensor, g: lucid.Tensor, mode: str, pad: str, align: bool) -> lucid.Tensor:
     return F.grid_sample(x, g, mode=mode, padding_mode=pad, align_corners=align)
 
 
 @pytest.mark.parametrize("first", [0, 1])
-@pytest.mark.parametrize(
-    "name,mode,pad,align,reach,rank", CASES, ids=[c[0] for c in CASES]
-)
+@pytest.mark.parametrize("name,mode,pad,align,reach,rank", CASES, ids=[c[0] for c in CASES])
 def test_the_second_derivative_matches_central_differences(
     first: int, name: str, mode: str, pad: str, align: bool, reach: float, rank: int
 ) -> None:
@@ -97,9 +93,7 @@ def test_the_second_derivative_matches_central_differences(
         plus = [v + h * e if i == k else v for i, v in enumerate(base)]
         minus = [v - h * e if i == k else v for i, v in enumerate(base)]
         numeric = (projected_gradient(plus) - projected_gradient(minus)) / (2 * h)
-        exact = (
-            0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
-        )
+        exact = 0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
         assert exact == pytest.approx(numeric, rel=1e-5, abs=1e-6), (first, k)
 
 

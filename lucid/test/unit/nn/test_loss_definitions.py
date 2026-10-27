@@ -73,9 +73,7 @@ def test_the_reductions_are_what_they_say(reduction):
 @pytest.mark.parametrize("delta", [0.5, 1.0, 2.0])
 def test_huber_is_quadratic_inside_delta_and_linear_outside(delta):
     diff = X - Y
-    want = np.where(
-        np.abs(diff) < delta, 0.5 * diff**2, delta * (np.abs(diff) - 0.5 * delta)
-    )
+    want = np.where(np.abs(diff) < delta, 0.5 * diff**2, delta * (np.abs(diff) - 0.5 * delta))
     assert np.allclose(
         _v(F.huber_loss(_t(X), _t(Y), delta=delta, reduction="none")), want, atol=1e-6
     )
@@ -97,9 +95,7 @@ def test_smooth_l1_divides_the_quadratic_region_by_beta(beta):
     the one it asked for.
     """
     diff = X - Y
-    want = np.where(
-        np.abs(diff) < beta, 0.5 * diff**2 / beta, np.abs(diff) - 0.5 * beta
-    )
+    want = np.where(np.abs(diff) < beta, 0.5 * diff**2 / beta, np.abs(diff) - 0.5 * beta)
     assert np.allclose(
         _v(F.smooth_l1_loss(_t(X), _t(Y), beta=beta, reduction="none")),
         want,
@@ -240,9 +236,7 @@ def test_cross_entropy_is_log_softmax_then_nll():
 
 def test_binary_cross_entropy_is_the_bernoulli_log_likelihood():
     want = -(BINARY * np.log(PROBS) + (1 - BINARY) * np.log(1 - PROBS)).mean()
-    assert np.isclose(
-        _f(F.binary_cross_entropy(_t(PROBS), _t(BINARY))), want, atol=1e-5
-    )
+    assert np.isclose(_f(F.binary_cross_entropy(_t(PROBS), _t(BINARY))), want, atol=1e-5)
 
 
 def test_bce_with_logits_matches_sigmoid_then_bce():
@@ -258,9 +252,7 @@ def test_bce_with_logits_matches_sigmoid_then_bce():
 def test_bce_with_logits_survives_a_saturated_logit():
     """The reason it exists as its own function: ``sigmoid`` then ``log``
     loses the answer at ±40, the fused form does not."""
-    got = _v(
-        nn.BCEWithLogitsLoss(reduction="none")(_t([[-60.0, 60.0]]), _t([[0.0, 1.0]]))
-    )
+    got = _v(nn.BCEWithLogitsLoss(reduction="none")(_t([[-60.0, 60.0]]), _t([[0.0, 1.0]])))
     assert np.isfinite(got).all()
     assert np.allclose(got, 0.0, atol=1e-6)
 
@@ -305,9 +297,7 @@ def test_full_adds_the_stirling_term_rather_than_nothing():
     )
 
     without = _v(F.poisson_nll_loss(_t(inputs), _t(target), reduction="none"))
-    with_full = _v(
-        F.poisson_nll_loss(_t(inputs), _t(target), full=True, reduction="none")
-    )
+    with_full = _v(F.poisson_nll_loss(_t(inputs), _t(target), full=True, reduction="none"))
     assert np.allclose(without, short, atol=1e-5)
     assert np.allclose(with_full, short + stirling, atol=1e-5)
     assert not np.allclose(without, with_full)
@@ -326,11 +316,7 @@ def test_the_stirling_term_is_zero_at_target_zero_and_one():
 def test_full_stays_finite_at_target_zero():
     """``target·log(target)`` is where a naive Stirling term produces a
     NaN and poisons the whole batch."""
-    got = _v(
-        F.poisson_nll_loss(
-            _t([[0.5, 0.5]]), _t([[0.0, 0.0]]), full=True, reduction="none"
-        )
-    )
+    got = _v(F.poisson_nll_loss(_t([[0.5, 0.5]]), _t([[0.0, 0.0]]), full=True, reduction="none"))
     assert np.isfinite(got).all()
 
 
@@ -352,9 +338,7 @@ def test_the_full_gradient_is_unchanged_by_a_term_that_does_not_involve_the_inpu
 def test_kl_div_batchmean_divides_by_the_batch_and_not_the_support():
     logp = np.log(PROBS)
     want = (PROBS * (np.log(PROBS) - logp)).sum() / PROBS.shape[0]
-    assert np.isclose(
-        _f(F.kl_div(_t(logp), _t(PROBS), reduction="batchmean")), want, atol=1e-5
-    )
+    assert np.isclose(_f(F.kl_div(_t(logp), _t(PROBS), reduction="batchmean")), want, atol=1e-5)
 
 
 def test_kl_div_of_a_distribution_with_itself_is_zero():
@@ -468,14 +452,10 @@ def test_multilabel_margin_accepts_any_integer_target(dtype):
     scores = lucid.tensor(np.array([[1.0, 0.5, -0.3, 0.2]], dtype=np.float32))
     target = lucid.tensor(np.array([[0, 1, -1, -1]], dtype=np.int32), dtype=dtype)
     # Positives {0,1}, negatives {2,3}: hinges 0, 0.2, 0.2, 0.7 over C=4.
-    assert _f(F.multilabel_margin_loss(scores, target)) == pytest.approx(
-        1.1 / 4, rel=1e-6
-    )
+    assert _f(F.multilabel_margin_loss(scores, target)) == pytest.approx(1.1 / 4, rel=1e-6)
 
 
 def test_multilabel_margin_1d_accepts_a_default_int_target():
     scores = lucid.tensor(np.array([1.0, 0.5, -0.3, 0.2], dtype=np.float32))
     target = lucid.tensor(np.array([0, 1, -1, -1], dtype=np.int64), dtype=lucid.int64)
-    assert _f(F.multilabel_margin_loss(scores, target)) == pytest.approx(
-        1.1 / 4, rel=1e-6
-    )
+    assert _f(F.multilabel_margin_loss(scores, target)) == pytest.approx(1.1 / 4, rel=1e-6)

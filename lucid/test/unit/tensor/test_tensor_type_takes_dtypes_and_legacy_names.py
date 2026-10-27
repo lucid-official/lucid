@@ -160,9 +160,7 @@ def test_byte_tensor_names_nothing():
 
 def test_type_as_moves_device_and_casts_dtype(cross_device_pair):
     cpu, metal = cross_device_pair
-    x_cpu = lucid.tensor(
-        [1.0, 2.0], dtype=lucid.float32, device=cpu, requires_grad=True
-    )
+    x_cpu = lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=cpu, requires_grad=True)
     proto_metal = lucid.zeros(2, dtype=lucid.float16, device=metal)
     y = x_cpu.type_as(proto_metal)
     assert y.device == lucid.device(metal) and y.dtype == lucid.float16

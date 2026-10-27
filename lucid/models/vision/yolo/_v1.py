@@ -220,9 +220,7 @@ class YOLOConfig(ModelConfig):
 # ---------------------------------------------------------------------------
 
 
-def _conv_block(
-    in_ch: int, out_ch: int, kernel: int, stride: int, padding: int
-) -> nn.Sequential:
+def _conv_block(in_ch: int, out_ch: int, kernel: int, stride: int, padding: int) -> nn.Sequential:
     """Conv2d → BatchNorm2d → LeakyReLU(0.1) block.
 
     Divergence, deliberate: the CVPR-2016 paper describes plain
@@ -430,9 +428,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         cy = (box_preds[..., 1] + rows) * (H / S)
         w = (box_preds[..., 2] ** 2) * float(W)
         h = (box_preds[..., 3] ** 2) * float(H)
-        return lucid.stack(
-            [cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0], dim=-1
-        )
+        return lucid.stack([cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0], dim=-1)
 
     def _decode_predictions(
         self,

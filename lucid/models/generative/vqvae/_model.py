@@ -170,9 +170,7 @@ class _VQVAEEncoder(nn.Module):
         in_ch = config.in_channels
         for _ in range(config.num_downsample_layers):
             blocks.append(
-                nn.Conv2d(
-                    in_ch, config.hidden_channels, kernel_size=4, stride=2, padding=1
-                )
+                nn.Conv2d(in_ch, config.hidden_channels, kernel_size=4, stride=2, padding=1)
             )
             in_ch = config.hidden_channels
         self.down_blocks = nn.ModuleList(blocks)
@@ -187,9 +185,7 @@ class _VQVAEEncoder(nn.Module):
                 for _ in range(config.num_residual_layers)
             ]
         )
-        self.proj = nn.Conv2d(
-            config.hidden_channels, config.embedding_dim, kernel_size=1
-        )
+        self.proj = nn.Conv2d(config.hidden_channels, config.embedding_dim, kernel_size=1)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -579,9 +575,7 @@ class VQVAEForImageGeneration(ImageGenerationModel):
         """
         device = resolve_generation_device(self, device)
         h, w = self._latent_grid_size
-        indices = lucid.randint(
-            0, self._num_embeddings, size=(n_samples, h, w), device=device
-        )
+        indices = lucid.randint(0, self._num_embeddings, size=(n_samples, h, w), device=device)
         samples = self.vqvae.decode_indices(indices)
         if self._recon_loss == "bce":
             samples = F.sigmoid(samples)

@@ -98,4 +98,3 @@ class TestGenerator:
 
     def test_no_default_override_binding(self) -> None:
         assert not hasattr(lucid._C_engine, "_set_default_override")
-

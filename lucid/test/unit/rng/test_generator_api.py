@@ -98,9 +98,7 @@ def test_counter_stays_readable_and_writable() -> None:
 
 
 @pytest.mark.parametrize("seed", [True, 2.0, 2.5, -1])
-def test_the_global_manual_seed_reads_its_seed_through_int(
-    ref: ModuleType, seed: int
-) -> None:
+def test_the_global_manual_seed_reads_its_seed_through_int(ref: ModuleType, seed: int) -> None:
     # The reference's global manual_seed calls int() on its seed; its
     # Generator.manual_seed does not, and neither does Lucid's.
     ref.manual_seed(seed)

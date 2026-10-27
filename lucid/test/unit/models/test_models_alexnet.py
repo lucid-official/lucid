@@ -116,9 +116,7 @@ class TestAlexNetRegistry(unittest.TestCase):
         self.assertIn("alexnet_cls", names)
 
     def test_family_filter(self) -> None:
-        self.assertEqual(
-            models.list_models(family="alexnet"), ["alexnet", "alexnet_cls"]
-        )
+        self.assertEqual(models.list_models(family="alexnet"), ["alexnet", "alexnet_cls"])
 
     def test_auto_config(self) -> None:
         cfg = models.AutoConfig.from_pretrained("alexnet")
@@ -171,9 +169,7 @@ class TestAlexNetWeightsEnum(unittest.TestCase):
 
     def test_meta_keys(self) -> None:
         meta = AlexNetWeights.IMAGENET1K_V1.meta
-        self.assertEqual(
-            meta["source"], "reference_vision/AlexNet_Weights.IMAGENET1K_V1"
-        )
+        self.assertEqual(meta["source"], "reference_vision/AlexNet_Weights.IMAGENET1K_V1")
         self.assertEqual(meta["num_params"], 61_100_840)
         self.assertIn("ImageNet-1k", meta["metrics"])
 

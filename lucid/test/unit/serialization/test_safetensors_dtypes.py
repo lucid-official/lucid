@@ -77,9 +77,7 @@ def test_a_bfloat16_file_loads_as_bfloat16(tmp_path) -> None:  # type: ignore[no
 def test_every_dtype_round_trips_bit_for_bit(tmp_path, dtype) -> None:  # type: ignore[no-untyped-def]
     t = (lucid.randn(4, 3) * 50).to(dtype)
     path = str(tmp_path / "rt.safetensors")
-    save_safetensors(
-        {"t": t, "s": lucid.tensor(2.0).to(dtype)}, path, metadata={"k": "v"}
-    )
+    save_safetensors({"t": t, "s": lucid.tensor(2.0).to(dtype)}, path, metadata={"k": "v"})
     back = load_safetensors(path)
     assert back["t"].dtype == dtype and tuple(back["s"].shape) == ()
     assert bytes(back["t"]._impl.to_bytes()) == bytes(t._impl.to_bytes())
@@ -91,9 +89,7 @@ def test_any_read_only_mapping_saves(tmp_path: Path) -> None:
     t = lucid.randn(2, 3)
     path = str(tmp_path / "mapping.safetensors")
     save_safetensors(MappingProxyType({"t": t}), path)
-    assert bytes(load_safetensors(path)["t"]._impl.to_bytes()) == bytes(
-        t._impl.to_bytes()
-    )
+    assert bytes(load_safetensors(path)["t"]._impl.to_bytes()) == bytes(t._impl.to_bytes())
 
 
 def test_unsigned_entries_widen_losslessly(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -135,17 +131,13 @@ def test_from_numpy_widens_unsigned_arrays() -> None:
 def test_a_reference_writer_file_loads(tmp_path) -> None:  # type: ignore[no-untyped-def]
     safetensors_numpy = pytest.importorskip("safetensors.numpy")
     path = str(tmp_path / "np.safetensors")
-    safetensors_numpy.save_file(
-        {"a": np.arange(6, dtype=np.float32).reshape(2, 3)}, path
-    )
+    safetensors_numpy.save_file({"a": np.arange(6, dtype=np.float32).reshape(2, 3)}, path)
     np.testing.assert_array_equal(
         load_safetensors(path)["a"].numpy(),
         np.arange(6, dtype=np.float32).reshape(2, 3),
     )
     # And a Lucid-written bfloat16 file reads back through the reference reader's header.
-    save_safetensors(
-        {"w": lucid.ones(2).to(lucid.bfloat16)}, str(tmp_path / "l.safetensors")
-    )
+    save_safetensors({"w": lucid.ones(2).to(lucid.bfloat16)}, str(tmp_path / "l.safetensors"))
     with open(tmp_path / "l.safetensors", "rb") as fh:
         (size,) = struct.unpack("<Q", fh.read(8))
         header = json.loads(fh.read(size))

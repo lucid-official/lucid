@@ -129,9 +129,7 @@ def test_norm_metal_matches_cpu(shape: tuple, kwargs: dict) -> None:
 
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-@pytest.mark.parametrize(
-    "ord_", [1, -1, 2, -2, "fro", "nuc", float("inf"), float("-inf")]
-)
+@pytest.mark.parametrize("ord_", [1, -1, 2, -2, "fro", "nuc", float("inf"), float("-inf")])
 def test_matrix_norm_metal_matches_cpu(ord_: object) -> None:
     """Every matrix order, including the three that need an SVD."""
     x = np.random.default_rng(11).standard_normal((4, 5)).astype(np.float32)

@@ -22,17 +22,14 @@ import lucid.optim as optim
 _RNG = np.random.default_rng(0)
 _W0 = _RNG.standard_normal((4, 3)).astype(np.float32)
 _GRADS = [
-    _RNG.standard_normal((4, 3)).astype(np.float32) * s
-    for s in (5.0, 0.1, 0.1, 3.0, 0.05, 0.05)
+    _RNG.standard_normal((4, 3)).astype(np.float32) * s for s in (5.0, 0.1, 0.1, 3.0, 0.05, 0.05)
 ]
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 @pytest.mark.parametrize("amsgrad", [True, False])
 @pytest.mark.parametrize("name", ["Adam", "AdamW"])
-def test_adam_family_matches_the_reference(
-    name: str, amsgrad: bool, device: str, ref: Any
-) -> None:
+def test_adam_family_matches_the_reference(name: str, amsgrad: bool, device: str, ref: Any) -> None:
     mine = nn.Parameter(lucid.tensor(_W0.copy(), device=device))
     theirs = ref.nn.Parameter(ref.tensor(_W0.copy()))
     opt_mine = getattr(optim, name)(

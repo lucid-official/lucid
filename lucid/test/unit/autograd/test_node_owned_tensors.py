@@ -17,9 +17,7 @@ def _owned(t: lucid.Tensor) -> list[object]:
 
 
 def _same(got: list[object], want: list[lucid.Tensor]) -> bool:
-    return len(got) == len(want) and all(
-        g is w.impl for g, w in zip(got, want, strict=True)
-    )
+    return len(got) == len(want) and all(g is w.impl for g, w in zip(got, want, strict=True))
 
 
 def test_a_kernel_node_holds_its_inputs(device: str) -> None:

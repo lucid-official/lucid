@@ -3,25 +3,17 @@
 from collections import OrderedDict
 from typing import Callable
 
-_GLOBAL_FORWARD_PRE_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool]] = (
-    OrderedDict()
-)
-_GLOBAL_FORWARD_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool, bool]] = (
-    OrderedDict()
-)
+_GLOBAL_FORWARD_PRE_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool]] = OrderedDict()
+_GLOBAL_FORWARD_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool, bool]] = OrderedDict()
 _GLOBAL_BACKWARD_PRE_HOOKS: OrderedDict[int, Callable[..., object]] = OrderedDict()
 _GLOBAL_BACKWARD_HOOKS: OrderedDict[int, Callable[..., object]] = OrderedDict()
 # load_state_dict pre-hook signature:
 #   hook(module, state_dict, prefix, local_metadata, strict, missing_keys,
 #        unexpected_keys, error_msgs) -> None
-_GLOBAL_LOAD_STATE_DICT_PRE_HOOKS: OrderedDict[int, Callable[..., object]] = (
-    OrderedDict()
-)
+_GLOBAL_LOAD_STATE_DICT_PRE_HOOKS: OrderedDict[int, Callable[..., object]] = OrderedDict()
 # load_state_dict post-hook signature:
 #   hook(module, incompatible_keys) -> None
-_GLOBAL_LOAD_STATE_DICT_POST_HOOKS: OrderedDict[int, Callable[..., object]] = (
-    OrderedDict()
-)
+_GLOBAL_LOAD_STATE_DICT_POST_HOOKS: OrderedDict[int, Callable[..., object]] = OrderedDict()
 
 _HOOK_ID = 0
 

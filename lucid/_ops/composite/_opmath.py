@@ -51,9 +51,7 @@ def _real(x: Tensor) -> Tensor:
     """
     x = _float_input(x)
     if lucid.is_complex(x):
-        raise TypeError(
-            f"expected a real input to a function of a real variable, got {x.dtype}"
-        )
+        raise TypeError(f"expected a real input to a function of a real variable, got {x.dtype}")
     return x
 
 

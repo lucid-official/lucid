@@ -124,7 +124,5 @@ def test_multi_group_shares_the_parent_groups() -> None:
             for o in (eager_opt, opt):
                 o.param_groups[1]["lr"] = 1e-4
                 o._sync_hyperparams()
-    for (_, pe), (_, pc) in zip(
-        eager_model.named_parameters(), comp_model.named_parameters()
-    ):
+    for (_, pe), (_, pc) in zip(eager_model.named_parameters(), comp_model.named_parameters()):
         assert float((pe - pc).abs().max().item()) < 1e-6

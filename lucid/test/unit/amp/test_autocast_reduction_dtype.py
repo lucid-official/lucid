@@ -73,9 +73,7 @@ _WIDENS = {"metal": {"sum", "prod"}, "cpu": {"prod"}}
 
 @pytest.mark.parametrize("op", ["sum", "mean", "prod"])
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16], ids=_name)
-def test_a_half_reduction_follows_its_row(
-    device: str, dtype: lucid.dtype, op: str
-) -> None:
+def test_a_half_reduction_follows_its_row(device: str, dtype: lucid.dtype, op: str) -> None:
     x = lucid.full((64, 64), 1.0, dtype=dtype, device=device)
     with autocast(device_type=device, dtype=_autocast_dtype(device)):
         got = getattr(x, op)()
@@ -96,12 +94,8 @@ def test_autocast_reduction_dtype_matches_reference(
         pytest.skip("the reference's GPU stream is not available")
     amp_dtype = _autocast_dtype(device)
     ref_dtype = getattr(ref, _name(amp_dtype))
-    x = lucid.full(
-        (8, 8), 1.0, device=device, dtype=amp_dtype if half else lucid.float32
-    )
-    r = ref.full(
-        (8, 8), 1.0, device=ref_device, dtype=ref_dtype if half else ref.float32
-    )
+    x = lucid.full((8, 8), 1.0, device=device, dtype=amp_dtype if half else lucid.float32)
+    r = ref.full((8, 8), 1.0, device=ref_device, dtype=ref_dtype if half else ref.float32)
     with autocast(device_type=device, dtype=amp_dtype):
         got = getattr(x, op)()
     with ref.autocast(device_type=ref_device, dtype=ref_dtype):

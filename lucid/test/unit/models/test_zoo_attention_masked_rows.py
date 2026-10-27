@@ -67,9 +67,7 @@ def test_bert_head_mask_removes_a_head() -> None:
     attn = _BERTSelfAttention(BERTConfig(**_SMALL)).eval()
     x = lucid.randn(B, T, HIDDEN)
     full, _ = attn(x, attention_mask=_mask_with_dead_row())
-    half, w = attn(
-        x, attention_mask=_mask_with_dead_row(), head_mask=lucid.tensor([1.0, 0.0])
-    )
+    half, w = attn(x, attention_mask=_mask_with_dead_row(), head_mask=lucid.tensor([1.0, 0.0]))
     d = HIDDEN // HEADS
     assert _finite(half)
     assert float((half[..., :d] - full[..., :d]).abs().max().item()) < 1e-5
@@ -165,9 +163,7 @@ def _hand_rolled_dual_paths(source: str) -> list[str]:
         node for node in tree.body if isinstance(node, (ast.ClassDef, ast.FunctionDef))
     ]
     return [
-        unit.name
-        for unit in units
-        if {"scaled_dot_product_attention", "softmax"} <= _called(unit)
+        unit.name for unit in units if {"scaled_dot_product_attention", "softmax"} <= _called(unit)
     ]
 
 

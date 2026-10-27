@@ -75,14 +75,10 @@ _MAX_CANDIDATES = 6
 #: names the *probe's* dtype as the expectation and reads as a defect in
 #: a function that works.  An image transform's domain is float32 images
 #: and that is what it should be handed.
-_F32_PARAMS = frozenset(
-    {"img", "image", "pts", "points", "matrix", "field", "dx", "dy"}
-)
+_F32_PARAMS = frozenset({"img", "image", "pts", "points", "matrix", "field", "dx", "dy"})
 
 
-def _tensor(
-    shape: tuple[int, ...], domain: str, variant: int = 0, name: str = ""
-) -> Any:
+def _tensor(shape: tuple[int, ...], domain: str, variant: int = 0, name: str = "") -> Any:
     """One tensor argument.
 
     ``variant`` must differ between the operands of a binary op.  Built
@@ -194,9 +190,7 @@ _MODULE_BY_NAME: dict[str, Any] = {
     # ``fuse_modules(model, [["0", "1"]])`` names children by index, so
     # the model it is handed has to *have* children — a bare ``Linear``
     # answered "'Linear' has no attribute '0'".
-    "model": lambda: lucid.nn.Sequential(
-        lucid.nn.Linear(_COUT, _COUT), lucid.nn.ReLU()
-    ),
+    "model": lambda: lucid.nn.Sequential(lucid.nn.Linear(_COUT, _COUT), lucid.nn.ReLU()),
     "conv": lambda: lucid.nn.Conv2d(_CIN, _COUT, 3, padding=1),
     "bn": lambda: lucid.nn.BatchNorm2d(_COUT),
     "norm": lambda: lucid.nn.BatchNorm2d(_COUT),
@@ -331,9 +325,7 @@ def _literal_choice(text: str) -> str | None:
 #: functions.  Several carry no annotation, and Tensor methods spell the
 #: receiver ``Self``, so the annotation-driven rules cannot see them; the
 #: name is the only evidence there is.
-_OPERAND_NAMES = frozenset(
-    {"other", "input", "mat1", "mat2", "condition", "reps", "base_impl"}
-)
+_OPERAND_NAMES = frozenset({"other", "input", "mat1", "mat2", "condition", "reps", "base_impl"})
 
 _TENSOR_PARAMS = frozenset(
     {"input", "x", "tensor", "a", "b", "self", "real", "imag", "abs", "angle"}
@@ -542,9 +534,7 @@ def _related_value(
         # The right-hand side of a triangular solve, square with the
         # factorization it is solved against.
         order = shape[-1]
-        return True, _tensor(
-            (*shape[:-2], order, 1) if len(shape) >= 2 else (order, 1), domain
-        )
+        return True, _tensor((*shape[:-2], order, 1) if len(shape) >= 2 else (order, 1), domain)
     if name == "matrix":
         # A 3x3 *homogeneous* affine, not the 2x3 the shorthand suggests.
         # Every one of these transforms inverts the matrix internally and
@@ -553,17 +543,13 @@ def _related_value(
         # reads as a defect and is a probe that handed over the wrong
         # convention.  Identity plus a small shift: invertible, and not
         # the degenerate map a random draw produces about one time in six.
-        return True, _probe.as_f32(
-            np.array([[1.0, 0.0, 0.1], [0.0, 1.0, -0.1], [0.0, 0.0, 1.0]])
-        )
+        return True, _probe.as_f32(np.array([[1.0, 0.0, 0.1], [0.0, 1.0, -0.1], [0.0, 0.0, 1.0]]))
     if name == "pts":
         return True, _probe.as_f32(np.array([[1.0, 2.0], [3.0, 4.0], [0.5, 1.5]]))
     if name in ("dx", "dy"):
         # A displacement field the size of the image it resamples.
         spatial = shape[-2:] if len(shape) >= 2 else shape
-        return True, _tensor(
-            tuple(spatial), "unit", variant=1 if name == "dx" else 2, name=name
-        )
+        return True, _tensor(tuple(spatial), "unit", variant=1 if name == "dx" else 2, name=name)
     if name == "field":
         # ``(H, W)``: a *scalar* field, as the docstring says.  Read as
         # ``(2, H, W)`` it reached ``grid_sample`` with twice the values
@@ -588,9 +574,7 @@ def _related_value(
         if re.search(r"conv", op_name):
             rank = _rank_from(op_name, len(shape))
             spatial = (3,) * rank
-            return True, _tensor(
-                (_COUT, shape[1] if len(shape) > 1 else 1, *spatial), domain
-            )
+            return True, _tensor((_COUT, shape[1] if len(shape) > 1 else 1, *spatial), domain)
         if re.search(r"linear|bilinear", op_name):
             return True, _tensor((_COUT, shape[-1]), domain)
         if re.search(r"embedding", op_name):
@@ -657,9 +641,7 @@ def _tensor_shapes(op_name: str, fn: Any = None) -> tuple[tuple[int, ...], ...]:
         rank = int(match.group(1))
         spatial = {1: (_L,), 2: (_H, _W), 3: (4, _H, _W)}[rank]
         return ((_N, _CIN, *spatial),)
-    if re.search(
-        r"matmul|bmm|mm\b|matrix|linalg|inv|det|solve|cholesky|qr|svd", op_name
-    ):
+    if re.search(r"matmul|bmm|mm\b|matrix|linalg|inv|det|solve|cholesky|qr|svd", op_name):
         return ((_N, _COUT, _COUT), (_COUT, _COUT))
     return ((_N, _COUT), (_N, _CIN, _H, _W), (_COUT,))
 
@@ -740,8 +722,7 @@ def _value_for(
         # ...and at the parameters' dtype.  A freshly built layer is
         # float32 and ``copy_from`` refuses the sweep's float64.
         total = sum(
-            int(np.prod(tuple(t.shape)))
-            for t in lucid.nn.Linear(_COUT, _COUT).parameters()
+            int(np.prod(tuple(t.shape))) for t in lucid.nn.Linear(_COUT, _COUT).parameters()
         )
         return True, _probe.as_f32(_probe.sample(domain, (total,))), True
     # The remaining named arguments the ladder cannot invent.  Each is
@@ -763,8 +744,7 @@ def _value_for(
         if not isinstance(reference, list | tuple):
             return True, _tensor(shape, domain, variant + 1), True
         tangents = [
-            _tensor(tuple(t.shape), domain, variant + i + 1)
-            for i, t in enumerate(reference)
+            _tensor(tuple(t.shape), domain, variant + i + 1) for i, t in enumerate(reference)
         ]
         # In the container ``inputs`` came in: a tuple of inputs takes a
         # tuple of tangents.
@@ -952,9 +932,7 @@ def _build(fn: Any, op_name: str, domain: str, shape: tuple[int, ...]) -> _Plan 
             param, op_name, domain, reference, shape, variant=tensors_built
         )
         if not found:
-            plan.unknown.append(
-                f"{name}: {_clean(param.annotation) or '<no annotation>'}"
-            )
+            plan.unknown.append(f"{name}: {_clean(param.annotation) or '<no annotation>'}")
             return None
         if param.kind is param.KEYWORD_ONLY:
             plan.kwargs[name] = value

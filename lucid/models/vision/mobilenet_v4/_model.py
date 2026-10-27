@@ -76,9 +76,7 @@ def _fused(out: int, stride: int, exp: float) -> list[_Spec]:
     return [_Spec("fused", out, stride=stride, kernel=3, exp=exp)]
 
 
-def _uib(
-    out: int, start: int, mid: int, stride: int, exp: float, repeat: int = 1
-) -> list[_Spec]:
+def _uib(out: int, start: int, mid: int, stride: int, exp: float, repeat: int = 1) -> list[_Spec]:
     # A repeated group strides only on its first block.
     return [
         _Spec("uib", out, stride=stride if i == 0 else 1, exp=exp, start=start, mid=mid)
@@ -344,9 +342,7 @@ class _ConvBlock(nn.Module):
         act: Literal["relu", "gelu"],
     ) -> None:
         super().__init__()
-        self.conv = nn.Conv2d(
-            in_ch, out_ch, kernel, stride=stride, padding=kernel // 2, bias=False
-        )
+        self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=kernel // 2, bias=False)
         self.bn1 = nn.BatchNorm2d(out_ch)
         self.act = _make_act(act)
 
@@ -421,25 +417,19 @@ class _UIB(nn.Module):
         )
         self.pw_exp = _ConvNorm(in_ch, mid_ch, 1, act=_make_act(act))
         self.dw_mid: _ConvNorm | nn.Identity = (
-            _ConvNorm(
-                mid_ch, mid_ch, mid, stride=stride, groups=mid_ch, act=_make_act(act)
-            )
+            _ConvNorm(mid_ch, mid_ch, mid, stride=stride, groups=mid_ch, act=_make_act(act))
             if mid
             else nn.Identity()
         )
         self.pw_proj = _ConvNorm(mid_ch, out_ch, 1)
         self.layer_scale: LayerScale | nn.Identity = (
-            LayerScale(out_ch, layer_scale)
-            if layer_scale is not None
-            else nn.Identity()
+            LayerScale(out_ch, layer_scale) if layer_scale is not None else nn.Identity()
         )
         self.drop_path = DropPath(drop_path)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        y = _chain(
-            x, self.dw_start, self.pw_exp, self.dw_mid, self.pw_proj, self.layer_scale
-        )
+        y = _chain(x, self.dw_start, self.pw_exp, self.dw_mid, self.pw_proj, self.layer_scale)
         if self._has_skip:
             y = self.drop_path(y) + x
         return y
@@ -488,9 +478,7 @@ class _MultiQueryAttention(nn.Module):
     ``(B, heads * HW, key_dim)`` against keys of ``(B, M, key_dim)``.
     """
 
-    def __init__(
-        self, dim: int, out_dim: int, heads: int, key_dim: int, kv_stride: int
-    ) -> None:
+    def __init__(self, dim: int, out_dim: int, heads: int, key_dim: int, kv_stride: int) -> None:
         super().__init__()
         self.heads = heads
         self.key_dim = key_dim
@@ -563,9 +551,7 @@ def _build_trunk(
 ]:
     """Return ``(conv_stem, bn1, act, blocks, feature_info)`` for ``cfg``."""
     arch = _ARCHS[cfg.variant]
-    conv_stem = nn.Conv2d(
-        cfg.in_channels, arch.stem, 3, stride=2, padding=1, bias=False
-    )
+    conv_stem = nn.Conv2d(cfg.in_channels, arch.stem, 3, stride=2, padding=1, bias=False)
     bn1 = nn.BatchNorm2d(arch.stem)
     act = _make_act(arch.act)
 
@@ -586,9 +572,7 @@ def _build_trunk(
             if spec.kind == "conv":
                 block = _ConvBlock(in_ch, spec.out, spec.kernel, spec.stride, arch.act)
             elif spec.kind == "fused":
-                block = _FusedIB(
-                    in_ch, spec.out, spec.kernel, spec.stride, spec.exp, arch.act, dpr
-                )
+                block = _FusedIB(in_ch, spec.out, spec.kernel, spec.stride, spec.exp, arch.act, dpr)
             elif spec.kind == "uib":
                 block = _UIB(
                     in_ch,
@@ -760,9 +744,7 @@ class MobileNetV4(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class MobileNetV4ForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class MobileNetV4ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""MobileNet-v4 image classifier with the post-pool head.
 
     Runs the :class:`MobileNetV4` trunk and the head of the paper's tables:

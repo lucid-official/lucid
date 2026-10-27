@@ -94,8 +94,7 @@ def _resolve_params(
         for index, p in enumerate(params):
             if not isinstance(p, Tensor):
                 raise TypeError(
-                    f"adjoint_params[{index}] must be a Tensor, "
-                    f"got {type(p).__name__}"
+                    f"adjoint_params[{index}] must be a Tensor, " f"got {type(p).__name__}"
                 )
         return params
 
@@ -167,9 +166,7 @@ class _AdjointSolve(Function):
 
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx, y0: Tensor, *params: Tensor, config: _Config
-    ) -> Tensor:
+    def forward(ctx: FunctionCtx, y0: Tensor, *params: Tensor, config: _Config) -> Tensor:
         """Integrate the trajectory with gradient tracking switched off."""
         ctx.config = config
         with lucid.no_grad():

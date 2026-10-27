@@ -224,9 +224,7 @@ class TestBlockParity:
         x = lucid.tensor(np.random.RandomState(4).randn(b, t, n, d).astype(np.float32))
 
         ours = _np(block(x))
-        swapped = _np(
-            block(x.permute(0, 2, 1, 3).contiguous()).permute(0, 2, 1, 3).contiguous()
-        )
+        swapped = _np(block(x.permute(0, 2, 1, 3).contiguous()).permute(0, 2, 1, 3).contiguous())
         assert np.abs(ours - swapped).max() > 1e-3
 
 
@@ -263,9 +261,7 @@ class TestPatchParity:
 class TestObjectiveParity:
     """The masked objective, and the quantiser both codebooks share."""
 
-    def test_the_masked_loss_is_cross_entropy_over_what_was_hidden(
-        self, ref: Any
-    ) -> None:
+    def test_the_masked_loss_is_cross_entropy_over_what_was_hidden(self, ref: Any) -> None:
         # At a rate of 1 the masked mean equals the plain mean over frames
         # 2..T, and the comparison says nothing; at 0.5 it separates them.
         lucid.manual_seed(5)
@@ -311,7 +307,4 @@ class TestObjectiveParity:
         assert np.abs(_np(out.quantized) - theirs_quantized).max() < 1e-5
         assert abs(float(out.codebook_loss.item()) - codebook_loss) < 1e-5
         assert abs(float(out.commitment_loss.item()) - commitment) < 1e-5
-        assert (
-            abs(float(quantizer.loss(out).item()) - (codebook_loss + 0.25 * commitment))
-            < 1e-5
-        )
+        assert abs(float(quantizer.loss(out).item()) - (codebook_loss + 0.25 * commitment)) < 1e-5

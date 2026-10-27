@@ -166,9 +166,7 @@ def _run_ref(R: ModuleType, name: str, dtype: str) -> tuple[list[float], list[fl
 
 @pytest.mark.parity
 @pytest.mark.parametrize(("name", "dtype", "dev"), _cases())
-def test_values_match_the_reference(
-    name: str, dtype: str, dev: str, ref: ModuleType
-) -> None:
+def test_values_match_the_reference(name: str, dtype: str, dev: str, ref: ModuleType) -> None:
     got, _ = _run(name, dtype, dev)
     want, _ = _run_ref(ref, name, dtype)
     for x, g, w in zip(_UNARY[name][2], got, want, strict=True):
@@ -192,9 +190,7 @@ def test_cpu_erfinv_keeps_the_sign_of_minus_zero(dtype: str) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize(("name", "dtype", "dev"), _cases())
-def test_gradients_match_the_reference(
-    name: str, dtype: str, dev: str, ref: ModuleType
-) -> None:
+def test_gradients_match_the_reference(name: str, dtype: str, dev: str, ref: ModuleType) -> None:
     _, got = _run(name, dtype, dev)
     _, want = _run_ref(ref, name, dtype)
     for x, g, w in zip(_UNARY[name][2], got, want, strict=True):
@@ -239,9 +235,7 @@ def test_zeta_matches_the_reference(dtype: str, dev: str, ref: ModuleType) -> No
     xs = [p[0] for p in _ZETA_GRID]
     qs = [p[1] for p in _ZETA_GRID]
     q = lucid.tensor(qs, dtype=getattr(lucid, dtype), device=dev, requires_grad=True)
-    out = lucid.special.zeta(
-        lucid.tensor(xs, dtype=getattr(lucid, dtype), device=dev), q
-    )
+    out = lucid.special.zeta(lucid.tensor(xs, dtype=getattr(lucid, dtype), device=dev), q)
     out.backward(lucid.ones_like(out))
     assert q.grad is not None
     got, got_dq = out.to("cpu").tolist(), q.grad.to("cpu").tolist()
@@ -251,9 +245,7 @@ def test_zeta_matches_the_reference(dtype: str, dev: str, ref: ModuleType) -> No
     rout.backward(ref.ones_like(rout))
     want, want_dq = rout.tolist(), rq.grad.tolist()
 
-    for (x, qv), g, w, gd, wd in zip(
-        _ZETA_GRID, got, want, got_dq, want_dq, strict=True
-    ):
+    for (x, qv), g, w, gd, wd in zip(_ZETA_GRID, got, want, got_dq, want_dq, strict=True):
         assert _same(g, w, dtype), f"zeta({x}, {qv}) {dtype} {dev}: {g} != {w}"
         # d/dq zeta(x, q) = -x zeta(x + 1, q) where the value is finite.
         if (x, qv, dtype) in _ZETA_GRADIENT_DEVIATIONS:

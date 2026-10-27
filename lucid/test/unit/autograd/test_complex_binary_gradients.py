@@ -8,9 +8,7 @@ import pytest
 import lucid
 
 
-@pytest.mark.parametrize(
-    "operation", [operator.add, operator.sub, operator.mul, operator.truediv]
-)
+@pytest.mark.parametrize("operation", [operator.add, operator.sub, operator.mul, operator.truediv])
 @pytest.mark.parametrize("create_graph", [False, True])
 @pytest.mark.parametrize(
     ("dtype", "device"),

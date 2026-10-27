@@ -111,9 +111,7 @@ def _narrate(message: str) -> None:
 _PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep
 
 
-def run_eager(
-    model: Module, args: tuple[object, ...], kwargs: dict[str, object]
-) -> object:
+def run_eager(model: Module, args: tuple[object, ...], kwargs: dict[str, object]) -> object:
     """Invoke ``model(*args, **kwargs)`` on the eager path.
 
     Thin wrapper to keep the call-site self-documenting and easy to

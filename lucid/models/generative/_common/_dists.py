@@ -140,9 +140,7 @@ class TruncatedNormal:
         """
         shape = tuple(int(s) for s in self.loc.shape)
         uniform = lucid.rand(shape, device=self.loc.device, dtype=self.loc.dtype)
-        probability = (self._cdf_alpha + uniform * self._z).clip(
-            self.epsilon, 1.0 - self.epsilon
-        )
+        probability = (self._cdf_alpha + uniform * self._z).clip(self.epsilon, 1.0 - self.epsilon)
         standard = _SQRT_2 * lucid.erfinv(2.0 * probability - 1.0)
         drawn = self.loc + self.scale * standard
         return drawn.clip(self.low + self.epsilon, self.high - self.epsilon)
@@ -175,12 +173,7 @@ class TruncatedNormal:
         1.0
         """
         standard = (value - self.loc) / self.scale
-        return (
-            -0.5 * standard * standard
-            - self.scale.log()
-            - _LOG_SQRT_2PI
-            - self._z.log()
-        )
+        return -0.5 * standard * standard - self.scale.log() - _LOG_SQRT_2PI - self._z.log()
 
     def entropy(self) -> Tensor:
         r"""Differential entropy, in closed form.
@@ -198,14 +191,10 @@ class TruncatedNormal:
         built on an estimate is noisier than the thing it regularises.
         """
         correction = (
-            self._alpha * _standard_pdf(self._alpha)
-            - self._beta * _standard_pdf(self._beta)
+            self._alpha * _standard_pdf(self._alpha) - self._beta * _standard_pdf(self._beta)
         ) / (2.0 * self._z)
         return (
-            0.5 * math.log(2.0 * math.pi * math.e)
-            + self.scale.log()
-            + self._z.log()
-            + correction
+            0.5 * math.log(2.0 * math.pi * math.e) + self.scale.log() + self._z.log() + correction
         )
 
 

@@ -197,9 +197,7 @@ class Sequential(Module):
         keys = list(self._modules.keys())
         if isinstance(idx, slice):
             return Sequential(
-                OrderedDict(
-                    (k, m) for k in keys[idx] if (m := self._modules[k]) is not None
-                )
+                OrderedDict((k, m) for k in keys[idx] if (m := self._modules[k]) is not None)
             )
         m = self._modules[keys[idx]]
         assert m is not None
@@ -1024,9 +1022,7 @@ class ParameterDict(Module):
         """Remove all modules from the ParameterDict."""
         self._parameters.clear()
 
-    def update(
-        self, parameters: Mapping[str, Tensor] | Iterable[tuple[str, Tensor]]
-    ) -> None:
+    def update(self, parameters: Mapping[str, Tensor] | Iterable[tuple[str, Tensor]]) -> None:
         """Update the ParameterDict with another mapping of modules.
 
         A plain tensor is wrapped in a :class:`Parameter`, as the

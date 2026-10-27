@@ -165,9 +165,7 @@ class ButcherTableau:
     def __post_init__(self) -> None:
         # Coerce first so that a tableau written with lists — the natural way
         # to type one out — still ends up frozen, hashable, and float-typed.
-        object.__setattr__(
-            self, "a", tuple(tuple(float(v) for v in row) for row in self.a)
-        )
+        object.__setattr__(self, "a", tuple(tuple(float(v) for v in row) for row in self.a))
         object.__setattr__(self, "b", tuple(float(v) for v in self.b))
         object.__setattr__(self, "c", tuple(float(v) for v in self.c))
         if self.b_error is not None:
@@ -197,9 +195,7 @@ class ButcherTableau:
             )
         weight_sum = sum(self.b)
         if abs(weight_sum - 1.0) > _TOL:
-            raise ValueError(
-                f"ButcherTableau weights b must sum to 1, got {weight_sum!r}"
-            )
+            raise ValueError(f"ButcherTableau weights b must sum to 1, got {weight_sum!r}")
         for i, row in enumerate(self.a):
             row_sum = sum(row)
             if abs(self.c[i] - row_sum) > _TOL:
@@ -215,8 +211,7 @@ class ButcherTableau:
         if self.b_error is not None:
             if len(self.b_error) != n:
                 raise ValueError(
-                    f"ButcherTableau b_error must hold {n} entries, "
-                    f"got {len(self.b_error)}"
+                    f"ButcherTableau b_error must hold {n} entries, " f"got {len(self.b_error)}"
                 )
             error_sum = sum(self.b_error)
             if abs(error_sum) > _TOL:
@@ -230,9 +225,7 @@ class ButcherTableau:
                     "weights the dense-output interpolant is anchored on"
                 )
         if self.mid is not None and len(self.mid) != n:
-            raise ValueError(
-                f"ButcherTableau mid must hold {n} entries, got {len(self.mid)}"
-            )
+            raise ValueError(f"ButcherTableau mid must hold {n} entries, got {len(self.mid)}")
 
     @cached_property
     def is_adaptive(self) -> bool:
@@ -342,14 +335,10 @@ class ButcherTableau:
 EULER = ButcherTableau(a=((),), b=(1.0,), c=(0.0,), order=1, name="euler")
 """ButcherTableau: Forward Euler — one stage, first order."""
 
-MIDPOINT = ButcherTableau(
-    a=((), (0.5,)), b=(0.0, 1.0), c=(0.0, 0.5), order=2, name="midpoint"
-)
+MIDPOINT = ButcherTableau(a=((), (0.5,)), b=(0.0, 1.0), c=(0.0, 0.5), order=2, name="midpoint")
 """ButcherTableau: Explicit midpoint — two stages, second order."""
 
-HEUN2 = ButcherTableau(
-    a=((), (1.0,)), b=(0.5, 0.5), c=(0.0, 1.0), order=2, name="heun2"
-)
+HEUN2 = ButcherTableau(a=((), (1.0,)), b=(0.5, 0.5), c=(0.0, 1.0), order=2, name="heun2")
 """ButcherTableau: Heun's method (explicit trapezoid) — two stages, second order."""
 
 HEUN3 = ButcherTableau(
@@ -860,31 +849,21 @@ def _collocation_tableau(nodes: list[Decimal], order: int, name: str) -> Butcher
     c = tuple(float(node) for node in nodes)
     reached = _collocation.quadrature_order(b, c)
     if reached != order:
-        raise ValueError(
-            f"derived tableau {name!r} reached order {reached}, expected {order}"
-        )
+        raise ValueError(f"derived tableau {name!r} reached order {reached}, expected {order}")
     return ButcherTableau(a=a, b=b, c=c, order=order, name=name)
 
 
-IMPLICIT_EULER = _collocation_tableau(
-    _collocation.radau_nodes(1), order=1, name="implicit_euler"
-)
+IMPLICIT_EULER = _collocation_tableau(_collocation.radau_nodes(1), order=1, name="implicit_euler")
 
 IMPLICIT_MIDPOINT = _collocation_tableau(
     _collocation.gauss_nodes(1), order=2, name="implicit_midpoint"
 )
 
-TRAPEZOID = _collocation_tableau(
-    _collocation.lobatto_nodes(2), order=2, name="trapezoid"
-)
+TRAPEZOID = _collocation_tableau(_collocation.lobatto_nodes(2), order=2, name="trapezoid")
 
-RADAU_IIA3 = _collocation_tableau(
-    _collocation.radau_nodes(2), order=3, name="radauIIA3"
-)
+RADAU_IIA3 = _collocation_tableau(_collocation.radau_nodes(2), order=3, name="radauIIA3")
 
-RADAU_IIA5 = _collocation_tableau(
-    _collocation.radau_nodes(3), order=5, name="radauIIA5"
-)
+RADAU_IIA5 = _collocation_tableau(_collocation.radau_nodes(3), order=5, name="radauIIA5")
 
 GL4 = _collocation_tableau(_collocation.gauss_nodes(2), order=4, name="gl4")
 
@@ -928,8 +907,7 @@ for _tableau in (SDIRK2, TRBDF2):
     _reached = _collocation.quadrature_order(_tableau.b, _tableau.c)
     if _reached != _tableau.order:
         raise ValueError(
-            f"tableau {_tableau.name!r} reached order {_reached}, "
-            f"expected {_tableau.order}"
+            f"tableau {_tableau.name!r} reached order {_reached}, " f"expected {_tableau.order}"
         )
 
 

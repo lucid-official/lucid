@@ -79,9 +79,7 @@ def test_audit(
     finding = audit_baseline.apply(axis.run(symbol, audit_context))
 
     if finding.status is Status.FAIL:
-        pytest.fail(
-            f"{axis.name} · {symbol.qualname}\n  {finding.detail}", pytrace=False
-        )
+        pytest.fail(f"{axis.name} · {symbol.qualname}\n  {finding.detail}", pytrace=False)
     if finding.status is Status.ERROR:
         pytest.fail(f"the probe itself broke: {finding.detail}", pytrace=False)
     if finding.status in (Status.SKIP, Status.UNSUPPORTED):

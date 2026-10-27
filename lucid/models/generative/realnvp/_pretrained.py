@@ -338,9 +338,7 @@ def realnvp_celeba(pretrained: bool = False, **overrides: object) -> RealNVPMode
     model_class=RealNVPForImageGeneration,
     default_config=_CFG_CIFAR,
 )
-def realnvp_cifar_gen(
-    pretrained: bool = False, **overrides: object
-) -> RealNVPForImageGeneration:
+def realnvp_cifar_gen(pretrained: bool = False, **overrides: object) -> RealNVPForImageGeneration:
     r"""RealNVP generator for CIFAR-10 (bits/dim loss + ``.generate()``).
 
     Same bijection as :func:`realnvp_cifar`, wrapped with the paper's
@@ -482,9 +480,7 @@ def realnvp_imagenet64_gen(
     model_class=RealNVPForImageGeneration,
     default_config=_CFG_LSUN,
 )
-def realnvp_lsun_gen(
-    pretrained: bool = False, **overrides: object
-) -> RealNVPForImageGeneration:
+def realnvp_lsun_gen(pretrained: bool = False, **overrides: object) -> RealNVPForImageGeneration:
     r"""RealNVP generator for LSUN ``64 x 64``.
 
     Same bijection as :func:`realnvp_lsun`, wrapped with the bits/dim
@@ -529,9 +525,7 @@ def realnvp_lsun_gen(
     model_class=RealNVPForImageGeneration,
     default_config=_CFG_CELEBA,
 )
-def realnvp_celeba_gen(
-    pretrained: bool = False, **overrides: object
-) -> RealNVPForImageGeneration:
+def realnvp_celeba_gen(pretrained: bool = False, **overrides: object) -> RealNVPForImageGeneration:
     r"""RealNVP generator for CelebA ``64 x 64``.
 
     Same bijection as :func:`realnvp_celeba`, wrapped with the bits/dim

@@ -102,9 +102,7 @@ def test_a_longer_tau_is_accepted() -> None:
 def test_lstsq_refuses_a_one_dimensional_A() -> None:
     """``shape[-2]`` on a rank-1 shape underflowed into a 1.8e19-byte ask."""
     with pytest.raises(ValueError, match="at least 2 dimensions"):
-        LA.lstsq(
-            lucid.randn(4, dtype=lucid.float64), lucid.randn(4, dtype=lucid.float64)
-        )
+        LA.lstsq(lucid.randn(4, dtype=lucid.float64), lucid.randn(4, dtype=lucid.float64))
 
 
 def test_lstsq_solves_a_batched_A() -> None:
@@ -117,9 +115,7 @@ def test_lstsq_solves_a_batched_A() -> None:
         want, *_ = np.linalg.lstsq(a_np[i], b_np[i], rcond=None)
         np.testing.assert_allclose(sol[i].numpy(), want, rtol=1e-10, atol=1e-10)
     sol_vec, *_ = LA.lstsq(lucid.tensor(a_np), lucid.tensor(b_np[:, :, 0]))
-    np.testing.assert_allclose(
-        sol_vec.numpy(), sol[:, :, 0].numpy(), rtol=1e-12, atol=1e-12
-    )
+    np.testing.assert_allclose(sol_vec.numpy(), sol[:, :, 0].numpy(), rtol=1e-12, atol=1e-12)
 
 
 def test_lstsq_refuses_a_B_with_too_few_rows() -> None:
@@ -203,9 +199,7 @@ def test_tensorsolve_solves_tensordot_with_and_without_dims() -> None:
 
     a_perm = lucid.movedim(a.detach(), (-2, -1), (0, 2))
     x_dims = LA.tensorsolve(a_perm, b.detach(), dims=(0, 2))
-    np.testing.assert_allclose(
-        x_dims.numpy(), x.detach().numpy(), rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(x_dims.numpy(), x.detach().numpy(), rtol=1e-10, atol=1e-10)
     with pytest.raises(RuntimeError, match="prod"):
         LA.tensorsolve(lucid.ones(2, 3, 2, 2, dtype=lucid.float64), b.detach())
     with pytest.raises(RuntimeError, match="other.shape"):
@@ -241,9 +235,7 @@ def test_vander_supports_batched_inputs() -> None:
 
 @pytest.mark.parametrize("left", [True, False])
 @pytest.mark.parametrize("adjoint", [False, True])
-def test_lu_solve_supports_left_and_adjoint_with_gradients(
-    left: bool, adjoint: bool
-) -> None:
+def test_lu_solve_supports_left_and_adjoint_with_gradients(left: bool, adjoint: bool) -> None:
     rng = np.random.default_rng(11)
     a_np = rng.standard_normal((2, 3, 3)) * 0.25 + np.eye(3) * 2.0
     b_np = rng.standard_normal((2, 3, 2)) if left else rng.standard_normal((2, 2, 3))
@@ -253,9 +245,7 @@ def test_lu_solve_supports_left_and_adjoint_with_gradients(
     x = LA.lu_solve(lu_res.LU, lu_res.pivots, b, left=left, adjoint=adjoint)
     mat = a.mT if adjoint else a
     want = LA.solve(mat, b, left=left)
-    np.testing.assert_allclose(
-        x.detach().numpy(), want.detach().numpy(), rtol=1e-10, atol=1e-10
-    )
+    np.testing.assert_allclose(x.detach().numpy(), want.detach().numpy(), rtol=1e-10, atol=1e-10)
     (x * 1.5).sum().backward()
     assert a.grad is not None and np.isfinite(a.grad.numpy()).all()
     assert b.grad is not None and np.isfinite(b.grad.numpy()).all()

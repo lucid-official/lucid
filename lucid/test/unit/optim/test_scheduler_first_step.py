@@ -40,9 +40,7 @@ def _rate(opt: optim.SGD) -> float:
     ],
     ids=["LambdaLR", "LinearLR", "ConstantLR", "CyclicLR", "OneCycleLR"],
 )
-def test_the_first_step_runs_at_the_schedules_first_rate(
-    make: object, first: float
-) -> None:
+def test_the_first_step_runs_at_the_schedules_first_rate(make: object, first: float) -> None:
     opt = _opt()
     sched = make(opt)  # type: ignore[operator]
     assert _rate(opt) == pytest.approx(first)

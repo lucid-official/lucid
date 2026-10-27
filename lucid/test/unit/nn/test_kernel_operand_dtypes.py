@@ -116,9 +116,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
     "conv_transpose2d": (
         [_normal(2, 3, 5, 5), _normal(3, 4, 3, 3), _normal(4)],
         [],
-        lambda x, w, b: _C_engine.nn.conv_transpose2d(
-            x, w, b, 1, 1, 1, 1, 0, 0, 1, 1, 1
-        ),
+        lambda x, w, b: _C_engine.nn.conv_transpose2d(x, w, b, 1, 1, 1, 1, 0, 0, 1, 1, 1),
     ),
     "layer_norm": (
         [_normal(3, 4), _normal(4), _normal(4)],
@@ -158,9 +156,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
     "sdpa_mask": (
         [_normal(2, 1, 3, 4), _normal(2, 1, 3, 4), _normal(2, 1, 3, 4), _MASK],
         [],
-        lambda q, k, v, m: _C_engine.nn.scaled_dot_product_attention(
-            q, k, v, m, 0.5, False
-        ),
+        lambda q, k, v, m: _C_engine.nn.scaled_dot_product_attention(q, k, v, m, 0.5, False),
     ),
     "sdpa_weights_mask": (
         [_normal(2, 1, 3, 4), _normal(2, 1, 3, 4), _normal(2, 1, 3, 4), _MASK],
@@ -174,9 +170,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
 
 def _run(name: str, dtypes: Sequence[str], device: str) -> lucid.Tensor:
     floats, extras, call = _CASES[name]
-    args = [
-        f.to(_DTYPES[d]).to(device)._impl for f, d in zip(floats, dtypes, strict=True)
-    ]
+    args = [f.to(_DTYPES[d]).to(device)._impl for f, d in zip(floats, dtypes, strict=True)]
     args += [e.to(device)._impl for e in extras]
     return _wrap(call(*args))
 

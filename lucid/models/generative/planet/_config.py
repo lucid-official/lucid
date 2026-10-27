@@ -164,22 +164,16 @@ class PlaNetConfig(WorldModelConfig):
         super().__post_init__()
 
         if self.reward_hidden <= 0:
-            raise ValueError(
-                f"reward_hidden must be positive, got {self.reward_hidden}"
-            )
+            raise ValueError(f"reward_hidden must be positive, got {self.reward_hidden}")
         if self.reward_layers <= 0:
-            raise ValueError(
-                f"reward_layers must be positive, got {self.reward_layers}"
-            )
+            raise ValueError(f"reward_layers must be positive, got {self.reward_layers}")
         if self.overshoot_distance is not None and self.overshoot_distance < 1:
             raise ValueError(
                 "overshoot_distance must be at least 1 (1 disables overshooting) "
                 f"or None for the full sequence, got {self.overshoot_distance}"
             )
         if self.overshoot_weight < 0.0:
-            raise ValueError(
-                f"overshoot_weight must be non-negative, got {self.overshoot_weight}"
-            )
+            raise ValueError(f"overshoot_weight must be non-negative, got {self.overshoot_weight}")
         if self.reward_loss_scale < 0.0:
             raise ValueError(
                 f"reward_loss_scale must be non-negative, got {self.reward_loss_scale}"

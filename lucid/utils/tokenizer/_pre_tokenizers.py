@@ -441,18 +441,14 @@ def _apply_behavior(runs: list[_Run], behavior: str) -> list[tuple[int, int]]:
                 spans.append((s, e))
             previous = m
     else:
-        raise ValueError(
-            f"unknown split behavior {behavior!r}; expected one of {_BEHAVIORS}"
-        )
+        raise ValueError(f"unknown split behavior {behavior!r}; expected one of {_BEHAVIORS}")
     return [(s, e) for s, e in spans if e > s]
 
 
 def _check_behavior(behavior: str) -> str:
     """Validate a snake-case behaviour name."""
     if behavior not in _BEHAVIORS:
-        raise ValueError(
-            f"unknown split behavior {behavior!r}; expected one of {_BEHAVIORS}"
-        )
+        raise ValueError(f"unknown split behavior {behavior!r}; expected one of {_BEHAVIORS}")
     return behavior
 
 
@@ -511,9 +507,7 @@ class Metaspace(PreTokenizer):
             Split on markers.
         """
         if len(replacement) != 1:
-            raise ValueError(
-                f"Metaspace: replacement must be one character, got {replacement!r}"
-            )
+            raise ValueError(f"Metaspace: replacement must be one character, got {replacement!r}")
         if prepend_scheme not in ("always", "first", "never"):
             raise ValueError(f"Metaspace: unknown prepend_scheme {prepend_scheme!r}")
         self._replacement = replacement
@@ -610,9 +604,7 @@ class Split(PreTokenizer):
             Swap matches and non-matches.
         """
         self._source = pattern
-        self._pattern = (
-            re.compile(re.escape(pattern)) if isinstance(pattern, str) else pattern
-        )
+        self._pattern = re.compile(re.escape(pattern)) if isinstance(pattern, str) else pattern
         self._behavior = _check_behavior(behavior)
         self._invert = invert
 
@@ -775,9 +767,7 @@ class Whitespace(PreTokenizer):
                 while i < n and _is_word_char(text[i]):
                     i += 1
             else:
-                while (
-                    i < n and not _is_word_char(text[i]) and text[i] not in _WHITE_SPACE
-                ):
+                while i < n and not _is_word_char(text[i]) and text[i] not in _WHITE_SPACE:
                     i += 1
             out.append((text[start:i], (start, i)))
         return out
@@ -875,9 +865,7 @@ def prepend_scheme_from_config(config: dict[str, object], where: str) -> str:
     if add_prefix_space is False:
         return "never"
     if add_prefix_space is True and scheme == "never":
-        raise ValueError(
-            f"{where}: add_prefix_space=true contradicts prepend_scheme='never'"
-        )
+        raise ValueError(f"{where}: add_prefix_space=true contradicts prepend_scheme='never'")
     return scheme
 
 
@@ -949,9 +937,7 @@ def pre_tokenizer_from_config(config: object) -> PreTokenizer:
             invert=get_bool(cfg, "invert", where, False),
         )
     if kind == "Digits":
-        return Digits(
-            individual_digits=get_bool(cfg, "individual_digits", where, False)
-        )
+        return Digits(individual_digits=get_bool(cfg, "individual_digits", where, False))
     if kind == "Punctuation":
         raw_behavior = get_str(cfg, "behavior", where, "Isolated")
         if raw_behavior not in _BEHAVIOR_FROM_CONFIG:
@@ -963,9 +949,7 @@ def pre_tokenizer_from_config(config: object) -> PreTokenizer:
                 f"{where}: ByteLevel with use_regex=false is not supported; "
                 f"Lucid's ByteLevel always applies the GPT-2 split"
             )
-        return ByteLevel(
-            add_prefix_space=get_bool(cfg, "add_prefix_space", where, True)
-        )
+        return ByteLevel(add_prefix_space=get_bool(cfg, "add_prefix_space", where, True))
     raise ValueError(
         f"{where}: unsupported type {kind!r}; supported are Sequence, "
         f"WhitespaceSplit, Whitespace, BertPreTokenizer, Metaspace, Split, "

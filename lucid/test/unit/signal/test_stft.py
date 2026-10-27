@@ -65,9 +65,7 @@ def _closed_form(name: str, n: int, periodic: bool) -> np.ndarray:
 @pytest.mark.parametrize("name", _WINDOWS)
 @pytest.mark.parametrize("n", [0, 1, 2, 5, 16])
 @pytest.mark.parametrize("periodic", [True, False])
-def test_a_window_is_its_closed_form(
-    name: str, n: int, periodic: bool, device: str
-) -> None:
+def test_a_window_is_its_closed_form(name: str, n: int, periodic: bool, device: str) -> None:
     w = _factory(name)(n, periodic, device=device)
     assert w.shape == (n,) and w.dtype == lucid.float32 and w.device.type == device
     np.testing.assert_allclose(w.numpy(), _closed_form(name, n, periodic), atol=2e-6)
@@ -102,9 +100,7 @@ def test_a_window_takes_dtype_and_requires_grad(name: str) -> None:
 
 @pytest.mark.parametrize("name", _WINDOWS)
 @pytest.mark.parametrize("dtype", ["int32", "bool_", "complex64"])
-def test_a_window_refuses_a_dtype_it_cannot_be_computed_in(
-    name: str, dtype: str
-) -> None:
+def test_a_window_refuses_a_dtype_it_cannot_be_computed_in(name: str, dtype: str) -> None:
     with pytest.raises(_C_engine.DtypeMismatch):
         _factory(name)(4, dtype=getattr(lucid, dtype))
     with pytest.raises(TypeError):
@@ -156,10 +152,7 @@ _DEFINITION_CASES = [
 @pytest.mark.parametrize(
     "n_fft, hop, win, center, onesided, normalized",
     _DEFINITION_CASES,
-    ids=[
-        f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-o{c[4]:d}-z{c[5]:d}"
-        for c in _DEFINITION_CASES
-    ],
+    ids=[f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-o{c[4]:d}-z{c[5]:d}" for c in _DEFINITION_CASES],
 )
 def test_stft_is_the_dft_of_each_windowed_frame(
     n_fft: int,
@@ -191,14 +184,10 @@ def test_stft_is_the_dft_of_each_windowed_frame(
 def test_stft_batches_the_leading_axis(device: str) -> None:
     x = _signal((3, 50))
     w = lucid.hann_window(16, device=device)
-    batched = lucid.stft(
-        lucid.tensor(x, device=device), 16, window=w, return_complex=True
-    )
+    batched = lucid.stft(lucid.tensor(x, device=device), 16, window=w, return_complex=True)
     assert batched.shape == (3, 9, 13)
     for b in range(3):
-        alone = lucid.stft(
-            lucid.tensor(x[b], device=device), 16, window=w, return_complex=True
-        )
+        alone = lucid.stft(lucid.tensor(x[b], device=device), 16, window=w, return_complex=True)
         assert_close(batched[b], alone, atol=1e-5)
 
 
@@ -225,9 +214,7 @@ _ROUND_TRIPS = [
 @pytest.mark.parametrize(
     "n_fft, hop, win, center, normalized, batch",
     _ROUND_TRIPS,
-    ids=[
-        f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-z{c[4]:d}-b{c[5]:d}" for c in _ROUND_TRIPS
-    ],
+    ids=[f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-z{c[4]:d}-b{c[5]:d}" for c in _ROUND_TRIPS],
 )
 def test_istft_of_stft_is_the_signal(
     n_fft: int,
@@ -243,9 +230,7 @@ def test_istft_of_stft_is_the_signal(
     spec = lucid.stft(
         x, n_fft, hop, win, w, center=center, normalized=normalized, return_complex=True
     )
-    y = lucid.istft(
-        spec, n_fft, hop, win, w, center=center, normalized=normalized, length=100
-    )
+    y = lucid.istft(spec, n_fft, hop, win, w, center=center, normalized=normalized, length=100)
     assert y.shape == x.shape and y.device.type == device
     assert_close(y, x, atol=2e-5)
 
@@ -390,12 +375,8 @@ _REFUSALS: list[tuple[str, Callable[[], object], type[Exception]]] = [
 ]
 
 
-@pytest.mark.parametrize(
-    "call, kind", [r[1:] for r in _REFUSALS], ids=[r[0] for r in _REFUSALS]
-)
-def test_a_bad_argument_is_refused(
-    call: Callable[[], object], kind: type[Exception]
-) -> None:
+@pytest.mark.parametrize("call, kind", [r[1:] for r in _REFUSALS], ids=[r[0] for r in _REFUSALS])
+def test_a_bad_argument_is_refused(call: Callable[[], object], kind: type[Exception]) -> None:
     with pytest.raises(kind) as info:
         call()
     if issubclass(kind, _C_engine.LucidError):
@@ -404,9 +385,7 @@ def test_a_bad_argument_is_refused(
 
 def test_a_float64_signal_gives_a_complex128_spectrum() -> None:
     x = lucid.tensor(_signal((40,)).astype(np.float64))
-    spec = lucid.stft(
-        x, 8, window=lucid.hann_window(8, dtype=lucid.float64), return_complex=True
-    )
+    spec = lucid.stft(x, 8, window=lucid.hann_window(8, dtype=lucid.float64), return_complex=True)
     assert spec.dtype == lucid.complex128
 
 
@@ -459,9 +438,7 @@ def _stft_id(c: tuple[Any, ...]) -> str:
 @pytest.mark.parity
 @pytest.mark.filterwarnings("ignore:A window was not provided")
 @pytest.mark.parametrize("case", _STFT_GRID, ids=[_stft_id(c) for c in _STFT_GRID])
-def test_stft_matches_the_reference(
-    case: tuple[Any, ...], device: str, ref: Any
-) -> None:
+def test_stft_matches_the_reference(case: tuple[Any, ...], device: str, ref: Any) -> None:
     n_fft, hop, win, (center, mode), normalized, onesided, windowed, batched = case
     x = _signal((3, 50) if batched else (50,))
     kwargs: dict[str, Any] = dict(
@@ -502,14 +479,9 @@ _ISTFT_GRID = list(
 @pytest.mark.parametrize(
     "case",
     _ISTFT_GRID,
-    ids=[
-        f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-z{c[4]:d}-l{c[5]}-b{c[6]:d}"
-        for c in _ISTFT_GRID
-    ],
+    ids=[f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-z{c[4]:d}-l{c[5]}-b{c[6]:d}" for c in _ISTFT_GRID],
 )
-def test_istft_matches_the_reference(
-    case: tuple[Any, ...], device: str, ref: Any
-) -> None:
+def test_istft_matches_the_reference(case: tuple[Any, ...], device: str, ref: Any) -> None:
     n_fft, hop, win, center, normalized, length, batched = case
     x = _signal((2, 64) if batched else (64,))
     # An uncentred Hann window is zero at t = 0, which fails NOLA.
@@ -517,9 +489,7 @@ def test_istft_matches_the_reference(
     kwargs: dict[str, Any] = dict(
         hop_length=hop, win_length=win, center=center, normalized=normalized
     )
-    spec = ref.stft(
-        ref.tensor(x), n_fft, window=ref.tensor(w), return_complex=True, **kwargs
-    )
+    spec = ref.stft(ref.tensor(x), n_fft, window=ref.tensor(w), return_complex=True, **kwargs)
 
     def ours_() -> lucid.Tensor:
         return lucid.istft(
@@ -535,9 +505,7 @@ def test_istft_matches_the_reference(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         try:
-            expected = ref.istft(
-                spec, n_fft, window=ref.tensor(w), length=length, **kwargs
-            )
+            expected = ref.istft(spec, n_fft, window=ref.tensor(w), length=length, **kwargs)
         except RuntimeError:
             # A window shorter than n_fft leaves the uncentred ends with no
             # overlap at all (NOLA), which both refuse.
@@ -574,17 +542,13 @@ def test_the_window_parameters_match_the_reference(ref: Any) -> None:
         ref.hamming_window(9, False, 0.6, 0.3),
         atol=1e-6,
     )
-    assert_close(
-        lucid.kaiser_window(9, True, 5.0), ref.kaiser_window(9, True, 5.0), atol=1e-6
-    )
+    assert_close(lucid.kaiser_window(9, True, 5.0), ref.kaiser_window(9, True, 5.0), atol=1e-6)
     expected64 = ref.hann_window(9, dtype=ref.float64)
     assert_close(lucid.hann_window(9, dtype=lucid.float64), expected64, atol=1e-12)
 
 
 @pytest.mark.parity
-def test_a_complex_signal_or_window_matches_the_reference(
-    device: str, ref: Any
-) -> None:
+def test_a_complex_signal_or_window_matches_the_reference(device: str, ref: Any) -> None:
     re, im = _signal((40,), 1), _signal((40,), 2)
     xc = re + 1j * im
     w = np.hanning(8).astype(np.float32)
@@ -595,18 +559,14 @@ def test_a_complex_signal_or_window_matches_the_reference(
 
     cw = ref.tensor(w) * (1 + 1j)
     expected = ref.stft(ref.tensor(re), 8, window=cw)
-    ours_w = lucid.complex(
-        lucid.tensor(w, device=device), lucid.tensor(w, device=device)
-    )
+    ours_w = lucid.complex(lucid.tensor(w, device=device), lucid.tensor(w, device=device))
     got = lucid.stft(lucid.tensor(re, device=device), 8, window=ours_w)
     assert_close(got, expected.numpy(), atol=1e-4)
 
     spec = ref.stft(ref.tensor(xc.astype(np.complex64)), 8, window=ref.tensor(w))
     ours = lucid.tensor(spec.numpy(), device=device)
     for return_complex in (True, False):
-        expected = ref.istft(
-            spec, 8, window=ref.tensor(w), return_complex=return_complex
-        )
+        expected = ref.istft(spec, 8, window=ref.tensor(w), return_complex=return_complex)
         got = lucid.istft(
             ours,
             8,

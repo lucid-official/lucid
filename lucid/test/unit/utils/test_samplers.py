@@ -111,9 +111,7 @@ def test_without_replacement_really_is_without_replacement():
     """
     for seed in range(8):
         drawn = list(
-            WeightedRandomSampler(
-                [1.0, 2.0, 3.0, 4.0], 4, replacement=False, generator=seed
-            )
+            WeightedRandomSampler([1.0, 2.0, 3.0, 4.0], 4, replacement=False, generator=seed)
         )
         assert sorted(drawn) == [0, 1, 2, 3], drawn
 
@@ -121,9 +119,7 @@ def test_without_replacement_really_is_without_replacement():
 def test_a_partial_draw_without_replacement_is_still_unique():
     for seed in range(8):
         drawn = list(
-            WeightedRandomSampler(
-                [1.0, 1.0, 1.0, 1.0, 1.0], 3, replacement=False, generator=seed
-            )
+            WeightedRandomSampler([1.0, 1.0, 1.0, 1.0, 1.0], 3, replacement=False, generator=seed)
         )
         assert len(drawn) == 3
         assert len(set(drawn)) == 3
@@ -133,9 +129,7 @@ def test_without_replacement_still_lets_the_weights_decide_the_order():
     """Uniqueness must not be bought by ignoring the weights — a heavily
     weighted index should almost always come out first."""
     first = collections.Counter(
-        next(
-            iter(WeightedRandomSampler([1.0, 100.0], 2, replacement=False, generator=s))
-        )
+        next(iter(WeightedRandomSampler([1.0, 100.0], 2, replacement=False, generator=s)))
         for s in range(400)
     )
     assert first[1] > 350
@@ -147,8 +141,7 @@ def test_the_generator_makes_the_draw_reproducible():
     there and an epoch could not be replayed."""
     weights = [1.0, 2.0, 3.0, 4.0]
     same = [
-        list(WeightedRandomSampler(weights, 4, replacement=False, generator=7))
-        for _ in range(2)
+        list(WeightedRandomSampler(weights, 4, replacement=False, generator=7)) for _ in range(2)
     ]
     other = list(WeightedRandomSampler(weights, 4, replacement=False, generator=9))
     assert same[0] == same[1]
@@ -211,9 +204,7 @@ def test_batch_sampler_refuses_a_non_positive_batch_size():
 
 
 def test_a_batch_larger_than_the_dataset_is_one_short_batch():
-    assert [
-        len(b) for b in BatchSampler(SequentialSampler(_dataset(3)), 10, False)
-    ] == [3]
+    assert [len(b) for b in BatchSampler(SequentialSampler(_dataset(3)), 10, False)] == [3]
     assert list(BatchSampler(SequentialSampler(_dataset(3)), 10, True)) == []
 
 
@@ -245,22 +236,16 @@ def test_the_distributed_shards_partition_the_dataset():
     """Every index goes to exactly one rank.  An overlap silently trains
     on duplicates and a gap silently drops data, and both leave every
     rank with the same batch count."""
-    shards = [
-        sorted(DistributedSampler(_dataset(10), num_replicas=2, rank=r)) for r in (0, 1)
-    ]
+    shards = [sorted(DistributedSampler(_dataset(10), num_replicas=2, rank=r)) for r in (0, 1)]
     assert not (set(shards[0]) & set(shards[1]))
     assert sorted(shards[0] + shards[1]) == list(range(10))
 
 
 def test_every_distributed_rank_gets_the_same_count():
     """Ranks step in lockstep, so an uneven split deadlocks or truncates."""
-    lengths = {
-        len(DistributedSampler(_dataset(10), num_replicas=3, rank=r)) for r in range(3)
-    }
+    lengths = {len(DistributedSampler(_dataset(10), num_replicas=3, rank=r)) for r in range(3)}
     assert len(lengths) == 1
 
 
 def test_a_single_replica_is_the_whole_dataset():
-    assert sorted(DistributedSampler(_dataset(6), num_replicas=1, rank=0)) == list(
-        range(6)
-    )
+    assert sorted(DistributedSampler(_dataset(6), num_replicas=1, rank=0)) == list(range(6))

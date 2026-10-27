@@ -75,8 +75,7 @@ def test_listed_refusal_still_raises(name: str, dtype: str, device: str) -> None
             "entry from EAGER_REJECTS so the matrices run it"
         )
     assert type(err) is want, (
-        f"raises {type(err).__name__}: {str(err)[:160]} — EAGER_REJECTS says "
-        f"{want.__name__}"
+        f"raises {type(err).__name__}: {str(err)[:160]} — EAGER_REJECTS says " f"{want.__name__}"
     )
 
 
@@ -87,7 +86,6 @@ def test_no_unlisted_refusal() -> None:
         for c in M.CASES
         for d in c.dtypes
         for dev in DEVICES
-        if M.refusal(c.name, d, dev) is None
-        and (err := _eager_error(c.name, d, dev)) is not None
+        if M.refusal(c.name, d, dev) is None and (err := _eager_error(c.name, d, dev)) is not None
     ]
     assert not unlisted, "eager refuses, not in EAGER_REJECTS:\n" + "\n".join(unlisted)

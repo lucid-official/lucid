@@ -52,9 +52,7 @@ def _feed(name: str, rows: list[list[int]]) -> tuple[Tensor, Tensor]:
     return lucid.randint(0, 100, (2, L)), mask
 
 
-@pytest.mark.parametrize(
-    "name", ["gpt_cls", "gpt2_small_cls", "roformer_multiple_choice"]
-)
+@pytest.mark.parametrize("name", ["gpt_cls", "gpt2_small_cls", "roformer_multiple_choice"])
 def test_an_exported_head_follows_a_fresh_mask(name: str, tmp_path: object) -> None:
     lucid.manual_seed(0)
     model = M.create_model(name, **TINY).eval()

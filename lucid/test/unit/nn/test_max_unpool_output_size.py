@@ -83,9 +83,7 @@ def test_a_valid_unpool_still_works() -> None:
 def test_values_land_where_the_indices_say() -> None:
     x = lucid.tensor(np.array([[[1.0, 2.0]]], dtype=np.float32))
     indices = lucid.tensor(np.array([[[0, 3]]], dtype=np.int32))
-    out = np.asarray(
-        F.max_unpool1d(x, indices, kernel_size=2, output_size=(4,)).numpy()
-    )
+    out = np.asarray(F.max_unpool1d(x, indices, kernel_size=2, output_size=(4,)).numpy())
     assert np.allclose(out, [[[1.0, 0.0, 0.0, 2.0]]])
 
 

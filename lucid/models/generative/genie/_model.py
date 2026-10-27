@@ -91,14 +91,10 @@ def _unpatchify(
     return y.reshape(b, t, channels, h, w)
 
 
-def _check_video(
-    config: GenieConfig, video: Tensor, name: str, min_frames: int
-) -> None:
+def _check_video(config: GenieConfig, video: Tensor, name: str, min_frames: int) -> None:
     """Reject a video the configured networks cannot read."""
     if video.ndim != 5:
-        raise ValueError(
-            f"{name} must be (B, T, C, H, W), got shape {tuple(video.shape)}"
-        )
+        raise ValueError(f"{name} must be (B, T, C, H, W), got shape {tuple(video.shape)}")
     t, c = int(video.shape[1]), int(video.shape[2])
     frame = (int(video.shape[3]), int(video.shape[4]))
     if c != config.in_channels or frame != config.frame_shape:
@@ -134,9 +130,7 @@ class _Attention(nn.Module):
         self.key = nn.Linear(dim, inner)
         self.value = nn.Linear(dim, inner)
         self.out = nn.Linear(inner, dim)
-        self.query_norm: nn.LayerNorm | None = (
-            nn.LayerNorm(head_dim) if qk_norm else None
-        )
+        self.query_norm: nn.LayerNorm | None = nn.LayerNorm(head_dim) if qk_norm else None
         self.key_norm: nn.LayerNorm | None = nn.LayerNorm(head_dim) if qk_norm else None
 
     @override
@@ -144,9 +138,7 @@ class _Attention(nn.Module):
         batch, length = int(x.shape[0]), int(x.shape[1])
 
         def heads(t: Tensor) -> Tensor:
-            return t.reshape(batch, length, self.heads, self.head_dim).permute(
-                0, 2, 1, 3
-            )
+            return t.reshape(batch, length, self.heads, self.head_dim).permute(0, 2, 1, 3)
 
         query = heads(self.query(x))
         key = heads(self.key(x))
@@ -183,9 +175,7 @@ class _STBlock(nn.Module):
         self.temporal_norm = nn.LayerNorm(dim)
         self.temporal = _Attention(dim, heads, head_dim, qk_norm)
         self.ffw_norm = nn.LayerNorm(dim)
-        self.ffw = nn.Sequential(
-            nn.Linear(dim, hidden), activation(), nn.Linear(hidden, dim)
-        )
+        self.ffw = nn.Sequential(nn.Linear(dim, hidden), activation(), nn.Linear(hidden, dim))
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -225,10 +215,7 @@ class _STTransformer(nn.Module):
         init.trunc_normal_(self.spatial_position, std=0.02)
         init.trunc_normal_(self.temporal_position, std=0.02)
         self.blocks = nn.ModuleList(
-            [
-                _STBlock(dim, heads, head_dim, hidden, activation, qk_norm)
-                for _ in range(layers)
-            ]
+            [_STBlock(dim, heads, head_dim, hidden, activation, qk_norm) for _ in range(layers)]
         )
         self.norm = nn.LayerNorm(dim)
 
@@ -294,16 +281,12 @@ class _Codebook(nn.Module):
         super().__init__()
         self.num_codes = num_codes
         self.reset_threshold = reset_threshold
-        self.quantizer = nn.VectorQuantizer(
-            num_codes, dim, commitment_cost=commitment_cost
-        )
+        self.quantizer = nn.VectorQuantizer(num_codes, dim, commitment_cost=commitment_cost)
         self.register_buffer("usage", lucid.ones(num_codes) / float(num_codes))
         # Where a revived code would land: rows drawn from the last batch
         # this saw.  Kept so that reviving needs no data of its own, and
         # not persistent — a checkpoint has no use for one old batch.
-        self.register_buffer(
-            "candidates", lucid.zeros(num_codes, dim), persistent=False
-        )
+        self.register_buffer("candidates", lucid.zeros(num_codes, dim), persistent=False)
 
     @property
     def weight(self) -> nn.Parameter:
@@ -390,9 +373,7 @@ class _Codebook(nn.Module):
         flat_indices = indices.reshape(-1)
         counts = lucid.bincount(flat_indices, minlength=self.num_codes)
         share = counts.to(flat.dtype) / float(int(flat_indices.shape[0]))
-        picks = lucid.randint(
-            0, int(flat.shape[0]), (self.num_codes,), device=flat.device
-        )
+        picks = lucid.randint(0, int(flat.shape[0]), (self.num_codes,), device=flat.device)
         with lucid.no_grad():
             usage = self.usage
             usage[:] = _USAGE_DECAY * usage + (1.0 - _USAGE_DECAY) * share
@@ -479,9 +460,7 @@ class _LatentActionModel(nn.Module):
         self.decoder_in = nn.Linear(pixels, config.action_decoder_dim)
         self.action_in = nn.Linear(config.action_dim, config.action_decoder_dim)
         self.decoder = _STTransformer(config, "action_decoder", rows * cols)
-        self.to_pixels = nn.Linear(
-            config.action_decoder_dim, config.out_channels * patch * patch
-        )
+        self.to_pixels = nn.Linear(config.action_decoder_dim, config.out_channels * patch * patch)
 
     def quantize(self, video: Tensor) -> nn.VectorQuantizerOutput:
         """Latent actions ``(B, T - 1)`` for the transitions of ``(B, T, C, H, W)``.
@@ -896,14 +875,10 @@ class GenieModel(PretrainedModel):
     ) -> tuple[Tensor, Tensor, nn.VectorQuantizerOutput]:
         vq = self.latent_action_model.quantize(video)
         prediction = self.latent_action_model.decode(video, vq.quantized)
-        loss = F.mse_loss(
-            prediction, video[:, 1:]
-        ) + self.latent_action_model.quantizer.loss(vq)
+        loss = F.mse_loss(prediction, video[:, 1:]) + self.latent_action_model.quantizer.loss(vq)
         return loss, prediction, vq
 
-    def _dynamics_objective(
-        self, tokens: Tensor, actions: Tensor
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    def _dynamics_objective(self, tokens: Tensor, actions: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Mask frames ``2..T`` at a random rate and predict what was masked.
 
         Section 2.1 draws the rate from :math:`U[0.5, 1]` and masks the
@@ -963,9 +938,7 @@ class GenieModel(PretrainedModel):
         _check_video(self.config, video, "video", 2)
         tokenizer_loss, reconstruction, tokens = self._tokenizer_objective(video)
         action_loss, prediction, actions = self._latent_action_objective(video)
-        dynamics_loss, logits, _ = self._dynamics_objective(
-            tokens, actions.quantized.detach()
-        )
+        dynamics_loss, logits, _ = self._dynamics_objective(tokens, actions.quantized.detach())
         return GenieOutput(
             loss=tokenizer_loss + action_loss + dynamics_loss,
             tokenizer_loss=tokenizer_loss,
@@ -1077,9 +1050,7 @@ class GenieForWorldModeling(WorldModelingModel):
         tokens, actions = tokens[:, -context:], actions[:, -context:]
         b, n = int(tokens.shape[0]), int(tokens.shape[2])
         device = tokens.device
-        frame = lucid.full(
-            (b, n), float(dynamics.mask_token), dtype=tokens.dtype, device=device
-        )
+        frame = lucid.full((b, n), float(dynamics.mask_token), dtype=tokens.dtype, device=device)
         masked = lucid.ones(b, n, device=device)
         hidden = n
         for step in range(config.maskgit_steps):
@@ -1131,9 +1102,7 @@ class GenieForWorldModeling(WorldModelingModel):
         if start < window:
             frames.append(self.genie.detokenize(tokens[:, :window])[:, start:])
         for j in range(max(start, window), total):
-            frames.append(
-                self.genie.detokenize(tokens[:, j - window + 1 : j + 1])[:, -1:]
-            )
+            frames.append(self.genie.detokenize(tokens[:, j - window + 1 : j + 1])[:, -1:])
         return lucid.cat(frames, dim=1) if len(frames) > 1 else frames[0]
 
     @override

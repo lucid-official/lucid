@@ -47,12 +47,8 @@ def _same(got: object, want: _Array | tuple[_Array, ...]) -> None:
     assert got.reshape(-1).tolist() == pytest.approx(flat, nan_ok=True)
 
 
-@pytest.mark.parametrize(
-    "index", [[[1, 2], [3, -1]], 4, [], [[[0]], [[5]]], [0, -6]], ids=str
-)
-def test_take_answers_in_the_index_shape(
-    ref: ModuleType, device: str, index: object
-) -> None:
+@pytest.mark.parametrize("index", [[[1, 2], [3, -1]], 4, [], [[[0]], [[5]]], [0, -6]], ids=str)
+def test_take_answers_in_the_index_shape(ref: ModuleType, device: str, index: object) -> None:
     data = [[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]]
     got = lucid.take(
         lucid.tensor(data, device=device),
@@ -61,9 +57,7 @@ def test_take_answers_in_the_index_shape(
     _same(got, ref.take(ref.tensor(data), ref.tensor(index, dtype=ref.int64)))
 
 
-@pytest.mark.parametrize(
-    "mask_shape", [(2, 1, 1, 4), (), (4,), (3, 1, 4), (2, 3, 4, 4)], ids=str
-)
+@pytest.mark.parametrize("mask_shape", [(2, 1, 1, 4), (), (4,), (3, 1, 4), (2, 3, 4, 4)], ids=str)
 def test_masked_fill_broadcasts_the_mask(
     ref: ModuleType, device: str, mask_shape: tuple[int, ...]
 ) -> None:
@@ -72,11 +66,7 @@ def test_masked_fill_broadcasts_the_mask(
     for s in mask_shape:
         n *= s
     bits = [i % 3 == 0 for i in range(n)]
-    want = (
-        ref.tensor(x)
-        .reshape(2, 3, 4, 4)
-        .masked_fill(ref.tensor(bits).reshape(mask_shape), -1.0)
-    )
+    want = ref.tensor(x).reshape(2, 3, 4, 4).masked_fill(ref.tensor(bits).reshape(mask_shape), -1.0)
     got = lucid.masked_fill(
         lucid.tensor(x, device=device).reshape(2, 3, 4, 4),
         lucid.tensor(bits, device=device).reshape(mask_shape),
@@ -102,12 +92,8 @@ def test_masked_fill_refuses_a_mask_that_does_not_broadcast(device: str) -> None
         )
 
 
-@pytest.mark.parametrize(
-    "cond", [[[1, 0], [0, 1]], [0, 0, 0], [[True]], 3.0, 0.0], ids=str
-)
-def test_where_alone_and_nonzero_as_tuple(
-    ref: ModuleType, device: str, cond: object
-) -> None:
+@pytest.mark.parametrize("cond", [[[1, 0], [0, 1]], [0, 0, 0], [[True]], 3.0, 0.0], ids=str)
+def test_where_alone_and_nonzero_as_tuple(ref: ModuleType, device: str, cond: object) -> None:
     c = lucid.tensor(cond, device=device)
     want = ref.nonzero(ref.tensor(cond), as_tuple=True)
     _same(lucid.where(c), ref.where(ref.tensor(cond)))
@@ -177,9 +163,7 @@ _UNIQUE_DATA = {
 @pytest.mark.parametrize("name", list(_UNIQUE_DATA))
 @pytest.mark.parametrize("inverse", [False, True])
 @pytest.mark.parametrize("counts", [False, True])
-def test_unique_flat(
-    ref: ModuleType, device: str, name: str, inverse: bool, counts: bool
-) -> None:
+def test_unique_flat(ref: ModuleType, device: str, name: str, inverse: bool, counts: bool) -> None:
     data = _UNIQUE_DATA[name]
     got = lucid.unique(
         lucid.tensor(data, device=device),
@@ -199,9 +183,7 @@ def test_unique_along_a_dim(ref: ModuleType, device: str, dim: int) -> None:
         return_inverse=True,
         return_counts=True,
     )
-    want = ref.unique(
-        ref.tensor(data), dim=dim, return_inverse=True, return_counts=True
-    )
+    want = ref.unique(ref.tensor(data), dim=dim, return_inverse=True, return_counts=True)
     _same(got, want)
 
 
@@ -215,9 +197,7 @@ def test_unique_along_an_empty_dim(
         return_inverse=True,
         return_counts=True,
     )
-    want = ref.unique(
-        ref.zeros(*shape), dim=dim, return_inverse=True, return_counts=True
-    )
+    want = ref.unique(ref.zeros(*shape), dim=dim, return_inverse=True, return_counts=True)
     _same(got, want)
 
 
@@ -274,9 +254,7 @@ def test_unique_propagates_requires_grad_and_refuses_backward(
     counts: bool,
     dim: int | None,
 ) -> None:
-    x = lucid.tensor(
-        [[3.0, 1.0], [3.0, 1.0], [2.0, 1.0]], device=device, requires_grad=True
-    )
+    x = lucid.tensor([[3.0, 1.0], [3.0, 1.0], [2.0, 1.0]], device=device, requires_grad=True)
     fn = getattr(x, op) if as_method else lambda **kw: getattr(lucid, op)(x, **kw)
     out = fn(return_inverse=inverse, return_counts=counts, dim=dim)
     if isinstance(out, tuple):
@@ -288,9 +266,7 @@ def test_unique_propagates_requires_grad_and_refuses_backward(
         values = out
     assert values.requires_grad
     assert values.grad_fn is not None
-    with pytest.raises(
-        NotImplementedError, match=rf"the derivative for '{op}' is not implemented"
-    ):
+    with pytest.raises(NotImplementedError, match=rf"the derivative for '{op}' is not implemented"):
         values.sum().backward()
 
     with lucid.no_grad():
@@ -301,9 +277,7 @@ def test_unique_propagates_requires_grad_and_refuses_backward(
 
 
 @pytest.mark.parametrize("op", ["unique", "unique_consecutive"])
-def test_unique_refuses_zero_sized_unselected_dim_and_0d_dim(
-    device: str, op: str
-) -> None:
+def test_unique_refuses_zero_sized_unselected_dim_and_0d_dim(device: str, op: str) -> None:
     fn = getattr(lucid, op)
     with pytest.raises(IndexError, match="tensor has no dimensions"):
         fn(lucid.tensor(5.0, device=device), dim=0)
@@ -331,9 +305,7 @@ def test_scatter_refuses_a_src_of_another_dtype(ref: ModuleType, op: str) -> Non
     with pytest.raises(RuntimeError):
         getattr(ref.zeros(4), op)(0, ref.tensor(index), ref.ones(2, dtype=ref.float64))
     with pytest.raises(_C_engine.DtypeMismatch):
-        getattr(lucid.zeros(4), op)(
-            0, lucid.tensor(index), lucid.ones(2, dtype=lucid.float64)
-        )
+        getattr(lucid.zeros(4), op)(0, lucid.tensor(index), lucid.ones(2, dtype=lucid.float64))
 
 
 # The reference warns that ``reduce=`` with a tensor src is on its way out.
@@ -342,9 +314,7 @@ def test_scatter_reduce_modes_and_a_number(ref: ModuleType, device: str) -> None
     index = [[0, 1, 0], [2, 2, 1]]
     src = [[2.0, 3.0, 4.0], [5.0, 6.0, 7.0]]
     for reduce in ("add", "multiply"):
-        want = ref.ones(3, 3).scatter(
-            0, ref.tensor(index), ref.tensor(src), reduce=reduce
-        )
+        want = ref.ones(3, 3).scatter(0, ref.tensor(index), ref.tensor(src), reduce=reduce)
         got = lucid.ones(3, 3, device=device).scatter(
             0,
             lucid.tensor(index, device=device),
@@ -353,9 +323,7 @@ def test_scatter_reduce_modes_and_a_number(ref: ModuleType, device: str) -> None
         )
         _same(got, want)
     want = ref.zeros(3, 3).scatter(0, ref.tensor(index), 9.0)
-    got = lucid.zeros(3, 3, device=device).scatter(
-        0, lucid.tensor(index, device=device), 9.0
-    )
+    got = lucid.zeros(3, 3, device=device).scatter(0, lucid.tensor(index, device=device), 9.0)
     _same(got, want)
     with pytest.raises(ValueError, match="'add' or 'multiply'"):
         lucid.zeros(3, device=device).scatter(
@@ -437,9 +405,7 @@ def test_half_data_dependent_ops_match_reference(
     else:
         got_bc = lucid.bincount(bins_idx, weights=x)
         assert got_bc.device.type == "metal"
-        assert got_bc.tolist() == pytest.approx(
-            ref.bincount(rbins_idx, weights=rx).tolist()
-        )
+        assert got_bc.tolist() == pytest.approx(ref.bincount(rbins_idx, weights=rx).tolist())
 
     grid = lucid.tensor([0.0, 1.0, 2.0, 3.0], dtype=dt, device=device)
     rgrid = ref.tensor([0.0, 1.0, 2.0, 3.0], dtype=ref_dt)
@@ -478,9 +444,7 @@ def test_searchsorted_and_bucketize_duplicates_nan_empty_and_2d(
     q = lucid.tensor(q_vals, device=device)
     rseq = ref.tensor(seq_vals)
     rq = ref.tensor(q_vals)
-    _same(
-        lucid.searchsorted(seq, q, right=right), ref.searchsorted(rseq, rq, right=right)
-    )
+    _same(lucid.searchsorted(seq, q, right=right), ref.searchsorted(rseq, rq, right=right))
     _same(lucid.bucketize(q, seq, right=right), ref.bucketize(rq, rseq, right=right))
 
     # Empty sequence and empty queries
@@ -561,12 +525,8 @@ def test_searchsorted_and_bucketize_metal_zero_host_sync_and_compiled_parity(
     _same(got_ss, want_ss)
     _same(got_bk, want_bk)
 
-    c_ss = lucid.compile(
-        lambda s, v: lucid.searchsorted(s, v, out_int32=out_int32, side=side)
-    )
-    c_bk = lucid.compile(
-        lambda v, b: lucid.bucketize(v, b, out_int32=out_int32, right=right)
-    )
+    c_ss = lucid.compile(lambda s, v: lucid.searchsorted(s, v, out_int32=out_int32, side=side))
+    c_bk = lucid.compile(lambda v, b: lucid.bucketize(v, b, out_int32=out_int32, right=right))
     got_c_ss = c_ss(seq, q)
     got_c_bk = c_bk(q, seq)
     lucid.metal.synchronize()
@@ -605,9 +565,7 @@ def test_searchsorted_sorter_nd_scalar_strided_and_empty_compiled(
     want = ref.searchsorted(runs, rq, right=right, sorter=rsorter)
     _same(got, want)
 
-    c_fn = lucid.compile(
-        lambda u, v, s: lucid.searchsorted(u, v, right=right, sorter=s)
-    )
+    c_fn = lucid.compile(lambda u, v, s: lucid.searchsorted(u, v, right=right, sorter=s))
     _same(c_fn(unsorted, q_strided, sorter), want)
 
     # 0-D scalar query and empty sequence / empty query under compile.

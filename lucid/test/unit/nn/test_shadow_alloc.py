@@ -86,9 +86,7 @@ def test_the_parameter_count_is_readable_without_allocating():
     """The number the docs pipeline exists to produce."""
     with shadow_alloc():
         model = nn.Linear(1000, 1000)
-    total = sum(
-        int(np.prod([int(d) for d in p.shape])) for _, p in model.named_parameters()
-    )
+    total = sum(int(np.prod([int(d) for d in p.shape])) for _, p in model.named_parameters())
     assert total == 1000 * 1000 + 1000
 
 

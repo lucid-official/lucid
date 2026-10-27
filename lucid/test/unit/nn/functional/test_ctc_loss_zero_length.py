@@ -60,9 +60,7 @@ def test_ctc_loss_zero_and_short_lengths_match_reference(
     targets = lucid.tensor(tgt_np, dtype=lucid.int64, device=device)
     il = lucid.tensor([t_b], dtype=lucid.int64, device=device)
     tl = lucid.tensor([s_b], dtype=lucid.int64, device=device)
-    out = F.ctc_loss(
-        lp, targets, il, tl, blank=0, reduction=reduction, zero_infinity=zero_infinity
-    )
+    out = F.ctc_loss(lp, targets, il, tl, blank=0, reduction=reduction, zero_infinity=zero_infinity)
     (out.sum() if reduction == "none" else out).backward()
     assert lp.grad is not None
 

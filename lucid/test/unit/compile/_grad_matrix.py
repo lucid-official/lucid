@@ -40,9 +40,7 @@ def _probe(shape: tuple[int, ...]) -> lucid.Tensor:
     if shape not in _PROBES:
         state = lucid.get_rng_state()
         lucid.manual_seed(11)
-        _PROBES[shape] = (
-            (lucid.rand(*shape) + 0.5).to(DEV) if shape else lucid.tensor(1.3).to(DEV)
-        )
+        _PROBES[shape] = (lucid.rand(*shape) + 0.5).to(DEV) if shape else lucid.tensor(1.3).to(DEV)
         lucid.set_rng_state(state)
     return _PROBES[shape]
 
@@ -89,9 +87,7 @@ def run_grad(case: Case) -> GradOutcome:
     except _NoGrad:
         return GradOutcome("nograd", NO_FLOAT)
     except Exception as e:  # noqa: BLE001
-        return GradOutcome(
-            "recipe", f"eager backward: {type(e).__name__}: {str(e)[:80]}"
-        )
+        return GradOutcome("recipe", f"eager backward: {type(e).__name__}: {str(e)[:80]}")
     if model.w.grad is None:
         return GradOutcome("nograd", "no gradient reaches w")
     want = model.w.grad.numpy().copy()
@@ -111,9 +107,7 @@ def run_grad(case: Case) -> GradOutcome:
     fallback = step.eager_only  # type: ignore[attr-defined]
     if len(fallback.snapshot()) if hasattr(fallback, "snapshot") else len(fallback):
         why = [
-            ln
-            for ln in err.getvalue().splitlines()
-            if "fallback" in ln or "compile_trace" in ln
+            ln for ln in err.getvalue().splitlines() if "fallback" in ln or "compile_trace" in ln
         ]
         return GradOutcome("eager", (why[-1] if why else "")[:160])
     if model.w.grad is None:
@@ -161,9 +155,7 @@ NO_GRAD: dict[str, str] = {
     **dict.fromkeys(("astype_i64", "argmax", "argmin", "argsort", "one_hot"), NO_FLOAT),
 }
 
-GRAD_CASES = [
-    c for c in CASES if "f32" in c.dtypes and not c.random and c.name not in NO_GRAD
-]
+GRAD_CASES = [c for c in CASES if "f32" in c.dtypes and not c.random and c.name not in NO_GRAD]
 
 #: Case → why its compiled training step runs eager.  The manual VJPs for
 #: prod, cumprod, cummax/cummin, sort/kthvalue, repeat_interleave,

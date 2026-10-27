@@ -64,9 +64,7 @@ def _edge_run(name: str, device: str, dtype: str) -> tuple[np.ndarray, np.ndarra
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_FUNCS))
 @pytest.mark.parametrize("device,dtype", _cases())
-def test_edges_match_the_reference(
-    name: str, device: str, dtype: str, ref: Any
-) -> None:
+def test_edges_match_the_reference(name: str, device: str, dtype: str, ref: Any) -> None:
     got, _ = _edge_run(name, device, dtype)
     want = getattr(ref.special, _FUNCS[name][1])(
         ref.tensor(_EDGES, dtype=getattr(ref, dtype))
@@ -113,9 +111,7 @@ def _identity(name: str, v: dict[str, Any]) -> Any:
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_FUNCS))
 @pytest.mark.parametrize("device", [d for d, t in _cases() if t == "float32"])
-def test_float32_gradient_matches_the_identity(
-    name: str, device: str, ref: Any
-) -> None:
+def test_float32_gradient_matches_the_identity(name: str, device: str, ref: Any) -> None:
     # Past ~1e4 the float32 phase of J / Y is rounding noise, and I overflows
     # float32 past ~88; the gradient there only has to be finite.
     xs = np.asarray([v for v in _GRID if name[0] in "k" or v <= 60.0])

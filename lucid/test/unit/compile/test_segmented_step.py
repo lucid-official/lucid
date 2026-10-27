@@ -99,9 +99,7 @@ def test_segmented_grads_match_eager_and_mono_mlp() -> None:
 def test_segmented_grads_match_eager_conv_bn() -> None:
     lucid.manual_seed(0)
     b, c, n, depth = 8, 16, 10, 6
-    model = nn.Sequential(*[_ConvBlock(c) for _ in range(depth)], _Head(c, n)).to(
-        COMPILE_DEVICE
-    )
+    model = nn.Sequential(*[_ConvBlock(c) for _ in range(depth)], _Head(c, n)).to(COMPILE_DEVICE)
     x = lucid.randn(b, c, 14, 14).to(COMPILE_DEVICE)
     t = lucid.randint(0, n, (b,)).to(COMPILE_DEVICE)
 

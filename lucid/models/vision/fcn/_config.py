@@ -115,8 +115,7 @@ class FCNConfig(ModelConfig):
         # the other two now refuse rather than silently substituting it.
         if self.variant not in ("fcn32s", "fcn16s", "fcn8s"):
             raise ValueError(
-                f"variant must be one of 'fcn32s', 'fcn16s', 'fcn8s', got "
-                f"{self.variant!r}"
+                f"variant must be one of 'fcn32s', 'fcn16s', 'fcn8s', got " f"{self.variant!r}"
             )
         if self.variant != "fcn32s":
             raise NotImplementedError(

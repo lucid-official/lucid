@@ -159,9 +159,7 @@ class TestTheForwardPassIsCompressed:
         aware(lucid.randn(2, 3, 16, 16))
         after = list(model.named_parameters())
         assert [name for name, _ in after] == [name for name, _ in before]
-        assert all(
-            now is then for (_, now), (_, then) in zip(after, before, strict=True)
-        )
+        assert all(now is then for (_, now), (_, then) in zip(after, before, strict=True))
         assert "weight" not in model.second.__dict__
         assert model.second.weight is dict(before)["second.weight"]
 
@@ -318,9 +316,7 @@ class TestItActuallyHelps:
                 for _ in range(6):
                     x, y = batch()
                     out = module(x)
-                    hits += float(
-                        (out.argmax(dim=1) == y).to(lucid.float32).mean().item()
-                    )
+                    hits += float((out.argmax(dim=1) == y).to(lucid.float32).mean().item())
                     loss += float(F.cross_entropy(out, y).item())
             return hits / 6, loss / 6
 
@@ -337,9 +333,7 @@ class TestItActuallyHelps:
         control = copy_of(base)
         draws = lucid.get_rng_state()
         train(control, 400, 1e-3)
-        snapped = cml.CompressionAware(
-            copy_of(control), weights=cml.Palettize(bits=2)
-        ).settle()
+        snapped = cml.CompressionAware(copy_of(control), weights=cml.Palettize(bits=2)).settle()
 
         aware = cml.CompressionAware(copy_of(base), weights=cml.Palettize(bits=2))
         lucid.set_rng_state(draws)  # the 400 batches the control trained on

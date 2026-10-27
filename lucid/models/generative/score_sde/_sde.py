@@ -213,9 +213,7 @@ class VESDE(SDE):
     def __init__(self, sigma_min: float = 0.01, sigma_max: float = 50.0) -> None:
         """Initialise the SDE. See the class docstring for parameters."""
         if not 0.0 < sigma_min < sigma_max:
-            raise ValueError(
-                f"need 0 < sigma_min < sigma_max, got {sigma_min}, {sigma_max}"
-            )
+            raise ValueError(f"need 0 < sigma_min < sigma_max, got {sigma_min}, {sigma_max}")
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
         self._ratio = sigma_max / sigma_min
@@ -299,9 +297,7 @@ class VPSDE(SDE):
     def __init__(self, beta_min: float = 0.1, beta_max: float = 20.0) -> None:
         """Initialise the SDE. See the class docstring for parameters."""
         if not 0.0 < beta_min < beta_max:
-            raise ValueError(
-                f"need 0 < beta_min < beta_max, got {beta_min}, {beta_max}"
-            )
+            raise ValueError(f"need 0 < beta_min < beta_max, got {beta_min}, {beta_max}")
         self.beta_min = beta_min
         self.beta_max = beta_max
 

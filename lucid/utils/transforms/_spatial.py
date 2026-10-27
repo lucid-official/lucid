@@ -368,9 +368,7 @@ class Rotate(_WarpTransform):
         """
         h, w = F._spatial_hw(img)
         angle = _random.uniform(self.limit[0], self.limit[1])
-        matrix = F.rotation_matrix(
-            angle, (w - 1) / 2.0, (h - 1) / 2.0, device=img.device
-        )
+        matrix = F.rotation_matrix(angle, (w - 1) / 2.0, (h - 1) / 2.0, device=img.device)
         return WarpParams(matrix=matrix, out_hw=(h, w))
 
     @override
@@ -727,9 +725,7 @@ class RandomScale(GeometricTransform[ScaleParam]):
         """
         h, w = F._spatial_hw(img)
         f = 1.0 + _random.uniform(self.scale_limit[0], self.scale_limit[1])
-        return ScaleParam(
-            new_h=max(int(round(h * f)), 1), new_w=max(int(round(w * f)), 1)
-        )
+        return ScaleParam(new_h=max(int(round(h * f)), 1), new_w=max(int(round(w * f)), 1))
 
     @override
     def _apply_image(self, img: Tensor, params: ScaleParam) -> Tensor:
@@ -742,9 +738,7 @@ class RandomScale(GeometricTransform[ScaleParam]):
 
     @override
     def _apply_mask(self, mask: Tensor, params: ScaleParam) -> Tensor:
-        return F.resize(
-            mask, (params.new_h, params.new_w), interpolation=Interpolation.NEAREST
-        )
+        return F.resize(mask, (params.new_h, params.new_w), interpolation=Interpolation.NEAREST)
 
     @override
     def _apply_boxes(self, boxes: BoundingBoxes, params: ScaleParam) -> BoundingBoxes:

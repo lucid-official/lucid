@@ -100,9 +100,7 @@ class Resize(_NoParams, GeometricTransform[Empty]):
 
     @override
     def _apply_mask(self, mask: Tensor, params: Empty) -> Tensor:
-        return F.resize(
-            mask, (self.height, self.width), interpolation=Interpolation.NEAREST
-        )
+        return F.resize(mask, (self.height, self.width), interpolation=Interpolation.NEAREST)
 
     @override
     def _apply_boxes(self, boxes: BoundingBoxes, params: Empty) -> BoundingBoxes:
@@ -138,9 +136,7 @@ class _MaxSizeResize(_NoParams, GeometricTransform[Empty]):
         h, w = F._spatial_hw(img)
         # Albumentations resizes through OpenCV, which does not low-pass
         # filter before shrinking; F.resize does unless told not to.
-        return F.resize(
-            img, self._target(h, w), interpolation=self.interpolation, antialias=False
-        )
+        return F.resize(img, self._target(h, w), interpolation=self.interpolation, antialias=False)
 
     @override
     def _apply_mask(self, mask: Tensor, params: Empty) -> Tensor:
@@ -565,16 +561,12 @@ class RandomResizedCrop(GeometricTransform[CropBox]):
 
     @override
     def _apply_boxes(self, boxes: BoundingBoxes, params: CropBox) -> BoundingBoxes:
-        cropped = crop_boxes(
-            boxes, params.top, params.left, params.height, params.width
-        )
+        cropped = crop_boxes(boxes, params.top, params.left, params.height, params.width)
         return resize_boxes(cropped, self.height, self.width)
 
     @override
     def _apply_keypoints(self, kps: Keypoints, params: CropBox) -> Keypoints:
-        cropped = crop_keypoints(
-            kps, params.top, params.left, params.height, params.width
-        )
+        cropped = crop_keypoints(kps, params.top, params.left, params.height, params.width)
         return resize_keypoints(cropped, self.height, self.width)
 
     @override

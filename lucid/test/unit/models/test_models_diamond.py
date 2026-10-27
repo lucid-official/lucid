@@ -48,16 +48,14 @@ def _tiny(**overrides: object) -> DIAMONDConfig:
 def _history(batch: int = 2, config: DIAMONDConfig | None = None) -> lucid.Tensor:
     config = _tiny() if config is None else config
     side = int(config.sample_size) if isinstance(config.sample_size, int) else 16
-    return lucid.randn(
-        (batch, config.conditioning_frames, config.in_channels, side, side)
-    )
+    return lucid.randn((batch, config.conditioning_frames, config.in_channels, side, side))
 
 
 def _actions(batch: int = 2, config: DIAMONDConfig | None = None) -> lucid.Tensor:
     config = _tiny() if config is None else config
-    return lucid.zeros(
+    return lucid.zeros((batch, config.conditioning_frames), dtype=lucid.int64) + lucid.ones(
         (batch, config.conditioning_frames), dtype=lucid.int64
-    ) + lucid.ones((batch, config.conditioning_frames), dtype=lucid.int64)
+    )
 
 
 def _wake(model: DIAMONDModel) -> DIAMONDModel:
@@ -126,9 +124,7 @@ class TestReleaseGeometry:
         frames = lucid.randn((1, config.conditioning_frames, 3, 30, 56))
         actions = lucid.zeros((1, config.conditioning_frames), dtype=lucid.int64)
         with lucid.no_grad():
-            out = model.denoise(
-                lucid.randn((1, 3, 30, 56)), lucid.tensor([1.0]), frames, actions
-            )
+            out = model.denoise(lucid.randn((1, 3, 30, 56)), lucid.tensor([1.0]), frames, actions)
         assert out.shape == (1, 3, 30, 56)
         assert bool(out.isfinite().all().item())
 
@@ -149,9 +145,7 @@ class TestReleaseGeometry:
         seen: list[lucid.Tensor] = []
 
         class _Capture(nn.Module):
-            def conditioning(
-                self, c_noise: lucid.Tensor, *rest: object
-            ) -> lucid.Tensor:
+            def conditioning(self, c_noise: lucid.Tensor, *rest: object) -> lucid.Tensor:
                 return lucid.zeros((int(c_noise.shape[0]), config.cond_dim))
 
             def forward(self, x: lucid.Tensor, cond: lucid.Tensor) -> lucid.Tensor:
@@ -199,12 +193,7 @@ class TestPreconditioning:
             total = math.sqrt(s**2 + data**2)
             assert abs(float(c_in.reshape(-1)[index].item()) - 1.0 / total) < 1e-6
             assert abs(float(c_out.reshape(-1)[index].item()) - s * data / total) < 1e-6
-            assert (
-                abs(
-                    float(c_skip.reshape(-1)[index].item()) - data**2 / (data**2 + s**2)
-                )
-                < 1e-6
-            )
+            assert abs(float(c_skip.reshape(-1)[index].item()) - data**2 / (data**2 + s**2)) < 1e-6
             assert abs(float(c_noise[index].item()) - 0.25 * math.log(s)) < 1e-6
 
     def test_the_skip_hands_over_at_sigma_data(self) -> None:
@@ -380,9 +369,7 @@ class TestSampling:
         config = _tiny()
         model = DIAMONDModel(config)
         with pytest.raises(ValueError, match="steps must be positive"):
-            model.imagine_frame(
-                _history(config=config), _actions(config=config), steps=0
-            )
+            model.imagine_frame(_history(config=config), _actions(config=config), steps=0)
 
 
 class TestImagination:
@@ -553,10 +540,7 @@ class TestObjectives:
             lucid.zeros((2, config.conditioning_frames)),
         )
         loss.backward()
-        assert (
-            sum(1 for p in model.diamond.reward_end.parameters() if p.grad is not None)
-            > 0
-        )
+        assert sum(1 for p in model.diamond.reward_end.parameters() if p.grad is not None) > 0
 
     def test_the_paper_hyperparameters(self) -> None:
         """Table 3, recorded so an edit cannot quietly rewrite it."""
@@ -838,6 +822,4 @@ class TestCSGO:
         assert model.config.attn_depths == (0, 0)
 
         with pytest.raises(ValueError, match="one flag per U-Net resolution"):
-            DIAMONDConfig(
-                unet_channels=(8, 8), unet_layers=(1, 1), attn_depths=(0, 0, 1, 1)
-            )
+            DIAMONDConfig(unet_channels=(8, 8), unet_layers=(1, 1), attn_depths=(0, 0, 1, 1))

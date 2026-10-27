@@ -79,9 +79,7 @@ def test_a_create_graph_pass_records_its_nodes_and_the_ops_they_dispatch(
 
 
 @pytest.mark.parametrize("shape", [(3,), (2, 3)])
-def test_a_node_event_carries_the_gradient_it_ran_on(
-    shape: tuple[int, ...], device: str
-) -> None:
+def test_a_node_event_carries_the_gradient_it_ran_on(shape: tuple[int, ...], device: str) -> None:
     x = lucid.ones(*shape, requires_grad=True, device=device)
     with lucid.profiler.profile() as prof:
         (x.exp()).sum().backward()

@@ -238,9 +238,7 @@ def _approx_standard_normal_cdf(x: Tensor) -> Tensor:
     return 0.5 * (1.0 + (math.sqrt(2.0 / math.pi) * (x + 0.044715 * x**3)).tanh())
 
 
-def discretized_gaussian_log_likelihood(
-    x: Tensor, *, means: Tensor, log_scales: Tensor
-) -> Tensor:
+def discretized_gaussian_log_likelihood(x: Tensor, *, means: Tensor, log_scales: Tensor) -> Tensor:
     """Log-likelihood of 8-bit data under a Gaussian, discretised to bins.
 
     The final reverse step ``p(x_0 | x_1)`` is a *discrete* likelihood: the
@@ -335,9 +333,7 @@ class DiffusionPosterior(NamedTuple):
     log_variance: Tensor
 
 
-def diffusion_posterior_constants(
-    betas: Tensor, *, device: str = "cpu"
-) -> DiffusionPosterior:
+def diffusion_posterior_constants(betas: Tensor, *, device: str = "cpu") -> DiffusionPosterior:
     r"""Precompute the closed-form posterior constants (Ho 2020 Eq. 6–7):
 
     .. math::
@@ -816,17 +812,12 @@ def make_sigma_schedule(
     if num_noise_levels <= 0:
         raise ValueError(f"num_noise_levels must be positive, got {num_noise_levels}")
     if not 0.0 < sigma_min < sigma_max:
-        raise ValueError(
-            f"require 0 < sigma_min < sigma_max, got min={sigma_min}, max={sigma_max}"
-        )
+        raise ValueError(f"require 0 < sigma_min < sigma_max, got min={sigma_min}, max={sigma_max}")
     if num_noise_levels == 1:
         return lucid.tensor([sigma_max], device=device)
 
     ratio = sigma_min / sigma_max
-    sigmas = [
-        sigma_max * (ratio ** (i / (num_noise_levels - 1)))
-        for i in range(num_noise_levels)
-    ]
+    sigmas = [sigma_max * (ratio ** (i / (num_noise_levels - 1))) for i in range(num_noise_levels)]
     return lucid.tensor(sigmas, device=device)
 
 
@@ -878,9 +869,7 @@ def trace_probe(like: Tensor, noise: str) -> Tensor:
         return lucid.sign(draw - 0.5)
     if noise == "gaussian":
         return lucid.randn(like.shape, dtype=like.dtype, device=like.device)
-    raise ValueError(
-        f"trace_probe: noise must be 'rademacher' or 'gaussian', got {noise!r}"
-    )
+    raise ValueError(f"trace_probe: noise must be 'rademacher' or 'gaussian', got {noise!r}")
 
 
 def hutchinson_divergence(

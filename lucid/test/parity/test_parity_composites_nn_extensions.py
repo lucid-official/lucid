@@ -126,9 +126,7 @@ class TestNNUtilsFusionTopLevelParity:
         expected = (
             float(
                 sum(
-                    p.grad.numpy().flatten() ** 2
-                    for p in linear.parameters()
-                    if p.grad is not None
+                    p.grad.numpy().flatten() ** 2 for p in linear.parameters() if p.grad is not None
                 ).__class__.__mro__  # trick to get the sum
             )
             if False

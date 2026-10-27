@@ -478,8 +478,7 @@ class DreamerV2Model(PretrainedModel):
         """
         if self.pcont_head is None:
             raise ValueError(
-                "this model has no discount head; construct it with "
-                "DreamerV2Config(pcont=True)"
+                "this model has no discount head; construct it with " "DreamerV2Config(pcont=True)"
             )
         return self.pcont_head(state.feature)
 
@@ -773,9 +772,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             posteriors = posteriors.map(lambda x: x[:, :keep])
 
         b, t = int(posteriors.deter.shape[0]), int(posteriors.deter.shape[1])
-        start = posteriors.map(
-            lambda x: x.reshape(b * t, *(int(v) for v in x.shape[2:])).detach()
-        )
+        start = posteriors.map(lambda x: x.reshape(b * t, *(int(v) for v in x.shape[2:])).detach())
 
         states, actions = model.imagine(start, self._horizon)
         reward = model.predict_reward(states)
@@ -799,9 +796,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
                 dtype=target.dtype,
             )
         else:
-            ones = lucid.ones(
-                (int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype
-            )
+            ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
             running = lucid.cat([ones, pcont[:, : self._horizon - 1]], dim=1)
             weight = lucid.cumprod(running, dim=1).detach()
 
@@ -862,8 +857,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             objective = (
                 score
                 if self._actor_grad == "reinforce"
-                else self._actor_grad_mix * objective
-                + (1.0 - self._actor_grad_mix) * score
+                else self._actor_grad_mix * objective + (1.0 - self._actor_grad_mix) * score
             )
 
         entropy = model.actor.entropy(feature)
@@ -871,9 +865,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
         actor_loss = -(weight[:, : horizon - 1] * objective).mean()
         return actor_loss, entropy.mean()
 
-    def _critic_objective(
-        self, states: RSSMState, target: Tensor, weight: Tensor
-    ) -> Tensor:
+    def _critic_objective(self, states: RSSMState, target: Tensor, weight: Tensor) -> Tensor:
         """Half the weighted squared error against a fixed target.
 
         Parameters

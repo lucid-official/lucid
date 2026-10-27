@@ -247,9 +247,7 @@ class RandomSizedBBoxSafeCrop(_NoParams, Transform[Empty], _BBoxAwareCrop):
         else:
             window = self._safe_window(boxes)
         cropped = Crop(*window, p=1.0)(inputs)
-        return Resize(self.height, self.width, interpolation=self.interpolation, p=1.0)(
-            cropped
-        )
+        return Resize(self.height, self.width, interpolation=self.interpolation, p=1.0)(cropped)
 
     @override
     def __repr__(self) -> str:
@@ -363,11 +361,7 @@ class MaskDropout(_NoParams, Transform[Empty]):
         flat = mask_obj.data.reshape(-1).tolist()
         vals = flat if isinstance(flat, list) else [flat]
         labels = sorted(
-            {
-                int(round(v))
-                for v in vals
-                if isinstance(v, (int, float)) and round(v) != 0
-            }
+            {int(round(v)) for v in vals if isinstance(v, (int, float)) and round(v) != 0}
         )
         if not labels:
             return inputs

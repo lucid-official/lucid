@@ -67,9 +67,7 @@ def two_inputs(tmp_path):
 @pytest.fixture
 def one_input(tmp_path):
     lucid.manual_seed(0)
-    exported = cml.export(
-        _Small().eval(), lucid.randn(1, 3, 8, 8), str(tmp_path / "one.mlpackage")
-    )
+    exported = cml.export(_Small().eval(), lucid.randn(1, 3, 8, 8), str(tmp_path / "one.mlpackage"))
     yield exported
     exported.close()
 
@@ -80,9 +78,7 @@ class TestTheCountIsTakenBeforeThePairing:
     def test_one_tensor_too_many_is_refused(self, two_inputs) -> None:
         """It was accepted, and the third tensor was never fed."""
         with pytest.raises(ValueError, match="2 input"):
-            two_inputs.predict(
-                (lucid.ones(1, 4), lucid.ones(1, 4) * 2, lucid.ones(1, 4) * 100)
-            )
+            two_inputs.predict((lucid.ones(1, 4), lucid.ones(1, 4) * 2, lucid.ones(1, 4) * 100))
 
     def test_the_message_says_how_many_were_given(self, two_inputs) -> None:
         """Three, not the two that survived being zipped.
@@ -298,9 +294,7 @@ class TestTheOtherFourAxesReachingThisOne:
 
         lucid.manual_seed(0)
         with pytest.raises(ValueError, match="on the GPU"):
-            cml.export(
-                Carries().eval(), lucid.randn(4, 4), f"{tmp_path}/buffers.mlpackage"
-            )
+            cml.export(Carries().eval(), lucid.randn(4, 4), f"{tmp_path}/buffers.mlpackage")
 
     def test_pack_bits_refuses_gpu_keys_with_value_error(self) -> None:
         """LCD-263 / LCD-521: ``pack_bits`` must check ``device() == CPU``

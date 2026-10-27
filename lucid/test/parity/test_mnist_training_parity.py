@@ -276,9 +276,7 @@ def test_training_matches_the_reference_over_five_epochs(
             continue
         got = np.asarray(buf.numpy(), dtype=np.int64)
         want = np.asarray(ref_buffers[name].numpy(), dtype=np.int64)
-        assert np.array_equal(
-            got, want
-        ), f"{name} differs: lucid {got} vs reference {want}"
+        assert np.array_equal(got, want), f"{name} differs: lucid {got} vs reference {want}"
 
 
 def test_batchnorm_running_stats_match_with_weights_frozen(

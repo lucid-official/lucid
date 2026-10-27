@@ -156,12 +156,8 @@ def test_clip_grad_norm_inside_autocast_scope_matches_reference(
     rm.bias.grad = ref.tensor(m.bias.grad.cpu().numpy().copy())
 
     with lucid.amp.autocast(device_type=device, dtype=amp_dtype):
-        total_norm = nn.utils.clip_grad_norm_(
-            m.parameters(), max_norm=0.1, norm_type=norm_type
-        )
-    ref_norm = ref.nn.utils.clip_grad_norm_(
-        rm.parameters(), max_norm=0.1, norm_type=norm_type
-    )
+        total_norm = nn.utils.clip_grad_norm_(m.parameters(), max_norm=0.1, norm_type=norm_type)
+    ref_norm = ref.nn.utils.clip_grad_norm_(rm.parameters(), max_norm=0.1, norm_type=norm_type)
 
     assert total_norm.dtype == lucid.float32
     assert m.weight.grad.dtype == lucid.float32

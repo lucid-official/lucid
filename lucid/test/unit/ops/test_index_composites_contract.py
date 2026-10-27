@@ -65,17 +65,13 @@ _WRITES: dict[str, Callable[[str, int], lucid.Tensor]] = {
     ),
     "index_put_": lambda d, b: _base(d).index_put_((_ix([b], d),), _one(d)),
     "put": lambda d, b: lucid.put(_base(d), _ix([b], d), _one(d)),
-    "put_accumulate": lambda d, b: lucid.put(
-        _base(d), _ix([b], d), _one(d), accumulate=True
-    ),
+    "put_accumulate": lambda d, b: lucid.put(_base(d), _ix([b], d), _one(d), accumulate=True),
 }
 
 
 @pytest.mark.parametrize("bad", _WIDE, ids=[str(b) for b in _WIDE])
 @pytest.mark.parametrize("name", list(_WRITES))
-def test_a_wide_index_is_never_wrapped_into_range(
-    device: str, name: str, bad: int
-) -> None:
+def test_a_wide_index_is_never_wrapped_into_range(device: str, name: str, bad: int) -> None:
     write = _WRITES[name]
     if device == "cpu":
         with pytest.raises(IndexError):
@@ -297,9 +293,7 @@ _CASES: dict[str, _Case] = {
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_CASES))
-def test_values_and_gradients_match_the_reference(
-    ref: ModuleType, device: str, name: str
-) -> None:
+def test_values_and_gradients_match_the_reference(ref: ModuleType, device: str, name: str) -> None:
     ours, our_leaves = _CASES[name](_OnDevice(device))
     theirs, their_leaves = _CASES[name](ref)
     assert isinstance(ours, lucid.Tensor)
@@ -328,9 +322,7 @@ def test_masked_scatter_refuses_a_short_source_and_a_non_bool_mask(
 ) -> None:
     x = lucid.zeros(3, device=device)
     with pytest.raises(_C_engine.ShapeMismatch, match="selects 2"):
-        lucid.masked_scatter(
-            x, lucid.tensor([True, True, False], device=device), _one(device)
-        )
+        lucid.masked_scatter(x, lucid.tensor([True, True, False], device=device), _one(device))
     with pytest.raises(_C_engine.DtypeMismatch, match="bool"):
         lucid.masked_scatter(x, lucid.tensor([1, 0, 0], device=device), x)
 
@@ -404,9 +396,7 @@ _DUP_OPS: dict[str, Callable[[ModuleType, str | None], object]] = {
         m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
         m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
     ),
-    "scatter_": lambda m, dev: m.zeros(
-        4, **({"device": dev} if dev else {})
-    ).scatter_(
+    "scatter_": lambda m, dev: m.zeros(4, **({"device": dev} if dev else {})).scatter_(
         0,
         m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
         m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
@@ -423,9 +413,7 @@ _DUP_OPS: dict[str, Callable[[ModuleType, str | None], object]] = {
         m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),
         m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
     ),
-    "index_copy_": lambda m, dev: m.zeros(
-        3, 4, **({"device": dev} if dev else {})
-    ).index_copy_(
+    "index_copy_": lambda m, dev: m.zeros(3, 4, **({"device": dev} if dev else {})).index_copy_(
         1,
         m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),
         m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(3, 1536),
@@ -435,9 +423,7 @@ _DUP_OPS: dict[str, Callable[[ModuleType, str | None], object]] = {
         m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
         m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
     ),
-    "put_": lambda m, dev: m.zeros(
-        2, 2, **({"device": dev} if dev else {})
-    ).put_(
+    "put_": lambda m, dev: m.zeros(2, 2, **({"device": dev} if dev else {})).put_(
         m.tensor([2, 0, 2, 1, 2, 0] * 512, **({"device": dev} if dev else {})),
         m.arange(1.0, 3073.0, **({"device": dev} if dev else {})),
     ),
@@ -446,9 +432,7 @@ _DUP_OPS: dict[str, Callable[[ModuleType, str | None], object]] = {
         (m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),),
         m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
     ),
-    "index_put_": lambda m, dev: m.zeros(
-        4, 3, **({"device": dev} if dev else {})
-    ).index_put_(
+    "index_put_": lambda m, dev: m.zeros(4, 3, **({"device": dev} if dev else {})).index_put_(
         (m.tensor([2, 0, 2, 1, 2, 0] * 256, **({"device": dev} if dev else {})),),
         m.arange(1.0, 4609.0, **({"device": dev} if dev else {})).reshape(1536, 3),
     ),

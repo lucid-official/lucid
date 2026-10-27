@@ -227,9 +227,7 @@ def point_sample(masks: Tensor, coords: Tensor) -> Tensor:
         if scaled.ndim == 2
         else scaled.reshape(n, 1, k, 2)
     )
-    sampled = F.grid_sample(
-        masks.unsqueeze(1), grid, mode="bilinear", align_corners=False
-    )
+    sampled = F.grid_sample(masks.unsqueeze(1), grid, mode="bilinear", align_corners=False)
     return sampled.reshape(n, k)
 
 

@@ -56,9 +56,7 @@ def test_fused_forward_matches_cpu(config: str) -> None:
         elif config == "causal":
             r = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         else:
-            r = F.scaled_dot_product_attention(
-                q, k, v, attn_mask=_additive_mask(device)
-            )
+            r = F.scaled_dot_product_attention(q, k, v, attn_mask=_additive_mask(device))
         return r.numpy()
 
     np.testing.assert_allclose(out("metal"), out("cpu"), atol=1e-5, rtol=1e-4)
@@ -136,9 +134,7 @@ def _assert_no_score_matrix(dims: tuple[int, int], is_causal: bool) -> None:
 
 @pytest.mark.parametrize("is_causal", [True, False])
 @pytest.mark.parametrize("head_dim", [16, 32, 48, 64, 72, 80, 88, 96, 128])
-def test_fused_forward_allocates_no_score_matrix(
-    head_dim: int, is_causal: bool
-) -> None:
+def test_fused_forward_allocates_no_score_matrix(head_dim: int, is_causal: bool) -> None:
     """The fused forward allocates its output and no ``(Lq, Lk)`` buffer.
 
     The bound is absolute.  It used to be "below the hand-rolled softmax
@@ -201,9 +197,7 @@ def test_padded_head_dim_matches_cpu(dims: tuple[int, int], lk: int, mode: str) 
 
 
 @pytest.mark.parametrize("is_causal", [True, False])
-@pytest.mark.parametrize(
-    ("dtype", "tol"), [(lucid.float16, 1e-3), (lucid.bfloat16, 8e-3)]
-)
+@pytest.mark.parametrize(("dtype", "tol"), [(lucid.float16, 1e-3), (lucid.bfloat16, 8e-3)])
 def test_padded_head_dim_half_matches_cpu(dtype, tol: float, is_causal: bool) -> None:
     """A padded half-precision call agrees with the CPU kernel, which widens.
 
@@ -229,9 +223,7 @@ def test_padded_head_dim_takes_head_transposed_operands(is_causal: bool) -> None
     if not metal_available():
         pytest.skip("metal backend unavailable")
     lucid.manual_seed(0)
-    q, k = (
-        lucid.randn(2, 1024, 4, 32, device="metal").transpose(1, 2) for _ in range(2)
-    )
+    q, k = (lucid.randn(2, 1024, 4, 32, device="metal").transpose(1, 2) for _ in range(2))
     v = lucid.randn(2, 1024, 4, 48, device="metal").transpose(1, 2)
 
     def out(q, k, v) -> np.ndarray:

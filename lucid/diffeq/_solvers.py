@@ -82,9 +82,7 @@ def _resolve_method(method: str | ButcherTableau | None) -> ButcherTableau:
             known = ", ".join(sorted({*_METHODS, *_multistep.METHODS}))
             raise ValueError(f"unknown method {method!r}; expected one of: {known}")
         return tableau
-    raise TypeError(
-        f"method must be a str or ButcherTableau, got {type(method).__name__}"
-    )
+    raise TypeError(f"method must be a str or ButcherTableau, got {type(method).__name__}")
 
 
 def _multistep_kind(method: str | ButcherTableau | None) -> bool | None:
@@ -187,9 +185,7 @@ def _resolve_grid(t: Tensor | Sequence[float]) -> list[float]:
             raise ValueError(f"t must hold finite time points, found {value!r}")
 
     ascending = grid[1] > grid[0]
-    for prev, cur in zip(
-        grid, grid[1:], strict=False
-    ):  # adjacent pairs: grid[1:] is 1 shorter
+    for prev, cur in zip(grid, grid[1:], strict=False):  # adjacent pairs: grid[1:] is 1 shorter
         if (cur > prev) != ascending or cur == prev:
             raise ValueError(
                 "t must be strictly monotonic (ascending or descending); "
@@ -543,9 +539,7 @@ def odeint(
     func, y0, event_fn, shapes = _pack_state(func, y0, event_fn)
 
     if not y0.is_floating_point():
-        raise ValueError(
-            f"y0 must have a floating dtype for integration, got {y0.dtype}"
-        )
+        raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
 
     scalar, check = _make_callbacks(y0)
 
@@ -725,9 +719,7 @@ def odeint_dense(
     _warn_coarse_interpolant(tableau, "the continuous solution")
     func, y0, _unused, shapes = _pack_state(func, y0, None)
     if not y0.is_floating_point():
-        raise ValueError(
-            f"y0 must have a floating dtype for integration, got {y0.dtype}"
-        )
+        raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
 
     scalar, check = _make_callbacks(y0)
 
@@ -749,9 +741,7 @@ def odeint_dense(
             options=options,
         )
     else:
-        segments = _fixed.integrate_dense(
-            func, y0, t0, t1, tableau, scalar, check, options=options
-        )
+        segments = _fixed.integrate_dense(func, y0, t0, t1, tableau, scalar, check, options=options)
 
     # Index by ascending interval start so a query is a binary search
     # regardless of which way the solve ran.
@@ -765,8 +755,7 @@ def odeint_dense(
             raise ValueError(f"query time must be finite, got {value!r}")
         if value < low or value > high:
             raise ValueError(
-                f"query time {value!r} lies outside the solved interval "
-                f"[{low!r}, {high!r}]"
+                f"query time {value!r} lies outside the solved interval " f"[{low!r}, {high!r}]"
             )
         index = bisect.bisect_right(starts, value) - 1
         index = min(max(index, 0), len(ordered) - 1)

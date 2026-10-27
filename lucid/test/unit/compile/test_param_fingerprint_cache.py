@@ -42,9 +42,7 @@ def walks(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     return seen
 
 
-@pytest.mark.filterwarnings(
-    "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
-)
+@pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
 @pytest.mark.parametrize(
     "device",
     [
@@ -55,9 +53,7 @@ def walks(monkeypatch: pytest.MonkeyPatch) -> list[object]:
         ),
     ],
 )
-def test_a_replayed_make_step_walks_no_parameters(
-    device: str, walks: list[object]
-) -> None:
+def test_a_replayed_make_step_walks_no_parameters(device: str, walks: list[object]) -> None:
     # On the CPU the step runs eager, keyed all the same.
     model = _model().to(device)
     opt = optim.SGD(model.parameters(), lr=0.1)

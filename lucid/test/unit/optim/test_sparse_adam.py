@@ -76,9 +76,7 @@ def _as_array(v: object) -> np.ndarray:
 @pytest.mark.parity
 @pytest.mark.parametrize("maximize", [False, True])
 @pytest.mark.parametrize("case", sorted(_BATCHES))
-def test_rows_follow_the_reference(
-    case: str, maximize: bool, device: str, ref: Any
-) -> None:
+def test_rows_follow_the_reference(case: str, maximize: bool, device: str, ref: Any) -> None:
     batches = _BATCHES[case]
     ours, _ = _lucid_run(device, batches, maximize=maximize)
 
@@ -220,9 +218,7 @@ def test_a_restored_optimizer_continues_bit_identically(
             resumed.weight.numpy(), live.weight.numpy(), err_msg=f"step {k + 5}"
         )
     for key in ("exp_avg", "exp_avg_sq", "step"):
-        np.testing.assert_array_equal(
-            _as_array(opt2.state[0][key]), _as_array(opt.state[0][key])
-        )
+        np.testing.assert_array_equal(_as_array(opt2.state[0][key]), _as_array(opt.state[0][key]))
 
 
 def test_state_dict_leaves_the_live_state_alone(device: str) -> None:

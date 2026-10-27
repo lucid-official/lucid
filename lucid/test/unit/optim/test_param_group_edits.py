@@ -121,11 +121,7 @@ _RTOL, _ATOL = 2e-5, 2e-6
 def _case_id(case: Case) -> str:
     name, kw, edits = case
     built = "".join(f"-{k}={v}" for k, v in kw.items())
-    return (
-        name
-        + built
-        + "".join("|" + ",".join(f"{k}={v}" for k, v in e.items()) for e in edits)
-    )
+    return name + built + "".join("|" + ",".join(f"{k}={v}" for k, v in e.items()) for e in edits)
 
 
 def _shapes(name: str) -> tuple[tuple[int, ...], ...]:
@@ -204,9 +200,7 @@ def _run_lucid(case: Case, device: str) -> list[list[np.ndarray]]:
 
 def _run_ref(case: Case, ref: Any) -> list[list[np.ndarray]]:
     name, kw, edits = case
-    params = [
-        ref.nn.Parameter(ref.from_numpy(a.copy())) for a in _arrays(0, _shapes(name))
-    ]
+    params = [ref.nn.Parameter(ref.from_numpy(a.copy())) for a in _arrays(0, _shapes(name))]
     opt = getattr(ref.optim, name)(params, **kw)
     out: list[list[np.ndarray]] = []
     for phase in range(len(edits) + 1):
@@ -226,9 +220,7 @@ def _run_ref(case: Case, ref: Any) -> list[list[np.ndarray]]:
     "case",
     [pytest.param(c, id=_case_id(c)) for c in _CASES],
 )
-def test_an_edit_takes_effect_as_in_the_reference(
-    case: Case, device: str, ref: Any
-) -> None:
+def test_an_edit_takes_effect_as_in_the_reference(case: Case, device: str, ref: Any) -> None:
     ours = _run_lucid(case, device)
     theirs = _run_ref(case, ref)
     for k, (got, want) in enumerate(zip(ours, theirs)):
@@ -268,9 +260,7 @@ def _transfer_state(src: optim.Optimizer, dst: optim.Optimizer) -> None:
     "case",
     [pytest.param(c, id=_case_id(c)) for c in [*_CASES, *_SWITCH_ON_CASES]],
 )
-def test_an_edit_equals_a_fresh_optimizer_on_the_same_state(
-    case: Case, device: str
-) -> None:
+def test_an_edit_equals_a_fresh_optimizer_on_the_same_state(case: Case, device: str) -> None:
     name, kw, edits = case
     params = _params(_arrays(0, _shapes(name)), device)
     opt = getattr(optim, name)(params, **kw)
@@ -289,9 +279,7 @@ def test_an_edit_equals_a_fresh_optimizer_on_the_same_state(
             _feed(fresh_params, grads, device)
             fresh.step()
             for i, (a, b) in enumerate(zip(_values(params), _values(fresh_params))):
-                np.testing.assert_array_equal(
-                    a, b, err_msg=f"param {i} after step {k + 1}"
-                )
+                np.testing.assert_array_equal(a, b, err_msg=f"param {i} after step {k + 1}")
 
 
 def _quadratic(params: list[nn.Parameter], target: list[lucid.Tensor]) -> lucid.Tensor:
@@ -308,9 +296,7 @@ def test_an_lbfgs_edit_equals_a_fresh_optimizer_on_the_same_state() -> None:
     params = _params(init, "cpu")
     opt = optim.LBFGS(params, lr=1.0)
 
-    def closure_for(
-        ps: list[nn.Parameter], o: optim.Optimizer
-    ) -> Callable[[], lucid.Tensor]:
+    def closure_for(ps: list[nn.Parameter], o: optim.Optimizer) -> Callable[[], lucid.Tensor]:
         def closure() -> lucid.Tensor:
             o.zero_grad()
             loss = _quadratic(ps, target)
@@ -338,9 +324,7 @@ def test_an_lbfgs_edit_equals_a_fresh_optimizer_on_the_same_state() -> None:
 def test_each_group_is_read_on_its_own(device: str, ref: Any) -> None:
     init = _arrays(0, _SHAPES)
     params = _params(init, device)
-    opt = optim.Adam(
-        [{"params": params[:2]}, {"params": params[2:], "lr": 0.01}], lr=0.05
-    )
+    opt = optim.Adam([{"params": params[:2]}, {"params": params[2:], "lr": 0.01}], lr=0.05)
     ref_params = [ref.nn.Parameter(ref.from_numpy(a.copy())) for a in init]
     ref_opt = ref.optim.Adam(
         [{"params": ref_params[:2]}, {"params": ref_params[2:], "lr": 0.01}], lr=0.05
@@ -537,9 +521,7 @@ def test_a_switched_off_buffer_is_in_the_state_as_in_the_reference(
     state = opt.state_dict()["state"]
     ref_state = ref_opt.state_dict()["state"]
     for idx, entry in ref_state.items():
-        np.testing.assert_allclose(
-            state[idx][kept], entry[kept].numpy(), rtol=_RTOL, atol=_ATOL
-        )
+        np.testing.assert_allclose(state[idx][kept], entry[kept].numpy(), rtol=_RTOL, atol=_ATOL)
 
 
 def test_a_rejected_edit_also_stops_a_checkpoint() -> None:
@@ -609,9 +591,7 @@ class _Recorder:
 
 def test_a_step_after_no_edit_makes_no_hand_over(device: str) -> None:
     params = _params(_arrays(0, _SHAPES), device)
-    opt = optim.Adam(
-        [{"params": params[:2]}, {"params": params[2:], "lr": 0.01}], lr=0.05
-    )
+    opt = optim.Adam([{"params": params[:2]}, {"params": params[2:], "lr": 0.01}], lr=0.05)
     _feed(params, _grads("Adam", 0), device)
     opt.step()
     recorders = [_Recorder(cast(_C_engine.Adam, e)) for e in opt._engines]
@@ -792,9 +772,7 @@ def test_every_optimizer_has_its_rules() -> None:
     assert {case[0] for case in _CASES} == optimizers - {"LBFGS"}
 
 
-def _closure_for(
-    params: list[nn.Parameter], opt: optim.Optimizer
-) -> Callable[[], lucid.Tensor]:
+def _closure_for(params: list[nn.Parameter], opt: optim.Optimizer) -> Callable[[], lucid.Tensor]:
     target = [lucid.zeros_like(p) for p in params]
 
     def closure() -> lucid.Tensor:
@@ -832,9 +810,7 @@ def test_the_reference_rejects_it_too(
     rule: tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str], ref: Any
 ) -> None:
     name, base, bad, _, _ = rule
-    params = [
-        ref.nn.Parameter(ref.from_numpy(a.copy())) for a in _arrays(0, _shapes(name))
-    ]
+    params = [ref.nn.Parameter(ref.from_numpy(a.copy())) for a in _arrays(0, _shapes(name))]
     with pytest.raises(ValueError):
         getattr(ref.optim, name)(params, **{**base, **bad})
 
@@ -907,6 +883,4 @@ def test_a_value_of_the_wrong_type_is_a_type_error(value: object) -> None:
 
 
 def _match(name: str, message: str) -> str:
-    return f"^{name}: " + message.replace("[", r"\[").replace("(", r"\(").replace(
-        ")", r"\)"
-    )
+    return f"^{name}: " + message.replace("[", r"\[").replace("(", r"\(").replace(")", r"\)")

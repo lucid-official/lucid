@@ -52,9 +52,7 @@ class _InvertedResidual(nn.Module):
 
         layers += [
             # Depthwise
-            nn.Conv2d(
-                hidden, hidden, 3, stride=stride, padding=1, groups=hidden, bias=False
-            ),
+            nn.Conv2d(hidden, hidden, 3, stride=stride, padding=1, groups=hidden, bias=False),
             nn.BatchNorm2d(hidden),
             nn.ReLU6(inplace=True),
             # Pointwise linear (no activation)
@@ -107,9 +105,7 @@ def _build_features(cfg: MobileNetV2Config) -> tuple[nn.Sequential, int]:
         out_ch = _ch(c)
         for i in range(n):
             layers.append(
-                _InvertedResidual(
-                    in_ch, out_ch, stride=s if i == 0 else 1, expand_ratio=t
-                )
+                _InvertedResidual(in_ch, out_ch, stride=s if i == 0 else 1, expand_ratio=t)
             )
             in_ch = out_ch
 
@@ -225,9 +221,7 @@ class MobileNetV2(PretrainedModel, BackboneMixin):
         fi: list[FeatureInfo] = []
         for stage, (_, c, _, s) in enumerate(_INVERTED_RESIDUAL_SETTINGS):
             cumulative *= s
-            fi.append(
-                FeatureInfo(stage=stage + 1, num_channels=_ch(c), reduction=cumulative)
-            )
+            fi.append(FeatureInfo(stage=stage + 1, num_channels=_ch(c), reduction=cumulative))
         self._feature_info = fi
 
         # Reference initialisation: He/MSRA fan-out normal on convs, unit
@@ -256,9 +250,7 @@ class MobileNetV2(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class MobileNetV2ForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class MobileNetV2ForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""MobileNet v2 with global-average-pooled linear classification head.
 
     Combines a :class:`MobileNetV2` backbone with the standard

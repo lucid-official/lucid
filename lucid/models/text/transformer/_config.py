@@ -138,9 +138,7 @@ class TransformerConfig(LanguageModelConfig):
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.num_decoder_layers <= 0:
-            raise ValueError(
-                f"num_decoder_layers must be positive, got {self.num_decoder_layers}"
-            )
+            raise ValueError(f"num_decoder_layers must be positive, got {self.num_decoder_layers}")
         if self.decoder_vocab_size is not None and self.decoder_vocab_size <= 0:
             raise ValueError(
                 f"decoder_vocab_size must be positive when set, got {self.decoder_vocab_size}"
@@ -154,19 +152,12 @@ class TransformerConfig(LanguageModelConfig):
                 )
         if self.num_labels <= 0:
             raise ValueError(f"num_labels must be positive, got {self.num_labels}")
-        if self.classifier_dropout is not None and not (
-            0.0 <= self.classifier_dropout < 1.0
-        ):
+        if self.classifier_dropout is not None and not (0.0 <= self.classifier_dropout < 1.0):
             raise ValueError(
-                "classifier_dropout must be in [0, 1) or None, got "
-                f"{self.classifier_dropout}"
+                "classifier_dropout must be in [0, 1) or None, got " f"{self.classifier_dropout}"
             )
 
     @property
     def effective_decoder_vocab_size(self) -> int:
         """Resolved target-side vocabulary (handles ``decoder_vocab_size=None``)."""
-        return (
-            self.decoder_vocab_size
-            if self.decoder_vocab_size is not None
-            else self.vocab_size
-        )
+        return self.decoder_vocab_size if self.decoder_vocab_size is not None else self.vocab_size

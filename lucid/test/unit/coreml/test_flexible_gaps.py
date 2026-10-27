@@ -113,9 +113,7 @@ class _Table(nn.Module):
 def test_both_sides_of_a_cut_follow_the_input(tmp_path: object) -> None:
     lucid.manual_seed(0)
     model = _Table().eval()
-    exported = _export(
-        model, lucid.randn(1, 8, 8), str(tmp_path / "t.mlpackage"), {1: (2, 30)}
-    )
+    exported = _export(model, lucid.randn(1, 8, 8), str(tmp_path / "t.mlpackage"), {1: (2, 30)})
     try:
         for length in (2, 3, 8, 17, 30):
             x = lucid.randn(1, length, 8)
@@ -153,9 +151,7 @@ _PLANES = [(4, 4), (2, 2), (16, 16), (3, 7), (12, 5)]
 RESAMPLES: dict[str, Callable[[], nn.Module]] = {
     "nearest-size": lambda: nn.Upsample(size=(8, 8)),
     "bilinear-size": lambda: nn.Upsample(size=(8, 6), mode="bilinear"),
-    "bilinear-size-aligned": lambda: nn.Upsample(
-        size=(8, 8), mode="bilinear", align_corners=True
-    ),
+    "bilinear-size-aligned": lambda: nn.Upsample(size=(8, 8), mode="bilinear", align_corners=True),
     "nearest-scale": lambda: nn.Upsample(scale_factor=2),
     "bilinear-scale": lambda: nn.Upsample(scale_factor=2, mode="bilinear"),
 }
@@ -215,6 +211,4 @@ def test_an_untraced_constant_output_is_named(tmp_path: object) -> None:
     """``arange`` reaches the trace as a buffer, not an operation, so it is
     refused — by a message that says it may be a constant."""
     with pytest.raises(ValueError, match="constant"):
-        cml.export(
-            _WithArange().eval(), lucid.randn(2, 3), str(tmp_path / "a.mlpackage")
-        )
+        cml.export(_WithArange().eval(), lucid.randn(2, 3), str(tmp_path / "a.mlpackage"))

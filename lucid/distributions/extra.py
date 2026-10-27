@@ -354,9 +354,7 @@ class InverseGamma(Distribution):
         """Defined for ``concentration > 1``: ``β / (α − 1)``."""
         # Only valid for α > 1; the mean diverges at or below it.
         closed = self.rate / (self.concentration - 1.0)
-        return lucid.where(
-            self.concentration > 1.0, closed, lucid.full_like(closed, float("inf"))
-        )
+        return lucid.where(self.concentration > 1.0, closed, lucid.full_like(closed, float("inf")))
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
@@ -644,12 +642,7 @@ class Kumaraswamy(Distribution):
         reference framework answers NaN at both ends.
         """
         a, b = self.concentration1, self.concentration0
-        return (
-            a.log()
-            + b.log()
-            + lucid.xlogy(a - 1.0, value)
-            + xlog1py(b - 1.0, -(value**a))
-        )
+        return a.log() + b.log() + lucid.xlogy(a - 1.0, value) + xlog1py(b - 1.0, -(value**a))
 
     @override
     def entropy(self) -> Tensor:
@@ -838,9 +831,7 @@ class Multinomial(Distribution):
             self.probs = self._cat.probs
         # An ``int`` count becomes a 0-dim host tensor; it joins the
         # probabilities on their device, or ``n · p`` cannot run on Metal.
-        self._total_count: Tensor = _align_device(
-            _as_tensor(total_count), self._cat._probs
-        )
+        self._total_count: Tensor = _align_device(_as_tensor(total_count), self._cat._probs)
         super().__init__(
             batch_shape=tuple(self._cat._batch_shape),
             event_shape=(self._cat._num_events,),
@@ -972,9 +963,9 @@ class Multinomial(Distribution):
         :math:`p_i = 0` (a zero in ``probs`` or a logit of ``-inf``), rather
         than ``0 · (-inf) = NaN``.
         """
-        log_coeff: Tensor = lucid.lgamma(value.sum(dim=-1) + 1.0) - lucid.lgamma(
-            value + 1.0
-        ).sum(dim=-1)
+        log_coeff: Tensor = lucid.lgamma(value.sum(dim=-1) + 1.0) - lucid.lgamma(value + 1.0).sum(
+            dim=-1
+        )
         if self._is_logits:
             log_p: Tensor = self.logits
             # ``log_softmax`` differentiates without dividing by p, so the
@@ -995,8 +986,7 @@ class Multinomial(Distribution):
         draws: list[Tensor] = [self._cat.sample(sample_shape) for _ in range(n)]
         # Count each category k in {0, ..., K-1}.
         counts: list[Tensor] = [
-            lucid.stack([(d == k).to(p.dtype) for d in draws]).sum(dim=0)
-            for k in range(K)
+            lucid.stack([(d == k).to(p.dtype) for d in draws]).sum(dim=0) for k in range(K)
         ]
         # Stack along last dim: (*sample_shape, *batch_shape, K)
         return lucid.stack(counts, dim=-1).to(lucid.int64).detach()
@@ -1122,9 +1112,7 @@ class ContinuousBernoulli(Distribution):
             If ``True``, validate parameter constraints at construction time.
         """
         if (probs is None) == (logits is None):
-            raise ValueError(
-                "ContinuousBernoulli: pass exactly one of `probs` or `logits`."
-            )
+            raise ValueError("ContinuousBernoulli: pass exactly one of `probs` or `logits`.")
         # Stored through the lazy parameters, as ``Bernoulli`` does, so the
         # one given is in ``arg_constraints``' reach: held in a private
         # ``_param`` instead, both ``probs`` and ``logits`` looked derived
@@ -1273,28 +1261,20 @@ class ContinuousBernoulli(Distribution):
         tensor([0.0759, 0.08333, 0.08043])
         """
         t, near, p_far, l_far = self._moment_operands()
-        closed: Tensor = p_far * (p_far - 1.0) / (1.0 - 2.0 * p_far) ** 2 + 1.0 / (
-            l_far * l_far
-        )
+        closed: Tensor = p_far * (p_far - 1.0) / (1.0 - 2.0 * p_far) ** 2 + 1.0 / (l_far * l_far)
         x: Tensor = t * t
-        series: Tensor = 1.0 / 12.0 - x * (
-            1.0 / 15.0 + x * (128.0 / 945.0 + x * 4864.0 / 14175.0)
-        )
+        series: Tensor = 1.0 / 12.0 - x * (1.0 / 15.0 + x * (128.0 / 945.0 + x * 4864.0 / 14175.0))
         return lucid.where(near, series, closed)
 
     @override
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
         """Reparameterised sample via the closed-form icdf."""
         shape = self._extended_shape(sample_shape)
-        u: Tensor = lucid.rand(
-            *shape, dtype=self._param.dtype, device=self._param.device
-        )
+        u: Tensor = lucid.rand(*shape, dtype=self._param.dtype, device=self._param.device)
         u = lucid.clamp(u, min=1e-6, max=1.0 - 1e-6)
         # Broadcast distribution parameters to the full sample shape so that
         # lucid.where (which requires same-shape operands) always succeeds.
-        zeros_b: Tensor = lucid.zeros(
-            *shape, dtype=self._param.dtype, device=self._param.device
-        )
+        zeros_b: Tensor = lucid.zeros(*shape, dtype=self._param.dtype, device=self._param.device)
         p: Tensor = self._probs + zeros_b
         l: Tensor = self._logits + zeros_b
         d: Tensor = 2.0 * p - 1.0  # ∈ (−1, 1) \ {0}

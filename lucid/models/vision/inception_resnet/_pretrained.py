@@ -20,9 +20,7 @@ _CFG = InceptionResNetConfig()
     model_class=InceptionResNetV2,
     default_config=_CFG,
 )
-def inception_resnet_v2(
-    pretrained: bool = False, **overrides: object
-) -> InceptionResNetV2:
+def inception_resnet_v2(pretrained: bool = False, **overrides: object) -> InceptionResNetV2:
     r"""Inception-ResNet v2 feature-extracting backbone.
 
     Builds an :class:`InceptionResNetV2` with the paper-cited Szegedy
@@ -69,9 +67,7 @@ def inception_resnet_v2(
     (1, 1536, 8, 8)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "inception_resnet_v2", alternative="inception_resnet_v2_cls"
-        )
+        reject_unavailable_pretrained("inception_resnet_v2", alternative="inception_resnet_v2_cls")
     cfg = apply_overrides(_CFG, overrides)
     return InceptionResNetV2(cfg)
 

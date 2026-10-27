@@ -124,9 +124,7 @@ class PointMass:
 
     def _render(self) -> Tensor:
         """Agent in channel 0, target in channel 1 — ``(3, size, size)``."""
-        return lucid.stack(
-            [self._blob(*self.position), self._target_blob, self._empty], dim=0
-        )
+        return lucid.stack([self._blob(*self.position), self._target_blob, self._empty], dim=0)
 
     def reset(self) -> Tensor:
         """Return the agent to its start, and re-draw the goal if asked.
@@ -181,9 +179,6 @@ class PointMass:
             "more than random".
         """
         return lucid.tensor(
-            [
-                max(-1.0, min(1.0, (self.target[i] - self.position[i]) * 10.0))
-                for i in range(2)
-            ],
+            [max(-1.0, min(1.0, (self.target[i] - self.position[i]) * 10.0)) for i in range(2)],
             device=self.device,
         )

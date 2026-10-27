@@ -135,9 +135,7 @@ class TestInceptionResNetClassifier(unittest.TestCase):
         self.assertEqual(out.logits.shape, (1, 1000))
 
     def test_custom_num_classes(self) -> None:
-        m = InceptionResNetV2ForImageClassification(
-            InceptionResNetConfig(num_classes=10)
-        )
+        m = InceptionResNetV2ForImageClassification(InceptionResNetConfig(num_classes=10))
         m.eval()
         x = lucid.randn(1, 3, 299, 299)
         self.assertEqual(m(x).logits.shape, (1, 10))

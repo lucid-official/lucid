@@ -29,9 +29,7 @@ def test_an_unrunnable_graph_raises_from_synchronize() -> None:
     _C_engine.synchronize_gpu()  # nothing earlier left queued counts here
     healthy = lucid.ones(4, device="metal") * 3.0
     doomed = lucid.zeros(*_TOO_LARGE, device="metal")
-    with pytest.raises(
-        _C_engine.LucidError, match="maximum allowed buffer size"
-    ) as info:
+    with pytest.raises(_C_engine.LucidError, match="maximum allowed buffer size") as info:
         lucid.metal.synchronize()
     assert isinstance(info.value, RuntimeError)
     assert str(info.value).startswith("metal synchronize: 1 of ")
@@ -46,9 +44,7 @@ def test_every_failure_is_counted_and_the_rest_still_run() -> None:
     first = lucid.zeros(*_TOO_LARGE, device="metal")
     healthy = lucid.arange(6, device="metal").reshape(2, 3) + 1
     second = lucid.full(_TOO_LARGE, 2.0, device="metal")
-    with pytest.raises(
-        _C_engine.LucidError, match=r"^metal synchronize: 2 of \d+ pending"
-    ):
+    with pytest.raises(_C_engine.LucidError, match=r"^metal synchronize: 2 of \d+ pending"):
         _C_engine.synchronize_gpu()
     assert healthy.tolist() == [[1, 2, 3], [4, 5, 6]]
     del first, second

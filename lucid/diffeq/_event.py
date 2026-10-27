@@ -85,9 +85,7 @@ def _evaluate(
     if not isinstance(out, Tensor):
         raise TypeError(f"event_fn must return a Tensor, got {type(out).__name__}")
     if out.numel() != 1:
-        raise ValueError(
-            f"event_fn must return a single-element tensor, got shape {out.shape}"
-        )
+        raise ValueError(f"event_fn must return a single-element tensor, got shape {out.shape}")
     return float(out.item())
 
 
@@ -160,11 +158,7 @@ def find_event(
         # has collapsed, or a root outside the bracket, means the linear model
         # is useless here and bisection is the honest fallback.
         span = g_high - g_low
-        guess = (
-            low + (high - low) * 0.5
-            if span == 0.0
-            else low - g_low * (high - low) / span
-        )
+        guess = low + (high - low) * 0.5 if span == 0.0 else low - g_low * (high - low) / span
         margin = 0.01 * abs(high - low)
         if not (min(low, high) + margin <= guess <= max(low, high) - margin):
             guess = (low + high) / 2.0
@@ -290,9 +284,7 @@ def integrate_until_event(
         # recipe below would read coefficients that do not belong to it.  Its
         # steps come from the nonlinear solve instead; everything after that —
         # bracketing, the Hermite fit, the bisection — is shared.
-        implicit_opts = (
-            _implicit.parse_options(options) if tableau.is_implicit else None
-        )
+        implicit_opts = _implicit.parse_options(options) if tableau.is_implicit else None
 
         for index in range(_MAX_EVENT_STEPS):
             t_next = t_cur + dt
@@ -358,9 +350,7 @@ def solution_pair(y0: Tensor, y_event: Tensor) -> Tensor:
     """
     states: Sequence[Tensor] = (y0, y_event)
     target = lucid.promote_types(y0.dtype, y_event.dtype)
-    return lucid.stack(
-        [s if s.dtype == target else s.to(target) for s in states], dim=0
-    )
+    return lucid.stack([s if s.dtype == target else s.to(target) for s in states], dim=0)
 
 
 @final
@@ -486,9 +476,7 @@ def differentiable_event_time(
 
     time = cast(
         Tensor,
-        _EventTimeGradient.apply(
-            state_t, event_t=event_t, func=func, event_fn=event_fn
-        ),
+        _EventTimeGradient.apply(state_t, event_t=event_t, func=func, event_fn=event_fn),
     )
     with lucid.no_grad():
         slope = func(event_t, state_t)

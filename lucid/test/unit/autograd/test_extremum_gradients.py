@@ -123,9 +123,7 @@ def test_first_derivative_matches_reference(ref, device, op, pair, dtype_name):
     _same(y.grad.tolist(), want_y)
 
     x, y, w = _operands(lucid, _PAIRS[pair], dtype, device=device)
-    gx, gy = lucid.autograd.grad(
-        (getattr(lucid, op)(x, y) * w).sum(), (x, y), create_graph=True
-    )
+    gx, gy = lucid.autograd.grad((getattr(lucid, op)(x, y) * w).sum(), (x, y), create_graph=True)
     _same(gx.tolist(), want_x)
     _same(gy.tolist(), want_y)
     # The masks are constants of the inputs: a linear loss leaves the
@@ -143,9 +141,7 @@ def _second(lib, op, pair, dtype, **kw):
 
 # A squared output takes the infinities to inf * 0 inside the reference's
 # own second-derivative formula; the finite and NaN pairs carry the rule.
-_FINITE = [
-    name for name, pair in _PAIRS.items() if not any(math.isinf(v) for v in pair)
-]
+_FINITE = [name for name, pair in _PAIRS.items() if not any(math.isinf(v) for v in pair)]
 
 
 @pytest.mark.parametrize("pair", _FINITE)

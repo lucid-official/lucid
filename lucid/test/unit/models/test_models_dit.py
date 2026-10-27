@@ -153,9 +153,7 @@ class TestBackbone:
         held = float((first[dim // 2 :] - second[dim // 2 :]).abs().max().item())
         assert held == 0.0, "the trailing half must be constant along a row"
 
-    @pytest.mark.parametrize(
-        "mode", ["adaln_zero", "adaln", "cross_attention", "in_context"]
-    )
+    @pytest.mark.parametrize("mode", ["adaln_zero", "adaln", "cross_attention", "in_context"])
     def test_every_conditioning_design_builds_and_runs(self, mode: str) -> None:
         """All four of Section 3.2's designs are constructible.
 

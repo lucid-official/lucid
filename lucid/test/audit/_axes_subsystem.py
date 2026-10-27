@@ -272,9 +272,7 @@ class SmokeAxis(Axis):
 
                 instance, why = _construct(fn)
                 if instance is not None:
-                    return self._finding(
-                        symbol, Status.PASS, "constructed from its signature"
-                    )
+                    return self._finding(symbol, Status.PASS, "constructed from its signature")
                 return self._finding(symbol, Status.SKIP, f"construct: {why}")
 
             # Falling through to the op ladder covers anything with a
@@ -296,9 +294,7 @@ class SmokeAxis(Axis):
             # snapshotting the process state is that the call can then be
             # made.
             for domain in ctx.domains:
-                for call in _specs.invocations(
-                    symbol.short, domain, symbol.qualname, fn
-                ):
+                for call in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
                     try:
                         fn(*call.args, **call.kwargs)
                     except Exception:  # noqa: BLE001 - a refusal is a fine answer
@@ -327,9 +323,7 @@ def _smoke_arguments(
     out: list[tuple[tuple[Any, ...], dict[str, Any], str]] = [((), {}, "no arguments")]
 
     if name.startswith("set_"):
-        getter = getattr(lucid, "get_" + name[4:], None) or getattr(
-            lucid, "is_" + name[4:], None
-        )
+        getter = getattr(lucid, "get_" + name[4:], None) or getattr(lucid, "is_" + name[4:], None)
         if getter is not None:
             try:
                 out.insert(0, ((getter(),), {}, "its own getter's value"))
@@ -467,9 +461,7 @@ class DistributionAxis(Axis):
             )
         mapped = _probe.to_numpy(forward)
         if mapped is None:
-            return self._finding(
-                symbol, Status.SKIP, "the forward map returned no tensor"
-            )
+            return self._finding(symbol, Status.SKIP, "the forward map returned no tensor")
         if not np.isfinite(mapped).all():
             problems.append("the forward map is not finite on (0.15, 0.85)")
 
@@ -483,9 +475,7 @@ class DistributionAxis(Axis):
             if back is not None:
                 if not np.isfinite(back).all():
                     problems.append("inv is not finite on the forward map's own output")
-                elif back.shape == np.shape(
-                    _probe.to_numpy(source)
-                ) and not np.allclose(
+                elif back.shape == np.shape(_probe.to_numpy(source)) and not np.allclose(
                     back.astype(float),
                     _probe.to_numpy(source).astype(float),
                     rtol=1e-6,
@@ -494,9 +484,7 @@ class DistributionAxis(Axis):
                     # ``AbsTransform`` is deliberately not injective, and
                     # says so; a transform that claims a bijection and is
                     # not one is the finding.
-                    residual = back.astype(float) - _probe.to_numpy(source).astype(
-                        float
-                    )
+                    residual = back.astype(float) - _probe.to_numpy(source).astype(float)
                     if np.allclose(residual - residual[..., :1], 0.0, atol=1e-8):
                         # A constant offset along the transformed axis is
                         # the softmax gauge: adding a constant to every
@@ -512,14 +500,10 @@ class DistributionAxis(Axis):
                             f"{residual.reshape(-1)[0]:+.4f} along the transformed axis",
                         )
                     if getattr(transform, "bijective", True):
-                        problems.append(
-                            f"inv(forward(x)) is off by {np.abs(residual).max():.3e}"
-                        )
+                        problems.append(f"inv(forward(x)) is off by {np.abs(residual).max():.3e}")
         if problems:
             return self._finding(symbol, Status.FAIL, "; ".join(problems))
-        return self._finding(
-            symbol, Status.PASS, "forward is finite and inv round trips"
-        )
+        return self._finding(symbol, Status.PASS, "forward is finite and inv round trips")
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         if symbol.short == "kl_divergence":
@@ -591,13 +575,9 @@ class DistributionAxis(Axis):
                     scored = _probe.to_numpy(log_prob(draw))
                     checked.append("log_prob")
                     if scored is not None and not np.isfinite(scored).all():
-                        problems.append(
-                            "log_prob is not finite on the distribution's own samples"
-                        )
+                        problems.append("log_prob is not finite on the distribution's own samples")
                 except Exception as exc:  # noqa: BLE001
-                    problems.append(
-                        f"log_prob raised {type(exc).__name__} on its own samples"
-                    )
+                    problems.append(f"log_prob raised {type(exc).__name__} on its own samples")
 
         cdf_problems, cdf_checked = self._check_cdf(dist)
         problems += cdf_problems
@@ -648,14 +628,10 @@ class DistributionAxis(Axis):
                 problems.append("stddev is not the square root of variance")
 
         if problems:
-            return self._finding(
-                symbol, Status.FAIL, "; ".join(problems[:3]), problems=problems
-            )
+            return self._finding(symbol, Status.FAIL, "; ".join(problems[:3]), problems=problems)
         if not checked:
             return self._finding(symbol, Status.SKIP, "no probeable method")
-        return self._finding(
-            symbol, Status.PASS, f"checked {', '.join(sorted(set(checked)))}"
-        )
+        return self._finding(symbol, Status.PASS, f"checked {', '.join(sorted(set(checked)))}")
 
     @staticmethod
     def _check_cdf(dist: Any) -> tuple[list[str], list[str]]:
@@ -710,9 +686,7 @@ class DistributionAxis(Axis):
         if np.any(np.diff(table, axis=0) < -1e-9):
             problems.append("cdf is not monotone")
         if table.min() < -1e-9 or table.max() > 1.0 + 1e-9:
-            problems.append(
-                f"cdf leaves [0, 1]: [{table.min():.3f}, {table.max():.3f}]"
-            )
+            problems.append(f"cdf leaves [0, 1]: [{table.min():.3f}, {table.max():.3f}]")
         if icdf is None:
             return problems, checked
         # ``icdf(cdf(x)) == x`` only where the cdf is strictly increasing.
@@ -736,9 +710,7 @@ class DistributionAxis(Axis):
         invertible &= (table > _ICDF_CLIP) & (table < 1 - _ICDF_CLIP)
         if not invertible.any():
             return problems, checked
-        inside = _probe.as_f64(
-            np.clip(table, _ICDF_CLIP, 1 - _ICDF_CLIP).reshape(np.shape(probs))
-        )
+        inside = _probe.as_f64(np.clip(table, _ICDF_CLIP, 1 - _ICDF_CLIP).reshape(np.shape(probs)))
         try:
             back = _probe.to_numpy(icdf(inside))
         except NotImplementedError:
@@ -879,9 +851,7 @@ class DiffeqAxis(Axis):
             problems.append(f"weights sum to {b.sum():.12g}, not 1")
         rows = a.sum(axis=1) if a.ndim == 2 else a
         if rows.shape == c.shape and np.abs(rows - c).max() > 1e-12:
-            problems.append(
-                f"row sums differ from the nodes by {np.abs(rows - c).max():.2e}"
-            )
+            problems.append(f"row sums differ from the nodes by {np.abs(rows - c).max():.2e}")
         if problems:
             return self._finding(symbol, Status.FAIL, "; ".join(problems))
         return self._finding(symbol, Status.PASS, f"{len(b)} stages, consistent")
@@ -1068,9 +1038,7 @@ class QuantizationAxis(Axis):
                 continue
             dq = None
             for name in ("dequantize", "dequantize_per_tensor"):
-                fn = getattr(lucid.quantization, name, None) or getattr(
-                    q, "dequantize", None
-                )
+                fn = getattr(lucid.quantization, name, None) or getattr(q, "dequantize", None)
                 if fn is None:
                     continue
                 try:
@@ -1133,9 +1101,7 @@ class QuantizationAxis(Axis):
                     f"a range of {high - low} over 8 bits gave a step of {step:.5g}, "
                     f"expected about {wanted:.5g}",
                 )
-            return self._finding(
-                symbol, Status.PASS, f"step {step:.5g} spans the range"
-            )
+            return self._finding(symbol, Status.PASS, f"step {step:.5g} spans the range")
 
         try:
             if name == "quantize":
@@ -1156,18 +1122,14 @@ class QuantizationAxis(Axis):
         got = _probe.to_numpy(out)
         if got is None:
             return self._finding(symbol, Status.SKIP, "nothing measurable came back")
-        error = float(
-            np.abs(got.astype(float) - _probe.to_numpy(x).astype(float)).max()
-        )
+        error = float(np.abs(got.astype(float) - _probe.to_numpy(x).astype(float)).max())
         if error > step:
             return self._finding(
                 symbol,
                 Status.FAIL,
                 f"the round trip is off by {error:.5g}, more than one step ({step:.5g})",
             )
-        return self._finding(
-            symbol, Status.PASS, f"within one step: {error:.3g} <= {step:.3g}"
-        )
+        return self._finding(symbol, Status.PASS, f"within one step: {error:.3g} <= {step:.3g}")
 
     def _qconfig_factory(self, symbol: Symbol, obj: Any) -> Finding:
         try:
@@ -1216,18 +1178,14 @@ class QuantizationAxis(Axis):
                     f"{type(exc).__name__}: {str(exc)[:50]}",
                 )
             if observer is None:
-                return self._finding(
-                    symbol, Status.FAIL, "an observer factory gave None"
-                )
+                return self._finding(symbol, Status.FAIL, "an observer factory gave None")
         return self._finding(symbol, Status.PASS, f"{len(factories)} observers build")
 
     def _observer(self, symbol: Symbol, cls: Any) -> Finding:
         try:
             observer = cls()
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.UNSUPPORTED, f"construct: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.UNSUPPORTED, f"construct: {type(exc).__name__}")
         # A known range in; the reported qparams have to be able to
         # represent it.  An observer that ignores its input reports the
         # same scale for every range, which is the failure that makes a
@@ -1241,9 +1199,7 @@ class QuantizationAxis(Axis):
                 fresh(probe)
                 params = fresh.calculate_qparams()
             except Exception as exc:  # noqa: BLE001
-                return self._finding(
-                    symbol, Status.UNSUPPORTED, f"calibrate: {type(exc).__name__}"
-                )
+                return self._finding(symbol, Status.UNSUPPORTED, f"calibrate: {type(exc).__name__}")
             scale = _probe.to_numpy(params[0] if isinstance(params, tuple) else params)
             if scale is None:
                 return self._finding(symbol, Status.SKIP, "no scale to compare")
@@ -1294,17 +1250,14 @@ class QuantizationAxis(Axis):
                 last = f"{type(exc).__name__}: {str(exc)[:60]}"
                 continue
             if not isinstance(out, lucid.nn.Module):
-                return self._finding(
-                    symbol, Status.PASS, f"returned {type(out).__name__}"
-                )
+                return self._finding(symbol, Status.PASS, f"returned {type(out).__name__}")
             try:
                 got = _probe.to_numpy(out(probe))
             except Exception as exc:  # noqa: BLE001
                 return self._finding(
                     symbol,
                     Status.FAIL,
-                    f"the returned model does not run: {type(exc).__name__}: "
-                    f"{str(exc)[:50]}",
+                    f"the returned model does not run: {type(exc).__name__}: " f"{str(exc)[:50]}",
                 )
             if got is None or want is None:
                 return self._finding(symbol, Status.SKIP, "no output to compare")
@@ -1402,13 +1355,9 @@ class SerializationAxis(Axis):
                 original, restored = tensor, restored["probe"]
             a, b = _probe.to_numpy(original), _probe.to_numpy(restored)
             if a is None or b is None:
-                return self._finding(
-                    symbol, Status.SKIP, "round trip produced no tensor"
-                )
+                return self._finding(symbol, Status.SKIP, "round trip produced no tensor")
             if a.shape != b.shape:
-                return self._finding(
-                    symbol, Status.FAIL, f"shape {a.shape} became {b.shape}"
-                )
+                return self._finding(symbol, Status.FAIL, f"shape {a.shape} became {b.shape}")
             if not np.array_equal(a, b, equal_nan=True):
                 return self._finding(
                     symbol,
@@ -1465,9 +1414,7 @@ class CompiledAxis(Axis):
         name = symbol.short
         obj = symbol.obj
         if not callable(obj):
-            return self._finding(
-                symbol, Status.NOT_APPLICABLE, "not a compile entry point"
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "not a compile entry point")
         x = _probe.as_f32(_probe.sample("moderate", (3, 4)))
         try:
             if name == "compile":
@@ -1693,9 +1640,7 @@ class CompiledAxis(Axis):
                 "fused_step": lambda: obj(model, loss_fn, optimiser),
             }[name]()
             if stepper is None:
-                return self._finding(
-                    symbol, Status.FAIL, "returned nothing to step with"
-                )
+                return self._finding(symbol, Status.FAIL, "returned nothing to step with")
 
         if stepper is not None:
             optimiser.zero_grad()
@@ -1729,13 +1674,10 @@ class CompiledAxis(Axis):
                 )
 
         got = [_probe.to_numpy(p) for p in model.parameters()]
-        if len(got) != len(want) or any(
-            a is None or b is None for a, b in zip(got, want)
-        ):
+        if len(got) != len(want) or any(a is None or b is None for a, b in zip(got, want)):
             return self._finding(symbol, Status.SKIP, "no parameters to compare")
         drift = max(
-            float(np.abs(a.astype(float) - b.astype(float)).max())
-            for a, b in zip(got, want)
+            float(np.abs(a.astype(float) - b.astype(float)).max()) for a, b in zip(got, want)
         )
         moved = max(float(np.abs(a.astype(float)).max()) for a in want)
         if drift > 1e-4 * max(moved, 1.0):
@@ -1790,9 +1732,7 @@ class ClassContractAxis(Axis):
         try:
             text = repr(instance)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.FAIL, f"repr raised {type(exc).__name__}: {exc}"
-            )
+            return self._finding(symbol, Status.FAIL, f"repr raised {type(exc).__name__}: {exc}")
         if not text:
             return self._finding(symbol, Status.FAIL, "repr returned an empty string")
         return self._finding(symbol, Status.PASS, "constructs and reprs")
@@ -1823,17 +1763,13 @@ class ConstantAxis(Axis):
         try:
             text = repr(value)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.FAIL, f"repr raised {type(exc).__name__}: {exc}"
-            )
+            return self._finding(symbol, Status.FAIL, f"repr raised {type(exc).__name__}: {exc}")
         if not text:
             return self._finding(symbol, Status.FAIL, "repr returned an empty string")
 
         if symbol.short == "__version__":
             if not isinstance(value, str) or not value[:1].isdigit():
-                return self._finding(
-                    symbol, Status.FAIL, f"not a version string: {value!r}"
-                )
+                return self._finding(symbol, Status.FAIL, f"not a version string: {value!r}")
             return self._finding(symbol, Status.PASS, f"version {value}")
 
         # A dtype earns the strongest check available: build with it and
@@ -1849,9 +1785,7 @@ class ConstantAxis(Axis):
                     Status.FAIL,
                     f"a tensor built with {value} reports dtype {tensor.dtype}",
                 )
-            return self._finding(
-                symbol, Status.PASS, f"builds a tensor of {tensor.dtype}"
-            )
+            return self._finding(symbol, Status.PASS, f"builds a tensor of {tensor.dtype}")
 
         return self._finding(symbol, Status.PASS, f"exported value: {text[:48]}")
 

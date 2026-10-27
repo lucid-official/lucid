@@ -54,14 +54,11 @@ def _ref_half(ref: ModuleType, name: str) -> Any:
 def _same(got: list[float], want: list[float]) -> bool:
     """Elementwise equality in which NaN matches NaN (``(-1) ** 0.1``)."""
     return len(got) == len(want) and all(
-        g == w or (math.isnan(g) and math.isnan(w))
-        for g, w in zip(got, want, strict=True)
+        g == w or (math.isnan(g) and math.isnan(w)) for g, w in zip(got, want, strict=True)
     )
 
 
-def _expected(
-    ref: ModuleType, half: str, op: str, s: float | int
-) -> list[float] | None:
+def _expected(ref: ModuleType, half: str, op: str, s: float | int) -> list[float] | None:
     rt = ref.tensor(_VALUES, dtype=_ref_half(ref, half))
     if op == "rdiv":
         out = (ref.tensor(float(s), dtype=ref.float32) / rt.float()).to(rt.dtype)
@@ -135,9 +132,9 @@ def test_a_0d_operand_that_requires_grad_keeps_op_math_and_gets_f32_grad(
 ) -> None:
     expected = _expected(ref, half, op, 0.1)
     assert expected is not None
-    t = lucid.tensor(
-        _VALUES, dtype=lucid.float32, device=device, requires_grad=True
-    ).to(_HALF[half])
+    t = lucid.tensor(_VALUES, dtype=lucid.float32, device=device, requires_grad=True).to(
+        _HALF[half]
+    )
     t.retain_grad()
     z = lucid.tensor(0.1, dtype=lucid.float32, device=device, requires_grad=True)
     out = t * z if op == "*" else (t / z if op == "/" else z / t)
@@ -157,9 +154,7 @@ def test_a_0d_operand_that_requires_grad_keeps_op_math_and_gets_f32_grad(
 
 
 @pytest.mark.parametrize("half", list(_HALF))
-@pytest.mark.parametrize(
-    "op,s", [("*", 0.1), ("*", 1e5), ("/", 1e5), ("/", 0.3)], ids=str
-)
+@pytest.mark.parametrize("op,s", [("*", 0.1), ("*", 1e5), ("/", 1e5), ("/", 0.3)], ids=str)
 def test_in_place_forms_take_the_same_path(
     half: str, op: str, s: float, device: str, ref: ModuleType
 ) -> None:

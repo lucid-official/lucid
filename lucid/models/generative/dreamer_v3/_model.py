@@ -462,8 +462,7 @@ class DreamerV3Model(PretrainedModel):
         """
         if self.pcont_head is None:
             raise ValueError(
-                "this model has no discount head; construct it with "
-                "DreamerV3Config(pcont=True)"
+                "this model has no discount head; construct it with " "DreamerV3Config(pcont=True)"
             )
         return self.pcont_head(state.feature)
 
@@ -735,9 +734,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         something worth regressing toward.
         """
         mix = 1.0 if self._updates == 0 else self._critic_ema
-        update_averages(
-            self.dreamer_v3.value_head, [(self.dreamer_v3.slow_value_head, 1.0 - mix)]
-        )
+        update_averages(self.dreamer_v3.value_head, [(self.dreamer_v3.slow_value_head, 1.0 - mix)])
         self._updates += 1
 
     # ── objectives ───────────────────────────────────────────────────────
@@ -808,16 +805,12 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
                 dtype=target.dtype,
             )
         else:
-            ones = lucid.ones(
-                (int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype
-            )
+            ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
             running = lucid.cat([ones, pcont[:, : self._horizon - 1]], dim=1)
             weight = lucid.cumprod(running, dim=1).detach()
 
         scale = self.returns.update(target) if self.training else self.returns.scale
-        actor_loss, entropy = self._actor_objective(
-            states, actions, target, weight, scale
-        )
+        actor_loss, entropy = self._actor_objective(states, actions, target, weight, scale)
         value_loss = self._critic_objective(states, target, weight)
 
         replay_loss: Tensor | None = None
@@ -907,9 +900,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         actor_loss = -(weight * objective).mean()
         return actor_loss, entropy.mean()
 
-    def _critic_objective(
-        self, states: RSSMState, target: Tensor, weight: Tensor
-    ) -> Tensor:
+    def _critic_objective(self, states: RSSMState, target: Tensor, weight: Tensor) -> Tensor:
         """Two-hot cross-entropy against the returns, plus the slow-copy pull.
 
         Parameters
@@ -996,8 +987,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         """
         if int(rewards.shape[1]) < 2:
             raise ValueError(
-                "the replayed critic term needs at least two steps, got "
-                f"{int(rewards.shape[1])}"
+                "the replayed critic term needs at least two steps, got " f"{int(rewards.shape[1])}"
             )
         model = self.dreamer_v3
         feature = posteriors.feature.detach()

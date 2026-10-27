@@ -92,9 +92,7 @@ def test_a_zero_divisor_refusal_is_not_missing_dtype_support(qualname: str) -> N
 
 def test_only_a_division_by_zero_counts_as_a_value_refusal() -> None:
     with pytest.raises(RuntimeError) as caught:
-        lucid.fmod(
-            lucid.tensor([3], dtype=lucid.int32), lucid.tensor([0], dtype=lucid.int32)
-        )
+        lucid.fmod(lucid.tensor([3], dtype=lucid.int32), lucid.tensor([0], dtype=lucid.int32))
     assert _probe.refuses_a_value(caught.value)
     assert _probe.refuses_a_value(ZeroDivisionError("integer division by zero"))
     assert not _probe.refuses_a_value(TypeError("dtype not supported: int8"))
@@ -126,9 +124,7 @@ def test_ops_that_only_share_a_name_are_not_compared() -> None:
         assert got == labels, (qualname, got)
 
 
-@pytest.mark.parametrize(
-    "qualname", ["lucid.optim.ChainedScheduler", "lucid.optim.SequentialLR"]
-)
+@pytest.mark.parametrize("qualname", ["lucid.optim.ChainedScheduler", "lucid.optim.SequentialLR"])
 @pytest.mark.parametrize("axis", [SchedulerAxis, SmokeAxis], ids=["scheduler", "smoke"])
 def test_a_composite_scheduler_is_handed_children_of_its_own_optimizer(
     qualname: str, axis: type
@@ -141,9 +137,7 @@ def test_a_composite_scheduler_is_handed_children_of_its_own_optimizer(
 
 
 def test_the_icdf_round_trip_compares_only_points_it_did_not_clip() -> None:
-    finding = DistributionAxis().run(
-        _symbol("lucid.distributions.HalfNormal"), _context()
-    )
+    finding = DistributionAxis().run(_symbol("lucid.distributions.HalfNormal"), _context())
     assert finding.status == Status.PASS, finding.detail
 
 
@@ -180,16 +174,12 @@ def test_split_is_probed_with_sizes_its_axis_takes() -> None:
 
 def _stochastic() -> list[str]:
     return sorted(
-        q
-        for q, s in _symbols().items()
-        if "stochastic" in s.flags and s.kind in ("op", "method")
+        q for q, s in _symbols().items() if "stochastic" in s.flags and s.kind in ("op", "method")
     )
 
 
 def test_every_spelling_of_a_sampler_is_drawn_under_one_seed() -> None:
-    compared = [
-        q for q in _stochastic() if len(list(_surface.counterparts(_symbol(q)))) >= 2
-    ]
+    compared = [q for q in _stochastic() if len(list(_surface.counterparts(_symbol(q)))) >= 2]
     assert compared, "no sampler has two spellings — the case this guards is gone"
     for qualname in compared:
         finding = EntryPointAxis().run(_symbol(qualname), _context())
@@ -219,9 +209,7 @@ def test_a_batched_distributions_cdf_is_probed_member_by_member() -> None:
     )
     problems, checked = DistributionAxis._check_cdf(normal)
     assert not problems and {"cdf", "icdf"} <= set(checked), (problems, checked)
-    finding = DistributionAxis().run(
-        _symbol("lucid.distributions.GeneralizedPareto"), _context()
-    )
+    finding = DistributionAxis().run(_symbol("lucid.distributions.GeneralizedPareto"), _context())
     assert finding.status == Status.PASS, finding.detail
 
 
@@ -284,9 +272,7 @@ def test_a_resized_in_place_call_keeps_what_it_declared() -> None:
     # including the in-place joint rule, which built its own ``Call``.
     receiver = _probe.as_f64(np.full((2, 3), 0.5))
     peer = _probe.as_f64(np.full((2, 3), 0.25))
-    call = _specs.Call(
-        [receiver, peer], {}, 0, "x.op_(peer)", domain=(0.0, 1.0), strided=True
-    )
+    call = _specs.Call([receiver, peer], {}, 0, "x.op_(peer)", domain=(0.0, 1.0), strided=True)
     call.joint = _specs._bounds_resized
     shrunk = call.resized(np.full((1, 3), 0.5))
     x, follower = shrunk.args

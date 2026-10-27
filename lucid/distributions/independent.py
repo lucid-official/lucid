@@ -264,9 +264,7 @@ class Independent(Distribution):
         Tensor
             Log joint probability values of shape ``batch_shape``.
         """
-        return _sum_rightmost(
-            self.base_dist.log_prob(value), self.reinterpreted_batch_ndims
-        )
+        return _sum_rightmost(self.base_dist.log_prob(value), self.reinterpreted_batch_ndims)
 
     @override
     def entropy(self) -> Tensor:
@@ -296,17 +294,13 @@ class Independent(Distribution):
             return False
         return self.base_dist.has_enumerate_support
 
-    has_enumerate_support = property(
-        _has_enumerate_support, doc=_has_enumerate_support.__doc__
-    )
+    has_enumerate_support = property(_has_enumerate_support, doc=_has_enumerate_support.__doc__)
 
     @override
     def enumerate_support(self, expand: bool = True) -> Tensor:
         """Delegate support enumeration to ``base_dist`` when no batch axes are re-interpreted."""
         if self.reinterpreted_batch_ndims > 0:
-            raise NotImplementedError(
-                "Enumeration over cartesian product is not implemented"
-            )
+            raise NotImplementedError("Enumeration over cartesian product is not implemented")
         return self.base_dist.enumerate_support(expand=expand)
 
     @override

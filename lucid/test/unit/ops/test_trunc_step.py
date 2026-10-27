@@ -17,12 +17,8 @@ _VALUES = [2.7, -2.7, -0.5, 0.5, 0.0, -0.0, float("inf"), -float("inf"), float("
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize(
-    "dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str
-)
-def test_trunc_matches_numpy_down_to_the_sign_of_zero(
-    device: str, dtype: object
-) -> None:
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=str)
+def test_trunc_matches_numpy_down_to_the_sign_of_zero(device: str, dtype: object) -> None:
     got = lucid.trunc(lucid.tensor(_VALUES, device=device).to(dtype)).float().numpy()
     want = np.trunc(np.array(_VALUES, dtype=np.float32))
     np.testing.assert_array_equal(got, want)

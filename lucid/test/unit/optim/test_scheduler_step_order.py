@@ -173,12 +173,8 @@ def test_step_order_warnings_are_the_references(name: str, loop: str, ref: Any) 
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", list(_SCHEDULES))
-def test_an_optimizer_step_before_the_scheduler_does_not_count(
-    name: str, ref: Any
-) -> None:
-    _assert_as_the_reference(
-        ref, _SCHEDULES[name], _scheduler_first, step_before_build=True
-    )
+def test_an_optimizer_step_before_the_scheduler_does_not_count(name: str, ref: Any) -> None:
+    _assert_as_the_reference(ref, _SCHEDULES[name], _scheduler_first, step_before_build=True)
 
 
 def _second_scheduler_after_a_step(S: Any, o: Any) -> Any:
@@ -376,16 +372,13 @@ def _compiled_loop(entry: str, on: str, built: str, scheduler_first: bool) -> li
             if not scheduler_first:
                 sched.step()
     return [
-        str(w.message).split(". ")[0]
-        for w in caught
-        if "lr_scheduler.step()" in str(w.message)
+        str(w.message).split(". ")[0] for w in caught if "lr_scheduler.step()" in str(w.message)
     ]
 
 
 _CASES = [
     pytest.param(entry, "optimizer", built, id=f"{entry}-built-{built}")
-    for entry in ["compile_optimizer", "compile_optimizer-via-opt", "fused_step"]
-    + ["make_step"]
+    for entry in ["compile_optimizer", "compile_optimizer-via-opt", "fused_step"] + ["make_step"]
     for built in ["before", "after"]
 ] + [
     # The documented handles of a compiled optimizer: the wrapper itself, and

@@ -129,14 +129,8 @@ class TestProbabilityPaths:
             minus = lucid.tensor([value - step], dtype=lucid.float64)
             a_p, s_p, _, _ = _path_coefficients(path, plus, **kwargs)  # type: ignore[arg-type]
             a_m, s_m, _, _ = _path_coefficients(path, minus, **kwargs)  # type: ignore[arg-type]
-            assert (
-                abs(_flat(a_dot)[0] - (_flat(a_p)[0] - _flat(a_m)[0]) / (2 * step))
-                < 1e-7
-            )
-            assert (
-                abs(_flat(sigma_dot)[0] - (_flat(s_p)[0] - _flat(s_m)[0]) / (2 * step))
-                < 1e-7
-            )
+            assert abs(_flat(a_dot)[0] - (_flat(a_p)[0] - _flat(a_m)[0]) / (2 * step)) < 1e-7
+            assert abs(_flat(sigma_dot)[0] - (_flat(s_p)[0] - _flat(s_m)[0]) / (2 * step)) < 1e-7
 
     def test_optimal_transport_boundary_conditions_are_exact(self) -> None:
         kwargs = {"sigma_min": 1e-4, "beta_min": 0.1, "beta_max": 20.0}
@@ -248,9 +242,7 @@ class TestProbabilityPaths:
                 calls += 1
                 image = x.reshape(8, 1, 1, 2)
                 a, sigma, a_dot, sigma_dot = model.coefficients(t.reshape(1, 1, 1, 1))
-                return ((sigma_dot / sigma) * (image - a * x1) + a_dot * x1).reshape(
-                    8, -1
-                )
+                return ((sigma_dot / sigma) * (image - a * x1) + a_dot * x1).reshape(8, -1)
 
             lucid.diffeq.odeint(
                 field,
@@ -389,10 +381,7 @@ class TestVelocityField:
         # Discrete step 400 and continuous t = 0.4 meet at the same
         # embedding input, since the field scales time by 1000.
         assert (
-            _worst(
-                reference(x, lucid.tensor([400, 400]))
-                - field(x, lucid.tensor([0.4, 0.4]))
-            )
+            _worst(reference(x, lucid.tensor([400, 400])) - field(x, lucid.tensor([0.4, 0.4])))
             == 0.0
         )
 

@@ -132,9 +132,7 @@ def _check_delta(delta: float, op: str = "huber_loss") -> None:
     if isinstance(delta := _promotion.as_number(delta), bool) or not isinstance(
         delta, (int, float)
     ):
-        raise TypeError(
-            f"{op}: delta must be a float or int, got {type(delta).__name__}"
-        )
+        raise TypeError(f"{op}: delta must be a float or int, got {type(delta).__name__}")
     if not delta > 0.0:
         raise ValueError(f"{op}: delta must be positive, got {delta!r}")
 
@@ -144,20 +142,14 @@ def _check_label_smoothing(label_smoothing: float, op: str = "cross_entropy") ->
         isinstance(label_smoothing := _promotion.as_number(label_smoothing), bool)
         or not 0.0 <= label_smoothing <= 1.0
     ):
-        raise ValueError(
-            f"{op}: label_smoothing must be in [0, 1], got {label_smoothing!r}"
-        )
+        raise ValueError(f"{op}: label_smoothing must be in [0, 1], got {label_smoothing!r}")
 
 
-def _check_multi_margin(
-    p: int, weight: Tensor | None, op: str = "multi_margin_loss"
-) -> None:
+def _check_multi_margin(p: int, weight: Tensor | None, op: str = "multi_margin_loss") -> None:
     if isinstance(p := _promotion.as_number(p), bool) or (p != 1 and p != 2):
         raise ValueError(f"{op}: only p == 1 and p == 2 supported, got {p!r}")
     if weight is not None and weight.ndim != 1:
-        raise ValueError(
-            f"{op}: expected weight to be None or 1D tensor, got {weight.ndim}D"
-        )
+        raise ValueError(f"{op}: expected weight to be None or 1D tensor, got {weight.ndim}D")
 
 
 def _check_triplet_margin(margin: float, op: str) -> None:
@@ -206,15 +198,12 @@ def _broadcast_shape(*shapes: tuple[int, ...]) -> tuple[int, ...] | None:
         return None
 
 
-def _check_broadcasts_to(
-    t: Tensor | None, shape: tuple[int, ...], what: str, op: str
-) -> None:
+def _check_broadcasts_to(t: Tensor | None, shape: tuple[int, ...], what: str, op: str) -> None:
     """``t`` scales a loss of ``shape`` element by element: it has to
     broadcast to ``shape`` without making it any larger."""
     if t is not None and _broadcast_shape(_shape(t), shape) != shape:
         raise ValueError(
-            f"{op}: {what} of shape {_shape(t)} does not broadcast to the "
-            f"input's shape {shape}"
+            f"{op}: {what} of shape {_shape(t)} does not broadcast to the " f"input's shape {shape}"
         )
 
 
@@ -259,8 +248,7 @@ def _check_target(x: Tensor, target: Tensor, op: str) -> tuple[int, ...]:
     if rule == "same":
         if t_shape != x_shape:
             raise ValueError(
-                f"{op}: target size {t_shape} must be the same as input size "
-                f"{x_shape}"
+                f"{op}: target size {t_shape} must be the same as input size " f"{x_shape}"
             )
         return x_shape
     shape = _broadcast_shape(x_shape, t_shape)
@@ -280,9 +268,7 @@ def _check_target(x: Tensor, target: Tensor, op: str) -> tuple[int, ...]:
     return shape
 
 
-def _broadcast_operands(
-    x: Tensor, target: Tensor, shape: tuple[int, ...]
-) -> tuple[Tensor, Tensor]:
+def _broadcast_operands(x: Tensor, target: Tensor, shape: tuple[int, ...]) -> tuple[Tensor, Tensor]:
     """``x`` and ``target`` at the loss's ``shape``, for a fused kernel that
     takes operands of one shape.  An operand already at ``shape`` is passed
     through untouched, so the ordinary call dispatches nothing extra."""
@@ -482,9 +468,7 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
         t.is_floating_point() for t in (*inputs.values(), target)
     ):
         dtypes = ", ".join(str(t.dtype) for t in (*inputs.values(), target))
-        raise TypeError(
-            f"{op}: expected a floating point input or target, got {dtypes}"
-        )
+        raise TypeError(f"{op}: expected a floating point input or target, got {dtypes}")
 
 
 def _loss_dtype(*operands: Tensor) -> _C_engine.Dtype:
@@ -564,9 +548,7 @@ def _check_cross_entropy_target(
             f"and must be floating point, got {target.dtype}"
         )
     elif ignore_index >= 0:
-        raise ValueError(
-            f"{op}: ignore_index is not supported for a target of class probabilities"
-        )
+        raise ValueError(f"{op}: ignore_index is not supported for a target of class probabilities")
     return num_classes, soft
 
 
@@ -641,9 +623,7 @@ def _poisson_stirling(ti: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     # ``log(target!)`` is 0 and the approximation is not.
     one = _C_engine.full(ti.shape, 1.0, ti.dtype, ti.device)
     safe = _C_engine.maximum(ti, one)  # keeps log finite at target == 0
-    two_pi_safe = _C_engine.mul(
-        _C_engine.full(ti.shape, 2.0 * math.pi, ti.dtype, ti.device), safe
-    )
+    two_pi_safe = _C_engine.mul(_C_engine.full(ti.shape, 2.0 * math.pi, ti.dtype, ti.device), safe)
     stirling = _C_engine.add(
         _C_engine.sub(_C_engine.mul(safe, _C_engine.log(safe)), safe),
         _C_engine.mul(
@@ -668,9 +648,7 @@ class _Loss(Module):
     ) -> None:
         """Initialise the loss module's ``reduction`` attribute."""
         super().__init__()
-        self.reduction = _legacy_reduction(
-            size_average, reduce, reduction, self.__class__.__name__
-        )
+        self.reduction = _legacy_reduction(size_average, reduce, reduction, self.__class__.__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -690,6 +668,3 @@ def _default_distance(
         return pairwise_distance(a, b, p=2.0)
 
     return _default
-
-
-

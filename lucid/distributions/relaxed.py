@@ -161,9 +161,7 @@ class RelaxedBernoulli(Distribution):
             If both or neither of ``probs`` and ``logits`` are provided.
         """
         if (probs is None) == (logits is None):
-            raise ValueError(
-                "RelaxedBernoulli: pass exactly one of `probs` or `logits`."
-            )
+            raise ValueError("RelaxedBernoulli: pass exactly one of `probs` or `logits`.")
         self.temperature = _as_tensor(temperature)
         param = _as_tensor(probs if probs is not None else logits)  # type: ignore[arg-type]
         # A temperature or a probability given as a number is a 0-dim host
@@ -234,12 +232,8 @@ class RelaxedBernoulli(Distribution):
         l: Tensor = self._logits + lucid.zeros(
             shape, dtype=self._logits.dtype, device=self._logits.device
         )
-        u1: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(
-            1e-7, 1.0 - 1e-7
-        )
-        u2: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(
-            1e-7, 1.0 - 1e-7
-        )
+        u1: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
+        u2: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
         # Gumbel(0,1) = −log(−log U).
         g1: Tensor = -(-(u1.log())).log()
         g2: Tensor = -(-(u2.log())).log()
@@ -441,9 +435,7 @@ class RelaxedOneHotCategorical(Distribution):
         )
 
         if (probs is None) == (logits is None):
-            raise ValueError(
-                "RelaxedOneHotCategorical: pass exactly one of `probs` or `logits`."
-            )
+            raise ValueError("RelaxedOneHotCategorical: pass exactly one of `probs` or `logits`.")
         self.temperature = _as_tensor(temperature)
         if probs is not None:
             self.probs = _normalize_probs(_as_tensor(probs))
@@ -514,15 +506,11 @@ class RelaxedOneHotCategorical(Distribution):
         """
         from lucid.nn.functional.activations import softmax
 
-        out_shape = (
-            tuple(sample_shape) + tuple(self._batch_shape) + tuple(self._event_shape)
-        )
+        out_shape = tuple(sample_shape) + tuple(self._batch_shape) + tuple(self._event_shape)
         l = self._logits + lucid.zeros(
             out_shape, dtype=self._logits.dtype, device=self._logits.device
         )
-        u = lucid.rand(*out_shape, dtype=l.dtype, device=l.device).clip(
-            1e-7, 1.0 - 1e-7
-        )
+        u = lucid.rand(*out_shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
         g = -(-(u.log())).log()
         return softmax((l + g) / self.temperature.unsqueeze(-1), dim=-1)
 

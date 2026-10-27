@@ -290,9 +290,7 @@ def remove_small_boxes(boxes: Tensor, min_size: float) -> Tensor:
     """
     # One host read for every box's (w, h), not two per box.
     sizes = host_rows(boxes[:, 2:4] - boxes[:, 0:2])
-    keep: list[int] = [
-        i for i, (w, h) in enumerate(sizes) if w >= min_size and h >= min_size
-    ]
+    keep: list[int] = [i for i, (w, h) in enumerate(sizes) if w >= min_size and h >= min_size]
     if not keep:
         return lucid.zeros((0,), device=boxes.device.type).long()
     return lucid.tensor(keep, device=boxes.device.type).long()
@@ -483,9 +481,7 @@ def nms(
     if words * 32 != N:
         over = F.pad(over, (0, words * 32 - N))
     bits = lucid.tensor([1 << b for b in range(32)], device=dev).long()
-    packed = cast(
-        list[list[int]], (over.reshape(N, words, 32) * bits).sum(dim=-1).tolist()
-    )
+    packed = cast(list[list[int]], (over.reshape(N, words, 32) * bits).sum(dim=-1).tolist())
 
     suppressed = 0
     keep: list[int] = []
@@ -590,9 +586,7 @@ class AnchorGenerator(nn.Module):
     def _compute_cell_anchors(self) -> list[list[list[float]]]:
         """Base anchors (centred at origin) for every FPN level, as xyxy rows."""
         all_anchors: list[list[list[float]]] = []
-        for level_sizes, level_ratios in zip(
-            self.sizes, self.aspect_ratios, strict=True
-        ):
+        for level_sizes, level_ratios in zip(self.sizes, self.aspect_ratios, strict=True):
             anchors: list[list[float]] = []
             for size in level_sizes:
                 area = float(size * size)
@@ -663,9 +657,7 @@ class AnchorGenerator(nn.Module):
         # with — and as wide as — the predictions they are matched against.
         device = feature_maps[0].device.type if feature_maps else "cpu"
         all_anchors: list[Tensor] = []
-        for feat, base, stride in zip(
-            feature_maps, self._cell_anchors, strides, strict=True
-        ):
+        for feat, base, stride in zip(feature_maps, self._cell_anchors, strides, strict=True):
             fH = int(feat.shape[2])
             fW = int(feat.shape[3])
             all_anchors.append(
@@ -766,16 +758,8 @@ def roi_align(
                 rx = max(1, math.ceil(roi_w / out_w))
 
             # Sub-bin sample centres (out_h*ry rows, out_w*rx cols).
-            xs = [
-                rx1 + j * bw + (ix + 0.5) * bw / rx
-                for j in range(out_w)
-                for ix in range(rx)
-            ]
-            ys = [
-                ry1 + i * bh + (iy + 0.5) * bh / ry
-                for i in range(out_h)
-                for iy in range(ry)
-            ]
+            xs = [rx1 + j * bw + (ix + 0.5) * bw / rx for j in range(out_w) for ix in range(rx)]
+            ys = [ry1 + i * bh + (iy + 0.5) * bh / ry for i in range(out_h) for iy in range(ry)]
             yl, yh, fy, zy = _bilinear_prep(ys, feat_H)
             xl, xh, fx, zx = _bilinear_prep(xs, feat_W)
             ny = len(ys)
@@ -1148,9 +1132,7 @@ class FPN(nn.Module):
         self.out_channels = out_channels
         n = len(in_channels)
 
-        self.lateral_convs = nn.ModuleList(
-            [nn.Conv2d(ic, out_channels, 1) for ic in in_channels]
-        )
+        self.lateral_convs = nn.ModuleList([nn.Conv2d(ic, out_channels, 1) for ic in in_channels])
         self.output_convs = nn.ModuleList(
             [nn.Conv2d(out_channels, out_channels, 3, padding=1) for _ in range(n)]
         )
@@ -1289,9 +1271,7 @@ class RPN(nn.Module):
             #         → (B,H,W,A,4) → (B, H*W*A, 4)
             scores_flat = F.sigmoid(logits.permute(0, 2, 3, 1).reshape(B, -1))
             deltas_flat = (
-                deltas.reshape(B, A, 4, fH, fW)
-                .permute(0, 3, 4, 1, 2)
-                .reshape(B, fH * fW * A, 4)
+                deltas.reshape(B, A, 4, fH, fW).permute(0, 3, 4, 1, 2).reshape(B, fH * fW * A, 4)
             )
 
             for b in range(B):
@@ -1317,9 +1297,7 @@ class RPN(nn.Module):
                 topk_sc = topk_sc[keep_small]
 
                 score_mask: list[int] = [
-                    i
-                    for i, score in enumerate(host_floats(topk_sc))
-                    if score >= self.score_thresh
+                    i for i, score in enumerate(host_floats(topk_sc)) if score >= self.score_thresh
                 ]
                 if not score_mask:
                     continue
@@ -1627,9 +1605,7 @@ class Matcher:
         best_gt_iou, matches = iou.max(dim=0)  # (N,) best overlap and GT index
 
         below = best_gt_iou < self.low_threshold
-        between = (best_gt_iou >= self.low_threshold) & (
-            best_gt_iou < self.high_threshold
-        )
+        between = (best_gt_iou >= self.low_threshold) & (best_gt_iou < self.high_threshold)
         result = lucid.where(below, self.BELOW_LOW_THRESHOLD, matches)
         result = lucid.where(between, self.BETWEEN_THRESHOLDS, result)
 
@@ -1925,15 +1901,11 @@ def rpn_loss(
         sampled = lucid.cat([pos, neg], dim=0)
         obj_target = labels[sampled].to(objectness.dtype)
         obj_parts.append(
-            F.binary_cross_entropy_with_logits(
-                objectness[b][sampled], obj_target, reduction="sum"
-            )
+            F.binary_cross_entropy_with_logits(objectness[b][sampled], obj_target, reduction="sum")
         )
         if n_pos > 0:
             matched_gt = gt_boxes[matched[pos].long()]
-            reg_targets = encode_boxes(
-                matched_gt, anchors_cat[pos], (1.0, 1.0, 1.0, 1.0)
-            )
+            reg_targets = encode_boxes(matched_gt, anchors_cat[pos], (1.0, 1.0, 1.0, 1.0))
             reg_parts.append(
                 F.smooth_l1_loss(
                     pred_deltas[b][pos],
@@ -2040,9 +2012,7 @@ def select_training_samples(
         matched = matcher(box_iou(gt_boxes, props))
         clamped = matched.clip(min=0).long()
         fg = matched >= 0
-        labels = lucid.where(
-            fg, gt_labels[clamped], lucid.zeros_like(gt_labels[clamped])
-        )
+        labels = lucid.where(fg, gt_labels[clamped], lucid.zeros_like(gt_labels[clamped]))
         binary = lucid.where(fg, lucid.ones_like(labels), lucid.zeros_like(labels))
 
         pos, neg = sampler(binary)
@@ -2132,9 +2102,9 @@ def fastrcnn_loss(
     pred = chosen[offsets]
 
     reg_cat = lucid.cat(reg_targets, dim=0)
-    reg_loss = F.smooth_l1_loss(
-        pred, reg_cat[pos], beta=1.0 / 9.0, reduction="sum"
-    ) / float(n_total)
+    reg_loss = F.smooth_l1_loss(pred, reg_cat[pos], beta=1.0 / 9.0, reduction="sum") / float(
+        n_total
+    )
     return cls_loss, reg_loss
 
 
@@ -2252,9 +2222,7 @@ def maskrcnn_loss(
     # Select the ground-truth class channel of each positive RoI.
     chosen = mask_logits[pos].reshape(len(pos_idx) * k, m, m)
     pos_labels = cast(list[int], labels[pos].long().tolist())
-    offsets = lucid.tensor(
-        [i * k + int(c) for i, c in enumerate(pos_labels)], device=dev
-    ).long()
+    offsets = lucid.tensor([i * k + int(c) for i, c in enumerate(pos_labels)], device=dev).long()
     pred = chosen[offsets]  # (P_pos, m, m)
 
     return F.binary_cross_entropy_with_logits(pred, mask_targets[pos])
@@ -2304,9 +2272,7 @@ def flatten_rpn_outputs(
         fW = int(lg.shape[3])
         per_level_scores.append(lg.permute(0, 2, 3, 1).reshape(B, fH * fW * A))
         per_level_deltas.append(
-            dl.reshape(B, A, 4, fH, fW)
-            .permute(0, 3, 4, 1, 2)
-            .reshape(B, fH * fW * A, 4)
+            dl.reshape(B, A, 4, fH, fW).permute(0, 3, 4, 1, 2).reshape(B, fH * fW * A, 4)
         )
     return per_level_scores, per_level_deltas
 
@@ -2518,8 +2484,7 @@ class _ReferenceAnchorGenerator(nn.Module):
         self.sizes = sizes
         self.aspect_ratios = aspect_ratios
         self._cell_anchors: list[Tensor] = [
-            self._gen_cell_anchors(s, r)
-            for s, r in zip(sizes, aspect_ratios, strict=True)
+            self._gen_cell_anchors(s, r) for s, r in zip(sizes, aspect_ratios, strict=True)
         ]
 
     @staticmethod
@@ -2560,9 +2525,7 @@ class _ReferenceAnchorGenerator(nn.Module):
     @override
     def forward(self, feature_maps: list[Tensor], strides: list[int]) -> list[Tensor]:
         out: list[Tensor] = []
-        for feat, base, stride in zip(
-            feature_maps, self._cell_anchors, strides, strict=True
-        ):
+        for feat, base, stride in zip(feature_maps, self._cell_anchors, strides, strict=True):
             gh = int(feat.shape[2])
             gw = int(feat.shape[3])
             out.append(self._grid_anchors((gh, gw), stride, base, feat))
@@ -2587,9 +2550,7 @@ def _fpn_level_for_boxes(
     # itself.  The lower clamp keeps a degenerate (zero-area) box out of
     # log2(0) now that eps no longer covers for it.
     s = area.clamp(0.0, 1e18).sqrt().clamp(min=1e-12)
-    lvl = lucid.floor(
-        float(canonical_level) + lucid.log2(s / float(canonical_scale)) + eps
-    )
+    lvl = lucid.floor(float(canonical_level) + lucid.log2(s / float(canonical_scale)) + eps)
     lvl = lvl.clamp(float(k_min), float(k_max))
     return (lvl - float(k_min)).long()
 
@@ -2803,9 +2764,7 @@ class MultiScaleResolution:
             raise ValueError(f"period must be positive, got {period}")
         bad = [s for s in sizes if s <= 0 or s % stride != 0]
         if bad:
-            raise ValueError(
-                f"every size must be a positive multiple of {stride}, got {bad}"
-            )
+            raise ValueError(f"every size must be a positive multiple of {stride}, got {bad}")
         self.sizes = sizes
         self.period = period
         self.stride = stride

@@ -246,22 +246,14 @@ class MeanFlowConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_patch_grid(
-            self.sample_size, self.patch_size, self.hidden_size, self.num_heads
-        )
+        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
         if self.depth <= 0:
             raise ValueError(f"depth must be positive, got {self.depth}")
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the average velocity"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the average velocity")
         if not 0.0 <= self.ratio_r_not_t <= 1.0:
-            raise ValueError(
-                f"ratio_r_not_t is a probability, got {self.ratio_r_not_t}"
-            )
+            raise ValueError(f"ratio_r_not_t is a probability, got {self.ratio_r_not_t}")
         if not 0.0 <= self.class_dropout <= 1.0:
-            raise ValueError(
-                f"class_dropout is a probability, got {self.class_dropout}"
-            )
+            raise ValueError(f"class_dropout is a probability, got {self.class_dropout}")
         if self.adaptive_weight_eps <= 0.0:
             raise ValueError(
                 f"adaptive_weight_eps must be positive — it exists to keep the "

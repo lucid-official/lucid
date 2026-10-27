@@ -252,9 +252,7 @@ class _Side:
         self.tensor, self.parameter, self.sgd = tensor, parameter, sgd
         self.scaler_cls, self.clip = scaler, clip
 
-    def run(
-        self, n_opts: int, unscale_first: bool
-    ) -> list[tuple[list[list[float]], float]]:
+    def run(self, n_opts: int, unscale_first: bool) -> list[tuple[list[list[float]], float]]:
         params = [self.parameter([1.0, -2.0, 0.5]) for _ in range(n_opts)]
         opts = [self.sgd([p], lr=0.1) for p in params]
         scaler = self.scaler_cls(init_scale=2.0**10, growth_interval=2)
@@ -306,9 +304,7 @@ def _ref_side(ref) -> _Side:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("n_opts", [1, 2], ids=["one-optimizer", "two-optimizers"])
-@pytest.mark.parametrize(
-    "unscale_first", [True, False], ids=["unscale-clip-step", "step"]
-)
+@pytest.mark.parametrize("unscale_first", [True, False], ids=["unscale-clip-step", "step"])
 def test_trajectory_matches_the_reference(
     device: str, ref, n_opts: int, unscale_first: bool
 ) -> None:

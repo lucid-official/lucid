@@ -166,10 +166,7 @@ def _grad_slots(
     inputs = grad_ids[n_params : n_params + len(input_positions)]
     return (
         absent if any(absent) else (),
-        tuple(
-            None if g == -1 else pos
-            for pos, g in zip(input_positions, inputs, strict=True)
-        ),
+        tuple(None if g == -1 else pos for pos, g in zip(input_positions, inputs, strict=True)),
     )
 
 
@@ -365,8 +362,7 @@ def _run_step_entry(
         if pos is not None:
             input_grads[pos] = g
     reached: _Grads = [
-        None if entry.absent and entry.absent[i] else g
-        for i, g in enumerate(grads[:n_grads])
+        None if entry.absent and entry.absent[i] else g for i, g in enumerate(grads[:n_grads])
     ]
     loss_impl = cast(_C_engine.TensorImpl, outs[0])
     if not entry.observed:
@@ -409,9 +405,7 @@ class _CompiledStepFunction(Function):
         from lucid._dispatch import _wrap
 
         saved_grad_impls = cast(_Grads, ctx.saved_grad_impls)
-        return tuple(
-            None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls
-        )
+        return tuple(None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls)
 
 
 def _make_monolithic_step(
@@ -459,9 +453,7 @@ def _make_monolithic_step(
 
             with compile_attempt():
                 before = fingerprint.outside_slots()
-                entry = _compile_step_entry(
-                    model, loss_fn, params, x_args, use_dynamic=use_dynamic
-                )
+                entry = _compile_step_entry(model, loss_fn, params, x_args, use_dynamic=use_dynamic)
                 fingerprint.settle(() if entry is None else entry.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})
@@ -472,9 +464,7 @@ def _make_monolithic_step(
             if key is not None:
                 cache[key] = entry
 
-        return cast(
-            Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params)
-        )
+        return cast(Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params))
 
     def clear_cache() -> None:
         """Drop every cached executable + eager-fallback blacklist for this step callable."""
@@ -582,9 +572,7 @@ def make_step(
             from lucid.compile._entry.segmented_step import make_autoseg_step
 
             return make_autoseg_step(model, loss_fn, dynamic=dynamic)
-        raise ValueError(
-            f"make_step: segments must be an int or 'auto', got {segments!r}"
-        )
+        raise ValueError(f"make_step: segments must be an int or 'auto', got {segments!r}")
     if segments > 1:
         from lucid.compile._entry.segmented_step import make_segmented_step
 
@@ -647,7 +635,5 @@ def _graph_dump(entries: Iterable[tuple[object, _StepEntry]]) -> str:
     """
     import json as _json
 
-    items = [
-        {"sig_hash": hash(k), "graph": _json.loads(e.graph_json)} for k, e in entries
-    ]
+    items = [{"sig_hash": hash(k), "graph": _json.loads(e.graph_json)} for k, e in entries]
     return _json.dumps(items, indent=2)

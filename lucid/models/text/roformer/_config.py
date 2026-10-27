@@ -143,15 +143,10 @@ class RoFormerConfig(LanguageModelConfig):
                 f"rotary_base must be > 1 for RoPE to make sense, got {self.rotary_base}"
             )
         if self.type_vocab_size <= 0:
-            raise ValueError(
-                f"type_vocab_size must be positive, got {self.type_vocab_size}"
-            )
+            raise ValueError(f"type_vocab_size must be positive, got {self.type_vocab_size}")
         if self.num_labels <= 0:
             raise ValueError(f"num_labels must be positive, got {self.num_labels}")
-        if self.classifier_dropout is not None and not (
-            0.0 <= self.classifier_dropout < 1.0
-        ):
+        if self.classifier_dropout is not None and not (0.0 <= self.classifier_dropout < 1.0):
             raise ValueError(
-                "classifier_dropout must be in [0, 1) or None, got "
-                f"{self.classifier_dropout}"
+                "classifier_dropout must be in [0, 1) or None, got " f"{self.classifier_dropout}"
             )

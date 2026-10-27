@@ -104,9 +104,7 @@ _ANTIALIAS = [
 ]
 
 
-def _compare(
-    ref: Any, device: str, shape: tuple[int, ...], kw: dict[str, Any], seed: int
-) -> None:
+def _compare(ref: Any, device: str, shape: tuple[int, ...], kw: dict[str, Any], seed: int) -> None:
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(shape).astype(np.float32)
     lx = lucid.tensor(x, device=device, requires_grad=True)
@@ -181,9 +179,7 @@ class TestInterpolateAntialias:
         # That is not mirrored.  Resizing the transposed image (height one,
         # which it gets right) gives the answer to hold Lucid to instead.
         x = np.random.default_rng(3).standard_normal((1, 2, 6, 2)).astype(np.float32)
-        got = F.interpolate(
-            lucid.tensor(x, device=device), size=(3, 1), mode=mode, antialias=True
-        )
+        got = F.interpolate(lucid.tensor(x, device=device), size=(3, 1), mode=mode, antialias=True)
         want = ref.nn.functional.interpolate(
             ref.tensor(x).transpose(2, 3), size=(1, 3), mode=mode, antialias=True
         ).transpose(2, 3)
@@ -216,9 +212,7 @@ class TestUpsampleModules:
             "bilinear2d",
         ],
     )
-    def test_modules_delegate(
-        self, ref: Any, device: str, module: str, kw: dict[str, Any]
-    ) -> None:
+    def test_modules_delegate(self, ref: Any, device: str, module: str, kw: dict[str, Any]) -> None:
         x = np.random.default_rng(0).standard_normal((2, 3, 5, 7)).astype(np.float32)
         l_out = getattr(lucid.nn, module)(**kw)(lucid.tensor(x, device=device))
         r_out = getattr(ref.nn, module)(**kw)(ref.tensor(x))

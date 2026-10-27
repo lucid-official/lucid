@@ -40,9 +40,7 @@ class TestSymbolicByDefault:
     """Gate-clean graphs share ONE symbolic-batch executable, no env var needed."""
 
     def test_mlp_one_shared_executable(self) -> None:
-        m = to_metal(
-            nn.Sequential(nn.Linear(16, 32), nn.GELU(), nn.Linear(32, 8))
-        ).eval()
+        m = to_metal(nn.Sequential(nn.Linear(16, 32), nn.GELU(), nn.Linear(32, 8))).eval()
         cm = lucid.compile(m, dynamic=True)
         for bs in (8, 16, 32):
             x = metal_tensor(bs, 16)
@@ -51,9 +49,7 @@ class TestSymbolicByDefault:
         assert_cache_hit(cm, 1)  # SHARED across every batch size, no env opt-in
 
     def test_transformer_one_shared_executable(self) -> None:
-        m = to_metal(
-            nn.TransformerEncoderLayer(32, 4, dim_feedforward=64, batch_first=True)
-        ).eval()
+        m = to_metal(nn.TransformerEncoderLayer(32, 4, dim_feedforward=64, batch_first=True)).eval()
         cm = lucid.compile(m, dynamic=True)
         for bs in (2, 4, 8):
             x = metal_tensor(bs, 7, 32)
@@ -170,9 +166,7 @@ class TestForceStaticOptOut:
 
     def test_env_disables_symbolic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LUCID_COMPILE_DYNAMIC", "0")
-        m = to_metal(
-            nn.Sequential(nn.Linear(16, 32), nn.ReLU(), nn.Linear(32, 8))
-        ).eval()
+        m = to_metal(nn.Sequential(nn.Linear(16, 32), nn.ReLU(), nn.Linear(32, 8))).eval()
         cm = lucid.compile(m, dynamic=True)
         assert cm._symbolic is False  # symbolic attempt disabled
         for bs in (8, 16):

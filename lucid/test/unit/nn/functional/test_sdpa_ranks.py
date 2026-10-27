@@ -31,11 +31,7 @@ CASES = [
 def test_metal_attends_at_every_rank_as_the_cpu_does(shape, mask_shape, causal) -> None:
     rng = np.random.default_rng(0)
     q, k, v = (rng.standard_normal(shape).astype(np.float32) for _ in range(3))
-    mask = (
-        None
-        if mask_shape is None
-        else rng.standard_normal(mask_shape).astype(np.float32)
-    )
+    mask = None if mask_shape is None else rng.standard_normal(mask_shape).astype(np.float32)
     outs, grads = {}, {}
     for device in ("cpu", "metal"):
         query = lucid.tensor(q, device=device, requires_grad=True)

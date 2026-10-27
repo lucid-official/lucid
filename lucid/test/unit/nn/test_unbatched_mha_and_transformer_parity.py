@@ -25,12 +25,9 @@ import lucid.nn.functional as F
 from lucid.nn.parameter import UninitializedParameter
 
 
-def _copy_state(
-    src_state: dict[str, object], dst_module: nn.Module, device: str
-) -> None:
+def _copy_state(src_state: dict[str, object], dst_module: nn.Module, device: str) -> None:
     mapped = {
-        k: lucid.tensor(v.detach().cpu().numpy(), device=device)
-        for k, v in src_state.items()
+        k: lucid.tensor(v.detach().cpu().numpy(), device=device) for k, v in src_state.items()
     }
     dst_module.load_state_dict(mapped)
 
@@ -56,9 +53,7 @@ class TestUnbatchedMultiheadAttention:
         v_np = rng.standard_normal((S, E)).astype(np.float32)
         kpm_np = np.array([False, True, False, False, True, False][:S])
 
-        ref_mha = ref.nn.MultiheadAttention(
-            E, H, dropout=0.0, batch_first=batch_first
-        ).eval()
+        ref_mha = ref.nn.MultiheadAttention(E, H, dropout=0.0, batch_first=batch_first).eval()
         mha = nn.MultiheadAttention(
             E, H, dropout=0.0, batch_first=batch_first, device=device
         ).eval()
@@ -69,18 +64,14 @@ class TestUnbatchedMultiheadAttention:
         v_l = lucid.tensor(v_np, device=device, requires_grad=True)
         kpm_l = lucid.tensor(kpm_np, device=device) if use_kpm else None
         attn_mask_l = (
-            nn.Transformer.generate_square_subsequent_mask(L, device=device)
-            if is_causal
-            else None
+            nn.Transformer.generate_square_subsequent_mask(L, device=device) if is_causal else None
         )
 
         q_r = ref.tensor(q_np, requires_grad=True)
         k_r = ref.tensor(k_np, requires_grad=True)
         v_r = ref.tensor(v_np, requires_grad=True)
         kpm_r = ref.tensor(kpm_np) if use_kpm else None
-        attn_mask_r = (
-            ref.nn.Transformer.generate_square_subsequent_mask(L) if is_causal else None
-        )
+        attn_mask_r = ref.nn.Transformer.generate_square_subsequent_mask(L) if is_causal else None
 
         out_l, w_l = mha(
             q_l,
@@ -108,26 +99,16 @@ class TestUnbatchedMultiheadAttention:
         expected_w_shape = (L, S) if average_attn_weights else (H, L, S)
         assert w_l.shape == expected_w_shape
 
-        np.testing.assert_allclose(
-            out_l.numpy(), out_r.detach().numpy(), rtol=1e-4, atol=1e-5
-        )
-        np.testing.assert_allclose(
-            w_l.numpy(), w_r.detach().numpy(), rtol=1e-4, atol=1e-5
-        )
+        np.testing.assert_allclose(out_l.numpy(), out_r.detach().numpy(), rtol=1e-4, atol=1e-5)
+        np.testing.assert_allclose(w_l.numpy(), w_r.detach().numpy(), rtol=1e-4, atol=1e-5)
 
         grad_out = rng.standard_normal((L, E)).astype(np.float32)
         (out_l * lucid.tensor(grad_out, device=device)).sum().backward()
         (out_r * ref.tensor(grad_out)).sum().backward()
         assert q_l.grad is not None and k_l.grad is not None and v_l.grad is not None
-        np.testing.assert_allclose(
-            q_l.grad.numpy(), q_r.grad.numpy(), rtol=1e-4, atol=1e-5
-        )
-        np.testing.assert_allclose(
-            k_l.grad.numpy(), k_r.grad.numpy(), rtol=1e-4, atol=1e-5
-        )
-        np.testing.assert_allclose(
-            v_l.grad.numpy(), v_r.grad.numpy(), rtol=1e-4, atol=1e-5
-        )
+        np.testing.assert_allclose(q_l.grad.numpy(), q_r.grad.numpy(), rtol=1e-4, atol=1e-5)
+        np.testing.assert_allclose(k_l.grad.numpy(), k_r.grad.numpy(), rtol=1e-4, atol=1e-5)
+        np.testing.assert_allclose(v_l.grad.numpy(), v_r.grad.numpy(), rtol=1e-4, atol=1e-5)
 
     def test_gqa_and_mqa_and_functional_unbatched(self, device: str) -> None:
         q = lucid.randn(4, 8, device=device)
@@ -220,15 +201,11 @@ class TestUnbatchedConvPoolAndRankGuards:
 
         signed = lucid.tensor([[[-1.0, 2.0, -3.0, 4.0]]], device=device)
         got = F.lp_pool1d(signed, 1, kernel_size=2)
-        np.testing.assert_allclose(
-            got.numpy(), np.array([[[1.0, 1.0]]], dtype=np.float32)
-        )
+        np.testing.assert_allclose(got.numpy(), np.array([[[1.0, 1.0]]], dtype=np.float32))
 
 
 class TestTransformerAPIParity:
-    def test_generate_square_subsequent_mask(
-        self, ref: ModuleType, device: str
-    ) -> None:
+    def test_generate_square_subsequent_mask(self, ref: ModuleType, device: str) -> None:
         for sz in (0, 1, 5):
             for dt_l, dt_r in (
                 (None, None),
@@ -236,12 +213,8 @@ class TestTransformerAPIParity:
                 (lucid.float16, ref.float16),
                 (lucid.bool_, ref.bool),
             ):
-                got = nn.Transformer.generate_square_subsequent_mask(
-                    sz, device=device, dtype=dt_l
-                )
-                want = ref.nn.Transformer.generate_square_subsequent_mask(
-                    sz, dtype=dt_r
-                )
+                got = nn.Transformer.generate_square_subsequent_mask(sz, device=device, dtype=dt_l)
+                want = ref.nn.Transformer.generate_square_subsequent_mask(sz, dtype=dt_r)
                 assert got.device.type == device
                 assert got.shape == (sz, sz)
                 np.testing.assert_array_equal(got.numpy(), want.numpy())
@@ -333,23 +306,15 @@ class TestTransformerAPIParity:
             tgt_is_causal=True,
             memory_is_causal=True,
         )
-        np.testing.assert_allclose(
-            out_l.numpy(), out_r.detach().numpy(), rtol=1e-4, atol=1e-4
-        )
+        np.testing.assert_allclose(out_l.numpy(), out_r.detach().numpy(), rtol=1e-4, atol=1e-4)
 
         out_l.sum().backward()
         out_r.sum().backward()
         assert src_l.grad is not None and tgt_l.grad is not None
-        np.testing.assert_allclose(
-            src_l.grad.numpy(), src_r.grad.numpy(), rtol=1e-4, atol=1e-4
-        )
-        np.testing.assert_allclose(
-            tgt_l.grad.numpy(), tgt_r.grad.numpy(), rtol=1e-4, atol=1e-4
-        )
+        np.testing.assert_allclose(src_l.grad.numpy(), src_r.grad.numpy(), rtol=1e-4, atol=1e-4)
+        np.testing.assert_allclose(tgt_l.grad.numpy(), tgt_r.grad.numpy(), rtol=1e-4, atol=1e-4)
 
-    def test_custom_encoder_decoder_and_unbatched_transformer(
-        self, device: str
-    ) -> None:
+    def test_custom_encoder_decoder_and_unbatched_transformer(self, device: str) -> None:
         enc = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(8, 2, 16, dropout=0.0, device=device),
             num_layers=1,

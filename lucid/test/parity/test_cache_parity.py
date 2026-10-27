@@ -39,9 +39,7 @@ class TestDynamicCacheParity:
             pytest.skip("reference framework has no DynamicCache")
 
         rng = np.random.default_rng(1)
-        chunks = [
-            rng.standard_normal((1, 2, s, 4)).astype(np.float32) for s in (3, 1, 1)
-        ]
+        chunks = [rng.standard_normal((1, 2, s, 4)).astype(np.float32) for s in (3, 1, 1)]
 
         lucid_cache = DynamicCache()
         ref_cache = ref_cache_cls()

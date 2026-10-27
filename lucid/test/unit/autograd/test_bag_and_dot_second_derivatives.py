@@ -54,12 +54,8 @@ def _second_derivative_matches(
     (hvp,) = grad((g * lucid.tensor(u)).sum(), [w])
     e = rng.standard_normal(w0.shape)
     h = 1e-6
-    numeric = (projected_gradient(w0 + h * e) - projected_gradient(w0 - h * e)) / (
-        2 * h
-    )
-    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(
-        numeric, rel=1e-6, abs=1e-6
-    )
+    numeric = (projected_gradient(w0 + h * e) - projected_gradient(w0 - h * e)) / (2 * h)
+    assert float((np.asarray(hvp.numpy()) * e).sum()) == pytest.approx(numeric, rel=1e-6, abs=1e-6)
 
 
 @pytest.mark.parametrize("name,kw", CASES, ids=[c[0] for c in CASES])
@@ -67,9 +63,7 @@ def test_embedding_bag(name: str, kw: dict[str, object]) -> None:
     idx = lucid.tensor(INDICES, dtype=lucid.int64)
     off = lucid.tensor(OFFSETS, dtype=lucid.int64)
     # Distinct values a unit apart, so a small step changes no max winner.
-    w0 = (
-        np.random.default_rng(1).permutation(40).reshape(10, 4).astype(np.float64) * 0.1
-    )
+    w0 = np.random.default_rng(1).permutation(40).reshape(10, 4).astype(np.float64) * 0.1
 
     def bag(w: lucid.Tensor) -> lucid.Tensor:
         return F.embedding_bag(idx, w, off, **kw)

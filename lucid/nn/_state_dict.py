@@ -31,9 +31,7 @@ from lucid._types import StateDict
 
 
 @final
-class _IncompatibleKeys(
-    namedtuple("_IncompatibleKeys", ["missing_keys", "unexpected_keys"])
-):
+class _IncompatibleKeys(namedtuple("_IncompatibleKeys", ["missing_keys", "unexpected_keys"])):
     """Result tuple returned by ``Module.load_state_dict``.
 
     Lightweight named tuple summarising the diff between the
@@ -112,8 +110,7 @@ def _checked_source(
 
     if not isinstance(src, Tensor):
         error_msgs.append(
-            f"While copying parameter '{key}', expected Tensor, "
-            f"got {type(src).__name__}"
+            f"While copying parameter '{key}', expected Tensor, " f"got {type(src).__name__}"
         )
         return None
     unshaped = assign and isinstance(attr, UninitializedParameter)
@@ -236,9 +233,7 @@ def _walk_load(
     after the full walk completes, so each hook sees the final
     _IncompatibleKeys rather than a per-module snapshot.
     """
-    local_meta: dict[str, object] = (
-        metadata.get(prefix.rstrip("."), {}) if metadata else {}
-    )
+    local_meta: dict[str, object] = metadata.get(prefix.rstrip("."), {}) if metadata else {}
     if assign:
         # Told to every loader the way the reference tells it, so a module's
         # own _load_from_state_dict (lazy sizing, key and version migration)
@@ -345,9 +340,7 @@ def _load_state_dict(
         Named tuple ``(missing_keys, unexpected_keys)`` summarising the
         load.  Empty fields indicate a clean match.
     """
-    metadata: dict[str, dict[str, object]] = (
-        getattr(state_dict, "_metadata", None) or {}
-    )
+    metadata: dict[str, dict[str, object]] = getattr(state_dict, "_metadata", None) or {}
     # We must operate on a mutable copy so hooks may rename keys safely.
     state_dict = OrderedDict(state_dict)
     state_dict._metadata = metadata  # type: ignore[attr-defined]

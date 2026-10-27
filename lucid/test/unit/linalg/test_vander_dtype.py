@@ -25,9 +25,7 @@ _SQUARES = [[1.0, 1.0, 1.0], [1.0, 2.0, 4.0], [1.0, 3.0, 9.0]]
 def test_the_default_is_increasing_powers(device: str) -> None:
     x = lucid.tensor([1.0, 2.0, 3.0], device=device)
     assert lucid.linalg.vander(x).tolist() == _SQUARES
-    assert lucid.linalg.vander(x, increasing=False).tolist() == [
-        row[::-1] for row in _SQUARES
-    ]
+    assert lucid.linalg.vander(x, increasing=False).tolist() == [row[::-1] for row in _SQUARES]
 
 
 def test_n_sets_the_number_of_columns(device: str) -> None:
@@ -98,9 +96,7 @@ def test_the_derivative_at_zero_is_exact(device: str) -> None:
 def test_the_second_derivative_at_zero_is_exact(device: str) -> None:
     # d^2/dx^2 (1 + x + x^2 + x^3) = 2 + 6x: 2 at 0, 14 at 2 (LCD-637).
     x = lucid.tensor([0.0, 2.0], device=device, requires_grad=True)
-    (g1,) = lucid.autograd.grad(
-        lucid.linalg.vander(x, N=4).sum(), [x], create_graph=True
-    )
+    (g1,) = lucid.autograd.grad(lucid.linalg.vander(x, N=4).sum(), [x], create_graph=True)
     (g2,) = lucid.autograd.grad(g1.sum(), [x])
     assert g1.tolist() == [1.0, 17.0]
     assert g2.tolist() == [2.0, 14.0]

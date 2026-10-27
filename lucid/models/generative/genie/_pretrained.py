@@ -140,9 +140,7 @@ def genie(pretrained: bool = False, **overrides: object) -> GenieModel:
     default_config=_CFG_PLATFORMERS,
     summary="auto",
 )
-def genie_world_model(
-    pretrained: bool = False, **overrides: object
-) -> GenieForWorldModeling:
+def genie_world_model(pretrained: bool = False, **overrides: object) -> GenieForWorldModeling:
     r"""Construct the Platformers Genie as a playable environment.
 
     Parameters

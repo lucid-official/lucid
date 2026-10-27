@@ -138,9 +138,7 @@ def hamming_window(
     """
     from lucid.signal.windows import general_cosine
 
-    w = general_cosine(
-        window_length, [alpha, beta], sym=not periodic, dtype=dtype, device=device
-    )
+    w = general_cosine(window_length, [alpha, beta], sym=not periodic, dtype=dtype, device=device)
     return _as_factory(w, requires_grad)
 
 
@@ -303,9 +301,7 @@ def _frame_lengths(
     if hop <= 0:
         raise _invalid(op, f"expected hop_length > 0, got hop_length={hop}")
     if not 0 < win <= n_fft:
-        raise _invalid(
-            op, f"expected 0 < win_length <= n_fft={n_fft}, got win_length={win}"
-        )
+        raise _invalid(op, f"expected 0 < win_length <= n_fft={n_fft}, got win_length={win}")
     return hop, win
 
 
@@ -354,8 +350,7 @@ def _check_signal(input: Tensor, center: bool, align_to_window: bool | None) -> 
         )
     if input.ndim not in (1, 2):
         raise _C_engine.ShapeMismatch(
-            f"stft: expected a 1-D or 2-D (batch, time) signal, got "
-            f"shape {tuple(input.shape)}"
+            f"stft: expected a 1-D or 2-D (batch, time) signal, got " f"shape {tuple(input.shape)}"
         )
 
 
@@ -731,18 +726,14 @@ def istft(
     one_sided = _check_spectrum(input, n_fft, onesided)
     hop, win = _frame_lengths("istft", n_fft, hop_length, win_length)
     if hop > win:
-        raise _invalid(
-            "istft", f"expected hop_length <= win_length={win}, got hop_length={hop}"
-        )
+        raise _invalid("istft", f"expected hop_length <= win_length={win}, got hop_length={hop}")
     spectrum = input.unsqueeze(0) if input.ndim == 2 else input
     frames = _frames_of(spectrum, n_fft, one_sided, normalized, return_complex, window)
     padded_window = _padded_window("istft", window, n_fft, win, frames)
     if padded_window is not None:
         frames = frames * padded_window
     start, end, span = _output_span(n_fft, hop, int(frames.shape[-2]), center, length)
-    signal = _overlap_add_normalised(
-        frames, padded_window, hop, start, min(end, span) - start
-    )
+    signal = _overlap_add_normalised(frames, padded_window, hop, start, min(end, span) - start)
     if input.ndim == 2:
         signal = signal.squeeze(0)
     return _pad_tail(signal, end - span) if end > span else signal

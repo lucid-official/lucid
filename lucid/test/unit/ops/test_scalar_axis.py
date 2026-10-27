@@ -116,15 +116,11 @@ _OPS = {
         True,
     ),
     "scatter_add": (
-        lambda lib, t, d, k: lib.scatter_add(
-            t, d, _like(lib, t, 0), _like(lib, t, 2.0)
-        ),
+        lambda lib, t, d, k: lib.scatter_add(t, d, _like(lib, t, 0), _like(lib, t, 2.0)),
         True,
     ),
     "scatter_reduce_amax": (
-        lambda lib, t, d, k: lib.scatter_reduce(
-            t, d, _like(lib, t, 0), _like(lib, t, 2.0), "amax"
-        ),
+        lambda lib, t, d, k: lib.scatter_reduce(t, d, _like(lib, t, 0), _like(lib, t, 2.0), "amax"),
         True,
     ),
     "normalize": (lambda lib, t, d, k: lib.nn.functional.normalize(t, dim=d), True),

@@ -62,9 +62,7 @@ def faster_rcnn(
     >>> out.logits.shape[-1]
     91
     """
-    entry = weights_mod.resolve_weights(
-        FasterRCNNResNet50FPNWeights, pretrained, weights
-    )
+    entry = weights_mod.resolve_weights(FasterRCNNResNet50FPNWeights, pretrained, weights)
     model = FasterRCNNForObjectDetection(apply_overrides(_CFG_R50_FPN, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="faster_rcnn")
@@ -128,9 +126,7 @@ def faster_rcnn_resnet50_fpn(
     >>> out.logits.shape[-1]
     91
     """
-    entry = weights_mod.resolve_weights(
-        FasterRCNNResNet50FPNWeights, pretrained, weights
-    )
+    entry = weights_mod.resolve_weights(FasterRCNNResNet50FPNWeights, pretrained, weights)
     model = FasterRCNNForObjectDetection(apply_overrides(_CFG_R50_FPN, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="faster_rcnn_resnet50_fpn")

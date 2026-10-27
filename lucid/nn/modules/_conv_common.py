@@ -167,9 +167,7 @@ class _LazyConvMixin(_LazyModule):
         self._dtype = self._dtype or weight.dtype
         self._device = self._device or weight.device
         in_channels = int(weight.shape[1 - out_axis])
-        self._initialize(
-            in_channels if self._lazy_transposed else in_channels * self.groups
-        )
+        self._initialize(in_channels if self._lazy_transposed else in_channels * self.groups)
         return True
 
     @override

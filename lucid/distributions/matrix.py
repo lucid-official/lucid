@@ -167,9 +167,7 @@ class Wishart(Distribution):
             With validation off, if a covariance or precision matrix has no
             Cholesky factorisation.
         """
-        n_spec = sum(
-            x is not None for x in (covariance_matrix, precision_matrix, scale_tril)
-        )
+        n_spec = sum(x is not None for x in (covariance_matrix, precision_matrix, scale_tril))
         if n_spec != 1:
             raise ValueError(
                 "Wishart: pass exactly one of covariance_matrix, "
@@ -179,11 +177,7 @@ class Wishart(Distribution):
         # The matrix given is stored under its own name, so validation checks
         # it before anything factorises it.
         given = _as_tensor(
-            next(
-                m
-                for m in (covariance_matrix, precision_matrix, scale_tril)
-                if m is not None
-            )
+            next(m for m in (covariance_matrix, precision_matrix, scale_tril) if m is not None)
         )
         if scale_tril is not None:
             self.scale_tril = given
@@ -266,9 +260,7 @@ class Wishart(Distribution):
 
     # -- sampling (Bartlett decomposition) ------------------------------------
 
-    def _bartlett_sample(
-        self, sample_shape: tuple[int, ...], *, reparameterised: bool
-    ) -> Tensor:
+    def _bartlett_sample(self, sample_shape: tuple[int, ...], *, reparameterised: bool) -> Tensor:
         d: int = self._dim
         L: Tensor = self.scale_tril  # (..., d, d)
         dt = L.dtype
@@ -495,9 +487,7 @@ class LKJCholesky(Distribution):
         # squared norm is ``y_i ~ Beta(i/2, η + (d − 1 − i)/2)``.  Row 0 has
         # none — its draw is discarded — but ``Beta`` needs a positive pair, so
         # it borrows row 1's, which is what the leading zero in ``offset`` is.
-        offset = lucid.arange(
-            0, d, 1, dtype=eta.dtype, device=eta.device
-        )  # [0, 1, ..., d-1]
+        offset = lucid.arange(0, d, 1, dtype=eta.dtype, device=eta.device)  # [0, 1, ..., d-1]
         offset = lucid.clip(offset - 1.0, min=0.0)  # [0, 0, 1, ..., d-2]
         beta_conc1 = 0.5 * offset + 0.5  # (d,)
         beta_conc0 = marginal_conc.unsqueeze(-1) - 0.5 * offset  # (*batch, d)
@@ -543,9 +533,7 @@ class LKJCholesky(Distribution):
         # Avoid division by zero on rows that are entirely zero.
         # Avoid division by zero: replace zero norms with 1.0 (those rows
         # are all zeros anyway, so the division result is still zero).
-        row_norms = lucid.where(
-            row_norms < 1e-10, lucid.ones_like(row_norms), row_norms
-        )
+        row_norms = lucid.where(row_norms < 1e-10, lucid.ones_like(row_norms), row_norms)
         u_hypersphere = u_normal / row_norms
 
         # Scale — w := sqrt(y) * u_hypersphere

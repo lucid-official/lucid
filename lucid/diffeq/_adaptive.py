@@ -145,9 +145,7 @@ def parse_options(options: dict[str, object] | None) -> AdaptiveOptions:
     def _real(key: str, default: float) -> float:
         raw = options.get(key, default)
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-            raise TypeError(
-                f"option {key!r} must be a real number, got {type(raw).__name__}"
-            )
+            raise TypeError(f"option {key!r} must be a real number, got {type(raw).__name__}")
         return float(raw)
 
     def _count(key: str, default: int) -> int:
@@ -177,8 +175,7 @@ def parse_options(options: dict[str, object] | None) -> AdaptiveOptions:
     else:
         if isinstance(first_raw, bool) or not isinstance(first_raw, (int, float)):
             raise ValueError(
-                f"option 'first_step' must be a real number, "
-                f"got {type(first_raw).__name__}"
+                f"option 'first_step' must be a real number, " f"got {type(first_raw).__name__}"
             )
         first = abs(float(first_raw))
         if first == 0.0:
@@ -194,9 +191,7 @@ def parse_options(options: dict[str, object] | None) -> AdaptiveOptions:
         ifactor=_real("ifactor", _IFACTOR),
         dfactor=_real("dfactor", _DFACTOR),
         max_num_steps=_count("max_num_steps", _MAX_NUM_STEPS),
-        norm_prefix=(
-            None if options.get("_norm_prefix") is None else _count("_norm_prefix", 0)
-        ),
+        norm_prefix=(None if options.get("_norm_prefix") is None else _count("_norm_prefix", 0)),
     )
     if parsed.min_step > parsed.max_step:
         raise ValueError(
@@ -380,12 +375,8 @@ def interp_fit(
     """
     y0, y1, y_mid, f0, f1 = _fused._promote([y0, y1, y_mid, f0, f1])
     return [
-        _fused.lincomb(
-            [f1, f0, y0, y1, y_mid], [2.0 * dt, -2.0 * dt, -8.0, -8.0, 16.0]
-        ),
-        _fused.lincomb(
-            [f0, f1, y0, y1, y_mid], [5.0 * dt, -3.0 * dt, 18.0, 14.0, -32.0]
-        ),
+        _fused.lincomb([f1, f0, y0, y1, y_mid], [2.0 * dt, -2.0 * dt, -8.0, -8.0, 16.0]),
+        _fused.lincomb([f0, f1, y0, y1, y_mid], [5.0 * dt, -3.0 * dt, 18.0, 14.0, -32.0]),
         _fused.lincomb([f1, f0, y0, y1, y_mid], [dt, -4.0 * dt, -11.0, -5.0, 16.0]),
         _fused.lincomb([f0], [dt]),
         y0,
@@ -562,9 +553,7 @@ class Stepper:
             for stage in range(1, tableau.stages):
                 stage_y = _fused.combine(self.y, ks, tableau.a[stage], dt)
                 stage_t = self._scalar(self.t + tableau.c[stage] * dt)
-                ks.append(
-                    self._check(self._func(stage_t, stage_y), self.accepted, stage)
-                )
+                ks.append(self._check(self._func(stage_t, stage_y), self.accepted, stage))
 
             y_next = _fused.combine(self.y, ks, tableau.b, dt)
             assert tableau.b_error is not None
@@ -714,9 +703,7 @@ def integrate(
     """
     opts = parse_options(options)
     direction = 1.0 if grid[-1] > grid[0] else -1.0
-    stepper = Stepper(
-        func, y0, grid[0], tableau, scalar, check, rtol, atol, opts, direction
-    )
+    stepper = Stepper(func, y0, grid[0], tableau, scalar, check, rtol, atol, opts, direction)
 
     trajectory: list[Tensor] = [y0] if return_trajectory else []
     span: tuple[float, float] | None = None

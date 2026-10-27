@@ -142,11 +142,7 @@ class _VectorField(nn.Module):
     def __init__(self, config: NeuralODEConfig) -> None:
         super().__init__()
         self._act_name = config.act_fn
-        widths = (
-            [config.data_dim]
-            + [config.hidden_dim] * config.num_blocks
-            + [config.data_dim]
-        )
+        widths = [config.data_dim] + [config.hidden_dim] * config.num_blocks + [config.data_dim]
         self.blocks = nn.ModuleList(
             [_GatedBlock(widths[i], widths[i + 1]) for i in range(len(widths) - 1)]
         )
@@ -206,9 +202,7 @@ class _CNFDynamics(nn.Module):
 
     def __init__(self, config: NeuralODEConfig) -> None:
         super().__init__()
-        self.field = (
-            _PlanarField(config) if config.field == "planar" else _VectorField(config)
-        )
+        self.field = _PlanarField(config) if config.field == "planar" else _VectorField(config)
         self._dim = config.data_dim
         self._trace_method = config.resolved_trace_method
         self._trace_noise = config.trace_noise
@@ -278,9 +272,7 @@ class _CNFDynamics(nn.Module):
         # what stops a convolutional field being scored at all.
         create_graph = lucid.is_grad_enabled()
         if self._trace_method == "exact":
-            return exact_divergence(
-                dz, z, self._exact_seeds(dz), create_graph=create_graph
-            )
+            return exact_divergence(dz, z, self._exact_seeds(dz), create_graph=create_graph)
         eps = self._eps
         if eps is None:
             # A caller that reached the dynamics without going through
@@ -301,9 +293,7 @@ class _CNFDynamics(nn.Module):
         if seeds is None or seeds[0].shape != dz.shape:
             basis = self.basis
             ones = lucid.ones_like(dz[:, :1])
-            seeds = [
-                basis[index].reshape(1, self._dim) * ones for index in range(self._dim)
-            ]
+            seeds = [basis[index].reshape(1, self._dim) * ones for index in range(self._dim)]
             self._seeds = seeds
         return seeds
 
@@ -569,8 +559,7 @@ class NeuralODEModel(PretrainedModel):
         """
         if z.ndim != 2 or int(z.shape[1]) != self._input_dim:
             raise ValueError(
-                f"Neural ODE expects (B, {self._input_dim}) latents, "
-                f"got shape {tuple(z.shape)}"
+                f"Neural ODE expects (B, {self._input_dim}) latents, " f"got shape {tuple(z.shape)}"
             )
         batch = int(z.shape[0])
         self.dynamics.reset()

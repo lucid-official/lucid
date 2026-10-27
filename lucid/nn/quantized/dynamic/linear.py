@@ -84,12 +84,8 @@ class Linear(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         """Dynamically quantize the input, then run linear with the int8 weight."""
-        x_scale, x_zp = calculate_qparams(
-            x.min(), x.max(), per_tensor_affine, self.act_qdtype
-        )
-        x_q = fake_quantize(
-            x, x_scale, x_zp, self.act_qdtype.quant_min, self.act_qdtype.quant_max
-        )
+        x_scale, x_zp = calculate_qparams(x.min(), x.max(), per_tensor_affine, self.act_qdtype)
+        x_q = fake_quantize(x, x_scale, x_zp, self.act_qdtype.quant_min, self.act_qdtype.quant_max)
         weight = dequantize(
             self.weight_int8,
             self.weight_scale,
@@ -105,14 +101,10 @@ class Linear(nn.Module):
 
         f = cast("_FloatLinear", mod)
         qmod = cls(f.in_features, f.out_features, bias=f.bias is not None)
-        obs = PerChannelMinMaxObserver(
-            ch_axis=0, qscheme=per_channel_symmetric, qdtype=dtype
-        )
+        obs = PerChannelMinMaxObserver(ch_axis=0, qscheme=per_channel_symmetric, qdtype=dtype)
         obs(f.weight)
         scale, zero_point = obs.calculate_qparams()
-        qmod.register_buffer(
-            "weight_int8", quantize(f.weight, scale, zero_point, dtype, ch_axis=0)
-        )
+        qmod.register_buffer("weight_int8", quantize(f.weight, scale, zero_point, dtype, ch_axis=0))
         qmod.register_buffer("weight_scale", scale)
         qmod.register_buffer("weight_zero_point", zero_point)
         if f.bias is not None:

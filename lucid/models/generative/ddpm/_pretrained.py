@@ -403,9 +403,7 @@ def ddpm_lsun_gen(
     default_config=_CFG_IMAGENET64,
     params=121060483,
 )
-def ddpm_imagenet64_gen(
-    pretrained: bool = False, **overrides: object
-) -> DDPMForImageGeneration:
+def ddpm_imagenet64_gen(pretrained: bool = False, **overrides: object) -> DDPMForImageGeneration:
     r"""Construct an Improved-DDPM ImageNet 64x64 model with training loss and ``.generate()``.
 
     Same trunk as :func:`ddpm_imagenet64` (sample size 64x64, 4-stage U-Net

@@ -41,9 +41,7 @@ _NAMESPACES = (
     "lucid.optim",
 )
 
-_ENTRY = re.compile(
-    r"^\s*\*{0,2}([A-Za-z_]\w*(?:\s*,\s*\*{0,2}[A-Za-z_]\w*)*)\s*(?::|$)"
-)
+_ENTRY = re.compile(r"^\s*\*{0,2}([A-Za-z_]\w*(?:\s*,\s*\*{0,2}[A-Za-z_]\w*)*)\s*(?::|$)")
 
 
 def _documented(doc: str) -> list[str]:

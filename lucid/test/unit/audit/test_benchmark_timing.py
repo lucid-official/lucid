@@ -13,12 +13,8 @@ def test_cold_timer_materializes_before_final_sync(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events = []
-    monkeypatch.setattr(
-        timing.lucid.metal, "synchronize", lambda: events.append("sync")
-    )
-    monkeypatch.setattr(
-        timing, "materialize", lambda value: events.append(("value", value))
-    )
+    monkeypatch.setattr(timing.lucid.metal, "synchronize", lambda: events.append("sync"))
+    monkeypatch.setattr(timing, "materialize", lambda value: events.append(("value", value)))
     ticks = iter([1.0, 1.25])
     monkeypatch.setattr(timing.time, "perf_counter", lambda: next(ticks))
     assert timing.cold_ms(lambda: 42) == 250

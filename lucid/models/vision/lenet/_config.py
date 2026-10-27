@@ -96,8 +96,6 @@ class LeNetConfig(ModelConfig):
         # or ``pooling="none"`` silently produced the *default* network — the
         # opposite of what the caller asked for, with no warning.
         if self.activation not in ("tanh", "relu"):
-            raise ValueError(
-                f"activation must be 'tanh' or 'relu', got {self.activation!r}"
-            )
+            raise ValueError(f"activation must be 'tanh' or 'relu', got {self.activation!r}")
         if self.pooling not in ("avg", "max"):
             raise ValueError(f"pooling must be 'avg' or 'max', got {self.pooling!r}")

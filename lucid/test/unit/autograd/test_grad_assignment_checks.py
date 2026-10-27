@@ -24,9 +24,7 @@ from lucid.test._fixtures.devices import metal_available
 _needs_metal = pytest.mark.skipif(not metal_available(), reason="needs Metal")
 
 
-def _param(
-    values: list[float], device: str, dtype: lucid.dtype = lucid.float32
-) -> lucid.Tensor:
+def _param(values: list[float], device: str, dtype: lucid.dtype = lucid.float32) -> lucid.Tensor:
     return lucid.nn.Parameter(lucid.tensor(values, dtype=dtype, device=device))
 
 
@@ -59,9 +57,7 @@ def test_every_dtype_mismatch_is_refused(
         p.grad = lucid.ones(3, dtype=grad_dtype, device=device)
 
 
-@pytest.mark.parametrize(
-    "grad_dtype", [lucid.float64, lucid.complex64], ids=["f64", "c64"]
-)
+@pytest.mark.parametrize("grad_dtype", [lucid.float64, lucid.complex64], ids=["f64", "c64"])
 def test_wider_dtypes_are_refused_on_the_cpu(grad_dtype: lucid.dtype) -> None:
     # Metal holds no float64, so these two pairs only exist on the CPU.
     p = lucid.ones(2, requires_grad=True)
@@ -93,9 +89,7 @@ def test_every_shape_mismatch_is_refused(
 @pytest.mark.parametrize(
     ("param_device", "grad_device"), [("cpu", "metal"), ("metal", "cpu")], ids=str
 )
-def test_a_gradient_on_another_device_is_refused(
-    param_device: str, grad_device: str
-) -> None:
+def test_a_gradient_on_another_device_is_refused(param_device: str, grad_device: str) -> None:
     p = _param([1.0, 2.0], param_device)
     with pytest.raises(_C_engine.DeviceMismatch):
         p.grad = lucid.tensor([3.0, 4.0], device=grad_device)
@@ -170,9 +164,7 @@ def test_integer_tensors_take_integer_gradients(device: str) -> None:
     ],
     ids=["offset-view", "strided-view"],
 )
-def test_a_view_gives_its_own_elements(
-    device: str, make: Callable[[str], lucid.Tensor]
-) -> None:
+def test_a_view_gives_its_own_elements(device: str, make: Callable[[str], lucid.Tensor]) -> None:
     # The slot is read from its first byte in row-major order, so a view's
     # values must arrive packed, not as the bytes at the front of its base.
     p = _param([0.0, 0.0, 0.0], device)
@@ -240,9 +232,7 @@ def test_a_hook_replacement_of_the_same_kind_is_installed(device: str) -> None:
 
 
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16], ids=["f16", "bf16"])
-def test_clipping_half_precision_gradients_keeps_them(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_clipping_half_precision_gradients_keeps_them(device: str, dtype: lucid.dtype) -> None:
     p = _param([1.0, 1.0], device, dtype)
     p.grad = lucid.tensor([3.0, -4.0], dtype=dtype, device=device)
     clip_grad_value_([p], clip_value=1.0)
@@ -265,9 +255,7 @@ def test_the_engine_binding_is_checked_like_the_setter(device: str) -> None:
 
 # (param maker, grad maker) on the CPU, with what the refusal is about —
 # the word the reference's message and Lucid's both name.
-_CASES: dict[
-    str, tuple[Callable[[object], object], Callable[[object], object], str | None]
-] = {
+_CASES: dict[str, tuple[Callable[[object], object], Callable[[object], object], str | None]] = {
     "dtype": (
         lambda m: m.ones(3, dtype=m.float16),
         lambda m: m.ones(3, dtype=m.float32),
@@ -484,4 +472,3 @@ def test_reassigned_held_gradient_accumulates_in_place(device: str, rebind: str)
     (w * 5.0).sum().backward()
     assert g.tolist() == [8.0, 8.0]
     assert w.grad.tolist() == [8.0, 8.0]
-

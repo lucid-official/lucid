@@ -166,9 +166,7 @@ class TestKLBalancing:
 
         def total(module: object) -> float:
             return sum(
-                float(p.grad.abs().sum().item())
-                for p in module.parameters()
-                if p.grad is not None
+                float(p.grad.abs().sum().item()) for p in module.parameters() if p.grad is not None
             )
 
         rssm = model.dreamer_v2.rssm
@@ -206,10 +204,7 @@ class TestKLBalancing:
         """
         model = DreamerV2Model(_tiny_cfg(mean_only=True))
         priors, posteriors = model.observe(*_batch()[:2])
-        values = [
-            float(balanced_kl(posteriors, priors, balance=b).item())
-            for b in (0.0, 0.5, 1.0)
-        ]
+        values = [float(balanced_kl(posteriors, priors, balance=b).item()) for b in (0.0, 0.5, 1.0)]
         assert max(values) - min(values) < 1e-5
 
     def test_refuses_a_gaussian_state(self) -> None:
@@ -218,9 +213,7 @@ class TestKLBalancing:
         gaussian = RSSM(
             stoch_size=4, deter_size=8, hidden_size=8, action_dim=2, embed_size=6
         ).eval()
-        priors, posteriors = gaussian.observe(
-            lucid.randn((2, 2, 6)), lucid.randn((2, 2, 2))
-        )
+        priors, posteriors = gaussian.observe(lucid.randn((2, 2, 6)), lucid.randn((2, 2, 2)))
         with pytest.raises(ValueError):
             balanced_kl(posteriors, priors, balance=0.8)
 
@@ -230,18 +223,14 @@ class TestTargetCritic:
         model = DreamerV2ForWorldModeling(_tiny_cfg())
         batch = _batch()
         _, posteriors = model.dreamer_v2.observe(batch[0], batch[1], sample=False)
-        before = float(
-            model.dreamer_v2.predict_value(posteriors, target=True).mean().item()
-        )
+        before = float(model.dreamer_v2.predict_value(posteriors, target=True).mean().item())
 
         optimiser = optim.Adam(model.value_parameters(), lr=0.5)
         out = model(*batch)
         model.backward(out)
         optimiser.step()
 
-        after = float(
-            model.dreamer_v2.predict_value(posteriors, target=True).mean().item()
-        )
+        after = float(model.dreamer_v2.predict_value(posteriors, target=True).mean().item())
         live = float(model.dreamer_v2.predict_value(posteriors).mean().item())
         assert abs(after - before) < 1e-9
         assert abs(live - before) > 1e-6, "the critic itself should have moved"
@@ -258,9 +247,7 @@ class TestTargetCritic:
         model.update_slow_target()
         _, posteriors = model.dreamer_v2.observe(batch[0], batch[1], sample=False)
         live = float(model.dreamer_v2.predict_value(posteriors).mean().item())
-        target = float(
-            model.dreamer_v2.predict_value(posteriors, target=True).mean().item()
-        )
+        target = float(model.dreamer_v2.predict_value(posteriors, target=True).mean().item())
         assert abs(live - target) < 1e-5
 
     def test_it_moves_only_on_the_schedule(self) -> None:
@@ -274,13 +261,9 @@ class TestTargetCritic:
             out = model(*batch)
             model.backward(out)
             optimiser.step()
-            before = float(
-                model.dreamer_v2.predict_value(posteriors, target=True).mean().item()
-            )
+            before = float(model.dreamer_v2.predict_value(posteriors, target=True).mean().item())
             model.update_slow_target()
-            after = float(
-                model.dreamer_v2.predict_value(posteriors, target=True).mean().item()
-            )
+            after = float(model.dreamer_v2.predict_value(posteriors, target=True).mean().item())
             moved.append(abs(after - before) > 1e-9)
 
         assert [i for i, m in enumerate(moved) if m] == [0, 3]
@@ -310,9 +293,7 @@ class TestActorGradientModes:
         model.zero_grad()
         out.behavior.actor_loss.backward()
         reached = sum(
-            float(p.grad.abs().sum().item())
-            for p in model.actor_parameters()
-            if p.grad is not None
+            float(p.grad.abs().sum().item()) for p in model.actor_parameters() if p.grad is not None
         )
         assert reached > 0
 
@@ -322,19 +303,14 @@ class TestActorGradientModes:
         batch = _batch()
         grads = {}
         for mode in ("dynamics", "reinforce"):
-            model = DreamerV2ForWorldModeling(
-                _tiny_cfg(actor_grad=mode, mean_only=True)
-            )
+            model = DreamerV2ForWorldModeling(_tiny_cfg(actor_grad=mode, mean_only=True))
             model.load_state_dict(weights)
             out = model(*batch)
             model.zero_grad()
             out.behavior.actor_loss.backward()
-            grads[mode] = [
-                p.grad.clone() for p in model.actor_parameters() if p.grad is not None
-            ]
+            grads[mode] = [p.grad.clone() for p in model.actor_parameters() if p.grad is not None]
         spread = max(
-            float((a - b).abs().max().item())
-            for a, b in zip(grads["dynamics"], grads["reinforce"])
+            float((a - b).abs().max().item()) for a, b in zip(grads["dynamics"], grads["reinforce"])
         )
         assert spread > 1e-6
 
@@ -349,9 +325,7 @@ class TestActorGradientModes:
         batch = _batch()
         losses = []
         for coefficient in (0.0, 1.0):
-            model = DreamerV2ForWorldModeling(
-                _tiny_cfg(actor_entropy=coefficient, mean_only=True)
-            )
+            model = DreamerV2ForWorldModeling(_tiny_cfg(actor_entropy=coefficient, mean_only=True))
             model.load_state_dict(weights)
             out = model(*batch)
             assert out.behavior is not None
@@ -459,9 +433,7 @@ class TestTrainingStep:
             other.zero_grad()
             pick(result).backward()
             group = getattr(other, f"{name}_parameters")()
-            reference[name] = [
-                None if p.grad is None else p.grad.clone() for p in group
-            ]
+            reference[name] = [None if p.grad is None else p.grad.clone() for p in group]
 
         out = model(*batch)
         model.backward(out)
@@ -626,9 +598,7 @@ class TestEntropyIsNumericallySafe:
 
     def test_a_confident_policy_gives_zero_not_nan(self) -> None:
         """The case that actually occurs: training makes the policy certain."""
-        value = float(
-            OneHotCategorical(lucid.tensor([[50.0, -50.0, -50.0]])).entropy().item()
-        )
+        value = float(OneHotCategorical(lucid.tensor([[50.0, -50.0, -50.0]])).entropy().item())
         assert value == value and 0.0 <= value < 1e-6
 
 
@@ -689,9 +659,7 @@ class TestDiscreteActionSpace:
         model.zero_grad()
         out.behavior.actor_loss.backward()
         reached = sum(
-            float(p.grad.abs().sum().item())
-            for p in model.actor_parameters()
-            if p.grad is not None
+            float(p.grad.abs().sum().item()) for p in model.actor_parameters() if p.grad is not None
         )
         assert reached > 0
 

@@ -147,9 +147,7 @@ def _lbfgs_run(device: str, amp: lucid.dtype | None) -> list[Any]:
 
 
 @pytest.mark.parametrize(("device", "amp"), _SCOPES)
-def test_lbfgs_step_inside_autocast_is_the_step_outside(
-    device: str, amp: lucid.dtype
-) -> None:
+def test_lbfgs_step_inside_autocast_is_the_step_outside(device: str, amp: lucid.dtype) -> None:
     _assert_identical(_lbfgs_run(device, amp), _lbfgs_run(device, None))
 
 
@@ -233,9 +231,7 @@ def _init_run(name: str, device: str, amp: lucid.dtype | None) -> lucid.Tensor:
 
 @pytest.mark.parametrize(("device", "amp"), _SCOPES)
 @pytest.mark.parametrize("name", sorted(_INIT))
-def test_init_inside_autocast_is_the_init_outside(
-    name: str, device: str, amp: lucid.dtype
-) -> None:
+def test_init_inside_autocast_is_the_init_outside(name: str, device: str, amp: lucid.dtype) -> None:
     inside = _init_run(name, device, amp)
     outside = _init_run(name, device, None)
     assert inside.dtype == outside.dtype == lucid.float32

@@ -116,9 +116,7 @@ def test_dropout_path_honours_is_causal() -> None:
     of the output cannot move.
     """
     q, k, v = _qkv(batch=1, heads=1, lq=4, lk=4)
-    base = F.scaled_dot_product_attention(
-        q, k, v, dropout_p=0.0, is_causal=True
-    ).numpy()
+    base = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=True).numpy()
 
     v_np = v.numpy().copy()
     v_np[0, 0, 3, :] += 100.0  # a key/value strictly in the future of row 0
@@ -163,9 +161,7 @@ def test_the_additive_mask_holds_on_both_paths(dropout_p: float) -> None:
         q, k, lucid.tensor(v_np), attn_mask=mask, dropout_p=dropout_p
     ).numpy()
 
-    assert np.allclose(
-        base, moved, atol=1e-3
-    ), "a masked-out position still influenced the output"
+    assert np.allclose(base, moved, atol=1e-3), "a masked-out position still influenced the output"
 
 
 @pytest.mark.parametrize("dropout_p", [0.0, 0.5])
@@ -225,9 +221,7 @@ def test_a_partially_broadcast_mask_is_materialised() -> None:
     partial[1, 0, :, 3] = -1e9  # ban the last key, in the second batch only
     full = np.broadcast_to(partial, (2, 2, 4, 4)).copy()
 
-    got = F.scaled_dot_product_attention(
-        q, k, v, attn_mask=lucid.tensor(partial)
-    ).numpy()
+    got = F.scaled_dot_product_attention(q, k, v, attn_mask=lucid.tensor(partial)).numpy()
     want = F.scaled_dot_product_attention(q, k, v, attn_mask=lucid.tensor(full)).numpy()
     np.testing.assert_allclose(got, want, rtol=1e-5, atol=1e-5)
 
@@ -244,9 +238,7 @@ def test_a_lower_rank_partial_mask_is_unsqueezed_then_expanded() -> None:
     partial[1, :, 3] = -1e9  # ban the last key, in the second head only
     full = np.broadcast_to(partial[None, :], (2, 2, 4, 4)).copy()
 
-    got = F.scaled_dot_product_attention(
-        q, k, v, attn_mask=lucid.tensor(partial)
-    ).numpy()
+    got = F.scaled_dot_product_attention(q, k, v, attn_mask=lucid.tensor(partial)).numpy()
     want = F.scaled_dot_product_attention(q, k, v, attn_mask=lucid.tensor(full)).numpy()
     np.testing.assert_allclose(got, want, rtol=1e-5, atol=1e-5)
 

@@ -110,9 +110,7 @@ class _GPTSelfAttention(nn.Module):
                 # wasted q·kᵀ.  StaticCache.update narrows its returned view to it.
                 cache_kwargs["read_len"] = past_len + T
             k, v = past_key_value.update(k, v, layer_idx, cache_kwargs=cache_kwargs)
-        t_total = int(
-            k.shape[2]
-        )  # DynamicCache: past_len+T; StaticCache: max_cache_len
+        t_total = int(k.shape[2])  # DynamicCache: past_len+T; StaticCache: max_cache_len
 
         if isinstance(past_key_value, StaticCache) and cache_position is not None:
             # StaticCache returns the fixed max_len buffer with a dynamic write
@@ -293,13 +291,9 @@ class GPTModel(PretrainedModel):
         super().__init__(config)
         self._max_pos = config.max_position_embeddings
         self.tokens_embed = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.positions_embed = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
-        )
+        self.positions_embed = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.drop = nn.Dropout(p=config.hidden_dropout)
-        self.h = nn.ModuleList(
-            [_GPTBlock(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.h = nn.ModuleList([_GPTBlock(config) for _ in range(config.num_hidden_layers)])
 
         pos = lucid.arange(config.max_position_embeddings).long().unsqueeze(0)
         self.register_buffer("position_ids", pos, persistent=False)
@@ -314,8 +308,7 @@ class GPTModel(PretrainedModel):
     def set_input_embeddings(self, value: nn.Module) -> None:
         if not isinstance(value, nn.Embedding):
             raise TypeError(
-                "GPTModel input embeddings must be nn.Embedding, got "
-                f"{type(value).__name__}"
+                "GPTModel input embeddings must be nn.Embedding, got " f"{type(value).__name__}"
             )
         self.tokens_embed = value
 
@@ -330,9 +323,7 @@ class GPTModel(PretrainedModel):
         cache_position: Tensor | None = None,
     ) -> BaseModelOutput:
         B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
-        past_len = (
-            past_key_values.get_seq_length() if past_key_values is not None else 0
-        )
+        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
         if past_len + T > self._max_pos:
             raise ValueError(
                 f"Sequence length {past_len + T} exceeds max_position_embeddings "
@@ -354,9 +345,7 @@ class GPTModel(PretrainedModel):
         # Keys span the cached history plus the new tokens, so the padding
         # mask has to be that wide -- a T-wide mask would broadcast onto the
         # wrong columns (or fail outright) once a cache is in play.
-        ext_mask = extended_attention_mask(
-            attention_mask, (B, T), key_length=past_len + T
-        )
+        ext_mask = extended_attention_mask(attention_mask, (B, T), key_length=past_len + T)
         for layer_idx, block in enumerate(self.h):
             hidden = block(
                 hidden,
@@ -754,9 +743,7 @@ class GPTDoubleHeadsModel(LanguageModelingModel):
         L = int(input_ids.shape[2])
 
         flat_ids = input_ids.reshape(N * C, L)
-        flat_mask = (
-            attention_mask.reshape(N * C, L) if attention_mask is not None else None
-        )
+        flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
         outputs = self.transformer(flat_ids, attention_mask=flat_mask)
         hidden = outputs.last_hidden_state  # (N*C, L, H)
         H = int(hidden.shape[-1])

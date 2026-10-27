@@ -49,9 +49,7 @@ class _BaseAutoClass:
         )
 
     @classmethod
-    def from_pretrained(
-        cls, name_or_path: str, *, strict: bool = True
-    ) -> PretrainedModel:
+    def from_pretrained(cls, name_or_path: str, *, strict: bool = True) -> PretrainedModel:
         r"""Resolve a name or local checkpoint directory and return a model.
 
         Two input modes are supported:
@@ -117,9 +115,7 @@ class _BaseAutoClass:
         if not is_model(name_or_path):
             from lucid.models._registry import _unknown_model_message, _REGISTRY
 
-            raise ValueError(
-                _unknown_model_message(name_or_path, list(_REGISTRY.keys()))
-            )
+            raise ValueError(_unknown_model_message(name_or_path, list(_REGISTRY.keys())))
 
         entry = _registry_lookup(name_or_path, task=cls._task)
         return entry.factory(pretrained=True)
@@ -189,8 +185,7 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
         weights_file = weights_lucid
     else:
         raise FileNotFoundError(
-            f"No weights file found in {path}. "
-            f"Expected 'model.safetensors' or 'weights.lucid'."
+            f"No weights file found in {path}. " f"Expected 'model.safetensors' or 'weights.lucid'."
         )
 
     with open(cfg_file, "r", encoding="utf-8") as f:
@@ -207,9 +202,7 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
         if entry.task == task and entry.model_type == model_type
     ]
     if not matching:
-        raise ValueError(
-            f"No model registered for task={task!r}, model_type={model_type!r}"
-        )
+        raise ValueError(f"No model registered for task={task!r}, model_type={model_type!r}")
 
     entry = matching[0]
 
@@ -217,9 +210,7 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
         # Fast path: instantiate directly — no factory call needed.
         model_cls = entry.model_class
         if model_cls.config_class is None:
-            raise TypeError(
-                f"{model_cls.__name__} must set config_class before loading"
-            )
+            raise TypeError(f"{model_cls.__name__} must set config_class before loading")
         config = model_cls.config_class.from_dict(cfg_dict)
         model: PretrainedModel = model_cls(config)
     else:
@@ -229,17 +220,13 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
         model_cls2 = type(template)
         cc2 = model_cls2.config_class
         if cc2 is None:
-            raise TypeError(
-                f"{model_cls2.__name__} must set config_class before loading"
-            )
+            raise TypeError(f"{model_cls2.__name__} must set config_class before loading")
         saved_config = cc2.from_dict(cfg_dict)
         model = model_cls2(saved_config)
 
     sd = _lucid.load(str(weights_file), weights_only=True)
     if not isinstance(sd, dict):
-        raise TypeError(
-            f"weights.lucid did not contain a state_dict, got {type(sd).__name__}"
-        )
+        raise TypeError(f"weights.lucid did not contain a state_dict, got {type(sd).__name__}")
     model.load_state_dict(sd, strict=strict)
     return model
 
@@ -332,9 +319,7 @@ class AutoConfig:
         if not is_model(name_or_path):
             from lucid.models._registry import _unknown_model_message
 
-            raise ValueError(
-                _unknown_model_message(name_or_path, list(_REGISTRY.keys()))
-            )
+            raise ValueError(_unknown_model_message(name_or_path, list(_REGISTRY.keys())))
 
         # Fast path: default_config pre-registered, no model instantiation.
         entry = _REGISTRY.get(_normalize(name_or_path))
@@ -407,9 +392,7 @@ def _load_config_from_directory(path: Path) -> ModelConfig:
     template = matching[0].factory(pretrained=False)
     cc_dir = type(template).config_class
     if cc_dir is None:
-        raise TypeError(
-            f"{type(template).__name__} must set config_class before loading"
-        )
+        raise TypeError(f"{type(template).__name__} must set config_class before loading")
     return cc_dir.from_dict(cfg_dict)
 
 

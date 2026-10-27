@@ -61,39 +61,23 @@ FACTORIES: dict[str, Factory] = {
     "tensor_list": lambda d, dev, rg: lucid.tensor(
         [1.5, 2.0], dtype=d, device=dev, requires_grad=rg
     ),
-    "tensor_scalar": lambda d, dev, rg: lucid.tensor(
-        1.5, dtype=d, device=dev, requires_grad=rg
-    ),
+    "tensor_scalar": lambda d, dev, rg: lucid.tensor(1.5, dtype=d, device=dev, requires_grad=rg),
     "tensor_ndarray": lambda d, dev, rg: lucid.tensor(
         np.array([1.5, 2.0]), dtype=d, device=dev, requires_grad=rg
     ),
     "tensor_tensor": lambda d, dev, rg: lucid.tensor(
         lucid.ones(2, device=dev), dtype=d, device=dev, requires_grad=rg
     ),
-    "full": lambda d, dev, rg: lucid.full(
-        (2, 3), 1, dtype=d, device=dev, requires_grad=rg
-    ),
-    "zeros": lambda d, dev, rg: lucid.zeros(
-        2, 3, dtype=d, device=dev, requires_grad=rg
-    ),
+    "full": lambda d, dev, rg: lucid.full((2, 3), 1, dtype=d, device=dev, requires_grad=rg),
+    "zeros": lambda d, dev, rg: lucid.zeros(2, 3, dtype=d, device=dev, requires_grad=rg),
     "ones": lambda d, dev, rg: lucid.ones(2, 3, dtype=d, device=dev, requires_grad=rg),
-    "empty": lambda d, dev, rg: lucid.empty(
-        2, 3, dtype=d, device=dev, requires_grad=rg
-    ),
+    "empty": lambda d, dev, rg: lucid.empty(2, 3, dtype=d, device=dev, requires_grad=rg),
     "eye": lambda d, dev, rg: lucid.eye(3, dtype=d, device=dev, requires_grad=rg),
-    "arange": lambda d, dev, rg: lucid.arange(
-        0, 4, dtype=d, device=dev, requires_grad=rg
-    ),
-    "linspace": lambda d, dev, rg: lucid.linspace(
-        0, 1, 4, dtype=d, device=dev, requires_grad=rg
-    ),
-    "logspace": lambda d, dev, rg: lucid.logspace(
-        0, 1, 4, dtype=d, device=dev, requires_grad=rg
-    ),
+    "arange": lambda d, dev, rg: lucid.arange(0, 4, dtype=d, device=dev, requires_grad=rg),
+    "linspace": lambda d, dev, rg: lucid.linspace(0, 1, 4, dtype=d, device=dev, requires_grad=rg),
+    "logspace": lambda d, dev, rg: lucid.logspace(0, 1, 4, dtype=d, device=dev, requires_grad=rg),
     "rand": lambda d, dev, rg: lucid.rand(2, 3, dtype=d, device=dev, requires_grad=rg),
-    "randn": lambda d, dev, rg: lucid.randn(
-        2, 3, dtype=d, device=dev, requires_grad=rg
-    ),
+    "randn": lambda d, dev, rg: lucid.randn(2, 3, dtype=d, device=dev, requires_grad=rg),
     "zeros_like": _like(lucid.zeros_like),
     "ones_like": _like(lucid.ones_like),
     "empty_like": _like(lucid.empty_like),
@@ -134,9 +118,7 @@ def _cases() -> list[object]:
                 for rg in (False, True) if dtype in _FLOATING else (False,):
                     marks = []
                     if (name, dtype, device) in _ENGINE_GAPS:
-                        marks.append(
-                            pytest.mark.xfail(raises=NotImplementedError, strict=True)
-                        )
+                        marks.append(pytest.mark.xfail(raises=NotImplementedError, strict=True))
                     out.append(
                         pytest.param(
                             name,
@@ -207,10 +189,7 @@ def test_from_numpy_keeps_the_array_dtype(np_dtype: str) -> None:
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("value", [2**60 + 1, 2**53 + 1, -(2**63), 2**63 - 1])
 def test_int64_fill_is_exact(device: str, value: int) -> None:
-    assert (
-        lucid.full((3,), value, dtype=lucid.int64, device=device).tolist()
-        == [value] * 3
-    )
+    assert lucid.full((3,), value, dtype=lucid.int64, device=device).tolist() == [value] * 3
     src = lucid.zeros(3, device=device)
     assert lucid.full_like(src, value, dtype=lucid.int64).tolist() == [value] * 3
     assert lucid.tensor([value], dtype=lucid.int64, device=device).item() == value
@@ -328,9 +307,7 @@ _INFERENCE_ROWS: list[object] = [
 
 
 @pytest.mark.parametrize("row", _INFERENCE_ROWS, ids=repr)
-def test_literal_inference_matches_reference(
-    ref: ModuleType, row: list[object]
-) -> None:
+def test_literal_inference_matches_reference(ref: ModuleType, row: list[object]) -> None:
     want = str(ref.tensor(row).dtype).rsplit(".", 1)[-1]
     assert str(lucid.tensor(row).dtype) == f"lucid.{want}"
 
@@ -450,9 +427,7 @@ def _assign_state(dtype: lucid.dtype, device: str) -> lucid.Tensor:
 
 _GRAD_SETTERS: dict[str, GradSetter] = {
     **{f"factory-{name}": _factory_setter(name) for name in FACTORIES},
-    "Tensor-list": lambda d, dev: lucid.Tensor(
-        [1, 0], dtype=d, device=dev, requires_grad=True
-    ),
+    "Tensor-list": lambda d, dev: lucid.Tensor([1, 0], dtype=d, device=dev, requires_grad=True),
     "Tensor-tensor": lambda d, dev: lucid.Tensor(_src(d, dev), requires_grad=True),
     "Tensor-tensor-cast": lambda d, dev: lucid.Tensor(
         lucid.zeros(2, device=dev), dtype=d, requires_grad=True
@@ -503,9 +478,7 @@ def test_requires_grad_is_refused_on_bool_and_integer(
         _GRAD_SETTERS[setter](dtype, device)
 
 
-@pytest.mark.parametrize(
-    ("setter", "dtype", "device"), _setter_cases(sorted(_FLOATING, key=str))
-)
+@pytest.mark.parametrize(("setter", "dtype", "device"), _setter_cases(sorted(_FLOATING, key=str)))
 def test_requires_grad_is_accepted_on_floating_and_complex(
     setter: str, dtype: lucid.dtype, device: str
 ) -> None:
@@ -525,9 +498,7 @@ def test_unsigned_input_widens_and_still_refuses_requires_grad(device: str) -> N
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", _NO_GRAD_DTYPES, ids=str)
-def test_a_refused_flag_leaves_the_tensor_unchanged(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_a_refused_flag_leaves_the_tensor_unchanged(device: str, dtype: lucid.dtype) -> None:
     t = _src(dtype, device)
     for refused in (
         lambda: t.requires_grad_(True),
@@ -545,9 +516,7 @@ def test_a_refused_flag_leaves_the_tensor_unchanged(
 
 @pytest.mark.parametrize("target", ["cpu", "metal"])
 @pytest.mark.parametrize("dtype", _NO_GRAD_DTYPES, ids=str)
-def test_a_cast_to_bool_or_integer_drops_requires_grad(
-    dtype: lucid.dtype, target: str
-) -> None:
+def test_a_cast_to_bool_or_integer_drops_requires_grad(dtype: lucid.dtype, target: str) -> None:
     # A cast ends the graph at a discrete result rather than refusing: the
     # source's flag must not carry over, on the same device or across one.
     x = lucid.randn(3, requires_grad=True)

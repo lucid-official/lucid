@@ -258,6 +258,8 @@ ignore = [
 [tool.black]
 line-length = 100
 target-version = ["py313"]
+skip-magic-trailing-comma = true
+extend-exclude = '\.pyi$'
 
 # ── coverage ───────────────────────────────────────────────────────────────
 # Kept here rather than passed on the command line so every run — local,

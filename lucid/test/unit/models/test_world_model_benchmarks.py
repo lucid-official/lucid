@@ -158,9 +158,7 @@ def _blind_ceiling(env: PointMass) -> float:
     changes and turn this benchmark into a weaker claim without saying so.
     """
     grid = (-1.0, -0.5, 0.0, 0.5, 1.0)
-    return max(
-        _score(env, _Constant(a), episodes=8) for a in itertools.product(grid, repeat=2)
-    )
+    return max(_score(env, _Constant(a), episodes=8) for a in itertools.product(grid, repeat=2))
 
 
 @pytest.fixture(scope="module")
@@ -181,14 +179,10 @@ class TestTheTaskDeniesBlindPolicies:
             f"is open again"
         )
 
-    def test_reading_the_goal_is_worth_much_more(
-        self, moving_target: PointMass
-    ) -> None:
+    def test_reading_the_goal_is_worth_much_more(self, moving_target: PointMass) -> None:
         """There has to be headroom above the ceiling, or nothing can pass."""
         lucid.manual_seed(0)
-        assert _score(moving_target, _Greedy(moving_target)) > 1.3 * _blind_ceiling(
-            moving_target
-        )
+        assert _score(moving_target, _Greedy(moving_target)) > 1.3 * _blind_ceiling(moving_target)
 
     def test_the_fixed_target_still_admits_one(self) -> None:
         """The contrast, so the difference is the variant and not the seed."""
@@ -217,9 +211,7 @@ class TestDreamerV3BeatsTheBlindCeiling:
         ceiling = _blind_ceiling(env)
 
         inner = model.dreamer_v3
-        evaluator = LatentPolicy(
-            inner.encode, inner.rssm, lambda s: inner.act(s, sample=False), 2
-        )
+        evaluator = LatentPolicy(inner.encode, inner.rssm, lambda s: inner.act(s, sample=False), 2)
         collector = LatentPolicy(
             inner.encode,
             inner.rssm,

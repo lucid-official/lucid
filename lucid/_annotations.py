@@ -94,9 +94,7 @@ def _bind(target: ModuleType, bound: str, source: str, attr: str | None) -> None
     value: Any = module if attr is None else getattr(module, attr, _MISSING)
     if value is _MISSING:
         # ``from package import submodule`` before the submodule is loaded.
-        _waiting.setdefault(f"{source}.{attr}", []).append(
-            (target.__name__, bound, None)
-        )
+        _waiting.setdefault(f"{source}.{attr}", []).append((target.__name__, bound, None))
         return
     target.__dict__[bound] = value
 
@@ -176,9 +174,7 @@ class _Finder(importlib.abc.MetaPathFinder):
             find_spec = getattr(finder, "find_spec", None)
             if find_spec is None:
                 continue
-            spec: importlib.machinery.ModuleSpec | None = find_spec(
-                fullname, path, target
-            )
+            spec: importlib.machinery.ModuleSpec | None = find_spec(fullname, path, target)
             if spec is None:
                 continue
             if spec.loader is not None and hasattr(spec.loader, "exec_module"):
@@ -294,9 +290,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("TensorImpl", "lucid._C.engine", "TensorImpl"),
     ),
-    "lucid.compile._core.buffer_writes": (
-        ("Tracer", "lucid._C.engine.compile", "Tracer"),
-    ),
+    "lucid.compile._core.buffer_writes": (("Tracer", "lucid._C.engine.compile", "Tracer"),),
     "lucid.compile._core.custom_backward": (
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
@@ -360,9 +354,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
-    "lucid.compile._optim.compiler": (
-        ("Optimizer", "lucid.optim.optimizer", "Optimizer"),
-    ),
+    "lucid.compile._optim.compiler": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),
     "lucid.coreml": (
         ("Module", "lucid.nn.module", "Module"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
@@ -430,12 +422,8 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),
     "lucid.nn._module_backward_state": (("Module", "lucid.nn.module", "Module"),),
-    "lucid.nn.functional._grid_sampling": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
-    "lucid.nn.functional._index_checks": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
+    "lucid.nn.functional._grid_sampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.nn.functional._index_checks": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional._inplace": (
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("_C_engine", "lucid._C", "engine"),
@@ -453,9 +441,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.functional.linear": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.loss": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.metrics": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.nn.functional.normalization": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
+    "lucid.nn.functional.normalization": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.pooling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.positional": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.sampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
@@ -493,16 +479,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     ),
     "lucid.nn.quantized.activation": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.quantized.conv": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.nn.quantized.conv_transpose": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
-    "lucid.nn.quantized.dynamic.linear": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
+    "lucid.nn.quantized.conv_transpose": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.nn.quantized.dynamic.linear": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.quantized.dynamic.rnn": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.nn.quantized.functional_module": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
+    "lucid.nn.quantized.functional_module": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.quantized.intrinsic": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.quantized.linear": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.quantized.mlx_linear": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
@@ -518,12 +498,8 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.utils.fusion": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.skip_init": (("Module", "lucid.nn.module", "Module"),),
     "lucid.optim._step_counter": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),
-    "lucid.quantization._fake_quantize": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
-    "lucid.quantization._functional": (
-        ("QDtype", "lucid.quantization._qscheme", "QDtype"),
-    ),
+    "lucid.quantization._fake_quantize": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.quantization._functional": (("QDtype", "lucid.quantization._qscheme", "QDtype"),),
     "lucid.quantization._qgemm": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.quantization._quantize": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.quantization._quantize_fx": (
@@ -541,17 +517,13 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.special": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.cache._base": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.cache._dynamic": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.utils.cache._encoder_decoder": (
-        ("Tensor", "lucid._tensor.tensor", "Tensor"),
-    ),
+    "lucid.utils.cache._encoder_decoder": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.data.dataset": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.rollout._driver": (
         ("RSSM", "lucid.models.generative._common._rssm", "RSSM"),
         ("RSSMState", "lucid.models.generative._common._rssm", "RSSMState"),
     ),
-    "lucid.weights._base": (
-        ("Transform", "lucid.utils.transforms._base", "TransformLike"),
-    ),
+    "lucid.weights._base": (("Transform", "lucid.utils.transforms._base", "TransformLike"),),
     "lucid.weights._loading": (
         ("Module", "lucid.nn", "Module"),
         ("Tensor", "lucid._tensor", "Tensor"),

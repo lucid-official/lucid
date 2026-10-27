@@ -137,9 +137,7 @@ def _mobilenet_v4_branch_gains(model: object) -> None:
     lucid.manual_seed(0)
     for stage in getattr(model, "blocks"):
         for block in stage:
-            residual = bool(getattr(block, "_has_skip", False)) or hasattr(
-                block, "attn"
-            )
+            residual = bool(getattr(block, "_has_skip", False)) or hasattr(block, "attn")
             lo, hi = (0.1, 0.3) if residual else (0.5, 1.0)
             gamma = getattr(getattr(block, "layer_scale", None), "gamma", None)
             if gamma is not None:
@@ -365,12 +363,8 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.resnet_18_cls, "resnet18", use_positional_fallback=True),
     ParitySpec(M.resnet_34_cls, "resnet34", use_positional_fallback=True),
     ParitySpec(M.resnet_50_cls, "resnet50", tier="slow", use_positional_fallback=True),
-    ParitySpec(
-        M.resnet_101_cls, "resnet101", tier="slow", use_positional_fallback=True
-    ),
-    ParitySpec(
-        M.resnet_152_cls, "resnet152", tier="slow", use_positional_fallback=True
-    ),
+    ParitySpec(M.resnet_101_cls, "resnet101", tier="slow", use_positional_fallback=True),
+    ParitySpec(M.resnet_152_cls, "resnet152", tier="slow", use_positional_fallback=True),
     ParitySpec(M.resnet_200_cls, None, tier="slow", use_positional_fallback=True),
     ParitySpec(M.resnet_269_cls, None, tier="slow", use_positional_fallback=True),
     ParitySpec(
@@ -421,9 +415,7 @@ SPECS: list[ParitySpec] = [
         key_transform=_legacy_seresnet_key_transform,
         key_remap=_LEGACY_SERESNET_HEAD,
     ),
-    ParitySpec(
-        M.se_resnet_50_cls, "seresnet50", tier="slow", use_positional_fallback=True
-    ),
+    ParitySpec(M.se_resnet_50_cls, "seresnet50", tier="slow", use_positional_fallback=True),
     ParitySpec(
         M.se_resnet_101_cls,
         "legacy_seresnet101",
@@ -467,12 +459,8 @@ SPECS: list[ParitySpec] = [
     # ── ResNeSt ───────────────────────────────────────────────────────────────
     ParitySpec(M.resnest_14_cls, None),
     ParitySpec(M.resnest_26_cls, None),
-    ParitySpec(
-        M.resnest_50_cls, "resnest50d", tier="slow", use_positional_fallback=True
-    ),
-    ParitySpec(
-        M.resnest_101_cls, "resnest101e", tier="slow", use_positional_fallback=True
-    ),
+    ParitySpec(M.resnest_50_cls, "resnest50d", tier="slow", use_positional_fallback=True),
+    ParitySpec(M.resnest_101_cls, "resnest101e", tier="slow", use_positional_fallback=True),
     ParitySpec(M.resnest_200_cls, None, tier="slow"),
     ParitySpec(M.resnest_269_cls, None, tier="slow"),
     # ── DenseNet ──────────────────────────────────────────────────────────────
@@ -655,9 +643,7 @@ SPECS: list[ParitySpec] = [
     # ── ConvNeXt ──────────────────────────────────────────────────────────────
     # Lucid: stem.conv.N / stem.norm / stages.X.Y
     # timm:  stem.N      / stem.1    / stages.X.blocks.Y
-    ParitySpec(
-        M.convnext_tiny_cls, "convnext_tiny", key_transform=_convnext_key_transform
-    ),
+    ParitySpec(M.convnext_tiny_cls, "convnext_tiny", key_transform=_convnext_key_transform),
     ParitySpec(
         M.convnext_small_cls,
         "convnext_small",
@@ -688,9 +674,7 @@ SPECS: list[ParitySpec] = [
     # apart from the head rename — which is exactly what ``_cspnet_key_transform``
     # reproduces here.
     ParitySpec(M.cspresnet_50_cls, "cspresnet50", key_transform=_cspnet_key_transform),
-    ParitySpec(
-        M.cspresnext_50_cls, "cspresnext50", key_transform=_cspnet_key_transform
-    ),
+    ParitySpec(M.cspresnext_50_cls, "cspresnext50", key_transform=_cspnet_key_transform),
     ParitySpec(
         M.cspdarknet_53_cls,
         "cspdarknet53",

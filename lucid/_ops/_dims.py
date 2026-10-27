@@ -51,9 +51,7 @@ def _to_axes(dim: object, name: str, what: str = "dim") -> list[int]:
             return [operator.index(d) for d in dim]
     except TypeError:
         pass  # an element that is not an index; refused below with the whole dim
-    raise TypeError(
-        f"{name}(): {what} must be an int, a sequence of ints or None, got {dim!r}"
-    )
+    raise TypeError(f"{name}(): {what} must be an int, a sequence of ints or None, got {dim!r}")
 
 
 def _wrap_dim(dim: int, ndim: int, op: str) -> int:
@@ -91,8 +89,7 @@ def _wrap_dims(dims: Sequence[int], ndim: int, op: str) -> list[int]:
     if len(set(wrapped)) != len(wrapped):
         repeated = next(d for d in wrapped if wrapped.count(d) > 1)
         raise _C_engine.InvalidArgument(
-            f"{op}(): dim {repeated} appears multiple times in the list of "
-            f"dims {tuple(dims)}"
+            f"{op}(): dim {repeated} appears multiple times in the list of " f"dims {tuple(dims)}"
         )
     return wrapped
 

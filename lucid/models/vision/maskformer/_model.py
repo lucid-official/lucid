@@ -183,9 +183,7 @@ class _ResNetStage(nn.Module):
     ) -> None:
         super().__init__()
         out_ch = mid_ch * _ResNetBottleneck.expansion
-        blocks: list[nn.Module] = [
-            _ResNetBottleneck(in_ch, mid_ch, stride=stride, downsample=True)
-        ]
+        blocks: list[nn.Module] = [_ResNetBottleneck(in_ch, mid_ch, stride=stride, downsample=True)]
         for _ in range(1, num_blocks):
             blocks.append(_ResNetBottleneck(out_ch, mid_ch))
         self.layers = nn.Sequential(*blocks)
@@ -436,9 +434,7 @@ class _DecoderLayer(nn.Module):
     query positions to Q and the spatial positions to K.
     """
 
-    def __init__(
-        self, d_model: int, n_head: int, dim_ff: int, dropout: float = 0.0
-    ) -> None:
+    def __init__(self, d_model: int, n_head: int, dim_ff: int, dropout: float = 0.0) -> None:
         super().__init__()
         self.self_attn = _Attention(d_model, n_head)
         self.self_attn_layer_norm = nn.LayerNorm(d_model)
@@ -628,9 +624,7 @@ class _MaskEmbedder(nn.Sequential):
     Layers 0-1 use ReLU; the final layer is identity.
     """
 
-    def __init__(
-        self, d_model: int, mask_feature_size: int, num_layers: int = 3
-    ) -> None:
+    def __init__(self, d_model: int, mask_feature_size: int, num_layers: int = 3) -> None:
         in_dims = [d_model] + [d_model] * (num_layers - 1)
         out_dims = [d_model] * (num_layers - 1) + [mask_feature_size]
         blocks: list[nn.Module] = []
@@ -682,9 +676,7 @@ def _focal_dice_terms(
     focal: Tensor = (pos @ gt_t + neg @ ones_t) / P  # (N, M)
 
     inter: Tensor = prob @ gt_t  # (N, M)
-    denom: Tensor = prob.sum(dim=-1).reshape(-1, 1) + gt_masks.sum(dim=-1).reshape(
-        1, -1
-    )
+    denom: Tensor = prob.sum(dim=-1).reshape(-1, 1) + gt_masks.sum(dim=-1).reshape(1, -1)
     # The reference smooths with +1 on *both* numerator and denominator; a bare
     # epsilon guard would score an empty mask 1.0 instead of the reference's 0.
     dice: Tensor = 1.0 - (2.0 * inter + 1.0) / (denom + 1.0)
@@ -1025,9 +1017,9 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
             # arange(K) drops ignore and any other out-of-range label for
             # free.
             class_ids: Tensor = lucid.arange(K, device=seg_b.device.type).long()
-            onehot: Tensor = (
-                seg_b.reshape(1, seg_H, seg_W) == class_ids.reshape(K, 1, 1)
-            ).to(ml_b.dtype)
+            onehot: Tensor = (seg_b.reshape(1, seg_H, seg_W) == class_ids.reshape(K, 1, 1)).to(
+                ml_b.dtype
+            )
             counts: list[float] = cast(list[float], onehot.sum(dim=(1, 2)).tolist())
             unique_classes: list[int] = [c for c in range(K) if counts[c] > 0.0]
 
@@ -1071,9 +1063,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
             cls_weight: Tensor = lucid.tensor(
                 [1.0] * K + [_NO_OBJECT_WEIGHT], dtype=cl_b.dtype, device=cl_b.device
             )
-            cls_losses.append(
-                F.cross_entropy(cl_b, cls_tgt, weight=cls_weight, reduction="mean")
-            )
+            cls_losses.append(F.cross_entropy(cl_b, cls_tgt, weight=cls_weight, reduction="mean"))
 
             # Mask loss on matched pairs.  Section 4.1 weights the terms
             # lambda_mask=20 and lambda_dice=1 against a class term of 1, so
@@ -1108,9 +1098,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
                 ).long()
                 focal_d: Tensor = focal_m.reshape(-1).index_select(0, diag)
                 dice_d: Tensor = dice_m.reshape(-1).index_select(0, diag)
-                mask_losses.append(
-                    (_MASK_WEIGHT * focal_d + _DICE_WEIGHT * dice_d).mean()
-                )
+                mask_losses.append((_MASK_WEIGHT * focal_d + _DICE_WEIGHT * dice_d).mean())
 
         # Scalar fallbacks: a (1,) zero made the loss shape (1,) whenever no
         # image in the batch held a valid class, and a scalar everywhere else.

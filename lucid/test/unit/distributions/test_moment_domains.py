@@ -127,9 +127,7 @@ def test_one_hot_categorical_has_the_moments_categorical_cannot() -> None:
     dist = D.OneHotCategorical(probs=_T(0.25, 0.75))
     assert np.allclose(np.asarray(dist.mean.numpy()).ravel(), [0.25, 0.75])
     assert np.allclose(np.asarray(dist.variance.numpy()).ravel(), [0.1875, 0.1875])
-    assert np.allclose(
-        np.asarray(dist.stddev.numpy()).ravel(), np.sqrt([0.1875, 0.1875])
-    )
+    assert np.allclose(np.asarray(dist.stddev.numpy()).ravel(), np.sqrt([0.1875, 0.1875]))
 
 
 # ── the round trip a distribution exists for ─────────────────────────────────
@@ -171,9 +169,7 @@ def test_relaxed_families_refuse_a_non_positive_temperature(
     does not check it either.
     """
     with pytest.raises(ValueError):
-        D.RelaxedOneHotCategorical(
-            temperature=_T(temperature), probs=_T(0.5, 0.5)
-        ).rsample((4,))
+        D.RelaxedOneHotCategorical(temperature=_T(temperature), probs=_T(0.5, 0.5)).rsample((4,))
 
 
 # ── scoring at a degenerate probability ──────────────────────────────────────

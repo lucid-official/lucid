@@ -232,14 +232,11 @@ class IJEPAConfig(ModelConfig):
                 f"{self.patch_size}; a patch grid would not tile the image"
             )
         if self.dim % self.num_heads != 0:
-            raise ValueError(
-                f"dim {self.dim} is not divisible by num_heads {self.num_heads}"
-            )
+            raise ValueError(f"dim {self.dim} is not divisible by num_heads {self.num_heads}")
         heads = self.resolved_predictor_heads
         if heads < 1 or self.predictor_dim % heads != 0:
             raise ValueError(
-                f"predictor_dim {self.predictor_dim} is not divisible by its "
-                f"{heads} heads"
+                f"predictor_dim {self.predictor_dim} is not divisible by its " f"{heads} heads"
             )
         if self.mlp_ratio <= 0.0:
             raise ValueError(f"mlp_ratio must be positive, got {self.mlp_ratio}")
@@ -253,9 +250,7 @@ class IJEPAConfig(ModelConfig):
                 )
         low, high = self.target_aspect
         if not 0.0 < low <= high:
-            raise ValueError(
-                f"target_aspect must satisfy 0 < low <= high, got ({low}, {high})"
-            )
+            raise ValueError(f"target_aspect must satisfy 0 < low <= high, got ({low}, {high})")
         if self.min_keep > self.num_patches:
             raise ValueError(
                 f"min_keep {self.min_keep} exceeds the {self.num_patches} patches "
@@ -264,10 +259,7 @@ class IJEPAConfig(ModelConfig):
         start, end = self.ema
         if not 0.0 <= start <= end <= 1.0:
             raise ValueError(
-                f"the target encoder's momentum must rise through [0, 1], got "
-                f"({start}, {end})"
+                f"the target encoder's momentum must rise through [0, 1], got " f"({start}, {end})"
             )
         if self.smooth_l1_beta <= 0.0:
-            raise ValueError(
-                f"smooth_l1_beta must be positive, got {self.smooth_l1_beta}"
-            )
+            raise ValueError(f"smooth_l1_beta must be positive, got {self.smooth_l1_beta}")

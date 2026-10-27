@@ -216,9 +216,7 @@ def test_floating_input_is_not_cast(name: str, device: str) -> None:
     assert fn(x).dtype == lucid.float16
 
 
-@pytest.mark.parametrize(
-    "name", ["i0e", "entr", "erfcx", "ndtri", "bessel_j0", "gammaln"]
-)
+@pytest.mark.parametrize("name", ["i0e", "entr", "erfcx", "ndtri", "bessel_j0", "gammaln"])
 def test_complex_input_to_a_real_special_function_is_refused(name: str) -> None:
     # The cast that promoted an integer also dropped a complex input's
     # imaginary part, so ``i0e(1+1j)`` answered ``i0e(1)``.

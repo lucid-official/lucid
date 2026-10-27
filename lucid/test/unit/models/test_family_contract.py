@@ -94,9 +94,7 @@ def _import_family(domain: str, family: str):
     return importlib.import_module(mod_path)
 
 
-@pytest.mark.parametrize(
-    "domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES]
-)
+@pytest.mark.parametrize("domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES])
 def test_family_config_satisfies_protocol(domain: str, family: str) -> None:
     """Every family must export a ``<Family>Config`` class that
     structurally satisfies :class:`ModelConfigProtocol` (model_type
@@ -110,8 +108,7 @@ def test_family_config_satisfies_protocol(domain: str, family: str) -> None:
         and name not in _INTERMEDIATE_CONFIG_NAMES
     ]
     assert config_classes, (
-        f"family {domain}/{family}: no <Family>Config class exported "
-        f"from __init__.py"
+        f"family {domain}/{family}: no <Family>Config class exported " f"from __init__.py"
     )
     for cfg in config_classes:
         assert isinstance(cfg, ModelConfigProtocol), (
@@ -128,9 +125,7 @@ def test_family_config_satisfies_protocol(domain: str, family: str) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES]
-)
+@pytest.mark.parametrize("domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES])
 def test_family_models_satisfy_protocol(domain: str, family: str) -> None:
     """Every public model class in a family (backbone or task wrapper)
     must satisfy :class:`PretrainedModelProtocol` — i.e. declare
@@ -205,23 +200,17 @@ def _misspelt_versions(canonical_name: str) -> list[str]:
     bad: list[str] = []
     for match in re.finditer(r"[Vv]\s*\d+", canonical_name):
         token = match.group()
-        preceded_by_hyphen = (
-            match.start() > 0 and canonical_name[match.start() - 1] == "-"
-        )
+        preceded_by_hyphen = match.start() > 0 and canonical_name[match.start() - 1] == "-"
         if not (token.startswith("v") and preceded_by_hyphen):
             bad.append(token)
     return bad
 
 
-@pytest.mark.parametrize(
-    "domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES]
-)
+@pytest.mark.parametrize("domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES])
 def test_family_version_suffix_is_hyphen_v(domain: str, family: str) -> None:
     """Versioned families display as ``<Name>-vN`` on the docs site."""
     module = _import_family(domain, family)
-    config = next(
-        (getattr(module, n) for n in module.__all__ if n.endswith("Config")), None
-    )
+    config = next((getattr(module, n) for n in module.__all__ if n.endswith("Config")), None)
     assert config is not None, f"{domain}/{family} exports no Config"
     meta = getattr(config, "__model_family_meta__", None)
     canonical = getattr(meta, "canonical_name", None) or ""
@@ -269,9 +258,7 @@ def _stray_exported_functions(module: ModuleType) -> list[str]:
     return stray
 
 
-@pytest.mark.parametrize(
-    "domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES]
-)
+@pytest.mark.parametrize("domain,family", _FAMILIES, ids=[f"{d}/{f}" for d, f in _FAMILIES])
 def test_family_exports_no_internal_helpers(domain: str, family: str) -> None:
     """A family's ``__all__`` must not leak its own machinery.
 
@@ -358,9 +345,7 @@ _UNWEIGHTED = sorted(n for n in list_models() if weights_for(n) is None)
 
 
 @pytest.mark.parametrize("name", _UNWEIGHTED)
-def test_pretrained_without_weights_is_refused(
-    name: str, _downloads_blocked: None
-) -> None:
+def test_pretrained_without_weights_is_refused(name: str, _downloads_blocked: None) -> None:
     outcome = _pretrained_outcome(model_entrypoint(name))
     assert outcome != "ignores", (
         f"{name}(pretrained=True) returned a randomly initialised model.  "

@@ -82,9 +82,7 @@ def test_valid_parameters_still_build_and_score(build) -> None:
 
 def test_validation_can_be_turned_off() -> None:
     """The cost is opt-out, for a caller who has already checked."""
-    dist = D.Beta(
-        lucid.tensor(np.array(0.0)), lucid.tensor(np.array(1.0)), validate_args=False
-    )
+    dist = D.Beta(lucid.tensor(np.array(0.0)), lucid.tensor(np.array(1.0)), validate_args=False)
     assert dist is not None
 
 

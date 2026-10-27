@@ -81,12 +81,8 @@ class TestSessionCacheIdRemap:
         lucid.manual_seed(123)
         want2_a = x + lucid.randn(4, device=COMPILE_DEVICE)
         want2_b = x + lucid.randn(4, device=COMPILE_DEVICE)
-        assert np.allclose(
-            out2_a.to("cpu").numpy(), want2_a.to("cpu").numpy(), atol=1e-5
-        )
-        assert np.allclose(
-            out2_b.to("cpu").numpy(), want2_b.to("cpu").numpy(), atol=1e-5
-        )
+        assert np.allclose(out2_a.to("cpu").numpy(), want2_a.to("cpu").numpy(), atol=1e-5)
+        assert np.allclose(out2_b.to("cpu").numpy(), want2_b.to("cpu").numpy(), atol=1e-5)
         assert not np.allclose(out2_a.to("cpu").numpy(), out2_b.to("cpu").numpy())
 
     def test_rng_feed_then_constant_feed_both_compile(self) -> None:
@@ -112,12 +108,8 @@ class TestSessionCacheIdRemap:
 
         lucid.manual_seed(77)
         want_rng = x + lucid.randn(4, device=COMPILE_DEVICE)
-        assert np.allclose(
-            out_rng.to("cpu").numpy(), want_rng.to("cpu").numpy(), atol=1e-5
-        )
-        assert np.allclose(
-            out_const.to("cpu").numpy(), (x + c).to("cpu").numpy(), atol=1e-5
-        )
+        assert np.allclose(out_rng.to("cpu").numpy(), want_rng.to("cpu").numpy(), atol=1e-5)
+        assert np.allclose(out_const.to("cpu").numpy(), (x + c).to("cpu").numpy(), atol=1e-5)
 
     @pytest.mark.parametrize("order", [(0, 1, 2), (1, 0, 2), (2, 1, 0)])
     def test_three_same_graph_functions_with_distinct_raw_id_offsets(
@@ -134,12 +126,9 @@ class TestSessionCacheIdRemap:
         #   f1: first operand is RNG draw -> raw feeds {1, 3, 5}, output 4
         #   f2: both constants are RNG draws -> raw feeds {1, 3, 5}, output 6
         f0 = lucid.compile.compile(lambda t: (t + c1) + c2)
-        f1 = lucid.compile.compile(
-            lambda t: (t + lucid.randn(2, 4, device=t.device)) + c2
-        )
+        f1 = lucid.compile.compile(lambda t: (t + lucid.randn(2, 4, device=t.device)) + c2)
         f2 = lucid.compile.compile(
-            lambda t: (t + lucid.randn(2, 4, device=t.device))
-            + lucid.rand(2, 4, device=t.device)
+            lambda t: (t + lucid.randn(2, 4, device=t.device)) + lucid.rand(2, 4, device=t.device)
         )
         fns = [f0, f1, f2]
 
@@ -154,18 +143,14 @@ class TestSessionCacheIdRemap:
             assert info["entries"] == 1, info
             assert not info["eager_only"], info
 
-        assert np.allclose(
-            f0(x).to("cpu").numpy(), ((x + c1) + c2).to("cpu").numpy(), atol=1e-5
-        )
+        assert np.allclose(f0(x).to("cpu").numpy(), ((x + c1) + c2).to("cpu").numpy(), atol=1e-5)
         lucid.manual_seed(314)
         got_f2 = f2(x)
         lucid.manual_seed(314)
         want_f2 = (x + lucid.randn(2, 4, device=COMPILE_DEVICE)) + lucid.rand(
             2, 4, device=COMPILE_DEVICE
         )
-        assert np.allclose(
-            got_f2.to("cpu").numpy(), want_f2.to("cpu").numpy(), atol=1e-5
-        )
+        assert np.allclose(got_f2.to("cpu").numpy(), want_f2.to("cpu").numpy(), atol=1e-5)
 
     def test_non_commutative_op_preserves_operand_order_across_id_inversion(
         self,
@@ -209,15 +194,9 @@ class TestSessionCacheIdRemap:
 
         lucid.manual_seed(99)
         r = lucid.randn(4, device=COMPILE_DEVICE)
-        assert np.allclose(
-            got_sub_rng.to("cpu").numpy(), (x - r).to("cpu").numpy(), atol=1e-5
-        )
-        assert np.allclose(
-            got_sub_const.to("cpu").numpy(), (x - c).to("cpu").numpy(), atol=1e-5
-        )
-        assert np.allclose(
-            got_rng_sub.to("cpu").numpy(), (r - x).to("cpu").numpy(), atol=1e-5
-        )
+        assert np.allclose(got_sub_rng.to("cpu").numpy(), (x - r).to("cpu").numpy(), atol=1e-5)
+        assert np.allclose(got_sub_const.to("cpu").numpy(), (x - c).to("cpu").numpy(), atol=1e-5)
+        assert np.allclose(got_rng_sub.to("cpu").numpy(), (r - x).to("cpu").numpy(), atol=1e-5)
 
     def test_unused_rng_feed_does_not_collide_with_used_only_trace(self) -> None:
         """A trace with an unread RNG feed has an extra placeholder and must not poison a 1-feed trace."""

@@ -58,10 +58,7 @@ class _Stack(nn.Module):
     def __init__(self, layers: int = 8, channels: int = 128) -> None:
         super().__init__()
         self.convs = nn.ModuleList(
-            [
-                nn.Conv2d(channels, channels, 3, padding=1, bias=False)
-                for _ in range(layers)
-            ]
+            [nn.Conv2d(channels, channels, 3, padding=1, bias=False) for _ in range(layers)]
         )
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
@@ -187,9 +184,7 @@ class TestThePackageComputesWhatItStores:
             kept = lucid.where(flat.abs() > threshold, flat, lucid.zeros_like(flat))
             want = F.conv2d(want, kept.reshape(*weight.shape), padding=1)
 
-        exported = cml.export(
-            model, x, f"{tmp_path}/s.mlpackage", weights=cml.Sparsify(ratio=0.5)
-        )
+        exported = cml.export(model, x, f"{tmp_path}/s.mlpackage", weights=cml.Sparsify(ratio=0.5))
         try:
             got = exported.predict(x)
             scale = max(float(want.abs().max().item()), 1e-9)
@@ -206,9 +201,7 @@ class TestWhatIsLeftAlone:
             ("sparsify", cml.Sparsify(ratio=0.5)),
         ],
     )
-    def test_a_value_with_no_channel_axis_is_stored_whole(
-        self, name: str, weights: object
-    ) -> None:
+    def test_a_value_with_no_channel_axis_is_stored_whole(self, name: str, weights: object) -> None:
         """Biases and norm parameters are not weights to approximate.
 
         A rank-1 value has no output channel to group or threshold
@@ -297,9 +290,7 @@ class TestPalettizedModelsAvoidTheGpu:
         lucid.manual_seed(0)
         model = _Stack(layers=2, channels=64).eval()
         x = lucid.randn(1, 64, 8, 8)
-        exported = cml.export(
-            model, x, f"{tmp_path}/p.mlpackage", weights=cml.Palettize(bits=4)
-        )
+        exported = cml.export(model, x, f"{tmp_path}/p.mlpackage", weights=cml.Palettize(bits=4))
         try:
             assert exported.palettized
             assert exported.compute_units is cml.ComputeUnits.CPU_AND_NE
@@ -321,9 +312,7 @@ class TestPalettizedModelsAvoidTheGpu:
         with pytest.raises(ValueError, match="GPU"):
             cml.load(path, compute_units=cml.ComputeUnits.CPU_AND_GPU)
 
-    def test_an_uncompressed_model_keeps_the_units_it_was_given(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_uncompressed_model_keeps_the_units_it_was_given(self, tmp_path: object) -> None:
         """The guard reads the package, not the request.
 
         Nothing about an ordinary export changes, including its right to
@@ -342,9 +331,7 @@ class TestPalettizedModelsAvoidTheGpu:
 
 class TestTheSizeActuallyFalls:
     @pytest.mark.parametrize("bits", [1, 2, 4, 6])
-    def test_a_narrower_palette_writes_a_smaller_package(
-        self, bits: int, tmp_path: object
-    ) -> None:
+    def test_a_narrower_palette_writes_a_smaller_package(self, bits: int, tmp_path: object) -> None:
         """Compression that does not compress is a bug, not a trade.
 
         The tables are stored too, so the saving is not exactly the ratio

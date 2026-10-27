@@ -60,14 +60,14 @@ class TestRotate:
     def test_marker_within_one_pixel(self, angle):
         """NEAREST marker within ±1 px of Albu."""
         chw, _ = _marker(8, 20)
-        out_l = T.Rotate(
-            limit=(angle, angle), interpolation="nearest", border_mode=0, p=1.0
-        )(T.Image(chw)).data.numpy()
+        out_l = T.Rotate(limit=(angle, angle), interpolation="nearest", border_mode=0, p=1.0)(
+            T.Image(chw)
+        ).data.numpy()
         hwc = np.zeros((24, 24, 1), dtype=np.float32)
         hwc[8, 20, 0] = 1.0
-        out_a = A.Rotate(limit=(angle, angle), interpolation=0, border_mode=0, p=1.0)(
-            image=hwc
-        )["image"]
+        out_a = A.Rotate(limit=(angle, angle), interpolation=0, border_mode=0, p=1.0)(image=hwc)[
+            "image"
+        ]
         pl = _marker_pos(out_l)
         pa = _marker_pos(out_a)
         if pl is None or pa is None:
@@ -107,9 +107,9 @@ class TestAffine:
         )(T.Image(chw)).data.numpy()
         hwc = np.zeros((24, 24, 1), dtype=np.float32)
         hwc[8, 20, 0] = 1.0
-        out_a = A.Affine(rotate=(angle, angle), interpolation=0, border_mode=0, p=1.0)(
-            image=hwc
-        )["image"]
+        out_a = A.Affine(rotate=(angle, angle), interpolation=0, border_mode=0, p=1.0)(image=hwc)[
+            "image"
+        ]
         pl = _marker_pos(out_l)
         pa = _marker_pos(out_a)
         if pl is None or pa is None:
@@ -214,14 +214,14 @@ class TestSafeRotate:
     def test_marker_within_one_pixel(self, angle):
         """NEAREST marker landed in expanded canvas within ±1 px of Albu."""
         chw, _ = _marker(8, 20)
-        out_l = T.SafeRotate(
-            limit=(angle, angle), interpolation="nearest", border_mode=0, p=1.0
-        )(T.Image(chw)).data.numpy()
+        out_l = T.SafeRotate(limit=(angle, angle), interpolation="nearest", border_mode=0, p=1.0)(
+            T.Image(chw)
+        ).data.numpy()
         hwc = np.zeros((24, 24, 1), dtype=np.float32)
         hwc[8, 20, 0] = 1.0
-        out_a = A.SafeRotate(
-            limit=(angle, angle), interpolation=0, border_mode=0, p=1.0
-        )(image=hwc)["image"]
+        out_a = A.SafeRotate(limit=(angle, angle), interpolation=0, border_mode=0, p=1.0)(
+            image=hwc
+        )["image"]
         pl = _marker_pos(out_l)
         pa = _marker_pos(out_a)
         if pl is None or pa is None:
@@ -279,8 +279,8 @@ class TestPerspective:
     def test_marker_stays_in_frame(self):
         """Small-scale perspective keeps a centered NEAREST marker in frame."""
         chw, _ = _marker(12, 12)
-        out_l = T.Perspective(
-            scale=(0.02, 0.02), interpolation="nearest", border_mode=0, p=1.0
-        )(T.Image(chw)).data.numpy()
+        out_l = T.Perspective(scale=(0.02, 0.02), interpolation="nearest", border_mode=0, p=1.0)(
+            T.Image(chw)
+        ).data.numpy()
         pl = _marker_pos(out_l)
         assert pl is not None, "marker disappeared under tiny perspective warp"

@@ -16,9 +16,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 
 
-def _view(
-    base: lucid.Tensor, shape: list[int], stride: list[int], offset: int
-) -> lucid.Tensor:
+def _view(base: lucid.Tensor, shape: list[int], stride: list[int], offset: int) -> lucid.Tensor:
     return _wrap(_C_engine.TensorImpl._make_view(base._impl, shape, stride, offset))
 
 

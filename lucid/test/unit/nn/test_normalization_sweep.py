@@ -20,9 +20,7 @@ import lucid.nn as nn
 
 
 def _x(shape):
-    return lucid.tensor(
-        np.random.default_rng(len(shape)).standard_normal(shape).astype(np.float32)
-    )
+    return lucid.tensor(np.random.default_rng(len(shape)).standard_normal(shape).astype(np.float32))
 
 
 BATCH_NORMS = [
@@ -158,9 +156,7 @@ def test_group_norm_with_one_group_matches_layer_norm_over_the_same_axes():
     x = _x((4, 6, 5))
     grouped = np.asarray(nn.GroupNorm(1, 6, affine=False)(x).numpy())
     flat = np.asarray(x.numpy()).reshape(4, -1)
-    expected = (flat - flat.mean(1, keepdims=True)) / np.sqrt(
-        flat.var(1, keepdims=True) + 1e-5
-    )
+    expected = (flat - flat.mean(1, keepdims=True)) / np.sqrt(flat.var(1, keepdims=True) + 1e-5)
     assert np.allclose(grouped.reshape(4, -1), expected, atol=1e-4)
 
 
@@ -201,9 +197,7 @@ def test_running_stats_survive_a_state_dict_round_trip(cls, shape):
     source.eval()
     target.eval()
     x = _x(shape)
-    assert np.allclose(
-        np.asarray(source(x).numpy()), np.asarray(target(x).numpy()), atol=1e-6
-    )
+    assert np.allclose(np.asarray(source(x).numpy()), np.asarray(target(x).numpy()), atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -231,9 +225,7 @@ def test_repr_names_the_shape():
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-def test_instance_norm_running_var_excludes_between_instance_variance(
-    ref, device: str
-) -> None:
+def test_instance_norm_running_var_excludes_between_instance_variance(ref, device: str) -> None:
     """LCD-92 (#164): running_var averages each instance's unbiased spatial variance."""
     m = nn.InstanceNorm1d(1, track_running_stats=True, device=device)
     rm = ref.nn.InstanceNorm1d(1, track_running_stats=True)
@@ -243,12 +235,8 @@ def test_instance_norm_running_var_excludes_between_instance_variance(
     ref_out = rm(ref.tensor(x_np))
 
     np.testing.assert_allclose(out.cpu().numpy(), ref_out.numpy(), atol=1e-5)
-    np.testing.assert_allclose(
-        m.running_mean.cpu().numpy(), rm.running_mean.numpy(), atol=1e-6
-    )
-    np.testing.assert_allclose(
-        m.running_var.cpu().numpy(), rm.running_var.numpy(), atol=1e-6
-    )
+    np.testing.assert_allclose(m.running_mean.cpu().numpy(), rm.running_mean.numpy(), atol=1e-6)
+    np.testing.assert_allclose(m.running_var.cpu().numpy(), rm.running_var.numpy(), atol=1e-6)
     assert m.num_batches_tracked is not None
     assert m.num_batches_tracked.dtype == lucid.int64
     assert m.num_batches_tracked.shape == ()
@@ -276,17 +264,11 @@ def test_instance_norm_track_running_stats_train_eval_and_state_dict_parity(
     """LCD-92: InstanceNorm{1,2,3}d running stats, eval output, and checkpoint keys match ref."""
     rng = np.random.default_rng(len(shape))
     C = shape[1]
-    m = getattr(nn, cls_name)(
-        C, affine=True, track_running_stats=True, momentum=0.2, device=device
-    )
-    rm = getattr(ref.nn, cls_name)(
-        C, affine=True, track_running_stats=True, momentum=0.2
-    )
+    m = getattr(nn, cls_name)(C, affine=True, track_running_stats=True, momentum=0.2, device=device)
+    rm = getattr(ref.nn, cls_name)(C, affine=True, track_running_stats=True, momentum=0.2)
 
     for step in range(2):
-        x_np = (rng.standard_normal(shape) * (step + 2.0) + step * 5.0).astype(
-            np.float32
-        )
+        x_np = (rng.standard_normal(shape) * (step + 2.0) + step * 5.0).astype(np.float32)
         out = m(lucid.tensor(x_np, device=device))
         ref_out = rm(ref.tensor(x_np))
         np.testing.assert_allclose(
@@ -303,14 +285,10 @@ def test_instance_norm_track_running_stats_train_eval_and_state_dict_parity(
 
     # Strict load from reference checkpoint into both eager and lazy Lucid modules:
     ref_sd = {
-        k: lucid.tensor(
-            v.detach().numpy(), dtype=m.state_dict()[k].dtype, device=device
-        )
+        k: lucid.tensor(v.detach().numpy(), dtype=m.state_dict()[k].dtype, device=device)
         for k, v in rm.state_dict().items()
     }
-    target_eager = getattr(nn, cls_name)(
-        C, affine=True, track_running_stats=True, device=device
-    )
+    target_eager = getattr(nn, cls_name)(C, affine=True, track_running_stats=True, device=device)
     target_eager.load_state_dict(ref_sd, strict=True)
     target_lazy = getattr(nn, f"Lazy{cls_name}")(
         affine=True, track_running_stats=True, device=device

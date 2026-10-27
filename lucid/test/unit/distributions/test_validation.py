@@ -230,12 +230,8 @@ def test_half_normal_scores_below_zero_as_impossible(device: str) -> None:
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize(
-    "probs", [[-0.5, 1.5], [float("nan"), 0.5, 0.5]], ids=["negative", "nan"]
-)
-def test_multinomial_validates_its_probabilities(
-    probs: list[float], device: str
-) -> None:
+@pytest.mark.parametrize("probs", [[-0.5, 1.5], [float("nan"), 0.5, 0.5]], ids=["negative", "nan"])
+def test_multinomial_validates_its_probabilities(probs: list[float], device: str) -> None:
     with pytest.raises(ValueError, match="probs"):
         D.Multinomial(5, probs=_t(probs, device))
 
@@ -246,9 +242,7 @@ def test_multinomial_scores_like_the_reference(device: str) -> None:
     dist = D.Multinomial(5, probs=_t([0.2, 0.3, 0.5], device))
     # 3! / (1! 1! 1!) · 0.2 · 0.3 · 0.5
     want = np.log(6 * 0.2 * 0.3 * 0.5)
-    assert dist.log_prob(_t([1.0, 1.0, 1.0], device)).item() == pytest.approx(
-        want, rel=1e-5
-    )
+    assert dist.log_prob(_t([1.0, 1.0, 1.0], device)).item() == pytest.approx(want, rel=1e-5)
     with pytest.raises(ValueError, match="support"):
         dist.log_prob(_t([3.0, 3.0, 0.0], device))
 
@@ -276,18 +270,10 @@ def test_a_scale_tril_that_is_not_a_cholesky_factor(device: str) -> None:
 @pytest.mark.parametrize("device", DEVICES)
 def test_the_given_matrix_and_its_duals_agree(device: str) -> None:
     cov = np.array([[2.0, 0.5], [0.5, 1.0]])
-    mvn = D.MultivariateNormal(
-        _t([0.0, 0.0], device), covariance_matrix=_t(cov, device)
-    )
-    np.testing.assert_allclose(
-        mvn.precision_matrix.numpy(), np.linalg.inv(cov), rtol=1e-5
-    )
-    np.testing.assert_allclose(
-        mvn.scale_tril.numpy(), np.linalg.cholesky(cov), rtol=1e-5
-    )
-    wishart = D.Wishart(
-        _t(3.0, device), precision_matrix=_t(np.linalg.inv(cov), device)
-    )
+    mvn = D.MultivariateNormal(_t([0.0, 0.0], device), covariance_matrix=_t(cov, device))
+    np.testing.assert_allclose(mvn.precision_matrix.numpy(), np.linalg.inv(cov), rtol=1e-5)
+    np.testing.assert_allclose(mvn.scale_tril.numpy(), np.linalg.cholesky(cov), rtol=1e-5)
+    wishart = D.Wishart(_t(3.0, device), precision_matrix=_t(np.linalg.inv(cov), device))
     np.testing.assert_allclose(wishart.covariance_matrix.numpy(), cov, rtol=1e-4)
 
 
@@ -312,8 +298,7 @@ def test_positive_definite_checks_every_matrix_in_mixed_batch(device: str) -> No
     )
     got = D.constraints.positive_definite.check(batch)
     per_matrix = [
-        bool(D.constraints.positive_definite.check(batch[i]).item())
-        for i in range(batch.shape[0])
+        bool(D.constraints.positive_definite.check(batch[i]).item()) for i in range(batch.shape[0])
     ]
     assert got.device == device
     assert got.dtype == lucid.bool

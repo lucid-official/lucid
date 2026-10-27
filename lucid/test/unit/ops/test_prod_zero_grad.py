@@ -141,9 +141,7 @@ def test_scatter_prod_gradient_matches_reference(
     base, index, src = _SCATTER[case]
     xr = ref.tensor(base, requires_grad=True)
     sr = ref.tensor(src, requires_grad=True)
-    want = xr.scatter_reduce(
-        1, ref.tensor(index), sr, "prod", include_self=include_self
-    )
+    want = xr.scatter_reduce(1, ref.tensor(index), sr, "prod", include_self=include_self)
     want.backward(ref.tensor(_weights(tuple(want.shape))))
 
     xl = lucid.tensor(base, device=device, requires_grad=True)
@@ -234,9 +232,7 @@ def test_expanded_zero_cumprod_second_derivative_matches_reference(
     (gr2,) = ref.autograd.grad(gr1, [ar])
 
     al = lucid.tensor([0.0], device=device, requires_grad=True)
-    (gl1,) = lucid.autograd.grad(
-        lucid.cumprod(al.expand(3), 0).sum(), [al], create_graph=True
-    )
+    (gl1,) = lucid.autograd.grad(lucid.cumprod(al.expand(3), 0).sum(), [al], create_graph=True)
     (gl2,) = lucid.autograd.grad(gl1, [al])
     assert gl1.tolist() == gr1.tolist() == [1.0]
     assert gl2.tolist() == gr2.tolist() == [2.0]
@@ -278,9 +274,7 @@ def test_zero_dim_prod_passes_the_gradient(device: str, value: float) -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_3d_middle_axis_prod_and_int32_scatter_prod_gradients(
-    ref: ModuleType, device: str
-) -> None:
+def test_3d_middle_axis_prod_and_int32_scatter_prod_gradients(ref: ModuleType, device: str) -> None:
     vals = [
         [[2.0, 0.0], [3.0, -2.0], [0.5, 4.0]],
         [[0.0, 1.5], [0.0, 0.0], [2.0, -3.0]],
@@ -297,16 +291,12 @@ def test_3d_middle_axis_prod_and_int32_scatter_prod_gradients(
     base, index, src = _SCATTER["base_and_src"]
     br = ref.tensor(base, requires_grad=True)
     sr = ref.tensor(src, requires_grad=True)
-    br.scatter_reduce(1, ref.tensor(index), sr, "prod").backward(
-        ref.tensor(_weights((2, 3)))
-    )
+    br.scatter_reduce(1, ref.tensor(index), sr, "prod").backward(ref.tensor(_weights((2, 3))))
 
     bl = lucid.tensor(base, device=device, requires_grad=True)
     sl = lucid.tensor(src, device=device, requires_grad=True)
     idx32 = lucid.tensor(index, dtype=lucid.int32, device=device)
-    bl.scatter_reduce(1, idx32, sl, "prod").backward(
-        lucid.tensor(_weights((2, 3)), device=device)
-    )
+    bl.scatter_reduce(1, idx32, sl, "prod").backward(lucid.tensor(_weights((2, 3)), device=device))
     _close(bl.grad.tolist(), br.grad.tolist())
     _close(sl.grad.tolist(), sr.grad.tolist())
 

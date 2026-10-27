@@ -306,9 +306,7 @@ class TestEmbeddingScaleGradByFreq:
         forward is scaled by its own counts before the gradients sum."""
         lucid.manual_seed(0)
         emb = nn.Embedding(5, 3, scale_grad_by_freq=True)
-        total = (
-            emb(lucid.tensor([1, 1]).long()).sum() + emb(lucid.tensor([1]).long()).sum()
-        )
+        total = emb(lucid.tensor([1, 1]).long()).sum() + emb(lucid.tensor([1]).long()).sum()
         total.backward()
         assert np.allclose(emb.weight.grad.numpy()[1], 2.0, atol=1e-6)
 

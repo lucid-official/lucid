@@ -98,9 +98,7 @@ class TwoHotHead(nn.Module):
             raise ValueError(f"bin_range must be positive, got {bin_range}")
 
         self.num_bins = num_bins
-        self.trunk = DenseHead(
-            in_features, hidden, layers, out_features=num_bins, act_fn=act_fn
-        )
+        self.trunk = DenseHead(in_features, hidden, layers, out_features=num_bins, act_fn=act_fn)
         if zero_init:
             with lucid.no_grad():
                 self.trunk.out.weight[:] = lucid.zeros_like(self.trunk.out.weight)

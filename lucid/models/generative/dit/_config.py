@@ -194,9 +194,7 @@ class DiTConfig(DiffusionModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_patch_grid(
-            self.sample_size, self.patch_size, self.hidden_size, self.num_heads
-        )
+        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
         if self.frequency_embedding_size % 2 != 0:
             raise ValueError(
                 f"frequency_embedding_size must be even — the sinusoid "
@@ -206,9 +204,5 @@ class DiTConfig(DiffusionModelConfig):
         if self.depth <= 0:
             raise ValueError(f"depth must be positive, got {self.depth}")
         if not 0.0 <= self.class_dropout <= 1.0:
-            raise ValueError(
-                f"class_dropout is a probability, got {self.class_dropout}"
-            )
-        check_noise_prediction_channels(
-            self.in_channels, self.out_channels, self.learn_sigma
-        )
+            raise ValueError(f"class_dropout is a probability, got {self.class_dropout}")
+        check_noise_prediction_channels(self.in_channels, self.out_channels, self.learn_sigma)

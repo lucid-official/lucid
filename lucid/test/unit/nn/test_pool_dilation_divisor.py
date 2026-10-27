@@ -69,9 +69,7 @@ def test_dilated_max_pool_matches_the_reference(
 
 
 @pytest.mark.parametrize("rank", [1, 2, 3])
-def test_max_pool_modules_take_dilation(
-    ref: ModuleType, device: str, rank: int
-) -> None:
+def test_max_pool_modules_take_dilation(ref: ModuleType, device: str, rank: int) -> None:
     x = _input(rank, batched=True)
     layer = getattr(nn, f"MaxPool{rank}d")(3, stride=2, padding=1, dilation=2)
     want = getattr(ref.nn, f"MaxPool{rank}d")(3, stride=2, padding=1, dilation=2)
@@ -142,8 +140,6 @@ def test_divisor_override_matches_the_reference(
 def test_a_zero_divisor_is_refused(ref: ModuleType, rank: int) -> None:
     x = _input(rank, batched=True)
     with pytest.raises(RuntimeError, match="zero"):
-        getattr(ref.nn.functional, f"avg_pool{rank}d")(
-            ref.from_numpy(x), 2, divisor_override=0
-        )
+        getattr(ref.nn.functional, f"avg_pool{rank}d")(ref.from_numpy(x), 2, divisor_override=0)
     with pytest.raises(ValueError, match="zero"):
         getattr(F, f"avg_pool{rank}d")(lucid.tensor(x), 2, divisor_override=0)

@@ -173,13 +173,11 @@ class CLIPConfig(MultimodalModelConfig):
                 raise ValueError(f"{name}_heads must be positive, got {heads}")
             if width % heads != 0:
                 raise ValueError(
-                    f"{name}_width must be divisible by {name}_heads, got "
-                    f"{width} and {heads}"
+                    f"{name}_width must be divisible by {name}_heads, got " f"{width} and {heads}"
                 )
         if self.context_length < 2:
             raise ValueError(
-                f"context_length must leave room for [SOS] and [EOS], got "
-                f"{self.context_length}"
+                f"context_length must leave room for [SOS] and [EOS], got " f"{self.context_length}"
             )
         if not 0.0 < self.logit_scale_init:
             raise ValueError(
@@ -187,6 +185,4 @@ class CLIPConfig(MultimodalModelConfig):
                 f"got {self.logit_scale_init}"
             )
         if self.logit_scale_max <= 1.0:
-            raise ValueError(
-                f"logit_scale_max must exceed 1, got {self.logit_scale_max}"
-            )
+            raise ValueError(f"logit_scale_max must exceed 1, got {self.logit_scale_max}")

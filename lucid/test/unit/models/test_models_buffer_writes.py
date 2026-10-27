@@ -25,9 +25,7 @@ import lucid
 import lucid.models as models
 from lucid.compile import fused_step, make_step
 
-_REGISTRIES = frozenset(
-    {"_buffers", "_parameters", "_modules", "_non_persistent_buffers"}
-)
+_REGISTRIES = frozenset({"_buffers", "_parameters", "_modules", "_non_persistent_buffers"})
 _MUTATORS = frozenset(
     {
         "__setitem__",
@@ -94,9 +92,7 @@ def _negative_log_likelihood(out: models.NormalizingFlowOutput) -> lucid.Tensor:
 
 def _running(model: lucid.nn.Module) -> dict[str, lucid.Tensor]:
     return {
-        name: buffer.detach().clone()
-        for name, buffer in model.named_buffers()
-        if "running" in name
+        name: buffer.detach().clone() for name, buffer in model.named_buffers() if "running" in name
     }
 
 
@@ -124,9 +120,7 @@ _ENTRIES = [
 ]
 
 
-@pytest.mark.filterwarnings(
-    "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
-)
+@pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
 @pytest.mark.parametrize("entry", _ENTRIES)
 @pytest.mark.parametrize("running_in_training", [False, True], ids=["batch", "running"])
 def test_a_compiled_realnvp_step_keeps_the_running_statistics(

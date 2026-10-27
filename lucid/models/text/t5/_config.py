@@ -143,9 +143,7 @@ class T5Config(LanguageModelConfig):
         if self.head_dim <= 0:
             raise ValueError(f"head_dim must be positive, got {self.head_dim}")
         if self.num_decoder_layers <= 0:
-            raise ValueError(
-                f"num_decoder_layers must be positive, got {self.num_decoder_layers}"
-            )
+            raise ValueError(f"num_decoder_layers must be positive, got {self.num_decoder_layers}")
         buckets = self.relative_attention_num_buckets
         if buckets < 4:
             raise ValueError(
@@ -165,9 +163,7 @@ class T5Config(LanguageModelConfig):
                 f"{self.vocab_size}, got {self.decoder_start_token_id}"
             )
         if self.initializer_factor <= 0.0:
-            raise ValueError(
-                f"initializer_factor must be positive, got {self.initializer_factor}"
-            )
+            raise ValueError(f"initializer_factor must be positive, got {self.initializer_factor}")
 
     @property
     def inner_dim(self) -> int:

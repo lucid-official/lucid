@@ -22,9 +22,7 @@ Scenario = Callable[[ModuleType, str], dict[str, object]]
 def _grad_of(t: object) -> object:
     g = getattr(t, "grad")
     return (
-        None
-        if g is None
-        else [round(float(v), 6) for v in g.detach().cpu().reshape(-1).tolist()]
+        None if g is None else [round(float(v), 6) for v in g.detach().cpu().reshape(-1).tolist()]
     )
 
 
@@ -136,9 +134,7 @@ def test_a_freed_graph_still_refuses_a_second_pass(device: str) -> None:
 
 
 @pytest.mark.parametrize("module", ["lucid", "ref"])
-def test_empty_inputs_are_refused(
-    module: str, device: str, request: pytest.FixtureRequest
-) -> None:
+def test_empty_inputs_are_refused(module: str, device: str, request: pytest.FixtureRequest) -> None:
     m: ModuleType = lucid if module == "lucid" else request.getfixturevalue("ref")
     a = m.ones(2, requires_grad=True, device=device if module == "lucid" else "cpu")
     with pytest.raises(RuntimeError, match="empty"):

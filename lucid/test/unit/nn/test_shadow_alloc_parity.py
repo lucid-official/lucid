@@ -147,9 +147,7 @@ _SCALAR_BINARY_SPECS: list[tuple[str, Callable[[Tensor, int | float], Tensor]]] 
 ]
 
 
-@pytest.mark.parametrize(
-    "name,op", _SCALAR_BINARY_SPECS, ids=[s[0] for s in _SCALAR_BINARY_SPECS]
-)
+@pytest.mark.parametrize("name,op", _SCALAR_BINARY_SPECS, ids=[s[0] for s in _SCALAR_BINARY_SPECS])
 @pytest.mark.parametrize(
     "dt",
     [
@@ -203,9 +201,7 @@ _MATMUL_CALLERS: list[tuple[str, Callable[[Tensor, Tensor], Tensor]]] = [
 ]
 
 
-@pytest.mark.parametrize(
-    "caller_name,caller", _MATMUL_CALLERS, ids=[c[0] for c in _MATMUL_CALLERS]
-)
+@pytest.mark.parametrize("caller_name,caller", _MATMUL_CALLERS, ids=[c[0] for c in _MATMUL_CALLERS])
 @pytest.mark.parametrize(
     "shape_a,shape_b",
     _MATMUL_SHAPES,
@@ -266,9 +262,7 @@ def test_matmul_shape_and_dtype_parity(
     ],
 )
 @pytest.mark.parametrize("dt", [lucid.bool_, lucid.int64, lucid.float16, lucid.float32])
-def test_unary_free_fn_and_method_parity(
-    fn: Callable[[Tensor], Tensor], dt: DType
-) -> None:
+def test_unary_free_fn_and_method_parity(fn: Callable[[Tensor], Tensor], dt: DType) -> None:
     if fn is lucid.neg and dt == lucid.bool_:
         pytest.skip("neg is not supported on bool tensors in eager mode")
     eager_x = lucid.ones((2, 3), dtype=dt)
@@ -277,9 +271,7 @@ def test_unary_free_fn_and_method_parity(
     with shadow_alloc():
         ph_x = lucid.ones((2, 3), dtype=dt)
         ph_out = fn(ph_x)
-        method_out = (
-            getattr(ph_x, fn.__name__)() if hasattr(ph_x, fn.__name__) else ph_out
-        )
+        method_out = getattr(ph_x, fn.__name__)() if hasattr(ph_x, fn.__name__) else ph_out
 
     assert ph_out.shape == eager_out.shape
     assert ph_out.dtype == eager_out.dtype

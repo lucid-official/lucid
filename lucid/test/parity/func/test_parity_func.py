@@ -141,12 +141,8 @@ class TestGradParity:
         f_l = lambda x, y: (x * y).sum()
         f_r = lambda x, y: (x * y).sum()
 
-        g_l = func.grad(f_l, argnums=1)(
-            lucid.tensor(x_np.copy()), lucid.tensor(y_np.copy())
-        )
-        g_r = ref.func.grad(f_r, argnums=1)(
-            ref.tensor(x_np.copy()), ref.tensor(y_np.copy())
-        )
+        g_l = func.grad(f_l, argnums=1)(lucid.tensor(x_np.copy()), lucid.tensor(y_np.copy()))
+        g_r = ref.func.grad(f_r, argnums=1)(ref.tensor(x_np.copy()), ref.tensor(y_np.copy()))
         assert_close(g_l, g_r, atol=1e-5)
 
     def test_argnums_tuple(self, ref: Any) -> None:
@@ -228,12 +224,8 @@ class TestVJPParity:
         f_l = lambda x, y: x * y
         f_r = lambda x, y: x * y
 
-        out_l, vjp_l = func.vjp(
-            f_l, lucid.tensor(x_np.copy()), lucid.tensor(y_np.copy())
-        )
-        out_r, vjp_r = ref.func.vjp(
-            f_r, ref.tensor(x_np.copy()), ref.tensor(y_np.copy())
-        )
+        out_l, vjp_l = func.vjp(f_l, lucid.tensor(x_np.copy()), lucid.tensor(y_np.copy()))
+        out_r, vjp_r = ref.func.vjp(f_r, ref.tensor(x_np.copy()), ref.tensor(y_np.copy()))
 
         gx_l, gy_l = vjp_l(lucid.tensor(ct_np.copy()))
         gx_r, gy_r = vjp_r(ref.tensor(ct_np.copy()))
@@ -271,12 +263,8 @@ class TestJVPParity:
         f_l = lambda x: (x**2).sum()
         f_r = lambda x: (x**2).sum()
 
-        pout_l, jvp_l = func.jvp(
-            f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),)
-        )
-        pout_r, jvp_r = ref.func.jvp(
-            f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),)
-        )
+        pout_l, jvp_l = func.jvp(f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),))
+        pout_r, jvp_r = ref.func.jvp(f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),))
 
         assert_close(pout_l, pout_r, atol=1e-4)
         assert_close(jvp_l, jvp_r, atol=1e-4)
@@ -293,12 +281,8 @@ class TestJVPParity:
         f_l = lambda x: x * scales_l
         f_r = lambda x: x * scales_r
 
-        _, jvp_l = func.jvp(
-            f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),)
-        )
-        _, jvp_r = ref.func.jvp(
-            f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),)
-        )
+        _, jvp_l = func.jvp(f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),))
+        _, jvp_r = ref.func.jvp(f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),))
         assert_close(jvp_l, jvp_r, atol=1e-4)
 
     def test_tangent_direction(self, ref: Any) -> None:
@@ -314,12 +298,8 @@ class TestJVPParity:
         f_l = lambda x: x * scales_l
         f_r = lambda x: x * scales_r
 
-        _, jvp_l = func.jvp(
-            f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),)
-        )
-        _, jvp_r = ref.func.jvp(
-            f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),)
-        )
+        _, jvp_l = func.jvp(f_l, (lucid.tensor(x_np.copy()),), (lucid.tensor(v_np.copy()),))
+        _, jvp_r = ref.func.jvp(f_r, (ref.tensor(x_np.copy()),), (ref.tensor(v_np.copy()),))
         # JVP[i] = scales[i] * v[i]; only dim 1 is non-zero
         assert_close(jvp_l, jvp_r, atol=1e-4)
 

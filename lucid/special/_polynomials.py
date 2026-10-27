@@ -81,8 +81,7 @@ def _ortho_poly(
         top = _top_degree(op, degree.max().item() if degree.numel() else -1)
     elif not isinstance(x, Tensor):
         raise TypeError(
-            f"{op}: expected a Tensor for x or n, got "
-            f"{type(x).__name__} and {type(n).__name__}"
+            f"{op}: expected a Tensor for x or n, got " f"{type(x).__name__} and {type(n).__name__}"
         )
     elif isinstance(n, bool | int | float):
         x, top = _real(x), _top_degree(op, n)
@@ -237,9 +236,7 @@ def chebyshev_polynomial_v(x: TensorOrScalar, n: TensorOrScalar) -> Tensor:
     >>> chebyshev_polynomial_v(lucid.tensor([-1.0, 0.0, 1.0]), n=2)
     tensor([5., -1., 1.])
     """
-    return _ortho_poly(
-        "chebyshev_polynomial_v", x, n, lambda v: 2 * v - 1, _chebyshev_step
-    )
+    return _ortho_poly("chebyshev_polynomial_v", x, n, lambda v: 2 * v - 1, _chebyshev_step)
 
 
 def chebyshev_polynomial_w(x: TensorOrScalar, n: TensorOrScalar) -> Tensor:
@@ -287,9 +284,7 @@ def chebyshev_polynomial_w(x: TensorOrScalar, n: TensorOrScalar) -> Tensor:
     >>> chebyshev_polynomial_w(lucid.tensor([-1.0, 0.0, 1.0]), n=2)
     tensor([1., -1., 5.])
     """
-    return _ortho_poly(
-        "chebyshev_polynomial_w", x, n, lambda v: 2 * v + 1, _chebyshev_step
-    )
+    return _ortho_poly("chebyshev_polynomial_w", x, n, lambda v: 2 * v + 1, _chebyshev_step)
 
 
 def shifted_chebyshev_polynomial_t(x: TensorOrScalar, n: TensorOrScalar) -> Tensor:

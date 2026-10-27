@@ -50,9 +50,7 @@ def _saved(device: str) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
 
 
 @pytest.mark.parametrize("write", list(WRITES), ids=list(WRITES))
-def test_a_write_into_a_saved_tensor_without_grad_is_refused(
-    write: str, device: str
-) -> None:
+def test_a_write_into_a_saved_tensor_without_grad_is_refused(write: str, device: str) -> None:
     w, buf, out = _saved(device)
     WRITES[write](buf, device)
     with pytest.raises(_C_engine.VersionMismatch):
@@ -61,9 +59,7 @@ def test_a_write_into_a_saved_tensor_without_grad_is_refused(
 
 
 @pytest.mark.parametrize("write", ["fill_", "copy_", "index_fill_"])
-def test_a_write_through_an_alias_of_the_saved_tensor_is_refused(
-    write: str, device: str
-) -> None:
+def test_a_write_through_an_alias_of_the_saved_tensor_is_refused(write: str, device: str) -> None:
     # A view and ``detach()`` read the saved tensor's buffer.  This held
     # before and must keep holding: on the CPU the write itself is refused,
     # since a node holds the bytes it would change; on metal it is copied
@@ -71,9 +67,7 @@ def test_a_write_through_an_alias_of_the_saved_tensor_is_refused(
     for alias in (lambda t: t.view(3), lambda t: t.detach()):
         _, buf, out = _saved(device)
         if device == "cpu":
-            with pytest.raises(
-                _C_engine.NotImplementedError, match="saved for backward"
-            ):
+            with pytest.raises(_C_engine.NotImplementedError, match="saved for backward"):
                 WRITES[write](alias(buf), device)
             continue
         WRITES[write](alias(buf), device)
@@ -106,9 +100,7 @@ def test_the_count_moves_without_making_the_tensor_require_grad(device: str) -> 
 
 
 @pytest.mark.parametrize("write", list(WRITES), ids=list(WRITES))
-def test_a_write_into_a_tensor_nothing_saved_still_runs(
-    write: str, device: str
-) -> None:
+def test_a_write_into_a_tensor_nothing_saved_still_runs(write: str, device: str) -> None:
     w = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True, device=device)
     scale = lucid.tensor([2.0, 2.0, 2.0], device=device)
     unrelated = lucid.ones(3, device=device)

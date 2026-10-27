@@ -146,9 +146,7 @@ class VAEConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the reconstruction"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the reconstruction")
         if not self.down_block_channels:
             raise ValueError("down_block_channels must have at least one stage")
         if any(c <= 0 for c in self.down_block_channels):
@@ -166,9 +164,7 @@ class VAEConfig(GenerativeModelConfig):
                     f"HVAE assigns one z per encoder stage."
                 )
             if any(d <= 0 for d in self.latent_dim):
-                raise ValueError(
-                    f"latent_dim entries must be positive, got {self.latent_dim}"
-                )
+                raise ValueError(f"latent_dim entries must be positive, got {self.latent_dim}")
         else:
             if self.latent_dim <= 0:
                 raise ValueError(f"latent_dim must be positive, got {self.latent_dim}")

@@ -62,9 +62,7 @@ def _sincos_2d(dim: int, grid: int) -> Tensor:
     error rather than a variation.
     """
     if dim % 4 != 0:
-        raise ValueError(
-            f"a two-dimensional sin-cos table needs dim % 4 == 0, got {dim}"
-        )
+        raise ValueError(f"a two-dimensional sin-cos table needs dim % 4 == 0, got {dim}")
     coords = lucid.arange(grid).to(lucid.float64)
     zeros = lucid.zeros(grid, grid, dtype=lucid.float64)
     rows = coords.reshape(grid, 1) + zeros
@@ -108,9 +106,7 @@ class _Encoder(nn.Module):
     def __init__(self, config: IJEPAConfig) -> None:
         super().__init__()
         hidden = int(config.dim * config.mlp_ratio)
-        self.patch_embed = _PatchEmbed(
-            config.in_channels, config.patch_size, config.dim
-        )
+        self.patch_embed = _PatchEmbed(config.in_channels, config.patch_size, config.dim)
         self.register_buffer("pos_embed", _sincos_2d(config.dim, config.grid_size))
         blocks = [
             _Block(config.dim, config.num_heads, hidden, config.layer_norm_eps)
@@ -177,9 +173,7 @@ class _Predictor(nn.Module):
             _scale_residual_projection(block.attn.proj, block.mlp.fc2, depth_index)
 
     @override
-    def forward(
-        self, context: Tensor, context_indices: Tensor, target_indices: Tensor
-    ) -> Tensor:
+    def forward(self, context: Tensor, context_indices: Tensor, target_indices: Tensor) -> Tensor:
         """Predict the target encoder's output at ``target_indices``."""
         positions = self.predictor_pos_embed
         tokens = self.predictor_embed(context)
@@ -201,8 +195,7 @@ class _Predictor(nn.Module):
             batch, count, width, dtype=tokens.dtype, device=tokens.device
         )
         queries = queries + _gather_tokens(
-            positions
-            + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
+            positions + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
             target_indices,
         )
 
@@ -253,9 +246,7 @@ def _block_indices(grid: int, height: int, width: int, rng: random.Random) -> li
     return [(top + r) * grid + (left + c) for r in range(height) for c in range(width)]
 
 
-def _sample_masks(
-    config: IJEPAConfig, batch: int, device: DeviceLike
-) -> tuple[Tensor, Tensor]:
+def _sample_masks(config: IJEPAConfig, batch: int, device: DeviceLike) -> tuple[Tensor, Tensor]:
     """Context and target patch indices for one batch.
 
     Returns ``(B, Nc)`` context indices and ``(B, M, Nt)`` target indices.
@@ -277,8 +268,7 @@ def _sample_masks(
     contexts: list[list[int]] = []
     for _ in range(batch):
         blocks = [
-            _block_indices(grid, target_h, target_w, rng)
-            for _ in range(config.num_target_blocks)
+            _block_indices(grid, target_h, target_w, rng) for _ in range(config.num_target_blocks)
         ]
         targets.append(blocks)
         context = _block_indices(grid, context_h, context_w, rng)
@@ -635,9 +625,7 @@ class IJEPAForImageClassification(ImageClassificationModel, ClassificationHeadMi
         self.head = nn.Linear(config.dim, config.num_classes)
 
     @override
-    def forward(
-        self, x: Tensor, labels: Tensor | None = None
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         """Classify images from the frozen representation.
 
         Parameters

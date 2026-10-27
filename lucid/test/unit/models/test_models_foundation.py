@@ -256,9 +256,7 @@ class TestRegistry:
 
         assert "dummy_a" in list_models(task="base")
         assert "dummy_a_for_classification" in list_models(task="image-classification")
-        assert list_models(family="dummy") == sorted(
-            ["dummy_a", "dummy_a_for_classification"]
-        )
+        assert list_models(family="dummy") == sorted(["dummy_a", "dummy_a_for_classification"])
 
 
 # ─── Auto classes ────────────────────────────────────────────────────────────
@@ -420,9 +418,7 @@ class TestAutoModelTaskCoverage:
         )
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "bert_base_cls", task=AutoModelForSequenceClassification._task
-        )
+        entry = _registry_lookup("bert_base_cls", task=AutoModelForSequenceClassification._task)
         assert entry.model_class is BERTForSequenceClassification
 
     def test_token_classification_dispatch(self) -> None:
@@ -432,9 +428,7 @@ class TestAutoModelTaskCoverage:
         )
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "bert_base_token_cls", task=AutoModelForTokenClassification._task
-        )
+        entry = _registry_lookup("bert_base_token_cls", task=AutoModelForTokenClassification._task)
         assert entry.model_class is BERTForTokenClassification
 
     def test_question_answering_dispatch(self) -> None:
@@ -450,9 +444,7 @@ class TestAutoModelTaskCoverage:
         )
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "bert_base_qa", task=AutoModelForSequenceClassification._task
-        )
+        entry = _registry_lookup("bert_base_qa", task=AutoModelForSequenceClassification._task)
         assert entry.model_class is BERTForQuestionAnswering
 
     def test_seq2seq_lm_dispatch(self) -> None:
@@ -518,9 +510,7 @@ class TestAutoModelTaskCoverage:
                 and not issubclass(entry.model_class, TaskModel)
             }
         )
-        assert (
-            not offenders
-        ), f"registered under a task but not a TaskModel: {offenders}"
+        assert not offenders, f"registered under a task but not a TaskModel: {offenders}"
 
     def test_class_task_matches_the_tag_it_registers_under(self) -> None:
         """The base's ``task`` and the registry tag are the same string.
@@ -539,6 +529,4 @@ class TestAutoModelTaskCoverage:
             and entry.model_class is not None
             and getattr(entry.model_class, "task", None) != entry.task
         ]
-        assert (
-            not mismatched
-        ), f"class.task disagrees with registry tag: {mismatched[:5]}"
+        assert not mismatched, f"class.task disagrees with registry tag: {mismatched[:5]}"

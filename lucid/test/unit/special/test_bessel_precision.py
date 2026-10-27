@@ -421,8 +421,7 @@ def test_kaiser_float64_peak_and_shape(beta: float) -> None:
     assert abs(w.numpy()[4] - 1.0) <= 2.0**-52
     n = np.arange(9.0)
     want = [
-        float(_mp_i0(beta * math.sqrt(1.0 - (2.0 * k / 8.0 - 1.0) ** 2)) / _mp_i0(beta))
-        for k in n
+        float(_mp_i0(beta * math.sqrt(1.0 - (2.0 * k / 8.0 - 1.0) ** 2)) / _mp_i0(beta)) for k in n
     ]
     np.testing.assert_allclose(w.numpy(), want, rtol=1e-14, atol=1e-16)
 

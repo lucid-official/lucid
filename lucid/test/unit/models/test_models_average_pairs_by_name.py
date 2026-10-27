@@ -200,8 +200,7 @@ def test_the_average_pairs_parameters_by_name(family: str) -> None:
     by_name = dict(live.named_parameters())
     named = dict(averages[0][0].named_parameters())
     assert all(
-        tuple(by_name[a].shape) == tuple(named[b].shape)
-        for a, b in zip(order, built, strict=True)
+        tuple(by_name[a].shape) == tuple(named[b].shape) for a, b in zip(order, built, strict=True)
     )
 
     with lucid.no_grad():

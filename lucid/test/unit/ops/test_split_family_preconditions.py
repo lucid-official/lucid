@@ -56,9 +56,7 @@ def test_a_section_count_must_divide_the_axis(
 ) -> None:
     shape = _SHAPES[op]
     want = _outcome(lambda: getattr(ref, op)(ref.zeros(shape), sections))
-    got = _outcome(
-        lambda: getattr(lucid, op)(lucid.zeros(shape, device=device), sections)
-    )
+    got = _outcome(lambda: getattr(lucid, op)(lucid.zeros(shape, device=device), sections))
     assert got == want
     if want is RuntimeError:
         with pytest.raises(_C_engine.InvalidArgument):
@@ -101,9 +99,7 @@ _COUNTS: dict[str, Callable[[ModuleType], Any]] = {
     [("tensor_split", c) for c in _COUNTS]
     + [("vsplit", c) for c in _COUNTS if c != "1-D tensor of indices"],
 )
-def test_any_integer_counts_sections(
-    ref: ModuleType, device: str, op: str, count: str
-) -> None:
+def test_any_integer_counts_sections(ref: ModuleType, device: str, op: str, count: str) -> None:
     want = _outcome(lambda: getattr(ref, op)(ref.zeros(6, 2), _COUNTS[count](ref)))
     x = lucid.zeros(6, 2, device=device)
     got = _outcome(lambda: getattr(lucid, op)(x, _COUNTS[count](lucid)))
@@ -122,9 +118,7 @@ _CUTS: dict[str, Callable[[Any, Any, int], Any]] = {
 
 @pytest.mark.parametrize("dim", [0, -1])
 @pytest.mark.parametrize("op", list(_CUTS))
-def test_a_0d_tensor_cannot_be_cut(
-    ref: ModuleType, device: str, op: str, dim: int
-) -> None:
+def test_a_0d_tensor_cannot_be_cut(ref: ModuleType, device: str, op: str, dim: int) -> None:
     with pytest.raises(RuntimeError, match="1-dimensional"):
         _CUTS[op](ref, ref.tensor(1.0), dim)
     with pytest.raises(_C_engine.InvalidArgument, match="1-dimensional"):
@@ -143,9 +137,7 @@ def test_a_0d_tensors_dim_past_its_axis_is_still_an_index_error(
 # ── CatTransform and constraints.cat ─────────────────────────────────────────
 
 
-def test_cat_transform_defaults_to_one_element_per_transform(
-    ref: ModuleType, device: str
-) -> None:
+def test_cat_transform_defaults_to_one_element_per_transform(ref: ModuleType, device: str) -> None:
     rt = ref.distributions.transforms
     transform = T.CatTransform([T.ExpTransform(), T.AffineTransform(1.0, 2.0)])
     reference = rt.CatTransform([rt.ExpTransform(), rt.AffineTransform(1.0, 2.0)])

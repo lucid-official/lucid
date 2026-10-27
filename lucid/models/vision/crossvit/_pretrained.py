@@ -152,9 +152,7 @@ def crossvit_small(pretrained: bool = False, **overrides: object) -> CrossViT:
     (1, 576)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "crossvit_small", alternative="crossvit_small_cls"
-        )
+        reject_unavailable_pretrained("crossvit_small", alternative="crossvit_small_cls")
     return CrossViT(apply_overrides(_CFG_SMALL, overrides))
 
 

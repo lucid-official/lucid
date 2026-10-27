@@ -258,9 +258,7 @@ def _assemble(cluster: list[_Member], lo: int, n: int) -> _C_engine.TensorImpl:
     covering = [
         m
         for m in cluster
-        if m.first == lo
-        and m.stride == _contiguous_stride(m.shape)
-        and _numel(m.shape) == n
+        if m.first == lo and m.stride == _contiguous_stride(m.shape) and _numel(m.shape) == n
     ]
     if covering:
         return _C_engine.TensorImpl.from_bytes(covering[0].raw, [n], dtype, cpu, False)
@@ -274,9 +272,7 @@ def _assemble(cluster: list[_Member], lo: int, n: int) -> _C_engine.TensorImpl:
     return buf
 
 
-def _compact_strided_cluster(
-    plan: _StoragePlan, cluster: list[_Member], n: int
-) -> bool:
+def _compact_strided_cluster(plan: _StoragePlan, cluster: list[_Member], n: int) -> bool:
     """Save ``cluster`` in its largest member's packed elements when the span exceeds it."""
     top = max(cluster, key=lambda m: _numel(m.shape))
     if _numel(top.shape) >= n or _may_overlap(top.shape, top.stride):

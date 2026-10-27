@@ -77,9 +77,7 @@ def _close(got, want, dtype):
     )
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype", "reduce", "include_self", "case"), list(_cases())
-)
+@pytest.mark.parametrize(("device", "dtype", "reduce", "include_self", "case"), list(_cases()))
 def test_matches_reference(ref, device, dtype, reduce, include_self, case):
     dim, x, index, src = _CASES[case]
     x_np, src_np = np.array(x, dtype=dtype), np.array(src, dtype=dtype)
@@ -87,9 +85,7 @@ def test_matches_reference(ref, device, dtype, reduce, include_self, case):
 
     xr = ref.tensor(x_np, requires_grad=True)
     sr = ref.tensor(src_np, requires_grad=True)
-    want = xr.scatter_reduce(
-        dim, ref.tensor(index_np), sr, reduce, include_self=include_self
-    )
+    want = xr.scatter_reduce(dim, ref.tensor(index_np), sr, reduce, include_self=include_self)
     grad_np = (np.arange(want.numel()).reshape(want.shape) + 1).astype(dtype)
     want.backward(ref.tensor(grad_np))
 
@@ -117,11 +113,7 @@ def _integer_cases():
             for reduce in ("sum", "mean", "amax", "amin"):
                 marks = ()
                 # MLX scatters no int64 operand; the CPU runs every integer.
-                if (
-                    reduce in ("amax", "amin")
-                    and device == "metal"
-                    and dtype == "int64"
-                ):
+                if reduce in ("amax", "amin") and device == "metal" and dtype == "int64":
                     marks = (
                         pytest.mark.xfail(
                             raises=ValueError,
@@ -140,9 +132,7 @@ def _integer_cases():
                     )
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype", "reduce", "include_self"), list(_integer_cases())
-)
+@pytest.mark.parametrize(("device", "dtype", "reduce", "include_self"), list(_integer_cases()))
 def test_integer_input(ref, device, dtype, reduce, include_self):
     # Negative totals tell a floored mean from a truncated one.
     x = np.array([[1, -2, 3, 4], [5, 6, -7, 8]], dtype=dtype)

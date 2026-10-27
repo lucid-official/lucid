@@ -47,11 +47,7 @@ class _RoFormerInitMixin:
     config: ModelConfig
 
     def _init_weights(self, module: nn.Module) -> None:
-        std = (
-            self.config.initializer_range
-            if isinstance(self.config, RoFormerConfig)
-            else 0.02
-        )
+        std = self.config.initializer_range if isinstance(self.config, RoFormerConfig) else 0.02
         init_text_module_weights(module, std, reset_layer_norm=True)
 
 
@@ -89,9 +85,7 @@ class _RoFormerRotaryEmbedding(Module):
     ) -> None:
         super().__init__()
         if head_dim % 2 != 0:
-            raise ValueError(
-                f"_RoFormerRotaryEmbedding requires an even head_dim, got {head_dim}"
-            )
+            raise ValueError(f"_RoFormerRotaryEmbedding requires an even head_dim, got {head_dim}")
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
@@ -419,9 +413,7 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
         # reference's ``if config.embedding_size != config.hidden_size``.
         emb_dim = config.embedding_size or config.hidden_size
         self.embeddings_project: nn.Linear | None = (
-            nn.Linear(emb_dim, config.hidden_size)
-            if emb_dim != config.hidden_size
-            else None
+            nn.Linear(emb_dim, config.hidden_size) if emb_dim != config.hidden_size else None
         )
         self.rotary = _RoFormerRotaryEmbedding(
             head_dim=head_dim,
@@ -453,9 +445,7 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
     ) -> BaseModelOutputWithPooling:
         B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
         if T > self._max_pos:
-            raise ValueError(
-                f"Sequence length {T} exceeds max_position_embeddings {self._max_pos}"
-            )
+            raise ValueError(f"Sequence length {T} exceeds max_position_embeddings {self._max_pos}")
 
         cos, sin = self.rotary()
         # Slice the precomputed tables to the current sequence length so we
@@ -519,9 +509,7 @@ class _RoFormerLMPredictionHead(nn.Module):
         if have != vocab:
             kept = self.bias.detach()[: min(have, vocab)]
             if vocab > have:
-                pad = lucid.zeros(
-                    vocab - have, dtype=kept.dtype, device=kept.device.type
-                )
+                pad = lucid.zeros(vocab - have, dtype=kept.dtype, device=kept.device.type)
                 kept = lucid.cat([kept, pad])
             self.bias = nn.Parameter(kept)
 
@@ -636,9 +624,7 @@ class RoFormerForMaskedLM(_RoFormerInitMixin, LanguageModelingModel, MaskedLMMix
         return MaskedLMOutput(logits=prediction_scores, loss=loss)
 
 
-class RoFormerForSequenceClassification(
-    _RoFormerInitMixin, SequenceClassificationModel
-):
+class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificationModel):
     r"""RoFormer with a pooled-CLS sequence-classification head.
 
     Wraps :class:`RoFormerModel` with the reference's own classification
@@ -743,9 +729,7 @@ class RoFormerForSequenceClassification(
         return SequenceClassificationOutput(logits=logits, loss=loss)
 
 
-class RoFormerForTokenClassification(
-    _RoFormerInitMixin, TokenClassificationModel, MaskedLMMixin
-):
+class RoFormerForTokenClassification(_RoFormerInitMixin, TokenClassificationModel, MaskedLMMixin):
     r"""RoFormer with a per-token classification head.
 
     Wraps :class:`RoFormerModel` with a dropout-regularised linear
@@ -932,12 +916,8 @@ class RoFormerForMultipleChoice(_RoFormerInitMixin, SequenceClassificationModel)
         L = int(input_ids.shape[2])
 
         flat_ids = input_ids.reshape(N * C, L)
-        flat_mask = (
-            attention_mask.reshape(N * C, L) if attention_mask is not None else None
-        )
-        flat_tt = (
-            token_type_ids.reshape(N * C, L) if token_type_ids is not None else None
-        )
+        flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
+        flat_tt = token_type_ids.reshape(N * C, L) if token_type_ids is not None else None
         outputs = self.roformer(
             flat_ids,
             attention_mask=flat_mask,
@@ -1068,6 +1048,4 @@ class RoFormerForQuestionAnswering(_RoFormerInitMixin, SequenceClassificationMod
                     + F.cross_entropy(end_logits, end_t, ignore_index=ignored)
                 ) / 2.0
 
-        return QuestionAnsweringOutput(
-            start_logits=start_logits, end_logits=end_logits, loss=loss
-        )
+        return QuestionAnsweringOutput(start_logits=start_logits, end_logits=end_logits, loss=loss)

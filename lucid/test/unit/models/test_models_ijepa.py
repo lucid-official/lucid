@@ -209,10 +209,7 @@ class TestMasking:
         config = _tiny(allow_overlap=True, context_scale=(1.0, 1.0))
         context, targets = _sample_masks(config, 4, "cpu")
         shared = sum(
-            len(
-                set(context[i].tolist())
-                & {int(j) for b in targets[i].tolist() for j in b}
-            )
+            len(set(context[i].tolist()) & {int(j) for b in targets[i].tolist() for j in b})
             for i in range(4)
         )
         assert shared > 0
@@ -295,12 +292,8 @@ class TestWhatEachNetworkSees:
         context_index = lucid.tensor([[0, 1, 2, 3]], dtype=lucid.int64)
         with lucid.no_grad():
             context = model.encoder(_images(1, config), context_index)
-            here = model.predictor(
-                context, context_index, lucid.tensor([[8]], dtype=lucid.int64)
-            )
-            there = model.predictor(
-                context, context_index, lucid.tensor([[15]], dtype=lucid.int64)
-            )
+            here = model.predictor(context, context_index, lucid.tensor([[8]], dtype=lucid.int64))
+            there = model.predictor(context, context_index, lucid.tensor([[15]], dtype=lucid.int64))
         assert float((here - there).abs().max().item()) > 1e-6
 
     def test_the_predictor_answers_at_the_encoder_s_width(self) -> None:
@@ -313,9 +306,7 @@ class TestWhatEachNetworkSees:
 class TestTheMovingAverage:
     def test_the_target_encoder_starts_as_a_copy(self) -> None:
         model = IJEPAModel(_tiny())
-        for live, averaged in zip(
-            model.encoder.parameters(), model.target_encoder.parameters()
-        ):
+        for live, averaged in zip(model.encoder.parameters(), model.target_encoder.parameters()):
             assert float((live - averaged).abs().max().item()) == 0.0
 
     def test_the_target_encoder_is_frozen(self) -> None:
@@ -324,9 +315,9 @@ class TestTheMovingAverage:
         model = IJEPAModel(_tiny())
         assert all(not p.requires_grad for p in model.target_encoder.parameters())
         assert all(p.requires_grad for p in model.encoder.parameters())
-        assert len(model.trainable_parameters()) == len(
-            list(model.encoder.parameters())
-        ) + len(list(model.predictor.parameters()))
+        assert len(model.trainable_parameters()) == len(list(model.encoder.parameters())) + len(
+            list(model.predictor.parameters())
+        )
 
     def test_no_gradient_reaches_the_target_encoder(self) -> None:
         # If one did, the pair would be free to agree on a constant.
@@ -366,9 +357,7 @@ class TestTheMovingAverage:
         assert model.momentum(200, 100) == pytest.approx(1.0)
 
     @pytest.mark.parametrize("momentum", [-0.1, 1.5])
-    def test_a_momentum_outside_the_unit_interval_is_refused(
-        self, momentum: float
-    ) -> None:
+    def test_a_momentum_outside_the_unit_interval_is_refused(self, momentum: float) -> None:
         with pytest.raises(ValueError):
             IJEPAModel(_tiny()).update_target(momentum)
 
@@ -481,13 +470,11 @@ class TestInitialisation:
         model = IJEPAModel(_tiny(dim=32, depth=4, num_heads=4))
         block = model.encoder.blocks[0]
 
-        assert float(block.attn.qkv.weight.std().item()) == pytest.approx(
+        assert float(block.attn.qkv.weight.std().item()) == pytest.approx(0.02, rel=0.15)
+        assert float(block.mlp.fc1.weight.std().item()) == pytest.approx(0.02, rel=0.15)
+        assert float(model.encoder.patch_embed.proj.weight.std().item()) == pytest.approx(
             0.02, rel=0.15
         )
-        assert float(block.mlp.fc1.weight.std().item()) == pytest.approx(0.02, rel=0.15)
-        assert float(
-            model.encoder.patch_embed.proj.weight.std().item()
-        ) == pytest.approx(0.02, rel=0.15)
 
     def test_biases_start_at_zero_and_norms_at_one(self) -> None:
         model = IJEPAModel(_tiny(dim=32, depth=2, num_heads=4))
@@ -515,9 +502,7 @@ class TestInitialisation:
         """Guards the test above — without the scaling every block matches."""
         lucid.manual_seed(2)
         model = IJEPAModel(_tiny(dim=32, depth=4, num_heads=4))
-        widths = [
-            float(block.mlp.fc2.weight.std().item()) for block in model.encoder.blocks
-        ]
+        widths = [float(block.mlp.fc2.weight.std().item()) for block in model.encoder.blocks]
         assert widths == sorted(widths, reverse=True), widths
         assert widths[0] > 1.7 * widths[-1]
 
@@ -530,6 +515,4 @@ class TestInitialisation:
         )
         # The mask token is drawn before the sweep and must survive it:
         # the sweep visits linear, convolutional and norm layers only.
-        assert float(model.predictor.mask_token.std().item()) == pytest.approx(
-            0.02, rel=0.25
-        )
+        assert float(model.predictor.mask_token.std().item()) == pytest.approx(0.02, rel=0.25)

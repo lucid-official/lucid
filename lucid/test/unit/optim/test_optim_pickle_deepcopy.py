@@ -26,9 +26,7 @@ _OPTIMIZER_SPECS: list[tuple[str, _OptimizerFactory]] = [
     ),
     (
         "SGD_nesterov",
-        lambda ps: optim.SGD(
-            ps, lr=0.05, momentum=0.9, weight_decay=1e-4, nesterov=True
-        ),
+        lambda ps: optim.SGD(ps, lr=0.05, momentum=0.9, weight_decay=1e-4, nesterov=True),
     ),
     ("ASGD", lambda ps: optim.ASGD(ps, lr=0.05, lambd=1e-3, alpha=0.75, t0=2.0)),
     ("Adam", lambda ps: optim.Adam(ps, lr=0.01, weight_decay=1e-4)),
@@ -96,9 +94,7 @@ def _as_array(v: object) -> np.ndarray:
     return np.asarray(v)
 
 
-def _assert_state_dict_equal(
-    actual: dict[str, object], expected: dict[str, object]
-) -> None:
+def _assert_state_dict_equal(actual: dict[str, object], expected: dict[str, object]) -> None:
     act_state = actual["state"]
     exp_state = expected["state"]
     assert isinstance(act_state, dict)
@@ -117,15 +113,11 @@ def _assert_state_dict_equal(
             )
 
 
-def _assert_params_equal(
-    actual: list[Tensor], expected: list[Tensor] | list[nn.Parameter]
-) -> None:
+def _assert_params_equal(actual: list[Tensor], expected: list[Tensor] | list[nn.Parameter]) -> None:
     for i, (pa, pe) in enumerate(zip(actual, expected, strict=True)):
         assert pa.device == pe.device, f"param {i} device mismatch"
         assert pa.dtype == pe.dtype, f"param {i} dtype mismatch"
-        np.testing.assert_array_equal(
-            pa.numpy(), pe.numpy(), err_msg=f"param {i} value mismatch"
-        )
+        np.testing.assert_array_equal(pa.numpy(), pe.numpy(), err_msg=f"param {i} value mismatch")
 
 
 @pytest.mark.parametrize(

@@ -138,9 +138,7 @@ def _eager(model: nn.Module) -> _Run:
     return run
 
 
-def _train(
-    model: nn.Sequential, run: _Run, fresh_grad: bool, device: str
-) -> list[np.ndarray]:
+def _train(model: nn.Sequential, run: _Run, fresh_grad: bool, device: str) -> list[np.ndarray]:
     """Three steps — the first layer's weight as the input, a fresh tensor,
     the weight again — and what each left: the loss and every gradient."""
     target = _values((4, 4), 0.2, device)

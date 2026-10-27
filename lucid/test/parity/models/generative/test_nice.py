@@ -177,9 +177,7 @@ def test_scaling_gradient_parity(ref: ModuleType) -> None:
     grad = head.nice.scaling.log_scale.grad
     assert grad is not None
 
-    log_scale = ref.tensor(
-        model.scaling.log_scale.numpy(), dtype=ref.float64, requires_grad=True
-    )
+    log_scale = ref.tensor(model.scaling.log_scale.numpy(), dtype=ref.float64, requires_grad=True)
     dim = model.input_dim
     split = dim // 2
     batch = x_np.shape[0]

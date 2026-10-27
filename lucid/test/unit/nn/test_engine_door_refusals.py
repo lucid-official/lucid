@@ -466,9 +466,7 @@ _STILL_ANSWERS = [
     ("max_pool_stride_sentinel", "E.nn.max_pool2d(R(2, 3, 8, 8), 2, 2, 0, 0)", OK, ""),
 ]
 
-CASES = (
-    _BATCH_NORM + _OTHER_NORMS + _CONV + _POOL + _RESAMPLE_AND_DROPOUT + _STILL_ANSWERS
-)
+CASES = _BATCH_NORM + _OTHER_NORMS + _CONV + _POOL + _RESAMPLE_AND_DROPOUT + _STILL_ANSWERS
 
 _CHILD = r"""
 import json
@@ -580,9 +578,7 @@ _RESULTS: dict[str, dict[str, list[object]]] = {}
 def _result(device: str, name: str) -> list[object]:
     if device not in _RESULTS:
         _RESULTS[device] = _run_cases(device)
-    return _RESULTS[device].get(
-        name, ["missing", "the child never reached this case", False]
-    )
+    return _RESULTS[device].get(name, ["missing", "the child never reached this case", False])
 
 
 @pytest.mark.parametrize(
@@ -599,9 +595,7 @@ def test_engine_door_refuses_unhandled_operand(
         assert kind == "ok", f"{name} on {device}: {kind}: {detail}"
         return
     assert kind == f"lucid._C.engine.{expect}", f"{name} on {device}: {kind}: {detail}"
-    assert (
-        typed_value_error
-    ), f"{name} on {device}: {kind} is not a ValueError LucidError"
+    assert typed_value_error, f"{name} on {device}: {kind} is not a ValueError LucidError"
     assert needle in str(detail), f"{name} on {device}: {needle!r} not in {detail!r}"
 
 

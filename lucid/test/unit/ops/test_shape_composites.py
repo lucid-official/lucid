@@ -177,18 +177,14 @@ def test_tensor_split_handles_an_uneven_division():
 @pytest.mark.parametrize("dim", [0, 1, -1])
 def test_take_along_dim_matches_numpy(dim):
     indices = np.argsort(M, axis=dim)
-    got = _v(
-        lucid.take_along_dim(_t(M), lucid.tensor(indices, dtype=lucid.int32), dim=dim)
-    )
+    got = _v(lucid.take_along_dim(_t(M), lucid.tensor(indices, dtype=lucid.int32), dim=dim))
     assert np.array_equal(got, np.take_along_axis(M.copy(), indices, axis=dim))
 
 
 def test_take_along_dim_with_argsort_sorts():
     """The composition that makes it worth having."""
     indices = np.argsort(M, axis=1)
-    got = _v(
-        lucid.take_along_dim(_t(M), lucid.tensor(indices, dtype=lucid.int32), dim=1)
-    )
+    got = _v(lucid.take_along_dim(_t(M), lucid.tensor(indices, dtype=lucid.int32), dim=1))
     assert np.array_equal(got, np.sort(M, axis=1))
 
 

@@ -86,9 +86,7 @@ def _identity_linear(lib: ModuleType, device: str, dtype: str) -> object:
 
 
 def _input(lib: ModuleType, values: list[object], device: str, dtype: str) -> object:
-    return lib.tensor(
-        values, dtype=_dtype(lib, dtype), device=device, requires_grad=True
-    )
+    return lib.tensor(values, dtype=_dtype(lib, dtype), device=device, requires_grad=True)
 
 
 # ── scenarios ──────────────────────────────────────────────────────────────
@@ -103,9 +101,7 @@ def _input_used_twice(lib: ModuleType, device: str, dtype: str) -> dict[str, obj
     m = Twice()
     m.register_full_backward_hook(_recorder(log))
     x = _input(lib, [1.0, -2.0, 0.5], device, dtype)
-    (
-        m(x) * lib.tensor([1.0, 2.0, 3.0], dtype=_dtype(lib, dtype), device=device)
-    ).sum().backward()
+    (m(x) * lib.tensor([1.0, 2.0, 3.0], dtype=_dtype(lib, dtype), device=device)).sum().backward()
     return {"x": _plain(x.grad), "hooks": log}
 
 
@@ -130,18 +126,14 @@ def _residual(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     return {"x": _plain(x.grad), "w": _plain(lin.weight.grad), "hooks": log}
 
 
-def _hook_replaces_the_sum(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _hook_replaces_the_sum(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     class Twice(lib.nn.Module):  # type: ignore[name-defined, misc]
         def forward(self, x: object) -> object:
             return x * x + 2 * x
 
     log: list[object] = []
 
-    def halve(
-        module: object, grad_input: tuple[object, ...], grad_output: object
-    ) -> object:
+    def halve(module: object, grad_input: tuple[object, ...], grad_output: object) -> object:
         log.append(["full", _plain(grad_input), _plain(grad_output)])
         return (grad_input[0] * 0.5,)  # type: ignore[operator]
 
@@ -153,9 +145,7 @@ def _hook_replaces_the_sum(
     return {"x": _plain(x.grad), "hooks": log}
 
 
-def _pre_hook_sees_the_sum(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _pre_hook_sees_the_sum(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     class Twice(lib.nn.Module):  # type: ignore[name-defined, misc]
         def forward(self, x: object) -> object:
             return x + 2 * x
@@ -175,9 +165,7 @@ def _pre_hook_sees_the_sum(
     return {"x": _plain(x.grad), "hooks": log}
 
 
-def _two_inputs_two_outputs(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _two_inputs_two_outputs(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     class Pair(lib.nn.Module):  # type: ignore[name-defined, misc]
         def forward(self, a: object, b: object) -> object:
             return a * b + a, b * 2
@@ -192,9 +180,7 @@ def _two_inputs_two_outputs(
     return {"a": _plain(a.grad), "b": _plain(b.grad), "hooks": log}
 
 
-def _create_graph_one_slot(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _create_graph_one_slot(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     class Twice(lib.nn.Module):  # type: ignore[name-defined, misc]
         def forward(self, x: object) -> object:
             return x + 2 * x
@@ -208,9 +194,7 @@ def _create_graph_one_slot(
     return {"g": _plain(g), "h": _plain(h), "hooks": log}
 
 
-def _create_graph_two_slots(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _create_graph_two_slots(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     # Two outputs of different shapes: graph mode used to add every arrival
     # at a node into one tensor, whatever its slot.
     class Pair(lib.nn.Module):  # type: ignore[name-defined, misc]
@@ -238,9 +222,7 @@ def _create_graph_two_slots(
     }
 
 
-def _backward_create_graph(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _backward_create_graph(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     log: list[object] = []
     lin = _identity_linear(lib, device, dtype)
     lin.register_full_backward_hook(_recorder(log))
@@ -251,9 +233,7 @@ def _backward_create_graph(
     return {"x": _plain(x.grad), "h": _plain(h), "hooks": log}
 
 
-def _retained_graph_twice(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _retained_graph_twice(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     log: list[object] = []
     lin = _identity_linear(lib, device, dtype)
     lin.register_full_backward_hook(_recorder(log))
@@ -265,9 +245,7 @@ def _retained_graph_twice(
     return {"x": _plain(x.grad), "w": _plain(lin.weight.grad), "hooks": log}
 
 
-def _grad_skips_a_barrier(
-    lib: ModuleType, device: str, dtype: str
-) -> dict[str, object]:
+def _grad_skips_a_barrier(lib: ModuleType, device: str, dtype: str) -> dict[str, object]:
     # autograd.grad by b hands the output barrier a gradient and then skips
     # it: nothing upstream of it was asked for.  The next pass must not add
     # onto what that one left.

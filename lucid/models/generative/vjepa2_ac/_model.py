@@ -132,9 +132,7 @@ class VJEPA2ACModel(PretrainedModel, BackboneMixin):
 
     def _check_video(self, video: Tensor) -> None:
         if video.ndim != 5:
-            raise ValueError(
-                f"video must have shape (B, T, C, H, W), got {video.shape}"
-            )
+            raise ValueError(f"video must have shape (B, T, C, H, W), got {video.shape}")
         _, frames, channels, height, width = (int(s) for s in video.shape)
         if frames < 1:
             raise ValueError(f"video must carry at least one frame, got {frames}")

@@ -11,9 +11,7 @@ from lucid.test._helpers.compare import assert_close
 from lucid.utils.cache import Cache, DynamicCache, EncoderDecoderCache
 
 
-def _kv(
-    seq: int, b: int = 1, h: int = 2, d: int = 4
-) -> tuple[lucid.Tensor, lucid.Tensor]:
+def _kv(seq: int, b: int = 1, h: int = 2, d: int = 4) -> tuple[lucid.Tensor, lucid.Tensor]:
     return lucid.randn(b, h, seq, d), lucid.randn(b, h, seq, d)
 
 
@@ -192,12 +190,8 @@ class TestEncoderDecoderCache:
 
     def test_batch_ops_and_iter(self) -> None:
         edc = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        edc.self_attention_cache.update(
-            lucid.randn(1, 2, 3, 4), lucid.randn(1, 2, 3, 4), 0
-        )
-        edc.cross_attention_cache.update(
-            lucid.randn(1, 2, 5, 4), lucid.randn(1, 2, 5, 4), 0
-        )
+        edc.self_attention_cache.update(lucid.randn(1, 2, 3, 4), lucid.randn(1, 2, 3, 4), 0)
+        edc.cross_attention_cache.update(lucid.randn(1, 2, 5, 4), lucid.randn(1, 2, 5, 4), 0)
         edc.batch_repeat_interleave(2)
         assert tuple(edc.self_attention_cache.key_cache[0].shape)[0] == 2
         assert tuple(edc.cross_attention_cache.key_cache[0].shape)[0] == 2

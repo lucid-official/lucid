@@ -39,12 +39,8 @@ class _Attend(nn.Module):
 
 def _inputs() -> tuple[lucid.Tensor, lucid.Tensor]:
     rng = np.random.default_rng(0)
-    x = lucid.tensor(
-        rng.standard_normal((1, 12, 16)).astype(np.float32), device="metal"
-    )
-    cache = lucid.tensor(
-        rng.standard_normal((1, 40, 16)).astype(np.float32), device="metal"
-    )
+    x = lucid.tensor(rng.standard_normal((1, 12, 16)).astype(np.float32), device="metal")
+    cache = lucid.tensor(rng.standard_normal((1, 40, 16)).astype(np.float32), device="metal")
     return x, cache
 
 
@@ -58,9 +54,7 @@ def test_long_attention_runs_eagerly_and_says_so(monkeypatch) -> None:  # type: 
         warnings.simplefilter("always")
         got = compiled(x, cache)
     assert any("score matrix" in str(w.message) for w in caught)
-    np.testing.assert_allclose(
-        got.numpy(), model(x, cache).numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(got.numpy(), model(x, cache).numpy(), rtol=1e-5, atol=1e-5)
     assert len(compiled._eager_only) == 1  # remembered: the next call skips the trace
     compiled(x, cache)
     assert not compiled._cache

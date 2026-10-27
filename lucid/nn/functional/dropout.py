@@ -74,9 +74,7 @@ def _alloc_philox_state(device: DeviceLike) -> Tensor:
         return _lucid.randint(0, 2**31 - 1, (7,), dtype=_lucid.int32, device=device)
 
 
-def dropout(
-    input: Tensor, p: float = 0.5, training: bool = True, inplace: bool = False
-) -> Tensor:
+def dropout(input: Tensor, p: float = 0.5, training: bool = True, inplace: bool = False) -> Tensor:
     r"""Element-wise Bernoulli dropout — the canonical Srivastava 2014 form.
 
     During training, each scalar in ``input`` is independently zeroed with
@@ -151,9 +149,7 @@ def dropout(
        Networks from Overfitting*, JMLR 2014.
     """
     if inplace:
-        return _dropout_in_place(
-            input, "dropout", p, training, lambda t: dropout(t, p, training)
-        )
+        return _dropout_in_place(input, "dropout", p, training, lambda t: dropout(t, p, training))
     dropped = _drop_everything(input, p, training)
     if dropped is not None:
         return dropped
@@ -213,9 +209,7 @@ def _dropout_in_place(
     return _in_place(x, f"{name}(inplace=True)", drop)
 
 
-def _channel_dropout(
-    x: Tensor, p: float, training: bool, inplace: bool, name: str
-) -> Tensor:
+def _channel_dropout(x: Tensor, p: float, training: bool, inplace: bool, name: str) -> Tensor:
     """Whole-channel dropout — the one body of dropout1d / 2d / 3d."""
     if inplace:
         return _dropout_in_place(
@@ -536,16 +530,12 @@ def feature_alpha_dropout(
     thresh = _C_engine.full([N, C], keep_prob, xi.dtype, xi.device)
     keep_nc = _C_engine.less(rand_nc, thresh)
     mask_shape = [N, C] + [1] * (len(xi.shape) - 2)
-    keep = _C_engine.broadcast_to(
-        _C_engine.reshape(keep_nc, mask_shape), list(xi.shape)
-    )
+    keep = _C_engine.broadcast_to(_C_engine.reshape(keep_nc, mask_shape), list(xi.shape))
 
     # A kept channel is ``a * x + b``; a dropped one is the SELU saturation
     # value pushed through the same affine map, ``a * alpha' + b``.
     a_t = _C_engine.full(xi.shape, a_coeff, xi.dtype, xi.device)
     b_t = _C_engine.full(xi.shape, b_coeff, xi.dtype, xi.device)
     kept = _C_engine.add(_C_engine.mul(a_t, xi), b_t)
-    dropped_t = _C_engine.full(
-        xi.shape, a_coeff * _ALPHA_PRIME + b_coeff, xi.dtype, xi.device
-    )
+    dropped_t = _C_engine.full(xi.shape, a_coeff * _ALPHA_PRIME + b_coeff, xi.dtype, xi.device)
     return _wrap(_C_engine.where(keep, kept, dropped_t))

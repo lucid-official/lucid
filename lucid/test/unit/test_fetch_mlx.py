@@ -24,9 +24,7 @@ def test_an_unreachable_url_names_the_offline_remedy(tmp_path: Path) -> None:
     with pytest.raises(fetch_mlx.FetchError, match="LUCID_MLX_DIST_DIR") as info:
         fetch_mlx.fetch_wheel(_pin(url), tmp_path)
     assert url in str(info.value)
-    assert not list(
-        tmp_path.glob(".download-*")
-    ), "a failed download left a partial file"
+    assert not list(tmp_path.glob(".download-*")), "a failed download left a partial file"
 
 
 def test_a_corrupt_download_is_refused(tmp_path: Path) -> None:
@@ -53,9 +51,7 @@ def _dist(root: Path, skip: str | None = None) -> Path:
 
 
 @pytest.mark.parametrize("missing", ["libmlx.dylib", "libjaccl.dylib", "mlx.metallib"])
-def test_an_offline_dist_must_hold_every_runtime_file(
-    tmp_path: Path, missing: str
-) -> None:
+def test_an_offline_dist_must_hold_every_runtime_file(tmp_path: Path, missing: str) -> None:
     with pytest.raises(fetch_mlx.FetchError, match=missing.replace(".", r"\.")):
         fetch_mlx._locate_dist(_dist(tmp_path, skip=missing))
 
@@ -86,9 +82,7 @@ class _TruncatedBody(io.BytesIO):
 def test_a_truncated_download_names_the_offline_remedy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        fetch_mlx.urllib.request, "urlopen", lambda url, timeout: _TruncatedBody()
-    )
+    monkeypatch.setattr(fetch_mlx.urllib.request, "urlopen", lambda url, timeout: _TruncatedBody())
     with pytest.raises(fetch_mlx.FetchError, match="LUCID_MLX_DIST_DIR") as info:
         fetch_mlx._download("https://example.invalid/w.whl", io.BytesIO())
     assert "https://example.invalid/w.whl" in str(info.value)
@@ -113,9 +107,7 @@ def test_bump_repoints_the_notices_mlx_section(tmp_path: Path) -> None:
     )
     fetch_mlx._rewrite_notices(notices, old, new)
     text = notices.read_text()
-    section = text[
-        text.index("\n## MLX\n") : text.index("\n### ", text.index("\n## MLX\n"))
-    ]
+    section = text[text.index("\n## MLX\n") : text.index("\n### ", text.index("\n## MLX\n"))]
     for stale in (old.wheel, old.sha256, f"v{old.version}"):
         assert stale not in section
     for fresh in (new.wheel, new.sha256, "MLX v9.8.7", "mlx_metal-9.8.7.dist-info"):
@@ -141,9 +133,7 @@ def test_a_concurrent_winner_is_reused(tmp_path: Path) -> None:
 def test_bump_keeps_the_floor_major(monkeypatch: pytest.MonkeyPatch) -> None:
     """A release that adds a macOS 27 build must not raise Lucid's floor."""
     tags = ["14_0", "15_0", "26_0", "27_0"]
-    listing = [
-        (f"mlx_metal-9.9.9-py3-none-macosx_{t}_arm64.whl", t, f"u/{t}") for t in tags
-    ]
+    listing = [(f"mlx_metal-9.9.9-py3-none-macosx_{t}_arm64.whl", t, f"u/{t}") for t in tags]
     listing.append(("mlx_metal-9.9.9.tar.gz", "src", "u/src"))
     monkeypatch.setattr(fetch_mlx, "_pypi_wheels", lambda version: listing)
     pin = fetch_mlx._resolve("9.9.9", "26.2")

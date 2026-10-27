@@ -128,9 +128,7 @@ SIGNED_OPS: frozenset[str] = frozenset(
 
 
 # Ops that take no magnitude (the lookup list is empty).
-NO_MAGNITUDE_OPS: frozenset[str] = frozenset(
-    {"Identity", "AutoContrast", "Equalize", "Invert"}
-)
+NO_MAGNITUDE_OPS: frozenset[str] = frozenset({"Identity", "AutoContrast", "Equalize", "Invert"})
 
 
 def _apply_affine(
@@ -425,9 +423,7 @@ class TrivialAugmentWide(PhotometricTransform[_SingleOpParams]):
     ) -> None:
         super().__init__(p=p)
         if num_magnitude_bins <= 1:
-            raise ValueError(
-                f"num_magnitude_bins must be > 1, got {num_magnitude_bins}"
-            )
+            raise ValueError(f"num_magnitude_bins must be > 1, got {num_magnitude_bins}")
         if isinstance(interpolation, str):
             interpolation = Interpolation(interpolation)
         self.num_magnitude_bins = num_magnitude_bins
@@ -549,13 +545,9 @@ class RandAugment(PhotometricTransform[_RandAugmentParams]):
         if num_ops < 1:
             raise ValueError(f"num_ops must be >= 1, got {num_ops}")
         if num_magnitude_bins <= 1:
-            raise ValueError(
-                f"num_magnitude_bins must be > 1, got {num_magnitude_bins}"
-            )
+            raise ValueError(f"num_magnitude_bins must be > 1, got {num_magnitude_bins}")
         if not 0 <= magnitude < num_magnitude_bins:
-            raise ValueError(
-                f"magnitude must be in [0, {num_magnitude_bins}), got {magnitude}"
-            )
+            raise ValueError(f"magnitude must be in [0, {num_magnitude_bins}), got {magnitude}")
         if isinstance(interpolation, str):
             interpolation = Interpolation(interpolation)
         self.num_ops = num_ops
@@ -789,13 +781,10 @@ class AutoAugment(PhotometricTransform[_AutoAugmentParams]):
         super().__init__(p=p)
         if policy not in _POLICY_TABLES:
             raise ValueError(
-                f"unknown policy {policy!r}; expected one of "
-                f"{sorted(_POLICY_TABLES)}"
+                f"unknown policy {policy!r}; expected one of " f"{sorted(_POLICY_TABLES)}"
             )
         if num_magnitude_bins <= 1:
-            raise ValueError(
-                f"num_magnitude_bins must be > 1, got {num_magnitude_bins}"
-            )
+            raise ValueError(f"num_magnitude_bins must be > 1, got {num_magnitude_bins}")
         # Validate the table against the magnitude range we'll use.
         table = _POLICY_TABLES[policy]
         for sub in table:
@@ -806,9 +795,7 @@ class AutoAugment(PhotometricTransform[_AutoAugmentParams]):
                         f"{op_name!r} (expected one of {_OP_NAMES})"
                     )
                 if not 0.0 <= prob <= 1.0:
-                    raise ValueError(
-                        f"policy {policy!r}: probability {prob} out of [0, 1]"
-                    )
+                    raise ValueError(f"policy {policy!r}: probability {prob} out of [0, 1]")
                 if not 0 <= mag_idx < num_magnitude_bins:
                     raise ValueError(
                         f"policy {policy!r}: magnitude_idx {mag_idx} out of "

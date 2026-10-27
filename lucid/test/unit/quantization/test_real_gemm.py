@@ -32,9 +32,7 @@ class TestRealGEMM:
         expected = layer(x).numpy().copy()
 
         def reject(*args, **kwargs):
-            raise AssertionError(
-                "Metal quantized forward must not observe a host value"
-            )
+            raise AssertionError("Metal quantized forward must not observe a host value")
 
         with monkeypatch.context() as guard:
             for name in ("numpy", "item", "cpu", "tolist"):
@@ -70,9 +68,7 @@ class TestRealGEMM:
         q = nnq.QuantizedLinearMLX.from_float(lin, bits=8)
         float_bytes = 512 * 512 * 4
         packed_bytes = (
-            q.packed_weight.numpy().nbytes
-            + q.scales.numpy().nbytes
-            + q.biases.numpy().nbytes
+            q.packed_weight.numpy().nbytes + q.scales.numpy().nbytes + q.biases.numpy().nbytes
         )
         assert packed_bytes < float_bytes / 2  # meaningfully smaller
 

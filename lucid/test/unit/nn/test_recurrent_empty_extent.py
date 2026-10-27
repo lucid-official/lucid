@@ -68,9 +68,7 @@ def test_empty_sequence_is_refused(kind: str, layout: str, device: str) -> None:
 
 
 @pytest.mark.parametrize("kind,layout", _cases(tuple(_LAYOUTS)))
-def test_reference_refuses_empty_sequence(
-    ref: ModuleType, kind: str, layout: str
-) -> None:
+def test_reference_refuses_empty_sequence(ref: ModuleType, kind: str, layout: str) -> None:
     # Why the refusal above is the contract and not a gap.
     kwargs, _ = _LAYOUTS[layout]
     module = getattr(ref.nn, kind)(_I, _H, **kwargs)
@@ -121,9 +119,7 @@ def test_engine_lstm_refuses_empty_sequence(device: str, requires_grad: bool) ->
 # ── B == 0 runs, as in the reference ─────────────────────────────────────────
 
 
-def _run_empty_batch(
-    fw: ModuleType, kind: str, layout: str, device: str
-) -> dict[str, object]:
+def _run_empty_batch(fw: ModuleType, kind: str, layout: str, device: str) -> dict[str, object]:
     """Run ``kind`` over ``_T`` steps of an empty batch, with explicit initial
     states, in Lucid or the reference (``fw``); backpropagate every output."""
     kwargs, _ = _LAYOUTS[layout]
@@ -177,9 +173,7 @@ def test_empty_batch_forward_matches_reference(
             lucid.randn(*shape, device=device)
         )
     with ref.no_grad():
-        want_out, want_states = getattr(ref.nn, kind)(_I, _H, **kwargs)(
-            ref.randn(*shape)
-        )
+        want_out, want_states = getattr(ref.nn, kind)(_I, _H, **kwargs)(ref.randn(*shape))
     _assert_same(out, want_out)
     ours = list(states) if isinstance(states, tuple) else [states]
     theirs = list(want_states) if isinstance(want_states, tuple) else [want_states]

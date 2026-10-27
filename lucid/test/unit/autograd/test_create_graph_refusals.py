@@ -151,9 +151,7 @@ def test_refusing_nodes_match_the_ledger():
     new = sorted(found - set(_REFUSING_NODES))
     gone = sorted(set(_REFUSING_NODES) - found)
     assert not new, f"nodes without a graph-mode backward, not in the ledger: {new}"
-    assert (
-        not gone
-    ), f"ledger entries that now have a graph-mode backward — remove them: {gone}"
+    assert not gone, f"ledger entries that now have a graph-mode backward — remove them: {gone}"
 
 
 def test_partial_refusals_match_the_ledger():
@@ -215,15 +213,11 @@ _ENGINE_OPS = {
         lambda x: 2.0**x,
     ),
     "norm_2": (
-        lambda x: _wrap(
-            _C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 2.0, [1], False)
-        ),
+        lambda x: _wrap(_C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 2.0, [1], False)),
         lambda x: x.reshape(4, 4).norm(2, 1),
     ),
     "norm_1": (
-        lambda x: _wrap(
-            _C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 1.0, [1], False)
-        ),
+        lambda x: _wrap(_C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 1.0, [1], False)),
         lambda x: x.reshape(4, 4).norm(1, 1),
     ),
     "complex_abs": (
@@ -257,11 +251,7 @@ def test_rope_second_derivative(device, interleaved):
     """RoPE is a rotation, so ``sum(y**2) == sum(x**2)``: the gradient is
     ``2x`` and its derivative 2 everywhere, in either pair layout."""
     x = lucid.tensor(_X, device=device, requires_grad=True)
-    y = _wrap(
-        _C_engine.nn.rotary_pos_embedding(
-            _unwrap(x.reshape(2, 2, 4)), None, interleaved
-        )
-    )
+    y = _wrap(_C_engine.nn.rotary_pos_embedding(_unwrap(x.reshape(2, 2, 4)), None, interleaved))
     (g,) = lucid.autograd.grad((y * y).sum(), x, create_graph=True)
     assert g.tolist() == pytest.approx([2 * v for v in _X], rel=1e-5, abs=1e-5)
     (h,) = lucid.autograd.grad(g.sum(), x)
@@ -270,13 +260,9 @@ def test_rope_second_derivative(device, interleaved):
 
 _MASKED = {
     "dropout": lambda x: lucid.nn.functional.dropout(x, 0.5, training=True),
-    "dropout2d": lambda x: lucid.nn.functional.dropout2d(
-        x.reshape(2, 4, 2, 1), 0.5, True
-    ),
+    "dropout2d": lambda x: lucid.nn.functional.dropout2d(x.reshape(2, 4, 2, 1), 0.5, True),
     "alpha_dropout": lambda x: lucid.nn.functional.alpha_dropout(x, 0.5, training=True),
-    "drop_path": lambda x: _wrap(
-        _C_engine.nn.drop_path(_unwrap(x.reshape(4, 4)), 0.5, True)
-    ),
+    "drop_path": lambda x: _wrap(_C_engine.nn.drop_path(_unwrap(x.reshape(4, 4)), 0.5, True)),
 }
 
 

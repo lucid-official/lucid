@@ -229,8 +229,7 @@ class DreamerConfig(WorldModelConfig):
         super().__post_init__()
         if self.action_space not in ("continuous", "discrete"):
             raise ValueError(
-                f"action_space must be 'continuous' or 'discrete', got "
-                f"{self.action_space!r}"
+                f"action_space must be 'continuous' or 'discrete', got " f"{self.action_space!r}"
             )
         for name, value in (
             ("horizon", self.horizon),
@@ -249,14 +248,8 @@ class DreamerConfig(WorldModelConfig):
         if not 0.0 <= self.lambda_ <= 1.0:
             raise ValueError(f"lambda_ must be in [0, 1], got {self.lambda_}")
         if self.actor_min_std <= 0.0:
-            raise ValueError(
-                f"actor_min_std must be positive, got {self.actor_min_std}"
-            )
+            raise ValueError(f"actor_min_std must be positive, got {self.actor_min_std}")
         if self.pcont_scale < 0.0:
-            raise ValueError(
-                f"pcont_scale must be non-negative, got {self.pcont_scale}"
-            )
+            raise ValueError(f"pcont_scale must be non-negative, got {self.pcont_scale}")
         if self.actor_mean_scale <= 0.0:
-            raise ValueError(
-                f"actor_mean_scale must be positive, got {self.actor_mean_scale}"
-            )
+            raise ValueError(f"actor_mean_scale must be positive, got {self.actor_mean_scale}")

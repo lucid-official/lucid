@@ -70,9 +70,7 @@ def test_grid_sample_backward_of_an_empty_batch(ref, device):
     xr = ref.zeros((0, 2, 4, 4), requires_grad=True)
     grid = lucid.zeros((0, 3, 3, 2), device=device)
     F.grid_sample(x, grid, align_corners=False).sum().backward()
-    ref.nn.functional.grid_sample(
-        xr, ref.zeros((0, 3, 3, 2)), align_corners=False
-    ).sum().backward()
+    ref.nn.functional.grid_sample(xr, ref.zeros((0, 3, 3, 2)), align_corners=False).sum().backward()
     assert tuple(x.grad.shape) == tuple(xr.grad.shape) == (0, 2, 4, 4)
 
 
@@ -88,9 +86,7 @@ def test_scatter_reduce_into_an_empty_base(ref, device, reduce):
 
 
 _GPU_BACKEND = Path(lucid.__file__).parent / "_C" / "backend" / "gpu"
-_RAW_MULTIAXIS_SCATTER = re.compile(
-    r"(::mlx::core::|\bmx::)scatter(_add|_max|_min|_prod)?\("
-)
+_RAW_MULTIAXIS_SCATTER = re.compile(r"(::mlx::core::|\bmx::)scatter(_add|_max|_min|_prod)?\(")
 # The one place a raw call belongs: the branch of a guarded helper that runs
 # once ``scatter_places_nothing`` has said there is something to place.
 _HELPER_BRANCH = re.compile(r"\s*: ::mlx::core::scatter")

@@ -105,9 +105,7 @@ def test_submodule_dropout_eval_flip_retraces_make_step() -> None:
     loss_compiled = step(x)
     loss_compiled.backward()
     assert len(step.cache) == 2
-    grads_compiled = [
-        p.grad.numpy().copy() for p in m.parameters() if p.grad is not None
-    ]
+    grads_compiled = [p.grad.numpy().copy() for p in m.parameters() if p.grad is not None]
 
     for p in m.parameters():
         p.grad = None
@@ -142,9 +140,7 @@ def test_nested_batchnorm_submodule_mode_flip_compiled_module_and_step() -> None
     with lucid.no_grad():
         _ = cm(x)
     rm_after = bn.running_mean.numpy().copy()  # type: ignore[union-attr]
-    assert not np.allclose(
-        rm_before, rm_after
-    ), "training BN submodule must update running_mean"
+    assert not np.allclose(rm_before, rm_after), "training BN submodule must update running_mean"
 
     # Under make_step, flipping bn.eval() <-> bn.train() switches between
     # compiled eval BN (no running stat write-back) and compiled train BN.
@@ -246,9 +242,7 @@ def test_signature_scalar_attr_edge_cases() -> None:
     assert k_pos_zero != k_neg_zero
 
     m.flag = float("nan")  # type: ignore[attr-defined]
-    assert signature_of(m, (x,), {}, dynamic=False) == signature_of(
-        m, (x,), {}, dynamic=False
-    )
+    assert signature_of(m, (x,), {}, dynamic=False) == signature_of(m, (x,), {}, dynamic=False)
 
     # Non-scalar attributes (lists/dicts) and private attributes must not break signature_of.
     m.history = [1, 2, 3]  # type: ignore[attr-defined]
@@ -270,9 +264,7 @@ def test_forward_hook_on_submodule_before_and_after_compile() -> None:
 
     recorded: list[np.ndarray] = []
 
-    def _record_hook(
-        mod: nn.Module, inp: tuple[lucid.Tensor, ...], out: lucid.Tensor
-    ) -> None:
+    def _record_hook(mod: nn.Module, inp: tuple[lucid.Tensor, ...], out: lucid.Tensor) -> None:
         recorded.append(out.numpy().copy())
 
     # 1. Hook registered BEFORE compile: must fire exactly once per call.
@@ -340,17 +332,13 @@ def test_forward_pre_hook_and_output_transform_hook() -> None:
             p.grad = None
         loss_step = step(x)
         loss_step.backward()
-        grads_step = [
-            p.grad.numpy().copy() for p in m.parameters() if p.grad is not None
-        ]
+        grads_step = [p.grad.numpy().copy() for p in m.parameters() if p.grad is not None]
 
         for p in m.parameters():
             p.grad = None
         loss_eager = (m(x) ** 2).sum()
         loss_eager.backward()
-        grads_eager = [
-            p.grad.numpy().copy() for p in m.parameters() if p.grad is not None
-        ]
+        grads_eager = [p.grad.numpy().copy() for p in m.parameters() if p.grad is not None]
 
         assert np.isclose(float(loss_step.item()), float(loss_eager.item()), rtol=1e-5)
         for gs, ge in zip(grads_step, grads_eager):
@@ -401,17 +389,13 @@ def test_backward_hooks_on_submodule_under_make_step() -> None:
         loss_step.backward()
         assert len(bwd_pre_seen) == 1
         assert len(bwd_seen) == 1
-        grads_step = [
-            p.grad.numpy().copy() for p in m.parameters() if p.grad is not None
-        ]
+        grads_step = [p.grad.numpy().copy() for p in m.parameters() if p.grad is not None]
 
         for p in m.parameters():
             p.grad = None
         loss_eager = loss_fn(m(x))
         loss_eager.backward()
-        grads_eager = [
-            p.grad.numpy().copy() for p in m.parameters() if p.grad is not None
-        ]
+        grads_eager = [p.grad.numpy().copy() for p in m.parameters() if p.grad is not None]
 
         for gs, ge in zip(grads_step, grads_eager):
             assert np.allclose(gs, ge, rtol=1e-4, atol=1e-5)
@@ -470,9 +454,7 @@ def test_parameter_and_mid_forward_tensor_hooks_under_compile_and_steps() -> Non
     # Registering a tensor hook on a parameter routes fused_step to eager so the hook runs,
     # and removing it resumes compiled execution.
     seen_param_grads: list[int] = []
-    hp = m.fc1.weight.register_hook(
-        lambda g: (seen_param_grads.append(g.numel()), g * 0.0)[1]
-    )
+    hp = m.fc1.weight.register_hook(lambda g: (seen_param_grads.append(g.numel()), g * 0.0)[1])
     try:
         assert model_has_active_hooks(m)
         w_before = m.fc1.weight.detach().cpu().tolist()
@@ -490,9 +472,7 @@ def test_parameter_and_mid_forward_tensor_hooks_under_compile_and_steps() -> Non
     assert all(len(c) == 1 for c in seg_step.cache)
 
     mod_hook_calls: list[int] = []
-    hm = seq[0].register_forward_hook(
-        lambda mod, inp, out: mod_hook_calls.append(out.numel())
-    )
+    hm = seq[0].register_forward_hook(lambda mod, inp, out: mod_hook_calls.append(out.numel()))
     try:
         for p in seq.parameters():
             p.grad = None

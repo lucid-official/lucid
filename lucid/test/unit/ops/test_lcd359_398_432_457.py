@@ -82,9 +82,7 @@ def test_dropped_base_view_keeps_its_strides_through_a_write(
     v.mul_(3.0).erfc_()
     rv.mul_(3.0).erfc_()
     assert v.stride() == rv.stride() == (1, 3)
-    assert v.reshape(-1).tolist() == pytest.approx(
-        rv.reshape(-1).tolist(), rel=1e-5, abs=1e-5
-    )
+    assert v.reshape(-1).tolist() == pytest.approx(rv.reshape(-1).tolist(), rel=1e-5, abs=1e-5)
     v.sum().backward()
     rv.sum().backward()
     assert x.grad is not None and rx.grad is not None
@@ -233,18 +231,12 @@ def test_ldexp_extreme_exponents_and_gradients(
             assert math.copysign(1.0, g) == math.copysign(1.0, w)
 
     # Differentiable in both arguments (first and second derivatives).
-    x = lucid.tensor(
-        [0.75, -1.25], dtype=lucid.float32, device=device, requires_grad=True
-    )
-    k = lucid.tensor(
-        [-4.0, 0.0], dtype=lucid.float32, device=device, requires_grad=True
-    )
+    x = lucid.tensor([0.75, -1.25], dtype=lucid.float32, device=device, requires_grad=True)
+    k = lucid.tensor([-4.0, 0.0], dtype=lucid.float32, device=device, requires_grad=True)
     y = lucid.ldexp(x, k)
     gx, gk = lucid.autograd.grad(y.sum(), [x, k], create_graph=True)
     (g2k,) = lucid.autograd.grad(gk.sum(), [k])
-    np.testing.assert_allclose(
-        gx.numpy(), np.array([2.0**-4.0, 1.0], dtype=np.float32), rtol=1e-6
-    )
+    np.testing.assert_allclose(gx.numpy(), np.array([2.0**-4.0, 1.0], dtype=np.float32), rtol=1e-6)
     np.testing.assert_allclose(
         gk.numpy(),
         np.array(
@@ -303,9 +295,7 @@ def test_grid_sample_near_float_max_and_mixed_infinite_coords(
     lx.requires_grad_(True)
     lg = lucid.tensor(coords, dtype=lucid.float32, device=device).reshape(*grid_shape)
     lg.requires_grad_(True)
-    ly = F.grid_sample(
-        lx, lg, mode=mode, padding_mode=padding_mode, align_corners=align_corners
-    )
+    ly = F.grid_sample(lx, lg, mode=mode, padding_mode=padding_mode, align_corners=align_corners)
     ly.sum().backward()
 
     def reference(at: list[float]) -> tuple[np.ndarray, ...]:
@@ -379,11 +369,7 @@ def test_engine_unique_supports_all_real_and_bool_dtypes(
         pytest.skip("Metal does not support float64")
     l_dt = getattr(lucid, dtype_name)
     r_dt = getattr(ref, dtype_name)
-    data = (
-        [True, False, True, True]
-        if dtype_name == "bool"
-        else [3, 1, 3, -1, 2, 1, 0, -1]
-    )
+    data = [True, False, True, True] if dtype_name == "bool" else [3, 1, 3, -1, 2, 1, 0, -1]
     lx = lucid.tensor(data, dtype=l_dt, device=device)
     rx = ref.tensor(data, dtype=r_dt)
     got_eng = lucid.Tensor.__new_from_impl__(_C_engine.unique(lx._impl))

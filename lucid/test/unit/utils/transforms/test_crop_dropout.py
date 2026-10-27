@@ -11,9 +11,7 @@ def _sample(h: int = 40, w: int = 40) -> dict[str, object]:
     return {
         "image": T.Image(lucid.rand(3, h, w)),
         "mask": T.Mask(lucid.rand(1, h, w)),
-        "boxes": T.BoundingBoxes(
-            lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)
-        ),
+        "boxes": T.BoundingBoxes(lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)),
         "kp": T.Keypoints(lucid.tensor([[10.0, 10.0]]), (h, w)),
     }
 
@@ -83,9 +81,7 @@ class TestCropPad:
 
 class TestDropout:
     def test_coarse_dropout_blanks(self) -> None:
-        out = T.CoarseDropout(max_holes=5, max_height=8, max_width=8, p=1.0)(
-            lucid.ones(3, 32, 32)
-        )
+        out = T.CoarseDropout(max_holes=5, max_height=8, max_width=8, p=1.0)(lucid.ones(3, 32, 32))
         assert float(out.min().item()) == 0.0
 
     def test_coarse_dropout_p0(self) -> None:
@@ -109,14 +105,10 @@ class TestDropout:
 
 class TestValueScaling:
     def test_to_float(self) -> None:
-        assert (
-            abs(float(T.ToFloat()(lucid.ones(3, 4, 4) * 255).max().item()) - 1.0) < 1e-5
-        )
+        assert abs(float(T.ToFloat()(lucid.ones(3, 4, 4) * 255).max().item()) - 1.0) < 1e-5
 
     def test_from_float(self) -> None:
-        assert (
-            abs(float(T.FromFloat()(lucid.ones(3, 4, 4)).max().item()) - 255.0) < 1e-3
-        )
+        assert abs(float(T.FromFloat()(lucid.ones(3, 4, 4)).max().item()) - 255.0) < 1e-3
 
 
 if __name__ == "__main__":

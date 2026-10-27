@@ -232,9 +232,7 @@ class ConvTranspose1d(_ConvTransposeNd):
         )
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """Upsample ``input`` of shape ``(N, C_in, L)``, or unbatched.
 
         ``output_size`` picks one of the ``stride`` sizes the layer can
@@ -393,9 +391,7 @@ class ConvTranspose2d(_ConvTransposeNd):
         )
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """Upsample ``input`` of shape ``(N, C_in, H, W)``, or unbatched.
 
         ``output_size`` picks one of the ``stride`` sizes the layer can
@@ -545,9 +541,7 @@ class ConvTranspose3d(_ConvTransposeNd):
         )
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """Upsample ``input`` of shape ``(N, C_in, D, H, W)``, or unbatched.
 
         ``output_size`` picks one of the ``stride`` sizes the layer can
@@ -686,9 +680,7 @@ class LazyConvTranspose1d(_LazyConvMixin, ConvTranspose1d):
         return (self.kernel_size,)
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
         self._materialize_from(input)
         return ConvTranspose1d.forward(self, input, output_size)
@@ -820,9 +812,7 @@ class LazyConvTranspose2d(_LazyConvMixin, ConvTranspose2d):
         return self.kernel_size
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
         self._materialize_from(input)
         return ConvTranspose2d.forward(self, input, output_size)
@@ -945,9 +935,7 @@ class LazyConvTranspose3d(_LazyConvMixin, ConvTranspose3d):
         self.kernel_size: tuple[int, int, int] = _triple(kernel_size, "kernel_size")
         self.stride: tuple[int, int, int] = _triple(stride, "stride")
         self.padding: tuple[int, int, int] = _triple(padding, "padding")
-        self.output_padding: tuple[int, int, int] = _triple(
-            output_padding, "output_padding"
-        )
+        self.output_padding: tuple[int, int, int] = _triple(output_padding, "output_padding")
         self.groups: int = groups
         self.dilation: tuple[int, int, int] = _triple(dilation, "dilation")
         self._defer(bias, device, dtype)
@@ -958,9 +946,7 @@ class LazyConvTranspose3d(_LazyConvMixin, ConvTranspose3d):
         return self.kernel_size
 
     @override
-    def forward(
-        self, input: Tensor, output_size: Sequence[int] | None = None
-    ) -> Tensor:
+    def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
         self._materialize_from(input)
         return ConvTranspose3d.forward(self, input, output_size)

@@ -160,8 +160,7 @@ class RSSMState(NamedTuple):
         """
         if self.mean is None or self.std is None:
             raise ValueError(
-                "this state carries a categorical latent; it has no mean or "
-                "standard deviation"
+                "this state carries a categorical latent; it has no mean or " "standard deviation"
             )
         return self.mean, self.std
 
@@ -481,9 +480,7 @@ class RSSM(nn.Module):
         if blocks < 0:
             raise ValueError(f"blocks must be non-negative, got {blocks}")
         if blocks and deter_size % blocks:
-            raise ValueError(
-                f"blocks must divide deter_size, got {deter_size} and {blocks}"
-            )
+            raise ValueError(f"blocks must divide deter_size, got {deter_size} and {blocks}")
         if discrete < 0 or discrete == 1:
             raise ValueError(
                 "discrete must be 0 for a Gaussian latent or at least 2 for a "
@@ -659,9 +656,7 @@ class RSSM(nn.Module):
         h = generative_activation(self._act_name, first(x))
         return second(h)
 
-    def _latent(
-        self, head: nn.ModuleList[nn.Linear], x: Tensor, sample: bool
-    ) -> RSSMState:
+    def _latent(self, head: nn.ModuleList[nn.Linear], x: Tensor, sample: bool) -> RSSMState:
         """Read a head and turn it into the latent half of a state.
 
         Parameters
@@ -687,9 +682,7 @@ class RSSM(nn.Module):
             return RSSMState(deter=out, stoch=stoch, logits=logits)
         mean = out[..., : self.stoch_size]
         std = nn.functional.softplus(out[..., self.stoch_size :]) + self.min_std
-        return RSSMState(
-            deter=out, stoch=self._draw(mean, std, sample), mean=mean, std=std
-        )
+        return RSSMState(deter=out, stoch=self._draw(mean, std, sample), mean=mean, std=std)
 
     def _draw_discrete(self, logits: Tensor, sample: bool) -> tuple[Tensor, Tensor]:
         r"""One-hot draw with a straight-through gradient, flattened.
@@ -755,9 +748,7 @@ class RSSM(nn.Module):
         """
         if not sample:
             return mean
-        noise = lucid.randn(
-            tuple(int(s) for s in mean.shape), device=mean.device, dtype=mean.dtype
-        )
+        noise = lucid.randn(tuple(int(s) for s in mean.shape), device=mean.device, dtype=mean.dtype)
         return mean + std * noise
 
     # ── single steps ─────────────────────────────────────────────────────
@@ -819,9 +810,7 @@ class RSSM(nn.Module):
             return RSSMState(deter=deter, stoch=stoch, logits=logits)
         return RSSMState(deter=deter, stoch=stoch, mean=stoch, std=stoch)
 
-    def prior_step(
-        self, state: RSSMState, action: Tensor, *, sample: bool = True
-    ) -> RSSMState:
+    def prior_step(self, state: RSSMState, action: Tensor, *, sample: bool = True) -> RSSMState:
         r"""Advance one step without an observation — :math:`p(s_t \mid h_t)`.
 
         Parameters
@@ -909,9 +898,7 @@ class RSSM(nn.Module):
         """
         prior = self.prior_step(state, action, sample=sample)
         x = lucid.cat([prior.deter, embed], dim=-1)
-        posterior = self._latent(self.posterior_head, x, sample)._replace(
-            deter=prior.deter
-        )
+        posterior = self._latent(self.posterior_head, x, sample)._replace(deter=prior.deter)
         return prior, posterior
 
     # ── unrolls ──────────────────────────────────────────────────────────
@@ -1004,16 +991,12 @@ class RSSM(nn.Module):
         priors: list[RSSMState] = []
         posteriors: list[RSSMState] = []
         for t in range(int(embed.shape[1])):
-            prior, state = self.posterior_step(
-                state, actions[:, t], embed[:, t], sample=sample
-            )
+            prior, state = self.posterior_step(state, actions[:, t], embed[:, t], sample=sample)
             priors.append(prior)
             posteriors.append(state)
         return self._stack(priors), self._stack(posteriors)
 
-    def imagine(
-        self, state: RSSMState, actions: Tensor, *, sample: bool = True
-    ) -> RSSMState:
+    def imagine(self, state: RSSMState, actions: Tensor, *, sample: bool = True) -> RSSMState:
         r"""Roll the prior forward with no observations at all.
 
         This is the model dreaming: every step's latent comes from the
@@ -1081,9 +1064,7 @@ class RSSM(nn.Module):
         )
 
 
-def rssm_kl(
-    posterior: RSSMState, prior: RSSMState, *, free_nats: float = 3.0
-) -> Tensor:
+def rssm_kl(posterior: RSSMState, prior: RSSMState, *, free_nats: float = 3.0) -> Tensor:
     r"""Scalar :math:`\mathrm{KL}(q \,\|\, p)` with a free-nats floor.
 
     The divergence is summed over the latent dimension, averaged over batch
@@ -1148,15 +1129,11 @@ def rssm_kl(
         )
 
     if posterior.is_discrete:
-        per_step = categorical_kl(
-            cast(Tensor, posterior.logits), cast(Tensor, prior.logits)
-        )
+        per_step = categorical_kl(cast(Tensor, posterior.logits), cast(Tensor, prior.logits))
     else:
         posterior_mean, _ = posterior.gaussian()
         prior_mean, _ = prior.gaussian()
-        per_step = normal_kl(
-            posterior_mean, posterior.logvar, prior_mean, prior.logvar
-        ).sum(dim=-1)
+        per_step = normal_kl(posterior_mean, posterior.logvar, prior_mean, prior.logvar).sum(dim=-1)
 
     kl = per_step.mean()
     return (kl - free_nats).clip(0.0, None) if free_nats > 0.0 else kl

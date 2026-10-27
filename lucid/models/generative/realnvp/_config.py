@@ -191,15 +191,11 @@ class RealNVPConfig(NormalizingFlowConfig):
         if self.num_scales <= 0:
             raise ValueError(f"num_scales must be positive, got {self.num_scales}")
         if self.residual_blocks <= 0:
-            raise ValueError(
-                f"residual_blocks must be positive, got {self.residual_blocks}"
-            )
+            raise ValueError(f"residual_blocks must be positive, got {self.residual_blocks}")
         if self.base_dim <= 0:
             raise ValueError(f"base_dim must be positive, got {self.base_dim}")
         if not 0.0 < self.data_constraint < 1.0:
-            raise ValueError(
-                f"data_constraint must lie in (0, 1), got {self.data_constraint}"
-            )
+            raise ValueError(f"data_constraint must lie in (0, 1), got {self.data_constraint}")
 
         h, w = self.image_shape[1:]
         factor = 2 ** (self.num_scales - 1)

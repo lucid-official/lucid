@@ -119,10 +119,8 @@ _UNORDERED = {"eigvals"}
 _REFERENCE_GAPS: dict[tuple[str, str], str] = {
     ("lstsq", "inf"): "lstsq uses the SVD minimum-norm solution (gelss: zeros), "
     "the reference defaults to QR with pivoting (gelsy: [nan, 0])",
-    ("eigvals", "nan"): "eigvals raises on a non-finite input, the reference "
-    "returns NaN",
-    ("eigvals", "inf"): "eigvals raises on a non-finite input, the reference "
-    "returns NaN",
+    ("eigvals", "nan"): "eigvals raises on a non-finite input, the reference " "returns NaN",
+    ("eigvals", "inf"): "eigvals raises on a non-finite input, the reference " "returns NaN",
 }
 
 _Kind = tuple[str, Any]
@@ -219,9 +217,7 @@ def test_devices_agree(op: str, case: str, cross_device_pair: tuple[str, str]) -
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    ("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64])
-)
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64]))
 @pytest.mark.parametrize(("op", "case"), _params(with_gaps=True))
 def test_matches_the_reference(
     op: str, case: str, device: str, dtype: lucid.dtype, ref: Any
@@ -266,18 +262,12 @@ def test_a_batch_refusal_names_the_failing_matrix(failing: int, device: str) -> 
     including a failure ahead of the last matrix, which used to go through."""
     batch = np.stack([np.array([[2.0, 1.0], [1.0, 4.0]])] * 3)
     batch[failing] = [[1.0, 0.0], [0.0, 0.0]]
-    with pytest.raises(
-        LA.LinAlgError, match=rf"\(Batch element {failing}\): D\[2,2\] is zero"
-    ):
+    with pytest.raises(LA.LinAlgError, match=rf"\(Batch element {failing}\): D\[2,2\] is zero"):
         LA.ldl_factor(lucid.tensor(batch, dtype=lucid.float32, device=device))
 
 
-@pytest.mark.parametrize(
-    ("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64])
-)
-def test_pinv_all_inf_is_nan_while_single_inf_is_zero(
-    device: str, dtype: lucid.dtype
-) -> None:
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64]))
+def test_pinv_all_inf_is_nan_while_single_inf_is_zero(device: str, dtype: lucid.dtype) -> None:
     """``pinv([[inf, inf], [inf, inf]])`` is all-NaN while a single leading
     ``inf`` gives zeros, matching LAPACK ``gesdd`` on both devices."""
     batch = lucid.tensor(

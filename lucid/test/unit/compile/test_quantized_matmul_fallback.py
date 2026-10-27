@@ -47,9 +47,7 @@ def _maxdiff(a: object, b: object) -> float:
 def test_compiled_quantized_matmul_reacts_to_new_input() -> None:
     """The regression: two different inputs must give two different outputs."""
     lucid.manual_seed(0)
-    qlin = nnq.QuantizedLinearMLX.from_float(nn.Linear(512, 256).to("metal")).to(
-        "metal"
-    )
+    qlin = nnq.QuantizedLinearMLX.from_float(nn.Linear(512, 256).to("metal")).to("metal")
     x1 = lucid.randn(4, 512, device="metal")
     x2 = lucid.randn(4, 512, device="metal")
 
@@ -66,9 +64,7 @@ def test_compiled_quantized_matmul_reacts_to_new_input() -> None:
 def test_compiled_quantized_matmul_falls_back_to_eager() -> None:
     """No emitter for the fused GEMM → the signature is marked eager-only."""
     lucid.manual_seed(1)
-    qlin = nnq.QuantizedLinearMLX.from_float(nn.Linear(256, 128).to("metal")).to(
-        "metal"
-    )
+    qlin = nnq.QuantizedLinearMLX.from_float(nn.Linear(256, 128).to("metal")).to("metal")
     cq = lucid.compile(qlin)
     cq(lucid.randn(8, 256, device="metal"))
 
@@ -85,9 +81,7 @@ def test_multilayer_quantized_mlp_correct_under_compile() -> None:
             self.l1 = nnq.QuantizedLinearMLX.from_float(
                 nn.Linear(256, 512).to("metal"), relu=True
             ).to("metal")
-            self.l2 = nnq.QuantizedLinearMLX.from_float(
-                nn.Linear(512, 128).to("metal")
-            ).to("metal")
+            self.l2 = nnq.QuantizedLinearMLX.from_float(nn.Linear(512, 128).to("metal")).to("metal")
 
         def forward(self, x: object) -> object:
             return self.l2(self.l1(x))

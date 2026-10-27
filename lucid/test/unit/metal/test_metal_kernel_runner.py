@@ -50,48 +50,36 @@ class TestMetalKernelRunner:
 
     def test_single_input_add_one(self) -> None:
         x = lucid.tensor([1.0, 2.0, 3.0, 4.0])
-        y = metal.run_kernel(
-            _MSL_ADD1, "add_one", [x], (4,), grid=(4, 1, 1), threads=(1, 1, 1)
-        )
+        y = metal.run_kernel(_MSL_ADD1, "add_one", [x], (4,), grid=(4, 1, 1), threads=(1, 1, 1))
         np.testing.assert_allclose(y.numpy(), [2.0, 3.0, 4.0, 5.0], atol=1e-6)
 
     def test_two_input_vector_add(self) -> None:
         a = lucid.tensor([1.0, 2.0, 3.0])
         b = lucid.tensor([10.0, 20.0, 30.0])
-        c = metal.run_kernel(
-            _MSL_VADD, "vadd", [a, b], (3,), grid=(3, 1, 1), threads=(1, 1, 1)
-        )
+        c = metal.run_kernel(_MSL_VADD, "vadd", [a, b], (3,), grid=(3, 1, 1), threads=(1, 1, 1))
         np.testing.assert_allclose(c.numpy(), [11.0, 22.0, 33.0], atol=1e-6)
 
     def test_relu_kernel(self) -> None:
         x = lucid.tensor([-1.0, 2.0, -0.5, 0.0, 3.0])
-        y = metal.run_kernel(
-            _MSL_RELU, "relu", [x], (5,), grid=(5, 1, 1), threads=(1, 1, 1)
-        )
+        y = metal.run_kernel(_MSL_RELU, "relu", [x], (5,), grid=(5, 1, 1), threads=(1, 1, 1))
         np.testing.assert_allclose(y.numpy(), [0.0, 2.0, 0.0, 0.0, 3.0], atol=1e-6)
 
     def test_metal_input_tensor(self) -> None:
         """Metal-device input tensors are accepted without copy."""
         x = lucid.tensor([5.0, 6.0, 7.0]).to(device="metal")
-        y = metal.run_kernel(
-            _MSL_ADD1, "add_one", [x], (3,), grid=(3, 1, 1), threads=(1, 1, 1)
-        )
+        y = metal.run_kernel(_MSL_ADD1, "add_one", [x], (3,), grid=(3, 1, 1), threads=(1, 1, 1))
         np.testing.assert_allclose(y.numpy(), [6.0, 7.0, 8.0], atol=1e-6)
 
     def test_output_is_cpu_tensor(self) -> None:
         """run_kernel always returns a CPU tensor (SharedStorage)."""
         x = lucid.tensor([1.0])
-        y = metal.run_kernel(
-            _MSL_ADD1, "add_one", [x], (1,), grid=(1, 1, 1), threads=(1, 1, 1)
-        )
+        y = metal.run_kernel(_MSL_ADD1, "add_one", [x], (1,), grid=(1, 1, 1), threads=(1, 1, 1))
         assert y.device == lucid.device("cpu")
 
     def test_output_moveable_to_metal(self) -> None:
         """Output can be moved back to Metal for further GPU computation."""
         x = lucid.tensor([3.0])
-        y = metal.run_kernel(
-            _MSL_ADD1, "add_one", [x], (1,), grid=(1, 1, 1), threads=(1, 1, 1)
-        )
+        y = metal.run_kernel(_MSL_ADD1, "add_one", [x], (1,), grid=(1, 1, 1), threads=(1, 1, 1))
         y_gpu = y.to(device="metal")
         assert y_gpu.device == lucid.device("metal")
         np.testing.assert_allclose(y_gpu.cpu().numpy(), [4.0], atol=1e-6)

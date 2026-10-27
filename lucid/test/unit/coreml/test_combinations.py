@@ -135,16 +135,12 @@ class _Carries(nn.Module):
         super().__init__()
         self.fc = nn.Linear(64, 64)
 
-    def forward(
-        self, x: lucid.Tensor, cache: lucid.Tensor
-    ) -> tuple[lucid.Tensor, lucid.Tensor]:
+    def forward(self, x: lucid.Tensor, cache: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
         carried = cache + self.fc(x)
         return carried, carried * 2.0
 
 
-@pytest.mark.parametrize(
-    ("name", "weights"), WEIGHTS, ids=[name for name, _w in WEIGHTS]
-)
+@pytest.mark.parametrize(("name", "weights"), WEIGHTS, ids=[name for name, _w in WEIGHTS])
 def test_carried_state_crossed_with_weight_storage(name, weights, tmp_path):
     """State raises the opset, and the weight encodings have to follow.
 
@@ -412,9 +408,7 @@ class _Samples(nn.Module):
     _DRAW_CASES,
     ids=[f"{p[0]}-{w[0]}-{i[0]}" for p, w, i in _DRAW_CASES],
 )
-def test_a_lifted_draw_crossed_with_the_interface(
-    precision, weights, interface, tmp_path
-):
+def test_a_lifted_draw_crossed_with_the_interface(precision, weights, interface, tmp_path):
     """The draw survives every way the package can present itself."""
     _precision_name, precision_value = precision
     _weights_name, weights_value = weights
@@ -460,16 +454,12 @@ class _CarriesAndDraws(nn.Module):
         super().__init__()
         self.fc = nn.Linear(64, 64)
 
-    def forward(
-        self, x: lucid.Tensor, cache: lucid.Tensor
-    ) -> tuple[lucid.Tensor, lucid.Tensor]:
+    def forward(self, x: lucid.Tensor, cache: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
         carried = cache + self.fc(x) + lucid.randn(1, 64)
         return carried, carried * 2.0
 
 
-@pytest.mark.parametrize(
-    ("name", "weights"), WEIGHTS, ids=[name for name, _w in WEIGHTS]
-)
+@pytest.mark.parametrize(("name", "weights"), WEIGHTS, ids=[name for name, _w in WEIGHTS])
 def test_a_lifted_draw_beside_carried_state(name, weights, tmp_path):
     """Both raise the opset, and a stochastic decoder wants both.
 
@@ -502,9 +492,7 @@ _AWARE_CASES = list(itertools.product(PRECISIONS, WEIGHTS[1:]))
     _AWARE_CASES,
     ids=[f"{p[0]}-{w[0]}" for p, w in _AWARE_CASES],
 )
-def test_training_against_the_compression_then_exporting_with_it(
-    precision, weights, tmp_path
-):
+def test_training_against_the_compression_then_exporting_with_it(precision, weights, tmp_path):
     """A settled model has to export as the compression it was settled to.
 
     Float32 is where this is exact — the weights are already on the
@@ -537,9 +525,7 @@ def test_training_against_the_compression_then_exporting_with_it(
         exported.close()
 
 
-@pytest.mark.parametrize(
-    ("name", "weights"), WEIGHTS[1:], ids=[name for name, _w in WEIGHTS[1:]]
-)
+@pytest.mark.parametrize(("name", "weights"), WEIGHTS[1:], ids=[name for name, _w in WEIGHTS[1:]])
 def test_a_compressed_model_that_also_draws(name, weights, tmp_path):
     """The two new axes against each other.
 
@@ -561,8 +547,6 @@ def test_a_compressed_model_that_also_draws(name, weights, tmp_path):
     )
     try:
         assert exported.noise_inputs == [("noise_0", (1, 5))]
-        assert exported.verify(settled, x, relative=True) < (
-            5e-2 if name == "int8" else 1e-3
-        )
+        assert exported.verify(settled, x, relative=True) < (5e-2 if name == "int8" else 1e-3)
     finally:
         exported.close()

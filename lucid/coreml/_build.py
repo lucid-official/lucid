@@ -214,8 +214,7 @@ def _named_examples(example: object) -> tuple[list[tuple[str, Tensor]], bool]:
         for name, value in example.items():
             if not isinstance(value, lucid.Tensor):
                 raise TypeError(
-                    f"lucid.coreml: example {name!r} is {type(value).__name__}, "
-                    "not a Tensor"
+                    f"lucid.coreml: example {name!r} is {type(value).__name__}, " "not a Tensor"
                 )
         return list(example.items()), True
     if isinstance(example, (tuple, list)):
@@ -223,8 +222,7 @@ def _named_examples(example: object) -> tuple[list[tuple[str, Tensor]], bool]:
         for position, value in enumerate(example):
             if not isinstance(value, lucid.Tensor):
                 raise TypeError(
-                    f"lucid.coreml: example {position} is {type(value).__name__}, "
-                    "not a Tensor"
+                    f"lucid.coreml: example {position} is {type(value).__name__}, " "not a Tensor"
                 )
             named.append((f"input_{position}", value))
         if not named:
@@ -438,9 +436,7 @@ def _bind_traced_inputs(
     feed_of = {id(impl): int(tid) for tid, impl in feeds.items()}
     inputs: list[tuple[str, int, Tensor]] = []
     for (name, tensor), impl in zip(examples, held, strict=True):
-        value_id = (
-            feed_of.get(id(impl)) if id(impl) in written else tracer.lookup_id(impl)
-        )
+        value_id = feed_of.get(id(impl)) if id(impl) in written else tracer.lookup_id(impl)
         if value_id is None:
             raise ValueError(
                 f"lucid.coreml: example input {name!r} never reached an op — the "
@@ -529,16 +525,12 @@ def trace(model: Module, example: object, *, output_field: str | None = None) ->
         writes = list(tracer.outside_writes())
         written = {id(impl) for _tid, impl in writes}
         answered = {
-            name: tensor.clone()
-            for name, tensor in selected
-            if id(_unwrap(tensor)) in written
+            name: tensor.clone() for name, tensor in selected if id(_unwrap(tensor)) in written
         }
     finally:
         replaced = _restore_traced_examples(tracer, examples, held)
 
-    moved = sorted(
-        name for name, mark in after.items() if before.get(name, mark) != mark
-    )
+    moved = sorted(name for name, mark in after.items() if before.get(name, mark) != mark)
     if moved:
         raise StatefulModel(moved)
     if replaced:
@@ -897,9 +889,7 @@ def _grid_already_there(flat: Tensor) -> Tensor | None:
     return step
 
 
-def _quantize_weight(
-    tensor: Tensor, scale_mil: int
-) -> tuple[Tensor, bytes, bytes, int] | None:
+def _quantize_weight(tensor: Tensor, scale_mil: int) -> tuple[Tensor, bytes, bytes, int] | None:
     """A weight as int8 codes with one scale per output channel.
 
     Returns ``None`` when the tensor should stay in floating point — a
@@ -940,12 +930,7 @@ def _quantize_weight(
         # they are.
         scale = existing.reshape(-1)
         zero_point = lucid.zeros_like(scale)
-        codes = (
-            (flat / existing)
-            .round()
-            .reshape(*[int(d) for d in tensor.shape])
-            .to(lucid.int8)
-        )
+        codes = (flat / existing).round().reshape(*[int(d) for d in tensor.shape]).to(lucid.int8)
     else:
         scale, zero_point = _quant.calculate_qparams(
             flat.min(dim=1)[0], flat.max(dim=1)[0], _quant.per_channel_symmetric, _quant.qint8
@@ -957,9 +942,7 @@ def _quantize_weight(
     # the engine as numbers it would have to re-encode.
     fmt = "<e" if scale_mil == _spec.FLOAT16 else "<f"
     scale_bytes = b"".join(struct.pack(fmt, v) for v in _flatten(scale, _as_float))
-    zero_bytes = b"".join(
-        struct.pack("<b", int(v)) for v in _flatten(zero_point, _as_float)
-    )
+    zero_bytes = b"".join(struct.pack("<b", int(v)) for v in _flatten(zero_point, _as_float))
     return codes, scale_bytes, zero_bytes, channels
 
 
@@ -1089,9 +1072,7 @@ def _palettes_for(rows: Tensor, count: int) -> Tensor:
     """
     groups = int(rows.shape[0])
     width = int(rows.shape[1])
-    sample = (
-        rows[:, :: (width // _PALETTE_SAMPLE + 1)] if width > _PALETTE_SAMPLE else rows
-    )
+    sample = rows[:, :: (width // _PALETTE_SAMPLE + 1)] if width > _PALETTE_SAMPLE else rows
     span = int(sample.shape[1])
 
     ordered = lucid.sort(sample, dim=-1).values
@@ -1100,10 +1081,7 @@ def _palettes_for(rows: Tensor, count: int) -> Tensor:
         # Exact, and the iteration below would not find it — see the
         # helper. Every ordinary weight falls straight through this.
         return settled
-    marks = [
-        float(min(span - 1, int((index + 0.5) * span / count)))
-        for index in range(count)
-    ]
+    marks = [float(min(span - 1, int((index + 0.5) * span / count))) for index in range(count)]
     centres = lucid.gather(
         ordered, 1, (lucid.zeros(groups, 1) + lucid.tensor(marks)).to(lucid.int64)
     )
@@ -1149,9 +1127,7 @@ def _palette_groups(channels: int, count: int, elements: int) -> int:
     return max(groups, 1)
 
 
-def _palettize_weight(
-    tensor: Tensor, bits: int
-) -> tuple[bytes, Tensor, list[int], int] | None:
+def _palettize_weight(tensor: Tensor, bits: int) -> tuple[bytes, Tensor, list[int], int] | None:
     """A weight as packed keys into one palette per group of channels.
 
     ``None`` when the weight is too small to be worth the tables, or has
@@ -1239,8 +1215,7 @@ def _operands(bindings: Bindings) -> list[tuple[str, list[str]]]:
         The same pairs, with every operand side a list.
     """
     return [
-        (param, [value] if isinstance(value, str) else list(value))
-        for param, value in bindings
+        (param, [value] if isinstance(value, str) else list(value)) for param, value in bindings
     ]
 
 
@@ -1300,9 +1275,7 @@ class Builder:
 
     def declare(self, name: str, shape: Sequence[int]) -> None:
         """Record a value's declared shape, ``-1`` on its open axes."""
-        self._shapes[name] = (
-            shape.declared() if isinstance(shape, _flex.Dims) else list(shape)
-        )
+        self._shapes[name] = shape.declared() if isinstance(shape, _flex.Dims) else list(shape)
 
     def result_dims(self, op: TracedOp, index: int = 0) -> _flex.Dims:
         """One of an operation's result shapes, open axes guarded.
@@ -1323,9 +1296,7 @@ class Builder:
         out = op.outputs[index]
         recorded = out.shape
         shape = (
-            recorded.declared()
-            if isinstance(recorded, _flex.Dims)
-            else [int(d) for d in recorded]
+            recorded.declared() if isinstance(recorded, _flex.Dims) else [int(d) for d in recorded]
         )
         # A value the driver emits a rank lower loses its leading axis
         # here too, or an emitter that writes the shape into a constant
@@ -1365,9 +1336,7 @@ class Builder:
             return self.const_ints(dims)
         return self._sizes(dims, value_id, operand, known, infer=True)
 
-    def sizes_operand(
-        self, sizes: Sequence[int], value_id: int, operand: str | None = None
-    ) -> str:
+    def sizes_operand(self, sizes: Sequence[int], value_id: int, operand: str | None = None) -> str:
         """``sizes`` as an int32 vector, each open one read at run time.
 
         An open axis the operand carries — ``value_id`` keeps it from
@@ -1453,9 +1422,7 @@ class Builder:
 
     def traced_id(self, name: str) -> int | None:
         """The traced value a program value stands for, the first if several."""
-        return next(
-            (tid for tid, held in self.traced_names.items() if held == name), None
-        )
+        return next((tid for tid, held in self.traced_names.items() if held == name), None)
 
     def run_time_dim(self, name: str, axis: int) -> str:
         """``name``'s size along ``axis``, read at run time, as ``[n]``."""
@@ -1465,9 +1432,7 @@ class Builder:
         int32 = _C_engine.coreml.DTYPE_INT32
         if name not in self._run_time:
             rank = len(self._shapes[name])
-            self._run_time[name] = self.emit(
-                "shape", [("x", name)], [rank], dtype=int32
-            )
+            self._run_time[name] = self.emit("shape", [("x", name)], [rank], dtype=int32)
         self._run_time[key] = self.emit(
             "gather",
             [
@@ -1574,9 +1539,7 @@ class Builder:
         list of str
             The operands, some possibly replaced by a cast of themselves.
         """
-        kinds = {
-            kind for kind in (self.dtype_of(name) for name in names) if kind is not None
-        }
+        kinds = {kind for kind in (self.dtype_of(name) for name in names) if kind is not None}
         if len(kinds) < 2 and (target is None or kinds <= {target}):
             return names
         if target is None:
@@ -1891,9 +1854,7 @@ class Builder:
                     return kind
         return self._body_mil
 
-    def emit_multi(
-        self, mil_type: str, bindings: Bindings, shapes: list[list[int]]
-    ) -> list[str]:
+    def emit_multi(self, mil_type: str, bindings: Bindings, shapes: list[list[int]]) -> list[str]:
         """Append an intermediate operation with several results.
 
         ``split`` is the one that needs it — decomposing a ``roll`` into a
@@ -2024,9 +1985,7 @@ _IO_PRECISION_KEY = "lucid.coreml.io_precision"
 _DRAW_OPS = frozenset({"randn", "rand"})
 
 
-def _lift_draws(
-    graph: Any, traced_values: dict[int, Any]
-) -> list[tuple[str, int, Tensor, str]]:
+def _lift_draws(graph: Any, traced_values: dict[int, Any]) -> list[tuple[str, int, Tensor, str]]:
     """Each random draw in the graph, as an input the caller supplies.
 
     The draw was never part of the network. ``mu + sigma * eps`` is a
@@ -2082,9 +2041,7 @@ def _tall_unit_ids(graph: TraceGraph, handled: set[int]) -> set[int]:
     return tall
 
 
-def _unit_axis_rewrites(
-    graph: Any, handled: set[int], folded: set[int] | None = None
-) -> set[int]:
+def _unit_axis_rewrites(graph: Any, handled: set[int], folded: set[int] | None = None) -> set[int]:
     """Rank-6 values that can be emitted without their leading axis."""
     tall = _tall_unit_ids(graph, handled)
     if not tall:
@@ -2094,9 +2051,7 @@ def _unit_axis_rewrites(
     for op in graph.ops:
         if op.outputs and int(op.outputs[0].id) in gone:
             continue
-        touches = any(o.id in tall for o in op.outputs) or any(
-            i in tall for i in op.inputs
-        )
+        touches = any(o.id in tall for o in op.outputs) or any(i in tall for i in op.inputs)
         if touches and op.name not in _UNIT_AXIS_SAFE:
             return set()
     return tall
@@ -2270,9 +2225,7 @@ def _names(record: _flex.Record) -> list[str]:
 
 def _record(model: Module, probe: Tensor, output_field: str | None) -> _flex.Record:
     """One probe trace, reduced to what the comparison reads."""
-    graph, feeds, inputs, _outputs, _values = trace(
-        model, probe, output_field=output_field
-    )
+    graph, feeds, inputs, _outputs, _values = trace(model, probe, output_field=output_field)
     ops = list(graph.ops)
     given = int(inputs[0][1])
     return _flex.Record(
@@ -2326,8 +2279,7 @@ def _declare_image(
     """
     if len(shape) != 4 or shape[0] != 1:
         raise ValueError(
-            f"lucid.coreml: an image input must be (1, C, H, W), and this one is "
-            f"{tuple(shape)}"
+            f"lucid.coreml: an image input must be (1, C, H, W), and this one is " f"{tuple(shape)}"
         )
     channels = shape[1]
     wanted = 1 if spec.color is ColorSpace.GRAYSCALE else 3
@@ -2337,9 +2289,7 @@ def _declare_image(
             f"input has {channels}"
         )
     if spec.bias and len(spec.bias) != channels:
-        raise ValueError(
-            f"lucid.coreml: bias has {len(spec.bias)} entries for {channels} channels"
-        )
+        raise ValueError(f"lucid.coreml: bias has {len(spec.bias)} entries for {channels} channels")
 
     program.set_image_input(name, shape[3], shape[2], _spec.color_space(spec.color))
 
@@ -2358,9 +2308,7 @@ def _declare_image(
     if spec.bias:
         biased = "_image_biased"
         offsets = builder.const_float32_shaped(list(spec.bias), [1, channels, 1, 1])
-        program.add_op(
-            "add", _operands([("x", source), ("y", offsets)]), biased, interface
-        )
+        program.add_op("add", _operands([("x", source), ("y", offsets)]), biased, interface)
         builder.declare(biased, shape)
         source = biased
     return source
@@ -2408,12 +2356,8 @@ class _BuildCtx:
     feeds: dict[int, _C_engine.TensorImpl] = dataclasses.field(default_factory=dict)
     inputs: list[tuple[str, int, Tensor]] = dataclasses.field(default_factory=list)
     outputs: list[tuple[str, int, Tensor]] = dataclasses.field(default_factory=list)
-    traced_values: dict[int, _C_engine.TensorImpl] = dataclasses.field(
-        default_factory=dict
-    )
-    flexibility: _flex.Flexibility = dataclasses.field(
-        default_factory=_flex.Flexibility
-    )
+    traced_values: dict[int, _C_engine.TensorImpl] = dataclasses.field(default_factory=dict)
+    flexibility: _flex.Flexibility = dataclasses.field(default_factory=_flex.Flexibility)
     ordered_shapes: list[tuple[int, ...]] = dataclasses.field(default_factory=list)
     bounds: list[tuple[int, int]] = dataclasses.field(default_factory=list)
     varying: dict[int, set[int]] = dataclasses.field(default_factory=dict)
@@ -2422,9 +2366,7 @@ class _BuildCtx:
     lifted_names: set[str] = dataclasses.field(default_factory=set)
     asked_for: int = 0
     carried: dict[str, State] = dataclasses.field(default_factory=dict)
-    plain_inputs: list[tuple[str, int, Tensor]] = dataclasses.field(
-        default_factory=list
-    )
+    plain_inputs: list[tuple[str, int, Tensor]] = dataclasses.field(default_factory=list)
     names: dict[int, str] = dataclasses.field(default_factory=dict)
     input_ids: set[int] = dataclasses.field(default_factory=set)
     builder_shapes_state: dict[str, list[int]] = dataclasses.field(default_factory=dict)
@@ -2432,9 +2374,7 @@ class _BuildCtx:
     weight_dtypes: dict[str, int] = dataclasses.field(default_factory=dict)
     quantized_count: int = 0
     f32_opmath_scalars: set[int] = dataclasses.field(default_factory=set)
-    rewrites: dict[int, _staging.WindowRewrite] = dataclasses.field(
-        default_factory=dict
-    )
+    rewrites: dict[int, _staging.WindowRewrite] = dataclasses.field(default_factory=dict)
     stuffing: dict[int, _staging.StuffRewrite] = dataclasses.field(default_factory=dict)
     absorbed: set[int] = dataclasses.field(default_factory=set)
     precomputed: set[int] = dataclasses.field(default_factory=set)
@@ -2488,9 +2428,7 @@ def _trace_and_probe(ctx: _BuildCtx) -> None:
 def _validate_state_and_draws(ctx: _BuildCtx) -> None:
     """Validate carried state specs and lifted random draws."""
     ctx.lifted = (
-        _lift_draws(ctx.graph, ctx.traced_values)
-        if ctx.draws is _spec.Draws.AS_INPUT
-        else []
+        _lift_draws(ctx.graph, ctx.traced_values) if ctx.draws is _spec.Draws.AS_INPUT else []
     )
     ctx.asked_for = len(ctx.inputs)
     ctx.carried = {spec.input: spec for spec in (ctx.state or [])}
@@ -2534,8 +2472,7 @@ def _check_carried_state(
     for spec in state:
         if spec.input not in by_input:
             raise ValueError(
-                f"lucid.coreml: {spec.input!r} is not an input of this model "
-                f"{sorted(by_input)}"
+                f"lucid.coreml: {spec.input!r} is not an input of this model " f"{sorted(by_input)}"
             )
         if spec.output not in by_output:
             raise ValueError(
@@ -2596,19 +2533,13 @@ def _init_program_and_state(ctx: _BuildCtx) -> None:
         ]
     )
     if ctx.shapes is not None:
-        ctx.program.set_enumerated_shapes(
-            ctx.inputs[0][0], [list(s) for s in ctx.ordered_shapes]
-        )
+        ctx.program.set_enumerated_shapes(ctx.inputs[0][0], [list(s) for s in ctx.ordered_shapes])
         ctx.program.set_default_shape(ctx.inputs[0][0], list(ctx.ordered_shapes[0]))
     if ctx.shape_range is not None:
         ctx.program.set_shape_range(ctx.inputs[0][0], ctx.bounds)
-        ctx.program.set_default_shape(
-            ctx.inputs[0][0], [int(d) for d in ctx.inputs[0][2].shape]
-        )
+        ctx.program.set_default_shape(ctx.inputs[0][0], [int(d) for d in ctx.inputs[0][2].shape])
     _declare_carried_state(ctx)
-    ctx.blob = (
-        ctx.into.blob if ctx.into is not None else cm.BlobWriter(ctx.paths.weight_bin)
-    )
+    ctx.blob = ctx.into.blob if ctx.into is not None else cm.BlobWriter(ctx.paths.weight_bin)
 
 
 def _write_palettized_const(
@@ -2657,9 +2588,7 @@ def _write_sparse_const(
     ctx.quantized_count += 1
 
 
-def _write_float_const(
-    ctx: _BuildCtx, name: str, tensor: Tensor, dedup: int | None
-) -> None:
+def _write_float_const(ctx: _BuildCtx, name: str, tensor: Tensor, dedup: int | None) -> None:
     """Write one float constant, compressed the way ``ctx.weights`` asks."""
     shape = [int(d) for d in tensor.shape]
     if isinstance(ctx.weights, _spec.Palettize):
@@ -2693,9 +2622,7 @@ def _write_float_const(
     is_f16 = tensor.dtype == lucid.float16
     mil_dt = _spec.FLOAT16 if is_f16 else _spec.FLOAT32
     blob_dt = _spec.BLOB_FLOAT16 if is_f16 else _spec.BLOB_FLOAT32
-    blob_offset = (
-        ctx.into.offsets.get(dedup) if ctx.into is not None and dedup else None
-    )
+    blob_offset = ctx.into.offsets.get(dedup) if ctx.into is not None and dedup else None
     if blob_offset is None:
         blob_offset = ctx.blob.append_tensor(_unwrap(tensor), blob_dt)
         if ctx.into is not None and dedup:
@@ -2795,9 +2722,7 @@ def _prepare_builder_and_inputs(ctx: _BuildCtx) -> None:
         if tid == ctx.flexibility.input_id:
             builder.flex_input = name
         half_in = _half_interface(ctx, name, tensor)
-        builder.dtypes[name] = (
-            _spec.FLOAT16 if half_in else _spec.mil_dtype(tensor.dtype)
-        )
+        builder.dtypes[name] = _spec.FLOAT16 if half_in else _spec.mil_dtype(tensor.dtype)
         source = name
         if ctx.image_input is not None and name not in ctx.lifted_names:
             source = _declare_image(
@@ -2817,9 +2742,7 @@ def _prepare_builder_and_inputs(ctx: _BuildCtx) -> None:
         ):
             cast_name = f"_cast_in_{name}"
             mil_type, raw = emit_cast(builder, source, "fp16")
-            ctx.program.add_op(
-                mil_type, _operands(raw), cast_name, (ctx.body_mil, shape)
-            )
+            ctx.program.add_op(mil_type, _operands(raw), cast_name, (ctx.body_mil, shape))
             builder.declare(cast_name, shape)
             builder.dtypes[cast_name] = ctx.body_mil
             ctx.names[tid] = cast_name
@@ -2889,8 +2812,7 @@ def _try_emit_staged_rewrite(ctx: _BuildCtx, op: TraceNode, head: int) -> bool:
         stuff = dataclasses.replace(
             stuff,
             source_shape=[
-                -1 if w < 0 else d
-                for d, w in zip(stuff.source_shape, wide, strict=True)
+                -1 if w < 0 else d for d, w in zip(stuff.source_shape, wide, strict=True)
             ],
             out_shape=wide,
         )
@@ -2922,9 +2844,7 @@ def _emit_single_op(ctx: _BuildCtx, op: TraceNode) -> None:
         return
     outs = op.outputs if isinstance(result, MultiOutput) else op.outputs[:1]
     mil_type, raw_bindings = (
-        (result.mil_type, result.bindings)
-        if isinstance(result, MultiOutput)
-        else result
+        (result.mil_type, result.bindings) if isinstance(result, MultiOutput) else result
     )
     bindings = _operands(raw_bindings)
     produced = [
@@ -2968,9 +2888,7 @@ def _emit_reachable_ops(ctx: _BuildCtx) -> None:
         ctx.blob.finalize()
 
 
-def _check_classifier(
-    classifier: Classifier, outputs: list[tuple[str, int, Tensor]]
-) -> None:
+def _check_classifier(classifier: Classifier, outputs: list[tuple[str, int, Tensor]]) -> None:
     if len(outputs) != 1:
         raise ValueError(
             f"lucid.coreml: a classifier needs one output and this model "
@@ -2985,8 +2903,7 @@ def _check_classifier(
         )
     if score_shape[1] != len(classifier.labels):
         raise ValueError(
-            f"lucid.coreml: {len(classifier.labels)} labels for "
-            f"{score_shape[1]} scores"
+            f"lucid.coreml: {len(classifier.labels)} labels for " f"{score_shape[1]} scores"
         )
 
 
@@ -3074,8 +2991,7 @@ def _build_package_summary(
 ) -> dict[str, object]:
     return {
         "inputs": [
-            (name, tuple(int(d) for d in tensor.shape))
-            for name, _tid, tensor in ctx.plain_inputs
+            (name, tuple(int(d) for d in tensor.shape)) for name, _tid, tensor in ctx.plain_inputs
         ],
         "outputs": declared,
         "ops": int(ctx.program.op_count),

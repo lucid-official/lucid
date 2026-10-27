@@ -57,9 +57,7 @@ def _verify_sha256(path: Path, expected: str) -> None:
             h.update(chunk)
     got = h.hexdigest()
     if got != expected:
-        raise RuntimeError(
-            f"SHA256 mismatch for {path.name}: expected {expected}, got {got}"
-        )
+        raise RuntimeError(f"SHA256 mismatch for {path.name}: expected {expected}, got {got}")
 
 
 def _filename_from_url(url: str) -> str:

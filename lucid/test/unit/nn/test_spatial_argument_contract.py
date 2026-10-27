@@ -148,9 +148,7 @@ def test_conv_transpose_matches_the_reference(
 
 
 @pytest.mark.parametrize("rank", RANKS)
-def test_lazy_conv_reads_the_channels_of_an_unbatched_input(
-    device: str, rank: int
-) -> None:
+def test_lazy_conv_reads_the_channels_of_an_unbatched_input(device: str, rank: int) -> None:
     layer = getattr(nn, f"LazyConv{rank}d")(4, 3, device=device)
     out = layer(lucid.tensor(_input(rank, batched=False, channels=5), device=device))
     assert layer.in_channels == 5
@@ -231,9 +229,7 @@ def test_lp_pool_matches_the_reference(
     ref: ModuleType, device: str, rank: int, batched: bool, ceil_mode: bool
 ) -> None:
     x = _input(rank, batched)
-    got = getattr(F, f"lp_pool{rank}d")(
-        lucid.tensor(x, device=device), 2.0, 2, ceil_mode=ceil_mode
-    )
+    got = getattr(F, f"lp_pool{rank}d")(lucid.tensor(x, device=device), 2.0, 2, ceil_mode=ceil_mode)
     want = getattr(ref.nn.functional, f"lp_pool{rank}d")(
         ref.from_numpy(x), 2.0, 2, ceil_mode=ceil_mode
     )
@@ -275,24 +271,14 @@ _WT2 = _data(3, 4, 3, 3, seed=1)
 _REFUSED: dict[str, Callable[[ModuleType, bool], object]] = {
     # The engine reads a pooling stride of 0 as "the kernel size".
     "max_pool_stride_0": lambda m, _: m.nn.functional.max_pool2d(_t(m, _X2), 2, 0),
-    "max_pool_stride_negative": lambda m, _: m.nn.functional.max_pool2d(
-        _t(m, _X2), 2, -1
-    ),
+    "max_pool_stride_negative": lambda m, _: m.nn.functional.max_pool2d(_t(m, _X2), 2, -1),
     "avg_pool_stride_0": lambda m, _: m.nn.functional.avg_pool2d(_t(m, _X2), 2, 0),
     "avg_pool1d_stride_0": lambda m, _: m.nn.functional.avg_pool1d(_t(m, _X2[0]), 2, 0),
     "max_pool_kernel_0": lambda m, _: m.nn.functional.max_pool2d(_t(m, _X2), 0),
-    "max_pool_padding_past_half": lambda m, _: m.nn.functional.max_pool2d(
-        _t(m, _X2), 2, padding=2
-    ),
-    "avg_pool_padding_past_half": lambda m, _: m.nn.functional.avg_pool2d(
-        _t(m, _X2), 3, padding=2
-    ),
-    "max_pool_kernel_too_long": lambda m, _: m.nn.functional.max_pool2d(
-        _t(m, _X2), (2, 2, 2)
-    ),
-    "conv_stride_0": lambda m, _: m.nn.functional.conv2d(
-        _t(m, _X2), _t(m, _W2), stride=0
-    ),
+    "max_pool_padding_past_half": lambda m, _: m.nn.functional.max_pool2d(_t(m, _X2), 2, padding=2),
+    "avg_pool_padding_past_half": lambda m, _: m.nn.functional.avg_pool2d(_t(m, _X2), 3, padding=2),
+    "max_pool_kernel_too_long": lambda m, _: m.nn.functional.max_pool2d(_t(m, _X2), (2, 2, 2)),
+    "conv_stride_0": lambda m, _: m.nn.functional.conv2d(_t(m, _X2), _t(m, _W2), stride=0),
     "conv_padding_negative": lambda m, _: m.nn.functional.conv2d(
         _t(m, _X2), _t(m, _W2), padding=-1
     ),

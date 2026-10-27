@@ -19,12 +19,7 @@ if TYPE_CHECKING:
 
 def _check_batch_norm_sample_count(x: Tensor, training: bool) -> None:
     """Reject training batches with no variance estimate per channel."""
-    if (
-        training
-        and x.ndim in (2, 3, 4, 5)
-        and x.shape[1] > 0
-        and x.numel() == x.shape[1]
-    ):
+    if training and x.ndim in (2, 3, 4, 5) and x.shape[1] > 0 and x.numel() == x.shape[1]:
         raise ValueError(
             "batch_norm: expected more than one value per channel when training, "
             f"got input size {tuple(x.shape)}"
@@ -143,15 +138,11 @@ def batch_norm(
         out_3d = _C_engine.nn.batch_norm1d(xi_3d, w, b, eps, rm_impl, rv_impl, momentum)
         return _wrap(_C_engine.squeeze(out_3d, 2))
     elif ndim == 3:
-        return _wrap(
-            _C_engine.nn.batch_norm1d(xi, w, b, eps, rm_impl, rv_impl, momentum)
-        )
+        return _wrap(_C_engine.nn.batch_norm1d(xi, w, b, eps, rm_impl, rv_impl, momentum))
     elif ndim == 4:
         return _wrap(_C_engine.nn.batch_norm(xi, w, b, eps, rm_impl, rv_impl, momentum))
     elif ndim == 5:
-        return _wrap(
-            _C_engine.nn.batch_norm3d(xi, w, b, eps, rm_impl, rv_impl, momentum)
-        )
+        return _wrap(_C_engine.nn.batch_norm3d(xi, w, b, eps, rm_impl, rv_impl, momentum))
     else:
         raise ValueError(f"batch_norm: expected 2–5D input, got ndim={ndim}")
 
@@ -475,8 +466,7 @@ def _check_instance_norm_input(
         )
     if x.ndim < 3:
         raise ValueError(
-            f"instance_norm: expected at least 3-D input (N, C, *spatial), "
-            f"got ndim={x.ndim}"
+            f"instance_norm: expected at least 3-D input (N, C, *spatial), " f"got ndim={x.ndim}"
         )
     if use_input_stats and math.prod(x.shape[2:]) == 1:
         # One element is its own mean with zero variance, so the output is
@@ -565,9 +555,7 @@ def instance_norm(
     >>> y.shape
     (4, 3, 64, 64)
     """
-    _check_instance_norm_input(
-        input, use_input_stats, running_mean, running_var, weight, bias
-    )
+    _check_instance_norm_input(input, use_input_stats, running_mean, running_var, weight, bias)
     amp_was_active = _C_engine.amp_is_active(_unwrap(input).device)
     with _autocast_entry("instance_norm", _unwrap(input)) as (xi,):
         input = _wrap(xi)
@@ -718,17 +706,13 @@ def _lrn_body(
     pad_r = (size - 1) // 2
 
     x_sq = _C_engine.mul(xi, xi)
-    pad_pairs: list[tuple[int, int]] = (
-        [(0, 0)] + [(pad_l, pad_r)] + [(0, 0)] * (ndim - 2)
-    )
+    pad_pairs: list[tuple[int, int]] = [(0, 0)] + [(pad_l, pad_r)] + [(0, 0)] * (ndim - 2)
     x_sq_pad = _C_engine.pad(x_sq, pad_pairs, 0.0)
 
     spatial_size = 1
     for d in range(2, ndim):
         spatial_size *= int(xi.shape[d])
-    flat = _C_engine.reshape(
-        x_sq_pad, [int(xi.shape[0]), C + pad_l + pad_r, spatial_size]
-    )
+    flat = _C_engine.reshape(x_sq_pad, [int(xi.shape[0]), C + pad_l + pad_r, spatial_size])
     # Transpose to (N, S, C+2h) so unfold_dim slides along the last axis.
     flat_t = _C_engine.permute(flat, [0, 2, 1])
     unf = _C_engine.unfold_dim(flat_t, 2, size, 1)  # (N, S, C, size)
@@ -744,15 +728,11 @@ def _lrn_body(
     k_t = _C_engine.full(out_shape, k, xi.dtype, xi.device)
     alpha_t = _C_engine.full(out_shape, alpha, xi.dtype, xi.device)
     window_mean = _C_engine.div(window_sum_rs, size_t)
-    scale = _C_engine.pow_scalar(
-        _C_engine.add(_C_engine.mul(window_mean, alpha_t), k_t), beta
-    )
+    scale = _C_engine.pow_scalar(_C_engine.add(_C_engine.mul(window_mean, alpha_t), k_t), beta)
     return _C_engine.div(xi, scale)
 
 
-def normalize(
-    input: Tensor, p: float = 2.0, dim: DimLike = 1, eps: float = 1e-12
-) -> Tensor:
+def normalize(input: Tensor, p: float = 2.0, dim: DimLike = 1, eps: float = 1e-12) -> Tensor:
     r"""Normalize a tensor to unit :math:`L_p` norm along a dimension.
 
     Parameters

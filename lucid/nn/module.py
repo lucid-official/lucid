@@ -263,9 +263,7 @@ class Module:
             return result
 
         for hook, with_kwargs in _GLOBAL_FORWARD_PRE_HOOKS.values():
-            args, kwargs = self._call_forward_pre_hook(
-                hook, args, kwargs, with_kwargs=with_kwargs
-            )
+            args, kwargs = self._call_forward_pre_hook(hook, args, kwargs, with_kwargs=with_kwargs)
         for key, hook in self._forward_pre_hooks.items():
             args, kwargs = self._call_forward_pre_hook(
                 hook,
@@ -286,9 +284,7 @@ class Module:
             raise
 
         for hook, with_kwargs, _ in _GLOBAL_FORWARD_HOOKS.values():
-            output = self._call_forward_hook(
-                hook, args, kwargs, output, with_kwargs=with_kwargs
-            )
+            output = self._call_forward_hook(hook, args, kwargs, output, with_kwargs=with_kwargs)
         for key, hook in self._forward_hooks.items():
             output = self._call_forward_hook(
                 hook,
@@ -303,9 +299,7 @@ class Module:
 
     if TYPE_CHECKING:
 
-        def __call__[**P, R](
-            self: _HasForward[P, R], *args: P.args, **kwargs: P.kwargs
-        ) -> R:
+        def __call__[**P, R](self: _HasForward[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
             """Run :meth:`forward` with the registered hooks around it.
 
             Always call the module rather than :meth:`forward` directly:
@@ -330,11 +324,7 @@ class Module:
             result = hook(self, args, kwargs)
             if result is None:
                 return args, kwargs
-            if (
-                not isinstance(result, tuple)
-                or len(result) != 2
-                or not isinstance(result[1], dict)
-            ):
+            if not isinstance(result, tuple) or len(result) != 2 or not isinstance(result[1], dict):
                 raise RuntimeError(
                     "forward pre-hook with kwargs must return None or (args, kwargs)"
                 )
@@ -473,9 +463,7 @@ class Module:
             return output
         wrapped_impl = _C_engine._wrap_module_backward_outputs(  # type: ignore[attr-defined]
             engine_state, [(0, _unwrap(output))], 1
-        )[
-            0
-        ]
+        )[0]
         return _wrap(wrapped_impl)
 
     @override
@@ -498,9 +486,7 @@ class Module:
         if name == "":
             raise KeyError("module attribute name cannot be empty")
 
-        if self._setattr_before_init(name, value) or self._write_traced_buffer(
-            name, value
-        ):
+        if self._setattr_before_init(name, value) or self._write_traced_buffer(name, value):
             return
 
         if isinstance(value, Parameter):
@@ -850,14 +836,10 @@ class Module:
         mod: Module = self
         for part in parts:
             if part not in mod._modules:
-                raise AttributeError(
-                    f"'{type(mod).__name__}' has no submodule '{part}'"
-                )
+                raise AttributeError(f"'{type(mod).__name__}' has no submodule '{part}'")
             next_mod = mod._modules[part]
             if next_mod is None:
-                raise AttributeError(
-                    f"'{type(mod).__name__}' submodule '{part}' is None"
-                )
+                raise AttributeError(f"'{type(mod).__name__}' submodule '{part}' is None")
             mod = next_mod
         return mod
 
@@ -890,16 +872,12 @@ class Module:
     def register_parameter(self, name: str, param: Parameter | None) -> None:
         """Register a Parameter under the given name."""
         if "_parameters" not in self.__dict__:
-            raise AttributeError(
-                "cannot assign parameter before Module.__init__() call"
-            )
+            raise AttributeError("cannot assign parameter before Module.__init__() call")
         self._validate_child_name(name, "parameter")
         if hasattr(self, name) and name not in self._parameters:
             raise KeyError(f"attribute '{name}' already exists")
         if param is not None and not isinstance(param, Parameter):
-            raise TypeError(
-                f"cannot assign '{type(param).__name__}' object as parameter '{name}'"
-            )
+            raise TypeError(f"cannot assign '{type(param).__name__}' object as parameter '{name}'")
         if name in self._buffers:
             del self._buffers[name]
             self._non_persistent_buffers.discard(name)
@@ -910,9 +888,7 @@ class Module:
         else:
             self._parameters[name] = param
 
-    def register_buffer(
-        self, name: str, tensor: Tensor | None, persistent: bool = True
-    ) -> None:
+    def register_buffer(self, name: str, tensor: Tensor | None, persistent: bool = True) -> None:
         """Register a buffer tensor. Non-persistent buffers are excluded from state_dict."""
         if "_buffers" not in self.__dict__:
             raise AttributeError("cannot assign buffer before Module.__init__() call")
@@ -920,9 +896,7 @@ class Module:
         if hasattr(self, name) and name not in self._buffers:
             raise KeyError(f"attribute '{name}' already exists")
         if tensor is not None and not isinstance(tensor, Tensor):
-            raise TypeError(
-                f"cannot assign '{type(tensor).__name__}' object as buffer '{name}'"
-            )
+            raise TypeError(f"cannot assign '{type(tensor).__name__}' object as buffer '{name}'")
         if name in self._parameters:
             del self._parameters[name]
         if name in self._modules:

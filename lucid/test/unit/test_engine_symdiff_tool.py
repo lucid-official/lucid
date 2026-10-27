@@ -38,8 +38,7 @@ _SAMPLE_OBJDUMP_B = """\
 def test_normalize_symbol_name_strips_cold_llvm_and_lambda_numbers() -> None:
     raw = "__ZZN5lucid7backend10CpuBackend3addEENK4$_42clEf.llvm.881.cold.2"
     assert (
-        engine_symdiff.normalize_symbol_name(raw)
-        == "__ZZN5lucid7backend10CpuBackend3addEENK$_clEf"
+        engine_symdiff.normalize_symbol_name(raw) == "__ZZN5lucid7backend10CpuBackend3addEENK$_clEf"
     )
 
 

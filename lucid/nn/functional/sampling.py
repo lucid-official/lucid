@@ -341,8 +341,7 @@ def affine_grid(
         return _affine_grid_3d(theta, sz, ac)
     if len(sz) != 4:
         raise ValueError(
-            "affine_grid: size must be (N, C, H, W) or (N, C, D, H, W), "
-            f"got {tuple(sz)}"
+            "affine_grid: size must be (N, C, H, W) or (N, C, D, H, W), " f"got {tuple(sz)}"
         )
     # Engine signature: (theta, N, H, W, align_corners) — no C dimension.
     N, H, W = sz[0], sz[2], sz[3]
@@ -646,12 +645,8 @@ def embedding_bag(
         # Flatten indices to 1-D
         flat_x = _C_engine.reshape(x_impl, [n_rows * seq_len])
         # One bag per row → offsets [0, seq_len, 2*seq_len, …].
-        off_impl = _C_engine.arange(
-            0, n_rows * seq_len, seq_len, _C_engine.I32, x_impl.device
-        )
-        impl = _C_engine.nn.embedding_bag(
-            w_impl, flat_x, off_impl, mode_int, pad_idx, False
-        )
+        off_impl = _C_engine.arange(0, n_rows * seq_len, seq_len, _C_engine.I32, x_impl.device)
+        impl = _C_engine.nn.embedding_bag(w_impl, flat_x, off_impl, mode_int, pad_idx, False)
     else:
         # 1-D x with explicit offsets, checked above.
         assert offsets is not None
@@ -682,9 +677,7 @@ def _flat_to_per_dim_pairs(padding: Sequence[int], ndim: int) -> list[tuple[int,
     """
     n = len(padding)
     if n % 2:
-        raise _C_engine.InvalidArgument(
-            f"pad: padding length must be divisible by 2, got {n}"
-        )
+        raise _C_engine.InvalidArgument(f"pad: padding length must be divisible by 2, got {n}")
     if n > 2 * ndim:
         raise _C_engine.InvalidArgument(
             f"pad: padding length should be at most two times the input "
@@ -729,16 +722,14 @@ def _gather_along(x: Tensor, dim: int, indices_1d: list[int]) -> Tensor:
     target_shape: list[int] = [1] * x.ndim
     target_shape[dim] = k
     bcast_shape: list[int] = [k if i == dim else int(x.shape[i]) for i in range(x.ndim)]
-    idx_flat: Tensor = _lucid.tensor(
-        indices_1d, dtype=_lucid.int32, device=x.device
-    ).reshape(target_shape)
+    idx_flat: Tensor = _lucid.tensor(indices_1d, dtype=_lucid.int32, device=x.device).reshape(
+        target_shape
+    )
     idx: Tensor = idx_flat.broadcast_to(bcast_shape).contiguous()
     return _lucid.gather(x, dim, idx)
 
 
-def _edge_indices(
-    mode: str, size: int, lo: int, hi: int
-) -> tuple[list[int], list[int]]:
+def _edge_indices(mode: str, size: int, lo: int, hi: int) -> tuple[list[int], list[int]]:
     """The source indices of the ``lo`` entries before and ``hi`` after an axis.
 
     Raises
@@ -950,9 +941,7 @@ def pixel_shuffle(input: Tensor, upscale_factor: int) -> Tensor:
     """
     r: int = int(upscale_factor)
     if len(input.shape) != 4:
-        raise ValueError(
-            f"pixel_shuffle: expected 4-D input, got shape {tuple(input.shape)}"
-        )
+        raise ValueError(f"pixel_shuffle: expected 4-D input, got shape {tuple(input.shape)}")
     n, c_r2, h, w = input.shape
     if c_r2 % (r * r) != 0:
         raise ValueError(
@@ -1008,14 +997,10 @@ def pixel_unshuffle(input: Tensor, downscale_factor: int) -> Tensor:
     """
     r: int = int(downscale_factor)
     if len(input.shape) != 4:
-        raise ValueError(
-            f"pixel_unshuffle: expected 4-D input, got shape {tuple(input.shape)}"
-        )
+        raise ValueError(f"pixel_unshuffle: expected 4-D input, got shape {tuple(input.shape)}")
     n, c, h_r, w_r = input.shape
     if h_r % r != 0 or w_r % r != 0:
-        raise ValueError(
-            f"pixel_unshuffle: spatial dims ({h_r}, {w_r}) not divisible by {r}"
-        )
+        raise ValueError(f"pixel_unshuffle: spatial dims ({h_r}, {w_r}) not divisible by {r}")
     h, w = h_r // r, w_r // r
     impl = _unwrap(input)
     t = _C_engine.reshape(impl, [n, c, h, r, w, r])
@@ -1305,9 +1290,7 @@ def channel_shuffle(input: Tensor, groups: int) -> Tensor:
     n = int(input.shape[0])
     c = int(input.shape[1])
     if c % int(groups) != 0:
-        raise ValueError(
-            f"channel_shuffle: channel count {c} not divisible by groups " f"{groups}"
-        )
+        raise ValueError(f"channel_shuffle: channel count {c} not divisible by groups " f"{groups}")
     ch_per_group = c // int(groups)
     spatial = list(input.shape[2:])
 

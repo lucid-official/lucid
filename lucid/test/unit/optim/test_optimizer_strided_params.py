@@ -55,8 +55,7 @@ _OPTIMIZERS: list[tuple[str, dict[str, Any]]] = [
 ]
 
 _OPTIMIZER_PARAMS = [
-    pytest.param(c, id=c[0] + "".join(f"-{k}={v}" for k, v in c[1].items()))
-    for c in _OPTIMIZERS
+    pytest.param(c, id=c[0] + "".join(f"-{k}={v}" for k, v in c[1].items())) for c in _OPTIMIZERS
 ]
 
 # Each parameter's (shape, stride, offset) over the 4 x 6 base, in elements.
@@ -83,9 +82,7 @@ def _covered(
 def _view(
     base: lucid.Tensor, shape: tuple[int, ...], stride: tuple[int, ...], offset: int
 ) -> lucid.Tensor:
-    return _wrap(
-        _C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset)
-    )
+    return _wrap(_C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset))
 
 
 def _grads(step: int, shapes: Sequence[tuple[int, ...]]) -> list[np.ndarray]:
@@ -227,9 +224,7 @@ def test_lbfgs_steps_strided_parameters_into_their_base(device: str, ref: Any) -
     layout = _LAYOUTS["two_params_one_base"]
     init = np.random.default_rng(3).standard_normal(_BASE_SHAPE).astype(np.float32)
     rng = np.random.default_rng(4)
-    weights = [
-        rng.uniform(0.5, 2.0, shape).astype(np.float32) for shape, _, _ in layout
-    ]
+    weights = [rng.uniform(0.5, 2.0, shape).astype(np.float32) for shape, _, _ in layout]
     base = lucid.tensor(init.copy()).to(device)
     params = [nn.Parameter(_view(base, *geometry)) for geometry in layout]
     ws = [lucid.tensor(w.copy()).to(device) for w in weights]
@@ -251,9 +246,7 @@ def test_lbfgs_steps_strided_parameters_into_their_base(device: str, ref: Any) -
 
     def ref_closure() -> Any:
         ref_opt.zero_grad()
-        loss = sum(
-            (w * (p - 1.0) ** 2).sum() for p, w in zip(ref_params, ref_ws, strict=True)
-        )
+        loss = sum((w * (p - 1.0) ** 2).sum() for p, w in zip(ref_params, ref_ws, strict=True))
         loss.backward()
         return loss
 
@@ -289,16 +282,12 @@ def test_a_parameter_whose_elements_overlap_is_refused(
     dense.grad = lucid.tensor([0.5, -1.5]).to(device)
     opt.step()
     dense_before = _flat(dense).copy()
-    state_before = {
-        k: np.array(v, copy=True) for k, v in opt.state_dict()["state"][0].items()
-    }
+    state_before = {k: np.array(v, copy=True) for k, v in opt.state_dict()["state"][0].items()}
     assert 1 not in opt.state_dict()["state"]
 
     dense.grad = lucid.tensor([4.0, 5.0]).to(device)
     p.grad = lucid.tensor([1.0, 2.0, 3.0, 4.0]).to(device)
-    with pytest.raises(
-        (_C_engine.InvalidArgument, RuntimeError), match=r"parameter 1.*overlap"
-    ):
+    with pytest.raises((_C_engine.InvalidArgument, RuntimeError), match=r"parameter 1.*overlap"):
         opt.step()
 
     np.testing.assert_array_equal(_flat(dense), dense_before)

@@ -121,9 +121,7 @@ def test_detect_anomaly_custom_function_and_decorator(device: str) -> None:
             return a + b
 
         @staticmethod
-        def backward(
-            ctx: FunctionCtx, grad_out: lucid.Tensor
-        ) -> tuple[None, lucid.Tensor]:
+        def backward(ctx: FunctionCtx, grad_out: lucid.Tensor) -> tuple[None, lucid.Tensor]:
             nan_t = lucid.full(
                 grad_out.shape,
                 float("nan"),

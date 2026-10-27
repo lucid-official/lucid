@@ -48,9 +48,7 @@ _FLATTEN_DIMS = [-4, -3, -2, -1, 0, 1, 2, 3]
 @pytest.mark.parametrize("start", _FLATTEN_DIMS)
 @pytest.mark.parametrize("shape", [(), (3,), (2, 3, 4)], ids=str)
 def test_flatten_matches_reference(ref, device, shape, start, end):
-    x = lucid.arange(int(np.prod(shape)), dtype=lucid.float32, device=device).reshape(
-        shape
-    )
+    x = lucid.arange(int(np.prod(shape)), dtype=lucid.float32, device=device).reshape(shape)
     xr = ref.arange(int(np.prod(shape)), dtype=ref.float32).reshape(shape)
     want, want_err = _outcome(lambda: ref.flatten(xr, start, end))
     got, got_err = _outcome(lambda: lucid.flatten(x, start, end))
@@ -82,18 +80,14 @@ _REPEATS = {
     (2, 3, 4): [(0, 0), (1, -2), (0, -3), (2, 0, -1)],
     (): [(0, 0), (0, -1)],
 }
-_REPEAT_CASES = [
-    (shape, dims) for shape, all_dims in _REPEATS.items() for dims in all_dims
-]
+_REPEAT_CASES = [(shape, dims) for shape, all_dims in _REPEATS.items() for dims in all_dims]
 
 
 @pytest.mark.parametrize("shape,dims", _REPEAT_CASES, ids=str)
 @pytest.mark.parametrize("op", list(_ENGINE_REDUCTIONS))
 def test_engine_reduction_refuses_a_repeated_dim(ref, device, op, shape, dims):
     x = lucid.ones(shape, device=device)
-    want_err = _outcome(
-        lambda: getattr(ref, _ENGINE_REDUCTIONS[op])(ref.ones(shape), dims)
-    )[1]
+    want_err = _outcome(lambda: getattr(ref, _ENGINE_REDUCTIONS[op])(ref.ones(shape), dims))[1]
     assert isinstance(want_err, RuntimeError)
     with pytest.raises(RuntimeError, match="appears multiple times") as info:
         getattr(_C_engine, op)(x._impl, list(dims), False)
@@ -178,9 +172,7 @@ def test_rot90_refuses_bad_dims_length_or_input_rank(ref, device, k):
         ((), (0, 1)),
     ]:
         want_err = _outcome(lambda: ref.rot90(ref.ones(shape), k, dims))[1]
-        got_err = _outcome(
-            lambda: lucid.rot90(lucid.ones(shape, device=device), k, dims)
-        )[1]
+        got_err = _outcome(lambda: lucid.rot90(lucid.ones(shape, device=device), k, dims))[1]
         _same_refusal(got_err, want_err)
 
 

@@ -95,9 +95,7 @@ class _TubeletEmbed(nn.Module):
     the one permutation.  Section 3.3: a 16x16 patch spanning two frames.
     """
 
-    def __init__(
-        self, in_channels: int, tubelet_size: int, patch_size: int, dim: int
-    ) -> None:
+    def __init__(self, in_channels: int, tubelet_size: int, patch_size: int, dim: int) -> None:
         super().__init__()
         self.proj = nn.Conv3d(
             in_channels,
@@ -216,8 +214,7 @@ class _Predictor(nn.Module):
         batch = int(context.shape[0])
         tokens = self.predictor_embed(context)
         tokens = tokens + _gather_tokens(
-            positions
-            + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
+            positions + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
             context_indices,
         )
 
@@ -227,8 +224,7 @@ class _Predictor(nn.Module):
             batch, count, width, dtype=tokens.dtype, device=tokens.device
         )
         queries = queries + _gather_tokens(
-            positions
-            + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
+            positions + lucid.zeros(batch, 1, 1, dtype=positions.dtype, device=positions.device),
             target_indices,
         )
 
@@ -279,9 +275,7 @@ class _AttentivePooler(nn.Module):
         keys_in = self.norm_keys(tokens)
 
         def heads(t: Tensor, length: int) -> Tensor:
-            return t.reshape(batch, length, self.num_heads, self.head_dim).permute(
-                0, 2, 1, 3
-            )
+            return t.reshape(batch, length, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         query_in = self.query_token + lucid.zeros(
             batch, 1, width, dtype=tokens.dtype, device=tokens.device
@@ -384,12 +378,8 @@ def _sample_collection(
     keep_target = min(len(t) for t in targets)
     keep_context = min(len(c) for c in contexts)
     return (
-        lucid.tensor(
-            [c[:keep_context] for c in contexts], dtype=lucid.int64, device=device
-        ),
-        lucid.tensor(
-            [t[:keep_target] for t in targets], dtype=lucid.int64, device=device
-        ),
+        lucid.tensor([c[:keep_context] for c in contexts], dtype=lucid.int64, device=device),
+        lucid.tensor([t[:keep_target] for t in targets], dtype=lucid.int64, device=device),
     )
 
 
@@ -668,13 +658,10 @@ class VJEPAModel(PretrainedModel, BackboneMixin):
         answers: list[Tensor] = []
         for index, (context_index, target_index) in enumerate((short, long)):
             context = self.encoder(x, context_index)
-            answers.append(
-                self.predictor(context, context_index, target_index, mask_index=index)
-            )
+            answers.append(self.predictor(context, context_index, target_index, mask_index=index))
 
         loss = (
-            self._discrepancy(answers[0], short_target)
-            + self._discrepancy(answers[1], long_target)
+            self._discrepancy(answers[0], short_target) + self._discrepancy(answers[1], long_target)
         ) / 2.0
         return VJEPAOutput(
             loss=loss,
@@ -745,9 +732,7 @@ class VJEPAForVideoClassification(ImageClassificationModel, ClassificationHeadMi
         self.head = nn.Linear(config.dim, config.num_classes)
 
     @override
-    def forward(
-        self, x: Tensor, labels: Tensor | None = None
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         """Classify clips from the frozen feature map.
 
         Parameters

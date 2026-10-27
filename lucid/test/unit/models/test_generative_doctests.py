@@ -45,7 +45,5 @@ def test_examples_run(module_name: str) -> None:
     with contextlib.redirect_stdout(captured):
         # ELLIPSIS matches what ``pytest --doctest-modules`` applies by
         # default, so running this file and running that flag agree.
-        result = doctest.testmod(
-            module, optionflags=doctest.ELLIPSIS, report=False, verbose=False
-        )
+        result = doctest.testmod(module, optionflags=doctest.ELLIPSIS, report=False, verbose=False)
     assert result.failed == 0, f"{module_name}:\n{captured.getvalue()}"

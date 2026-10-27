@@ -74,9 +74,7 @@ def test_a_list_of_schedulers_in_a_variable_is_accepted(
 ) -> None:
     stdout, _ = mypy_report
     unexpected = [
-        e
-        for e in stdout.splitlines()
-        if e.strip() and f"client.py:{_BAD_LINE}:" not in e
+        e for e in stdout.splitlines() if e.strip() and f"client.py:{_BAD_LINE}:" not in e
     ]
     assert unexpected == [], "\n".join(unexpected)
 

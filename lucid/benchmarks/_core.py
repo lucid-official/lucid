@@ -162,9 +162,7 @@ def fmt_table(rows: list[tuple[str, ...]]) -> str:
     sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
     lines = [sep]
     for i, row in enumerate(rows):
-        line = (
-            "|" + "|".join(f" {cell:<{widths[j]}} " for j, cell in enumerate(row)) + "|"
-        )
+        line = "|" + "|".join(f" {cell:<{widths[j]}} " for j, cell in enumerate(row)) + "|"
         lines.append(line)
         if i == 0:  # header separator
             lines.append(sep)

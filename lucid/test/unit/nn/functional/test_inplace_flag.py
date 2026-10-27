@@ -150,9 +150,7 @@ def _parameters(fn: Callable[..., object]) -> set[str]:
 
 @pytest.mark.parametrize("inplace", [True, False])
 @pytest.mark.parametrize("name", list(_FUNCTIONALS))
-def test_result_is_x_exactly_when_inplace(
-    name: str, inplace: bool, device: str
-) -> None:
+def test_result_is_x_exactly_when_inplace(name: str, inplace: bool, device: str) -> None:
     call, shape = _FUNCTIONALS[name]
     want = call(F, _input(shape, device), False)
     x = _input(shape, device)

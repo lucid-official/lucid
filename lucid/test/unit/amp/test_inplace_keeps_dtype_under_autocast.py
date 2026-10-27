@@ -128,9 +128,7 @@ _COMPOSITE: dict[str, Spelling] = {
     "masked_scatter_": lambda lib, x, y: x.masked_scatter_(_mask(lib, x), y),
     "scatter_": lambda lib, x, y: x.scatter_(0, _index(lib, x), y[:2]),
     "scatter_add_": lambda lib, x, y: x.scatter_add_(0, _index(lib, x), y[:2]),
-    "scatter_reduce_": lambda lib, x, y: x.scatter_reduce_(
-        0, _index(lib, x), y[:2], "sum"
-    ),
+    "scatter_reduce_": lambda lib, x, y: x.scatter_reduce_(0, _index(lib, x), y[:2], "sum"),
 }
 
 _SPELLINGS: dict[str, tuple[Spelling, Spelling]] = {
@@ -191,9 +189,7 @@ def test_inplace_op_under_autocast_matches_reference(
     # A few ulps of the target's own dtype.  One float16 rounding of a
     # float32 target is ~1e-4, far outside the float32 bound.
     rtol, atol = (2e-6, 1e-7) if target == lucid.float32 else (4e-3, 1e-3)
-    np.testing.assert_allclose(
-        x.float().numpy(), rx.float().cpu().numpy(), rtol=rtol, atol=atol
-    )
+    np.testing.assert_allclose(x.float().numpy(), rx.float().cpu().numpy(), rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(("device", "amp"), _SCOPES)
@@ -244,16 +240,12 @@ def test_inplace_op_under_autocast_differentiates_in_target_dtype(
     assert z.dtype == lucid.float32
     assert leaf.grad is not None
     assert leaf.grad.dtype == lucid.float32
-    np.testing.assert_allclose(
-        leaf.grad.numpy(), rleaf.grad.cpu().numpy(), rtol=2e-6, atol=1e-7
-    )
+    np.testing.assert_allclose(leaf.grad.numpy(), rleaf.grad.cpu().numpy(), rtol=2e-6, atol=1e-7)
 
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", [lucid.int64, lucid.int32, lucid.bool_], ids=str)
-@pytest.mark.parametrize(
-    "op", ["exp_", "log_", "sqrt_", "sin_", "sigmoid_", "reciprocal_"]
-)
+@pytest.mark.parametrize("op", ["exp_", "log_", "sqrt_", "sin_", "sigmoid_", "reciprocal_"])
 def test_real_valued_inplace_op_refuses_integral_target(
     ref: ModuleType, op: str, dtype: lucid.dtype, device: str
 ) -> None:

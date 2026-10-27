@@ -600,9 +600,7 @@ class _FusedStep:
         self._refresh_scaler_scalars()
         return self._run(plan, args, flags)
 
-    def _compile_and_run_first(
-        self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]
-    ) -> Tensor:
+    def _compile_and_run_first(self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> Tensor:
         """Build a new fused plan and execute its first run, or fall back to eager."""
         from lucid.compile._core.fallback import _fallback_notice
         from lucid.compile._core.trace_context import compile_attempt
@@ -738,15 +736,9 @@ class _FusedStep:
             import lucid as _lucid
 
             p0 = self._copt._params[0]
-            self._scale_holder = _lucid.zeros(
-                (), dtype=_lucid.float32, device=p0.device
-            )
-            self._inv_scale_holder = _lucid.zeros(
-                (), dtype=_lucid.float32, device=p0.device
-            )
-            self._found_inf_target = _lucid.zeros(
-                (), dtype=_lucid.float32, device=p0.device
-            )
+            self._scale_holder = _lucid.zeros((), dtype=_lucid.float32, device=p0.device)
+            self._inv_scale_holder = _lucid.zeros((), dtype=_lucid.float32, device=p0.device)
+            self._found_inf_target = _lucid.zeros((), dtype=_lucid.float32, device=p0.device)
         self._refresh_scaler_scalars()
         return True
 
@@ -762,8 +754,7 @@ class _FusedStep:
         reachable = {
             i
             for i, p in enumerate(params)
-            if (tid := tracer.lookup_id(_unwrap(p))) is not None
-            and int(tid) in ancestors
+            if (tid := tracer.lookup_id(_unwrap(p))) is not None and int(tid) in ancestors
         }
         self._reachable = frozenset(reachable)
         members = self._members()
@@ -790,36 +781,27 @@ class _FusedStep:
         members = tuple(ghost_grads.keys())
         assert self._inv_scale_holder is not None
         unscaled: dict[int, Tensor] = {
-            i: (g if g.dtype == _lucid.float32 else g.to(_lucid.float32))
-            * self._inv_scale_holder
+            i: (g if g.dtype == _lucid.float32 else g.to(_lucid.float32)) * self._inv_scale_holder
             for i, g in ghost_grads.items()
         }
         finite_counts: list[Tensor] = [
             _lucid.isfinite(g).to(_lucid.float32).sum() for g in unscaled.values()
         ]
-        expected_total = sum(
-            float(int(_prod_shape(g.shape))) for g in unscaled.values()
-        )
+        expected_total = sum(float(int(_prod_shape(g.shape))) for g in unscaled.values())
         if loss_for_bwd.dtype == _lucid.float16:
             assert self._scale_holder is not None
             finite_counts.append(_lucid.isfinite(loss_for_bwd).to(_lucid.float32).sum())
             expected_total += float(int(_prod_shape(loss_for_bwd.shape)))
-            finite_counts.append(
-                (self._scale_holder <= 65504.0).to(_lucid.float32).sum()
-            )
+            finite_counts.append((self._scale_holder <= 65504.0).to(_lucid.float32).sum())
             expected_total += 1.0
         total_finite = finite_counts[0]
         for nf in finite_counts[1:]:
             total_finite = total_finite + nf
-        expected_t = _lucid.tensor(
-            expected_total, dtype=_lucid.float32, device=params[0].device
-        )
+        expected_t = _lucid.tensor(expected_total, dtype=_lucid.float32, device=params[0].device)
         found_inf_bool = total_finite < expected_t
         found_inf_f32 = found_inf_bool.to(_lucid.float32)
 
-        opt_outputs, slots = copt._emit(
-            members, unscaled, layout, vectors, flags, False
-        )
+        opt_outputs, slots = copt._emit(members, unscaled, layout, vectors, flags, False)
         final_outputs: list[Tensor] = []
         for slot, new in zip(slots, opt_outputs, strict=True):
             old = copt._slot_tensor(slot)
@@ -867,14 +849,12 @@ class _FusedStep:
 
                         found_inf_f32: Tensor | None = None
                         if scaler_enabled:
-                            opt_outputs, slots, found_inf_f32 = (
-                                self._emit_scaled_update(
-                                    ghost_grads,
-                                    layout,
-                                    vectors,
-                                    flags,
-                                    loss_for_bwd,
-                                )
+                            opt_outputs, slots, found_inf_f32 = self._emit_scaled_update(
+                                ghost_grads,
+                                layout,
+                                vectors,
+                                flags,
+                                loss_for_bwd,
                             )
                         else:
                             opt_outputs, slots = copt._emit(
@@ -952,11 +932,7 @@ class _FusedStep:
         )
 
         for node in traced.graph.ops:
-            if (
-                node.name == "dropout_stateful"
-                and len(node.inputs) >= 2
-                and len(node.outputs) >= 2
-            ):
+            if node.name == "dropout_stateful" and len(node.inputs) >= 2 and len(node.outputs) >= 2:
                 sin = int(node.inputs[1])
                 sout = int(node.outputs[1].id)
                 traced.output_target_ids.append(sout)
@@ -1040,13 +1016,9 @@ class _FusedStep:
         }
         for i in traced.members:
             for name, buf in copt._state[i].items():
-                impl_to_resolver[id(_unwrap_hot(buf))] = _state_resolver(
-                    copt._state, i, name
-                )
+                impl_to_resolver[id(_unwrap_hot(buf))] = _state_resolver(copt._state, i, name)
         for k, dt in enumerate(traced.layout.dtypes):
-            impl_to_resolver[id(_unwrap_hot(traced.vectors[dt]))] = (
-                self._vector_resolver(k)
-            )
+            impl_to_resolver[id(_unwrap_hot(traced.vectors[dt]))] = self._vector_resolver(k)
         for holder in (self._scale_holder, self._inv_scale_holder):
             if holder is not None:
                 h_impl = _unwrap_hot(holder)
@@ -1068,9 +1040,7 @@ class _FusedStep:
             resolvers.append(r if r is not None else _pinned_resolver(impl))
         return resolvers
 
-    def _build_output_targets(
-        self, traced: _FusedTrace
-    ) -> tuple[_C_engine.TensorImpl, ...]:
+    def _build_output_targets(self, traced: _FusedTrace) -> tuple[_C_engine.TensorImpl, ...]:
         """Build and validate in-place output target ``TensorImpl``s."""
         from lucid._dispatch import _unwrap, _wrap
 
@@ -1107,9 +1077,7 @@ class _FusedStep:
         _verify_target_shapes(traced.graph, checked_ids, output_targets)
         return tuple(_unwrap(t) for t in output_targets)
 
-    def _build_plan(
-        self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]
-    ) -> _FusedPlan:
+    def _build_plan(self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> _FusedPlan:
         """Trace + compile the fused step for the current participants."""
         from lucid.compile._core.attention_probe import maybe_probe_for_graph
 
@@ -1155,9 +1123,7 @@ class _FusedStep:
             scaled_loss_sink=scaled_loss_sink,
         )
 
-    def _run(
-        self, plan: _FusedPlan, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]
-    ) -> Tensor:
+    def _run(self, plan: _FusedPlan, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> Tensor:
         """Bind feeds + targets and invoke the cached executable in-place.
 
         Packs this step's scalars (hyper-parameters read from the live

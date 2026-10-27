@@ -57,16 +57,12 @@ def _composite(
 
 @_amp_op("bce_loss")  # KEEP on Metal, FP32 on the CPU
 def _keeps_on_metal(input: lucid.Tensor) -> lucid.Tensor:
-    _seen.update(
-        input=input.dtype, autocast=_C_engine.amp_is_active(input._impl.device)
-    )
+    _seen.update(input=input.dtype, autocast=_C_engine.amp_is_active(input._impl.device))
     return input * 2.0
 
 
 @pytest.mark.parametrize(("device", "half"), _SETTINGS)
-def test_every_floating_tensor_argument_is_cast_by_the_row(
-    device: str, half: str
-) -> None:
+def test_every_floating_tensor_argument_is_cast_by_the_row(device: str, half: str) -> None:
     dt = getattr(lucid, half)
     x = lucid.randn(3, device=device).to(dt)
     with autocast(device_type=device, dtype=dt):
@@ -76,9 +72,7 @@ def test_every_floating_tensor_argument_is_cast_by_the_row(
 
 
 @pytest.mark.parametrize(("device", "half"), _SETTINGS)
-def test_a_tensor_passed_by_position_or_keyword_is_cast_alike(
-    device: str, half: str
-) -> None:
+def test_a_tensor_passed_by_position_or_keyword_is_cast_alike(device: str, half: str) -> None:
     dt = getattr(lucid, half)
     x = lucid.randn(3, device=device).to(dt)
     with autocast(device_type=device, dtype=dt):
@@ -98,9 +92,7 @@ def test_what_is_not_a_floating_tensor_passes_through(device: str, half: str) ->
 
 
 @pytest.mark.parametrize(("device", "half"), _SETTINGS)
-def test_the_body_runs_with_autocast_off_and_it_is_back_on_after(
-    device: str, half: str
-) -> None:
+def test_the_body_runs_with_autocast_off_and_it_is_back_on_after(device: str, half: str) -> None:
     dt = getattr(lucid, half)
     x = lucid.randn(3, device=device).to(dt)
     with autocast(device_type=device, dtype=dt):
@@ -232,9 +224,7 @@ def test_a_decorated_loss_keeps_its_signature(name: str) -> None:
 
 
 @pytest.mark.parametrize(("device", "half"), _SETTINGS)
-def test_a_call_that_does_not_bind_raises_the_function_s_own_error(
-    device: str, half: str
-) -> None:
+def test_a_call_that_does_not_bind_raises_the_function_s_own_error(device: str, half: str) -> None:
     """``signature.bind`` would refuse first, with its own wording; the
     error under autocast is the one the call raises outside it."""
     dt = getattr(lucid, half)

@@ -82,8 +82,7 @@ def _sequence_major(
     """
     layout = _input_layout(kind, x, batch_first)
     return layout, [
-        _initial_state(kind, layout, name, hx, (rows, width))
-        for name, hx, width in states
+        _initial_state(kind, layout, name, hx, (rows, width)) for name, hx, width in states
     ]
 
 

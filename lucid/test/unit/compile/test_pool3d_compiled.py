@@ -95,7 +95,5 @@ class TestPool3dCompiles:
         """Registration never changed; compiling did."""
         for name in ("max_pool3d", "avg_pool3d"):
             assert _C_engine.compile.emitter_registered(name)
-        compiled, _difference, _shape = _run(
-            lambda x: F.max_pool3d(x, 2), (1, 2, 4, 4, 4)
-        )
+        compiled, _difference, _shape = _run(lambda x: F.max_pool3d(x, 2), (1, 2, 4, 4, 4))
         assert compiled

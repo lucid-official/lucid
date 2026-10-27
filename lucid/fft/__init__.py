@@ -256,9 +256,7 @@ def ifftn(
     return _transform(_FftnAutograd, input, s_list, axes, norm_v, N, True)
 
 
-def fft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def fft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D discrete Fourier transform along a single axis.
 
     Computes the one-dimensional DFT of the input tensor along the axis
@@ -338,9 +336,7 @@ def fft(
     return fftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
 
 
-def ifft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def ifft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D inverse discrete Fourier transform along a single axis.
 
     Recovers the time-domain signal from its frequency-domain
@@ -781,9 +777,7 @@ def irfftn(
     return _transform(_IrfftnAutograd, input, s_list, axes, norm_v, N, out_sizes)
 
 
-def rfft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def rfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D FFT of a real-valued input along a single axis.
 
     Computes the one-dimensional DFT of a real signal and returns only
@@ -853,9 +847,7 @@ def rfft(
     return rfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
 
 
-def irfft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def irfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D inverse FFT for a Hermitian-symmetric spectrum.
 
     Computes the inverse one-dimensional FFT of a conjugate-symmetric
@@ -1242,9 +1234,7 @@ def ihfftn(
     return _conj(rfftn(input, s=s, dim=dim, norm=_dual_norm(norm_v)))
 
 
-def hfft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def hfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D FFT of a Hermitian-symmetric complex signal.
 
     Computes the one-dimensional DFT of a Hermitian (conjugate-symmetric)
@@ -1315,9 +1305,7 @@ def hfft(
     return hfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
 
 
-def ihfft(
-    input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None
-) -> Tensor:
+def ihfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
     r"""1-D inverse FFT of a real signal, giving a Hermitian half-spectrum.
 
     Computes the inverse of :func:`hfft`: given a real-valued input,

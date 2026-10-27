@@ -152,13 +152,11 @@ def get_weight(name: str) -> WeightsEnum:
     cls = _WEIGHTS_BY_ENUM.get(enum_name)
     if cls is None:
         raise ValueError(
-            f"get_weight: unknown weights enum {enum_name!r}. "
-            f"Known: {sorted(_WEIGHTS_BY_ENUM)}"
+            f"get_weight: unknown weights enum {enum_name!r}. " f"Known: {sorted(_WEIGHTS_BY_ENUM)}"
         )
     try:
         return cls[tag]
     except KeyError:
         raise ValueError(
-            f"get_weight: {enum_name!r} has no tag {tag!r}. "
-            f"Available: {[m.name for m in cls]}"
+            f"get_weight: {enum_name!r} has no tag {tag!r}. " f"Available: {[m.name for m in cls]}"
         ) from None

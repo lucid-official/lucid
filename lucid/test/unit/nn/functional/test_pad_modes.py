@@ -87,9 +87,7 @@ _REFUSED: dict[str, tuple[tuple[int, ...], tuple[int, ...], str]] = {
 
 
 @pytest.mark.parametrize("case", list(_REFUSED))
-def test_a_spec_the_reference_refuses_is_refused(
-    ref: ModuleType, device: str, case: str
-) -> None:
+def test_a_spec_the_reference_refuses_is_refused(ref: ModuleType, device: str, case: str) -> None:
     shape, padding, mode = _REFUSED[case]
     with pytest.raises(RuntimeError):
         ref.nn.functional.pad(ref.zeros(shape), padding, mode=mode)
@@ -114,15 +112,11 @@ def test_there_is_one_pad(ref: ModuleType, owner: Any) -> None:
 
 
 @pytest.mark.parametrize("mode", ["reflect", "replicate", "circular"])
-def test_non_constant_mode_refuses_value(
-    ref: ModuleType, device: str, mode: str
-) -> None:
+def test_non_constant_mode_refuses_value(ref: ModuleType, device: str, mode: str) -> None:
     """LCD-507: non-constant padding modes reject a non-zero ``value`` and accept 0."""
     with pytest.raises(RuntimeError, match="doesn't take in value argument"):
         ref.nn.functional.pad(ref.zeros(1, 2, 3), (1, 1), mode=mode, value=1.0)
-    with pytest.raises(
-        _C_engine.InvalidArgument, match="doesn't take in value argument"
-    ):
+    with pytest.raises(_C_engine.InvalidArgument, match="doesn't take in value argument"):
         F.pad(lucid.zeros(1, 2, 3, device=device), (1, 1), mode=mode, value=1.0)
     x = lucid.arange(6, dtype=lucid.float32, device=device).reshape(1, 2, 3)
     xr = ref.arange(6, dtype=ref.float32).reshape(1, 2, 3)
@@ -136,9 +130,7 @@ def test_non_constant_mode_refuses_value(
     "widths",
     [[(0, 0), (0, 0), (-1, 1)], [(0, 0), (0, 0), (1, -1)], [(-1, 0), (0, 0), (0, 0)]],
 )
-def test_engine_pad_refuses_negative_widths(
-    device: str, widths: list[tuple[int, int]]
-) -> None:
+def test_engine_pad_refuses_negative_widths(device: str, widths: list[tuple[int, int]]) -> None:
     """LCD-507: ``_C_engine.pad`` refuses negative widths instead of reading across rows."""
     x = lucid.arange(6, dtype=lucid.float32, device=device).reshape(1, 2, 3)
     with pytest.raises(_C_engine.InvalidArgument, match="non-negative"):

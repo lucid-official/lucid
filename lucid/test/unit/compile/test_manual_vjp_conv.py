@@ -68,9 +68,7 @@ def test_manual_vjp_conv2d_parity() -> None:
     comp_losses: list[float] = []
     for _ in range(3):
         loss = step(x, t)
-        comp_losses.append(
-            float(loss.item() if hasattr(loss, "item") else loss[0].item())
-        )
+        comp_losses.append(float(loss.item() if hasattr(loss, "item") else loss[0].item()))
 
     for k in range(3):
         diff = abs(eager_losses[k] - comp_losses[k])

@@ -220,9 +220,7 @@ class Call:
             peer = self.args[index]
             values = _probe.to_numpy(peer)
             fill = values.flat[0] if values is not None and values.size else 0
-            call.args[index] = _rebuild(
-                peer, np.full(array.shape, fill), keep_integer=True
-            )
+            call.args[index] = _rebuild(peer, np.full(array.shape, fill), keep_integer=True)
         return call
 
     @property
@@ -340,9 +338,7 @@ def _fractional_pool(name: str, domain: str) -> Iterator[Call]:
     rank = _rank_of(name)
     x = _f((_N, _CIN, *_spatial(rank)), domain)
     yield Call([x, 2], {"output_ratio": 0.5}, 0, "fractional_pool(x, k, output_ratio)")
-    yield Call(
-        [x, 2], {"output_size": (2,) * rank}, 0, "fractional_pool(x, k, output_size)"
-    )
+    yield Call([x, 2], {"output_size": (2,) * rank}, 0, "fractional_pool(x, k, output_size)")
 
 
 def _norm(name: str, domain: str) -> Iterator[Call]:
@@ -350,12 +346,8 @@ def _norm(name: str, domain: str) -> Iterator[Call]:
     weight, bias = _f((_CIN,), "positive"), _f((_CIN,), domain)
     if "batch" in name:
         mean, var = _f((_CIN,), domain), _f((_CIN,), "positive")
-        yield Call(
-            [x, mean, var, weight, bias], {"training": True}, 0, "batch_norm full"
-        )
-        yield Call(
-            [x, None, None, weight, bias], {"training": True}, 0, "batch_norm no stats"
-        )
+        yield Call([x, mean, var, weight, bias], {"training": True}, 0, "batch_norm full")
+        yield Call([x, None, None, weight, bias], {"training": True}, 0, "batch_norm no stats")
         yield Call([x, mean, var], {}, 0, "batch_norm(x, mean, var)")
     elif "layer" in name:
         flat = _f((_N, _CIN * 2), domain)
@@ -414,9 +406,7 @@ def _loss(name: str, domain: str) -> Iterator[Call]:
         # gradient there is neither what the formula gives nor stable
         # under a finite difference — the check could not fail.
         negative = _f((_N, classes), domain)
-        yield Call(
-            [logits, same, sign], {}, 0, "loss(a, b, target sign)", same_shape=(1,)
-        )
+        yield Call([logits, same, sign], {}, 0, "loss(a, b, target sign)", same_shape=(1,))
         yield Call(
             [logits, same, negative],
             {},
@@ -464,9 +454,7 @@ def _resample(name: str, domain: str) -> Iterator[Call]:
         theta = _f((_N, 2, 3), domain)
         yield Call([theta, (_N, _CIN, _H, _W)], {}, 0, "affine_grid(theta, size)")
     elif "interpolate" in name or "upsample" in name:
-        yield Call(
-            [x], {"scale_factor": 2.0, "mode": "nearest"}, 0, "interpolate nearest"
-        )
+        yield Call([x], {"scale_factor": 2.0, "mode": "nearest"}, 0, "interpolate nearest")
         yield Call([x], {"size": (_H * 2, _W * 2)}, 0, "interpolate size")
     elif "pixel_shuffle" in name:
         yield Call([_f((_N, 4, _H, _W), domain), 2], {}, 0, "pixel_shuffle(x, 2)")
@@ -506,9 +494,7 @@ def _linalg(name: str, domain: str) -> Iterator[Call]:
     if "matrix_power" in name:
         yield Call([_probe.as_f64(square), 2], {}, 0, "matrix_power(A, 2)")
     if any(k in name for k in ("matmul", "dot", "outer", "kron", "cross")):
-        yield Call(
-            [_probe.as_f64(rect), _probe.as_f64(rect.T.copy())], {}, 0, "linalg(A, B)"
-        )
+        yield Call([_probe.as_f64(rect), _probe.as_f64(rect.T.copy())], {}, 0, "linalg(A, B)")
     yield Call([_probe.as_f64(square)], {}, 0, "linalg(square)")
     yield Call([_probe.as_f64(rect)], {}, 0, "linalg(rectangular)")
 
@@ -599,9 +585,7 @@ def _ternary(name: str, domain: str) -> Iterator[Call]:
             0,
             "addc*(t, a, b)",
         )
-        yield Call(
-            [same, addend, _f(_probe.SHAPE, "positive")], {}, 0, "addc*(t, a, b)"
-        )
+        yield Call([same, addend, _f(_probe.SHAPE, "positive")], {}, 0, "addc*(t, a, b)")
     if name == "lerp":
         yield Call([same, _f(_probe.SHAPE, domain), 0.3], {}, 0, "lerp(a, b, weight)")
 
@@ -672,9 +656,7 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
             "normal(mu, sigma)",
         )
     elif name in ("cartesian_prod",):
-        yield Call(
-            [_f((3,), domain), _f((2,), domain)], {}, 0, "cartesian_prod(1-D, 1-D)"
-        )
+        yield Call([_f((3,), domain), _f((2,), domain)], {}, 0, "cartesian_prod(1-D, 1-D)")
     elif name in ("vander",):
         yield Call([_f((4,), "positive")], {}, 0, "vander(1-D)")
     else:
@@ -683,9 +665,7 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
 
 
 #: Ops that write a source at the positions an index names.
-_OVERWRITES = frozenset(
-    {"scatter", "scatter_", "index_copy", "index_copy_", "put", "put_"}
-)
+_OVERWRITES = frozenset({"scatter", "scatter_", "index_copy", "index_copy_", "put", "put_"})
 
 
 def _from_zero(positions: np.ndarray) -> np.ndarray:
@@ -933,9 +913,7 @@ def _linalg_extra(name: str, domain: str) -> Iterator[Call]:
             "solve_triangular",
         )
     elif name in ("lu_solve", "ldl_solve"):
-        yield Call(
-            [_probe.as_f64(square), _probe.as_f64(rhs)], {}, 0, "lu_solve(LU, B)"
-        )
+        yield Call([_probe.as_f64(square), _probe.as_f64(rhs)], {}, 0, "lu_solve(LU, B)")
     elif name in ("householder_product",):
         # ``H`` is a single 2-D reflector block and ``tau`` a *vector* of
         # min(m, n) coefficients.  Derived independently, the two came out
@@ -955,9 +933,7 @@ def _linalg_extra(name: str, domain: str) -> Iterator[Call]:
             "householder_product(H(4,3), tau(3,))",
         )
     elif name in ("tensorinv",):
-        yield Call(
-            [_probe.as_f64(square.reshape(2, 2, 2, 2))], {}, 0, "tensorinv((2,2,2,2))"
-        )
+        yield Call([_probe.as_f64(square.reshape(2, 2, 2, 2))], {}, 0, "tensorinv((2,2,2,2))")
     elif name in ("tensorsolve",):
         yield Call(
             [
@@ -1068,12 +1044,8 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
         spatial = _spatial(rank)
         pooled = tuple(v // 2 for v in spatial)
         x = _f((_N, _CIN, *pooled), domain)
-        idx = _probe.as_int(
-            _probe.rng(7).integers(0, int(np.prod(spatial)), (_N, _CIN, *pooled))
-        )
-        yield Call(
-            [x, idx, 2], {"output_size": spatial}, 0, "max_unpool(x, indices, k)"
-        )
+        idx = _probe.as_int(_probe.rng(7).integers(0, int(np.prod(spatial)), (_N, _CIN, *pooled)))
+        yield Call([x, idx, 2], {"output_size": spatial}, 0, "max_unpool(x, indices, k)")
         yield Call([x, idx, 2], {}, 0, "max_unpool(x, indices, k)")
     elif name in ("gaussian_nll_loss",):
         yield Call(
@@ -1118,9 +1090,7 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
         )
     elif name in ("fused_linear_relu", "fused_linear_gelu"):
         w, b = _f((_COUT, _CIN), domain), _f((_COUT,), domain)
-        yield Call(
-            [_f((_N, _CIN), domain), w, b], {}, 0, "fused_linear(x, weight, bias)"
-        )
+        yield Call([_f((_N, _CIN), domain), w, b], {}, 0, "fused_linear(x, weight, bias)")
         yield Call(
             [_f((_N, _CIN), domain)],
             {"weight": w, "bias": b},
@@ -1128,9 +1098,7 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
             "fused_linear(x, weight=, bias=)",
         )
     elif name in ("sinusoidal_embedding",):
-        yield Call(
-            [_probe.as_f64(np.arange(4.0)), 8], {}, 0, "sinusoidal_embedding(pos, dim)"
-        )
+        yield Call([_probe.as_f64(np.arange(4.0)), 8], {}, 0, "sinusoidal_embedding(pos, dim)")
     elif name in ("sinusoidal_embedding_2d",):
         yield Call([8, 4, 4], {}, 0, "sinusoidal_embedding_2d(dim, h, w)")
     elif name in ("multi_head_attention_forward",):
@@ -1315,22 +1283,14 @@ _EXACT: dict[str, Callable[[str, str], Iterator[Call]]] = {
             )
         ]
     ),
-    "softmax": lambda n, d: iter(
-        [Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "softmax dim=-1")]
-    ),
+    "softmax": lambda n, d: iter([Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "softmax dim=-1")]),
     "log_softmax": lambda n, d: iter(
         [Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "log_softmax dim=-1")]
     ),
-    "softmin": lambda n, d: iter(
-        [Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "softmin dim=-1")]
-    ),
+    "softmin": lambda n, d: iter([Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "softmin dim=-1")]),
     "glu": lambda n, d: iter([Call([_f((_N, 4), d)], {"dim": -1}, 0, "glu")]),
-    "normalize": lambda n, d: iter(
-        [Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "normalize")]
-    ),
-    "repeat_kv": lambda n, d: iter(
-        [Call([_f((_N, 2, 4, 4), d), 2], {}, 0, "repeat_kv(x, n_rep)")]
-    ),
+    "normalize": lambda n, d: iter([Call([_f(_probe.SHAPE, d)], {"dim": -1}, 0, "normalize")]),
+    "repeat_kv": lambda n, d: iter([Call([_f((_N, 2, 4, 4), d), 2], {}, 0, "repeat_kv(x, n_rep)")]),
 }
 
 
@@ -1348,9 +1308,7 @@ def _autograd_grad(domain: str) -> Iterator[Call]:
     x = _f((2, 3), domain)
     x.requires_grad_(True)
     y = (x * x).sum()
-    yield Call(
-        [y, x], {"retain_graph": True}, 1, "grad(outputs, inputs) of (x * x).sum()"
-    )
+    yield Call([y, x], {"retain_graph": True}, 1, "grad(outputs, inputs) of (x * x).sum()")
 
 
 def _input_tangent(op: str) -> Callable[[str], Iterator[Call]]:
@@ -1462,9 +1420,7 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
                     _f((2, 4), d),
                     # int32, not the int64 a plain ``lucid.tensor`` of ints
                     # produces — the loss rejects int64, reported separately.
-                    lucid.tensor(
-                        np.array([[3, 0, -1, -1], [2, -1, -1, -1]]), dtype=lucid.int32
-                    ),
+                    lucid.tensor(np.array([[3, 0, -1, -1], [2, -1, -1, -1]]), dtype=lucid.int32),
                 ],
                 {},
                 0,
@@ -1555,9 +1511,7 @@ def _padded_batch_resized(call: Call, array: np.ndarray) -> Call:
     rebuilt = call.with_primary(array)
     peer = call.args[1]
     rebuilt.args[1] = (
-        _probe.as_int(np.array(lengths, dtype=np.int64))
-        if hasattr(peer, "shape")
-        else lengths
+        _probe.as_int(np.array(lengths, dtype=np.int64)) if hasattr(peer, "shape") else lengths
     )
     return rebuilt
 
@@ -1607,16 +1561,13 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
     refusal, not the op's (LCD-532, LCD-536).  The peers the call itself
     declares (``same_shape``) follow it too.
     """
-    if not 0 <= call.primary < len(call.args) or not hasattr(
-        call.args[call.primary], "shape"
-    ):
+    if not 0 <= call.primary < len(call.args) or not hasattr(call.args[call.primary], "shape"):
         return call.with_primary(array)
     shape = tuple(call.args[call.primary].shape)
     bounds = tuple(
         index
         for index, arg in enumerate(call.args)
-        if index != call.primary
-        and (index in call.same_shape or _fits_receiver(arg, shape))
+        if index != call.primary and (index in call.same_shape or _fits_receiver(arg, shape))
     )
     # Everything the call declares survives, as in every other rebuild
     # (``with_primary``), except ``joint``: this function *is* the call's
@@ -1734,18 +1685,14 @@ def _draws_only_when_training(name: str, fn: Any) -> bool:
     if fn is None or not re.search(_surface.STOCHASTIC_PATTERN, name):
         return False
     try:
-        signature = inspect.signature(
-            fn, annotation_format=annotationlib.Format.FORWARDREF
-        )
+        signature = inspect.signature(fn, annotation_format=annotationlib.Format.FORWARDREF)
     except (TypeError, ValueError):
         return False
     training = signature.parameters.get("training")
     return training is not None and training.default is False
 
 
-def _candidates(
-    name: str, domain: str, qualname: str | None, fn: Any
-) -> Iterator[Call]:
+def _candidates(name: str, domain: str, qualname: str | None, fn: Any) -> Iterator[Call]:
     """The tiers of :func:`invocations`, in order."""
     if qualname is not None and qualname in _QUALIFIED:
         yield from _QUALIFIED[qualname](domain)

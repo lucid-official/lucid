@@ -59,18 +59,12 @@ def _weight_for(name: str, device: str) -> lucid.Tensor:
     """A ``weight`` of the shape loss ``name`` takes, on ``device``: one
     entry per class for the class-index losses, the input's own shape
     for the rest."""
-    return (
-        lucid.ones(C, device=device)
-        if name in CLASS_WEIGHT
-        else lucid.ones(N, C, device=device)
-    )
+    return lucid.ones(C, device=device) if name in CLASS_WEIGHT else lucid.ones(N, C, device=device)
 
 
 @pytest.mark.parametrize("base,other", _DEVICE_PAIRS)
 @pytest.mark.parametrize("name", CROSS_DEVICE_LOSSES)
-def test_cross_device_operand_raises_device_mismatch(
-    name: str, base: str, other: str
-) -> None:
+def test_cross_device_operand_raises_device_mismatch(name: str, base: str, other: str) -> None:
     """Every tensor operand of loss ``name``, moved alone to ``other``'s
     device while its siblings stay on ``base``, is refused before the
     loss computes anything — a ``DeviceMismatch`` naming ``name``."""
@@ -88,9 +82,7 @@ def test_cross_device_operand_raises_device_mismatch(
 
 @pytest.mark.parametrize("base,other", _DEVICE_PAIRS)
 @pytest.mark.parametrize("name", sorted(losses_with("weight")))
-def test_cross_device_weight_raises_device_mismatch(
-    name: str, base: str, other: str
-) -> None:
+def test_cross_device_weight_raises_device_mismatch(name: str, base: str, other: str) -> None:
     """A ``weight`` on ``other``'s device, beside operands on ``base``,
     is refused the same way as any other cross-device operand pair."""
     kwargs = VALID[name](_inputs(base))

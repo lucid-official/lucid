@@ -74,9 +74,7 @@ class TestPositionTableParity:
 
         with ref.no_grad():
             half = dim // 2
-            omega = 1.0 / (
-                10000.0 ** (ref.arange(half // 2, dtype=ref.float64) * (2.0 / half))
-            )
+            omega = 1.0 / (10000.0 ** (ref.arange(half // 2, dtype=ref.float64) * (2.0 / half)))
             coords = ref.arange(grid, dtype=ref.float64)
             cols = coords.repeat(grid)
             rows = coords.repeat_interleave(grid)
@@ -116,9 +114,7 @@ class TestBlockParity:
 
         with ref.no_grad():
             current = ref.tensor(x.copy())
-            norm1, norm2 = ref.nn.LayerNorm(12, eps=1e-6), ref.nn.LayerNorm(
-                12, eps=1e-6
-            )
+            norm1, norm2 = ref.nn.LayerNorm(12, eps=1e-6), ref.nn.LayerNorm(12, eps=1e-6)
             _copy_into(ref, block.norm1, norm1)
             _copy_into(ref, block.norm2, norm2)
 
@@ -177,9 +173,7 @@ class TestObjectiveParity:
         target = rng.randn(4, 6).astype(np.float32) * 3.0
 
         ours = float(
-            model._discrepancy(
-                lucid.tensor(prediction.copy()), lucid.tensor(target.copy())
-            ).item()
+            model._discrepancy(lucid.tensor(prediction.copy()), lucid.tensor(target.copy())).item()
         )
         with ref.no_grad():
             theirs = ref.nn.functional.smooth_l1_loss(
@@ -206,9 +200,7 @@ class TestObjectiveParity:
         target = rng.randn(4, 6).astype(np.float32)
 
         ours = float(
-            model._discrepancy(
-                lucid.tensor(prediction.copy()), lucid.tensor(target.copy())
-            ).item()
+            model._discrepancy(lucid.tensor(prediction.copy()), lucid.tensor(target.copy())).item()
         )
         with ref.no_grad():
             theirs = ref.nn.functional.mse_loss(
@@ -250,7 +242,5 @@ class TestTargetNormalisationParity:
         for image in range(targets.shape[0]):
             for block in range(targets.shape[1]):
                 for slot, patch in enumerate(indices[image, block]):
-                    gap = np.abs(
-                        targets[image, block, slot] - normed[image, int(patch)]
-                    )
+                    gap = np.abs(targets[image, block, slot] - normed[image, int(patch)])
                     assert gap.max() < 1e-5

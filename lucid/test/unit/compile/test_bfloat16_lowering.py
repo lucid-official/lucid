@@ -113,9 +113,7 @@ def _near_truth(got: lucid.Tensor, truth: lucid.Tensor) -> None:
 def _mlp(dtype: lucid.dtype = lucid.bfloat16) -> nn.Module:
     """The network with its weights rounded to bfloat16, held as ``dtype``."""
     lucid.manual_seed(0)
-    model = nn.Sequential(
-        nn.Linear(8, 16), nn.GELU(), nn.LayerNorm(16), nn.Linear(16, 4)
-    )
+    model = nn.Sequential(nn.Linear(8, 16), nn.GELU(), nn.LayerNorm(16), nn.Linear(16, 4))
     return model.to(COMPILE_DEVICE).to(lucid.bfloat16).to(dtype)
 
 
@@ -126,9 +124,7 @@ def _batch(dtype: lucid.dtype = lucid.bfloat16) -> tuple[lucid.Tensor, lucid.Ten
     return x, t
 
 
-def _sgd_step(
-    model: nn.Module, opt: optim.SGD, x: lucid.Tensor, t: lucid.Tensor
-) -> None:
+def _sgd_step(model: nn.Module, opt: optim.SGD, x: lucid.Tensor, t: lucid.Tensor) -> None:
     opt.zero_grad()
     F.mse_loss(model(x), t).backward()
     opt.step()
@@ -147,9 +143,7 @@ def test_make_step_gradients_match_eager_at_bfloat16() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error", fallback.CompileFallbackWarning)
         lucid.compile.make_step(model, F.mse_loss)(x, t).backward()
-    for truth, want, p in zip(
-        twin.parameters(), eager, model.parameters(), strict=True
-    ):
+    for truth, want, p in zip(twin.parameters(), eager, model.parameters(), strict=True):
         assert truth.grad is not None and p.grad is not None
         _near_truth(want, truth.grad)
         _near_truth(p.grad, truth.grad)

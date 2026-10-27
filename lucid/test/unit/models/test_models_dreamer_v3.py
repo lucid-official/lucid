@@ -162,9 +162,7 @@ class TestBlockLinear:
         assert block_weights * 8 == 64 * 128, "exactly 1/blocks of a dense map"
 
     @pytest.mark.parametrize("kwargs", [{"blocks": 0}, {"blocks": 5}])
-    def test_rejects_a_grouping_that_does_not_divide(
-        self, kwargs: dict[str, int]
-    ) -> None:
+    def test_rejects_a_grouping_that_does_not_divide(self, kwargs: dict[str, int]) -> None:
         with pytest.raises(ValueError):
             BlockLinear(12, 24, **kwargs)
 
@@ -204,9 +202,7 @@ class TestBlockRecurrence:
         x2 = act(model.action_in_norm(model.action_in(scaled)))
         shared = lucid.cat([x0, x1, x2], dim=-1).reshape(2, 1, -1).repeat(1, 4, 1)
         grouped = lucid.cat([deter.reshape(2, 4, 4), shared], dim=-1)
-        hidden = act(
-            model.block_hidden_norm(model.block_hidden(grouped.reshape(2, -1)))
-        )
+        hidden = act(model.block_hidden_norm(model.block_hidden(grouped.reshape(2, -1))))
         gates = model.block_gate(hidden).reshape(2, 4, 12)
         reset = lucid.nn.functional.sigmoid(gates[..., :4].reshape(2, -1))
         candidate = lucid.tanh(reset * gates[..., 4:8].reshape(2, -1))
@@ -222,15 +218,11 @@ class TestBlockRecurrence:
         lucid.manual_seed(2)
         deter = lucid.randn((64, 16)) * 10.0
         moved = model._recurrent(lucid.randn((64, 12)), lucid.randn((64, 2)), deter)
-        kept = float(
-            ((moved - deter).abs() < deter.abs()).to(lucid.float32).mean().item()
-        )
+        kept = float(((moved - deter).abs() < deter.abs()).to(lucid.float32).mean().item())
         assert kept > 0.9, "a fresh model should mostly carry its state forward"
 
     def test_blocks_zero_is_the_dense_gru(self) -> None:
-        dense = RSSM(
-            stoch_size=3, deter_size=16, hidden_size=8, action_dim=2, embed_size=6
-        )
+        dense = RSSM(stoch_size=3, deter_size=16, hidden_size=8, action_dim=2, embed_size=6)
         assert hasattr(dense, "cell") and not hasattr(dense, "block_gate")
         blocked = self._rssm("silu")
         assert hasattr(blocked, "block_gate") and not hasattr(blocked, "cell")
@@ -323,12 +315,8 @@ class TestFreeBits:
 
     def test_refuses_a_gaussian_state(self) -> None:
         lucid.manual_seed(0)
-        rssm = RSSM(
-            stoch_size=3, deter_size=8, hidden_size=8, action_dim=2, embed_size=6
-        ).eval()
-        priors, posteriors = rssm.observe(
-            lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2))
-        )
+        rssm = RSSM(stoch_size=3, deter_size=8, hidden_size=8, action_dim=2, embed_size=6).eval()
+        priors, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
         with pytest.raises(ValueError):
             free_bits_kl(posteriors, priors)
 
@@ -388,9 +376,7 @@ class TestReturnNormalisation:
         weight = lucid.ones((6, 4))
 
         small, _ = model._actor_objective(states, proposed, target, weight, 1.0)
-        large, _ = model._actor_objective(
-            states, proposed * 1.0, target * 1000.0, weight, 1000.0
-        )
+        large, _ = model._actor_objective(states, proposed * 1.0, target * 1000.0, weight, 1000.0)
         assert abs(float(small.item()) - float(large.item())) < 1e-3
 
     def test_without_the_divisor_it_would_not_be(self) -> None:
@@ -403,9 +389,7 @@ class TestReturnNormalisation:
         states, proposed = model.dreamer_v3.imagine(flat, 4)
         target, weight = lucid.randn((6, 4)), lucid.ones((6, 4))
         small, _ = model._actor_objective(states, proposed, target, weight, 1.0)
-        unscaled, _ = model._actor_objective(
-            states, proposed, target * 1000.0, weight, 1.0
-        )
+        unscaled, _ = model._actor_objective(states, proposed, target * 1000.0, weight, 1.0)
         assert abs(float(unscaled.item()) - float(small.item())) > 1.0
 
 
@@ -438,9 +422,7 @@ class TestSlowCritic:
                 parameter[:] = parameter + 3.0
         after = model(observations, actions, rewards).behavior
         assert after is not None
-        assert (
-            float((after.lambda_return - before.lambda_return).abs().max().item()) > 0.1
-        )
+        assert float((after.lambda_return - before.lambda_return).abs().max().item()) > 0.1
 
     def test_the_first_update_copies(self) -> None:
         lucid.manual_seed(0)
@@ -462,9 +444,7 @@ class TestSlowCritic:
         lucid.manual_seed(0)
         model = DreamerV3ForWorldModeling(_tiny_cfg(critic_ema=0.02))
         model.update_slow_critic()
-        anchor = [
-            p.detach().clone() for p in model.dreamer_v3.slow_value_head.parameters()
-        ]
+        anchor = [p.detach().clone() for p in model.dreamer_v3.slow_value_head.parameters()]
         with lucid.no_grad():
             for parameter in model.dreamer_v3.value_head.parameters():
                 parameter[:] = parameter + 1.0
@@ -539,9 +519,7 @@ class TestActorObjective:
         losses = []
         for bonus in (0.0, 1.0):
             lucid.manual_seed(1)
-            model = DreamerV3ForWorldModeling(
-                _tiny_cfg(actor_entropy=bonus, mean_only=True)
-            )
+            model = DreamerV3ForWorldModeling(_tiny_cfg(actor_entropy=bonus, mean_only=True))
             behavior = model(observations, actions, rewards).behavior
             assert behavior is not None
             losses.append(float(behavior.actor_loss.item()))
@@ -744,9 +722,7 @@ class TestGradientRouting:
     @staticmethod
     def _touched(parameters: list[lucid.nn.Parameter]) -> int:
         return sum(
-            1
-            for p in parameters
-            if p.grad is not None and float(p.grad.abs().sum().item()) > 0.0
+            1 for p in parameters if p.grad is not None and float(p.grad.abs().sum().item()) > 0.0
         )
 
     def test_backward_gives_each_group_its_own_loss(self) -> None:

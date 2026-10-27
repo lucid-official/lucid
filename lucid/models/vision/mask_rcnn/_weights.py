@@ -23,9 +23,7 @@ from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 # The reference transform copies each image into the top-left of a canvas
 # rounded up to a multiple of 32, which is where ``postprocess`` measures
 # ``image_sizes`` from.
-_PRESET = Detection(
-    max_size=1333, size_divisible=32, pad_position="top_left", pad_value=0.0
-)
+_PRESET = Detection(max_size=1333, size_divisible=32, pad_position="top_left", pad_value=0.0)
 
 
 @register_weights("mask_rcnn")
@@ -49,10 +47,7 @@ class MaskRCNNResNet50FPNWeights(WeightsEnum):
     """
 
     COCO_V1 = WeightEntry(
-        url=(
-            f"{HUB_BASE}/mask-rcnn-resnet-50-fpn/resolve/main/"
-            "COCO_V1/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/mask-rcnn-resnet-50-fpn/resolve/main/" "COCO_V1/model.safetensors"),
         sha256="120a1648dda49f1799d8cc581bef8ec83ba679313602a80d5278409ab4e0ddcd",
         num_classes=91,
         transforms=_PRESET,

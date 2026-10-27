@@ -112,10 +112,7 @@ def _eager_grads(block: str, device: str) -> dict[str, list | None]:
     model = _model(block, device)
     x, t = _data(device)
     F.mse_loss(model(x), t).backward()
-    return {
-        n: None if p.grad is None else p.grad.tolist()
-        for n, p in model.named_parameters()
-    }
+    return {n: None if p.grad is None else p.grad.tolist() for n, p in model.named_parameters()}
 
 
 def _close(a: list | None, b: list | None) -> bool:
@@ -146,10 +143,7 @@ def test_make_step_gradients_match_eager(block: str, device: str) -> None:
         assert len(step.eager_only) == 0
     else:
         assert len(step.eager_only) == 1
-    got = {
-        n: None if p.grad is None else p.grad.tolist()
-        for n, p in model.named_parameters()
-    }
+    got = {n: None if p.grad is None else p.grad.tolist() for n, p in model.named_parameters()}
     assert got.keys() == want.keys()
     for name in want:
         assert _close(got[name], want[name]), name
@@ -176,7 +170,5 @@ def test_fused_step_updates_match_eager(block: str, device_gpu_only: str) -> Non
         assert step.cache_info()["entries"] == 1
         assert not step.cache_info()["eager_only"]
 
-    for (name, want), got in zip(
-        eager.named_parameters(), fused.parameters(), strict=True
-    ):
+    for (name, want), got in zip(eager.named_parameters(), fused.parameters(), strict=True):
         assert _close(got.tolist(), want.tolist()), name

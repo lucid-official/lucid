@@ -56,8 +56,7 @@ def _same(got: list[complex], want: list[complex]) -> bool:
         return (math.isnan(a) and math.isnan(b)) or a == b
 
     return len(got) == len(want) and all(
-        eq(g.real, w.real) and eq(g.imag, w.imag)
-        for g, w in zip(got, want, strict=True)
+        eq(g.real, w.real) and eq(g.imag, w.imag) for g, w in zip(got, want, strict=True)
     )
 
 
@@ -86,9 +85,7 @@ def test_nan_to_num_replaces_each_part() -> None:
     assert got.dtype == lucid.complex64
 
     def part(v: float) -> float:
-        return (
-            0.0 if math.isnan(v) else _TOP if v == _INF else -_TOP if v == -_INF else v
-        )
+        return 0.0 if math.isnan(v) else _TOP if v == _INF else -_TOP if v == -_INF else v
 
     # Each value as complex64 holds it (5e-40 is a float32 subnormal).
     held = lucid.tensor(_VALUES, dtype=lucid.complex64).tolist()
@@ -105,9 +102,7 @@ def test_nan_to_num_explicit_values() -> None:
 
 
 def test_nan_to_num_keeps_shape_and_finite_values() -> None:
-    x = _metal(
-        [complex(1.5, -2.5), complex(0.0, 3.0), complex(_INF, 1.0), complex(2.0, 2.0)]
-    )
+    x = _metal([complex(1.5, -2.5), complex(0.0, 3.0), complex(_INF, 1.0), complex(2.0, 2.0)])
     got = lucid.nan_to_num(x.reshape(2, 2))
     assert got.shape == (2, 2)
     assert _same(

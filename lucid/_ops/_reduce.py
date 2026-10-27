@@ -269,9 +269,7 @@ def _as_correction(name: str, value: object) -> float:
     num = _promotion.as_number(value)
     if isinstance(num, (int, float)):
         return float(num)
-    raise TypeError(
-        f"{name}(): correction must be a number, got {type(value).__name__}"
-    )
+    raise TypeError(f"{name}(): correction must be a number, got {type(value).__name__}")
 
 
 def _variance_operands(
@@ -294,8 +292,7 @@ def _variance_operands(
         raise TypeError(f"{name}() got an unexpected keyword argument {unknown[0]!r}")
     if len(args) > 3:
         raise TypeError(
-            f"{name}() takes at most 4 positional arguments but "
-            f"{len(args) + 1} were given"
+            f"{name}() takes at most 4 positional arguments but " f"{len(args) + 1} were given"
         )
     names: tuple[str, ...]
     if args and isinstance(_promotion.as_number(args[0]), bool):
@@ -398,9 +395,7 @@ def _run_with_dtype(
         return call(x_impl)
     target = to_engine_dtype(dtype)
     if floating_only and target not in _FLOATING:
-        raise _C_engine.NotImplementedError(
-            f"{op}: not implemented for {_ENGINE_TO_DTYPE[target]}"
-        )
+        raise _C_engine.NotImplementedError(f"{op}: not implemented for {_ENGINE_TO_DTYPE[target]}")
     if inexact_only and _promotion.is_integral(target):
         raise _C_engine.DtypeMismatch(
             f"{op}(): could not infer output dtype. Optional dtype must be "
@@ -458,24 +453,16 @@ def _prod_adapter(
     )
 
 
-def _cumsum_adapter(
-    x_impl: _Impl, dim: int = -1, *, dtype: DTypeLike | None = None
-) -> _Impl:
+def _cumsum_adapter(x_impl: _Impl, dim: int = -1, *, dtype: DTypeLike | None = None) -> _Impl:
     """cumsum(x, dim=-1, *, dtype=None)."""
     axis = operator.index(dim)
-    return _run_with_dtype(
-        x_impl, dtype, lambda xi: _C_engine.cumsum(xi, axis), op="cumsum"
-    )
+    return _run_with_dtype(x_impl, dtype, lambda xi: _C_engine.cumsum(xi, axis), op="cumsum")
 
 
-def _cumprod_adapter(
-    x_impl: _Impl, dim: int = -1, *, dtype: DTypeLike | None = None
-) -> _Impl:
+def _cumprod_adapter(x_impl: _Impl, dim: int = -1, *, dtype: DTypeLike | None = None) -> _Impl:
     """cumprod(x, dim=-1, *, dtype=None)."""
     axis = operator.index(dim)
-    return _run_with_dtype(
-        x_impl, dtype, lambda xi: _C_engine.cumprod(xi, axis), op="cumprod"
-    )
+    return _run_with_dtype(x_impl, dtype, lambda xi: _C_engine.cumprod(xi, axis), op="cumprod")
 
 
 def _cumext_adapter(
@@ -487,9 +474,7 @@ def _cumext_adapter(
     shape = list(x_impl.shape)
     ndim = len(shape)
     if ndim == 0 or math.prod(shape) == 0 or x_impl.is_phantom:
-        return _ValuesIndices(
-            (values, _C_engine.zeros(shape, _C_engine.I64, x_impl.device))
-        )
+        return _ValuesIndices((values, _C_engine.zeros(shape, _C_engine.I64, x_impl.device)))
     d = axis + ndim if axis < 0 else axis
     hit = _C_engine.equal(x_impl, values)
     if not _promotion.is_integral(x_impl.dtype):
@@ -520,9 +505,7 @@ def _cummin_adapter(x_impl: _Impl, dim: int = -1) -> _ValuesIndices[_Impl]:
     return _cumext_adapter(_C_engine.cummin, x_impl, dim)
 
 
-def _softmax_adapter(
-    x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None
-) -> _Impl:
+def _softmax_adapter(x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None) -> _Impl:
     """softmax(x, dim=-1, dtype=None)."""
     axis = operator.index(dim)
     return _run_with_dtype(
@@ -534,9 +517,7 @@ def _softmax_adapter(
     )
 
 
-def _softmin_adapter(
-    x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None
-) -> _Impl:
+def _softmin_adapter(x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None) -> _Impl:
     """softmin(x, dim=-1, dtype=None)."""
     axis = operator.index(dim)
     return _run_with_dtype(
@@ -548,9 +529,7 @@ def _softmin_adapter(
     )
 
 
-def _log_softmax_adapter(
-    x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None
-) -> _Impl:
+def _log_softmax_adapter(x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = None) -> _Impl:
     """log_softmax(x, dim=-1, dtype=None)."""
     axis = operator.index(dim)
     return _run_with_dtype(
@@ -576,11 +555,7 @@ def _extreme_adapter(
     if dim is None or isinstance(dim, Sequence):
         return values
     axis = axes[0] if axes else 0
-    idx_in = (
-        _C_engine.astype(x_impl, _C_engine.I8)
-        if x_impl.dtype == _C_engine.Bool
-        else x_impl
-    )
+    idx_in = _C_engine.astype(x_impl, _C_engine.I8) if x_impl.dtype == _C_engine.Bool else x_impl
     return _ValuesIndices((values, idx_fn(idx_in, axis, bool(keepdim))))
 
 
@@ -590,9 +565,7 @@ def _max_adapter(
     keepdim: bool = False,
 ) -> _Impl | _ValuesIndices[_Impl]:
     """max(x, dim=None, keepdim=False)."""
-    return _extreme_adapter(
-        "max", _C_engine.max, _C_engine.argmax, x_impl, dim, keepdim
-    )
+    return _extreme_adapter("max", _C_engine.max, _C_engine.argmax, x_impl, dim, keepdim)
 
 
 def _min_adapter(
@@ -601,9 +574,7 @@ def _min_adapter(
     keepdim: bool = False,
 ) -> _Impl | _ValuesIndices[_Impl]:
     """min(x, dim=None, keepdim=False)."""
-    return _extreme_adapter(
-        "min", _C_engine.min, _C_engine.argmin, x_impl, dim, keepdim
-    )
+    return _extreme_adapter("min", _C_engine.min, _C_engine.argmin, x_impl, dim, keepdim)
 
 
 def _flat_arg_reduce(

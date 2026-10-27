@@ -104,10 +104,7 @@ class GPTConfig(LanguageModelConfig):
         super().__post_init__()
         if self.num_labels <= 0:
             raise ValueError(f"num_labels must be positive, got {self.num_labels}")
-        if self.classifier_dropout is not None and not (
-            0.0 <= self.classifier_dropout < 1.0
-        ):
+        if self.classifier_dropout is not None and not (0.0 <= self.classifier_dropout < 1.0):
             raise ValueError(
-                "classifier_dropout must be in [0, 1) or None, got "
-                f"{self.classifier_dropout}"
+                "classifier_dropout must be in [0, 1) or None, got " f"{self.classifier_dropout}"
             )

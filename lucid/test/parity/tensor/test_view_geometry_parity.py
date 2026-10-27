@@ -62,9 +62,7 @@ def test_view_layout_matches_the_reference(name: str, device: str, ref: Any) -> 
 
 
 @pytest.mark.parametrize("name", list(GRID))
-def test_untyped_storage_and_data_ptr_match_the_reference_on_cpu(
-    name: str, ref: Any
-) -> None:
+def test_untyped_storage_and_data_ptr_match_the_reference_on_cpu(name: str, ref: Any) -> None:
     ours_root = lucid.arange(24.0).reshape(4, 6)
     theirs_root = ref.arange(24.0).reshape(4, 6)
     ours = _apply_named(name, ours_root, lucid)

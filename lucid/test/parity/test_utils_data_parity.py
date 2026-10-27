@@ -46,9 +46,7 @@ class TestCollateParity:
         np.random.seed(0)
         batch = [np.random.standard_normal(4).astype(np.float32) for _ in range(6)]
         l = collate(batch)
-        r = ref.utils.data.dataloader.default_collate(
-            [ref.tensor(b.copy()) for b in batch]
-        )
+        r = ref.utils.data.dataloader.default_collate([ref.tensor(b.copy()) for b in batch])
         assert_close(l, r, atol=1e-6)
 
     def test_list_of_tuples(self, ref: Any) -> None:
@@ -123,9 +121,7 @@ class TestNumpyScalarCollateParity:
     """A dataset returning ``y[i]`` from a NumPy label array (CHA-182)."""
 
     @pytest.mark.parametrize("np_dtype", [np.int64, np.int32, np.float32, np.float64])
-    def test_scalars_collate_into_one_tensor_of_their_dtype(
-        self, ref: Any, np_dtype: Any
-    ) -> None:
+    def test_scalars_collate_into_one_tensor_of_their_dtype(self, ref: Any, np_dtype: Any) -> None:
         batch = [np_dtype(i) for i in range(4)]
         l = collate(batch)
         r = ref.utils.data.dataloader.default_collate(batch)

@@ -55,9 +55,7 @@ class _SelectiveKernelAttn(nn.Module):
         self.fc_reduce = nn.Conv2d(channels, attn_channels, kernel_size=1, bias=False)
         self.bn = nn.BatchNorm2d(attn_channels)
         self.act = nn.ReLU(inplace=True)
-        self.fc_select = nn.Conv2d(
-            attn_channels, channels * num_paths, kernel_size=1, bias=False
-        )
+        self.fc_select = nn.Conv2d(attn_channels, channels * num_paths, kernel_size=1, bias=False)
         # Reused across calls — instantiating in forward() leaks modules and
         # breaks ``.to(device)``/``state_dict`` round-trips.
         self.gap = nn.AdaptiveAvgPool2d(1)
@@ -219,8 +217,7 @@ class _SelectiveKernel(nn.Module):
         if self.split_input:
             half = self.in_channels // self.num_paths
             x_paths = [
-                self.paths[i](x[:, i * half : (i + 1) * half, :, :])
-                for i in range(self.num_paths)
+                self.paths[i](x[:, i * half : (i + 1) * half, :, :]) for i in range(self.num_paths)
             ]
         else:
             x_paths = [op(x) for op in self.paths]
@@ -348,9 +345,7 @@ class _SelectiveKernelBottleneck(nn.Module):
             rd_divisor=rd_divisor,
             min_attn_channels=min_attn_channels,
         )
-        self.conv3 = _ConvBnAct(
-            width, outplanes, kernel_size=1, padding=0, apply_act=False
-        )
+        self.conv3 = _ConvBnAct(width, outplanes, kernel_size=1, padding=0, apply_act=False)
         self.act = nn.ReLU(inplace=True)
         self.downsample = downsample
 
@@ -446,9 +441,7 @@ def _build_body(
 ]:
     """Build all layers from config; return them plus the stage feature-info list."""
     stem = nn.Sequential(
-        nn.Conv2d(
-            config.in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
-        ),
+        nn.Conv2d(config.in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False),
         nn.BatchNorm2d(64),
         nn.ReLU(inplace=True),
     )
@@ -472,9 +465,7 @@ def _build_body(
     feature_info: list[FeatureInfo] = []
     reductions = [4, 8, 16, 32]
 
-    for stage_idx, (planes, stride) in enumerate(
-        zip(planes_per_stage, strides, strict=True)
-    ):
+    for stage_idx, (planes, stride) in enumerate(zip(planes_per_stage, strides, strict=True)):
         layer, cur = _make_stage(
             cur,
             planes,
@@ -484,9 +475,7 @@ def _build_body(
         )
         layers.append(layer)
         feature_info.append(
-            FeatureInfo(
-                stage=stage_idx + 1, num_channels=cur, reduction=reductions[stage_idx]
-            )
+            FeatureInfo(stage=stage_idx + 1, num_channels=cur, reduction=reductions[stage_idx])
         )
 
     return stem, pool, layers[0], layers[1], layers[2], layers[3], feature_info
@@ -713,8 +702,6 @@ class SKNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
 
         loss: Tensor | None = None
         if labels is not None:
-            loss = F.cross_entropy(
-                logits, labels, label_smoothing=self._label_smoothing
-            )
+            loss = F.cross_entropy(logits, labels, label_smoothing=self._label_smoothing)
 
         return ImageClassificationOutput(logits=logits, loss=loss)

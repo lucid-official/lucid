@@ -79,9 +79,7 @@ class _CompiledSparseAdam(_CompiledStepBase):
         return ("neg_step_size",)
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         betas = group.get("betas", (0.9, 0.999))
         if not isinstance(betas, (tuple, list)) or len(betas) != 2:
             raise TypeError(f"SparseAdam: betas must be a pair, got {betas!r}")

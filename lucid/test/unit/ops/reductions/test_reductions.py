@@ -90,9 +90,7 @@ class TestArgmin:
 class TestCumsum:
     def test_basic(self, device: str) -> None:
         t = lucid.tensor([1.0, 2.0, 3.0, 4.0], device=device)
-        np.testing.assert_array_equal(
-            lucid.cumsum(t, dim=0).numpy(), [1.0, 3.0, 6.0, 10.0]
-        )
+        np.testing.assert_array_equal(lucid.cumsum(t, dim=0).numpy(), [1.0, 3.0, 6.0, 10.0])
 
     def test_int_promotes_to_int64_no_overflow(self, device: str) -> None:
         # Like sum, an integer cumsum promotes to int64 so it doesn't silently
@@ -100,17 +98,13 @@ class TestCumsum:
         t = lucid.tensor([2_000_000_000] * 3, dtype=lucid.int32, device=device)
         out = lucid.cumsum(t, dim=0)
         assert out.dtype == lucid.int64
-        np.testing.assert_array_equal(
-            out.numpy(), [2_000_000_000, 4_000_000_000, 6_000_000_000]
-        )
+        np.testing.assert_array_equal(out.numpy(), [2_000_000_000, 4_000_000_000, 6_000_000_000])
 
 
 class TestCumprod:
     def test_basic(self, device: str) -> None:
         t = lucid.tensor([1.0, 2.0, 3.0, 4.0], device=device)
-        np.testing.assert_array_equal(
-            lucid.cumprod(t, dim=0).numpy(), [1.0, 2.0, 6.0, 24.0]
-        )
+        np.testing.assert_array_equal(lucid.cumprod(t, dim=0).numpy(), [1.0, 2.0, 6.0, 24.0])
 
     def test_int_promotes_to_int64(self, device: str) -> None:
         t = lucid.tensor([100, 100, 100], dtype=lucid.int32, device=device)

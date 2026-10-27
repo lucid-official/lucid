@@ -22,9 +22,7 @@ class TestGeometricAug:
 
     def test_hflip_p1(self) -> None:
         x = lucid.rand(3, 8, 8)
-        assert (
-            float((T.HorizontalFlip(p=1.0)(x) - F.hflip(x)).abs().max().item()) < 1e-6
-        )
+        assert float((T.HorizontalFlip(p=1.0)(x) - F.hflip(x)).abs().max().item()) < 1e-6
 
     def test_vflip_p1(self) -> None:
         x = lucid.rand(3, 8, 8)

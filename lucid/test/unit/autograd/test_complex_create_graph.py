@@ -18,9 +18,7 @@ def test_projection_hessian(dtype: lucid.dtype, device: str, conjugate: bool) ->
     loss = (real * real + 3 * imag * imag).sum()
     (gradient,) = lucid.autograd.grad(loss, [z], create_graph=True)
     np.testing.assert_allclose(gradient.numpy(), [2 + 12j, -6 + 24j])
-    (hessian,) = lucid.autograd.grad(
-        (lucid.real(gradient) + lucid.imag(gradient)).sum(), [z]
-    )
+    (hessian,) = lucid.autograd.grad((lucid.real(gradient) + lucid.imag(gradient)).sum(), [z])
     np.testing.assert_allclose(hessian.numpy(), [2 + 6j, 2 + 6j])
 
 
@@ -28,9 +26,7 @@ def test_projection_hessian(dtype: lucid.dtype, device: str, conjugate: bool) ->
 def test_complex_assembly_preserves_second_derivative(dtype: lucid.dtype) -> None:
     x = lucid.tensor([1.0, 2.0], dtype=dtype, requires_grad=True)
     z = lucid.complex(x * x, x * x * x)
-    (gradient,) = lucid.autograd.grad(
-        (lucid.real(z) + lucid.imag(z)).sum(), [x], create_graph=True
-    )
+    (gradient,) = lucid.autograd.grad((lucid.real(z) + lucid.imag(z)).sum(), [x], create_graph=True)
     np.testing.assert_allclose(gradient.numpy(), [5, 16])
     (hessian,) = lucid.autograd.grad(gradient.sum(), [x])
     np.testing.assert_allclose(hessian.numpy(), [8, 14])

@@ -21,8 +21,7 @@ _W0 = _RNG.standard_normal((4, 3)).astype(np.float32)
 # fast, with beta2 at 0.5, so the two variants end far apart.
 _BETAS = (0.9, 0.5)
 _GRADS = [
-    _RNG.standard_normal((4, 3)).astype(np.float32) * s
-    for s in (5.0, 0.1, 0.1, 3.0, 0.05, 0.05)
+    _RNG.standard_normal((4, 3)).astype(np.float32) * s for s in (5.0, 0.1, 0.1, 3.0, 0.05, 0.05)
 ]
 
 
@@ -49,9 +48,7 @@ def test_the_running_maximum_is_saved_and_restored(cls: type) -> None:
     state = opt.state_dict()
     per_param = next(iter(state["state"].values()))
     assert "max_exp_avg_sq" in per_param
-    assert np.all(
-        np.asarray(per_param["max_exp_avg_sq"]) >= np.asarray(per_param["exp_avg_sq"])
-    )
+    assert np.all(np.asarray(per_param["max_exp_avg_sq"]) >= np.asarray(per_param["exp_avg_sq"]))
 
     resumed = nn.Parameter(lucid.tensor(p.numpy().copy()))
     opt2 = cls([resumed], lr=0.1, betas=_BETAS, amsgrad=True)

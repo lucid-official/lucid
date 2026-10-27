@@ -23,9 +23,7 @@ from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 
 class _Attn(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.softmax(q @ k.permute(0, 1, 3, 2), dim=-1) @ v
 
 
@@ -54,9 +52,7 @@ def test_attention_correct_under_probe_verdict() -> None:
     # window must match a NumPy reference.
     for b, n in ((8, 17), (8, 20), (8, 24), (4, 18), (3, 22)):
         rng = np.random.default_rng(b * 100 + n)
-        arrs = [
-            rng.standard_normal((b, 12, n, 64)).astype(np.float32) for _ in range(3)
-        ]
+        arrs = [rng.standard_normal((b, 12, n, 64)).astype(np.float32) for _ in range(3)]
         ins = [lucid.tensor(a.copy(), device=COMPILE_DEVICE) for a in arrs]
         out = lucid.compile(_Attn().to(COMPILE_DEVICE).eval())(*ins).numpy()
         err = float(np.abs(out - _np_attention(*arrs)).max())

@@ -119,9 +119,7 @@ def test_training_step_updates_original_and_matches_eager(device: str) -> None:
         e_loss.backward()
         e_opt.step()
 
-        assert np.isclose(
-            float(c_loss.item()), float(e_loss.item()), rtol=_TOL, atol=_TOL
-        )
+        assert np.isclose(float(c_loss.item()), float(e_loss.item()), rtol=_TOL, atol=_TOL)
 
     c_original = compiled_model.parametrizations.weight.original
     e_original = eager_model.parametrizations.weight.original

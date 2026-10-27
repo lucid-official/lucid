@@ -44,9 +44,10 @@ def _flat(t: Tensor) -> list[float]:
 def _assert_values(got: Tensor, want: Tensor, tol: float = 1e-10) -> None:
     g, w = _flat(got), _flat(want)
     assert len(g) == len(w)
-    assert all(
-        math.isclose(a, b, rel_tol=tol, abs_tol=tol) for a, b in zip(g, w, strict=True)
-    ), (g, w)
+    assert all(math.isclose(a, b, rel_tol=tol, abs_tol=tol) for a, b in zip(g, w, strict=True)), (
+        g,
+        w,
+    )
 
 
 def _vec(m: ModuleType, vals: list[float], device: str = "cpu") -> Tensor:
@@ -101,9 +102,7 @@ def test_jvp_attaches_where_the_reference_does(ref: ModuleType, case: str) -> No
 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", ["primal_rg", "tangent_rg", "captured"])
-def test_an_attached_tangent_carries_the_reference_gradient(
-    ref: ModuleType, case: str
-) -> None:
+def test_an_attached_tangent_carries_the_reference_gradient(ref: ModuleType, case: str) -> None:
     """Attached is not enough: a loss on the tangent and the primal output
     must send the reference's gradient to whatever requires grad."""
     grads = {}
@@ -131,9 +130,7 @@ def test_jacfwd_attaches_where_the_reference_does(ref: ModuleType, case: str) ->
 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", ["plain", "primal_rg", "captured"])
-def test_linearize_attaches_where_the_reference_does(
-    ref: ModuleType, case: str
-) -> None:
+def test_linearize_attaches_where_the_reference_does(ref: ModuleType, case: str) -> None:
     got = {}
     for m in (lucid, ref):
         f, x, t, _ = _scenario(m, case)
@@ -292,9 +289,7 @@ def _grad_mode(on: bool) -> Iterator[None]:
         pytest.param(True, False, True, 2, id="captured_parameter"),
     ],
 )
-def test_how_many_times_jvp_runs_func(
-    grad_on: bool, x_rg: bool, w_rg: bool, calls: int
-) -> None:
+def test_how_many_times_jvp_runs_func(grad_on: bool, x_rg: bool, w_rg: bool, calls: int) -> None:
     f = _Counted(lucid.tensor([1.5, -2.0, 0.75]).requires_grad_(w_rg))
     x = lucid.tensor([0.5, -1.0, 2.0]).requires_grad_(x_rg)
     with _grad_mode(grad_on):
@@ -370,11 +365,7 @@ def test_the_stream_moves_as_far_as_one_run() -> None:
 # ── the public signatures say what they return ───────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "name", ["grad", "grad_and_value", "vjp", "jacrev", "jacfwd", "hessian"]
-)
+@pytest.mark.parametrize("name", ["grad", "grad_and_value", "vjp", "jacrev", "jacfwd", "hessian"])
 def test_transform_signatures_are_not_widened_to_any(name: str) -> None:
-    sig = inspect.signature(
-        getattr(func, name), annotation_format=annotationlib.Format.STRING
-    )
+    sig = inspect.signature(getattr(func, name), annotation_format=annotationlib.Format.STRING)
     assert "Any" not in str(sig), str(sig)

@@ -57,13 +57,9 @@ class _Carries(nn.Module):
 
 
 class TestAPackageKnowsItsFloor:
-    def test_an_ordinary_export_stays_where_the_writer_writes(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_ordinary_export_stays_where_the_writer_writes(self, tmp_path: object) -> None:
         lucid.manual_seed(0)
-        exported = cml.export(
-            _small(), lucid.randn(1, 3, 32, 32), f"{tmp_path}/plain.mlpackage"
-        )
+        exported = cml.export(_small(), lucid.randn(1, 3, 32, 32), f"{tmp_path}/plain.mlpackage")
         try:
             assert exported.deployment_target is cml.DeploymentTarget.IOS17
         finally:
@@ -82,9 +78,7 @@ class TestAPackageKnowsItsFloor:
         finally:
             exported.close()
 
-    def test_asking_for_palettization_is_not_the_same_as_getting_it(
-        self, tmp_path: object
-    ) -> None:
+    def test_asking_for_palettization_is_not_the_same_as_getting_it(self, tmp_path: object) -> None:
         """The package answers, not the request.
 
         Weights below the threshold are left alone — the tables cost
@@ -104,9 +98,7 @@ class TestAPackageKnowsItsFloor:
         finally:
             exported.close()
 
-    def test_reopening_a_package_agrees_with_exporting_it(
-        self, tmp_path: object
-    ) -> None:
+    def test_reopening_a_package_agrees_with_exporting_it(self, tmp_path: object) -> None:
         """One file, one answer.
 
         An exported handle knows its floor because the export settled

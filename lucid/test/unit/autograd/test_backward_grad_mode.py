@@ -35,9 +35,7 @@ def _module_hooks(m: ModuleType, device: str, create_graph: bool, mode: str) -> 
 
     mod = Double()
     seen: dict[str, bool] = {}
-    mod.register_full_backward_pre_hook(
-        lambda _m, go: seen.__setitem__("pre", m.is_grad_enabled())
-    )
+    mod.register_full_backward_pre_hook(lambda _m, go: seen.__setitem__("pre", m.is_grad_enabled()))
     mod.register_full_backward_hook(
         lambda _m, gi, go: seen.__setitem__("full", m.is_grad_enabled())
     )
@@ -59,9 +57,7 @@ def _tensor_hook(m: ModuleType, device: str, create_graph: bool, mode: str) -> o
     return seen
 
 
-def _function_backward(
-    m: ModuleType, device: str, create_graph: bool, mode: str
-) -> object:
+def _function_backward(m: ModuleType, device: str, create_graph: bool, mode: str) -> object:
     seen: list[bool] = []
 
     class Twice(m.autograd.Function):
@@ -104,9 +100,7 @@ def _multi_output_function_backward(
     return seen
 
 
-def _hook_built_tensor(
-    m: ModuleType, device: str, create_graph: bool, mode: str
-) -> object:
+def _hook_built_tensor(m: ModuleType, device: str, create_graph: bool, mode: str) -> object:
     class Double(m.nn.Module):
         def forward(self, a: object) -> object:
             return a * 2.0
@@ -114,9 +108,7 @@ def _hook_built_tensor(
     mod = Double()
     w = m.ones(2, requires_grad=True, device=device)
     seen: list[bool] = []
-    mod.register_full_backward_hook(
-        lambda _m, gi, go: seen.append(bool((go[0] * w).requires_grad))
-    )
+    mod.register_full_backward_hook(lambda _m, gi, go: seen.append(bool((go[0] * w).requires_grad)))
     x = m.tensor([1.0, 2.0], requires_grad=True, device=device)
     loss = mod(x).sum()
     with _caller_mode(m, mode):
@@ -165,9 +157,7 @@ def test_matches_the_reference(
     name: str, create_graph: bool, mode: str, ref: ModuleType, device: str
 ) -> None:
     scenario = _SCENARIOS[name]
-    assert scenario(lucid, device, create_graph, mode) == scenario(
-        ref, "cpu", create_graph, mode
-    )
+    assert scenario(lucid, device, create_graph, mode) == scenario(ref, "cpu", create_graph, mode)
 
 
 @pytest.mark.parametrize("create_graph", [False, True])

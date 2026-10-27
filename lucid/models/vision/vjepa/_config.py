@@ -247,9 +247,7 @@ class VJEPAConfig(ModelConfig):
                 f"{self.tubelet_size}; a tubelet would straddle the end of the clip"
             )
         if self.dim % self.num_heads != 0:
-            raise ValueError(
-                f"dim {self.dim} is not divisible by num_heads {self.num_heads}"
-            )
+            raise ValueError(f"dim {self.dim} is not divisible by num_heads {self.num_heads}")
         heads = self.resolved_predictor_heads
         if heads < 1 or self.predictor_dim % heads != 0:
             raise ValueError(
@@ -267,19 +265,13 @@ class VJEPAConfig(ModelConfig):
                 )
         low, high = self.aspect_ratio
         if not 0.0 < low <= high:
-            raise ValueError(
-                f"aspect_ratio must satisfy 0 < low <= high, got ({low}, {high})"
-            )
+            raise ValueError(f"aspect_ratio must satisfy 0 < low <= high, got ({low}, {high})")
         start, end = self.ema
         if not 0.0 <= start <= end <= 1.0:
             raise ValueError(
                 f"the target encoder's momentum must rise through [0, 1], got ({start}, {end})"
             )
         if self.ema_schedule_scale <= 0.0:
-            raise ValueError(
-                f"ema_schedule_scale must be positive, got {self.ema_schedule_scale}"
-            )
+            raise ValueError(f"ema_schedule_scale must be positive, got {self.ema_schedule_scale}")
         if self.smooth_l1_beta <= 0.0:
-            raise ValueError(
-                f"smooth_l1_beta must be positive, got {self.smooth_l1_beta}"
-            )
+            raise ValueError(f"smooth_l1_beta must be positive, got {self.smooth_l1_beta}")

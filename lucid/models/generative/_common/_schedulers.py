@@ -99,9 +99,7 @@ class DiffusionScheduler(ABC):
                 self.to(sample.device)
 
     @abstractmethod
-    def set_timesteps(
-        self, num_inference_steps: int, *, device: DeviceLike = None
-    ) -> None:
+    def set_timesteps(self, num_inference_steps: int, *, device: DeviceLike = None) -> None:
         """Populate :attr:`timesteps` for the requested inference schedule.
 
         Most schedulers sub-sample the training schedule uniformly when
@@ -252,14 +250,10 @@ class DDPMScheduler(DiffusionScheduler):
             self.to(device)
 
     @override
-    def set_timesteps(
-        self, num_inference_steps: int, *, device: DeviceLike = None
-    ) -> None:
+    def set_timesteps(self, num_inference_steps: int, *, device: DeviceLike = None) -> None:
         """Uniform-subsample the training schedule into ``num_inference_steps``."""
         if num_inference_steps <= 0:
-            raise ValueError(
-                f"num_inference_steps must be positive, got {num_inference_steps}"
-            )
+            raise ValueError(f"num_inference_steps must be positive, got {num_inference_steps}")
         if num_inference_steps > self.num_train_timesteps:
             raise ValueError(
                 f"num_inference_steps ({num_inference_steps}) exceeds "
@@ -300,9 +294,7 @@ class DDPMScheduler(DiffusionScheduler):
         self._follow(original)
         shape, dtype = original.shape, original.dtype
         sqrt_ab = extract_into_tensor(self._signal_scale, timesteps, shape, dtype=dtype)
-        sqrt_one_minus_ab = extract_into_tensor(
-            self._noise_scale, timesteps, shape, dtype=dtype
-        )
+        sqrt_one_minus_ab = extract_into_tensor(self._noise_scale, timesteps, shape, dtype=dtype)
         return sqrt_ab * original + sqrt_one_minus_ab * noise
 
     @override

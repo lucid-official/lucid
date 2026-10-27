@@ -163,9 +163,7 @@ class TestSequentialOrderPreserved:
         # Regression: replacing a Sequential child via setattr would move it to
         # the end (Module.__setattr__ delete-then-re-add), scrambling exec order.
         lucid.manual_seed(5)
-        model = nn.Sequential(
-            nn.Conv2d(3, 4, 3, padding=1), nn.BatchNorm2d(4), nn.ReLU()
-        )
+        model = nn.Sequential(nn.Conv2d(3, 4, 3, padding=1), nn.BatchNorm2d(4), nn.ReLU())
         model.eval()
         prepared = Q.prepare(nnq.QuantWrapper(model))
         for _ in range(4):

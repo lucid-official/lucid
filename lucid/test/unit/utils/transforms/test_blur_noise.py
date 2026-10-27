@@ -53,9 +53,7 @@ class TestBlurNoise:
 
         s = {
             "image": T.Image(lucid.rand(3, 16, 16)),
-            "boxes": T.BoundingBoxes(
-                lucid.tensor([[1.0, 2.0, 8.0, 9.0]]), "xyxy", (16, 16)
-            ),
+            "boxes": T.BoundingBoxes(lucid.tensor([[1.0, 2.0, 8.0, 9.0]]), "xyxy", (16, 16)),
         }
         out = T.GaussNoise(p=1.0)(s)
         assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [

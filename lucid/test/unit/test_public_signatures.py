@@ -67,9 +67,7 @@ def _public_callables() -> list[str]:
     return found
 
 
-@pytest.mark.parametrize(
-    "name", [n for n in _public_callables() if n not in NO_PYTHON_SIGNATURE]
-)
+@pytest.mark.parametrize("name", [n for n in _public_callables() if n not in NO_PYTHON_SIGNATURE])
 def test_a_public_callable_has_a_readable_signature(name: str) -> None:
     inspect.signature(getattr(lucid, name))
 
@@ -201,9 +199,7 @@ def test_the_annotation_table_check_reads_only_the_generated_region() -> None:
         text.replace(gen.END, ""),
         text.replace(gen.BEGIN, ""),
         text + gen.BEGIN + "\n",
-        text.replace(gen.BEGIN, "\0")
-        .replace(gen.END, gen.BEGIN)
-        .replace("\0", gen.END),
+        text.replace(gen.BEGIN, "\0").replace(gen.END, gen.BEGIN).replace("\0", gen.END),
     ):
         with pytest.raises(gen.MarkerError):
             gen.region(broken)
@@ -227,9 +223,7 @@ def test_binding_names_imports_nothing_the_package_defers() -> None:
         "        except (ValueError, TypeError): pass\n"
         "assert 'numpy' not in sys.modules, 'reading a signature imported numpy'\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, cwd=_REPO
-    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=_REPO)
     assert result.returncode == 0, result.stderr[-2000:]
 
 
@@ -278,9 +272,7 @@ def test_importing_any_subpackage_first_leaves_every_package_whole() -> None:
     assert not broken, "\n\n".join(broken)
 
 
-def test_every_tensor_method_and_property_resolves_annotations_without_method_shadowing() -> (
-    None
-):
+def test_every_tensor_method_and_property_resolves_annotations_without_method_shadowing() -> None:
     """PEP 649 annotations on ``Tensor`` resolve ``int``, ``bool``, and ``float``
     to the builtins rather than ``Tensor.int``, ``Tensor.bool``, or ``Tensor.float``
     (LCD-442)."""

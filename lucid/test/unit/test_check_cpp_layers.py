@@ -204,9 +204,7 @@ def test_allowlist_ratchet_detects_stale_and_duplicate_entries(tmp_path: Path) -
     }
 
     # The upward-include entry is no longer present -> stale allow-list failure.
-    new_violations, stale, allowed_hits = check_cpp_layers.scan_engine(
-        engine, allowlist=allowlist
-    )
+    new_violations, stale, allowed_hits = check_cpp_layers.scan_engine(engine, allowlist=allowlist)
     assert new_violations == []
     assert len(allowed_hits) == 1
     assert stale == [("autograd/Engine.cpp", "upward-include", "../ops/gfunc/Gfunc.h")]

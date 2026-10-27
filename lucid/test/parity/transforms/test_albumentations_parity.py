@@ -96,9 +96,7 @@ class TestExact:
         chw, hwc = _image(3)
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
         got = _run_lucid(T.Normalize(mean, std, max_pixel_value=1.0, p=1.0), chw)
-        ref = _run_albu(
-            A.Normalize(mean=mean, std=std, max_pixel_value=1.0, p=1.0), hwc
-        )
+        ref = _run_albu(A.Normalize(mean=mean, std=std, max_pixel_value=1.0, p=1.0), hwc)
         np.testing.assert_allclose(got, ref, atol=1e-5)
 
     @pytest.mark.parametrize("num_bits", [1, 2, 3, 4, 5, 6, 7])
@@ -181,28 +179,20 @@ class TestStatisticalParity:
         # Mean must stay below the per-seed tolerance.
         worst_bound = max(atol * 50, 1e-12)  # avoid 0-vs-0 strict-less trap
         assert worst <= worst_bound, (
-            f"worst-case diff {worst:.3e} exceeds {worst_bound:.3e} "
-            f"across {self.N_SEEDS} seeds"
+            f"worst-case diff {worst:.3e} exceeds {worst_bound:.3e} " f"across {self.N_SEEDS} seeds"
         )
         assert mean <= atol or mean < 1e-12, (
-            f"mean-of-max diff {mean:.3e} exceeds {atol:.3e} "
-            f"across {self.N_SEEDS} seeds"
+            f"mean-of-max diff {mean:.3e} exceeds {atol:.3e} " f"across {self.N_SEEDS} seeds"
         )
 
     def test_horizontal_flip_aggregate(self) -> None:
-        self._aggregate(
-            lambda: T.HorizontalFlip(p=1.0), lambda: A.HorizontalFlip(p=1.0), atol=0.0
-        )
+        self._aggregate(lambda: T.HorizontalFlip(p=1.0), lambda: A.HorizontalFlip(p=1.0), atol=0.0)
 
     def test_vertical_flip_aggregate(self) -> None:
-        self._aggregate(
-            lambda: T.VerticalFlip(p=1.0), lambda: A.VerticalFlip(p=1.0), atol=0.0
-        )
+        self._aggregate(lambda: T.VerticalFlip(p=1.0), lambda: A.VerticalFlip(p=1.0), atol=0.0)
 
     def test_invert_aggregate(self) -> None:
-        self._aggregate(
-            lambda: T.InvertImg(p=1.0), lambda: A.InvertImg(p=1.0), atol=0.0
-        )
+        self._aggregate(lambda: T.InvertImg(p=1.0), lambda: A.InvertImg(p=1.0), atol=0.0)
 
     def test_normalize_aggregate(self) -> None:
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)

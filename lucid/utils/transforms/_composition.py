@@ -124,9 +124,7 @@ class SomeOf(_Container):
     without listing every combination.
     """
 
-    def __init__(
-        self, transforms: list[TransformLike], n: int = 1, p: float = 1.0
-    ) -> None:
+    def __init__(self, transforms: list[TransformLike], n: int = 1, p: float = 1.0) -> None:
         super().__init__(transforms, p=p)
         self.n = n
 
@@ -224,9 +222,7 @@ class OneOrOther(_Container):
     ... )
     """
 
-    def __init__(
-        self, first: TransformLike, second: TransformLike, p: float = 0.5
-    ) -> None:
+    def __init__(self, first: TransformLike, second: TransformLike, p: float = 0.5) -> None:
         super().__init__([first, second], p=1.0)
         self.first = first
         self.second = second
@@ -286,9 +282,7 @@ class ReplayCompose(_Container):
                 self.replay_data.append((tf, None, True))
         return out
 
-    def replay(
-        self, saved: list[tuple[TransformLike, object, bool]], inputs: object
-    ) -> object:
+    def replay(self, saved: list[tuple[TransformLike, object, bool]], inputs: object) -> object:
         """Re-apply a previously recorded ``replay_data`` to a new sample.
 
         Walks the saved ``(transform, params, applied)`` log in order

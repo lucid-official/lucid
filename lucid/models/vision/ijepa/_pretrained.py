@@ -103,9 +103,7 @@ def ijepa_base_16(pretrained: bool = False, **overrides: object) -> IJEPAModel:
     default_config=_CFG_BASE_16,
     summary="auto",
 )
-def ijepa_base_16_cls(
-    pretrained: bool = False, **overrides: object
-) -> IJEPAForImageClassification:
+def ijepa_base_16_cls(pretrained: bool = False, **overrides: object) -> IJEPAForImageClassification:
     r"""A linear probe on I-JEPA ViT-B/16.
 
     Parameters
@@ -277,9 +275,7 @@ def ijepa_huge_14(pretrained: bool = False, **overrides: object) -> IJEPAModel:
     default_config=_CFG_HUGE_14,
     summary="auto",
 )
-def ijepa_huge_14_cls(
-    pretrained: bool = False, **overrides: object
-) -> IJEPAForImageClassification:
+def ijepa_huge_14_cls(pretrained: bool = False, **overrides: object) -> IJEPAForImageClassification:
     r"""A linear probe on I-JEPA ViT-H/14.
 
     Parameters

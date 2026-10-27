@@ -378,9 +378,7 @@ def test_maskformer_weights_default_aliases() -> None:
 
 
 def test_maskformer_weights_entry_fields() -> None:
-    for cls, (_fac, slug, src, nparams, miou) in zip(
-        _maskformer_enums(), _MASKFORMER_SHIPPED
-    ):
+    for cls, (_fac, slug, src, nparams, miou) in zip(_maskformer_enums(), _MASKFORMER_SHIPPED):
         e = cls.ADE20K.entry
         assert e.num_classes == 150
         assert len(e.sha256) == 64 or e.sha256 == "__PENDING_UPLOAD__"
@@ -563,8 +561,7 @@ def _m2f_tiny_config(**over: object):
 
 def _m2f_targets(side: int = 64) -> list[dict[str, object]]:
     square = [
-        [1.0 if (8 <= r < 40 and 8 <= c < 40) else 0.0 for c in range(side)]
-        for r in range(side)
+        [1.0 if (8 <= r < 40 and 8 <= c < 40) else 0.0 for c in range(side)] for r in range(side)
     ]
     return [{"labels": lucid.tensor([1]).long(), "masks": lucid.tensor([square])}]
 
@@ -620,9 +617,7 @@ class TestMask2FormerTraining:
             ]
         )
         coords = sample_point_coords(cfg.train_num_points)
-        pred, gt = _m2f_match(
-            class_logits, mask_logits, gt_labels, gt_masks, coords, cfg
-        )
+        pred, gt = _m2f_match(class_logits, mask_logits, gt_labels, gt_masks, coords, cfg)
         assert list(zip(pred, gt)) == [(2, 0)]
 
     def test_deep_supervision_adds_the_auxiliary_layers(self) -> None:
@@ -635,9 +630,7 @@ class TestMask2FormerTraining:
         lucid.manual_seed(0)
         cfg = _m2f_tiny_config()
         deep = Mask2FormerForSemanticSegmentation(cfg)
-        shallow = Mask2FormerForSemanticSegmentation(
-            replace(cfg, deep_supervision=False)
-        )
+        shallow = Mask2FormerForSemanticSegmentation(replace(cfg, deep_supervision=False))
         shallow.load_state_dict(deep.state_dict())
         x = lucid.randn(1, 3, 64, 64)
         targets = _m2f_targets()
@@ -657,9 +650,7 @@ class TestMask2FormerTraining:
 
         lucid.manual_seed(0)
         side = 32
-        ramp = [
-            [-20.0 + 40.0 * c / (side - 1) for c in range(side)] for _ in range(side)
-        ]
+        ramp = [[-20.0 + 40.0 * c / (side - 1) for c in range(side)] for _ in range(side)]
         logits = lucid.tensor([ramp])
         coords = uncertain_point_coords(logits, 400, 3.0, 0.75)
         values = [abs(v) for v in point_sample(logits, coords)[0].tolist()]
@@ -704,9 +695,7 @@ class TestAttentionUNetRank:
         )
 
         return AttentionUNetForSemanticSegmentation(
-            AttentionUNetConfig(
-                num_classes=3, base_channels=8, depth=2, spatial_dims=dims
-            )
+            AttentionUNetConfig(num_classes=3, base_channels=8, depth=2, spatial_dims=dims)
         )
 
     def test_two_d_shape_is_unchanged(self) -> None:

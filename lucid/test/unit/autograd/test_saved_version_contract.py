@@ -65,17 +65,13 @@ READS_NOTHING: dict[str, Callable[[Any, Any], Any]] = {
 # The writes made into ``y`` (whose column 0 is ``v``) after the forward.
 WRITES: dict[str, Callable[[Any, Any], object]] = {
     "setitem through the base": lambda y, v: y.__setitem__((slice(None), 1), 7.0),
-    "setitem reading the view": lambda y, v: y.__setitem__(
-        (slice(None), 1), y[:, 0] + 5.0
-    ),
+    "setitem reading the view": lambda y, v: y.__setitem__((slice(None), 1), y[:, 0] + 5.0),
     "in-place on the base": lambda y, v: y.add_(1.0),
     "in-place on the view": lambda y, v: v.mul_(2.0),
 }
 
 
-def _grad_reading_nothing(
-    lib: Any, device: str | None, op: str, write: str
-) -> np.ndarray:
+def _grad_reading_nothing(lib: Any, device: str | None, op: str, write: str) -> np.ndarray:
     kw = {} if device is None else {"device": device}
     w = lib.arange(6.0, **kw).reshape(2, 3).requires_grad_()
     y = w * 1.0
@@ -145,9 +141,7 @@ def _bias_written(lib: Any, device: str | None, layer: str) -> list[np.ndarray]:
     return [np.asarray(t.grad.detach().cpu().numpy()) for t in leaves]
 
 
-def _recurrent_bias_written(
-    lib: Any, device: str | None, kind: str
-) -> list[np.ndarray]:
+def _recurrent_bias_written(lib: Any, device: str | None, kind: str) -> list[np.ndarray]:
     """``kind`` run once, its ``bias_ih`` written after forward, then backward.
 
     The parameters come from one seeded generator in the reference's order
@@ -162,12 +156,8 @@ def _recurrent_bias_written(
     params = list(cell.parameters())
     with lib.no_grad():
         for p in params:
-            p.copy_(
-                lib.tensor(rng.standard_normal(tuple(p.shape)).astype(np.float32), **kw)
-            )
-    x = lib.tensor(
-        rng.standard_normal((5, 2, 3)).astype(np.float32), **kw
-    ).requires_grad_()
+            p.copy_(lib.tensor(rng.standard_normal(tuple(p.shape)).astype(np.float32), **kw))
+    x = lib.tensor(rng.standard_normal((5, 2, 3)).astype(np.float32), **kw).requires_grad_()
     out, _ = cell(x)
     with lib.no_grad():
         params[2].add_(1.0)
@@ -199,9 +189,7 @@ def test_a_global_response_norm_beta_is_guarded(device: str) -> None:
     x = lucid.randn(1, 2, 3, 3, device=device).requires_grad_()
     gamma = lucid.ones(2, device=device).requires_grad_()
     beta = (lucid.full((2,), 0.5, device=device).requires_grad_()) * 1.0
-    out = _wrap(
-        _C_engine.nn.global_response_norm(_unwrap(x), _unwrap(gamma), _unwrap(beta))
-    )
+    out = _wrap(_C_engine.nn.global_response_norm(_unwrap(x), _unwrap(gamma), _unwrap(beta)))
     try:
         beta.mul_(2.0)
     except RuntimeError as exc:
@@ -270,9 +258,7 @@ SAVES: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
 }
 
 
-def _saved_then_written(
-    lib: Any, device: str | None, case: str
-) -> tuple[Any, Any, Any]:
+def _saved_then_written(lib: Any, device: str | None, case: str) -> tuple[Any, Any, Any]:
     """Build ``case`` on a slice ``x``, then double ``x`` in place.
 
     Returns the loss, whatever the write raised (``None`` if it went in), and
@@ -331,15 +317,11 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
     ),
     "fmod": (
         (2, 3),
-        lambda lib, x: lib.fmod(
-            x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])
-        ),
+        lambda lib, x: lib.fmod(x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])),
     ),
     "remainder": (
         (2, 3),
-        lambda lib, x: lib.remainder(
-            x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])
-        ),
+        lambda lib, x: lib.remainder(x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])),
     ),
     "matmul": (
         (2, 3),
@@ -351,9 +333,7 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
     ),
     "mm": (
         (2, 3),
-        lambda lib, x: lib.mm(
-            x, _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
-        ),
+        lambda lib, x: lib.mm(x, _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])),
     ),
     "bmm": (
         (2, 2, 3),
@@ -383,15 +363,11 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
     ),
     "linear": (
         (2, 3),
-        lambda lib, x: _fn(lib, "linear")(
-            x, _const(lib, x, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]])
-        ),
+        lambda lib, x: _fn(lib, "linear")(x, _const(lib, x, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]])),
     ),
     "linear weight": (
         (2, 3),
-        lambda lib, w: _fn(lib, "linear")(
-            _const(lib, w, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]]), w
-        ),
+        lambda lib, w: _fn(lib, "linear")(_const(lib, w, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]]), w),
     ),
     "addcmul": (
         (2, 3),
@@ -424,15 +400,11 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
 CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
     "nextafter": (
         (2, 3),
-        lambda lib, x: lib.nextafter(
-            x, _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-        ),
+        lambda lib, x: lib.nextafter(x, _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])),
     ),
     "conv2d": (
         (1, 1, 3, 3),
-        lambda lib, x: _fn(lib, "conv2d")(
-            x, _const(lib, x, [[[[1.0, -0.5], [0.25, 2.0]]]])
-        ),
+        lambda lib, x: _fn(lib, "conv2d")(x, _const(lib, x, [[[[1.0, -0.5], [0.25, 2.0]]]])),
     ),
     "conv2d weight": (
         (1, 1, 2, 2),
@@ -473,9 +445,7 @@ def _constant_operand_grad(
         x = (leaf * 1.0)[..., :-1]
     else:
         rng = np.random.default_rng(2)
-        leaf = lib.tensor(
-            rng.standard_normal(shape).astype(np.float32), **kw
-        ).requires_grad_()
+        leaf = lib.tensor(rng.standard_normal(shape).astype(np.float32), **kw).requires_grad_()
         x = leaf * 1.0
     out = build(lib, x)
     if mutate:
@@ -500,9 +470,7 @@ def test_a_write_into_an_operand_only_an_unneeded_gradient_reads_is_allowed(
 def test_conv_with_constant_peer_allows_inplace_write(
     case: str, sliced: bool, create_graph: bool, device: str, ref: ModuleType
 ) -> None:
-    got = _constant_operand_grad(
-        lucid, device, case, sliced=sliced, create_graph=create_graph
-    )
+    got = _constant_operand_grad(lucid, device, case, sliced=sliced, create_graph=create_graph)
     want = _constant_operand_grad(
         ref, None, case, sliced=sliced, create_graph=create_graph, mutate=False
     )
@@ -572,9 +540,7 @@ def test_lstm_allows_a_write_into_c0(device: str) -> None:
     np.testing.assert_allclose(x_grad(True), x_grad(False), rtol=1e-5)
 
 
-def test_scatter_reduce_refuses_a_write_into_its_operands(
-    device: str, ref: ModuleType
-) -> None:
+def test_scatter_reduce_refuses_a_write_into_its_operands(device: str, ref: ModuleType) -> None:
     # The node held base and src as tensors and read their live values.
     def run(lib: Any, kw: dict[str, str]) -> Any:
         base = lib.tensor([5.0, 0.0, 5.0, 0.0], **kw).requires_grad_() * 1.0
@@ -601,9 +567,7 @@ def test_scatter_reduce_refuses_a_write_into_its_operands(
 _INDEX_WRITERS: dict[str, Callable[[Any, Any, Any], Any]] = {
     "scatter_add": lambda base, idx, src: base.scatter_add(0, idx, src),
     "scatter": lambda base, idx, src: base.scatter(0, idx, src),
-    "scatter_reduce amax": lambda base, idx, src: lucid.scatter_reduce(
-        base, 0, idx, src, "amax"
-    ),
+    "scatter_reduce amax": lambda base, idx, src: lucid.scatter_reduce(base, 0, idx, src, "amax"),
 }
 _INDEX_NAMES = {
     "scatter_add": "scatter_add input 1",
@@ -644,9 +608,7 @@ def test_a_write_into_lu_solve_b_is_named_as_argument_2(device_cpu_only: str) ->
     A = lucid.tensor([[[0.0, 2.0], [3.0, 1.0]]], device=device_cpu_only)
     LU, piv = lu_factor(A)
     LU = LU.detach().requires_grad_()
-    wide = lucid.tensor(
-        [[[1.0, 9.0], [2.0, 9.0]]], device=device_cpu_only
-    ).requires_grad_()
+    wide = lucid.tensor([[[1.0, 9.0], [2.0, 9.0]]], device=device_cpu_only).requires_grad_()
     b = (wide * 1.0)[..., :1]
     x = lu_solve(LU, piv, b)
     b.mul_(2.0)
@@ -767,10 +729,7 @@ def test_the_check_refuses_each_way_a_node_can_escape_the_guard(tmp_path: Path) 
     )
     text = "\n".join(problems)
     assert "FooBackward::saved_x_ holds tensor data and is not classified" in text
-    assert (
-        "FooBackward keeps a tensor of its own but does not declare kKeepsOwnValues"
-        in text
-    )
+    assert "FooBackward keeps a tensor of its own but does not declare kKeepsOwnValues" in text
     assert (
         "QuxBackward declares kKeepsOwnValues = true but does not define release_own_saved()"
         in text

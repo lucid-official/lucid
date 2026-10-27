@@ -8,9 +8,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 
 
-@pytest.mark.parametrize(
-    "name", ["linear", "conv", "layernorm", "softmax", "attention", "fft"]
-)
+@pytest.mark.parametrize("name", ["linear", "conv", "layernorm", "softmax", "attention", "fft"])
 def test_native_forward_has_no_python_host_observation(
     monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
@@ -32,9 +30,7 @@ def test_native_forward_has_no_python_host_observation(
         expected = call().numpy().copy()
 
         def forbidden(*args: object, **kwargs: object) -> None:
-            raise AssertionError(
-                "unexpected Python host observation in native Metal forward"
-            )
+            raise AssertionError("unexpected Python host observation in native Metal forward")
 
         with monkeypatch.context() as guard:
             for method in ("numpy", "item", "cpu", "tolist", "__float__", "__bool__"):

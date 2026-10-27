@@ -59,8 +59,7 @@ def _assert_parity(got: object, want: object, tol: float = _TOL) -> None:
     w_vals = _tree_flat(want)
     assert len(g_vals) == len(w_vals)
     assert all(
-        math.isclose(a, b, rel_tol=tol, abs_tol=tol)
-        for a, b in zip(g_vals, w_vals, strict=True)
+        math.isclose(a, b, rel_tol=tol, abs_tol=tol) for a, b in zip(g_vals, w_vals, strict=True)
     ), (g_vals, w_vals)
 
 
@@ -107,9 +106,7 @@ def test_jacobian_vjp_jvp_single_tensor_shapes(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("in_shape", _SHAPES, ids=["in0d", "in1d", "in2d", "in3d"])
-def test_hessian_vhp_hvp_single_tensor_shapes(
-    ref: ModuleType, in_shape: tuple[int, ...]
-) -> None:
+def test_hessian_vhp_hvp_single_tensor_shapes(ref: ModuleType, in_shape: tuple[int, ...]) -> None:
     def scalar_fn(x: Tensor) -> Tensor:
         return (x * x * x).sum() + (x.sum() ** 2) * 0.5
 
@@ -264,9 +261,7 @@ def test_unused_input_device_and_dtype_preserved(device: str) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("fn_name", ["jacobian", "hessian", "vjp", "jvp", "vhp", "hvp"])
-def test_non_tensor_or_non_tuple_containers_raise_type_error(
-    ref: ModuleType, fn_name: str
-) -> None:
+def test_non_tensor_or_non_tuple_containers_raise_type_error(ref: ModuleType, fn_name: str) -> None:
     for m in (lucid, ref):
         ns = _ns(m)
         fn = getattr(ns, fn_name)

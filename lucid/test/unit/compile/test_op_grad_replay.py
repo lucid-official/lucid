@@ -48,9 +48,7 @@ pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 def test_compiled_gradient_matches_eager(case: object) -> None:
     outcome = run_grad(case)  # type: ignore[arg-type]
     if outcome.status == "nograd":
-        pytest.fail(
-            f"nothing to differentiate, not listed in NO_GRAD: {outcome.detail}"
-        )
+        pytest.fail(f"nothing to differentiate, not listed in NO_GRAD: {outcome.detail}")
     listed = case.name in EXPECTED_EAGER_GRAD  # type: ignore[attr-defined]
     if outcome.status == "eager":
         if listed:
@@ -83,9 +81,7 @@ def test_every_case_trains_through_a_manual_vjp(
     _C_engine.compile.session_cache_clear()
     outcome = run_grad(case)  # type: ignore[arg-type]
     if outcome.status == "nograd":
-        pytest.fail(
-            f"nothing to differentiate, not listed in NO_GRAD: {outcome.detail}"
-        )
+        pytest.fail(f"nothing to differentiate, not listed in NO_GRAD: {outcome.detail}")
     if outcome.status == "eager":
         why = EXPECTED_EAGER_GRAD.get(case.name) or MANUAL_VJP_GAPS.get(case.name)  # type: ignore[attr-defined]
         if why:
@@ -104,9 +100,6 @@ def test_no_grad_case_still_has_none(name: str) -> None:
     """
     outcome = run_grad(CASE_BY_NAME[name])
     assert outcome.status == "nograd", (
-        f"{outcome.status}: has a gradient now; drop it from NO_GRAD "
-        f"({outcome.detail})"
+        f"{outcome.status}: has a gradient now; drop it from NO_GRAD " f"({outcome.detail})"
     )
-    assert (
-        outcome.detail == NO_GRAD[name]
-    ), f"{outcome.detail!r}, NO_GRAD says {NO_GRAD[name]!r}"
+    assert outcome.detail == NO_GRAD[name], f"{outcome.detail!r}, NO_GRAD says {NO_GRAD[name]!r}"

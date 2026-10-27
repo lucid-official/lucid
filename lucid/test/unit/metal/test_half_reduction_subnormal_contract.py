@@ -95,9 +95,7 @@ def _bits(t: lucid.Tensor) -> list[int]:
     return [struct.unpack("<I", struct.pack("<f", float(v)))[0] for v in values]
 
 
-def _input(
-    op: str, dtype: lucid.dtype, shape: tuple[int, ...], sign: float
-) -> lucid.Tensor:
+def _input(op: str, dtype: lucid.dtype, shape: tuple[int, ...], sign: float) -> lucid.Tensor:
     """Every element the subnormal for a sum or mean; alternating ``±t``
     for a variance, so the variance is subnormal."""
     n = 1
@@ -240,9 +238,7 @@ _ONE_ELEMENT_OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
 
 @pytest.mark.parametrize("op", list(_ONE_ELEMENT_OPS))
 @pytest.mark.parametrize("dtype", [lucid.bfloat16, lucid.float16], ids=_name)
-def test_one_element_plan_is_the_widened_op_for_every_value(
-    dtype: lucid.dtype, op: str
-) -> None:
+def test_one_element_plan_is_the_widened_op_for_every_value(dtype: lucid.dtype, op: str) -> None:
     """The one-element plan computes in the half dtype, without the float32
     copy, and must still agree bit for bit (any NaN with any NaN) with the
     float32 op rounded once and with the compiled graph."""

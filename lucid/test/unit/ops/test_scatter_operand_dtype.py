@@ -67,9 +67,9 @@ _BAD_INDEX = ["int16", "bool", "float32"]
 
 
 def _lucid(values: list[object], dtype: str, device: str) -> lucid.Tensor:
-    return lucid.tensor(
-        values, dtype=getattr(lucid, dtype if dtype != "bool" else "bool_")
-    ).to(device)
+    return lucid.tensor(values, dtype=getattr(lucid, dtype if dtype != "bool" else "bool_")).to(
+        device
+    )
 
 
 def _ref(R: ModuleType, values: list[object], dtype: str) -> object:
@@ -82,9 +82,7 @@ def _engine(op: str, x: lucid.Tensor, i: lucid.Tensor, s: lucid.Tensor) -> lucid
 
 def _pair_params() -> list[object]:
     return [
-        pytest.param(
-            device, op, self_dt, src_dt, id=f"{device}-{op}-{self_dt}<-{src_dt}"
-        )
+        pytest.param(device, op, self_dt, src_dt, id=f"{device}-{op}-{self_dt}<-{src_dt}")
         for device in _DEVICES
         for op in _OPS
         for self_dt, src_dt in _PAIRS[device]
@@ -124,17 +122,13 @@ def test_the_reported_repro_is_refused_through_the_public_paths(device: str) -> 
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-@pytest.mark.parametrize(
-    ("self_dt", "src_dt"), [("float32", "float16"), ("int32", "int64")]
-)
+@pytest.mark.parametrize(("self_dt", "src_dt"), [("float32", "float16"), ("int32", "int64")])
 def test_scatter_set_refuses_as_index_copy_does(
     ref: ModuleType, device: str, self_dt: str, src_dt: str
 ) -> None:
     rows = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]
     with pytest.raises(RuntimeError):
-        _ref(ref, _BASE, self_dt).index_copy(
-            0, _ref(ref, _ROWS, "int64"), _ref(ref, rows, src_dt)
-        )
+        _ref(ref, _BASE, self_dt).index_copy(0, _ref(ref, _ROWS, "int64"), _ref(ref, rows, src_dt))
     x = _lucid(_BASE, self_dt, device)
     idx = _lucid([[0, 0, 0, 0], [1, 1, 1, 1]], "int64", device)
     s = _lucid(rows, src_dt, device)
@@ -170,11 +164,7 @@ def _match_params() -> list[object]:
         for dt in dtypes:
             for op in _OPS:
                 out.append(pytest.param(device, op, dt, id=f"{device}-{op}-{dt}"))
-        out.append(
-            pytest.param(
-                device, "scatter_add", "int64", id=f"{device}-scatter_add-int64"
-            )
-        )
+        out.append(pytest.param(device, "scatter_add", "int64", id=f"{device}-scatter_add-int64"))
     return out
 
 

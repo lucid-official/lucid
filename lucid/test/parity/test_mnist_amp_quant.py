@@ -111,8 +111,7 @@ def test_autocast_actually_casts(device_gpu_only: str) -> None:
 
     with amp.autocast(device_type=device):
         assert model(x).dtype == lucid.float16, (
-            "autocast did not cast — every other AMP assertion here would "
-            "then be vacuously true"
+            "autocast did not cast — every other AMP assertion here would " "then be vacuously true"
         )
 
     assert model(x).dtype == lucid.float32, "autocast leaked past its block"
@@ -207,15 +206,11 @@ def test_amp_training_reaches_float32_quality(
 
     lucid.manual_seed(H.SEED)
     fp32_model = H.build_lucid_bn_cnn().to(device)
-    fp32_losses, fp32_acc, fp32_dtypes = _train(
-        fp32_model, mnist, schedule, device, use_amp=False
-    )
+    fp32_losses, fp32_acc, fp32_dtypes = _train(fp32_model, mnist, schedule, device, use_amp=False)
 
     lucid.manual_seed(H.SEED)
     amp_model = H.build_lucid_bn_cnn().to(device)
-    amp_losses, amp_acc, amp_dtypes = _train(
-        amp_model, mnist, schedule, device, use_amp=True
-    )
+    amp_losses, amp_acc, amp_dtypes = _train(amp_model, mnist, schedule, device, use_amp=True)
 
     assert set(fp32_dtypes) == {lucid.float32}
     assert lucid.float16 in set(
@@ -243,9 +238,7 @@ def test_amp_training_reaches_float32_quality(
 # ── quantization ────────────────────────────────────────────────────────────
 
 
-def _fit_float_model(
-    data: tuple[np.ndarray, ...], device: str
-) -> tuple[nn.Module, float]:
+def _fit_float_model(data: tuple[np.ndarray, ...], device: str) -> tuple[nn.Module, float]:
     """A briefly-trained float model to quantize.  Two epochs is enough for
     accuracy to be well above chance, which is what makes a quantization
     regression visible."""

@@ -363,9 +363,7 @@ def _is_classified_refusal(error: RuntimeError) -> bool:
     """A refusal the compile names, not an inner backward's ``VersionMismatch``."""
     if isinstance(error, _C_engine.VersionMismatch):
         return False
-    return "backward pass ran inside" in str(error) or isinstance(
-        error, CustomBackwardInTrace
-    )
+    return "backward pass ran inside" in str(error) or isinstance(error, CustomBackwardInTrace)
 
 
 @pytest.mark.parametrize("write", _PUBLIC_WRITES)
@@ -450,9 +448,7 @@ _ROW1 = [0.30000001192092896, 0.9000000357627869, 1.5]
         ("fill_view", (_ROW0, [_ROW0, _ROW1], True, True, False, 1)),
     ],
 )
-def test_an_eager_overwrite_is_unchanged(
-    device: str, kind: str, want: tuple[object, ...]
-) -> None:
+def test_an_eager_overwrite_is_unchanged(device: str, kind: str, want: tuple[object, ...]) -> None:
     got = _eager_overwrite(device, kind)
     assert got[:-1] == want
     grad = [[1.0] * 3, [5.5] * 3] if kind == "fill_view" else [[1.0] * 3] * 2
@@ -521,9 +517,7 @@ def test_the_checkpoint_function_is_an_exact_derivative(
     made: list[type] = []
     init = FunctionMeta.__init__
 
-    def record(
-        cls: type, name: str, bases: tuple[type, ...], dct: dict[str, object]
-    ) -> None:
+    def record(cls: type, name: str, bases: tuple[type, ...], dct: dict[str, object]) -> None:
         init(cls, name, bases, dct)
         made.append(cls)
 

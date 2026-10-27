@@ -12,9 +12,7 @@ from lucid.models.vision.densenet._weights import (
 )
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
-_CFG_121 = DenseNetConfig(
-    block_config=(6, 12, 24, 16), growth_rate=32, num_init_features=64
-)
+_CFG_121 = DenseNetConfig(block_config=(6, 12, 24, 16), growth_rate=32, num_init_features=64)
 # DenseNet-161: k=48 with a 96-channel stem.  NOT from the paper — Table 1
 # lists exactly four ImageNet architectures (121/169/201/264) and states
 # "Growth rate k=32 for all networks"; the strings "161" and "k=48" appear
@@ -22,18 +20,10 @@ _CFG_121 = DenseNetConfig(
 # reference-framework models (liuzhuang13/DenseNet: "DenseNet-161 (k=48) |
 # 22.2"), which the reference vision library mirrors and which the shipped
 # checkpoint comes from.
-_CFG_161 = DenseNetConfig(
-    block_config=(6, 12, 36, 24), growth_rate=48, num_init_features=96
-)
-_CFG_169 = DenseNetConfig(
-    block_config=(6, 12, 32, 32), growth_rate=32, num_init_features=64
-)
-_CFG_201 = DenseNetConfig(
-    block_config=(6, 12, 48, 32), growth_rate=32, num_init_features=64
-)
-_CFG_264 = DenseNetConfig(
-    block_config=(6, 12, 64, 48), growth_rate=32, num_init_features=64
-)
+_CFG_161 = DenseNetConfig(block_config=(6, 12, 36, 24), growth_rate=48, num_init_features=96)
+_CFG_169 = DenseNetConfig(block_config=(6, 12, 32, 32), growth_rate=32, num_init_features=64)
+_CFG_201 = DenseNetConfig(block_config=(6, 12, 48, 32), growth_rate=32, num_init_features=64)
+_CFG_264 = DenseNetConfig(block_config=(6, 12, 64, 48), growth_rate=32, num_init_features=64)
 
 
 # ── Backbones ─────────────────────────────────────────────────────────────────

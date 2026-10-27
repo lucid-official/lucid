@@ -23,14 +23,10 @@ from lucid.utils.transforms import ImageClassification
 from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 
 # Tiny / Small: crop_pct=0.875 → resize 256, crop 224.
-_PRESET_875 = ImageClassification(
-    crop_size=224, resize_size=256, interpolation="bicubic"
-)
+_PRESET_875 = ImageClassification(crop_size=224, resize_size=256, interpolation="bicubic")
 # Base: crop_pct=0.95 → resize 235, crop 224.  timm truncates 224 / 0.95 =
 # 235.8, and rounding it to 236 moved the crop window by a pixel.
-_PRESET_95 = ImageClassification(
-    crop_size=224, resize_size=235, interpolation="bicubic"
-)
+_PRESET_95 = ImageClassification(crop_size=224, resize_size=235, interpolation="bicubic")
 
 
 @register_weights("inception_next_tiny_cls")

@@ -130,13 +130,9 @@ class Linear(Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = Parameter(
-            empty(out_features, in_features, dtype=dtype, device=device)
-        )
+        self.weight = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
         if bias:
-            self.bias: Parameter | None = Parameter(
-                empty(out_features, dtype=dtype, device=device)
-            )
+            self.bias: Parameter | None = Parameter(empty(out_features, dtype=dtype, device=device))
         else:
             self.bias = None
         self.reset_parameters()
@@ -374,13 +370,9 @@ class FusedLinear(Module):
         import math as _math
         import lucid.nn.init as _init
 
-        self.weight = Parameter(
-            empty(out_features, in_features, dtype=dtype, device=device)
-        )
+        self.weight = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
         if bias:
-            self.bias: Parameter | None = Parameter(
-                empty(out_features, dtype=dtype, device=device)
-            )
+            self.bias: Parameter | None = Parameter(empty(out_features, dtype=dtype, device=device))
         else:
             self.bias = None
 
@@ -695,9 +687,7 @@ class LazyLinear(_LazyModule):
         """Internal helper for the LazyLinear module."""
         self.in_features = in_features
         weight = Parameter(
-            empty(
-                self.out_features, in_features, dtype=self._dtype, device=self._device
-            )
+            empty(self.out_features, in_features, dtype=self._dtype, device=self._device)
         )
         init.kaiming_uniform_(weight, a=math.sqrt(5))
         # ``materialize`` and not assignment: the placeholder object is
@@ -706,9 +696,7 @@ class LazyLinear(_LazyModule):
 
         if self._has_bias:
             bound = 1.0 / math.sqrt(in_features)
-            bias = Parameter(
-                empty(self.out_features, dtype=self._dtype, device=self._device)
-            )
+            bias = Parameter(empty(self.out_features, dtype=self._dtype, device=self._device))
             init.uniform_(bias, -bound, bound)
             _fill(self, "bias", bias)
         else:
@@ -877,12 +865,8 @@ class NoisyLinear(Module):
         self.out_features = out_features
         self.sigma_zero = sigma_zero
 
-        self.weight_mu = Parameter(
-            empty(out_features, in_features, dtype=dtype, device=device)
-        )
-        self.weight_sigma = Parameter(
-            empty(out_features, in_features, dtype=dtype, device=device)
-        )
+        self.weight_mu = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
+        self.weight_sigma = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
         if bias:
             self.bias_mu: Parameter | None = Parameter(
                 empty(out_features, dtype=dtype, device=device)
@@ -894,12 +878,8 @@ class NoisyLinear(Module):
             self.bias_mu = None
             self.bias_sigma = None
 
-        self.register_buffer(
-            "epsilon_in", empty(in_features, dtype=dtype, device=device)
-        )
-        self.register_buffer(
-            "epsilon_out", empty(out_features, dtype=dtype, device=device)
-        )
+        self.register_buffer("epsilon_in", empty(in_features, dtype=dtype, device=device))
+        self.register_buffer("epsilon_out", empty(out_features, dtype=dtype, device=device))
         self.reset_parameters()
         self.resample()
 

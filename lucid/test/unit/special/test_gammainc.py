@@ -121,15 +121,11 @@ def _same(got: float, want: float, dtype: str) -> bool:
 @pytest.mark.parity
 @pytest.mark.parametrize("lower", [True, False], ids=["gammainc", "gammaincc"])
 @pytest.mark.parametrize("dtype,device", _placements())
-def test_matches_the_reference_on_the_grid(
-    dtype: str, device: str, lower: bool, ref: Any
-) -> None:
+def test_matches_the_reference_on_the_grid(dtype: str, device: str, lower: bool, ref: Any) -> None:
     a = [c[0] for c in _GRID]
     x = [c[1] for c in _GRID]
     ours_fn, ref_fn = (
-        (gammainc, ref.special.gammainc)
-        if lower
-        else (gammaincc, ref.special.gammaincc)
+        (gammainc, ref.special.gammainc) if lower else (gammaincc, ref.special.gammaincc)
     )
     ours = _floats(ours_fn(_lucid(a, dtype, device), _lucid(x, dtype, device)))
     theirs = ref_fn(_ref(ref, a, dtype), _ref(ref, x, dtype)).double().tolist()
@@ -151,9 +147,7 @@ def test_edges_of_the_domain(dtype: str, device: str) -> None:
     x = [c[1] for c in _EDGES]
     p = _floats(gammainc(_lucid(a, dtype, device), _lucid(x, dtype, device)))
     q = _floats(gammaincc(_lucid(a, dtype, device), _lucid(x, dtype, device)))
-    for (cell, (want_p, want_q)), got_p, got_q in zip(
-        _EDGES.items(), p, q, strict=True
-    ):
+    for (cell, (want_p, want_q)), got_p, got_q in zip(_EDGES.items(), p, q, strict=True):
         assert _same(got_p, want_p, dtype), (cell, got_p, want_p)
         assert _same(got_q, want_q, dtype), (cell, got_q, want_q)
 
@@ -168,9 +162,7 @@ def test_closed_forms_and_complement(dtype: str, device: str) -> None:
     if dtype in _HALF:
         rtol, atol = _tols(dtype)
     # P(1, x) = 1 - e^-x and Q(1/2, x) = erfc(sqrt(x)).
-    for got, want in zip(
-        _floats(gammainc(one, x)), [-math.expm1(-v) for v in xs], strict=True
-    ):
+    for got, want in zip(_floats(gammainc(one, x)), [-math.expm1(-v) for v in xs], strict=True):
         assert math.isclose(got, want, rel_tol=rtol, abs_tol=atol)
     for got, want in zip(
         _floats(gammaincc(half, x)), [math.erfc(math.sqrt(v)) for v in xs], strict=True
@@ -192,8 +184,7 @@ def test_gradient_in_x_is_the_density(dtype: str, device: str, lower: bool) -> N
     assert x.grad is not None
     assert x.grad.dtype == x.dtype
     want = [
-        (1.0 if lower else -1.0)
-        * math.exp((ai - 1.0) * math.log(xi) - xi - math.lgamma(ai))
+        (1.0 if lower else -1.0) * math.exp((ai - 1.0) * math.log(xi) - xi - math.lgamma(ai))
         for ai, xi in zip(_floats(a), _floats(x), strict=True)
     ]
     tol = {"float64": 1e-10, "float32": 1e-4}.get(dtype, _tols(dtype)[0])

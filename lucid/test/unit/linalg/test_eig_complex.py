@@ -63,9 +63,7 @@ def test_a_real_spectrum_still_comes_back_real_valued() -> None:
     """Guard the guard: the complex dtype must not perturb the easy case."""
     got = _sorted(L.eigvals(lucid.tensor(SYMMETRIC)))
     assert np.allclose(got, [1.0, 3.0])
-    assert np.allclose(
-        np.asarray(lucid.imag(L.eigvals(lucid.tensor(SYMMETRIC))).numpy()), 0.0
-    )
+    assert np.allclose(np.asarray(lucid.imag(L.eigvals(lucid.tensor(SYMMETRIC))).numpy()), 0.0)
 
 
 # ── the dtype is not a choice ─────────────────────────────────────────────────
@@ -160,8 +158,6 @@ def test_hermitian_eigenvalues_stay_real() -> None:
     """``eigh`` promises a real spectrum and must not have acquired a
     complex dtype from its neighbour."""
     assert L.eigvalsh(lucid.tensor(SYMMETRIC)).dtype is lucid.float64
-    assert np.allclose(
-        np.asarray(L.eigvalsh(lucid.tensor(SYMMETRIC)).numpy()), [1.0, 3.0]
-    )
+    assert np.allclose(np.asarray(L.eigvalsh(lucid.tensor(SYMMETRIC)).numpy()), [1.0, 3.0])
     w, v = L.eigh(lucid.tensor(SYMMETRIC))
     assert w.dtype is lucid.float64 and v.dtype is lucid.float64

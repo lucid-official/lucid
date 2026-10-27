@@ -70,9 +70,7 @@ class _Palette:
 
     def __init__(self, weight: Tensor, bits: int) -> None:
         self.count = 1 << bits
-        self.groups = _palette_groups(
-            int(weight.shape[0]), self.count, int(weight.numel())
-        )
+        self.groups = _palette_groups(int(weight.shape[0]), self.count, int(weight.numel()))
         self.centres = self._fit(weight)
 
     def _fit(self, weight: Tensor) -> Tensor:
@@ -115,12 +113,8 @@ class _Symmetric:
         self.scale, self.zero_point = self._fit(weight)
 
     def apply(self, weight: Tensor) -> Tensor:
-        codes = _quant.quantize(
-            weight, self.scale, self.zero_point, _quant.qint8, ch_axis=0
-        )
-        return _quant.dequantize(codes, self.scale, self.zero_point, ch_axis=0).to(
-            weight.dtype
-        )
+        codes = _quant.quantize(weight, self.scale, self.zero_point, _quant.qint8, ch_axis=0)
+        return _quant.dequantize(codes, self.scale, self.zero_point, ch_axis=0).to(weight.dtype)
 
 
 class _Mask:

@@ -37,9 +37,7 @@ _DETECTORS = {
 }
 
 
-def _detections_and_reads(
-    host_reads: HostReads, name: str, proposals: int
-) -> tuple[int, int]:
+def _detections_and_reads(host_reads: HostReads, name: str, proposals: int) -> tuple[int, int]:
     lucid.manual_seed(0)
     model = create_model(
         name,
@@ -53,22 +51,16 @@ def _detections_and_reads(
     ).eval()
     output = model(lucid.randn((1, 3, 64, 64)))
     found: list[list[dict[str, lucid.Tensor]]] = []
-    reads = host_reads(
-        lambda: found.append(model.postprocess(output, image_sizes=[(64, 64)]))
-    )
+    reads = host_reads(lambda: found.append(model.postprocess(output, image_sizes=[(64, 64)])))
     return int(found[0][0]["boxes"].shape[0]), len(reads)
 
 
 @pytest.mark.parametrize("name", sorted(_DETECTORS))
-def test_postprocess_reads_do_not_grow_with_detections(
-    name: str, host_reads: HostReads
-) -> None:
+def test_postprocess_reads_do_not_grow_with_detections(name: str, host_reads: HostReads) -> None:
     few = _detections_and_reads(host_reads, name, 5)
     many = _detections_and_reads(host_reads, name, 30)
     assert many[0] > few[0] > 0, (few, many)
-    assert (
-        many[1] == few[1]
-    ), f"{few[1]} reads for {few[0]} boxes, {many[1]} for {many[0]}"
+    assert many[1] == few[1], f"{few[1]} reads for {few[0]} boxes, {many[1]} for {many[0]}"
 
 
 def _generate_reads(host_reads: HostReads, steps: int) -> int:
@@ -85,9 +77,7 @@ def _generate_reads(host_reads: HostReads, steps: int) -> int:
     model = DDPMForImageGeneration(config).eval()
     scheduler = model.make_scheduler()
     return len(
-        host_reads(
-            lambda: model.generate(scheduler, n_samples=1, num_inference_steps=steps)
-        )
+        host_reads(lambda: model.generate(scheduler, n_samples=1, num_inference_steps=steps))
     )
 
 
@@ -139,9 +129,7 @@ def test_ijepa_masks_read_once(host_reads: HostReads, batch: int, blocks: int) -
 def test_vjepa_masks_read_once(host_reads: HostReads, batch: int, blocks: int) -> None:
     config = _vjepa()
     reads = host_reads(
-        lambda: _sample_collection(
-            config, batch, blocks, config.short_range_scale, "cpu"
-        )
+        lambda: _sample_collection(config, batch, blocks, config.short_range_scale, "cpu")
     )
     assert len(reads) == 1, reads
 
@@ -195,12 +183,8 @@ def _per_element_reads(source: str) -> Iterator[int]:
             for child in (*node.body, *node.orelse):
                 yield from visit(child, inner)
             return
-        if isinstance(
-            node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)
-        ):
-            inner = loop_names.union(
-                *(_bound_names(gen.target) for gen in node.generators)
-            )
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            inner = loop_names.union(*(_bound_names(gen.target) for gen in node.generators))
             for child in ast.iter_child_nodes(node):
                 yield from visit(child, inner)
             return
@@ -230,8 +214,7 @@ def test_no_model_reads_a_tensor_one_element_at_a_time() -> None:
     ]
     assert not offenders, (
         "read the tensor once with lucid.models._utils._common.host_floats / "
-        "host_ints / host_rows (or host_random for draws) instead:\n"
-        + "\n".join(offenders)
+        "host_ints / host_rows (or host_random for draws) instead:\n" + "\n".join(offenders)
     )
 
 

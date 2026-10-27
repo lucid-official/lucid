@@ -44,14 +44,10 @@ def _collect_lrs(scheduler: Any, steps: int) -> list[float]:
     return lrs
 
 
-def _assert_lr_sequence(
-    lucid_lrs: list[float], ref_lrs: list[float], atol: float = 1e-6
-) -> None:
+def _assert_lr_sequence(lucid_lrs: list[float], ref_lrs: list[float], atol: float = 1e-6) -> None:
     assert len(lucid_lrs) == len(ref_lrs)
     for i, (l, r) in enumerate(zip(lucid_lrs, ref_lrs)):
-        assert (
-            abs(l - r) < atol
-        ), f"step {i}: lucid={l:.8f} ref={r:.8f} diff={abs(l - r):.2e}"
+        assert abs(l - r) < atol, f"step {i}: lucid={l:.8f} ref={r:.8f} diff={abs(l - r):.2e}"
 
 
 # ── StepLR ────────────────────────────────────────────────────────────────────
@@ -61,9 +57,7 @@ def _assert_lr_sequence(
 class TestStepLRParity:
     def test_basic(self, ref: Any) -> None:
         lr0 = 0.1
-        lucid_sched = optim.lr_scheduler.StepLR(
-            _dummy_lucid_optimizer(lr0), step_size=3, gamma=0.5
-        )
+        lucid_sched = optim.lr_scheduler.StepLR(_dummy_lucid_optimizer(lr0), step_size=3, gamma=0.5)
         ref_sched = ref.optim.lr_scheduler.StepLR(
             _dummy_ref_optimizer(lr0, ref), step_size=3, gamma=0.5
         )
@@ -72,12 +66,8 @@ class TestStepLRParity:
 
     def test_gamma_0_1(self, ref: Any) -> None:
         lr0 = 1.0
-        lucid_sched = optim.lr_scheduler.StepLR(
-            _dummy_lucid_optimizer(lr0), step_size=5
-        )
-        ref_sched = ref.optim.lr_scheduler.StepLR(
-            _dummy_ref_optimizer(lr0, ref), step_size=5
-        )
+        lucid_sched = optim.lr_scheduler.StepLR(_dummy_lucid_optimizer(lr0), step_size=5)
+        ref_sched = ref.optim.lr_scheduler.StepLR(_dummy_ref_optimizer(lr0, ref), step_size=5)
 
         _assert_lr_sequence(_collect_lrs(lucid_sched, 15), _collect_lrs(ref_sched, 15))
 
@@ -89,12 +79,8 @@ class TestStepLRParity:
 class TestExponentialLRParity:
     def test_basic(self, ref: Any) -> None:
         lr0 = 0.1
-        lucid_sched = optim.lr_scheduler.ExponentialLR(
-            _dummy_lucid_optimizer(lr0), gamma=0.9
-        )
-        ref_sched = ref.optim.lr_scheduler.ExponentialLR(
-            _dummy_ref_optimizer(lr0, ref), gamma=0.9
-        )
+        lucid_sched = optim.lr_scheduler.ExponentialLR(_dummy_lucid_optimizer(lr0), gamma=0.9)
+        ref_sched = ref.optim.lr_scheduler.ExponentialLR(_dummy_ref_optimizer(lr0, ref), gamma=0.9)
 
         _assert_lr_sequence(_collect_lrs(lucid_sched, 20), _collect_lrs(ref_sched, 20))
 
@@ -136,9 +122,7 @@ class TestCosineAnnealingLRParity:
 
     def test_no_eta_min(self, ref: Any) -> None:
         lr0 = 0.5
-        lucid_sched = optim.lr_scheduler.CosineAnnealingLR(
-            _dummy_lucid_optimizer(lr0), T_max=8
-        )
+        lucid_sched = optim.lr_scheduler.CosineAnnealingLR(_dummy_lucid_optimizer(lr0), T_max=8)
         ref_sched = ref.optim.lr_scheduler.CosineAnnealingLR(
             _dummy_ref_optimizer(lr0, ref), T_max=8
         )
@@ -160,9 +144,7 @@ class TestCosineAnnealingWarmRestartsParity:
             _dummy_ref_optimizer(lr0, ref), T_0=5, T_mult=1, eta_min=0.0
         )
 
-        _assert_lr_sequence(
-            _collect_lrs(lucid_sched, 15), _collect_lrs(ref_sched, 15), atol=1e-6
-        )
+        _assert_lr_sequence(_collect_lrs(lucid_sched, 15), _collect_lrs(ref_sched, 15), atol=1e-6)
 
     def test_t_mult_2(self, ref: Any) -> None:
         lr0 = 0.2
@@ -173,9 +155,7 @@ class TestCosineAnnealingWarmRestartsParity:
             _dummy_ref_optimizer(lr0, ref), T_0=4, T_mult=2, eta_min=1e-4
         )
 
-        _assert_lr_sequence(
-            _collect_lrs(lucid_sched, 16), _collect_lrs(ref_sched, 16), atol=1e-6
-        )
+        _assert_lr_sequence(_collect_lrs(lucid_sched, 16), _collect_lrs(ref_sched, 16), atol=1e-6)
 
 
 # ── LinearLR ──────────────────────────────────────────────────────────────────
@@ -252,12 +232,8 @@ class TestLambdaLRParity:
         lr0 = 0.1
         fn = lambda epoch: epoch / 10 if epoch < 10 else 1.0  # noqa: E731
 
-        lucid_sched = optim.lr_scheduler.LambdaLR(
-            _dummy_lucid_optimizer(lr0), lr_lambda=fn
-        )
-        ref_sched = ref.optim.lr_scheduler.LambdaLR(
-            _dummy_ref_optimizer(lr0, ref), lr_lambda=fn
-        )
+        lucid_sched = optim.lr_scheduler.LambdaLR(_dummy_lucid_optimizer(lr0), lr_lambda=fn)
+        ref_sched = ref.optim.lr_scheduler.LambdaLR(_dummy_ref_optimizer(lr0, ref), lr_lambda=fn)
 
         _assert_lr_sequence(_collect_lrs(lucid_sched, 15), _collect_lrs(ref_sched, 15))
 
@@ -271,9 +247,7 @@ class TestMultiplicativeLRParity:
         lr0 = 1.0
         fn = lambda epoch: 0.95  # noqa: E731
 
-        lucid_sched = optim.lr_scheduler.MultiplicativeLR(
-            _dummy_lucid_optimizer(lr0), lr_lambda=fn
-        )
+        lucid_sched = optim.lr_scheduler.MultiplicativeLR(_dummy_lucid_optimizer(lr0), lr_lambda=fn)
         ref_sched = ref.optim.lr_scheduler.MultiplicativeLR(
             _dummy_ref_optimizer(lr0, ref), lr_lambda=fn
         )
@@ -486,10 +460,6 @@ class TestChainedSchedulerParity:
         last one's, so a warmup chained with a decay lost the decay."""
         lucid_opt = _dummy_lucid_optimizer(0.1)
         ref_opt = _dummy_ref_optimizer(0.1, ref)
-        lucid_sched = optim.lr_scheduler.ChainedScheduler(
-            make(optim.lr_scheduler, lucid_opt)
-        )
-        ref_sched = ref.optim.lr_scheduler.ChainedScheduler(
-            make(ref.optim.lr_scheduler, ref_opt)
-        )
+        lucid_sched = optim.lr_scheduler.ChainedScheduler(make(optim.lr_scheduler, lucid_opt))
+        ref_sched = ref.optim.lr_scheduler.ChainedScheduler(make(ref.optim.lr_scheduler, ref_opt))
         _assert_lr_sequence(_collect_lrs(lucid_sched, 12), _collect_lrs(ref_sched, 12))

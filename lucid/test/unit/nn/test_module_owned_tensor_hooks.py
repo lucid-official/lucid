@@ -43,9 +43,7 @@ def _embedding_step(module: nn.Module, device: str) -> None:
 
 
 #: name -> (build, step that runs the scaled backward)
-_SITES: dict[
-    str, tuple[Callable[[str], nn.Module], Callable[[nn.Module, str], None]]
-] = {
+_SITES: dict[str, tuple[Callable[[str], nn.Module], Callable[[nn.Module, str], None]]] = {
     "embedding-scale-grad-by-freq": (_embedding_scale_grad_by_freq, _embedding_step),
 }
 
@@ -165,9 +163,7 @@ _SCENARIOS: dict[str, Callable[[ModuleType, str], list[list[float]]]] = {
 
 
 @pytest.mark.parametrize("name", list(_SCENARIOS))
-def test_scaled_gradient_matches_the_reference(
-    name: str, ref: ModuleType, device: str
-) -> None:
+def test_scaled_gradient_matches_the_reference(name: str, ref: ModuleType, device: str) -> None:
     if name == "double" and device == "metal":
         pytest.skip("Metal holds no float64")
     got = _SCENARIOS[name](lucid, device)
@@ -280,9 +276,7 @@ def _hooks_holding_self(source: str) -> list[int]:
             continue
         hooks = [*node.args[_REGISTRARS[name] :], *(kw.value for kw in node.keywords)]
         if any(
-            isinstance(n, ast.Name) and n.id == "self"
-            for hook in hooks
-            for n in ast.walk(hook)
+            isinstance(n, ast.Name) and n.id == "self" for hook in hooks for n in ast.walk(hook)
         ):
             lines.append(node.lineno)
     return lines

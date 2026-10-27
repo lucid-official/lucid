@@ -20,9 +20,7 @@ from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 # top-left corner -- the frame ``postprocess`` scales normalised boxes into --
 # and does not round its canvas to a stride multiple, so DETR keeps the 1333
 # square it was converted and checked on rather than the R-CNNs' 1344.
-_PRESET = Detection(
-    max_size=1333, size_divisible=1, pad_position="top_left", pad_value=0.0
-)
+_PRESET = Detection(max_size=1333, size_divisible=1, pad_position="top_left", pad_value=0.0)
 
 
 @register_weights("detr_resnet50")

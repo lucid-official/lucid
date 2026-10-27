@@ -57,9 +57,7 @@ def _run(path: str, budget: str | None) -> dict[str, np.ndarray]:
     env.pop("LUCID_CONV_COLUMN_BUDGET", None)
     if budget is not None:
         env["LUCID_CONV_COLUMN_BUDGET"] = budget
-    subprocess.run(
-        [sys.executable, "-c", _SCRIPT, path], env=env, check=True, timeout=300
-    )
+    subprocess.run([sys.executable, "-c", _SCRIPT, path], env=env, check=True, timeout=300)
     with np.load(path) as data:
         return {key: data[key] for key in data.files}
 

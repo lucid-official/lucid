@@ -28,9 +28,7 @@ def test_generator_next_uint32x4_and_counter_setter_stubbed() -> None:
     """``Generator.next_uint32x4`` and ``Generator.counter`` setter are emitted."""
     stub_text = _ENGINE_STUB.read_text(encoding="utf-8")
     tree = ast.parse(stub_text)
-    gen_cls = next(
-        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Generator"
-    )
+    gen_cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Generator")
     fn_defs = [n for n in gen_cls.body if isinstance(n, ast.FunctionDef)]
     names = {n.name for n in fn_defs}
     assert "next_uint32x4" in names
@@ -38,9 +36,7 @@ def test_generator_next_uint32x4_and_counter_setter_stubbed() -> None:
     assert "set_seed" in names
 
     setters = {
-        n.name
-        for n in fn_defs
-        if any(ast.unparse(d) == "counter.setter" for d in n.decorator_list)
+        n.name for n in fn_defs if any(ast.unparse(d) == "counter.setter" for d in n.decorator_list)
     }
     assert "counter" in setters
 
@@ -71,9 +67,7 @@ def test_all_runtime_classes_present_and_phantoms_absent() -> None:
     assert "reset" not in profiler_members
 
     tensor_members = {
-        n.name
-        for n in stub_classes["TensorImpl"].body
-        if isinstance(n, ast.FunctionDef)
+        n.name for n in stub_classes["TensorImpl"].body if isinstance(n, ast.FunctionDef)
     }
     assert "_make_view" in tensor_members
     assert "bump_version" not in tensor_members
@@ -124,9 +118,7 @@ def test_engine_drift_catches_missing_and_phantom_members() -> None:
     ]
 
     # 5. Add phantom top-level class and function -> both reported
-    phantom_top_stub = (
-        stub_text + "\nclass _EngineOptimizer: ...\ndef no_grad() -> object: ...\n"
-    )
+    phantom_top_stub = stub_text + "\nclass _EngineOptimizer: ...\ndef no_grad() -> object: ...\n"
     assert engine_drift(phantom_top_stub, _C_engine) == [
         "_EngineOptimizer: in the stub, not in the engine",
         "no_grad: in the stub, not in the engine",

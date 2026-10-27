@@ -22,9 +22,7 @@ class TestQuantizeParity:
         data = rng.standard_normal((3, 16)).astype(np.float32)
         scale, zp = 0.05, 0
         lc = Q.quantize(lucid.tensor(data.copy()), scale, float(zp), Q.qint8)
-        rc = ref.quantize_per_tensor(
-            ref.tensor(data.copy()), scale, zp, ref.qint8
-        ).int_repr()
+        rc = ref.quantize_per_tensor(ref.tensor(data.copy()), scale, zp, ref.qint8).int_repr()
         assert np.array_equal(lc.numpy().astype(np.int64), rc.numpy().astype(np.int64))
 
     def test_dequantize_per_tensor(self, ref: Any) -> None:
@@ -33,9 +31,7 @@ class TestQuantizeParity:
         scale, zp = 0.05, 0
         q = Q.quantize(lucid.tensor(data.copy()), scale, float(zp), Q.qint8)
         l = Q.dequantize(q, scale, float(zp))
-        r = ref.quantize_per_tensor(
-            ref.tensor(data.copy()), scale, zp, ref.qint8
-        ).dequantize()
+        r = ref.quantize_per_tensor(ref.tensor(data.copy()), scale, zp, ref.qint8).dequantize()
         assert_close(l, r, atol=1e-4)
 
 
@@ -46,9 +42,7 @@ class TestFakeQuantizeParity:
         data = rng.standard_normal((3, 16)).astype(np.float32)
         scale, zp, qmin, qmax = 0.037, 0, -128, 127
         l = Q.fake_quantize(lucid.tensor(data.copy()), scale, float(zp), qmin, qmax)
-        r = ref.fake_quantize_per_tensor_affine(
-            ref.tensor(data.copy()), scale, zp, qmin, qmax
-        )
+        r = ref.fake_quantize_per_tensor_affine(ref.tensor(data.copy()), scale, zp, qmin, qmax)
         assert_close(l, r, atol=1e-4)
 
     def test_per_tensor_unsigned_zero_point(self, ref: Any) -> None:
@@ -56,9 +50,7 @@ class TestFakeQuantizeParity:
         data = rng.standard_normal((5, 7)).astype(np.float32)
         scale, zp, qmin, qmax = 0.02, 128, 0, 255
         l = Q.fake_quantize(lucid.tensor(data.copy()), scale, float(zp), qmin, qmax)
-        r = ref.fake_quantize_per_tensor_affine(
-            ref.tensor(data.copy()), scale, zp, qmin, qmax
-        )
+        r = ref.fake_quantize_per_tensor_affine(ref.tensor(data.copy()), scale, zp, qmin, qmax)
         assert_close(l, r, atol=1e-4)
 
     def test_per_channel(self, ref: Any) -> None:

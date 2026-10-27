@@ -113,9 +113,7 @@ def neural_ode(pretrained: bool = False, **overrides: object) -> NeuralODEModel:
     model_class=NeuralODEForImageGeneration,
     default_config=_CFG_DEFAULT,
 )
-def neural_ode_gen(
-    pretrained: bool = False, **overrides: object
-) -> NeuralODEForImageGeneration:
+def neural_ode_gen(pretrained: bool = False, **overrides: object) -> NeuralODEForImageGeneration:
     r"""Neural ODE flow with the bits/dim objective and a sampler.
 
     Same field as :func:`neural_ode`, wrapped so ``forward`` reports a

@@ -23,9 +23,7 @@ _HALVES = [lucid.float16, lucid.bfloat16]
 def _close(got: lucid.Tensor, ref: lucid.Tensor, dtype: lucid.dtype) -> None:
     assert got.dtype == dtype
     tol = 2e-2 if dtype == lucid.bfloat16 else 2e-3
-    np.testing.assert_allclose(
-        got.float().numpy(), ref.float().numpy(), rtol=tol, atol=tol
-    )
+    np.testing.assert_allclose(got.float().numpy(), ref.float().numpy(), rtol=tol, atol=tol)
 
 
 @pytest.mark.parametrize("dtype", _HALVES)
@@ -77,9 +75,7 @@ _DEVICES = [
     "cpu",
     pytest.param(
         "metal",
-        marks=pytest.mark.skipif(
-            not lucid.metal.is_available(), reason="no Metal device"
-        ),
+        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
     ),
 ]
 

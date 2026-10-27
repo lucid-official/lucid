@@ -40,9 +40,7 @@ def _validate_padding_mode(mode: str) -> PaddingMode:
     return cast(PaddingMode, mode)
 
 
-def _string_padding(
-    padding: object, stride: int | tuple[int, ...], label: str
-) -> str | None:
+def _string_padding(padding: object, stride: int | tuple[int, ...], label: str) -> str | None:
     """A ``"same"`` / ``"valid"`` padding, checked when the module is built.
 
     The forward reads the string again through the functional's own rule,
@@ -90,12 +88,8 @@ class _ConvNd(Module):
             spatial dimensions determined by stride, padding, dilation, and
             kernel size.
         """
-        args = _ConvArgs(
-            self.stride, self._padding_str or self.padding, self.dilation, self.groups
-        )
-        return _convnd(
-            input, self.weight, self.bias, args, self._rank, self.padding_mode
-        )
+        args = _ConvArgs(self.stride, self._padding_str or self.padding, self.dilation, self.groups)
+        return _convnd(input, self.weight, self.bias, args, self._rank, self.padding_mode)
 
     @override
     def extra_repr(self) -> str:
@@ -272,12 +266,8 @@ class Conv1d(_ConvNd):
         self.dilation: int = _single(dilation, "dilation")
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
-        self._padding_str: str | None = _string_padding(
-            padding, self.stride, type(self).__name__
-        )
-        self.padding: int = (
-            0 if isinstance(padding, str) else _single(padding, "padding")
-        )
+        self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
+        self.padding: int = 0 if isinstance(padding, str) else _single(padding, "padding")
         self.weight, self.bias = _conv_parameters(
             (out_channels, in_channels // groups, self.kernel_size),
             out_channels,
@@ -464,9 +454,7 @@ class Conv2d(_ConvNd):
         self.dilation: tuple[int, int] = _pair(dilation, "dilation")
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
-        self._padding_str: str | None = _string_padding(
-            padding, self.stride, type(self).__name__
-        )
+        self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
         self.padding: tuple[int, int] = (
             (0, 0) if isinstance(padding, str) else _pair(padding, "padding")
         )
@@ -621,9 +609,7 @@ class Conv3d(_ConvNd):
         self.dilation: tuple[int, int, int] = _triple(dilation, "dilation")
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
-        self._padding_str: str | None = _string_padding(
-            padding, self.stride, type(self).__name__
-        )
+        self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
         self.padding: tuple[int, int, int] = (
             (0, 0, 0) if isinstance(padding, str) else _triple(padding, "padding")
         )
@@ -771,9 +757,7 @@ class LazyConv1d(_LazyConvMixin, Conv1d):
         self.padding_mode: PaddingMode = _validate_padding_mode(padding_mode)
         self._padding_str: str | None
         self._padding_str = _string_padding(padding, self.stride, type(self).__name__)
-        self.padding: int = (
-            0 if isinstance(padding, str) else _single(padding, "padding")
-        )
+        self.padding: int = 0 if isinstance(padding, str) else _single(padding, "padding")
         self._defer(bias, device, dtype)
 
     @override

@@ -296,11 +296,7 @@ def _callable_slots(fn: object) -> list[tuple[tuple[str, str], object]]:
     code = getattr(fn, "__code__", None)
     space = getattr(fn, "__globals__", None)
     if isinstance(code, CodeType) and isinstance(space, dict):
-        out.extend(
-            (("global", name), space[name])
-            for name in _global_names(code)
-            if name in space
-        )
+        out.extend((("global", name), space[name]) for name in _global_names(code) if name in space)
     return out
 
 
@@ -338,9 +334,7 @@ def _dict_children(value: dict[object, object]) -> Iterator[tuple[_Hop, object]]
             yield ("item", key), item
 
 
-def _function_children(
-    value: object, seen_funcs: set[int]
-) -> Iterator[tuple[_Hop, object]]:
+def _function_children(value: object, seen_funcs: set[int]) -> Iterator[tuple[_Hop, object]]:
     """``value``'s own cells and globals, once per function (cycle guard)."""
     if id(value) in seen_funcs:
         return
@@ -362,9 +356,7 @@ def _object_children(value: object) -> Iterator[tuple[_Hop, object]]:
             yield ("attr", name), item
 
 
-def _path_children(
-    value: object, seen_funcs: set[int]
-) -> Iterator[tuple[_Hop, object]]:
+def _path_children(value: object, seen_funcs: set[int]) -> Iterator[tuple[_Hop, object]]:
     """One further hop's worth of values reachable from ``value``: the items
     of a list/tuple/dict, the cells and globals of a function it is, or the
     public attributes of a plain object — each capped at
@@ -401,9 +393,7 @@ def _indirect_module_paths(fn: object) -> list[tuple[_Path, Module]]:
     found: list[tuple[_Path, Module]] = []
     seen_funcs: set[int] = {id(fn)}
     seen_values: set[int] = set()
-    frontier: list[tuple[_Path, object]] = [
-        ((hop,), value) for hop, value in _callable_slots(fn)
-    ]
+    frontier: list[tuple[_Path, object]] = [((hop,), value) for hop, value in _callable_slots(fn)]
     for _ in range(_MAX_PATH_DEPTH):
         if not frontier:
             break
@@ -666,8 +656,7 @@ def _tree_walk(model: object) -> _TreeWalk:
         version=version,
         roots=tuple(weakref.ref(root) for root in roots),
         states=tuple(
-            (bool(getattr(sub, "training", False)), _dict_scalar_attrs(sub))
-            for sub in subs
+            (bool(getattr(sub, "training", False)), _dict_scalar_attrs(sub)) for sub in subs
         ),
         hooked=any(_sub_has_active_hooks(sub) for sub in subs),
         tensors=tuple(t for _, t in slots if t is not None),
@@ -791,9 +780,7 @@ def _tree_alias(
     if not slot_of:
         return ()
     return tuple(
-        (i, slot)
-        for i, t in enumerate(leaves)
-        if (slot := slot_of.get(id(t._impl))) is not None
+        (i, slot) for i, t in enumerate(leaves) if (slot := slot_of.get(id(t._impl))) is not None
     )
 
 
@@ -803,9 +790,7 @@ def outside_feeds(tracer: Tracer) -> tuple[_C_engine.TensorImpl, ...]:
     A constant the trace built and folded is a feed too, but no slot of the
     model held it before the call.
     """
-    return tuple(
-        impl for impl in tracer.external_feeds.values() if not tracer.made_here(impl)
-    )
+    return tuple(impl for impl in tracer.external_feeds.values() if not tracer.made_here(impl))
 
 
 @final
@@ -838,9 +823,7 @@ class TraceReads:
     fed: tuple[_C_engine.TensorImpl, ...] = ()
 
     @classmethod
-    def of(
-        cls, tracer: Tracer, input_ids: Iterable[int], sources: Iterable[object]
-    ) -> TraceReads:
+    def of(cls, tracer: Tracer, input_ids: Iterable[int], sources: Iterable[object]) -> TraceReads:
         """Read them off a finished trace.
 
         Parameters
@@ -865,8 +848,7 @@ class TraceReads:
         return cls(
             pinned=tuple(feeds[tid] for tid, src in pairs if src is None),
             grad_leaf=any(
-                impl.requires_grad and impl.is_leaf and id(impl) not in ids
-                for impl in held
+                impl.requires_grad and impl.is_leaf and id(impl) not in ids for impl in held
             ),
             fed=outside_feeds(tracer),
         )
@@ -899,10 +881,7 @@ def _arg_sig(value: object, *, dynamic_batch: bool = False) -> object:
         return tuple(_arg_sig(v, dynamic_batch=dynamic_batch) for v in value)
     if isinstance(value, dict):
         return tuple(
-            sorted(
-                (str(k), _arg_sig(v, dynamic_batch=dynamic_batch))
-                for k, v in value.items()
-            )
+            sorted((str(k), _arg_sig(v, dynamic_batch=dynamic_batch)) for k, v in value.items())
         )
     return _atom_sig(value)
 
@@ -957,9 +936,7 @@ def _reached_modules(
     """
     from lucid.nn.module import Module
 
-    reached: dict[_Path, Module] = {
-        (key,): v for key, v in values.items() if isinstance(v, Module)
-    }
+    reached: dict[_Path, Module] = {(key,): v for key, v in values.items() if isinstance(v, Module)}
     reached.update(_indirect_module_paths(fn) if fn is not None else ())
     return tuple((path, weakref.ref(v)) for path, v in reached.items())
 
@@ -1023,9 +1000,7 @@ class _TreeTensors:
 
     def same_as(self, now: _TreeTensors) -> bool:
         """Whether ``now`` holds the modules and tensors this record does."""
-        return self._record[0] == now._record[0] and all(
-            ref() is not None for ref in self._modules
-        )
+        return self._record[0] == now._record[0] and all(ref() is not None for ref in self._modules)
 
     def reads_the_same(self, model: object) -> bool:
         """Whether the wrapped callable reaches the modules and recorded tensors
@@ -1037,9 +1012,9 @@ class _TreeTensors:
         if not self._reached and not self._read:
             return True
         fn = _wrapped_callable(model)
-        return all(
-            _resolve_path(fn, path) is ref() for path, ref in self._reached
-        ) and all(_read_slot(fn, key) is value for key, value in self._read)
+        return all(_resolve_path(fn, path) is ref() for path, ref in self._reached) and all(
+            _read_slot(fn, key) is value for key, value in self._read
+        )
 
 
 def _as_tensor(value: object) -> Tensor | None:
@@ -1116,9 +1091,7 @@ class ParamFingerprint(_ModuleWrapper):
         — with its executables — until a cycle collection.
     """
 
-    def __init__(
-        self, model: Module, on_replaced: Callable[[], object] | None = None
-    ) -> None:
+    def __init__(self, model: Module, on_replaced: Callable[[], object] | None = None) -> None:
         self._model: weakref.ref[Module] = weakref.ref(model)
         self._value: tuple[tuple[str, str], ...] | None = None
         self._version = -1
@@ -1273,9 +1246,7 @@ class ParamFingerprint(_ModuleWrapper):
             if isinstance(name, tuple):
                 self._callable_slots = tuple(sorted({*self._callable_slots, name}))
             elif sub is not None:
-                self._attributes[sub] = tuple(
-                    sorted({*self._attributes.get(sub, ()), name})
-                )
+                self._attributes[sub] = tuple(sorted({*self._attributes.get(sub, ()), name}))
 
     def tree_alias(
         self, args: Iterable[object], kwargs: dict[str, object]
@@ -1319,9 +1290,7 @@ class ParamFingerprint(_ModuleWrapper):
         leaves = leaf_tensors(args, kwargs)
         return _alias_pattern(leaves), _tree_alias(leaves, self._slot_of)
 
-    def rekey(
-        self, key: CacheKey, args: Iterable[object], kwargs: dict[str, object]
-    ) -> CacheKey:
+    def rekey(self, key: CacheKey, args: Iterable[object], kwargs: dict[str, object]) -> CacheKey:
         """``key`` with the slots :meth:`settle` just learnt the trace reads.
 
         An argument that is a tensor attribute the trace read shares that
@@ -1475,11 +1444,7 @@ def signature_of(
     kwarg_sigs = tuple(
         sorted((str(k), _arg_sig(v, dynamic_batch=dynamic)) for k, v in kwargs.items())
     )
-    fp = (
-        param_fingerprint
-        if param_fingerprint is not None
-        else _param_fingerprint(model)
-    )
+    fp = param_fingerprint if param_fingerprint is not None else _param_fingerprint(model)
     module_state = _module_state(model)
     return CacheKey(
         args=arg_sigs,
@@ -1488,9 +1453,7 @@ def signature_of(
         dynamic=bool(dynamic),
         param_fingerprint=fp,
         alias=_alias_pattern(leaves),
-        tree_alias=_tree_alias(
-            leaves, _tree_walk(model).slot_of if slots is None else slots
-        ),
+        tree_alias=_tree_alias(leaves, _tree_walk(model).slot_of if slots is None else slots),
         module_state=module_state,
         grad_mode=bool(_C_engine.grad_enabled()),
     )

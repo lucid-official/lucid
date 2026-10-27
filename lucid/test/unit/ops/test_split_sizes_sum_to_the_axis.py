@@ -213,9 +213,7 @@ def test_the_named_splits_slice_as_the_reference_slices(
 
 
 @pytest.mark.parity
-def test_overlapping_slices_each_carry_their_gradient(
-    ref: ModuleType, device: str
-) -> None:
+def test_overlapping_slices_each_carry_their_gradient(ref: ModuleType, device: str) -> None:
     """``[5, 2]`` reads ``x[2:5]`` twice, so those elements get two gradients."""
     x = lucid.arange(10, dtype=lucid.float32, device=device).requires_grad_(True)
     r = ref.arange(10, dtype=ref.float32).requires_grad_(True)
@@ -229,9 +227,7 @@ def test_overlapping_slices_each_carry_their_gradient(
 @pytest.mark.parametrize(
     ("n", "sizes"), [(6, [2, 3]), (4, [2, 3]), (6, [2, 5]), (6, [-1, 7])], ids=str
 )
-def test_a_size_list_that_misses_the_axis_is_refused(
-    device: str, n: int, sizes: list[int]
-) -> None:
+def test_a_size_list_that_misses_the_axis_is_refused(device: str, n: int, sizes: list[int]) -> None:
     """The defect itself, held without the reference installed."""
     x = lucid.zeros(n, device=device)
     with pytest.raises(_C_engine.InvalidArgument, match="split_with_sizes expects"):
@@ -249,9 +245,7 @@ def test_a_size_that_is_not_an_integer_is_refused(sizes: object) -> None:
 
 def test_cat_transform_refuses_lengths_that_miss_the_axis(device: str) -> None:
     """``CatTransform`` cuts by ``split``: lengths that miss the axis are refused."""
-    transform = CatTransform(
-        [ExpTransform(), AffineTransform(0.0, 2.0)], lengths=[2, 3]
-    )
+    transform = CatTransform([ExpTransform(), AffineTransform(0.0, 2.0)], lengths=[2, 3])
     ok = transform(lucid.zeros(5, device=device))
     assert ok.tolist() == [1.0, 1.0, 0.0, 0.0, 0.0]
     with pytest.raises(_C_engine.InvalidArgument, match="sum exactly to 4"):

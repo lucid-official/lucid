@@ -73,12 +73,8 @@ class TestOdeintParity:
     ) -> None:
         # A time-dependent, non-linear RHS so every tableau entry matters.
         grid = _grid(16)
-        lucid_traj = diffeq.odeint(
-            lambda t, y: -y + lucid.sin(t), y0_pair[0], grid, method=method
-        )
-        ref_traj = _ref_odeint(
-            ref, lambda t, y: -y + ref.sin(t), y0_pair[1], grid, method
-        )
+        lucid_traj = diffeq.odeint(lambda t, y: -y + lucid.sin(t), y0_pair[0], grid, method=method)
+        ref_traj = _ref_odeint(ref, lambda t, y: -y + ref.sin(t), y0_pair[1], grid, method)
         assert_close(lucid_traj, ref_traj, atol=1e-10, rtol=1e-9)
 
     @pytest.mark.parametrize("method", METHODS)
@@ -93,9 +89,7 @@ class TestOdeintParity:
             method=method,
             return_trajectory=False,
         )
-        ref_final = _ref_odeint(ref, lambda t, y: y * y - t, y0_pair[1], grid, method)[
-            -1
-        ]
+        ref_final = _ref_odeint(ref, lambda t, y: y * y - t, y0_pair[1], grid, method)[-1]
         assert_close(lucid_final, ref_final, atol=1e-10, rtol=1e-9)
 
     @pytest.mark.parametrize("method", METHODS)
@@ -125,9 +119,7 @@ class TestOdeintParity:
         )
         (lucid_out * lucid_out).sum().backward()
 
-        ref_out = _ref_odeint(ref, lambda t, y: -y + ref.sin(t), ref_y0, grid, method)[
-            -1
-        ]
+        ref_out = _ref_odeint(ref, lambda t, y: -y + ref.sin(t), ref_y0, grid, method)[-1]
         (ref_out * ref_out).sum().backward()
 
         assert lucid_y0.grad is not None
@@ -232,9 +224,7 @@ class TestReferenceOdeParity:
         )
         ref_event_t.backward()
 
-        assert float(event_t.item()) == pytest.approx(
-            float(ref_event_t.item()), rel=1e-9
-        )
+        assert float(event_t.item()) == pytest.approx(float(ref_event_t.item()), rel=1e-9)
         assert k.grad is not None
         assert float(k.grad.item()) == pytest.approx(float(ref_k.grad.item()), rel=1e-9)
 
@@ -306,9 +296,7 @@ class TestFusedPrimitiveParity:
         # -- dopri8's fourteen.  Sized from the registry so adding a method
         # cannot silently leave the fixture short.
         n_slots = 2 + max(t.stages for t in _METHODS.values())
-        raw = [
-            rng.standard_normal(size=(3, 4)).astype(np.float64) for _ in range(n_slots)
-        ]
+        raw = [rng.standard_normal(size=(3, 4)).astype(np.float64) for _ in range(n_slots)]
         return (
             [lucid.tensor(a.copy(), dtype=lucid.float64) for a in raw],
             [ref.tensor(a.copy(), dtype=ref.float64) for a in raw],
@@ -372,9 +360,7 @@ class TestFusedPrimitiveParity:
         coeffs = _adaptive.interp_fit(y0, y1, y_mid, f0, f1, 0.25)
         assert_close(_adaptive.interp_evaluate(coeffs, 0.0, 1.0, 0.0), y0, atol=1e-12)
         assert_close(_adaptive.interp_evaluate(coeffs, 0.0, 1.0, 1.0), y1, atol=1e-12)
-        assert_close(
-            _adaptive.interp_evaluate(coeffs, 0.0, 1.0, 0.5), y_mid, atol=1e-12
-        )
+        assert_close(_adaptive.interp_evaluate(coeffs, 0.0, 1.0, 0.5), y_mid, atol=1e-12)
 
 
 @pytest.mark.parity
@@ -382,9 +368,7 @@ class TestAdaptiveAgreement:
     """Every method must land on the same solution when told to be accurate."""
 
     @pytest.mark.parametrize("method", ADAPTIVE_METHODS)
-    def test_agrees_with_the_reference_framework_closed_form(
-        self, method: str, ref: Any
-    ) -> None:
+    def test_agrees_with_the_reference_framework_closed_form(self, method: str, ref: Any) -> None:
         # y' = -y + sin(t) has the closed form below; solving it with a tight
         # tolerance must reproduce that, computed in the reference framework.
         rtol, atol, want_tol = ADAPTIVE_TOL[method]
@@ -441,9 +425,7 @@ class TestOdeintDenseParity:
 
     @pytest.mark.parametrize("method", ADAPTIVE_METHODS)
     @pytest.mark.filterwarnings("ignore:method .*interpolates:RuntimeWarning")
-    def test_matches_the_reference_framework_closed_form(
-        self, method: str, ref: Any
-    ) -> None:
+    def test_matches_the_reference_framework_closed_form(self, method: str, ref: Any) -> None:
         rtol, atol, want_tol = ADAPTIVE_TOL[method]
         y0_val = 0.75
         y0 = lucid.tensor([y0_val], dtype=lucid.float64)
@@ -465,12 +447,10 @@ class TestOdeintDenseParity:
         for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
             t = 1.3 * frac
             rt = ref.tensor(t, dtype=ref.float64)
-            want = (ref.tensor(y0_val, dtype=ref.float64) + 0.5) * ref.exp(
-                -rt
-            ) + 0.5 * (ref.sin(rt) - ref.cos(rt))
-            assert float(dense(t).item()) == pytest.approx(
-                float(want), abs=interior_tol
+            want = (ref.tensor(y0_val, dtype=ref.float64) + 0.5) * ref.exp(-rt) + 0.5 * (
+                ref.sin(rt) - ref.cos(rt)
             )
+            assert float(dense(t).item()) == pytest.approx(float(want), abs=interior_tol)
 
     def test_matches_odeint_on_the_same_solve(self, ref: Any) -> None:
         # A bounded right-hand side: y * y - t blows up wherever |y| > 1, and
@@ -738,9 +718,7 @@ class TestMultistepParity:
         assert_close(got, want, atol=1e-11)
 
     @pytest.mark.parametrize("max_order", [1, 2, 3])
-    def test_low_max_order_runs_the_runge_kutta_fallback(
-        self, ref: Any, max_order: int
-    ) -> None:
+    def test_low_max_order_runs_the_runge_kutta_fallback(self, ref: Any, max_order: int) -> None:
         # Below order 4 there is nothing to gain over RK4, so the solver never
         # applies Adams weights at all and must reproduce rk4 exactly.
         grid = _grid(40)
@@ -825,9 +803,7 @@ class TestImplicitParity:
 
     @pytest.mark.parametrize("method", IMPLICIT_METHODS)
     @pytest.mark.parametrize("rate", [-1.0, -50.0, 2.0])
-    def test_matches_the_stability_function(
-        self, ref: Any, method: str, rate: float
-    ) -> None:
+    def test_matches_the_stability_function(self, ref: Any, method: str, rate: float) -> None:
         steps = 20
         dt = 1.0 / steps
         got = diffeq.odeint(
@@ -841,9 +817,7 @@ class TestImplicitParity:
         assert float(got.item()) == pytest.approx(want, rel=1e-9)
 
     @pytest.mark.parametrize("method", IMPLICIT_METHODS)
-    def test_matches_the_closed_form_on_a_coupled_system(
-        self, ref: Any, method: str
-    ) -> None:
+    def test_matches_the_closed_form_on_a_coupled_system(self, ref: Any, method: str) -> None:
         # A 2x2 system, so the stage solve is genuinely multidimensional
         # rather than a scalar equation dressed up as one.
         matrix = [[-3.0, 1.0], [1.0, -3.0]]

@@ -68,9 +68,7 @@ class TestFunctionalQuantize:
         assert F.nearest_codebook(x, codebook).tolist() == [1, 0]
 
     @pytest.mark.parametrize("shape", [(4, 3), (2, 4, 3), (2, 2, 4, 3)])
-    def test_nearest_codebook_drops_only_the_feature_axis(
-        self, shape: tuple[int, ...]
-    ) -> None:
+    def test_nearest_codebook_drops_only_the_feature_axis(self, shape: tuple[int, ...]) -> None:
         codebook = lucid.randn((8, 3))
         assert F.nearest_codebook(lucid.randn(shape), codebook).shape == shape[:-1]
 
@@ -136,9 +134,7 @@ class TestVectorQuantizerConstruction:
             ),
         ],
     )
-    def test_rejects_invalid_arguments(
-        self, kwargs: dict[str, object], match: str
-    ) -> None:
+    def test_rejects_invalid_arguments(self, kwargs: dict[str, object], match: str) -> None:
         with pytest.raises(ValueError, match=match):
             nn.VectorQuantizer(**kwargs)  # type: ignore[arg-type]
 
@@ -163,9 +159,7 @@ class TestVectorQuantizerForward:
 
     def test_output_unpacks_as_a_tuple(self) -> None:
         vq = nn.VectorQuantizer(16, 4)
-        quantized, indices, codebook_loss, commitment_loss, perplexity = vq(
-            lucid.randn((3, 4))
-        )
+        quantized, indices, codebook_loss, commitment_loss, perplexity = vq(lucid.randn((3, 4)))
         assert quantized.shape == (3, 4)
         assert indices.shape == (3,)
         for term in (codebook_loss, commitment_loss, perplexity):
@@ -207,9 +201,7 @@ class TestVectorQuantizerForward:
     def test_loss_applies_the_commitment_cost(self) -> None:
         vq = nn.VectorQuantizer(16, 4, commitment_cost=0.5)
         out = vq(lucid.randn((6, 4)))
-        expected = float(out.codebook_loss.item()) + 0.5 * float(
-            out.commitment_loss.item()
-        )
+        expected = float(out.codebook_loss.item()) + 0.5 * float(out.commitment_loss.item())
         assert abs(float(vq.loss(out).item()) - expected) < 1e-6
 
 

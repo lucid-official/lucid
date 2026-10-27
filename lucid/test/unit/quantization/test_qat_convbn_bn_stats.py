@@ -74,12 +74,8 @@ def _lucid_module(
     name: str, device: str, conv_bias: bool = False, momentum: float | None = 0.1
 ) -> nn.Module:
     kind, rank = _split(name)
-    conv = (nn.Conv1d, nn.Conv2d, nn.Conv3d)[rank - 1](
-        _IN, _OUT, _K, padding=1, bias=conv_bias
-    )
-    bn = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)[rank - 1](
-        _OUT, momentum=momentum
-    )
+    conv = (nn.Conv1d, nn.Conv2d, nn.Conv3d)[rank - 1](_IN, _OUT, _K, padding=1, bias=conv_bias)
+    bn = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)[rank - 1](_OUT, momentum=momentum)
     p = _params(rank, conv_bias)
     with lucid.no_grad():
         conv.weight.copy_(lucid.tensor(p["weight"]))
@@ -129,9 +125,7 @@ def test_training_updates_running_statistics(name: str, device: str) -> None:
 
 
 @pytest.mark.parametrize("name", _ALL)
-def test_freeze_bn_stats_stops_updates_and_survives_train(
-    name: str, device: str
-) -> None:
+def test_freeze_bn_stats_stops_updates_and_survives_train(name: str, device: str) -> None:
     module = _lucid_module(name, device)
     module.train()
     _train_steps(module, _split(name)[1], device, 2)
@@ -172,9 +166,7 @@ def test_eval_output_is_the_folded_conv(name: str, device: str) -> None:
 def test_bn_without_running_statistics_is_refused() -> None:
     bn = nn.BatchNorm2d(_OUT, track_running_stats=False)
     with pytest.raises(ValueError, match="track_running_stats"):
-        nniqat.ConvBn2d(
-            nn.Conv2d(_IN, _OUT, _K), bn, qconfig=Q.get_default_qat_qconfig()
-        )
+        nniqat.ConvBn2d(nn.Conv2d(_IN, _OUT, _K), bn, qconfig=Q.get_default_qat_qconfig())
 
 
 # ── parity ──────────────────────────────────────────────────────────────────
@@ -202,9 +194,7 @@ def _ref_qconfig(ref: Any) -> Any:
     )
 
 
-def _ref_module(
-    ref: Any, name: str, conv_bias: bool, momentum: float | None
-) -> tuple[Any, Any]:
+def _ref_module(ref: Any, name: str, conv_bias: bool, momentum: float | None) -> tuple[Any, Any]:
     """The reference QAT module and its output fake-quant (added by prepare)."""
     kind, rank = _split(name)
     conv = (ref.nn.Conv1d, ref.nn.Conv2d, ref.nn.Conv3d)[rank - 1](
@@ -275,9 +265,7 @@ def _side_by_side(
         ly, ry = lm(lx), r_afq(rm(rx))
         (ly * lucid.tensor(upstream, device=device)).sum().backward()
         (ry * ref.tensor(upstream)).sum().backward()
-        _assert_step(
-            f"{tag} step {step}", lm, rm, (ly, ry), (lx.grad, rx.grad), conv_bias
-        )
+        _assert_step(f"{tag} step {step}", lm, rm, (ly, ry), (lx.grad, rx.grad), conv_bias)
 
 
 @pytest.mark.parity
@@ -313,9 +301,7 @@ def test_training_follows_the_reference(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", [n for n, bias, mom in _PARITY if not bias and mom])
-def test_converted_module_follows_the_reference(
-    name: str, device: str, ref: Any
-) -> None:
+def test_converted_module_follows_the_reference(name: str, device: str, ref: Any) -> None:
     kind, rank = _split(name)
     lm = _lucid_module(name, device)
     rm, r_afq = _ref_module(ref, name, False, 0.1)

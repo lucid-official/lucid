@@ -397,9 +397,7 @@ def model_entrypoint(name: str) -> ModelFactory:
     return entry.factory
 
 
-def create_model(
-    name: str, *, pretrained: bool = False, **overrides: object
-) -> PretrainedModel:
+def create_model(name: str, *, pretrained: bool = False, **overrides: object) -> PretrainedModel:
     r"""Look up ``name`` and call its factory — the timm-style entry point.
 
     Parameters

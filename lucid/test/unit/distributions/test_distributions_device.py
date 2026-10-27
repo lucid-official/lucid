@@ -48,10 +48,7 @@ SPECS = [
 def _build(name, kwargs, device):
     cls = getattr(D, name)
     return cls(
-        **{
-            k: lucid.tensor(np.array(v, dtype=np.float32), device=device)
-            for k, v in kwargs.items()
-        }
+        **{k: lucid.tensor(np.array(v, dtype=np.float32), device=device) for k, v in kwargs.items()}
     )
 
 

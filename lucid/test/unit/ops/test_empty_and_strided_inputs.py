@@ -225,13 +225,9 @@ def test_a_gather_from_an_empty_axis_is_out_of_range(device: str) -> None:
 def test_scatter_add_refuses_an_index_larger_than_its_operands(device: str) -> None:
     index = lucid.zeros(4, 6, dtype=lucid.int64).to(device)
     with pytest.raises(RuntimeError, match="no larger than self"):
-        lucid.scatter_add(
-            lucid.zeros(2, 6).to(device), 1, index, lucid.ones(4, 6).to(device)
-        )
+        lucid.scatter_add(lucid.zeros(2, 6).to(device), 1, index, lucid.ones(4, 6).to(device))
     with pytest.raises(RuntimeError, match="no larger than src"):
-        lucid.scatter_add(
-            lucid.zeros(4, 6).to(device), 1, index, lucid.ones(2, 6).to(device)
-        )
+        lucid.scatter_add(lucid.zeros(4, 6).to(device), 1, index, lucid.ones(2, 6).to(device))
     with pytest.raises(RuntimeError, match="no larger than self"):
         lucid.scatter_reduce(
             lucid.zeros(2, 6).to(device), 1, index, lucid.ones(4, 6).to(device), "sum"
@@ -251,21 +247,15 @@ def test_an_index_smaller_than_its_operands_scatters_and_gathers(device: str) ->
         for c, t in enumerate(row):
             want[r, t] += src[r, c]
     index = lucid.tensor(idx).to(device)
-    added = lucid.scatter_add(
-        lucid.zeros(4, 6).to(device), 1, index, lucid.tensor(src).to(device)
-    )
+    added = lucid.scatter_add(lucid.zeros(4, 6).to(device), 1, index, lucid.tensor(src).to(device))
     np.testing.assert_array_equal(added.numpy(), want)
-    written = lucid.scatter(
-        lucid.zeros(4, 6).to(device), 1, index, lucid.tensor(src).to(device)
-    )
+    written = lucid.scatter(lucid.zeros(4, 6).to(device), 1, index, lucid.tensor(src).to(device))
     np.testing.assert_array_equal(written.numpy(), want)  # no duplicates: same answer
 
     table = np.arange(24.0, dtype=np.float32).reshape(4, 6)
     x = lucid.tensor(table).to(device).requires_grad_()
     picked = lucid.gather(x, 1, index)
-    np.testing.assert_array_equal(
-        picked.numpy(), np.take_along_axis(table[:2], np.array(idx), 1)
-    )
+    np.testing.assert_array_equal(picked.numpy(), np.take_along_axis(table[:2], np.array(idx), 1))
     (picked * 3.0).sum().backward()
     grad = np.zeros((4, 6), np.float32)
     for r, row in enumerate(idx):
@@ -274,9 +264,7 @@ def test_an_index_smaller_than_its_operands_scatters_and_gathers(device: str) ->
 
     # A src larger than the index sends its gradient to the corner it gave.
     s = lucid.tensor(src).to(device).requires_grad_()
-    (
-        lucid.scatter_add(lucid.zeros(4, 6).to(device), 1, index, s) * 2.0
-    ).sum().backward()
+    (lucid.scatter_add(lucid.zeros(4, 6).to(device), 1, index, s) * 2.0).sum().backward()
     corner = np.zeros((3, 5), np.float32)
     corner[:2, :3] = 2.0
     np.testing.assert_array_equal(s.grad.numpy(), corner)

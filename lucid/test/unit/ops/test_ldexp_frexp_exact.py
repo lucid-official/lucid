@@ -96,9 +96,7 @@ def _assert_same(got: list[float], want: list[float], what: str) -> None:
             assert math.copysign(1.0, g) == math.copysign(1.0, w), f"{what}[{i}] sign"
 
 
-def _assert_close(
-    got: list[float], want: list[float], what: str, *, rel_tol: float = 3e-7
-) -> None:
+def _assert_close(got: list[float], want: list[float], what: str, *, rel_tol: float = 3e-7) -> None:
     """``got`` is within rounding of ``want``: ``rel_tol`` (about 2.5 float32
     ulp by default), or two steps of the float32 subnormal grid."""
     for i, (g, w) in enumerate(zip(got, want, strict=True)):
@@ -223,9 +221,7 @@ def test_ldexp_fractional_exponent_gradient_is_within_a_few_ulp(
     y = lucid.ldexp(x, k)
     y.sum().backward()
     assert k.grad is not None and x.grad is not None
-    want_y = lucid.tensor(
-        [_exact_ldexp(a, b) for a, b in zip(xs, ks, strict=True)], dtype=dt
-    )
+    want_y = lucid.tensor([_exact_ldexp(a, b) for a, b in zip(xs, ks, strict=True)], dtype=dt)
     want_ge = [_exact_ldexp(a, b, _LN2) for a, b in zip(xs, ks, strict=True)]
     want_gx = [_exact_ldexp(1.0, b) for b in ks]
     # Three ulp of the dtype.
@@ -291,9 +287,7 @@ def test_ldexp_half_is_exact_and_differentiable(
     _assert_same(y.to(dtype=lucid.float32).to("cpu").tolist(), want, "ldexp")
     y.sum().backward()
     assert x.grad is not None
-    want_gx_dt = (
-        ref.tensor(want_gx, dtype=ref.float32).to(getattr(ref, dtype_name)).float()
-    )
+    want_gx_dt = ref.tensor(want_gx, dtype=ref.float32).to(getattr(ref, dtype_name)).float()
     _assert_grad(
         x.grad.to(dtype=lucid.float32).to("cpu").tolist(),
         want_gx_dt.tolist(),
@@ -360,12 +354,8 @@ def test_ldexp_second_derivatives_reach_both_arguments(device: str) -> None:
 
 
 def test_ldexp_gradients_reduce_to_broadcast_operands(device: str) -> None:
-    x = lucid.tensor(
-        [1e-40, 0.75, 3.0], dtype=lucid.float32, device=device, requires_grad=True
-    )
-    k = lucid.tensor(
-        [[1.0], [-2.0]], dtype=lucid.float32, device=device, requires_grad=True
-    )
+    x = lucid.tensor([1e-40, 0.75, 3.0], dtype=lucid.float32, device=device, requires_grad=True)
+    k = lucid.tensor([[1.0], [-2.0]], dtype=lucid.float32, device=device, requires_grad=True)
     lucid.ldexp(x, k).sum().backward()
     assert x.grad is not None and k.grad is not None
     assert x.grad.shape == (3,) and k.grad.shape == (2, 1)
@@ -414,9 +404,7 @@ def _is_subnormal(v: float) -> bool:
     return v != 0.0 and abs(v) < 1.1754943508222875e-38
 
 
-def _split_cells(
-    ref: ModuleType, subnormal: bool
-) -> tuple[list[float], list[int], list[float]]:
+def _split_cells(ref: ModuleType, subnormal: bool) -> tuple[list[float], list[int], list[float]]:
     """The float32 ``ldexp`` grid's cells and the ``frexp`` operands that do
     (``subnormal``) or do not read or write a subnormal."""
     xs, es = _grid(_F32_X, _EXPONENTS)
@@ -436,9 +424,7 @@ def _compiled(fn: Callable[..., object]) -> Callable[..., object]:
     return lucid.compile(fn)
 
 
-def _assert_compiled_matches_eager(
-    xs: list[float], es: list[int], frexp_xs: list[float]
-) -> None:
+def _assert_compiled_matches_eager(xs: list[float], es: list[int], frexp_xs: list[float]) -> None:
     x = lucid.tensor(xs, dtype=lucid.float32, device="metal")
     e = lucid.tensor(es, dtype=lucid.int32, device="metal")
     compiled = _compiled(lambda a, b: lucid.ldexp(a, b))(x, e)
@@ -446,9 +432,7 @@ def _assert_compiled_matches_eager(
     assert _C_engine.compile.session_cache_size() >= 1
     got = [_bits(v) for v in compiled.to("cpu").tolist()]
     want = [_bits(v) for v in lucid.ldexp(x, e).to("cpu").tolist()]
-    bad = [
-        (xs[i], es[i]) for i, (g, w) in enumerate(zip(got, want, strict=True)) if g != w
-    ]
+    bad = [(xs[i], es[i]) for i, (g, w) in enumerate(zip(got, want, strict=True)) if g != w]
     assert not bad, f"compiled ldexp differs from eager at (x, e) = {bad[:8]}"
 
     fx = lucid.tensor(frexp_xs, dtype=lucid.float32, device="metal")

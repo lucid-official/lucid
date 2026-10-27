@@ -198,9 +198,7 @@ class AddedVocabulary:
     [('hello', None, 0), ('</s>', 1, 5), ('world', None, 9)]
     """
 
-    def __init__(
-        self, tokens: list[AddedToken], normalizer: Normalizer | None = None
-    ) -> None:
+    def __init__(self, tokens: list[AddedToken], normalizer: Normalizer | None = None) -> None:
         r"""Build the two matchers.
 
         Parameters
@@ -215,11 +213,7 @@ class AddedVocabulary:
         normalized: dict[str, AddedToken] = {}
         for token in self._tokens:
             if token.normalized:
-                key = (
-                    normalizer(token.content)
-                    if normalizer is not None
-                    else token.content
-                )
+                key = normalizer(token.content) if normalizer is not None else token.content
                 normalized[key] = token
             else:
                 raw[token.content] = token

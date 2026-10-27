@@ -65,9 +65,7 @@ class TestClassifierOutputs:
         finally:
             exported.close()
 
-    def test_predict_on_a_classifier_says_to_use_classify(
-        self, tmp_path: object
-    ) -> None:
+    def test_predict_on_a_classifier_says_to_use_classify(self, tmp_path: object) -> None:
         _model, exported, x = _classifier(tmp_path, "wrongcall")
         try:
             with pytest.raises(TypeError, match="classify"):
@@ -87,9 +85,7 @@ class TestClassifierOutputs:
 
 
 class TestClassifierRefusals:
-    def test_a_label_count_that_does_not_match_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_label_count_that_does_not_match_is_refused(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         with pytest.raises(ValueError, match="labels for"):
             cml.export(

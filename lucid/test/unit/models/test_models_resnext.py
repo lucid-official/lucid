@@ -118,9 +118,7 @@ class TestResNeXtRegistry(unittest.TestCase):
         self.assertIsInstance(m, ResNeXt)
 
     def test_auto_model_for_classification(self) -> None:
-        m = models.AutoModelForImageClassification.from_pretrained(
-            "resnext_50_32x4d_cls"
-        )
+        m = models.AutoModelForImageClassification.from_pretrained("resnext_50_32x4d_cls")
         self.assertIsInstance(m, ResNeXtForImageClassification)
 
 

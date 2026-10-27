@@ -181,9 +181,7 @@ def test_a_tied_median_names_an_entry_holding_it(
 
 
 @pytest.mark.parametrize("dtype", ("float32", "int64"))
-def test_an_empty_input_matches_reference(
-    ref: ModuleType, device: str, dtype: str
-) -> None:
+def test_an_empty_input_matches_reference(ref: ModuleType, device: str, dtype: str) -> None:
     x = lucid.zeros(0, 4, dtype=getattr(lucid, dtype), device=device)
     want_x = ref.zeros(0, 4, dtype=getattr(ref, dtype))
     for fn_l, fn_r in (
@@ -236,11 +234,7 @@ def test_bool_and_out_of_range_dims_are_refused(device: str) -> None:
 def test_mode_matches_reference(
     ref: ModuleType, device: str, dtype: str, dim: int, keepdim: bool
 ) -> None:
-    raw = (
-        [[True, False, True, False], [False, False, True, False]]
-        if dtype == "bool_"
-        else _TIES
-    )
+    raw = [[True, False, True, False], [False, False, True, False]] if dtype == "bool_" else _TIES
     ref_dt = "bool" if dtype == "bool_" else dtype
     grad = dtype in ("float32", "float16")
     x = lucid.tensor(raw, dtype=getattr(lucid, dtype), device=device)
@@ -307,12 +301,8 @@ def test_sort_returns_values_and_indices_namedtuple(
     _same(values, want_res.values)
     _same(indices, want_res.indices)
     if grad:
-        weights = lucid.arange(1, x.numel() + 1, dtype=x.dtype, device=device).reshape(
-            x.shape
-        )
-        r_weights = ref.arange(1, want_x.numel() + 1, dtype=want_x.dtype).reshape(
-            want_x.shape
-        )
+        weights = lucid.arange(1, x.numel() + 1, dtype=x.dtype, device=device).reshape(x.shape)
+        r_weights = ref.arange(1, want_x.numel() + 1, dtype=want_x.dtype).reshape(want_x.shape)
         (values * weights).sum().backward()
         (want_res.values * r_weights).sum().backward()
         np.testing.assert_allclose(_np(x.grad), _np(want_x.grad), rtol=1e-3)

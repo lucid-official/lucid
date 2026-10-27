@@ -32,9 +32,7 @@ class _QuantizedGridModule(Module):
     scale: Tensor
     zero_point: Tensor
 
-    def __init__(
-        self, scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8
-    ) -> None:
+    def __init__(self, scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8) -> None:
         super().__init__()
         self.register_buffer("scale", scale)
         self.register_buffer("zero_point", zero_point)
@@ -122,9 +120,7 @@ def _module_device(mod: nn.Module) -> lucid.device:
     return lucid.tensor(0.0).device
 
 
-def _to_device(
-    scale: Tensor, zero_point: Tensor, dev: lucid.device
-) -> tuple[Tensor, Tensor]:
+def _to_device(scale: Tensor, zero_point: Tensor, dev: lucid.device) -> tuple[Tensor, Tensor]:
     """Move a ``(scale, zero_point)`` pair onto ``dev`` (no-op if already there)
     so a quantized module built from a Metal float module keeps every buffer on
     Metal — a HistogramObserver derives its range from host floats, so its

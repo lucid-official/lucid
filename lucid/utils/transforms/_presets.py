@@ -201,19 +201,14 @@ class TransformsPreset(_NoParams, Transform[Empty], abc.ABC):
                 f"from_dict: 'preprocessor_type' must be a str, got {type(key).__name__}"
             )
         if not isinstance(kwargs, dict):
-            raise TypeError(
-                f"from_dict: 'init_kwargs' must be a dict, got {type(kwargs).__name__}"
-            )
+            raise TypeError(f"from_dict: 'init_kwargs' must be a dict, got {type(kwargs).__name__}")
         target = _PRESET_REGISTRY.get(key)
         if target is None:
             raise KeyError(
-                f"unknown preset type {key!r}; registered: "
-                f"{sorted(_PRESET_REGISTRY)}"
+                f"unknown preset type {key!r}; registered: " f"{sorted(_PRESET_REGISTRY)}"
             )
         if cls is not TransformsPreset and target is not cls:
-            raise ValueError(
-                f"from_dict on {cls.__qualname__} got cfg for {target.__qualname__}"
-            )
+            raise ValueError(f"from_dict on {cls.__qualname__} got cfg for {target.__qualname__}")
         return target(**kwargs)
 
     # ── Transform interface (delegates to the inner pipeline) ───────
@@ -343,9 +338,7 @@ class _ReferenceShorterSide(SmallestMaxSize):
         h, w = int(img.shape[-2]), int(img.shape[-1])
         if not img.is_floating_point():
             return _resize_eight_bit(img, self._target(h, w), self.interpolation)
-        return resize(
-            img, self._target(h, w), interpolation=self.interpolation, antialias=True
-        )
+        return resize(img, self._target(h, w), interpolation=self.interpolation, antialias=True)
 
 
 class _ReferenceStretch(Resize):
@@ -438,9 +431,7 @@ class ImageClassification(TransformsPreset):
             "resize_size": self.resize_size,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
         }
 
 
@@ -474,9 +465,7 @@ def _parse_auto_augment(spec: str) -> TransformLike:
             elif part.startswith("n"):
                 n = int(part[1:])
             else:
-                raise ValueError(
-                    f"unrecognised RandAugment fragment {part!r} in spec {spec!r}"
-                )
+                raise ValueError(f"unrecognised RandAugment fragment {part!r} in spec {spec!r}")
         return RandAugment(num_ops=n, magnitude=m, p=1.0)
     if spec.startswith("aa_"):
         policy = spec[3:]
@@ -543,9 +532,7 @@ class VideoClassification(TransformsPreset):
         # rounding 292.57 would give.  One pixel of resize moves the
         # centre crop's window and rescales every pixel inside it — the
         # released processor's own config records shortest_edge 292.
-        self.resize_size = (
-            resize_size if resize_size is not None else int(crop_size * 256 / 224)
-        )
+        self.resize_size = resize_size if resize_size is not None else int(crop_size * 256 / 224)
         self.mean = mean if mean is not None else _IMAGENET_MEAN
         self.std = std if std is not None else _IMAGENET_STD
         self.interpolation = interpolation
@@ -573,9 +560,7 @@ class VideoClassification(TransformsPreset):
             "resize_size": self.resize_size,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
         }
 
 
@@ -704,9 +689,7 @@ class ImageClassificationAugment(TransformsPreset):
             "random_erasing": self.random_erasing,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
         }
 
 
@@ -817,9 +800,7 @@ class Detection(TransformsPreset):
         interpolation: str | Interpolation = Interpolation.BILINEAR,
     ) -> None:
         if size_divisible < 1:
-            raise ValueError(
-                f"Detection: size_divisible must be at least 1, got {size_divisible}"
-            )
+            raise ValueError(f"Detection: size_divisible must be at least 1, got {size_divisible}")
         self.max_size = max_size
         self.min_size = min_size
         self.size_divisible = size_divisible
@@ -840,9 +821,7 @@ class Detection(TransformsPreset):
         # trained the other way.  Composing the two caps reproduces the rule.
         self._resize: LongestMaxSize | ResizeShortestEdge
         if min_size is not None:
-            self._resize = ResizeShortestEdge(
-                min_size, max_size, interpolation=interpolation
-            )
+            self._resize = ResizeShortestEdge(min_size, max_size, interpolation=interpolation)
         else:
             self._resize = LongestMaxSize(max_size, interpolation=interpolation)
         side = self.canvas_size
@@ -982,9 +961,7 @@ class Detection(TransformsPreset):
             "min_visibility": self.min_visibility,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
         }
 
 
@@ -1064,9 +1041,7 @@ class Segmentation(TransformsPreset):
             # exactly that shape -- aspect ratio distorted, nothing cropped.
             # Reproducing them with shortest-edge + centre-crop feeds the
             # model a differently-framed image than it was evaluated on.
-            stages = [
-                _ReferenceStretch(resize_size, resize_size, interpolation=interpolation)
-            ]
+            stages = [_ReferenceStretch(resize_size, resize_size, interpolation=interpolation)]
         else:
             stages = [_ReferenceShorterSide(resize_size, interpolation=interpolation)]
             if crop_size is not None:
@@ -1082,9 +1057,7 @@ class Segmentation(TransformsPreset):
             "resize_size": self.resize_size,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
             "stretch": self.stretch,
         }
 
@@ -1151,7 +1124,5 @@ class Pose(TransformsPreset):
             "resize_size": self.resize_size,
             "mean": list(self.mean),
             "std": list(self.std),
-            "interpolation": (
-                interp.value if isinstance(interp, Interpolation) else interp
-            ),
+            "interpolation": (interp.value if isinstance(interp, Interpolation) else interp),
         }

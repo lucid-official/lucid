@@ -51,9 +51,7 @@ def _retained(run: Callable[[], lucid.Tensor], device: str) -> int:
 
 
 @pytest.mark.parametrize("mode", ["amax", "amin", "prod", "mean", "sum"])
-def test_a_scatter_reduce_that_runs_no_backward_frees_its_graph(
-    mode: str, device: str
-) -> None:
+def test_a_scatter_reduce_that_runs_no_backward_frees_its_graph(mode: str, device: str) -> None:
     base = lucid.randn(_ELEMS, requires_grad=True, device=device)
     src = lucid.randn(_ELEMS, requires_grad=True, device=device)
     index = lucid.arange(_ELEMS, device=device)
@@ -196,9 +194,7 @@ _SAVES_OUTPUT: dict[
 
 
 @pytest.mark.parametrize("node", list(_SAVES_OUTPUT))
-def test_a_node_that_reads_its_output_frees_it_without_a_backward(
-    node: str, device: str
-) -> None:
+def test_a_node_that_reads_its_output_frees_it_without_a_backward(node: str, device: str) -> None:
     make, forward = _SAVES_OUTPUT[node]
     x = make(device)
     out = forward(x)
@@ -293,9 +289,7 @@ def test_a_dropped_result_gives_the_kept_results_gradient(
 
 
 @pytest.mark.parametrize("mode", ["amax", "amin"])
-def test_the_tie_split_matches_the_reference(
-    mode: str, device: str, ref: ModuleType
-) -> None:
+def test_the_tie_split_matches_the_reference(mode: str, device: str, ref: ModuleType) -> None:
     base = ref.tensor(_BASE, requires_grad=True)
     src = ref.tensor(_SRC, requires_grad=True)
     y = base.scatter_reduce(0, ref.tensor(_INDEX), src, reduce=mode)

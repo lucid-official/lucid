@@ -98,9 +98,7 @@ def test_fuse_conv_bn_weights_needs_positive_variance(device):
     zeros = lucid.tensor(np.zeros(4, dtype=np.float32), device=device)
     ones = lucid.tensor(np.ones(4, dtype=np.float32), device=device)
     var = lucid.tensor(np.array([0.5, 1.0, 2.0, 3.0], dtype=np.float32), device=device)
-    fused_w, fused_b = U.fuse_conv_bn_weights(
-        weight, zeros, zeros, var, 1e-5, ones, zeros
-    )
+    fused_w, fused_b = U.fuse_conv_bn_weights(weight, zeros, zeros, var, 1e-5, ones, zeros)
     assert not np.isnan(fused_w.numpy()).any()
     assert not np.isnan(fused_b.numpy()).any()
     assert str(fused_w.device) == f"device('{device}')"

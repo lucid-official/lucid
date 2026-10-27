@@ -38,10 +38,7 @@ def _unpool_default_size(
     s = k if stride is None else _ntuple(stride, n, f"max_unpool{n}d", "stride")
     p = _ntuple(padding, n, f"max_unpool{n}d", "padding")
     extent = _spatial_extent(x, n, f"max_unpool{n}d")
-    return tuple(
-        (i - 1) * sd - 2 * pd + kd
-        for i, kd, sd, pd in zip(extent, k, s, p, strict=True)
-    )
+    return tuple((i - 1) * sd - 2 * pd + kd for i, kd, sd, pd in zip(extent, k, s, p, strict=True))
 
 
 @overload

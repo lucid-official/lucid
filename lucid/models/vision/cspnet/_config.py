@@ -183,6 +183,5 @@ class CSPNetConfig(ModelConfig):
         ):
             if len(getattr(self, f)) != n:
                 raise ValueError(
-                    f"CSPNetConfig: {f!r} length {len(getattr(self, f))} "
-                    f"!= depths length {n}"
+                    f"CSPNetConfig: {f!r} length {len(getattr(self, f))} " f"!= depths length {n}"
                 )

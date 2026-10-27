@@ -134,9 +134,7 @@ class TestSymexpTwoHotLoop:
         encoded = F.two_hot(F.symlog(lucid.tensor([value])), self.GRID)
         return float(F.symexp((encoded * self.GRID).sum(dim=-1)).item())
 
-    @pytest.mark.parametrize(
-        "value", [-1e6, -10000.0, -12.5, -1.0, 0.0, 0.5, 7.0, 3000.0, 1e6]
-    )
+    @pytest.mark.parametrize("value", [-1e6, -10000.0, -12.5, -1.0, 0.0, 0.5, 7.0, 3000.0, 1e6])
     def test_recovers_across_eight_orders_of_magnitude(self, value: float) -> None:
         recovered = self._round_trip(value)
         assert abs(recovered - value) <= 1e-4 * max(abs(value), 1.0)

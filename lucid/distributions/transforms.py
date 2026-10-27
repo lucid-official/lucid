@@ -684,9 +684,7 @@ class StickBreakingTransform(Transform):
         K_minus_1: int = int(x.shape[-1])
         offsets: Tensor = lucid.arange(K_minus_1, 0, -1, dtype=x.dtype, device=x.device)
         x_shifted: Tensor = x - offsets.log()
-        return (
-            -x_shifted + logsigmoid(x_shifted) + y.narrow(-1, 0, K_minus_1).log()
-        ).sum(dim=-1)
+        return (-x_shifted + logsigmoid(x_shifted) + y.narrow(-1, 0, K_minus_1).log()).sum(dim=-1)
 
 
 class LowerCholeskyTransform(Transform):
@@ -971,17 +969,13 @@ class IndependentTransform(Transform):
     @property
     def domain(self) -> Constraint:
         """``independent(transform.domain, reinterpreted_batch_ndims)``."""
-        return constraints.independent(
-            self.transform.domain, self.reinterpreted_batch_ndims
-        )
+        return constraints.independent(self.transform.domain, self.reinterpreted_batch_ndims)
 
     @override
     @property
     def codomain(self) -> Constraint:
         """``independent(transform.codomain, reinterpreted_batch_ndims)``."""
-        return constraints.independent(
-            self.transform.codomain, self.reinterpreted_batch_ndims
-        )
+        return constraints.independent(self.transform.codomain, self.reinterpreted_batch_ndims)
 
     @override
     def forward_shape(self, shape: tuple[int, ...]) -> tuple[int, ...]:
@@ -1216,9 +1210,7 @@ class CorrCholeskyTransform(Transform):
             return self.dim
         d = round((math.sqrt(1 + 8 * free_n) + 1) / 2)
         if d * (d - 1) // 2 != free_n or d < 2:
-            raise ValueError(
-                f"CorrCholeskyTransform: invalid unconstrained dimension {free_n}"
-            )
+            raise ValueError(f"CorrCholeskyTransform: invalid unconstrained dimension {free_n}")
         return d
 
     def _resolve_dim_from_matrix(self, mat_d: int) -> int:
@@ -1326,9 +1318,7 @@ class CorrCholeskyTransform(Transform):
                     )
                     diag = diag_sq.sqrt()  # (...,)
                     # pad to length d: [off | diag | zeros]
-                    zero_pad = lucid.zeros(
-                        *batch, d - row - 1, dtype=dtype, device=device
-                    )
+                    zero_pad = lucid.zeros(*batch, d - row - 1, dtype=dtype, device=device)
                     full_row = lucid.cat([off, diag.unsqueeze(-1), zero_pad], dim=-1)
                 else:
                     full_row = lucid.zeros(*batch, d, dtype=dtype, device=device)

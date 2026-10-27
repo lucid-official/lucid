@@ -99,9 +99,7 @@ def _normalise_argnums(
     return False, tuple(argnums)
 
 
-def _prepare_grad_args(
-    args: tuple[object, ...], argnums: tuple[int, ...]
-) -> list[object]:
+def _prepare_grad_args(args: tuple[object, ...], argnums: tuple[int, ...]) -> list[object]:
     from lucid._tensor.tensor import Tensor as _T
 
     args_list = list(args)
@@ -145,8 +143,7 @@ def _output_tensor(value: object, name: str) -> Tensor:
     out = _output_tensors(value, name)
     if isinstance(out, tuple):
         raise TypeError(
-            f"lucid.func.{name}: func must return a single Tensor, got a tuple "
-            f"of {len(out)}"
+            f"lucid.func.{name}: func must return a single Tensor, got a tuple " f"of {len(out)}"
         )
     return out
 
@@ -159,9 +156,7 @@ def _split_aux(
     if not has_aux:
         return output, None
     if not isinstance(output, tuple) or len(output) < _MIN_AUX_TUPLE_LEN:
-        raise ValueError(
-            f"lucid.func.{name}: has_aux=True requires func to return ({label}, aux)"
-        )
+        raise ValueError(f"lucid.func.{name}: has_aux=True requires func to return ({label}, aux)")
     aux = output[1] if len(output) == _MIN_AUX_TUPLE_LEN else output[1:]
     return output[0], aux
 
@@ -171,9 +166,7 @@ def _requires_grad(out: Tensor | tuple[Tensor, ...]) -> bool:
     return any(o.requires_grad for o in (out if isinstance(out, tuple) else (out,)))
 
 
-def _attachment(
-    primals: tuple[Tensor, ...], out: Tensor | tuple[Tensor, ...]
-) -> tuple[bool, bool]:
+def _attachment(primals: tuple[Tensor, ...], out: Tensor | tuple[Tensor, ...]) -> tuple[bool, bool]:
     """``(attach, required)`` for tangents at ``primals``, under the current
     grad mode, given ``func``'s output there evaluated in that mode.
 
@@ -246,9 +239,7 @@ def _combine_outputs(
     first = items[0]
     if isinstance(first, tuple):
         n_o = len(first)
-        ods: list[int] = (
-            [out_dims] * n_o if isinstance(out_dims, int) else list(out_dims)
-        )
+        ods: list[int] = [out_dims] * n_o if isinstance(out_dims, int) else list(out_dims)
         return tuple(
             combine(
                 [r[i] for r in items if isinstance(r, tuple)],
@@ -260,9 +251,7 @@ def _combine_outputs(
     return combine([t for t in items if isinstance(t, _T)], od_i)
 
 
-def _validate_vmap_batch_size(
-    args: tuple[object, ...], in_dims: list[int | None]
-) -> int | None:
+def _validate_vmap_batch_size(args: tuple[object, ...], in_dims: list[int | None]) -> int | None:
     from lucid._tensor.tensor import Tensor as _T
 
     batch_size: int | None = None
@@ -296,9 +285,7 @@ def _vectorized_vmap_call(
     ]
     output = func(*moved, **kwargs)
     if isinstance(output, tuple):
-        od_list = (
-            [out_dims] * len(output) if isinstance(out_dims, int) else list(out_dims)
-        )
+        od_list = [out_dims] * len(output) if isinstance(out_dims, int) else list(out_dims)
         # A non-tensor item passes through, as it always has.
         return tuple(
             _move_from_front(o, od) if isinstance(o, _T) else o
@@ -385,8 +372,7 @@ def vmap(
     """
     if strategy not in ("auto", "isolated", "vectorized"):
         raise ValueError(
-            f"vmap: strategy must be 'auto', 'isolated', or 'vectorized'; "
-            f"got {strategy!r}"
+            f"vmap: strategy must be 'auto', 'isolated', or 'vectorized'; " f"got {strategy!r}"
         )
 
     def vectorized(
@@ -409,13 +395,9 @@ def vmap(
                 strategy != "vectorized" or getattr(func, _ISOLATION_ATTR, False)
             )
             if isolate:
-                return _isolated_vmap(
-                    func, args, kwargs, _in, out_dims, batch_size, chunk_size
-                )
+                return _isolated_vmap(func, args, kwargs, _in, out_dims, batch_size, chunk_size)
             if chunk_size is not None and batch_size > chunk_size:
-                return _chunked_vmap(
-                    func, args, kwargs, _in, out_dims, chunk_size, batch_size
-                )
+                return _chunked_vmap(func, args, kwargs, _in, out_dims, chunk_size, batch_size)
             return _vectorized_vmap_call(func, args, kwargs, _in, out_dims)
 
     return _mark_isolation(vectorized)
@@ -491,9 +473,7 @@ def _isolated_vmap(
             end = min(start + chunk_size, batch_size)
             chunk_res = [_run_element(b) for b in range(start, end)]
             parts.append(
-                _combine_outputs(
-                    chunk_res, out_dims, lambda ts, d: lucid.stack(ts, dim=d)
-                )
+                _combine_outputs(chunk_res, out_dims, lambda ts, d: lucid.stack(ts, dim=d))
             )
         return _combine_outputs(parts, out_dims, lambda ts, d: lucid.cat(ts, dim=d))
 
@@ -587,13 +567,9 @@ def grad[**P](
     """
     _, _argnums = _normalise_argnums(argnums)
 
-    def grad_fn(
-        *args: P.args, **kwargs: P.kwargs
-    ) -> _PerArgnum | tuple[_PerArgnum, object]:
+    def grad_fn(*args: P.args, **kwargs: P.kwargs) -> _PerArgnum | tuple[_PerArgnum, object]:
         """Closure that computes the gradient via reverse-mode autograd."""
-        g, _, aux = _eval_grad_and_value(
-            func, args, kwargs, _argnums, has_aux=has_aux, name="grad"
-        )
+        g, _, aux = _eval_grad_and_value(func, args, kwargs, _argnums, has_aux=has_aux, name="grad")
         return (g, aux) if has_aux else g
 
     return _mark_isolation(grad_fn)
@@ -735,9 +711,7 @@ def vjp(
     out_list = list(outputs) if isinstance(outputs, tuple) else [outputs]
 
     def _vjp(*cotangents: Tensor) -> tuple[Tensor | None, ...]:
-        cots: list[Tensor | None] = (
-            list(cotangents) if cotangents else [None] * len(out_list)
-        )
+        cots: list[Tensor | None] = list(cotangents) if cotangents else [None] * len(out_list)
         return tuple(
             _ag(
                 out_list,
@@ -790,9 +764,7 @@ def _tangent_pass(
     """
     rewind = _replay_draws() if attach and not required else None
     try:
-        return _jvp_by_double_backward(
-            fn, primals, tangents, create_graph=attach, strict=strict
-        )
+        return _jvp_by_double_backward(fn, primals, tangents, create_graph=attach, strict=strict)
     except NotImplementedError:
         if rewind is None:
             raise
@@ -803,9 +775,7 @@ def _tangent_pass(
         stacklevel=4,
     )
     rewind()
-    return _jvp_by_double_backward(
-        fn, primals, tangents, create_graph=False, strict=strict
-    )
+    return _jvp_by_double_backward(fn, primals, tangents, create_graph=False, strict=strict)
 
 
 def _jvp_attached(
@@ -820,9 +790,7 @@ def _jvp_attached(
 
     grad_on = lucid.is_grad_enabled()
     if not grad_on or any(p.requires_grad for p in primals):
-        return _tangent_pass(
-            fn, primals, tangents, attach=grad_on, required=grad_on, strict=strict
-        )
+        return _tangent_pass(fn, primals, tangents, attach=grad_on, required=grad_on, strict=strict)
     # Nothing passed in requires grad, yet ``fn`` can still reach the
     # caller's graph through the tensors it captures — a model's parameters.
     # The backward passes run ``fn`` at copies of the primals that require
@@ -1009,9 +977,7 @@ def linearize(
                 f"primals and {len(tangents)} tangents"
             )
         on = lucid.is_grad_enabled()
-        required = on and (
-            primal_attached or any(tangents[i].requires_grad for i in idx)
-        )
+        required = on and (primal_attached or any(tangents[i].requires_grad for i in idx))
         _, tangents_out = _tangent_pass(
             fn,
             primals_sel,
@@ -1040,9 +1006,7 @@ def _one_hot_tangent(x: Tensor, col: int) -> Tensor:
     one = _C_engine.ones([1], dtype, dev)
     idx = _C_engine.full([1], float(col), _C_engine.I32, dev)
     t_flat = _C_engine.scatter_add(t_flat, idx, one, 0)
-    return _TT.__new_from_impl__(
-        _C_engine.reshape(t_flat, x_shape) if x_shape else t_flat
-    )
+    return _TT.__new_from_impl__(_C_engine.reshape(t_flat, x_shape) if x_shape else t_flat)
 
 
 def _jacfwd_block(
@@ -1138,9 +1102,7 @@ def jacrev[**P](
     _scalar_argnum, _argnums = _normalise_argnums(argnums)
     call: Callable[..., object] = func
 
-    def jac_fn(
-        *args: P.args, **kwargs: P.kwargs
-    ) -> _Jacobian | tuple[_Jacobian, object]:
+    def jac_fn(*args: P.args, **kwargs: P.kwargs) -> _Jacobian | tuple[_Jacobian, object]:
         """Closure that computes the Jacobian."""
         arg_list = list(args)
         selected = tuple(_tensor_argument(arg_list, i, "jacrev") for i in _argnums)
@@ -1220,18 +1182,14 @@ def jacfwd[**P](
     _scalar_argnum, _argnums = _normalise_argnums(argnums)
     call: Callable[..., object] = func
 
-    def jac_fn(
-        *args: P.args, **kwargs: P.kwargs
-    ) -> _PerArgnum | tuple[_PerArgnum, object]:
+    def jac_fn(*args: P.args, **kwargs: P.kwargs) -> _PerArgnum | tuple[_PerArgnum, object]:
         """Closure that computes the Jacobian."""
         arg_list = list(args)
         primals = tuple(_tensor_argument(arg_list, i, "jacfwd") for i in _argnums)
         with _RandGuard(randomness):
             # At the arguments, in the caller's grad mode: the output's shape,
             # the aux, and the attachment — decided once, not per column.
-            first, aux = _split_aux(
-                call(*args, **kwargs), has_aux=has_aux, name="jacfwd"
-            )
+            first, aux = _split_aux(call(*args, **kwargs), has_aux=has_aux, name="jacfwd")
             sample = _output_tensors(first, "jacfwd")
             out_shape = [] if isinstance(sample, tuple) else list(sample.shape)
             attach, required = _attachment(primals, sample)
@@ -1315,9 +1273,7 @@ def hessian[**P](
     _scalar_argnum, _argnums = _normalise_argnums(argnums)
     call: Callable[..., Tensor] = func
 
-    def hessian_fn(
-        *args: P.args, **kwargs: P.kwargs
-    ) -> Tensor | tuple[tuple[Tensor, ...], ...]:
+    def hessian_fn(*args: P.args, **kwargs: P.kwargs) -> Tensor | tuple[tuple[Tensor, ...], ...]:
         """Closure that computes the Hessian (second-order derivative tensor)."""
         arg_list = list(args)
         selected = tuple(_tensor_argument(arg_list, i, "hessian") for i in _argnums)

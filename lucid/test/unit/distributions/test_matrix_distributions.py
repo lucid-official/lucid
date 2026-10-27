@@ -61,9 +61,7 @@ def test_log_prob_matches_the_written_out_density():
 
     delta = point - MEAN
     inv = np.linalg.inv(COV)
-    expected = -0.5 * (
-        delta @ inv @ delta + np.log(np.linalg.det(COV)) + 3 * np.log(2 * np.pi)
-    )
+    expected = -0.5 * (delta @ inv @ delta + np.log(np.linalg.det(COV)) + 3 * np.log(2 * np.pi))
     assert np.isclose(got, expected, atol=1e-8)
 
 

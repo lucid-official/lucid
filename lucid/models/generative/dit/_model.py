@@ -266,11 +266,7 @@ class DiTModel(PretrainedModel):
         """Initialise the network. See the class docstring for parameters."""
         super().__init__(config)
         self.config: DiTConfig = config
-        side = (
-            config.sample_size
-            if isinstance(config.sample_size, int)
-            else config.sample_size[0]
-        )
+        side = config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
         self.grid = side // config.patch_size
 
         self.patch_embed = nn.Conv2d(
@@ -312,9 +308,7 @@ class DiTModel(PretrainedModel):
         elif mode == "cross_attention":
             self.blocks = nn.ModuleList(
                 [
-                    _CrossAttentionBlock(
-                        config.hidden_size, config.num_heads, config.mlp_ratio
-                    )
+                    _CrossAttentionBlock(config.hidden_size, config.num_heads, config.mlp_ratio)
                     for _ in range(config.depth)
                 ]
             )
@@ -326,17 +320,13 @@ class DiTModel(PretrainedModel):
                 ]
             )
 
-        self.final = DiTFinalLayer(
-            config.hidden_size, config.patch_size, config.out_channels
-        )
+        self.final = DiTFinalLayer(config.hidden_size, config.patch_size, config.out_channels)
         if mode == "adaln_zero":
             for block in self.blocks:
                 cast(DiTBlock, block).zero_conditioning()
         self.final.zero_conditioning()
 
-    def _embeddings(
-        self, timesteps: Tensor, labels: Tensor | None
-    ) -> tuple[Tensor, Tensor]:
+    def _embeddings(self, timesteps: Tensor, labels: Tensor | None) -> tuple[Tensor, Tensor]:
         """The timestep and label vectors, kept apart.
 
         Three of the four conditioning designs want their sum; in-context
@@ -520,9 +510,7 @@ class DiTForImageGeneration(ImageGenerationModel):
         batch = int(images.shape[0])
         device = images.device.type
 
-        steps = lucid.randint(
-            0, config.num_train_timesteps, size=(batch,), device=device
-        )
+        steps = lucid.randint(0, config.num_train_timesteps, size=(batch,), device=device)
         dt = images.dtype
         noise = lucid.randn(images.shape, dtype=dt, device=device)
         # At float32 or wider, cast once: on the float16 buffer the first two
@@ -616,16 +604,10 @@ class DiTForImageGeneration(ImageGenerationModel):
             raise ValueError(f"steps must be positive, got {steps}")
         if not 0.0 <= eta <= 1.0:
             raise ValueError(f"eta interpolates DDIM and DDPM, got {eta}")
-        side = (
-            config.sample_size
-            if isinstance(config.sample_size, int)
-            else config.sample_size[0]
-        )
+        side = config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
         device = resolve_generation_device(self, device)
         if noise is None:
-            noise = start_noise(
-                self, (n_samples, config.in_channels, side, side), device
-            )
+            noise = start_noise(self, (n_samples, config.in_channels, side, side), device)
 
         z = noise
         dt = z.dtype
@@ -642,9 +624,7 @@ class DiTForImageGeneration(ImageGenerationModel):
                 # The final step's alpha_bar_prev = 1 has to sit with the
                 # schedule; a bare CPU scalar broke the last step on Metal.
                 alpha_bar_prev = (
-                    alphas_cumprod[previous]
-                    if previous > 0
-                    else lucid.ones_like(alpha_bar)
+                    alphas_cumprod[previous] if previous > 0 else lucid.ones_like(alpha_bar)
                 )
                 signal, noise_scale, keep, direction, sigma = _reverse_step(
                     alpha_bar, alpha_bar_prev, eta, dt

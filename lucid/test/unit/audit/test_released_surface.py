@@ -26,9 +26,7 @@ def test_the_snapshot_is_the_release_this_tree_is_versioned_as() -> None:
 
 
 def test_every_released_call_still_binds() -> None:
-    problems = _released.breaks(
-        _released.load()["symbols"], _released.collect(), lucid.__version__
-    )
+    problems = _released.breaks(_released.load()["symbols"], _released.collect(), lucid.__version__)
     assert not problems, (
         f"{len(problems)} released call(s) no longer bind — keep the old "
         "spelling working and mark it with lucid._deprecation.deprecated:\n  "
@@ -80,9 +78,7 @@ def test_a_call_that_still_binds_is_not_a_break(
 
 
 @pytest.mark.parametrize("old,new,why", BREAKING, ids=[b[2] for b in BREAKING])
-def test_a_call_that_stops_binding_is_a_break(
-    old: list[str], new: list[str], why: str
-) -> None:
+def test_a_call_that_stops_binding_is_a_break(old: list[str], new: list[str], why: str) -> None:
     reason = _released.incompatible(old, new)
     assert reason is not None and why in reason
 

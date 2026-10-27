@@ -77,13 +77,9 @@ def test_a_host_read_runs_eagerly_and_follows_the_input(name: str) -> None:
         got_second = compiled(second.to(COMPILE_DEVICE)).to("cpu")
 
     for got, want in ((got_first, want_first), (got_second, want_second)):
-        assert float((got - want).abs().max().item()) <= 1e-4 * float(
-            want.abs().max().item()
-        )
+        assert float((got - want).abs().max().item()) <= 1e-4 * float(want.abs().max().item())
     said = [
-        str(w.message)
-        for w in caught
-        if issubclass(w.category, fallback.CompileFallbackWarning)
+        str(w.message) for w in caught if issubclass(w.category, fallback.CompileFallbackWarning)
     ]
     assert said and "host" in said[0], said
     assert compiled.cache_info()["eager_only"]
@@ -99,9 +95,7 @@ def _reads_a_global_model(x: lucid.Tensor) -> lucid.Tensor:
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("reach", ["bound-method", "closure", "global"])
 @pytest.mark.parametrize("name", sorted(STATE_READS))
-def test_a_host_read_of_a_reached_modules_state_runs_eagerly(
-    name: str, reach: str
-) -> None:
+def test_a_host_read_of_a_reached_modules_state_runs_eagerly(name: str, reach: str) -> None:
     """The weights of a module the compiled function reaches are watched as
     a compiled module's are: the trace watched only the wrapper's own, none,
     so the first call's value was baked in (5.35 off eager)."""
@@ -157,9 +151,7 @@ def _follows_the_input(
     for g, w in zip(got, want, strict=True):
         assert float((g - w).abs().max().item()) <= 1e-4 * float(w.abs().max().item())
     said = [
-        str(w.message)
-        for w in caught
-        if issubclass(w.category, fallback.CompileFallbackWarning)
+        str(w.message) for w in caught if issubclass(w.category, fallback.CompileFallbackWarning)
     ]
     return said, compiled
 
@@ -227,9 +219,7 @@ def test_a_copy_of_a_constant_records_nothing() -> None:
 
 @pytest.mark.parametrize("device", ["metal", "cpu"])
 @pytest.mark.parametrize("name", sorted(FUSED_KERNELS))
-def test_a_fused_kernel_is_recorded_and_follows_the_input(
-    name: str, device: str
-) -> None:
+def test_a_fused_kernel_is_recorded_and_follows_the_input(name: str, device: str) -> None:
     """The trace records the fused kernels: a Core ML export and a compile
     trace see the kernel's output as computed from the input. On Metal the
     compile emitter translates them (LCD-450); on the CPU every compiled call

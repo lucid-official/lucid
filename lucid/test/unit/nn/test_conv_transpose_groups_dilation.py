@@ -43,9 +43,7 @@ def _stuff_zeros(w: lucid.Tensor, dilation: tuple[int, ...]) -> lucid.Tensor:
     rank = len(dilation)
     taps = [int(w.shape[2 + i]) for i in range(rank)]
     spread = [dilation[i] * (taps[i] - 1) + 1 for i in range(rank)]
-    out = lucid.zeros(
-        int(w.shape[0]), int(w.shape[1]), *spread, dtype=w.dtype, device=w.device
-    )
+    out = lucid.zeros(int(w.shape[0]), int(w.shape[1]), *spread, dtype=w.dtype, device=w.device)
     for idx in itertools.product(*[range(t) for t in taps]):
         at = tuple(idx[i] * dilation[i] for i in range(rank))
         out[(slice(None), slice(None)) + at] = w[(slice(None), slice(None)) + idx]

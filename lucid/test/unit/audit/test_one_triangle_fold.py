@@ -17,11 +17,7 @@ def _one_triangle_difference(symmetric: np.ndarray, lower: bool) -> np.ndarray:
     """What a coordinate-wise difference of a one-triangle op reports."""
     n = symmetric.shape[-1]
     diagonal = np.eye(n, dtype=bool)
-    read = (
-        np.tril(np.ones((n, n), bool), -1)
-        if lower
-        else np.triu(np.ones((n, n), bool), 1)
-    )
+    read = np.tril(np.ones((n, n), bool), -1) if lower else np.triu(np.ones((n, n), bool), 1)
     return np.where(read, 2 * symmetric, np.where(diagonal, symmetric, 0.0))
 
 

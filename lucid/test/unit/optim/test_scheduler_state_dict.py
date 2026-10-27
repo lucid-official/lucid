@@ -154,8 +154,7 @@ def _sequential():
 def test_sequential_lr_resume_recurses_into_children():
     opt_a, sched_a = _sequential()
     reference = [
-        (sched_a.step(), round(float(opt_a.param_groups[0]["lr"]), 8))[1]
-        for _ in range(9)
+        (sched_a.step(), round(float(opt_a.param_groups[0]["lr"]), 8))[1] for _ in range(9)
     ]
 
     opt_b, sched_b = _sequential()
@@ -167,10 +166,7 @@ def test_sequential_lr_resume_recurses_into_children():
     opt_c, sched_c = _sequential()
     opt_c.load_state_dict(saved_opt)
     sched_c.load_state_dict(saved_sched)
-    resumed = [
-        (sched_c.step(), round(float(opt_c.param_groups[0]["lr"]), 8))[1]
-        for _ in range(5)
-    ]
+    resumed = [(sched_c.step(), round(float(opt_c.param_groups[0]["lr"]), 8))[1] for _ in range(5)]
     assert resumed == reference[4:]
 
 
@@ -178,9 +174,7 @@ def test_chained_scheduler_round_trip():
     lucid.manual_seed(0)
     model = nn.Linear(4, 3)
     opt = optim.SGD(model.parameters(), lr=0.1)
-    chained = S.ChainedScheduler(
-        [S.StepLR(opt, step_size=2), S.ExponentialLR(opt, gamma=0.9)]
-    )
+    chained = S.ChainedScheduler([S.StepLR(opt, step_size=2), S.ExponentialLR(opt, gamma=0.9)])
     sd = chained.state_dict()
     assert len(sd["schedulers"]) == 2
     chained.load_state_dict(sd)
@@ -200,8 +194,7 @@ def test_composite_rejects_a_mismatched_child_count():
 def test_checkpoint_survives_a_real_save_load(tmp_path):
     opt_a, sched_a = _sequential()
     reference = [
-        (sched_a.step(), round(float(opt_a.param_groups[0]["lr"]), 8))[1]
-        for _ in range(9)
+        (sched_a.step(), round(float(opt_a.param_groups[0]["lr"]), 8))[1] for _ in range(9)
     ]
 
     opt_b, sched_b = _sequential()
@@ -214,8 +207,5 @@ def test_checkpoint_survives_a_real_save_load(tmp_path):
     opt_c, sched_c = _sequential()
     opt_c.load_state_dict(loaded["opt"])
     sched_c.load_state_dict(loaded["sched"])
-    resumed = [
-        (sched_c.step(), round(float(opt_c.param_groups[0]["lr"]), 8))[1]
-        for _ in range(5)
-    ]
+    resumed = [(sched_c.step(), round(float(opt_c.param_groups[0]["lr"]), 8))[1] for _ in range(5)]
     assert resumed == reference[4:]

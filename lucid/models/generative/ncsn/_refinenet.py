@@ -114,17 +114,11 @@ class _CondResBlock(nn.Module):
     ) -> None:
         super().__init__()
         self.norm1 = CondInstanceNormPlusPlus(in_ch, num_classes)
-        self.conv1 = nn.Conv2d(
-            in_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False
-        )
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False)
         self.norm2 = CondInstanceNormPlusPlus(out_ch, num_classes)
-        self.conv2 = nn.Conv2d(
-            out_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False
-        )
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False)
         self.skip: nn.Conv2d | nn.Identity = (
-            nn.Conv2d(in_ch, out_ch, 1, bias=False)
-            if in_ch != out_ch
-            else nn.Identity()
+            nn.Conv2d(in_ch, out_ch, 1, bias=False) if in_ch != out_ch else nn.Identity()
         )
 
     @override
@@ -258,9 +252,7 @@ class RefineNetScoreNet(nn.Module):
 
         h = F.elu(self.out_norm(h, labels))
         out = self.out_conv(h)
-        if tuple(int(v) for v in out.shape[2:]) != tuple(
-            int(v) for v in sample.shape[2:]
-        ):
+        if tuple(int(v) for v in out.shape[2:]) != tuple(int(v) for v in sample.shape[2:]):
             out = F.interpolate(
                 out,
                 size=(int(sample.shape[2]), int(sample.shape[3])),

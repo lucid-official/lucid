@@ -126,9 +126,7 @@ def test_bool_sort_on_metal() -> None:
     got = lucid.sort(x, dim=-1).values.to("cpu").numpy()
     assert np.array_equal(got, np.sort(x.to("cpu").numpy(), axis=-1))
     got_desc = lucid.topk(x.to(lucid.int32), 2, dim=-1)[0].to("cpu").numpy()
-    assert np.array_equal(
-        got_desc, -np.sort(-x.to("cpu").numpy().astype(np.int32))[:, :2]
-    )
+    assert np.array_equal(got_desc, -np.sort(-x.to("cpu").numpy().astype(np.int32))[:, :2])
 
 
 def test_tensordot_under_symbolic_batch() -> None:

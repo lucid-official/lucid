@@ -147,4 +147,3 @@ def negated_grads(tensors: Iterable[Tensor]) -> Iterator[None]:
         with no_grad():
             for g in grads:
                 _negate_inplace(g)
-

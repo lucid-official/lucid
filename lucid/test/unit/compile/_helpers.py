@@ -94,9 +94,7 @@ def assert_compile_parity(
     rel = diff / max(max_eager, 1e-12)
 
     if atol == 0.0 and rtol == 0.0:
-        assert diff == 0.0, (
-            f"bit-exact parity broken: abs diff = {diff:.3e}, " f"rel = {rel:.3e}"
-        )
+        assert diff == 0.0, f"bit-exact parity broken: abs diff = {diff:.3e}, " f"rel = {rel:.3e}"
     else:
         threshold = atol + rtol * max_eager
         assert diff <= threshold, (
@@ -119,8 +117,7 @@ def assert_cache_hit(compiled_model: object, expected_entries: int = 1) -> None:
     info = compiled_model.cache_info()
     n = info["entries"]
     assert n == expected_entries, (
-        f"cache entries: expected {expected_entries}, got {n}. "
-        f"keys = {info['keys']}"
+        f"cache entries: expected {expected_entries}, got {n}. " f"keys = {info['keys']}"
     )
 
 
@@ -169,6 +166,5 @@ def assert_no_eager_fallback(compiled_model: object) -> None:
     info = compiled_model.cache_info()
     eager_only = info["eager_only"]
     assert not eager_only, (
-        f"expected zero eager-fallback signatures, got {len(eager_only)}: "
-        f"{eager_only}"
+        f"expected zero eager-fallback signatures, got {len(eager_only)}: " f"{eager_only}"
     )

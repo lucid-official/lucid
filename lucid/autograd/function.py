@@ -48,9 +48,7 @@ def _impl_of(t: object) -> _C_engine.TensorImpl | None:
     return None
 
 
-def _position(
-    impl: _C_engine.TensorImpl, impls: list[_C_engine.TensorImpl | None]
-) -> int | None:
+def _position(impl: _C_engine.TensorImpl, impls: list[_C_engine.TensorImpl | None]) -> int | None:
     """Index of ``impl`` in ``impls`` by identity, or ``None``."""
     for k, other in enumerate(impls):
         if other is impl:
@@ -288,8 +286,7 @@ class FunctionCtx:
         record, carrier = self._saved_record, self._carrier
         if record is None or carrier is None:
             return tuple(
-                _wrap(t) if isinstance(t, _C_engine.TensorImpl) else t
-                for t in self._saved_tensors
+                _wrap(t) if isinstance(t, _C_engine.TensorImpl) else t for t in self._saved_tensors
             )
         check = not _C_engine.is_mutation_on_saved_allowed()
         held = carrier.saved_tensors
@@ -438,9 +435,7 @@ def _owned_outputs(
         The settled entries, their tensors in order, and whether each tensor
         is non-differentiable.
     """
-    marked_impls: list[_C_engine.TensorImpl | None] = [
-        t._impl for t in ctx._non_differentiable
-    ]
+    marked_impls: list[_C_engine.TensorImpl | None] = [t._impl for t in ctx._non_differentiable]
     seen_output_impls: list[_C_engine.TensorImpl | None] = []
     owned: list[object] = []
     tensors: list[Tensor] = []
@@ -575,9 +570,7 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
             # the plain ops, in the caller's grad mode.
             return trace_form(*args, **kwargs)
         ctx = FunctionCtx()
-        ctx.needs_input_grad = tuple(
-            isinstance(a, Tensor) and a.requires_grad for a in args
-        )
+        ctx.needs_input_grad = tuple(isinstance(a, Tensor) and a.requires_grad for a in args)
 
         # Under ``no_grad``, as the reference runs it: the node registered
         # below is the call's whole graph.  A graph ``forward`` built itself
@@ -608,9 +601,7 @@ class FunctionMeta(type):
     autograd node.
     """
 
-    def __init__(
-        cls, name: str, bases: tuple[type, ...], dct: dict[str, object]
-    ) -> None:
+    def __init__(cls, name: str, bases: tuple[type, ...], dct: dict[str, object]) -> None:
         """Install the dispatching :meth:`apply` on the freshly built subclass."""
         super().__init__(name, bases, dct)
         if name != "Function":

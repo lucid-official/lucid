@@ -44,9 +44,7 @@ from lucid.models.vision.swin._config import SwinConfig
 
 
 class _PatchEmbed(nn.Module):
-    def __init__(
-        self, in_ch: int, patch_size: int, embed_dim: int, dropout: float = 0.0
-    ) -> None:
+    def __init__(self, in_ch: int, patch_size: int, embed_dim: int, dropout: float = 0.0) -> None:
         super().__init__()
         self.proj = nn.Conv2d(in_ch, embed_dim, patch_size, stride=patch_size)
         self.norm = nn.LayerNorm(embed_dim)
@@ -171,9 +169,7 @@ class _WindowAttention(nn.Module):
         coords_1d = lucid.arange(window_size).to(lucid.int64)
         gy, gx = lucid.meshgrid(coords_1d, coords_1d, indexing="ij")  # (ws, ws)
         flat_y, flat_x = gy.flatten(), gx.flatten()  # (ws^2,)
-        rel_y = (
-            flat_y.unsqueeze(1) - flat_y.unsqueeze(0) + (window_size - 1)
-        )  # (ws^2, ws^2)
+        rel_y = flat_y.unsqueeze(1) - flat_y.unsqueeze(0) + (window_size - 1)  # (ws^2, ws^2)
         rel_x = flat_x.unsqueeze(1) - flat_x.unsqueeze(0) + (window_size - 1)
         rel_idx = rel_y * (2 * window_size - 1) + rel_x  # (ws^2, ws^2)
         self.register_buffer("rel_pos_idx", rel_idx, persistent=False)
@@ -207,12 +203,7 @@ class _WindowAttention(nn.Module):
             rx = fx.unsqueeze(1) - fx.unsqueeze(0) + (self.ws - 1)
             rel_pos_idx = ry * (2 * self.ws - 1) + rx
         idx = rel_pos_idx.reshape(-1)
-        bias = (
-            self.rel_pos_bias[idx]
-            .reshape(N, N, self.num_heads)
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-        )
+        bias = self.rel_pos_bias[idx].reshape(N, N, self.num_heads).permute(2, 0, 1).unsqueeze(0)
         attn = attn + bias
 
         if mask is not None:
@@ -423,12 +414,8 @@ class _SwinStage(nn.Module):
 
 def _build_swin(
     cfg: SwinConfig,
-) -> tuple[
-    _PatchEmbed, nn.ModuleList[_SwinStage], nn.LayerNorm, list[FeatureInfo], int
-]:
-    patch_embed = _PatchEmbed(
-        cfg.in_channels, cfg.patch_size, cfg.embed_dim, cfg.dropout
-    )
+) -> tuple[_PatchEmbed, nn.ModuleList[_SwinStage], nn.LayerNorm, list[FeatureInfo], int]:
+    patch_embed = _PatchEmbed(cfg.in_channels, cfg.patch_size, cfg.embed_dim, cfg.dropout)
 
     stages: list[_SwinStage] = []
     dim = cfg.embed_dim
@@ -608,9 +595,7 @@ class SwinTransformer(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class SwinTransformerForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class SwinTransformerForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""Swin Transformer with a linear classification head (Liu et al., 2021).
 
     Wraps the same hierarchical trunk as :class:`SwinTransformer` (patch

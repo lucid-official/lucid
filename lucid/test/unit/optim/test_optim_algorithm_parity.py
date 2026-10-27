@@ -281,9 +281,7 @@ def test_trajectory_and_state_match_the_reference(
                 tg = ref.from_numpy(g.copy())
                 rp.grad = tg.to_sparse(1) if name == "SparseAdam" else tg
             ref_opt.step()
-            for i, (ours, rp) in enumerate(
-                zip(_values(params), ref_params, strict=True)
-            ):
+            for i, (ours, rp) in enumerate(zip(_values(params), ref_params, strict=True)):
                 np.testing.assert_allclose(
                     ours,
                     rp.detach().numpy(),
@@ -309,9 +307,7 @@ def test_trajectory_and_state_match_the_reference(
             if key == "step":
                 assert int(ours) == int(theirs) == _STEPS
             else:
-                np.testing.assert_allclose(
-                    ours, theirs, rtol=tol, atol=tol, err_msg=f"{idx}/{key}"
-                )
+                np.testing.assert_allclose(ours, theirs, rtol=tol, atol=tol, err_msg=f"{idx}/{key}")
 
 
 def test_adamax_adds_eps_inside_exp_inf(device: str, ref: Any) -> None:

@@ -108,13 +108,9 @@ def _make_div_adapter(*, inplace: bool = False) -> Callable[..., _Impl]:
         A ``rounding_mode`` other than ``None``, ``"trunc"`` or ``"floor"``.
     """
 
-    def _adapter(
-        input: _Impl, other: _Impl, /, *, rounding_mode: str | None = None
-    ) -> _Impl:
+    def _adapter(input: _Impl, other: _Impl, /, *, rounding_mode: str | None = None) -> _Impl:
         if rounding_mode is None:
-            a, b = _binary_operands(
-                input, other, true_div=True, opmath=True, inplace=inplace
-            )
+            a, b = _binary_operands(input, other, true_div=True, opmath=True, inplace=inplace)
             return _C_engine.div_(a, b) if inplace else _C_engine.div(a, b)
         if rounding_mode not in ("trunc", "floor"):
             raise _C_engine.InvalidArgument(

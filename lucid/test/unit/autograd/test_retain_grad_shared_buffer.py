@@ -91,14 +91,10 @@ _SCENARIOS: dict[str, Callable[[ModuleType, str, str], dict[str, object]]] = {
 
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize("name", list(_SCENARIOS))
-def test_matches_the_reference(
-    name: str, dtype: str, ref: ModuleType, device: str
-) -> None:
+def test_matches_the_reference(name: str, dtype: str, ref: ModuleType, device: str) -> None:
     if device == "metal" and dtype == "float64":
         pytest.skip("Metal holds no float64")
-    _compare(
-        _SCENARIOS[name](lucid, device, dtype), _SCENARIOS[name](ref, "cpu", dtype)
-    )
+    _compare(_SCENARIOS[name](lucid, device, dtype), _SCENARIOS[name](ref, "cpu", dtype))
 
 
 # ── without the reference ──────────────────────────────────────────────────
@@ -135,9 +131,7 @@ def test_single_requires_grad_operand_and_shared_gradient_isolation(
     assert y.grad.tolist() == [1.0, 1.0, 1.0]
 
     x.grad = None
-    (
-        (x * c) - (c / x) + (x**c) + lucid.fmod(x, c) + lucid.remainder(x, c)
-    ).sum().backward()
+    ((x * c) - (c / x) + (x**c) + lucid.fmod(x, c) + lucid.remainder(x, c)).sum().backward()
     assert x.grad is not None and c.grad is None
 
     a = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], requires_grad=True, device=device)

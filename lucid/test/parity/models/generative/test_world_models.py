@@ -60,28 +60,19 @@ class TestRecurrenceParity:
         with ref.no_grad():
             for name, parameter in cell.named_parameters():
                 getattr(reference, name).copy_(ref.tensor(parameter.numpy()))
-            theirs = (
-                reference(ref.tensor(state.copy()), ref.tensor(hidden.copy()))
-                .detach()
-                .numpy()
-            )
+            theirs = reference(ref.tensor(state.copy()), ref.tensor(hidden.copy())).detach().numpy()
         assert np.abs(ours - theirs).max() < 1e-5
 
     def test_the_parameter_layout_is_the_same(self, ref: Any) -> None:
         """Guards the test above — a copy that silently no-ops would pass it."""
-        ours = {
-            n: tuple(int(d) for d in p.shape)
-            for n, p in nn.GRUCell(4, 6).named_parameters()
-        }
+        ours = {n: tuple(int(d) for d in p.shape) for n, p in nn.GRUCell(4, 6).named_parameters()}
         theirs = {n: tuple(p.shape) for n, p in ref.nn.GRUCell(4, 6).named_parameters()}
         assert ours == theirs
 
     def test_the_rssm_recurrence_is_that_cell(self, ref: Any) -> None:
         """The dense path, end to end: projection, activation, then the gate."""
         lucid.manual_seed(0)
-        rssm = RSSM(
-            stoch_size=3, deter_size=6, hidden_size=5, action_dim=2, embed_size=4
-        ).eval()
+        rssm = RSSM(stoch_size=3, deter_size=6, hidden_size=5, action_dim=2, embed_size=4).eval()
         stoch = np.random.RandomState(2).randn(2, 3).astype(np.float32)
         action = np.random.RandomState(3).randn(2, 2).astype(np.float32)
         deter = np.random.RandomState(4).randn(2, 6).astype(np.float32)
@@ -115,9 +106,7 @@ class TestDivergenceParity:
         posterior = rng.randn(4, 3, 8).astype(np.float32) * 2.0
         prior = rng.randn(4, 3, 8).astype(np.float32) * 2.0
 
-        ours = _np(
-            categorical_kl(lucid.tensor(posterior.copy()), lucid.tensor(prior.copy()))
-        )
+        ours = _np(categorical_kl(lucid.tensor(posterior.copy()), lucid.tensor(prior.copy())))
 
         q = ref.distributions.Categorical(logits=ref.tensor(posterior.copy()))
         p = ref.distributions.Categorical(logits=ref.tensor(prior.copy()))
@@ -138,9 +127,7 @@ class TestDivergenceParity:
         rng = np.random.RandomState(5)
         posterior = rng.randn(4, 3, 8).astype(np.float32) * 2.0
         prior = rng.randn(4, 3, 8).astype(np.float32) * 2.0
-        ours = _np(
-            categorical_kl(lucid.tensor(posterior.copy()), lucid.tensor(prior.copy()))
-        )
+        ours = _np(categorical_kl(lucid.tensor(posterior.copy()), lucid.tensor(prior.copy())))
         q = ref.distributions.Categorical(logits=ref.tensor(posterior.copy()))
         p = ref.distributions.Categorical(logits=ref.tensor(prior.copy()))
         swapped = ref.distributions.kl_divergence(p, q).sum(-1).detach().numpy()
@@ -171,9 +158,7 @@ class TestReturnParity:
         value = rng.randn(3, horizon + 1).astype(np.float32)
 
         ours = _np(
-            lambda_return(
-                lucid.tensor(reward.copy()), lucid.tensor(value.copy()), gamma, lam
-            )
+            lambda_return(lucid.tensor(reward.copy()), lucid.tensor(value.copy()), gamma, lam)
         )
 
         r = ref.tensor(reward.copy(), dtype=ref.float64)
@@ -186,9 +171,7 @@ class TestReturnParity:
             for n in range(1, remaining + 1):
                 total = sum(gamma**i * r[:, t + i] for i in range(n))
                 n_step.append(total + gamma**n * v[:, t + n])
-            mixed = sum(
-                (1 - lam) * lam ** (n - 1) * n_step[n - 1] for n in range(1, remaining)
-            )
+            mixed = sum((1 - lam) * lam ** (n - 1) * n_step[n - 1] for n in range(1, remaining))
             mixed = mixed + lam ** (remaining - 1) * n_step[remaining - 1]
             rows.append(mixed)
         theirs = ref.stack(rows, dim=1).numpy()
@@ -200,9 +183,7 @@ class TestScaleFreeTransformParity:
     """DreamerV3's symlog and two-hot, the pieces that decouple reward scale."""
 
     def test_symlog_matches_the_reference(self, ref: Any) -> None:
-        x = np.array(
-            [-1e6, -100.0, -1.0, -1e-4, 0.0, 1e-4, 1.0, 100.0, 1e6], dtype=np.float32
-        )
+        x = np.array([-1e6, -100.0, -1.0, -1e-4, 0.0, 1e-4, 1.0, 100.0, 1e6], dtype=np.float32)
         ours = _np(F.symlog(lucid.tensor(x.copy())))
         t = ref.tensor(x.copy(), dtype=ref.float64)
         theirs = (ref.sign(t) * ref.log1p(t.abs())).numpy()
@@ -220,9 +201,7 @@ class TestScaleFreeTransformParity:
         ours = _np(F.two_hot(lucid.tensor(values.copy()), lucid.tensor(bins.copy())))
 
         b = ref.tensor(bins.copy(), dtype=ref.float64)
-        v = ref.tensor(values.copy(), dtype=ref.float64).clamp(
-            float(bins[0]), float(bins[-1])
-        )
+        v = ref.tensor(values.copy(), dtype=ref.float64).clamp(float(bins[0]), float(bins[-1]))
         below = (ref.searchsorted(b, v.contiguous()) - 1).clamp(0, len(bins) - 2)
         left, right = b[below], b[below + 1]
         weight = (v - left) / (right - left)

@@ -75,20 +75,14 @@ class TestReleasedGeometry:
         """
         clip = self._ramp(292, 292)
         for offset in ("round", "floor"):
-            window = self._window(
-                T.CenterCrop(256, 256, offset=offset)(T.Image(clip)).data
-            )
+            window = self._window(T.CenterCrop(256, 256, offset=offset)(T.Image(clip)).data)
             assert window == (18, 273, 18, 273)
 
     def test_an_odd_margin_is_placed_down(self) -> None:
         """519 -> 256 leaves 263; the release starts at 131, not 132."""
         clip = self._ramp(292, 519)
-        floored = self._window(
-            T.CenterCrop(256, 256, offset="floor")(T.Image(clip)).data
-        )
-        rounded = self._window(
-            T.CenterCrop(256, 256, offset="round")(T.Image(clip)).data
-        )
+        floored = self._window(T.CenterCrop(256, 256, offset="floor")(T.Image(clip)).data)
+        rounded = self._window(T.CenterCrop(256, 256, offset="round")(T.Image(clip)).data)
         assert floored == (18, 273, 131, 386)
         assert rounded == (18, 273, 132, 387)
 

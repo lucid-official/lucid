@@ -231,9 +231,7 @@ def _register(
             py_ctx,
             *(None if g is None else _wrap(g) for g in grad_impls),
         )
-        returned: list[object] = (
-            list(grads) if isinstance(grads, (list, tuple)) else [grads]
-        )
+        returned: list[object] = list(grads) if isinstance(grads, (list, tuple)) else [grads]
 
         result: list[_C_engine.TensorImpl | None] = []
         for i, (g, meta) in enumerate(
@@ -254,7 +252,5 @@ def _register(
 
     impl_inputs = [_unwrap(t) for t in tensor_inputs]
     out_seq = outputs if isinstance(outputs, tuple) else (outputs,)
-    _C_engine._register_python_backward_node(
-        [t._impl for t in out_seq], node, impl_inputs
-    )
+    _C_engine._register_python_backward_node([t._impl for t in out_seq], node, impl_inputs)
     return cpp_ctx

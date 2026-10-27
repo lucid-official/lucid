@@ -187,9 +187,7 @@ def _constant_zero(position: Tensor) -> Tensor:
     return _lucid.where(_lucid.isfinite(position), position, 0.0) * 0.0
 
 
-def _unnormalize(
-    coord: Tensor, size: int, align_corners: bool, volumetric: bool
-) -> Tensor:
+def _unnormalize(coord: Tensor, size: int, align_corners: bool, volumetric: bool) -> Tensor:
     """Map a normalised ``[-1, 1]`` coordinate onto pixel positions of an axis.
 
     The 4-D reference scales by ``size / 2`` and the 5-D one contracts
@@ -298,9 +296,7 @@ def _index_of(position: Tensor) -> Tensor:
     return _lucid.where(_lucid.isnan(position), 0.0, position)
 
 
-def _gather(
-    flat: Tensor, coords: list[Tensor], sizes: list[int]
-) -> tuple[Tensor, Tensor]:
+def _gather(flat: Tensor, coords: list[Tensor], sizes: list[int]) -> tuple[Tensor, Tensor]:
     """Read ``flat`` at integral pixel coordinates; reads off the image are 0.
 
     A read off the image takes nothing from ``flat`` — not even a NaN or
@@ -467,9 +463,7 @@ def _bicubic(
         weights.append([w.unsqueeze(1) for w in cubic_coefficients(coord - base)])
         taps.append(
             [
-                _index_of(
-                    _pad(base + float(offset), size, padding_mode, align_corners, False)
-                )
+                _index_of(_pad(base + float(offset), size, padding_mode, align_corners, False))
                 for offset in (-1, 0, 1, 2)
             ]
         )
@@ -504,9 +498,7 @@ def check_options(x: Tensor, mode: str, padding_mode: str) -> None:
         tricubic filter either).
     """
     if mode not in _MODES:
-        raise ValueError(
-            f"grid_sample: unsupported mode {mode!r}; expected one of {_MODES}"
-        )
+        raise ValueError(f"grid_sample: unsupported mode {mode!r}; expected one of {_MODES}")
     if padding_mode not in _PADDINGS:
         raise ValueError(
             f"grid_sample: unsupported padding_mode {padding_mode!r}; expected one of {_PADDINGS}"
@@ -592,9 +584,7 @@ def _check_operands(x: Tensor, grid: Tensor) -> None:
             f"grid_sample: batch size mismatch, input {tuple(x.shape)} vs grid {tuple(grid.shape)}"
         )
     if x.device != grid.device:
-        raise ValueError(
-            f"grid_sample: input is on {x.device} but grid is on {grid.device}"
-        )
+        raise ValueError(f"grid_sample: input is on {x.device} but grid is on {grid.device}")
     if x.dtype != grid.dtype:
         raise TypeError(
             f"grid_sample: input and grid must have the same dtype, got {x.dtype} and {grid.dtype}"

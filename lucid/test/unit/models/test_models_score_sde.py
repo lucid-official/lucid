@@ -88,9 +88,7 @@ class TestSDEs:
             g = sde.diffusion(t).reshape(count, 1)
             x = x + sde.drift(x, t) * step + g * (step**0.5) * lucid.randn((count, 1))
             t = t + step
-        mean, std = sde.marginal_prob(
-            lucid.ones((count, 1)), lucid.ones((count,)) * end
-        )
+        mean, std = sde.marginal_prob(lucid.ones((count, 1)), lucid.ones((count,)) * end)
         assert abs(float(x.mean().item()) - float(mean.mean().item())) < 0.05
         assert abs(float(x.std().item()) / float(std.mean().item()) - 1.0) < 0.06
 
@@ -193,11 +191,7 @@ class TestSamplersAgainstAnAnalyticScore:
         for i in range(steps):
             t = lucid.ones((self.COUNT,)) * float(times[i].item())
             g = sde.diffusion(t).reshape(self.COUNT, 1)
-            x = (
-                x
-                + sde.drift(x, t) * (-step)
-                + g * (step**0.5) * lucid.randn((self.COUNT, 1))
-            )
+            x = x + sde.drift(x, t) * (-step) + g * (step**0.5) * lucid.randn((self.COUNT, 1))
         assert abs(float(x.mean().item()) - self.MU) > 0.5
 
 
@@ -282,9 +276,7 @@ class TestRegistry:
 
     def test_the_classes_are_what_the_registry_says(self) -> None:
         assert isinstance(create_model("score_sde_vp", **_TINY), ScoreSDEModel)
-        assert isinstance(
-            create_model("score_sde_ve_gen", **_TINY), ScoreSDEForImageGeneration
-        )
+        assert isinstance(create_model("score_sde_ve_gen", **_TINY), ScoreSDEForImageGeneration)
 
     def test_pretrained_weights_are_refused(self) -> None:
         with pytest.raises(NotImplementedError):
@@ -315,8 +307,7 @@ class TestExactLikelihood:
         integral = 0.5 * (sde.beta_max - sde.beta_min) + sde.beta_min
         end = x * math.exp(-0.5 * integral)
         prior = -0.5 * (
-            dims * math.log(2.0 * math.pi)
-            + float((end.reshape(1, -1) ** 2).sum().item())
+            dims * math.log(2.0 * math.pi) + float((end.reshape(1, -1) ** 2).sum().item())
         )
         return prior - 0.5 * integral * dims
 
@@ -326,10 +317,7 @@ class TestExactLikelihood:
         lucid.manual_seed(0)
         model = self._tiny()
         x = lucid.randn((1, 3, 8, 8))
-        assert (
-            float(model.score_sde.score(x, lucid.ones((1,)) * 0.5).abs().max().item())
-            == 0.0
-        )
+        assert float(model.score_sde.score(x, lucid.ones((1,)) * 0.5).abs().max().item()) == 0.0
         target = self._analytic(model, x)
         coarse = abs(float(model.log_likelihood(x, steps=16).item()) - target)
         fine = abs(float(model.log_likelihood(x, steps=128).item()) - target)
@@ -342,17 +330,12 @@ class TestExactLikelihood:
         model = self._tiny()
         x = lucid.randn((1, 3, 8, 8))
         target = self._analytic(model, x)
-        errors = [
-            abs(float(model.log_likelihood(x, steps=n).item()) - target)
-            for n in (32, 128)
-        ]
+        errors = [abs(float(model.log_likelihood(x, steps=n).item()) - target) for n in (32, 128)]
         assert 3.0 < errors[0] / errors[1] < 5.0
 
     def test_it_returns_one_number_per_sample(self) -> None:
         lucid.manual_seed(0)
-        assert self._tiny().log_likelihood(
-            lucid.randn((3, 3, 8, 8)), steps=3
-        ).shape == (3,)
+        assert self._tiny().log_likelihood(lucid.randn((3, 3, 8, 8)), steps=3).shape == (3,)
 
     def test_the_prior_width_follows_the_sde(self) -> None:
         """VE's prior is as wide as sigma_max; assuming unit variance

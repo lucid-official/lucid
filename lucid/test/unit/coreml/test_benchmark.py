@@ -37,9 +37,7 @@ def _model() -> nn.Module:
 class TestTheMeasurementIsAMeasurement:
     def test_it_reports_a_median_and_a_best(self, tmp_path: object) -> None:
         lucid.manual_seed(0)
-        exported = cml.export(
-            _model(), lucid.randn(1, 3, 32, 32), f"{tmp_path}/t.mlpackage"
-        )
+        exported = cml.export(_model(), lucid.randn(1, 3, 32, 32), f"{tmp_path}/t.mlpackage")
         try:
             timing = exported.benchmark(lucid.randn(1, 3, 32, 32), repeats=8)
             assert timing.repeats == 8

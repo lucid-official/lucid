@@ -1065,9 +1065,7 @@ class Softmax2d(Module):
             Output tensor of the same shape as ``input``.
         """
         if input.ndim != 4:
-            raise ValueError(
-                f"Softmax2d: expected 4-D input (N, C, H, W), got ndim={input.ndim}"
-            )
+            raise ValueError(f"Softmax2d: expected 4-D input (N, C, H, W), got ndim={input.ndim}")
         return softmax(input, -3, _stacklevel=5)
 
 
@@ -1153,9 +1151,7 @@ class RReLU(Module):
         Tensor
             Output tensor of the same shape as ``input``.
         """
-        return rrelu(
-            input, self.lower, self.upper, training=self.training, inplace=self.inplace
-        )
+        return rrelu(input, self.lower, self.upper, training=self.training, inplace=self.inplace)
 
     @override
     def extra_repr(self) -> str:
@@ -1298,9 +1294,7 @@ class PReLU(Module):
         """Initialise the PReLU module. See the class docstring for parameter semantics."""
         super().__init__()
         self.num_parameters = num_parameters
-        self.weight = Parameter(
-            full((num_parameters,), init, dtype=dtype, device=device)
-        )
+        self.weight = Parameter(full((num_parameters,), init, dtype=dtype, device=device))
 
     @override
     def forward(self, input: Tensor) -> Tensor:

@@ -220,9 +220,7 @@ class ReturnNormaliser(nn.Module):
         if not 0.0 <= decay < 1.0:
             raise ValueError(f"decay must be in [0, 1), got {decay}")
         if not 0.0 <= low < high <= 100.0:
-            raise ValueError(
-                f"percentiles must satisfy 0 <= low < high <= 100, got {low}, {high}"
-            )
+            raise ValueError(f"percentiles must satisfy 0 <= low < high <= 100, got {low}, {high}")
         if floor <= 0.0:
             raise ValueError(f"floor must be positive, got {floor}")
         self.decay = decay

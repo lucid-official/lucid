@@ -69,18 +69,14 @@ def _ref_index_add(
     return out
 
 
-def _ref_index_copy(
-    x: np.ndarray, dim: int, index: list[int], src: np.ndarray
-) -> np.ndarray:
+def _ref_index_copy(x: np.ndarray, dim: int, index: list[int], src: np.ndarray) -> np.ndarray:
     out = x.copy()
     for i, j in enumerate(index):
         out[_along(dim, x.ndim, j)] = src[_along(dim, x.ndim, i)]
     return out
 
 
-def _ref_index_fill(
-    x: np.ndarray, dim: int, index: list[int], value: float
-) -> np.ndarray:
+def _ref_index_fill(x: np.ndarray, dim: int, index: list[int], value: float) -> np.ndarray:
     out = x.copy()
     for j in index:
         out[_along(dim, x.ndim, j)] = value
@@ -100,9 +96,7 @@ class TestGatherOrder:
     WANT = [[1.0, 3.0], [5.0, 5.0]]
 
     def _operands(self, device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
-        return lucid.tensor(self.X, device=device), lucid.tensor(
-            self.IDX, device=device
-        )
+        return lucid.tensor(self.X, device=device), lucid.tensor(self.IDX, device=device)
 
     def test_the_reference_order_answers(self, device: str) -> None:
         x, idx = self._operands(device)
@@ -219,9 +213,7 @@ class TestGatherOrder:
         _, idx = self._operands(device)
         x.gather(1, idx).sum().backward()
         assert x.grad is not None
-        assert_close(
-            x.grad, np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]], dtype=np.float32)
-        )
+        assert_close(x.grad, np.array([[1.0, 0.0, 1.0], [0.0, 2.0, 0.0]], dtype=np.float32))
 
 
 class TestLibraryUsesTheReferenceOrder:
@@ -252,11 +244,7 @@ class TestLibraryUsesTheReferenceOrder:
         ``gather(x, idx, dim)``, which reads like ``gather(x, dim, idx)``.
         """
         package = Path(lucid.__file__).parent
-        sources = [
-            p
-            for p in package.rglob("*.py")
-            if "test" not in p.relative_to(package).parts
-        ]
+        sources = [p for p in package.rglob("*.py") if "test" not in p.relative_to(package).parts]
         tools = package.parent / "tools"
         if tools.is_dir():  # a source checkout; an installed wheel has none
             sources += tools.rglob("*.py")
@@ -273,26 +261,17 @@ class TestLibraryUsesTheReferenceOrder:
                 if isinstance(owner, ast.Name) and owner.id.endswith("engine"):
                     continue  # the engine binding keeps (a, indices, dim)
                 keywords = {k.arg for k in node.keywords}
-                is_method = not (
-                    isinstance(owner, ast.Name) and owner.id in ("lucid", "_lucid")
-                )
+                is_method = not (isinstance(owner, ast.Name) and owner.id in ("lucid", "_lucid"))
                 positionals = len(node.args) + (1 if is_method else 0)
-                third = (
-                    node.args[2 - (1 if is_method else 0)] if positionals == 3 else None
-                )
+                third = node.args[2 - (1 if is_method else 0)] if positionals == 3 else None
                 old = (
                     "indices" in keywords
                     or (positionals == 2 and "index" not in keywords)
                     or isinstance(third, ast.Constant)
-                    or (
-                        isinstance(third, ast.UnaryOp)
-                        and isinstance(third.operand, ast.Constant)
-                    )
+                    or (isinstance(third, ast.UnaryOp) and isinstance(third.operand, ast.Constant))
                 )
                 if old:
-                    offenders.append(
-                        f"{path.relative_to(package.parent)}:{node.lineno}"
-                    )
+                    offenders.append(f"{path.relative_to(package.parent)}:{node.lineno}")
         assert offenders == []
 
 
@@ -350,9 +329,7 @@ class TestOutOfPlace:
             want[r, c] = want[r, c] + v if accumulate else v
         x = lucid.tensor(a, device=device)
         index = (lucid.tensor(rows, device=device), lucid.tensor(cols, device=device))
-        out = x.index_put(
-            index, lucid.tensor(values, device=device), accumulate=accumulate
-        )
+        out = x.index_put(index, lucid.tensor(values, device=device), accumulate=accumulate)
         assert_close(out, want)
         assert_close(x, a)
 
@@ -367,9 +344,7 @@ class TestOutOfPlace:
         assert_close(out, want)
 
     @pytest.mark.parity
-    def test_index_put_refuses_0d_narrow_integer_indices(
-        self, ref: object, device: str
-    ) -> None:
+    def test_index_put_refuses_0d_narrow_integer_indices(self, ref: object, device: str) -> None:
         x = lucid.zeros(3, device=device)
         v = lucid.tensor(5.0, device=device)
         rx = ref.zeros(3)  # type: ignore[attr-defined]
@@ -388,9 +363,7 @@ class TestOutOfPlace:
             idx = lucid.tensor(1, dtype=getattr(lucid, dtype_name), device=device)
             assert x.index_put((idx,), v).tolist() == [0.0, 5.0, 0.0]
 
-    def test_a_source_of_another_dtype_is_refused_not_reinterpreted(
-        self, device: str
-    ) -> None:
+    def test_a_source_of_another_dtype_is_refused_not_reinterpreted(self, device: str) -> None:
         # The engine's scatter read an int source's bits as float32; then the
         # composites cast it, where the reference refuses (LCD-324).
         x = lucid.zeros(3, device=device)
@@ -470,9 +443,7 @@ class TestInPlace:
         row = base[1]
         base.index_fill_(1, lucid.tensor([2]), 4.0)
         assert_close(row, np.array([0.0, 0.0, 4.0], dtype=np.float32))
-        lucid.index_put_(
-            base, (lucid.tensor([1]), lucid.tensor([0])), lucid.tensor([9.0])
-        )
+        lucid.index_put_(base, (lucid.tensor([1]), lucid.tensor([0])), lucid.tensor([9.0]))
         assert_close(row, np.array([9.0, 0.0, 4.0], dtype=np.float32))
 
 
@@ -535,14 +506,10 @@ class TestInPlaceAutograd:
             with pytest.raises(RuntimeError, match="leaf tensor that requires grad"):
                 getattr(p, method)(*args)
 
-    def test_a_parameter_written_under_no_grad_stays_a_trainable_leaf(
-        self, device: str
-    ) -> None:
+    def test_a_parameter_written_under_no_grad_stays_a_trainable_leaf(self, device: str) -> None:
         p = nn.Parameter(lucid.zeros(3, device=device))
         with lucid.no_grad():
-            p.index_add_(
-                0, lucid.tensor([0, 2], device=device), lucid.ones(2, device=device)
-            )
+            p.index_add_(0, lucid.tensor([0, 2], device=device), lucid.ones(2, device=device))
             p.index_fill_(0, lucid.tensor([1], device=device), 5.0)
         assert p.requires_grad and p.is_leaf and isinstance(p, nn.Parameter)
         assert_close(p.detach(), np.array([1.0, 5.0, 1.0], dtype=np.float32))
@@ -621,9 +588,7 @@ class TestNewTensorMethodsLCD340:
         assert v.grad is not None and v.grad.item() == 1.0
 
         with pytest.raises(RuntimeError, match="0-dimensional"):
-            lucid.zeros(3, device=device).masked_fill_(
-                mask, lucid.ones(1, device=device)
-            )
+            lucid.zeros(3, device=device).masked_fill_(mask, lucid.ones(1, device=device))
 
     def test_scatter_and_scatter_add_inplace(self, device: str) -> None:
         x = lucid.zeros(4, device=device)

@@ -56,9 +56,9 @@ class TestColorSemantics:
         assert float(out.abs().max().item()) < 1e-6
         kps = T.Keypoints(lucid.tensor([[1.0, 2.0], [3.0, 4.0]]), (8, 8))
         sample = {"image": T.Image(x), "keypoints": kps}
-        out_sample = T.Lambda(
-            keypoints=lambda k: T.Keypoints(k.data + 5.0, k.canvas_size), p=1.0
-        )(sample)
+        out_sample = T.Lambda(keypoints=lambda k: T.Keypoints(k.data + 5.0, k.canvas_size), p=1.0)(
+            sample
+        )
         assert out_sample["keypoints"].data.tolist() == [[6.0, 7.0], [8.0, 9.0]]
 
     def test_pixel_dropout_range(self) -> None:
@@ -73,9 +73,7 @@ def _det_sample() -> dict[str, object]:
     return {
         "image": T.Image(lucid.rand(3, 40, 40)),
         "mask": T.Mask((lucid.rand(1, 40, 40) * 3).long().to(lucid.float32)),
-        "boxes": T.BoundingBoxes(
-            lucid.tensor([[10.0, 10.0, 30.0, 30.0]]), "xyxy", (40, 40)
-        ),
+        "boxes": T.BoundingBoxes(lucid.tensor([[10.0, 10.0, 30.0, 30.0]]), "xyxy", (40, 40)),
     }
 
 

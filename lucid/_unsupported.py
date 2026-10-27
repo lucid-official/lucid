@@ -36,9 +36,7 @@ def unsupported_arg(func: str, arg: str, value: Any, *, detail: str = "") -> Non
     raise NotImplementedError(f"{func}: {arg}={value!r} is not implemented.{tail}")
 
 
-def unsupported_if(
-    condition: bool, func: str, arg: str, value: Any, *, detail: str = ""
-) -> None:
+def unsupported_if(condition: bool, func: str, arg: str, value: Any, *, detail: str = "") -> None:
     """:func:`unsupported_arg`, but only when ``condition`` holds.
 
     Lets a call site state the refusal inline instead of wrapping it in an

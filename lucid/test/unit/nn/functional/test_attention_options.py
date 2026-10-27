@@ -60,9 +60,7 @@ def test_separate_projections_need_all_three_weights() -> None:
 def test_keys_already_split_per_head_are_still_refused() -> None:
     x = lucid.randn(L, N, E)
     with pytest.raises(NotImplementedError, match="static_k"):
-        F.multi_head_attention_forward(
-            x, x, x, E, H, static_k=lucid.randn(N * H, S, E // H)
-        )
+        F.multi_head_attention_forward(x, x, x, E, H, static_k=lucid.randn(N * H, S, E // H))
 
 
 @pytest.mark.parametrize("dtype", [lucid.float64, lucid.float16, lucid.bfloat16])
@@ -74,4 +72,3 @@ def test_partial_weights_match_query_dtype(dtype: lucid.DType) -> None:
     assert out.dtype == dtype
     assert weights is not None and weights.dtype == dtype
     assert tuple(out.shape) == (L, N, E)
-

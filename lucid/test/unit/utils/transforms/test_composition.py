@@ -27,9 +27,9 @@ class TestComposition:
 
     def test_someof_applies_n(self) -> None:
         lucid.manual_seed(1)
-        out = T.SomeOf(
-            [T.Blur(p=1.0), T.InvertImg(p=1.0), T.ToGray(p=1.0)], n=2, p=1.0
-        )(lucid.rand(3, 16, 16))
+        out = T.SomeOf([T.Blur(p=1.0), T.InvertImg(p=1.0), T.ToGray(p=1.0)], n=2, p=1.0)(
+            lucid.rand(3, 16, 16)
+        )
         assert tuple(out.shape) == (3, 16, 16)
 
     def test_sequential_applies_all(self) -> None:
@@ -50,9 +50,7 @@ class TestComposition:
     def test_oneof_multitarget(self) -> None:
         s = {
             "image": T.Image(lucid.rand(3, 20, 20)),
-            "boxes": T.BoundingBoxes(
-                lucid.tensor([[2.0, 2.0, 10.0, 10.0]]), "xyxy", (20, 20)
-            ),
+            "boxes": T.BoundingBoxes(lucid.tensor([[2.0, 2.0, 10.0, 10.0]]), "xyxy", (20, 20)),
         }
         out = T.OneOf([T.HorizontalFlip(p=1.0)], p=1.0)(s)
         assert out["boxes"].canvas_size == (20, 20)

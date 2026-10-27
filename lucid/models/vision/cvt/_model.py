@@ -308,9 +308,7 @@ class _CvTStage(nn.Module):
             kernel, padding = 7, 2
         else:
             kernel, padding = 3, 1
-        self.embed = _ConvEmbed(
-            in_ch, dim, kernel=kernel, stride=embed_stride, padding=padding
-        )
+        self.embed = _ConvEmbed(in_ch, dim, kernel=kernel, stride=embed_stride, padding=padding)
         # Paper §3.2 / Table 1: K/V conv-projection uses stride=2 in *all*
         # three stages (Q is always stride=1).  This is the key trick that
         # makes CvT attention cheaper than ViT's O(N²).
@@ -591,9 +589,7 @@ class CvTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         stage_list, _ = _build_stages(config)
         self.stages = nn.ModuleList(stage_list)
         self.head_norm = nn.LayerNorm(config.dims[-1])
-        self._build_classifier(
-            config.dims[-1], config.num_classes, dropout=config.dropout
-        )
+        self._build_classifier(config.dims[-1], config.num_classes, dropout=config.dropout)
         init_transformer_trunc_normal(self)
 
     @override

@@ -38,9 +38,7 @@ _EPS = {lucid.float32: 2.0**-23, lucid.float16: 2.0**-10, lucid.bfloat16: 2.0**-
 
 @pytest.mark.parametrize("dtype", list(_EPS), ids=["f32", "f16", "bf16"])
 @pytest.mark.parametrize("activation", ["relu", "gelu"])
-def test_a_compiled_fused_linear_is_one_executable(
-    activation: str, dtype: lucid.dtype
-) -> None:
+def test_a_compiled_fused_linear_is_one_executable(activation: str, dtype: lucid.dtype) -> None:
     lucid.manual_seed(0)
     model = nn.FusedLinear(8, 16, activation=activation).to("metal").to(dtype).eval()
     _C_engine.compile.session_cache_clear()

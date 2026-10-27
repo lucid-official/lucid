@@ -129,9 +129,7 @@ def deprecated[T: Callable[..., object]](
 
 
 def _message(what: str, since: str, removal: str, alternative: str | None) -> str:
-    message = (
-        f"{what} is deprecated since Lucid {since} and will be removed in {removal}"
-    )
+    message = f"{what} is deprecated since Lucid {since} and will be removed in {removal}"
     if alternative:
         message += f"; use {alternative} instead"
     return message
@@ -142,9 +140,7 @@ def _message(what: str, since: str, removal: str, alternative: str | None) -> st
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
-def warn_deprecated(
-    what: str, *, since: str, removal: str, alternative: str | None = None
-) -> None:
+def warn_deprecated(what: str, *, since: str, removal: str, alternative: str | None = None) -> None:
     """Warn that one way of calling a public name is on its way out.
 
     :func:`deprecated` retires a whole name.  When the name stays and only

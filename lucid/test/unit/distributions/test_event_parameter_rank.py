@@ -39,9 +39,7 @@ _SHORT: dict[str, Callable[[bool], object]] = {
     "MultivariateNormal.scale_tril": lambda va: D.MultivariateNormal(
         _t([0.0]), scale_tril=_t([1.0]), validate_args=va
     ),
-    "Wishart": lambda va: D.Wishart(
-        _t(3.0), covariance_matrix=_t(1.0), validate_args=va
-    ),
+    "Wishart": lambda va: D.Wishart(_t(3.0), covariance_matrix=_t(1.0), validate_args=va),
 }
 
 

@@ -152,10 +152,7 @@ def _data(device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
 
 
 def _grads(model: nn.Module) -> dict[str, list | None]:
-    return {
-        n: None if p.grad is None else p.grad.tolist()
-        for n, p in model.named_parameters()
-    }
+    return {n: None if p.grad is None else p.grad.tolist() for n, p in model.named_parameters()}
 
 
 def _close(a: list | None, b: list | None) -> bool:
@@ -222,9 +219,7 @@ def test_compiled_module_step_trains_as_eager(case: str, device: str) -> None:
     model = _model(case, device)
     compiled = lucid.compile(model)
     with _warns_on_metal(_CASES[case][0], device):
-        got = _step_and_update(
-            model, lambda x, t: compiled.step(x, t, loss_fn=F.mse_loss), device
-        )
+        got = _step_and_update(model, lambda x, t: compiled.step(x, t, loss_fn=F.mse_loss), device)
     _assert_same(got, want)
 
 
@@ -398,9 +393,7 @@ def test_each_clause_alone_sends_the_step_eager(clause: str, device: str) -> Non
 
 
 @pytest.mark.parametrize("clause", sorted(_CLAUSES))
-def test_each_clause_alone_makes_compiled_step_refuse(
-    clause: str, device_gpu_only: str
-) -> None:
+def test_each_clause_alone_makes_compiled_step_refuse(clause: str, device_gpu_only: str) -> None:
     model = _weighted(clause, device_gpu_only)
     x, t = _data(device_gpu_only)
     if clause == "leaf input forward ignores":

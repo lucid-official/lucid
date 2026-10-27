@@ -134,11 +134,7 @@ def test_a_metal_view_layout_dispatches_nothing_and_is_the_cpus(make: _View) -> 
     cpu = make(base)
     assert view.shape == cpu.shape
     assert _moving(view.shape, view.stride()) == _moving(cpu.shape, cpu.stride())
-    assert (
-        view.is_contiguous()
-        == cpu.is_contiguous()
-        == _contiguous(cpu.shape, cpu.stride())
-    )
+    assert view.is_contiguous() == cpu.is_contiguous() == _contiguous(cpu.shape, cpu.stride())
     assert view.storage_offset() == cpu.storage_offset()
     if cpu.numel():
         assert view.storage_offset() == _cpu_offset(cpu, base)
@@ -215,9 +211,7 @@ def _windows(rng: random.Random, shape: tuple[int, ...]) -> list[_View]:
         lambda t: t.as_strided(t.shape, t.stride()),
         lambda t: t.as_strided(part, t.stride()),
         # Sliding windows along axis ``i``, from the view's first element.
-        lambda t: t.as_strided(
-            (shape[i] - width + 1, width), (t.stride(i), t.stride(i))
-        ),
+        lambda t: t.as_strided((shape[i] - width + 1, width), (t.stride(i), t.stride(i))),
     ]
 
 
@@ -300,13 +294,9 @@ class _Chain:
                 # past the slice views the copy from somewhere inside it.
                 if self.metal_root is not None:
                     root_fid = self.metal_root._impl.family_id()
-                    assert (
-                        root_fid == 0 or metal._impl.family_id() != root_fid
-                    ), self.where()
+                    assert root_fid == 0 or metal._impl.family_id() != root_fid, self.where()
                 copied = cpu.storage_offset() == 0 and cpu.is_contiguous()
-                self.cpu_root, self.metal_root = (
-                    (cpu, metal) if copied else (None, None)
-                )
+                self.cpu_root, self.metal_root = (cpu, metal) if copied else (None, None)
         self.cpu, self.metal = cpu, metal
         self.steps.append(f"-> {tuple(cpu.shape)}")
         _same_view(self.cpu, self.metal, self.cpu_root, self.where())
@@ -316,15 +306,11 @@ def _same_view(
     cpu: lucid.Tensor, metal: lucid.Tensor, root: lucid.Tensor | None, where: str
 ) -> None:
     assert metal.shape == cpu.shape, where
-    assert _moving(metal.shape, metal.stride()) == _moving(
-        cpu.shape, cpu.stride()
-    ), where
+    assert _moving(metal.shape, metal.stride()) == _moving(cpu.shape, cpu.stride()), where
     if cpu.numel():
         assert metal.is_contiguous() == cpu.is_contiguous(), where
         if root is not None:
-            assert (
-                metal.storage_offset() == cpu.storage_offset() == _cpu_offset(cpu, root)
-            ), where
+            assert metal.storage_offset() == cpu.storage_offset() == _cpu_offset(cpu, root), where
     assert metal.tolist() == cpu.tolist(), where
 
 
@@ -335,9 +321,7 @@ def _attempt(view: _View, t: lucid.Tensor) -> lucid.Tensor | None:
         return None
 
 
-def _a_window_reads_the_storage(
-    rng: random.Random, chain: _Chain, root: lucid.Tensor
-) -> None:
+def _a_window_reads_the_storage(rng: random.Random, chain: _Chain, root: lucid.Tensor) -> None:
     """A window anywhere in the storage reads what the storage holds there.
 
     Both CPU and Metal ``as_strided`` count offsets in the root allocation

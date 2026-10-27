@@ -105,9 +105,7 @@ def _check(ref, name, shape, kwargs, device, complex_in, seed) -> None:
     got = _lucid_grad(name, re, im, kwargs, device, complex_in, weights)
     want = _ref_grad(ref, name, re, im, kwargs, complex_in, weights)
     assert got.shape == want.shape, (name, kwargs, got.shape, want.shape)
-    np.testing.assert_allclose(
-        got, want, atol=2e-3, rtol=2e-3, err_msg=f"{name} {kwargs}"
-    )
+    np.testing.assert_allclose(got, want, atol=2e-3, rtol=2e-3, err_msg=f"{name} {kwargs}")
 
 
 # ── The reported case, by its numbers ────────────────────────────────────────
@@ -139,9 +137,7 @@ def test_one_d_gradient_has_the_input_shape(name: str, n: int, device: str) -> N
 
 @pytest.mark.parametrize("name", MULTI_D)
 @pytest.mark.parametrize("s", [(2, 3), (4, 9), (3, 6)])
-def test_multi_d_gradient_has_the_input_shape(
-    name: str, s: tuple[int, int], device: str
-) -> None:
+def test_multi_d_gradient_has_the_input_shape(name: str, s: tuple[int, int], device: str) -> None:
     x = lucid.randn(2, 3, 6, device=device, requires_grad=True)
     out = getattr(lucid.fft, name)(x, s=s)
     (lucid.abs(out) if out.is_complex() else out).sum().backward()
@@ -154,9 +150,7 @@ def test_multi_d_gradient_has_the_input_shape(
 @pytest.mark.parity
 @pytest.mark.parametrize("name", ONE_D)
 @pytest.mark.parametrize("n", [None, 3, 6, 9, 11], ids=lambda n: f"n{n}")
-def test_one_d_gradients_match_the_reference(
-    name: str, n: int | None, device: str, ref
-) -> None:
+def test_one_d_gradients_match_the_reference(name: str, n: int | None, device: str, ref) -> None:
     """Input length 6 along the transformed axis: ``n`` shorter, equal,
     longer, odd — and for ``irfft`` / ``hfft`` 6 is a bin count, so the
     same values cover cropping and padding the half-spectrum."""
@@ -172,9 +166,7 @@ def test_one_d_gradients_match_the_reference(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", MULTI_D)
-@pytest.mark.parametrize(
-    "s", [None, (3, 4), (4, 6), (5, 9), (3, 9)], ids=lambda s: f"s{s}"
-)
+@pytest.mark.parametrize("s", [None, (3, 4), (4, 6), (5, 9), (3, 9)], ids=lambda s: f"s{s}")
 def test_multi_d_gradients_match_the_reference(name: str, s, device: str, ref) -> None:
     """Input ``(4, 3, 6)``.  The 2-D forms transform the last two axes;
     the N-D forms transform axes ``(0, 2)`` explicitly and, when ``s`` is
@@ -196,9 +188,7 @@ def test_multi_d_gradients_match_the_reference(name: str, s, device: str, ref) -
 @pytest.mark.parity
 @pytest.mark.parametrize("name", ONE_D)
 @pytest.mark.parametrize("dtype", ["int64", "bool"])
-def test_integer_and_bool_input_is_promoted(
-    name: str, dtype: str, device: str, ref
-) -> None:
+def test_integer_and_bool_input_is_promoted(name: str, dtype: str, device: str, ref) -> None:
     values = [3, 0, 1, 4, 1, 5]
     if dtype == "bool":
         values = [v % 2 == 1 for v in values]
@@ -215,9 +205,7 @@ def test_integer_and_bool_input_is_promoted(
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "name", ["fftn", "ifftn", "rfftn", "irfftn", "hfftn", "ihfftn"]
-)
+@pytest.mark.parametrize("name", ["fftn", "ifftn", "rfftn", "irfftn", "hfftn", "ihfftn"])
 def test_a_short_s_without_dim_names_the_last_axes(name: str, device: str, ref) -> None:
     re, _ = _data(7, (2, 3, 4))
     got = getattr(lucid.fft, name)(lucid.tensor(re, device=device), s=(3, 5))

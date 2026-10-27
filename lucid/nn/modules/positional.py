@@ -85,8 +85,7 @@ class SinusoidalEmbedding(Module):
         super().__init__()
         if embedding_dim % 2 != 0:
             raise ValueError(
-                f"SinusoidalEmbedding requires an even embedding_dim, "
-                f"got {embedding_dim}"
+                f"SinusoidalEmbedding requires an even embedding_dim, " f"got {embedding_dim}"
             )
         self.num_positions = num_positions
         self.embedding_dim = embedding_dim
@@ -234,18 +233,14 @@ class RotaryEmbedding(Module):
     ) -> None:
         super().__init__()
         if head_dim % 2 != 0:
-            raise ValueError(
-                f"RotaryEmbedding requires an even head_dim, got {head_dim}"
-            )
+            raise ValueError(f"RotaryEmbedding requires an even head_dim, got {head_dim}")
         self.head_dim = head_dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
 
         # inv_freq[i] = base ** (-2 i / d_head) for i = 0 .. d_head/2 - 1
         half = head_dim // 2
-        inv_freq_vals: list[float] = [
-            1.0 / (base ** (2.0 * i / head_dim)) for i in range(half)
-        ]
+        inv_freq_vals: list[float] = [1.0 / (base ** (2.0 * i / head_dim)) for i in range(half)]
         inv_freq = lucid.tensor(inv_freq_vals)
 
         # Outer product positions × inv_freq → (max_pos, head_dim / 2).
@@ -363,9 +358,7 @@ class TimestepEmbedding(Module):
         half = self.in_dim // 2
         # Frequencies: ω_i = base ** (-i / (half - 1))    for i = 0 … half-1
         denom = float(half - 1) if half > 1 else 1.0
-        inv_freq_vals: list[float] = [
-            1.0 / (self.base ** (i / denom)) for i in range(half)
-        ]
+        inv_freq_vals: list[float] = [1.0 / (self.base ** (i / denom)) for i in range(half)]
         out_dtype = self.linear_1.weight.dtype
         work = _float32_or_wider(out_dtype)
         inv_freq = lucid.tensor(inv_freq_vals, dtype=work, device=timesteps.device.type)

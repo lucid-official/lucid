@@ -387,9 +387,7 @@ class TestMultiheadAttentionParity:
             pytest.skip("reference SDPA has no enable_gqa")
         kl = nn.functional.repeat_kv(lucid.tensor(k.copy()), H // KV)
         vl = nn.functional.repeat_kv(lucid.tensor(v.copy()), H // KV)
-        lucid_out = nn.functional.scaled_dot_product_attention(
-            lucid.tensor(q.copy()), kl, vl
-        )
+        lucid_out = nn.functional.scaled_dot_product_attention(lucid.tensor(q.copy()), kl, vl)
         assert_close(lucid_out, ref_out, atol=1e-4)
 
 
@@ -403,9 +401,7 @@ class TestTransformerEncoderLayerParity:
         rng = np.random.default_rng(17)
         x_np = rng.standard_normal((6, 2, D)).astype(np.float32)  # (T, N, D)
 
-        ref_layer = ref.nn.TransformerEncoderLayer(
-            D, H, dim_feedforward=16, dropout=0.0
-        )
+        ref_layer = ref.nn.TransformerEncoderLayer(D, H, dim_feedforward=16, dropout=0.0)
         lucid_layer = nn.TransformerEncoderLayer(D, H, dim_feedforward=16, dropout=0.0)
         ref_layer.eval()
         lucid_layer.eval()
@@ -446,18 +442,14 @@ class TestTransformerDecoderLayerParity:
         tgt_np = rng.standard_normal((4, 2, D)).astype(np.float32)
         mem_np = rng.standard_normal((6, 2, D)).astype(np.float32)
 
-        ref_layer = ref.nn.TransformerDecoderLayer(
-            D, H, dim_feedforward=16, dropout=0.0
-        )
+        ref_layer = ref.nn.TransformerDecoderLayer(D, H, dim_feedforward=16, dropout=0.0)
         lucid_layer = nn.TransformerDecoderLayer(D, H, dim_feedforward=16, dropout=0.0)
         ref_layer.eval()
         lucid_layer.eval()
         _copy_weights_positional(ref_layer, lucid_layer)
 
         ref_out = ref_layer(ref.tensor(tgt_np.copy()), ref.tensor(mem_np.copy()))
-        lucid_out = lucid_layer(
-            lucid.tensor(tgt_np.copy()), lucid.tensor(mem_np.copy())
-        )
+        lucid_out = lucid_layer(lucid.tensor(tgt_np.copy()), lucid.tensor(mem_np.copy()))
         assert_close(lucid_out, ref_out, atol=1e-4)
 
     def test_norm_first_eval(self, ref: Any) -> None:
@@ -477,9 +469,7 @@ class TestTransformerDecoderLayerParity:
         _copy_weights_positional(ref_layer, lucid_layer)
 
         ref_out = ref_layer(ref.tensor(tgt_np.copy()), ref.tensor(mem_np.copy()))
-        lucid_out = lucid_layer(
-            lucid.tensor(tgt_np.copy()), lucid.tensor(mem_np.copy())
-        )
+        lucid_out = lucid_layer(lucid.tensor(tgt_np.copy()), lucid.tensor(mem_np.copy()))
         assert_close(lucid_out, ref_out, atol=1e-4)
 
 
@@ -494,9 +484,7 @@ class TestTransformerDecoderParity:
         tgt_np = rng.standard_normal((4, 2, D)).astype(np.float32)
         mem_np = rng.standard_normal((6, 2, D)).astype(np.float32)
 
-        ref_proto = ref.nn.TransformerDecoderLayer(
-            D, H, dim_feedforward=16, dropout=0.0
-        )
+        ref_proto = ref.nn.TransformerDecoderLayer(D, H, dim_feedforward=16, dropout=0.0)
         lucid_proto = nn.TransformerDecoderLayer(D, H, dim_feedforward=16, dropout=0.0)
 
         ref_dec = ref.nn.TransformerDecoder(ref_proto, num_layers=2)

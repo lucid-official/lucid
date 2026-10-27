@@ -71,8 +71,7 @@ CONSTANTS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "zeros": lambda x: x + lucid.zeros(4).to(x.device),
     "full": lambda x: x * lucid.full((4,), 3.0).to(x.device),
     "eye-row": lambda x: x + lucid.eye(4)[2].to(x.device),
-    "float-of-int-literal": lambda x: x
-    + lucid.tensor([1, 2, 3, 4]).float().to(x.device),
+    "float-of-int-literal": lambda x: x + lucid.tensor([1, 2, 3, 4]).float().to(x.device),
     "metal-factory-chain": lambda x: x + lucid.ones(4, device=x.device) * 2,
     "metal-arange": lambda x: x + lucid.arange(4, device=x.device).float(),
     "constant-returned-too": lambda x: (x * 2, lucid.arange(4).float().to(x.device)),
@@ -81,9 +80,7 @@ CONSTANTS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
 
 def _compiled_twice(
     fn: Callable[[lucid.Tensor], object],
-) -> tuple[
-    CompiledModule[[lucid.Tensor], object], list[str], list[tuple[object, object]]
-]:
+) -> tuple[CompiledModule[[lucid.Tensor], object], list[str], list[tuple[object, object]]]:
     compiled = lucid.compile.compile(fn)
     pairs: list[tuple[object, object]] = []
     with warnings.catch_warnings(record=True) as caught:
@@ -282,9 +279,7 @@ def _constant_onto_constant(x: lucid.Tensor) -> lucid.Tensor:
     return x + c
 
 
-@pytest.mark.parametrize(
-    "fn", [_written_constant, _read_then_written, _constant_onto_constant]
-)
+@pytest.mark.parametrize("fn", [_written_constant, _read_then_written, _constant_onto_constant])
 def test_a_constant_written_in_place_is_right_on_every_call(
     fn: Callable[[lucid.Tensor], lucid.Tensor],
 ) -> None:
@@ -467,13 +462,9 @@ def test_the_decode_tracer_does_not_fold(installed: dict[str, set[bool]]) -> Non
 
 def test_the_segmented_tracers_do_not_fold(installed: dict[str, set[bool]]) -> None:
     lucid.manual_seed(0)
-    model = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 3)).to(
-        COMPILE_DEVICE
-    )
+    model = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 3)).to(COMPILE_DEVICE)
     target = lucid.tensor([0, 2]).to(COMPILE_DEVICE)
-    step = lucid.compile.make_step(
-        model, lambda out: F.cross_entropy(out, target), segments=2
-    )
+    step = lucid.compile.make_step(model, lambda out: F.cross_entropy(out, target), segments=2)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         step(_x(0, 2, 4))
@@ -513,17 +504,12 @@ def test_a_tracer_without_folding_records_what_main_did(device: str, mode: str) 
         [
             op.name,
             [int(i) for i in op.inputs],
-            [
-                [int(o.id), list(o.shape), str(o.dtype), str(o.device)]
-                for o in op.outputs
-            ],
+            [[int(o.id), list(o.shape), str(o.dtype), str(o.device)] for o in op.outputs],
             [list(kv) for kv in sorted((k, repr(v)) for k, v in op.attrs.items())],
         ]
         for op in tracer.graph.ops
     ]
     feeds = sorted([int(k), list(v.shape)] for k, v in tracer.external_feeds.items())
-    want = json.loads(_RECORDINGS.read_text())[
-        f"{'cpu' if device == 'cpu' else 'metal'}-{mode}"
-    ]
+    want = json.loads(_RECORDINGS.read_text())[f"{'cpu' if device == 'cpu' else 'metal'}-{mode}"]
     assert ops == want["ops"]
     assert feeds == want["feeds"]

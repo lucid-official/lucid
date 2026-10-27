@@ -79,9 +79,7 @@ def _ints(out: object) -> list[object]:
     return values
 
 
-def _same(
-    fn: Callable[..., object], *args: lucid.Tensor, compiled: bool = True
-) -> None:
+def _same(fn: Callable[..., object], *args: lucid.Tensor, compiled: bool = True) -> None:
     _C_engine.compile.session_cache_clear()
     c = lucid.compile(fn)
     got = c(*args)
@@ -138,8 +136,7 @@ OPS: dict[str, Callable[[lucid.Tensor, _Idx], object]] = {
     "scatter_add": lambda t, i: t.scatter_add(0, i.perm, t) + 0,
     "scatter_add_one_slot": lambda t, i: t.scatter_add(0, i.slot0, t) + 0,
     "index_put": lambda t, i: lucid.zeros_like(t).index_put((i.perm,), t) + 0,
-    "index_put_accumulate": lambda t, i: t.index_put((i.slot2,), t, accumulate=True)
-    + 0,
+    "index_put_accumulate": lambda t, i: t.index_put((i.slot2,), t, accumulate=True) + 0,
     "topk": lambda t, i: tuple(o + 0 for o in lucid.topk(t, 5)),
     "sort": lambda t, i: lucid.sort(t, descending=True)[0] + 0,
     "cat": lambda t, i: lucid.cat([t, lucid.flip(t, [0])]) + 0,
@@ -241,9 +238,7 @@ COLLIDING: dict[str, Callable[[lucid.Tensor, lucid.Tensor], lucid.Tensor]] = {
 @pytest.mark.parametrize("n", [64, 4096, 65536])
 @pytest.mark.parametrize("spread", ["one_slot", "three_slots"])
 @pytest.mark.parametrize("op", list(COLLIDING))
-def test_colliding_int64_overwrites_keep_one_whole_update(
-    op: str, spread: str, n: int
-) -> None:
+def test_colliding_int64_overwrites_keep_one_whole_update(op: str, spread: str, n: int) -> None:
     """Where several updates aim at one slot the winner is unspecified, but it
     is one of them, whole.  Scattered as int16 lanes, each lane picked its own
     winner and the slot held a mix of two updates (0xcb4a0d781cc5675 from
@@ -255,11 +250,7 @@ def test_colliding_int64_overwrites_keep_one_whole_update(
     c = lucid.compile(fn)
     for run in range(4):
         vals = _random_int64(n, seed=1000 * n + run)
-        got = (
-            c(lucid.tensor(vals, dtype=lucid.int64).to(COMPILE_DEVICE), idx)
-            .to("cpu")
-            .tolist()
-        )
+        got = c(lucid.tensor(vals, dtype=lucid.int64).to(COMPILE_DEVICE), idx).to("cpu").tolist()
         for slot, value in enumerate(got):
             landed = {v for v, k in zip(vals, slots, strict=True) if k == slot}
             assert value in (landed or {0}), (slot, hex(value))
@@ -327,9 +318,7 @@ def test_a_dynamic_batch_moves_wide_integers_without_aborting() -> None:
         check=False,
     )
     assert run.returncode == 0, run.stderr[-2000:]
-    rows = [
-        json.loads(line) for line in run.stdout.splitlines() if line.startswith("{")
-    ]
+    rows = [json.loads(line) for line in run.stdout.splitlines() if line.startswith("{")]
     assert len(rows) == 24, run.stdout
     for row in rows:
         assert row["ok"] and row["entries"] == 1 and row["eager"] == 0, row
@@ -346,9 +335,7 @@ class _GatherNet(nn.Module):
 
     def forward(self, idx: lucid.Tensor) -> lucid.Tensor:
         h = self.emb(idx)
-        picked = lucid.take_along_dim(
-            h, lucid.zeros_like(idx).unsqueeze(-1).expand(*h.shape), 1
-        )
+        picked = lucid.take_along_dim(h, lucid.zeros_like(idx).unsqueeze(-1).expand(*h.shape), 1)
         top = lucid.topk(h + picked, 2, dim=1)[0].sum(dim=1)
         return self.fc(top)
 
@@ -362,9 +349,7 @@ def test_float_training_through_the_wrapped_emitters_matches_eager() -> None:
     comp_model.load_state_dict(eager_model.state_dict())
 
     eager_opt = optim.SGD(list(eager_model.parameters()), lr=0.1)
-    step = fused_step(
-        comp_model, F.cross_entropy, optim.SGD(list(comp_model.parameters()), lr=0.1)
-    )
+    step = fused_step(comp_model, F.cross_entropy, optim.SGD(list(comp_model.parameters()), lr=0.1))
     for _ in range(3):
         eager_opt.zero_grad()
         eager_loss = F.cross_entropy(eager_model(idx), tgt)
@@ -406,7 +391,5 @@ def test_forward_emitters_move_data_only_through_the_helper() -> None:
                 ok = allowed.get(path.name, set())
                 if ok is None or m.group(1) in ok:
                     continue
-                offenders.append(
-                    f"{path.relative_to(_EMITTERS)}:{lineno}: {m.group(1)}"
-                )
+                offenders.append(f"{path.relative_to(_EMITTERS)}:{lineno}: {m.group(1)}")
     assert not offenders, "\n".join(offenders)

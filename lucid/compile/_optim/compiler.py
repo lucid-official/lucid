@@ -285,9 +285,7 @@ def _pack_impl(
             struct.pack(f"={n}f", *values), [n], _C_engine.Dtype.F32, dev, False
         )
         return _C_engine.astype(f32, dt)
-    return _C_engine.TensorImpl.from_bytes(
-        struct.pack(f"={n}{fmt}", *values), [n], dt, dev, False
-    )
+    return _C_engine.TensorImpl.from_bytes(struct.pack(f"={n}{fmt}", *values), [n], dt, dev, False)
 
 
 def _wrap(impl: _C_engine.TensorImpl) -> Tensor:
@@ -348,9 +346,7 @@ class _ScalarLayout:
 class _TraceScalars:
     """Trace-time view of the packed scalar vectors — one ``unbind`` each."""
 
-    def __init__(
-        self, layout: _ScalarLayout, vectors: dict[_C_engine.Dtype, Tensor]
-    ) -> None:
+    def __init__(self, layout: _ScalarLayout, vectors: dict[_C_engine.Dtype, Tensor]) -> None:
         self._layout = layout
         self._pieces: dict[_C_engine.Dtype, Sequence[Tensor]] = {}
         if layout.entries:
@@ -671,9 +667,7 @@ class _CompiledStepBase:
                     # as the eager loader restores it.
                     buf = self._state[i].get(name)
                     if buf is None:
-                        buf = self._state[i][name] = self._init_state(
-                            i, name, groups[gi]
-                        )
+                        buf = self._state[i][name] = self._init_state(i, name, groups[gi])
                     # The eager loader's host-array door: it keeps a 0-d
                     # entry 0-d.
                     host = _from_host(value, buf._impl.device)
@@ -717,9 +711,7 @@ class _CompiledStepBase:
         for i in active:
             self._activate(i, flags, groups)
         plan = self._plan_for(active, flags)
-        vectors = self._scalar_vectors(
-            plan.layout, flags, set(active) if plan.masked else None
-        )
+        vectors = self._scalar_vectors(plan.layout, flags, set(active) if plan.masked else None)
         feeds = [self._feed(slot, vectors) for slot in plan.feeds]
         targets = [_unwrap(self._slot_tensor(slot)) for slot in plan.targets]
         _C_engine.compile.run_executable_inplace(plan.exe, feeds, targets)
@@ -784,9 +776,7 @@ class _CompiledStepBase:
             if name not in state:
                 state[name] = self._init_state(i, name, group)
 
-    def _activate(
-        self, i: int, flags: tuple[_Flags, ...], groups: list[dict[str, object]]
-    ) -> None:
+    def _activate(self, i: int, flags: tuple[_Flags, ...], groups: list[dict[str, object]]) -> None:
         """Make parameter ``i`` ready to step; first time = eager's slot init."""
         gi = self._group_of[i]
         group = groups[gi]
@@ -870,9 +860,7 @@ class _CompiledStepBase:
 
         with no_grad():
             with _tracing() as tracer:
-                outputs, targets = self._emit(
-                    members, grads, layout, vectors, flags, masked
-                )
+                outputs, targets = self._emit(members, grads, layout, vectors, flags, masked)
 
         graph = tracer.graph
         if not graph.ops:
@@ -891,9 +879,7 @@ class _CompiledStepBase:
                 )
             explicit_outputs.append(int(tid))
         try:
-            exe = _C_engine.compile.compile_or_cached(
-                graph, ext, False, [], explicit_outputs
-            )
+            exe = _C_engine.compile.compile_or_cached(graph, ext, False, [], explicit_outputs)
         except RuntimeError as e:
             raise RuntimeError(f"compile_optimizer: compile_or_cached failed: {e}")
         if exe is None:
@@ -905,9 +891,7 @@ class _CompiledStepBase:
         for tid in exe.input_ids:
             impl = ext.get(tid)
             if impl is None:
-                raise RuntimeError(
-                    f"compile_optimizer: input id {tid} not in external_feeds"
-                )
+                raise RuntimeError(f"compile_optimizer: input id {tid} not in external_feeds")
             slot = registry.get(id(impl))
             if slot is None:
                 raise RuntimeError(
@@ -922,9 +906,7 @@ class _CompiledStepBase:
             )
         return _Plan(exe, members, masked, layout, feeds, targets)
 
-    def _feed(
-        self, slot: _Slot, vectors: Sequence[_C_engine.TensorImpl]
-    ) -> _C_engine.TensorImpl:
+    def _feed(self, slot: _Slot, vectors: Sequence[_C_engine.TensorImpl]) -> _C_engine.TensorImpl:
         """The live engine impl bound to one executable input."""
         from lucid._dispatch import _unwrap
 
@@ -991,9 +973,7 @@ class _CompiledStepBase:
             gi = self._group_of[i]
             if gi not in seen_groups:
                 seen_groups.add(gi)
-                entries.extend(
-                    ("g", n, gi) for n in self._group_scalar_names(flags[gi])
-                )
+                entries.extend(("g", n, gi) for n in self._group_scalar_names(flags[gi]))
         for c, rep in enumerate(class_reps):
             names = self._param_scalar_names(flags[self._group_of[rep]])
             entries.extend(("c", n, c) for n in names)
@@ -1010,9 +990,7 @@ class _CompiledStepBase:
     def _trace_vectors(self, layout: _ScalarLayout) -> dict[_C_engine.Dtype, Tensor]:
         """Trace-time stand-ins for the packed vectors (values do not matter)."""
         n = len(layout.entries)
-        return {
-            dt: _wrap(_pack_impl([0.0] * n, dt, layout.device)) for dt in layout.dtypes
-        }
+        return {dt: _wrap(_pack_impl([0.0] * n, dt, layout.device)) for dt in layout.dtypes}
 
     def _scalar_vectors(
         self,
@@ -1096,9 +1074,7 @@ class _CompiledStepBase:
             def gs(name: str, gi: int = gi, dt: _C_engine.Dtype = dt) -> Tensor:
                 return sc.get(("g", name, gi), dt)
 
-            def ps(
-                name: str, c: int = layout.param_class[i], dt: _C_engine.Dtype = dt
-            ) -> Tensor:
+            def ps(name: str, c: int = layout.param_class[i], dt: _C_engine.Dtype = dt) -> Tensor:
                 return sc.get(("c", name, c), dt)
 
             new_p, new_st = self._update(p, grads[i], st, fl, gs, ps)
@@ -1134,9 +1110,7 @@ class _CompiledStepBase:
         del flags
         return ()
 
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         """This step's numbers for ``group``."""
         del group, flags
         return {}
@@ -1292,9 +1266,7 @@ class _CompiledSGD(_CompiledStepBase):
         return self._pstate[i].get(_MOMENTUM_STARTED, 0.0) != 0.0
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         return {
             "lr": _hp(group, "lr", 0.0),
             "weight_decay": _hp(group, "weight_decay", 0.0),
@@ -1385,9 +1357,7 @@ class _CompiledAdam(_CompiledStepBase):
         return ("lr_eff", "eps_eff")
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         lr = _hp(group, "lr", 1e-3)
         b1 = _hp(group, "beta1", 0.9)
         b2 = _hp(group, "beta2", 0.999)
@@ -1514,9 +1484,7 @@ class _CompiledRMSprop(_CompiledStepBase):
         return tuple(names)
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         alpha = _hp(group, "alpha", 0.99)
         w = 1.0 - alpha
         return {
@@ -1600,9 +1568,7 @@ class _CompiledAdagrad(_CompiledStepBase):
         return ("clr",)
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         return {
             "lr": _hp(group, "lr", 1e-2),
             "lr_decay": _hp(group, "lr_decay", 0.0),
@@ -1671,9 +1637,7 @@ class _CompiledAdadelta(_CompiledStepBase):
         return names + ("weight_decay",) if flags[0] else names
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         rho = _hp(group, "rho", 0.9)
         return {
             "lr": _hp(group, "lr", 1.0),
@@ -1740,9 +1704,7 @@ class _CompiledAdamax(_CompiledStepBase):
         return ("step_size",)
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         b1 = _hp(group, "beta1", 0.9)
         return {
             "lr": _hp(group, "lr", 2e-3),
@@ -1828,9 +1790,7 @@ class _CompiledNAdam(_CompiledStepBase):
         return ("inv_bc2", "c1", "c2")
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         lr = _hp(group, "lr", 2e-3)
         b1 = _hp(group, "beta1", 0.9)
         b2 = _hp(group, "beta2", 0.999)
@@ -1847,9 +1807,7 @@ class _CompiledNAdam(_CompiledStepBase):
             "momentum_decay": _hp(group, "momentum_decay", self._MOMENTUM_DECAY),
         }
 
-    def _mu(
-        self, beta1: float, step: int, momentum_decay: float = _MOMENTUM_DECAY
-    ) -> float:
+    def _mu(self, beta1: float, step: int, momentum_decay: float = _MOMENTUM_DECAY) -> float:
         return beta1 * (1.0 - 0.5 * float(0.96 ** (float(step) * momentum_decay)))
 
     def _next_mu_product(
@@ -1961,9 +1919,7 @@ class _CompiledRAdam(_CompiledStepBase):
         return ("inv_bc1", "bc2_sqrt", "lr_rt", "use_rect")
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         b1 = _hp(group, "beta1", 0.9)
         b2 = _hp(group, "beta2", 0.999)
         return {
@@ -2069,9 +2025,7 @@ class _CompiledASGD(_CompiledStepBase):
         return ("decay", "neg_eta", "mu", "keep")
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         return {
             "lr": _hp(group, "lr", 1e-2),
             "lambd": _hp(group, "lambd", 1e-4),
@@ -2158,9 +2112,7 @@ class _CompiledRprop(_CompiledStepBase):
         return ("eta_plus", "eta_minus", "step_min", "step_max")
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         return {
             "eta_plus": _hp(group, "eta_plus", 1.2),
             "eta_minus": _hp(group, "eta_minus", 0.5),
@@ -2248,9 +2200,7 @@ class _CompiledLBFGS(_CompiledStepBase):
         return ("use_history",)
 
     @override
-    def _group_values(
-        self, group: dict[str, object], flags: _Flags
-    ) -> dict[str, float]:
+    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
         return {"lr": _hp(group, "lr", 1.0)}
 
     @override

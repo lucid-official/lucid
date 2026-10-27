@@ -98,9 +98,7 @@ def identity(module: Module, name: str = "weight") -> Module:
     return _install_mask(module, name, mask)
 
 
-def random_unstructured(
-    module: Module, name: str = "weight", amount: float = 0.5
-) -> Module:
+def random_unstructured(module: Module, name: str = "weight", amount: float = 0.5) -> Module:
     r"""Prune a uniformly random ``amount`` fraction of weight elements.
 
     Each scalar entry of ``module.<name>`` is independently masked to
@@ -160,9 +158,7 @@ def random_unstructured(
     return _install_mask(module, name, mask)
 
 
-def l1_unstructured(
-    module: Module, name: str = "weight", amount: float = 0.5
-) -> Module:
+def l1_unstructured(module: Module, name: str = "weight", amount: float = 0.5) -> Module:
     r"""Prune the smallest-magnitude ``amount`` fraction of weight elements.
 
     The classical "magnitude pruning" heuristic of Han et al. (2015):

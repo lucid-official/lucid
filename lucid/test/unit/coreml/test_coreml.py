@@ -69,9 +69,7 @@ class TestPackageFormat:
         root = cm.path
         assert os.path.exists(os.path.join(root, "Manifest.json"))
         assert os.path.exists(os.path.join(root, "Data/com.apple.CoreML/model.mlmodel"))
-        assert os.path.exists(
-            os.path.join(root, "Data/com.apple.CoreML/weights/weight.bin")
-        )
+        assert os.path.exists(os.path.join(root, "Data/com.apple.CoreML/weights/weight.bin"))
         cm.close()
 
     def test_a_hand_built_program_loads_and_runs(self, tmp_path: object) -> None:
@@ -91,9 +89,7 @@ class TestPackageFormat:
 
         handle = engine.load_model(paths.root, engine.ComputeUnits.CPU_ONLY)
         out = lucid.Tensor(
-            handle.predict(
-                [("x", lucid.tensor([[-1.0, 2.0, -3.0, 4.0]])._impl)], ["y"]
-            )[0]
+            handle.predict([("x", lucid.tensor([[-1.0, 2.0, -3.0, 4.0]])._impl)], ["y"])[0]
         )
 
         assert out.numpy().ravel().tolist() == [0.0, 2.0, 0.0, 4.0]
@@ -192,9 +188,7 @@ class TestTheAcceleratorIsActuallyUsed:
             assert plan.ane_fraction == 0.0
         cm.close()
 
-    def test_float16_runs_the_computation_on_the_neural_engine(
-        self, tmp_path: object
-    ) -> None:
+    def test_float16_runs_the_computation_on_the_neural_engine(self, tmp_path: object) -> None:
         require_neural_engine()
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         x = lucid.randn(1, 3, 64, 64)
@@ -329,9 +323,7 @@ class TestTextModels:
             assert plan.ane_fraction > 0.9
         cm.close()
 
-    def test_an_output_dataclass_exports_every_field_it_declares(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_output_dataclass_exports_every_field_it_declares(self, tmp_path: object) -> None:
         """A model's outputs are all of them, named as the model names them.
 
         Taking one field and calling the package the model is the same
@@ -376,9 +368,7 @@ class TestSegmentationAndDetection:
         model = M.create_model(factory).eval()
         x = lucid.randn(1, channels, 64, 64)
         reference = model(x)
-        reference = (
-            reference if isinstance(reference, lucid.Tensor) else reference.logits
-        )
+        reference = reference if isinstance(reference, lucid.Tensor) else reference.logits
         scale = float(reference.abs().max().item())
 
         cm = cml.export(model, x, str(tmp_path / f"{factory}.mlpackage"))
@@ -421,9 +411,7 @@ class TestSegmentationAndDetection:
 
 
 class TestFormatLimits:
-    def test_window_attention_exports_despite_the_rank_cap(
-        self, tmp_path: object
-    ) -> None:
+    def test_window_attention_exports_despite_the_rank_cap(self, tmp_path: object) -> None:
         """Core ML caps tensors at rank five; window attention wants six.
 
         This used to assert the refusal, because a window partition lifts
@@ -485,9 +473,7 @@ class TestRefusals:
 
     def test_a_training_mode_model_is_refused(self, tmp_path: object) -> None:
         with pytest.raises(ValueError, match="training mode"):
-            cml.export(
-                _Tiny().train(), lucid.randn(1, 3, 8, 8), str(tmp_path / "t.mlpackage")
-            )
+            cml.export(_Tiny().train(), lucid.randn(1, 3, 8, 8), str(tmp_path / "t.mlpackage"))
 
     def test_float64_has_no_core_ml_equivalent(self, tmp_path: object) -> None:
         class Passthrough(nn.Module):
@@ -556,9 +542,7 @@ class TestQuantizedWeights:
             a.close()
             b.close()
 
-    def test_a_quantized_package_still_reaches_the_neural_engine(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_quantized_package_still_reaches_the_neural_engine(self, tmp_path: object) -> None:
         require_neural_engine()
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         x = lucid.randn(1, 3, 224, 224)
@@ -595,9 +579,7 @@ class TestReadingSomeoneElsesOutputs:
             program.add_op("relu", [("x", ["x"])], "y", (dtype, [1, 4]))
         else:
             program.add_op("relu", [("x", ["x"])], "h", (engine.DTYPE_FLOAT16, [1, 4]))
-            program.add_op(
-                "cast", [("x", ["h"]), ("dtype", ["target"])], "y", (dtype, [1, 4])
-            )
+            program.add_op("cast", [("x", ["h"]), ("dtype", ["target"])], "y", (dtype, [1, 4]))
         program.add_output("y", (dtype, [1, 4]))
         paths = engine.prepare_package(f"{tmp_path}/{name}.mlpackage")
         engine.BlobWriter(paths.weight_bin).finalize()
@@ -605,9 +587,7 @@ class TestReadingSomeoneElsesOutputs:
         return str(paths.root)
 
     @pytest.mark.parametrize("kind", ["float16", "float32"])
-    def test_an_output_is_read_at_the_type_it_declares(
-        self, kind: str, tmp_path: object
-    ) -> None:
+    def test_an_output_is_read_at_the_type_it_declares(self, kind: str, tmp_path: object) -> None:
         engine = _C_engine.coreml
         wanted = engine.DTYPE_FLOAT16 if kind == "float16" else engine.DTYPE_FLOAT32
         handle = engine.load_model(
@@ -615,9 +595,7 @@ class TestReadingSomeoneElsesOutputs:
         )
         try:
             x = lucid.tensor([[-1.0, 2.0, -3.0, 4.0]]).half()
-            got = lucid.Tensor(
-                handle.predict([("x", x._impl)], list(handle.output_names), [])[0]
-            )
+            got = lucid.Tensor(handle.predict([("x", x._impl)], list(handle.output_names), [])[0])
             assert str(got.dtype).endswith(kind)
             assert got.reshape(-1).tolist() == [0.0, 2.0, 0.0, 4.0]
         finally:
@@ -746,9 +724,7 @@ class TestWeightQuantizationInEitherBody:
         x = lucid.randn(1, 3, 64, 64)
         scale = max(float(model(x).logits.abs().max().item()), 1e-6)
 
-        plain = cml.export(
-            model, x, str(tmp_path / f"{name}.mlpackage"), precision=precision
-        )
+        plain = cml.export(model, x, str(tmp_path / f"{name}.mlpackage"), precision=precision)
         quantized = cml.export(
             model,
             x,
@@ -820,9 +796,7 @@ class TestASingleResultEmitter:
         from lucid.coreml import _emit
         from lucid.coreml._build import Builder
 
-        def first_section(
-            b: Builder, op: _emit.TracedOp, ins: list[str]
-        ) -> _emit.EmitResult:
+        def first_section(b: Builder, op: _emit.TracedOp, ins: list[str]) -> _emit.EmitResult:
             size = [int(d) for d in op.outputs[0].shape]
             return "slice_by_size", [
                 ("x", ins[0]),

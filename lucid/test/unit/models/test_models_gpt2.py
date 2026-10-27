@@ -138,9 +138,7 @@ class TestGPT2LMHead:
 class TestGPT2Generate:
     def test_greedy(self) -> None:
         m = GPT2LMHeadModel(_tiny_config()).eval()
-        out = m.generate(
-            lucid.tensor([[1, 2, 3]]).long(), max_length=7, do_sample=False
-        )
+        out = m.generate(lucid.tensor([[1, 2, 3]]).long(), max_length=7, do_sample=False)
         assert tuple(out.shape) == (1, 7)
         assert [int(out[0, t].item()) for t in range(3)] == [1, 2, 3]
 

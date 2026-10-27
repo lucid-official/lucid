@@ -18,9 +18,7 @@ from lucid.test._fixtures.devices import metal_available
 
 _DEVICES = [
     "cpu",
-    pytest.param(
-        "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 
 _WRITES: dict[str, Callable[[lucid.Tensor], object]] = {
@@ -32,9 +30,7 @@ _WRITES: dict[str, Callable[[lucid.Tensor], object]] = {
 }
 
 
-def _leaf_view_of_plain_base(
-    lib: ModuleType, device: str
-) -> tuple[lucid.Tensor, lucid.Tensor]:
+def _leaf_view_of_plain_base(lib: ModuleType, device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
     """``X`` needs no grad; ``x = X[:]`` is a leaf that does."""
     X = lib.ones(4, 3, device=device)
     x = X[:]
@@ -42,9 +38,7 @@ def _leaf_view_of_plain_base(
     return X, x
 
 
-def _make(
-    lib: ModuleType, device: str, case: str
-) -> tuple[lucid.Tensor, lucid.Tensor | None]:
+def _make(lib: ModuleType, device: str, case: str) -> tuple[lucid.Tensor, lucid.Tensor | None]:
     """The tensor ``case`` writes into, and the leaf it is about (kept alive)."""
     if case == "base of a leaf view":
         return _leaf_view_of_plain_base(lib, device)
@@ -109,9 +103,7 @@ def test_the_rule_is_the_reference_rule(case: str, write: str, ref: ModuleType) 
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("write", list(_WRITES))
-def test_the_leaf_view_reads_the_base_write_and_keeps_its_gradient(
-    write: str, device: str
-) -> None:
+def test_the_leaf_view_reads_the_base_write_and_keeps_its_gradient(write: str, device: str) -> None:
     X, x = _leaf_view_of_plain_base(lucid, device)
     _WRITES[write](X)
     assert X.to("cpu").tolist() == x.to("cpu").tolist()

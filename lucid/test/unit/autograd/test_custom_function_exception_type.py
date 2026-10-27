@@ -65,9 +65,7 @@ PATHS: dict[str, Callable[[lucid.Tensor, lucid.Tensor], object]] = {
     "backward": lambda out, x: out.backward(),
     "grad": lambda out, x: lucid.autograd.grad(out, [x]),
     "backward-create_graph": lambda out, x: out.backward(create_graph=True),
-    "grad-create_graph": lambda out, x: lucid.autograd.grad(
-        out, [x], create_graph=True
-    ),
+    "grad-create_graph": lambda out, x: lucid.autograd.grad(out, [x], create_graph=True),
 }
 
 
@@ -97,9 +95,7 @@ class _TwoOut(Function):
 
 
 @pytest.mark.parametrize("path", ["backward", "grad"])
-def test_a_function_with_several_outputs_raises_its_own_type(
-    path: str, device: str
-) -> None:
+def test_a_function_with_several_outputs_raises_its_own_type(path: str, device: str) -> None:
     x = _leaf(device)
     a, b = _TwoOut.apply(x)
     out = a.sum() + b.sum()

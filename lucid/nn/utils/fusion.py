@@ -93,13 +93,9 @@ def fuse_conv_bn_eval(conv: object, bn: object) -> object:
     True
     """
     if not isinstance(conv, _CONV_TYPES):
-        raise TypeError(
-            f"fuse_conv_bn_eval: conv must be Conv1d/2d/3d, got {type(conv).__name__}"
-        )
+        raise TypeError(f"fuse_conv_bn_eval: conv must be Conv1d/2d/3d, got {type(conv).__name__}")
     if not isinstance(bn, _BN_TYPES):
-        raise TypeError(
-            f"fuse_conv_bn_eval: bn must be BatchNorm1d/2d/3d, got {type(bn).__name__}"
-        )
+        raise TypeError(f"fuse_conv_bn_eval: bn must be BatchNorm1d/2d/3d, got {type(bn).__name__}")
 
     fused = _copy_module.deepcopy(conv)
 
@@ -271,13 +267,9 @@ def fuse_linear_bn_eval(linear: object, bn: object) -> object:
     True
     """
     if not isinstance(linear, Linear):
-        raise TypeError(
-            f"fuse_linear_bn_eval: linear must be Linear, got {type(linear).__name__}"
-        )
+        raise TypeError(f"fuse_linear_bn_eval: linear must be Linear, got {type(linear).__name__}")
     if not isinstance(bn, BatchNorm1d):
-        raise TypeError(
-            f"fuse_linear_bn_eval: bn must be BatchNorm1d, got {type(bn).__name__}"
-        )
+        raise TypeError(f"fuse_linear_bn_eval: bn must be BatchNorm1d, got {type(bn).__name__}")
 
     from lucid.nn.parameter import Parameter
 
@@ -289,9 +281,7 @@ def fuse_linear_bn_eval(linear: object, bn: object) -> object:
     beta = bn.bias.detach() if bn.affine and bn.bias is not None else None
 
     conv_b = fused.bias.detach() if fused.bias is not None else None
-    new_w, new_b = fuse_conv_bn_weights(
-        fused.weight.detach(), conv_b, rm, rv, eps, gamma, beta
-    )
+    new_w, new_b = fuse_conv_bn_weights(fused.weight.detach(), conv_b, rm, rv, eps, gamma, beta)
     fused.weight = Parameter(new_w)
     fused.bias = Parameter(new_b)
     return fused

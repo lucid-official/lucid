@@ -60,9 +60,7 @@ OFFSETS = [
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("mode", ["sum", "mean", "max"])
 @pytest.mark.parametrize("off", OFFSETS, ids=["at end", "empty bag", "short"])
-def test_the_last_offset_ends_the_last_bag(
-    off: list[int], mode: str, device: str
-) -> None:
+def test_the_last_offset_ends_the_last_bag(off: list[int], mode: str, device: str) -> None:
     out = F.embedding_bag(
         lucid.tensor(INDICES).to(device),
         lucid.tensor(TABLE.astype(np.float32)).to(device),
@@ -155,9 +153,7 @@ def test_per_sample_weights_on_a_two_dimensional_input() -> None:
         mode="sum",
         per_sample_weights=lucid.tensor(psw),
     )
-    np.testing.assert_allclose(
-        out.numpy(), (TABLE[x] * psw[..., None]).sum(1), rtol=1e-12
-    )
+    np.testing.assert_allclose(out.numpy(), (TABLE[x] * psw[..., None]).sum(1), rtol=1e-12)
 
 
 def test_per_sample_weights_are_refused_outside_sum() -> None:

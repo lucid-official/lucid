@@ -73,9 +73,7 @@ def _pool(dim: int) -> nn.MaxPool2d | nn.MaxPool3d:
     return nn.MaxPool3d(2, stride=2) if dim == 3 else nn.MaxPool2d(2, stride=2)
 
 
-def _deconv(
-    dim: int, in_ch: int, out_ch: int
-) -> nn.ConvTranspose2d | nn.ConvTranspose3d:
+def _deconv(dim: int, in_ch: int, out_ch: int) -> nn.ConvTranspose2d | nn.ConvTranspose3d:
     if dim == 3:
         return nn.ConvTranspose3d(in_ch, out_ch, 2, stride=2)
     return nn.ConvTranspose2d(in_ch, out_ch, 2, stride=2)
@@ -211,13 +209,9 @@ class _DecoderBlock(nn.Module):
             # Interpolation alone carries all ``in_ch`` channels into the
             # concat, so the bilinear decoder came out *wider* than the
             # transposed-conv one instead of matching its budget.
-            self.up: nn.Sequential | nn.ConvTranspose2d | nn.ConvTranspose3d = (
-                nn.Sequential(
-                    nn.Upsample(
-                        scale_factor=2, mode=_interp_mode(dim), align_corners=True
-                    ),
-                    _conv(dim, in_ch, in_ch // 2, k=1, padding=0, bias=False),
-                )
+            self.up: nn.Sequential | nn.ConvTranspose2d | nn.ConvTranspose3d = nn.Sequential(
+                nn.Upsample(scale_factor=2, mode=_interp_mode(dim), align_corners=True),
+                _conv(dim, in_ch, in_ch // 2, k=1, padding=0, bias=False),
             )
             self.conv = _DoubleConv(
                 in_ch // 2 + skip_ch, out_ch, dim, dropout, residual, mid_ch=mid
@@ -366,9 +360,7 @@ class UNetForSemanticSegmentation(SemanticSegmentationModel):
         enc_channels: list[int] = []
         for i in range(depth):
             out_ch = ch * (2**i)
-            block = _EncoderBlock(
-                in_ch, out_ch, dim, dropout, residual, config.double_before_pool
-            )
+            block = _EncoderBlock(in_ch, out_ch, dim, dropout, residual, config.double_before_pool)
             self.add_module(f"encoder_{i}", block)
             self.encoders.append(block)
             enc_channels.append(out_ch)
@@ -406,9 +398,7 @@ class UNetForSemanticSegmentation(SemanticSegmentationModel):
             dec_in = dec_out
 
         # Segmentation head
-        self.head = _conv(
-            dim, enc_channels[0], config.num_classes, k=1, padding=0, bias=True
-        )
+        self.head = _conv(dim, enc_channels[0], config.num_classes, k=1, padding=0, bias=True)
 
     @override
     def forward(

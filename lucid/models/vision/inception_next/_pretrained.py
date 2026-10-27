@@ -86,9 +86,7 @@ def inception_next_tiny(pretrained: bool = False, **overrides: object) -> Incept
     (1, 768)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "inception_next_tiny", alternative="inception_next_tiny_cls"
-        )
+        reject_unavailable_pretrained("inception_next_tiny", alternative="inception_next_tiny_cls")
     return InceptionNeXt(apply_overrides(_CFG_T, overrides))
 
 
@@ -166,9 +164,7 @@ def inception_next_tiny_cls(
     default_config=_CFG_S,
     params=45292632,
 )
-def inception_next_small(
-    pretrained: bool = False, **overrides: object
-) -> InceptionNeXt:
+def inception_next_small(pretrained: bool = False, **overrides: object) -> InceptionNeXt:
     r"""InceptionNeXt-Small backbone (Yu et al., 2024).
 
     Builds the canonical *InceptionNeXt-S* configuration:
@@ -327,9 +323,7 @@ def inception_next_base(pretrained: bool = False, **overrides: object) -> Incept
     (1, 1024)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "inception_next_base", alternative="inception_next_base_cls"
-        )
+        reject_unavailable_pretrained("inception_next_base", alternative="inception_next_base_cls")
     return InceptionNeXt(apply_overrides(_CFG_B, overrides))
 
 

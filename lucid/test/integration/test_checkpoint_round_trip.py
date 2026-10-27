@@ -100,9 +100,7 @@ def test_checkpoint_resume_reproduces_next_updates(tmp_path: Path, kind: str) ->
     )
     restored, _, _, _ = _build()
     restored_optimizer = constructor(restored.parameters(), **options)
-    restored_scheduler = optim.lr_scheduler.StepLR(
-        restored_optimizer, step_size=2, gamma=0.7
-    )
+    restored_scheduler = optim.lr_scheduler.StepLR(restored_optimizer, step_size=2, gamma=0.7)
     # Optimizer state contains arrays, not just Tensor payloads. This file
     # was written above in this test; arbitrary external checkpoints are not trusted.
     with pytest.warns(UserWarning, match="arbitrary object deserialization"):
@@ -117,12 +115,6 @@ def test_checkpoint_resume_reproduces_next_updates(tmp_path: Path, kind: str) ->
             abs=1e-7,
             rel=1e-6,
         )
-        assert (
-            restored_optimizer.param_groups[0]["lr"] == optimizer.param_groups[0]["lr"]
-        )
-        for original, resumed in zip(
-            model.parameters(), restored.parameters(), strict=True
-        ):
-            np.testing.assert_allclose(
-                resumed.numpy(), original.numpy(), atol=1e-7, rtol=1e-6
-            )
+        assert restored_optimizer.param_groups[0]["lr"] == optimizer.param_groups[0]["lr"]
+        for original, resumed in zip(model.parameters(), restored.parameters(), strict=True):
+            np.testing.assert_allclose(resumed.numpy(), original.numpy(), atol=1e-7, rtol=1e-6)

@@ -476,9 +476,7 @@ class GaussNoise(PhotometricTransform[NoiseParam]):
 
     @override
     def _apply_image(self, img: Tensor, params: NoiseParam) -> Tensor:
-        noise = (
-            lucid.randn(*img.shape, device=img.device) * params.std + self.mean / 255.0
-        )
+        noise = lucid.randn(*img.shape, device=img.device) * params.std + self.mean / 255.0
         return lucid.clip(img + noise, 0.0, 1.0)
 
     @override
@@ -545,10 +543,7 @@ class MultiplicativeNoise(PhotometricTransform[MultiplierParam]):
     @override
     def _apply_image(self, img: Tensor, params: MultiplierParam) -> Tensor:
         if self.elementwise:
-            mult = (
-                lucid.rand(*img.shape, device=img.device) * (params.hi - params.lo)
-                + params.lo
-            )
+            mult = lucid.rand(*img.shape, device=img.device) * (params.hi - params.lo) + params.lo
             return lucid.clip(img * mult, 0.0, 1.0)
         scalar = _random.uniform(params.lo, params.hi)
         return lucid.clip(img * scalar, 0.0, 1.0)
@@ -610,8 +605,7 @@ class ISONoise(PhotometricTransform[NoiseParam]):
     @override
     def __repr__(self) -> str:
         return (
-            f"ISONoise(color_shift={self.color_shift}, intensity={self.intensity}, "
-            f"p={self.p})"
+            f"ISONoise(color_shift={self.color_shift}, intensity={self.intensity}, " f"p={self.p})"
         )
 
 
@@ -678,10 +672,7 @@ class Downscale(PhotometricTransform[ScaleParam]):
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"Downscale(scale_min={self.scale_min}, scale_max={self.scale_max}, "
-            f"p={self.p})"
-        )
+        return f"Downscale(scale_min={self.scale_min}, scale_max={self.scale_max}, " f"p={self.p})"
 
 
 # ── B8: defocus / zoom blur ─────────────────────────────────────────
@@ -850,9 +841,7 @@ class ZoomBlur(PhotometricTransform[ZoomParam]):
             f = 1.0 + (params.factor - 1.0) * i / n
             ch, cw = max(int(round(h / f)), 1), max(int(round(w / f)), 1)
             top, left = (h - ch) // 2, (w - cw) // 2
-            zoomed = F.resize(
-                F.crop(img, top, left, ch, cw), (h, w), interpolation="bilinear"
-            )
+            zoomed = F.resize(F.crop(img, top, left, ch, cw), (h, w), interpolation="bilinear")
             acc = acc + zoomed
         return lucid.clip(acc / (n + 1), 0.0, 1.0)
 

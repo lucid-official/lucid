@@ -366,9 +366,7 @@ class StudentT(Distribution):
         # ``log Γ(½)`` is a Python constant: as a host tensor it could not meet
         # a Metal ``df``.
         beta_term = (
-            math.lgamma(0.5)
-            + lucid.lgamma(self.df * 0.5)
-            - lucid.lgamma((self.df + 1.0) * 0.5)
+            math.lgamma(0.5) + lucid.lgamma(self.df * 0.5) - lucid.lgamma((self.df + 1.0) * 0.5)
         )
         return (
             self.scale.log()

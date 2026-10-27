@@ -263,8 +263,7 @@ class _IntegerInterval(Constraint):
     @override
     def __repr__(self) -> str:
         return (
-            f"IntegerInterval(lower_bound={self.lower_bound}, "
-            f"upper_bound={self.upper_bound})"
+            f"IntegerInterval(lower_bound={self.lower_bound}, " f"upper_bound={self.upper_bound})"
         )
 
 
@@ -408,9 +407,7 @@ class _PositiveDefinite(Constraint):
         """Return ``True`` per matrix where it is symmetric and has a
         Cholesky factorisation."""
         if value.shape[-1] != value.shape[-2]:
-            return lucid.zeros(
-                tuple(value.shape[:-2]), dtype=lucid.bool, device=value.device
-            )
+            return lucid.zeros(tuple(value.shape[:-2]), dtype=lucid.bool, device=value.device)
         symmetric = _all_trailing(lucid.isclose(value, value.mT, atol=1e-6), 2)
         _, info = lucid.linalg.cholesky_ex(value)
         return symmetric & (info == 0)
@@ -459,9 +456,7 @@ class _IndependentConstraint(Constraint):
     of :class:`~lucid.distributions.Independent`.
     """
 
-    def __init__(
-        self, base_constraint: Constraint, reinterpreted_batch_ndims: int
-    ) -> None:
+    def __init__(self, base_constraint: Constraint, reinterpreted_batch_ndims: int) -> None:
         """Store the wrapped constraint and how many batch axes it absorbs."""
         if reinterpreted_batch_ndims < 0:
             raise ValueError(
@@ -485,16 +480,14 @@ class _IndependentConstraint(Constraint):
         result = self.base_constraint.check(value)
         if result.ndim < self.reinterpreted_batch_ndims:
             raise ValueError(
-                f"independent: expected value.ndim >= {self.event_dim}, "
-                f"got {value.ndim}"
+                f"independent: expected value.ndim >= {self.event_dim}, " f"got {value.ndim}"
             )
         return _all_trailing(result, self.reinterpreted_batch_ndims)
 
     @override
     def __repr__(self) -> str:
         return (
-            f"IndependentConstraint({self.base_constraint!r}, "
-            f"{self.reinterpreted_batch_ndims})"
+            f"IndependentConstraint({self.base_constraint!r}, " f"{self.reinterpreted_batch_ndims})"
         )
 
 
@@ -590,9 +583,7 @@ def interval(lower_bound: float | Tensor, upper_bound: float | Tensor) -> Constr
     return _Interval(lower_bound, upper_bound)
 
 
-def half_open_interval(
-    lower_bound: float | Tensor, upper_bound: float | Tensor
-) -> Constraint:
+def half_open_interval(lower_bound: float | Tensor, upper_bound: float | Tensor) -> Constraint:
     """Construct a half-open interval constraint ``[lower_bound, upper_bound)``.
 
     The domain of a probability that may be impossible but not certain —
@@ -621,9 +612,7 @@ def half_open_interval(
     return _Interval(lower_bound, upper_bound, upper_open=True)
 
 
-def integer_interval(
-    lower_bound: int | Tensor, upper_bound: int | Tensor
-) -> Constraint:
+def integer_interval(lower_bound: int | Tensor, upper_bound: int | Tensor) -> Constraint:
     """Construct an inclusive integer-interval constraint.
 
     Parameters
@@ -667,9 +656,7 @@ def multinomial(upper_bound: float | Tensor) -> Constraint:
     return _Multinomial(upper_bound)
 
 
-def independent(
-    base_constraint: Constraint, reinterpreted_batch_ndims: int
-) -> Constraint:
+def independent(base_constraint: Constraint, reinterpreted_batch_ndims: int) -> Constraint:
     """Reinterpret batch axes of a constraint as event axes.
 
     The returned constraint answers once per event: ``True`` when every

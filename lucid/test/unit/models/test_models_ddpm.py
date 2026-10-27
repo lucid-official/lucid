@@ -146,9 +146,7 @@ class TestDDPMUNet:
         cfg = _tiny_cfg(attention_resolutions=(8,))  # only the 8×8 stage
         unet = _DDPMUNet(cfg).eval()
         # Encoder side: stage 0 (16×16) → no attn; stage 1 (8×8 after down) → attn
-        non_id_down = sum(
-            1 for blk in unet.down_attn if not isinstance(blk, lucid.nn.Identity)
-        )
+        non_id_down = sum(1 for blk in unet.down_attn if not isinstance(blk, lucid.nn.Identity))
         # Tiny config has num_res_blocks=1 per stage.  Stage-0 spatial == 16
         # (no attn), stage-1 spatial == 8 (attn).  So expect 1.
         assert non_id_down == 1
@@ -295,8 +293,7 @@ class TestDDPMHybridObjective:
         assert out.loss_simple is not None and out.loss_vlb is not None
         assert float(out.loss_simple.item()) > 0.0
         expected = float(
-            out.loss_simple.item()
-            + cfg.vlb_weight * cfg.num_train_timesteps * out.loss_vlb.item()
+            out.loss_simple.item() + cfg.vlb_weight * cfg.num_train_timesteps * out.loss_vlb.item()
         )
         assert abs(float(out.loss.item()) - expected) < 1e-5
 
@@ -356,9 +353,7 @@ class TestDDPMSampling:
         cfg = _tiny_cfg()
         m = DDPMForImageGeneration(cfg).eval()
         sched = DDPMScheduler(num_train_timesteps=cfg.num_train_timesteps)
-        out = m.generate(
-            sched, n_samples=1, num_inference_steps=3, return_intermediates=True
-        )
+        out = m.generate(sched, n_samples=1, num_inference_steps=3, return_intermediates=True)
         assert out.intermediates is not None
         assert len(out.intermediates) == 3
 
@@ -406,9 +401,7 @@ class TestDDPMRegistry:
         from lucid.models import AutoModelForImageGeneration
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "ddpm_cifar_gen", task=AutoModelForImageGeneration._task
-        )
+        entry = _registry_lookup("ddpm_cifar_gen", task=AutoModelForImageGeneration._task)
         assert entry.model_class is DDPMForImageGeneration
 
 

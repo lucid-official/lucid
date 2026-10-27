@@ -69,15 +69,9 @@ def test_new_op_supports_inline_backend_headers(tmp_path: Path) -> None:
 
     cpu_hdr = (be_dir / "cpu/CpuBackend.h").read_text(encoding="utf-8")
     gpu_hdr = (be_dir / "gpu/GpuBackend.h").read_text(encoding="utf-8")
-    assert (
-        "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override {"
-        in cpu_hdr
-    )
+    assert "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override {" in cpu_hdr
     assert "Storage dummy_bop(const Storage& a, const Storage& b," in cpu_hdr
-    assert (
-        "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override {"
-        in gpu_hdr
-    )
+    assert "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override {" in gpu_hdr
     assert "Storage dummy_bop(const Storage& a, const Storage& b," in gpu_hdr
 
 
@@ -98,10 +92,7 @@ def test_new_op_supports_split_backend_headers_and_methods_cpp(
     gpu_unary = (be_dir / "gpu/methods/Unary.cpp").read_text(encoding="utf-8")
     gpu_binary = (be_dir / "gpu/methods/Binary.cpp").read_text(encoding="utf-8")
 
-    assert (
-        "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override;"
-        in cpu_hdr
-    )
+    assert "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override;" in cpu_hdr
     assert (
         "Storage dummy_bop(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) override;"
         in cpu_hdr
@@ -110,15 +101,9 @@ def test_new_op_supports_split_backend_headers_and_methods_cpp(
         "Storage CpuBackend::dummy_uop(const Storage& a, const Shape& shape, Dtype dt) {"
         in cpu_unary
     )
-    assert (
-        "Storage CpuBackend::dummy_bop(const Storage& a, const Storage& b,"
-        in cpu_binary
-    )
+    assert "Storage CpuBackend::dummy_bop(const Storage& a, const Storage& b," in cpu_binary
 
-    assert (
-        "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override;"
-        in gpu_hdr
-    )
+    assert "Storage dummy_uop(const Storage& a, const Shape& shape, Dtype dt) override;" in gpu_hdr
     assert (
         "Storage dummy_bop(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) override;"
         in gpu_hdr
@@ -127,10 +112,7 @@ def test_new_op_supports_split_backend_headers_and_methods_cpp(
         "Storage GpuBackend::dummy_uop(const Storage& a, const Shape& shape, Dtype dt) {"
         in gpu_unary
     )
-    assert (
-        "Storage GpuBackend::dummy_bop(const Storage& a, const Storage& b,"
-        in gpu_binary
-    )
+    assert "Storage GpuBackend::dummy_bop(const Storage& a, const Storage& b," in gpu_binary
 
 
 def test_new_op_raises_when_anchor_is_missing(tmp_path: Path) -> None:

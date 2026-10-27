@@ -54,8 +54,7 @@ def _load_vocab_json(path: str) -> dict[str, int]:
         raw = json.load(f)
     if not isinstance(raw, dict):
         raise TypeError(
-            f"_load_vocab_json: expected a JSON object at {path}, "
-            f"got {type(raw).__name__}"
+            f"_load_vocab_json: expected a JSON object at {path}, " f"got {type(raw).__name__}"
         )
     return {str(k): int(v) for k, v in raw.items()}
 
@@ -83,9 +82,7 @@ def _load_merges_txt(path: str) -> list[tuple[str, str]]:
                 # tokenizers crate.
                 idx = line.rfind(" ")
                 if idx <= 0:
-                    raise ValueError(
-                        f"_load_merges_txt: malformed line {line!r} " f"at {path}"
-                    )
+                    raise ValueError(f"_load_merges_txt: malformed line {line!r} " f"at {path}")
                 parts = [line[:idx], line[idx + 1 :]]
             merges.append((parts[0], parts[1]))
     return merges
@@ -117,8 +114,7 @@ def _load_unified_tokenizer_json(
             idx = entry.rfind(" ")
             if idx <= 0:
                 raise ValueError(
-                    f"_load_unified_tokenizer_json: malformed merge "
-                    f"{entry!r} in {path}"
+                    f"_load_unified_tokenizer_json: malformed merge " f"{entry!r} in {path}"
                 )
             merges.append((entry[:idx], entry[idx + 1 :]))
         else:
@@ -135,9 +131,7 @@ def _save_vocab_json(vocab: dict[str, int], path: str) -> None:
         json.dump(vocab, f, ensure_ascii=False, indent=2)
 
 
-def _save_merges_txt(
-    merges: list[tuple[str, str]], path: str, version: str = "0.2"
-) -> None:
+def _save_merges_txt(merges: list[tuple[str, str]], path: str, version: str = "0.2") -> None:
     """Write a merge list to ``merges.txt`` with the HF header."""
     with open(path, "w", encoding="utf-8") as f:
         f.write(f"#version: {version}\n")
@@ -353,9 +347,7 @@ class BPETokenizer(_BPECommonMixin, Tokenizer):
         self._vocab: dict[str, int] = dict(vocab)
         self._merges: list[tuple[str, str]] = list(merges)
         self._normalizer = normalizer if normalizer is not None else NFC()
-        self._pre_tokenizer = (
-            pre_tokenizer if pre_tokenizer is not None else WhitespaceSplit()
-        )
+        self._pre_tokenizer = pre_tokenizer if pre_tokenizer is not None else WhitespaceSplit()
         # Compiled merge table: ``(left_id, right_id) -> (merged_id, rank)``.
         self._pair_to_merge: dict[tuple[int, int], tuple[int, int]] = {}
         self._rebuild_tables()
@@ -709,9 +701,7 @@ class BPETokenizerFast(_BPECommonMixin, Tokenizer):
         self._vocab: dict[str, int] = dict(vocab)
         self._merges: list[tuple[str, str]] = list(merges)
         self._normalizer = normalizer if normalizer is not None else NFC()
-        self._pre_tokenizer = (
-            pre_tokenizer if pre_tokenizer is not None else WhitespaceSplit()
-        )
+        self._pre_tokenizer = pre_tokenizer if pre_tokenizer is not None else WhitespaceSplit()
         # Construct the C++ tokenizer from the same vocab + merges.
         self._cpp = _C_engine.utils.tokenizer.BPE(self._vocab, self._merges)
         # Reverse lookup table for decode (the C++ side also has one,

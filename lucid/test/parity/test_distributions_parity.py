@@ -41,10 +41,7 @@ class TestNormalParity:
     def test_entropy(self, ref: Any) -> None:
         loc, scale = 0.5, 1.5
         assert (
-            abs(
-                _ent(D.Normal(loc, scale))
-                - ref.distributions.Normal(loc, scale).entropy().item()
-            )
+            abs(_ent(D.Normal(loc, scale)) - ref.distributions.Normal(loc, scale).entropy().item())
             < 1e-5
         )
 
@@ -65,10 +62,7 @@ class TestUniformParity:
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Uniform(0.0, 2.0))
-                - ref.distributions.Uniform(0.0, 2.0).entropy().item()
-            )
+            abs(_ent(D.Uniform(0.0, 2.0)) - ref.distributions.Uniform(0.0, 2.0).entropy().item())
             < 1e-5
         )
 
@@ -78,21 +72,12 @@ class TestExponentialParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.5, 1.0, 2.0], dtype=np.float32)
         l = D.Exponential(2.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Exponential(2.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Exponential(2.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Exponential(2.0))
-                - ref.distributions.Exponential(2.0).entropy().item()
-            )
+            abs(_ent(D.Exponential(2.0)) - ref.distributions.Exponential(2.0).entropy().item())
             < 1e-5
         )
 
@@ -102,22 +87,12 @@ class TestGammaParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.5, 1.0, 2.0, 3.0], dtype=np.float32)
         l = D.Gamma(2.0, 1.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Gamma(2.0, 1.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Gamma(2.0, 1.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Gamma(3.0, 2.0))
-                - ref.distributions.Gamma(3.0, 2.0).entropy().item()
-            )
-            < 1e-4
+            abs(_ent(D.Gamma(3.0, 2.0)) - ref.distributions.Gamma(3.0, 2.0).entropy().item()) < 1e-4
         )
 
 
@@ -126,22 +101,12 @@ class TestBetaParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.1, 0.3, 0.5, 0.8], dtype=np.float32)
         l = D.Beta(2.0, 3.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Beta(2.0, 3.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Beta(2.0, 3.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Beta(2.0, 3.0))
-                - ref.distributions.Beta(2.0, 3.0).entropy().item()
-            )
-            < 1e-4
+            abs(_ent(D.Beta(2.0, 3.0)) - ref.distributions.Beta(2.0, 3.0).entropy().item()) < 1e-4
         )
 
 
@@ -161,10 +126,7 @@ class TestLaplaceParity:
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Laplace(0.0, 2.0))
-                - ref.distributions.Laplace(0.0, 2.0).entropy().item()
-            )
+            abs(_ent(D.Laplace(0.0, 2.0)) - ref.distributions.Laplace(0.0, 2.0).entropy().item())
             < 1e-5
         )
 
@@ -174,21 +136,12 @@ class TestCauchyParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([-2.0, 0.0, 1.0, 3.0], dtype=np.float32)
         l = D.Cauchy(0.0, 1.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Cauchy(0.0, 1.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Cauchy(0.0, 1.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Cauchy(0.0, 1.0))
-                - ref.distributions.Cauchy(0.0, 1.0).entropy().item()
-            )
+            abs(_ent(D.Cauchy(0.0, 1.0)) - ref.distributions.Cauchy(0.0, 1.0).entropy().item())
             < 1e-5
         )
 
@@ -228,13 +181,7 @@ class TestHalfNormalParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.5, 1.0, 2.0], dtype=np.float32)
         l = D.HalfNormal(1.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.HalfNormal(1.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.HalfNormal(1.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
 
@@ -243,13 +190,7 @@ class TestHalfCauchyParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.5, 1.0, 2.0], dtype=np.float32)
         l = D.HalfCauchy(1.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.HalfCauchy(1.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.HalfCauchy(1.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
 
@@ -258,13 +199,7 @@ class TestParetoParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([1.5, 2.0, 3.0], dtype=np.float32)
         l = D.Pareto(1.0, 2.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Pareto(1.0, 2.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Pareto(1.0, 2.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
 
@@ -317,11 +252,7 @@ class TestBernoulliParity:
 
     def test_entropy(self, ref: Any) -> None:
         assert (
-            abs(
-                _ent(D.Bernoulli(0.3))
-                - ref.distributions.Bernoulli(0.3).entropy().item()
-            )
-            < 1e-5
+            abs(_ent(D.Bernoulli(0.3)) - ref.distributions.Bernoulli(0.3).entropy().item()) < 1e-5
         )
 
 
@@ -345,13 +276,7 @@ class TestPoissonParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.0, 1.0, 2.0, 5.0], dtype=np.float32)
         l = D.Poisson(3.0).log_prob(lucid.tensor(x.copy())).numpy()
-        r = (
-            ref.distributions.Poisson(3.0)
-            .log_prob(ref.tensor(x.copy()))
-            .detach()
-            .cpu()
-            .numpy()
-        )
+        r = ref.distributions.Poisson(3.0).log_prob(ref.tensor(x.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(l, r, atol=1e-5)
 
 
@@ -359,11 +284,7 @@ class TestPoissonParity:
 class TestBinomialParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.0, 2.0, 4.0, 5.0], dtype=np.float32)
-        l = (
-            D.Binomial(total_count=5, probs=0.4)
-            .log_prob(lucid.tensor(x.copy()))
-            .numpy()
-        )
+        l = D.Binomial(total_count=5, probs=0.4).log_prob(lucid.tensor(x.copy())).numpy()
         r = (
             ref.distributions.Binomial(5, probs=0.4)
             .log_prob(ref.tensor(x.copy()))
@@ -378,11 +299,7 @@ class TestBinomialParity:
 class TestNegativeBinomialParity:
     def test_log_prob(self, ref: Any) -> None:
         x = np.array([0.0, 1.0, 3.0, 5.0], dtype=np.float32)
-        l = (
-            D.NegativeBinomial(total_count=3, probs=0.5)
-            .log_prob(lucid.tensor(x.copy()))
-            .numpy()
-        )
+        l = D.NegativeBinomial(total_count=3, probs=0.5).log_prob(lucid.tensor(x.copy())).numpy()
         r = (
             ref.distributions.NegativeBinomial(3, probs=0.5)
             .log_prob(ref.tensor(x.copy()))
@@ -400,11 +317,7 @@ class TestCategoricalParity:
         # Scalar index — shape matches the 1-D probs tensor.
         for idx in [0, 1, 2]:
             l = D.Categorical(probs=lucid.tensor(p)).log_prob(lucid.tensor(idx)).item()
-            r = (
-                ref.distributions.Categorical(probs=ref.tensor(p))
-                .log_prob(ref.tensor(idx))
-                .item()
-            )
+            r = ref.distributions.Categorical(probs=ref.tensor(p)).log_prob(ref.tensor(idx)).item()
             assert abs(l - r) < 1e-5, f"idx={idx}"
 
     def test_entropy(self, ref: Any) -> None:
@@ -458,15 +371,9 @@ class TestIndependentParity:
     def test_log_prob_sum(self, ref: Any) -> None:
         loc = np.array([0.0, 1.0, -1.0], dtype=np.float32)
         x = np.array([0.5, 0.5, 0.5], dtype=np.float32)
-        l = (
-            D.Independent(D.Normal(lucid.tensor(loc), 1.0), 1)
-            .log_prob(lucid.tensor(x))
-            .item()
-        )
+        l = D.Independent(D.Normal(lucid.tensor(loc), 1.0), 1).log_prob(lucid.tensor(x)).item()
         r = (
-            ref.distributions.Independent(
-                ref.distributions.Normal(ref.tensor(loc), 1.0), 1
-            )
+            ref.distributions.Independent(ref.distributions.Normal(ref.tensor(loc), 1.0), 1)
             .log_prob(ref.tensor(x))
             .item()
         )

@@ -128,9 +128,7 @@ def test_integer_zero_divisor_raises_on_the_cpu(dtype: lucid.dtype, op: str) -> 
 
 @pytest.mark.parametrize("op", sorted(OPS))
 @pytest.mark.parametrize("dtype", _INT_DTYPES)
-def test_integer_zero_divisor_on_metal_is_defined_and_unsynced(
-    dtype: lucid.dtype, op: str
-) -> None:
+def test_integer_zero_divisor_on_metal_is_defined_and_unsynced(dtype: lucid.dtype, op: str) -> None:
     """Metal reads nothing back.
 
     ``a // 0`` and its truncated form are -1; ``a % 0`` and ``fmod(a, 0)``
@@ -185,12 +183,8 @@ def test_metal_broadcast_and_wide_int64_divmod_are_exact(ref: ModuleType) -> Non
         want = [[_int_oracle(_KIND[op], x, y, 64) for x in nums] for y in dens]
         assert got == want
 
-    fa = lucid.tensor(
-        [[0.0, -0.0, 5.0, -5.0, _INF, -_INF]], dtype=lucid.float32, device="metal"
-    )
-    fb = lucid.tensor(
-        [[1.0], [-1.0], [_INF], [-_INF]], dtype=lucid.float32, device="metal"
-    )
+    fa = lucid.tensor([[0.0, -0.0, 5.0, -5.0, _INF, -_INF]], dtype=lucid.float32, device="metal")
+    fb = lucid.tensor([[1.0], [-1.0], [_INF], [-_INF]], dtype=lucid.float32, device="metal")
     rfa = ref.tensor([[0.0, -0.0, 5.0, -5.0, _INF, -_INF]], dtype=ref.float32)
     rfb = ref.tensor([[1.0], [-1.0], [_INF], [-_INF]], dtype=ref.float32)
     for op in ("floordiv", "mod", "fmod"):
@@ -283,9 +277,7 @@ def test_float_results_match_the_reference(
 
 @pytest.mark.parametrize("divisor", [2.0, -0.3, 1e-3, _INF, -_INF, 0.0])
 @pytest.mark.parametrize("op", ["floordiv", "div_floor", "div_trunc", "mod"])
-@pytest.mark.parametrize(
-    ("device", "dtype"), device_dtype_params([lucid.float16, lucid.bfloat16])
-)
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float16, lucid.bfloat16]))
 def test_half_tensor_over_a_number(
     ref: ModuleType, device: str, dtype: lucid.dtype, op: str, divisor: float
 ) -> None:
@@ -354,9 +346,7 @@ class _FmodPlusOne(nn.Module):
         return lucid.fmod(a, b) + 1
 
 
-@pytest.mark.filterwarnings(
-    "ignore::lucid.compile._core.fallback.CompileFallbackWarning"
-)
+@pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
 @pytest.mark.parametrize("dtype", [lucid.float32, lucid.int64])
 def test_compiled_fmod_matches_eager_bit_for_bit(dtype: lucid.dtype) -> None:
     """Compiled or not, ``fmod`` is the exact one.
@@ -379,8 +369,7 @@ def test_compiled_fmod_matches_eager_bit_for_bit(dtype: lucid.dtype) -> None:
     np.testing.assert_array_equal(compiled.view(np.uint8), eager.view(np.uint8))
     if dtype == lucid.int64:
         want = [
-            _int_oracle("fmod", int(x), int(y), 64) + 1
-            for x, y in zip(nums, dens, strict=True)
+            _int_oracle("fmod", int(x), int(y), 64) + 1 for x, y in zip(nums, dens, strict=True)
         ]
         assert compiled.tolist() == want
     else:

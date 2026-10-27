@@ -99,9 +99,7 @@ _CFG_LSUN = replace(_CFG_HIGH_RES, data_centered=False)
     model_class=RectifiedFlowModel,
     default_config=_CFG_CIFAR,
 )
-def rectified_flow_cifar(
-    pretrained: bool = False, **overrides: object
-) -> RectifiedFlowModel:
+def rectified_flow_cifar(pretrained: bool = False, **overrides: object) -> RectifiedFlowModel:
     r"""Rectified Flow velocity field for the CIFAR-10 setup.
 
     The configuration the paper's headline result was produced with.
@@ -153,9 +151,7 @@ def rectified_flow_cifar(
     model_class=RectifiedFlowModel,
     default_config=_CFG_LSUN,
 )
-def rectified_flow_bedroom(
-    pretrained: bool = False, **overrides: object
-) -> RectifiedFlowModel:
+def rectified_flow_bedroom(pretrained: bool = False, **overrides: object) -> RectifiedFlowModel:
     r"""Rectified Flow velocity field for LSUN Bedroom ``256 x 256``.
 
     Parameters
@@ -196,9 +192,7 @@ def rectified_flow_bedroom(
     model_class=RectifiedFlowModel,
     default_config=_CFG_LSUN,
 )
-def rectified_flow_church(
-    pretrained: bool = False, **overrides: object
-) -> RectifiedFlowModel:
+def rectified_flow_church(pretrained: bool = False, **overrides: object) -> RectifiedFlowModel:
     r"""Rectified Flow velocity field for LSUN Church ``256 x 256``.
 
     Parameters
@@ -237,9 +231,7 @@ def rectified_flow_church(
     model_class=RectifiedFlowModel,
     default_config=_CFG_HIGH_RES,
 )
-def rectified_flow_celeba_hq(
-    pretrained: bool = False, **overrides: object
-) -> RectifiedFlowModel:
+def rectified_flow_celeba_hq(pretrained: bool = False, **overrides: object) -> RectifiedFlowModel:
     r"""Rectified Flow velocity field for CelebA-HQ ``256 x 256``.
 
     Parameters
@@ -281,9 +273,7 @@ def rectified_flow_celeba_hq(
     model_class=RectifiedFlowModel,
     default_config=_CFG_HIGH_RES,
 )
-def rectified_flow_afhq_cat(
-    pretrained: bool = False, **overrides: object
-) -> RectifiedFlowModel:
+def rectified_flow_afhq_cat(pretrained: bool = False, **overrides: object) -> RectifiedFlowModel:
     r"""Rectified Flow velocity field for AFHQ-Cat ``256 x 256``.
 
     Parameters

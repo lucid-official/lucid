@@ -72,9 +72,7 @@ def test_zero_grad_zeroes_the_held_gradient(reset: Reset, device: str) -> None:
 
 
 @pytest.mark.parametrize("reset", _RESETS.values(), ids=_RESETS.keys())
-def test_set_to_none_drops_the_gradient_and_leaves_the_held_one(
-    reset: Reset, device: str
-) -> None:
+def test_set_to_none_drops_the_gradient_and_leaves_the_held_one(reset: Reset, device: str) -> None:
     p = nn.Parameter(lucid.ones(3, device=device))
     (p * 2).sum().backward()
     g = p.grad
@@ -176,7 +174,6 @@ def test_detach_in_place_detaches_every_holder_of_the_same_impl(
     assert y._version == ver_y
     assert y.grad_fn is None and not y.requires_grad and y.is_leaf
     assert holder.grad_fn is None and not holder.requires_grad and holder.is_leaf
-
 
 
 def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
@@ -439,9 +436,7 @@ _HELD_APART_WRITERS: dict[str, Callable[[nn.Parameter], None]] = {
 }
 
 
-@pytest.mark.parametrize(
-    "write", _HELD_APART_WRITERS.values(), ids=_HELD_APART_WRITERS.keys()
-)
+@pytest.mark.parametrize("write", _HELD_APART_WRITERS.values(), ids=_HELD_APART_WRITERS.keys())
 @pytest.mark.parametrize("kind", _HELD_APART.values(), ids=_HELD_APART.keys())
 def test_a_written_held_apart_gradient_stays_the_gradient(
     kind: Callable[[nn.Parameter], None],

@@ -17,12 +17,8 @@ from tools import check_engine_link, fetch_mlx
 _ENGINE = check_engine_link.default_engine()
 
 pytestmark = [
-    pytest.mark.skipif(
-        _ENGINE is None, reason="the engine is not built in this checkout"
-    ),
-    pytest.mark.skipif(
-        shutil.which("otool") is None, reason="needs the Xcode command line tools"
-    ),
+    pytest.mark.skipif(_ENGINE is None, reason="the engine is not built in this checkout"),
+    pytest.mark.skipif(shutil.which("otool") is None, reason="needs the Xcode command line tools"),
 ]
 
 
@@ -49,9 +45,7 @@ def _shipped_mlx(engine: Path) -> Path:
     commands = check_engine_link.load_commands(engine)
     mlx = check_engine_link.resolve_mlx(engine, commands.rpaths)
     if mlx is None:
-        pytest.skip(
-            "the engine's liblucid_mlx is not staged (python3 tools/fetch_mlx.py)"
-        )
+        pytest.skip("the engine's liblucid_mlx is not staged (python3 tools/fetch_mlx.py)")
     return mlx
 
 

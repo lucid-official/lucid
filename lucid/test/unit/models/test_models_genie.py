@@ -192,9 +192,7 @@ class TestPaperConfigurations:
         }
         reported = {"tokenizer": 200_000_000, "dynamics": 10_100_000_000}
         # The fraction of the 4x feed-forward each would have to keep.
-        needed = {
-            k: (reported[k] - attention[k]) / (full[k] - attention[k]) for k in reported
-        }
+        needed = {k: (reported[k] - attention[k]) / (full[k] - attention[k]) for k in reported}
         assert abs(needed["tokenizer"] - needed["dynamics"]) > 0.05
 
     def test_no_weights_were_released(self) -> None:
@@ -266,8 +264,7 @@ class TestCodebookCollapse:
 
         def on_the_data() -> int:
             return sum(
-                max(abs(abs(v) - 5.0) for v in row) < 1e-6
-                for row in codebook.weight.tolist()
+                max(abs(abs(v) - 5.0) for v in row) < 1e-6 for row in codebook.weight.tolist()
             )
 
         assert on_the_data() == 0
@@ -327,10 +324,7 @@ class TestCodebookCollapse:
         for _ in range(50):
             codebook(self._two_clusters())
         codebook.revive()
-        assert (
-            float((cast(lucid.Tensor, codebook.usage) - before).abs().max().item())
-            == 0.0
-        )
+        assert float((cast(lucid.Tensor, codebook.usage) - before).abs().max().item()) == 0.0
 
     def test_the_usage_buffer_is_saved_with_the_model(self) -> None:
         # It carries which codes were alive; a checkpoint that dropped it
@@ -566,9 +560,7 @@ class TestDynamicsModel:
         config = _tiny(mask_ratio_min=0.5, mask_ratio_max=0.5)
         model = GenieModel(config)
         tokens = lucid.randint(0, config.num_codes, (2, 4, 4))
-        loss, logits, mask = model._dynamics_objective(
-            tokens, lucid.randn(2, 3, config.action_dim)
-        )
+        loss, logits, mask = model._dynamics_objective(tokens, lucid.randn(2, 3, config.action_dim))
         flat_logits = logits.reshape(-1, config.num_codes)
         flat_tokens = tokens.reshape(-1)
         per_token = F.cross_entropy(flat_logits, flat_tokens, reduction="none")
@@ -801,9 +793,7 @@ class TestPlaying:
             lucid.tensor([[0], [1]], dtype=lucid.int64),
         ],
     )
-    def test_an_action_the_codebook_cannot_hold_is_refused(
-        self, actions: lucid.Tensor
-    ) -> None:
+    def test_an_action_the_codebook_cannot_hold_is_refused(self, actions: lucid.Tensor) -> None:
         model = GenieForWorldModeling(_tiny()).eval()
         with pytest.raises(ValueError):
             model(lucid.rand(1, 1, 3, 8, 8), actions)

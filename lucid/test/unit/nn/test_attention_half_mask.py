@@ -76,9 +76,7 @@ def _sdpa(
     arrays: list[np.ndarray], mask: np.ndarray, kind: str, dtype: Any, device: str
 ) -> tuple[lucid.Tensor, list[lucid.Tensor]]:
     """Output and (q, k, v[, mask]) gradients for one SDPA call."""
-    ins = [
-        lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays
-    ]
+    ins = [lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays]
     if kind == "bool":
         m = lucid.tensor(mask, device=device)
     else:
@@ -109,8 +107,7 @@ def test_sdpa_matches_float32(device: str, dtype: str, kind: str) -> None:
 
 def test_a_zero_mask_is_no_mask() -> None:
     q, k, v = (
-        lucid.tensor(_values(i, N, H, n, D), dtype=lucid.float16)
-        for i, n in enumerate((L, S, S))
+        lucid.tensor(_values(i, N, H, n, D), dtype=lucid.float16) for i, n in enumerate((L, S, S))
     )
     with_mask = F.scaled_dot_product_attention(
         q, k, v, attn_mask=lucid.zeros(N, H, L, S, dtype=lucid.float16)
@@ -127,9 +124,7 @@ def _mha(
     dtype: Any,
     device: str,
 ) -> tuple[lucid.Tensor, list[lucid.Tensor]]:
-    ins = [
-        lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays
-    ]
+    ins = [lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays]
     if kind == "bool":
         m = lucid.tensor(~mask, device=device)  # MHA's bool mask drops on True
     else:
@@ -144,22 +139,16 @@ def _mha(
 @pytest.mark.parametrize("dtype", list(_HALVES))
 @pytest.mark.parametrize("kind", _KINDS)
 def test_mha_matches_float32(device: str, dtype: str, kind: str) -> None:
-    half = nn.MultiheadAttention(E, H, batch_first=True).to(
-        device, dtype=_HALVES[dtype]
-    )
+    half = nn.MultiheadAttention(E, H, batch_first=True).to(device, dtype=_HALVES[dtype])
     full = copy.deepcopy(half).to(dtype=lucid.float32)
-    arrays = [
-        _rounded(_values(10 + i, N, n, E), dtype) for i, n in enumerate((L, S, S))
-    ]
+    arrays = [_rounded(_values(10 + i, N, n, E), dtype) for i, n in enumerate((L, S, S))]
     mask = _mask_values(kind, (L, S))
     if kind != "bool":
         mask = _rounded(mask, dtype)
     got, got_grads = _mha(half, arrays, mask, kind, _HALVES[dtype], device)
     want, want_grads = _mha(full, arrays, mask, kind, lucid.float32, device)
     _close(got, want.numpy(), dtype, "output")
-    for name, g, w in zip(
-        ("query", "key", "value"), got_grads, want_grads, strict=True
-    ):
+    for name, g, w in zip(("query", "key", "value"), got_grads, want_grads, strict=True):
         assert w is not None
         _close(g, w.cpu().numpy(), dtype, f"{name} gradient")
 
@@ -168,9 +157,7 @@ def test_mha_matches_float32(device: str, dtype: str, kind: str) -> None:
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", list(_HALVES))
 @pytest.mark.parametrize("kind", _KINDS)
-def test_sdpa_matches_the_reference(
-    ref: Any, device: str, dtype: str, kind: str
-) -> None:
+def test_sdpa_matches_the_reference(ref: Any, device: str, dtype: str, kind: str) -> None:
     arrays = [_rounded(_values(i, N, H, n, D), dtype) for i, n in enumerate((L, S, S))]
     mask = _mask_values(kind, (N, H, L, S))
     if kind != "bool":
@@ -212,16 +199,10 @@ def _ref_mha(ref: Any, ours: nn.MultiheadAttention) -> Any:
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", list(_HALVES))
 @pytest.mark.parametrize("kind", _KINDS)
-def test_mha_matches_the_reference(
-    ref: Any, device: str, dtype: str, kind: str
-) -> None:
-    ours = nn.MultiheadAttention(E, H, batch_first=True).to(
-        device, dtype=_HALVES[dtype]
-    )
+def test_mha_matches_the_reference(ref: Any, device: str, dtype: str, kind: str) -> None:
+    ours = nn.MultiheadAttention(E, H, batch_first=True).to(device, dtype=_HALVES[dtype])
     theirs = _ref_mha(ref, ours)
-    arrays = [
-        _rounded(_values(10 + i, N, n, E), dtype) for i, n in enumerate((L, S, S))
-    ]
+    arrays = [_rounded(_values(10 + i, N, n, E), dtype) for i, n in enumerate((L, S, S))]
     mask = _mask_values(kind, (L, S))
     if kind != "bool":
         mask = _rounded(mask, dtype)
@@ -254,9 +235,7 @@ def _mixed_shapes(entry: str) -> tuple[list[tuple[int, ...]], tuple[int, ...]]:
     return [(N, n, E) for n in (L, S, S)], (L, S)
 
 
-def _mixed_inputs(
-    entry: str, dtype: str, mask_dtype: str
-) -> tuple[list[np.ndarray], np.ndarray]:
+def _mixed_inputs(entry: str, dtype: str, mask_dtype: str) -> tuple[list[np.ndarray], np.ndarray]:
     """Query/key/value rounded through ``dtype``; the bias through its own."""
     shapes, mask_shape = _mixed_shapes(entry)
     arrays = [_rounded(_values(20 + i, *sh), dtype) for i, sh in enumerate(shapes)]
@@ -274,9 +253,7 @@ def _mixed_run(
     device: str,
 ) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
     """Output, query gradient and mask gradient."""
-    q, k, v = (
-        lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays
-    )
+    q, k, v = (lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays)
     m = lucid.tensor(bias, dtype=mask_dtype, device=device, requires_grad=True)
     if module is None:
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=m)
@@ -299,13 +276,9 @@ def test_a_float_mask_in_another_dtype_is_cast(
     half = None
     full = None
     if entry == "mha":
-        half = nn.MultiheadAttention(E, H, batch_first=True).to(
-            device, dtype=_HALVES[dtype]
-        )
+        half = nn.MultiheadAttention(E, H, batch_first=True).to(device, dtype=_HALVES[dtype])
         full = copy.deepcopy(half).to(dtype=lucid.float32)
-    got, gq, gm = _mixed_run(
-        half, arrays, bias, _HALVES[dtype], _MASK_DTYPES[mask_dtype], device
-    )
+    got, gq, gm = _mixed_run(half, arrays, bias, _HALVES[dtype], _MASK_DTYPES[mask_dtype], device)
     want, wq, wm = _mixed_run(full, arrays, bias, lucid.float32, lucid.float32, device)
     assert got.dtype == _HALVES[dtype]
     assert gm.dtype == _MASK_DTYPES[mask_dtype], "mask gradient left its dtype"
@@ -325,12 +298,8 @@ def test_a_float_mask_in_another_dtype_matches_the_reference(
     arrays, bias = _mixed_inputs(entry, dtype, mask_dtype)
     ours = None
     if entry == "mha":
-        ours = nn.MultiheadAttention(E, H, batch_first=True).to(
-            device, dtype=_HALVES[dtype]
-        )
-    got, gq, gm = _mixed_run(
-        ours, arrays, bias, _HALVES[dtype], _MASK_DTYPES[mask_dtype], device
-    )
+        ours = nn.MultiheadAttention(E, H, batch_first=True).to(device, dtype=_HALVES[dtype])
+    got, gq, gm = _mixed_run(ours, arrays, bias, _HALVES[dtype], _MASK_DTYPES[mask_dtype], device)
 
     q, k, v = (ref.from_numpy(a).requires_grad_() for a in arrays)
     m = ref.from_numpy(bias).requires_grad_()

@@ -17,9 +17,7 @@ from lucid.test._fixtures.devices import metal_available
 
 _DEVICES = [
     "cpu",
-    pytest.param(
-        "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 _HALF = ["float16", "bfloat16"]
 
@@ -29,9 +27,7 @@ _RANKS = {1: ("BatchNorm1d", (8, 4)), 2: ("BatchNorm2d", (2, 4, 2, 2))}
 
 def _trained(rank: int, dtype: str, device: str, data: lucid.Tensor) -> lucid.nn.Module:
     name, _ = _RANKS[rank]
-    bn = getattr(lucid.nn, name)(4, momentum=1.0).to(
-        device=device, dtype=getattr(lucid, dtype)
-    )
+    bn = getattr(lucid.nn, name)(4, momentum=1.0).to(device=device, dtype=getattr(lucid, dtype))
     bn.train()
     bn(data.to(device=device, dtype=getattr(lucid, dtype)))
     return bn
@@ -65,9 +61,7 @@ def test_eval_after_a_constant_batch_is_finite(dtype: str, device: str) -> None:
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", _HALF)
-def test_a_nan_in_the_batch_still_reaches_the_running_variance(
-    dtype: str, device: str
-) -> None:
+def test_a_nan_in_the_batch_still_reaches_the_running_variance(dtype: str, device: str) -> None:
     # The clamp at 0 must not turn a NaN variance into 0.
     data = lucid.ones(8, 4)
     data[0, 0] = float("nan")

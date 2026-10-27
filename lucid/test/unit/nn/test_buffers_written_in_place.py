@@ -49,9 +49,7 @@ _UPDATERS: dict[str, tuple[Callable[[str], nn.Module], tuple[int, ...]]] = {
         (_C, 3, 4),
     ),
     "instance_norm_3d": (
-        lambda d: nn.InstanceNorm3d(
-            _C, affine=True, track_running_stats=True, device=d
-        ),
+        lambda d: nn.InstanceNorm3d(_C, affine=True, track_running_stats=True, device=d),
         (2, _C, 2, 2, 3),
     ),
     "lazy_instance_norm_2d": (
@@ -89,9 +87,7 @@ def _host(t: lucid.Tensor) -> np.ndarray:
 
 
 @pytest.mark.parametrize("name", list(_UPDATERS))
-def test_a_buffer_a_module_updates_is_the_same_tensor_after(
-    name: str, device: str
-) -> None:
+def test_a_buffer_a_module_updates_is_the_same_tensor_after(name: str, device: str) -> None:
     make, shape = _UPDATERS[name]
     m = make(device)
     m.train()

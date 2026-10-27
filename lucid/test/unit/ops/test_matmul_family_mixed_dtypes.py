@@ -14,9 +14,7 @@ _DEVICES = [
     "cpu",
     pytest.param(
         "metal",
-        marks=pytest.mark.skipif(
-            not lucid.metal.is_available(), reason="no Metal device"
-        ),
+        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
     ),
 ]
 
@@ -66,9 +64,7 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
         "einsum_contract",
         [(2, 3), (3, 2)],
         lambda lib, fn, a, b: (
-            lib.einops.einsum("ij,jk->ik", a, b)
-            if lib is lucid
-            else lib.einsum("ij,jk->ik", a, b)
+            lib.einops.einsum("ij,jk->ik", a, b) if lib is lucid else lib.einsum("ij,jk->ik", a, b)
         ),
         True,
     ),
@@ -76,9 +72,7 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
         "einsum_outer",
         [(2,), (3,)],
         lambda lib, fn, a, b: (
-            lib.einops.einsum("i,j->ij", a, b)
-            if lib is lucid
-            else lib.einsum("i,j->ij", a, b)
+            lib.einops.einsum("i,j->ij", a, b) if lib is lucid else lib.einsum("i,j->ij", a, b)
         ),
         False,
     ),
@@ -228,8 +222,7 @@ def test_mixed_float_dtypes_succeed_under_metal_autocast(
         out = call(lucid, F, *args)
     expected = (
         lucid.float32
-        if name
-        in ("bilinear", "tensordot", "conv_transpose3d", "outer", "einsum_outer")
+        if name in ("bilinear", "tensordot", "conv_transpose3d", "outer", "einsum_outer")
         else lucid.float16
     )
     assert out.dtype == expected

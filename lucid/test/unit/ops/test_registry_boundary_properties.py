@@ -102,13 +102,9 @@ _FLOAT_PROMOTING_OPS: frozenset[str] = frozenset(
     }
 )
 
-_INTEGRAL_DTYPES: frozenset[str] = frozenset(
-    {"bool_", "int8", "int16", "int32", "int64"}
-)
+_INTEGRAL_DTYPES: frozenset[str] = frozenset({"bool_", "int8", "int16", "int32", "int64"})
 
-_DIVMOD_OPS: frozenset[str] = frozenset(
-    {"div", "div_", "floor_divide", "fmod", "remainder"}
-)
+_DIVMOD_OPS: frozenset[str] = frozenset({"div", "div_", "floor_divide", "fmod", "remainder"})
 
 _SHIFT_OPS: frozenset[str] = frozenset({"bitwise_left_shift", "bitwise_right_shift"})
 
@@ -189,9 +185,7 @@ def _make_tensor_pair(
 ) -> tuple[lucid.Tensor, object]:
     dt = getattr(lucid, dtype_name)
     ref_dt = (
-        getattr(ref, "bool" if dtype_name == "bool_" else dtype_name)
-        if ref is not None
-        else None
+        getattr(ref, "bool" if dtype_name == "bool_" else dtype_name) if ref is not None else None
     )
     numel = math.prod(shape)
     if numel == 0:
@@ -271,9 +265,7 @@ def _assert_single_tensor_matches(
         ), f"{op_name}: {got_cpu.reshape(-1).tolist()} != {ref_cpu.reshape(-1).tolist()}"
 
 
-def _assert_matches_ref(
-    op_name: str, got_obj: object, ref_obj: object, device: str
-) -> None:
+def _assert_matches_ref(op_name: str, got_obj: object, ref_obj: object, device: str) -> None:
     got_tensors = _extract_tensors(got_obj)
     if not got_tensors:
         return
@@ -282,8 +274,7 @@ def _assert_matches_ref(
         for idx, (g, r) in enumerate(zip(got_tensors, ref_obj, strict=True)):
             sub_name = (
                 "argsort"
-                if idx == 1
-                and op_name in ("sort", "topk", "kthvalue", "cummax", "cummin")
+                if idx == 1 and op_name in ("sort", "topk", "kthvalue", "cummax", "cummin")
                 else op_name
             )
             _assert_single_tensor_matches(sub_name, g, r, device)
@@ -316,9 +307,7 @@ _REF_NN_F_MAP: dict[str, str] = {
 }
 
 
-def _call_ref_entry(
-    ref: ModuleType, entry: OpEntry, *args: object, **kwargs: object
-) -> object:
+def _call_ref_entry(ref: ModuleType, entry: OpEntry, *args: object, **kwargs: object) -> object:
     name = entry.name
     if entry.inplace:
         target = getattr(args[0], "clone")()
@@ -356,9 +345,7 @@ def _call_ref_entry(
 
 def _assert_valid_refusal(op_name: str, exc: Exception) -> None:
     msg = str(exc)
-    assert (
-        "bad_variant_access" not in msg
-    ), f"{op_name} leaked bad_variant_access: {exc}"
+    assert "bad_variant_access" not in msg, f"{op_name} leaked bad_variant_access: {exc}"
     if isinstance(exc, (_TYPED_REFUSALS, RuntimeError)) and msg:
         return
     pytest.fail(f"{op_name} raised untyped {type(exc).__name__}: {exc}")
@@ -385,14 +372,9 @@ def _is_permitted_lucid_refusal_when_ref_succeeds(
         return True
     if entry.name == "tensordot" and isinstance(exc, _C_engine.ShapeMismatch):
         return True
-    if entry.name in ("nextafter", "nextafter_") and "dtype must be F32 or F64" in str(
-        exc
-    ):
+    if entry.name in ("nextafter", "nextafter_") and "dtype must be F32 or F64" in str(exc):
         return True
-    if (
-        entry.name in ("repeat_interleave", "repeat", "tile", "repeat_method")
-        and device == "metal"
-    ):
+    if entry.name in ("repeat_interleave", "repeat", "tile", "repeat_method") and device == "metal":
         return isinstance(exc, _TYPED_REFUSALS)
     return False
 
@@ -444,9 +426,7 @@ def _is_permitted_lucid_success_when_ref_raises(
         return True
 
     if entry.name == "isclose" and len(r_args) == 2:
-        common = ref.promote_types(
-            getattr(r_args[0], "dtype"), getattr(r_args[1], "dtype")
-        )
+        common = ref.promote_types(getattr(r_args[0], "dtype"), getattr(r_args[1], "dtype"))
         try:
             want = ref.isclose(
                 getattr(r_args[0], "to")(common),
@@ -521,9 +501,7 @@ def _verify_against_ref(
     if ref_ok:
         if not lucid_ok:
             assert lucid_exc is not None
-            if _is_permitted_lucid_refusal_when_ref_succeeds(
-                entry, lucid_exc, dtypes, device
-            ):
+            if _is_permitted_lucid_refusal_when_ref_succeeds(entry, lucid_exc, dtypes, device):
                 return
             pytest.fail(
                 f"{entry.name} raised {type(lucid_exc).__name__} ({lucid_exc}) "
@@ -531,10 +509,7 @@ def _verify_against_ref(
             )
         if (
             entry.name in _SHIFT_OPS
-            or (
-                (entry.name in _DIVMOD_OPS or entry.name in ("pow", "pow_"))
-                and device == "metal"
-            )
+            or ((entry.name in _DIVMOD_OPS or entry.name in ("pow", "pow_")) and device == "metal")
         ) and any(d in _INTEGRAL_DTYPES for d in dtypes):
             for t in _extract_tensors(got):
                 assert t.device.type == device
@@ -663,20 +638,14 @@ _INDEXED_NAMES: frozenset[str] = frozenset(
     }
 )
 
-_VARIADIC_ZERO_NAMES: frozenset[str] = frozenset(
-    {"where", "meshgrid", "cartesian_prod"}
-)
+_VARIADIC_ZERO_NAMES: frozenset[str] = frozenset({"where", "meshgrid", "cartesian_prod"})
 
-_JOIN_ENTRIES: tuple[OpEntry, ...] = tuple(
-    e for e in _REGISTRY if e.n_tensor_args == -1
-)
+_JOIN_ENTRIES: tuple[OpEntry, ...] = tuple(e for e in _REGISTRY if e.n_tensor_args == -1)
 
 _UNARY_PLAIN_ENTRIES: tuple[OpEntry, ...] = tuple(
     e
     for e in _REGISTRY
-    if e.n_tensor_args == 1
-    and e.name not in _SPECIAL_UNARY_KWARGS
-    and e.name not in _INDEXED_NAMES
+    if e.n_tensor_args == 1 and e.name not in _SPECIAL_UNARY_KWARGS and e.name not in _INDEXED_NAMES
 )
 
 _UNARY_SPECIAL_ENTRIES: tuple[OpEntry, ...] = tuple(
@@ -687,9 +656,7 @@ _BINARY_ENTRIES: tuple[OpEntry, ...] = tuple(
     e for e in _REGISTRY if e.n_tensor_args == 2 and e.name not in _INDEXED_NAMES
 )
 
-_INDEXED_ENTRIES: tuple[OpEntry, ...] = tuple(
-    e for e in _REGISTRY if e.name in _INDEXED_NAMES
-)
+_INDEXED_ENTRIES: tuple[OpEntry, ...] = tuple(e for e in _REGISTRY if e.name in _INDEXED_NAMES)
 
 _VARIADIC_ZERO_ENTRIES: tuple[OpEntry, ...] = tuple(
     e for e in _REGISTRY if e.name in _VARIADIC_ZERO_NAMES
@@ -842,9 +809,7 @@ def test_join_and_variadic_registry_ops_at_boundary_inputs(
     ref_tensors = [p[1] for p in pairs]
 
     for entry in _JOIN_ENTRIES:
-        _verify_against_ref(
-            ref, entry, (tensors,), (ref_tensors,), {}, {}, (dtype_name,), device
-        )
+        _verify_against_ref(ref, entry, (tensors,), (ref_tensors,), {}, {}, (dtype_name,), device)
 
     if tensors:
         x, rx = tensors[0], ref_tensors[0]
@@ -872,9 +837,7 @@ def test_join_and_variadic_registry_ops_at_boundary_inputs(
             (dtype_name,),
             device,
         )
-        prod_entry = next(
-            e for e in _VARIADIC_ZERO_ENTRIES if e.name == "cartesian_prod"
-        )
+        prod_entry = next(e for e in _VARIADIC_ZERO_ENTRIES if e.name == "cartesian_prod")
         _verify_against_ref(
             ref,
             prod_entry,
@@ -898,18 +861,12 @@ def test_indexed_registry_ops_refuse_out_of_range_indices_without_crash(
     n_rows: int, idx_val: int, device: str
 ) -> None:
     ref = ref_module()
-    base = lucid.arange(n_rows * 2, dtype=lucid.float32, device=device).reshape(
-        (n_rows, 2)
-    )
+    base = lucid.arange(n_rows * 2, dtype=lucid.float32, device=device).reshape((n_rows, 2))
     rbase = (
-        ref.arange(n_rows * 2, dtype=ref.float32).reshape((n_rows, 2))
-        if ref is not None
-        else None
+        ref.arange(n_rows * 2, dtype=ref.float32).reshape((n_rows, 2)) if ref is not None else None
     )
     idx_2d = lucid.tensor([[idx_val, idx_val]], dtype=lucid.int64, device=device)
-    ridx_2d = (
-        ref.tensor([[idx_val, idx_val]], dtype=ref.int64) if ref is not None else None
-    )
+    ridx_2d = ref.tensor([[idx_val, idx_val]], dtype=ref.int64) if ref is not None else None
     idx_1d = lucid.tensor([idx_val], dtype=lucid.int64, device=device)
     ridx_1d = ref.tensor([idx_val], dtype=ref.int64) if ref is not None else None
     src = lucid.ones((1, 2), dtype=lucid.float32, device=device)
@@ -917,9 +874,7 @@ def test_indexed_registry_ops_refuse_out_of_range_indices_without_crash(
     seq = lucid.arange(n_rows, dtype=lucid.float32, device=device)
     rseq = ref.arange(n_rows, dtype=ref.float32) if ref is not None else None
     queries = lucid.tensor([float(idx_val)], dtype=lucid.float32, device=device)
-    rqueries = (
-        ref.tensor([float(idx_val)], dtype=ref.float32) if ref is not None else None
-    )
+    rqueries = ref.tensor([float(idx_val)], dtype=ref.float32) if ref is not None else None
 
     spec_map: dict[str, tuple[tuple[object, ...], tuple[object, ...], int]] = {
         "gather": ((base, 0, idx_2d), (rbase, 0, ridx_2d), n_rows),
@@ -938,9 +893,7 @@ def test_indexed_registry_ops_refuse_out_of_range_indices_without_crash(
             # Reference gather/scatter/index_select accept only non-negative
             # indices [0, limit), whereas take accepts [-limit, limit).
             in_bounds = (
-                (-limit <= idx_val < limit)
-                if entry.name == "take"
-                else (0 <= idx_val < limit)
+                (-limit <= idx_val < limit) if entry.name == "take" else (0 <= idx_val < limit)
             )
             lucid_in_bounds = -limit <= idx_val < limit
             if not lucid_in_bounds and (device == "cpu" or limit == 0):

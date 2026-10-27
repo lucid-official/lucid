@@ -135,9 +135,7 @@ def spectral_norm(
         cls_name: str = type(module).__name__
         dim = 1 if cls_name.startswith("ConvTranspose") else 0
     if dim < 0 or dim >= len(weight.shape):
-        raise ValueError(
-            f"dim {dim} out of range for weight of shape {tuple(weight.shape)}"
-        )
+        raise ValueError(f"dim {dim} out of range for weight of shape {tuple(weight.shape)}")
 
     # Move the original weight to ``{name}_orig`` and seed the iteration
     # vectors.  ``u`` is the row-side iterate (size = rows of the flattened

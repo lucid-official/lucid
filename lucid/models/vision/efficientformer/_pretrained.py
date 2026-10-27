@@ -66,9 +66,7 @@ _CFG_L7 = EfficientFormerConfig(
     params=12300000,
     summary="auto",
 )
-def efficientformer_l1(
-    pretrained: bool = False, **overrides: object
-) -> EfficientFormer:
+def efficientformer_l1(pretrained: bool = False, **overrides: object) -> EfficientFormer:
     r"""EfficientFormer-L1 backbone (Li et al., 2022).
 
     Builds the canonical *EfficientFormer-L1* configuration:
@@ -111,9 +109,7 @@ def efficientformer_l1(
     (1, 448)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientformer_l1", alternative="efficientformer_l1_cls"
-        )
+        reject_unavailable_pretrained("efficientformer_l1", alternative="efficientformer_l1_cls")
     return EfficientFormer(apply_overrides(_CFG_L1, overrides))
 
 
@@ -126,9 +122,7 @@ def efficientformer_l1(
     params=31300000,
     summary="auto",
 )
-def efficientformer_l3(
-    pretrained: bool = False, **overrides: object
-) -> EfficientFormer:
+def efficientformer_l3(pretrained: bool = False, **overrides: object) -> EfficientFormer:
     r"""EfficientFormer-L3 backbone (Li et al., 2022).
 
     Builds the canonical *EfficientFormer-L3* configuration:
@@ -166,9 +160,7 @@ def efficientformer_l3(
     (1, 512)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientformer_l3", alternative="efficientformer_l3_cls"
-        )
+        reject_unavailable_pretrained("efficientformer_l3", alternative="efficientformer_l3_cls")
     return EfficientFormer(apply_overrides(_CFG_L3, overrides))
 
 
@@ -181,9 +173,7 @@ def efficientformer_l3(
     params=82100000,
     summary="auto",
 )
-def efficientformer_l7(
-    pretrained: bool = False, **overrides: object
-) -> EfficientFormer:
+def efficientformer_l7(pretrained: bool = False, **overrides: object) -> EfficientFormer:
     r"""EfficientFormer-L7 backbone (Li et al., 2022).
 
     Builds the canonical *EfficientFormer-L7* configuration:
@@ -222,9 +212,7 @@ def efficientformer_l7(
     (1, 768)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "efficientformer_l7", alternative="efficientformer_l7_cls"
-        )
+        reject_unavailable_pretrained("efficientformer_l7", alternative="efficientformer_l7_cls")
     return EfficientFormer(apply_overrides(_CFG_L7, overrides))
 
 

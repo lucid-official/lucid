@@ -16,10 +16,7 @@ def test_installed_methods_include_the_tensor_dunders_and_to() -> None:
     found = dict(_doctests._installed_methods([tensor_mod]))
     for name in ("__getitem__", "__setitem__", "__add__", "to", "cpu"):
         assert f"lucid._tensor.tensor.Tensor.{name}" in found, name
-    assert (
-        found["lucid._tensor.tensor.Tensor.__getitem__"]
-        is vars(lucid.Tensor)["__getitem__"]
-    )
+    assert found["lucid._tensor.tensor.Tensor.__getitem__"] is vars(lucid.Tensor)["__getitem__"]
 
 
 def test_installed_examples_count_under_their_defining_module() -> None:

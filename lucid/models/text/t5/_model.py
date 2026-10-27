@@ -244,13 +244,9 @@ class _T5Stack(nn.Module):
         self.max_distance = config.relative_attention_max_distance
         # One table per stack, read by every block: the released models keep
         # it in block 0 and hand its output down, which is the same thing.
-        self.relative_attention_bias = nn.Embedding(
-            self.num_buckets, config.num_attention_heads
-        )
+        self.relative_attention_bias = nn.Embedding(self.num_buckets, config.num_attention_heads)
         depth = config.num_decoder_layers if is_decoder else config.num_hidden_layers
-        self.blocks = nn.ModuleList(
-            [_T5Block(config, is_decoder=is_decoder) for _ in range(depth)]
-        )
+        self.blocks = nn.ModuleList([_T5Block(config, is_decoder=is_decoder) for _ in range(depth)])
         self.final_layer_norm = nn.RMSNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
 
@@ -707,8 +703,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         if decoder_input_ids is None:
             if labels is None:
                 raise ValueError(
-                    "T5ForSeq2SeqLM needs decoder_input_ids, or labels to shift "
-                    "right into them"
+                    "T5ForSeq2SeqLM needs decoder_input_ids, or labels to shift " "right into them"
                 )
             decoder_input_ids = self._shift_right(labels)
         out = self.t5(

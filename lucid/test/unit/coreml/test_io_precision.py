@@ -60,9 +60,7 @@ class TestAFloat16Interface:
             assert from_single.dtype == lucid.float16
             assert bool((from_single == from_half).all().item())
 
-    def test_verify_compares_at_the_eager_models_precision(
-        self, tmp_path: object
-    ) -> None:
+    def test_verify_compares_at_the_eager_models_precision(self, tmp_path: object) -> None:
         x = lucid.randn(2, 8)
         with _half_package(tmp_path) as package:
             assert package.verify(_small(), x, relative=True) < 1e-2
@@ -107,12 +105,8 @@ class TestAFloat16Interface:
 
 
 class TestTheRecordedPrecision:
-    @pytest.mark.parametrize(
-        "precision", [cml.Precision.FLOAT32, cml.Precision.FLOAT16]
-    )
-    def test_load_reads_it_back(
-        self, tmp_path: object, precision: cml.Precision
-    ) -> None:
+    @pytest.mark.parametrize("precision", [cml.Precision.FLOAT32, cml.Precision.FLOAT16])
+    def test_load_reads_it_back(self, tmp_path: object, precision: cml.Precision) -> None:
         cml.export(
             _small(), lucid.randn(2, 8), f"{tmp_path}/m.mlpackage", precision=precision
         ).close()
@@ -163,9 +157,7 @@ class TestWhatThePlanSays:
         assert "Precision.FLOAT16" not in note
         assert "does not record its precision" in note
 
-    def test_a_reopened_float16_package_gets_the_neutral_note(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_reopened_float16_package_gets_the_neutral_note(self, tmp_path: object) -> None:
         """The reported case: a float16 package opened by ``load``."""
         _half_package(tmp_path).close()
         with cml.load(

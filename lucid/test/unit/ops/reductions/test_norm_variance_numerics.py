@@ -91,9 +91,7 @@ def _assert_matches(
     assert np.isfinite(
         ours[finite]
     ).all(), f"{what}: nan/inf where the reference is finite\n{ours}\nvs\n{theirs}"
-    np.testing.assert_allclose(
-        ours[finite], theirs[finite], rtol=rtol, atol=rtol, err_msg=what
-    )
+    np.testing.assert_allclose(ours[finite], theirs[finite], rtol=rtol, atol=rtol, err_msg=what)
     if exact_nonfinite:
         np.testing.assert_array_equal(ours[~finite], theirs[~finite], err_msg=what)
 
@@ -119,9 +117,7 @@ def _compare(
     sum(o.sum() for o in ours).backward()
     sum(t.sum() for t in theirs).backward()
     assert x.grad is not None
-    _assert_matches(
-        _lucid_np(x.grad), _ref_np(rx.grad), f"{what} grad", exact_nonfinite=False
-    )
+    _assert_matches(_lucid_np(x.grad), _ref_np(rx.grad), f"{what} grad", exact_nonfinite=False)
 
 
 # ── Norms: zero-safe gradient ────────────────────────────────────────────────
@@ -218,15 +214,11 @@ def test_an_empty_reduction_is_nan(
 def test_a_single_element_has_no_sample_variance(device: str) -> None:
     v, m = lucid.var_mean(lucid.tensor([5.0], device=device))
     assert math.isnan(v.item()) and m.item() == 5.0
-    assert math.isinf(
-        lucid.var(lucid.tensor([1.0, 2.0, 3.0], device=device), correction=3).item()
-    )
+    assert math.isinf(lucid.var(lucid.tensor([1.0, 2.0, 3.0], device=device), correction=3).item())
 
 
 @pytest.mark.parametrize("fn", ["var_mean", "std_mean"])
-def test_the_pair_honours_correction_and_keepdim_over_every_axis(
-    device: str, fn: str
-) -> None:
+def test_the_pair_honours_correction_and_keepdim_over_every_axis(device: str, fn: str) -> None:
     # ``dim=None`` used to drop both and answer the default.
     x = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
     spread, mean = getattr(lucid, fn)(x, None, 0, True)
@@ -283,9 +275,7 @@ _B = [[0.0, 1.0], [5.0, 5.5]]
 
 @pytest.mark.parity
 @pytest.mark.parametrize("p", [2.0, 1.0, 3.0, 1.5, 0.5, math.inf], ids=str)
-def test_cdist_at_coincident_points_matches(
-    ref: ModuleType, device: str, p: float
-) -> None:
+def test_cdist_at_coincident_points_matches(ref: ModuleType, device: str, p: float) -> None:
     y, ry = lucid.tensor(_B, device=device), ref.tensor(_B)
     _compare(
         ref,
@@ -404,9 +394,7 @@ def _callers(fn: str, x: lucid.Tensor) -> list[Callable[..., object]]:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "args, kwargs", _SPELLINGS, ids=[f"{a}-{k}" for a, k in _SPELLINGS]
-)
+@pytest.mark.parametrize("args, kwargs", _SPELLINGS, ids=[f"{a}-{k}" for a, k in _SPELLINGS])
 @pytest.mark.parametrize("fn", _VARIANCE_FNS)
 def test_every_spelling_matches_the_reference(
     ref: ModuleType,
@@ -437,9 +425,7 @@ def _dof(caught: warnings.WarningMessage) -> bool:
 
 
 @pytest.mark.parametrize("fn", ["var_mean", "std_mean"])
-def test_the_pairs_keep_their_released_positional_correction(
-    device: str, fn: str
-) -> None:
+def test_the_pairs_keep_their_released_positional_correction(device: str, fn: str) -> None:
     # ``var_mean(x, dim, correction, keepdim)`` is how the pair was spelled
     # before the shared reading; an int in that place stays a correction.
     x = lucid.tensor(_X, device=device)
@@ -530,7 +516,8 @@ def test_half_std_rounds_once_after_sqrt_and_compiled_matches_eager(
         np.testing.assert_array_equal(_lucid_np(o), _ref_np(t), err_msg=f"{fn} {dtype_name}")
     if device == "metal" and fn in ("var", "std"):
         c_fn = lucid.compile.compile(
-            lambda t_in: getattr(lucid, fn)(t_in, dim=-1, correction=correction) + (t_in[:, :1].squeeze(-1) * 0)
+            lambda t_in: getattr(lucid, fn)(t_in, dim=-1, correction=correction)
+            + (t_in[:, :1].squeeze(-1) * 0)
         )
         c_out = c_fn(x)
         assert c_out.dtype == dt

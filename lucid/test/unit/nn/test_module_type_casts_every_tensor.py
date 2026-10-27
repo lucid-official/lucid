@@ -16,9 +16,7 @@ from lucid.test._fixtures.devices import devices_supporting
 
 
 def _dtypes(module):
-    return {
-        name: str(t.dtype).split(".")[-1] for name, t in module.state_dict().items()
-    }
+    return {name: str(t.dtype).split(".")[-1] for name, t in module.state_dict().items()}
 
 
 def _model(lib):
@@ -53,9 +51,7 @@ def test_every_tensor_is_cast_and_parameters_are_kept(device, target):
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "target", [t for _, t, _ in _TARGETS], ids=[c for c, _, _ in _TARGETS]
-)
+@pytest.mark.parametrize("target", [t for _, t, _ in _TARGETS], ids=[c for c, _, _ in _TARGETS])
 def test_the_dtypes_match_the_reference(ref, target):
     ours, theirs = _model(lucid), _model(ref)
     ours.type(target(lucid))

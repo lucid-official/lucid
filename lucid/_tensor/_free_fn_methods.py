@@ -115,8 +115,7 @@ def _as_method(name: str, fn: Callable[..., object]) -> Callable[..., object]:
     method.__name__ = name
     method.__qualname__ = f"Tensor.{name}"
     method.__doc__ = (
-        f"Method form of :func:`lucid.{name}`: ``x.{name}(...)`` is "
-        f"``lucid.{name}(x, ...)``."
+        f"Method form of :func:`lucid.{name}`: ``x.{name}(...)`` is " f"``lucid.{name}(x, ...)``."
     )
     return method
 

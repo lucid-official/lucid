@@ -15,9 +15,7 @@ def test_complex_contraction_is_real_and_uses_both_lanes() -> None:
     result = _probe.contract(lucid.tensor(values), weights)
     imaginary_weights = _probe.rng(_probe.SEED_A + 1).standard_normal(2)
     assert not result.is_complex()
-    assert float(result) == pytest.approx(
-        values.real @ weights + values.imag @ imaginary_weights
-    )
+    assert float(result) == pytest.approx(values.real @ weights + values.imag @ imaginary_weights)
 
 
 @pytest.mark.parametrize("corrupt", [False, True])
@@ -43,9 +41,7 @@ def test_creategraph_observes_imaginary_gradient_errors(
         monkeypatch.setattr(lucid.autograd, "grad", bad_grad)
     axis = CreateGraphAxis()
     monkeypatch.setattr(axis, "_working_call", lambda *args: (call, "moderate", None))
-    finding = axis.run(
-        _surface.Symbol("lucid.identity", "lucid", "op", identity), Context()
-    )
+    finding = axis.run(_surface.Symbol("lucid.identity", "lucid", "op", identity), Context())
     assert finding.status == (Status.FAIL if corrupt else Status.PASS), finding.detail
     for observed in seen:
         np.testing.assert_array_equal(observed, original.numpy())

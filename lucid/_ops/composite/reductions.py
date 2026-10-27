@@ -299,8 +299,7 @@ def _median_along(
     n = x.shape[d]
     if n == 0:
         raise IndexError(
-            f"{op}: the reduced dim {dim} has length 0 — there is no "
-            "median of nothing"
+            f"{op}: the reduced dim {dim} has length 0 — there is no " "median of nothing"
         )
     # The engine's sort puts NaN after every number, ``+inf`` included,
     # and keeps tied entries in their input order.
@@ -491,9 +490,7 @@ def amax(
     lucid.max : returns ``(values, indices)`` for a single axis.
     """
     return _wrap(
-        _C_engine.max(
-            input._impl, _reduction_axes(input._impl, dim, "amax"), bool(keepdim)
-        )
+        _C_engine.max(input._impl, _reduction_axes(input._impl, dim, "amax"), bool(keepdim))
     )
 
 
@@ -530,9 +527,7 @@ def amin(
     lucid.min : returns ``(values, indices)`` for a single axis.
     """
     return _wrap(
-        _C_engine.min(
-            input._impl, _reduction_axes(input._impl, dim, "amin"), bool(keepdim)
-        )
+        _C_engine.min(input._impl, _reduction_axes(input._impl, dim, "amin"), bool(keepdim))
     )
 
 
@@ -567,12 +562,8 @@ def aminmax(
     (-1.0, 4.0)
     """
     dim_num = _promotion.as_number(dim)
-    if dim_num is not None and (
-        isinstance(dim_num, bool) or not isinstance(dim_num, int)
-    ):
-        raise TypeError(
-            f"aminmax(): argument 'dim' must be int, not {type(dim).__name__}"
-        )
+    if dim_num is not None and (isinstance(dim_num, bool) or not isinstance(dim_num, int)):
+        raise TypeError(f"aminmax(): argument 'dim' must be int, not {type(dim).__name__}")
     if dim_num is None:
         lo = lucid.min(input)
         hi = lucid.max(input)
@@ -613,23 +604,17 @@ def logcumsumexp(input: Tensor, dim: int) -> Tensor:
     tensor([0., 0.6931])
     """
     if not lucid.is_floating_point(input):
-        raise _C_engine.NotImplementedError(
-            f"logcumsumexp is not implemented for {input.dtype}"
-        )
+        raise _C_engine.NotImplementedError(f"logcumsumexp is not implemented for {input.dtype}")
     d = _wrap_dim(dim, input.ndim, "logcumsumexp")
     if input.ndim == 0 or input.shape[d] <= 1:
         return input.clone()
     n = int(input.shape[d])
-    work_dt = (
-        lucid.float32 if input.dtype in (lucid.float16, lucid.bfloat16) else input.dtype
-    )
+    work_dt = lucid.float32 if input.dtype in (lucid.float16, lucid.bfloat16) else input.dtype
     acc = input.to(work_dt) if work_dt != input.dtype else input
     step = 1
     while step < n:
         head = acc.narrow(d, 0, step)
-        pair = _logaddexp_pair(
-            acc.narrow(d, 0, n - step), acc.narrow(d, step, n - step)
-        )
+        pair = _logaddexp_pair(acc.narrow(d, 0, n - step), acc.narrow(d, step, n - step))
         acc = lucid.cat([head, pair], dim=d)
         step <<= 1
     return acc.to(input.dtype) if work_dt != input.dtype else acc
@@ -681,13 +666,9 @@ def renorm(input: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
     return out.to(input.dtype) if is_half else out
 
 
-def _align_trapezoid_x(
-    name: str, yw: Tensor, x: Tensor, d: int
-) -> tuple[Tensor, Tensor]:
+def _align_trapezoid_x(name: str, yw: Tensor, x: Tensor, d: int) -> tuple[Tensor, Tensor]:
     if x.dtype == lucid.bool:
-        raise RuntimeError(
-            f"{name}: received a bool input for `x`, but bool is not supported"
-        )
+        raise RuntimeError(f"{name}: received a bool input for `x`, but bool is not supported")
     target_dt = lucid.result_type(yw, x)
     yw = yw.to(target_dt) if yw.dtype != target_dt else yw
     xw = x.to(target_dt) if x.dtype != target_dt else x
@@ -707,9 +688,7 @@ def _trapezoid_operands(
     dim: int,
 ) -> tuple[Tensor, Tensor | None, int]:
     if y.dtype == lucid.bool:
-        raise RuntimeError(
-            f"{name}: received a bool input for `y`, but bool is not supported"
-        )
+        raise RuntimeError(f"{name}: received a bool input for `y`, but bool is not supported")
     if x is not None and dx is not None:
         raise TypeError(
             f"{name}() received an invalid combination of arguments - "
@@ -825,8 +804,7 @@ def _validate_diff_extra(input: Tensor, d: int, extra: Tensor | None) -> None:
         extra.shape[i] != input.shape[i] for i in range(input.ndim) if i != d
     ):
         raise _C_engine.InvalidArgument(
-            "diff expects prepend and append to match input shape "
-            "on all dimensions except dim"
+            "diff expects prepend and append to match input shape " "on all dimensions except dim"
         )
 
 
@@ -840,9 +818,7 @@ def _diff(
     """Compute the ``n``-th discrete difference along ``dim``."""
     d = _wrap_dim(dim, input.ndim, "diff")
     if input.ndim == 0:
-        raise _C_engine.InvalidArgument(
-            "diff expects input to be at least one-dimensional"
-        )
+        raise _C_engine.InvalidArgument("diff expects input to be at least one-dimensional")
     if n < 0:
         raise _C_engine.InvalidArgument(f"order must be non-negative but got {n}")
     _validate_diff_extra(input, d, prepend)

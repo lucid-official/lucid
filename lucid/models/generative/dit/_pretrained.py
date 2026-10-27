@@ -68,9 +68,7 @@ _CFG_XLARGE_4 = DiTConfig(patch_size=4, hidden_size=1152, depth=28, num_heads=16
 _CFG_XLARGE_8 = DiTConfig(patch_size=8, hidden_size=1152, depth=28, num_heads=16)
 
 
-def _latent_for(
-    entry: WeightsEnum | None, overrides: dict[str, object]
-) -> dict[str, object]:
+def _latent_for(entry: WeightsEnum | None, overrides: dict[str, object]) -> dict[str, object]:
     """Add the checkpoint's latent size to ``overrides`` when one applies.
 
     The two released checkpoints are the same architecture over
@@ -628,9 +626,7 @@ def dit_xlarge_8(pretrained: bool = False, **overrides: object) -> DiTModel:
     default_config=_CFG_SMALL_2,
     summary="auto",
 )
-def dit_small_2_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_small_2_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_small_2` posed as a diffusion sampler.
 
     Parameters
@@ -668,9 +664,7 @@ def dit_small_2_gen(
     default_config=_CFG_SMALL_4,
     summary="auto",
 )
-def dit_small_4_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_small_4_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_small_4` posed as a diffusion sampler.
 
     Parameters
@@ -708,9 +702,7 @@ def dit_small_4_gen(
     default_config=_CFG_SMALL_8,
     summary="auto",
 )
-def dit_small_8_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_small_8_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_small_8` posed as a diffusion sampler.
 
     Parameters
@@ -748,9 +740,7 @@ def dit_small_8_gen(
     default_config=_CFG_BASE_2,
     summary="auto",
 )
-def dit_base_2_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_base_2_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_base_2` posed as a diffusion sampler.
 
     Parameters
@@ -788,9 +778,7 @@ def dit_base_2_gen(
     default_config=_CFG_BASE_4,
     summary="auto",
 )
-def dit_base_4_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_base_4_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_base_4` posed as a diffusion sampler.
 
     Parameters
@@ -828,9 +816,7 @@ def dit_base_4_gen(
     default_config=_CFG_BASE_8,
     summary="auto",
 )
-def dit_base_8_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_base_8_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_base_8` posed as a diffusion sampler.
 
     Parameters
@@ -868,9 +854,7 @@ def dit_base_8_gen(
     default_config=_CFG_LARGE_2,
     summary="auto",
 )
-def dit_large_2_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_large_2_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_large_2` posed as a diffusion sampler.
 
     Parameters
@@ -908,9 +892,7 @@ def dit_large_2_gen(
     default_config=_CFG_LARGE_4,
     summary="auto",
 )
-def dit_large_4_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_large_4_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_large_4` posed as a diffusion sampler.
 
     Parameters
@@ -948,9 +930,7 @@ def dit_large_4_gen(
     default_config=_CFG_LARGE_8,
     summary="auto",
 )
-def dit_large_8_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_large_8_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_large_8` posed as a diffusion sampler.
 
     Parameters
@@ -1024,9 +1004,7 @@ def dit_xlarge_2_gen(
     >>> model = dit_xlarge_2_gen()  # doctest: +SKIP
     """
     entry = weights_mod.resolve_weights(DiTXLarge2Weights, pretrained, weights)
-    model = DiTForImageGeneration(
-        apply_overrides(_CFG_XLARGE_2, _latent_for(entry, overrides))
-    )
+    model = DiTForImageGeneration(apply_overrides(_CFG_XLARGE_2, _latent_for(entry, overrides)))
     if entry is not None:
         # The checkpoint holds the backbone, which this wrapper keeps
         # under ``dit`` — so the load targets that, not the wrapper.
@@ -1042,9 +1020,7 @@ def dit_xlarge_2_gen(
     default_config=_CFG_XLARGE_4,
     summary="auto",
 )
-def dit_xlarge_4_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_xlarge_4_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_xlarge_4` posed as a diffusion sampler.
 
     Parameters
@@ -1070,9 +1046,7 @@ def dit_xlarge_4_gen(
     >>> model = dit_xlarge_4_gen()  # doctest: +SKIP
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "dit_xlarge_4_gen", alternative="dit_xlarge_2_gen"
-        )
+        reject_unavailable_pretrained("dit_xlarge_4_gen", alternative="dit_xlarge_2_gen")
     return DiTForImageGeneration(apply_overrides(_CFG_XLARGE_4, overrides))
 
 
@@ -1084,9 +1058,7 @@ def dit_xlarge_4_gen(
     default_config=_CFG_XLARGE_8,
     summary="auto",
 )
-def dit_xlarge_8_gen(
-    pretrained: bool = False, **overrides: object
-) -> DiTForImageGeneration:
+def dit_xlarge_8_gen(pretrained: bool = False, **overrides: object) -> DiTForImageGeneration:
     """:func:`dit_xlarge_8` posed as a diffusion sampler.
 
     Parameters
@@ -1112,7 +1084,5 @@ def dit_xlarge_8_gen(
     >>> model = dit_xlarge_8_gen()  # doctest: +SKIP
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "dit_xlarge_8_gen", alternative="dit_xlarge_2_gen"
-        )
+        reject_unavailable_pretrained("dit_xlarge_8_gen", alternative="dit_xlarge_2_gen")
     return DiTForImageGeneration(apply_overrides(_CFG_XLARGE_8, overrides))

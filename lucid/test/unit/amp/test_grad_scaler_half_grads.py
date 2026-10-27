@@ -93,9 +93,7 @@ def test_unscale_at_the_default_scale(device: str, dtype: lucid.dtype) -> None:
     _backward(p, [2.0**-20, 0.75, 3.0e4], scale=2.0**16)
     GradScaler().unscale_(_PlainSGD([p], lucid.no_grad))
     assert p.grad.dtype == dtype
-    assert (
-        p.grad.tolist() == lucid.tensor([2.0**-20, 0.75, 3.0e4], dtype=dtype).tolist()
-    )
+    assert p.grad.tolist() == lucid.tensor([2.0**-20, 0.75, 3.0e4], dtype=dtype).tolist()
 
 
 @pytest.mark.parametrize("device,dtype", device_dtype_params(_UNSCALED))
@@ -189,9 +187,7 @@ def test_overflow_skips_the_step(device: str, dtype: lucid.dtype, bad: float) ->
 
 
 @pytest.mark.parametrize("device,dtype", device_dtype_params(_UNSCALED))
-def test_unscale_then_step_updates_in_the_parameter_dtype(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_unscale_then_step_updates_in_the_parameter_dtype(device: str, dtype: lucid.dtype) -> None:
     p = _param([1.0, -2.0], device, dtype)
     _backward(p, [0.5, 3.0], scale=8.0)
     opt = _PlainSGD([p], lucid.no_grad)
@@ -217,18 +213,14 @@ _SCHEDULE = [
 ]
 
 
-def _trajectory(
-    lib, scaler, dtype, **device_kw
-) -> list[tuple[list[float], list[float], float]]:
+def _trajectory(lib, scaler, dtype, **device_kw) -> list[tuple[list[float], list[float], float]]:
     """``(unscaled grad, params, scale)`` after each iteration of the schedule."""
     p = lib.nn.Parameter(lib.tensor([1.0, -2.0, 0.5], dtype=dtype, **device_kw))
     opt = _PlainSGD([p], lib.no_grad)
     log = []
     for weights in _SCHEDULE:
         opt.zero_grad()
-        scaler.scale(
-            (p * lib.tensor(weights, dtype=dtype, **device_kw)).sum()
-        ).backward()
+        scaler.scale((p * lib.tensor(weights, dtype=dtype, **device_kw)).sum()).backward()
         scaler.unscale_(opt)
         grad = p.grad.tolist()
         scaler.step(opt)
@@ -238,9 +230,7 @@ def _trajectory(
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "device,dtype", device_dtype_params([lucid.bfloat16, lucid.float32])
-)
+@pytest.mark.parametrize("device,dtype", device_dtype_params([lucid.bfloat16, lucid.float32]))
 def test_trajectory_matches_the_reference(device: str, dtype: lucid.dtype, ref) -> None:
     got = _trajectory(
         lucid, GradScaler(init_scale=2.0**10, growth_interval=2), dtype, device=device

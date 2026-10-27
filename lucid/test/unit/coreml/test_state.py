@@ -27,9 +27,7 @@ pytestmark = pytest.mark.skipif(
 class Accumulate(nn.Module):
     """Reads the carried value, returns the new one beside a result."""
 
-    def forward(
-        self, x: lucid.Tensor, cache: lucid.Tensor
-    ) -> tuple[lucid.Tensor, lucid.Tensor]:
+    def forward(self, x: lucid.Tensor, cache: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
         carried = cache + x
         return carried, carried * 2.0
 
@@ -86,9 +84,7 @@ class TestCarriedState:
         finally:
             exported.close()
 
-    def test_verify_refuses_because_one_call_proves_nothing(
-        self, tmp_path: object
-    ) -> None:
+    def test_verify_refuses_because_one_call_proves_nothing(self, tmp_path: object) -> None:
         exported = _stateful(tmp_path, "verify")
         try:
             with pytest.raises(TypeError, match="carries state"):
@@ -98,9 +94,7 @@ class TestCarriedState:
 
 
 class TestStateRefusals:
-    def test_a_model_that_writes_its_own_buffer_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_model_that_writes_its_own_buffer_is_refused(self, tmp_path: object) -> None:
         """The failure this guards against passes ``verify``.
 
         The buffer's value is read into the package after the trace, so
@@ -116,16 +110,12 @@ class TestStateRefusals:
             )
         assert excinfo.value.names == ["total"]
 
-    def test_a_model_that_leaves_its_buffers_alone_still_exports(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_model_that_leaves_its_buffers_alone_still_exports(self, tmp_path: object) -> None:
         """BatchNorm's running statistics must not trip the guard."""
         import lucid.models as M
 
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
-        exported = cml.export(
-            model, lucid.randn(1, 3, 224, 224), f"{tmp_path}/bn.mlpackage"
-        )
+        exported = cml.export(model, lucid.randn(1, 3, 224, 224), f"{tmp_path}/bn.mlpackage")
         exported.close()
 
     def test_state_needs_float16(self, tmp_path: object) -> None:
@@ -147,9 +137,7 @@ class TestStateRefusals:
                 state=[cml.State(input="nope", output="output_0")],
             )
 
-    def test_a_state_whose_shape_does_not_come_back_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_state_whose_shape_does_not_come_back_is_refused(self, tmp_path: object) -> None:
         class Shrinks(nn.Module):
             def forward(
                 self, x: lucid.Tensor, cache: lucid.Tensor

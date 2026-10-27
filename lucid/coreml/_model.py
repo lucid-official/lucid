@@ -438,9 +438,7 @@ class CoreMLModel:
             self._release()
             raise
 
-    def _declare_noise(
-        self, noise: list[tuple[str, tuple[int, ...], str, Tensor | None]]
-    ) -> None:
+    def _declare_noise(self, noise: list[tuple[str, tuple[int, ...], str, Tensor | None]]) -> None:
         """Record which inputs stand in for a draw, and what the trace drew."""
         # Inputs that stand in for a draw the model used to make itself.
         # A caller who passes nothing for them gets a fresh sample, so
@@ -503,9 +501,7 @@ class CoreMLModel:
             drawn = supplied.get(name)
             if drawn is None:
                 drawn = (
-                    lucid.randn(*shape)
-                    if self._noise_kind[name] == "randn"
-                    else lucid.rand(*shape)
+                    lucid.randn(*shape) if self._noise_kind[name] == "randn" else lucid.rand(*shape)
                 )
             given.append((name, drawn))
 
@@ -514,8 +510,7 @@ class CoreMLModel:
         for name, tensor in given:
             if name not in self.input_names:
                 raise KeyError(
-                    f"lucid.coreml: {name!r} is not an input of this package "
-                    f"{self.input_names}"
+                    f"lucid.coreml: {name!r} is not an input of this package " f"{self.input_names}"
                 )
             if not isinstance(tensor, lucid.Tensor):
                 raise TypeError(
@@ -527,9 +522,7 @@ class CoreMLModel:
                 # integer input is narrowed here rather than at every call
                 # site. Token ids and masks are nowhere near the range
                 # where that loses anything.
-                tensor = (
-                    tensor if tensor.dtype == lucid.int32 else tensor.to(lucid.int32)
-                )
+                tensor = tensor if tensor.dtype == lucid.int32 else tensor.to(lucid.int32)
             elif (
                 tensor.dtype == lucid.float32
                 and self.io_precision == "FLOAT16"
@@ -686,9 +679,7 @@ class CoreMLModel:
             # Core ML returns a 0-d result as ``(1,)``. An axis that follows
             # the input is ``-1`` here and keeps whatever size came back.
             if declared is not None and (
-                len(out.shape) != len(declared)
-                if -1 in declared
-                else out.shape != declared
+                len(out.shape) != len(declared) if -1 in declared else out.shape != declared
             ):
                 out = out.reshape(*declared)
             produced[name] = out
@@ -949,8 +940,7 @@ class CoreMLModel:
 
         if repeats < 1:
             raise ValueError(
-                f"lucid.coreml: benchmark needs at least one timed call, got "
-                f"{repeats}"
+                f"lucid.coreml: benchmark needs at least one timed call, got " f"{repeats}"
             )
         for _ in range(max(warmup, 0)):
             self.predict(x)

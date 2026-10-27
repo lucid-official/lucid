@@ -50,9 +50,7 @@ def _run(fw: ModuleType, layer: object, which: str, device: str) -> np.ndarray:
     if which == "encoder":
         out = layer(src)
     else:
-        memory = fw.tensor(
-            rng.standard_normal((2, 6, _D)).astype(np.float32), device=device
-        )
+        memory = fw.tensor(rng.standard_normal((2, 6, _D)).astype(np.float32), device=device)
         out = layer(src, memory)
     return np.asarray(out.detach().numpy())
 

@@ -88,9 +88,7 @@ def lenet_5(pretrained: bool = False, **overrides: object) -> LeNet:
     model_class=LeNetForImageClassification,
     default_config=_CFG_5,
 )
-def lenet_5_cls(
-    pretrained: bool = False, **overrides: object
-) -> LeNetForImageClassification:
+def lenet_5_cls(pretrained: bool = False, **overrides: object) -> LeNetForImageClassification:
     r"""LeNet-5 image classifier (C1-S2-C3-S4-C5 + F6 + linear head).
 
     Builds a :class:`LeNetForImageClassification` with the paper-cited

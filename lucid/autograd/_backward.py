@@ -59,8 +59,7 @@ def _check_seed(where: str, index: int, out: Tensor, seed: object) -> Tensor | N
         return None
     if not isinstance(seed, Tensor):
         raise TypeError(
-            f"{where}(): gradient {index} must be a Tensor or None, "
-            f"got {type(seed).__name__}"
+            f"{where}(): gradient {index} must be a Tensor or None, " f"got {type(seed).__name__}"
         )
     if tuple(seed.shape) != tuple(out.shape):
         raise _C_engine.ShapeMismatch(
@@ -120,10 +119,7 @@ def _engine_seeds(
     attached, so that under ``create_graph`` a gradient is differentiable
     with respect to whatever computed the seed.
     """
-    return [
-        None if s is None else _unwrap(s if keep_seed_graph else s.detach())
-        for s in seeds
-    ]
+    return [None if s is None else _unwrap(s if keep_seed_graph else s.detach()) for s in seeds]
 
 
 def backward(
@@ -293,14 +289,10 @@ def _backward_inputs(inputs: Tensor | Sequence[Tensor]) -> list[Tensor]:
 
     targets = _as_tensors(inputs)
     if not targets:
-        raise RuntimeError(
-            "backward(): inputs cannot be empty; pass None for every leaf"
-        )
+        raise RuntimeError("backward(): inputs cannot be empty; pass None for every leaf")
     for i, t in enumerate(targets):
         if not isinstance(t, Tensor):
-            raise TypeError(
-                f"backward(): inputs[{i}] must be a Tensor, got {type(t).__name__}"
-            )
+            raise TypeError(f"backward(): inputs[{i}] must be a Tensor, got {type(t).__name__}")
         if not t.requires_grad:
             raise RuntimeError(
                 f"backward(): inputs[{i}] does not require grad, so no "
@@ -374,9 +366,7 @@ def _raw_grad_list(
             f"or None, got {type(grads).__name__}"
         )
     if len(raw) != len(outs):
-        raise RuntimeError(
-            f"{where}(): got {len(outs)} tensors and {len(raw)} gradients"
-        )
+        raise RuntimeError(f"{where}(): got {len(outs)} tensors and {len(raw)} gradients")
     return raw
 
 
@@ -468,17 +458,14 @@ def _finalize_grads(
     if batch_size is not None:
         return tuple(
             (
-                _lucid.zeros(
-                    (batch_size, *inp.shape), dtype=inp.dtype, device=inp.device
-                )
+                _lucid.zeros((batch_size, *inp.shape), dtype=inp.dtype, device=inp.device)
                 if g is None
                 else g
             )
             for g, inp in zip(totals, ins, strict=True)
         )
     return tuple(
-        _lucid.zeros_like(inp) if g is None else g
-        for g, inp in zip(totals, ins, strict=True)
+        _lucid.zeros_like(inp) if g is None else g for g, inp in zip(totals, ins, strict=True)
     )
 
 

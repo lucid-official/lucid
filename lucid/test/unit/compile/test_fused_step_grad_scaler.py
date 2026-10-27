@@ -121,9 +121,7 @@ def test_grad_scaler_growth_schedule() -> None:
         actual_scales == expected_scales
     ), f"growth schedule wrong; expected {expected_scales}, got {actual_scales}"
     # Loss should decrease (the scaler isn't tripping any overflow path here).
-    assert (
-        losses[-1] < losses[0]
-    ), f"loss should decrease over 5 SGD steps; got {losses}"
+    assert losses[-1] < losses[0], f"loss should decrease over 5 SGD steps; got {losses}"
 
 
 def test_grad_scaler_overflow_skips_step_and_backs_off() -> None:
@@ -161,8 +159,7 @@ def test_grad_scaler_overflow_skips_step_and_backs_off() -> None:
 
     # Scale must have halved (backoff_factor=0.5 by default).
     assert scaler.get_scale() == init_scale * 0.5, (
-        f"expected scale halved on overflow; "
-        f"init={init_scale}, after={scaler.get_scale()}"
+        f"expected scale halved on overflow; " f"init={init_scale}, after={scaler.get_scale()}"
     )
 
     # Params must be unchanged — the where(found_inf, old, new)

@@ -58,9 +58,7 @@ def test_and_the_compile_cache_a_directory_inside_it(compile_cache, tmp_path_fac
     assert compile_cache.is_relative_to(tmp_path_factory.getbasetemp())
 
 
-def test_a_test_writes_a_package_and_core_ml_specialises_it(
-    tmp_path, core_ml_home, compile_cache
-):
+def test_a_test_writes_a_package_and_core_ml_specialises_it(tmp_path, core_ml_home, compile_cache):
     lucid.manual_seed(0)
     model = _Small().eval()
     x = lucid.randn(1, 3, 16, 16)

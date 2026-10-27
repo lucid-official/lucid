@@ -134,9 +134,7 @@ class _SideParser:
         if "." not in text:
             return text
         if "..." not in text or text.count(".") != 3:
-            raise _bad_pattern(
-                f"the {self.label} side may contain '.' only as one '...'"
-            )
+            raise _bad_pattern(f"the {self.label} side may contain '.' only as one '...'")
         self.side.has_ellipsis = True
         return text.replace("...", _ELLIPSIS)
 
@@ -151,9 +149,7 @@ class _SideParser:
             elif char.isalnum() or char in ("_", _ELLIPSIS):
                 token += char
             else:
-                raise _bad_pattern(
-                    f"unexpected character {char!r} on the {self.label} side"
-                )
+                raise _bad_pattern(f"unexpected character {char!r} on the {self.label} side")
         if self.group is not None:
             raise _bad_pattern(f"unbalanced parentheses on the {self.label} side")
         if token:
@@ -182,9 +178,7 @@ class _SideParser:
         else:
             problem = _axis_name_problem(token)
             if problem is not None:
-                raise _bad_pattern(
-                    f"{_spelled(token)} is not a valid axis name: {problem}"
-                )
+                raise _bad_pattern(f"{_spelled(token)} is not a valid axis name: {problem}")
             if token in self.side.identifiers:
                 raise _bad_pattern(
                     f"axis {token!r} appears more than once on the {self.label} side"
@@ -256,8 +250,7 @@ def _split_pattern(pattern: str) -> tuple[str, str]:
         # The marker the parser stands in for ``...``: written by hand it
         # would read as an ellipsis that no '...' announced, unchecked.
         raise _bad_pattern(
-            "'…' (U+2026) is not part of the grammar; write the ellipsis as "
-            "three dots, '...'"
+            "'…' (U+2026) is not part of the grammar; write the ellipsis as " "three dots, '...'"
         )
     if pattern.count("->") != 1:
         raise _bad_pattern("a pattern needs exactly one '->'")
@@ -289,19 +282,13 @@ def _check_repeat(left: _Side, right: _Side, keywords: set[str]) -> None:
             f"{_axes_appear(dropped)} only on the left side; repeat cannot remove axes"
         )
     unsized = [
-        a
-        for a in _missing(right.identifiers, left)
-        if isinstance(a, str) and a not in keywords
+        a for a in _missing(right.identifiers, left) if isinstance(a, str) and a not in keywords
     ]
     if unsized:
-        raise _bad_pattern(
-            f"new axes {_describe(unsized)} need lengths; pass them as keywords"
-        )
+        raise _bad_pattern(f"new axes {_describe(unsized)} need lengths; pass them as keywords")
 
 
-def _check_axes_agree(
-    left: _Side, right: _Side, operation: str, keywords: set[str]
-) -> None:
+def _check_axes_agree(left: _Side, right: _Side, operation: str, keywords: set[str]) -> None:
     """The reference's rules for which axes may appear on which side."""
     if right.has_ellipsis and not left.has_ellipsis:
         raise _bad_pattern("'...' appears on the right side but not on the left")
@@ -343,9 +330,7 @@ def _expand_ellipsis(
     if not left.has_ellipsis and ndim != fixed:
         raise _bad_shape(f"the pattern names {fixed} dimensions, the input has {ndim}")
     if ndim < fixed:
-        raise _bad_shape(
-            f"the pattern needs at least {fixed} dimensions, the input has {ndim}"
-        )
+        raise _bad_shape(f"the pattern needs at least {fixed} dimensions, the input has {ndim}")
     covered: list[_Axis] = [f"{_ELLIPSIS}{i}" for i in range(ndim - fixed)]
     for side in (left, right):
         if side.has_ellipsis:
@@ -354,9 +339,7 @@ def _expand_ellipsis(
     return _spell_out(left, covered), _spell_out(right, covered)
 
 
-def _declare(
-    left_groups: list[list[_Axis]], right: _Side
-) -> tuple[list[_Axis], list[int], int]:
+def _declare(left_groups: list[list[_Axis]], right: _Side) -> tuple[list[_Axis], list[int], int]:
     """Number the elementary axes: the left's in order, then the right's new ones."""
     names: list[_Axis] = []
     lengths: list[int] = []
@@ -377,9 +360,7 @@ def _keyword_slots(
         if problem is not None:
             raise _bad_pattern(f"{name!r} is not a valid axis name: {problem}")
         if name not in names:
-            raise _bad_pattern(
-                f"axis {name!r} is given a length but not used in the pattern"
-            )
+            raise _bad_pattern(f"axis {name!r} is given a length but not used in the pattern")
         slots.append((name, names.index(name)))
         lengths[names.index(name)] = _KEYWORD
     return tuple(slots)
@@ -404,9 +385,7 @@ def _input_dims(
 
 
 @functools.lru_cache(maxsize=512)
-def _recipe(
-    pattern: str, operation: str, keywords: tuple[str, ...], ndim: int
-) -> _Recipe:
+def _recipe(pattern: str, operation: str, keywords: tuple[str, ...], ndim: int) -> _Recipe:
     left_text, right_text = _split_pattern(pattern)
     left = _parse(left_text, "left")
     right = _parse(right_text, "right")
@@ -431,9 +410,7 @@ def _recipe(
         reduced=tuple(i for i, a in enumerate(flat_left) if a not in right.identifiers),
         permutation=tuple(survivors.index(a) for a in flat_right if a in survivors),
         added=tuple(
-            (i, names.index(a))
-            for i, a in enumerate(flat_right)
-            if a not in left.identifiers
+            (i, names.index(a)) for i, a in enumerate(flat_right) if a not in left.identifiers
         ),
         outputs=tuple(tuple(names.index(a) for a in group) for group in right_groups),
     )
@@ -511,22 +488,16 @@ def _plan(
     shape: tuple[int, ...],
     keywords: tuple[tuple[str, int], ...],
 ) -> _Plan:
-    recipe = _recipe(
-        pattern, operation, tuple(name for name, _ in keywords), len(shape)
-    )
+    recipe = _recipe(pattern, operation, tuple(name for name, _ in keywords), len(shape))
     lengths, must_split = _resolve_lengths(recipe, shape, keywords)
     permutation = recipe.permutation
     return _Plan(
         split=tuple(lengths[: recipe.n_left]) if must_split else None,
         reduced=recipe.reduced,
-        permutation=(
-            None if permutation == tuple(range(len(permutation))) else permutation
-        ),
+        permutation=(None if permutation == tuple(range(len(permutation))) else permutation),
         inserted=tuple(pos for pos, _ in recipe.added),
         broadcast=(
-            tuple(lengths[i] for group in recipe.outputs for i in group)
-            if recipe.added
-            else None
+            tuple(lengths[i] for group in recipe.outputs for i in group) if recipe.added else None
         ),
         merge=(
             tuple(_product([lengths[i] for i in group]) for group in recipe.outputs)
@@ -544,9 +515,7 @@ def _length(name: str, value: SupportsIndex) -> int:
             f"the length of axis {name!r} must be an integer, got {type(value).__name__}"
         ) from None
     if length < 0:
-        raise _bad_pattern(
-            f"the length of axis {name!r} must be non-negative, got {length}"
-        )
+        raise _bad_pattern(f"the length of axis {name!r} must be non-negative, got {length}")
     return length
 
 
@@ -589,9 +558,7 @@ def plan(
     except _Refusal as refusal:
         context = f"einops.{_entry_point(operation)}({pattern!r}) on shape {shape}"
         if axes_lengths:
-            context += " with " + ", ".join(
-                f"{n}={v!r}" for n, v in axes_lengths.items()
-            )
+            context += " with " + ", ".join(f"{n}={v!r}" for n, v in axes_lengths.items())
         raise refusal.kind(f"{context}: {refusal}") from None
 
 

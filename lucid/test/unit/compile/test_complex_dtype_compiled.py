@@ -103,9 +103,7 @@ class TestTheLaneOperations:
 class TestComplexCrossesTheGraphBoundary:
     def test_a_complex_output_comes_back(self):
         lucid.manual_seed(0)
-        reference, got, compiled = _run(
-            lambda t: lucid.complex(t, t * 2), lucid.randn(2, 4)
-        )
+        reference, got, compiled = _run(lambda t: lucid.complex(t, t * 2), lucid.randn(2, 4))
         assert compiled
         assert str(got.dtype).endswith("complex64")
         assert _lane_error(reference, got) == 0.0
@@ -130,9 +128,7 @@ class TestTheBufferSizesEightByteDtypesNeed:
 
     def test_an_int64_output_is_allocated_for_int64(self):
         lucid.manual_seed(0)
-        reference, got, compiled = _run(
-            lambda t: lucid.argmax(t, dim=1), lucid.randn(4, 16)
-        )
+        reference, got, compiled = _run(lambda t: lucid.argmax(t, dim=1), lucid.randn(4, 16))
         assert compiled
         assert str(reference.dtype).endswith("int64")
         assert bool((got == reference).all().item())
@@ -158,9 +154,7 @@ class TestTheBoundaryIsStated:
         it names the dtype and the way out.
         """
         lucid.manual_seed(0)
-        z = lucid.complex(
-            lucid.randn(2, 2).to(lucid.float64), lucid.randn(2, 2).to(lucid.float64)
-        )
+        z = lucid.complex(lucid.randn(2, 2).to(lucid.float64), lucid.randn(2, 2).to(lucid.float64))
         assert str(z.dtype).endswith("complex128")
         with pytest.raises(Exception, match="complex128"):
             z.to("metal")

@@ -44,8 +44,7 @@ class MobileNetV3LargeWeights(WeightsEnum):
     """
 
     IMAGENET1K_V1 = WeightEntry(
-        url=f"{HUB_BASE}/mobilenet-v3-large/resolve/main/"
-        "IMAGENET1K_V1/model.safetensors",
+        url=f"{HUB_BASE}/mobilenet-v3-large/resolve/main/" "IMAGENET1K_V1/model.safetensors",
         sha256="238269e463c10e08ba786f4b724de32c632458fc20f6489c46c3559a6d3e7023",
         num_classes=1000,
         transforms=_PRESET,
@@ -88,8 +87,7 @@ class MobileNetV3SmallWeights(WeightsEnum):
     """
 
     IMAGENET1K_V1 = WeightEntry(
-        url=f"{HUB_BASE}/mobilenet-v3-small/resolve/main/"
-        "IMAGENET1K_V1/model.safetensors",
+        url=f"{HUB_BASE}/mobilenet-v3-small/resolve/main/" "IMAGENET1K_V1/model.safetensors",
         sha256="6e96fd6d266b1291cf3fd24833e1196a774e4949d53180a3f5d7a6dc57fe2f66",
         num_classes=1000,
         transforms=_PRESET,

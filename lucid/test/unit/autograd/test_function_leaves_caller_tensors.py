@@ -105,9 +105,7 @@ def _grads(lib: ModuleType, case: tuple[str, bool, bool], device: str) -> tuple:
 
 
 @pytest.mark.parametrize("case", _CASES, ids=_case_id)
-def test_the_callers_tensors_are_left_alone(
-    case: tuple[str, bool, bool], device: str
-) -> None:
+def test_the_callers_tensors_are_left_alone(case: tuple[str, bool, bool], device: str) -> None:
     kind, marked, needs_grad = case
     x, m = _inputs(lucid, needs_grad, device)
     x_before, m_before = _state(x), _state(m)
@@ -121,9 +119,7 @@ def test_the_callers_tensors_are_left_alone(
 
 
 @pytest.mark.parametrize("case", _CASES, ids=_case_id)
-def test_a_marked_output_carries_no_gradient(
-    case: tuple[str, bool, bool], device: str
-) -> None:
+def test_a_marked_output_carries_no_gradient(case: tuple[str, bool, bool], device: str) -> None:
     kind, marked, needs_grad = case
     x, m = _inputs(lucid, needs_grad, device)
     y, out = _function(lucid, kind, marked).apply(x, m)
@@ -184,9 +180,7 @@ def test_the_reference_divergence_is_its_no_grad_view(ref: ModuleType) -> None:
         m = lib.ones(4, requires_grad=True)
         with lib.no_grad():
             view = m.view(-1)
-        _, out = _function(lib, "view of the input", True).apply(
-            lib.ones(4, requires_grad=True), m
-        )
+        _, out = _function(lib, "view of the input", True).apply(lib.ones(4, requires_grad=True), m)
         answers[lib] = (out.requires_grad, view.requires_grad)
     assert answers[lucid] == (False, False)
     assert answers[ref] == (True, True)
@@ -207,9 +201,7 @@ def _untracked(lib: ModuleType, mode: str, marked: bool):
 
 
 _UNTRACKED = [
-    (mode, marked)
-    for mode in ("under no_grad", "no input needs grad")
-    for marked in (True, False)
+    (mode, marked) for mode in ("under no_grad", "no input needs grad") for marked in (True, False)
 ]
 
 
@@ -229,9 +221,7 @@ def test_an_untracked_call_hands_back_a_new_tensor(case: tuple[str, bool]) -> No
 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", _UNTRACKED, ids=_untracked_id)
-def test_an_untracked_call_matches_the_reference(
-    ref: ModuleType, case: tuple[str, bool]
-) -> None:
+def test_an_untracked_call_matches_the_reference(ref: ModuleType, case: tuple[str, bool]) -> None:
     answers = {}
     for lib in (lucid, ref):
         m, before, out = _untracked(lib, *case)
@@ -259,9 +249,7 @@ def _keyword_function(kind: str, marked: bool) -> type:
 
 
 @pytest.mark.parametrize("case", _CASES, ids=_case_id)
-def test_a_keyword_tensor_is_left_alone(
-    case: tuple[str, bool, bool], device: str
-) -> None:
+def test_a_keyword_tensor_is_left_alone(case: tuple[str, bool, bool], device: str) -> None:
     kind, marked, needs_grad = case
     x, m = _inputs(lucid, needs_grad, device)
     before, m_impl = _state(m), m._impl
@@ -315,9 +303,7 @@ def _write_through(lib: ModuleType, case: tuple[bool, bool, str], device: str):
 
 
 @pytest.mark.parametrize("case", [c for c in _WRITES if c[1]], ids=_write_id)
-def test_a_write_through_a_marked_alias(
-    case: tuple[bool, bool, str], device: str
-) -> None:
+def test_a_write_through_a_marked_alias(case: tuple[bool, bool, str], device: str) -> None:
     needs_grad, _, _ = case
     values, moved, out_needs_grad, m_state = _write_through(lucid, case, device)
     # A detached alias: the write reaches the caller's storage, and the
@@ -378,9 +364,7 @@ _CUSTOM_GRADIENT = {
 
 
 @pytest.mark.parametrize("write", sorted(_CUSTOM_GRADIENT))
-def test_a_write_to_the_input_keeps_the_custom_gradient(
-    write: str, device: str
-) -> None:
+def test_a_write_to_the_input_keeps_the_custom_gradient(write: str, device: str) -> None:
     # The reference refuses the write (the input is its output view's base);
     # Lucid, until LCD-558, keeps the custom backward — never the plain
     # view's gradient (``[1, 1, 1]`` / ``[2, 2, 2]``) a view alias gave.
@@ -390,9 +374,7 @@ def test_a_write_to_the_input_keeps_the_custom_gradient(
 
 @pytest.mark.parity
 @pytest.mark.parametrize("write", sorted(_CUSTOM_GRADIENT))
-def test_a_write_to_the_input_is_refused_as_by_the_reference(
-    ref: ModuleType, write: str
-) -> None:
+def test_a_write_to_the_input_is_refused_as_by_the_reference(ref: ModuleType, write: str) -> None:
     assert _write_to_the_input(ref, write, "cpu") == "refused"
     assert _write_to_the_input(lucid, write, "cpu") == "refused"
 
@@ -434,9 +416,7 @@ def test_a_write_to_a_saved_input_is_caught(device: str) -> None:
 
 
 @pytest.mark.parity
-def test_a_write_to_a_saved_input_matches_the_reference(
-    ref: ModuleType, device: str
-) -> None:
+def test_a_write_to_a_saved_input_matches_the_reference(ref: ModuleType, device: str) -> None:
     assert _write_to_a_saved_input(lucid, device) == _write_to_a_saved_input(ref, "cpu")
 
 

@@ -248,9 +248,7 @@ _ALL_ENGINES: list[tuple[str, dict[str, Any]]] = [
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-@pytest.mark.parametrize(
-    ("name", "kwargs"), _ALL_ENGINES, ids=[n for n, _ in _ALL_ENGINES]
-)
+@pytest.mark.parametrize(("name", "kwargs"), _ALL_ENGINES, ids=[n for n, _ in _ALL_ENGINES])
 def test_every_engine_carries_its_state_across_a_move(
     name: str, kwargs: dict[str, Any], device: str
 ) -> None:
@@ -269,9 +267,7 @@ def test_every_engine_carries_its_state_across_a_move(
     [("SGD", {"lr": 0.05}), *_OPTIMIZERS],
     ids=["SGD-plain", *_OPT_IDS],
 )
-def test_rebuild_with_nothing_to_carry_does_not_warn(
-    name: str, kwargs: dict[str, Any]
-) -> None:
+def test_rebuild_with_nothing_to_carry_does_not_warn(name: str, kwargs: dict[str, Any]) -> None:
     """No state yet — a step() before any backward — is nothing lost."""
     run = _Run(name, kwargs, "cpu")
     run.opt.step()
@@ -427,11 +423,7 @@ def test_wgan_critic_toggle_follows_the_reference(device: str, ref: Any) -> None
             opt_g.zero_grad()
             (-critic(gen(z)).mean()).backward()
             opt_g.step()
-            trace.append(
-                np.concatenate(
-                    [_host(critic.weight).ravel(), _host(gen.weight).ravel()]
-                )
-            )
+            trace.append(np.concatenate([_host(critic.weight).ravel(), _host(gen.weight).ravel()]))
         return np.stack(trace)
 
     def _host(t: Any) -> np.ndarray:

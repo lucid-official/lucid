@@ -41,9 +41,7 @@ def _fresh_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 def _fallback_warnings(caught: list[warnings.WarningMessage]) -> list[str]:
     return [
-        str(w.message)
-        for w in caught
-        if issubclass(w.category, fallback.CompileFallbackWarning)
+        str(w.message) for w in caught if issubclass(w.category, fallback.CompileFallbackWarning)
     ]
 
 
@@ -84,9 +82,7 @@ class TestTheNotice:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             fallback._fallback_notice("lowering", "op 'inv' has no emitter")
-        (only,) = [
-            w for w in caught if issubclass(w.category, fallback.CompileFallbackWarning)
-        ]
+        (only,) = [w for w in caught if issubclass(w.category, fallback.CompileFallbackWarning)]
         assert only.filename == __file__
 
 

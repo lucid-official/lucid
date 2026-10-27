@@ -101,9 +101,7 @@ def _conv(
     nd = w.ndim - 2
     if padding:
         x = np.pad(x, [(0, 0), (0, 0)] + [(padding, padding)] * nd)
-    win = np.lib.stride_tricks.sliding_window_view(
-        _f(x), w.shape[2:], axis=tuple(range(2, 2 + nd))
-    )
+    win = np.lib.stride_tricks.sliding_window_view(_f(x), w.shape[2:], axis=tuple(range(2, 2 + nd)))
     win = win[(slice(None), slice(None)) + (slice(None, None, stride),) * nd]
     # win: N, C, *out, *k  ·  w: O, C, *k  →  N, O, *out
     letters = "defgh"[:nd]  # not "c": that is the channel subscript
@@ -228,9 +226,7 @@ def _batch_norm_train(x: np.ndarray, w: np.ndarray, b: np.ndarray) -> np.ndarray
     shape = (1, -1) + (1,) * (x.ndim - 2)
     mean = x.mean(axis=axes, keepdims=True)
     var = x.var(axis=axes, keepdims=True)
-    return (x - mean) / np.sqrt(var + 1e-5) * _f(w).reshape(shape) + _f(b).reshape(
-        shape
-    )
+    return (x - mean) / np.sqrt(var + 1e-5) * _f(w).reshape(shape) + _f(b).reshape(shape)
 
 
 def _unfold(x: np.ndarray, axis: int, size: int, step: int) -> np.ndarray:
@@ -238,9 +234,7 @@ def _unfold(x: np.ndarray, axis: int, size: int, step: int) -> np.ndarray:
     return np.take(win, range(0, win.shape[axis], step), axis=axis)
 
 
-def _scatter(
-    base: np.ndarray, idx: np.ndarray, src: np.ndarray, add: bool
-) -> np.ndarray:
+def _scatter(base: np.ndarray, idx: np.ndarray, src: np.ndarray, add: bool) -> np.ndarray:
     out = base.copy()
     rows = np.arange(idx.shape[0])[:, None]
     if add:
@@ -293,9 +287,7 @@ REFS: dict[str, Ref] = {
     "clamp": lambda x, c: np.clip(x, -2, 2),
     "clip": lambda x, c: np.clip(x, -1, 3),
     "pow_scalar": lambda x, c: x.astype(np.int64) ** 2 if x.dtype == np.bool_ else x**2,
-    "pow_scalar3": lambda x, c: (
-        x.astype(np.int64) ** 3 if x.dtype == np.bool_ else x**3
-    ),
+    "pow_scalar3": lambda x, c: (x.astype(np.int64) ** 3 if x.dtype == np.bool_ else x**3),
     "rpow_scalar": lambda x, c: 2.0 ** _f(x),
     "astype_f32": lambda x, c: x.astype(np.float32),
     "astype_i64": lambda x, c: x.astype(np.int64),
@@ -344,9 +336,7 @@ REFS: dict[str, Ref] = {
     "masked_fill": lambda x, c: np.where(x > 1, np.zeros_like(x), x),
     "atan2": lambda x, c: np.arctan2(_f(x), _f(_flip0(x)) + 0.5),
     "hypot": lambda x, c: np.hypot(_f(x), _f(_flip0(x))),
-    "xlogy": lambda x, c: np.where(
-        _f(x) == 0, 0.0, _f(x) * np.log(np.abs(_f(_flip0(x))) + 1)
-    ),
+    "xlogy": lambda x, c: np.where(_f(x) == 0, 0.0, _f(x) * np.log(np.abs(_f(_flip0(x))) + 1)),
     "logaddexp": lambda x, c: np.logaddexp(_f(x), _f(_flip0(x))),
     "nextafter": lambda x, c: np.nextafter(x, _flip0(x)),
     "isclose": lambda x, c: np.isclose(_f(x), _f(_flip0(x))),
@@ -436,9 +426,7 @@ REFS: dict[str, Ref] = {
         False,
     ),
     "unfold_dim": lambda x, c: _unfold(x, 1, 3, 2) * 1,
-    "one_hot": lambda x, c: np.eye(5, dtype=np.int64)[
-        np.minimum(np.abs(x).astype(np.int64), 4)
-    ],
+    "one_hot": lambda x, c: np.eye(5, dtype=np.int64)[np.minimum(np.abs(x).astype(np.int64), 4)],
     "meshgrid": lambda x, c: tuple(np.meshgrid(x[0], x[1], indexing="ij")),
     "meshgrid_xy": lambda x, c: tuple(np.meshgrid(x[0][:3], x[1], indexing="xy")),
     # ── linear algebra
@@ -543,12 +531,8 @@ REFS: dict[str, Ref] = {
     "interp_nearest3d": lambda x, c: _nearest(x, (3, 5, 4)),
     "interp_bilinear_t": lambda x, c: _bilinear(x, (8, 6), False).swapaxes(-1, -2),
     "embedding": lambda x, c: _f(c.w(5, 3))[np.minimum(np.abs(x), 4)],
-    "cross_entropy": lambda x, c: -_log_softmax(x, 1)[
-        np.arange(4), c.idx(0, 5, 2, 1)
-    ].mean(),
-    "nll_loss": lambda x, c: -_log_softmax(x, 1)[
-        np.arange(4), c.idx(0, 5, 2, 1)
-    ].mean(),
+    "cross_entropy": lambda x, c: -_log_softmax(x, 1)[np.arange(4), c.idx(0, 5, 2, 1)].mean(),
+    "nll_loss": lambda x, c: -_log_softmax(x, 1)[np.arange(4), c.idx(0, 5, 2, 1)].mean(),
     "mse_loss": lambda x, c: ((_f(x) - _f(_flip0(x))) ** 2).mean(),
     "huber_loss": lambda x, c: np.where(
         np.abs(_f(x) - _f(_flip0(x))) < 1.0,
@@ -556,13 +540,10 @@ REFS: dict[str, Ref] = {
         np.abs(_f(x) - _f(_flip0(x))) - 0.5,
     ).mean(),
     "bce": lambda x, c: -(
-        (_flip0(x) > 0) * np.log(_sigmoid(x))
-        + (_flip0(x) <= 0) * np.log(1 - _sigmoid(x))
+        (_flip0(x) > 0) * np.log(_sigmoid(x)) + (_flip0(x) <= 0) * np.log(1 - _sigmoid(x))
     ).mean(),
     "bce_logits": lambda x, c: (
-        np.maximum(_f(x), 0)
-        - _f(x) * (_flip0(x) > 0)
-        + np.log1p(np.exp(-np.abs(_f(x))))
+        np.maximum(_f(x), 0) - _f(x) * (_flip0(x) > 0) + np.log1p(np.exp(-np.abs(_f(x))))
     ).mean(),
     "sdpa": lambda x, c: _sdpa(x, x[:, :, ::-1], x * 0.5, False),
     "sdpa_causal": lambda x, c: _sdpa(x, x[:, :, ::-1], x * 0.5, True),

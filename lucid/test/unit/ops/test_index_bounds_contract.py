@@ -141,15 +141,11 @@ def _row_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], objec
             [[NAN, NAN, NAN], [6.0, 7.0, 8.0]],
         ),
         "nll_loss": (
-            lambda d: engine(
-                _C_engine.nn.nll_loss, logits(d), _ix([1, bad], d), None, 0
-            ),
+            lambda d: engine(_C_engine.nn.nll_loss, logits(d), _ix([1, bad], d), None, 0),
             [-1.0, NAN],
         ),
         "cross_entropy": (
-            lambda d: engine(
-                _C_engine.nn.cross_entropy_loss, logits(d), _ix([1, bad], d), None, 0
-            ),
+            lambda d: engine(_C_engine.nn.cross_entropy_loss, logits(d), _ix([1, bad], d), None, 0),
             [pytest.approx(ce_first, rel=1e-5), NAN],
         ),
         "one_hot": (
@@ -165,11 +161,7 @@ def _row_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], objec
 # (API-05b) all pass it at full width, so every ``huge`` case is refused.
 def _name_case_params(names: list[str], cases: list[str]) -> list[object]:
     """Every (name, case) pair."""
-    return [
-        pytest.param(name, case, id=f"{name}-{case}")
-        for name in names
-        for case in cases
-    ]
+    return [pytest.param(name, case, id=f"{name}-{case}") for name in names for case in cases]
 
 
 @pytest.mark.parametrize(
@@ -208,9 +200,7 @@ def _scatter_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], o
     row and aims one update out of range; everything else must be the base."""
     idx = [[1, bad], [bad, 3]]
 
-    def src(
-        device: str, value: float, dtype: lucid.dtype = lucid.float32
-    ) -> lucid.Tensor:
+    def src(device: str, value: float, dtype: lucid.dtype = lucid.float32) -> lucid.Tensor:
         return lucid.full((2, 2), value, dtype=dtype).to(device)
 
     def amax(d: str) -> lucid.Tensor:
@@ -246,9 +236,7 @@ def _scatter_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], o
             [[0.0, 10.0, 2.0, 3.0], [4.0, 5.0, 6.0, 10.0]],
         ),
         "scatter_int64": (
-            lambda d: lucid.scatter(
-                _base(d, lucid.int64), 1, _ix(idx, d), src(d, 10, lucid.int64)
-            ),
+            lambda d: lucid.scatter(_base(d, lucid.int64), 1, _ix(idx, d), src(d, 10, lucid.int64)),
             [[0, 10, 2, 3], [4, 5, 6, 10]],
         ),
         "scatter_bool": (
@@ -273,15 +261,11 @@ def _scatter_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], o
             [[0.0, 3.0, 2.0, 3.0], [4.0, 5.0, 6.0, 21.0]],
         ),
         "index_add": (
-            lambda d: flat(d).index_add(
-                0, _ix([1, bad], d), lucid.full((2,), 10.0).to(d)
-            ),
+            lambda d: flat(d).index_add(0, _ix([1, bad], d), lucid.full((2,), 10.0).to(d)),
             [0.0, 10.0, 0.0, 0.0],
         ),
         "index_copy": (
-            lambda d: flat(d).index_copy(
-                0, _ix([1, bad], d), lucid.full((2,), 10.0).to(d)
-            ),
+            lambda d: flat(d).index_copy(0, _ix([1, bad], d), lucid.full((2,), 10.0).to(d)),
             [0.0, 10.0, 0.0, 0.0],
         ),
         "index_fill": (
@@ -300,16 +284,12 @@ def test_scatter_family(device: str, name: str, case: str) -> None:
     _check(device, lambda: run(device), answer)
 
 
-def _engine_full_width_cases() -> (
-    dict[str, tuple[Callable[[str], lucid.Tensor], object]]
-):
+def _engine_full_width_cases() -> dict[str, tuple[Callable[[str], lucid.Tensor], object]]:
     """The engine ops themselves at 2**40, past every Python-side cast."""
     huge = 2**40
 
     def call(fn: Callable[..., object], *args: object) -> lucid.Tensor:
-        return _wrap(
-            fn(*[_unwrap(a) if isinstance(a, lucid.Tensor) else a for a in args])
-        )
+        return _wrap(fn(*[_unwrap(a) if isinstance(a, lucid.Tensor) else a for a in args]))
 
     def ones(d: str) -> lucid.Tensor:
         return lucid.full((1, 2), 10.0).to(d)
@@ -361,9 +341,7 @@ def test_scatter_leaves_its_base_alone(device_gpu_only: str) -> None:
     base = _base(d)
     before = base.tolist()
     lucid.scatter(base, 1, _ix([[1, 99], [-99, 3]], d), lucid.full((2, 2), 10.0).to(d))
-    lucid.scatter_add(
-        base, 1, _ix([[1, 99], [-99, 3]], d), lucid.full((2, 2), 10.0).to(d)
-    )
+    lucid.scatter_add(base, 1, _ix([[1, 99], [-99, 3]], d), lucid.full((2, 2), 10.0).to(d))
     assert base.tolist() == before
 
 
@@ -408,9 +386,7 @@ def _empty_axis_cases() -> dict[str, Callable[[str], object]]:
         "scatter_add": lambda d: lucid.scatter_add(
             empty(d), 1, _ix([[0], [0]], d), lucid.ones(2, 1).to(d)
         ),
-        "scatter": lambda d: lucid.scatter(
-            empty(d), 1, _ix([[0], [0]], d), lucid.ones(2, 1).to(d)
-        ),
+        "scatter": lambda d: lucid.scatter(empty(d), 1, _ix([[0], [0]], d), lucid.ones(2, 1).to(d)),
         **{
             f"scatter_reduce_{r}": (
                 lambda d, r=r: lucid.scatter_reduce(
@@ -476,9 +452,7 @@ def test_class_target_is_compared_with_ignore_index_at_full_width(device: str) -
     # and the target was silently skipped.
     logits = lucid.zeros(1, N).to(device)
     target = _ix([2**32 - 100], device)
-    run = lambda: _wrap(
-        _C_engine.nn.nll_loss(_unwrap(logits), _unwrap(target), None, 0)
-    )
+    run = lambda: _wrap(_C_engine.nn.nll_loss(_unwrap(logits), _unwrap(target), None, 0))
     _check(device, run, [NAN])
 
 
@@ -491,9 +465,7 @@ def test_empty_axis_is_refused_on_both_devices(device: str, name: str) -> None:
 def test_empty_table(device: str) -> None:
     # A table with no rows has nothing to look up; Metal answers NaN.
     table = lucid.zeros(0, 3).to(device)
-    run = lambda: _wrap(
-        _C_engine.nn.embedding(_unwrap(table), _unwrap(_ix([0], device)), -1)
-    )
+    run = lambda: _wrap(_C_engine.nn.embedding(_unwrap(table), _unwrap(_ix([0], device)), -1))
     _check(device, run, [[NAN, NAN, NAN]])
 
 

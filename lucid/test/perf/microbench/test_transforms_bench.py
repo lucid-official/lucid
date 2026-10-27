@@ -142,9 +142,7 @@ class TestDeterministicBench:
             bench,
             "Normalize 224",
             lambda: _run_lucid(T.Normalize(mean, std, max_pixel_value=1.0, p=1.0), chw),
-            lambda: _run_albu(
-                A.Normalize(mean=mean, std=std, max_pixel_value=1.0, p=1.0), hwc
-            ),
+            lambda: _run_albu(A.Normalize(mean=mean, std=std, max_pixel_value=1.0, p=1.0), hwc),
         )
 
     def test_to_gray(self, bench: Callable[..., object]) -> None:
@@ -203,9 +201,7 @@ class TestCv2AccuracyBench:
             bench,
             "CLAHE 8x8 tiles",
             lambda: F.clahe(chw, 4.0, (8, 8)),
-            lambda: _run_albu(
-                A.CLAHE(clip_limit=4.0, tile_grid_size=(8, 8), p=1.0), hwc
-            ),
+            lambda: _run_albu(A.CLAHE(clip_limit=4.0, tile_grid_size=(8, 8), p=1.0), hwc),
         )
 
 

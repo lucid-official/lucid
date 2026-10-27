@@ -68,9 +68,7 @@ def _cases() -> list[_Case]:
     """
     cases: list[_Case] = []
 
-    def add(
-        fn: str, shape: tuple[int, ...], kw: dict[str, Any], refused: str | None
-    ) -> None:
+    def add(fn: str, shape: tuple[int, ...], kw: dict[str, Any], refused: str | None) -> None:
         cases.append((fn, shape, kw, refused))
 
     for o in _VECTOR_ORDS:
@@ -151,11 +149,7 @@ def _np(t: lucid.Tensor) -> np.ndarray:
 
 
 def _tol(device: str) -> dict[str, float]:
-    return (
-        {"rtol": 1e-3, "atol": 1e-4}
-        if device == "metal"
-        else {"rtol": 1e-4, "atol": 1e-5}
-    )
+    return {"rtol": 1e-3, "atol": 1e-4} if device == "metal" else {"rtol": 1e-4, "atol": 1e-5}
 
 
 def _lucid_call(fn: str, a: np.ndarray, kw: dict[str, Any], device: str) -> Any:

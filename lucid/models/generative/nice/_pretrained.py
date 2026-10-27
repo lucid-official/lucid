@@ -314,9 +314,7 @@ def nice_cifar(pretrained: bool = False, **overrides: object) -> NICEModel:
     default_config=_CFG_MNIST,
     params=19158352,
 )
-def nice_mnist_gen(
-    pretrained: bool = False, **overrides: object
-) -> NICEForImageGeneration:
+def nice_mnist_gen(pretrained: bool = False, **overrides: object) -> NICEForImageGeneration:
     r"""NICE generator for the MNIST setup (NLL loss + ``.generate()``).
 
     Same bijection as :func:`nice_mnist`, wrapped with the exact
@@ -365,9 +363,7 @@ def nice_mnist_gen(
     default_config=_CFG_TFD,
     params=346166912,
 )
-def nice_tfd_gen(
-    pretrained: bool = False, **overrides: object
-) -> NICEForImageGeneration:
+def nice_tfd_gen(pretrained: bool = False, **overrides: object) -> NICEForImageGeneration:
     r"""NICE generator for the TFD setup (NLL loss + ``.generate()``).
 
     Same bijection as :func:`nice_tfd` — four coupling layers of four
@@ -416,9 +412,7 @@ def nice_tfd_gen(
     default_config=_CFG_SVHN,
     params=72617216,
 )
-def nice_svhn_gen(
-    pretrained: bool = False, **overrides: object
-) -> NICEForImageGeneration:
+def nice_svhn_gen(pretrained: bool = False, **overrides: object) -> NICEForImageGeneration:
     r"""NICE generator for the SVHN setup (NLL loss + ``.generate()``).
 
     Same bijection as :func:`nice_svhn`, wrapped with the exact
@@ -465,9 +459,7 @@ def nice_svhn_gen(
     default_config=_CFG_CIFAR,
     params=72617216,
 )
-def nice_cifar_gen(
-    pretrained: bool = False, **overrides: object
-) -> NICEForImageGeneration:
+def nice_cifar_gen(pretrained: bool = False, **overrides: object) -> NICEForImageGeneration:
     r"""NICE generator for the CIFAR-10 setup (NLL loss + ``.generate()``).
 
     Same bijection as :func:`nice_cifar`, wrapped with the exact

@@ -63,9 +63,7 @@ class Outcome:
     reached: set[str] = field(default_factory=set)
 
 
-def make_input(
-    kind: str, dtype: str, shape: tuple[int, ...], seed: int
-) -> lucid.Tensor:
+def make_input(kind: str, dtype: str, shape: tuple[int, ...], seed: int) -> lucid.Tensor:
     lucid.manual_seed(seed)
     if dtype == "bool":
         return (lucid.randint(0, 2, shape) == 1).to(DEV)
@@ -125,9 +123,7 @@ def _reached(fn: Callable[[lucid.Tensor], object], x: lucid.Tensor) -> set[str]:
 def run(case: Case, dtype: str) -> Outcome:
     import os
 
-    os.environ["LUCID_COMPILE_VERBOSE"] = (
-        "1"  # the fallback reason is printed only then
-    )
+    os.environ["LUCID_COMPILE_VERBOSE"] = "1"  # the fallback reason is printed only then
     x1 = make_input(case.kind, dtype, case.shape, 1)
     x2 = make_input(case.kind, dtype, case.shape, 2)
     try:
@@ -299,9 +295,7 @@ def _cases() -> list[Case]:
         add(name, f)
     # Not bool: the reference framework rejects ``lerp`` on bools; Lucid's
     # eager answers with bool arithmetic that is not worth pinning down.
-    add(
-        "lerp", lambda t: lucid.lerp(t, t.flip([0]), 0.25), dtypes=("f32", "i64", "i32")
-    )
+    add("lerp", lambda t: lucid.lerp(t, t.flip([0]), 0.25), dtypes=("f32", "i64", "i32"))
     add("bitwise_and", lambda t: t & t.flip([0]), dtypes=("i64", "i32", "bool"))
     add("invert", lambda t: ~t, dtypes=("i64", "i32", "bool"))
     add("bitwise_or", lambda t: t | t.flip([0]), dtypes=("i64", "i32", "bool"))
@@ -386,9 +380,7 @@ def _cases() -> list[Case]:
         "pad": lambda t: F.pad(t, (1, 2)),
         "slice": lambda t: t[1:3, ::2] * 1,
         "narrow": lambda t: lucid.narrow(t, 1, 2, 3) * 1,
-        "gather": lambda t: lucid.gather(
-            t, 1, _idx(0, 5, 2, 1, 3, 4).reshape(1, 6).expand(4, 6)
-        ),
+        "gather": lambda t: lucid.gather(t, 1, _idx(0, 5, 2, 1, 3, 4).reshape(1, 6).expand(4, 6)),
         "index_select": lambda t: lucid.index_select(t, 0, _idx(3, 0, 0, 2)),
         "fancy_index": lambda t: t[_idx(2, 0, 3)],
         "take_along_dim": lambda t: lucid.take_along_dim(t, lucid.argsort(t, dim=1), 1),
@@ -610,9 +602,7 @@ def _cases() -> list[Case]:
     )
     add(
         "interp_trilinear",
-        lambda t: F.interpolate(
-            t, size=(3, 5, 4), mode="trilinear", align_corners=False
-        ),
+        lambda t: F.interpolate(t, size=(3, 5, 4), mode="trilinear", align_corners=False),
         shape=(1, 2, 2, 3, 3),
         dtypes=fo,
     )
@@ -638,9 +628,7 @@ def _cases() -> list[Case]:
         )
     add(
         "interp_trilinear_ac",
-        lambda t: F.interpolate(
-            t, size=(3, 5, 4), mode="trilinear", align_corners=True
-        ),
+        lambda t: F.interpolate(t, size=(3, 5, 4), mode="trilinear", align_corners=True),
         shape=(1, 2, 2, 3, 3),
         dtypes=fo,
     )
@@ -671,16 +659,12 @@ def _cases() -> list[Case]:
     add("huber_loss", lambda t: F.huber_loss(t, t.flip([0])), dtypes=fo)
     add(
         "bce",
-        lambda t: F.binary_cross_entropy(
-            lucid.sigmoid(t), (t.flip([0]) > 0).to(lucid.float32)
-        ),
+        lambda t: F.binary_cross_entropy(lucid.sigmoid(t), (t.flip([0]) > 0).to(lucid.float32)),
         dtypes=fo,
     )
     add(
         "bce_logits",
-        lambda t: F.binary_cross_entropy_with_logits(
-            t, (t.flip([0]) > 0).to(lucid.float32)
-        ),
+        lambda t: F.binary_cross_entropy_with_logits(t, (t.flip([0]) > 0).to(lucid.float32)),
         dtypes=fo,
     )
     add(
@@ -691,9 +675,7 @@ def _cases() -> list[Case]:
     )
     add(
         "sdpa_causal",
-        lambda t: F.scaled_dot_product_attention(
-            t, t.flip([2]), t * 0.5, is_causal=True
-        ),
+        lambda t: F.scaled_dot_product_attention(t, t.flip([2]), t * 0.5, is_causal=True),
         shape=(2, 2, 5, 4),
         dtypes=fo,
     )
@@ -760,9 +742,7 @@ def _both(exc: type[Exception], why: str) -> Refusal:
     return Refusal(exc, exc, why)
 
 
-def _each(
-    name: str, dtypes: tuple[str, ...], r: Refusal
-) -> dict[tuple[str, str], Refusal]:
+def _each(name: str, dtypes: tuple[str, ...], r: Refusal) -> dict[tuple[str, str], Refusal]:
     return {(name, d): r for d in dtypes}
 
 
@@ -801,9 +781,7 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     ("kthvalue", "bool"): _both(_NOT_IMPL, "kthvalue does not order bools"),
     ("inner", "bool"): _both(_NOT_IMPL, "no inner product of bools"),
     **_each("hypot", _NON_FLOAT, _both(_NOT_IMPL, "hypot takes floating tensors")),
-    **_each(
-        "logaddexp", _NON_FLOAT, _both(_NOT_IMPL, "logaddexp takes floating tensors")
-    ),
+    **_each("logaddexp", _NON_FLOAT, _both(_NOT_IMPL, "logaddexp takes floating tensors")),
     # A norm has no integer form; the reference refuses every order (LCD-384).
     **_each("norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
     **_each(
@@ -823,9 +801,7 @@ def refusal(name: str, dtype: str, device: str) -> type[Exception] | None:
 
 def all_params() -> list[tuple[str, str]]:
     """Every (case, dtype) the replay runs: the declared dtypes eager answers."""
-    return [
-        (c.name, d) for c in CASES for d in c.dtypes if refusal(c.name, d, DEV) is None
-    ]
+    return [(c.name, d) for c in CASES for d in c.dtypes if refusal(c.name, d, DEV) is None]
 
 
 def _main() -> None:  # pragma: no cover — manual triage

@@ -444,9 +444,7 @@ class TestFasterRCNNTraining:
     def _targets() -> list[dict[str, Tensor]]:
         return [
             {
-                "boxes": lucid.tensor(
-                    [[10.0, 10.0, 60.0, 60.0], [70.0, 70.0, 110.0, 110.0]]
-                ),
+                "boxes": lucid.tensor([[10.0, 10.0, 60.0, 60.0], [70.0, 70.0, 110.0, 110.0]]),
                 "labels": lucid.tensor([1, 2]).long(),
             }
         ]
@@ -489,9 +487,7 @@ class TestFasterRCNNTraining:
         assert float(obj.item()) > 0.0
         assert float(reg.item()) > 0.0
 
-        props = m._rpn_proposals(  # type: ignore[attr-defined]
-            logits, deltas, anchors, (128, 128)
-        )
+        props = m._rpn_proposals(logits, deltas, anchors, (128, 128))  # type: ignore[attr-defined]
         sampled, labels, _, _ = m._select_training_samples(  # type: ignore[attr-defined]
             props, targets
         )
@@ -822,9 +818,7 @@ class TestDetectionPresetCanvas:
                 proposals=proposals,
             )
         else:
-            out = ObjectDetectionOutput(
-                logits=logits, pred_boxes=pred_boxes, proposals=proposals
-            )
+            out = ObjectDetectionOutput(logits=logits, pred_boxes=pred_boxes, proposals=proposals)
         det = model.postprocess(out, image_sizes=[(h, w)])[0]
         assert int(det["boxes"].shape[0]) == 1
         got = [float(v) for v in det["boxes"].numpy().reshape(-1)]
@@ -855,9 +849,7 @@ class TestDetectionPresetCanvas:
         box, (h, _) = self._far_corner(centred)
         assert box[1] >= h
 
-    def test_both_detectors_derive_strides_one_way(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_both_detectors_derive_strides_one_way(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Mask R-CNN imports Faster R-CNN's backbone and stride rule, and
         Faster R-CNN's own forward applies that rule: at 96 the pool level is
         2 wide, a stride of 48."""
@@ -1016,10 +1008,7 @@ class TestMaskRCNNTraining:
         from lucid.models._utils._detection import project_masks_on_boxes
 
         side = 20
-        quadrant = [
-            [1.0 if (r < 10 and c < 10) else 0.0 for c in range(side)]
-            for r in range(side)
-        ]
+        quadrant = [[1.0 if (r < 10 and c < 10) else 0.0 for c in range(side)] for r in range(side)]
         gt_masks = lucid.tensor([quadrant])
         proposals = lucid.tensor([[0.0, 0.0, 10.0, 10.0], [10.0, 10.0, 20.0, 20.0]])
         matched = lucid.tensor([0, 0]).long()
@@ -1326,9 +1315,7 @@ class TestRoIAlign:
         feat = lucid.ones(1, 4, 16, 16) * 3.0
         boxes = [lucid.tensor([[2.0, 3.0, 11.0, 13.0], [0.0, 0.0, 15.0, 15.0]])]
         for ratio in (1, 2, -1):
-            out = roi_align(
-                feat, boxes, output_size=7, spatial_scale=1.0, sampling_ratio=ratio
-            )
+            out = roi_align(feat, boxes, output_size=7, spatial_scale=1.0, sampling_ratio=ratio)
             assert tuple(out.shape) == (2, 4, 7, 7)
             # A constant feature must sample to that constant everywhere.
             assert abs(float(out.max().item()) - 3.0) < 1e-5
@@ -1403,9 +1390,7 @@ class TestFasterRCNNWeightsEnums:
     def test_default_aliases_coco(self) -> None:
         from lucid.models.vision.faster_rcnn import FasterRCNNResNet50FPNWeights
 
-        assert (
-            FasterRCNNResNet50FPNWeights.DEFAULT is FasterRCNNResNet50FPNWeights.COCO_V1
-        )
+        assert FasterRCNNResNet50FPNWeights.DEFAULT is FasterRCNNResNet50FPNWeights.COCO_V1
 
     def test_entry_fields(self) -> None:
         from lucid.models.vision.faster_rcnn import FasterRCNNResNet50FPNWeights
@@ -1417,9 +1402,7 @@ class TestFasterRCNNWeightsEnums:
         assert "lucid-dl/faster-rcnn-resnet-50-fpn" in e.url
         assert "/COCO_V1/" in e.url
         meta = FasterRCNNResNet50FPNWeights.COCO_V1.meta
-        assert meta["source"] == (
-            "reference_vision/FasterRCNN_ResNet50_FPN_Weights.COCO_V1"
-        )
+        assert meta["source"] == ("reference_vision/FasterRCNN_ResNet50_FPN_Weights.COCO_V1")
         assert meta["license"] == "bsd-3-clause"
         assert meta["num_params"] == 41_755_286
         assert meta["metrics"]["COCO"]["box mAP"] == 37.0
@@ -1472,9 +1455,7 @@ class TestMaskRCNNWeightsEnums:
         assert "lucid-dl/mask-rcnn-resnet-50-fpn" in e.url
         assert "/COCO_V1/" in e.url
         meta = MaskRCNNResNet50FPNWeights.COCO_V1.meta
-        assert meta["source"] == (
-            "reference_vision/MaskRCNN_ResNet50_FPN_Weights.COCO_V1"
-        )
+        assert meta["source"] == ("reference_vision/MaskRCNN_ResNet50_FPN_Weights.COCO_V1")
         assert meta["license"] == "bsd-3-clause"
         assert meta["num_params"] == 44_401_393
         assert meta["metrics"]["COCO"]["box mAP"] == 37.9
@@ -1661,17 +1642,13 @@ class TestLinearSVM:
         from lucid.models._utils._common import fit_linear_svm
 
         with pytest.raises(ValueError, match=r"exactly \+1 and -1"):
-            fit_linear_svm(
-                lucid.tensor([[1.0, 0.0], [-1.0, 0.0]]), lucid.tensor([1.0, 0.0])
-            )
+            fit_linear_svm(lucid.tensor([[1.0, 0.0], [-1.0, 0.0]]), lucid.tensor([1.0, 0.0]))
 
     def test_single_class_is_refused(self) -> None:
         from lucid.models._utils._common import fit_linear_svm
 
         with pytest.raises(ValueError, match="both positive and negative"):
-            fit_linear_svm(
-                lucid.tensor([[1.0, 0.0], [-1.0, 0.0]]), lucid.tensor([1.0, 1.0])
-            )
+            fit_linear_svm(lucid.tensor([[1.0, 0.0], [-1.0, 0.0]]), lucid.tensor([1.0, 1.0]))
 
 
 class TestHardNegativeMining:
@@ -1726,12 +1703,8 @@ class TestHardNegativeMining:
             lucid.tensor([1.0] * 20 + [-1.0] * 50),
         )
         hard = neg[360:]
-        mined_worst = max(
-            ((hard @ w_mined.reshape(-1, 1)).reshape(-1) + b_mined).tolist()
-        )
-        plain_worst = max(
-            ((hard @ w_plain.reshape(-1, 1)).reshape(-1) + b_plain).tolist()
-        )
+        mined_worst = max(((hard @ w_mined.reshape(-1, 1)).reshape(-1) + b_mined).tolist())
+        plain_worst = max(((hard @ w_plain.reshape(-1, 1)).reshape(-1) + b_plain).tolist())
         assert plain_worst > 0.0  # the easy-slice fit gets them wrong
         assert mined_worst < plain_worst
 
@@ -1789,9 +1762,7 @@ class TestYOLOV2MultiScale:
         model = YOLOV2ForObjectDetection(YOLOV2Config(num_classes=4)).eval()
         base = lucid.randn(1, 3, 320, 320)
         for side in (320, 448, 608):
-            x = F.interpolate(
-                base, size=(side, side), mode="bilinear", align_corners=False
-            )
+            x = F.interpolate(base, size=(side, side), mode="bilinear", align_corners=False)
             out = model(x)
             assert int(out.pred_boxes.shape[1]) == (side // 32) ** 2 * 5
 
@@ -1828,9 +1799,7 @@ class TestYOLOV2MultiScale:
 
         per_cell = []
         for side in (320, 416, 608):
-            x = F.interpolate(
-                base, size=(side, side), mode="bilinear", align_corners=False
-            )
+            x = F.interpolate(base, size=(side, side), mode="bilinear", align_corners=False)
             out = model(x, targets=targets)
             assert out.loss is not None
             per_cell.append(float(out.loss.item()) / ((side // 32) ** 2 * 5))
@@ -1902,9 +1871,7 @@ class TestNms:
 
     @pytest.mark.parametrize("n", [1, 31, 32, 33, 64, 200, 1000])
     @pytest.mark.parametrize("thr", [0.3, 0.7])
-    def test_matches_the_plain_greedy_pass(
-        self, device: str, n: int, thr: float
-    ) -> None:
+    def test_matches_the_plain_greedy_pass(self, device: str, n: int, thr: float) -> None:
         from lucid.models._utils._detection import nms
 
         boxes, scores = self._boxes(n, device)

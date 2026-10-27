@@ -237,9 +237,7 @@ class LatentPolicy:
             # `.type` — str(device) renders as "device('cpu')", which the
             # factories do not parse.
             self._state = self.rssm.initial(1, device=observation.device.type)
-            self._previous = lucid.zeros(
-                (1, self.action_dim), device=observation.device
-            )
+            self._previous = lucid.zeros((1, self.action_dim), device=observation.device)
 
         shape = tuple(int(s) for s in observation.shape)
         embed = self._encode(observation.reshape(1, 1, *shape))[:, 0]

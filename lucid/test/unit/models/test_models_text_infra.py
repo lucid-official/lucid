@@ -65,9 +65,7 @@ class _DeterministicLM(CausalLMMixin, nn.Module):
     def __init__(self, vocab: int = 7, eos: int | None = None) -> None:
         super().__init__()
         self.vocab = vocab
-        self.config = type(
-            "C", (), {"eos_token_id": eos, "pad_token_id": 0, "vocab_size": vocab}
-        )()
+        self.config = type("C", (), {"eos_token_id": eos, "pad_token_id": 0, "vocab_size": vocab})()
 
     def forward(self, input_ids: lucid.Tensor) -> CausalLMOutput:
         B = int(input_ids.shape[0])
@@ -113,9 +111,7 @@ class TestCausalLMMixin:
     def test_sampling_runs(self) -> None:
         m = _DeterministicLM(vocab=7)
         prompt = lucid.tensor([[1, 2]]).long()
-        out = m.generate(
-            prompt, max_length=5, do_sample=True, temperature=0.7, top_k=3, top_p=0.9
-        )
+        out = m.generate(prompt, max_length=5, do_sample=True, temperature=0.7, top_k=3, top_p=0.9)
         assert tuple(out.shape) == (1, 5)
 
     def test_input_must_be_2d(self) -> None:
@@ -259,9 +255,7 @@ class TestTaskWrapperEmbeddings:
         assert _trunk(model).get_input_embeddings() is new
 
     @pytest.mark.parametrize("wrapper", _WRAPPERS, ids=lambda w: w.__name__)
-    def test_a_tied_head_follows_the_new_table(
-        self, wrapper: type[PretrainedModel]
-    ) -> None:
+    def test_a_tied_head_follows_the_new_table(self, wrapper: type[PretrainedModel]) -> None:
         # Shared source/target tables, so the seq2seq head -- tied to the
         # target side -- is tied to the table being replaced as well.
         model = _build(wrapper, share_embeddings=True)

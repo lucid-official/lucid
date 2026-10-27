@@ -46,9 +46,7 @@ _MASK_SHAPES = [
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 @pytest.mark.parametrize("mshape", _MASK_SHAPES)
-def test_sdpa_additive_mask_broadcast_matches_manual(
-    device: str, mshape: tuple
-) -> None:
+def test_sdpa_additive_mask_broadcast_matches_manual(device: str, mshape: tuple) -> None:
     if device == "metal" and not metal_available():
         pytest.skip("metal backend unavailable")
     lucid.manual_seed(0)

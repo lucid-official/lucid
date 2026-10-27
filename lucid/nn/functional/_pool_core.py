@@ -123,9 +123,7 @@ def _pool_windows(x: Tensor, g: _PoolGeometry, out_spatial: tuple[int, ...]) -> 
         windows = windows.narrow(lead + d, 0, out_spatial[d])
     for d in range(n):
         if dilation[d] > 1:
-            taps = _lucid.arange(
-                0, span[d], dilation[d], dtype=_lucid.int64, device=x.device
-            )
+            taps = _lucid.arange(0, span[d], dilation[d], dtype=_lucid.int64, device=x.device)
             windows = windows.index_select(x.ndim + d, taps)
     return windows.reshape(*x.shape[:lead], *out_spatial, math.prod(kernel))
 
@@ -187,9 +185,7 @@ def _adaptive_argmax_indices(x: Tensor, out_spatial: tuple[int, ...]) -> Tensor:
     if all(i % o == 0 for i, o in zip(spatial, out_spatial, strict=True)):
         kernel = tuple(i // o for i, o in zip(spatial, out_spatial, strict=True))
         g = _PoolGeometry(kernel, kernel, (0,) * n, (1,) * n)
-        return _window_argmax_indices(
-            x, g, out_spatial, _pool_windows(x, g, out_spatial)
-        )
+        return _window_argmax_indices(x, g, out_spatial, _pool_windows(x, g, out_spatial))
     found: list[Tensor] = []
     for cell, window in _adaptive_cells(x, out_spatial):
         extent = [hi - lo for lo, hi in cell]
@@ -203,9 +199,7 @@ def _adaptive_argmax_indices(x: Tensor, out_spatial: tuple[int, ...]) -> Tensor:
     return _lucid.stack(found, dim=-1).reshape(*x.shape[:lead], *out_spatial)
 
 
-def _adaptive_pool_python(
-    x: Tensor, output_size: tuple[int, ...], reduce: str
-) -> Tensor:
+def _adaptive_pool_python(x: Tensor, output_size: tuple[int, ...], reduce: str) -> Tensor:
     """Engine fallback for adaptive pooling with non-divisible sizes.
 
     Reduces each window ``[floor(i·in/out), ceil((i+1)·in/out))`` per axis,
@@ -249,9 +243,7 @@ def _max_pool(
     xb, unbatched = _add_batch_axis(x, n)
     if any(d != 1 for d in g.dilation):
         if xb.ndim != n + 2:
-            raise ValueError(
-                f"max_pool{n}d: expected {n + 1}D or {n + 2}D input, got {x.ndim}D"
-            )
+            raise ValueError(f"max_pool{n}d: expected {n + 1}D or {n + 2}D input, got {x.ndim}D")
         spatial = tuple(int(v) for v in xb.shape[2:])
         out_spatial = tuple(
             _pooled_extent(size, *axis, ceil_mode)
@@ -265,9 +257,7 @@ def _max_pool(
         windows = _pool_windows(xb, g, out_spatial)
         out = windows.max(dim=-1).values
     else:
-        out = _wrap(
-            _MAX_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode)
-        )
+        out = _wrap(_MAX_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode))
         if not return_indices:
             return _drop_batch_axis(out, unbatched)
         out_spatial = tuple(int(v) for v in out.shape[-n:])
@@ -287,9 +277,7 @@ def _padded_window_sizes(
     the padding (``ceil_mode``) counts only what it covers.
     """
     sizes: list[list[int]] = []
-    for size, o, (k, s, p, _) in zip(
-        spatial, out_spatial, zip(*g, strict=True), strict=True
-    ):
+    for size, o, (k, s, p, _) in zip(spatial, out_spatial, zip(*g, strict=True), strict=True):
         sizes.append([min(i * s - p + k, size + p) - (i * s - p) for i in range(o)])
     return sizes
 
@@ -311,9 +299,7 @@ def _avg_pool(
         raise ValueError(f"avg_pool{n}d: divisor_override must not be zero")
     xb, unbatched = _add_batch_axis(x, n)
     cip = count_include_pad or divisor_override is not None
-    out = _wrap(
-        _AVG_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode, cip)
-    )
+    out = _wrap(_AVG_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode, cip))
     if divisor_override is not None:
         sizes = _padded_window_sizes(
             tuple(int(v) for v in xb.shape[2:]), g, tuple(int(v) for v in out.shape[2:])
@@ -370,13 +356,10 @@ def _adaptive_size(
             f"{op}: expected output_size to be a single integer or {n} entries, "
             f"got {output_size!r}"
         )
-    sizes = tuple(
-        e if v is None else int(v) for v, e in zip(given, spatial, strict=True)
-    )
+    sizes = tuple(e if v is None else int(v) for v, e in zip(given, spatial, strict=True))
     if min(sizes) < 0:
         raise ValueError(
-            f"{op}: elements of output_size must be greater than or equal to 0, "
-            f"got {sizes}"
+            f"{op}: elements of output_size must be greater than or equal to 0, " f"got {sizes}"
         )
     return sizes
 
@@ -395,9 +378,7 @@ def _adaptive_pool(
     with _pool_autocast(op, x) as x:
         xb, unbatched = _add_batch_axis(x, n)
         if xb.ndim != n + 2:
-            raise ValueError(
-                f"{op}: expected {n + 1}D or {n + 2}D input, got {x.ndim}D"
-            )
+            raise ValueError(f"{op}: expected {n + 1}D or {n + 2}D input, got {x.ndim}D")
         spatial = tuple(int(s) for s in xb.shape[-n:])
         sizes = _adaptive_size(output_size, spatial, op)
         if 0 in sizes:
@@ -495,9 +476,7 @@ def _fractional_plane(
         taps = [s + k for s in starts[d] for k in range(kernel[d])]
         rows = _lucid.tensor(taps, dtype=_lucid.int64, device=plane.device)
         windows = windows.index_select(2 * d, rows)
-        windows = windows.reshape(
-            *windows.shape[: 2 * d], out[d], kernel[d], *spatial[d + 1 :]
-        )
+        windows = windows.reshape(*windows.shape[: 2 * d], out[d], kernel[d], *spatial[d + 1 :])
     order = [2 * d for d in range(n)] + [2 * d + 1 for d in range(n)]
     flat = windows.permute(order).reshape(*out, math.prod(kernel))
     values, local = flat.max(dim=-1)
@@ -582,17 +561,13 @@ def _fractional_max_pool(
             for c in range(channels):
                 at = (b * channels + c) * n
                 starts = [
-                    _frac_pool_starts(
-                        spatial[d], kernel[d], out[d], u[at + axis_sample[d]], single
-                    )
+                    _frac_pool_starts(spatial[d], kernel[d], out[d], u[at + axis_sample[d]], single)
                     for d in range(n)
                 ]
                 value, index = _fractional_plane(xb[b, c], starts, kernel)
                 values.append(value)
                 indices.append(index)
-        result = _drop_batch_axis(
-            _lucid.stack(values).reshape(batch, channels, *out), unbatched
-        )
+        result = _drop_batch_axis(_lucid.stack(values).reshape(batch, channels, *out), unbatched)
         if not return_indices:
             return result
         where = _lucid.stack(indices).reshape(batch, channels, *out)

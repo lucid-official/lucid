@@ -177,9 +177,7 @@ def vjepa_huge_16(pretrained: bool = False, **overrides: object) -> VJEPAModel:
     default_config=_CFG_HUGE_16,
     summary="auto",
 )
-def vjepa_huge_16_cls(
-    pretrained: bool = False, **overrides: object
-) -> VJEPAForVideoClassification:
+def vjepa_huge_16_cls(pretrained: bool = False, **overrides: object) -> VJEPAForVideoClassification:
     r"""V-JEPA ViT-H/16 under the paper's attentive probe.
 
     Parameters

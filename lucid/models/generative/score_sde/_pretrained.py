@@ -70,9 +70,7 @@ def score_sde_vp(pretrained: bool = False, **overrides: object) -> ScoreSDEModel
     default_config=_CFG_VP,
     summary="auto",
 )
-def score_sde_vp_gen(
-    pretrained: bool = False, **overrides: object
-) -> ScoreSDEForImageGeneration:
+def score_sde_vp_gen(pretrained: bool = False, **overrides: object) -> ScoreSDEForImageGeneration:
     r"""The VP model with its objective and the three samplers.
 
     Parameters
@@ -152,9 +150,7 @@ def score_sde_ve(pretrained: bool = False, **overrides: object) -> ScoreSDEModel
     default_config=_CFG_VE,
     summary="auto",
 )
-def score_sde_ve_gen(
-    pretrained: bool = False, **overrides: object
-) -> ScoreSDEForImageGeneration:
+def score_sde_ve_gen(pretrained: bool = False, **overrides: object) -> ScoreSDEForImageGeneration:
     r"""The VE model with its objective and the three samplers.
 
     Parameters

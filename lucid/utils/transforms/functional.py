@@ -31,9 +31,7 @@ def _cat(tensors: list[Tensor], dim: int) -> Tensor:
 def _spatial_hw(img: Tensor) -> tuple[int, int]:
     """Return ``(H, W)`` for a CHW or NCHW tensor."""
     if img.ndim not in (3, 4):
-        raise ValueError(
-            f"expected a (C, H, W) or (B, C, H, W) tensor, got ndim={img.ndim}"
-        )
+        raise ValueError(f"expected a (C, H, W) or (B, C, H, W) tensor, got ndim={img.ndim}")
     return int(img.shape[-2]), int(img.shape[-1])
 
 
@@ -278,12 +276,8 @@ def normalize(
     Tensor
         Normalized image with the same shape and dtype as ``img``.
     """
-    mean_t = lucid.tensor(list(mean), dtype=img.dtype, device=img.device).reshape(
-        -1, 1, 1
-    )
-    std_t = lucid.tensor(list(std), dtype=img.dtype, device=img.device).reshape(
-        -1, 1, 1
-    )
+    mean_t = lucid.tensor(list(mean), dtype=img.dtype, device=img.device).reshape(-1, 1, 1)
+    std_t = lucid.tensor(list(std), dtype=img.dtype, device=img.device).reshape(-1, 1, 1)
     return (img - mean_t) / std_t
 
 
@@ -512,9 +506,7 @@ def rgb_to_hsv(img: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     rc = (maxc - r) / (delta + eps)
     gc = (maxc - g) / (delta + eps)
     bc = (maxc - b) / (delta + eps)
-    hue = lucid.where(
-        maxc == r, bc - gc, lucid.where(maxc == g, 2.0 + rc - bc, 4.0 + gc - rc)
-    )
+    hue = lucid.where(maxc == r, bc - gc, lucid.where(maxc == g, 2.0 + rc - bc, 4.0 + gc - rc))
     hue = _frac1(hue / 6.0)
     hue = lucid.where(delta < eps, hue * 0.0, hue)
 
@@ -561,9 +553,7 @@ def hsv_to_rgb(h: Tensor, s: Tensor, v: Tensor) -> Tensor:
     t = v * (1.0 - s * (1.0 - f))
     i_mod = i - 6.0 * lucid.floor(i / 6.0)
 
-    def _sel(
-        c0: Tensor, c1: Tensor, c2: Tensor, c3: Tensor, c4: Tensor, c5: Tensor
-    ) -> Tensor:
+    def _sel(c0: Tensor, c1: Tensor, c2: Tensor, c3: Tensor, c4: Tensor, c5: Tensor) -> Tensor:
         out = lucid.where(i_mod == 0, c0, c1)
         out = lucid.where(i_mod == 2, c2, out)
         out = lucid.where(i_mod == 3, c3, out)
@@ -603,9 +593,7 @@ def adjust_hue(img: Tensor, factor: float) -> Tensor:
     return hsv_to_rgb(_frac1(h + factor), s, v)
 
 
-def adjust_hsv(
-    img: Tensor, hue_shift: float, sat_shift: float, val_shift: float
-) -> Tensor:
+def adjust_hsv(img: Tensor, hue_shift: float, sat_shift: float, val_shift: float) -> Tensor:
     r"""Additive HSV shift (cv2 / Albumentations ``HueSaturationValue`` semantics).
 
     Round-trips through HSV via :func:`rgb_to_hsv` /
@@ -686,9 +674,7 @@ def _norm_to_pixel(h: int, w: int, device: DeviceLike = None) -> Tensor:
     )
 
 
-def affine_theta(
-    matrix: Tensor, in_hw: tuple[int, int], out_hw: tuple[int, int]
-) -> Tensor:
+def affine_theta(matrix: Tensor, in_hw: tuple[int, int], out_hw: tuple[int, int]) -> Tensor:
     """Convert a forward pixel matrix ``M`` to ``affine_grid`` ``theta`` (1,2,3).
 
     Composes the normalisation transforms on either side of ``M`` so
@@ -1021,15 +1007,11 @@ def remap(img: Tensor, dx: Tensor, dy: Tensor, *, mode: str = "bilinear") -> Ten
     if b > 1:
         grid = _cat([grid] * b, 0)
     gmode = "nearest" if mode == "nearest" else "bilinear"
-    y = F.grid_sample(
-        x, grid, mode=gmode, padding_mode="reflection", align_corners=True
-    )
+    y = F.grid_sample(x, grid, mode=gmode, padding_mode="reflection", align_corners=True)
     return y[0] if unbatched else y
 
 
-def sample_field_at_points(
-    field: Tensor, pts: Tensor, canvas_hw: tuple[int, int]
-) -> Tensor:
+def sample_field_at_points(field: Tensor, pts: Tensor, canvas_hw: tuple[int, int]) -> Tensor:
     """Bilinearly sample a 2-D scalar field at arbitrary continuous points.
 
     Wraps :func:`grid_sample` for the common case of looking up
@@ -1060,9 +1042,7 @@ def sample_field_at_points(
     gx = 2.0 * pts[:, 0:1] / (w - 1) - 1.0
     gy = 2.0 * pts[:, 1:2] / (h - 1) - 1.0
     grid = _cat([gx, gy], 1).reshape(1, n, 1, 2)
-    samp = F.grid_sample(
-        field.reshape(1, 1, h, w), grid, mode="bilinear", align_corners=True
-    )
+    samp = F.grid_sample(field.reshape(1, 1, h, w), grid, mode="bilinear", align_corners=True)
     return samp.reshape(n, 1)
 
 
@@ -1116,9 +1096,7 @@ def equalize(img: Tensor, clip_limit: float | None = None) -> Tensor:
     b, c, h, w = (int(d) for d in x.shape)
     imgs = []
     for bi in range(b):
-        chans = [
-            _equalize_channel(x[bi, ci], clip_limit).reshape(1, h, w) for ci in range(c)
-        ]
+        chans = [_equalize_channel(x[bi, ci], clip_limit).reshape(1, h, w) for ci in range(c)]
         imgs.append(_cat(chans, 0).reshape(1, c, h, w))
     out = _cat(imgs, 0)
     return out[0] if unbatched else out
@@ -1229,9 +1207,7 @@ def _clahe_channel(ch: Tensor, clip_limit: float, grid_h: int, grid_w: int) -> T
     return top * (1.0 - wy) + bot * wy
 
 
-def clahe(
-    img: Tensor, clip_limit: float = 4.0, tile_grid_size: tuple[int, int] = (8, 8)
-) -> Tensor:
+def clahe(img: Tensor, clip_limit: float = 4.0, tile_grid_size: tuple[int, int] = (8, 8)) -> Tensor:
     r"""Contrast-limited adaptive histogram equalization (cv2 ``CLAHE``).
 
     Per-tile clipped-histogram LUT plus 4-neighbour bilinear
@@ -1410,12 +1386,8 @@ def autocontrast(img: Tensor) -> Tensor:
         Contrast-stretched image, same shape and dtype as ``img``.
     """
     # min/max per channel over the spatial axes — both shape (..., C, 1, 1).
-    minv = lucid.min(
-        lucid.min(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True
-    ).values
-    maxv = lucid.max(
-        lucid.max(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True
-    ).values
+    minv = lucid.min(lucid.min(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True).values
+    maxv = lucid.max(lucid.max(img, dim=-1, keepdim=True).values, dim=-2, keepdim=True).values
     span = maxv - minv  # (..., C, 1, 1)
     # Multiplicative mask avoids the lucid.where shape constraint (which
     # requires cond + branches all the same shape, no broadcast).  The

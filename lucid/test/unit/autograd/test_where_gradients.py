@@ -81,9 +81,7 @@ def _explicit_cdist(a: lucid.Tensor, b: lucid.Tensor) -> lucid.Tensor:
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("wrt", [0, 1], ids=["x1", "x2"])
-def test_cdist_second_derivative_matches_the_explicit_formula(
-    device: str, wrt: int
-) -> None:
+def test_cdist_second_derivative_matches_the_explicit_formula(device: str, wrt: int) -> None:
     rng = np.random.default_rng(0)
     arrays = [
         rng.standard_normal((3, 2)).astype(np.float32),
@@ -96,9 +94,7 @@ def test_cdist_second_derivative_matches_the_explicit_formula(
         leaves = [lucid.tensor(a, requires_grad=True, device=device) for a in arrays]
         out = (fn(*leaves) * lucid.tensor(v, device=device)).sum()  # type: ignore[operator]
         (g,) = lucid.autograd.grad(out, [leaves[wrt]], create_graph=True)
-        (h,) = lucid.autograd.grad(
-            (g * lucid.tensor(w, device=device)).sum(), [leaves[wrt]]
-        )
+        (h,) = lucid.autograd.grad((g * lucid.tensor(w, device=device)).sum(), [leaves[wrt]])
         return h.numpy()
 
     np.testing.assert_allclose(

@@ -47,16 +47,12 @@ _BAD = {"parameter": _bad_linear, "buffer": _bad_batchnorm}
 def test_a_shape_mismatch_is_refused(case, assign, strict, device):
     module, state = _BAD[case](lucid)
     module.to(device)
-    before = {
-        k: (v, tuple(v.shape)) for k, v in module.state_dict(keep_vars=True).items()
-    }
+    before = {k: (v, tuple(v.shape)) for k, v in module.state_dict(keep_vars=True).items()}
     with pytest.raises(RuntimeError, match="size mismatch for"):
         module.load_state_dict(state, strict=strict, assign=assign)
     after = module.state_dict(keep_vars=True)
     (name,) = [k for k, v in state.items() if tuple(v.shape) != before[k][1]]
-    assert (
-        after[name] is before[name][0] and tuple(after[name].shape) == before[name][1]
-    )
+    assert after[name] is before[name][0] and tuple(after[name].shape) == before[name][1]
 
 
 @pytest.mark.parity
@@ -87,9 +83,7 @@ def test_an_assign_load_still_takes_the_checkpoint_dtype(device):
 # that bypassed it failed or left the module half-built.
 def _lazy_linear():
     module = nn.LazyLinear(3)
-    module.load_state_dict(
-        {"weight": lucid.ones(3, 4), "bias": lucid.ones(3)}, assign=True
-    )
+    module.load_state_dict({"weight": lucid.ones(3, 4), "bias": lucid.ones(3)}, assign=True)
     assert module.in_features == 4 and tuple(module.weight.shape) == (3, 4)
     assert module(lucid.ones(1, 4)).shape == (1, 3)
 
@@ -104,9 +98,7 @@ def _lazy_conv():
 
 def _batchnorm_version_1():
     state = OrderedDict(
-        (k, v)
-        for k, v in nn.BatchNorm1d(2).state_dict().items()
-        if k != "num_batches_tracked"
+        (k, v) for k, v in nn.BatchNorm1d(2).state_dict().items() if k != "num_batches_tracked"
     )
     state._metadata = {"": {"version": 1}}
     module = nn.BatchNorm1d(2)

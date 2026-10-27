@@ -46,9 +46,7 @@ _CFG_HYBRID_LARGE = MobileNetV4Config(variant="hybrid_large", dropout=0.2)
     params=1_261_664,
     summary="auto",
 )
-def mobilenet_v4_conv_small(
-    pretrained: bool = False, **overrides: object
-) -> MobileNetV4:
+def mobilenet_v4_conv_small(pretrained: bool = False, **overrides: object) -> MobileNetV4:
     r"""MobileNet-v4-Conv-Small feature-extracting backbone.
 
     Builds a :class:`MobileNetV4` with the Conv-Small architecture of
@@ -108,9 +106,7 @@ def mobilenet_v4_conv_small(
     params=7_203_152,
     summary="auto",
 )
-def mobilenet_v4_conv_medium(
-    pretrained: bool = False, **overrides: object
-) -> MobileNetV4:
+def mobilenet_v4_conv_medium(pretrained: bool = False, **overrides: object) -> MobileNetV4:
     r"""MobileNet-v4-Conv-Medium feature-extracting backbone.
 
     Builds a :class:`MobileNetV4` with the Conv-Medium architecture of
@@ -170,9 +166,7 @@ def mobilenet_v4_conv_medium(
     params=30_078_504,
     summary="auto",
 )
-def mobilenet_v4_conv_large(
-    pretrained: bool = False, **overrides: object
-) -> MobileNetV4:
+def mobilenet_v4_conv_large(pretrained: bool = False, **overrides: object) -> MobileNetV4:
     r"""MobileNet-v4-Conv-Large feature-extracting backbone.
 
     Builds a :class:`MobileNetV4` with the Conv-Large architecture of
@@ -232,9 +226,7 @@ def mobilenet_v4_conv_large(
     params=8_562_288,
     summary="auto",
 )
-def mobilenet_v4_hybrid_medium(
-    pretrained: bool = False, **overrides: object
-) -> MobileNetV4:
+def mobilenet_v4_hybrid_medium(pretrained: bool = False, **overrides: object) -> MobileNetV4:
     r"""MobileNet-v4-Hybrid-Medium feature-extracting backbone.
 
     Builds a :class:`MobileNetV4` with the Hybrid-Medium architecture of
@@ -294,9 +286,7 @@ def mobilenet_v4_hybrid_medium(
     params=35_252_264,
     summary="auto",
 )
-def mobilenet_v4_hybrid_large(
-    pretrained: bool = False, **overrides: object
-) -> MobileNetV4:
+def mobilenet_v4_hybrid_large(pretrained: bool = False, **overrides: object) -> MobileNetV4:
     r"""MobileNet-v4-Hybrid-Large feature-extracting backbone.
 
     Builds a :class:`MobileNetV4` with the Hybrid-Large architecture of
@@ -431,12 +421,8 @@ def mobilenet_v4_conv_small_cls(
     ...     weights=MobileNetV4ConvSmallWeights.E2400_R224_IN1K
     ... )
     """
-    entry = weights_mod.resolve_weights(
-        MobileNetV4ConvSmallWeights, pretrained, weights
-    )
-    model = MobileNetV4ForImageClassification(
-        apply_overrides(_CFG_CONV_SMALL, overrides)
-    )
+    entry = weights_mod.resolve_weights(MobileNetV4ConvSmallWeights, pretrained, weights)
+    model = MobileNetV4ForImageClassification(apply_overrides(_CFG_CONV_SMALL, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mobilenet_v4_conv_small_cls")
     return model
@@ -523,12 +509,8 @@ def mobilenet_v4_conv_medium_cls(
     ...     weights=MobileNetV4ConvMediumWeights.E500_R256_IN1K
     ... )
     """
-    entry = weights_mod.resolve_weights(
-        MobileNetV4ConvMediumWeights, pretrained, weights
-    )
-    model = MobileNetV4ForImageClassification(
-        apply_overrides(_CFG_CONV_MEDIUM, overrides)
-    )
+    entry = weights_mod.resolve_weights(MobileNetV4ConvMediumWeights, pretrained, weights)
+    model = MobileNetV4ForImageClassification(apply_overrides(_CFG_CONV_MEDIUM, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mobilenet_v4_conv_medium_cls")
     return model
@@ -615,12 +597,8 @@ def mobilenet_v4_conv_large_cls(
     ...     weights=MobileNetV4ConvLargeWeights.E600_R384_IN1K
     ... )
     """
-    entry = weights_mod.resolve_weights(
-        MobileNetV4ConvLargeWeights, pretrained, weights
-    )
-    model = MobileNetV4ForImageClassification(
-        apply_overrides(_CFG_CONV_LARGE, overrides)
-    )
+    entry = weights_mod.resolve_weights(MobileNetV4ConvLargeWeights, pretrained, weights)
+    model = MobileNetV4ForImageClassification(apply_overrides(_CFG_CONV_LARGE, overrides))
     if entry is not None:
         weights_mod.load_weight_entry(model, entry, name="mobilenet_v4_conv_large_cls")
     return model
@@ -707,16 +685,10 @@ def mobilenet_v4_hybrid_medium_cls(
     ...     weights=MobileNetV4HybridMediumWeights.IX_E550_R256_IN1K
     ... )
     """
-    entry = weights_mod.resolve_weights(
-        MobileNetV4HybridMediumWeights, pretrained, weights
-    )
-    model = MobileNetV4ForImageClassification(
-        apply_overrides(_CFG_HYBRID_MEDIUM, overrides)
-    )
+    entry = weights_mod.resolve_weights(MobileNetV4HybridMediumWeights, pretrained, weights)
+    model = MobileNetV4ForImageClassification(apply_overrides(_CFG_HYBRID_MEDIUM, overrides))
     if entry is not None:
-        weights_mod.load_weight_entry(
-            model, entry, name="mobilenet_v4_hybrid_medium_cls"
-        )
+        weights_mod.load_weight_entry(model, entry, name="mobilenet_v4_hybrid_medium_cls")
     return model
 
 
@@ -801,14 +773,8 @@ def mobilenet_v4_hybrid_large_cls(
     ...     weights=MobileNetV4HybridLargeWeights.IX_E600_R384_IN1K
     ... )
     """
-    entry = weights_mod.resolve_weights(
-        MobileNetV4HybridLargeWeights, pretrained, weights
-    )
-    model = MobileNetV4ForImageClassification(
-        apply_overrides(_CFG_HYBRID_LARGE, overrides)
-    )
+    entry = weights_mod.resolve_weights(MobileNetV4HybridLargeWeights, pretrained, weights)
+    model = MobileNetV4ForImageClassification(apply_overrides(_CFG_HYBRID_LARGE, overrides))
     if entry is not None:
-        weights_mod.load_weight_entry(
-            model, entry, name="mobilenet_v4_hybrid_large_cls"
-        )
+        weights_mod.load_weight_entry(model, entry, name="mobilenet_v4_hybrid_large_cls")
     return model

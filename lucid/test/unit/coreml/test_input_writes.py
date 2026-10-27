@@ -51,9 +51,7 @@ class _CountsIntoBuffer(nn.Module):
 class TestAWriteIntoAnInput:
     def test_the_package_reads_the_input_it_is_given(self, tmp_path: object) -> None:
         k, cache = lucid.ones(1, 2), lucid.zeros(1, 4)
-        exported = cml.export(
-            _FillsCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage"
-        )
+        exported = cml.export(_FillsCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage")
         try:
             got = exported.predict((k * 5.0, lucid.full((1, 4), 7.0)))
             assert got.tolist() == [[5.0, 5.0, 7.0, 7.0]]
@@ -68,9 +66,7 @@ class TestAWriteIntoAnInput:
     def test_an_in_place_op_verifies_against_eager(self, tmp_path: object) -> None:
         """``verify`` runs the package first, or eager's write is counted twice."""
         k, cache = lucid.ones(1, 2), lucid.zeros(1, 4)
-        exported = cml.export(
-            _AddsIntoCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage"
-        )
+        exported = cml.export(_AddsIntoCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage")
         try:
             fresh = (k * 5.0, lucid.full((1, 4), 7.0))
             assert exported.predict(fresh).tolist() == [[12.0, 12.0, 12.0, 12.0]]
@@ -78,9 +74,7 @@ class TestAWriteIntoAnInput:
         finally:
             exported.close()
 
-    def test_an_input_that_requires_grad_is_written_into_too(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_input_that_requires_grad_is_written_into_too(self, tmp_path: object) -> None:
         """A write into an input that requires grad is recorded like any other.
 
         Assigning into a tensor that requires grad used to rebind it to a new
@@ -92,9 +86,7 @@ class TestAWriteIntoAnInput:
         """
         k, cache = lucid.ones(1, 2), lucid.zeros(1, 4, requires_grad=True)
         held = cache._impl
-        exported = cml.export(
-            _FillsCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage"
-        )
+        exported = cml.export(_FillsCache().eval(), (k, cache), f"{tmp_path}/m.mlpackage")
         try:
             got = exported.predict((k * 5.0, lucid.full((1, 4), 7.0)))
             assert got.tolist() == [[5.0, 5.0, 7.0, 7.0]]
@@ -105,9 +97,7 @@ class TestAWriteIntoAnInput:
 
 
 class _AccumulatesInPlace(nn.Module):
-    def forward(
-        self, x: lucid.Tensor, cache: lucid.Tensor
-    ) -> tuple[lucid.Tensor, lucid.Tensor]:
+    def forward(self, x: lucid.Tensor, cache: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
         cache.add_(x)
         return cache, cache * 2.0
 
@@ -136,9 +126,7 @@ class TestACacheWrittenInPlaceCarriedAsState:
 
 
 class TestAWriteIntoABuffer:
-    def test_it_is_still_refused_and_the_buffer_is_put_back(
-        self, tmp_path: object
-    ) -> None:
+    def test_it_is_still_refused_and_the_buffer_is_put_back(self, tmp_path: object) -> None:
         model = _CountsIntoBuffer().eval()
         with pytest.raises(cml.StatefulModel):
             cml.export(model, lucid.ones(1, 4), f"{tmp_path}/m.mlpackage")

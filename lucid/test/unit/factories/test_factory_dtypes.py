@@ -98,8 +98,6 @@ def test_randn_gives_each_complex_part_half_the_variance(device: str) -> None:
         "rand-bool",
     ],
 )
-def test_what_the_reference_refuses_is_refused_in_lucids_words(
-    device: str, make: object
-) -> None:
+def test_what_the_reference_refuses_is_refused_in_lucids_words(device: str, make: object) -> None:
     with pytest.raises(NotImplementedError, match="not implemented for"):
         make(device)  # type: ignore[operator]

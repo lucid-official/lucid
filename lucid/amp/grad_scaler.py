@@ -277,8 +277,7 @@ class GradScaler:
         state = self._state_for(optimizer)
         if state.stage is _Stage.UNSCALED:
             raise RuntimeError(
-                "unscale_() has already been called on this optimizer "
-                "since the last update()."
+                "unscale_() has already been called on this optimizer " "since the last update()."
             )
         if state.stage is _Stage.STEPPED:
             raise RuntimeError("unscale_() is being called after step().")
@@ -331,28 +330,18 @@ class GradScaler:
             # dtype: mixed-dtype multiply is not supported (BinaryKernel
             # validates same-dtype operands).
             work_dtype = _C_engine.F32 if grad_dtype == _C_engine.BF16 else grad_dtype
-            g_work = (
-                g_impl
-                if grad_dtype == work_dtype
-                else _C_engine.astype(g_impl, work_dtype)
-            )
+            g_work = g_impl if grad_dtype == work_dtype else _C_engine.astype(g_impl, work_dtype)
             bad = _C_engine.any(_C_engine.logical_not(_C_engine.isfinite(g_work)))
             seen = nonfinite.get(g_work.device)
-            nonfinite[g_work.device] = (
-                bad if seen is None else _C_engine.logical_or(seen, bad)
-            )
-            coef = _C_engine.full(
-                list(g_work.shape), inv_scale, work_dtype, g_work.device
-            )
+            nonfinite[g_work.device] = bad if seen is None else _C_engine.logical_or(seen, bad)
+            coef = _C_engine.full(list(g_work.shape), inv_scale, work_dtype, g_work.device)
             unscaled = _C_engine.mul(g_work, coef)
             if g_work is not g_impl:
                 unscaled = _C_engine.astype(unscaled, grad_dtype)
             write_grad_(p, unscaled, "GradScaler.unscale_")
         return any(bool(_wrap(flag).item()) for flag in nonfinite.values())
 
-    def step(
-        self, optimizer: Optimizer, *args: object, **kwargs: object
-    ) -> Tensor | None:
+    def step(self, optimizer: Optimizer, *args: object, **kwargs: object) -> Tensor | None:
         """Unscale the gradients if needed, then step unless they overflowed.
 
         If :meth:`unscale_` already ran for ``optimizer`` in this iteration
@@ -393,20 +382,14 @@ class GradScaler:
             return optimizer.step(*args, **kwargs)  # type: ignore[arg-type]
 
         if "closure" in kwargs:
-            raise RuntimeError(
-                "Closure use is not currently supported if GradScaler is enabled."
-            )
+            raise RuntimeError("Closure use is not currently supported if GradScaler is enabled.")
         state = self._state_for(optimizer)
         if state.stage is _Stage.STEPPED:
-            raise RuntimeError(
-                "step() has already been called since the last update()."
-            )
+            raise RuntimeError("step() has already been called since the last update().")
         if state.stage is _Stage.READY:
             self.unscale_(optimizer)
         retval = (
-            None
-            if state.found_inf
-            else optimizer.step(*args, **kwargs)  # type: ignore[arg-type]
+            None if state.found_inf else optimizer.step(*args, **kwargs)  # type: ignore[arg-type]
         )
         state.stage = _Stage.STEPPED
         return retval

@@ -20,9 +20,7 @@ _PATHS = [
 ]
 
 
-def _operands(
-    rank: int, device: str, dtype: lucid.dtype
-) -> tuple[lucid.Tensor, lucid.Tensor]:
+def _operands(rank: int, device: str, dtype: lucid.dtype) -> tuple[lucid.Tensor, lucid.Tensor]:
     rng = np.random.default_rng(0)
     if rank == 4:
         x, g = rng.standard_normal((2, 3, 16, 16)), rng.random((2, 9, 9, 2))
@@ -53,23 +51,15 @@ def test_a_half_sample_is_the_float32_one_rounded_once(
     want.sum().backward()
 
     assert out.dtype == dtype
-    np.testing.assert_array_equal(
-        out.detach().float().numpy(), want.to(dtype).float().numpy()
-    )
+    np.testing.assert_array_equal(out.detach().float().numpy(), want.to(dtype).float().numpy())
     assert x.grad is not None and x32.grad is not None
     assert grid.grad is not None and grid32.grad is not None
-    np.testing.assert_array_equal(
-        x.grad.float().numpy(), x32.grad.to(dtype).float().numpy()
-    )
-    np.testing.assert_array_equal(
-        grid.grad.float().numpy(), grid32.grad.to(dtype).float().numpy()
-    )
+    np.testing.assert_array_equal(x.grad.float().numpy(), x32.grad.to(dtype).float().numpy())
+    np.testing.assert_array_equal(grid.grad.float().numpy(), grid32.grad.to(dtype).float().numpy())
 
 
 @pytest.mark.parametrize("padding", _PADDINGS)
-def test_float16_bicubic_is_within_one_rounding_of_float32(
-    device: str, padding: str
-) -> None:
+def test_float16_bicubic_is_within_one_rounding_of_float32(device: str, padding: str) -> None:
     """The LCD-616 report's measure: 1.1e-2 (reflection) before, ~1e-3 now."""
     x, grid = _operands(4, device, lucid.float16)
     kwargs = {"mode": "bicubic", "padding_mode": padding, "align_corners": False}

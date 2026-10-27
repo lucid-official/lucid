@@ -71,9 +71,7 @@ def _convnd(
     _require_positive(d, op, "dilation")
     # A weight of the wrong rank has no kernel to size "same" from; size it
     # as 1 so that the engine's own rank check is what refuses it.
-    kernel = (
-        tuple(int(v) for v in weight.shape[2:]) if weight.ndim == n + 2 else (1,) * n
-    )
+    kernel = tuple(int(v) for v in weight.shape[2:]) if weight.ndim == n + 2 else (1,) * n
     before, after = _conv_padding(args.padding, kernel, s, d, op)
     xb, unbatched = _add_batch_axis(x, n)
     if padding_mode != "zeros" or before != after:
@@ -98,9 +96,7 @@ def _conv_transposend(
     """The one body of ``conv_transpose{1,2,3}d`` and of their modules."""
     op = f"conv_transpose{n}d"
     if isinstance(args.padding, str):
-        raise TypeError(
-            f"{op}: padding must be an integer or {n} integers, got {args.padding!r}"
-        )
+        raise TypeError(f"{op}: padding must be an integer or {n} integers, got {args.padding!r}")
     s = _ntuple(args.stride, n, op, "stride")
     _require_positive(s, op, "stride")
     d = _ntuple(args.dilation, n, op, "dilation")
@@ -118,9 +114,7 @@ def _conv_transposend(
         b = _unwrap(bias)
     else:
         b = _C_engine.zeros([int(wi.shape[1]) * args.groups], wi.dtype, wi.device)
-    out = _wrap(
-        _CONV_TRANSPOSE[n](_unwrap(xb), wi, b, *s, *p, *out_pad, *d, args.groups)
-    )
+    out = _wrap(_CONV_TRANSPOSE[n](_unwrap(xb), wi, b, *s, *p, *out_pad, *d, args.groups))
     return _drop_batch_axis(out, unbatched)
 
 
@@ -143,9 +137,7 @@ def _output_padding_for_size(
     if len(sizes) in (n + 1, n + 2):
         sizes = sizes[len(sizes) - n :]
     if len(sizes) != n:
-        raise ValueError(
-            f"{label}: output_size must have {n} or {n + 2} elements, got {sizes}"
-        )
+        raise ValueError(f"{label}: output_size must have {n} or {n + 2} elements, got {sizes}")
     if isinstance(args.padding, str):
         raise TypeError(f"{label}: padding must be integers, got {args.padding!r}")
     stride = _ntuple(args.stride, n, label, "stride")
@@ -181,9 +173,7 @@ def _check_output_padding(
     way.  Anything larger reaches past every input position: the engine used
     to answer anyway, with rows that hold the bias alone.
     """
-    for axis, (op, s, d) in enumerate(
-        zip(output_padding, stride, dilation, strict=True)
-    ):
+    for axis, (op, s, d) in enumerate(zip(output_padding, stride, dilation, strict=True)):
         if op < 0 or op >= max(s, d):
             raise ValueError(
                 f"{name}: output_padding {tuple(output_padding)} must be "

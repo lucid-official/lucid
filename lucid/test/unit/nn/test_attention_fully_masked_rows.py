@@ -105,9 +105,7 @@ def test_sdpa_zeroes_a_row_with_no_key(
     if spelling == "bool":
         mask = lucid.tensor(~drop, device=device)
     else:
-        mask = lucid.tensor(
-            np.where(drop, -np.inf, 0.0), dtype=_DTYPES[dtype], device=device
-        )
+        mask = lucid.tensor(np.where(drop, -np.inf, 0.0), dtype=_DTYPES[dtype], device=device)
     out = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=dropout_p)
     out.sum().backward()
     o = out.to(lucid.float32).numpy()
@@ -124,10 +122,7 @@ def test_sdpa_zeroes_a_row_with_no_key(
 
 def test_a_learnable_bias_gets_no_gradient_from_an_empty_row(device: str) -> None:
     rng = np.random.default_rng(1)
-    q, k, v = (
-        lucid.tensor(_draw(rng, "float32", 1, 1, n, D), device=device)
-        for n in (L, S, S)
-    )
+    q, k, v = (lucid.tensor(_draw(rng, "float32", 1, 1, n, D), device=device) for n in (L, S, S))
     bias_np = rng.standard_normal((L, S)).astype(np.float32)
     bias_np[1] = -np.inf
     bias = lucid.tensor(bias_np, device=device, requires_grad=True)
@@ -142,13 +137,8 @@ def test_a_learnable_bias_gets_no_gradient_from_an_empty_row(device: str) -> Non
 def test_a_finite_large_negative_is_not_a_mask_out(device: str) -> None:
     """``-1e9`` everywhere still normalises — to the mean of V, as in the reference."""
     rng = np.random.default_rng(2)
-    q, k, v = (
-        lucid.tensor(_draw(rng, "float32", 1, 1, n, D), device=device)
-        for n in (L, S, S)
-    )
-    out = F.scaled_dot_product_attention(
-        q, k, v, attn_mask=lucid.full((L, S), -1e9, device=device)
-    )
+    q, k, v = (lucid.tensor(_draw(rng, "float32", 1, 1, n, D), device=device) for n in (L, S, S))
+    out = F.scaled_dot_product_attention(q, k, v, attn_mask=lucid.full((L, S), -1e9, device=device))
     np.testing.assert_allclose(
         out.numpy()[0, 0], np.broadcast_to(v.numpy()[0, 0].mean(0), (L, D)), atol=1e-5
     )
@@ -201,8 +191,7 @@ def _sdpa_case(ref: Any, device: str, dtype: str, kind: str, rows: str) -> None:
     (want * ref.from_numpy(upstream)).sum().backward()
 
     ours = [
-        lucid.tensor(a, dtype=_DTYPES[dtype], device=device, requires_grad=True)
-        for a in arrays
+        lucid.tensor(a, dtype=_DTYPES[dtype], device=device, requires_grad=True) for a in arrays
     ]
     got = F.scaled_dot_product_attention(*ours, attn_mask=ours_mask, is_causal=causal)
     (got * lucid.tensor(upstream, dtype=_DTYPES[dtype], device=device)).sum().backward()
@@ -218,9 +207,7 @@ def _mha_case(ref: Any, device: str, dtype: str, kind: str, rows: str) -> None:
     with ref.no_grad():
         for p in theirs.parameters():
             p.copy_(ref.from_numpy(_draw(rng, dtype, *p.shape)))
-    ours = nn.MultiheadAttention(E, H, batch_first=True).to(
-        device, dtype=_DTYPES[dtype]
-    )
+    ours = nn.MultiheadAttention(E, H, batch_first=True).to(device, dtype=_DTYPES[dtype])
     state = theirs.state_dict()
     for mine, name in (
         ("in_proj_weight", "in_proj_weight"),
@@ -256,9 +243,7 @@ def _mha_case(ref: Any, device: str, dtype: str, kind: str, rows: str) -> None:
             ref_kw["key_padding_mask"] = ref.from_numpy(no_pad)
         if kind == "float":
             add = np.where(per_head, -np.inf, 0.0).astype(np.float32)
-            ours_kw["attn_mask"] = lucid.tensor(
-                add, dtype=_DTYPES[dtype], device=device
-            )
+            ours_kw["attn_mask"] = lucid.tensor(add, dtype=_DTYPES[dtype], device=device)
             ref_kw["attn_mask"] = ref.from_numpy(add)
         else:
             ours_kw["attn_mask"] = lucid.tensor(per_head, device=device)
@@ -271,8 +256,7 @@ def _mha_case(ref: Any, device: str, dtype: str, kind: str, rows: str) -> None:
     (want * ref.from_numpy(upstream)).sum().backward()
 
     our_in = [
-        lucid.tensor(a, dtype=_DTYPES[dtype], device=device, requires_grad=True)
-        for a in arrays
+        lucid.tensor(a, dtype=_DTYPES[dtype], device=device, requires_grad=True) for a in arrays
     ]
     got, _ = ours(*our_in, need_weights=False, **ours_kw)
     (got * lucid.tensor(upstream, dtype=_DTYPES[dtype], device=device)).sum().backward()

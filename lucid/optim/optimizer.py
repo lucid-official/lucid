@@ -94,9 +94,7 @@ def _hyperparam_reader(
     return operator.itemgetter(*keys)
 
 
-def _follow(
-    src: _C_engine.TensorImpl, like: _C_engine.TensorImpl
-) -> _C_engine.TensorImpl:
+def _follow(src: _C_engine.TensorImpl, like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     """``src`` in ``like``'s dtype and on its device; ``src`` itself when it already is.
 
     The one rule by which optimizer state follows its parameter through a
@@ -155,9 +153,7 @@ def _group_params(group: dict[str, object]) -> list[Parameter]:
     """The parameters of one param group (``add_param_group`` stores a list)."""
     params = group["params"]
     if not isinstance(params, list):
-        raise TypeError(
-            f"a param group's 'params' must be a list, got {type(params).__name__}"
-        )
+        raise TypeError(f"a param group's 'params' must be a list, got {type(params).__name__}")
     return params
 
 
@@ -165,15 +161,11 @@ def _group_float(group: dict[str, object], key: str = "lr") -> float:
     """Read a numeric entry ``key`` from ``group`` as a ``float``."""
     value = group[key]
     if not isinstance(value, (SupportsFloat, SupportsIndex)):
-        raise TypeError(
-            f"a param group's {key!r} must be a number, got {type(value).__name__}"
-        )
+        raise TypeError(f"a param group's {key!r} must be a number, got {type(value).__name__}")
     return float(value)
 
 
-def _format_param(
-    name: str, optimizer: Optimizer, param: float | list[float]
-) -> list[float]:
+def _format_param(name: str, optimizer: Optimizer, param: float | list[float]) -> list[float]:
     """Broadcast a scalar or validate a per-group list for ``optimizer``."""
     n = len(optimizer.param_groups)
     if isinstance(param, (list, tuple)):
@@ -183,9 +175,7 @@ def _format_param(
     return [float(param)] * n
 
 
-def _set_group_momentum(
-    use_beta1: bool, group: dict[str, object], momentum: float
-) -> None:
+def _set_group_momentum(use_beta1: bool, group: dict[str, object], momentum: float) -> None:
     """Write ``momentum`` into ``group['betas'][0]`` or ``group['momentum']``."""
     if use_beta1:
         betas = group["betas"]
@@ -213,9 +203,7 @@ def _init_cycle_momentum(
     base_moms = _format_param("base_momentum", optimizer, base_momentum)
     max_moms = _format_param("max_momentum", optimizer, max_momentum)
     if last_epoch == -1:
-        for m_mom, b_mom, group in zip(
-            max_moms, base_moms, optimizer.param_groups, strict=True
-        ):
+        for m_mom, b_mom, group in zip(max_moms, base_moms, optimizer.param_groups, strict=True):
             _set_group_momentum(use_beta1, group, m_mom)
             group["max_momentum"] = m_mom
             group["base_momentum"] = b_mom
@@ -240,9 +228,7 @@ def _resolve_one_cycle_steps(step_cfg: _OneCycleSteps) -> int:
         return _check_positive_int("epochs", epochs) * _check_positive_int(
             "steps_per_epoch", steps_per_epoch
         )
-    raise ValueError(
-        "You must define either total_steps OR (epochs AND steps_per_epoch)"
-    )
+    raise ValueError("You must define either total_steps OR (epochs AND steps_per_epoch)")
 
 
 def _one_cycle_phases(
@@ -254,9 +240,7 @@ def _one_cycle_phases(
     """Resolve ``total_steps`` and the ``(end_step, start_lr, end_lr, start_mom, end_mom)`` phases."""
     steps = _resolve_one_cycle_steps(step_cfg)
     if pct_start < 0 or pct_start > 1 or not isinstance(pct_start, float):
-        raise ValueError(
-            f"Expected float between 0 and 1 pct_start, but got {pct_start}"
-        )
+        raise ValueError(f"Expected float between 0 and 1 pct_start, but got {pct_start}")
     if anneal_strategy not in ("cos", "linear"):
         raise ValueError(
             f"anneal_strategy must be one of 'cos' or 'linear', instead got {anneal_strategy}"
@@ -384,9 +368,7 @@ type _OneCycleArgs = tuple[
 ]
 
 
-def _init_cyclic(
-    sched: _CyclicLike, optimizer: Optimizer, args: _CyclicArgs
-) -> list[float]:
+def _init_cyclic(sched: _CyclicLike, optimizer: Optimizer, args: _CyclicArgs) -> list[float]:
     """Initialise CyclicLR attributes on ``sched`` and return ``base_lrs``."""
     (
         base_lr,
@@ -420,9 +402,7 @@ def _init_cyclic(
     sched.gamma = gamma
     sched._scale_fn_custom = scale_fn
     sched.scale_mode = (
-        scale_mode
-        if scale_fn is not None
-        else ("iterations" if mode == "exp_range" else "cycle")
+        scale_mode if scale_fn is not None else ("iterations" if mode == "exp_range" else "cycle")
     )
     sched.cycle_momentum = cycle_momentum
     sched.use_beta1, sched.base_momentums, sched.max_momentums = _init_cycle_momentum(
@@ -434,11 +414,7 @@ def _init_cyclic(
 def _cyclic_get_lr(sched: _CyclicLike, cycle: int) -> list[float]:
     """Compute per-group learning rates (and update momentum) for CyclicLR."""
     x = 1.0 + sched.last_epoch / sched.total_size - cycle
-    sf = (
-        x / sched.step_ratio
-        if x <= sched.step_ratio
-        else (x - 1) / (sched.step_ratio - 1)
-    )
+    sf = x / sched.step_ratio if x <= sched.step_ratio else (x - 1) / (sched.step_ratio - 1)
     s = _cyclic_scale(sched, cycle)
     if sched.cycle_momentum:
         for group, base_m, max_m in zip(
@@ -447,18 +423,14 @@ def _cyclic_get_lr(sched: _CyclicLike, cycle: int) -> list[float]:
             sched.max_momentums,
             strict=False,
         ):
-            _set_group_momentum(
-                sched.use_beta1, group, max_m - (max_m - base_m) * sf * s
-            )
+            _set_group_momentum(sched.use_beta1, group, max_m - (max_m - base_m) * sf * s)
     return [
         b_lr + (m_lr - b_lr) * sf * s
         for b_lr, m_lr in zip(sched.base_lrs, sched.max_lrs, strict=True)
     ]
 
 
-def _init_one_cycle(
-    sched: _OneCycleLike, optimizer: Optimizer, args: _OneCycleArgs
-) -> None:
+def _init_one_cycle(sched: _OneCycleLike, optimizer: Optimizer, args: _OneCycleArgs) -> None:
     """Initialise OneCycleLR attributes on ``sched``."""
     (
         max_lr,
@@ -505,27 +477,17 @@ def _one_cycle_get_lr(sched: _OneCycleLike) -> list[float]:
         raise ValueError(
             f"Tried to step {step_num} times. The specified number of total steps is {sched.total_steps}"
         )
-    anneal = (
-        sched._annealing_cos
-        if sched.anneal_strategy == "cos"
-        else sched._annealing_linear
-    )
+    anneal = sched._annealing_cos if sched.anneal_strategy == "cos" else sched._annealing_linear
     lrs: list[float] = []
     for group in sched.optimizer.param_groups:
         start_step = 0.0
-        for i, (end_step, s_lr, e_lr, s_mom, e_mom) in enumerate(
-            sched._schedule_phases
-        ):
+        for i, (end_step, s_lr, e_lr, s_mom, e_mom) in enumerate(sched._schedule_phases):
             if step_num <= end_step or i == len(sched._schedule_phases) - 1:
                 denom = end_step - start_step
                 pct = (step_num - start_step) / denom if denom != 0.0 else 0.0
-                lrs.append(
-                    anneal(_group_float(group, s_lr), _group_float(group, e_lr), pct)
-                )
+                lrs.append(anneal(_group_float(group, s_lr), _group_float(group, e_lr), pct))
                 if sched.cycle_momentum:
-                    mom = anneal(
-                        _group_float(group, s_mom), _group_float(group, e_mom), pct
-                    )
+                    mom = anneal(_group_float(group, s_mom), _group_float(group, e_mom), pct)
                     _set_group_momentum(sched.use_beta1, group, mom)
                 break
             start_step = end_step
@@ -692,9 +654,7 @@ class Optimizer:
             # Default path: no wrapper, user's step() runs raw.
             return
         if "step" in cls.__dict__:
-            _orig: Callable[[Optimizer, _OptimizerClosure], Tensor | None] = (
-                cls.__dict__["step"]
-            )
+            _orig: Callable[[Optimizer, _OptimizerClosure], Tensor | None] = cls.__dict__["step"]
 
             def _step_with_eval(
                 self: Optimizer, closure: _OptimizerClosure = None
@@ -730,11 +690,7 @@ class Optimizer:
         defaults: dict[str, object],
     ) -> None:
         """Initialise the Optimizer.  See the class docstring for parameter semantics."""
-        if (
-            isinstance(params, (list, tuple))
-            and len(params) > 0
-            and isinstance(params[0], dict)
-        ):
+        if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             param_groups: list[dict[str, object]] = list(params)
         else:
             param_groups = [{"params": list(params)}]
@@ -757,9 +713,7 @@ class Optimizer:
         self._engines: list[_EngineOptimizer] = []
         # Parallel to ``_engines``: the parameters each engine optimizer was
         # built over, and the impls they held at that moment.
-        self._engine_binds: list[tuple[list[Parameter], list[_C_engine.TensorImpl]]] = (
-            []
-        )
+        self._engine_binds: list[tuple[list[Parameter], list[_C_engine.TensorImpl]]] = []
         self._engine_state_reset_warned: bool = False
         self._engines_built: bool = False
         # Parallel to ``param_groups``: each group's hyper-parameters as they
@@ -876,9 +830,7 @@ class Optimizer:
         if self._engines_built:
             self._bind_engine_optim(merged)
 
-    def _normalize_group_pairs(
-        self, group: dict[str, object], merged: dict[str, object]
-    ) -> None:
+    def _normalize_group_pairs(self, group: dict[str, object], merged: dict[str, object]) -> None:
         """Synchronize 2-tuple pair keys and their split scalar entries in ``merged``."""
         for pair_key, (k0, k1) in self._PAIR_KEYS.items():
             if k0 in group or k1 in group:
@@ -933,9 +885,7 @@ class Optimizer:
         cur_split = (group[k0], group[k1])
         raw_pair = group.get(pair_key, cur_split)
         if not isinstance(raw_pair, (tuple, list)) or len(raw_pair) != 2:
-            raise _C_engine.InvalidArgument(
-                f"{type(self).__name__}: {pair_key} must be a 2-tuple"
-            )
+            raise _C_engine.InvalidArgument(f"{type(self).__name__}: {pair_key} must be a 2-tuple")
         cur_pair = (raw_pair[0], raw_pair[1])
         if cur_split != old_pair and cur_pair == old_pair:
             return cur_split[0], cur_split[1], {pair_key: cur_split}
@@ -945,9 +895,7 @@ class Optimizer:
                 cur_pair[1],
                 {pair_key: cur_pair, k0: cur_pair[0], k1: cur_pair[1]},
             )
-        upd: dict[str, object] = (
-            {} if isinstance(raw_pair, tuple) else {pair_key: cur_pair}
-        )
+        upd: dict[str, object] = {} if isinstance(raw_pair, tuple) else {pair_key: cur_pair}
         return cur_pair[0], cur_pair[1], upd
 
     def _resolve_group_hparams(
@@ -962,9 +910,7 @@ class Optimizer:
         updates: dict[str, object] = {}
         for pair_key, (k0, k1) in self._PAIR_KEYS.items():
             i0, i1 = slot_of[k0], slot_of[k1]
-            v0, v1, upd = self._reconcile_pair(
-                pair_key, (k0, k1), group, (last[i0], last[i1])
-            )
+            v0, v1, upd = self._reconcile_pair(pair_key, (k0, k1), group, (last[i0], last[i1]))
             raw[i0], raw[i1] = v0, v1
             updates.update(upd)
         return tuple(raw), updates
@@ -1077,9 +1023,7 @@ class Optimizer:
         for idx, group in enumerate(self.param_groups):
             params: list[Parameter] = _group_params(group)
             impls: list[_C_engine.TensorImpl] = binds[idx][1]
-            if len(params) == len(impls) and all(
-                map(operator.is_, map(impl_of, params), impls)
-            ):
+            if len(params) == len(impls) and all(map(operator.is_, map(impl_of, params), impls)):
                 continue
             self._rebuild_engine_optim(idx, group)
 
@@ -1174,13 +1118,9 @@ class Optimizer:
             hp["weight_decay"] = 0.0
         return cls([p._impl for p in _group_params(group)], **hp)
 
-    def _apply_decoupled_wd(
-        self, group: dict[str, object], params: list[Parameter]
-    ) -> None:
+    def _apply_decoupled_wd(self, group: dict[str, object], params: list[Parameter]) -> None:
         """Apply decoupled weight decay in Python for optimizers whose engine lacks it."""
-        if not (
-            self._PYTHON_DECOUPLED_WD and group.get("decoupled_weight_decay", False)
-        ):
+        if not (self._PYTHON_DECOUPLED_WD and group.get("decoupled_weight_decay", False)):
             return
         wd = _group_float(group, "weight_decay")
         if wd == 0.0:
@@ -1191,9 +1131,7 @@ class Optimizer:
                 if p.grad is not None and p.grad.numel() > 0:
                     p._impl.copy_from((p * factor)._impl)
 
-    def _step_one_group(
-        self, group: dict[str, object], optim: _EngineOptimizer
-    ) -> None:
+    def _step_one_group(self, group: dict[str, object], optim: _EngineOptimizer) -> None:
         """Step a single parameter group's engine optimizer."""
         if group.get("differentiable", False):
             raise _C_engine.NotImplementedError(
@@ -1387,9 +1325,7 @@ class Optimizer:
                         and loaded_impl.dtype == _C_engine.Dtype.F32
                         and k not in ("step", "eta", "mu", "mu_product")
                     ):
-                        loaded_impl = _C_engine.astype(
-                            loaded_impl, _C_engine.Dtype.BF16
-                        )
+                        loaded_impl = _C_engine.astype(loaded_impl, _C_engine.Dtype.BF16)
                     by_name[k][slot] = loaded_impl
             if by_name:
                 eng.load_state_buffers(list(by_name.items()))

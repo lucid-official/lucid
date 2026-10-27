@@ -136,9 +136,7 @@ class _RPNHead(nn.Module):
 
     def __init__(self, in_channels: int, num_anchors: int) -> None:
         super().__init__()
-        self.conv = nn.Sequential(
-            nn.Sequential(nn.Conv2d(in_channels, in_channels, 3, padding=1))
-        )
+        self.conv = nn.Sequential(nn.Sequential(nn.Conv2d(in_channels, in_channels, 3, padding=1)))
         self.cls_logits = nn.Conv2d(in_channels, num_anchors, 1)
         self.bbox_pred = nn.Conv2d(in_channels, num_anchors * 4, 1)
 
@@ -214,9 +212,7 @@ class _RoIHeads(nn.Module):
         num_classes: int,
     ) -> None:
         super().__init__()
-        self.box_head = _TwoMLPHead(
-            in_channels * roi_size * roi_size, representation_size
-        )
+        self.box_head = _TwoMLPHead(in_channels * roi_size * roi_size, representation_size)
         self.box_predictor = _FastRCNNPredictor(representation_size, num_classes)
 
     @override
@@ -305,9 +301,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
         self.rpn = _RegionProposalNetwork(C, num_anchors)
 
         # One anchor size per FPN level (5 levels including pool).
-        sizes: tuple[tuple[int, ...], ...] = tuple(
-            (s,) for s in config.rpn_anchor_sizes
-        )
+        sizes: tuple[tuple[int, ...], ...] = tuple((s,) for s in config.rpn_anchor_sizes)
         ratios: tuple[tuple[float, ...], ...] = tuple(
             tuple(config.rpn_anchor_ratios) for _ in config.rpn_anchor_sizes
         )
@@ -368,9 +362,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
                 props = clip_boxes_to_image(props, image_size)
                 boxes_parts.append(props)
                 scores_parts.append(F.sigmoid(sc_t))
-                levels_parts.append(
-                    lucid.full((int(sc_t.shape[0]),), float(lvl), device=dev)
-                )
+                levels_parts.append(lucid.full((int(sc_t.shape[0]),), float(lvl), device=dev))
 
             boxes_b = lucid.cat(boxes_parts, dim=0)
             scores_b = lucid.cat(scores_parts, dim=0)
@@ -618,9 +610,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
         deltas_3d = box_deltas.reshape(N, K, 4)
         per_class: list[Tensor] = []
         for c in range(K):
-            boxes_c = decode_boxes(
-                deltas_3d[:, c, :], flat_props, self._cfg.bbox_reg_weights
-            )
+            boxes_c = decode_boxes(deltas_3d[:, c, :], flat_props, self._cfg.bbox_reg_weights)
             per_class.append(clip_boxes_to_image(boxes_c, image_size))
         return lucid.stack(per_class, dim=1)
 
@@ -728,9 +718,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
 
             for c in range(1, cfg.num_classes):  # skip background slot 0
                 bx_class = bx_i[:, c, :]  # (N_i, 4)
-                mask = [
-                    i for i, row in enumerate(host_scores) if row[c] > cfg.score_thresh
-                ]
+                mask = [i for i, row in enumerate(host_scores) if row[c] > cfg.score_thresh]
                 if not mask:
                     continue
                 mask_t = lucid.tensor(mask, device=dev).long()

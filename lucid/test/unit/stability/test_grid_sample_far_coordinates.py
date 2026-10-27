@@ -147,9 +147,7 @@ def _cases() -> list[Case]:
                     corners = "corners" if align else "edges"
                     for cname, coord in _COORDS.items():
                         for axis_label, axes in _axes(shape):
-                            name = (
-                                f"{label}-{mode}-{pad}-{corners}-{cname}-{axis_label}"
-                            )
+                            name = f"{label}-{mode}-{pad}-{corners}-{cname}-{axis_label}"
                             point = _point(shape, axes, coord)
                             stand_in = _stand_in(shape, mode, pad, align, point)
                             out.append((name, shape, mode, pad, align, point, stand_in))
@@ -272,14 +270,10 @@ def _reference(
     point: list[float],
 ) -> dict[str, np.ndarray]:
     image = np.arange(float(math.prod(shape)), dtype=np.float32).reshape(shape)
-    grid = np.array(point, dtype=np.float32).reshape(
-        (1,) * (len(shape) - 1) + (len(point),)
-    )
+    grid = np.array(point, dtype=np.float32).reshape((1,) * (len(shape) - 1) + (len(point),))
     x = ref.tensor(image, requires_grad=True)
     g = ref.tensor(grid, requires_grad=True)
-    y = ref.nn.functional.grid_sample(
-        x, g, mode=mode, padding_mode=pad, align_corners=align
-    )
+    y = ref.nn.functional.grid_sample(x, g, mode=mode, padding_mode=pad, align_corners=align)
     y.sum().backward()
     return {
         "y": y.detach().double().numpy().ravel(),
@@ -288,9 +282,7 @@ def _reference(
     }
 
 
-def _check(
-    got: dict[str, Any], want: dict[str, np.ndarray], keys: tuple[str, ...]
-) -> None:
+def _check(got: dict[str, Any], want: dict[str, np.ndarray], keys: tuple[str, ...]) -> None:
     for key in keys:
         np.testing.assert_allclose(
             _array(got[key]), want[key], atol=1e-5, equal_nan=True, err_msg=key
@@ -310,9 +302,7 @@ def test_far_coordinates(
     stand_in: list[float],
 ) -> None:
     got = _result(device, name)
-    assert (
-        "crash" not in got
-    ), f"{name} on {device} killed the interpreter: {got['crash']}"
+    assert "crash" not in got, f"{name} on {device} killed the interpreter: {got['crash']}"
     want = _reference(ref, shape, mode, pad, align, point)
     kinds = {k for k in _kinds(shape, mode, pad, align, point) if k is not None}
     if not kinds:
@@ -337,18 +327,14 @@ def test_every_departure_has_a_reason() -> None:
         assert reason and math.isfinite(stand_in)
 
 
-@pytest.mark.parametrize(
-    "name,angle,cy,cx", ROTATIONS, ids=[case[0] for case in ROTATIONS]
-)
+@pytest.mark.parametrize("name,angle,cy,cx", ROTATIONS, ids=[case[0] for case in ROTATIONS])
 def test_rotate_far_or_nan_centre(
     device: str, name: str, angle: float, cy: float, cx: float
 ) -> None:
     # A far centre puts every source outside the image (zeros); a NaN
     # position reads sample 0, the one rule both devices share.
     got = _result(device, name)
-    assert (
-        "crash" not in got
-    ), f"{name} on {device} killed the interpreter: {got['crash']}"
+    assert "crash" not in got, f"{name} on {device} killed the interpreter: {got['crash']}"
     y = _array(got["y"])
     far = math.isinf(cx) or abs(cy) > 1e9
     np.testing.assert_array_equal(y, np.zeros(16) if far else np.full(16, 1.0))
@@ -443,9 +429,7 @@ def test_fma_bf16_double_rounding_traps_and_random_corpus(device: str) -> None:
     odd_b = (1.0 + (2 * rng.integers(0, 8, size=2000) + 1) / 16.0) * rng.choice(
         [-1.0, 1.0], size=2000
     )
-    tiny_c = rng.choice([-1.0, 1.0], size=2000) * (
-        2.0 ** rng.integers(-120, -10, size=2000)
-    )
+    tiny_c = rng.choice([-1.0, 1.0], size=2000) * (2.0 ** rng.integers(-120, -10, size=2000))
 
     a_all = np.concatenate([gen[0], odd_a])
     b_all = np.concatenate([gen[1], odd_b])

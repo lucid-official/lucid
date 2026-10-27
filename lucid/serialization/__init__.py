@@ -72,9 +72,7 @@ _SAFE_CLASSES = frozenset(
 )
 
 
-def _wrap_loaded_impl(
-    impl: _C_engine.TensorImpl, is_param: bool, requires_grad: bool
-) -> _T:
+def _wrap_loaded_impl(impl: _C_engine.TensorImpl, is_param: bool, requires_grad: bool) -> _T:
     """Wrap ``impl`` as a :class:`Parameter` or :class:`Tensor` with ``requires_grad``."""
     if is_param:
         from lucid.nn.parameter import Parameter
@@ -95,9 +93,7 @@ def _wrap_loaded_impl(
 
 @final
 class _LucidPickler(pickle.Pickler):
-    def __init__(
-        self, file: io.BytesIO, protocol: int | None, *, plan: _StoragePlan
-    ) -> None:
+    def __init__(self, file: io.BytesIO, protocol: int | None, *, plan: _StoragePlan) -> None:
         super().__init__(file, protocol=protocol)
         self._plan = plan
         self._emitted_tensors: dict[int, int] = {}
@@ -146,14 +142,10 @@ class _LucidPickler(pickle.Pickler):
         )
 
 
-def _restore_tensor(
-    shape: list[int], dtype_name: str, device_str: str, raw_bytes: bytes
-) -> _T:
+def _restore_tensor(shape: list[int], dtype_name: str, device_str: str, raw_bytes: bytes) -> _T:
     eng_device = _C_engine.Device.GPU if device_str == "metal" else _C_engine.Device.CPU
     eng_dtype = to_engine_dtype(_resolve_dtype_name(dtype_name))
-    impl = _C_engine.TensorImpl.from_bytes(
-        raw_bytes, list(shape), eng_dtype, eng_device, False
-    )
+    impl = _C_engine.TensorImpl.from_bytes(raw_bytes, list(shape), eng_dtype, eng_device, False)
     return _wrap(impl)
 
 
@@ -244,9 +236,7 @@ class _LucidUnpickler(pickle.Unpickler):
             if tag == "tensor_ref":
                 return self._tensors[int(pid[1])]
             if tag == "tensor_v3" and len(pid) == 11:
-                return _load_v3_11tuple(
-                    pid, self._map_location, self._storages, self._tensors
-                )
+                return _load_v3_11tuple(pid, self._map_location, self._storages, self._tensors)
             if tag == "tensor_v3" and len(pid) == 5:
                 _, shape, dtype_name, device_str, raw_bytes = pid
                 target_dev = _resolve_target_device(device_str, self._map_location)
@@ -363,9 +353,7 @@ def save(
 
 def load(
     f: str | bytes | os.PathLike[str] | os.PathLike[bytes] | io.IOBase,
-    map_location: (
-        str | Callable[[str, str], str] | dict[str, str] | object | None
-    ) = None,
+    map_location: str | Callable[[str, str], str] | dict[str, str] | object | None = None,
     pickle_module: object = None,
     *,
     weights_only: bool | None = True,
@@ -788,9 +776,7 @@ def load_sharded(
         index = json.load(fp)
 
     if not isinstance(index, dict) or index.get("_lucid_sharded") != 1:
-        raise RuntimeError(
-            f"{index_path!r} is not a valid Lucid sharded checkpoint index"
-        )
+        raise RuntimeError(f"{index_path!r} is not a valid Lucid sharded checkpoint index")
 
     shards_meta: list[dict[str, object]] = index["shards"]
 
@@ -1017,16 +1003,12 @@ def load_safetensors(
     with open(path, "rb") as fh:
         prefix = fh.read(8)
         if len(prefix) != 8:
-            raise ValueError(
-                f"load_safetensors: {path!r} is too short to be SafeTensors"
-            )
+            raise ValueError(f"load_safetensors: {path!r} is too short to be SafeTensors")
         (header_len,) = struct.unpack("<Q", prefix)
         try:
             header = json.loads(fh.read(header_len))
         except ValueError as exc:
-            raise ValueError(
-                f"load_safetensors: {path!r} has no readable header"
-            ) from exc
+            raise ValueError(f"load_safetensors: {path!r} has no readable header") from exc
         base = 8 + header_len
         meta: dict[str, str] = header.pop("__metadata__", None) or {}
         scalar_keys = set(meta.get("__lucid_scalar_keys__", "").split(",")) - {""}

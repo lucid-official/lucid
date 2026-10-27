@@ -27,9 +27,7 @@ def _grad(fn, shape, device, seed):
 
 # Non-divisible sizes are the regression: (5,5)/(7,7)/(15,15) with kernel 2 were
 # silently wrong on metal; even sizes happened to be fine.
-@pytest.mark.parametrize(
-    "hw", [(5, 5), (7, 7), (8, 8), (15, 15), (16, 16), (6, 9), (9, 6)]
-)
+@pytest.mark.parametrize("hw", [(5, 5), (7, 7), (8, 8), (15, 15), (16, 16), (6, 9), (9, 6)])
 def test_max_pool2d_backward_metal_matches_cpu(hw: tuple) -> None:
     if not metal_available():
         pytest.skip("metal backend unavailable")

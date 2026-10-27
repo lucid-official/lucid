@@ -199,9 +199,7 @@ def _step_and_compare(kwargs: dict[str, object], steps: int = 3) -> float:
     ],
     ids=["grouped", "depthwise", "dilated", "grouped-dilated"],
 )
-def test_manual_vjp_conv_transpose2d_options_parity(
-    name: str, kwargs: dict[str, object]
-) -> None:
+def test_manual_vjp_conv_transpose2d_options_parity(name: str, kwargs: dict[str, object]) -> None:
     worst = _step_and_compare(kwargs)
     assert worst < 1e-4, (
         f"ConvTranspose2d ({name}) VJP disagrees with eager: "

@@ -154,9 +154,7 @@ class TestYOLOV3TinyIsPublic:
 def _yolo_targets(device: str) -> list[dict[str, Tensor]]:
     return [
         {
-            "boxes": lucid.tensor(
-                [[0.1, 0.1, 0.5, 0.5], [0.4, 0.3, 0.9, 0.8]], device=device
-            ),
+            "boxes": lucid.tensor([[0.1, 0.1, 0.5, 0.5], [0.4, 0.3, 0.9, 0.8]], device=device),
             "labels": lucid.tensor([1, 2], device=device).long(),
         },
         {
@@ -325,9 +323,7 @@ def test_dit_generates_on_device(device: str, eta: float) -> None:
     # The last reverse step used a bare CPU alpha_bar_prev = 1, so every
     # run reached it and raised.
     lucid.manual_seed(0)
-    model = M.create_model(
-        "dit_small_2_gen", sample_size=8, hidden_size=32, depth=1, num_heads=4
-    )
+    model = M.create_model("dit_small_2_gen", sample_size=8, hidden_size=32, depth=1, num_heads=4)
     model = model.to(device).eval()
     samples = model.generate(1, steps=2, eta=eta).samples
     assert tuple(samples.shape) == (1, 4, 8, 8)
@@ -365,9 +361,7 @@ def test_ddpm_generate_follows_the_model_device(device: str) -> None:
 
     lucid.manual_seed(0)
     model = M.create_model("ddpm_cifar_gen", **_DDPM_SMALL).to(device).eval()
-    out = model.generate(
-        DDPMScheduler(num_train_timesteps=20), n_samples=1, num_inference_steps=3
-    )
+    out = model.generate(DDPMScheduler(num_train_timesteps=20), n_samples=1, num_inference_steps=3)
     assert tuple(out.samples.shape) == (1, 3, 16, 16)
     assert _on(out.samples, device)
 

@@ -121,9 +121,7 @@ def test_distance_and_cosine_accept_real_floating_inputs(
     got = _ref_ops(lucid)[op_id](lx, ly)
     assert isinstance(got, lucid.Tensor)
     assert str(got.dtype).rsplit(".", 1)[-1] == dtype
-    np.testing.assert_allclose(
-        got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5)
 
 
 @pytest.mark.parity
@@ -146,25 +144,17 @@ def test_pairwise_distance_real_and_complex_parity(
         want = ref.nn.functional.pairwise_distance(rx, ry, p=p)
     want.sum().backward()
 
-    lx = lucid.tensor(
-        raw_x, dtype=getattr(lucid, dtype), device=device, requires_grad=True
-    )
-    ly = lucid.tensor(
-        raw_y, dtype=getattr(lucid, dtype), device=device, requires_grad=True
-    )
+    lx = lucid.tensor(raw_x, dtype=getattr(lucid, dtype), device=device, requires_grad=True)
+    ly = lucid.tensor(raw_y, dtype=getattr(lucid, dtype), device=device, requires_grad=True)
     if via_module:
         got = nn.PairwiseDistance(p=p)(lx, ly)
     else:
         got = F.pairwise_distance(lx, ly, p=p)
     got.sum().backward()
 
-    expected_real_dt = {"complex64": "float32", "complex128": "float64"}.get(
-        dtype, dtype
-    )
+    expected_real_dt = {"complex64": "float32", "complex128": "float64"}.get(dtype, dtype)
     assert str(got.dtype).rsplit(".", 1)[-1] == expected_real_dt
-    np.testing.assert_allclose(
-        got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5)
     assert lx.grad is not None and ly.grad is not None
     np.testing.assert_allclose(
         lx.grad.numpy(), rx.grad.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
@@ -199,9 +189,7 @@ def test_normalize_real_and_complex_parity_forward_and_backward(
     else:
         (want * rg).sum().backward()
 
-    lx = lucid.tensor(
-        raw_x, dtype=getattr(lucid, dtype), device=device, requires_grad=True
-    )
+    lx = lucid.tensor(raw_x, dtype=getattr(lucid, dtype), device=device, requires_grad=True)
     lg = lucid.tensor(raw_g, dtype=getattr(lucid, dtype), device=device)
     got = F.normalize(lx, p=p, dim=dim)
     if is_cplx:
@@ -210,9 +198,7 @@ def test_normalize_real_and_complex_parity_forward_and_backward(
         (got * lg).sum().backward()
 
     assert str(got.dtype).rsplit(".", 1)[-1] == dtype
-    np.testing.assert_allclose(
-        got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5)
     assert lx.grad is not None
     np.testing.assert_allclose(
         lx.grad.numpy(), rx.grad.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
@@ -230,15 +216,11 @@ def test_normalize_complex_zero_row_and_zero_entry_parity(
     want = ref.nn.functional.normalize(rx, p=2.0, dim=1)
     ref.real(want).sum().backward()
 
-    lx = lucid.tensor(
-        data, dtype=getattr(lucid, dtype), device=device, requires_grad=True
-    )
+    lx = lucid.tensor(data, dtype=getattr(lucid, dtype), device=device, requires_grad=True)
     got = F.normalize(lx, p=2.0, dim=1)
     lucid.real(got).sum().backward()
 
-    np.testing.assert_allclose(
-        got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(got.numpy(), want.detach().cpu().numpy(), rtol=1e-5, atol=1e-5)
     assert lx.grad is not None
     np.testing.assert_allclose(
         lx.grad.numpy(), rx.grad.detach().cpu().numpy(), rtol=1e-5, atol=1e-5

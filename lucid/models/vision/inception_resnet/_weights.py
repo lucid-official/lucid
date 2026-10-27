@@ -39,9 +39,7 @@ class InceptionResNetV2Weights(WeightsEnum):
     """
 
     TF_IN1K = WeightEntry(
-        url=(
-            f"{HUB_BASE}/inception-resnet-v2/resolve/main/" "TF_IN1K/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/inception-resnet-v2/resolve/main/" "TF_IN1K/model.safetensors"),
         sha256="d6125423dcc684daa2a422770ca8f00c091822ec36d14f98bfbdcd90e91740a0",
         num_classes=1000,
         transforms=ImageClassification(

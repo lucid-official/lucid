@@ -196,9 +196,7 @@ class _Resample(nn.Module):
     features and therefore has no convolution of its own.
     """
 
-    def __init__(
-        self, channels: int, taps: tuple[int, ...], *, up: bool, fir: bool
-    ) -> None:
+    def __init__(self, channels: int, taps: tuple[int, ...], *, up: bool, fir: bool) -> None:
         super().__init__()
         self._up = up
         self.filter = _FIRResample(channels, taps, up=up) if fir else None
@@ -297,17 +295,13 @@ class _ResBlock(nn.Module):
         if up or down:
             self._resample = _Resample(in_channels, taps, up=up, fir=fir)
 
-        self.norm1 = nn.GroupNorm(
-            _groups(in_channels, group_limit), in_channels, eps=1e-6
-        )
+        self.norm1 = nn.GroupNorm(_groups(in_channels, group_limit), in_channels, eps=1e-6)
         self.conv1 = _conv3x3(in_channels, out_channels)
         self.time_proj = nn.Linear(time_dim, out_channels)
         nn.init.xavier_uniform_(self.time_proj.weight, gain=_gain(1.0))
         if self.time_proj.bias is not None:
             nn.init.zeros_(self.time_proj.bias)
-        self.norm2 = nn.GroupNorm(
-            _groups(out_channels, group_limit), out_channels, eps=1e-6
-        )
+        self.norm2 = nn.GroupNorm(_groups(out_channels, group_limit), out_channels, eps=1e-6)
         self.dropout = nn.Dropout(p=dropout)
         self.conv2 = _conv3x3(out_channels, out_channels, scale=init_scale)
 
@@ -455,9 +449,7 @@ class _VelocityField(nn.Module):
 
         taps = config.fir_kernel
 
-        def _res(
-            in_ch: int, out_ch: int, *, up: bool = False, down: bool = False
-        ) -> _ResBlock:
+        def _res(in_ch: int, out_ch: int, *, up: bool = False, down: bool = False) -> _ResBlock:
             return _ResBlock(
                 in_ch,
                 out_ch,
@@ -482,9 +474,7 @@ class _VelocityField(nn.Module):
             )
 
         if config.embedding_type == "fourier":
-            self.fourier: _FourierProjection | None = _FourierProjection(
-                base, config.fourier_scale
-            )
+            self.fourier: _FourierProjection | None = _FourierProjection(base, config.fourier_scale)
             embed_dim = 2 * base
         else:
             self.fourier, embed_dim = None, base
@@ -537,9 +527,7 @@ class _VelocityField(nn.Module):
                 self.down_res.append(_res(ch, out_ch))
                 ch = out_ch
                 self.down_attn.append(
-                    _attn(ch)
-                    if spatial in config.attention_resolutions
-                    else nn.Identity()
+                    _attn(ch) if spatial in config.attention_resolutions else nn.Identity()
                 )
                 skip_channels.append(ch)
             if level != levels - 1:
@@ -577,9 +565,7 @@ class _VelocityField(nn.Module):
                 self.pyramid_norm.append(
                     nn.GroupNorm(_groups(ch, config.resnet_groups), ch, eps=1e-6)
                 )
-                self.pyramid_conv.append(
-                    _conv3x3(ch, config.in_channels, scale=config.init_scale)
-                )
+                self.pyramid_conv.append(_conv3x3(ch, config.in_channels, scale=config.init_scale))
             else:
                 self.pyramid_norm.append(nn.Identity())
                 self.pyramid_conv.append(nn.Identity())
@@ -593,9 +579,7 @@ class _VelocityField(nn.Module):
             self.norm_out: nn.GroupNorm | nn.Identity = nn.Identity()
             self.conv_out: nn.Conv2d | nn.Identity = nn.Identity()
         else:
-            self.norm_out = nn.GroupNorm(
-                _groups(ch, config.resnet_groups), ch, eps=1e-6
-            )
+            self.norm_out = nn.GroupNorm(_groups(ch, config.resnet_groups), ch, eps=1e-6)
             self.conv_out = _conv3x3(ch, config.in_channels, scale=config.init_scale)
 
     def _time_embedding(self, t: Tensor) -> Tensor:
@@ -697,9 +681,7 @@ class _VelocityField(nn.Module):
             # at t = 0, and the floor is the smallest value training or
             # sampling ever produces, so clamping changes nothing in range.
             floor = lucid.full_like(scaled_t, max(self._time_floor, 1e-12))
-            denom = lucid.maximum(scaled_t, floor).reshape(
-                -1, *([1] * (len(sample.shape) - 1))
-            )
+            denom = lucid.maximum(scaled_t, floor).reshape(-1, *([1] * (len(sample.shape) - 1)))
             out = out / denom
         return out
 
@@ -760,9 +742,7 @@ class _LikelihoodDynamics:
         image = x.reshape(batch, *self._image_shape)
         return self.field(image, t).reshape(batch, -1)
 
-    def __call__(
-        self, t: Tensor, state: tuple[Tensor, Tensor]
-    ) -> tuple[Tensor, Tensor]:
+    def __call__(self, t: Tensor, state: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
         x, _ = state
         self.nfe += 1
         with lucid.enable_grad():
@@ -778,9 +758,7 @@ class _LikelihoodDynamics:
         # touches the divergence, so the density is a reported quantity
         # rather than a trained one.
         if self._trace_method == "exact":
-            return exact_divergence(
-                velocity, x, self._exact_seeds(velocity), create_graph=False
-            )
+            return exact_divergence(velocity, x, self._exact_seeds(velocity), create_graph=False)
         eps = self._eps
         if eps is None:
             eps = self.sample_noise(x)
@@ -793,9 +771,7 @@ class _LikelihoodDynamics:
         if seeds is None or seeds[0].shape != velocity.shape:
             basis = lucid.eye(self._dim, dtype=velocity.dtype, device=velocity.device)
             ones = lucid.ones_like(velocity[:, :1])
-            seeds = [
-                basis[index].reshape(1, self._dim) * ones for index in range(self._dim)
-            ]
+            seeds = [basis[index].reshape(1, self._dim) * ones for index in range(self._dim)]
             self._seeds = seeds
         return seeds
 
@@ -1588,18 +1564,14 @@ class RectifiedFlowModel(PretrainedModel):
         flat = x.reshape(batch, -1)
         delta = lucid.zeros((batch,), dtype=flat.dtype, device=flat.device)
 
-        eps = (
-            None if self._trace_method == "exact" else self.dynamics.sample_noise(flat)
-        )
+        eps = None if self._trace_method == "exact" else self.dynamics.sample_noise(flat)
         self.dynamics.reset(eps)
 
         x0, delta0 = cast(
             tuple[Tensor, Tensor],
             self._integrate(self.dynamics, (flat, delta), 1.0, self._time_eps),
         )
-        prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(
-            2.0 * math.pi
-        )
+        prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(2.0 * math.pi)
         return prior + delta0
 
     def bits_per_dim(self, x: Tensor) -> Tensor:
@@ -1715,9 +1687,7 @@ class RectifiedFlowForImageGeneration(ImageGenerationModel):
         device = resolve_generation_device(self, device)
         return cast(
             tuple[Tensor, Tensor],
-            self.rectified_flow.reflow_pairs(
-                n_samples, steps=steps, device=device, noise=noise
-            ),
+            self.rectified_flow.reflow_pairs(n_samples, steps=steps, device=device, noise=noise),
         )
 
     @lucid.no_grad()
@@ -1769,9 +1739,7 @@ class RectifiedFlowForImageGeneration(ImageGenerationModel):
         """
         device = resolve_generation_device(self, device)
         return GenerationOutput(
-            samples=self.rectified_flow.sample(
-                n_samples, steps=steps, device=device, noise=noise
-            )
+            samples=self.rectified_flow.sample(n_samples, steps=steps, device=device, noise=noise)
         )
 
 

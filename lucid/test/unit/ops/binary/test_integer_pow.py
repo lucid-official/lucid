@@ -97,9 +97,7 @@ def test_integer_pow_tensor_and_scalar_spellings_match_reference(
     assert rpow_got.tolist() == rpow_ref.cpu().tolist()
 
 
-def test_int64_pow_above_float64_mantissa_is_exact(
-    ref: ModuleType, device: str
-) -> None:
+def test_int64_pow_above_float64_mantissa_is_exact(ref: ModuleType, device: str) -> None:
     """Powers above $2^{53}$ lose low bits if routed through ``double``."""
     rdev = _ref_device(ref, device)
     bases = [
@@ -164,9 +162,7 @@ def test_bool_pow_promotion_and_values(ref: ModuleType, device: str) -> None:
 
 
 @pytest.mark.parametrize("dtype", _INT_DTYPES)
-def test_negative_integer_exponent_raises_on_cpu(
-    ref: ModuleType, dtype: lucid.dtype
-) -> None:
+def test_negative_integer_exponent_raises_on_cpu(ref: ModuleType, dtype: lucid.dtype) -> None:
     rdt = _ref_dtype(ref, dtype)
     rt = ref.arange(1, 17, dtype=rdt)
     with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
@@ -205,9 +201,7 @@ def test_negative_integer_exponent_on_metal_is_unsynced(dtype: lucid.dtype) -> N
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))
-def test_integer_pow_inside_autocast_keeps_dtype(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_integer_pow_inside_autocast_keeps_dtype(device: str, dtype: lucid.dtype) -> None:
     amp_dt = lucid.float16 if device == "metal" else lucid.bfloat16
     x = lucid.arange(1, 17, dtype=dtype, device=device)
     e = lucid.full((16,), 2, dtype=dtype, device=device)

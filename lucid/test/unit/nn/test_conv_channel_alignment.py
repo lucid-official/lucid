@@ -32,9 +32,7 @@ def _conv(rank: int, transposed: bool):
     return {2: F.conv2d, 3: F.conv3d}[rank]
 
 
-def _run(
-    x: np.ndarray, w: np.ndarray, rank: int, transposed: bool, stride: int, device: str
-):
+def _run(x: np.ndarray, w: np.ndarray, rank: int, transposed: bool, stride: int, device: str):
     xt = lucid.tensor(x, device=device, requires_grad=True)
     wt = lucid.tensor(w, device=device, requires_grad=True)
     y = _conv(rank, transposed)(xt, wt, stride=stride, padding=1)

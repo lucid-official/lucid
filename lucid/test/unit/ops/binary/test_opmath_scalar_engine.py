@@ -59,9 +59,7 @@ def _call(op: str, a: lucid.Tensor, b: lucid.Tensor) -> lucid.Tensor:
     return _wrap(getattr(_C_engine, op)(a._impl, b._impl))
 
 
-def _oracle(
-    op: str, t: lucid.Tensor, s: lucid.Tensor, scalar_first: bool
-) -> lucid.Tensor:
+def _oracle(op: str, t: lucid.Tensor, s: lucid.Tensor, scalar_first: bool) -> lucid.Tensor:
     wide_t = t.detach().to(lucid.float32)
     wide_s = s.detach().to(lucid.float32)
     x, y = (wide_s, wide_t) if scalar_first else (wide_t, wide_s)
@@ -74,15 +72,11 @@ def _oracle(
     return r.to(t.dtype)
 
 
-def _scalar(
-    value: float, device: str, dtype: lucid.dtype = lucid.float32
-) -> lucid.Tensor:
+def _scalar(value: float, device: str, dtype: lucid.dtype = lucid.float32) -> lucid.Tensor:
     return lucid.tensor(value, dtype=dtype, device=device)
 
 
-def _half(
-    values: Any, dtype: lucid.dtype, device: str, grad: bool = False
-) -> lucid.Tensor:
+def _half(values: Any, dtype: lucid.dtype, device: str, grad: bool = False) -> lucid.Tensor:
     # ``requires_grad_`` after construction: a bfloat16 ``tensor(...,
     # requires_grad=True)`` comes back as a non-leaf whose ``.grad`` stays
     # None, which is a factory defect and not this op's.
@@ -216,9 +210,7 @@ class TestGradients:
         t = _half([0.5, 2.0, -4.0], lucid.float16, device, grad=True)
         sc = _scalar(0.25, device)
         out = _call("div", sc, t)
-        (first,) = lucid.autograd.grad(
-            out, t, [lucid.ones_like(out)], create_graph=True
-        )
+        (first,) = lucid.autograd.grad(out, t, [lucid.ones_like(out)], create_graph=True)
         assert first.requires_grad
         assert first.tolist() == [-1.0, -0.0625, -0.015625]
         (second,) = lucid.autograd.grad(first, t, [lucid.ones_like(first)])
@@ -229,9 +221,7 @@ class TestGradients:
         t = _half([1.5, -2.0, 0.3], lucid.bfloat16, device, grad=True)
         sc = _scalar(0.1, device)
         out = _call(op, t, sc)
-        (first,) = lucid.autograd.grad(
-            out, t, [lucid.ones_like(out)], create_graph=True
-        )
+        (first,) = lucid.autograd.grad(out, t, [lucid.ones_like(out)], create_graph=True)
         wide = lucid.ones(3, device=device)
         expected = (wide * sc if op == "mul" else wide / sc).to(lucid.bfloat16)
         assert first.tolist() == expected.tolist()
@@ -285,9 +275,7 @@ class TestGradients:
         t = _half([2.0, 4.0], lucid.float16, device, grad=True)
         sc = lucid.tensor(0.5, dtype=lucid.float32, device=device, requires_grad=True)
         out = _call(op, sc, t) if scalar_first else _call(op, t, sc)
-        dt, dsc = lucid.autograd.grad(
-            out, [t, sc], [lucid.ones_like(out)], create_graph=True
-        )
+        dt, dsc = lucid.autograd.grad(out, [t, sc], [lucid.ones_like(out)], create_graph=True)
         assert dsc.dtype == lucid.float32
         assert dsc.shape == ()
         expected_dsc = 6.0 if op == "mul" else (0.75 if scalar_first else -24.0)
@@ -319,9 +307,7 @@ def _mixed_pairs(device: str) -> list[tuple[lucid.Tensor, lucid.Tensor]]:
         (lucid.ones(3, dtype=lucid.int32, device=device), _scalar(2.0, device)),
     ]
     if device == "cpu":
-        pairs.append(
-            (lucid.ones(3, device=device), _scalar(2.0, device, lucid.float64))
-        )
+        pairs.append((lucid.ones(3, device=device), _scalar(2.0, device, lucid.float64)))
     return pairs
 
 
@@ -346,9 +332,7 @@ class TestOtherMixedPairsStillRefused:
 class TestTrace:
     @pytest.mark.parametrize("op", _OPS)
     @pytest.mark.parametrize("scalar_first", [False, True], ids=["T_op_S", "S_op_T"])
-    def test_one_node_with_both_operands(
-        self, device: str, op: str, scalar_first: bool
-    ) -> None:
+    def test_one_node_with_both_operands(self, device: str, op: str, scalar_first: bool) -> None:
         t = _half([1.0, 2.0], lucid.float16, device)
         sc = _scalar(0.1, device)
         with lucid.compile._tracing() as tracer:
@@ -408,9 +392,7 @@ class TestIntegerFloorDivision:
         b = lucid.tensor([-1], dtype=lucid.int8, device=device)
         assert _call("floordiv", a, b).tolist() == [-128]
 
-    @pytest.mark.parametrize(
-        "dtype", [lucid.bool_, lucid.complex64], ids=["bool", "c64"]
-    )
+    @pytest.mark.parametrize("dtype", [lucid.bool_, lucid.complex64], ids=["bool", "c64"])
     def test_non_real_dtypes_are_refused(self, device: str, dtype: lucid.dtype) -> None:
         a = lucid.ones(2, dtype=dtype, device=device)
         with pytest.raises(NotImplementedError):

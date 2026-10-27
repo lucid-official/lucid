@@ -181,9 +181,7 @@ def get_default_qconfig() -> QConfig:
     QConfig : The recipe object this returns.
     """
     return QConfig(
-        activation=HistogramObserver.with_args(
-            qscheme=per_tensor_affine, qdtype=quint8
-        ),
+        activation=HistogramObserver.with_args(qscheme=per_tensor_affine, qdtype=quint8),
         weight=PerChannelMinMaxObserver.with_args(
             ch_axis=0, qscheme=per_channel_symmetric, qdtype=qint8
         ),
@@ -350,9 +348,7 @@ class QConfigMapping:
         self._global = qconfig
         return self
 
-    def set_object_type(
-        self, module_type: type, qconfig: QConfig | None
-    ) -> QConfigMapping:
+    def set_object_type(self, module_type: type, qconfig: QConfig | None) -> QConfigMapping:
         r"""Bind a :class:`QConfig` to every module of an exact type.
 
         A per-type rule sits above the global fallback but below a per-name rule.

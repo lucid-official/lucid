@@ -40,8 +40,7 @@ class FCNResNet50Weights(WeightsEnum):
     """
 
     COCO_WITH_VOC_LABELS_V1 = WeightEntry(
-        url=f"{HUB_BASE}/fcn-resnet-50/resolve/main/"
-        "COCO_WITH_VOC_LABELS_V1/model.safetensors",
+        url=f"{HUB_BASE}/fcn-resnet-50/resolve/main/" "COCO_WITH_VOC_LABELS_V1/model.safetensors",
         sha256="4e87ab18d1a18fac1d40f15984b70ae4a13cee336d9c0c646cd474a937600234",
         num_classes=21,
         transforms=_PRESET,
@@ -76,8 +75,7 @@ class FCNResNet101Weights(WeightsEnum):
     """
 
     COCO_WITH_VOC_LABELS_V1 = WeightEntry(
-        url=f"{HUB_BASE}/fcn-resnet-101/resolve/main/"
-        "COCO_WITH_VOC_LABELS_V1/model.safetensors",
+        url=f"{HUB_BASE}/fcn-resnet-101/resolve/main/" "COCO_WITH_VOC_LABELS_V1/model.safetensors",
         sha256="f46d07ed89706a0a51d327e10c748f109580862d96e6ea8afd0cfaee6fb1d133",
         num_classes=21,
         transforms=_PRESET,

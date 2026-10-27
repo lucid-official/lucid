@@ -78,9 +78,7 @@ def test_fused_step_autocast_mlp_trains() -> None:
         metal.synchronize()
         losses.append(float(loss.item()))
 
-    assert (
-        losses[0] > losses[-1]
-    ), f"expected loss to decrease over 5 SGD steps; got {losses}"
+    assert losses[0] > losses[-1], f"expected loss to decrease over 5 SGD steps; got {losses}"
 
 
 def test_fused_step_autocast_preserves_f32_master_weights() -> None:
@@ -156,9 +154,7 @@ def test_fused_step_autocast_layernorm_mlp_trains() -> None:
         metal.synchronize()
         losses.append(float(loss.item()))
 
-    assert (
-        losses[0] > losses[-1]
-    ), f"expected loss to decrease over 5 SGD steps; got {losses}"
+    assert losses[0] > losses[-1], f"expected loss to decrease over 5 SGD steps; got {losses}"
 
 
 # ── Forward-only ── `lucid.compile(model)` + autocast ──────────────
@@ -210,8 +206,7 @@ def test_fused_step_autocast_batchnorm1d_mlp_trains() -> None:
         losses.append(float(loss.item()))
 
     assert losses[0] > losses[-1], (
-        f"expected loss to decrease over 3 SGD steps with BN1d under "
-        f"autocast; got {losses}"
+        f"expected loss to decrease over 3 SGD steps with BN1d under " f"autocast; got {losses}"
     )
 
 
@@ -287,8 +282,7 @@ def test_lucid_compile_forward_autocast_matches_eager() -> None:
     rel_diff = abs_diff / max(scale, 1e-9)
     # F16 tolerance — 1e-2 is the standard "within ~3 decimal digits" gate.
     assert rel_diff < 1e-2, (
-        f"compile output diverges from eager under autocast; "
-        f"rel_diff={rel_diff:.4e}"
+        f"compile output diverges from eager under autocast; " f"rel_diff={rel_diff:.4e}"
     )
 
 

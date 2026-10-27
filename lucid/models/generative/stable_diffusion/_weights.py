@@ -90,10 +90,7 @@ class StableDiffusionWeights(WeightsEnum):
     """
 
     COMPVIS_LAION = WeightEntry(
-        url=(
-            f"{HUB_BASE}/stable-diffusion-v1/resolve/main/"
-            "CompVis_LAION/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/stable-diffusion-v1/resolve/main/" "CompVis_LAION/model.safetensors"),
         sha256="2fa36eeea24af004402d07d8c1ff6731f81119d69bdf952e5d0da5ad42f2860e",
         num_classes=0,
         transforms=_PRESET_512,

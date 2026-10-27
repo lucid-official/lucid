@@ -186,9 +186,7 @@ class StateAxis(Axis):
             # One value proves nothing: the getter could be returning a
             # constant that happens to match.  Reported rather than
             # passed, which is what VACUOUS is for.
-            return self._finding(
-                symbol, Status.VACUOUS, f"only one value was accepted: {seen}"
-            )
+            return self._finding(symbol, Status.VACUOUS, f"only one value was accepted: {seen}")
         # The restore is part of the contract too — a setter that cannot
         # accept its own getter's value is a setter no save/restore can
         # use, and this tool's own :class:`StateGuard` is one of them: it
@@ -201,9 +199,7 @@ class StateAxis(Axis):
                 f"{reader}() reports {before!r} and {writer}() will not accept it "
                 f"— the value cannot be saved and restored",
             )
-        return self._finding(
-            symbol, Status.PASS, f"{reader} follows {writer} for {seen}"
-        )
+        return self._finding(symbol, Status.PASS, f"{reader} follows {writer} for {seen}")
 
     def _seed(self, symbol: Symbol, obj: Any, name: str) -> Finding:
         # One stream serves both devices (see ``_draw``).  The draw is taken
@@ -259,15 +255,11 @@ class StateAxis(Axis):
         if first is None or second is None:
             return self._finding(symbol, Status.SKIP, "no draw to compare")
         if not np.array_equal(first, second):
-            return self._finding(
-                symbol, Status.FAIL, "the same seed produced two different draws"
-            )
+            return self._finding(symbol, Status.FAIL, "the same seed produced two different draws")
         if other is not None and np.array_equal(first, other):
             # Reproducible and *insensitive* is the worse failure: it
             # reads as a working seed and means the seed is ignored.
-            return self._finding(
-                symbol, Status.FAIL, "a different seed produced the same draw"
-            )
+            return self._finding(symbol, Status.FAIL, "a different seed produced the same draw")
         return self._finding(symbol, Status.PASS, "reproducible and seed-sensitive")
 
     def _rng_state(self, symbol: Symbol) -> Finding:
@@ -321,9 +313,7 @@ class StateAxis(Axis):
         finally:
             with contextlib.suppress(Exception):
                 set_(before)
-        return self._finding(
-            symbol, Status.PASS, "new tensors follow the default device"
-        )
+        return self._finding(symbol, Status.PASS, "new tensors follow the default device")
 
     def _grad_context(self, symbol: Symbol, obj: Any, name: str) -> Finding:
         x = lucid.tensor(np.ones((2, 2)), requires_grad=True)
@@ -343,12 +333,8 @@ class StateAxis(Axis):
                 f"inside {name}() a product reports requires_grad={inside}",
             )
         if not outside:
-            return self._finding(
-                symbol, Status.FAIL, f"{name}() did not restore grad mode on exit"
-            )
-        return self._finding(
-            symbol, Status.PASS, f"grad is {wanted} inside and restored after"
-        )
+            return self._finding(symbol, Status.FAIL, f"{name}() did not restore grad mode on exit")
+        return self._finding(symbol, Status.PASS, f"grad is {wanted} inside and restored after")
 
     def _detect_anomaly(self, symbol: Symbol, obj: Any) -> Finding:
         reader = getattr(lucid.autograd, "is_anomaly_enabled", None)
@@ -449,9 +435,7 @@ class HookAxis(Axis):
                 symbol, Status.UNSUPPORTED, f"{type(exc).__name__}: {str(exc)[:60]}"
             )
         if not fired:
-            return self._finding(
-                symbol, Status.FAIL, "backward ran and the hook never fired"
-            )
+            return self._finding(symbol, Status.FAIL, "backward ran and the hook never fired")
         return self._removes(symbol, handle, fired, self._backward_again(x))
 
     @staticmethod
@@ -473,9 +457,7 @@ class HookAxis(Axis):
         try:
             handle = register(hook)
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.UNSUPPORTED, f"register: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.UNSUPPORTED, f"register: {type(exc).__name__}")
 
         def exercise() -> None:
             if "load_state_dict" in symbol.short:
@@ -490,33 +472,23 @@ class HookAxis(Axis):
         except Exception as exc:  # noqa: BLE001
             with contextlib.suppress(Exception):
                 handle.remove()
-            return self._finding(
-                symbol, Status.UNSUPPORTED, f"exercise: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.UNSUPPORTED, f"exercise: {type(exc).__name__}")
         if not fired:
             with contextlib.suppress(Exception):
                 handle.remove()
-            return self._finding(
-                symbol, Status.FAIL, "the hook was registered and never fired"
-            )
+            return self._finding(symbol, Status.FAIL, "the hook was registered and never fired")
         return self._removes(symbol, handle, fired, exercise)
 
-    def _removes(
-        self, symbol: Symbol, handle: Any, fired: list[Any], exercise: Any
-    ) -> Finding:
+    def _removes(self, symbol: Symbol, handle: Any, fired: list[Any], exercise: Any) -> Finding:
         remove = getattr(handle, "remove", None)
         if remove is None:
-            return self._finding(
-                symbol, Status.FAIL, "fired, but returned no removable handle"
-            )
+            return self._finding(symbol, Status.FAIL, "fired, but returned no removable handle")
         count = len(fired)
         try:
             remove()
             exercise()
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.UNSUPPORTED, f"after remove: {type(exc).__name__}"
-            )
+            return self._finding(symbol, Status.UNSUPPORTED, f"after remove: {type(exc).__name__}")
         if len(fired) != count:
             return self._finding(
                 symbol,
@@ -524,9 +496,7 @@ class HookAxis(Axis):
                 f"handle.remove() left the hook installed — it fired "
                 f"{len(fired) - count} more time(s)",
             )
-        return self._finding(
-            symbol, Status.PASS, "fires once registered, stops once removed"
-        )
+        return self._finding(symbol, Status.PASS, "fires once registered, stops once removed")
 
 
 # ── dtype and device algebra ─────────────────────────────────────────────────
@@ -615,15 +585,13 @@ class MetadataAxis(Axis):
                 return self._finding(
                     symbol,
                     Status.FAIL,
-                    f"not commutative: ({left}, {right}) -> {forward}, "
-                    f"reversed -> {backward}",
+                    f"not commutative: ({left}, {right}) -> {forward}, " f"reversed -> {backward}",
                 )
             if expected not in str(forward):
                 return self._finding(
                     symbol,
                     Status.FAIL,
-                    f"({left}, {right}) promoted to {forward}, which does not "
-                    f"contain both",
+                    f"({left}, {right}) promoted to {forward}, which does not " f"contain both",
                 )
         return self._finding(symbol, Status.PASS, "commutative and widening")
 
@@ -640,9 +608,7 @@ class MetadataAxis(Axis):
         if low is None or high is None:
             return self._finding(symbol, Status.SKIP, "no min/max to compare")
         if not low < high:
-            return self._finding(
-                symbol, Status.FAIL, f"min {low} is not below max {high}"
-            )
+            return self._finding(symbol, Status.FAIL, f"min {low} is not below max {high}")
         if name == "finfo":
             eps = getattr(info, "eps", None)
             if eps is not None and not 0.0 < float(eps) < 1.0:
@@ -658,9 +624,7 @@ class MetadataAxis(Axis):
             try:
                 seen[name] = fn(dtype)
             except Exception as exc:  # noqa: BLE001
-                return self._finding(
-                    symbol, Status.UNSUPPORTED, f"{name}: {type(exc).__name__}"
-                )
+                return self._finding(symbol, Status.UNSUPPORTED, f"{name}: {type(exc).__name__}")
         if len(seen) < 2:
             return self._finding(symbol, Status.SKIP, "fewer than two dtypes accepted")
         # Distinct in, distinct out.  A mapping that collapses two dtypes
@@ -696,25 +660,15 @@ class MetadataAxis(Axis):
                     f"a {dtype} tensor reports itemsize {answer}, not {itemsize}",
                 )
             if name == "device" and "cpu" not in str(answer):
-                return self._finding(
-                    symbol, Status.FAIL, f"a cpu tensor reports device {answer}"
-                )
+                return self._finding(symbol, Status.FAIL, f"a cpu tensor reports device {answer}")
             if name in ("ndim",) and int(answer) != 2:
-                return self._finding(
-                    symbol, Status.FAIL, f"a 2-D tensor reports ndim {answer}"
-                )
+                return self._finding(symbol, Status.FAIL, f"a 2-D tensor reports ndim {answer}")
             if name in ("numel",) and int(answer) != 6:
-                return self._finding(
-                    symbol, Status.FAIL, f"a (2, 3) tensor reports numel {answer}"
-                )
+                return self._finding(symbol, Status.FAIL, f"a (2, 3) tensor reports numel {answer}")
             if name == "is_floating_point" and not bool(answer):
-                return self._finding(
-                    symbol, Status.FAIL, f"a {dtype} tensor is not floating point"
-                )
+                return self._finding(symbol, Status.FAIL, f"a {dtype} tensor is not floating point")
             if name == "is_complex" and bool(answer):
-                return self._finding(
-                    symbol, Status.FAIL, f"a {dtype} tensor reports as complex"
-                )
+                return self._finding(symbol, Status.FAIL, f"a {dtype} tensor reports as complex")
             if name in ("data_ptr", "storage_offset"):
                 if int(answer) < 0:
                     return self._finding(symbol, Status.FAIL, f"reported {answer}")
@@ -722,9 +676,7 @@ class MetadataAxis(Axis):
                 # ``-1`` is the ordinal a host tensor reports — there is
                 # no device index to give — and reading it as an error
                 # blamed the convention rather than the answer.
-                return self._finding(
-                    symbol, Status.FAIL, f"a cpu tensor reports ordinal {answer}"
-                )
+                return self._finding(symbol, Status.FAIL, f"a cpu tensor reports ordinal {answer}")
         return self._finding(symbol, Status.PASS, "agrees with the tensor it describes")
 
 
@@ -775,9 +727,7 @@ class FunctionalTransformAxis(Axis):
         # ``lucid.autograd.grad`` is the eager entry point and takes
         # tensors, not a function; the numeric axes reach it already.
         return (
-            symbol.qualname.startswith(
-                ("lucid.func.", "lucid.autograd.", "lucid.utils.")
-            )
+            symbol.qualname.startswith(("lucid.func.", "lucid.autograd.", "lucid.utils."))
             and symbol.qualname != "lucid.autograd.grad"
         )
 
@@ -803,11 +753,7 @@ class FunctionalTransformAxis(Axis):
                 got = fn(lambda t: t * t)(x)
                 expected = np.diag(expected)
             elif name == "hessian":
-                got = (
-                    fn(self._square)(x)
-                    if "func" in symbol.qualname
-                    else fn(self._square, x)
-                )
+                got = fn(self._square)(x) if "func" in symbol.qualname else fn(self._square, x)
                 expected = 2.0 * np.eye(3)
             elif name == "vmap":
                 got = fn(lambda t: t * 2.0)(_probe.as_f64(np.stack([[1.0, 2.0]] * 3)))
@@ -906,10 +852,7 @@ class NnUtilsAxis(Axis):
     )
 
     def applies(self, symbol: Symbol) -> bool:
-        return (
-            symbol.qualname.startswith("lucid.nn.utils.")
-            and symbol.short in self._NAMES
-        )
+        return symbol.qualname.startswith("lucid.nn.utils.") and symbol.short in self._NAMES
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         fn = _surface.resolve(symbol)
@@ -978,9 +921,7 @@ class NnUtilsAxis(Axis):
                 Status.FAIL,
                 "after parametrisation no parameter receives a gradient",
             )
-        return self._finding(
-            symbol, Status.PASS, "forward keeps its shape and stays trainable"
-        )
+        return self._finding(symbol, Status.PASS, "forward keeps its shape and stays trainable")
 
     def _unparametrise(self, symbol: Symbol, fn: Any, name: str, probe: Any) -> Finding:
         if name == "remove_spectral_norm":
@@ -1007,8 +948,7 @@ class NnUtilsAxis(Axis):
             return self._finding(
                 symbol,
                 Status.FAIL,
-                f"removing it changed the output by "
-                f"{np.abs(parametrised - plain).max():.3e}",
+                f"removing it changed the output by " f"{np.abs(parametrised - plain).max():.3e}",
             )
         return self._finding(symbol, Status.PASS, "removed without changing the output")
 
@@ -1049,15 +989,9 @@ class NnUtilsAxis(Axis):
                 f"{np.abs(orig - restored).max():.3e}",
             )
 
-        left = [
-            attr
-            for attr in ("weight_orig", "weight_u", "weight_v")
-            if hasattr(module, attr)
-        ]
+        left = [attr for attr in ("weight_orig", "weight_u", "weight_v") if hasattr(module, attr)]
         if left:
-            return self._finding(
-                symbol, Status.FAIL, f"the machinery survived removal: {left}"
-            )
+            return self._finding(symbol, Status.FAIL, f"the machinery survived removal: {left}")
 
         # The normalisation divided by sigma > 1 here, so the two must
         # differ; if they do not, spectral_norm never applied and the
@@ -1069,9 +1003,7 @@ class NnUtilsAxis(Axis):
                 Status.VACUOUS,
                 "normed and unnormed outputs agree — nothing was being normalised",
             )
-        return self._finding(
-            symbol, Status.PASS, "weight_orig restored and the buffers are gone"
-        )
+        return self._finding(symbol, Status.PASS, "weight_orig restored and the buffers are gone")
 
     def _prune(self, symbol: Symbol, fn: Any, name: str, probe: Any) -> Finding:
         module = self._linear()
@@ -1090,9 +1022,7 @@ class NnUtilsAxis(Axis):
                     f"{zeros} of {weight.size} are zero, expected at least "
                     f"{weight.size // 2}",
                 )
-            return self._finding(
-                symbol, Status.PASS, "the pruned values survive removal"
-            )
+            return self._finding(symbol, Status.PASS, "the pruned values survive removal")
 
         if name == "random_unstructured":
             return self._prune_bernoulli(symbol, fn)
@@ -1104,12 +1034,8 @@ class NnUtilsAxis(Axis):
         zeros = int((weight == 0.0).sum())
         if name == "identity":
             if zeros == weight.size:
-                return self._finding(
-                    symbol, Status.FAIL, "identity pruning zeroed everything"
-                )
-            return self._finding(
-                symbol, Status.PASS, "identity leaves the weight alone"
-            )
+                return self._finding(symbol, Status.FAIL, "identity pruning zeroed everything")
+            return self._finding(symbol, Status.PASS, "identity leaves the weight alone")
         wanted = weight.size // 2
         if zeros != wanted:
             return self._finding(
@@ -1155,8 +1081,7 @@ class NnUtilsAxis(Axis):
                 return self._finding(
                     symbol,
                     Status.FAIL,
-                    f"amount={amount} should {what}: zeroed {zeros} of {size}, "
-                    f"expected {want}",
+                    f"amount={amount} should {what}: zeroed {zeros} of {size}, " f"expected {want}",
                 )
 
         fn(wide, "weight", amount=0.5)
@@ -1197,24 +1122,17 @@ class NnUtilsAxis(Axis):
             return self._finding(
                 symbol,
                 Status.FAIL,
-                f"the fused layer differs from the sequence by "
-                f"{np.abs(want - got).max():.3e}",
+                f"the fused layer differs from the sequence by " f"{np.abs(want - got).max():.3e}",
             )
-        return self._finding(
-            symbol, Status.PASS, "the fused layer matches the sequence"
-        )
+        return self._finding(symbol, Status.PASS, "the fused layer matches the sequence")
 
     def _skip_init(self, symbol: Symbol, fn: Any, probe: Any) -> Finding:
         module = fn(lucid.nn.Linear, 4, 3)
         if not isinstance(module, lucid.nn.Module):
-            return self._finding(
-                symbol, Status.FAIL, f"returned {type(module).__name__}"
-            )
+            return self._finding(symbol, Status.FAIL, f"returned {type(module).__name__}")
         out = _probe.to_numpy(module(probe))
         if out is None or out.shape != (2, 3):
-            return self._finding(
-                symbol, Status.FAIL, "the built module does not forward"
-            )
+            return self._finding(symbol, Status.FAIL, "the built module does not forward")
         return self._finding(symbol, Status.PASS, "builds a usable module")
 
     def _vector(self, symbol: Symbol, fn: Any, name: str) -> Finding:
@@ -1256,9 +1174,7 @@ class NnUtilsAxis(Axis):
     def _pack(self, symbol: Symbol, fn: Any) -> Finding:
         padded = _probe.as_f32(_probe.sample("moderate", (2, 4, 3)))
         packed = fn(padded, [4, 2], batch_first=True, enforce_sorted=True)
-        restored, lengths = lucid.nn.utils.rnn.pad_packed_sequence(
-            packed, batch_first=True
-        )
+        restored, lengths = lucid.nn.utils.rnn.pad_packed_sequence(packed, batch_first=True)
         a, b = _probe.to_numpy(padded), _probe.to_numpy(restored)
         if a is None or b is None:
             return self._finding(symbol, Status.SKIP, "no tensor to compare")
@@ -1269,9 +1185,7 @@ class NnUtilsAxis(Axis):
                 Status.FAIL,
                 "the valid timesteps did not survive the round trip",
             )
-        return self._finding(
-            symbol, Status.PASS, "packs and unpacks the valid timesteps"
-        )
+        return self._finding(symbol, Status.PASS, "packs and unpacks the valid timesteps")
 
     def _grad_norm(self, symbol: Symbol, fn: Any, name: str) -> Finding:
         module = self._linear()
@@ -1281,11 +1195,7 @@ class NnUtilsAxis(Axis):
             return self._finding(symbol, Status.SKIP, "no gradient to measure")
         if name == "get_total_norm":
             got = float(_probe.to_numpy(fn(grads)))
-            want = float(
-                np.sqrt(
-                    sum((_probe.to_numpy(g).astype(float) ** 2).sum() for g in grads)
-                )
-            )
+            want = float(np.sqrt(sum((_probe.to_numpy(g).astype(float) ** 2).sum() for g in grads)))
             if not np.isclose(got, want, rtol=1e-5):
                 return self._finding(
                     symbol, Status.FAIL, f"reported {got:.6g}, computed {want:.6g}"
@@ -1294,16 +1204,12 @@ class NnUtilsAxis(Axis):
 
         before = copy.deepcopy([_probe.to_numpy(g) for g in grads])
         fn(module.parameters(), 1e-4)
-        after = [
-            _probe.to_numpy(p.grad) for p in module.parameters() if p.grad is not None
-        ]
+        after = [_probe.to_numpy(p.grad) for p in module.parameters() if p.grad is not None]
         if any(np.abs(a).max() > 1e-4 + 1e-9 for a in after if a is not None):
-            return self._finding(
-                symbol, Status.FAIL, "a gradient survived above the clip value"
-            )
-        if all(
-            np.array_equal(x, y) for x, y in zip(before, after) if x is not None
-        ) and any(np.abs(x).max() > 1e-4 for x in before if x is not None):
+            return self._finding(symbol, Status.FAIL, "a gradient survived above the clip value")
+        if all(np.array_equal(x, y) for x, y in zip(before, after) if x is not None) and any(
+            np.abs(x).max() > 1e-4 for x in before if x is not None
+        ):
             return self._finding(symbol, Status.FAIL, "nothing was clipped")
         return self._finding(symbol, Status.PASS, "clipped to the value given")
 
@@ -1345,9 +1251,7 @@ class WeightsAxis(Axis):
     )
 
     def applies(self, symbol: Symbol) -> bool:
-        return symbol.qualname.startswith("lucid.weights.") and (
-            symbol.short in self._NAMES
-        )
+        return symbol.qualname.startswith("lucid.weights.") and (symbol.short in self._NAMES)
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
         import lucid.weights as weights  # noqa: PLC0415 - optional subsystem
@@ -1385,12 +1289,8 @@ class WeightsAxis(Axis):
         # relies on and the two a typo silently breaks.
         try:
             if weights.resolve_weights(registered, False, None) is not None:
-                problems.append(
-                    "resolve_weights(pretrained=False) chose weights anyway"
-                )
-            if weights.resolve_weights(registered, "PROBE_V1", None) is not (
-                registered.PROBE_V1
-            ):
+                problems.append("resolve_weights(pretrained=False) chose weights anyway")
+            if weights.resolve_weights(registered, "PROBE_V1", None) is not (registered.PROBE_V1):
                 problems.append("resolve_weights did not honour the tag it was given")
         except Exception as exc:  # noqa: BLE001
             problems.append(f"resolve_weights raised {type(exc).__name__}")
@@ -1400,9 +1300,7 @@ class WeightsAxis(Axis):
 
         if problems:
             return self._finding(symbol, Status.FAIL, "; ".join(problems))
-        return self._finding(
-            symbol, Status.PASS, "registered once, found by all four routes"
-        )
+        return self._finding(symbol, Status.PASS, "registered once, found by all four routes")
 
 
 STATE_AXES: tuple[Axis, ...] = (

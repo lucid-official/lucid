@@ -166,40 +166,28 @@ class NCSNConfig(GenerativeModelConfig):
         super().__post_init__()
         check_sample_space_channels(self.in_channels, self.out_channels, "the score")
         if self.base_channels <= 0:
-            raise ValueError(
-                f"base_channels must be positive, got {self.base_channels}"
-            )
+            raise ValueError(f"base_channels must be positive, got {self.base_channels}")
         if not self.channel_mult:
             raise ValueError("channel_mult must have at least one stage")
         if any(m <= 0 for m in self.channel_mult):
-            raise ValueError(
-                f"channel_mult entries must be positive, got {self.channel_mult}"
-            )
+            raise ValueError(f"channel_mult entries must be positive, got {self.channel_mult}")
         if self.num_res_blocks <= 0:
-            raise ValueError(
-                f"num_res_blocks must be positive, got {self.num_res_blocks}"
-            )
+            raise ValueError(f"num_res_blocks must be positive, got {self.num_res_blocks}")
         if self.num_heads <= 0:
             raise ValueError(f"num_heads must be positive, got {self.num_heads}")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError(f"dropout must be in [0, 1), got {self.dropout}")
         if self.resnet_groups <= 0:
-            raise ValueError(
-                f"resnet_groups must be positive, got {self.resnet_groups}"
-            )
+            raise ValueError(f"resnet_groups must be positive, got {self.resnet_groups}")
         if self.num_noise_levels <= 0:
-            raise ValueError(
-                f"num_noise_levels must be positive, got {self.num_noise_levels}"
-            )
+            raise ValueError(f"num_noise_levels must be positive, got {self.num_noise_levels}")
         if not 0.0 < self.sigma_min < self.sigma_max:
             raise ValueError(
                 f"require 0 < sigma_min < sigma_max, got "
                 f"min={self.sigma_min}, max={self.sigma_max}"
             )
         if self.langevin_steps <= 0:
-            raise ValueError(
-                f"langevin_steps must be positive, got {self.langevin_steps}"
-            )
+            raise ValueError(f"langevin_steps must be positive, got {self.langevin_steps}")
         if self.langevin_eps <= 0:
             raise ValueError(f"langevin_eps must be positive, got {self.langevin_eps}")
 

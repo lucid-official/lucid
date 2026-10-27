@@ -919,9 +919,7 @@ def __index__(self: Tensor) -> int:
     """
     value = self.item()
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(
-            f"only integer tensors can be used as an index, " f"got dtype {self.dtype}"
-        )
+        raise TypeError(f"only integer tensors can be used as an index, " f"got dtype {self.dtype}")
     return value
 
 

@@ -52,9 +52,7 @@ def _parameters(fn: Callable[..., object]) -> list[str] | None:
     return [p.name for p in params]
 
 
-@pytest.mark.parametrize(
-    "entry", [e for e in _REGISTRY if e.extra_kwargs], ids=lambda e: e.name
-)
+@pytest.mark.parametrize("entry", [e for e in _REGISTRY if e.extra_kwargs], ids=lambda e: e.name)
 def test_registry_keywords_name_real_parameters(entry) -> None:  # type: ignore[no-untyped-def]
     accepted = _parameters(entry.engine_fn)
     if accepted is None:
@@ -64,9 +62,7 @@ def test_registry_keywords_name_real_parameters(entry) -> None:  # type: ignore[
 
 def _stub_methods() -> list[tuple[str, list[str]]]:
     tree = ast.parse(STUB.read_text(encoding="utf-8"))
-    cls = next(
-        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor"
-    )
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor")
     out = []
     for fn in cls.body:
         if not isinstance(fn, ast.FunctionDef) or fn.name.startswith("__"):
@@ -105,9 +101,7 @@ def _stub_cases() -> list[object]:
 @pytest.mark.parametrize("name,keywords", _stub_cases())
 def test_tensor_stub_keywords_reach_the_callee(name: str, keywords: list[str]) -> None:
     method = getattr(Tensor, name, None)
-    assert (
-        method is not None
-    ), f"tensor.pyi declares Tensor.{name}, which does not exist"
+    assert method is not None, f"tensor.pyi declares Tensor.{name}, which does not exist"
     direct = _parameters(method)
     if direct is not None and "args" not in direct:
         assert [k for k in keywords if k not in direct] == []
@@ -218,9 +212,7 @@ def _signature(fn: object) -> inspect.Signature:
 
 
 def _catch_all(params: list[_Param]) -> bool:
-    return any(p.kind == "varkw" for p in params) and not any(
-        p.kind == "kw" for p in params
-    )
+    return any(p.kind == "varkw" for p in params) and not any(p.kind == "kw" for p in params)
 
 
 def _stub_params(path: Path, name: str, cls: str | None) -> list[_Param] | None:
@@ -228,12 +220,8 @@ def _stub_params(path: Path, name: str, cls: str | None) -> list[_Param] | None:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     body = tree.body
     if cls is not None:
-        body = next(
-            n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls
-        ).body
-    fn = next(
-        (n for n in body if isinstance(n, ast.FunctionDef) and n.name == name), None
-    )
+        body = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls).body
+    fn = next((n for n in body if isinstance(n, ast.FunctionDef) and n.name == name), None)
     if fn is None:
         return None
     a = fn.args
@@ -300,8 +288,7 @@ def _reference_overloads(
         # An ``out=`` variant writes to an argument other than ``self``; an
         # in-place one (``add_``) writes ``self`` and is the method's own.
         written = any(
-            a.alias_info is not None and a.alias_info.is_write and a.name != "self"
-            for a in args
+            a.alias_info is not None and a.alias_info.is_write and a.name != "self" for a in args
         )
         if written or any("Dimname" in str(a.type) for a in args):
             continue  # an ``out=`` variant, or a named-dims one
@@ -329,11 +316,7 @@ def _reference_overloads(
 def _unspellable(want: _Param, got: _Param) -> bool:
     """``want`` is named by a Python keyword (``from``), which a call can pass
     only by position, and ``got`` is that slot, positional-only, as ``from_``."""
-    return (
-        keyword.iskeyword(want.name)
-        and got.kind == "po"
-        and got.name == f"{want.name}_"
-    )
+    return keyword.iskeyword(want.name) and got.kind == "po" and got.name == f"{want.name}_"
 
 
 def _mismatches(ours: list[_Param], theirs: list[_Param], method: bool) -> list[str]:
@@ -362,12 +345,7 @@ def _mismatches(ours: list[_Param], theirs: list[_Param], method: bool) -> list[
                 problems.append(f"slot {i} is {want.name}, not {got.name}")
             elif want.kind == "pk" and got.kind == "po":
                 problems.append(f"{got.name} takes a keyword there")
-        elif (
-            spread is not None
-            and i == len(slots)
-            and want.int_list
-            and (i == 0 or method)
-        ):
+        elif spread is not None and i == len(slots) and want.int_list and (i == 0 or method):
             continue  # ``f(*size)`` — the parser spreads a leading int list
         else:
             problems.append(f"no slot {i} ({want.name})")
@@ -426,9 +404,7 @@ def _tensor_methods() -> list[str]:
     out = []
     for name in sorted(dir(Tensor)):
         member = inspect.getattr_static(Tensor, name)
-        if name.startswith("_") or isinstance(
-            member, (property, staticmethod, classmethod)
-        ):
+        if name.startswith("_") or isinstance(member, (property, staticmethod, classmethod)):
             continue
         if callable(member):
             out.append(name)
@@ -544,9 +520,7 @@ def _signature_cases() -> list[object]:
 
 
 @pytest.mark.parametrize("namespace,name", _signature_cases())
-def test_signatures_bind_as_the_reference_binds(
-    ref: ModuleType, namespace: str, name: str
-) -> None:
+def test_signatures_bind_as_the_reference_binds(ref: ModuleType, namespace: str, name: str) -> None:
     _, _, ref_path, aten_prefix = next(n for n in _NAMESPACES if n[0] == namespace)
     owner: object = ref
     for part in filter(None, ref_path.split(".")):
@@ -579,11 +553,7 @@ def test_signatures_bind_as_the_reference_binds(
             module = lucid
             for part in filter(None, lucid_path.split(".")):
                 module = getattr(module, part)
-            stub = (
-                Path(lucid.__file__).with_name("__init__.pyi")
-                if not lucid_path
-                else None
-            )
+            stub = Path(lucid.__file__).with_name("__init__.pyi") if not lucid_path else None
             ours = _lucid_function(name, getattr(module, name), stub)
     if ours is None:
         pytest.skip("Lucid's signature is a catch-all with no stub")
@@ -593,8 +563,7 @@ def test_signatures_bind_as_the_reference_binds(
         pytest.skip("the reference exposes no signature")
     if name in _OVERLOADED_NAMES:
         overloads = [
-            [p._replace(name=_BY_OVERLOAD.get(p.name, p.name)) for p in o]
-            for o in overloads
+            [p._replace(name=_BY_OVERLOAD.get(p.name, p.name)) for p in o] for o in overloads
         ]
     found = [_mismatches(ours, theirs_params, method) for theirs_params in overloads]
     closest = min(found, key=len)
@@ -609,16 +578,12 @@ def _pair(device: str) -> tuple[Tensor, Tensor]:
 
 
 _ARITH = [
-    e
-    for e in _REGISTRY
-    if e.engine_fn.__qualname__.startswith(_make_arith_adapter.__qualname__)
+    e for e in _REGISTRY if e.engine_fn.__qualname__.startswith(_make_arith_adapter.__qualname__)
 ]
 
 
 @pytest.mark.parametrize("entry", _ARITH, ids=lambda e: e.name)
-def test_arithmetic_ops_take_input_and_other_by_keyword(
-    entry: OpEntry, device: str
-) -> None:
+def test_arithmetic_ops_take_input_and_other_by_keyword(entry: OpEntry, device: str) -> None:
     def fresh() -> tuple[Tensor, Tensor]:
         a, b = _pair(device)
         if entry.name.startswith(("bitwise", "logical")):
@@ -681,9 +646,7 @@ def test_arithmetic_ops_take_input_and_other_by_keyword(
                 mask=lucid.tensor([True, False, True], device=x.device),
                 value=0.0,
             ),
-            lucid.masked_fill(
-                x, lucid.tensor([True, False, True], device=x.device), 0.0
-            ),
+            lucid.masked_fill(x, lucid.tensor([True, False, True], device=x.device), 0.0),
         ),
         lambda x, y: (lucid.unique(input=x), lucid.unique(x)),
         lambda x, y: (x.matmul(other=y), x.matmul(y)),
@@ -755,9 +718,7 @@ def test_atan2_reads_input_over_other(ref: ModuleType, device: str) -> None:
         assert got.tolist() == pytest.approx(want, rel=1e-6)
 
 
-def test_lcd412_ops_and_tensor_keywords_match_reference(
-    ref: ModuleType, device: str
-) -> None:
+def test_lcd412_ops_and_tensor_keywords_match_reference(ref: ModuleType, device: str) -> None:
     x = lucid.tensor([1.0, 2.0, 3.0], device=device)
     y = lucid.tensor([0.5, -1.0, 2.0], device=device)
     assert lucid.add(x, y, alpha=2.0).tolist() == pytest.approx([2.0, 0.0, 7.0])
@@ -799,9 +760,7 @@ def test_lcd412_ops_and_tensor_keywords_match_reference(
         1.0,
         3.0,
     ]
-    assert lucid.isin(
-        x, lucid.tensor([2.0, 4.0], device=device), assume_unique=True
-    ).tolist() == [
+    assert lucid.isin(x, lucid.tensor([2.0, 4.0], device=device), assume_unique=True).tolist() == [
         False,
         True,
         False,
@@ -813,9 +772,7 @@ def test_lcd412_ops_and_tensor_keywords_match_reference(
     rmat = ref.tensor([[1.0, 2.0, 4.0], [2.0, 0.0, 1.0]])
     rfw = ref.tensor([1, 2, 1])
     raw = ref.tensor([0.5, 1.5, 1.0])
-    assert lucid.cov(mat, fweights=fw, aweights=aw).reshape(
-        -1
-    ).tolist() == pytest.approx(
+    assert lucid.cov(mat, fweights=fw, aweights=aw).reshape(-1).tolist() == pytest.approx(
         ref.cov(rmat, fweights=rfw, aweights=raw).reshape(-1).tolist(), rel=1e-5
     )
 
@@ -824,9 +781,9 @@ def test_lcd412_ops_and_tensor_keywords_match_reference(
     counts, _ = lucid.histogramdd(pts, bins=2, range=[(0.0, 1.0), (0.0, 1.0)], weight=w)
     assert counts.reshape(-1).tolist() == pytest.approx([2.5, 0.0, 0.0, 1.5])
     rpts = ref.tensor([[0.1, 0.2], [0.8, 0.9]])
-    assert lucid.cdist(
-        pts, pts, p=2.0, compute_mode="donot_use_mm_for_euclid_dist"
-    ).reshape(-1).tolist() == pytest.approx(
+    assert lucid.cdist(pts, pts, p=2.0, compute_mode="donot_use_mm_for_euclid_dist").reshape(
+        -1
+    ).tolist() == pytest.approx(
         ref.cdist(rpts, rpts, p=2.0, compute_mode="donot_use_mm_for_euclid_dist")
         .reshape(-1)
         .tolist(),
@@ -905,9 +862,7 @@ def test_lcd412_optim_autograd_and_amp_keywords_match_reference() -> None:
     assert 0.004 < opt.param_groups[0]["lr"] < 0.1
 
     pr = lucid.nn.Parameter(lucid.tensor([2.0]))
-    radam = lucid.optim.RAdam(
-        [pr], lr=0.1, weight_decay=0.5, decoupled_weight_decay=True
-    )
+    radam = lucid.optim.RAdam([pr], lr=0.1, weight_decay=0.5, decoupled_weight_decay=True)
     pr.grad = lucid.tensor([0.0])
     radam.step()
     assert pr.tolist() == pytest.approx([1.9])
@@ -936,10 +891,7 @@ def test_nn_module_forward_parameter_names_match_reference(ref: ModuleType) -> N
                 or not isinstance(rcls, type)
             ):
                 continue
-            if (
-                cls.forward is lucid.nn.Module.forward
-                or rcls.forward is ref.nn.Module.forward
-            ):
+            if cls.forward is lucid.nn.Module.forward or rcls.forward is ref.nn.Module.forward:
                 continue
             lsig = _signature(cls.forward)
             rsig = _signature(rcls.forward)
@@ -986,9 +938,7 @@ def test_lcd434_signature_parity_stragglers(device: str) -> None:
     def _fn(x: Tensor) -> Tensor:
         return x + 1.0
 
-    assert (
-        lucid.compile(_fn, fullgraph=True, mode="reduce-overhead", disable=True) is _fn
-    )
+    assert lucid.compile(_fn, fullgraph=True, mode="reduce-overhead", disable=True) is _fn
     assert lucid.compile(fullgraph=True, disable=True)(_fn) is _fn
 
     buf = io.BytesIO()
@@ -1014,10 +964,7 @@ def test_lcd430_legacy_reduction_and_elu_inplace_scale(device: str) -> None:
         assert _legacy_reduction(False, False, "mean", "mse_loss") == "none"
         assert _legacy_reduction(False, True, "mean", "mse_loss") == "sum"
         assert _legacy_reduction(True, True, "sum", "mse_loss") == "mean"
-        assert (
-            _legacy_reduction(None, None, "batchmean", "kl_div", batchmean=True)
-            == "batchmean"
-        )
+        assert _legacy_reduction(None, None, "batchmean", "kl_div", batchmean=True) == "batchmean"
 
         x = lucid.tensor([[1.0, 2.0], [3.0, 4.0]], device=device)
         y = lucid.tensor([[0.0, 1.0], [1.0, 2.0]], device=device)
@@ -1038,4 +985,3 @@ def test_lcd430_legacy_reduction_and_elu_inplace_scale(device: str) -> None:
     t = lucid.tensor([-1.0, 2.0], device=device)
     assert F.elu_(t, 1.0, False) is t
     assert t.tolist() == [0.0, 0.0]
-

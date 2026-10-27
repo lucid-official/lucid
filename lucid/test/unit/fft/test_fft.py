@@ -97,9 +97,7 @@ _F64_NORMS = [None, "backward", "ortho", "forward"]
 @pytest.mark.parity
 @pytest.mark.parametrize("n", _F64_LENGTHS)
 @pytest.mark.parametrize("norm", _F64_NORMS)
-def test_f64_and_c128_1d_fft_family_matches_reference(
-    n: int, norm: str | None, ref
-) -> None:
+def test_f64_and_c128_1d_fft_family_matches_reference(n: int, norm: str | None, ref) -> None:
     rng = np.random.default_rng(n + 17)
     re = rng.standard_normal(n).astype(np.float64)
     im = rng.standard_normal(n).astype(np.float64)
@@ -121,9 +119,7 @@ def test_f64_and_c128_1d_fft_family_matches_reference(
         got = getattr(lucid.fft, fn_name)(xr, norm=norm)
         want = getattr(ref.fft, fn_name)(txr, norm=norm)
         assert got.dtype == lucid.complex128
-        np.testing.assert_allclose(
-            got.numpy(), want.resolve_conj().numpy(), rtol=1e-11, atol=1e-11
-        )
+        np.testing.assert_allclose(got.numpy(), want.resolve_conj().numpy(), rtol=1e-11, atol=1e-11)
 
     half_len = n // 2 + 1
     h_re = rng.standard_normal(half_len).astype(np.float64)
@@ -134,9 +130,7 @@ def test_f64_and_c128_1d_fft_family_matches_reference(
         got = getattr(lucid.fft, fn_name)(lh, n=n, norm=norm)
         want = getattr(ref.fft, fn_name)(th, n=n, norm=norm)
         assert got.dtype == lucid.float64
-        np.testing.assert_allclose(
-            got.numpy(), want.resolve_conj().numpy(), rtol=1e-11, atol=1e-11
-        )
+        np.testing.assert_allclose(got.numpy(), want.resolve_conj().numpy(), rtol=1e-11, atol=1e-11)
 
 
 @pytest.mark.parity
@@ -161,9 +155,7 @@ def test_f64_and_c128_nd_fft_and_gradients_match_reference(
 
         ly = getattr(lucid.fft, fn_name)(lx, s=s, dim=dim, norm=norm)
         ty = getattr(ref.fft, fn_name)(tx, s=s, dim=dim, norm=norm)
-        expected_dt = (
-            lucid.float64 if fn_name in ("irfftn", "hfftn") else lucid.complex128
-        )
+        expected_dt = lucid.float64 if fn_name in ("irfftn", "hfftn") else lucid.complex128
         assert ly.dtype == expected_dt
         np.testing.assert_allclose(
             ly.numpy(), ty.detach().resolve_conj().numpy(), rtol=1e-11, atol=1e-11
@@ -173,8 +165,7 @@ def test_f64_and_c128_nd_fft_and_gradients_match_reference(
         w_im = rng.standard_normal(tuple(ly.shape)).astype(np.float64)
         if ly.is_complex():
             l_loss = (
-                lucid.real(ly) * lucid.tensor(w_re)
-                + lucid.imag(ly) * lucid.tensor(w_im)
+                lucid.real(ly) * lucid.tensor(w_re) + lucid.imag(ly) * lucid.tensor(w_im)
             ).sum()
             t_loss = (ty.real * ref.tensor(w_re) + ty.imag * ref.tensor(w_im)).sum()
         else:

@@ -206,9 +206,7 @@ class NCSNModel(PretrainedModel):
         # exact failure NCSNv2 sec. 3 identifies.  Dividing here also makes the
         # DSM residual ``sigma * score + z`` collapse to ``raw + z``, so the
         # regression target stops depending on sigma at all.
-        used_sigmas = self.sigmas[sigma_idx].reshape(
-            -1, *([1] * (len(sample.shape) - 1))
-        )
+        used_sigmas = self.sigmas[sigma_idx].reshape(-1, *([1] * (len(sample.shape) - 1)))
         return DiffusionModelOutput(sample=raw / used_sigmas)
 
 

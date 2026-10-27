@@ -125,9 +125,7 @@ def test_lcd198_model_config_json_roundtrip_preserves_tuples(tmp_path: Path) -> 
     restored = _NestedTupleConfig.from_dict(raw)
     assert isinstance(restored.depths, tuple) and restored.depths == (3, 4, 6, 3)
     assert isinstance(restored.window_size, tuple) and restored.window_size == (8, 8)
-    assert isinstance(restored.nested, tuple) and all(
-        isinstance(x, tuple) for x in restored.nested
-    )
+    assert isinstance(restored.nested, tuple) and all(isinstance(x, tuple) for x in restored.nested)
     assert restored.nested == ((2, 4), (6, 8))
     assert isinstance(restored.optional_tuple, tuple) and restored.optional_tuple == (
         "stage1",
@@ -232,9 +230,7 @@ def test_lcd199_vision_transformer_for_image_classification_inits_weights(
     """All 8 transformer/hybrid *ForImageClassification wrappers run init_transformer_trunc_normal."""
     model = cls_fn()
     linear_biases = [
-        m.bias
-        for m in model.modules()
-        if isinstance(m, nn.Linear) and m.bias is not None
+        m.bias for m in model.modules() if isinstance(m, nn.Linear) and m.bias is not None
     ]
     assert len(linear_biases) >= 1
     for b in linear_biases:
@@ -244,9 +240,7 @@ def test_lcd199_vision_transformer_for_image_classification_inits_weights(
 def test_lcd199_vgg_and_resnet_for_image_classification_cnn_init() -> None:
     """VGGForImageClassification and ResNetForImageClassification run init_cnn_fan_out."""
     vgg = VGGForImageClassification(VGGConfig(arch=(1, 1, 1, 1, 1), num_classes=5))
-    conv_biases = [
-        m.bias for m in vgg.modules() if isinstance(m, nn.Conv2d) and m.bias is not None
-    ]
+    conv_biases = [m.bias for m in vgg.modules() if isinstance(m, nn.Conv2d) and m.bias is not None]
     assert len(conv_biases) == 5
     for b in conv_biases:
         assert lucid.allclose(b, lucid.zeros_like(b))

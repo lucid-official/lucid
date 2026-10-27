@@ -234,9 +234,7 @@ def _compile_decode_entry(
     write_ids, buf_slot = collected
 
     try:
-        exe = _C_engine.compile.compile_or_cached(
-            graph, dict(ext), False, [], write_ids
-        )
+        exe = _C_engine.compile.compile_or_cached(graph, dict(ext), False, [], write_ids)
     except RuntimeError:
         return None
     if exe is None:
@@ -288,11 +286,7 @@ def _run_decode_entry(
             feed_impls.append(cp_impl)
         elif isinstance(src, tuple):
             layer, kv = divmod(src[1], 2)
-            buf = (
-                static_cache.key_cache[layer]
-                if kv == 0
-                else static_cache.value_cache[layer]
-            )
+            buf = static_cache.key_cache[layer] if kv == 0 else static_cache.value_cache[layer]
             feed_impls.append(_unwrap(buf))
         else:
             feed_impls.append(entry.external_feeds[tid])

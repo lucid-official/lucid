@@ -30,9 +30,7 @@ def test_only_executed_batchnorm_advances_once_per_step(entry: str) -> None:
     elif entry == "make":
         step = make_step(model, lambda out: out.square().mean())
     else:
-        step = lambda value: compiled_step(
-            model, value, lambda out: out.square().mean()
-        )
+        step = lambda value: compiled_step(model, value, lambda out: out.square().mean())
     for expected_count in range(1, 4):
         step(x).item()
         assert model.active.num_batches_tracked.item() == expected_count
@@ -59,9 +57,7 @@ class _Head(lucid.nn.Module):
         ("direct", "metal"),
     ],
 )
-def test_the_counter_advances_in_the_tensor_a_holder_already_has(
-    entry: str, device: str
-) -> None:
+def test_the_counter_advances_in_the_tensor_a_holder_already_has(entry: str, device: str) -> None:
     # The compiled step rebound the buffer to ``counter + count``: the live
     # attribute counted, a reference taken before the step stayed at 0
     # (LCD-503).  The eager layer counts in place.  A CPU make_step runs
@@ -149,9 +145,5 @@ def test_shared_batchnorm_chains_running_stats_and_counts(entry: str) -> None:
         step(values).item()
         assert model.active.num_batches_tracked.item() == 2 * (index + 1)
         assert model.unused.num_batches_tracked.item() == 0
-        assert lucid.allclose(
-            model.active.running_mean, eager.active.running_mean, atol=1e-5
-        )
-        assert lucid.allclose(
-            model.active.running_var, eager.active.running_var, atol=1e-4
-        )
+        assert lucid.allclose(model.active.running_mean, eager.active.running_mean, atol=1e-5)
+        assert lucid.allclose(model.active.running_var, eager.active.running_var, atol=1e-4)

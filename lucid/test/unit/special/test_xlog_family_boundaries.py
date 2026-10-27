@@ -121,9 +121,7 @@ def _run(name: str, x: float, y: float, device: str) -> tuple[float, float, floa
     return out.item(), xt.grad.item(), yt.grad.item()
 
 
-def _run_ref(
-    R: ModuleType, name: str, x: float, y: float
-) -> tuple[float, float, float]:
+def _run_ref(R: ModuleType, name: str, x: float, y: float) -> tuple[float, float, float]:
     xt = R.tensor(x, requires_grad=True)
     yt = R.tensor(y, requires_grad=True)
     fn = R.xlogy if name == "xlogy" else R.special.xlog1py
@@ -136,9 +134,7 @@ _PARTS = ("value", "dx", "dy")
 
 
 @pytest.mark.parametrize(("name", "x", "y"), _grid())
-def test_the_grid_follows_the_convention(
-    name: str, x: float, y: float, device: str
-) -> None:
+def test_the_grid_follows_the_convention(name: str, x: float, y: float, device: str) -> None:
     got = _run(name, x, y, device)
     want = _spec(name, x, y)
     for part, g, w in zip(_PARTS, got, want):
@@ -162,9 +158,7 @@ def test_the_grid_matches_the_reference(
             )
             assert _same(got[i], _spec(name, x, y)[i]), why
             continue
-        assert _same(
-            got[i], want[i]
-        ), f"{name}({x}, {y}) {part} on {device}: {got[i]} != {want[i]}"
+        assert _same(got[i], want[i]), f"{name}({x}, {y}) {part} on {device}: {got[i]} != {want[i]}"
 
 
 # ── The class, beyond the grid ───────────────────────────────────────────────

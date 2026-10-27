@@ -50,8 +50,7 @@ def _resolve_activation(
         return fn
     if not callable(activation):
         raise TypeError(
-            "activation should be a string or a callable, got "
-            f"{type(activation).__name__}"
+            "activation should be a string or a callable, got " f"{type(activation).__name__}"
         )
     return activation
 
@@ -254,12 +253,8 @@ class TransformerEncoderLayer(Module):
         )
         self.linear1 = Linear(d_model, dim_feedforward, bias, device, dtype)
         self.linear2 = Linear(dim_feedforward, d_model, bias, device, dtype)
-        self.norm1 = LayerNorm(
-            d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-        )
-        self.norm2 = LayerNorm(
-            d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-        )
+        self.norm1 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
+        self.norm2 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
         self.dropout1 = Dropout(dropout)
         self.dropout2 = Dropout(dropout)
         self.dropout3 = Dropout(dropout)
@@ -826,15 +821,9 @@ class TransformerDecoderLayer(Module):
         )
         self.linear1 = Linear(d_model, dim_feedforward, bias, device, dtype)
         self.linear2 = Linear(dim_feedforward, d_model, bias, device, dtype)
-        self.norm1 = LayerNorm(
-            d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-        )
-        self.norm2 = LayerNorm(
-            d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-        )
-        self.norm3 = LayerNorm(
-            d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-        )
+        self.norm1 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
+        self.norm2 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
+        self.norm3 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
         self.dropout1 = Dropout(dropout)
         self.dropout2 = Dropout(dropout)
         self.dropout3 = Dropout(dropout)
@@ -1371,9 +1360,7 @@ class Transformer(Module):
                     attention_dropout=attention_dropout,
                 ),
                 num_encoder_layers,
-                norm=LayerNorm(
-                    d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-                ),
+                norm=LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype),
             )
         )
         self.decoder = (
@@ -1395,9 +1382,7 @@ class Transformer(Module):
                     attention_dropout=attention_dropout,
                 ),
                 num_decoder_layers,
-                norm=LayerNorm(
-                    d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype
-                ),
+                norm=LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype),
             )
         )
         self.d_model = d_model
@@ -1428,9 +1413,7 @@ class Transformer(Module):
             if src.shape[batch_dim] != tgt.shape[batch_dim]:
                 raise RuntimeError("the batch number of src and tgt must be equal")
         if src.shape[-1] != self.d_model or tgt.shape[-1] != self.d_model:
-            raise RuntimeError(
-                "the feature number of src and tgt must be equal to d_model"
-            )
+            raise RuntimeError("the feature number of src and tgt must be equal to d_model")
         memory = self.encoder(
             src,
             mask=src_mask,
@@ -1456,9 +1439,7 @@ class Transformer(Module):
     ) -> Tensor:
         """Generate a square causal mask of shape ``(sz, sz)``."""
         if sz < 0:
-            raise ValueError(
-                f"generate_square_subsequent_mask: sz must be >= 0, got {sz}"
-            )
+            raise ValueError(f"generate_square_subsequent_mask: sz must be >= 0, got {sz}")
         return _lucid.triu(
             _lucid.full((sz, sz), float("-inf"), dtype=dtype, device=device),
             diagonal=1,

@@ -133,9 +133,7 @@ class TestCoAtNetVariantsBuild(unittest.TestCase):
     rather than risking OOM on the developer machine.
     """
 
-    def _check_params_within(
-        self, model: object, paper_M: int, tol_M: float = 5.0
-    ) -> None:
+    def _check_params_within(self, model: object, paper_M: int, tol_M: float = 5.0) -> None:
         n = float(getattr(model, "num_parameters")()) / 1e6
         self.assertLess(
             abs(n - paper_M),
@@ -293,9 +291,7 @@ class TestCoAtNetResolutionChange(unittest.TestCase):
         layout = {k: tuple(v.shape) for k, v in stage.state_dict().items()}
         with lucid.no_grad():
             stage(self._images(self._OTHER))
-        self.assertEqual(
-            {k: tuple(v.shape) for k, v in stage.state_dict().items()}, layout
-        )
+        self.assertEqual({k: tuple(v.shape) for k, v in stage.state_dict().items()}, layout)
 
     def test_training_at_another_resolution_trains_the_built_table(self) -> None:
         stage = self._stage().train()
@@ -338,9 +334,7 @@ class TestCoAtNetResolutionChange(unittest.TestCase):
 
     def test_public_factory_trains_at_another_resolution(self) -> None:
         lucid.manual_seed(0)
-        model = models.create_model(
-            "coatnet_0_cls", image_size=64, num_classes=4, **_SMALL
-        )
+        model = models.create_model("coatnet_0_cls", image_size=64, num_classes=4, **_SMALL)
         params = list(model.parameters())
         opt = optim.SGD(params, lr=0.1)
         model.train()
@@ -401,9 +395,7 @@ def test_public_factory_trains_and_infers_at_odd_and_even_sides(side: int) -> No
     ``AvgPool2d`` kept ``floor``, so the residual add failed on 13×13 + 12×12.
     """
     lucid.manual_seed(0)
-    model = models.create_model(
-        "coatnet_0_cls", image_size=side, num_classes=4, **_SMALL
-    )
+    model = models.create_model("coatnet_0_cls", image_size=side, num_classes=4, **_SMALL)
     opt = optim.SGD(model.parameters(), lr=0.1)
     out = model.train()(lucid.randn(2, 3, side, side), labels=lucid.tensor([0, 3]))
     assert out.loss is not None
@@ -480,12 +472,8 @@ def test_blocks_share_one_index_per_grid(monkeypatch: pytest.MonkeyPatch) -> Non
             model.forward_features(lucid.randn(1, 3, side, side))
     # 64 px: S3 attends on 4×4, S4 on 2×2; 96 px: 6×6 and 3×3 — one table
     # each, however many blocks attend there and however often.
-    assert sorted(built) == sorted(
-        [(4, 4, "cpu"), (2, 2, "cpu"), (6, 6, "cpu"), (3, 3, "cpu")]
-    )
-    assert _coatnet._relative_index(4, 4, "cpu") is _coatnet._relative_index(
-        4, 4, "cpu"
-    )
+    assert sorted(built) == sorted([(4, 4, "cpu"), (2, 2, "cpu"), (6, 6, "cpu"), (3, 3, "cpu")])
+    assert _coatnet._relative_index(4, 4, "cpu") is _coatnet._relative_index(4, 4, "cpu")
 
 
 def test_the_index_cache_is_bounded_in_bytes() -> None:

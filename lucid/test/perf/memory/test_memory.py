@@ -31,9 +31,7 @@ class TestPythonSideMemory:
         _, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         threshold = _PY_PEAK_THRESHOLDS_BYTES["tensor_alloc_2048_f32"]
-        assert (
-            peak < threshold * 5
-        ), f"python-side peak {peak} > 5x threshold {threshold}"
+        assert peak < threshold * 5, f"python-side peak {peak} > 5x threshold {threshold}"
 
     def test_matmul_alloc(self, device: str) -> None:
         a = lucid.tensor(np.zeros((64, 64), dtype=np.float32), device=device)

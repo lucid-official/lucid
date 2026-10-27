@@ -63,29 +63,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sel = p.add_argument_group("selection")
-    sel.add_argument(
-        "--axis", default="all", help="comma-separated axis names, or 'all'"
-    )
-    sel.add_argument(
-        "--subsystem", default="all", help="comma-separated subsystem keys, or 'all'"
-    )
-    sel.add_argument(
-        "--select", default="", help="regular expression over symbol names"
-    )
-    sel.add_argument(
-        "--limit", type=int, default=0, help="stop after N symbols (smoke run)"
-    )
+    sel.add_argument("--axis", default="all", help="comma-separated axis names, or 'all'")
+    sel.add_argument("--subsystem", default="all", help="comma-separated subsystem keys, or 'all'")
+    sel.add_argument("--select", default="", help="regular expression over symbol names")
+    sel.add_argument("--limit", type=int, default=0, help="stop after N symbols (smoke run)")
 
     run = p.add_argument_group("run")
     run.add_argument("--quick", action="store_true", help="fewer domains, looser sweep")
-    run.add_argument(
-        "--no-metal", action="store_true", help="skip every GPU comparison"
-    )
+    run.add_argument("--no-metal", action="store_true", help="skip every GPU comparison")
     run.add_argument("--step", type=float, default=1e-5, help="finite-difference step")
     run.add_argument("--tolerance", type=float, default=2e-5, help="relative tolerance")
-    run.add_argument(
-        "--fail-fast", action="store_true", help="stop at the first defect"
-    )
+    run.add_argument("--fail-fast", action="store_true", help="stop at the first defect")
 
     stage = p.add_argument_group("stages")
     stage.add_argument(
@@ -156,9 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     out = p.add_argument_group("output")
-    out.add_argument(
-        "--json", type=Path, default=None, help="write the full report here"
-    )
+    out.add_argument("--json", type=Path, default=None, help="write the full report here")
     out.add_argument("--known", type=Path, default=_DEFAULT_KNOWN, help="baseline file")
     out.add_argument(
         "--coverage-baseline",
@@ -182,9 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="fold this run's defects into the baseline as accepted",
     )
     out.add_argument("--no-color", action="store_true")
-    out.add_argument(
-        "--quiet", action="store_true", help="only the summary and findings"
-    )
+    out.add_argument("--quiet", action="store_true", help="only the summary and findings")
     out.add_argument(
         "--log",
         type=Path,
@@ -197,16 +181,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not write the transcript",
     )
     out.add_argument("--width", type=int, default=None)
-    out.add_argument(
-        "--show", default="fail,error,vacuous", help="statuses to list in full"
-    )
+    out.add_argument("--show", default="fail,error,vacuous", help="statuses to list in full")
 
     info = p.add_argument_group("information")
     info.add_argument("--list-axes", action="store_true")
     info.add_argument("--list-subsystems", action="store_true")
-    info.add_argument(
-        "--list-uncovered", action="store_true", help="symbols no axis reached"
-    )
+    info.add_argument("--list-uncovered", action="store_true", help="symbols no axis reached")
     info.add_argument(
         "--self-check",
         action="store_true",
@@ -224,9 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _list_axes(console: Console) -> int:
-    console.banner(
-        "Audit axes", "each one has already caught a defect in this framework"
-    )
+    console.banner("Audit axes", "each one has already caught a defect in this framework")
     console.table(
         ["axis", "applies to", "question"],
         [[a.name, ", ".join(sorted(a.kinds)), a.summary] for a in _axes.ALL_AXES],
@@ -293,9 +271,7 @@ def _self_check(console: Console) -> int:
     console.always(
         "  "
         + console.paint("proven".ljust(22), "grey")
-        + console.paint(
-            f"{len(results) - len(missed)}/{len(results)} mutants caught ", "white"
-        )
+        + console.paint(f"{len(results) - len(missed)}/{len(results)} mutants caught ", "white")
         + console.paint(
             f"({len({r.axis for r in results}) - len({r.axis for r in missed})}"
             f" of {len(_axes.ALL_AXES)} axes)",
@@ -355,9 +331,7 @@ def _report_coverage(console: Console) -> int:
     absent = {name for oid, name in walked.items() if oid not in reached}
     reach = 100.0 * (len(walked) - len(absent)) / max(len(walked), 1)
 
-    per_symbol = {
-        s.qualname: [a.name for a in _axes.ALL_AXES if a.applies(s)] for s in symbols
-    }
+    per_symbol = {s.qualname: [a.name for a in _axes.ALL_AXES if a.applies(s)] for s in symbols}
     cells = sum(len(v) for v in per_symbol.values())
     shallow = [s for s in symbols if per_symbol[s.qualname] == ["smoke"]]
     stateful_shallow = sum(1 for s in shallow if not s.inert)
@@ -395,9 +369,7 @@ def _report_coverage(console: Console) -> int:
             console.always(f"      {name}")
     else:
         console.always(
-            console.paint(
-                "  every public object the walk found is in the surface.", "green"
-            )
+            console.paint("  every public object the walk found is in the surface.", "green")
         )
     console.always(
         f"  {len(shallow)} symbol(s) reach only the smoke axis, of which "
@@ -441,9 +413,7 @@ def _selected_axes(spec: str) -> list[_axes.Axis]:
     for name in wanted:
         axis = _axes.axis_by_name(name)
         if axis is None:
-            raise SystemExit(
-                f"unknown axis {name!r}; known axes: {', '.join(_axes.axis_names())}"
-            )
+            raise SystemExit(f"unknown axis {name!r}; known axes: {', '.join(_axes.axis_names())}")
         out.append(axis)
     return out
 
@@ -488,9 +458,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
     axes = _selected_axes(args.axis)
     symbols = _selected_symbols(args)
     metal = (not args.no_metal) and _probe.metal_available()
-    ctx = _axes.Context(
-        quick=args.quick, metal=metal, step=args.step, tolerance=args.tolerance
-    )
+    ctx = _axes.Context(quick=args.quick, metal=metal, step=args.step, tolerance=args.tolerance)
 
     report = Report()
     report.surface_total = len(symbols)
@@ -541,9 +509,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
                         finding = axis.run(symbol, ctx)
                     except KeyboardInterrupt:
                         raise
-                    except (
-                        Exception
-                    ) as exc:  # noqa: BLE001 - the harness must survive the survey
+                    except Exception as exc:  # noqa: BLE001 - the harness must survive the survey
                         finding = Finding(
                             axis.name,
                             symbol.qualname,
@@ -592,10 +558,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
                                 f"eta {axis_timer.eta(index, len(applicable))}",
                                 "grey",
                             ),
-                            "     "
-                            + console.paint(
-                                symbol.qualname[: console.width - 8], "grey"
-                            ),
+                            "     " + console.paint(symbol.qualname[: console.width - 8], "grey"),
                             "     " + _tally(counts, console),
                         ]
                     )
@@ -617,9 +580,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
             if stop:
                 console.write()
                 console.always(
-                    console.paint(
-                        "  stopped at the first defect (--fail-fast)", "yellow"
-                    )
+                    console.paint("  stopped at the first defect (--fail-fast)", "yellow")
                 )
                 break
 
@@ -710,14 +671,10 @@ def summarise(report: Report, console: Console, show: Sequence[str]) -> None:
     defects = report.defects
     if defects:
         console.always(
-            console.paint(
-                f"  {len(defects)} defect(s) — see the FAIL list above", "red", "bold"
-            )
+            console.paint(f"  {len(defects)} defect(s) — see the FAIL list above", "red", "bold")
         )
     else:
-        console.always(
-            console.paint("  no defects survived verification", "green", "bold")
-        )
+        console.always(console.paint("  no defects survived verification", "green", "bold"))
 
 
 # ── coverage baseline ────────────────────────────────────────────────────────
@@ -784,19 +741,12 @@ def _scoped_coverage(
     selected cells that now skip or refuse their input.
     """
     axes = {axis.name for axis in _selected_axes(args.axis)}
-    scoped_symbols = (
-        args.subsystem.strip() not in ("all", "") or args.select or args.limit
-    )
-    symbols = (
-        {symbol.qualname for symbol in _selected_symbols(args)}
-        if scoped_symbols
-        else None
-    )
+    scoped_symbols = args.subsystem.strip() not in ("all", "") or args.select or args.limit
+    symbols = {symbol.qualname for symbol in _selected_symbols(args)} if scoped_symbols else None
     return {
         key: value
         for key, value in recorded.items()
-        if key.partition("::")[0] in axes
-        and (symbols is None or key.partition("::")[2] in symbols)
+        if key.partition("::")[0] in axes and (symbols is None or key.partition("::")[2] in symbols)
     }
 
 
@@ -822,11 +772,7 @@ def _removed_cells(report: Report, unanswered: set[str]) -> dict[str, str]:
             out[key] = f"{symbol} is no longer public"
             continue
         spelled = _surface.spellings(symbol.rpartition(".")[2]) & gone
-        if (
-            axis == _axes.EntryPointAxis.name
-            and spelled
-            and now.get(key) is Status.NOT_APPLICABLE
-        ):
+        if axis == _axes.EntryPointAxis.name and spelled and now.get(key) is Status.NOT_APPLICABLE:
             out[key] = f"the spelling it was compared with, {min(spelled)}, is gone"
     return out
 
@@ -838,9 +784,7 @@ def _capped(console: Console, label: str, colour: str, lines: list[str]) -> None
         console.always(console.paint(f"       ... and {len(lines) - 20} more", "grey"))
 
 
-def report_coverage_diff(
-    report: Report, recorded: dict[str, str], console: Console
-) -> int:
+def report_coverage_diff(report: Report, recorded: dict[str, str], console: Console) -> int:
     """Print what moved since the baseline.  Returns the regression count.
 
     A cell that answered and no longer does is the interesting direction:
@@ -862,9 +806,7 @@ def report_coverage_diff(
 
     if not (lost or gained or worsened or removed):
         console.always("")
-        console.always(
-            console.paint("  coverage unchanged against the baseline", "green")
-        )
+        console.always(console.paint("  coverage unchanged against the baseline", "green"))
         return 0
 
     if lost or worsened:
@@ -877,9 +819,7 @@ def report_coverage_diff(
             )
         for key in worsened:
             console.always(
-                "  "
-                + console.paint("WORSE", "red", "bold")
-                + f" {key}  (pass -> {current[key]})"
+                "  " + console.paint("WORSE", "red", "bold") + f" {key}  (pass -> {current[key]})"
             )
     if removed:
         console.always("")
@@ -888,10 +828,7 @@ def report_coverage_diff(
             console,
             "REMOVED",
             "grey",
-            [
-                f"{key}  (was {recorded[key]}; {why})"
-                for key, why in sorted(removed.items())
-            ],
+            [f"{key}  (was {recorded[key]}; {why})" for key, why in sorted(removed.items())],
         )
     if gained:
         console.always("")
@@ -899,9 +836,7 @@ def report_coverage_diff(
         _capped(console, "NEW  ", "green", gained)
     if removed or gained:
         console.always(
-            console.paint(
-                "  run with --update-coverage to record the new floor", "grey"
-            )
+            console.paint("  run with --update-coverage to record the new floor", "grey")
         )
     return len(lost) + len(worsened)
 
@@ -929,9 +864,7 @@ def report_uncovered(console: Console, args: argparse.Namespace) -> int:
         ]
         for key, names in sorted(by_sub.items())
     ]
-    console.table(
-        ["subsystem", "count", "examples"], rows, ["l", "r", "l"], always=True
-    )
+    console.table(["subsystem", "count", "examples"], rows, ["l", "r", "l"], always=True)
     console.always("")
     console.always(
         console.paint(
@@ -1039,9 +972,7 @@ def _run_audit_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
     if args.update_known:
         Baseline.load(args.known).save(args.known, report.defects)
         console.always(
-            console.paint(
-                f"  {len(report.defects)} defect(s) folded into {args.known}", "grey"
-            )
+            console.paint(f"  {len(report.defects)} defect(s) folded into {args.known}", "grey")
         )
         return 0, regressions
 
@@ -1068,9 +999,7 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
     if args.update_suite:
         if result.percent is None:
             console.always(
-                console.paint(
-                    "  nothing to record — the run measured no coverage", "grey"
-                )
+                console.paint("  nothing to record — the run measured no coverage", "grey")
             )
         else:
             _suite.save_floor(args.suite_baseline, result)
@@ -1145,9 +1074,7 @@ def _run_doctest_stage(args: argparse.Namespace, console: Console) -> int:
     if floor is None:
         console.always("")
         console.always(
-            console.paint(
-                "  no doctest floor yet — run --update-doctests to record one", "grey"
-            )
+            console.paint("  no doctest floor yet — run --update-doctests to record one", "grey")
         )
         return 0
     worse = _doctests.regressions(result, floor)
@@ -1184,12 +1111,8 @@ def _run_self_check_stage(console: Console) -> int:
     console.always(
         "  "
         + console.paint("axes proven".ljust(22), "grey")
-        + console.paint(
-            f"{len(results) - len(missed)}/{len(results)} mutants caught ", "white"
-        )
-        + console.paint(
-            f"({len(_mutants.unproven_axes())} axes unproven, by design)", "cyan"
-        )
+        + console.paint(f"{len(results) - len(missed)}/{len(results)} mutants caught ", "white")
+        + console.paint(f"({len(_mutants.unproven_axes())} axes unproven, by design)", "cyan")
     )
     if missed:
         console.always("")
@@ -1220,13 +1143,9 @@ def _verdict(console: Console, tallies: dict[str, int]) -> int:
     total = sum(tallies.values())
     console.always("")
     if total:
-        console.always(
-            console.paint(f"  {total} problem(s) — see above", "red", "bold")
-        )
+        console.always(console.paint(f"  {total} problem(s) — see above", "red", "bold"))
     else:
-        console.always(
-            console.paint("  clean on every stage that ran", "green", "bold")
-        )
+        console.always(console.paint("  clean on every stage that ran", "green", "bold"))
     return 1 if total else 0
 
 
@@ -1331,9 +1250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(exit_.code or 0)
     except Exception as exc:  # noqa: BLE001
         console.always("")
-        console.always(
-            console.paint(f"  the audit harness failed: {exc!r}", "red", "bold")
-        )
+        console.always(console.paint(f"  the audit harness failed: {exc!r}", "red", "bold"))
         return 2
 
     return _verdict(console, tallies)

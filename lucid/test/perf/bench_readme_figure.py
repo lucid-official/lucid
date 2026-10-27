@@ -58,9 +58,7 @@ def _time(fn: Callable[[], object], warmup: int = WARMUP, iters: int = ITERS) ->
 
 def _train_step(width: int, ref: Any) -> tuple[float, float]:
     """One forward + backward + Adam update on an MLP of the given width."""
-    model = nn.Sequential(
-        nn.Linear(width, width), nn.ReLU(), nn.Linear(width, width)
-    ).to("metal")
+    model = nn.Sequential(nn.Linear(width, width), nn.ReLU(), nn.Linear(width, width)).to("metal")
     opt = optim.Adam(model.parameters(), lr=1e-3)
     x = lucid.randn(BATCH, width, device="metal")
     y = lucid.randn(BATCH, width, device="metal")
@@ -89,9 +87,7 @@ def _train_step(width: int, ref: Any) -> tuple[float, float]:
     return _time(lucid_step), _time(ref_step)
 
 
-def _infer(
-    batch: int, ref: Any, depth: int = 8, width: int = 512
-) -> tuple[float, float]:
+def _infer(batch: int, ref: Any, depth: int = 8, width: int = 512) -> tuple[float, float]:
     """Forward-only latency through a stack of ``depth`` linear+ReLU blocks."""
     ours: list[nn.Module] = []
     theirs: list[Any] = []
@@ -237,9 +233,7 @@ def _render(results: dict[str, list[dict[str, float]]], out_dir: str) -> None:
             markersize=6,
             label=ref_label,
         )
-        right.plot(
-            xs2, ours2, "-o", color=accent, linewidth=2.4, markersize=6, label="Lucid"
-        )
+        right.plot(xs2, ours2, "-o", color=accent, linewidth=2.4, markersize=6, label="Lucid")
         right.fill_between(xs2, ours2, theirs2, color=accent, alpha=0.13)
         for i, (a, b) in enumerate(zip(ours2, theirs2)):
             right.text(

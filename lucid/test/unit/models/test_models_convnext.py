@@ -192,9 +192,7 @@ class TestConvNeXtWeightsEnums(unittest.TestCase):
 
         # XLarge uses the timm-sourced fb_in22k_ft_in1k tag (different
         # naming convention from the reference_vision IMAGENET1K_V1 four).
-        self.assertIs(
-            ConvNeXtXLargeWeights.DEFAULT, ConvNeXtXLargeWeights.FB_IN22K_FT_IN1K
-        )
+        self.assertIs(ConvNeXtXLargeWeights.DEFAULT, ConvNeXtXLargeWeights.FB_IN22K_FT_IN1K)
 
     def test_xlarge_meta_provenance(self) -> None:
         from lucid.models.weights import ConvNeXtXLargeWeights
@@ -220,9 +218,7 @@ class TestConvNeXtWeightsEnums(unittest.TestCase):
         from lucid.models.weights import ConvNeXtBaseWeights
 
         meta = ConvNeXtBaseWeights.IMAGENET1K_V1.meta
-        self.assertEqual(
-            meta["source"], "reference_vision/ConvNeXt_Base_Weights.IMAGENET1K_V1"
-        )
+        self.assertEqual(meta["source"], "reference_vision/ConvNeXt_Base_Weights.IMAGENET1K_V1")
         self.assertEqual(meta["num_params"], 88_591_464)
         self.assertIn("ImageNet-1k", meta["metrics"])
 

@@ -122,9 +122,7 @@ class EncoderDecoderCache(Cache):
         tuple of (Tensor, Tensor)
             The accumulated self-attention ``(keys, values)`` for ``layer_idx``.
         """
-        return self.self_attention_cache.update(
-            key_states, value_states, layer_idx, cache_kwargs
-        )
+        return self.self_attention_cache.update(key_states, value_states, layer_idx, cache_kwargs)
 
     @override
     def get_seq_length(self, layer_idx: int = 0) -> int:
@@ -184,9 +182,7 @@ class EncoderDecoderCache(Cache):
     @classmethod
     def from_legacy_cache(
         cls,
-        past_key_values: (
-            tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...] | None
-        ) = None,
+        past_key_values: tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...] | None = None,
     ) -> Self:
         """Build an :class:`EncoderDecoderCache` from the legacy 4-tuple format."""
         self_cache = DynamicCache()

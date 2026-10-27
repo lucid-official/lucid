@@ -77,9 +77,7 @@ def parameters_to_vector(parameters: Iterable[Parameter]) -> Tensor:
                 f"{target_device} then {p._impl.device}"
             )
         elif p.dtype is not target_dtype:
-            raise ValueError(
-                f"all parameters must share dtype; saw {target_dtype} then {p.dtype}"
-            )
+            raise ValueError(f"all parameters must share dtype; saw {target_dtype} then {p.dtype}")
         flats.append(p.reshape(-1))
     if not flats:
         return lucid.zeros(0)

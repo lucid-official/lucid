@@ -64,9 +64,7 @@ class TestTopkTies:
             values, indices = lucid.topk(x, k)
             assert indices.to("cpu").tolist()[0] == _stable_largest(rows[0], k)
             r_values, _ = ref.topk(ref.tensor(rows), k)
-            np.testing.assert_array_equal(
-                np.asarray(values.to("cpu").numpy()), r_values.numpy()
-            )
+            np.testing.assert_array_equal(np.asarray(values.to("cpu").numpy()), r_values.numpy())
 
 
 @pytest.mark.parity
@@ -84,9 +82,7 @@ class TestOrderedSelections:
             assert got == want, descending
 
     @pytest.mark.parametrize("rows", _SHORT + _long())
-    def test_kthvalue_of_tied_rows(
-        self, ref: Any, device: str, rows: list[list[float]]
-    ) -> None:
+    def test_kthvalue_of_tied_rows(self, ref: Any, device: str, rows: list[list[float]]) -> None:
         x = lucid.tensor(rows, device=device)
         n = len(rows[0])
         for k in sorted({1, n // 2 + 1, n}):
@@ -116,9 +112,7 @@ class TestDuplicateDims:
             "movedim-destination",
         ],
     )
-    def test_an_axis_named_twice_is_refused(
-        self, ref: Any, device: str, call: Any
-    ) -> None:
+    def test_an_axis_named_twice_is_refused(self, ref: Any, device: str, call: Any) -> None:
         with pytest.raises(RuntimeError):
             call(ref, ref.zeros(2, 3, 4))
         with pytest.raises(RuntimeError):

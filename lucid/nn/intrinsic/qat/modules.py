@@ -250,9 +250,7 @@ class ConvBn1d(_ConvBnNd):
     lucid.quantization.convert : Folds BN a final time and bakes the int8 conv.
     """
 
-    def __init__(
-        self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None
-    ) -> None:
+    def __init__(self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None) -> None:
         super().__init__(conv, bn, False, qconfig)
 
 
@@ -388,9 +386,7 @@ class ConvBn2d(_ConvBnNd):
     lucid.quantization.convert : Folds BN a final time and bakes the int8 conv.
     """
 
-    def __init__(
-        self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None
-    ) -> None:
+    def __init__(self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None) -> None:
         super().__init__(conv, bn, False, qconfig)
 
 
@@ -507,9 +503,7 @@ class ConvBn3d(_ConvBnNd):
     lucid.quantization.convert : Folds BN a final time and bakes the int8 conv.
     """
 
-    def __init__(
-        self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None
-    ) -> None:
+    def __init__(self, conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None) -> None:
         super().__init__(conv, bn, False, qconfig)
 
 

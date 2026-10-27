@@ -16,9 +16,7 @@ _DEVICES = [
     "cpu",
     pytest.param(
         "metal",
-        marks=pytest.mark.skipif(
-            not lucid.metal.is_available(), reason="no Metal device"
-        ),
+        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
     ),
 ]
 _A = [1 + 2j, 3 - 1j]
@@ -40,10 +38,7 @@ _CASES: dict[str, Callable[[object, object, object], object]] = {
 
 
 def _expected(name: str) -> list[complex]:
-    return [
-        complex(_CASES[name](a, b, r))  # type: ignore[arg-type]
-        for a, b, r in zip(_A, _B, _R)
-    ]
+    return [complex(_CASES[name](a, b, r)) for a, b, r in zip(_A, _B, _R)]  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("device", _DEVICES)

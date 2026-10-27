@@ -19,9 +19,7 @@ _DEVICES = [
     "cpu",
     pytest.param(
         "metal",
-        marks=pytest.mark.skipif(
-            not lucid.metal.is_available(), reason="no Metal device"
-        ),
+        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
     ),
 ]
 
@@ -66,6 +64,4 @@ def test_in_place_float_op_on_integers_is_refused_and_reads_back_unchanged(
         x.exp_()
     assert x.dtype == lucid.int64
     assert x.tolist() == [1, 2, 3, 4, 5]
-    assert x.exp().tolist() == pytest.approx(
-        [math.exp(v) for v in range(1, 6)], rel=1e-6
-    )
+    assert x.exp().tolist() == pytest.approx([math.exp(v) for v in range(1, 6)], rel=1e-6)

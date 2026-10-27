@@ -94,9 +94,7 @@ def relu(input: Tensor, inplace: bool = False) -> Tensor:
     return input
 
 
-def leaky_relu(
-    input: Tensor, negative_slope: float = 0.01, inplace: bool = False
-) -> Tensor:
+def leaky_relu(input: Tensor, negative_slope: float = 0.01, inplace: bool = False) -> Tensor:
     r"""Leaky rectified linear unit activation.
 
     A simple modification of :func:`relu` that lets a small, non-zero gradient
@@ -247,11 +245,7 @@ def selu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> selu(x)
     tensor([-1.111, 0., 1.051])
     """
-    return (
-        _in_place(input, "selu_", selu)
-        if inplace
-        else _wrap(_C_engine.selu(_unwrap(input)))
-    )
+    return _in_place(input, "selu_", selu) if inplace else _wrap(_C_engine.selu(_unwrap(input)))
 
 
 def gelu(input: Tensor, *, approximate: GeluApproximate = "none") -> Tensor:
@@ -306,9 +300,7 @@ def gelu(input: Tensor, *, approximate: GeluApproximate = "none") -> Tensor:
     tensor([-0.1587, 0., 0.8413, 1.954])
     """
     xi = _unwrap(input)
-    return _wrap(
-        _C_engine.gelu(xi) if approximate == "tanh" else _C_engine.gelu_exact(xi)
-    )
+    return _wrap(_C_engine.gelu(xi) if approximate == "tanh" else _C_engine.gelu_exact(xi))
 
 
 def silu(input: Tensor, inplace: bool = False) -> Tensor:
@@ -356,11 +348,7 @@ def silu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> silu(x)
     tensor([-0.2384, -0.2689, 0., 0.7311, 1.762])
     """
-    return (
-        _in_place(input, "silu_", silu)
-        if inplace
-        else _wrap(_C_engine.silu(_unwrap(input)))
-    )
+    return _in_place(input, "silu_", silu) if inplace else _wrap(_C_engine.silu(_unwrap(input)))
 
 
 def mish(input: Tensor, inplace: bool = False) -> Tensor:
@@ -403,11 +391,7 @@ def mish(input: Tensor, inplace: bool = False) -> Tensor:
     >>> mish(x)
     tensor([-0.2525, -0.3034, 0., 0.8651, 1.944])
     """
-    return (
-        _in_place(input, "mish_", mish)
-        if inplace
-        else _wrap(_C_engine.mish(_unwrap(input)))
-    )
+    return _in_place(input, "mish_", mish) if inplace else _wrap(_C_engine.mish(_unwrap(input)))
 
 
 def hardswish(input: Tensor, inplace: bool = False) -> Tensor:
@@ -647,18 +631,12 @@ def softplus(input: Tensor, beta: float = 1.0, threshold: float = 20.0) -> Tenso
         return _wrap(_C_engine.softplus(_unwrap(input)))
     with _autocast_entry("softplus", _unwrap(input)) as (xi,):
         beta_t = _C_engine.full(list(xi.shape), float(beta), xi.dtype, xi.device)
-        threshold_t = _C_engine.full(
-            list(xi.shape), float(threshold), xi.dtype, xi.device
-        )
+        threshold_t = _C_engine.full(list(xi.shape), float(threshold), xi.dtype, xi.device)
         bx = _C_engine.mul(xi, beta_t)
         # log1p(exp(bx)) / beta — composed because the engine's ``softplus`` is beta-agnostic.
-        inv_beta = _C_engine.full(
-            list(xi.shape), 1.0 / float(beta), xi.dtype, xi.device
-        )
+        inv_beta = _C_engine.full(list(xi.shape), 1.0 / float(beta), xi.dtype, xi.device)
         softplus_full = _C_engine.mul(_C_engine.softplus(bx), inv_beta)
-        return _wrap(
-            _C_engine.where(_C_engine.greater(bx, threshold_t), xi, softplus_full)
-        )
+        return _wrap(_C_engine.where(_C_engine.greater(bx, threshold_t), xi, softplus_full))
 
 
 def relu6(input: Tensor, inplace: bool = False) -> Tensor:
@@ -702,11 +680,7 @@ def relu6(input: Tensor, inplace: bool = False) -> Tensor:
     >>> relu6(x)
     tensor([0., 0., 3., 6.])
     """
-    return (
-        _in_place(input, "relu6_", relu6)
-        if inplace
-        else _wrap(_C_engine.relu6(_unwrap(input)))
-    )
+    return _in_place(input, "relu6_", relu6) if inplace else _wrap(_C_engine.relu6(_unwrap(input)))
 
 
 def glu(input: Tensor, dim: int = -1) -> Tensor:
@@ -924,9 +898,7 @@ def hardtanh(
         return _in_place(input, "hardtanh_", lambda t: hardtanh(t, min_val, max_val))
     inside = _unwrap((input > min_val) & (input < max_val))
     clamped = _C_engine.clip(_unwrap(input.detach()), min_val, max_val)
-    return _keep_in_graph(
-        _wrap(_C_engine.where(inside, _unwrap(input), clamped)), input
-    )
+    return _keep_in_graph(_wrap(_C_engine.where(inside, _unwrap(input), clamped)), input)
 
 
 def logsigmoid(input: Tensor) -> Tensor:
@@ -1013,9 +985,7 @@ def softsign(input: Tensor) -> Tensor:
     return input / (1.0 + _l.abs(input))
 
 
-def threshold(
-    input: Tensor, threshold: float, value: float, inplace: bool = False
-) -> Tensor:
+def threshold(input: Tensor, threshold: float, value: float, inplace: bool = False) -> Tensor:
     r"""Threshold activation — gate elements by a scalar cutoff.
 
     Replaces every element of ``input`` that is **not** strictly greater than
@@ -1174,9 +1144,7 @@ def relu_(input: Tensor, inplace: bool = True) -> Tensor:
     return relu(input, inplace)
 
 
-def elu_(
-    input: Tensor, alpha: float = 1.0, scale: float = 1.0, input_scale: float = 1.0
-) -> Tensor:
+def elu_(input: Tensor, alpha: float = 1.0, scale: float = 1.0, input_scale: float = 1.0) -> Tensor:
     r"""In-place ELU — overwrites ``input`` with :math:`\text{ELU}(\text{input}, \alpha)`.
 
     Parameters
@@ -1200,9 +1168,7 @@ def elu_(
     return _in_place(
         input,
         "elu_",
-        lambda t: _l.where(
-            t > 0, t * scale, (alpha * scale) * (_l.exp(t * input_scale) - 1.0)
-        ),
+        lambda t: _l.where(t > 0, t * scale, (alpha * scale) * (_l.exp(t * input_scale) - 1.0)),
     )
 
 
@@ -1229,9 +1195,7 @@ def selu_(input: Tensor, inplace: bool = True) -> Tensor:
     return selu(input, inplace)
 
 
-def leaky_relu_(
-    input: Tensor, negative_slope: float = 0.01, inplace: bool = True
-) -> Tensor:
+def leaky_relu_(input: Tensor, negative_slope: float = 0.01, inplace: bool = True) -> Tensor:
     r"""In-place Leaky ReLU — overwrites ``input`` with the leaky-rectified result.
 
     .. math::
@@ -1281,9 +1245,7 @@ def hardtanh_(
     return hardtanh(input, min_val, max_val, inplace)
 
 
-def threshold_(
-    input: Tensor, threshold: float, value: float, inplace: bool = True
-) -> Tensor:
+def threshold_(input: Tensor, threshold: float, value: float, inplace: bool = True) -> Tensor:
     """In-place threshold — replace entries ``<= threshold`` with ``value``.
 
     Parameters

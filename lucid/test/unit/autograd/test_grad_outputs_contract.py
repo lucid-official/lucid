@@ -158,9 +158,7 @@ def test_a_seed_on_another_device_is_refused(device_gpu_only: str) -> None:
 
 
 @pytest.mark.parametrize("api", ["grad", "method"])
-def test_a_seed_of_another_real_dtype_is_cast_to_the_output(
-    api: str, device: str
-) -> None:
+def test_a_seed_of_another_real_dtype_is_cast_to_the_output(api: str, device: str) -> None:
     if device == "metal":
         pytest.skip("float64 is CPU-only")
     x = lucid.ones(2, device=device, requires_grad=True)

@@ -295,9 +295,7 @@ class DIAMONDConfig(GenerativeModelConfig):
         super().__post_init__()
         # The denoiser's output is mixed with its noisy input frame by the
         # EDM preconditioning, so it is a frame of the same channels.
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the denoised frame"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the denoised frame")
         # JSON round-trips turn tuples into lists; the frozen dataclass
         # has to put them back or equality and hashing break.
         # ``None`` means "none of them attend", and so does a stale length
@@ -307,8 +305,7 @@ class DIAMONDConfig(GenerativeModelConfig):
         # attention anywhere — only a list that names some is worth
         # failing over.
         if self.attn_depths is None or (
-            len(self.attn_depths) != len(self.unet_channels)
-            and not any(self.attn_depths)
+            len(self.attn_depths) != len(self.unet_channels) and not any(self.attn_depths)
         ):
             object.__setattr__(self, "attn_depths", (0,) * len(self.unet_channels))
         for name in (
@@ -399,18 +396,13 @@ class DIAMONDConfig(GenerativeModelConfig):
                 f"must be positive, got {self.conditioning_frames}"
             )
         if self.denoise_steps < 1:
-            raise ValueError(
-                f"denoise_steps must be positive, got {self.denoise_steps}"
-            )
+            raise ValueError(f"denoise_steps must be positive, got {self.denoise_steps}")
         if self.sigma_offset_noise < 0.0:
             raise ValueError(
-                f"sigma_offset_noise is a standard deviation, got "
-                f"{self.sigma_offset_noise}"
+                f"sigma_offset_noise is a standard deviation, got " f"{self.sigma_offset_noise}"
             )
         if self.reward_frames < 1:
-            raise ValueError(
-                f"reward_frames must be positive, got {self.reward_frames}"
-            )
+            raise ValueError(f"reward_frames must be positive, got {self.reward_frames}")
         if self.sigma_data <= 0.0:
             raise ValueError(
                 f"sigma_data scales the preconditioners and must be "
@@ -427,8 +419,7 @@ class DIAMONDConfig(GenerativeModelConfig):
             raise ValueError(f"lambda_ is a mixing weight, got {self.lambda_}")
         if self.horizon < 2:
             raise ValueError(
-                f"lambda-returns need at least two imagined states, got "
-                f"horizon={self.horizon}"
+                f"lambda-returns need at least two imagined states, got " f"horizon={self.horizon}"
             )
         if self.burn_in < 0:
             raise ValueError(f"burn_in cannot be negative, got {self.burn_in}")

@@ -109,9 +109,7 @@ class TestBERTTokenizer:
         snapshot = _hub_snapshot("bert-base-uncased")
         if snapshot is None or not os.path.isfile(os.path.join(snapshot, "vocab.txt")):
             pytest.skip("bert-base-uncased is not in the Hugging Face cache")
-        theirs = tokenizers.Tokenizer.from_file(
-            os.path.join(snapshot, "tokenizer.json")
-        )
+        theirs = tokenizers.Tokenizer.from_file(os.path.join(snapshot, "tokenizer.json"))
         texts = [
             "Hello world",
             "The quick brown fox jumps over the lazy dog.",
@@ -184,9 +182,7 @@ class TestGPTTokenizer:
         assert tok.encode("IN") == tok.encode("in")
 
     def test_fast_matches_python(self) -> None:
-        assert self._marked(GPTTokenizerFast).encode("ins") == self._marked().encode(
-            "ins"
-        )
+        assert self._marked(GPTTokenizerFast).encode("ins") == self._marked().encode("ins")
 
     def test_train_encode(self) -> None:
         for cls in (GPTTokenizer, GPTTokenizerFast):
@@ -265,9 +261,7 @@ class TestGPT2Tokenizer:
         snapshot = _hub_snapshot("gpt2")
         if snapshot is None:
             pytest.skip("gpt2 is not in the Hugging Face cache")
-        theirs = tokenizers.Tokenizer.from_file(
-            os.path.join(snapshot, "tokenizer.json")
-        )
+        theirs = tokenizers.Tokenizer.from_file(os.path.join(snapshot, "tokenizer.json"))
         # Single spaces only: runs of whitespace go through Lucid's
         # approximation of the GPT-2 split expression, which is a separate
         # matter from the framing checked here.

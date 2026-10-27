@@ -45,9 +45,7 @@ def _step(
     lucid.manual_seed(1)
     out = model(*args, **kwargs)
     out.loss.backward()
-    grads = {
-        n: p.grad.clone() for n, p in model.named_parameters() if p.grad is not None
-    }
+    grads = {n: p.grad.clone() for n, p in model.named_parameters() if p.grad is not None}
     return [(n, t.detach().clone()) for n, t in _tensors_of(out)], grads
 
 
@@ -143,9 +141,7 @@ def test_detector_forward_is_the_same_with_inplace_off(family: str) -> None:
 def test_the_walk_finds_the_flag() -> None:
     """Guards the test above: a walk that finds nothing would skip every family."""
     for case in CASES:
-        family, factory, overrides, _make = (
-            case.values if hasattr(case, "values") else case
-        )
+        family, factory, overrides, _make = case.values if hasattr(case, "values") else case
         if family == "xception":
             assert _inplace_modules(models.create_model(factory, **overrides))
             return

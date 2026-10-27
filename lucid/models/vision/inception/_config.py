@@ -80,8 +80,7 @@ class InceptionConfig(ModelConfig):
         # wrote the bogus value into config.json on save.
         if self.version != "v3":
             raise ValueError(
-                f"only version='v3' is implemented by this module, got "
-                f"{self.version!r}"
+                f"only version='v3' is implemented by this module, got " f"{self.version!r}"
             )
 
     aux_logits: bool = False

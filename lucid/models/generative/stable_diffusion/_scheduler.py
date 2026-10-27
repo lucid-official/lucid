@@ -103,9 +103,7 @@ class DDIMScheduler:
         steps = config.num_train_timesteps
         ramp = lucid.linspace(0.0, 1.0, steps)
         if config.beta_schedule == "scaled_linear":
-            root = (1.0 - ramp) * (config.beta_start**0.5) + ramp * (
-                config.beta_end**0.5
-            )
+            root = (1.0 - ramp) * (config.beta_start**0.5) + ramp * (config.beta_end**0.5)
             betas = root**2
         else:
             betas = (1.0 - ramp) * config.beta_start + ramp * config.beta_end
@@ -181,8 +179,7 @@ class DDIMScheduler:
         total = self.config.num_train_timesteps
         if not 1 <= num_inference_steps <= total:
             raise ValueError(
-                f"num_inference_steps must be in [1, {total}], got "
-                f"{num_inference_steps}"
+                f"num_inference_steps must be in [1, {total}], got " f"{num_inference_steps}"
             )
         stride = total // num_inference_steps
         # The released schedule is ``arange(n) * stride`` reversed, plus
@@ -190,14 +187,10 @@ class DDIMScheduler:
         # per-step arithmetic is identical either way, so a trajectory
         # built on the wrong times takes correct steps to a different
         # image and nothing reports it.
-        ascending = [
-            i * stride + self.config.steps_offset for i in range(num_inference_steps)
-        ]
+        ascending = [i * stride + self.config.steps_offset for i in range(num_inference_steps)]
         return ascending[::-1]
 
-    def add_noise(
-        self, latent: Tensor, noise: Tensor, timestep: int | Tensor
-    ) -> Tensor:
+    def add_noise(self, latent: Tensor, noise: Tensor, timestep: int | Tensor) -> Tensor:
         r"""The forward process — :math:`z_t` from :math:`z_0`.
 
         Parameters
@@ -267,9 +260,7 @@ class DDIMScheduler:
             # tensor is left to the gather (see ``extract_into_tensor``).
             total = self.config.num_train_timesteps
             if not -total <= timestep < total:
-                raise IndexError(
-                    f"timestep must lie in [{-total}, {total}), got {timestep}"
-                )
+                raise IndexError(f"timestep must lie in [{-total}, {total}), got {timestep}")
             timestep = lucid.tensor([timestep], device=latent.device.type)
         self._follow(latent)
         shape = tuple(int(s) for s in latent.shape)
@@ -277,9 +268,7 @@ class DDIMScheduler:
         # which would widen a float16 latent.
         dtype = latent.dtype
         signal = extract_into_tensor(self._signal_scale, timestep, shape, dtype=dtype)
-        noise_scale = extract_into_tensor(
-            self._noise_scale, timestep, shape, dtype=dtype
-        )
+        noise_scale = extract_into_tensor(self._noise_scale, timestep, shape, dtype=dtype)
         return signal * latent + noise_scale * noise
 
     def step(
@@ -350,11 +339,7 @@ class DDIMScheduler:
         alpha_t = float(self.alphas_cumprod[timestep].item())
         # Past the end the reference bootstraps from ``alphas_cumprod[0]``
         # unless ``set_alpha_to_one``; the released config leaves it off.
-        final = (
-            1.0
-            if self.config.set_alpha_to_one
-            else float(self.alphas_cumprod[0].item())
-        )
+        final = 1.0 if self.config.set_alpha_to_one else float(self.alphas_cumprod[0].item())
         alpha_prev = (
             float(self.alphas_cumprod[previous_timestep].item())
             if previous_timestep >= 0
@@ -627,15 +612,10 @@ class PNDMScheduler:
         elif len(self.ets) == 2:
             combined = (3.0 * self.ets[-1] - self.ets[-2]) / 2.0
         elif len(self.ets) == 3:
-            combined = (
-                23.0 * self.ets[-1] - 16.0 * self.ets[-2] + 5.0 * self.ets[-3]
-            ) / 12.0
+            combined = (23.0 * self.ets[-1] - 16.0 * self.ets[-2] + 5.0 * self.ets[-3]) / 12.0
         else:
             combined = (1.0 / 24.0) * (
-                55.0 * self.ets[-1]
-                - 59.0 * self.ets[-2]
-                + 37.0 * self.ets[-3]
-                - 9.0 * self.ets[-4]
+                55.0 * self.ets[-1] - 59.0 * self.ets[-2] + 37.0 * self.ets[-3] - 9.0 * self.ets[-4]
             )
 
         self.counter += 1

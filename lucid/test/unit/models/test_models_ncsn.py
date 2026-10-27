@@ -104,9 +104,7 @@ class TestSigmaSchedule:
     def test_geometric_ratio(self) -> None:
         """Consecutive ratio must be constant for a geometric schedule."""
         sigmas = make_sigma_schedule(5, sigma_max=10.0, sigma_min=0.001)
-        ratios = [
-            float(sigmas[i + 1].item()) / float(sigmas[i].item()) for i in range(4)
-        ]
+        ratios = [float(sigmas[i + 1].item()) / float(sigmas[i].item()) for i in range(4)]
         for r in ratios[1:]:
             assert math.isclose(r, ratios[0], rel_tol=1e-4)
 
@@ -236,9 +234,7 @@ class TestNCSNRegistry:
         from lucid.models import AutoModelForImageGeneration
         from lucid.models._registry import _registry_lookup
 
-        entry = _registry_lookup(
-            "ncsn_cifar_gen", task=AutoModelForImageGeneration._task
-        )
+        entry = _registry_lookup("ncsn_cifar_gen", task=AutoModelForImageGeneration._task)
         assert entry.model_class is NCSNForImageGeneration
 
 
@@ -280,8 +276,7 @@ class TestNCSNRefineNetBackbone:
 
         default = {type(mod).__name__ for mod in NCSNModel(self._config()).modules()}
         refine = {
-            type(mod).__name__
-            for mod in NCSNModel(self._config(backbone="refinenet")).modules()
+            type(mod).__name__ for mod in NCSNModel(self._config(backbone="refinenet")).modules()
         }
         assert "GroupNorm" in default and "CondInstanceNormPlusPlus" not in default
         assert "CondInstanceNormPlusPlus" in refine and "GroupNorm" not in refine
@@ -293,9 +288,7 @@ class TestNCSNRefineNetBackbone:
         lucid.manual_seed(0)
         m = NCSNModel(self._config(backbone="refinenet"))
         m.train()
-        m(
-            lucid.randn(2, 3, 32, 32), lucid.tensor([0, 3]).long()
-        ).sample.sum().backward()
+        m(lucid.randn(2, 3, 32, 32), lucid.tensor([0, 3]).long()).sample.sum().backward()
         gains = [n for n, _ in m.named_parameters() if "gamma" in n or "alpha" in n]
         assert gains
         for name in gains:

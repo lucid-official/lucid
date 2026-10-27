@@ -190,9 +190,7 @@ def subtract(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Te
     """
     alpha = _promotion.as_number(alpha)
     return (
-        input - other
-        if alpha == 1.0 and not isinstance(alpha, bool)
-        else input - (other * alpha)
+        input - other if alpha == 1.0 and not isinstance(alpha, bool) else input - (other * alpha)
     )
 
 
@@ -235,9 +233,7 @@ def multiply(input: Tensor, other: Tensor | Scalar) -> Tensor:
     return input * other
 
 
-def divide(
-    input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = None
-) -> Tensor:
+def divide(input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = None) -> Tensor:
     r"""Element-wise division — :func:`lucid.div` under its longer name.
 
     ``rounding_mode=None`` is the ``/`` operator: integer operands are
@@ -360,9 +356,7 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
     """
     alpha = _promotion.as_number(alpha)
     return (
-        other - input
-        if alpha == 1.0 and not isinstance(alpha, bool)
-        else other - (input * alpha)
+        other - input if alpha == 1.0 and not isinstance(alpha, bool) else other - (input * alpha)
     )
 
 
@@ -819,9 +813,7 @@ def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
     tensor([0., 0.5, 1.])
     """
     if not _is_tensor(values):
-        values = lucid.full_like(
-            input, float(_promotion.as_number(cast(float, values)))
-        )
+        values = lucid.full_like(input, float(_promotion.as_number(cast(float, values))))
     return lucid.where(
         input == 0.0,
         values,
@@ -1127,9 +1119,7 @@ def fmax(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     tensor([2., 2., 3.])
     """
     input, other = _promote_pair(input, other)
-    return lucid.where(
-        lucid.logical_or(input >= other, lucid.isnan(other)), input, other
-    )
+    return lucid.where(lucid.logical_or(input >= other, lucid.isnan(other)), input, other)
 
 
 def fmin(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
@@ -1176,9 +1166,7 @@ def fmin(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     tensor([1., 2., 3.])
     """
     input, other = _promote_pair(input, other)
-    return lucid.where(
-        lucid.logical_or(input <= other, lucid.isnan(other)), input, other
-    )
+    return lucid.where(lucid.logical_or(input <= other, lucid.isnan(other)), input, other)
 
 
 # ── Special math functions ─────────────────────────────────────────────────
@@ -1330,9 +1318,7 @@ def frexp(input: Tensor) -> tuple[Tensor, Tensor]:
     Metal); the exponent is not.
     """
     orig_dtype = input.dtype
-    work_dtype = (
-        orig_dtype if orig_dtype in (lucid.float32, lucid.float64) else lucid.float32
-    )
+    work_dtype = orig_dtype if orig_dtype in (lucid.float32, lucid.float64) else lucid.float32
     work = input if orig_dtype == work_dtype else input.to(dtype=work_dtype)
     m, e = _frexp(work)
     return (m.to(dtype=orig_dtype) if orig_dtype != work_dtype else m), e

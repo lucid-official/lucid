@@ -212,8 +212,8 @@ class _DecoderBlock(nn.Module):
             _AttentionGate(skip_ch, in_ch, inter_ch, dims) if gated else None
         )
         if bilinear:
-            self.up: nn.Upsample | nn.ConvTranspose2d | nn.ConvTranspose3d = (
-                nn.Upsample(scale_factor=2, mode=_interp_mode(dims), align_corners=True)
+            self.up: nn.Upsample | nn.ConvTranspose2d | nn.ConvTranspose3d = nn.Upsample(
+                scale_factor=2, mode=_interp_mode(dims), align_corners=True
             )
             self.conv = _DoubleConv(in_ch + skip_ch, out_ch, dims)
         else:
@@ -393,9 +393,7 @@ class AttentionUNetForSemanticSegmentation(SemanticSegmentationModel):
                 proj = _conv_nd(dims)(enc_channels[level], config.num_classes, 1)
                 self.add_module(f"dsv_{level}", proj)
                 self.dsv.append(proj)
-            self.fuse = _conv_nd(dims)(
-                config.num_classes * depth, config.num_classes, 1
-            )
+            self.fuse = _conv_nd(dims)(config.num_classes * depth, config.num_classes, 1)
 
     @override
     def forward(

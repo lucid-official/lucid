@@ -29,7 +29,5 @@ def test_a_repeated_axis_is_refused(device):
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 def test_valid_axes_still_reduce(device):
     x = lucid.tensor([[3.0, 4.0]], device=device)
-    got = lucid.Tensor.__new_from_impl__(
-        _C_engine.linalg.norm(x._impl, 2.0, [-1], False)
-    )
+    got = lucid.Tensor.__new_from_impl__(_C_engine.linalg.norm(x._impl, 2.0, [-1], False))
     assert float(got.item()) == pytest.approx(5.0)

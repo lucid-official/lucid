@@ -406,9 +406,7 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
         return members[0], ""
 
     try:
-        signature = inspect.signature(
-            cls, annotation_format=annotationlib.Format.STRING
-        )
+        signature = inspect.signature(cls, annotation_format=annotationlib.Format.STRING)
     except (TypeError, ValueError, NameError) as exc:
         return None, f"no signature: {type(exc).__name__}: {exc}"
 
@@ -462,14 +460,10 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
         # precision_matrix, scale_tril" just as loudly for two as for
         # zero, and the retry that was meant to construct them made the
         # message change without making the class buildable.
-        group = next(
-            (i for i, names in enumerate(_EXCLUSIVE) if param.name in names), None
-        )
+        group = next((i for i, names in enumerate(_EXCLUSIVE) if param.name in names), None)
         if group is not None and group in claimed:
             continue
-        found, value = _value_for(
-            param, extra, getattr(cls, "__name__", ""), extra_kwargs
-        )
+        found, value = _value_for(param, extra, getattr(cls, "__name__", ""), extra_kwargs)
         if found:
             extra_kwargs[param.name] = value
             added = True
@@ -665,9 +659,7 @@ class DataAxis(Axis):
                 )
             sizes = [len(p) for p in parts]
             if sizes != [4, 2]:
-                return self._finding(
-                    symbol, Status.FAIL, f"asked for [4, 2] and got {sizes}"
-                )
+                return self._finding(symbol, Status.FAIL, f"asked for [4, 2] and got {sizes}")
             # A partition, not a sample: every index exactly once.
             seen = sorted(i for p in parts for i in getattr(p, "indices", []))
             if seen and seen != list(range(6)):
@@ -686,9 +678,7 @@ class DataAxis(Axis):
                 symbol, Status.UNSUPPORTED, f"{type(exc).__name__}: {str(exc)[:60]}"
             )
         if name == "default_convert":
-            return self._finding(
-                symbol, Status.PASS, f"converted to {type(out).__name__}"
-            )
+            return self._finding(symbol, Status.PASS, f"converted to {type(out).__name__}")
         if not isinstance(out, (list, tuple)) or not out:
             return self._finding(
                 symbol,
@@ -739,9 +729,7 @@ class DataAxis(Axis):
                 "abstract base — __len__ is the subclass's",
             )
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.FAIL, f"len() raised: {type(exc).__name__}: {exc}"
-            )
+            return self._finding(symbol, Status.FAIL, f"len() raised: {type(exc).__name__}: {exc}")
 
         if not hasattr(instance, "__iter__") and hasattr(instance, "__getitem__"):
             if declared is None:
@@ -807,9 +795,7 @@ def _bounded(iterable: Any, limit: int) -> Any:
 def _call_if_collator(axis: Axis, symbol: Symbol, instance: Any) -> Finding:
     """Collators are neither sized nor iterable — they are called on a batch."""
     if not callable(instance):
-        return axis._finding(
-            symbol, Status.SKIP, "neither sized, iterable nor callable"
-        )
+        return axis._finding(symbol, Status.SKIP, "neither sized, iterable nor callable")
     batch = [_ToyDataset()[i] for i in range(4)]
     try:
         out = instance(batch)
@@ -820,12 +806,8 @@ def _call_if_collator(axis: Axis, symbol: Symbol, instance: Any) -> Finding:
             f"collate: {type(exc).__name__}: {str(exc)[:70]}",
         )
     if out is None:
-        return axis._finding(
-            symbol, Status.FAIL, "collating a 4-sample batch returned None"
-        )
-    return axis._finding(
-        symbol, Status.PASS, f"collated 4 samples -> {type(out).__name__}"
-    )
+        return axis._finding(symbol, Status.FAIL, "collating a 4-sample batch returned None")
+    return axis._finding(symbol, Status.PASS, f"collated 4 samples -> {type(out).__name__}")
 
 
 class TokenizerAxis(Axis):
@@ -870,9 +852,7 @@ class TokenizerAxis(Axis):
             )
         ids = list(ids)
         if not ids:
-            return self._finding(
-                symbol, Status.FAIL, "encoding a 19-character string gave no ids"
-            )
+            return self._finding(symbol, Status.FAIL, "encoding a 19-character string gave no ids")
 
         size = getattr(instance, "vocab_size", None)
         if isinstance(size, int) and size > 0:
@@ -893,9 +873,7 @@ class TokenizerAxis(Axis):
                 f"decode of its own ids raised: {type(exc).__name__}: {exc}",
             )
         if text == self._TEXT:
-            return self._finding(
-                symbol, Status.PASS, f"round trip exact over {len(ids)} ids"
-            )
+            return self._finding(symbol, Status.PASS, f"round trip exact over {len(ids)} ids")
 
         try:
             again = instance.decode(list(instance.encode(self._TEXT)))
@@ -997,16 +975,12 @@ class SchedulerAxis(Axis):
             )
 
         if not hasattr(instance, "state_dict"):
-            return self._finding(
-                symbol, Status.PASS, f"{len(rates)} finite rates, no state_dict"
-            )
+            return self._finding(symbol, Status.PASS, f"{len(rates)} finite rates, no state_dict")
 
         try:
             saved = instance.state_dict()
         except Exception as exc:  # noqa: BLE001
-            return self._finding(
-                symbol, Status.FAIL, f"state_dict(): {type(exc).__name__}: {exc}"
-            )
+            return self._finding(symbol, Status.FAIL, f"state_dict(): {type(exc).__name__}: {exc}")
 
         # Restore the optimizer's rates as well as the scheduler's state.
         # Several schedulers are *chainable*: ``get_lr`` scales whatever

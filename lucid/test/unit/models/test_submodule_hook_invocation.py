@@ -95,9 +95,7 @@ class TestBERTSubmoduleHooks:
     def test_bert_causal_lm_fires_encoder_hook(self) -> None:
         model = BERTForCausalLM(self._tiny_bert_config()).eval()
         calls: list[int] = []
-        handle = model.bert.encoder.register_forward_hook(
-            lambda *_args: calls.append(1)
-        )
+        handle = model.bert.encoder.register_forward_hook(lambda *_args: calls.append(1))
         try:
             input_ids = lucid.tensor([[1, 2, 3, 4], [4, 3, 2, 1]], dtype=lucid.int64)
             out = model(input_ids)
@@ -232,12 +230,8 @@ class TestDIAMONDSubmoduleHooksAndGuards:
 
         reward_calls: list[int] = []
         actor_calls: list[int] = []
-        h1 = model.reward_end.register_forward_hook(
-            lambda *_args: reward_calls.append(1)
-        )
-        h2 = model.actor_critic.register_forward_hook(
-            lambda *_args: actor_calls.append(1)
-        )
+        h1 = model.reward_end.register_forward_hook(lambda *_args: reward_calls.append(1))
+        h2 = model.actor_critic.register_forward_hook(lambda *_args: actor_calls.append(1))
         try:
             obs = lucid.randn((2, 3, 16, 16))
             next_obs = lucid.randn((2, 3, 16, 16))
@@ -260,9 +254,10 @@ class TestNoDirectSubmoduleForwardCallsAST:
             if rel in _DEFERRED_DETECTION_FILES:
                 continue
             violations.extend(_find_direct_forward_calls(py_file))
-        assert violations == [], (
-            "Direct .forward(...) calls bypass Module.__call__ and skip hooks:\n"
-            + "\n".join(violations)
+        assert (
+            violations == []
+        ), "Direct .forward(...) calls bypass Module.__call__ and skip hooks:\n" + "\n".join(
+            violations
         )
 
     @pytest.mark.xfail(

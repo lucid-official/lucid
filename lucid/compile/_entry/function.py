@@ -173,9 +173,7 @@ def compiled_step(
             raise RuntimeError("compiled_step: empty trace (model produced no ops)")
         maybe_probe_for_graph(g)
         # The tensor ``loss_fn`` returned, not the last op traced — see make_step.
-        found = (
-            tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
-        )
+        found = tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
         if found is None:
             raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
         loss_id = int(found)

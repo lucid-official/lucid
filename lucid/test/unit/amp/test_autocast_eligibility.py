@@ -103,9 +103,7 @@ def test_float64_stays_float64_across_policies_and_backward(
         (y_sum, ry_sum),
     ]:
         assert got.dtype == lucid.float64
-        np.testing.assert_allclose(
-            got.numpy(), want.detach().numpy(), rtol=1e-12, atol=1e-12
-        )
+        np.testing.assert_allclose(got.numpy(), want.detach().numpy(), rtol=1e-12, atol=1e-12)
 
     loss = (y_mm + y_exp + y_ln).sum()
     rloss = (ry_mm + ry_exp + ry_ln).sum()
@@ -165,9 +163,7 @@ def test_complex_stays_complex_under_autocast(
         (y_conj, ry_conj),
     ]:
         assert got.dtype == dtype
-        np.testing.assert_allclose(
-            got.numpy(), want.detach().numpy(), rtol=1e-5, atol=1e-5
-        )
+        np.testing.assert_allclose(got.numpy(), want.detach().numpy(), rtol=1e-5, atol=1e-5)
 
     lucid.real(y_mul).sum().backward()
     ref.real(ry_mul).sum().backward()
@@ -177,9 +173,7 @@ def test_complex_stays_complex_under_autocast(
 
 @pytest.mark.parametrize(
     ("device", "dtype"),
-    device_dtype_params(
-        [lucid.int8, lucid.int16, lucid.int32, lucid.int64, lucid.bool]
-    ),
+    device_dtype_params([lucid.int8, lucid.int16, lucid.int32, lucid.int64, lucid.bool]),
 )
 def test_integer_and_bool_dtypes_under_autocast(
     ref: ModuleType, device: str, dtype: lucid.dtype
@@ -211,12 +205,8 @@ def test_integer_and_bool_dtypes_under_autocast(
 
     assert y_exp.dtype == lucid.float32
     assert y_mean.dtype == lucid.float32
-    np.testing.assert_allclose(
-        y_exp.numpy(), ry_exp.cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
-    np.testing.assert_allclose(
-        y_mean.numpy(), ry_mean.cpu().numpy(), rtol=1e-5, atol=1e-5
-    )
+    np.testing.assert_allclose(y_exp.numpy(), ry_exp.cpu().numpy(), rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(y_mean.numpy(), ry_mean.cpu().numpy(), rtol=1e-5, atol=1e-5)
 
     if dtype != lucid.bool:
         assert y_add.dtype == dtype and y_add.tolist() == ry_add.cpu().tolist()

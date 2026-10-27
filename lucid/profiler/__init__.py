@@ -99,10 +99,7 @@ class OpEvent:
     @override
     def __repr__(self) -> str:
         """Return a developer-facing string representation of the instance."""
-        return (
-            f"OpEvent(name={self.name!r}, time_us={self.time_us:.3f}, "
-            f"shape={self.shape})"
-        )
+        return f"OpEvent(name={self.name!r}, time_us={self.time_us:.3f}, " f"shape={self.shape})"
 
 
 class ProfileSummary:

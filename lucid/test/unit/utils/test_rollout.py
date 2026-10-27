@@ -65,9 +65,7 @@ class _DeviceCounter:
     def step(self, action: lucid.Tensor) -> StepResult:
         self.t += 1
         last = self.t >= self.length
-        return StepResult(
-            lucid.ones((1, 2, 2), device=self.device), float(self.t), False, last
-        )
+        return StepResult(lucid.ones((1, 2, 2), device=self.device), float(self.t), False, last)
 
 
 class TestEpisodesAreDeviceConsistent:
@@ -266,9 +264,7 @@ class TestDiscreteAgentRollout:
             value_hidden=8,
             reward_hidden=8,
         ).eval()
-        policy = LatentPolicy(
-            model.encode, model.rssm, lambda s: model.act(s, sample=False), 4
-        )
+        policy = LatentPolicy(model.encode, model.rssm, lambda s: model.act(s, sample=False), 4)
         episode, _ = rollout(_Buttons(5), policy)
         assert len(episode) == 5
         assert episode.actions.shape == (5, 4)
@@ -335,10 +331,7 @@ class TestSequenceReplay:
 
         batch = replay.sample(16, 5)
         for chunk in range(16):
-            values = [
-                round(float(batch.observations[chunk, t].mean().item()))
-                for t in range(5)
-            ]
+            values = [round(float(batch.observations[chunk, t].mean().item())) for t in range(5)]
             assert values == list(range(values[0], values[0] + 5)), "not contiguous"
             assert values[0] // 100 == values[-1] // 100, "spans two episodes"
 
@@ -523,9 +516,7 @@ class TestActionBounds:
         policy = LatentPolicy(
             wrapper.planet.encode,
             wrapper.planet.rssm,
-            lambda state: wrapper.plan(
-                state, horizon=3, iterations=2, candidates=16, elites=4
-            ),
+            lambda state: wrapper.plan(state, horizon=3, iterations=2, candidates=16, elites=4),
             2,
             noise=noise,
         )
@@ -699,9 +690,7 @@ class TestPrioritizedSequenceReplay:
         with pytest.raises(ValueError):
             self._filled(3).update_priorities([0, 1], [1.0])
 
-    @pytest.mark.parametrize(
-        "kwargs", [{"alpha": -0.1}, {"beta": -0.1}, {"epsilon": 0.0}]
-    )
+    @pytest.mark.parametrize("kwargs", [{"alpha": -0.1}, {"beta": -0.1}, {"epsilon": 0.0}])
     def test_it_rejects_bad_hyperparameters(self, kwargs: dict[str, float]) -> None:
         with pytest.raises(ValueError):
             PrioritizedSequenceReplay(capacity=10, **kwargs)

@@ -125,14 +125,9 @@ def test_broadcast_tensors_forward_and_backward_match_reference(
             atol=1e-6,
         )
 
-    weights = [
-        rng.standard_normal(tuple(r_out[0].shape)).astype(np.float32) for _ in shapes
-    ]
+    weights = [rng.standard_normal(tuple(r_out[0].shape)).astype(np.float32) for _ in shapes]
     l_loss = sum(
-        (
-            lt * lucid.tensor(w, device=device)
-            for lt, w in zip(l_out, weights, strict=True)
-        ),
+        (lt * lucid.tensor(w, device=device) for lt, w in zip(l_out, weights, strict=True)),
         start=lucid.zeros((), device=device),
     ).sum()
     r_loss = sum(

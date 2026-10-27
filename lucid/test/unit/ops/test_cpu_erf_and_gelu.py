@@ -47,9 +47,7 @@ GRID = np.concatenate(
 )
 
 
-def _assert_close_to_scale(
-    got: np.ndarray, want: np.ndarray, x: np.ndarray, eps: float
-) -> None:
+def _assert_close_to_scale(got: np.ndarray, want: np.ndarray, x: np.ndarray, eps: float) -> None:
     bound = eps * np.maximum(1.0, np.abs(x.astype(np.float64)))
     worst = float((np.abs(got.astype(np.float64) - want) / bound).max())
     assert worst <= 1.0, f"off by {worst:.2f}x the bound"
@@ -204,9 +202,7 @@ def test_exact_gelu_gradient_is_within_one_ulp_for_positive_inputs() -> None:
     x = np.linspace(0.0, 6.0, 200_001, dtype=np.float32)
     x64 = x.astype(np.float64)
     cdf = 0.5 * np.array([math.erfc(-v / math.sqrt(2.0)) for v in x64])
-    want = (cdf + x64 * np.exp(-0.5 * x64 * x64) / math.sqrt(2.0 * math.pi)).astype(
-        np.float32
-    )
+    want = (cdf + x64 * np.exp(-0.5 * x64 * x64) / math.sqrt(2.0 * math.pi)).astype(np.float32)
     assert int(_signed_ulps(_gelu_grad(x), want).max()) <= 1
 
 
@@ -229,9 +225,7 @@ def test_exact_gelu_gradient_keeps_the_special_values(copies: int) -> None:
     )
     got = _gelu_grad(np.tile(special, copies)).reshape(copies, -1)
     assert np.isnan(got[:, :3]).all()
-    np.testing.assert_array_equal(
-        got[:, 3:], [[0.5, 0.5, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]] * copies
-    )
+    np.testing.assert_array_equal(got[:, 3:], [[0.5, 0.5, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]] * copies)
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])

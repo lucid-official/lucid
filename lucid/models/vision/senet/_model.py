@@ -75,9 +75,7 @@ class _SEBasicBlock(nn.Module):
         reduction: int = 16,
     ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 3, stride=stride, padding=1, bias=False
-        )
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1, bias=False)
@@ -167,9 +165,7 @@ class _SEBottleneck(nn.Module):
             bias=False,
         )
         self.bn2 = nn.BatchNorm2d(out_channels)
-        self.conv3 = nn.Conv2d(
-            out_channels, out_channels * self.expansion, 1, bias=False
-        )
+        self.conv3 = nn.Conv2d(out_channels, out_channels * self.expansion, 1, bias=False)
         self.bn3 = nn.BatchNorm2d(out_channels * self.expansion)
         self.se = _SEBlock(out_channels * self.expansion, reduction=reduction)
         self.relu = nn.ReLU(inplace=True)
@@ -236,9 +232,7 @@ def _make_layer(
 
     # Only the bottleneck block has the two convolutions the flag chooses
     # between; the basic block's geometry is unambiguous.
-    extra: dict[str, bool] = (
-        {"legacy_stride": legacy_stride} if block_cls is _SEBottleneck else {}
-    )
+    extra: dict[str, bool] = {"legacy_stride": legacy_stride} if block_cls is _SEBottleneck else {}
     blocks: list[nn.Module] = [
         block_cls(
             in_channels,
@@ -273,15 +267,11 @@ def _build_body(
     Sequential, so state-dict keys match timm's seresnet naming:
     ``conv1.weight``, ``bn1.*``, ``layer1.*``, …, ``layer4.*``.
     """
-    block_cls: _BlockType = (
-        _SEBasicBlock if config.block_type == "basic" else _SEBottleneck
-    )
+    block_cls: _BlockType = _SEBasicBlock if config.block_type == "basic" else _SEBottleneck
     stem_channels = 64
     hidden_sizes = (64, 128, 256, 512)
 
-    conv1 = nn.Conv2d(
-        config.in_channels, stem_channels, 7, stride=2, padding=3, bias=False
-    )
+    conv1 = nn.Conv2d(config.in_channels, stem_channels, 7, stride=2, padding=3, bias=False)
     bn1 = nn.BatchNorm2d(stem_channels)
     pool: nn.MaxPool2d = (
         nn.MaxPool2d(3, stride=2, padding=0, ceil_mode=True)
@@ -522,9 +512,7 @@ class SENetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         self.layer3 = l3
         self.layer4 = l4
 
-        block_cls: _BlockType = (
-            _SEBasicBlock if config.block_type == "basic" else _SEBottleneck
-        )
+        block_cls: _BlockType = _SEBasicBlock if config.block_type == "basic" else _SEBottleneck
         final_channels = 512 * block_cls.expansion
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.dropout = nn.Dropout(p=config.dropout)

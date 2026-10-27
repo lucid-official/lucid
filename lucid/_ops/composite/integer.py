@@ -23,15 +23,12 @@ def _tensor_operand(op: str, name: str, x: object) -> Tensor:
     """``x``, refused with ``TypeError`` unless it is a tensor."""
     if not _is_tensor(x):
         raise TypeError(
-            f"lucid.{op}(): argument '{name}' must be a Tensor, "
-            f"got {type(x).__name__}"
+            f"lucid.{op}(): argument '{name}' must be a Tensor, " f"got {type(x).__name__}"
         )
     return x
 
 
-def _integer_pair(
-    op: str, input: object, other: object
-) -> tuple[Tensor, Tensor, _C_engine.Device]:
+def _integer_pair(op: str, input: object, other: object) -> tuple[Tensor, Tensor, _C_engine.Device]:
     """``input`` and ``other`` at their common dtype and broadcast shape.
 
     With them, the device the answer lands on (:func:`_binary_device`),

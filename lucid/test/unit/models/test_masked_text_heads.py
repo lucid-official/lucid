@@ -101,9 +101,7 @@ def _ids_and_mask(name: str, mask: Tensor, device: str) -> tuple[Tensor, Tensor]
     return ids.to(device), mask.to(device)
 
 
-def _old_logits(
-    model: nn.Module, name: str, ids: Tensor, mask: Tensor | None
-) -> Tensor:
+def _old_logits(model: nn.Module, name: str, ids: Tensor, mask: Tensor | None) -> Tensor:
     if name == "roformer_multiple_choice":
         N, C = int(ids.shape[0]), int(ids.shape[1])
         flat_mask = None if mask is None else mask.reshape(N * C, L)
@@ -117,9 +115,7 @@ def _old_logits(
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("masks", ["fixed", "random"])
 @pytest.mark.parametrize("name", HEADS)
-def test_pooled_token_matches_the_host_read_selection(
-    name: str, masks: str, device: str
-) -> None:
+def test_pooled_token_matches_the_host_read_selection(name: str, masks: str, device: str) -> None:
     model = _model(name, device)
     ids, mask = _ids_and_mask(name, _masks()[masks], device)
     new = model(ids, mask).logits
@@ -144,9 +140,7 @@ def test_no_mask_still_pools_the_last_position(name: str, device: str) -> None:
     [(GPTDoubleHeadsModel, GPTConfig), (GPT2DoubleHeadsModel, GPT2Config)],
     ids=["gpt", "gpt2"],
 )
-def test_double_heads_pool_the_named_token(
-    model_cls: type, config_cls: type, device: str
-) -> None:
+def test_double_heads_pool_the_named_token(model_cls: type, config_cls: type, device: str) -> None:
     lucid.manual_seed(0)
     model = model_cls(config_cls(vocab_size=100, **TINY)).eval().to(device)
     ids = lucid.randint(0, 100, (2, 3, L)).to(device)
@@ -155,9 +149,7 @@ def test_double_heads_pool_the_named_token(
 
     hidden = model.transformer(ids.reshape(6, L)).last_hidden_state.reshape(2, 3, L, -1)
     rows = [
-        hidden[n, c, t : t + 1, :]
-        for n, row in enumerate(mc.tolist())
-        for c, t in enumerate(row)
+        hidden[n, c, t : t + 1, :] for n, row in enumerate(mc.tolist()) for c, t in enumerate(row)
     ]
     pooled = lucid.cat(rows, dim=0).reshape(2, 3, -1)
     old = model.mc_head.summary(pooled).reshape(2, 3)
@@ -206,9 +198,7 @@ def test_compile_does_not_fall_back_to_eager(name: str) -> None:
     [(GPTDoubleHeadsModel, GPTConfig), (GPT2DoubleHeadsModel, GPT2Config)],
     ids=["gpt", "gpt2"],
 )
-def test_double_heads_compile_without_eager_fallback(
-    model_cls: type, config_cls: type
-) -> None:
+def test_double_heads_compile_without_eager_fallback(model_cls: type, config_cls: type) -> None:
     lucid.manual_seed(0)
     model = model_cls(config_cls(vocab_size=100, **TINY)).eval().to("metal")
     compiled = lucid.compile.compile(model)

@@ -102,9 +102,7 @@ _BINARY_SIGNATURE = inspect.Signature(
 _ADD_SUB_SIGNATURE = _BINARY_SIGNATURE.replace(
     parameters=[
         *_BINARY_SIGNATURE.parameters.values(),
-        inspect.Parameter(
-            "alpha", inspect.Parameter.KEYWORD_ONLY, default=1, annotation=Scalar
-        ),
+        inspect.Parameter("alpha", inspect.Parameter.KEYWORD_ONLY, default=1, annotation=Scalar),
     ]
 )
 
@@ -125,9 +123,7 @@ def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar) -> _Impl:
     if a.dtype == _C_engine.Bool:
         return _C_engine.zeros_like(b)
     scale = _unwrap_or_scalar(alpha, b)
-    return _C_engine.mul(
-        b, _C_engine.astype(scale, b.dtype) if scale.dtype != b.dtype else scale
-    )
+    return _C_engine.mul(b, _C_engine.astype(scale, b.dtype) if scale.dtype != b.dtype else scale)
 
 
 def _make_arith_adapter(
@@ -255,22 +251,16 @@ def _as_dim(value: object) -> int:
     try:
         return operator.index(value)  # type: ignore[arg-type]  # refused below
     except TypeError:
-        raise TypeError(
-            f"gather(): dim must be an int, got {type(value).__name__}"
-        ) from None
+        raise TypeError(f"gather(): dim must be an int, got {type(value).__name__}") from None
 
 
-def _gather_adapter(
-    input: _Impl, dim: int, index: Tensor, *, sparse_grad: bool = False
-) -> _Impl:
+def _gather_adapter(input: _Impl, dim: int, index: Tensor, *, sparse_grad: bool = False) -> _Impl:
     """gather(input, dim, index, *, sparse_grad=False).
 
     ``dim`` may be a 0-d integer tensor, as the reference reads one.
     """
     if sparse_grad:
-        raise _C_engine.NotImplementedError(
-            "gather(): sparse_grad=True is not supported"
-        )
+        raise _C_engine.NotImplementedError("gather(): sparse_grad=True is not supported")
     index_impl = _promotion.try_unwrap(index)
     if index_impl is None:
         raise TypeError(f"gather(): index must be a Tensor, got {type(index).__name__}")
@@ -324,9 +314,7 @@ def _scatter_adapter(
     idx_impl = _unwrap(index)
     src = _promotion.as_number(src)
     if isinstance(src, _promotion.NUMBER):
-        src_impl = _C_engine.full(
-            list(idx_impl.shape), src, x_impl.dtype, x_impl.device
-        )
+        src_impl = _C_engine.full(list(idx_impl.shape), src, x_impl.dtype, x_impl.device)
     else:
         src_impl = _unwrap(src)
         if src_impl.dtype != x_impl.dtype:
@@ -387,9 +375,7 @@ def _masked_select_adapter(a_impl: _Impl, mask: _Impl) -> _Impl:
         from lucid._dispatch import _wrap
 
         return _unwrap(_wrap(a_impl)[_wrap(mask)])
-    return _C_engine.masked_select(
-        _C_engine.contiguous(a_impl), _C_engine.contiguous(mask)
-    )
+    return _C_engine.masked_select(_C_engine.contiguous(a_impl), _C_engine.contiguous(mask))
 
 
 def _sort_adapter(
@@ -467,9 +453,7 @@ def _chunk_adapter(a_impl: _Impl, chunks: int, dim: int = 0) -> list[_Impl]:
             f"chunk expects `chunks` to be greater than 0, got: {count}"
         )
     d = _wrap_dim(int(dim), len(a_impl.shape), "chunk")
-    _require_real_axis(
-        len(a_impl.shape), "chunk expects at least a 1-dimensional tensor"
-    )
+    _require_real_axis(len(a_impl.shape), "chunk expects at least a 1-dimensional tensor")
     size = _dim_size(a_impl.shape, d)
     if size % count == 0:
         return _C_engine.chunk(a_impl, count, d)
@@ -597,9 +581,7 @@ def _int_list(
     ``np.int64``) are accepted and ``bool`` / ``None`` are refused.
     """
     if value is None:
-        raise TypeError(
-            f"{name}(): {what} must be an int or a sequence of ints, got None"
-        )
+        raise TypeError(f"{name}(): {what} must be an int or a sequence of ints, got None")
     return _to_axes(value, name, what)
 
 
@@ -618,9 +600,7 @@ def _reshape_adapter(x_impl: _Impl, shape: int | Sequence[int]) -> _Impl:
     return _C_engine.reshape(x_impl, _int_list(shape, "reshape", "shape"))
 
 
-def _transpose_adapter(
-    x_impl: _Impl, dim0: int | None = None, dim1: int | None = None
-) -> _Impl:
+def _transpose_adapter(x_impl: _Impl, dim0: int | None = None, dim1: int | None = None) -> _Impl:
     """transpose(x) swaps the last two axes; transpose(x, dim0, dim1) swaps those.
 
     The two-axis form is the reference framework's, and code written for it
@@ -644,9 +624,7 @@ def _broadcast_to_adapter(x_impl: _Impl, size: int | Sequence[int]) -> _Impl:
     return _C_engine.expand(x_impl, _kept_sizes(x_impl.shape, raw, "broadcast_to"))
 
 
-def _expand_adapter(
-    x_impl: _Impl, size: int | Sequence[int], *, implicit: bool = False
-) -> _Impl:
+def _expand_adapter(x_impl: _Impl, size: int | Sequence[int], *, implicit: bool = False) -> _Impl:
     """expand(input, size, *, implicit=False) — ``x.expand(2, 3)`` is ``x.expand((2, 3))``."""
     del implicit
     raw = _int_list(size, "expand", "size")
@@ -673,9 +651,7 @@ def _roll_adapter(
     steps = _int_list(shifts, "roll", "shifts")
     if dims is None:
         if len(steps) != 1:
-            raise ValueError(
-                f"roll: without dims, shifts must be a single int, got {shifts!r}"
-            )
+            raise ValueError(f"roll: without dims, shifts must be a single int, got {shifts!r}")
         flat = _C_engine.reshape(a_impl, [a_impl.numel()])
         rolled = _C_engine.roll(flat, steps, [0])
         return _C_engine.reshape(rolled, list(a_impl.shape))
@@ -690,18 +666,14 @@ def _roll_adapter(
 def _fliplr_adapter(x_impl: _Impl) -> _Impl:
     """fliplr(x) — flip along axis 1.  ``x`` must be at least 2-D."""
     if len(x_impl.shape) < 2:
-        raise ValueError(
-            f"fliplr: input must be at least 2-D, got shape {tuple(x_impl.shape)}"
-        )
+        raise ValueError(f"fliplr: input must be at least 2-D, got shape {tuple(x_impl.shape)}")
     return _C_engine.flip(x_impl, [1])
 
 
 def _flipud_adapter(x_impl: _Impl) -> _Impl:
     """flipud(x) — flip along axis 0.  ``x`` must be at least 1-D."""
     if len(x_impl.shape) < 1:
-        raise ValueError(
-            f"flipud: input must be at least 1-D, got shape {tuple(x_impl.shape)}"
-        )
+        raise ValueError(f"flipud: input must be at least 1-D, got shape {tuple(x_impl.shape)}")
     return _C_engine.flip(x_impl, [0])
 
 
@@ -818,11 +790,7 @@ def _repeat_interleave_adapter(
 ) -> _Impl:
     """repeat_interleave(x, repeats, dim=None, *, output_size=None)."""
     base = _C_engine.reshape(a_impl, [int(a_impl.numel())]) if dim is None else a_impl
-    axis = (
-        0
-        if dim is None
-        else _wrap_dim(int(dim), len(a_impl.shape), "repeat_interleave")
-    )
+    axis = 0 if dim is None else _wrap_dim(int(dim), len(a_impl.shape), "repeat_interleave")
     repeats = _promotion.as_number(repeats)
     out = (
         _C_engine.repeat(base, int(repeats), axis)
@@ -836,9 +804,7 @@ def _repeat_interleave_adapter(
     return out
 
 
-def _split_pieces(
-    x_impl: _Impl, sections: int | Sequence[int], dim: int, what: str
-) -> list[_Impl]:
+def _split_pieces(x_impl: _Impl, sections: int | Sequence[int], dim: int, what: str) -> list[_Impl]:
     """The pieces of ``x_impl`` along ``dim`` for a split size or size list.
 
     The one place a split's sizes become the cut points of the engine's
@@ -860,14 +826,10 @@ def _split_pieces(
         axis, or a size list that does not sum to the axis.
     """
     wrapped = _wrap_dim(int(dim), len(x_impl.shape), "split")
-    _require_real_axis(
-        len(x_impl.shape), "split expects at least a 1-dimensional tensor"
-    )
+    _require_real_axis(len(x_impl.shape), "split expects at least a 1-dimensional tensor")
     axis_size = _dim_size(x_impl.shape, wrapped)
     if isinstance(_promotion.as_number(sections), bool):
-        raise TypeError(
-            f"split(): {what} must be an int or a sequence of ints, got {sections!r}"
-        )
+        raise TypeError(f"split(): {what} must be an int or a sequence of ints, got {sections!r}")
     if not isinstance(sections, Sequence):
         size = operator.index(sections)
         if size < 0:
@@ -998,9 +960,7 @@ def _clip_with_nan(out: _Impl, any_nan: _Impl, is_float: bool) -> _Impl:
     return _C_engine.where(any_nan, nan_c, out)
 
 
-def _clip_both_impls(
-    x_impl: _Impl, lo_impl: _Impl, hi_impl: _Impl, is_float: bool
-) -> _Impl:
+def _clip_both_impls(x_impl: _Impl, lo_impl: _Impl, hi_impl: _Impl, is_float: bool) -> _Impl:
     """Two-sided tensor-bound clamp matching the reference's tie and NaN rules."""
     use_x = _C_engine.logical_and(
         _C_engine.greater_equal(x_impl, lo_impl),
@@ -1054,12 +1014,7 @@ def _clip_scalar_bounds(
         lo_f = -math.inf if min is None else float(min)
         hi_f = math.inf if max is None else float(max)
         return clip(x_impl, lo_f, hi_f)
-    if (
-        min is not None
-        and max is not None
-        and abs(min) <= (1 << 53)
-        and abs(max) <= (1 << 53)
-    ):
+    if min is not None and max is not None and abs(min) <= (1 << 53) and abs(max) <= (1 << 53):
         return clip(x_impl, float(min), float(max))
     return None
 
@@ -1077,11 +1032,7 @@ def _clip_dtype(
     if min is None and max is None:
         raise ValueError("clip: at least one of min or max must be given")
     bounds: list[_promotion.Operand] = [
-        (
-            bn
-            if isinstance(bn := _promotion.as_number(b), _promotion.NUMBER)
-            else _unwrap(bn)
-        )
+        (bn if isinstance(bn := _promotion.as_number(b), _promotion.NUMBER) else _unwrap(bn))
         for b in (min, max)
         if b is not None
     ]
@@ -1188,9 +1139,7 @@ def _where_adapter(
     return _C_engine.where(c, x_impl, y_impl)
 
 
-def _nonzero_adapter(
-    a_impl: _Impl, *, as_tuple: bool = False
-) -> _Impl | tuple[_Impl, ...]:
+def _nonzero_adapter(a_impl: _Impl, *, as_tuple: bool = False) -> _Impl | tuple[_Impl, ...]:
     """nonzero(a, *, as_tuple=False) — the indices of ``a``'s nonzero elements.
 
     ``as_tuple`` returns one 1-D index tensor per dim rather than one
@@ -1431,9 +1380,7 @@ def _unique_rows(
             _C_engine.ones([n], _C_engine.I64, device),
         )
         groups = (
-            _C_engine.scatter(
-                _C_engine.zeros([n], _C_engine.I64, device), 0, order, group
-            )
+            _C_engine.scatter(_C_engine.zeros([n], _C_engine.I64, device), 0, order, group)
             if order is not None
             else group
         )
@@ -1488,9 +1435,7 @@ def _searchsorted_adapter(
     """searchsorted(sorted_seq, values, *, out_int32=False, right=False, side=None, sorter=None)."""
     if side is not None:
         if side not in ("left", "right"):
-            raise RuntimeError(
-                f"searchsorted(): side can only be 'left' or 'right', got {side!r}"
-            )
+            raise RuntimeError(f"searchsorted(): side can only be 'left' or 'right', got {side!r}")
         if right and side == "left":
             raise RuntimeError(
                 "searchsorted(): side and right can't be set to opposites, got side of left while right was True"

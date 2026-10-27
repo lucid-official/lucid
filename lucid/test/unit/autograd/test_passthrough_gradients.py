@@ -48,9 +48,7 @@ def test_nan_to_num_is_differentiable_twice():
 def test_nextafter_follows_its_first_argument(device):
     a = lucid.tensor([1.0, 2.0, -3.0], requires_grad=True, device=device)
     b = lucid.tensor([2.0, 0.0, 5.0], requires_grad=True, device=device)
-    (
-        lucid.nextafter(a, b) * lucid.tensor([1.0, 2.0, 3.0], device=device)
-    ).sum().backward()
+    (lucid.nextafter(a, b) * lucid.tensor([1.0, 2.0, 3.0], device=device)).sum().backward()
     np.testing.assert_array_equal(a.grad.numpy(), [1.0, 2.0, 3.0])
     np.testing.assert_array_equal(b.grad.numpy(), [0.0, 0.0, 0.0])
 

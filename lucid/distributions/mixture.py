@@ -125,9 +125,7 @@ class MixtureSameFamily(Distribution):
             ``K``.
         """
         if not isinstance(mixture_distribution, Categorical):
-            raise TypeError(
-                "MixtureSameFamily: mixture_distribution must be Categorical"
-            )
+            raise TypeError("MixtureSameFamily: mixture_distribution must be Categorical")
         # Component dist's rightmost batch dim is the number of components.
         comp_batch = tuple(component_distribution.batch_shape)
         if len(comp_batch) == 0 or comp_batch[-1] != mixture_distribution._num_events:
@@ -238,9 +236,7 @@ class MixtureSameFamily(Distribution):
         idx_shape: list[int] = list(idx_unsq.shape) + [1] + [1] * len(self._event_shape)
         idx_b: Tensor = (
             idx_unsq.reshape(idx_shape)
-            .broadcast_to(
-                list(comp_samples.shape[:ax]) + [1] + list(comp_samples.shape[ax + 1 :])
-            )
+            .broadcast_to(list(comp_samples.shape[:ax]) + [1] + list(comp_samples.shape[ax + 1 :]))
             .contiguous()
         )
         gathered: Tensor = lucid.gather(comp_samples, ax, idx_b)

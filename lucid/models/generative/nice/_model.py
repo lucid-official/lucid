@@ -256,8 +256,7 @@ class NICEModel(PretrainedModel):
     def _check_shape(self, x: Tensor, what: str) -> None:
         if x.ndim != 2 or int(x.shape[1]) != self._input_dim:
             raise ValueError(
-                f"NICE expects (B, {self._input_dim}) {what}, "
-                f"got shape {tuple(x.shape)}"
+                f"NICE expects (B, {self._input_dim}) {what}, " f"got shape {tuple(x.shape)}"
             )
 
     def encode(self, x: Tensor) -> tuple[Tensor, Tensor]:

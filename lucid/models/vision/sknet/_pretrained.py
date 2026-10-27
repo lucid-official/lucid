@@ -43,15 +43,11 @@ _CFG_SK34 = SKNetConfig(
 # sk_resnet_50 / sk_resnet_101:
 #   cardinality=1, base_width=64, split_input=True  →  timm ``skresnet50``
 #   25,803,160 parameters for sk_resnet_50_cls (1000-class head)
-_CFG_SK50 = SKNetConfig(
-    layers=(3, 4, 6, 3), cardinality=1, base_width=64, split_input=True
-)
+_CFG_SK50 = SKNetConfig(layers=(3, 4, 6, 3), cardinality=1, base_width=64, split_input=True)
 # Section 3.2: "SKNet-101, which has {3,4,23,3} SK units".  Table 2 pins it
 # at 48.9M params / 8.46 GFLOPs, which is the ResNeXt-101 32x4d base -- not
 # the cardinality-1, width-64 ResNet base this used to build.
-_CFG_SK101 = SKNetConfig(
-    layers=(3, 4, 23, 3), cardinality=32, base_width=4, split_input=True
-)
+_CFG_SK101 = SKNetConfig(layers=(3, 4, 23, 3), cardinality=32, base_width=4, split_input=True)
 
 # sk_resnext_50_32x4d:
 #   cardinality=32, base_width=4, split_input=False, rd_ratio=1/16, rd_divisor=32
@@ -508,9 +504,7 @@ def sk_resnet_34_cls(
     default_config=_CFG_SK50,
     params=25928104,
 )
-def sk_resnet_50_cls(
-    pretrained: bool = False, **overrides: object
-) -> SKNetForImageClassification:
+def sk_resnet_50_cls(pretrained: bool = False, **overrides: object) -> SKNetForImageClassification:
     r"""SK-ResNet-50 image classifier (backbone + GAP + linear head).
 
     Builds an :class:`SKNetForImageClassification` with the
@@ -562,9 +556,7 @@ def sk_resnet_50_cls(
     default_config=_CFG_SK101,
     params=46068008,
 )
-def sk_resnet_101_cls(
-    pretrained: bool = False, **overrides: object
-) -> SKNetForImageClassification:
+def sk_resnet_101_cls(pretrained: bool = False, **overrides: object) -> SKNetForImageClassification:
     r"""SK-ResNet-101 image classifier (backbone + GAP + linear head).
 
     Builds an :class:`SKNetForImageClassification` with the

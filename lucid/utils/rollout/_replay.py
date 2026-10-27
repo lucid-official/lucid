@@ -105,8 +105,7 @@ class SequenceReplay:
         ):
             if int(field.shape[0]) != length:
                 raise ValueError(
-                    f"{name} has {int(field.shape[0])} steps but observations "
-                    f"has {length}"
+                    f"{name} has {int(field.shape[0])} steps but observations " f"has {length}"
                 )
 
         self.episodes.append(episode)
@@ -488,9 +487,7 @@ class PrioritizedSequenceReplay(SequenceReplay):
         count = len(self.episodes)
         scaled = [max(self._tree.get(i), self.epsilon**self.alpha) for i in indices]
         probabilities = (
-            [s / total for s in scaled]
-            if total > 0.0
-            else [1.0 / count for _ in indices]
+            [s / total for s in scaled] if total > 0.0 else [1.0 / count for _ in indices]
         )
         raw = [(count * p) ** (-self.beta) for p in probabilities]
         largest = max(raw)

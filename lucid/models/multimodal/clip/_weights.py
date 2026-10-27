@@ -209,10 +209,7 @@ class CLIPViTLarge14_336Weights(WeightsEnum):
     """
 
     OPENAI_WIT400M = WeightEntry(
-        url=(
-            f"{HUB_BASE}/clip-vit-large-14-336/resolve/main/"
-            "OPENAI_WIT400M/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/clip-vit-large-14-336/resolve/main/" "OPENAI_WIT400M/model.safetensors"),
         sha256="961cfbc43d8e08c52debb0a513a22ec29d8ea01ad117bdbdee4ac096eb74515e",
         num_classes=0,
         transforms=_PRESET_336,

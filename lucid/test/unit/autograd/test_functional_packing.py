@@ -135,9 +135,7 @@ def _cases() -> list[Any]:
             outs = ["tensor"] if name in _ONE_OUTPUT else ["tensor", "tuple"]
             for outputs in outs:
                 cases.append(
-                    pytest.param(
-                        name, packing, outputs, id=f"{name}-{packing}-{outputs}-out"
-                    )
+                    pytest.param(name, packing, outputs, id=f"{name}-{packing}-{outputs}-out")
                 )
     return cases
 
@@ -153,12 +151,8 @@ def test_matches_the_reference(
     create_graph: bool,
     strict: bool,
 ) -> None:
-    kind, got = _outcome(
-        lambda: _call(lucid, name, packing, outputs, create_graph, strict)
-    )
-    want_kind, want = _outcome(
-        lambda: _call(ref, name, packing, outputs, create_graph, strict)
-    )
+    kind, got = _outcome(lambda: _call(lucid, name, packing, outputs, create_graph, strict))
+    want_kind, want = _outcome(lambda: _call(ref, name, packing, outputs, create_graph, strict))
     assert kind == want_kind
     if kind == "raised":
         return
@@ -166,16 +160,13 @@ def test_matches_the_reference(
     g, w = _flat(got), _flat(want)
     assert len(g) == len(w)
     assert all(
-        math.isclose(a, b, rel_tol=_TIGHT, abs_tol=_TIGHT)
-        for a, b in zip(g, w, strict=True)
+        math.isclose(a, b, rel_tol=_TIGHT, abs_tol=_TIGHT) for a, b in zip(g, w, strict=True)
     ), (g, w)
     assert _grad_flags(got) == _grad_flags(want)
 
 
 @pytest.mark.parametrize("name", _FUNCTIONS)
-def test_strict_refuses_an_input_the_function_ignores(
-    ref: ModuleType, name: str
-) -> None:
+def test_strict_refuses_an_input_the_function_ignores(ref: ModuleType, name: str) -> None:
     for m in (lucid, ref):
         ns = _namespace(m)
         x, y = _inputs(m, "pair", requires_grad=False)
@@ -243,9 +234,7 @@ def test_hessian_products_refuse_a_function_of_several_elements(name: str) -> No
 
 
 @pytest.mark.parametrize("name", ["hvp", "vhp"])
-def test_hessian_products_seed_a_single_element_input(
-    ref: ModuleType, name: str
-) -> None:
+def test_hessian_products_seed_a_single_element_input(ref: ModuleType, name: str) -> None:
     got = getattr(AG, name)(lambda a: a**3, lucid.tensor(2.0, dtype=lucid.float64))
     want = getattr(ref.autograd.functional, name)(
         lambda a: a**3, ref.tensor(2.0, dtype=ref.float64)
@@ -261,9 +250,7 @@ def test_strict_refuses_a_linear_function(ref: ModuleType, name: str) -> None:
         ns = _namespace(m)
         x = m.tensor([1.0, 2.0], dtype=m.float64)
         calls = {
-            "jacobian": lambda: ns.jacobian(
-                lambda a: a * 2, x, create_graph=True, strict=True
-            ),
+            "jacobian": lambda: ns.jacobian(lambda a: a * 2, x, create_graph=True, strict=True),
             "hessian": lambda: ns.hessian(lambda a: (a * 2).sum(), x, strict=True),
         }
         with pytest.raises(RuntimeError, match="strict mode"):

@@ -121,9 +121,7 @@ def _assert_matches(ours: list[float], theirs: list[float], dtype: str) -> None:
 @pytest.mark.parity
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", _ALL_DTYPES)
-def test_ndtri_boundaries_and_interior_match_reference(
-    device: str, dtype: str, ref: Any
-) -> None:
+def test_ndtri_boundaries_and_interior_match_reference(device: str, dtype: str, ref: Any) -> None:
     if device == "metal" and dtype == "float64":
         pytest.skip("Metal does not support float64")
     l_dt = getattr(lucid, dtype)

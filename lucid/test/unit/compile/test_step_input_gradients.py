@@ -125,9 +125,7 @@ def test_an_eager_trunk_trains_under_a_compiled_head(kind: str, device: str) -> 
     trunk_c, head_c = _trunk(device), _head(device)
     before = [p.detach().clone() for p in trunk_c.parameters()]
 
-    want = _train_once(
-        trunk_e, head_e, lambda x, tt: F.cross_entropy(head_e(x), tt), inp, t
-    )
+    want = _train_once(trunk_e, head_e, lambda x, tt: F.cross_entropy(head_e(x), tt), inp, t)
     step = _STEPS[kind](head_c, F.cross_entropy)
     got = _train_once(trunk_c, head_c, step, inp, t)
 
@@ -150,9 +148,7 @@ def _sq_err(y: lucid.Tensor, target: lucid.Tensor) -> lucid.Tensor:
 
 
 @pytest.mark.parametrize("which", ["input", "target", "both", "same-tensor"])
-def test_each_tensor_that_requires_grad_gets_its_gradient(
-    which: str, device: str
-) -> None:
+def test_each_tensor_that_requires_grad_gets_its_gradient(which: str, device: str) -> None:
     lucid.manual_seed(3)
     x0 = lucid.randn(4, 6, device=device)
     y0 = lucid.randn(4, 6, device=device)
@@ -319,9 +315,7 @@ def test_a_segmented_step_keys_its_first_segment_on_the_grad_need(
 
 
 @pytest.mark.parametrize("source", ["leaf", "trunk"])
-def test_fused_step_refuses_an_input_that_requires_grad(
-    source: str, device: str
-) -> None:
+def test_fused_step_refuses_an_input_that_requires_grad(source: str, device: str) -> None:
     inp, x0, t = _data(device)
     head = _head(device)
     step = fused_step(head, F.cross_entropy, optim.SGD(head.parameters(), lr=0.5))
@@ -338,8 +332,7 @@ def test_fused_step_refuses_an_input_that_requires_grad(
 
     step(x.detach(), t)  # a detached input trains the head as before
     moved = [
-        float((p - b).abs().max().item())
-        for p, b in zip(head.parameters(), before, strict=True)
+        float((p - b).abs().max().item()) for p, b in zip(head.parameters(), before, strict=True)
     ]
     assert max(moved) > 1e-4
 
@@ -356,9 +349,7 @@ def _same_grads(got: nn.Module, want: nn.Module) -> None:
 
 
 @pytest.mark.parametrize("source", ["leaf", "trunk"])
-def test_compiled_step_hands_the_input_its_gradient(
-    source: str, device_gpu_only: str
-) -> None:
+def test_compiled_step_hands_the_input_its_gradient(source: str, device_gpu_only: str) -> None:
     """``compiled_step`` has no eager path: on a CPU trace it raises."""
     device = device_gpu_only
     inp, x0, t = _data(device)
@@ -366,9 +357,7 @@ def test_compiled_step_hands_the_input_its_gradient(
     trunk_e, trunk_c = _trunk(device), _trunk(device)
     for model in (eager, compiled):
         model[0].bias.requires_grad_(False)  # eager gives a frozen one nothing
-    xe, xc = (
-        (_leaf(x0), _leaf(x0)) if source == "leaf" else (trunk_e(inp), trunk_c(inp))
-    )
+    xe, xc = (_leaf(x0), _leaf(x0)) if source == "leaf" else (trunk_e(inp), trunk_c(inp))
 
     want = F.cross_entropy(eager(xe), t)
     want.backward()

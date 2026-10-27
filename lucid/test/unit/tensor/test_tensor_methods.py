@@ -62,9 +62,10 @@ class TestTolist:
         assert lucid.tensor([1.0, 2.0, 3.0], device=device).tolist() == [1.0, 2.0, 3.0]
 
     def test_nested(self, device: str) -> None:
-        assert lucid.tensor(
-            [[1, 2], [3, 4]], dtype=lucid.int64, device=device
-        ).tolist() == [[1, 2], [3, 4]]
+        assert lucid.tensor([[1, 2], [3, 4]], dtype=lucid.int64, device=device).tolist() == [
+            [1, 2],
+            [3, 4],
+        ]
 
 
 class TestItem:

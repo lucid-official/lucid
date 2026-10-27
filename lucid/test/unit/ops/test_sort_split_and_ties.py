@@ -82,9 +82,7 @@ def test_topk_returns_the_smallest_on_request(device: str) -> None:
         x.topk(3, dim=1, largest=False),
     ):
         np.testing.assert_array_equal(indices.numpy(), want)
-        np.testing.assert_array_equal(
-            values.numpy(), np.take_along_axis(a, want, axis=1)
-        )
+        np.testing.assert_array_equal(values.numpy(), np.take_along_axis(a, want, axis=1))
     largest_values, _ = lucid.topk(x, 3, dim=1)
     assert np.all(np.diff(largest_values.numpy(), axis=1) <= 0)
 
@@ -111,16 +109,12 @@ def test_split_and_chunk_follow_the_reference_rule(n: int) -> None:
 @pytest.mark.parametrize("op", ["max", "min"])
 def test_ties_share_the_gradient(device: str, op: str) -> None:
     extreme = 5.0 if op == "max" else -5.0
-    a = np.array(
-        [[extreme, extreme, 0.0, extreme], [1.0, extreme, 2.0, 0.5]], dtype=np.float32
-    )
+    a = np.array([[extreme, extreme, 0.0, extreme], [1.0, extreme, 2.0, 0.5]], dtype=np.float32)
     reduce = getattr(lucid, op)
 
     x = lucid.tensor(a, device=device, requires_grad=True)
     reduce(x, dim=1).values.sum().backward()
-    np.testing.assert_allclose(
-        x.grad.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6
-    )
+    np.testing.assert_allclose(x.grad.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6)
 
     x = lucid.tensor(a, device=device, requires_grad=True)
     reduce(x).backward()
@@ -129,9 +123,7 @@ def test_ties_share_the_gradient(device: str, op: str) -> None:
     # The graph-mode backward takes the same shares.
     x = lucid.tensor(a, device=device, requires_grad=True)
     (d,) = grad(reduce(x, dim=1).values.sum(), [x], create_graph=True)
-    np.testing.assert_allclose(
-        d.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6
-    )
+    np.testing.assert_allclose(d.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6)
 
 
 def test_a_nan_slice_gets_no_gradient_rather_than_nan() -> None:

@@ -29,9 +29,7 @@ def test_zero_dim_variance(
         want = getattr(ref, op)(ref.tensor(3.0), dim=dim, correction=correction)
     with warnings.catch_warnings(record=True) as ours:
         warnings.simplefilter("always")
-        got = getattr(lucid, op)(
-            lucid.tensor(3.0, device=device), dim=dim, correction=correction
-        )
+        got = getattr(lucid, op)(lucid.tensor(3.0, device=device), dim=dim, correction=correction)
     pairs = zip(got, want, strict=True) if op.endswith("_mean") else [(got, want)]
     for g, w in pairs:
         assert g.shape == tuple(w.shape) == ()

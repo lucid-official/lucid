@@ -48,9 +48,7 @@ _EXPANDED_WRITES: dict[str, Callable[[lucid.Tensor], object]] = {
 
 @pytest.mark.parametrize("base_alive", [True, False], ids=["base alive", "base gone"])
 @pytest.mark.parametrize("name", list(_EXPANDED_WRITES))
-def test_a_write_into_an_expanded_view_is_refused(
-    device: str, name: str, base_alive: bool
-) -> None:
+def test_a_write_into_an_expanded_view_is_refused(device: str, name: str, base_alive: bool) -> None:
     base = lucid.tensor([[1.0, 2.0, 3.0]]).to(device)
     expanded = base.expand(2, 3)
     if not base_alive:

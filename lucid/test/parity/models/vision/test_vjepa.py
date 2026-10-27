@@ -54,25 +54,16 @@ class TestPositionTableParity:
 
             def table(positions: Any, width: int) -> Any:
                 omega = 1.0 / (
-                    10000.0
-                    ** (ref.arange(width // 2, dtype=ref.float64) * (2.0 / width))
+                    10000.0 ** (ref.arange(width // 2, dtype=ref.float64) * (2.0 / width))
                 )
                 angles = positions.reshape(-1, 1) * omega.reshape(1, -1)
                 return ref.cat([ref.sin(angles), ref.cos(angles)], dim=1)
 
-            time = ref.arange(duration, dtype=ref.float64).repeat_interleave(
-                rows * cols
-            )
-            down = (
-                ref.arange(rows, dtype=ref.float64)
-                .repeat_interleave(cols)
-                .repeat(duration)
-            )
+            time = ref.arange(duration, dtype=ref.float64).repeat_interleave(rows * cols)
+            down = ref.arange(rows, dtype=ref.float64).repeat_interleave(cols).repeat(duration)
             across = ref.arange(cols, dtype=ref.float64).repeat(duration * rows)
             theirs = (
-                ref.cat(
-                    [table(time, each), table(down, each), table(across, each)], dim=1
-                )[:, :dim]
+                ref.cat([table(time, each), table(down, each), table(across, each)], dim=1)[:, :dim]
                 .float()
                 .numpy()
             )
@@ -137,9 +128,7 @@ class TestObjectiveParity:
         target = rng.randn(4, 6).astype(np.float32) * 2.0
 
         ours = float(
-            model._discrepancy(
-                lucid.tensor(prediction.copy()), lucid.tensor(target.copy())
-            ).item()
+            model._discrepancy(lucid.tensor(prediction.copy()), lucid.tensor(target.copy())).item()
         )
         with ref.no_grad():
             theirs = ref.nn.functional.l1_loss(
@@ -185,9 +174,7 @@ class TestAttentiveProbeParity:
                     getattr(target, name).copy_(ref.tensor(parameter.numpy()))
 
             def linear(layer: Any, value: Any) -> Any:
-                return value @ ref.tensor(layer.weight.numpy()).T + ref.tensor(
-                    layer.bias.numpy()
-                )
+                return value @ ref.tensor(layer.weight.numpy()).T + ref.tensor(layer.bias.numpy())
 
             batch, count = 2, 7
             heads, head_dim = config.num_heads, config.dim // config.num_heads
@@ -214,11 +201,7 @@ class TestAttentiveProbeParity:
 
             pooled = query_in + linear(pooler.proj, attended)
             hidden = ref.nn.functional.gelu(linear(pooler.mlp.fc1, norm_out(pooled)))
-            theirs = (
-                (pooled + linear(pooler.mlp.fc2, hidden))
-                .reshape(batch, config.dim)
-                .numpy()
-            )
+            theirs = (pooled + linear(pooler.mlp.fc2, hidden)).reshape(batch, config.dim).numpy()
 
         assert np.abs(ours - theirs).max() < 1e-5
         assert model.config.dim == config.dim

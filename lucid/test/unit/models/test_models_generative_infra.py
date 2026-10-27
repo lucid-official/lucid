@@ -48,23 +48,17 @@ _CHANNELS_NOT_CHECKED: dict[str, str] = {
 
 def _generative_families() -> list[str]:
     root = Path(_generative.__file__).parent
-    return sorted(
-        d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith("_")
-    )
+    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith("_"))
 
 
 def _default_config(family: str) -> GenerativeModelConfig:
     for entry in _REGISTRY.values():
-        if entry.family == family and isinstance(
-            entry.default_config, GenerativeModelConfig
-        ):
+        if entry.family == family and isinstance(entry.default_config, GenerativeModelConfig):
             return entry.default_config
     raise AssertionError(f"{family}: no registered generative default config")
 
 
-_CHECKED_FAMILIES = [
-    f for f in _generative_families() if f not in _CHANNELS_NOT_CHECKED
-]
+_CHECKED_FAMILIES = [f for f in _generative_families() if f not in _CHANNELS_NOT_CHECKED]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configs
@@ -107,9 +101,7 @@ class TestGenerativeConfigs:
             DiffusionModelConfig(num_train_timesteps=0)
 
     @pytest.mark.parametrize("family", _CHECKED_FAMILIES)
-    def test_every_family_refuses_an_output_width_that_does_not_fit(
-        self, family: str
-    ) -> None:
+    def test_every_family_refuses_an_output_width_that_does_not_fit(self, family: str) -> None:
         # Accepted, the mismatch surfaced as a broadcast error deep in the
         # forward pass or the sampler (LCD-620), or was silently replaced by
         # the width the family derived (LCD-631).
@@ -311,9 +303,7 @@ class TestDDPMSchedulerDevice:
     """LCD-383: the schedule had no device — every table stayed on the CPU."""
 
     def _tables(self, sched: DDPMScheduler) -> set[str]:
-        return {
-            t.device.type for t in vars(sched).values() if isinstance(t, lucid.Tensor)
-        }
+        return {t.device.type for t in vars(sched).values() if isinstance(t, lucid.Tensor)}
 
     @pytest.mark.parametrize("device", _METAL)
     def test_built_on_a_device(self, device: str) -> None:
@@ -394,9 +384,7 @@ class _DummyDiffusionModel(PretrainedModel, DiffusionMixin):
 
 class TestDiffusionMixin:
     def _tiny_cfg(self) -> DiffusionModelConfig:
-        return DiffusionModelConfig(
-            sample_size=8, in_channels=3, num_train_timesteps=20
-        )
+        return DiffusionModelConfig(sample_size=8, in_channels=3, num_train_timesteps=20)
 
     def test_generate_shape(self) -> None:
         cfg = self._tiny_cfg()
@@ -411,9 +399,7 @@ class TestDiffusionMixin:
         cfg = self._tiny_cfg()
         m = _DummyDiffusionModel(cfg).eval()
         sched = DDPMScheduler(num_train_timesteps=cfg.num_train_timesteps)
-        out = m.generate(
-            sched, n_samples=1, num_inference_steps=3, return_intermediates=True
-        )
+        out = m.generate(sched, n_samples=1, num_inference_steps=3, return_intermediates=True)
         assert out.intermediates is not None
         assert len(out.intermediates) == 3
         for inter in out.intermediates:
@@ -508,15 +494,11 @@ class TestRSSM:
 
     @staticmethod
     def _rssm() -> RSSM:
-        return RSSM(
-            stoch_size=4, deter_size=8, hidden_size=8, action_dim=2, embed_size=6
-        )
+        return RSSM(stoch_size=4, deter_size=8, hidden_size=8, action_dim=2, embed_size=6)
 
     def test_observe_shapes(self) -> None:
         rssm = self._rssm().eval()
-        priors, posteriors = rssm.observe(
-            lucid.randn((2, 5, 6)), lucid.randn((2, 5, 2))
-        )
+        priors, posteriors = rssm.observe(lucid.randn((2, 5, 6)), lucid.randn((2, 5, 2)))
         for state in (priors, posteriors):
             assert state.stoch.shape == (2, 5, 4)
             assert state.deter.shape == (2, 5, 8)
@@ -525,9 +507,7 @@ class TestRSSM:
 
     def test_posterior_shares_the_deterministic_path(self) -> None:
         rssm = self._rssm().eval()
-        priors, posteriors = rssm.observe(
-            lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2))
-        )
+        priors, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
         assert float((priors.deter - posteriors.deter).abs().max().item()) == 0.0
 
     def test_std_is_floored_at_min_std(self) -> None:
@@ -546,10 +526,7 @@ class TestRSSM:
         rssm = self._rssm().eval()
         _, posteriors = rssm.observe(lucid.randn((1, 2, 6)), lucid.randn((1, 2, 2)))
         assert posteriors.feature.shape == (1, 2, 12)
-        assert (
-            float((posteriors.feature[..., :8] - posteriors.deter).abs().max().item())
-            == 0.0
-        )
+        assert float((posteriors.feature[..., :8] - posteriors.deter).abs().max().item()) == 0.0
 
     def test_logvar_round_trips_the_std(self) -> None:
         rssm = self._rssm().eval()
@@ -565,13 +542,9 @@ class TestRSSM:
         rolled = rssm.imagine(rssm.initial(2), actions)
         lucid.manual_seed(0)
         state = rssm.initial(2)
-        steps = [
-            (state := rssm.prior_step(state, actions[:, t])).stoch for t in range(4)
-        ]
+        steps = [(state := rssm.prior_step(state, actions[:, t])).stoch for t in range(4)]
 
-        assert (
-            float((rolled.stoch - lucid.stack(steps, dim=1)).abs().max().item()) < 1e-6
-        )
+        assert float((rolled.stoch - lucid.stack(steps, dim=1)).abs().max().item()) < 1e-6
 
     def test_gradient_survives_the_whole_unroll(self) -> None:
         # A detach anywhere in the loop, or rebuilding the carried state
@@ -594,9 +567,7 @@ class TestRSSM:
 
     def test_kl_trains_the_prior_head(self) -> None:
         rssm = self._rssm()
-        priors, posteriors = rssm.observe(
-            lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2))
-        )
+        priors, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
         rssm_kl(posteriors, priors, free_nats=0.0).backward()
 
         reached = [n for n, p in rssm.named_parameters() if p.grad is not None]
@@ -604,9 +575,7 @@ class TestRSSM:
 
     def test_rssm_kl_clamps_at_free_nats(self) -> None:
         rssm = self._rssm().eval()
-        priors, posteriors = rssm.observe(
-            lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2))
-        )
+        priors, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
 
         assert float(rssm_kl(posteriors, priors, free_nats=0.0).item()) >= 0.0
         assert float(rssm_kl(posteriors, priors, free_nats=1e9).item()) == 0.0
@@ -626,9 +595,7 @@ class TestRSSM:
             ({"min_std": 0.0}, "min_std"),
         ],
     )
-    def test_rejects_invalid_arguments(
-        self, kwargs: dict[str, object], match: str
-    ) -> None:
+    def test_rejects_invalid_arguments(self, kwargs: dict[str, object], match: str) -> None:
         base: dict[str, object] = {
             "stoch_size": 4,
             "deter_size": 8,

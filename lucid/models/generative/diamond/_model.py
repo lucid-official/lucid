@@ -244,9 +244,7 @@ class _ResBlock(nn.Module):
         """Initialise the block. See the class docstring for parameters."""
         super().__init__()
         self.proj: nn.Conv2d | None = (
-            nn.Conv2d(in_channels, out_channels, 1)
-            if in_channels != out_channels
-            else None
+            nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else None
         )
         self.norm1 = _AdaGroupNorm(in_channels, cond_dim)
         self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=1, padding=1)
@@ -462,9 +460,7 @@ class _UNet(nn.Module):
         cursor = len(pushes)
         for stage in reversed(range(len(channels))):
             out_ch = channels[stage]
-            self.upsamples.append(
-                nn.Identity() if stage == len(channels) - 1 else _Upsample(width)
-            )
+            self.upsamples.append(nn.Identity() if stage == len(channels) - 1 else _Upsample(width))
             # The last block of each decoder resolution steps down to the
             # next one's width, so the upsample that follows already works
             # at the shallower size.  Holding the width for the whole
@@ -569,15 +565,11 @@ class _Denoiser(nn.Module):
         # One embedding per conditioning step, flattened back to
         # ``cond_dim`` — so the width per action falls as the history
         # grows, rather than the conditioning vector growing with it.
-        self.action_embed = nn.Embedding(
-            config.num_actions, cond_dim // config.conditioning_frames
-        )
+        self.action_embed = nn.Embedding(config.num_actions, cond_dim // config.conditioning_frames)
         self.cond_proj = nn.Sequential(
             nn.Linear(cond_dim, cond_dim), nn.SiLU(), nn.Linear(cond_dim, cond_dim)
         )
-        self.conv_in = nn.Conv2d(
-            config.denoiser_in_channels, config.unet_channels[0], 3, padding=1
-        )
+        self.conv_in = nn.Conv2d(config.denoiser_in_channels, config.unet_channels[0], 3, padding=1)
         self.unet = _UNet(
             cond_dim,
             config.unet_channels,
@@ -587,9 +579,7 @@ class _Denoiser(nn.Module):
         )
         self.norm_out = _GroupNorm(config.unet_channels[0])
         self.act = nn.SiLU()
-        self.conv_out = nn.Conv2d(
-            config.unet_channels[0], config.out_channels, 3, padding=1
-        )
+        self.conv_out = nn.Conv2d(config.unet_channels[0], config.out_channels, 3, padding=1)
         # The output convolution starts at zero, so an untrained model
         # predicts the skip exactly rather than noise.
         init.zeros_(self.conv_out.weight)
@@ -621,9 +611,7 @@ class _Denoiser(nn.Module):
         # sum, so both go through the same weights — which is what lets one
         # checkpoint serve a categorical action set and a compositional one.
         if actions.ndim == 3:
-            embedded = actions.to(self.action_embed.weight.dtype) @ (
-                self.action_embed.weight
-            )
+            embedded = actions.to(self.action_embed.weight.dtype) @ (self.action_embed.weight)
         else:
             embedded = self.action_embed(actions)
         flat = embedded.reshape(int(actions.shape[0]), -1)
@@ -678,9 +666,7 @@ class _Upsampler(nn.Module):
         self.cond_proj = nn.Sequential(
             nn.Linear(cond_dim, cond_dim), nn.SiLU(), nn.Linear(cond_dim, cond_dim)
         )
-        self.conv_in = nn.Conv2d(
-            config.in_channels * 3, config.upsampler_channels[0], 3, padding=1
-        )
+        self.conv_in = nn.Conv2d(config.in_channels * 3, config.upsampler_channels[0], 3, padding=1)
         self.unet = _UNet(
             cond_dim,
             config.upsampler_channels,
@@ -690,9 +676,7 @@ class _Upsampler(nn.Module):
         )
         self.norm_out = _GroupNorm(config.upsampler_channels[0])
         self.act = nn.SiLU()
-        self.conv_out = nn.Conv2d(
-            config.upsampler_channels[0], config.out_channels, 3, padding=1
-        )
+        self.conv_out = nn.Conv2d(config.upsampler_channels[0], config.out_channels, 3, padding=1)
 
     def conditioning(self, c_noise: Tensor, cond_noise: Tensor | None = None) -> Tensor:
         """The two noise levels, embedded and summed.
@@ -763,19 +747,13 @@ class _Encoder(nn.Module):
             self.downsamples.append(nn.Identity() if stage == 0 else _Downsample(width))
             self.blocks.append(
                 _ResBlocks(
-                    [
-                        _ResBlock(width if i == 0 else out_ch, out_ch, cond_dim)
-                        for i in range(count)
-                    ]
+                    [_ResBlock(width if i == 0 else out_ch, out_ch, cond_dim) for i in range(count)]
                 )
             )
             width = out_ch
         self.blocks.append(
             _ResBlocks(
-                [
-                    _ResBlock(width, width, cond_dim, True, head_dim)
-                    for _ in range(layers[-1])
-                ]
+                [_ResBlock(width, width, cond_dim, True, head_dim) for _ in range(layers[-1])]
             )
         )
         self.out_channels = width
@@ -905,9 +883,7 @@ class _SimpleResBlock(nn.Module):
             nn.Conv2d(in_channels, out_channels, 3, stride=1, padding=1),
         )
         self.skip_projection: nn.Conv2d | None = (
-            nn.Conv2d(in_channels, out_channels, 1)
-            if in_channels != out_channels
-            else None
+            nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else None
         )
 
     @override
@@ -941,9 +917,7 @@ class _ActorCritic(nn.Module):
             nn.Conv2d(config.in_channels, config.actor_channels[0], 3, padding=1)
         ]
         width = config.actor_channels[0]
-        for out_ch, count in zip(
-            config.actor_channels, config.actor_layers, strict=True
-        ):
+        for out_ch, count in zip(config.actor_channels, config.actor_layers, strict=True):
             for _ in range(count):
                 layers.append(_SimpleResBlock(width, out_ch))
                 width = out_ch
@@ -990,11 +964,7 @@ class _ActorCritic(nn.Module):
 # for the same reason: a stride-2 encoder does not halve cleanly.
 def _side(config: DIAMONDConfig) -> int:
     """Frame side length, whichever way ``sample_size`` was written."""
-    return (
-        config.sample_size
-        if isinstance(config.sample_size, int)
-        else config.sample_size[0]
-    )
+    return config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
 
 
 @dataclass(slots=True)
@@ -1152,9 +1122,7 @@ class DIAMONDModel(PretrainedModel):
         # reinforcement learning to give an agent anything to learn from.
         self.reward_end = _RewardEndModel(config) if config.with_agent else None
         self.actor_critic = _ActorCritic(config) if config.with_agent else None
-        self.upsampler = (
-            _Upsampler(config) if config.upsampler_channels is not None else None
-        )
+        self.upsampler = _Upsampler(config) if config.upsampler_channels is not None else None
 
     def step_reward_end(
         self,
@@ -1211,8 +1179,7 @@ class DIAMONDModel(PretrainedModel):
         """
         if self.reward_end is None:
             raise ValueError(
-                "this configuration has no reward/termination model "
-                "(config.with_agent=False)"
+                "this configuration has no reward/termination model " "(config.with_agent=False)"
             )
         pair = lucid.cat([frame, next_frame], dim=1)
         return self.reward_end(pair, action, state)
@@ -1259,9 +1226,7 @@ class DIAMONDModel(PretrainedModel):
         False
         """
         if self.actor_critic is None:
-            raise ValueError(
-                "this configuration has no actor-critic (config.with_agent=False)"
-            )
+            raise ValueError("this configuration has no actor-critic (config.with_agent=False)")
         return self.actor_critic(frame, state)
 
     def preconditioners(self, sigma: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -1390,9 +1355,7 @@ class DIAMONDModel(PretrainedModel):
         """
         c_in, c_out, c_skip, c_noise = self.preconditioners(sigma)
         if self.config.noise_previous_obs and cond_sigma is not None:
-            frames = frames + lucid.randn_like(frames) * cond_sigma.reshape(
-                -1, 1, 1, 1, 1
-            )
+            frames = frames + lucid.randn_like(frames) * cond_sigma.reshape(-1, 1, 1, 1, 1)
         history = frames.reshape(int(frames.shape[0]), -1, *frames.shape[3:])
         # ``conv_in`` reads the history first, oldest to newest, and the
         # noised frame last.  The checkpoint says so: its per-input-channel
@@ -1766,11 +1729,7 @@ class DIAMONDModel(PretrainedModel):
         shape = (batch, int(next_frame.shape[1]), 1, 1)
         offset_noise = lucid.randn(shape, dtype=dt, device=device)
         offset = offset_noise * self.config.sigma_offset_noise
-        noised = (
-            next_frame
-            + offset
-            + lucid.randn_like(next_frame) * sigma.reshape(-1, 1, 1, 1)
-        )
+        noised = next_frame + offset + lucid.randn_like(next_frame) * sigma.reshape(-1, 1, 1, 1)
         # The CS:GO configuration noises the history too — a form of
         # augmentation against the error a long autoregressive rollout
         # compounds.  Atari leaves it clean.
@@ -1782,9 +1741,7 @@ class DIAMONDModel(PretrainedModel):
             )
         # No quantiser on the training path: it has no gradient, and the
         # released code computes its loss on the unwrapped estimate too.
-        prediction = self.denoise(
-            noised, sigma, frames, actions, cond_sigma, quantize=False
-        )
+        prediction = self.denoise(noised, sigma, frames, actions, cond_sigma, quantize=False)
         loss = ((prediction - next_frame) ** 2).mean()
         return DIAMONDOutput(loss=loss, prediction=prediction, sigma=sigma)
 
@@ -1976,9 +1933,7 @@ class DIAMONDForWorldModeling(WorldModelingModel):
         """
         horizon = self.config.horizon if horizon is None else horizon
         if horizon < 2:
-            raise ValueError(
-                f"lambda-returns need at least two imagined states, got {horizon}"
-            )
+            raise ValueError(f"lambda-returns need at least two imagined states, got {horizon}")
         config = self.config
         history = frames
         history_actions = actions
@@ -1995,9 +1950,7 @@ class DIAMONDForWorldModeling(WorldModelingModel):
                     actions[:, step],
                     reward_state,
                 )
-            _l, _v, actor_state = self.diamond.step_actor_critic(
-                frames[:, step], actor_state
-            )
+            _l, _v, actor_state = self.diamond.step_actor_critic(frames[:, step], actor_state)
 
         imagined: list[Tensor] = []
         log_probs: list[Tensor] = []
@@ -2007,18 +1960,14 @@ class DIAMONDForWorldModeling(WorldModelingModel):
         continues: list[Tensor] = []
 
         for _ in range(horizon):
-            logits, value, actor_state = self.diamond.step_actor_critic(
-                history[:, -1], actor_state
-            )
+            logits, value, actor_state = self.diamond.step_actor_critic(history[:, -1], actor_state)
             probs = lucid.softmax(logits, dim=-1)
             action = lucid.multinomial(probs, num_samples=1).reshape(-1)
             log_prob = lucid.log(probs + 1e-8)
             # Picked out with a one-hot rather than advanced indexing: the
             # gradient path is the same and it does not depend on how the
             # backend handles a pair of index tensors.
-            onehot = F.one_hot(action, num_classes=config.num_actions).to(
-                log_prob.dtype
-            )
+            onehot = F.one_hot(action, num_classes=config.num_actions).to(log_prob.dtype)
             chosen = (log_prob * onehot).sum(dim=-1)
             entropy = -(probs * log_prob).sum(dim=-1)
 
@@ -2045,13 +1994,9 @@ class DIAMONDForWorldModeling(WorldModelingModel):
                 ],
                 dim=1,
             )
-            history_actions = lucid.cat(
-                [history_actions[:, 1:], action.reshape(-1, 1)], dim=1
-            )
+            history_actions = lucid.cat([history_actions[:, 1:], action.reshape(-1, 1)], dim=1)
 
-        _logits, bootstrap, _state = self.diamond.step_actor_critic(
-            history[:, -1], actor_state
-        )
+        _logits, bootstrap, _state = self.diamond.step_actor_critic(history[:, -1], actor_state)
         value_seq = lucid.stack([*values, bootstrap], dim=1)
         reward_seq = lucid.stack([*rewards, lucid.zeros_like(rewards[0])], dim=1)
         discount = lucid.stack(continues, dim=1) * config.gamma
@@ -2062,9 +2007,7 @@ class DIAMONDForWorldModeling(WorldModelingModel):
 
         log_prob_seq = lucid.stack(log_probs, dim=1)
         entropy_seq = lucid.stack(entropies, dim=1)
-        policy_loss = -(
-            log_prob_seq * advantage + config.entropy_weight * entropy_seq
-        ).mean()
+        policy_loss = -(log_prob_seq * advantage + config.entropy_weight * entropy_seq).mean()
         value_loss = ((value_seq[:, :horizon] - returns.detach()) ** 2).mean()
 
         return DIAMONDBehaviorOutput(
@@ -2213,7 +2156,5 @@ class DIAMONDForWorldModeling(WorldModelingModel):
             )
             target = (rewards[:, step].sign() + 1.0).to(lucid.int64)
             reward_loss = reward_loss + F.cross_entropy(logits, target)
-            end_loss = end_loss + F.cross_entropy(
-                end_logits, ends[:, step].to(lucid.int64)
-            )
+            end_loss = end_loss + F.cross_entropy(end_logits, ends[:, step].to(lucid.int64))
         return (reward_loss + end_loss) / float(steps)

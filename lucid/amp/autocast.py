@@ -16,9 +16,7 @@ _DEVICE_TYPES = frozenset({"metal", "cpu"})
 def _to_engine_device(device_type: str) -> _C_engine.Device:
     """Validate ``device_type`` and map it to :class:`_C_engine.Device`."""
     if device_type not in _DEVICE_TYPES:
-        raise ValueError(
-            f"autocast: unknown device_type {device_type!r}. Use 'metal' or 'cpu'."
-        )
+        raise ValueError(f"autocast: unknown device_type {device_type!r}. Use 'metal' or 'cpu'.")
     return _C_engine.Device.GPU if device_type == "metal" else _C_engine.Device.CPU
 
 
@@ -130,9 +128,7 @@ class autocast:
             If ``device_type`` is neither ``'metal'`` nor ``'cpu'``.
         """
         self._engine_device = _to_engine_device(device_type)
-        self._dtype = (
-            (bfloat16 if device_type == "cpu" else float16) if dtype is None else dtype
-        )
+        self._dtype = (bfloat16 if device_type == "cpu" else float16) if dtype is None else dtype
         self._enabled = enabled
         self._cache_enabled = True if cache_enabled is None else bool(cache_enabled)
         # One stack of live engine guards per thread: the AMP state the
@@ -148,9 +144,7 @@ class autocast:
 
     def _guards(self) -> list[_C_engine.AutocastGuard]:
         """Return this thread's stack of guards opened by this object."""
-        stack: list[_C_engine.AutocastGuard] | None = getattr(
-            self._local, "stack", None
-        )
+        stack: list[_C_engine.AutocastGuard] | None = getattr(self._local, "stack", None)
         if stack is None:
             stack = []
             self._local.stack = stack

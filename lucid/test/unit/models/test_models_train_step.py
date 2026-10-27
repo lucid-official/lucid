@@ -307,8 +307,7 @@ def _boxes(side: int, *, normalised: bool) -> Callable[[], Inputs]:
         scale = 1.0 if normalised else float(side)
         box = lucid.tensor([[0.25, 0.25, 0.75, 0.75]]) * scale
         targets = [
-            {"boxes": box, "labels": lucid.randint(0, _CLASSES, (1,))}
-            for _ in range(_BATCH)
+            {"boxes": box, "labels": lucid.randint(0, _CLASSES, (1,))} for _ in range(_BATCH)
         ]
         return (x,), {"targets": targets}
 
@@ -450,20 +449,14 @@ def test_a_family_takes_a_training_step(
 
     unused = _UNUSED.get(family, ())
     missing = [n for n, p in named if p.grad is None and not n.startswith(unused)]
-    assert (
-        not missing
-    ), f"{len(missing)} of {len(named)} parameters got no gradient: {missing[:6]}"
+    assert not missing, f"{len(missing)} of {len(named)} parameters got no gradient: {missing[:6]}"
     broken = [
-        n
-        for n, p in named
-        if p.grad is not None and not bool(p.grad.isfinite().all().item())
+        n for n, p in named if p.grad is not None and not bool(p.grad.isfinite().all().item())
     ]
     assert not broken, f"non-finite gradients in {broken[:6]}"
 
     optim.SGD([p for _n, p in named], lr=1e-2).step()
-    moved = [
-        n for n, p in named if float((p.detach() - before[n]).abs().max().item()) > 0
-    ]
+    moved = [n for n, p in named if float((p.detach() - before[n]).abs().max().item()) > 0]
     assert moved, "the optimizer step changed no parameter"
 
 
@@ -488,10 +481,7 @@ ELSEWHERE: dict[str, str] = {
         "test_models_ijepa.py — the target encoder is frozen by design, which "
         "the check above refuses"
     ),
-    "vjepa": (
-        "test_models_vjepa.py — the target encoder is frozen by design, as "
-        "I-JEPA's is"
-    ),
+    "vjepa": ("test_models_vjepa.py — the target encoder is frozen by design, as " "I-JEPA's is"),
     "vjepa2": (
         "test_models_vjepa2.py — the target encoder is frozen and nine of "
         "the ten mask-token slots sit out any one step, which the check "

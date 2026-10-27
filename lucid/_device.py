@@ -24,9 +24,7 @@ class device:
     type: str
     index: int
 
-    def __init__(
-        self, type_or_str: device | _C_engine.Device | str, index: int = 0
-    ) -> None:
+    def __init__(self, type_or_str: device | _C_engine.Device | str, index: int = 0) -> None:
         """Parse a device specifier.
 
         Parameters
@@ -79,9 +77,7 @@ class device:
         if self.type not in self._VALID_TYPES:
             raise ValueError(f"Unknown device '{self.type}'. Use 'metal' or 'cpu'.")
         self._engine: _C_engine.Device = (
-            _C_engine.Device.GPU
-            if self.type in self._METAL_TYPES
-            else _C_engine.Device.CPU
+            _C_engine.Device.GPU if self.type in self._METAL_TYPES else _C_engine.Device.CPU
         )
 
     @property

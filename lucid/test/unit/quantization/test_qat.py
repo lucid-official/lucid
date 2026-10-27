@@ -70,9 +70,7 @@ class TestQATConvert:
         x = lucid.randn(64, 16, generator=data)
         yq_train = qat(x).numpy()
         yq_int8 = qm(x).numpy()
-        assert (
-            np.abs(yq_train - yq_int8).mean() / (np.abs(yq_train).mean() + 1e-9) < 0.1
-        )
+        assert np.abs(yq_train - yq_int8).mean() / (np.abs(yq_train).mean() + 1e-9) < 0.1
 
 
 class TestConvBnReLUQAT:

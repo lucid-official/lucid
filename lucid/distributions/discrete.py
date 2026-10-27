@@ -499,26 +499,22 @@ class Binomial(Distribution):
             # `i < total_count`, count where U < p.
             full_shape: tuple[int, ...] = (max_n,) + out_shape
             u: Tensor = lucid.rand(max_n, *out_shape, dtype=dtype, device=device)
-            p_b: Tensor = self._probs + lucid.zeros(
-                full_shape, dtype=dtype, device=device
-            )
+            p_b: Tensor = self._probs + lucid.zeros(full_shape, dtype=dtype, device=device)
             tc_b_full: Tensor = self.total_count + lucid.zeros(
                 full_shape, dtype=dtype, device=device
             )
             # Per-trial active mask: trial index i is active if i < tc.
             i_flat: Tensor = lucid.arange(0, max_n, 1, dtype=dtype, device=device)
-            i_idx: Tensor = i_flat.reshape(
-                [max_n] + [1] * len(out_shape)
-            ) + lucid.zeros(full_shape, dtype=dtype, device=device)
+            i_idx: Tensor = i_flat.reshape([max_n] + [1] * len(out_shape)) + lucid.zeros(
+                full_shape, dtype=dtype, device=device
+            )
             active: Tensor = (i_idx < tc_b_full).to(dtype)
             success: Tensor = (u < p_b).to(dtype) * active
             return success.sum(dim=0).to(lucid.int64).detach()
 
         # Normal approximation.
         mu: Tensor = self.mean + lucid.zeros(out_shape, dtype=dtype, device=device)
-        sigma: Tensor = self.variance.sqrt() + lucid.zeros(
-            out_shape, dtype=dtype, device=device
-        )
+        sigma: Tensor = self.variance.sqrt() + lucid.zeros(out_shape, dtype=dtype, device=device)
         z: Tensor = lucid.randn(*out_shape, dtype=dtype, device=device)
         sample: Tensor = (mu + sigma * z + 0.5).floor()
         # Clamp to [0, total_count].
@@ -557,9 +553,7 @@ class Binomial(Distribution):
         # everything below is float arithmetic — so the counts join the
         # parameters rather than the other way round.
         k: Tensor = value.to(self._logits.dtype)
-        log_comb: Tensor = (
-            lucid.lgamma(n + 1.0) - lucid.lgamma(k + 1.0) - lucid.lgamma(n - k + 1.0)
-        )
+        log_comb: Tensor = lucid.lgamma(n + 1.0) - lucid.lgamma(k + 1.0) - lucid.lgamma(n - k + 1.0)
         # Stable form via logits: k·l − n·softplus(l).
         l: Tensor = self._logits
 
@@ -636,9 +630,7 @@ class Binomial(Distribution):
                 "Inhomogeneous total count not supported by `enumerate_support`."
             )
         param = self.logits if self._is_logits else self.probs
-        values = lucid.arange(
-            0, 1 + total_count, 1, dtype=param.dtype, device=param.device
-        )
+        values = lucid.arange(0, 1 + total_count, 1, dtype=param.dtype, device=param.device)
         return self._expand_support(values, expand)
 
     @override
@@ -777,9 +769,7 @@ class NegativeBinomial(Distribution):
             If both or neither of ``probs`` and ``logits`` are provided.
         """
         if (probs is None) == (logits is None):
-            raise ValueError(
-                "NegativeBinomial: pass exactly one of `probs` or `logits`."
-            )
+            raise ValueError("NegativeBinomial: pass exactly one of `probs` or `logits`.")
         self._is_logits = probs is None
         if probs is not None:
             param = _as_tensor(probs)

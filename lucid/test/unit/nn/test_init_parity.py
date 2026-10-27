@@ -160,9 +160,7 @@ class TestZeroElementTensors:
         shape: tuple[int, ...],
     ) -> None:
         t = lucid.zeros(*shape, device=device)
-        with pytest.warns(
-            UserWarning, match="Initializing zero-element tensors is a no-op"
-        ):
+        with pytest.warns(UserWarning, match="Initializing zero-element tensors is a no-op"):
             out = fn(t)
         assert out is t
         assert out.shape == shape
@@ -253,9 +251,7 @@ class TestGeneratorAndGainAndSparse:
             init.calculate_gain("leaky_relu", True)
         with pytest.raises(ValueError, match="not a valid number"):
             init.calculate_gain("leaky_relu", False)
-        assert math.isclose(
-            init.calculate_gain("leaky_relu", 0), math.sqrt(2.0), rel_tol=1e-6
-        )
+        assert math.isclose(init.calculate_gain("leaky_relu", 0), math.sqrt(2.0), rel_tol=1e-6)
 
     @pytest.mark.parametrize("device", DEVICES)
     def test_sparse_uses_ceil_zeros_per_column(self, device: str) -> None:

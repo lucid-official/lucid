@@ -59,9 +59,7 @@ def _fit(device, steps=25, lr=0.5):
 def test_lbfgs_reaches_the_least_squares_optimum(device):
     start, final, best, *_ = _fit(device)
     assert final < start, f"{device}: LBFGS did not reduce the loss at all"
-    assert (
-        final - best < 0.05
-    ), f"{device}: stalled at {final:.6f}, optimum is {best:.6f}"
+    assert final - best < 0.05, f"{device}: stalled at {final:.6f}, optimum is {best:.6f}"
 
 
 @pytest.mark.parametrize("device", DEVICES)

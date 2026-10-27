@@ -144,9 +144,7 @@ def test_view_of_clone_stays_disjoint_after_shared_buffer_write(
     assert _flat(c) == PRE
 
 
-def test_sgd_live_momentum_and_loaded_state_stay_disjoint_from_grad_shared_buffer() -> (
-    None
-):
+def test_sgd_live_momentum_and_loaded_state_stay_disjoint_from_grad_shared_buffer() -> None:
     s = _buffer()
     g = s.to("metal")
     p = lucid.nn.Parameter(lucid.ones((4,), device="metal"))

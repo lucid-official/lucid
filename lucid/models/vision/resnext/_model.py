@@ -146,9 +146,7 @@ def _build_body(
     hidden_sizes = (64, 128, 256, 512)
 
     stem = nn.Sequential(
-        nn.Conv2d(
-            config.in_channels, stem_channels, 7, stride=2, padding=3, bias=False
-        ),
+        nn.Conv2d(config.in_channels, stem_channels, 7, stride=2, padding=3, bias=False),
         nn.BatchNorm2d(stem_channels),
         nn.ReLU(inplace=True),
     )
@@ -393,9 +391,7 @@ class ResNeXtForImageClassification(ImageClassificationModel, ClassificationHead
 
         final_channels = 512 * _ResNeXtBottleneck.expansion  # 2048
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self._build_classifier(
-            final_channels, config.num_classes, dropout=config.dropout
-        )
+        self._build_classifier(final_channels, config.num_classes, dropout=config.dropout)
 
         # Reference initialisation: He/MSRA fan-out normal on convs, unit
         # norms — Lucid's Conv2d default is a different distribution and gain.

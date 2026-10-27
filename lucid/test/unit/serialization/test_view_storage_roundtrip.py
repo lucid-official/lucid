@@ -112,9 +112,7 @@ class TestViewRoundTrip:
         assert _bits(r["v"]) == want_view
         _assert_shares(r["base"], r["v"], make, overlapping)
 
-    def test_in_nested_containers_shares_its_storage(
-        self, device: str, kind: str
-    ) -> None:
+    def test_in_nested_containers_shares_its_storage(self, device: str, kind: str) -> None:
         make, overlapping = _VIEWS[kind]
         base = _base(device)
         view = make(base)
@@ -200,9 +198,7 @@ _ALL_DTYPES = (
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_ALL_DTYPES))
-def test_every_dtype_shares_and_keeps_its_values(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_every_dtype_shares_and_keeps_its_values(device: str, dtype: lucid.dtype) -> None:
     counts = lucid.arange(24, dtype=lucid.int64).reshape(4, 6)
     source = counts % 3 == 0 if dtype == lucid.bool_ else counts.to(dtype)
     base = source.to(device)
@@ -258,9 +254,7 @@ class TestParameters:
             r["x"].copy_(_marker(x, 2.0))
         assert _bits(r["p"]) == _bits(_marker(x, 2.0))
 
-    def test_engine_family_members_survive_repeated_roundtrip(
-        self, device: str
-    ) -> None:
+    def test_engine_family_members_survive_repeated_roundtrip(self, device: str) -> None:
         x = _base(device)
         r1 = _roundtrip({"x": x, "p": nn.Parameter(x), "f": nn.Flatten(0)(x)})
         r = _roundtrip(r1)

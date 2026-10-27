@@ -235,18 +235,14 @@ def test_cholesky_info_matches_the_reference_past_the_blocked_size(
     _, got = LA.cholesky_ex(mine, upper=upper)
     _, want = ref.linalg.cholesky_ex(theirs, upper=upper)
     np.testing.assert_array_equal(_np(got), _np(want))
-    with pytest.raises(
-        LA.LinAlgError, match=r"\(Batch element 1\): .*leading minor of order 1 "
-    ):
+    with pytest.raises(LA.LinAlgError, match=r"\(Batch element 1\): .*leading minor of order 1 "):
         LA.cholesky(mine, upper=upper)
 
 
 # ── lu_solve on the factors of a singular matrix ──────────────────────────────
 
 
-def test_lu_solve_through_lu_factor_ex_matches_the_reference(
-    device: str, ref: Any
-) -> None:
+def test_lu_solve_through_lu_factor_ex_matches_the_reference(device: str, ref: Any) -> None:
     """``lu_factor`` refuses a singular matrix; ``lu_factor_ex`` hands its
     factors on, and back substitution through the zero pivot gives the
     IEEE result the reference gives."""
@@ -313,9 +309,7 @@ def test_ldl_info_agrees_wherever_the_factorisations_do(device: str, ref: Any) -
     assert compared > 250
 
 
-def test_lu_info_matches_the_reference_on_non_finite_input(
-    device: str, ref: Any
-) -> None:
+def test_lu_info_matches_the_reference_on_non_finite_input(device: str, ref: Any) -> None:
     rng = np.random.default_rng(11)
     values = np.array([0.0, 0.0, 1.0, -1.0, 2.0, np.nan, np.inf, 0.5, -3.0])
     p = [0.3, 0.2, 0.1, 0.1, 0.1, 0.05, 0.03, 0.06, 0.06]

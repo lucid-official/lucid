@@ -65,9 +65,7 @@ class TestMaskLabelPreservation:
     @pytest.mark.parametrize(
         "name, make_tf", _GEOMETRIC_FIXTURES, ids=[n for n, _ in _GEOMETRIC_FIXTURES]
     )
-    def test_integer_labels_preserved(
-        self, name: str, make_tf: Callable[[], Transform]
-    ) -> None:
+    def test_integer_labels_preserved(self, name: str, make_tf: Callable[[], Transform]) -> None:
         # Build a 5-label mask + a paired image (the transform's sampler
         # needs an image-shaped reference for shape-derived params).
         lucid.manual_seed(0)
@@ -120,9 +118,7 @@ _CHANNEL_AGNOSTIC: list[Callable[[], Transform]] = [
 
 
 class TestMultiChannelCoverage:
-    @pytest.mark.parametrize(
-        "make_tf", _RGB_ONLY, ids=[f.__qualname__ for f in _RGB_ONLY]
-    )
+    @pytest.mark.parametrize("make_tf", _RGB_ONLY, ids=[f.__qualname__ for f in _RGB_ONLY])
     @pytest.mark.parametrize("channels", [1, 4])
     def test_rgb_only_rejects_non_three(
         self, make_tf: Callable[[], Transform], channels: int

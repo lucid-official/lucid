@@ -52,9 +52,7 @@ def test_can_cast_matches_reference(ref: ModuleType) -> None:
 
 
 @pytest.mark.parametrize("other", [None, "abc", object(), [1, 2]])
-def test_equality_against_non_tensor_non_scalar(
-    other: Any, device: str, ref: ModuleType
-) -> None:
+def test_equality_against_non_tensor_non_scalar(other: Any, device: str, ref: ModuleType) -> None:
     t = lucid.tensor([1.0, 2.0], device=device)
     rt = ref.tensor([1.0, 2.0])
     eq_got = t == other
@@ -100,9 +98,7 @@ def test_pow_scalar_overflow_raises_runtime_error(
 
 
 @pytest.mark.parametrize("dt", [lucid.complex64, lucid.complex128])
-def test_complex_comparisons_match_reference(
-    dt: lucid.dtype, device: str, ref: ModuleType
-) -> None:
+def test_complex_comparisons_match_reference(dt: lucid.dtype, device: str, ref: ModuleType) -> None:
     if device != "cpu" and dt in _CPU_ONLY:
         pytest.skip(f"{dt} is CPU-only")
     vals_a = [1.0 + 2.0j, 1.0 + 2.0j, 1.0 + 3.0j, complex(float("nan"), 1.0)]
@@ -237,9 +233,7 @@ def test_addcmul_preserves_integer_dtype_and_addcdiv_refuses_integer_division(
         f_ip.addcdiv_(b, c)
 
 
-def test_clamp_preserves_int64_precision_above_2_pow_53(
-    device: str, ref: ModuleType
-) -> None:
+def test_clamp_preserves_int64_precision_above_2_pow_53(device: str, ref: ModuleType) -> None:
     big = (1 << 53) + 1
     x = lucid.tensor([big - 5, big, big + 5], dtype=lucid.int64, device=device)
     rx = ref.tensor([big - 5, big, big + 5], dtype=ref.int64)
@@ -254,9 +248,7 @@ def test_clamp_preserves_int64_precision_above_2_pow_53(
     assert x_ip.tolist() == [big, big, big]
 
 
-def test_bool_subtraction_refused_for_any_bool_operand(
-    device: str, ref: ModuleType
-) -> None:
+def test_bool_subtraction_refused_for_any_bool_operand(device: str, ref: ModuleType) -> None:
     f = lucid.tensor([2.0], device=device)
     i = lucid.tensor([2], device=device)
     b = lucid.tensor([True], device=device)
@@ -292,9 +284,7 @@ def test_bool_subtraction_refused_for_any_bool_operand(
     assert f_ip.tolist() == [2.0]
 
 
-def test_lerp_on_integer_tensors_raises_not_implemented_error(
-    device: str, ref: ModuleType
-) -> None:
+def test_lerp_on_integer_tensors_raises_not_implemented_error(device: str, ref: ModuleType) -> None:
     a = lucid.tensor([0, 10], dtype=lucid.int64, device=device)
     b = lucid.tensor([10, 20], dtype=lucid.int64, device=device)
     ra = ref.tensor([0, 10], dtype=ref.int64)

@@ -40,16 +40,12 @@ pytestmark = pytest.mark.usefixtures("inference")
 
 
 class _FusedSdpa(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.scaled_dot_product_attention(q, k, v)
 
 
 class _ManualSdpa(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         scores = (q @ k.swapaxes(-1, -2)) * (int(q.shape[-1]) ** -0.5)
         return F.softmax(scores, dim=-1) @ v
 

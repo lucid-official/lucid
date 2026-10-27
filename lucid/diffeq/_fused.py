@@ -50,14 +50,10 @@ def _promote(terms: Sequence[Tensor]) -> tuple[Tensor, ...]:
 
     for d in dtypes[1:]:
         target = lucid.promote_types(target, d)
-    return tuple(
-        t if d == target else t.to(target) for t, d in zip(terms, dtypes, strict=True)
-    )
+    return tuple(t if d == target else t.to(target) for t, d in zip(terms, dtypes, strict=True))
 
 
-def combine(
-    y0: Tensor, ks: Sequence[Tensor], coeffs: Sequence[float], dt: float
-) -> Tensor:
+def combine(y0: Tensor, ks: Sequence[Tensor], coeffs: Sequence[float], dt: float) -> Tensor:
     """Evaluate ``y0 + dt * sum_i coeffs[i] * ks[i]`` in one fused engine op.
 
     Parameters
@@ -85,9 +81,7 @@ def combine(
         return y0
     base, *stages = _promote([y0, *ks])
     return _wrap(
-        _C_engine.diffeq.rk_combine(
-            _unwrap(base), [_unwrap(s) for s in stages], list(coeffs), dt
-        )
+        _C_engine.diffeq.rk_combine(_unwrap(base), [_unwrap(s) for s in stages], list(coeffs), dt)
     )
 
 

@@ -270,9 +270,7 @@ class WorldModelConfig(GenerativeModelConfig):
             )
         # The decoder's frame is scored against the observation the encoder
         # read, in the reconstruction term of every family's bound.
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the decoded frame"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the decoded frame")
 
         for name, value in (
             ("action_dim", self.action_dim),
@@ -365,17 +363,14 @@ def check_patch_grid(
         )
     if hidden_size % num_heads != 0:
         raise ValueError(
-            f"hidden_size must be divisible by num_heads, got "
-            f"{hidden_size} and {num_heads}"
+            f"hidden_size must be divisible by num_heads, got " f"{hidden_size} and {num_heads}"
         )
 
 
 # ── fields that live in the sample's own space ───────────────────────────────
 
 
-def check_sample_space_channels(
-    in_channels: int, out_channels: int, quantity: str
-) -> None:
+def check_sample_space_channels(in_channels: int, out_channels: int, quantity: str) -> None:
     """Refuse an output width other than the input's, for an in-place field.
 
     A family whose network predicts something the objective or the sampler
@@ -405,9 +400,7 @@ def check_sample_space_channels(
         )
 
 
-def check_noise_prediction_channels(
-    in_channels: int, out_channels: int, learn_sigma: bool
-) -> None:
+def check_noise_prediction_channels(in_channels: int, out_channels: int, learn_sigma: bool) -> None:
     r"""Refuse an output width other than the noise prediction's.
 
     A noise-predicting network emits :math:`\epsilon_\theta` in the sample's

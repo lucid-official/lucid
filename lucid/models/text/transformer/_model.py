@@ -373,9 +373,7 @@ class TransformerModel(PretrainedModel):
         T = int(tgt_ids.shape[1])
         dev = tgt_ids.device.type
         past_len = (
-            past_key_value.get_seq_length()
-            if (use_cache and past_key_value is not None)
-            else 0
+            past_key_value.get_seq_length() if (use_cache and past_key_value is not None) else 0
         )
         tgt_emb = self._embed(tgt_ids, self.tgt_tok_emb, pos_offset=past_len)
         # A single new token attends over the whole cached history (no causal

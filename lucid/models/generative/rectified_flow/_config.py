@@ -295,35 +295,23 @@ class RectifiedFlowConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the velocity field"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the velocity field")
         if self.base_channels <= 0:
-            raise ValueError(
-                f"base_channels must be positive, got {self.base_channels}"
-            )
+            raise ValueError(f"base_channels must be positive, got {self.base_channels}")
         if not self.channel_mult:
             raise ValueError("channel_mult must name at least one stage")
         if any(m <= 0 for m in self.channel_mult):
-            raise ValueError(
-                f"channel_mult entries must be positive, got {self.channel_mult}"
-            )
+            raise ValueError(f"channel_mult entries must be positive, got {self.channel_mult}")
         if self.num_res_blocks <= 0:
-            raise ValueError(
-                f"num_res_blocks must be positive, got {self.num_res_blocks}"
-            )
+            raise ValueError(f"num_res_blocks must be positive, got {self.num_res_blocks}")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError(f"dropout must lie in [0, 1), got {self.dropout}")
         if self.resnet_groups <= 0:
-            raise ValueError(
-                f"resnet_groups must be positive, got {self.resnet_groups}"
-            )
+            raise ValueError(f"resnet_groups must be positive, got {self.resnet_groups}")
         if not self.fir_kernel or any(k <= 0 for k in self.fir_kernel):
             raise ValueError(f"fir_kernel taps must be positive, got {self.fir_kernel}")
         if self.fourier_scale <= 0.0:
-            raise ValueError(
-                f"fourier_scale must be positive, got {self.fourier_scale}"
-            )
+            raise ValueError(f"fourier_scale must be positive, got {self.fourier_scale}")
         if self.init_scale < 0.0:
             raise ValueError(f"init_scale must be non-negative, got {self.init_scale}")
         # ``bool`` is a subtype of ``int``, so a stray ``True`` would sail
@@ -348,13 +336,11 @@ class RectifiedFlowConfig(GenerativeModelConfig):
             raise ValueError(f"time_eps must lie in [0, 1), got {self.time_eps}")
         if self.rtol <= 0.0 or self.atol <= 0.0:
             raise ValueError(
-                f"solver tolerances must be positive, got rtol={self.rtol}, "
-                f"atol={self.atol}"
+                f"solver tolerances must be positive, got rtol={self.rtol}, " f"atol={self.atol}"
             )
         if self.exact_trace_max_dim < 1:
             raise ValueError(
-                f"exact_trace_max_dim must be at least 1, got "
-                f"{self.exact_trace_max_dim}"
+                f"exact_trace_max_dim must be at least 1, got " f"{self.exact_trace_max_dim}"
             )
 
 

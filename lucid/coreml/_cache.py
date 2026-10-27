@@ -268,9 +268,7 @@ def _fingerprint() -> str:
         "/System/Library/Frameworks/CoreML.framework/Resources/version.plist",
         "CFBundleVersion",
     )
-    system = read(
-        "/System/Library/CoreServices/SystemVersion.plist", "ProductBuildVersion"
-    )
+    system = read("/System/Library/CoreServices/SystemVersion.plist", "ProductBuildVersion")
     return f"lucid-coreml-cache/{_FORMAT};coreml={coreml};os={system}"
 
 
@@ -307,9 +305,7 @@ def _identify(package: str) -> tuple[str, int]:
     stamp = []
     for relative, full in files:
         info = os.stat(full)
-        stamp.append(
-            (relative, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino)
-        )
+        stamp.append((relative, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_ino))
     signature = tuple(stamp)
     real = os.path.realpath(package)
     with _lock:
@@ -321,9 +317,7 @@ def _identify(package: str) -> tuple[str, int]:
     size = 0
     chunk = bytearray(8 << 20)
     view = memoryview(chunk)
-    for (relative, full), (_r, length, _m, _c, _i) in zip(
-        files, signature, strict=True
-    ):
+    for (relative, full), (_r, length, _m, _c, _i) in zip(files, signature, strict=True):
         size += length
         digest.update(f"\0{relative}\0{length}\0".encode())
         with open(full, "rb") as handle:
@@ -367,10 +361,7 @@ def _require_room(package: str, size: int, *, compile_into: str | None) -> None:
     if compile_into is not None:
         scratch = tempfile.gettempdir()
         writes.append((scratch, "the compiled model"))
-        if (
-            os.stat(_existing(compile_into)).st_dev
-            != os.stat(_existing(scratch)).st_dev
-        ):
+        if os.stat(_existing(compile_into)).st_dev != os.stat(_existing(scratch)).st_dev:
             writes.append((compile_into, "the compiled model's kept copy"))
     writes.append(
         (
@@ -509,9 +500,7 @@ def _sweep(store: str, name: str, now: float) -> None:
         return
     try:
         if not os.path.exists(os.path.join(store, f"{key}{_SUFFIX}")):
-            _unlink(
-                os.path.join(store, f"{key}.json"), os.path.join(store, f"{key}.lock")
-            )
+            _unlink(os.path.join(store, f"{key}.json"), os.path.join(store, f"{key}.lock"))
     finally:
         os.close(fd)
 
@@ -601,9 +590,7 @@ def _unkept(package: str, size: int, *, compile: bool) -> Lease:
     where it is.
     """
     if size:
-        _require_room(
-            package, size, compile_into=tempfile.gettempdir() if compile else None
-        )
+        _require_room(package, size, compile_into=tempfile.gettempdir() if compile else None)
     return Lease(package, None)
 
 
@@ -644,11 +631,7 @@ def _usable(store: str) -> bool:
             os.close(fd)
             _unlink(probe)
     except OSError as exc:
-        why = (
-            "its volume does not support file locks"
-            if exc.errno in _NO_LOCKS
-            else str(exc)
-        )
+        why = "its volume does not support file locks" if exc.errno in _NO_LOCKS else str(exc)
         return _cannot_keep(store, why, stacklevel=5)
     with _lock:
         _lockable.add(store)

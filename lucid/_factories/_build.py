@@ -118,9 +118,7 @@ def _python_scalar(value: object) -> PyScalar:
         value = _promotion.as_number(item())
         if isinstance(value, _PY_SCALAR_TYPES):
             return value
-    raise TypeError(
-        f"expected a number (bool, int, float or complex), got {type(value).__name__}"
-    )
+    raise TypeError(f"expected a number (bool, int, float or complex), got {type(value).__name__}")
 
 
 def _scalar_dtype(value: object, default_float: _C_engine.Dtype) -> _C_engine.Dtype:
@@ -148,9 +146,7 @@ def _infer_dtype(flat: Sequence[object]) -> _C_engine.Dtype:
     types = {type(v) for v in flat}
     if types <= _PY_SCALAR_SET:  # the common literal: plain Python numbers
         return _promotion.literal_types_dtype(types, default_float)
-    dtypes = sorted(
-        {_scalar_dtype(v, default_float) for v in flat}, key=lambda d: d.value
-    )
+    dtypes = sorted({_scalar_dtype(v, default_float) for v in flat}, key=lambda d: d.value)
     return functools.reduce(_promotion.promote_types, dtypes)
 
 
@@ -178,9 +174,7 @@ def _coerce(value: object, dtype: _C_engine.Dtype) -> PyScalar:
     if dtype in _COMPLEX:
         return complex(v)
     if isinstance(v, complex):
-        raise TypeError(
-            f"cannot store the complex value {v!r} in a {_name(dtype)} tensor"
-        )
+        raise TypeError(f"cannot store the complex value {v!r} in a {_name(dtype)} tensor")
     if dtype == _D.Bool:
         return bool(v)
     if not _promotion.is_integer(dtype):
@@ -188,16 +182,12 @@ def _coerce(value: object, dtype: _C_engine.Dtype) -> PyScalar:
     bits = _promotion.bit_width(dtype)
     if isinstance(v, float):
         if not math.isfinite(v):
-            raise ValueError(
-                f"cannot store {v!r} in an integer ({_name(dtype)}) tensor"
-            )
+            raise ValueError(f"cannot store {v!r} in an integer ({_name(dtype)}) tensor")
         v = int(v)
     low, high = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
     iv = int(v)
     if not low <= iv <= high:
-        raise OverflowError(
-            f"{iv} does not fit in {_name(dtype)}, which holds [{low}, {high}]"
-        )
+        raise OverflowError(f"{iv} does not fit in {_name(dtype)}, which holds [{low}, {high}]")
     return iv
 
 
@@ -254,13 +244,9 @@ def _from_values(
 ) -> _C_engine.TensorImpl:
     r"""A tensor (not yet a leaf of the caller's choosing) holding ``flat``."""
     if dtype == _D.BF16:
-        f32 = _C_engine.TensorImpl.from_bytes(
-            _pack(flat, _D.F32), shape, _D.F32, device, False
-        )
+        f32 = _C_engine.TensorImpl.from_bytes(_pack(flat, _D.F32), shape, _D.F32, device, False)
         return _C_engine.astype(f32, _D.BF16)
-    return _C_engine.TensorImpl.from_bytes(
-        _pack(flat, dtype), shape, dtype, device, False
-    )
+    return _C_engine.TensorImpl.from_bytes(_pack(flat, dtype), shape, dtype, device, False)
 
 
 # Below this magnitude a double holds every integer, so the engine's
@@ -288,14 +274,8 @@ def _fill(
     if (
         not shape
         or isinstance(v, complex)
-        or (
-            isinstance(v, int) and not isinstance(v, bool) and abs(v) > _EXACT_IN_DOUBLE
-        )
+        or (isinstance(v, int) and not isinstance(v, bool) and abs(v) > _EXACT_IN_DOUBLE)
     ):
         scalar = _scalar_impl(v, dtype, device)
-        return (
-            scalar
-            if not shape
-            else _C_engine.contiguous(_C_engine.broadcast_to(scalar, shape))
-        )
+        return scalar if not shape else _C_engine.contiguous(_C_engine.broadcast_to(scalar, shape))
     return _C_engine.full(shape, float(v), dtype, device)

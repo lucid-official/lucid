@@ -19,9 +19,7 @@ def test_missing_evidence_is_not_a_pass() -> None:
     assert report["evidence"] == {"audit": None, "pretrained": None}
     assert report["counts"]["model_factories"] > 0
     assert report["contract"]["missing_evidence"] == "unverified, not unsupported"
-    assert all(
-        "supported" not in entry for entry in report["registrations"]["native_schemas"]
-    )
+    assert all("supported" not in entry for entry in report["registrations"]["native_schemas"])
 
 
 def test_scoped_failures_and_skips_survive_attachment(tmp_path: Path) -> None:

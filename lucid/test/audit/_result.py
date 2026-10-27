@@ -183,9 +183,7 @@ class Report:
         them still reports a low number.
         """
         filled = sum(1 for f in self.findings if f.status.is_coverage)
-        total = self.applicable_cells or (
-            self.surface_total * max(len(self.axes_run), 1)
-        )
+        total = self.applicable_cells or (self.surface_total * max(len(self.axes_run), 1))
         # A question that cannot be asked is not one that went unanswered.
         # 1,856 cells were being counted against the framework for asking a
         # unary op how it broadcasts, a single-spelling name how its two

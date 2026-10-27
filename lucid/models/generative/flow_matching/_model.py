@@ -322,9 +322,7 @@ class _VelocityField(nn.Module):
         time_dim = base * 4
         self._act_name = config.act_fn
 
-        self.time_mlp = nn.TimestepEmbedding(
-            in_dim=base, out_dim=time_dim, flip_sin_to_cos=False
-        )
+        self.time_mlp = nn.TimestepEmbedding(in_dim=base, out_dim=time_dim, flip_sin_to_cos=False)
         self.conv_in = nn.Conv2d(config.in_channels, base, 3, padding=1)
 
         size = config.sample_size
@@ -550,9 +548,7 @@ class _LikelihoodDynamics:
         image = x.reshape(batch, *self._image_shape)
         return self.field(image, t).reshape(batch, -1)
 
-    def __call__(
-        self, t: Tensor, state: tuple[Tensor, Tensor]
-    ) -> tuple[Tensor, Tensor]:
+    def __call__(self, t: Tensor, state: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
         x, _ = state
         self.nfe += 1
         with lucid.enable_grad():
@@ -574,9 +570,7 @@ class _LikelihoodDynamics:
         # for second derivatives it is never going to be asked for would
         # be pure cost.
         if self._trace_method == "exact":
-            return exact_divergence(
-                velocity, x, self._exact_seeds(velocity), create_graph=False
-            )
+            return exact_divergence(velocity, x, self._exact_seeds(velocity), create_graph=False)
         eps = self._eps
         if eps is None:
             eps = self.sample_noise(x)
@@ -589,9 +583,7 @@ class _LikelihoodDynamics:
         if seeds is None or seeds[0].shape != velocity.shape:
             basis = lucid.eye(self._dim, dtype=velocity.dtype, device=velocity.device)
             ones = lucid.ones_like(velocity[:, :1])
-            seeds = [
-                basis[index].reshape(1, self._dim) * ones for index in range(self._dim)
-            ]
+            seeds = [basis[index].reshape(1, self._dim) * ones for index in range(self._dim)]
             self._seeds = seeds
         return seeds
 
@@ -984,9 +976,7 @@ class FlowMatchingModel(PretrainedModel):
                     # and otherwise fall back to Euler — one evaluation per
                     # step, and what the reference's ``ODESolver.sample``
                     # defaults to.
-                    method=(
-                        self._solver if self._solver in _FIXED_STEP_SOLVERS else "euler"
-                    ),
+                    method=(self._solver if self._solver in _FIXED_STEP_SOLVERS else "euler"),
                     return_trajectory=False,
                 ),
             )
@@ -1043,9 +1033,7 @@ class FlowMatchingModel(PretrainedModel):
         flat = x.reshape(batch, -1)
         delta = lucid.zeros((batch,), dtype=flat.dtype, device=flat.device)
 
-        eps = (
-            None if self._trace_method == "exact" else self.dynamics.sample_noise(flat)
-        )
+        eps = None if self._trace_method == "exact" else self.dynamics.sample_noise(flat)
         self.dynamics.reset(eps)
 
         x0, delta0 = cast(
@@ -1053,9 +1041,7 @@ class FlowMatchingModel(PretrainedModel):
             self._integrate(self.dynamics, (flat, delta), 1.0, 0.0),
         )
         # log p_0 of a standard normal, summed over the flattened sample.
-        prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(
-            2.0 * math.pi
-        )
+        prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(2.0 * math.pi)
         return prior + delta0
 
     def bits_per_dim(self, x: Tensor) -> Tensor:
@@ -1181,9 +1167,7 @@ class FlowMatchingForImageGeneration(ImageGenerationModel):
         """
         device = resolve_generation_device(self, device)
         return GenerationOutput(
-            samples=self.flow_matching.sample(
-                n_samples, steps=steps, device=device, noise=noise
-            )
+            samples=self.flow_matching.sample(n_samples, steps=steps, device=device, noise=noise)
         )
 
 

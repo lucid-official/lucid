@@ -59,9 +59,7 @@ def test_broadcast_copies_every_element_where_numpy_does(src, dst) -> None:
 @pytest.mark.parametrize("src,dst", CASES)
 def test_the_gradient_sums_in_output_order(src, dst) -> None:
     rng = np.random.default_rng(1)
-    source = lucid.tensor(
-        rng.standard_normal(src).astype(np.float32), requires_grad=True
-    )
+    source = lucid.tensor(rng.standard_normal(src).astype(np.float32), requires_grad=True)
     upstream = rng.standard_normal(dst).astype(np.float32)
     lucid.broadcast_to(source, dst).backward(lucid.tensor(upstream))
     want = _sequential_reduce(upstream, src)
@@ -69,9 +67,7 @@ def test_the_gradient_sums_in_output_order(src, dst) -> None:
     assert np.array_equal(source.grad.numpy().reshape(src), want)
 
 
-@pytest.mark.parametrize(
-    "dtype", [lucid.float64, lucid.int32, lucid.int64, lucid.bool_]
-)
+@pytest.mark.parametrize("dtype", [lucid.float64, lucid.int32, lucid.int64, lucid.bool_])
 def test_broadcast_keeps_every_dtype(dtype) -> None:
     source = lucid.tensor([[1], [0], [1]]).to(dtype)
     got = lucid.broadcast_to(source, (2, 3, 4)).numpy()
@@ -81,16 +77,12 @@ def test_broadcast_keeps_every_dtype(dtype) -> None:
 @pytest.mark.parametrize("src,dst", [c for c in CASES if 0 not in c[1]])
 def test_a_broadcasting_binary_op_sums_its_gradient_in_output_order(src, dst) -> None:
     rng = np.random.default_rng(2)
-    small = lucid.tensor(
-        rng.standard_normal(src).astype(np.float32), requires_grad=True
-    )
+    small = lucid.tensor(rng.standard_normal(src).astype(np.float32), requires_grad=True)
     big = lucid.tensor(rng.standard_normal(dst).astype(np.float32))
     upstream = rng.standard_normal(dst).astype(np.float32)
     (small + big).backward(lucid.tensor(upstream))
     assert small.grad is not None
-    assert np.array_equal(
-        small.grad.numpy().reshape(src), _sequential_reduce(upstream, src)
-    )
+    assert np.array_equal(small.grad.numpy().reshape(src), _sequential_reduce(upstream, src))
 
 
 @pytest.mark.parametrize(
@@ -106,6 +98,4 @@ def test_a_reductions_gradient_is_the_upstream_broadcast(shape, axes, keepdim) -
     y.backward(lucid.tensor(upstream))
     kept = tuple(1 if d in axes else n for d, n in enumerate(shape))
     assert x.grad is not None
-    assert np.array_equal(
-        x.grad.numpy(), np.broadcast_to(upstream.reshape(kept), shape)
-    )
+    assert np.array_equal(x.grad.numpy(), np.broadcast_to(upstream.reshape(kept), shape))

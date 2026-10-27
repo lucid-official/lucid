@@ -22,9 +22,7 @@ _MATRIX = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]]
 
 @pytest.mark.parametrize("op", ["tril", "triu"])
 @pytest.mark.parametrize("offset", [-1, 0, 2])
-def test_tril_triu_take_diagonal(
-    ref: ModuleType, device: str, op: str, offset: int
-) -> None:
+def test_tril_triu_take_diagonal(ref: ModuleType, device: str, op: str, offset: int) -> None:
     x = lucid.tensor(_MATRIX, device=device)
     want = getattr(ref, op)(ref.tensor(_MATRIX), diagonal=offset).tolist()
     for got in (
@@ -110,11 +108,7 @@ def test_any_all_reduce_over_dim(
     x = lucid.tensor(data, dtype=_dtypes(lucid, dtype), device=device)
     r = ref.tensor(data, dtype=_dtypes(ref, dtype))
     if dim is None:
-        want = (
-            getattr(ref, op)(r, dim=None, keepdim=keepdim)
-            if keepdim
-            else getattr(ref, op)(r)
-        )
+        want = getattr(ref, op)(r, dim=None, keepdim=keepdim) if keepdim else getattr(ref, op)(r)
     else:
         want = getattr(ref, op)(r, dim=dim, keepdim=keepdim)
     calls = [

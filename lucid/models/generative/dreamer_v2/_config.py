@@ -280,22 +280,15 @@ class DreamerV2Config(WorldModelConfig):
         if not 0.0 <= self.kl_balance <= 1.0:
             raise ValueError(f"kl_balance must be in [0, 1], got {self.kl_balance}")
         if not 0.0 <= self.actor_grad_mix <= 1.0:
-            raise ValueError(
-                f"actor_grad_mix must be in [0, 1], got {self.actor_grad_mix}"
-            )
+            raise ValueError(f"actor_grad_mix must be in [0, 1], got {self.actor_grad_mix}")
         if not 0.0 < self.slow_target_fraction <= 1.0:
             raise ValueError(
-                f"slow_target_fraction must be in (0, 1], got "
-                f"{self.slow_target_fraction}"
+                f"slow_target_fraction must be in (0, 1], got " f"{self.slow_target_fraction}"
             )
         if self.actor_entropy < 0.0:
-            raise ValueError(
-                f"actor_entropy must be non-negative, got {self.actor_entropy}"
-            )
+            raise ValueError(f"actor_entropy must be non-negative, got {self.actor_entropy}")
         if self.pcont_scale < 0.0:
-            raise ValueError(
-                f"pcont_scale must be non-negative, got {self.pcont_scale}"
-            )
+            raise ValueError(f"pcont_scale must be non-negative, got {self.pcont_scale}")
 
     @property
     def resolved_actor_grad(self) -> ActorGradient:

@@ -46,9 +46,7 @@ def test_a_missing_mlx_runtime_file_is_refused(tmp_path: Path, missing: str) -> 
 
 @pytest.mark.parametrize("foreign", check_wheel.FOREIGN)
 def test_a_python_mlx_library_name_is_refused(tmp_path: Path, foreign: str) -> None:
-    problems, _ = check_wheel.check(
-        _wheel(tmp_path, (*_COMPLETE, f"lucid/_C/{foreign}")), _FLOOR
-    )
+    problems, _ = check_wheel.check(_wheel(tmp_path, (*_COMPLETE, f"lucid/_C/{foreign}")), _FLOOR)
     assert any(foreign in p for p in problems), problems
 
 

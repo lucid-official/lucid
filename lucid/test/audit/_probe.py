@@ -236,17 +236,14 @@ def contract(out: Any, weights: np.ndarray) -> Any:
         # independent covectors instead of implicitly discarding one of them.
         imaginary_weights = rng(SEED_A + 1).standard_normal(n)
         return (
-            lucid.real(flat) * as_f64(weights[:n])
-            + lucid.imag(flat) * as_f64(imaginary_weights)
+            lucid.real(flat) * as_f64(weights[:n]) + lucid.imag(flat) * as_f64(imaginary_weights)
         ).sum()
     return (flat * as_f64(weights[:n])).sum()
 
 
 def relative(a: np.ndarray, b: np.ndarray) -> float:
     """Scale-free disagreement, safe on zeros."""
-    scale = max(
-        float(np.abs(a).max(initial=0.0)), float(np.abs(b).max(initial=0.0)), 1e-12
-    )
+    scale = max(float(np.abs(a).max(initial=0.0)), float(np.abs(b).max(initial=0.0)), 1e-12)
     return float(np.abs(a - b).max(initial=0.0) / scale)
 
 
@@ -278,9 +275,9 @@ def finite_difference(
         plus, minus = flat.copy(), flat.copy()
         plus[i] += step
         minus[i] -= step
-        out[i] = (
-            evaluate(plus.reshape(base.shape)) - evaluate(minus.reshape(base.shape))
-        ) / (2.0 * step)
+        out[i] = (evaluate(plus.reshape(base.shape)) - evaluate(minus.reshape(base.shape))) / (
+            2.0 * step
+        )
     return out
 
 
@@ -383,9 +380,7 @@ def dtype_args(call: Any, name: str, build: Callable[..., Any]) -> list[Any]:
     args: list[Any] = []
     for index, value in enumerate(call.args):
         if index == call.primary:
-            args.append(
-                build(call.base if in_domain else np.abs(call.base) + 1.0, True)
-            )
+            args.append(build(call.base if in_domain else np.abs(call.base) + 1.0, True))
         else:
             args.append(_rebuild(value, build))
     return args

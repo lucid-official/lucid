@@ -64,9 +64,7 @@ def _cases():
                 continue
             for op in _OPS:
                 for row in _ROWS:
-                    yield pytest.param(
-                        device, dtype, op, row, id=f"{device}-{dtype}-{op}-{row}"
-                    )
+                    yield pytest.param(device, dtype, op, row, id=f"{device}-{dtype}-{op}-{row}")
 
 
 def _as_f64(t):

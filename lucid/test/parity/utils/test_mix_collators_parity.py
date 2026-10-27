@@ -146,9 +146,7 @@ class TestMixupAlgorithmParity:
             assert float(y_np[i].max()) == pytest.approx(1.0, abs=1e-6)
             assert float(y_np[i].sum()) == pytest.approx(1.0, abs=1e-6)
 
-    def test_soft_label_convex_combination(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_soft_label_convex_combination(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """For a fixed λ, every soft label row is on the convex hull of
         two one-hot rows: each row has at most 2 nonzero entries summing
         to exactly 1.  Reference framework MixUp produces the same shape
@@ -176,9 +174,7 @@ class TestMixupAlgorithmParity:
                     or abs(float(v) - 1.0) < 1e-5
                 )
 
-    def test_pixel_values_bounded_by_inputs(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pixel_values_bounded_by_inputs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Convex combination ⇒ every output pixel lies in
         ``[min(images), max(images)]`` because each output pixel is a
         convex combination of two input pixels.  Pins the mixing math
@@ -254,9 +250,7 @@ class TestCutMixGeometryParity:
                 assert lam_eff + comp == pytest.approx(1.0, abs=1e-5)
                 assert 0.0 <= comp <= lam_eff <= 1.0
 
-    def test_pixel_values_from_one_of_two_images(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pixel_values_from_one_of_two_images(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Every output pixel comes from either the original batch or
         the permuted batch — no blended pixel values exist (the keep
         mask is strictly 0 or 1).  Pins CutMix's hard-paste semantics
@@ -370,8 +364,7 @@ class TestLambdaDistributionParity:
         # Variance tolerance is looser — variance estimator is itself
         # noisier than the mean. Use 30% relative + 0.01 absolute floor.
         assert abs(sample_var - true_var) < max(0.3 * true_var, 0.01), (
-            f"sample var {sample_var:.4f} vs Beta({alpha},{alpha}) var "
-            f"{true_var:.4f}"
+            f"sample var {sample_var:.4f} vs Beta({alpha},{alpha}) var " f"{true_var:.4f}"
         )
 
     def test_lambda_alpha_le_zero_is_one(self) -> None:
@@ -418,9 +411,7 @@ class TestEndToEndShapeParity:
         assert tuple(l_y.shape) == tuple(r_y.shape) == (b, num_classes)
         # Both produce sum-to-1 soft targets.
         np.testing.assert_allclose(l_y.numpy().sum(axis=1), np.ones(b), atol=1e-5)
-        np.testing.assert_allclose(
-            r_y.detach().cpu().numpy().sum(axis=1), np.ones(b), atol=1e-5
-        )
+        np.testing.assert_allclose(r_y.detach().cpu().numpy().sum(axis=1), np.ones(b), atol=1e-5)
 
     def test_cutmix_output_shapes(self, ref: Any) -> None:
         b, c, h, w, num_classes = 4, 3, 16, 16, 10
@@ -445,6 +436,4 @@ class TestEndToEndShapeParity:
         assert tuple(l_y.shape) == tuple(r_y.shape) == (b, num_classes)
         # Both produce sum-to-1 soft targets.
         np.testing.assert_allclose(l_y.numpy().sum(axis=1), np.ones(b), atol=1e-5)
-        np.testing.assert_allclose(
-            r_y.detach().cpu().numpy().sum(axis=1), np.ones(b), atol=1e-5
-        )
+        np.testing.assert_allclose(r_y.detach().cpu().numpy().sum(axis=1), np.ones(b), atol=1e-5)

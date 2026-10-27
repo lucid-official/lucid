@@ -157,23 +157,16 @@ class ScoreSDEConfig(GenerativeModelConfig):
         super().__post_init__()
         check_sample_space_channels(self.in_channels, self.out_channels, "the score")
         if self.sde_type not in ("vp", "ve", "subvp"):
-            raise ValueError(
-                f"sde_type must be 'vp', 've' or 'subvp', got {self.sde_type!r}"
-            )
+            raise ValueError(f"sde_type must be 'vp', 've' or 'subvp', got {self.sde_type!r}")
         if not 0.0 < self.sigma_min < self.sigma_max:
             raise ValueError(
-                f"need 0 < sigma_min < sigma_max, got {self.sigma_min}, "
-                f"{self.sigma_max}"
+                f"need 0 < sigma_min < sigma_max, got {self.sigma_min}, " f"{self.sigma_max}"
             )
         if not 0.0 < self.beta_min < self.beta_max:
-            raise ValueError(
-                f"need 0 < beta_min < beta_max, got {self.beta_min}, {self.beta_max}"
-            )
+            raise ValueError(f"need 0 < beta_min < beta_max, got {self.beta_min}, {self.beta_max}")
         if self.num_scales < 1:
             raise ValueError(f"num_scales must be at least 1, got {self.num_scales}")
         if self.snr <= 0.0:
             raise ValueError(f"snr must be positive, got {self.snr}")
         if self.corrector_steps < 0:
-            raise ValueError(
-                f"corrector_steps must be non-negative, got {self.corrector_steps}"
-            )
+            raise ValueError(f"corrector_steps must be non-negative, got {self.corrector_steps}")

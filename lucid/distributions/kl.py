@@ -132,9 +132,7 @@ def register_kl[F: Callable[..., Tensor]](p_cls: type, q_cls: type) -> Callable[
     for cls, name in ((p_cls, "p_cls"), (q_cls, "q_cls")):
         chk: object = cls
         if not (isinstance(chk, type) and issubclass(chk, Distribution)):
-            raise TypeError(
-                f"Expected {name} to be a Distribution subclass but got {cls}"
-            )
+            raise TypeError(f"Expected {name} to be a Distribution subclass but got {cls}")
 
     def _decorator(fn: F) -> F:
         """Insert ``fn`` into the KL registry under ``(p_cls, q_cls)``."""
@@ -245,11 +243,7 @@ def _kl_normal_normal(p: Normal, q: Normal) -> Tensor:
     """
     var_p = p.variance
     var_q = q.variance
-    return (
-        (q.scale.log() - p.scale.log())
-        + (var_p + (p.loc - q.loc) ** 2) / (2.0 * var_q)
-        - 0.5
-    )
+    return (q.scale.log() - p.scale.log()) + (var_p + (p.loc - q.loc) ** 2) / (2.0 * var_q) - 0.5
 
 
 def _bernoulli_outcomes(d: Bernoulli) -> tuple[Tensor, Tensor]:
@@ -289,9 +283,7 @@ def _kl_bernoulli_bernoulli(p: Bernoulli, q: Bernoulli) -> Tensor:
     """
     p1, p0 = _bernoulli_outcomes(p)
     q1, q0 = _bernoulli_outcomes(q)
-    return (lucid.xlogy(p1, p1) - lucid.xlogy(p1, q1)) + (
-        lucid.xlogy(p0, p0) - lucid.xlogy(p0, q0)
-    )
+    return (lucid.xlogy(p1, p1) - lucid.xlogy(p1, q1)) + (lucid.xlogy(p0, p0) - lucid.xlogy(p0, q0))
 
 
 @register_kl(Categorical, Categorical)
@@ -466,10 +458,7 @@ def _kl_laplace_laplace(p: Laplace, q: Laplace) -> Tensor:
     scale_ratio: Tensor = p.scale / q.scale
     loc_diff: Tensor = (p.loc - q.loc).abs()
     return (
-        -scale_ratio.log()
-        + loc_diff / q.scale
-        + scale_ratio * (-(loc_diff / p.scale)).exp()
-        - 1.0
+        -scale_ratio.log() + loc_diff / q.scale + scale_ratio * (-(loc_diff / p.scale)).exp() - 1.0
     )
 
 

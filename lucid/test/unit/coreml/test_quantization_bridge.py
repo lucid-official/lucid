@@ -131,9 +131,7 @@ class TestAQuantizationAwareModelExports:
             ("int8", cml.WeightPrecision.INT8),
         ],
     )
-    def test_the_package_computes_what_the_model_does(
-        self, name, weights, tmp_path
-    ) -> None:
+    def test_the_package_computes_what_the_model_does(self, name, weights, tmp_path) -> None:
         """Exactly, and int8 is free here — which is the point of QAT.
 
         The weights were trained onto the grid, so storing them on it
@@ -291,9 +289,7 @@ class TestDroppingTheActivationSimulation:
             activations=cml.Activations.DROPPED,
         )
         try:
-            assert (
-                dropped.compute_plan().total_compute < kept.compute_plan().total_compute
-            )
+            assert dropped.compute_plan().total_compute < kept.compute_plan().total_compute
         finally:
             kept.close()
             dropped.close()
@@ -312,9 +308,7 @@ class TestDroppingTheActivationSimulation:
 
         x = lucid.randn(1, 3, 16, 16)
         model = _prepared(x)
-        weights = [
-            m for n, m in model.named_modules() if n.endswith("weight_fake_quant")
-        ]
+        weights = [m for n, m in model.named_modules() if n.endswith("weight_fake_quant")]
         activations = [
             m
             for n, m in model.named_modules()
@@ -361,9 +355,7 @@ class TestDroppingTheActivationSimulation:
             ("simulated", cml.Activations.SIMULATED),
             ("dropped", cml.Activations.DROPPED),
         ):
-            exported = cml.export(
-                plain, x, f"{tmp_path}/{name}.mlpackage", activations=setting
-            )
+            exported = cml.export(plain, x, f"{tmp_path}/{name}.mlpackage", activations=setting)
             try:
                 both.append(exported.verify(plain, x, relative=True))
             finally:

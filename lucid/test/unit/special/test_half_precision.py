@@ -98,9 +98,7 @@ def _args(name: str, make: Callable[[list[float]], Any]) -> list[Any]:
     ],
 )
 @pytest.mark.parametrize("name,dtype", _cases())
-def test_sixteen_bit_answers_match(
-    name: str, dtype: str, device: str, ref: Any
-) -> None:
+def test_sixteen_bit_answers_match(name: str, dtype: str, device: str, ref: Any) -> None:
     ref_fn = getattr(ref.special, name, None)
     if ref_fn is None:
         pytest.skip(f"the reference has no special.{name}")
@@ -123,9 +121,6 @@ def test_sixteen_bit_answers_match(
     wrong = [
         (o, t)
         for o, t in zip(ours, theirs, strict=True)
-        if not (
-            (math.isnan(o) and math.isnan(t))
-            or math.isclose(o, t, rel_tol=rtol, abs_tol=atol)
-        )
+        if not ((math.isnan(o) and math.isnan(t)) or math.isclose(o, t, rel_tol=rtol, abs_tol=atol))
     ]
     assert not wrong, wrong

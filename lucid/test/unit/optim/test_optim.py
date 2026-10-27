@@ -203,9 +203,7 @@ class TestOptimizerGpuMemory:
             cwd=str(pathlib.Path(__file__).resolve().parents[4]),
         )
         assert completed.returncode == 0, completed.stderr[-2000:]
-        line = next(
-            ln for ln in completed.stdout.splitlines() if ln.startswith("DRIFT ")
-        )
+        line = next(ln for ln in completed.stdout.splitlines() if ln.startswith("DRIFT "))
         return int(line.split()[1])
 
     def test_no_active_memory_leak(self) -> None:

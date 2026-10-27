@@ -68,9 +68,7 @@ def is_available() -> bool:
     return hasattr(_C_engine, "quantized")
 
 
-def quantize(
-    w: Tensor, group_size: int = 64, bits: int = 8
-) -> tuple[Tensor, Tensor, Tensor]:
+def quantize(w: Tensor, group_size: int = 64, bits: int = 8) -> tuple[Tensor, Tensor, Tensor]:
     r"""Group-wise quantize a weight to MLX's packed int4/int8 form (Metal only).
 
     The encode half of the genuine low-precision path. Whereas the sidecar

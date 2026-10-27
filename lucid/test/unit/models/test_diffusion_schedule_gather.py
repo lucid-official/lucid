@@ -57,10 +57,7 @@ SD_TINY = {
 
 def _old_extract(arr: Tensor, timesteps: Tensor, shape: tuple[int, ...]) -> Tensor:
     """The lookup ``extract_into_tensor`` made before LCD-372."""
-    vals = [
-        float(arr[int(timesteps[b].item())].item())
-        for b in range(int(timesteps.shape[0]))
-    ]
+    vals = [float(arr[int(timesteps[b].item())].item()) for b in range(int(timesteps.shape[0]))]
     out = lucid.tensor(vals, device=arr.device.type)
     while out.ndim < len(shape):
         out = out.unsqueeze(-1)
@@ -218,9 +215,7 @@ def _ddim_scheduler() -> DDIMScheduler:
 
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-@pytest.mark.parametrize(
-    "build", [_ddpm_scheduler, _ddim_scheduler], ids=["ddpm", "ddim"]
-)
+@pytest.mark.parametrize("build", [_ddpm_scheduler, _ddim_scheduler], ids=["ddpm", "ddim"])
 def test_add_noise_traces_the_same_cold_or_warm(
     build: Callable[[], DDPMScheduler | DDIMScheduler],
 ) -> None:

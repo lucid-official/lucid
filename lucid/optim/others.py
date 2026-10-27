@@ -683,9 +683,7 @@ class NAdam(Optimizer):
             {k: values[k] for k in ("lr", "beta1", "beta2", "eps", "weight_decay")}
         )
         mom_decay = values["momentum_decay"]
-        if isinstance(mom_decay, bool) or not isinstance(
-            mom_decay, (SupportsFloat, SupportsIndex)
-        ):
+        if isinstance(mom_decay, bool) or not isinstance(mom_decay, (SupportsFloat, SupportsIndex)):
             raise TypeError(
                 f"NAdam: momentum_decay must be a number, got {type(mom_decay).__name__}"
             )
@@ -1006,9 +1004,7 @@ def _step_count(value: object) -> int:
         ``value`` is not an integer (a Python or a 0-d host-array integer).
     """
     if not isinstance(value, SupportsIndex):
-        raise TypeError(
-            f"SparseAdam: 'step' must be an integer, got {type(value).__name__}"
-        )
+        raise TypeError(f"SparseAdam: 'step' must be an integer, got {type(value).__name__}")
     return operator.index(value)
 
 
@@ -1151,9 +1147,7 @@ class SparseAdam(Optimizer):
         maximize: bool = False,
     ) -> None:
         """Initialise the SparseAdam.  See the class docstring for parameter semantics."""
-        defaults: dict[str, object] = dict(
-            lr=lr, betas=betas, eps=eps, maximize=maximize
-        )
+        defaults: dict[str, object] = dict(lr=lr, betas=betas, eps=eps, maximize=maximize)
         super().__init__(params, defaults)
 
     @override

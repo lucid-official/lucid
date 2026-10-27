@@ -52,10 +52,7 @@ class FasterRCNNResNet50FPNWeights(WeightsEnum):
     """
 
     COCO_V1 = WeightEntry(
-        url=(
-            f"{HUB_BASE}/faster-rcnn-resnet-50-fpn/resolve/main/"
-            "COCO_V1/model.safetensors"
-        ),
+        url=(f"{HUB_BASE}/faster-rcnn-resnet-50-fpn/resolve/main/" "COCO_V1/model.safetensors"),
         sha256="cc8d2c79125d73432bee0eadd049f2871368a90a7bb0b0c5cba63af3c29f3205",
         num_classes=91,
         transforms=_PRESET,

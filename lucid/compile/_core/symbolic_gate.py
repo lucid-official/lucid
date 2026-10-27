@@ -44,9 +44,7 @@ _BROADCAST_OPS: frozenset[str] = frozenset({"broadcast_to", "expand", "repeat", 
 # Concatenate / stack: unsafe only when the join axis IS the batch axis (dim 0).
 _JOIN_OPS: frozenset[str] = frozenset({"concatenate", "concat", "cat", "stack"})
 # Factory ops: unsafe only when the produced shape's leading dim is the batch.
-_FACTORY_OPS: frozenset[str] = frozenset(
-    {"zeros", "ones", "full", "arange", "eye", "linspace"}
-)
+_FACTORY_OPS: frozenset[str] = frozenset({"zeros", "ones", "full", "arange", "eye", "linspace"})
 
 # Ops whose answer depends on the length of the axis they act along, so the
 # batch axis may not be that axis.  (``embedding`` is its own op, and a table

@@ -312,16 +312,12 @@ class TVMConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        if isinstance(self.sample_size, tuple) and (
-            self.sample_size[0] != self.sample_size[1]
-        ):
+        if isinstance(self.sample_size, tuple) and (self.sample_size[0] != self.sample_size[1]):
             raise ValueError(
                 f"sample_size must be square — the positional table is built "
                 f"over a square grid, got {self.sample_size}"
             )
-        check_patch_grid(
-            self.sample_size, self.patch_size, self.hidden_size, self.num_heads
-        )
+        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
         if self.depth <= 0:
             raise ValueError(f"depth must be positive, got {self.depth}")
         self._check_guidance()
@@ -332,9 +328,7 @@ class TVMConfig(GenerativeModelConfig):
     def _check_guidance(self) -> None:
         """Class dropout is a probability; ``w`` and its range are positive."""
         if not 0.0 <= self.class_dropout <= 1.0:
-            raise ValueError(
-                f"class_dropout is a probability, got {self.class_dropout}"
-            )
+            raise ValueError(f"class_dropout is a probability, got {self.class_dropout}")
         if self.guidance_scale <= 0.0:
             raise ValueError(
                 f"guidance_scale must be positive — the network is conditioned "
@@ -354,9 +348,7 @@ class TVMConfig(GenerativeModelConfig):
             if getattr(self, name) <= 0.0:
                 raise ValueError(f"{name} must be positive, got {getattr(self, name)}")
         if not 0.0 <= self.ratio_t_equals_s <= 1.0:
-            raise ValueError(
-                f"ratio_t_equals_s is a probability, got {self.ratio_t_equals_s}"
-            )
+            raise ValueError(f"ratio_t_equals_s is a probability, got {self.ratio_t_equals_s}")
 
     def _check_latent(self) -> None:
         """Output channels match the latent's; each channel's whitening is valid."""
@@ -378,6 +370,4 @@ class TVMConfig(GenerativeModelConfig):
                 f"leaves its initialisation, got {self.target_ema_decay}"
             )
         if self.eval_ema_decay is not None and not 0.0 <= self.eval_ema_decay < 1.0:
-            raise ValueError(
-                f"eval_ema_decay must be in [0, 1) or None, got {self.eval_ema_decay}"
-            )
+            raise ValueError(f"eval_ema_decay must be in [0, 1) or None, got {self.eval_ema_decay}")

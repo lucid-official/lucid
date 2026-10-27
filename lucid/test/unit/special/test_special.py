@@ -217,9 +217,7 @@ class TestPolygamma:
         a reference sharing the same derivation would not.
         """
         x = lucid.tensor([0.6, 1.3, 4.0])
-        lhs = (
-            lucid.special.polygamma(n, x + 1.0) - lucid.special.polygamma(n, x)
-        ).numpy()
+        lhs = (lucid.special.polygamma(n, x + 1.0) - lucid.special.polygamma(n, x)).numpy()
         rhs = ((-1.0) ** n * math.factorial(n) / (x ** (n + 1))).numpy()
         np.testing.assert_allclose(lhs, rhs, rtol=4e-6)
 
@@ -241,10 +239,7 @@ class TestPolygamma:
 class TestSphericalBesselJ0:
     def test_at_zero(self) -> None:
         # j₀(0) = 1 by continuous extension.
-        assert (
-            abs(lucid.special.spherical_bessel_j0(lucid.tensor([0.0])).item() - 1.0)
-            < 1e-5
-        )
+        assert abs(lucid.special.spherical_bessel_j0(lucid.tensor([0.0])).item() - 1.0) < 1e-5
 
     def test_at_pi(self) -> None:
         # sin(π)/π = 0.
@@ -301,22 +296,14 @@ class TestOrthogonalPolynomials:
     def test_hermite_h_known(self) -> None:
         # H_2(x)=4x²-2; H_3(x)=8x³-12x.  At x=1 → 2 and -4.
         x = lucid.tensor([1.0])
-        np.testing.assert_allclose(
-            lucid.special.hermite_polynomial_h(x, 2).numpy(), [2.0]
-        )
-        np.testing.assert_allclose(
-            lucid.special.hermite_polynomial_h(x, 3).numpy(), [-4.0]
-        )
+        np.testing.assert_allclose(lucid.special.hermite_polynomial_h(x, 2).numpy(), [2.0])
+        np.testing.assert_allclose(lucid.special.hermite_polynomial_h(x, 3).numpy(), [-4.0])
 
     def test_hermite_he_known(self) -> None:
         # He_2=x²-1, He_3=x³-3x at x=2.
         x = lucid.tensor([2.0])
-        np.testing.assert_allclose(
-            lucid.special.hermite_polynomial_he(x, 2).numpy(), [3.0]
-        )
-        np.testing.assert_allclose(
-            lucid.special.hermite_polynomial_he(x, 3).numpy(), [2.0]
-        )
+        np.testing.assert_allclose(lucid.special.hermite_polynomial_he(x, 2).numpy(), [3.0])
+        np.testing.assert_allclose(lucid.special.hermite_polynomial_he(x, 3).numpy(), [2.0])
 
     def test_legendre_p_known(self) -> None:
         # P_2(x) = (3x²-1)/2; at 0.5 → -0.125.
@@ -350,9 +337,7 @@ class TestBessel:
     def test_j1_known(self) -> None:
         x = lucid.tensor([0.0, 1.0, -1.0, 5.0])
         out = lucid.special.bessel_j1(x).numpy()
-        np.testing.assert_allclose(
-            out, [0.0, 0.4400506, -0.4400506, -0.3275791], atol=1e-4
-        )
+        np.testing.assert_allclose(out, [0.0, 0.4400506, -0.4400506, -0.3275791], atol=1e-4)
 
     def test_y0_y1_known(self) -> None:
         x = lucid.tensor([1.0, 5.0, 10.0])

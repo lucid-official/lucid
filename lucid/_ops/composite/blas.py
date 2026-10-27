@@ -149,9 +149,7 @@ def addbmm(
     >>> lucid.addbmm(M, b1, b2)
     tensor([[12., 12.], [12., 12.]])
     """
-    return _scaled_add(
-        input, beta, lucid.sum(lucid.bmm(batch1, batch2), 0), alpha, op="addbmm"
-    )
+    return _scaled_add(input, beta, lucid.sum(lucid.bmm(batch1, batch2), 0), alpha, op="addbmm")
 
 
 @_amp_op("baddbmm")
@@ -330,14 +328,11 @@ def addr(
 
 def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
     return a.device == b.device or (
-        (a.ndim == 0 and a.device.type == "cpu")
-        or (b.ndim == 0 and b.device.type == "cpu")
+        (a.ndim == 0 and a.device.type == "cpu") or (b.ndim == 0 and b.device.type == "cpu")
     )
 
 
-def _check_ternary_devices(
-    op: str, input: Tensor, tensor1: Tensor, tensor2: Tensor
-) -> None:
+def _check_ternary_devices(op: str, input: Tensor, tensor1: Tensor, tensor2: Tensor) -> None:
     for name, peer in (("tensor1", tensor1), ("tensor2", tensor2)):
         if not _can_mix_devices(input, peer):
             raise _C_engine.DeviceMismatch(
@@ -448,9 +443,7 @@ def addcmul(
     tensor([5., 7., 9.])
     """
     _check_ternary_devices("addcmul", input, tensor1, tensor2)
-    with _autocast_entry(
-        "addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)
-    ) as (
+    with _autocast_entry("addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,
         t2,
@@ -518,9 +511,7 @@ def addcdiv(
         raise RuntimeError(
             "Integer division with addcdiv is no longer supported; use floor_divide instead."
         )
-    with _autocast_entry(
-        "addcdiv", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)
-    ) as (
+    with _autocast_entry("addcdiv", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,
         t2,

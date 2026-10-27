@@ -19,9 +19,7 @@ from tools.quality_gate.collectors.deadcode import VultureCollector
 from tools.quality_gate.core import Scope, scope_of
 
 
-def _collect_single_file(
-    tmp_path: Path, source: str
-) -> dict[tuple[str, str, str], int]:
+def _collect_single_file(tmp_path: Path, source: str) -> dict[tuple[str, str, str], int]:
     pkg = tmp_path / "lucid"
     pkg.mkdir(parents=True, exist_ok=True)
     target = pkg / "sample.py"

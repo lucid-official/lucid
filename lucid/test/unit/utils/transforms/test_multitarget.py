@@ -16,9 +16,7 @@ def _sample(h: int = 100, w: int = 120) -> dict[str, object]:
     return {
         "image": T.Image(lucid.rand(3, h, w)),
         "mask": T.Mask(lucid.rand(1, h, w)),
-        "boxes": T.BoundingBoxes(
-            lucid.tensor([[10.0, 20.0, 60.0, 80.0]]), "xyxy", (h, w)
-        ),
+        "boxes": T.BoundingBoxes(lucid.tensor([[10.0, 20.0, 60.0, 80.0]]), "xyxy", (h, w)),
         "kp": T.Keypoints(lucid.tensor([[10.0, 20.0], [60.0, 80.0]]), (h, w)),
     }
 
@@ -41,9 +39,7 @@ class TestDataTypes:
             T.BoundingBoxes(lucid.tensor([[0.0, 0.0, 1.0, 1.0]]), "nope", (10, 10))
 
     def test_xywh_roundtrip(self) -> None:
-        b = T.BoundingBoxes(
-            lucid.tensor([[10.0, 20.0, 30.0, 40.0]]), "xywh", (100, 100)
-        )
+        b = T.BoundingBoxes(lucid.tensor([[10.0, 20.0, 30.0, 40.0]]), "xywh", (100, 100))
         assert to_xyxy(b).numpy().reshape(-1).tolist() == [10.0, 20.0, 40.0, 60.0]
 
 
@@ -106,11 +102,7 @@ class TestPlainAndCompose:
     def test_no_image_raises(self) -> None:
         with pytest.raises(ValueError, match="no image"):
             T.Resize(5, 5)(
-                {
-                    "boxes": T.BoundingBoxes(
-                        lucid.tensor([[0.0, 0.0, 1.0, 1.0]]), "xyxy", (10, 10)
-                    )
-                }
+                {"boxes": T.BoundingBoxes(lucid.tensor([[0.0, 0.0, 1.0, 1.0]]), "xyxy", (10, 10))}
             )
 
 

@@ -6,14 +6,15 @@ from typing import ClassVar, override
 from lucid._tensor.tensor import Tensor
 from lucid._types import Reduction, ReductionKL
 from lucid.nn.functional._loss_checks import _Loss, _default_distance, _legacy_reduction
-from lucid.nn.functional.loss import (
-    _check_beta, _check_delta, _check_label_smoothing, _check_multi_margin, _check_reduction,
-    _check_triplet_margin, binary_cross_entropy, binary_cross_entropy_with_logits,
-    cosine_embedding_loss, cross_entropy, ctc_loss, gaussian_nll_loss, hinge_embedding_loss,
-    huber_loss, kl_div, l1_loss, margin_ranking_loss, mse_loss, multi_margin_loss,
-    multilabel_margin_loss, multilabel_soft_margin_loss, nll_loss, poisson_nll_loss,
-    smooth_l1_loss, soft_margin_loss, triplet_margin_loss, triplet_margin_with_distance_loss,
-)
+from lucid.nn.functional.loss import _check_beta, _check_delta, _check_label_smoothing
+from lucid.nn.functional.loss import _check_multi_margin, _check_reduction, _check_triplet_margin
+from lucid.nn.functional.loss import binary_cross_entropy, binary_cross_entropy_with_logits
+from lucid.nn.functional.loss import cosine_embedding_loss, cross_entropy, ctc_loss, huber_loss
+from lucid.nn.functional.loss import gaussian_nll_loss, hinge_embedding_loss, kl_div, l1_loss
+from lucid.nn.functional.loss import margin_ranking_loss, mse_loss, multi_margin_loss, nll_loss
+from lucid.nn.functional.loss import multilabel_margin_loss, multilabel_soft_margin_loss
+from lucid.nn.functional.loss import poisson_nll_loss, smooth_l1_loss, soft_margin_loss
+from lucid.nn.functional.loss import triplet_margin_loss, triplet_margin_with_distance_loss
 from lucid.nn.module import Module
 
 type _Flag = bool | None
@@ -207,8 +208,11 @@ class _WeightedLoss(_Loss):
     weight: Tensor | None
 
     def __init__(
-        self, weight: Tensor | None = None, size_average: bool | None = None,
-        reduce: bool | None = None, reduction: Reduction = "mean",
+        self,
+        weight: Tensor | None = None,
+        size_average: bool | None = None,
+        reduce: bool | None = None,
+        reduction: Reduction = "mean",
     ) -> None:
         """Initialise the weighted loss module."""
         super().__init__(size_average, reduce, reduction)
@@ -216,14 +220,18 @@ class _WeightedLoss(_Loss):
 
     @override
     def _load_from_state_dict(
-        self, state_dict: dict[str, Tensor], prefix: str,
-        local_metadata: _Meta, strict: bool,
-        missing_keys: list[str], unexpected_keys: list[str], error_msgs: list[str],
+        self,
+        state_dict: dict[str, Tensor],
+        prefix: str,
+        local_metadata: _Meta,
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
     ) -> None:
         """Load as usual, excusing the weight keys a version-1 checkpoint lacks."""
         super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs,
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
         version = local_metadata.get("version") if local_metadata else None
         if isinstance(version, int) and version >= 2:
@@ -595,9 +603,7 @@ class BCELoss(_WeightedLoss):
         Tensor
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
-        return binary_cross_entropy(
-            input, target, weight=self.weight, reduction=self.reduction
-        )
+        return binary_cross_entropy(input, target, weight=self.weight, reduction=self.reduction)
 
 
 class BCEWithLogitsLoss(_WeightedLoss):
@@ -722,11 +728,7 @@ class BCEWithLogitsLoss(_WeightedLoss):
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
         return binary_cross_entropy_with_logits(
-            input,
-            target,
-            weight=self.weight,
-            pos_weight=self.pos_weight,
-            reduction=self.reduction,
+            input, target, weight=self.weight, pos_weight=self.pos_weight, reduction=self.reduction
         )
 
 
@@ -1050,9 +1052,7 @@ class KLDivLoss(Module):
         Tensor
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
-        return kl_div(
-            input, target, reduction=self.reduction, log_target=self.log_target
-        )
+        return kl_div(input, target, reduction=self.reduction, log_target=self.log_target)
 
     @override
     def extra_repr(self) -> str:
@@ -1152,8 +1152,13 @@ class TripletMarginLoss(_Loss):
     """
 
     def __init__(
-        self, margin: float = 1.0, p: float = 2.0, eps: float = 1e-6, swap: bool = False,
-        size_average: _Flag = None, reduce: _Flag = None,
+        self,
+        margin: float = 1.0,
+        p: float = 2.0,
+        eps: float = 1e-6,
+        swap: bool = False,
+        size_average: _Flag = None,
+        reduce: _Flag = None,
         reduction: Reduction = "mean",
     ) -> None:
         """Initialise the TripletMarginLoss module. See the class docstring for parameter semantics."""
@@ -1380,8 +1385,11 @@ class MarginRankingLoss(_Loss):
     """
 
     def __init__(
-        self, margin: float = 0.0, size_average: _Flag = None,
-        reduce: _Flag = None, reduction: Reduction = "mean",
+        self,
+        margin: float = 0.0,
+        size_average: _Flag = None,
+        reduce: _Flag = None,
+        reduction: Reduction = "mean",
     ) -> None:
         """Initialise the MarginRankingLoss module. See the class docstring for parameter semantics."""
         self.margin = margin
@@ -1513,9 +1521,7 @@ class HingeEmbeddingLoss(_Loss):
         Tensor
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
-        return hinge_embedding_loss(
-            input, target, self.margin, reduction=self.reduction
-        )
+        return hinge_embedding_loss(input, target, self.margin, reduction=self.reduction)
 
     @override
     def extra_repr(self) -> str:
@@ -1641,12 +1647,7 @@ class PoissonNLLLoss(_Loss):
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
         return poisson_nll_loss(
-            log_input,
-            target,
-            self.log_input,
-            self.full,
-            eps=self.eps,
-            reduction=self.reduction,
+            log_input, target, self.log_input, self.full, eps=self.eps, reduction=self.reduction
         )
 
     @override
@@ -1764,9 +1765,7 @@ class GaussianNLLLoss(_Loss):
         Tensor
             Scalar loss (or unreduced tensor depending on ``reduction``).
         """
-        return gaussian_nll_loss(
-            input, target, var, self.full, self.eps, self.reduction
-        )
+        return gaussian_nll_loss(input, target, var, self.full, self.eps, self.reduction)
 
 
 class CTCLoss(_Loss):
@@ -1858,10 +1857,7 @@ class CTCLoss(_Loss):
     """
 
     def __init__(
-        self,
-        blank: int = 0,
-        reduction: Reduction = "mean",
-        zero_infinity: bool = False,
+        self, blank: int = 0, reduction: Reduction = "mean", zero_infinity: bool = False
     ) -> None:
         """Initialise the CTCLoss module. See the class docstring for parameter semantics."""
         super().__init__()
@@ -1872,11 +1868,7 @@ class CTCLoss(_Loss):
 
     @override
     def forward(
-        self,
-        log_probs: Tensor,
-        targets: Tensor,
-        input_lengths: Tensor,
-        target_lengths: Tensor,
+        self, log_probs: Tensor, targets: Tensor, input_lengths: Tensor, target_lengths: Tensor
     ) -> Tensor:
         """Compute the loss between predictions and targets.
 

@@ -180,40 +180,27 @@ class VQVAEConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the reconstruction"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the reconstruction")
         if self.num_embeddings <= 0:
-            raise ValueError(
-                f"num_embeddings must be positive, got {self.num_embeddings}"
-            )
+            raise ValueError(f"num_embeddings must be positive, got {self.num_embeddings}")
         if self.embedding_dim <= 0:
-            raise ValueError(
-                f"embedding_dim must be positive, got {self.embedding_dim}"
-            )
+            raise ValueError(f"embedding_dim must be positive, got {self.embedding_dim}")
         if self.hidden_channels <= 0:
-            raise ValueError(
-                f"hidden_channels must be positive, got {self.hidden_channels}"
-            )
+            raise ValueError(f"hidden_channels must be positive, got {self.hidden_channels}")
         if self.num_downsample_layers <= 0:
             raise ValueError(
-                "num_downsample_layers must be at least 1, got "
-                f"{self.num_downsample_layers}"
+                "num_downsample_layers must be at least 1, got " f"{self.num_downsample_layers}"
             )
         if self.num_residual_layers < 0:
             raise ValueError(
-                "num_residual_layers must be non-negative, got "
-                f"{self.num_residual_layers}"
+                "num_residual_layers must be non-negative, got " f"{self.num_residual_layers}"
             )
         if self.residual_hidden_channels <= 0:
             raise ValueError(
-                "residual_hidden_channels must be positive, got "
-                f"{self.residual_hidden_channels}"
+                "residual_hidden_channels must be positive, got " f"{self.residual_hidden_channels}"
             )
         if self.commitment_cost < 0.0:
-            raise ValueError(
-                f"commitment_cost must be non-negative, got {self.commitment_cost}"
-            )
+            raise ValueError(f"commitment_cost must be non-negative, got {self.commitment_cost}")
 
         # A stride-2 stack that does not evenly divide the input silently
         # changes the reconstruction's shape, so reject it at config time

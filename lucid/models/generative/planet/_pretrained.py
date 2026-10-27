@@ -114,9 +114,7 @@ def planet(pretrained: bool = False, **overrides: object) -> PlaNetModel:
     model_class=PlaNetForWorldModeling,
     default_config=_CFG_PLANET,
 )
-def planet_world_model(
-    pretrained: bool = False, **overrides: object
-) -> PlaNetForWorldModeling:
+def planet_world_model(pretrained: bool = False, **overrides: object) -> PlaNetForWorldModeling:
     r"""Construct PlaNet with its variational objective.
 
     Same trunk as :func:`planet`, wrapped with the bound of Hafner et al.,

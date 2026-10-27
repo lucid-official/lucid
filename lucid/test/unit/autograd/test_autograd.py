@@ -171,16 +171,12 @@ class TestCustomFunction:
 
         class Scale(Function):
             @staticmethod
-            def forward(
-                ctx: FunctionCtx, x: lucid.Tensor, s: lucid.Tensor
-            ) -> lucid.Tensor:
+            def forward(ctx: FunctionCtx, x: lucid.Tensor, s: lucid.Tensor) -> lucid.Tensor:
                 ctx.save_for_backward(x, s)
                 return x * s
 
             @staticmethod
-            def backward(
-                ctx: FunctionCtx, grad: lucid.Tensor
-            ) -> tuple[lucid.Tensor, lucid.Tensor]:
+            def backward(ctx: FunctionCtx, grad: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
                 x, s = ctx.saved_tensors
                 return grad * s, (grad * x).sum()
 
@@ -198,16 +194,12 @@ class TestCustomFunction:
 
         class AddWithMask(Function):
             @staticmethod
-            def forward(
-                ctx: FunctionCtx, x: lucid.Tensor, mask: lucid.Tensor
-            ) -> lucid.Tensor:
+            def forward(ctx: FunctionCtx, x: lucid.Tensor, mask: lucid.Tensor) -> lucid.Tensor:
                 ctx.save_for_backward(mask)
                 return x * mask.to(dtype=x.dtype)
 
             @staticmethod
-            def backward(
-                ctx: FunctionCtx, grad: lucid.Tensor
-            ) -> tuple[lucid.Tensor, None]:
+            def backward(ctx: FunctionCtx, grad: lucid.Tensor) -> tuple[lucid.Tensor, None]:
                 (mask,) = ctx.saved_tensors
                 return grad * mask.to(dtype=grad.dtype), None
 
@@ -366,9 +358,7 @@ class TestMultiOutputFunction:
             """``x -> (2x, 3x)``, so the combined gradient is ``2ga + 3gb``."""
 
             @staticmethod
-            def forward(
-                ctx: FunctionCtx, x: lucid.Tensor
-            ) -> tuple[lucid.Tensor, lucid.Tensor]:
+            def forward(ctx: FunctionCtx, x: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
                 ctx.save_for_backward(x)
                 # Detached, as a hand-written backward normally would be:
                 # if the node were skipped, these would carry no gradient at
@@ -376,9 +366,7 @@ class TestMultiOutputFunction:
                 return (x * 2.0).detach(), (x * 3.0).detach()
 
             @staticmethod
-            def backward(
-                ctx: FunctionCtx, ga: lucid.Tensor, gb: lucid.Tensor
-            ) -> lucid.Tensor:
+            def backward(ctx: FunctionCtx, ga: lucid.Tensor, gb: lucid.Tensor) -> lucid.Tensor:
                 return ga * 2.0 + gb * 3.0
 
         return Split

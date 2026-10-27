@@ -77,9 +77,7 @@ class TestPaperConfigurations:
             ("vjepa_huge_16_384", 1280, 32, 384),
         ],
     )
-    def test_table_6_models(
-        self, factory: str, dim: int, depth: int, size: int
-    ) -> None:
+    def test_table_6_models(self, factory: str, dim: int, depth: int, size: int) -> None:
         config = AutoConfig.from_pretrained(factory)
         assert isinstance(config, VJEPAConfig)
         assert (config.dim, config.depth, config.image_size) == (dim, depth, size)
@@ -214,9 +212,7 @@ class TestTubeMasking:
     def test_the_two_collections_hide_different_amounts(self) -> None:
         # Eight small blocks against two large ones.
         lucid.manual_seed(0)
-        config = VJEPAConfig(
-            image_size=224, patch_size=16, num_frames=16, tubelet_size=2
-        )
+        config = VJEPAConfig(image_size=224, patch_size=16, num_frames=16, tubelet_size=2)
         _, short = _sample_collection(
             config, 2, config.short_range_blocks, config.short_range_scale, "cpu"
         )
@@ -297,9 +293,7 @@ class TestTheMovingAverage:
     def test_the_target_encoder_is_frozen_and_starts_as_a_copy(self) -> None:
         model = VJEPAModel(_tiny())
         assert all(not p.requires_grad for p in model.target_encoder.parameters())
-        for live, averaged in zip(
-            model.encoder.parameters(), model.target_encoder.parameters()
-        ):
+        for live, averaged in zip(model.encoder.parameters(), model.target_encoder.parameters()):
             assert float((live - averaged).abs().max().item()) == 0.0
 
     def test_no_gradient_reaches_the_target_encoder(self) -> None:
@@ -360,9 +354,7 @@ class TestObjective:
         assert out.loss.ndim == 0
         assert math.isfinite(float(out.loss.item()))
 
-    @pytest.mark.parametrize(
-        "shape", [(2, 3, 32, 32), (2, 8, 3, 32, 32), (2, 4, 3, 16, 16)]
-    )
+    @pytest.mark.parametrize("shape", [(2, 3, 32, 32), (2, 8, 3, 32, 32), (2, 4, 3, 16, 16)])
     def test_a_clip_of_the_wrong_shape_is_refused(self, shape: tuple[int, ...]) -> None:
         with pytest.raises(ValueError):
             VJEPAModel(_tiny())(lucid.rand(*shape))
@@ -441,12 +433,10 @@ class TestInitialisation:
         lucid.manual_seed(0)
         model = VJEPAModel(_tiny(dim=32, depth=4, num_heads=4))
         block = model.encoder.blocks[0]
-        assert float(block.attn.qkv.weight.std().item()) == pytest.approx(
+        assert float(block.attn.qkv.weight.std().item()) == pytest.approx(0.02, rel=0.15)
+        assert float(model.encoder.patch_embed.proj.weight.std().item()) == pytest.approx(
             0.02, rel=0.15
         )
-        assert float(
-            model.encoder.patch_embed.proj.weight.std().item()
-        ) == pytest.approx(0.02, rel=0.15)
         assert float(block.attn.qkv.bias.abs().max().item()) == 0.0
 
     def test_each_block_narrows_its_residual_writes_by_its_depth(self) -> None:
@@ -462,9 +452,7 @@ class TestInitialisation:
         """Guards the test above — without the scaling every block matches."""
         lucid.manual_seed(2)
         model = VJEPAModel(_tiny(dim=32, depth=4, num_heads=4))
-        widths = [
-            float(block.mlp.fc2.weight.std().item()) for block in model.encoder.blocks
-        ]
+        widths = [float(block.mlp.fc2.weight.std().item()) for block in model.encoder.blocks]
         assert widths == sorted(widths, reverse=True), widths
         assert widths[0] > 1.7 * widths[-1]
 
@@ -475,12 +463,8 @@ class TestInitialisation:
         assert float(model.pooler.proj.weight.std().item()) == pytest.approx(
             0.02 / math.sqrt(2.0), rel=0.2
         )
-        assert float(model.pooler.key.weight.std().item()) == pytest.approx(
-            0.02, rel=0.2
-        )
-        assert float(model.pooler.query_token.std().item()) == pytest.approx(
-            0.02, rel=0.3
-        )
+        assert float(model.pooler.key.weight.std().item()) == pytest.approx(0.02, rel=0.2)
+        assert float(model.pooler.query_token.std().item()) == pytest.approx(0.02, rel=0.3)
 
     def test_the_mask_tokens_stay_at_zero(self) -> None:
         # The sweep visits linear, convolutional and norm layers only, so

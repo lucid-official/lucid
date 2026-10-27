@@ -115,9 +115,7 @@ def _above(ax: Tensor, edge: float) -> Tensor:
 
 def _on_half_line(x: Tensor, value: Tensor, at_zero: float) -> Tensor:
     """``value`` where ``x > 0``, ``at_zero`` at 0 and NaN below."""
-    edge = lucid.where(
-        x == 0.0, lucid.full_like(x, at_zero), lucid.full_like(x, math.nan)
-    )
+    edge = lucid.where(x == 0.0, lucid.full_like(x, at_zero), lucid.full_like(x, math.nan))
     return lucid.where(x > 0.0, value, edge)
 
 
@@ -145,9 +143,7 @@ def _half_line_split(
     """
 
     def split(v: Tensor) -> Tensor:
-        value = lucid.where(
-            v <= edge, small(_positive(v, edge)), large(_above(v, edge))
-        )
+        value = lucid.where(v <= edge, small(_positive(v, edge)), large(_above(v, edge)))
         return _on_half_line(v, value, at_zero)
 
     return _in_float32(split, x)
@@ -183,9 +179,7 @@ def _i0_as_fit(input: Tensor) -> Tensor:
     for c in _AS_I0_LARGE[1:]:
         y_pow = y_pow * y_large
         val_large = val_large + c * y_pow
-    return lucid.where(
-        ax <= 3.75, val_small, val_large * lucid.exp(ax_safe) / lucid.sqrt(ax_safe)
-    )
+    return lucid.where(ax <= 3.75, val_small, val_large * lucid.exp(ax_safe) / lucid.sqrt(ax_safe))
 
 
 def _i1e(x: Tensor) -> Tensor:
@@ -252,17 +246,13 @@ def _j0(x: Tensor) -> Tensor:
 def _j1(x: Tensor) -> Tensor:
     """``J1(x)``; odd in ``x``."""
     ax = lucid.abs(x)
-    large = lucid.sign(x) * _hankel(
-        _above(ax, 5.0), _THPIO4, _J1_HANKEL, second_kind=False
-    )
+    large = lucid.sign(x) * _hankel(_above(ax, 5.0), _THPIO4, _J1_HANKEL, second_kind=False)
     return lucid.where(ax <= 5.0, _j1_small(lucid.clip(x, -5.0, 5.0)), large)
 
 
 def _y0_small(s: Tensor) -> Tensor:
     z = s * s
-    return _polevl(z, _Y0_YP) / _p1evl(z, _Y0_YQ) + _TWOOPI * lucid.log(s) * _j0_small(
-        s
-    )
+    return _polevl(z, _Y0_YP) / _p1evl(z, _Y0_YQ) + _TWOOPI * lucid.log(s) * _j0_small(s)
 
 
 def _y1_small(s: Tensor) -> Tensor:

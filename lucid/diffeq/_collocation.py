@@ -138,9 +138,7 @@ def _roots(f: _Fn, low: Decimal, high: Decimal, expected: int) -> list[Decimal]:
         previous_x, previous_value = x, value
 
     if len(found) != expected:
-        raise ValueError(
-            f"expected {expected} root(s) in [{low}, {high}], found {len(found)}"
-        )
+        raise ValueError(f"expected {expected} root(s) in [{low}, {high}], found {len(found)}")
     return found
 
 
@@ -227,9 +225,7 @@ def lobatto_nodes(stages: int) -> list[Decimal]:
     def f(x: Decimal) -> tuple[Decimal, Decimal]:
         values, derivatives = _legendre(stages - 1, x)
         index = stages - 1
-        second = (2 * x * derivatives[index] - index * (index + 1) * values[index]) / (
-            1 - x * x
-        )
+        second = (2 * x * derivatives[index] - index * (index + 1) * values[index]) / (1 - x * x)
         return derivatives[index], second
 
     free = _roots(f, Decimal("-0.999999"), Decimal("0.999999"), stages - 2)
@@ -283,10 +279,7 @@ def collocation_tableau(
     is what makes the method implicit.
     """
     basis = [_lagrange_basis(nodes, j) for j in range(len(nodes))]
-    a = tuple(
-        tuple(float(_integrate(basis[j], node)) for j in range(len(nodes)))
-        for node in nodes
-    )
+    a = tuple(tuple(float(_integrate(basis[j], node)) for j in range(len(nodes))) for node in nodes)
     b = tuple(float(_integrate(basis[j], Decimal(1))) for j in range(len(nodes)))
     return a, b
 

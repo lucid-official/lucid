@@ -156,9 +156,7 @@ def test_a_state_dict_round_trip_keeps_the_order_and_the_values() -> None:
     model, other = _Holder(), _Holder()
     other.load_state_dict(model.state_dict())
     assert list(other.state_dict()) == list(model.state_dict())
-    for (k, a), b in zip(
-        model.state_dict().items(), other.state_dict().values(), strict=True
-    ):
+    for (k, a), b in zip(model.state_dict().items(), other.state_dict().values(), strict=True):
         assert a.tolist() == b.tolist(), k
 
 

@@ -82,8 +82,7 @@ END_OF_WORD = "</w>"
 # contraction forms must be tried before the letter run, or ``'s`` is
 # consumed as punctuation followed by a letter.
 _PATTERN = re.compile(
-    r"<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d"
-    r"|[^\W\d_]+|\d|[^\s\w]+",
+    r"<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d" r"|[^\W\d_]+|\d|[^\s\w]+",
     re.UNICODE,
 )
 
@@ -319,8 +318,7 @@ class CLIPTokenizer(BPETokenizer):
         """
         if context_length < 2:
             raise ValueError(
-                f"context_length must leave room for both sentinels, got "
-                f"{context_length}"
+                f"context_length must leave room for both sentinels, got " f"{context_length}"
             )
         ids = [self._sos_id, *self.encode(text), self._eos_id]
         if len(ids) > context_length:
@@ -462,13 +460,9 @@ class CLIPTokenizerFast(CLIPTokenizer):
         special_tokens: SpecialTokens | None = None,
     ) -> None:
         """Construct the tokenizer. See the class docstring for parameters."""
-        super().__init__(
-            vocab, merges, normalizer=normalizer, special_tokens=special_tokens
-        )
+        super().__init__(vocab, merges, normalizer=normalizer, special_tokens=special_tokens)
         self._folded = _fold_map()
-        shadow_vocab = {
-            _fold_token(token, self._folded): index for token, index in vocab.items()
-        }
+        shadow_vocab = {_fold_token(token, self._folded): index for token, index in vocab.items()}
         if len(shadow_vocab) != len(vocab):
             raise ValueError(
                 "folding the end-of-word marker collapsed two vocabulary "

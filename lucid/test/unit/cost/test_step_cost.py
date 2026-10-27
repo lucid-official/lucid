@@ -42,9 +42,7 @@ def test_the_budget_lists_every_workload() -> None:
     assert sorted(_BUDGET) == sorted(f"{w.name}/{d}" for w, d in _CASES)
 
 
-@pytest.mark.parametrize(
-    ("workload", "device"), _CASES, ids=[f"{w.name}-{d}" for w, d in _CASES]
-)
+@pytest.mark.parametrize(("workload", "device"), _CASES, ids=[f"{w.name}-{d}" for w, d in _CASES])
 def test_a_step_costs_what_the_budget_says(workload: object, device: str) -> None:
     got = measure(workload, device)  # type: ignore[arg-type]
     want = _BUDGET[f"{workload.name}/{device}"]  # type: ignore[attr-defined]

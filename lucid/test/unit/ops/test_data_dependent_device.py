@@ -65,12 +65,8 @@ def test_results_are_identical_across_devices(device):
     ints = np.random.default_rng(3).integers(0, 7, (24,)).astype(np.int64)
     ref_nz = lucid.nonzero(lucid.tensor(values, device="cpu")).numpy()
     ref_u = lucid.unique(lucid.tensor(ints, device="cpu")).numpy()
-    assert np.array_equal(
-        lucid.nonzero(lucid.tensor(values, device=device)).numpy(), ref_nz
-    )
-    assert np.array_equal(
-        lucid.unique(lucid.tensor(ints, device=device)).numpy(), ref_u
-    )
+    assert np.array_equal(lucid.nonzero(lucid.tensor(values, device=device)).numpy(), ref_nz)
+    assert np.array_equal(lucid.unique(lucid.tensor(ints, device=device)).numpy(), ref_u)
 
 
 @pytest.mark.parametrize("device", DEVICES)

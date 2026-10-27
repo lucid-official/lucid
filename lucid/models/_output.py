@@ -551,9 +551,7 @@ class Seq2SeqLMOutput(ModelOutput):
 
     logits: Tensor
     loss: Tensor | None = None
-    past_key_values: EncoderDecoderCache | tuple[tuple[Tensor, Tensor], ...] | None = (
-        None
-    )
+    past_key_values: EncoderDecoderCache | tuple[tuple[Tensor, Tensor], ...] | None = None
     decoder_hidden_states: tuple[Tensor, ...] | None = None
     decoder_attentions: tuple[Tensor, ...] | None = None
     encoder_last_hidden_state: Tensor | None = None

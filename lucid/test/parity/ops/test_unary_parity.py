@@ -112,9 +112,7 @@ def test_unary_parity(
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "name,lucid_fn,ref_attr,rng", _PRED_OPS, ids=[op[0] for op in _PRED_OPS]
-)
+@pytest.mark.parametrize("name,lucid_fn,ref_attr,rng", _PRED_OPS, ids=[op[0] for op in _PRED_OPS])
 def test_unary_predicate_parity(
     name: str,
     lucid_fn: Callable,

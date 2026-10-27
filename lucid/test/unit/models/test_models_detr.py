@@ -59,9 +59,7 @@ class TestDETRTransformerTopology(unittest.TestCase):
         # No final encoder norm
         self.assertNotIn("transformer.encoder.norm.weight", keys)
         # Decoder layers + final decoder norm
-        self.assertIn(
-            "transformer.decoder.layers.0.multihead_attn.in_proj_weight", keys
-        )
+        self.assertIn("transformer.decoder.layers.0.multihead_attn.in_proj_weight", keys)
         self.assertIn("transformer.decoder.norm.weight", keys)
         # Backbone frozen-BN: no num_batches_tracked
         self.assertIn("backbone.bn1.running_mean", keys)
@@ -114,9 +112,7 @@ class TestDETRWeightsEnums(unittest.TestCase):
             self.assertTrue(len(e.sha256) == 64 or e.sha256 == "__PENDING_UPLOAD__")
             self.assertIn(f"lucid-dl/{slug}", e.url)
             self.assertIn("/COCO_2017/", e.url)
-            self.assertEqual(
-                cls.COCO_2017.meta["source"], f"facebookresearch/detr/{src}"
-            )
+            self.assertEqual(cls.COCO_2017.meta["source"], f"facebookresearch/detr/{src}")
             self.assertEqual(cls.COCO_2017.meta["license"], "apache-2.0")
             self.assertEqual(cls.COCO_2017.meta["num_params"], nparams)
             self.assertEqual(cls.COCO_2017.meta["metrics"]["COCO"]["box mAP"], box_ap)

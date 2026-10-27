@@ -35,9 +35,7 @@ def test_the_limits(device):
 def test_the_gradient_is_exp():
     x = lucid.tensor([1e-7, 0.5, -3.0, 0.0], requires_grad=True)
     lucid.expm1(x).sum().backward()
-    np.testing.assert_allclose(
-        x.grad.numpy(), np.exp([1e-7, 0.5, -3.0, 0.0]), rtol=1e-6
-    )
+    np.testing.assert_allclose(x.grad.numpy(), np.exp([1e-7, 0.5, -3.0, 0.0]), rtol=1e-6)
     x = lucid.tensor([0.5], requires_grad=True)
     (g,) = lucid.autograd.grad(lucid.expm1(x).sum(), [x], create_graph=True)
     (h,) = lucid.autograd.grad(g.sum(), [x])

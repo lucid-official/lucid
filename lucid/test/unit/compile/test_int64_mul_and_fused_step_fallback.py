@@ -39,9 +39,7 @@ def _clean_compile_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
         "fmod",
     ],
 )
-def test_integer_self_mul_compiles_and_matches_eager(
-    dtype: lucid.NumericDType, kind: str
-) -> None:
+def test_integer_self_mul_compiles_and_matches_eager(dtype: lucid.NumericDType, kind: str) -> None:
     """``int64`` and ``int32`` self-products compile without hitting ``square_i64``."""
     _C_engine.compile.session_cache_clear()
 
@@ -126,9 +124,7 @@ def test_fused_step_with_argmax_self_mul_compiles_without_fallback(
             assert np.isclose(got_loss, want_loss, rtol=1e-5, atol=1e-5)
 
     for p_c, p_e in zip(comp_model.parameters(), eager_model.parameters(), strict=True):
-        assert np.allclose(
-            p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5
-        )
+        assert np.allclose(p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5)
 
 
 def test_fused_step_falls_back_to_eager_on_uncompilable_op() -> None:
@@ -177,9 +173,7 @@ def test_fused_step_falls_back_to_eager_on_uncompilable_op() -> None:
             assert np.isclose(got, float(want_t.item()), rtol=1e-5, atol=1e-5)
 
     for p_c, p_e in zip(comp_model.parameters(), eager_model.parameters(), strict=True):
-        assert np.allclose(
-            p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5
-        )
+        assert np.allclose(p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5)
     comp_sd = comp_opt.state_dict()
     eager_sd = eager_opt.state_dict()
     assert comp_sd["state"].keys() == eager_sd["state"].keys()
@@ -234,9 +228,7 @@ def test_fused_step_falls_back_on_cumulative_bn_and_grad_scaler() -> None:
 
     assert int(comp_model.bn.num_batches_tracked.item()) == 3
     for p_c, p_e in zip(comp_model.parameters(), eager_model.parameters(), strict=True):
-        assert np.allclose(
-            p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5
-        )
+        assert np.allclose(p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5)
 
 
 def test_fused_step_falls_back_on_first_run_mpsgraph_failure(
@@ -255,9 +247,7 @@ def test_fused_step_falls_back_on_first_run_mpsgraph_failure(
     orig_run_inplace = _C_engine.compile.run_executable_inplace
     fused_calls = 0
 
-    def _fail_fused_inplace(
-        exe: object, feeds: list[object], targets: list[object]
-    ) -> None:
+    def _fail_fused_inplace(exe: object, feeds: list[object], targets: list[object]) -> None:
         nonlocal fused_calls
         # The fused executable writes [loss, new_w, new_b, new_mom_w, new_mom_b] (5 targets),
         # whereas standalone copt.step() writes [new_w, new_b, new_mom_w, new_mom_b] (4 targets).
@@ -268,9 +258,7 @@ def test_fused_step_falls_back_on_first_run_mpsgraph_failure(
             )
         orig_run_inplace(exe, feeds, targets)
 
-    monkeypatch.setattr(
-        _C_engine.compile, "run_executable_inplace", _fail_fused_inplace
-    )
+    monkeypatch.setattr(_C_engine.compile, "run_executable_inplace", _fail_fused_inplace)
     _NOTICED.discard("first-run")
 
     x = lucid.randn(3, 4, device="metal")
@@ -292,6 +280,4 @@ def test_fused_step_falls_back_on_first_run_mpsgraph_failure(
     assert np.isclose(got1, want_losses[0], rtol=1e-5, atol=1e-5)
     assert np.isclose(got2, want_losses[1], rtol=1e-5, atol=1e-5)
     for p_c, p_e in zip(comp_model.parameters(), eager_model.parameters(), strict=True):
-        assert np.allclose(
-            p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5
-        )
+        assert np.allclose(p_c.to("cpu").numpy(), p_e.to("cpu").numpy(), rtol=1e-5, atol=1e-5)

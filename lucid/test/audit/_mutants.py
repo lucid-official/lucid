@@ -161,9 +161,7 @@ class _NoGradientModule(lucid.nn.Module):
 
     def __init__(self, width: int = 4) -> None:
         super().__init__()
-        self.weight = lucid.nn.Parameter(
-            _probe.as_f32(_probe.sample("moderate", (width, width)))
-        )
+        self.weight = lucid.nn.Parameter(_probe.as_f32(_probe.sample("moderate", (width, width))))
 
     def forward(self, x: Any) -> Any:
         return x @ self.weight.detach()
@@ -832,9 +830,7 @@ def verify(ctx: _axes.Context | None = None) -> list[Verdict]:
             continue
         axis = _axes.axis_by_name(mutant.axis)
         if axis is None:
-            out.append(
-                Verdict(mutant.axis, mutant.name, mutant.why, False, "no such axis", "")
-            )
+            out.append(Verdict(mutant.axis, mutant.name, mutant.why, False, "no such axis", ""))
             continue
         guard = mutant.patch() if mutant.patch else contextlib.nullcontext()
         try:

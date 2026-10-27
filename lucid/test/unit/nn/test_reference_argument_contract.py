@@ -145,18 +145,12 @@ def test_conv_transpose_output_size_matches_the_reference(
 
 
 @pytest.mark.parametrize("size", [(9, 10), (10, 13), (10,), (1, 1, 1, 10, 10)])
-def test_conv_transpose_output_size_out_of_range_is_refused(
-    ref: ModuleType, size: tuple
-) -> None:
+def test_conv_transpose_output_size_out_of_range_is_refused(ref: ModuleType, size: tuple) -> None:
     x = _data(1, 3, 4, 4)
     with pytest.raises(ValueError):
-        ref.nn.ConvTranspose2d(3, 2, 3, stride=3, padding=1)(
-            ref.from_numpy(x), output_size=size
-        )
+        ref.nn.ConvTranspose2d(3, 2, 3, stride=3, padding=1)(ref.from_numpy(x), output_size=size)
     with pytest.raises(ValueError):
-        nn.ConvTranspose2d(3, 2, 3, stride=3, padding=1)(
-            lucid.tensor(x), output_size=size
-        )
+        nn.ConvTranspose2d(3, 2, 3, stride=3, padding=1)(lucid.tensor(x), output_size=size)
 
 
 # ── adaptive pools: None keeps the axis ───────────────────────────────────────
@@ -217,9 +211,7 @@ def test_adaptive_pool_to_zero_is_empty(
 
 @pytest.mark.parametrize("kind", ["avg", "max"])
 @pytest.mark.parametrize("rank", [1, 2, 3])
-def test_adaptive_pool_refuses_a_negative_size(
-    ref: ModuleType, kind: str, rank: int
-) -> None:
+def test_adaptive_pool_refuses_a_negative_size(ref: ModuleType, kind: str, rank: int) -> None:
     x = _data(2, 3, *(5,) * rank)
     name = f"adaptive_{kind}_pool{rank}d"
     with pytest.raises(RuntimeError):
@@ -231,9 +223,7 @@ def test_adaptive_pool_refuses_a_negative_size(
 def test_fractional_samples_that_are_not_real_are_refused() -> None:
     samples = lucid.tensor([[[0.5 + 0j, 0.25 + 0j]]])
     with pytest.raises(TypeError, match="_random_samples"):
-        F.fractional_max_pool2d(
-            lucid.randn(1, 1, 8, 8), 2, output_size=4, _random_samples=samples
-        )
+        F.fractional_max_pool2d(lucid.randn(1, 1, 8, 8), 2, output_size=4, _random_samples=samples)
 
 
 # ── GRU / RNN parameter names ─────────────────────────────────────────────────
@@ -254,13 +244,9 @@ def _recurrent(module: ModuleType, case: str, device: str | None = None) -> obje
 
 
 @pytest.mark.parametrize("case", list(_RECURRENT))
-def test_recurrent_parameter_names_are_the_references(
-    ref: ModuleType, case: str
-) -> None:
+def test_recurrent_parameter_names_are_the_references(ref: ModuleType, case: str) -> None:
     ours, theirs = _recurrent(lucid, case), _recurrent(ref, case)
-    assert [n for n, _ in ours.named_parameters()] == [
-        n for n, _ in theirs.named_parameters()
-    ]
+    assert [n for n, _ in ours.named_parameters()] == [n for n, _ in theirs.named_parameters()]
     assert list(ours.state_dict()) == list(theirs.state_dict())
     for name, p in theirs.named_parameters():
         assert tuple(getattr(ours, name).shape) == tuple(p.shape)

@@ -79,9 +79,7 @@ class TestImageInput:
         finally:
             exported.close()
 
-    def test_a_channel_count_that_cannot_be_that_colour_is_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_channel_count_that_cannot_be_that_colour_is_refused(self, tmp_path: object) -> None:
         model = M.create_model("unet").eval()
         with pytest.raises(ValueError, match="channel"):
             cml.export(
@@ -108,9 +106,7 @@ class TestImageInput:
 
 
 class TestMetadata:
-    def test_what_is_stated_is_recorded_and_nothing_else(
-        self, tmp_path: object
-    ) -> None:
+    def test_what_is_stated_is_recorded_and_nothing_else(self, tmp_path: object) -> None:
         model = M.create_model("resnet_18_cls", num_classes=10).eval()
         exported = cml.export(
             model,

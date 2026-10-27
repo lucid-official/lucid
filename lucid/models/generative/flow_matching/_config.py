@@ -234,40 +234,28 @@ class FlowMatchingConfig(GenerativeModelConfig):
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_sample_space_channels(
-            self.in_channels, self.out_channels, "the velocity field"
-        )
+        check_sample_space_channels(self.in_channels, self.out_channels, "the velocity field")
         if self.base_channels <= 0:
-            raise ValueError(
-                f"base_channels must be positive, got {self.base_channels}"
-            )
+            raise ValueError(f"base_channels must be positive, got {self.base_channels}")
         if not self.channel_mult:
             raise ValueError("channel_mult must name at least one stage")
         if any(m <= 0 for m in self.channel_mult):
-            raise ValueError(
-                f"channel_mult entries must be positive, got {self.channel_mult}"
-            )
+            raise ValueError(f"channel_mult entries must be positive, got {self.channel_mult}")
         if self.num_res_blocks <= 0:
-            raise ValueError(
-                f"num_res_blocks must be positive, got {self.num_res_blocks}"
-            )
+            raise ValueError(f"num_res_blocks must be positive, got {self.num_res_blocks}")
         if self.num_head_channels <= 0:
-            raise ValueError(
-                f"num_head_channels must be positive, got {self.num_head_channels}"
-            )
+            raise ValueError(f"num_head_channels must be positive, got {self.num_head_channels}")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError(f"dropout must lie in [0, 1), got {self.dropout}")
         if self.sigma_min < 0.0 or self.sigma_min >= 1.0:
             raise ValueError(f"sigma_min must lie in [0, 1), got {self.sigma_min}")
         if not 0.0 < self.beta_min < self.beta_max:
             raise ValueError(
-                f"require 0 < beta_min < beta_max, got "
-                f"min={self.beta_min}, max={self.beta_max}"
+                f"require 0 < beta_min < beta_max, got " f"min={self.beta_min}, max={self.beta_max}"
             )
         if self.rtol <= 0.0 or self.atol <= 0.0:
             raise ValueError(
-                f"solver tolerances must be positive, got rtol={self.rtol}, "
-                f"atol={self.atol}"
+                f"solver tolerances must be positive, got rtol={self.rtol}, " f"atol={self.atol}"
             )
         if self.exact_trace_max_dim < 1:
             raise ValueError(

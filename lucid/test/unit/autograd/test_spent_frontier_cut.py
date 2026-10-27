@@ -368,9 +368,7 @@ def test_a_backward_is_linear_in_the_graph(
     # quadratic); the 8x bound absorbs a loaded machine.
     small = _backward_seconds(build, size, retain)
     large = _backward_seconds(build, 4 * size, retain)
-    assert (
-        large < 8 * small + 0.01
-    ), f"{size}: {small:.4f} s, {4 * size}: {large:.4f} s"
+    assert large < 8 * small + 0.01, f"{size}: {small:.4f} s, {4 * size}: {large:.4f} s"
 
 
 def _repeated_grad_over_spent_seconds(chain_len: int, calls: int = 40) -> float:
@@ -398,9 +396,7 @@ def test_repeated_grad_over_spent_graph_prunes_by_sequence_range() -> None:
     # marker on each grad() call.
     small = _repeated_grad_over_spent_seconds(4000)
     large = _repeated_grad_over_spent_seconds(16000)
-    assert (
-        large < 2.5 * small + 0.005
-    ), f"4000: {small:.4f} s, 16000: {large:.4f} s"
+    assert large < 2.5 * small + 0.005, f"4000: {small:.4f} s, 16000: {large:.4f} s"
 
 
 _DEEP = """
@@ -438,6 +434,5 @@ def test_what_a_long_chain_leaves_is_released_without_recursion() -> None:
         check=False,
     )
     assert proc.returncode == 0 and "survived" in proc.stdout, (
-        f"exit {proc.returncode} (negative: killed by that signal)\n"
-        f"{proc.stderr[-3000:]}"
+        f"exit {proc.returncode} (negative: killed by that signal)\n" f"{proc.stderr[-3000:]}"
     )

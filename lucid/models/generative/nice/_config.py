@@ -182,9 +182,7 @@ class NICEConfig(NormalizingFlowConfig):
                 f"num_coupling_layers must be positive, got {self.num_coupling_layers}"
             )
         if self.num_hidden_layers <= 0:
-            raise ValueError(
-                f"num_hidden_layers must be positive, got {self.num_hidden_layers}"
-            )
+            raise ValueError(f"num_hidden_layers must be positive, got {self.num_hidden_layers}")
         if self.hidden_dim <= 0:
             raise ValueError(f"hidden_dim must be positive, got {self.hidden_dim}")
         if self.init_range <= 0.0:

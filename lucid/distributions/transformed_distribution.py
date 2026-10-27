@@ -477,18 +477,13 @@ class TransformedDistribution(Distribution):
             self.transforms: list[Transform] = [transforms]
         else:
             self.transforms = list(transforms)
-        base_shape = tuple(base_distribution.batch_shape) + tuple(
-            base_distribution.event_shape
-        )
+        base_shape = tuple(base_distribution.batch_shape) + tuple(base_distribution.event_shape)
         base_event_dim = len(base_distribution.event_shape)
         if self.transforms:
             transform = ComposeTransform(self.transforms)
             forward_shape = transform.forward_shape(base_shape)
             reinterpreted_batch_ndims = transform.domain.event_dim - base_event_dim
-            if (
-                reinterpreted_batch_ndims > 0
-                and len(base_shape) >= transform.domain.event_dim
-            ):
+            if reinterpreted_batch_ndims > 0 and len(base_shape) >= transform.domain.event_dim:
                 base_distribution = Independent(
                     base_distribution,
                     reinterpreted_batch_ndims,
@@ -522,9 +517,7 @@ class TransformedDistribution(Distribution):
             return self.base_dist.support
         support = self.transforms[-1].codomain
         if len(self.event_shape) > support.event_dim:
-            support = constraints.independent(
-                support, len(self.event_shape) - support.event_dim
-            )
+            support = constraints.independent(support, len(self.event_shape) - support.event_dim)
         return support
 
     def _has_rsample(self) -> bool:

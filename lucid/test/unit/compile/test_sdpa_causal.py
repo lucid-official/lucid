@@ -43,16 +43,12 @@ def _qkv(B: int, H: int, Lq: int, Lk: int, D: int) -> tuple[lucid.Tensor, ...]:
 
 
 class _Causal(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
 
 class _Plain(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.scaled_dot_product_attention(q, k, v)
 
 
@@ -171,9 +167,7 @@ def test_multihead_attention_causal_compiles() -> None:
     class _MHA(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.mha = nn.MultiheadAttention(
-                embed_dim=32, num_heads=4, batch_first=True
-            )
+            self.mha = nn.MultiheadAttention(embed_dim=32, num_heads=4, batch_first=True)
 
         def forward(self, x: lucid.Tensor) -> lucid.Tensor:
             out, _ = self.mha(x, x, x, is_causal=True, need_weights=False)

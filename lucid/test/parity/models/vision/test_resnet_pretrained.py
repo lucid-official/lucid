@@ -60,9 +60,7 @@ def test_resnet18_pretrained_matches_source(ref) -> None:
 def test_resnet18_pretrained_stage_activations_match(ref) -> None:
     """Localise a conversion mismatch before pooling and the classifier hide it."""
     ours = _load_lucid_pretrained()
-    source = _tv.models.resnet18(
-        weights=_tv.models.ResNet18_Weights.IMAGENET1K_V1
-    ).eval()
+    source = _tv.models.resnet18(weights=_tv.models.ResNet18_Weights.IMAGENET1K_V1).eval()
     wanted, got = {}, {}
     handles = []
 
@@ -80,11 +78,7 @@ def test_resnet18_pretrained_stage_activations_match(ref) -> None:
         for name, own_layer, ref_layer in pairs:
             handles.append(own_layer.register_forward_hook(record(got, name)))
             handles.append(ref_layer.register_forward_hook(record(wanted, name)))
-        values = (
-            np.random.default_rng(17)
-            .standard_normal((1, 3, 224, 224))
-            .astype(np.float32)
-        )
+        values = np.random.default_rng(17).standard_normal((1, 3, 224, 224)).astype(np.float32)
         with lucid.no_grad(), ref.no_grad():
             ours(lucid.tensor(values))
             source(ref.from_numpy(values))

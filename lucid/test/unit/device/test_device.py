@@ -80,12 +80,8 @@ class TestDeviceConstructorAcceptsEveryForm:
         assert copy.type == original.type
         assert copy.index == original.index
 
-    @pytest.mark.parametrize(
-        "engine_device", [_C_engine.Device.CPU, _C_engine.Device.GPU]
-    )
-    def test_engine_device_enum_round_trips(
-        self, engine_device: object
-    ) -> None:
+    @pytest.mark.parametrize("engine_device", [_C_engine.Device.CPU, _C_engine.Device.GPU])
+    def test_engine_device_enum_round_trips(self, engine_device: object) -> None:
         once = lucid.device(engine_device)
         assert lucid.device(once) == once
 
@@ -120,9 +116,7 @@ class TestDefaultDevice:
 
 
 class TestCrossDevicePair:
-    def test_cpu_gpu_value_match_zeros(
-        self, cross_device_pair: tuple[str, str]
-    ) -> None:
+    def test_cpu_gpu_value_match_zeros(self, cross_device_pair: tuple[str, str]) -> None:
         cpu_dev, gpu_dev = cross_device_pair
         a = lucid.zeros(4, device=cpu_dev).numpy()
         b = lucid.zeros(4, device=gpu_dev).numpy()

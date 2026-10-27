@@ -59,9 +59,7 @@ OPTIONS = [
 
 
 @pytest.mark.parametrize("kind", ["RNN", "LSTM", "GRU"])
-@pytest.mark.parametrize(
-    "options", [o[1] for o in OPTIONS], ids=[o[0] for o in OPTIONS]
-)
+@pytest.mark.parametrize("options", [o[1] for o in OPTIONS], ids=[o[0] for o in OPTIONS])
 def test_the_recurrence_matches_the_reference(kind, options, ref):
     kwargs = dict(options)
     batch_first = kwargs.pop("batch_first", True)

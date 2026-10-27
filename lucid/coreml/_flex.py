@@ -169,9 +169,7 @@ class Flexibility:
     #: The flexible input's identifier, ``-1`` for a fixed-shape export.
     input_id: int = -1
     #: Operation names and result ids of the first probe, in order.
-    signature: list[tuple[str, tuple[int, ...]]] = dataclasses.field(
-        default_factory=list
-    )
+    signature: list[tuple[str, tuple[int, ...]]] = dataclasses.field(default_factory=list)
 
     def source(self, value_id: int, axis: int) -> int | None:
         """The input axis this value's axis equals at every probe.
@@ -219,9 +217,7 @@ class Flexibility:
         given = self.probes.get(operand_id)
         if not seen or not given or len(seen) != len(given):
             return None
-        found = {
-            mine[axis] / theirs[axis] for mine, theirs in zip(seen, given, strict=True)
-        }
+        found = {mine[axis] / theirs[axis] for mine, theirs in zip(seen, given, strict=True)}
         return found.pop() if len(found) == 1 else None
 
     def carried(
@@ -248,9 +244,7 @@ class Flexibility:
         """
         ours, theirs = self._keys(*value), self._keys(*operand)
         found = _walk(ours, theirs, range(len(ours)), range(len(theirs)))
-        back = _walk(
-            ours, theirs, range(len(ours) - 1, -1, -1), range(len(theirs) - 1, -1, -1)
-        )
+        back = _walk(ours, theirs, range(len(ours) - 1, -1, -1), range(len(theirs) - 1, -1, -1))
         for axis, other in back.items():
             if axis not in found and other not in found.values():
                 found[axis] = other
@@ -260,11 +254,7 @@ class Flexibility:
         """Per axis: open or not, and the size — at every probe when open."""
         seen = self.probes.get(value_id) or []
         return [
-            (
-                (True, tuple(shape[axis] for shape in seen) or None)
-                if size < 0
-                else (False, size)
-            )
+            ((True, tuple(shape[axis] for shape in seen) or None) if size < 0 else (False, size))
             for axis, size in enumerate(dims)
         ]
 
@@ -314,9 +304,7 @@ def plan_probes(
         return [], [], []
     if inputs != 1:
         kind = "a shape range needs" if shape_range else "flexible shapes need"
-        raise ValueError(
-            f"lucid.coreml: {kind} a single-input model, and this one takes {inputs}"
-        )
+        raise ValueError(f"lucid.coreml: {kind} a single-input model, and this one takes {inputs}")
     if shapes is not None:
         ordered = _enumerated(default, shapes)
         return ordered, ordered, []
@@ -334,15 +322,11 @@ def plan_probes(
             if moved not in probes:
                 probes.append(moved)
     if len(probes) < 2:
-        raise ValueError(
-            f"lucid.coreml: the range admits only the example's own shape {default}"
-        )
+        raise ValueError(f"lucid.coreml: the range admits only the example's own shape {default}")
     return probes, [], bounds
 
 
-def _enumerated(
-    default: tuple[int, ...], shapes: list[tuple[int, ...]]
-) -> list[tuple[int, ...]]:
+def _enumerated(default: tuple[int, ...], shapes: list[tuple[int, ...]]) -> list[tuple[int, ...]]:
     """The listed shapes, the example's first and nowhere else."""
     ordered = [default] + [tuple(s) for s in shapes if tuple(s) != default]
     if len(ordered) < 2:
@@ -363,9 +347,7 @@ def _bounds(
                 f"lucid.coreml: axis {axis} is outside the input's rank {len(default)}"
             )
         if low > high:
-            raise ValueError(
-                f"lucid.coreml: axis {axis} has a range of ({low}, {high})"
-            )
+            raise ValueError(f"lucid.coreml: axis {axis} has a range of ({low}, {high})")
         if not low <= default[axis] <= high:
             raise ValueError(
                 f"lucid.coreml: the example's axis {axis} is {default[axis]}, "
@@ -444,10 +426,7 @@ def compare(
     # the walk below never reaches it; its open axes are the ones the
     # probes disagree on.
     found.varying[base.input_id] = {
-        axis
-        for shape in probes[1:]
-        for axis in range(len(shape))
-        if shape[axis] != probes[0][axis]
+        axis for shape in probes[1:] for axis in range(len(shape)) if shape[axis] != probes[0][axis]
     }
     found.probes[base.input_id] = list(probes)
     position = 0
@@ -457,9 +436,7 @@ def compare(
             position += 1
             seen = [record.ops[index][2][output] for record in records]
             if any(len(shape) != len(base_shape) for shape in seen):
-                raise ShapeNotFlexible(
-                    name, "its result changes rank with the input size"
-                )
+                raise ShapeNotFlexible(name, "its result changes rank with the input size")
             axes = {
                 axis
                 for shape in seen[1:]
@@ -508,21 +485,16 @@ def _agree(base: Record, other: Record, skip_attrs: frozenset[str]) -> None:
             "a tensor that enters the graph as a constant has the input's "
             "size, so the package would hold it at the traced size",
         )
-    for (name, attrs, _shape), (_n, other_attrs, _s) in zip(
-        base.ops, other.ops, strict=True
-    ):
+    for (name, attrs, _shape), (_n, other_attrs, _s) in zip(base.ops, other.ops, strict=True):
         if name in skip_attrs or attrs == other_attrs:
             continue
         changed = sorted(
             key
             for key in set(attrs) | set(other_attrs)
-            if attrs.get(key) != other_attrs.get(key)
-            and key not in SIZE_ATTRS.get(name, ())
+            if attrs.get(key) != other_attrs.get(key) and key not in SIZE_ATTRS.get(name, ())
         )
         if changed:
-            raise ShapeNotFlexible(
-                name, f"its {', '.join(changed)} changed with the input size"
-            )
+            raise ShapeNotFlexible(name, f"its {', '.join(changed)} changed with the input size")
 
 
 class _Value(NamedTuple):

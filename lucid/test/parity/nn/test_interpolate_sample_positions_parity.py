@@ -70,9 +70,7 @@ def _copied_indices(
                 parts.append(_host(F.interpolate(x, size=size, mode="nearest")))
             else:
                 x = ref.tensor(data, dtype=getattr(ref, dtype))
-                parts.append(
-                    _host(ref.nn.functional.interpolate(x, size=size, mode="nearest"))
-                )
+                parts.append(_host(ref.nn.functional.interpolate(x, size=size, mode="nearest")))
         out[name] = (parts[1] * 64 + parts[0]).astype(np.int64).ravel().tolist()
     return out["lucid"], out["ref"]
 
@@ -127,9 +125,7 @@ def _linear_cases() -> list[Any]:
         for shape, size in shapes:
             for corners in (False, True):
                 cases.append(
-                    pytest.param(
-                        mode, shape, size, corners, id=f"{mode}-{size}-{corners}"
-                    )
+                    pytest.param(mode, shape, size, corners, id=f"{mode}-{size}-{corners}")
                 )
     return cases
 
@@ -152,24 +148,18 @@ class TestLinearValues:
         rng = np.random.default_rng(len(shape) * 100 + size[-1])
         data = rng.standard_normal(shape)
         cotangent = rng.standard_normal(shape[:2] + size)
-        lx = lucid.tensor(
-            data, dtype=getattr(lucid, dtype), device=device, requires_grad=True
-        )
+        lx = lucid.tensor(data, dtype=getattr(lucid, dtype), device=device, requires_grad=True)
         rx = ref.tensor(data, dtype=getattr(ref, dtype), requires_grad=True)
         kw = {"size": size, "mode": mode, "align_corners": corners}
         l_out = F.interpolate(lx, **kw)
         r_out = ref.nn.functional.interpolate(rx, **kw)
         atol = _ATOL[dtype]
         np.testing.assert_allclose(_host(l_out), _host(r_out), atol=atol, rtol=0)
-        l_out.backward(
-            lucid.tensor(cotangent, dtype=getattr(lucid, dtype), device=device)
-        )
+        l_out.backward(lucid.tensor(cotangent, dtype=getattr(lucid, dtype), device=device))
         r_out.backward(ref.tensor(cotangent, dtype=getattr(ref, dtype)))
         assert lx.grad is not None
         # A gradient sample sums every output that read it: a few ulp each.
-        np.testing.assert_allclose(
-            _host(lx.grad), _host(rx.grad), atol=8 * atol, rtol=0
-        )
+        np.testing.assert_allclose(_host(lx.grad), _host(rx.grad), atol=8 * atol, rtol=0)
 
 
 # A scale factor that does not divide the axis maps by ``1 / scale``, which
@@ -252,9 +242,7 @@ _SHORTCUT_LIMIT = 128
 def _heights_across(width_out: int, height_scale: float) -> list[int]:
     """Input heights whose output height lands on either side of the line."""
     line = _SHORTCUT_LIMIT - width_out
-    heights = [
-        h for h in range(2, 200) if abs(math.floor(h * height_scale) - line) <= 6
-    ]
+    heights = [h for h in range(2, 200) if abs(math.floor(h * height_scale) - line) <= 6]
     assert any(math.floor(h * height_scale) <= line for h in heights)
     assert any(math.floor(h * height_scale) > line for h in heights)
     return heights
@@ -274,9 +262,7 @@ class TestNearestCompatibilityShortcuts:
         width_out = math.floor(width * width_scale)
         kw = {"scale_factor": (height_scale, width_scale), "mode": "nearest"}
         for height in _heights_across(width_out, height_scale):
-            data = np.arange(height * width, dtype=np.float32).reshape(
-                1, 1, height, width
-            )
+            data = np.arange(height * width, dtype=np.float32).reshape(1, 1, height, width)
             got = F.interpolate(lucid.tensor(data, device=device), **kw)
             want = ref.nn.functional.interpolate(ref.tensor(data), **kw)
             np.testing.assert_array_equal(_host(got), _host(want), err_msg=f"{height}")
@@ -295,8 +281,6 @@ class TestNearestCompatibilityShortcuts:
             F.interpolate(x, **kw).sum().backward()
             index = lucid.arange(float(height * width)).reshape(1, 1, height, width)
             copied = _host(F.interpolate(index.to(device), **kw))
-            counts = np.bincount(
-                copied.astype(np.int64).ravel(), minlength=height * width
-            )
+            counts = np.bincount(copied.astype(np.int64).ravel(), minlength=height * width)
             assert x.grad is not None
             assert _host(x.grad).ravel().tolist() == counts.tolist(), f"{height}"

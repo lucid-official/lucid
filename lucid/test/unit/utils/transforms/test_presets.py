@@ -57,11 +57,7 @@ class TestRoundTrip:
 
     def test_image_classification_augment_disabled_aux(self) -> None:
         # color_jitter=0 + hflip_prob=0 should still round-trip cleanly.
-        _round_trip(
-            T.ImageClassificationAugment(
-                crop_size=224, color_jitter=0.0, hflip_prob=0.0
-            )
-        )
+        _round_trip(T.ImageClassificationAugment(crop_size=224, color_jitter=0.0, hflip_prob=0.0))
 
     def test_video_classification(self) -> None:
         _round_trip(T.VideoClassification(crop_size=256))
@@ -143,9 +139,7 @@ class TestMultiTarget:
         assert tuple(out["mask"].data.shape) == (1, 224, 224)
         # No synthetic labels (nearest interp only).
         before = set(int(round(v)) for v in m.numpy().reshape(-1).tolist())
-        after = set(
-            int(round(v)) for v in out["mask"].data.numpy().reshape(-1).tolist()
-        )
+        after = set(int(round(v)) for v in out["mask"].data.numpy().reshape(-1).tolist())
         assert after <= before, f"mask gained labels {after - before}"
 
     def test_detection_image_and_boxes(self) -> None:
@@ -174,9 +168,7 @@ class TestMultiTarget:
         )
         # Make pipeline a no-op size-wise then assert the filter
         # kicks the 1-pixel box.
-        out = T.Detection(max_size=256, min_area=10.0)(
-            {"image": T.Image(img), "boxes": boxes}
-        )
+        out = T.Detection(max_size=256, min_area=10.0)({"image": T.Image(img), "boxes": boxes})
         assert int(out["boxes"].data.shape[0]) == 0
 
     def test_pose_image_and_keypoints(self) -> None:
@@ -302,9 +294,7 @@ class TestDetectionCanvas:
     @pytest.mark.parametrize(
         "max_size, canvas", [(1333, 1344), (1344, 1344), (800, 800), (1000, 1024)]
     )
-    def test_size_divisible_rounds_the_canvas_up(
-        self, max_size: int, canvas: int
-    ) -> None:
+    def test_size_divisible_rounds_the_canvas_up(self, max_size: int, canvas: int) -> None:
         tf = T.Detection(max_size=max_size, size_divisible=32)
         assert tf.canvas_size == canvas
         # A non-square image still lands on the square canvas.
@@ -412,9 +402,7 @@ def test_broadcastable_mean_and_std_normalize_and_pad_channels(
         expected = (img[c] - m_exp[c]) / s_exp[c]
         assert lucid.allclose(out3[c], expected)
         assert lucid.allclose(out4[0, c], expected)
-    det = T.Detection(
-        max_size=64, pad_value=0.25, pad_position="top_left", mean=mean, std=std
-    )
+    det = T.Detection(max_size=64, pad_value=0.25, pad_position="top_left", mean=mean, std=std)
     padded = det(T.Image(lucid.rand(3, 16, 32))).data
     assert float((padded[:, 32:, :] - 0.25).abs().max().item()) < 1e-6
 
@@ -424,23 +412,17 @@ def test_without_pad_value_the_padding_is_a_normalised_black_pixel() -> None:
     tf = T.Detection(max_size=64, pad_position="top_left")
     out = tf(T.Image(lucid.rand(3, 16, 32))).data
     expect = [(0.0 - m) / s for m, s in zip(tf.mean, tf.std)]
-    assert [float(out[c, -1, 0].item()) for c in range(3)] == pytest.approx(
-        expect, abs=1e-6
-    )
+    assert [float(out[c, -1, 0].item()) for c in range(3)] == pytest.approx(expect, abs=1e-6)
 
 
 def test_to_image_boxes_undoes_the_letterbox_and_the_resize() -> None:
     letterbox = T.Detection(max_size=64)
     assert letterbox.image_size(16, 32) == (32, 64)
     on_canvas = lucid.tensor([[0.0, 16.0, 64.0, 48.0]])
-    assert letterbox.to_image_boxes(on_canvas, 16, 32).tolist() == [
-        [0.0, 0.0, 32.0, 16.0]
-    ]
+    assert letterbox.to_image_boxes(on_canvas, 16, 32).tolist() == [[0.0, 0.0, 32.0, 16.0]]
     top_left = T.Detection(max_size=64, pad_position="top_left")
     on_canvas = lucid.tensor([[0.0, 0.0, 64.0, 32.0]])
-    assert top_left.to_image_boxes(on_canvas, 16, 32).tolist() == [
-        [0.0, 0.0, 32.0, 16.0]
-    ]
+    assert top_left.to_image_boxes(on_canvas, 16, 32).tolist() == [[0.0, 0.0, 32.0, 16.0]]
 
 
 def test_a_per_axis_canvas_rounds_each_side_up_to_the_divisor() -> None:
@@ -448,9 +430,7 @@ def test_a_per_axis_canvas_rounds_each_side_up_to_the_divisor() -> None:
     # next multiple of 32; the square canvas pads the short side to the long.
     img = T.Image(lucid.rand(3, 20, 30))
     square = T.Detection(max_size=100, size_divisible=32, pad_position="top_left")
-    fitted = T.Detection(
-        max_size=100, size_divisible=32, pad_position="top_left", square=False
-    )
+    fitted = T.Detection(max_size=100, size_divisible=32, pad_position="top_left", square=False)
     assert tuple(square(img).data.shape) == (3, 128, 128)
     assert tuple(fitted(img).data.shape) == (3, 96, 128)
 

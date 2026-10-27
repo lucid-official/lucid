@@ -573,16 +573,7 @@ _LINALG_EMPTY += [
     ("norm_empty_matrix", "N(L.norm(R(0, 3)))", OK),
 ]
 
-CASES = (
-    _REPORTED
-    + _STILL_RIGHT
-    + _GEMM
-    + _ATTENTION
-    + _RECURRENT
-    + _CONV
-    + _ODE
-    + _LINALG_EMPTY
-)
+CASES = _REPORTED + _STILL_RIGHT + _GEMM + _ATTENTION + _RECURRENT + _CONV + _ODE + _LINALG_EMPTY
 
 # ── the child ─────────────────────────────────────────────────────────────────
 
@@ -745,9 +736,7 @@ def _run_cases(device: str) -> dict[str, list[str]]:
         if current is None:
             # Died outside any case — the prelude itself.  Blame everything left.
             for name, _ in pending:
-                results.setdefault(
-                    name, ["crash", f"{_describe_exit(done.returncode)}: {tail}"]
-                )
+                results.setdefault(name, ["crash", f"{_describe_exit(done.returncode)}: {tail}"])
             break
         results[current] = ["crash", f"{_describe_exit(done.returncode)}: {tail}"]
         pending = [(n, c) for n, c in pending if n not in results]
@@ -763,9 +752,7 @@ def _result(device: str, name: str) -> list[str]:
     return _RESULTS[device].get(name, ["missing", "the child never reached this case"])
 
 
-@pytest.mark.parametrize(
-    "name,expect", [(n, e) for n, _, e in CASES], ids=[n for n, _, _ in CASES]
-)
+@pytest.mark.parametrize("name,expect", [(n, e) for n, _, e in CASES], ids=[n for n, _, _ in CASES])
 def test_the_process_survives(device: str, name: str, expect: str) -> None:
     status, detail = _result(device, name)
     assert status != "crash", f"{name} on {device} killed the interpreter — {detail}"

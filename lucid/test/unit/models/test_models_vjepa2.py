@@ -107,9 +107,7 @@ class TestRegistry:
         } <= set(list_models(task="image-classification"))
 
     def test_the_action_model_registers_as_a_world_model(self) -> None:
-        assert "vjepa2_ac_vit_giant_world_model" in set(
-            list_models(task="world-modeling")
-        )
+        assert "vjepa2_ac_vit_giant_world_model" in set(list_models(task="world-modeling"))
 
     def test_the_probe_refuses_a_checkpoint_it_does_not_have(self) -> None:
         """Only the backbones are published; the probe's head is not."""
@@ -156,12 +154,8 @@ class TestReleasedGeometry:
         config = VJEPA2Config(ema=[0.99, 1.0])  # type: ignore[arg-type]
         assert config.ema == (0.99, 1.0)
 
-    @pytest.mark.parametrize(
-        "field", ["ema", "ema_schedule_scale", "num_pooler_layers"]
-    )
-    def test_a_configuration_no_model_can_be_built_from_is_refused(
-        self, field: str
-    ) -> None:
+    @pytest.mark.parametrize("field", ["ema", "ema_schedule_scale", "num_pooler_layers"])
+    def test_a_configuration_no_model_can_be_built_from_is_refused(self, field: str) -> None:
         bad: dict[str, object] = {
             "ema": (1.5, 1.0),
             "ema_schedule_scale": 0.0,
@@ -176,9 +170,7 @@ class TestPositionTable:
 
     def test_an_odd_axis_width_is_padded_not_truncated(self) -> None:
         assert tuple(
-            _sincos_3d(
-                12, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32
-            ).shape
+            _sincos_3d(12, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32).shape
         ) == (1, 8, 12)
 
     def test_a_float32_cpu_table_is_the_float64_one_rounded_once(self) -> None:
@@ -188,17 +180,11 @@ class TestPositionTable:
         narrow = _sincos_3d(1024, (8, 16, 16), True, device=cpu, dtype=lucid.float32)
         wide = _sincos_3d(1024, (8, 16, 16), True, device=cpu, dtype=lucid.float64)
         assert narrow.dtype == lucid.float32
-        assert bytes(narrow._impl.to_bytes()) == bytes(
-            wide.to(lucid.float32)._impl.to_bytes()
-        )
+        assert bytes(narrow._impl.to_bytes()) == bytes(wide.to(lucid.float32)._impl.to_bytes())
 
     def test_uniform_power_changes_the_split(self) -> None:
-        even = _sincos_3d(
-            24, (2, 2, 2), True, device=lucid.device("cpu"), dtype=lucid.float32
-        )
-        split = _sincos_3d(
-            24, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32
-        )
+        even = _sincos_3d(24, (2, 2, 2), True, device=lucid.device("cpu"), dtype=lucid.float32)
+        split = _sincos_3d(24, (2, 2, 2), False, device=lucid.device("cpu"), dtype=lucid.float32)
         assert float((even - split).abs().max().item()) > 0.0
 
     def test_the_config_chooses_the_split(self) -> None:
@@ -255,10 +241,7 @@ class TestMaskedPrediction:
         assert tuple(output.prediction.shape) == (1, 2, config.dim)
         assert tuple(output.target.shape) == (1, 2, config.dim)
         assert output.loss is not None and output.loss.ndim == 0
-        assert all(
-            not parameter.requires_grad
-            for parameter in model.target_encoder.parameters()
-        )
+        assert all(not parameter.requires_grad for parameter in model.target_encoder.parameters())
 
     def test_a_step_trains_the_encoder_and_the_predictor(self) -> None:
         """The family's training step, through the public factory."""
@@ -278,9 +261,7 @@ class TestMaskedPrediction:
         # Every mask-token slot but the one this step asked for stays out
         # of the graph, which is what ten slots are for.
         unused = {
-            id(token)
-            for index, token in enumerate(model.predictor.mask_tokens)
-            if index != 1
+            id(token) for index, token in enumerate(model.predictor.mask_tokens) if index != 1
         }
         for parameter in model.trainable_parameters():
             if id(parameter) in unused:
@@ -349,12 +330,8 @@ class TestInitialisation:
         model = VJEPA2Model(config)
         for index, block in enumerate(model.encoder.blocks, start=1):
             wanted = config.init_std / math.sqrt(2.0 * index)
-            assert float(block.attn.proj.weight.std().item()) == pytest.approx(
-                wanted, rel=0.15
-            )
-            assert float(block.mlp.fc2.weight.std().item()) == pytest.approx(
-                wanted, rel=0.15
-            )
+            assert float(block.attn.proj.weight.std().item()) == pytest.approx(wanted, rel=0.15)
+            assert float(block.mlp.fc2.weight.std().item()) == pytest.approx(wanted, rel=0.15)
 
     def test_the_tubelet_embedding_starts_at_the_released_width(self) -> None:
         model = VJEPA2Model(_vjepa_config(dim=64, num_heads=4))
@@ -365,14 +342,10 @@ class TestInitialisation:
         """Left out, the probe would start at the framework's fan-in default."""
         config = _vjepa_config(dim=64, num_heads=4, num_classes=5, num_pooler_layers=3)
         model = VJEPA2ForVideoClassification(config)
-        assert float(model.pooler.query.weight.std().item()) == pytest.approx(
-            0.02, rel=0.25
-        )
+        assert float(model.pooler.query.weight.std().item()) == pytest.approx(0.02, rel=0.25)
         for index, block in enumerate(model.pooler.blocks, start=1):
             wanted = config.init_std / math.sqrt(2.0 * index)
-            assert float(block.proj.weight.std().item()) == pytest.approx(
-                wanted, rel=0.2
-            )
+            assert float(block.proj.weight.std().item()) == pytest.approx(wanted, rel=0.2)
 
     def test_the_mask_tokens_stay_at_zero(self) -> None:
         model = VJEPA2Model(_vjepa_config())
@@ -416,9 +389,7 @@ class TestProbe:
         """
         config = _vjepa_config(num_classes=5, num_pooler_layers=3)
         model = VJEPA2ForVideoClassification(config)
-        probe = {
-            key for key in model.state_dict() if key.startswith(("pooler.", "head."))
-        }
+        probe = {key for key in model.state_dict() if key.startswith(("pooler.", "head."))}
         tower = {
             f"pooler.blocks.{index}.{leaf}"
             for index in range(3)
@@ -483,14 +454,8 @@ class TestProbe:
 
         for parameter in probe:
             assert parameter.grad is not None
-        assert any(
-            float((now - was).abs().max().item()) > 0.0
-            for now, was in zip(probe, before)
-        )
-        assert all(
-            parameter.grad is None
-            for parameter in model.vjepa2.target_encoder.parameters()
-        )
+        assert any(float((now - was).abs().max().item()) > 0.0 for now, was in zip(probe, before))
+        assert all(parameter.grad is None for parameter in model.vjepa2.target_encoder.parameters())
 
     def test_the_pooled_vector_depends_on_every_token(self) -> None:
         model = VJEPA2ForVideoClassification(_vjepa_config(num_classes=5)).eval()
@@ -601,9 +566,7 @@ class TestActionConditioned:
     def test_a_single_frame_is_not_a_transition(self) -> None:
         model = VJEPA2ACModel(_ac_config())
         with pytest.raises(ValueError, match="two frames"):
-            model(
-                lucid.randn(1, 1, 3, 16, 16), lucid.randn(1, 1, 3), lucid.randn(1, 1, 3)
-            )
+            model(lucid.randn(1, 1, 3, 16, 16), lucid.randn(1, 1, 3), lucid.randn(1, 1, 3))
 
     def test_a_video_of_the_wrong_shape_is_refused(self) -> None:
         model = VJEPA2ACModel(_ac_config())

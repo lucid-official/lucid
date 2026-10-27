@@ -91,9 +91,7 @@ def _zero_projection(head: nn.Module) -> None:
             layer.weight.zero_()
 
 
-def _modulation(
-    params: Tensor, count: int, width: int, normalize: bool
-) -> list[Tensor]:
+def _modulation(params: Tensor, count: int, width: int, normalize: bool) -> list[Tensor]:
     r"""Split an adaLN projection into ``count`` vectors of ``width``.
 
     With ``normalize`` each vector is RMS-normalised on its own — Eq. 16
@@ -301,9 +299,7 @@ class _FinalLayer(nn.Module):
     @override
     def forward(self, x: Tensor, cond: Tensor) -> Tensor:
         """Project ``(B, N, D)`` tokens to ``(B, N, patch^2 * out_channels)``."""
-        shift, scale = _modulation(
-            self.ada_ln(cond), 2, int(x.shape[2]), self.modulation_norm
-        )
+        shift, scale = _modulation(self.ada_ln(cond), 2, int(x.shape[2]), self.modulation_norm)
         return self.proj(self.norm(x) * (1.0 + scale) + shift)
 
 
@@ -557,9 +553,7 @@ class TVMModel(PretrainedModel):
         device = x.device.type
         guidance = self.resolve_guidance(guidance_scale, labels)
         if not isinstance(guidance, Tensor):
-            guidance = lucid.full(
-                (batch,), float(guidance), device=device, dtype=x.dtype
-            )
+            guidance = lucid.full((batch,), float(guidance), device=device, dtype=x.dtype)
         if labels is None:
             labels = lucid.full(
                 (batch,),
@@ -774,9 +768,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         outside :meth:`parameters`, so neither the optimiser's flush nor a
         loop's reaches them on Metal.
         """
-        averages = [
-            (self._average(key), decay) for key, decay in self._decays().items()
-        ]
+        averages = [(self._average(key), decay) for key, decay in self._decays().items()]
         update_averages(self.tvm, averages)
 
     # ── sampling the training variables ──────────────────────────────────
@@ -813,18 +805,14 @@ class TVMForImageGeneration(ImageGenerationModel):
         config = self.config
         if config.time_sampler == "gap":
             gap = self._logit_normal(config.gap_mean, config.gap_std, batch, device)
-            s = self._truncated_logit_normal(
-                config.s_mean, config.s_std, 1.0 - gap, device
-            )
+            s = self._truncated_logit_normal(config.s_mean, config.s_std, 1.0 - gap, device)
             t = lucid.clamp(s + gap, max=1.0)
         elif config.time_sampler == "trunc":
             t = self._logit_normal(config.t_mean, config.t_std, batch, device)
             s = self._truncated_logit_normal(config.s_mean, config.s_std, t, device)
         else:
             t = self._logit_normal(config.t_mean, config.t_std, batch, device)
-            s = lucid.minimum(
-                self._logit_normal(config.s_mean, config.s_std, batch, device), t
-            )
+            s = lucid.minimum(self._logit_normal(config.s_mean, config.s_std, batch, device), t)
 
         if config.ratio_t_equals_s > 0.0:
             same = lucid.rand((batch,), device=device) < config.ratio_t_equals_s
@@ -843,9 +831,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         if config.guidance_range is None:
             return lucid.full((batch,), config.guidance_scale, device=device)
         low, high = config.guidance_range
-        beta = 1.0 / high + lucid.rand((batch,), device=device) * (
-            1.0 / low - 1.0 / high
-        )
+        beta = 1.0 / high + lucid.rand((batch,), device=device) * (1.0 / low - 1.0 / high)
         return 1.0 / beta
 
     # ── objective ────────────────────────────────────────────────────────
@@ -881,9 +867,7 @@ class TVMForImageGeneration(ImageGenerationModel):
             with lucid.no_grad():
                 _, along_s = lucid.func.jvp(field, (s,), (tangent,))
         else:
-            primal, along_s = lucid.func.jvp(
-                field, (s.detach().requires_grad_(),), (tangent,)
-            )
+            primal, along_s = lucid.func.jvp(field, (s.detach().requires_grad_(),), (tangent,))
             assert isinstance(primal, Tensor), "the field returns one tensor"
             velocity = primal
         assert isinstance(along_s, Tensor), "the field returns one tensor"
@@ -933,9 +917,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         # Drawn in float32 (``ndtri`` wants it), then in the images' dtype.
         t, s, s_fm = (v.to(images.dtype) for v in self._sample_times(batch, device))
         guidance = self._sample_guidance(batch, device).to(images.dtype)
-        null = lucid.full(
-            (batch,), float(config.num_classes), dtype=lucid.int64, device=device
-        )
+        null = lucid.full((batch,), float(config.num_classes), dtype=lucid.int64, device=device)
         if labels is None:
             labels = null
             guidance = lucid.ones_like(guidance)
@@ -975,9 +957,7 @@ class TVMForImageGeneration(ImageGenerationModel):
         # The released loss zeroes the terminal term wherever ``isclose(s,
         # t)`` — its default tolerances, not exact equality.
         differs = 1.0 - lucid.isclose(s, t).to(images.dtype)
-        terminal_term = (((terminal - terminal_target) * beta_b) ** 2).mean(
-            dim=(1, 2, 3)
-        ) * differs
+        terminal_term = (((terminal - terminal_target) * beta_b) ** 2).mean(dim=(1, 2, 3)) * differs
         fm_term = (((velocity_fm - guided) * beta_b) ** 2).mean(dim=(1, 2, 3))
         return TVMOutput(
             loss=(terminal_term + fm_term).mean(),

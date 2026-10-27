@@ -478,12 +478,7 @@ class Nmt(Normalizer):
         out: list[str] = []
         for ch in text:
             cp = ord(ch)
-            if (
-                0x01 <= cp <= 0x08
-                or cp == 0x0B
-                or 0x0E <= cp <= 0x1F
-                or cp in (0x7F, 0x8F, 0x9F)
-            ):
+            if 0x01 <= cp <= 0x08 or cp == 0x0B or 0x0E <= cp <= 0x1F or cp in (0x7F, 0x8F, 0x9F):
                 continue
             if (
                 cp in (0x09, 0x0A, 0x0C, 0x0D, 0x1680, 0x2028, 0x2029, 0x2581)
@@ -819,8 +814,7 @@ class Precompiled(Normalizer):
         (trie_size,) = struct.unpack_from("<I", blob, 0)
         if trie_size > len(blob) - 4 or trie_size % 4 != 0:
             raise ValueError(
-                f"Precompiled: trie size {trie_size} does not fit a "
-                f"{len(blob)}-byte blob"
+                f"Precompiled: trie size {trie_size} does not fit a " f"{len(blob)}-byte blob"
             )
         self._units = struct.unpack_from(f"<{trie_size // 4}I", blob, 4)
         self._pool = blob[4 + trie_size :]

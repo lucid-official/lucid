@@ -130,10 +130,7 @@ class PixelEncoder(nn.Module):
         self.embed_size = pixel_embed_size(cnn_depth)
         widths = (in_channels, cnn_depth, 2 * cnn_depth, 4 * cnn_depth, 8 * cnn_depth)
         self.convs = nn.ModuleList(
-            [
-                nn.Conv2d(widths[i], widths[i + 1], kernel_size=4, stride=2)
-                for i in range(4)
-            ]
+            [nn.Conv2d(widths[i], widths[i + 1], kernel_size=4, stride=2) for i in range(4)]
         )
 
     @override
@@ -180,9 +177,7 @@ class PixelDecoder(nn.Module):
     happened to need.
     """
 
-    def __init__(
-        self, latent_size: int, out_channels: int, cnn_depth: int, act_fn: str
-    ) -> None:
+    def __init__(self, latent_size: int, out_channels: int, cnn_depth: int, act_fn: str) -> None:
         """Initialise the decoder. See the class docstring for parameters."""
         super().__init__()
         self._act_name = act_fn
@@ -196,10 +191,7 @@ class PixelDecoder(nn.Module):
             (cnn_depth, out_channels, 6),
         )
         self.deconvs = nn.ModuleList(
-            [
-                nn.ConvTranspose2d(cin, cout, kernel_size=k, stride=2)
-                for cin, cout, k in specs
-            ]
+            [nn.ConvTranspose2d(cin, cout, kernel_size=k, stride=2) for cin, cout, k in specs]
         )
 
     @override
@@ -268,9 +260,7 @@ class DenseHead(nn.Module):
         self._act_name = act_fn
         self._squeeze = squeeze and out_features == 1
         widths = [in_features] + [hidden] * layers
-        self.layers = nn.ModuleList(
-            [nn.Linear(widths[i], widths[i + 1]) for i in range(layers)]
-        )
+        self.layers = nn.ModuleList([nn.Linear(widths[i], widths[i + 1]) for i in range(layers)])
         self.out = nn.Linear(hidden, out_features)
 
     @override

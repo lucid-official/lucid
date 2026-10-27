@@ -203,9 +203,7 @@ def make_gpt(lib: ModuleType, nn_: ModuleType, F_: ModuleType) -> Any:
             b, t, c = x.shape
             qkv = self.qkv(self.ln1(x)).reshape(b, t, 3, heads, c // heads)
             qkv = qkv.permute(2, 0, 3, 1, 4)
-            att = F_.scaled_dot_product_attention(
-                qkv[0], qkv[1], qkv[2], is_causal=True
-            )
+            att = F_.scaled_dot_product_attention(qkv[0], qkv[1], qkv[2], is_causal=True)
             x = x + self.proj(att.permute(0, 2, 1, 3).reshape(b, t, c))
             return x + self.fc2(F_.gelu(self.fc1(self.ln2(x))))
 
@@ -269,12 +267,8 @@ GPT = Recipe(
     name="gpt_adamw_warmup",
     steps=3_000,
     make_model=make_gpt,
-    make_optimizer=lambda o, p: o.AdamW(
-        p, lr=3e-3, betas=(0.9, 0.95), weight_decay=0.1
-    ),
-    make_schedule=lambda o, opt: o.lr_scheduler.LambdaLR(
-        opt, _warmup_cosine(3_000, 100)
-    ),
+    make_optimizer=lambda o, p: o.AdamW(p, lr=3e-3, betas=(0.9, 0.95), weight_decay=0.1),
+    make_schedule=lambda o, opt: o.lr_scheduler.LambdaLR(opt, _warmup_cosine(3_000, 100)),
     clip=1.0,
 )
 
@@ -304,20 +298,10 @@ def build_pair(recipe: Recipe, device: str, ref: ModuleType) -> tuple[Any, Any]:
     return mine.to(device), theirs
 
 
-def run_images(
-    recipe: Recipe, framework: str, model: Any, device: str, ref: ModuleType
-) -> Run:
+def run_images(recipe: Recipe, framework: str, model: Any, device: str, ref: ModuleType) -> Run:
     x_te, y_te = shapes_dataset(N_TEST_IMAGES, SEED + 100)
-    lib, o, fn = (
-        (lucid, optim, F)
-        if framework == "lucid"
-        else (ref, ref.optim, ref.nn.functional)
-    )
-    put = (
-        (lambda a: lucid.tensor(a, device=device))
-        if framework == "lucid"
-        else ref.from_numpy
-    )
+    lib, o, fn = (lucid, optim, F) if framework == "lucid" else (ref, ref.optim, ref.nn.functional)
+    put = (lambda a: lucid.tensor(a, device=device)) if framework == "lucid" else ref.from_numpy
     opt = recipe.make_optimizer(o, model.parameters())
     sched = recipe.make_schedule(o, opt)
     losses: list[float] = []
@@ -339,26 +323,12 @@ def run_images(
     return Run(losses, correct / N_TEST_IMAGES)
 
 
-def run_text(
-    recipe: Recipe, framework: str, model: Any, device: str, ref: ModuleType
-) -> Run:
+def run_text(recipe: Recipe, framework: str, model: Any, device: str, ref: ModuleType) -> Run:
     corpus = markov_corpus(SEED)
     starts = text_batches(corpus, recipe.steps, SEED)
-    lib, o, fn = (
-        (lucid, optim, F)
-        if framework == "lucid"
-        else (ref, ref.optim, ref.nn.functional)
-    )
-    put = (
-        (lambda a: lucid.tensor(a, device=device))
-        if framework == "lucid"
-        else ref.from_numpy
-    )
-    clip = (
-        lucid.nn.utils.clip_grad_norm_
-        if framework == "lucid"
-        else ref.nn.utils.clip_grad_norm_
-    )
+    lib, o, fn = (lucid, optim, F) if framework == "lucid" else (ref, ref.optim, ref.nn.functional)
+    put = (lambda a: lucid.tensor(a, device=device)) if framework == "lucid" else ref.from_numpy
+    clip = lucid.nn.utils.clip_grad_norm_ if framework == "lucid" else ref.nn.utils.clip_grad_norm_
     opt = recipe.make_optimizer(o, model.parameters())
     sched = recipe.make_schedule(o, opt)
     losses: list[float] = []

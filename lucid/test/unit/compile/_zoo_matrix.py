@@ -229,9 +229,7 @@ def _episodes(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
 
 def _action_video(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     lucid.manual_seed(seed)
-    video = lucid.randn(
-        BATCH, cfg.num_frames, cfg.in_channels, cfg.image_size, cfg.image_size
-    )
+    video = lucid.randn(BATCH, cfg.num_frames, cfg.in_channels, cfg.image_size, cfg.image_size)
     steps = cfg.num_frames - 1  # one conditioning row per transition
     actions = lucid.randn(BATCH, steps, cfg.action_dim)
     states = lucid.randn(BATCH, steps, cfg.state_dim)
@@ -243,9 +241,7 @@ _ROLLOUT = "forward is a rollout (sampling), not a training step"
 #: family → what the rules miss, and why.
 SPECS: dict[str, Spec] = {
     # Zero-shot scoring takes the candidate prompts as a second input.
-    "clip": Spec(
-        {"image_size": 32, "patch_size": 16, "context_length": 8}, inputs=_clip
-    ),
+    "clip": Spec({"image_size": 32, "patch_size": 16, "context_length": 8}, inputs=_clip),
     # The decoder ids are optional — shifted from the labels when omitted —
     # so the rules, which fill required parameters only, would pass the
     # source alone.  Hand the decoder its own ids, as Transformer's get.
@@ -295,9 +291,7 @@ SPECS: dict[str, Spec] = {
         },
         inputs=_action_video,
     ),
-    "stable_diffusion": Spec(
-        skip=_ROLLOUT + " — 50 denoising steps from a text context"
-    ),
+    "stable_diffusion": Spec(skip=_ROLLOUT + " — 50 denoising steps from a text context"),
     "diamond": Spec(skip=_ROLLOUT + " — imagines a horizon from real frames"),
     "genie": Spec(skip=_ROLLOUT + " — generates frames from a prompt"),
 }
@@ -348,9 +342,7 @@ def default_inputs(
     size = spec.size or _cfg_int(
         cfg, ("image_size", "img_size", "input_size", "sample_size", "resolution"), 64
     )
-    chans = _cfg_int(
-        cfg, ("in_channels", "num_channels", "image_channels", "channels"), 3
-    )
+    chans = _cfg_int(cfg, ("in_channels", "num_channels", "image_channels", "channels"), 3)
     vocab = _cfg_int(cfg, ("vocab_size",), 128)
     args: list[Any] = []
     for p in list(inspect.signature(type(model).forward).parameters.values())[1:]:
@@ -369,9 +361,7 @@ def default_inputs(
         elif p.name in _TOKEN_ARGS:
             args.append(lucid.randint(0, vocab, (BATCH, SEQ)).to(DEV))
         elif p.name in ("timestep", "timesteps", "t"):
-            steps = _cfg_int(
-                cfg, ("num_timesteps", "timesteps", "num_train_timesteps"), 1000
-            )
+            steps = _cfg_int(cfg, ("num_timesteps", "timesteps", "num_train_timesteps"), 1000)
             args.append(lucid.randint(0, steps, (BATCH,)).to(DEV))
         else:
             raise LookupError(f"no input rule for parameter {p.name!r}")
@@ -444,11 +434,7 @@ def build(family: str, task: str) -> tuple[str, Any, Any, dict[str, Any]]:
 
 
 def _grads(model: Any) -> dict[str, np.ndarray]:
-    return {
-        n: p.grad.numpy().copy()
-        for n, p in model.named_parameters()
-        if p.grad is not None
-    }
+    return {n: p.grad.numpy().copy() for n, p in model.named_parameters() if p.grad is not None}
 
 
 def _state(model: Any) -> dict[str, np.ndarray]:
@@ -491,9 +477,7 @@ def nonfinite(loss: float, grads: Mapping[str, np.ndarray]) -> str | None:
     return None
 
 
-def _worst(
-    want: dict[str, np.ndarray], got: dict[str, np.ndarray]
-) -> tuple[float, str, list[str]]:
+def _worst(want: dict[str, np.ndarray], got: dict[str, np.ndarray]) -> tuple[float, str, list[str]]:
     """Largest error over the entries, each against its own scale.
 
     The scale is floored at a small fraction of the largest entry in the
@@ -574,9 +558,7 @@ def _compiled_step(
     return float(loss.item()), why
 
 
-def _eager_step(
-    model: Any, batch: tuple[tuple[Any, ...], dict[str, Any]], seed: int
-) -> float:
+def _eager_step(model: Any, batch: tuple[tuple[Any, ...], dict[str, Any]], seed: int) -> float:
     _zero(model)
     a, k = batch
     lucid.manual_seed(seed)
@@ -910,9 +892,7 @@ def verdict(rec: Mapping[str, Any]) -> str | None:
 
 
 def _details(rec: Mapping[str, Any]) -> str:
-    return "; ".join(
-        f"{m}={str(rec.get(f'{m}_detail'))[:160]}" for m in ("eval", "train")
-    )
+    return "; ".join(f"{m}={str(rec.get(f'{m}_detail'))[:160]}" for m in ("eval", "train"))
 
 
 def sweep(tasks: tuple[str, ...] = TASKS, shard: tuple[int, int] = (1, 1)) -> int:

@@ -29,9 +29,7 @@ from lucid._C import engine as _C_engine
 from lucid.test._fixtures.devices import METAL_UNSUPPORTED_DTYPES
 
 # Every dtype Lucid exposes, whatever alias it also goes by.
-_ALL_DTYPES = sorted(
-    {v for v in vars(lucid).values() if isinstance(v, lucid.dtype)}, key=str
-)
+_ALL_DTYPES = sorted({v for v in vars(lucid).values() if isinstance(v, lucid.dtype)}, key=str)
 _REFUSED = [d for d in _ALL_DTYPES if d in METAL_UNSUPPORTED_DTYPES]
 _HELD = [d for d in _ALL_DTYPES if d not in METAL_UNSUPPORTED_DTYPES]
 
@@ -59,9 +57,7 @@ def test_the_filter_names_only_real_dtypes() -> None:
 
 @pytest.mark.parametrize("way", list(_WAYS_ONTO_METAL))
 @pytest.mark.parametrize("dtype", _REFUSED, ids=str)
-def test_a_refused_dtype_is_refused_at_every_way_in(
-    dtype: lucid.dtype, way: str
-) -> None:
+def test_a_refused_dtype_is_refused_at_every_way_in(dtype: lucid.dtype, way: str) -> None:
     with pytest.raises(_C_engine.NotImplementedError) as info:
         _WAYS_ONTO_METAL[way](dtype)
     message = str(info.value)

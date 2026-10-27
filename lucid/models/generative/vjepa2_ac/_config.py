@@ -157,8 +157,7 @@ class VJEPA2ACConfig(ModelConfig):
             raise ValueError(f"mlp_ratio must be positive, got {self.mlp_ratio}")
         if self.predictor_mlp_ratio <= 0.0:
             raise ValueError(
-                "predictor_mlp_ratio must be positive, got "
-                f"{self.predictor_mlp_ratio}"
+                "predictor_mlp_ratio must be positive, got " f"{self.predictor_mlp_ratio}"
             )
         if self.layer_norm_eps <= 0.0 or self.init_std <= 0.0:
             raise ValueError("layer_norm_eps and init_std must be positive")

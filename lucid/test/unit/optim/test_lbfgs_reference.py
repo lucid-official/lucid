@@ -24,9 +24,7 @@ import lucid.nn as nn
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
 
-_A4 = np.array(
-    [[3, 1, 0, 0], [1, 4, 1, 0], [0, 1, 5, 1], [0, 0, 1, 6]], dtype=np.float32
-)
+_A4 = np.array([[3, 1, 0, 0], [1, 4, 1, 0], [0, 1, 5, 1], [0, 0, 1, 6]], dtype=np.float32)
 _B4 = np.array([1, 2, 3, 4], dtype=np.float32)
 
 # Condition number 1e3: enough curvature pairs are needed that a short
@@ -116,9 +114,7 @@ _LINE_SEARCHES = [None, "strong_wolfe"]
 
 
 @pytest.mark.parametrize("line_search_fn", _LINE_SEARCHES)
-def test_one_step_converges_on_the_spd_quadratic(
-    device: str, line_search_fn: str | None
-) -> None:
+def test_one_step_converges_on_the_spd_quadratic(device: str, line_search_fn: str | None) -> None:
     traj, calls, _, _ = _run(
         _Lib(lucid, device),
         _quadratic(_A4, _B4),
@@ -224,12 +220,8 @@ def test_several_parameters_are_one_flat_vector(device: str, ref: Any) -> None:
 def test_a_tolerance_ends_the_step_where_the_reference_does(
     device: str, ref: Any, tolerance: dict[str, float], line_search_fn: str | None
 ) -> None:
-    kwargs: dict[str, Any] = dict(
-        lr=1, max_iter=20, line_search_fn=line_search_fn, **tolerance
-    )
-    got, want = _both(
-        ref, device, _quadratic(_A4, _B4), np.zeros(4, dtype=np.float32), **kwargs
-    )
+    kwargs: dict[str, Any] = dict(lr=1, max_iter=20, line_search_fn=line_search_fn, **tolerance)
+    got, want = _both(ref, device, _quadratic(_A4, _B4), np.zeros(4, dtype=np.float32), **kwargs)
     unstopped = _run(
         _Lib(lucid, device),
         _quadratic(_A4, _B4),
@@ -256,9 +248,7 @@ def test_a_met_tolerance_grad_returns_after_one_evaluation(device: str) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("max_iter", [1, 4, 20])
-def test_max_eval_defaults_to_five_quarters_of_max_iter(
-    ref: Any, max_iter: int
-) -> None:
+def test_max_eval_defaults_to_five_quarters_of_max_iter(ref: Any, max_iter: int) -> None:
     p = nn.Parameter(lucid.zeros(2))
     q = ref.nn.Parameter(ref.zeros(2))
     got = optim.LBFGS([p], max_iter=max_iter).param_groups[0]["max_eval"]
@@ -290,12 +280,8 @@ def test_max_eval_caps_the_line_search(device: str, ref: Any) -> None:
 def test_history_size_truncates_like_the_reference(
     device: str, ref: Any, line_search_fn: str | None
 ) -> None:
-    kwargs: dict[str, Any] = dict(
-        lr=1, max_iter=12, history_size=2, line_search_fn=line_search_fn
-    )
-    got, want = _both(
-        ref, device, _quadratic(_A6, _B6), np.zeros(6, dtype=np.float32), **kwargs
-    )
+    kwargs: dict[str, Any] = dict(lr=1, max_iter=12, history_size=2, line_search_fn=line_search_fn)
+    got, want = _both(ref, device, _quadratic(_A6, _B6), np.zeros(6, dtype=np.float32), **kwargs)
     assert got[1] == want[1], "closure calls"
     np.testing.assert_allclose(got[0], want[0], rtol=0, atol=1e-4)
     held = got[3].state_dict()["state"][0]
@@ -307,9 +293,7 @@ def test_history_size_truncates_like_the_reference(
 
 
 @pytest.mark.parametrize("line_search_fn", _LINE_SEARCHES)
-def test_a_reloaded_state_continues_identically(
-    device: str, line_search_fn: str | None
-) -> None:
+def test_a_reloaded_state_continues_identically(device: str, line_search_fn: str | None) -> None:
     lib = _Lib(lucid, device)
     kwargs: dict[str, Any] = dict(lr=0.5, max_iter=4, line_search_fn=line_search_fn)
 
@@ -338,10 +322,7 @@ def test_a_reloaded_state_continues_identically(
         fresh.step(fresh_closure)
         np.testing.assert_array_equal(x.detach().numpy(), y.detach().numpy())
     assert calls[0] == fresh_calls[0]
-    assert (
-        fresh.state_dict()["state"][0]["n_iter"]
-        == opt.state_dict()["state"][0]["n_iter"]
-    )
+    assert fresh.state_dict()["state"][0]["n_iter"] == opt.state_dict()["state"][0]["n_iter"]
 
 
 @pytest.mark.parity

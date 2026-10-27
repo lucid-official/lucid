@@ -312,7 +312,5 @@ def gumbel_softmax(
         return y_soft
     # Build a one-hot at argmax, then re-attach ``y_soft``'s gradient.
     idx: Tensor = y_soft.argmax(dim=dim, keepdim=True)
-    y_hard: Tensor = _l.zeros_like(y_soft).scatter(
-        dim, idx, _l.ones_like(idx, dtype=y_soft.dtype)
-    )
+    y_hard: Tensor = _l.zeros_like(y_soft).scatter(dim, idx, _l.ones_like(idx, dtype=y_soft.dtype))
     return straight_through(y_hard, y_soft)

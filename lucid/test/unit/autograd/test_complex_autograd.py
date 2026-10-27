@@ -124,9 +124,7 @@ def test_complex_builds_from_two_real_operands() -> None:
         (lambda x: lucid.abs(lucid.fft.fft(x)), [-1.41421, 0.58579, 1.41421, 3.41421]),
     ],
 )
-def test_a_gradient_survives_a_round_trip_through_the_frequency_domain(
-    build, expected
-) -> None:
+def test_a_gradient_survives_a_round_trip_through_the_frequency_domain(build, expected) -> None:
     x = lucid.tensor(SIGNAL.copy(), requires_grad=True)
     build(x).sum().backward()
     assert x.grad is not None

@@ -125,9 +125,7 @@ class TestADrawBecomesAnInput:
         finally:
             exported.close()
 
-    def test_a_uniform_draw_is_not_filled_with_a_normal_one(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_uniform_draw_is_not_filled_with_a_normal_one(self, tmp_path: object) -> None:
         """Which operation drew is recorded, because it has to be.
 
         Filling ``rand``'s input from ``randn`` is a package that runs
@@ -138,9 +136,7 @@ class TestADrawBecomesAnInput:
         lucid.manual_seed(0)
         model = _TwoDraws().eval()
         x = lucid.zeros(1, 8)
-        exported = cml.export(
-            model, x, f"{tmp_path}/kinds.mlpackage", draws=cml.Draws.AS_INPUT
-        )
+        exported = cml.export(model, x, f"{tmp_path}/kinds.mlpackage", draws=cml.Draws.AS_INPUT)
         try:
             assert len(exported.noise_inputs) == 2
             bias = float(model.fc.bias.max().item())
@@ -161,9 +157,7 @@ class TestComparingOneAgainstItsModel:
         finally:
             exported.close()
 
-    def test_a_reopened_handle_refuses_rather_than_guessing(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_reopened_handle_refuses_rather_than_guessing(self, tmp_path: object) -> None:
         """The samples are not written into the file.
 
         A reopened handle could run the eager model and compare — and
@@ -273,9 +267,7 @@ class TestTheFamiliesThisUnblocks:
         ],
         ids=["vae", "hvae", "score_sde_ve"],
     )
-    def test_a_generative_family_exports(
-        self, factory, make_inputs, draws, tmp_path
-    ) -> None:
+    def test_a_generative_family_exports(self, factory, make_inputs, draws, tmp_path) -> None:
         import lucid.models as M
 
         lucid.manual_seed(0)

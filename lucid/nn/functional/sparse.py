@@ -157,9 +157,7 @@ def embedding(
     >>> w.grad[1].tolist(), w.grad[3].tolist()
     ([1.0, 1.0], [1.0, 1.0])
     """
-    unsupported_if(
-        sparse, "embedding", "sparse", sparse, detail="Gradients are always dense."
-    )
+    unsupported_if(sparse, "embedding", "sparse", sparse, detail="Gradients are always dense.")
     padding_idx = _padding_index(padding_idx, weight, "embedding")
     _check_table(input, weight, "embedding")
     if max_norm is not None:
@@ -176,9 +174,7 @@ def embedding(
     return _wrap(_C_engine.nn.embedding(_unwrap(weight), _unwrap(idx), pad, by_freq))
 
 
-def _renorm_rows(
-    weight: Tensor, idx: Tensor, max_norm: float, norm_type: float
-) -> None:
+def _renorm_rows(weight: Tensor, idx: Tensor, max_norm: float, norm_type: float) -> None:
     """Rescale the rows of ``weight`` that ``idx`` names down to ``max_norm``, in place.
 
     The ``max_norm`` of every lookup — ``embedding``, ``embedding_bag`` and
@@ -198,9 +194,7 @@ def _renorm_rows(
     with lucid.no_grad(), _autocast_suspended(_unwrap(weight).device):
         rows = weight.index_select(0, flat)
         norms = lucid.linalg.vector_norm(rows, norm_type, dim=1, keepdim=True)
-        scale = lucid.where(
-            norms > max_norm, max_norm / (norms + 1e-7), lucid.ones_like(norms)
-        )
+        scale = lucid.where(norms > max_norm, max_norm / (norms + 1e-7), lucid.ones_like(norms))
         weight.index_copy_(0, flat, rows * scale)
 
 
@@ -219,12 +213,8 @@ def _bag_mode(mode: str, sparse: bool, scale_grad_by_freq: bool) -> int:
     """
     modes = {"sum": 0, "mean": 1, "max": 2}
     if mode not in modes:
-        raise ValueError(
-            f"embedding_bag: mode must be one of {sorted(modes)}, got {mode!r}"
-        )
-    unsupported_if(
-        sparse, "embedding_bag", "sparse", sparse, detail="Gradients are always dense."
-    )
+        raise ValueError(f"embedding_bag: mode must be one of {sorted(modes)}, got {mode!r}")
+    unsupported_if(sparse, "embedding_bag", "sparse", sparse, detail="Gradients are always dense.")
     if scale_grad_by_freq and mode == "max":
         raise ValueError(
             "embedding_bag: scale_grad_by_freq is not defined for mode='max' — "
@@ -314,9 +304,7 @@ def _bag_by_lookup(
     if mode == "mean":
         sizes = lucid.index_add(zeros, 0, bag, counted.to(rows.dtype))
         scale = scale / sizes.clamp(min=1.0).index_select(0, bag)
-    out = lucid.zeros(
-        (n_bags, int(weight.shape[1])), dtype=rows.dtype, device=rows.device
-    )
+    out = lucid.zeros((n_bags, int(weight.shape[1])), dtype=rows.dtype, device=rows.device)
     return lucid.index_add(out, 0, bag, rows * scale.unsqueeze(-1))
 
 
@@ -409,8 +397,7 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
     """
     if num_classes != -1 and num_classes <= 0:
         raise ValueError(
-            f"one_hot: num_classes must be positive, or -1 to infer it, "
-            f"got {num_classes}"
+            f"one_hot: num_classes must be positive, or -1 to infer it, " f"got {num_classes}"
         )
     if num_classes == -1:
         # The engine takes only a positive count, so the default this
@@ -485,8 +472,7 @@ def nearest_codebook(x: Tensor, codebook: Tensor) -> Tensor:
     dim = int(codebook.shape[-1])
     if int(x.shape[-1]) != dim:
         raise ValueError(
-            f"x's trailing axis must match the codebook's, got "
-            f"{int(x.shape[-1])} and {dim}"
+            f"x's trailing axis must match the codebook's, got " f"{int(x.shape[-1])} and {dim}"
         )
 
     lead = tuple(int(s) for s in x.shape[:-1])

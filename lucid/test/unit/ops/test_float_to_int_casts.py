@@ -14,9 +14,7 @@ _DEVICES = [
     "cpu",
     pytest.param(
         "metal",
-        marks=pytest.mark.skipif(
-            not lucid.metal.is_available(), reason="no Metal device"
-        ),
+        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
     ),
 ]
 _VALUES = [float("inf"), float("-inf"), float("nan"), 1.5, -2.5, 3e19, -3e19]

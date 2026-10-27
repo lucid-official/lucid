@@ -349,9 +349,7 @@ class AutoencoderKL(nn.Module):
         groups = config.norm_num_groups
         latent = config.latent_channels
 
-        self.conv_in = nn.Conv2d(
-            config.in_channels, widths[0], kernel_size=3, padding=1
-        )
+        self.conv_in = nn.Conv2d(config.in_channels, widths[0], kernel_size=3, padding=1)
         down: list[_ResnetBlock | _Downsample2d] = []
         current = widths[0]
         for level, width in enumerate(widths):
@@ -387,9 +385,7 @@ class AutoencoderKL(nn.Module):
         self.up = nn.ModuleList(up)
 
         self.decoder_norm_out = nn.GroupNorm(groups, current, eps=_VAE_NORM_EPS)
-        self.decoder_conv_out = nn.Conv2d(
-            current, config.out_channels, kernel_size=3, padding=1
-        )
+        self.decoder_conv_out = nn.Conv2d(current, config.out_channels, kernel_size=3, padding=1)
         self.act = nn.SiLU()
 
     def encode(self, x: Tensor) -> DiagonalGaussian:
@@ -499,6 +495,4 @@ class AutoencoderKL(nn.Module):
         """
         posterior = self.encode(x)
         z = posterior.sample() if sample else posterior.mode()
-        return AutoencoderKLOutput(
-            reconstruction=self.decode(z), latent=z, kl=posterior.kl()
-        )
+        return AutoencoderKLOutput(reconstruction=self.decode(z), latent=z, kl=posterior.kl())

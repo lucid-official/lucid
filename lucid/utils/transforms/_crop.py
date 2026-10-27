@@ -178,14 +178,10 @@ class PadIfNeeded(_NoParams, GeometricTransform[Empty]):
     ) -> None:
         for divisor in (pad_height_divisor, pad_width_divisor):
             if divisor is not None and divisor < 1:
-                raise ValueError(
-                    f"PadIfNeeded: a divisor must be at least 1, got {divisor}"
-                )
+                raise ValueError(f"PadIfNeeded: a divisor must be at least 1, got {divisor}")
         positions = ("center", "top_left", "top_right", "bottom_left", "bottom_right")
         if position not in positions:
-            raise ValueError(
-                f"PadIfNeeded: position must be one of {positions}, got {position!r}"
-            )
+            raise ValueError(f"PadIfNeeded: position must be one of {positions}, got {position!r}")
         super().__init__(p=p)
         self.min_height = min_height
         self.min_width = min_width
@@ -221,9 +217,7 @@ class PadIfNeeded(_NoParams, GeometricTransform[Empty]):
         # One fill per channel: pad with 0, then add each channel's fill over
         # the padded ring only.  ``x + 0`` is exact, so the image keeps its
         # values bit for bit.
-        ring = F.pad(
-            lucid.zeros(1, h, w, dtype=img.dtype, device=img.device), pads, value=1.0
-        )
+        ring = F.pad(lucid.zeros(1, h, w, dtype=img.dtype, device=img.device), pads, value=1.0)
         fill = lucid.tensor(list(self.value), dtype=img.dtype, device=img.device)
         return F.pad(img, pads, value=0.0) + ring * fill.reshape(-1, 1, 1)
 
@@ -348,16 +342,12 @@ class RandomSizedCrop(GeometricTransform[CropBox]):
 
     @override
     def _apply_boxes(self, boxes: BoundingBoxes, params: CropBox) -> BoundingBoxes:
-        cropped = crop_boxes(
-            boxes, params.top, params.left, params.height, params.width
-        )
+        cropped = crop_boxes(boxes, params.top, params.left, params.height, params.width)
         return resize_boxes(cropped, self.height, self.width)
 
     @override
     def _apply_keypoints(self, kps: Keypoints, params: CropBox) -> Keypoints:
-        cropped = crop_keypoints(
-            kps, params.top, params.left, params.height, params.width
-        )
+        cropped = crop_keypoints(kps, params.top, params.left, params.height, params.width)
         return resize_keypoints(cropped, self.height, self.width)
 
     @override
@@ -422,9 +412,7 @@ class CropAndPad(_NoParams, GeometricTransform[Empty]):
     def _apply_keypoints(self, kps: Keypoints, params: Empty) -> Keypoints:
         h, w = kps.canvas_size
         if self.px >= 0:
-            return pad_keypoints(
-                kps, self.px, self.px, h + 2 * self.px, w + 2 * self.px
-            )
+            return pad_keypoints(kps, self.px, self.px, h + 2 * self.px, w + 2 * self.px)
         c = -self.px
         return crop_keypoints(kps, c, c, h - 2 * c, w - 2 * c)
 

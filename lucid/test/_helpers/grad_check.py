@@ -61,9 +61,9 @@ def _flat_jacobian_finite_diff(
         if isinstance(out_plus, tuple):
             out_plus = out_plus[output_idx]
             out_minus = out_minus[output_idx]
-        diff = out_plus.numpy().reshape(-1).astype(
-            np.float64
-        ) - out_minus.numpy().reshape(-1).astype(np.float64)
+        diff = out_plus.numpy().reshape(-1).astype(np.float64) - out_minus.numpy().reshape(
+            -1
+        ).astype(np.float64)
         jac[:, j] = diff / (2.0 * eps)
     return jac
 
@@ -108,9 +108,7 @@ def _flat_jacobian_autograd(
         seed = lucid.zeros_like(flat_k)
         seed_np = np.zeros(out_numel, dtype=np.float32)
         seed_np[k] = 1.0
-        seed = lucid.tensor(
-            seed_np.reshape(out_k.shape), dtype=out_k.dtype, device=out_k.device
-        )
+        seed = lucid.tensor(seed_np.reshape(out_k.shape), dtype=out_k.dtype, device=out_k.device)
         out_k.backward(seed)
         g = fresh[0].grad
         if g is None:

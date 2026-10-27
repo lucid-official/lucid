@@ -41,9 +41,7 @@ class TestActivationParity:
 
     def test_softmax(self, x_pair, ref) -> None:  # type: ignore[no-untyped-def]
         l, r = x_pair
-        assert_close(
-            F.softmax(l, dim=1), ref.nn.functional.softmax(r, dim=1), atol=1e-6
-        )
+        assert_close(F.softmax(l, dim=1), ref.nn.functional.softmax(r, dim=1), atol=1e-6)
 
     def test_log_softmax(self, x_pair, ref) -> None:  # type: ignore[no-untyped-def]
         l, r = x_pair

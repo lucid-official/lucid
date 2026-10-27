@@ -30,9 +30,7 @@ _REPLACED_ON_PURPOSE: frozenset[str] = frozenset()
 
 def _class_members() -> dict[str, int]:
     tree = ast.parse(_SOURCE.read_text(encoding="utf-8"))
-    cls = next(
-        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor"
-    )
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Tensor")
     members: dict[str, int] = {}
     for node in cls.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):

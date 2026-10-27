@@ -43,9 +43,7 @@ class _Resample(nn.Module):
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
         if self.mode == "nearest":
             return F.interpolate(x, size=self.size, mode=self.mode)
-        return F.interpolate(
-            x, size=self.size, mode=self.mode, align_corners=self.align
-        )
+        return F.interpolate(x, size=self.size, mode=self.mode, align_corners=self.align)
 
 
 def _run(

@@ -96,15 +96,11 @@ class TestLossesF:
 
 class TestGumbelSoftmax:
     def test_soft_sums_to_one(self) -> None:
-        out = F.gumbel_softmax(
-            lucid.tensor([[1.0, 2.0, 3.0]]), tau=1.0, hard=False
-        ).numpy()
+        out = F.gumbel_softmax(lucid.tensor([[1.0, 2.0, 3.0]]), tau=1.0, hard=False).numpy()
         assert abs(out.sum() - 1.0) < 1e-5
 
     def test_hard_one_hot(self) -> None:
-        out = F.gumbel_softmax(
-            lucid.tensor([[1.0, 2.0, 3.0]]), tau=1.0, hard=True
-        ).numpy()
+        out = F.gumbel_softmax(lucid.tensor([[1.0, 2.0, 3.0]]), tau=1.0, hard=True).numpy()
         assert out.sum() == 1.0
 
 
@@ -132,9 +128,7 @@ class TestTripletWithDistance:
         a = lucid.tensor([[1.0, 0.0]])
         p = lucid.tensor([[1.0, 0.0]])
         n = lucid.tensor([[0.0, 1.0]])
-        assert (
-            abs(F.triplet_margin_with_distance_loss(a, p, n, margin=1.0).item()) < 1e-6
-        )
+        assert abs(F.triplet_margin_with_distance_loss(a, p, n, margin=1.0).item()) < 1e-6
 
 
 class TestFractionalPool:
@@ -156,12 +150,8 @@ class TestFractionalPool:
         # pool[1,0]=max(8,9,12,13)=13  pool[1,1]=max(10,11,14,15)=15
         x = lucid.arange(16, dtype=lucid.float32).reshape(1, 1, 4, 4)
         samples = lucid.zeros(1, 1, 2)
-        out = F.fractional_max_pool2d(
-            x, kernel_size=2, output_size=2, _random_samples=samples
-        )
-        np.testing.assert_allclose(
-            out.numpy().flatten(), [5.0, 7.0, 13.0, 15.0], atol=1e-6
-        )
+        out = F.fractional_max_pool2d(x, kernel_size=2, output_size=2, _random_samples=samples)
+        np.testing.assert_allclose(out.numpy().flatten(), [5.0, 7.0, 13.0, 15.0], atol=1e-6)
 
     def test_frac_pool2d_return_indices_shape(self) -> None:
         x = lucid.randn(1, 1, 6, 6)
@@ -297,10 +287,7 @@ class TestBicubicInterpolate:
         up = F.interpolate(x, size=(1, 9), mode="bicubic", align_corners=True)
         row = up.reshape(-1)
         for source, target in enumerate(range(0, 9, 2)):
-            assert (
-                abs(float(row[target].item()) - float(x.reshape(-1)[source].item()))
-                < 1e-5
-            )
+            assert abs(float(row[target].item()) - float(x.reshape(-1)[source].item())) < 1e-5
 
     def test_it_overshoots_where_nearest_clamps(self) -> None:
         """Bicubic is allowed to leave the input's range — that is the filter.
@@ -405,23 +392,17 @@ class TestSoftmaxAndReductionDtype:
         rout = rfn(input=rx, dim=-1, dtype=ref_mod.float32)
 
         assert out.dtype == lucid.float32
-        np.testing.assert_allclose(
-            out.cpu().numpy(), rout.detach().numpy(), rtol=1e-3, atol=1e-3
-        )
+        np.testing.assert_allclose(out.cpu().numpy(), rout.detach().numpy(), rtol=1e-3, atol=1e-3)
         weights = lucid.arange(1, 17, dtype=lucid.float32, device=device).reshape(4, 4)
         rweights = ref_mod.arange(1, 17, dtype=ref_mod.float32).reshape(4, 4)
         (out * weights).sum().backward()
         (rout * rweights).sum().backward()
         assert x.grad is not None
         assert x.grad.dtype == lucid.float16
-        np.testing.assert_allclose(
-            x.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-2, atol=1e-2
-        )
+        np.testing.assert_allclose(x.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-2, atol=1e-2)
 
     @pytest.mark.parametrize("device", ["cpu", "metal"])
-    def test_top_level_and_tensor_method_softmax_dtype(
-        self, ref: object, device: str
-    ) -> None:
+    def test_top_level_and_tensor_method_softmax_dtype(self, ref: object, device: str) -> None:
         if device == "metal" and not lucid.metal.is_available():
             pytest.skip("metal not available")
         ref_mod = ref  # type: ignore[assignment]
@@ -448,13 +429,9 @@ class TestSoftmaxAndReductionDtype:
             ),
         ]:
             assert l_out.dtype == lucid.float32
-            np.testing.assert_allclose(
-                l_out.cpu().numpy(), r_out.numpy(), rtol=1e-3, atol=1e-3
-            )
+            np.testing.assert_allclose(l_out.cpu().numpy(), r_out.numpy(), rtol=1e-3, atol=1e-3)
 
-    def test_softmax_dim_none_warns_and_selects_reference_dim(
-        self, ref: object
-    ) -> None:
+    def test_softmax_dim_none_warns_and_selects_reference_dim(self, ref: object) -> None:
         ref_mod = ref  # type: ignore[assignment]
         for shape in [(16,), (4, 4), (2, 2, 4), (2, 2, 2, 2)]:
             np_x = np.arange(16, dtype=np.float32).reshape(shape)
@@ -465,16 +442,12 @@ class TestSoftmaxAndReductionDtype:
                     out = getattr(F, fn_name)(x)
                 with pytest.warns(UserWarning):
                     rout = getattr(ref_mod.nn.functional, fn_name)(rx)
-                np.testing.assert_allclose(
-                    out.numpy(), rout.numpy(), rtol=1e-6, atol=1e-6
-                )
+                np.testing.assert_allclose(out.numpy(), rout.numpy(), rtol=1e-6, atol=1e-6)
 
     def test_softmax_explicit_dtype_honored_under_autocast(self) -> None:
         if not lucid.metal.is_available():
             pytest.skip("metal not available")
-        x = lucid.linspace(-2.0, 2.0, 16, dtype=lucid.float32, device="metal").reshape(
-            4, 4
-        )
+        x = lucid.linspace(-2.0, 2.0, 16, dtype=lucid.float32, device="metal").reshape(4, 4)
         with lucid.amp.autocast("metal", dtype=lucid.float16):
             out_default = F.softmax(x, dim=-1)
             out_f16 = F.softmax(x, dim=-1, dtype=lucid.float16)
@@ -486,9 +459,7 @@ class TestSoftmaxAndReductionDtype:
         "op_name",
         ["sum", "mean", "prod", "cumsum", "cumprod", "nansum", "nanmean"],
     )
-    def test_reduction_dtype_keyword(
-        self, ref: object, device: str, op_name: str
-    ) -> None:
+    def test_reduction_dtype_keyword(self, ref: object, device: str, op_name: str) -> None:
         if device == "metal" and not lucid.metal.is_available():
             pytest.skip("metal not available")
         ref_mod = ref  # type: ignore[assignment]
@@ -505,16 +476,12 @@ class TestSoftmaxAndReductionDtype:
             out = fn(x, dim=1, dtype=lucid.float32)
             rout = rfn(rx, dim=1, dtype=ref_mod.float32)
         assert out.dtype == lucid.float32
-        np.testing.assert_allclose(
-            out.cpu().numpy(), rout.detach().numpy(), rtol=1e-3, atol=1e-3
-        )
+        np.testing.assert_allclose(out.cpu().numpy(), rout.detach().numpy(), rtol=1e-3, atol=1e-3)
         out.sum().backward()
         rout.sum().backward()
         assert x.grad is not None
         assert x.grad.dtype == lucid.float16
-        np.testing.assert_allclose(
-            x.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-2, atol=1e-2
-        )
+        np.testing.assert_allclose(x.grad.cpu().numpy(), rx.grad.numpy(), rtol=1e-2, atol=1e-2)
 
     def test_dtype_error_classes(self) -> None:
         x = lucid.ones((16,), dtype=lucid.float32)

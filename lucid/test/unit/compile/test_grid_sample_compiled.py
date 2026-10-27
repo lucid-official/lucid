@@ -42,9 +42,7 @@ class _Sampler(nn.Module):
         super().__init__()
         lucid.manual_seed(1)
         batch, height, width = grid_shape
-        self.register_buffer(
-            "grid", lucid.rand(batch, height, width, 2) * spread - spread / 2
-        )
+        self.register_buffer("grid", lucid.rand(batch, height, width, 2) * spread - spread / 2)
         self.mode = mode
         self.padding_mode = padding_mode
         self.align_corners = align_corners

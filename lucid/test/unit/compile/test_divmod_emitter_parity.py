@@ -58,9 +58,7 @@ class _BinaryMod(nn.Module):
 @pytest.mark.skipif(not metal_available(), reason="Metal unavailable")
 @pytest.mark.parametrize("op_name", sorted(_OPS))
 @pytest.mark.parametrize("dtype", _INT_DTYPES)
-def test_compiled_integer_divmod_matches_eager_and_oracle(
-    dtype: lucid.dtype, op_name: str
-) -> None:
+def test_compiled_integer_divmod_matches_eager_and_oracle(dtype: lucid.dtype, op_name: str) -> None:
     """Compiled integer ``floordiv``, ``remainder``, and ``fmod`` match eager exactly."""
     _C_engine.compile.session_cache_clear()
     bits = _BITS[dtype]
@@ -77,9 +75,7 @@ def test_compiled_integer_divmod_matches_eager_and_oracle(
     assert info["entries"] == 1
     assert info["eager_only"] == ()
     assert got.dtype == dtype
-    want = [
-        _int_oracle(_KIND[op_name], x, y, bits) for x, y in zip(nums, dens, strict=True)
-    ]
+    want = [_int_oracle(_KIND[op_name], x, y, bits) for x, y in zip(nums, dens, strict=True)]
     assert got.tolist() == want
     assert got.tolist() == eager.tolist()
 
@@ -108,9 +104,7 @@ def test_compiled_integer_zero_divisor_matches_metal_contract(
 @pytest.mark.skipif(not metal_available(), reason="Metal unavailable")
 @pytest.mark.parametrize("op_name", sorted(_OPS))
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16, lucid.float32])
-def test_compiled_float_divmod_matches_eager_bit_for_bit(
-    dtype: lucid.dtype, op_name: str
-) -> None:
+def test_compiled_float_divmod_matches_eager_bit_for_bit(dtype: lucid.dtype, op_name: str) -> None:
     """Compiled floating-point ``floordiv``, ``remainder``, and ``fmod`` match eager bit-for-bit."""
     _C_engine.compile.session_cache_clear()
     pairs = [(x, y) for x in _FLOAT_NUMS for y in _FLOAT_DENS]
@@ -177,9 +171,7 @@ def test_coreml_float_divmod_matches_eager_bit_for_bit(
     """Core ML ``floordiv``, ``remainder``, and ``fmod`` match eager bit-for-bit."""
     dtype = lucid.float16 if precision == "fp16" else lucid.float32
     pairs = [(x, y) for x in _FLOAT_NUMS for y in _FLOAT_DENS]
-    inp = lucid.tensor(
-        [[x for x, _ in pairs], [y for _, y in pairs]], dtype=dtype, device="cpu"
-    )
+    inp = lucid.tensor([[x for x, _ in pairs], [y for _, y in pairs]], dtype=dtype, device="cpu")
     model = _BinaryMod(_OPS[op_name]).eval()
     want = model(inp)
     cml_prec = cml.Precision.FLOAT16 if precision == "fp16" else cml.Precision.FLOAT32
@@ -204,9 +196,7 @@ def test_coreml_float_divmod_matches_eager_bit_for_bit(
 
 @pytest.mark.skipif(not _HAS_COREML, reason="built without Core ML writer")
 @pytest.mark.parametrize("op_name", sorted(_OPS))
-def test_coreml_int32_divmod_matches_eager_exactly(
-    op_name: str, tmp_path: object
-) -> None:
+def test_coreml_int32_divmod_matches_eager_exactly(op_name: str, tmp_path: object) -> None:
     """Core ML ``int32`` ``floordiv``, ``remainder``, and ``fmod`` match eager across _int_operands(32) and 2^24..2^31."""
     nums, dens = _int_operands(32)
     extra_nums = [-100_000_001, 100_000_003, -100_000_003] + [
@@ -243,9 +233,7 @@ def test_coreml_constant_folded_divmod_and_wide_int64_refusal(
     class _FoldedMod(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.register_buffer(
-                "num", lucid.tensor([17, -17, 25, -25], dtype=lucid.int32)
-            )
+            self.register_buffer("num", lucid.tensor([17, -17, 25, -25], dtype=lucid.int32))
             self.register_buffer("den", lucid.tensor([5, 5, -7, -7], dtype=lucid.int32))
 
         def forward(self, x: lucid.Tensor) -> lucid.Tensor:

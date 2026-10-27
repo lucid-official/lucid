@@ -47,9 +47,7 @@ class TestIndexSelect:
 class TestMaskedSelect:
     def test_basic(self, device: str) -> None:
         x = lucid.tensor([1.0, 2.0, 3.0, 4.0], device=device)
-        mask = lucid.tensor(
-            [True, False, True, False], dtype=lucid.bool_, device=device
-        )
+        mask = lucid.tensor([True, False, True, False], dtype=lucid.bool_, device=device)
         out = lucid.masked_select(x, mask).numpy()
         np.testing.assert_array_equal(out, [1.0, 3.0])
 
@@ -57,9 +55,7 @@ class TestMaskedSelect:
 class TestMaskedFill:
     def test_basic(self, device: str) -> None:
         x = lucid.tensor([1.0, 2.0, 3.0, 4.0], device=device)
-        mask = lucid.tensor(
-            [True, False, True, False], dtype=lucid.bool_, device=device
-        )
+        mask = lucid.tensor([True, False, True, False], dtype=lucid.bool_, device=device)
         out = lucid.masked_fill(x, mask, -1.0).numpy()
         np.testing.assert_array_equal(out, [-1.0, 2.0, -1.0, 4.0])
 

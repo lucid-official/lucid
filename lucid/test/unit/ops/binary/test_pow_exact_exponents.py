@@ -137,9 +137,7 @@ def _ieee_roots(xin: np.ndarray, r: np.ndarray, e: float) -> np.ndarray:
     return r
 
 
-def _exact(
-    ref: ModuleType, x: np.ndarray, e: float, dtype: lucid.dtype, device: str
-) -> np.ndarray:
+def _exact(ref: ModuleType, x: np.ndarray, e: float, dtype: lucid.dtype, device: str) -> np.ndarray:
     """The reference's float64 power rounded once, under Lucid's IEEE contract."""
     if e == 1.0:
         return x  # a copy: no arithmetic, so nothing is flushed
@@ -235,9 +233,7 @@ def test_reported_square_of_a_half_is_a_quarter(device: str) -> None:
     assert out.tolist() == [0.25] * 16
 
 
-def test_reported_powers_of_ten_agree_across_devices(
-    ref: ModuleType, device: str
-) -> None:
+def test_reported_powers_of_ten_agree_across_devices(ref: ModuleType, device: str) -> None:
     # The CPU's vForce answered 1000.0000610 and 0.0100000007.
     exps = [3.0, -2.0, -0.5, 2.0, -1.0, 0.5]
     got = (10.0 ** lucid.tensor(exps, device=device)).tolist()
@@ -360,9 +356,7 @@ _IEEE_CASES = [
 
 
 @pytest.mark.parametrize(("x", "e", "want"), _IEEE_CASES)
-def test_special_values_follow_ieee_pow(
-    device: str, x: float, e: float, want: float
-) -> None:
+def test_special_values_follow_ieee_pow(device: str, x: float, e: float, want: float) -> None:
     for out in (
         lucid.tensor([x], device=device) ** e,
         lucid.tensor([x], device=device) ** lucid.tensor([e], device=device),
@@ -410,9 +404,7 @@ def test_power_of_two_base_with_an_integer_exponent_is_exact(
     want = _metal_flush(_round_to(raw.numpy(), dtype), device, dtype)
     _assert_within(got, want, x, dtype, 0, f"{base} ** n")
     if base > 0:
-        _assert_within(
-            _values(lucid.pow(base, _on(x, dtype, device))), want, x, dtype, 0, "pow"
-        )
+        _assert_within(_values(lucid.pow(base, _on(x, dtype, device))), want, x, dtype, 0, "pow")
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_DTYPES))
@@ -485,9 +477,7 @@ def test_representable_integer_exponents_are_exact_in_float32(device: str) -> No
 
 
 def test_strided_and_broadcast_operands_take_the_same_paths(device: str) -> None:
-    x = lucid.tensor(
-        np.arange(1, 25, dtype=np.float32).reshape(4, 6) / 8, device=device
-    )
+    x = lucid.tensor(np.arange(1, 25, dtype=np.float32).reshape(4, 6) / 8, device=device)
     cpu = x.cpu()
     # Exponents both devices answer with the same operations, so the CPU's
     # answer is the oracle.
@@ -552,9 +542,7 @@ def test_second_derivative_is_the_power_rule(device: str, e: float) -> None:
     np.testing.assert_allclose(_values(g2), e * (e - 1) * xs ** (e - 2), rtol=1e-6)
 
 
-def test_gradient_of_the_zeroth_power_at_zero_is_zero(
-    ref: ModuleType, device: str
-) -> None:
+def test_gradient_of_the_zeroth_power_at_zero_is_zero(ref: ModuleType, device: str) -> None:
     x = lucid.tensor([0.0, -0.0, 1.5], requires_grad=True, device=device)
     (x**0).sum().backward()
     assert x.grad is not None and x.grad.tolist() == [0.0, 0.0, 0.0]
@@ -569,12 +557,8 @@ def test_gradient_of_the_zeroth_power_at_zero_is_zero(
     (a**b).sum().backward()
     (ra**rb).sum().backward()
     assert a.grad is not None and b.grad is not None
-    np.testing.assert_array_equal(
-        _values(a.grad), ra.grad.numpy(), err_msg="pow dA at zero"
-    )
-    np.testing.assert_array_equal(
-        _values(b.grad), rb.grad.numpy(), err_msg="pow dB at zero"
-    )
+    np.testing.assert_array_equal(_values(a.grad), ra.grad.numpy(), err_msg="pow dA at zero")
+    np.testing.assert_array_equal(_values(b.grad), rb.grad.numpy(), err_msg="pow dB at zero")
 
     # Scalar-base rpow(0.0, y): dB masks y >= 0 to 0.
     y = lucid.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True, device=device)
@@ -582,9 +566,7 @@ def test_gradient_of_the_zeroth_power_at_zero_is_zero(
     (0.0**y).sum().backward()
     (0.0**ry).sum().backward()
     assert y.grad is not None
-    np.testing.assert_array_equal(
-        _values(y.grad), ry.grad.numpy(), err_msg="rpow 0.0 ** y"
-    )
+    np.testing.assert_array_equal(_values(y.grad), ry.grad.numpy(), err_msg="rpow 0.0 ** y")
 
     # Higher-order (create_graph=True) path uses the same masks.
     x_ho = lucid.tensor([0.0, 1.5], requires_grad=True, device=device)
@@ -602,12 +584,8 @@ def test_gradient_of_the_zeroth_power_at_zero_is_zero(
         class _PowZeroprobe(lucid.nn.Module):
             def __init__(self) -> None:
                 super().__init__()
-                self.a = lucid.nn.Parameter(
-                    lucid.tensor([0.0, 0.0, 1.5], device="metal")
-                )
-                self.b = lucid.nn.Parameter(
-                    lucid.tensor([0.0, 2.0, 0.0], device="metal")
-                )
+                self.a = lucid.nn.Parameter(lucid.tensor([0.0, 0.0, 1.5], device="metal"))
+                self.b = lucid.nn.Parameter(lucid.tensor([0.0, 2.0, 0.0], device="metal"))
 
             def forward(self, x_in: lucid.Tensor) -> lucid.Tensor:
                 return (self.a**self.b) + (self.a**0.0) + (0.0**self.b) + x_in
@@ -633,9 +611,7 @@ def test_reported_normalize_of_equal_halves_is_exact() -> None:
 
 
 @pytest.mark.parametrize("p", [1.0, 2.0, 3.0])
-def test_normalize_matches_the_reference(
-    ref: ModuleType, device: str, p: float
-) -> None:
+def test_normalize_matches_the_reference(ref: ModuleType, device: str, p: float) -> None:
     rng = np.random.default_rng(int(p))
     x = rng.standard_normal((5, 4)).astype(np.float32)
     x[0] = [0.5, 0.5, 0.5, 0.5]

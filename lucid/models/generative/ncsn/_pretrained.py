@@ -187,9 +187,7 @@ def ncsn_celeba(pretrained: bool = False, **overrides: object) -> NCSNModel:
     model_class=NCSNForImageGeneration,
     default_config=_CFG_CIFAR,
 )
-def ncsn_cifar_gen(
-    pretrained: bool = False, **overrides: object
-) -> NCSNForImageGeneration:
+def ncsn_cifar_gen(pretrained: bool = False, **overrides: object) -> NCSNForImageGeneration:
     r"""Construct an NCSN CIFAR-10 model with DSM loss and ``.generate()``.
 
     Same trunk as :func:`ncsn_cifar` (CIFAR-10 setup, :math:`L = 232`
@@ -237,9 +235,7 @@ def ncsn_cifar_gen(
     model_class=NCSNForImageGeneration,
     default_config=_CFG_CELEBA,
 )
-def ncsn_celeba_gen(
-    pretrained: bool = False, **overrides: object
-) -> NCSNForImageGeneration:
+def ncsn_celeba_gen(pretrained: bool = False, **overrides: object) -> NCSNForImageGeneration:
     r"""Construct an NCSN CelebA 64x64 model with DSM loss and ``.generate()``.
 
     Same trunk as :func:`ncsn_celeba` (CelebA 64x64 setup, :math:`L = 500`

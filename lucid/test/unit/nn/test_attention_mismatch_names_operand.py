@@ -161,9 +161,7 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
         (
             "rms_norm",
             "x/weight",
-            lambda dev: F.rms_norm(
-                lucid.randn(2, 4), (4,), weight=lucid.ones(4, device=dev)
-            ),
+            lambda dev: F.rms_norm(lucid.randn(2, 4), (4,), weight=lucid.ones(4, device=dev)),
         ),
         (
             "instance_norm",
@@ -242,16 +240,12 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
         (
             "linear",
             "x/weight",
-            lambda dev: F.linear(
-                lucid.randn(2, 4), lucid.randn(3, 4, device=dev), lucid.zeros(3)
-            ),
+            lambda dev: F.linear(lucid.randn(2, 4), lucid.randn(3, 4, device=dev), lucid.zeros(3)),
         ),
         (
             "linear",
             "x/bias",
-            lambda dev: F.linear(
-                lucid.randn(2, 4), lucid.randn(3, 4), lucid.zeros(3, device=dev)
-            ),
+            lambda dev: F.linear(lucid.randn(2, 4), lucid.randn(3, 4), lucid.zeros(3, device=dev)),
         ),
         (
             "bilinear_layer",
@@ -304,44 +298,32 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
         (
             "lerp",
             "input/end",
-            lambda dev: lucid.ones(2).lerp(
-                lucid.zeros(2, device=dev), lucid.full((2,), 0.5)
-            ),
+            lambda dev: lucid.ones(2).lerp(lucid.zeros(2, device=dev), lucid.full((2,), 0.5)),
         ),
         (
             "lerp",
             "input/weight",
-            lambda dev: lucid.ones(2).lerp(
-                lucid.zeros(2), lucid.full((2,), 0.5, device=dev)
-            ),
+            lambda dev: lucid.ones(2).lerp(lucid.zeros(2), lucid.full((2,), 0.5, device=dev)),
         ),
         (
             "addcmul",
             "input/tensor1",
-            lambda dev: lucid.addcmul(
-                lucid.ones(2), lucid.ones(2, device=dev), lucid.ones(2)
-            ),
+            lambda dev: lucid.addcmul(lucid.ones(2), lucid.ones(2, device=dev), lucid.ones(2)),
         ),
         (
             "addcmul",
             "input/tensor2",
-            lambda dev: lucid.addcmul(
-                lucid.ones(2), lucid.ones(2), lucid.ones(2, device=dev)
-            ),
+            lambda dev: lucid.addcmul(lucid.ones(2), lucid.ones(2), lucid.ones(2, device=dev)),
         ),
         (
             "addcdiv",
             "input/tensor1",
-            lambda dev: lucid.addcdiv(
-                lucid.ones(2), lucid.ones(2, device=dev), lucid.ones(2)
-            ),
+            lambda dev: lucid.addcdiv(lucid.ones(2), lucid.ones(2, device=dev), lucid.ones(2)),
         ),
         (
             "addcdiv",
             "input/tensor2",
-            lambda dev: lucid.addcdiv(
-                lucid.ones(2), lucid.ones(2), lucid.ones(2, device=dev)
-            ),
+            lambda dev: lucid.addcdiv(lucid.ones(2), lucid.ones(2), lucid.ones(2, device=dev)),
         ),
     ]
 
@@ -399,16 +381,12 @@ def test_multi_operand_device_mismatch_names_offending_pair(
         (
             "lerp",
             "input/end",
-            lambda dt: lucid.ones(2).lerp(
-                lucid.zeros(2, dtype=dt), lucid.full((2,), 0.5)
-            ),
+            lambda dt: lucid.ones(2).lerp(lucid.zeros(2, dtype=dt), lucid.full((2,), 0.5)),
         ),
         (
             "lerp",
             "input/weight",
-            lambda dt: lucid.ones(2).lerp(
-                lucid.zeros(2), lucid.full((2,), 0.5, dtype=dt)
-            ),
+            lambda dt: lucid.ones(2).lerp(lucid.zeros(2), lucid.full((2,), 0.5, dtype=dt)),
         ),
     ],
 )

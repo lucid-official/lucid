@@ -69,9 +69,7 @@ def _close(got: object, want: object) -> None:
     np.testing.assert_allclose(got.numpy(), want.detach().numpy(), rtol=1e-4, atol=1e-5)
 
 
-def _leaves(
-    fw: ModuleType, arrays: dict[str, np.ndarray], device: str
-) -> dict[str, object]:
+def _leaves(fw: ModuleType, arrays: dict[str, np.ndarray], device: str) -> dict[str, object]:
     return {
         name: fw.tensor(a, device=device, requires_grad=not name.startswith("w_"))
         for name, a in arrays.items()
@@ -206,9 +204,7 @@ def test_mismatched_state_rank_is_refused(kind: str, case: str, device: str) -> 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", list(_MISMATCH))
 @pytest.mark.parametrize("kind", _KINDS)
-def test_reference_refuses_mismatched_state_rank(
-    ref: ModuleType, kind: str, case: str
-) -> None:
+def test_reference_refuses_mismatched_state_rank(ref: ModuleType, kind: str, case: str) -> None:
     # Why the refusal above is the contract and not a gap.  The reference
     # raises RuntimeError; Lucid's taxonomy makes a bad shape a ValueError.
     x_shape, h_shape = _MISMATCH[case]
@@ -219,9 +215,7 @@ def test_reference_refuses_mismatched_state_rank(
 
 @pytest.mark.parametrize("rank", [1, 4])
 @pytest.mark.parametrize("kind", _KINDS)
-def test_input_rank_outside_two_and_three_is_refused(
-    kind: str, rank: int, device: str
-) -> None:
+def test_input_rank_outside_two_and_three_is_refused(kind: str, rank: int, device: str) -> None:
     module = getattr(nn, kind)(_I, _H).to(device)
     shape = (_I,) if rank == 1 else (1, _T, _B, _I)
     with pytest.raises(ValueError, match=r"expected input to be 2-D .* or 3-D"):
@@ -237,9 +231,7 @@ _CELL_MISMATCH = {
 
 @pytest.mark.parametrize("case", list(_CELL_MISMATCH))
 @pytest.mark.parametrize("kind", _CELLS)
-def test_cell_mismatched_state_rank_is_refused(
-    kind: str, case: str, device: str
-) -> None:
+def test_cell_mismatched_state_rank_is_refused(kind: str, case: str, device: str) -> None:
     x_shape, h_shape, expected = _CELL_MISMATCH[case]
     cell = getattr(nn, kind)(_I, _H).to(device)
     hx = _states(lucid, kind, h_shape)

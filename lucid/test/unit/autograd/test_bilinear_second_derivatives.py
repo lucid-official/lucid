@@ -40,9 +40,7 @@ def test_the_second_derivative_matches_central_differences(
     u = rng.standard_normal(base[first].shape)
 
     def loss(args: list[lucid.Tensor]) -> lucid.Tensor:
-        y = F.bilinear(
-            args[0], args[1], args[2], None if b0 is None else lucid.tensor(b0)
-        )
+        y = F.bilinear(args[0], args[1], args[2], None if b0 is None else lucid.tensor(b0))
         return (lucid.tensor(r0) * y * y).sum()
 
     def projected_gradient(values: list[np.ndarray]) -> float:
@@ -63,7 +61,5 @@ def test_the_second_derivative_matches_central_differences(
         plus = [v + h * e if i == k else v for i, v in enumerate(base)]
         minus = [v - h * e if i == k else v for i, v in enumerate(base)]
         numeric = (projected_gradient(plus) - projected_gradient(minus)) / (2 * h)
-        exact = (
-            0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
-        )
+        exact = 0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
         assert exact == pytest.approx(numeric, rel=1e-6, abs=1e-6), (first, k)

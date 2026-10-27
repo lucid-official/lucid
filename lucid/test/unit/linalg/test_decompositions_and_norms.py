@@ -171,9 +171,7 @@ def test_eigvals_agrees_with_eig():
 
 
 def test_eigvalsh_agrees_with_eigh():
-    assert np.allclose(
-        _v(linalg.eigvalsh(_t(SPD))), _v(linalg.eigh(_t(SPD))[0]), atol=1e-9
-    )
+    assert np.allclose(_v(linalg.eigvalsh(_t(SPD))), _v(linalg.eigh(_t(SPD))[0]), atol=1e-9)
 
 
 def test_the_determinant_is_the_product_of_the_eigenvalues():
@@ -194,9 +192,7 @@ def test_matrix_norm_matches_numpy(order):
 
 
 def test_the_matrix_norm_default_is_frobenius():
-    assert np.isclose(
-        _v(linalg.matrix_norm(_t(A))), np.linalg.norm(A, ord="fro"), rtol=1e-9
-    )
+    assert np.isclose(_v(linalg.matrix_norm(_t(A))), np.linalg.norm(A, ord="fro"), rtol=1e-9)
 
 
 def test_matrix_norm_refuses_an_order_it_has_no_meaning_for():
@@ -240,9 +236,7 @@ def test_keepdim_keeps_the_reduced_axes():
 
 
 def test_cross_is_the_right_handed_product():
-    assert np.allclose(
-        _v(linalg.cross(_t([1.0, 0.0, 0.0]), _t([0.0, 1.0, 0.0]))), [0.0, 0.0, 1.0]
-    )
+    assert np.allclose(_v(linalg.cross(_t([1.0, 0.0, 0.0]), _t([0.0, 1.0, 0.0]))), [0.0, 0.0, 1.0])
     left = _v(linalg.cross(_t([1.0, 2.0, 3.0]), _t([4.0, 5.0, 6.0])))
     assert np.allclose(left, np.cross([1, 2, 3], [4, 5, 6]))
 
@@ -261,9 +255,7 @@ def test_diagonal_reads_the_diagonal():
 
 
 def test_matrix_exp_of_zero_is_the_identity():
-    assert np.allclose(
-        _v(linalg.matrix_exp(_t(np.zeros((3, 3))))), np.eye(3), atol=1e-12
-    )
+    assert np.allclose(_v(linalg.matrix_exp(_t(np.zeros((3, 3))))), np.eye(3), atol=1e-12)
 
 
 def test_matrix_exp_of_a_diagonal_is_the_elementwise_exponential():

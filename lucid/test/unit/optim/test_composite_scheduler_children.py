@@ -100,9 +100,7 @@ def test_a_composite_refuses_a_child_it_cannot_drive_before_changing_anything(
     assert after == before
 
 
-@pytest.mark.parametrize(
-    "case", [c for c, (err, _, _) in _REFUSED.items() if err is TypeError]
-)
+@pytest.mark.parametrize("case", [c for c, (err, _, _) in _REFUSED.items() if err is TypeError])
 def test_a_child_that_is_not_a_scheduler_is_named_by_index(case: str) -> None:
     _, kids_of, make = _REFUSED[case]
     S = optim.lr_scheduler
@@ -112,16 +110,12 @@ def test_a_child_that_is_not_a_scheduler_is_named_by_index(case: str) -> None:
 
 
 def _chain(S: Any, o: Any) -> Any:
-    return S.ChainedScheduler(
-        [S.ExponentialLR(o, gamma=0.9), S.StepLR(o, step_size=2, gamma=0.5)]
-    )
+    return S.ChainedScheduler([S.ExponentialLR(o, gamma=0.9), S.StepLR(o, step_size=2, gamma=0.5)])
 
 
 @pytest.mark.parity
 @pytest.mark.parametrize("add_at", [None, 0, 3, 6])
-def test_sequential_runs_a_chain_first_as_the_reference_does(
-    add_at: int | None, ref: Any
-) -> None:
+def test_sequential_runs_a_chain_first_as_the_reference_does(add_at: int | None, ref: Any) -> None:
     assert_as_the_reference(
         lambda S, o: S.SequentialLR(
             o, [_chain(S, o), S.LinearLR(o, start_factor=0.5)], milestones=[4]
@@ -196,9 +190,7 @@ def test_an_older_lucids_sequential_checkpoint_resumes_on_schedule(ref: Any) -> 
 
 def _everything(opt: Any, scheds: list[Any]) -> list[Any]:
     """The rates and momenta, and every scheduler's own state."""
-    return [dict(g, params=None) for g in opt.param_groups] + [
-        dict(vars(s)) for s in scheds
-    ]
+    return [dict(g, params=None) for g in opt.param_groups] + [dict(vars(s)) for s in scheds]
 
 
 def _chain_step(S: Any, o: Any) -> tuple[Any, list[Any]]:

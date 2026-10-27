@@ -187,6 +187,5 @@ class ResNetConfig(ModelConfig):
         # ``block_type="Bottleneck"`` quietly built a BasicBlock network.
         if self.block_type not in ("basic", "bottleneck"):
             raise ValueError(
-                f"block_type must be 'basic' or 'bottleneck', got "
-                f"{self.block_type!r}"
+                f"block_type must be 'basic' or 'bottleneck', got " f"{self.block_type!r}"
             )

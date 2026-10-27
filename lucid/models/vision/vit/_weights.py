@@ -129,9 +129,7 @@ class ViTLarge16Weights(WeightsEnum):
         url=f"{HUB_BASE}/vit-large-16/resolve/main/IMAGENET1K_V1/model.safetensors",
         sha256="0c925d3c73c3cbe7129a71ddc8ff7ff97fc34a9d1be78f833cf8004f88859ec3",
         num_classes=1000,
-        transforms=ImageClassification(
-            crop_size=224, resize_size=242, interpolation="bilinear"
-        ),
+        transforms=ImageClassification(crop_size=224, resize_size=242, interpolation="bilinear"),
         meta={
             "tag": "IMAGENET1K_V1",
             "source": "reference_vision/ViT_L_16_Weights.IMAGENET1K_V1",

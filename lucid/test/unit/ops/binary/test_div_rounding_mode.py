@@ -60,12 +60,8 @@ def test_each_mode_promotes_as_the_reference(
 ) -> None:
     av, adt, bv, bdt = _PAIRS[pair]
     call = _SPELLINGS[spelling]
-    got = call(
-        lucid, _operand(lucid, av, adt, device), _operand(lucid, bv, bdt, device), mode
-    )
-    want = call(
-        ref, _operand(ref, av, adt, device), _operand(ref, bv, bdt, device), mode
-    )
+    got = call(lucid, _operand(lucid, av, adt, device), _operand(lucid, bv, bdt, device), mode)
+    want = call(ref, _operand(ref, av, adt, device), _operand(ref, bv, bdt, device), mode)
     assert str(got.dtype).split(".")[-1] == str(want.dtype).split(".")[-1]
     np.testing.assert_array_equal(got.numpy(), want.numpy())
 
@@ -77,9 +73,7 @@ def test_rounding_mode_is_keyword_only(ref: ModuleType) -> None:
 
 
 @pytest.mark.parametrize("spelling", list(_SPELLINGS))
-def test_an_unknown_mode_is_refused(
-    ref: ModuleType, device: str, spelling: str
-) -> None:
+def test_an_unknown_mode_is_refused(ref: ModuleType, device: str, spelling: str) -> None:
     call = _SPELLINGS[spelling]
     with pytest.raises(RuntimeError, match="rounding_mode"):
         call(ref, ref.tensor([7.0]), 2, "round")
@@ -89,9 +83,7 @@ def test_an_unknown_mode_is_refused(
 
 
 @pytest.mark.parametrize("mode", ["trunc", "floor"])
-@pytest.mark.parametrize(
-    "values", [[True, False], [1 + 1j, 2 - 1j]], ids=["bool", "complex"]
-)
+@pytest.mark.parametrize("values", [[True, False], [1 + 1j, 2 - 1j]], ids=["bool", "complex"])
 def test_bool_and_complex_have_no_rounded_quotient(
     ref: ModuleType, device: str, mode: str, values: list[Any]
 ) -> None:
@@ -136,9 +128,7 @@ def test_an_integer_tensor_cannot_hold_a_float_quotient(
 
 
 @pytest.mark.parametrize("mode", ["trunc", "floor"])
-def test_a_rounded_quotient_has_a_zero_gradient(
-    ref: ModuleType, device: str, mode: str
-) -> None:
+def test_a_rounded_quotient_has_a_zero_gradient(ref: ModuleType, device: str, mode: str) -> None:
     av, bv = [7.5, -7.5, 0.5, 3.0], [2.0]
     a = lucid.tensor(av, device=device, requires_grad=True)
     b = lucid.tensor(bv, device=device, requires_grad=True)

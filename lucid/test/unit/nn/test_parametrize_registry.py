@@ -110,9 +110,7 @@ def test_the_names_match_the_reference(ref, case):
     _register(case, nn, parametrize, ours)
     assert _names(ours) == _names(theirs)
     assert type(ours).__name__ == type(theirs).__name__
-    assert [n for n, _ in ours.named_modules()] == [
-        n for n, _ in theirs.named_modules()
-    ]
+    assert [n for n, _ in ours.named_modules()] == [n for n, _ in theirs.named_modules()]
 
 
 @pytest.mark.parity
@@ -123,9 +121,7 @@ def test_a_parametrized_buffer_stays_a_buffer(ref):
             self.register_buffer("buf", ref.ones(3))
 
     theirs, ours = TheirBuffer(), _WithBuffer()
-    ref.nn.utils.parametrize.register_parametrization(
-        theirs, "buf", _steps(ref.nn)[1]()
-    )
+    ref.nn.utils.parametrize.register_parametrization(theirs, "buf", _steps(ref.nn)[1]())
     parametrize.register_parametrization(ours, "buf", _Scale())
     assert _names(ours) == _names(theirs)
 
@@ -337,9 +333,7 @@ def test_deepcopy_copies_and_pickle_is_refused() -> None:
     twin = copy.deepcopy(m)
     assert type(twin) is type(m)
     assert bool(lucid.equal(twin.weight, m.weight))
-    assert twin.parametrizations.weight.original is not (
-        m.parametrizations.weight.original
-    )
+    assert twin.parametrizations.weight.original is not (m.parametrizations.weight.original)
     with pytest.raises(RuntimeError, match="state_dict"):
         pickle.dumps(m)
 

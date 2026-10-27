@@ -31,16 +31,12 @@ def test_a_scalar_slot_takes_a_one_element_entry(device, assign):
     assert (m.p is p) is not assign  # a copy writes into the old object
 
 
-@pytest.mark.parametrize(
-    "shape", [(3,), (1, 1), (0,)], ids=["three", "one-by-one", "empty"]
-)
+@pytest.mark.parametrize("shape", [(3,), (1, 1), (0,)], ids=["three", "one-by-one", "empty"])
 @pytest.mark.parametrize("assign", [False, True], ids=["copy", "assign"])
 def test_any_other_shape_is_still_a_mismatch(shape, assign):
     m = _module(lucid)
     with pytest.raises(RuntimeError, match="size mismatch for p"):
-        m.load_state_dict(
-            {"p": lucid.zeros(*shape), "b": lucid.tensor(9)}, assign=assign
-        )
+        m.load_state_dict({"p": lucid.zeros(*shape), "b": lucid.tensor(9)}, assign=assign)
     assert m.p.item() == 1.0  # refused, so left as it was
 
 

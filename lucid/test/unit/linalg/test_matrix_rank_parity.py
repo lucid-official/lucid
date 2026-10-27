@@ -41,15 +41,11 @@ def test_matrix_rank_signature_exposes_tol_hermitian_atol_rtol() -> None:
     assert params[4].default is None
 
 
-def test_batched_matrix_rank_reduces_per_matrix_not_globally(
-    ref: ModuleType, device: str
-) -> None:
+def test_batched_matrix_rank_reduces_per_matrix_not_globally(ref: ModuleType, device: str) -> None:
     """LCD-51 repro 1: a large singular value in one batch entry must not
     inflate the threshold of another batch entry, and the output must have
     shape ``A.shape[:-2]`` rather than ``()``."""
-    arr = np.array(
-        [[[1.0, 0.0], [0.0, 1e-3]], [[1e4, 0.0], [0.0, 1e4]]], dtype=np.float32
-    )
+    arr = np.array([[[1.0, 0.0], [0.0, 1e-3]], [[1e4, 0.0], [0.0, 1e4]]], dtype=np.float32)
     got = LA.matrix_rank(lucid.tensor(arr, device=device))
     want = ref.linalg.matrix_rank(ref.tensor(arr))
     assert got.dtype is lucid.int64
@@ -77,9 +73,7 @@ def test_higher_rank_batches_match_reference(
     for idx in range(flat_s.shape[0]):
         target_rank = idx % (k + 1)
         scale = 10.0 ** (idx - flat_s.shape[0] // 2)
-        flat_s[idx, :target_rank] = scale * np.arange(
-            target_rank, 0, -1, dtype=np.float32
-        )
+        flat_s[idx, :target_rank] = scale * np.arange(target_rank, 0, -1, dtype=np.float32)
     mat = (u[..., :, :k] * s[..., None, :]) @ v[..., :k, :]
     got = LA.matrix_rank(lucid.tensor(mat, dtype=lucid.float32, device=device))
     want = ref.linalg.matrix_rank(ref.tensor(mat, dtype=ref.float32))
@@ -149,9 +143,7 @@ def test_tol_positional_and_keyword_matches_reference(
     assert got_kw.tolist() == want.tolist()
 
 
-def test_tensor_tolerances_broadcast_across_batches(
-    ref: ModuleType, device: str
-) -> None:
+def test_tensor_tolerances_broadcast_across_batches(ref: ModuleType, device: str) -> None:
     arr = np.array(
         [
             [[1e10, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1e-8]],
@@ -197,9 +189,7 @@ def test_tensor_tolerances_broadcast_across_batches(
     )
 
 
-def test_hermitian_uses_lower_triangle_eigenvalues(
-    ref: ModuleType, device: str
-) -> None:
+def test_hermitian_uses_lower_triangle_eigenvalues(ref: ModuleType, device: str) -> None:
     mats = np.array(
         [
             [[2.0, 1.0], [1.0, 3.0]],
@@ -231,9 +221,7 @@ def test_empty_matrices_return_int64_zeros_of_batch_shape(
     assert got.tolist() == want.tolist()
 
 
-def test_nonfinite_inputs_and_tolerances_match_reference(
-    ref: ModuleType, device: str
-) -> None:
+def test_nonfinite_inputs_and_tolerances_match_reference(ref: ModuleType, device: str) -> None:
     for val in (float("nan"), float("inf"), float("-inf")):
         a_l = lucid.tensor([[1.0, 0.0], [0.0, val]], device=device)
         a_r = ref.tensor([[1.0, 0.0], [0.0, val]])
@@ -273,9 +261,7 @@ def test_invalid_inputs_and_tolerance_combinations_are_refused() -> None:
         LA.matrix_rank(lucid.eye(2), tol=c_tol)
 
 
-def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(
-    ref: ModuleType, device: str
-) -> None:
+def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(ref: ModuleType, device: str) -> None:
     rng = np.random.default_rng(7)
     a_np = (rng.standard_normal((2, 3, 3)) + 4.0 * np.eye(3)).astype(np.float32)
     b2_np = rng.standard_normal((2, 4, 3)).astype(np.float32)
@@ -300,9 +286,7 @@ def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(
         lucid.tensor(b2_np, device=device),
         left=False,
     )
-    x_ex_r, info_r = ref.linalg.solve_ex(
-        ref.tensor(a_np), ref.tensor(b2_np), left=False
-    )
+    x_ex_r, info_r = ref.linalg.solve_ex(ref.tensor(a_np), ref.tensor(b2_np), left=False)
     assert np.allclose(x_ex_l.numpy(), x_ex_r.numpy(), atol=1e-5)
     assert info_l.tolist() == info_r.tolist() == [0, 0]
 
@@ -335,9 +319,7 @@ def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(
     cot_np = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
     sym_l = lucid.tensor(sym_np, device=device, requires_grad=True)
     sym_r = ref.tensor(sym_np, requires_grad=True)
-    (
-        LA.pinv(sym_l, hermitian=True) * lucid.tensor(cot_np, device=device)
-    ).sum().backward()
+    (LA.pinv(sym_l, hermitian=True) * lucid.tensor(cot_np, device=device)).sum().backward()
     (ref.linalg.pinv(sym_r, hermitian=True) * ref.tensor(cot_np)).sum().backward()
     assert sym_l.grad is not None and sym_r.grad is not None
     assert np.allclose(sym_l.grad.numpy(), sym_r.grad.numpy(), atol=1e-5)

@@ -49,9 +49,7 @@ def test_fft_abs_matches_reference(device, shape):
 @pytest.mark.parametrize("device", DEVICES)
 def test_complex_abs_entry_points_agree(device):
     """Method, free function and ``__abs__`` must all take the same path."""
-    z = lucid.fft.fft(
-        lucid.tensor(np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32), device=device)
-    )
+    z = lucid.fft.fft(lucid.tensor(np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32), device=device))
     a, b, c = z.abs(), lucid.abs(z), abs(z)
     assert a.dtype == b.dtype == c.dtype == lucid.float32
     assert np.array_equal(a.numpy(), b.numpy())
@@ -131,23 +129,16 @@ def _reference_adaptive(x, out, mode):
 
     def spans(ax):
         return [
-            ((i * ins[ax]) // out[ax], -(-(i + 1) * ins[ax] // out[ax]))
-            for i in range(out[ax])
+            ((i * ins[ax]) // out[ax], -(-(i + 1) * ins[ax] // out[ax])) for i in range(out[ax])
         ]
 
-    red = (
-        (lambda w, ax: w.max(axis=ax))
-        if mode == "max"
-        else (lambda w, ax: w.mean(axis=ax))
-    )
+    red = (lambda w, ax: w.max(axis=ax)) if mode == "max" else (lambda w, ax: w.mean(axis=ax))
     if n == 1:
         return np.stack([red(x[..., a:b], -1) for a, b in spans(0)], axis=-1)
     if n == 2:
         return np.stack(
             [
-                np.stack(
-                    [red(x[..., a:b, c:d], (-2, -1)) for c, d in spans(1)], axis=-1
-                )
+                np.stack([red(x[..., a:b, c:d], (-2, -1)) for c, d in spans(1)], axis=-1)
                 for a, b in spans(0)
             ],
             axis=-2,
@@ -232,9 +223,7 @@ def test_adaptive_max_pool2d_backward(device, shape, out):
     x = lucid.tensor(data, device=device, dtype=dt)
     x.requires_grad = True
     (F.adaptive_max_pool2d(x, out) * lucid.tensor(weight, device=device, dtype=dt))
-    (
-        F.adaptive_max_pool2d(x, out) * lucid.tensor(weight, device=device, dtype=dt)
-    ).sum().backward()
+    (F.adaptive_max_pool2d(x, out) * lucid.tensor(weight, device=device, dtype=dt)).sum().backward()
     assert x.grad is not None
     got = np.asarray(x.grad.numpy(), dtype=np.float64)
 
@@ -262,15 +251,11 @@ def test_adaptive_max_pool2d_backward(device, shape, out):
 @pytest.mark.parametrize("device", DEVICES)
 def test_adaptive_max_pool_modules_accept_non_divisible(device):
     rng = np.random.default_rng(4)
-    x2 = lucid.tensor(
-        rng.standard_normal((1, 2, 7, 7)).astype(np.float32), device=device
-    )
+    x2 = lucid.tensor(rng.standard_normal((1, 2, 7, 7)).astype(np.float32), device=device)
     assert nn.AdaptiveMaxPool2d((3, 3))(x2).shape == (1, 2, 3, 3)
     x1 = lucid.tensor(rng.standard_normal((1, 2, 7)).astype(np.float32), device=device)
     assert nn.AdaptiveMaxPool1d(3)(x1).shape == (1, 2, 3)
-    x3 = lucid.tensor(
-        rng.standard_normal((1, 2, 5, 7, 3)).astype(np.float32), device=device
-    )
+    x3 = lucid.tensor(rng.standard_normal((1, 2, 5, 7, 3)).astype(np.float32), device=device)
     assert nn.AdaptiveMaxPool3d((2, 3, 2))(x3).shape == (1, 2, 2, 3, 2)
 
 

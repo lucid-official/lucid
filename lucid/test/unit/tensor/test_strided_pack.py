@@ -49,9 +49,7 @@ def _array(dtype: type, shape: tuple[int, ...]) -> np.ndarray:
 @pytest.mark.parametrize("shape", [(7, 9), (5, 6, 7)], ids=["2-D", "3-D"])
 @pytest.mark.parametrize("view", list(VIEWS))
 @pytest.mark.parametrize("dtype", DTYPES, ids=lambda d: np.dtype(d).name)
-def test_a_packed_view_matches_numpy(
-    dtype: type, view: str, shape: tuple[int, ...]
-) -> None:
+def test_a_packed_view_matches_numpy(dtype: type, view: str, shape: tuple[int, ...]) -> None:
     v = VIEWS[view](lucid.tensor(_array(dtype, shape)))
     want = np.asarray(v.numpy())
     np.testing.assert_array_equal(v.contiguous().numpy(), want)

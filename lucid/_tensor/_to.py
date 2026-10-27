@@ -102,9 +102,7 @@ def _to_engine_target(
     )
 
 
-def _to_target(
-    rest: list[object], tensor_cls: type
-) -> tuple[object, object, object, set[str]]:
+def _to_target(rest: list[object], tensor_cls: type) -> tuple[object, object, object, set[str]]:
     """Pop ``.to``'s leading tensor, dtype, or device and dtype off ``rest``.
 
     Returns ``(other, device, dtype, taken)``, ``taken`` the parameters the
@@ -232,9 +230,7 @@ def _resolve_to_targets(
         target_device = t._impl.device
         target_dtype = t._impl.dtype
     if device is not None:
-        target_device = _parse_device(
-            cast(_device_cls | _C_engine.Device | str, device)
-        )
+        target_device = _parse_device(cast(_device_cls | _C_engine.Device | str, device))
     if dtype is not None:
         target_dtype = to_engine_dtype(
             cast(_dtype_cls | type[_dtype_cls] | _C_engine.Dtype | str, dtype)
@@ -323,11 +319,7 @@ def _to(
             return self
 
     target_device, target_dtype, copy = _resolve_to_targets(self, args, kwargs)
-    if (
-        target_device == self._impl.device
-        and target_dtype == self._impl.dtype
-        and not copy
-    ):
+    if target_device == self._impl.device and target_dtype == self._impl.dtype and not copy:
         return self
     return _transfer_impl(self._impl, target_device, target_dtype)
 

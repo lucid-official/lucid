@@ -91,9 +91,7 @@ class _DynamicRecurrent[F: nn.Module](nn.Module):
     @staticmethod
     def _put(shell: nn.Module, path: str, value: Tensor) -> None:
         owner, _, leaf = path.rpartition(".")
-        shell.get_submodule(owner)._parameters[leaf] = Parameter(
-            value, requires_grad=False
-        )
+        shell.get_submodule(owner)._parameters[leaf] = Parameter(value, requires_grad=False)
 
     @classmethod
     def from_float(cls, mod: nn.Module, dtype: QDtype = qint8) -> Self:

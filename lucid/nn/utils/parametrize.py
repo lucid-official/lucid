@@ -330,9 +330,7 @@ class ParametrizationList(ModuleList):
         for step in steps[1:]:
             out = step(out)
         if not isinstance(out, Tensor):
-            raise TypeError(
-                f"a parametrization must return a Tensor, got {type(out).__name__}"
-            )
+            raise TypeError(f"a parametrization must return a Tensor, got {type(out).__name__}")
         return out
 
 
@@ -342,16 +340,13 @@ def _parametrizations_of(module: Module) -> ModuleDict | None:
     return held if isinstance(held, ModuleDict) else None
 
 
-def _chain_in(
-    module: Module, tensor_name: str
-) -> tuple[ModuleDict, ParametrizationList]:
+def _chain_in(module: Module, tensor_name: str) -> tuple[ModuleDict, ParametrizationList]:
     """The registry and the chain of ``tensor_name``; ``ValueError`` if absent."""
     registry = _parametrizations_of(module)
     chain = registry.get(tensor_name) if registry is not None else None
     if registry is None or not isinstance(chain, ParametrizationList):
         raise ValueError(
-            f"Module {type(module).__name__} does not have a parametrization "
-            f"on {tensor_name}"
+            f"Module {type(module).__name__} does not have a parametrization " f"on {tensor_name}"
         )
     return registry, chain
 
@@ -388,11 +383,7 @@ def _inject_new_class(module: Module) -> None:
         # assigned that way would train nothing.  A plain tensor goes on
         # to the property, which writes the originals.
         registry = _parametrizations_of(self)
-        if (
-            isinstance(value, (Parameter, Module))
-            and registry is not None
-            and name in registry
-        ):
+        if isinstance(value, (Parameter, Module)) and registry is not None and name in registry:
             raise KeyError(f"attribute '{name}' already exists")
         cls.__setattr__(self, name, value)
 

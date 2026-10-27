@@ -81,9 +81,7 @@ class _BasicBlock(nn.Module):
         downsample: nn.Sequential | None = None,
     ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 3, stride=stride, padding=1, bias=False
-        )
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, padding=1, bias=False)
@@ -229,18 +227,12 @@ def _make_layer(
             nn.BatchNorm2d(final_channels),
         )
 
-    def _make_block(
-        inc: int, outc: int, s: int = 1, ds: nn.Sequential | None = None
-    ) -> nn.Module:
+    def _make_block(inc: int, outc: int, s: int = 1, ds: nn.Sequential | None = None) -> nn.Module:
         if block_cls is _Bottleneck:
-            return _Bottleneck(
-                inc, outc, stride=s, downsample=ds, width_mult=width_mult
-            )
+            return _Bottleneck(inc, outc, stride=s, downsample=ds, width_mult=width_mult)
         return _BasicBlock(inc, outc, stride=s, downsample=ds)
 
-    layers: list[nn.Module] = [
-        _make_block(in_channels, out_channels, stride, downsample)
-    ]
+    layers: list[nn.Module] = [_make_block(in_channels, out_channels, stride, downsample)]
     for _ in range(1, num_blocks):
         layers.append(_make_block(final_channels, out_channels))
 
@@ -274,15 +266,9 @@ def _build_body(
     wm = config.bottleneck_width_mult
     cur = sc
     layer1, cur = _make_layer(block_cls, cur, hs[0], config.layers[0], width_mult=wm)
-    layer2, cur = _make_layer(
-        block_cls, cur, hs[1], config.layers[1], stride=2, width_mult=wm
-    )
-    layer3, cur = _make_layer(
-        block_cls, cur, hs[2], config.layers[2], stride=2, width_mult=wm
-    )
-    layer4, cur = _make_layer(
-        block_cls, cur, hs[3], config.layers[3], stride=2, width_mult=wm
-    )
+    layer2, cur = _make_layer(block_cls, cur, hs[1], config.layers[1], stride=2, width_mult=wm)
+    layer3, cur = _make_layer(block_cls, cur, hs[2], config.layers[2], stride=2, width_mult=wm)
+    layer4, cur = _make_layer(block_cls, cur, hs[3], config.layers[3], stride=2, width_mult=wm)
 
     exp = block_cls.expansion
     feature_info = [
@@ -545,9 +531,7 @@ class ResNetForImageClassification(ImageClassificationModel, ClassificationHeadM
         )
         final_channels = config.hidden_sizes[-1] * block_cls.expansion
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self._build_classifier(
-            final_channels, config.num_classes, dropout=config.dropout
-        )
+        self._build_classifier(final_channels, config.num_classes, dropout=config.dropout)
 
         init_cnn_fan_out(self)
         if config.zero_init_residual:

@@ -50,9 +50,7 @@ _ENVELOPE: tuple[tuple[int, int, int, int], ...] = (
 # fused-SDPA graph never probes, so the flag stays at its conservative -1 and
 # unaffected hardware pays the transpose tax (and the native fused emitter,
 # which is gated on the same flag, never engages).
-_PROBE_TRIGGER_OPS: frozenset[str] = frozenset(
-    {"softmax", "scaled_dot_product_attention"}
-)
+_PROBE_TRIGGER_OPS: frozenset[str] = frozenset({"softmax", "scaled_dot_product_attention"})
 
 
 def maybe_probe_for_graph(graph: TraceGraph) -> None:

@@ -357,9 +357,7 @@ class GoogLeNet(PretrainedModel, BackboneMixin):
 
     def __init__(self, config: GoogLeNetConfig) -> None:
         super().__init__(config)
-        self.conv1 = _BasicConv2d(
-            config.in_channels, 64, kernel_size=7, stride=2, padding=3
-        )
+        self.conv1 = _BasicConv2d(config.in_channels, 64, kernel_size=7, stride=2, padding=3)
         self.maxpool1 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
         self.conv2 = _BasicConv2d(64, 64, kernel_size=1)
         self.conv3 = _BasicConv2d(64, 192, kernel_size=3, padding=1)
@@ -431,9 +429,7 @@ class GoogLeNet(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class GoogLeNetForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class GoogLeNetForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""GoogLeNet image classifier with optional auxiliary classifiers.
 
     Combines the GoogLeNet backbone with a global-average-pool +
@@ -518,9 +514,7 @@ class GoogLeNetForImageClassification(
 
     def __init__(self, config: GoogLeNetConfig) -> None:
         super().__init__(config)
-        self.conv1 = _BasicConv2d(
-            config.in_channels, 64, kernel_size=7, stride=2, padding=3
-        )
+        self.conv1 = _BasicConv2d(config.in_channels, 64, kernel_size=7, stride=2, padding=3)
         self.maxpool1 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
         self.conv2 = _BasicConv2d(64, 64, kernel_size=1)
         self.conv3 = _BasicConv2d(64, 192, kernel_size=3, padding=1)
@@ -543,12 +537,8 @@ class GoogLeNetForImageClassification(
 
         # Auxiliary classifiers (attached at 4a → 512ch, 4d → 528ch)
         if config.aux_logits:
-            self.aux1: nn.Module = _AuxClassifier(
-                512, config.num_classes, config.aux_dropout
-            )
-            self.aux2: nn.Module = _AuxClassifier(
-                528, config.num_classes, config.aux_dropout
-            )
+            self.aux1: nn.Module = _AuxClassifier(512, config.num_classes, config.aux_dropout)
+            self.aux2: nn.Module = _AuxClassifier(528, config.num_classes, config.aux_dropout)
         else:
             self.aux1 = nn.Identity()
             self.aux2 = nn.Identity()
@@ -609,6 +599,4 @@ class GoogLeNetForImageClassification(
             if aux2 is not None:
                 loss = loss + 0.3 * F.cross_entropy(aux2, labels)
 
-        return GoogLeNetOutput(
-            logits=logits, aux_logits1=aux1, aux_logits2=aux2, loss=loss
-        )
+        return GoogLeNetOutput(logits=logits, aux_logits1=aux1, aux_logits2=aux2, loss=loss)

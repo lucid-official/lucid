@@ -65,9 +65,7 @@ _WHICH = ["running_mean", "running_var", "both"]
 def _view(
     base: lucid.Tensor, shape: tuple[int, ...], stride: tuple[int, ...], offset: int
 ) -> lucid.Tensor:
-    return _wrap(
-        _C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset)
-    )
+    return _wrap(_C_engine.TensorImpl._make_view(base._impl, list(shape), list(stride), offset))
 
 
 def _positions(geometry: tuple[tuple[int, ...], tuple[int, ...], int]) -> list[int]:
@@ -99,9 +97,7 @@ def _input(step: int, shape: tuple[int, ...]) -> np.ndarray:
     channel[1] = _C
     scale = np.array([0.5, 1.0, 2.0], dtype=np.float32).reshape(channel)
     shift = np.array([-1.0, 0.5, 3.0], dtype=np.float32).reshape(channel)
-    return (rng.standard_normal(shape).astype(np.float32) * scale + shift).astype(
-        np.float32
-    )
+    return (rng.standard_normal(shape).astype(np.float32) * scale + shift).astype(np.float32)
 
 
 def _flat(t: lucid.Tensor) -> np.ndarray:
@@ -153,9 +149,7 @@ def test_a_running_stat_view_is_updated_as_the_reference_updates_it(
 
 @pytest.mark.parametrize("norm", list(_NORMS))
 @pytest.mark.parametrize("layout", list(_LAYOUTS))
-@pytest.mark.parametrize(
-    "device, dtype", device_dtype_params([lucid.float32, lucid.float64])
-)
+@pytest.mark.parametrize("device, dtype", device_dtype_params([lucid.float32, lucid.float64]))
 def test_a_running_stat_view_updates_as_a_dense_one(
     norm: str, layout: str, device: str, dtype: lucid.dtype
 ) -> None:
@@ -173,16 +167,12 @@ def test_a_running_stat_view_updates_as_a_dense_one(
         viewed(x)
         dense(x)
     for stat in ("running_mean", "running_var"):
-        np.testing.assert_array_equal(
-            _flat(getattr(viewed, stat)), _flat(getattr(dense, stat))
-        )
+        np.testing.assert_array_equal(_flat(getattr(viewed, stat)), _flat(getattr(dense, stat)))
 
 
 # What a user writes on the CPU, as in the LCD-491 report: each maps to a
 # geometry over the 4 x 6 base.
-_NATURAL: dict[
-    str, tuple[Callable[[Any], Any], tuple[tuple[int, ...], tuple[int, ...], int]]
-] = {
+_NATURAL: dict[str, tuple[Callable[[Any], Any], tuple[tuple[int, ...], tuple[int, ...], int]]] = {
     "column": (lambda x: x[:3, 2], ((_C,), (6,), 2)),
     "transpose": (lambda x: x.t()[4][:3], ((_C,), (6,), 4)),
     "offset_slice": (lambda x: x.reshape(-1)[7:10], ((_C,), (1,), 7)),
@@ -249,9 +239,7 @@ def test_the_functional_updates_running_stat_views_in_their_base(
     ref_rm, ref_rv = (b.as_strided(*geometry) for b in ref_bases)
     for step in range(_STEPS):
         x = _input(step, _NORMS["1d"][1])
-        F.batch_norm(
-            lucid.tensor(x.copy()).to(device), rm, rv, training=True, momentum=_MOMENTUM
-        )
+        F.batch_norm(lucid.tensor(x.copy()).to(device), rm, rv, training=True, momentum=_MOMENTUM)
         ref.nn.functional.batch_norm(
             ref.from_numpy(x.copy()), ref_rm, ref_rv, training=True, momentum=_MOMENTUM
         )
@@ -263,9 +251,7 @@ def test_the_functional_updates_running_stat_views_in_their_base(
 
 
 @pytest.mark.parametrize("layout", list(_LAYOUTS))
-def test_the_engine_update_entry_writes_a_view_as_a_dense_buffer(
-    layout: str, device: str
-) -> None:
+def test_the_engine_update_entry_writes_a_view_as_a_dense_buffer(layout: str, device: str) -> None:
     # ``batch_norm_update_running_stats``, the engine's update entry outside
     # the training forward.
     geometry = _LAYOUTS[layout]
@@ -355,9 +341,7 @@ def test_a_running_stat_whose_elements_overlap_is_refused_and_neither_moves(
 
 
 @pytest.mark.parametrize("path", list(_PATHS))
-def test_every_running_stat_path_updates_a_view_base(
-    path: str, device: str, ref: Any
-) -> None:
+def test_every_running_stat_path_updates_a_view_base(path: str, device: str, ref: Any) -> None:
     mean_at, var_at = _LAYOUTS["column"], _LAYOUTS["diagonal"]
     inits = [_base_init(0), _base_init(1)]
     bases = [lucid.tensor(i.copy()).to(device) for i in inits]
@@ -425,6 +409,4 @@ def test_a_training_forward_moves_each_buffer_version_as_the_reference_does(
     ref_moved = {k: b._version - theirs_before[k] for k, b in theirs.items()}
     assert moved == ref_moved
     for k, b in ours.items():
-        np.testing.assert_allclose(
-            _flat(b), theirs[k].double().numpy(), rtol=_TOL, atol=_TOL
-        )
+        np.testing.assert_allclose(_flat(b), theirs[k].double().numpy(), rtol=_TOL, atol=_TOL)

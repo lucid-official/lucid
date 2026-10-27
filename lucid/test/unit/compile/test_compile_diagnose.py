@@ -53,9 +53,7 @@ def test_diagnose_returns_report_dataclass() -> None:
 
 def test_diagnose_covered_mlp_reports_no_fallback() -> None:
     """An all-linear MLP loss has 100 % manual VJP coverage."""
-    model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(
-        COMPILE_DEVICE
-    )
+    model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(COMPILE_DEVICE)
     x = metal_tensor(2, 8)
     t = metal_tensor(2, 4)
 
@@ -206,7 +204,6 @@ def test_debug_env_var_emits_structured_stderr_on_gap() -> None:
     # got a VJP the script stopped reaching a gap, so the test passed while
     # checking nothing.
     assert "lucid.compile manual_vjp" in err, (
-        f"expected the bracketed marker [lucid.compile manual_vjp] in "
-        f"stderr but got:\n{err}"
+        f"expected the bracketed marker [lucid.compile manual_vjp] in " f"stderr but got:\n{err}"
     )
     assert "verdict:" in err, f"expected fallback verdict line; got:\n{err}"

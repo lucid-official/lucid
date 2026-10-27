@@ -231,9 +231,7 @@ class MobileNet(PretrainedModel, BackboneMixin):
 # ---------------------------------------------------------------------------
 
 
-class MobileNetForImageClassification(
-    ImageClassificationModel, ClassificationHeadMixin
-):
+class MobileNetForImageClassification(ImageClassificationModel, ClassificationHeadMixin):
     r"""MobileNet v1 with global-average-pooled linear classification head.
 
     Combines a :class:`MobileNet` backbone with the standard

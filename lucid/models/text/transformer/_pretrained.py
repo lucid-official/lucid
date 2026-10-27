@@ -98,9 +98,7 @@ def transformer_base(pretrained: bool = False, **overrides: object) -> Transform
     default_config=_CFG_LARGE,
     params=214249472,
 )
-def transformer_large(
-    pretrained: bool = False, **overrides: object
-) -> TransformerModel:
+def transformer_large(pretrained: bool = False, **overrides: object) -> TransformerModel:
     r"""Construct a Vaswani-style Transformer "big" encoder-decoder.
 
     Larger of the two original variants from Vaswani et al., 2017, Table 3

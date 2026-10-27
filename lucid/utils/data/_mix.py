@@ -130,10 +130,7 @@ class MixupCollator:
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"MixupCollator(alpha={self.alpha}, "
-            f"num_classes={self.num_classes}, p={self.p})"
-        )
+        return f"MixupCollator(alpha={self.alpha}, " f"num_classes={self.num_classes}, p={self.p})"
 
 
 # ── CutMix ───────────────────────────────────────────────────────────
@@ -223,10 +220,7 @@ class CutMixCollator:
 
     @override
     def __repr__(self) -> str:
-        return (
-            f"CutMixCollator(alpha={self.alpha}, "
-            f"num_classes={self.num_classes}, p={self.p})"
-        )
+        return f"CutMixCollator(alpha={self.alpha}, " f"num_classes={self.num_classes}, p={self.p})"
 
 
 # ── Random mixup-or-cutmix ───────────────────────────────────────────
@@ -276,9 +270,7 @@ class RandomMixupCutMixCollator:
             # Neither fires — soft-label the raw batch for shape consistency.
             images_obj, labels_obj = default_collate(batch)
             if not isinstance(images_obj, Tensor) or not isinstance(labels_obj, Tensor):
-                raise TypeError(
-                    "RandomMixupCutMixCollator expects (image, label) tuples"
-                )
+                raise TypeError("RandomMixupCutMixCollator expects (image, label) tuples")
             return images_obj, _to_soft_targets(labels_obj, self.num_classes)
         if float(lucid.rand(1).item()) < self.switch_prob:
             return self.cutmix(batch)

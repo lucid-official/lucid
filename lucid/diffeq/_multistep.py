@@ -118,9 +118,7 @@ def parse_options(options: dict[str, object] | None) -> AdamsOptions:
 
     max_order = _count("max_order", _DEFAULT_MAX_ORDER)
     if not 1 <= max_order <= _MAX_ORDER_CAP:
-        raise ValueError(
-            f"max_order must lie in [1, {_MAX_ORDER_CAP}], got {max_order}"
-        )
+        raise ValueError(f"max_order must lie in [1, {_MAX_ORDER_CAP}], got {max_order}")
     max_iters = _count("max_iters", _DEFAULT_MAX_ITERS)
     if max_iters < 1:
         raise ValueError(f"max_iters must be >= 1, got {max_iters}")
@@ -178,9 +176,7 @@ def coefficients(order: int, implicit: bool) -> tuple[float, ...]:
                 continue
             scale = nodes[j] - nodes[i]
             basis = _polymul(basis, [-nodes[i] / scale, Fraction(1) / scale])
-        weights.append(
-            sum((c / (power + 1) for power, c in enumerate(basis)), Fraction(0))
-        )
+        weights.append(sum((c / (power + 1) for power, c in enumerate(basis)), Fraction(0)))
     return tuple(float(w) for w in weights)
 
 
@@ -259,9 +255,7 @@ def integrate(
     direct = steps == grid
 
     spacings = [steps[i + 1] - steps[i] for i in range(len(steps) - 1)]
-    uniform = all(
-        abs(h - spacings[0]) <= 1e-12 * max(1.0, abs(spacings[0])) for h in spacings
-    )
+    uniform = all(abs(h - spacings[0]) <= 1e-12 * max(1.0, abs(spacings[0])) for h in spacings)
 
     y = y0
     trajectory: list[Tensor] = [y0] if return_trajectory else []
@@ -318,9 +312,7 @@ def integrate(
             (grid[target_index] - t1) * (1.0 if dt > 0 else -1.0) <= 0.0
         ):
             if return_trajectory:
-                trajectory.append(
-                    _fixed._interp_evaluate(coeffs, t0, t1, grid[target_index])
-                )
+                trajectory.append(_fixed._interp_evaluate(coeffs, t0, t1, grid[target_index]))
             target_index += 1
         y = y_next
 

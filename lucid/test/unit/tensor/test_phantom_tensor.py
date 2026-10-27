@@ -80,8 +80,7 @@ _CASES: dict[str, Callable[[str], object]] = {
     "full_like": lambda d: lucid.full_like(lucid.ones(3, device=d), 2.0),
     "tensor": lambda d: lucid.tensor([[1, 2], [3, 4]], device=d),
     # elementwise, with broadcasting and promotion
-    "add_broadcast": lambda d: lucid.ones(2, 1, 4, device=d)
-    + lucid.ones(3, 1, device=d),
+    "add_broadcast": lambda d: lucid.ones(2, 1, 4, device=d) + lucid.ones(3, 1, device=d),
     "sub_scalar": lambda d: lucid.ones(3, device=d) - 1,
     "mul_promote": lambda d: lucid.ones(3, device=d) * lucid.arange(3, device=d),
     "div": lambda d: lucid.ones(2, 3, device=d) / lucid.full((3,), 2.0, device=d),
@@ -93,9 +92,7 @@ _CASES: dict[str, Callable[[str], object]] = {
     "sigmoid": lambda d: lucid.sigmoid(lucid.ones(4, device=d)),
     "relu": lambda d: F.relu(lucid.randn(3, 2, device=d)),
     "gelu": lambda d: F.gelu(lucid.randn(3, 2, device=d)),
-    "maximum": lambda d: lucid.maximum(
-        lucid.ones(3, device=d), lucid.zeros(2, 3, device=d)
-    ),
+    "maximum": lambda d: lucid.maximum(lucid.ones(3, device=d), lucid.zeros(2, 3, device=d)),
     "compare": lambda d: lucid.ones(3, device=d) > lucid.zeros(3, device=d),
     "astype": lambda d: lucid.ones(2, 2, device=d).to(lucid.float16),
     # reductions
@@ -112,12 +109,8 @@ _CASES: dict[str, Callable[[str], object]] = {
     "unsqueeze": lambda d: lucid.ones(3, device=d).unsqueeze(0),
     "flatten": lambda d: lucid.ones(2, 3, 4, device=d).flatten(1),
     "expand": lambda d: lucid.ones(3, 1, device=d).expand(3, 4),
-    "cat": lambda d: lucid.cat(
-        [lucid.ones(2, 3, device=d), lucid.ones(4, 3, device=d)]
-    ),
-    "stack": lambda d: lucid.stack(
-        [lucid.ones(3, device=d), lucid.ones(3, device=d)], dim=1
-    ),
+    "cat": lambda d: lucid.cat([lucid.ones(2, 3, device=d), lucid.ones(4, 3, device=d)]),
+    "stack": lambda d: lucid.stack([lucid.ones(3, device=d), lucid.ones(3, device=d)], dim=1),
     "split": lambda d: lucid.ones(7, 2, device=d).split(3),
     "chunk": lambda d: lucid.ones(6, 4, device=d).chunk(3, dim=1),
     "narrow": lambda d: lucid.ones(5, 4, device=d).narrow(0, 1, 3),
@@ -128,9 +121,7 @@ _CASES: dict[str, Callable[[str], object]] = {
     "matmul": lambda d: lucid.ones(2, 3, 4, device=d) @ lucid.ones(4, 5, device=d),
     "softmax": lambda d: F.softmax(lucid.ones(2, 5, device=d), dim=-1),
     "log_softmax": lambda d: F.log_softmax(lucid.ones(2, 5, device=d), dim=1),
-    "linear": lambda d: F.linear(
-        lucid.ones(3, 4, device=d), lucid.ones(6, 4, device=d)
-    ),
+    "linear": lambda d: F.linear(lucid.ones(3, 4, device=d), lucid.ones(6, 4, device=d)),
     "conv2d": lambda d: F.conv2d(
         lucid.ones(1, 3, 8, 8, device=d), lucid.ones(4, 3, 3, 3, device=d), padding=1
     ),
@@ -196,9 +187,7 @@ def test_reading_a_phantom_s_values_raises(read, device):
     fn, name = _READS[read]
     with phantom():
         t = lucid.ones(1, device=device)
-    with pytest.raises(
-        _C_engine.LucidError, match=f"phantom tensor has no values: {name}"
-    ):
+    with pytest.raises(_C_engine.LucidError, match=f"phantom tensor has no values: {name}"):
         fn(t)
 
 
@@ -440,9 +429,7 @@ def test_a_phantom_running_statistic_takes_the_update(device):
 
 
 @pytest.mark.parametrize("optimizer", ["SGD", "Adam", "SparseAdam"])
-def test_an_optimizer_step_under_the_mode_refuses_before_any_state_moves(
-    optimizer, device
-):
+def test_an_optimizer_step_under_the_mode_refuses_before_any_state_moves(optimizer, device):
     def make() -> tuple[nn.Parameter, optim.Optimizer]:
         w = nn.Parameter(lucid.ones(3, device=device))
         w.grad = lucid.ones(3, device=device)
@@ -453,15 +440,11 @@ def test_an_optimizer_step_under_the_mode_refuses_before_any_state_moves(
     opt_ref.step()
     w, opt = make()
     with phantom():
-        with pytest.raises(
-            _C_engine.LucidError, match="optimizer step under phantom mode"
-        ):
+        with pytest.raises(_C_engine.LucidError, match="optimizer step under phantom mode"):
             opt.step()
     opt.step()
     with phantom():
-        with pytest.raises(
-            _C_engine.LucidError, match="optimizer step under phantom mode"
-        ):
+        with pytest.raises(_C_engine.LucidError, match="optimizer step under phantom mode"):
             opt.step()
     opt.step()
     assert not w._impl.is_phantom
@@ -473,9 +456,7 @@ def test_an_optimizer_step_of_a_phantom_parameter_refuses(device):
         w = nn.Parameter(lucid.ones(3, device=device))
         w.grad = lucid.ones(3, device=device)
     opt = optim.SGD([w], lr=0.1)
-    with pytest.raises(
-        _C_engine.LucidError, match="optimizer step of a phantom parameter"
-    ):
+    with pytest.raises(_C_engine.LucidError, match="optimizer step of a phantom parameter"):
         opt.step()
 
 
@@ -483,9 +464,7 @@ def test_an_optimizer_step_of_a_phantom_parameter_refuses(device):
     "rebind",
     [
         "half",
-        pytest.param(
-            "to", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
-        ),
+        pytest.param("to", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
         "data",
     ],
 )

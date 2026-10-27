@@ -79,12 +79,8 @@ def test_a_segment_returning_several_tensors() -> None:
 
 
 @pytest.mark.parametrize("use_reentrant", [True, False])
-@pytest.mark.parametrize(
-    "none_first", [False, True], ids=["tensor-none", "none-tensor"]
-)
-def test_a_segment_returning_none_beside_its_tensor(
-    use_reentrant: bool, none_first: bool
-) -> None:
+@pytest.mark.parametrize("none_first", [False, True], ids=["tensor-none", "none-tensor"])
+def test_a_segment_returning_none_beside_its_tensor(use_reentrant: bool, none_first: bool) -> None:
     """A ``None`` among the outputs takes no gradient, wherever it sits.
 
     ``backward`` gets one gradient per tensor output; pairing them with

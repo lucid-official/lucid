@@ -65,13 +65,9 @@ def test_run_executable_inplace_with_concurrent_sibling_reads() -> None:
         try:
             for k in range(steps):
                 if k % 2 == 0:
-                    _C_engine.compile.run_executable_inplace(
-                        exe_4x4, feeds_4x4, [impl_4x4]
-                    )
+                    _C_engine.compile.run_executable_inplace(exe_4x4, feeds_4x4, [impl_4x4])
                 else:
-                    _C_engine.compile.run_executable_inplace(
-                        exe_2x8, feeds_2x8, [impl_2x8]
-                    )
+                    _C_engine.compile.run_executable_inplace(exe_2x8, feeds_2x8, [impl_2x8])
         finally:
             done.set()
 

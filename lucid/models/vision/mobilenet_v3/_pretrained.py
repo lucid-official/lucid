@@ -71,9 +71,7 @@ def mobilenet_v3_large(pretrained: bool = False, **overrides: object) -> MobileN
     (1, 960, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "mobilenet_v3_large", alternative="mobilenet_v3_large_cls"
-        )
+        reject_unavailable_pretrained("mobilenet_v3_large", alternative="mobilenet_v3_large_cls")
     cfg = apply_overrides(_CFG_LARGE, overrides)
     return MobileNetV3(cfg)
 
@@ -130,9 +128,7 @@ def mobilenet_v3_small(pretrained: bool = False, **overrides: object) -> MobileN
     (1, 576, 7, 7)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "mobilenet_v3_small", alternative="mobilenet_v3_small_cls"
-        )
+        reject_unavailable_pretrained("mobilenet_v3_small", alternative="mobilenet_v3_small_cls")
     cfg = apply_overrides(_CFG_SMALL, overrides)
     return MobileNetV3(cfg)
 

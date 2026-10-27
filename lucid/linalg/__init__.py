@@ -46,9 +46,7 @@ def _linalg_op[R](fn: Callable[..., R]) -> Callable[..., R]:
         uk = {k: _try_unwrap(v) or v for k, v in kwargs.items()}
         out: object = fn(*ua, **uk)
         if isinstance(out, tuple):
-            out = tuple(
-                _wrap(o) if isinstance(o, _C_engine.TensorImpl) else o for o in out
-            )
+            out = tuple(_wrap(o) if isinstance(o, _C_engine.TensorImpl) else o for o in out)
         elif isinstance(out, _C_engine.TensorImpl):
             out = _wrap(out)
         # ``fn`` is annotated with what the caller gets once it is re-wrapped,
@@ -461,8 +459,7 @@ def _norm_body(
             return _scaled(x, ord, lambda t: vector_norm(t, ord, 0, keepdim))
         if rank == 1:
             raise ValueError(
-                f"norm: ord={ord!r} is a matrix order and needs at least "
-                "2 dimensions, got 1-D"
+                f"norm: ord={ord!r} is a matrix order and needs at least " "2 dimensions, got 1-D"
             )
         raise ValueError(
             "norm: when dim is not given but ord is, the input must be 1-D "
@@ -472,8 +469,7 @@ def _norm_body(
     if isinstance(ord, str) or len(axes) == 2:
         if len(axes) != 2:
             raise ValueError(
-                f"norm: ord={ord!r} is a matrix order and needs a pair of "
-                f"axes, got dim={dim!r}"
+                f"norm: ord={ord!r} is a matrix order and needs a pair of " f"axes, got dim={dim!r}"
             )
         pair = (axes[0], axes[1])
         m_ord: int | float | str = "fro" if ord is None else ord
@@ -748,9 +744,7 @@ def _copyltu(M: Tensor) -> Tensor:
     only for a symmetric ``M``.
     """
     strict_lower = lucid.tril(M, -1)
-    return (
-        strict_lower + strict_lower.mT + lucid.diag_embed(M.diagonal(dim1=-2, dim2=-1))
-    )
+    return strict_lower + strict_lower.mT + lucid.diag_embed(M.diagonal(dim1=-2, dim2=-1))
 
 
 def _qr_wide_backward(
@@ -827,9 +821,7 @@ class _QR(_AutogradFunction):
 
     @override
     @staticmethod
-    def backward(
-        ctx: FunctionCtx, G_Q: Tensor | None, G_R: Tensor | None
-    ) -> Tensor:
+    def backward(ctx: FunctionCtx, G_Q: Tensor | None, G_R: Tensor | None) -> Tensor:
         A, Q, R = ctx.saved_tensors
         if int(A.shape[-2]) < int(A.shape[-1]):
             return _qr_wide_backward(A, Q, R, G_Q, G_R)
@@ -990,9 +982,7 @@ def matrix_power(input: Tensor, n: int) -> Tensor:
 
     sh: tuple[int, ...] = tuple(_unwrap(input).shape)
     if len(sh) < 2 or sh[-1] != sh[-2]:
-        raise ValueError(
-            f"matrix_power requires a square matrix in the last two dims, got {sh}"
-        )
+        raise ValueError(f"matrix_power requires a square matrix in the last two dims, got {sh}")
 
     if n == 0:
         return cast(Tensor, _MatrixPowerZero.apply(input))
@@ -1091,9 +1081,7 @@ def pinv(
     """
     if rcond is not None:
         if atol is not None or rtol is not None:
-            raise TypeError(
-                "pinv: rcond cannot be specified together with atol or rtol"
-            )
+            raise TypeError("pinv: rcond cannot be specified together with atol or rtol")
         rtol = rcond
     if atol is not None or rtol is not None or hermitian:
         return _pinv_with_tol(input, atol=atol, rtol=rtol, hermitian=hermitian)
@@ -1121,9 +1109,7 @@ class _Pinv(_AutogradFunction):
 
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx, A: Tensor, p_impl: _C_engine.TensorImpl | None = None
-    ) -> Tensor:
+    def forward(ctx: FunctionCtx, A: Tensor, p_impl: _C_engine.TensorImpl | None = None) -> Tensor:
         P = _wrap(_la.pinv(_unwrap(A)) if p_impl is None else p_impl)
         ctx.save_for_backward(A, P)
         return P
@@ -1351,9 +1337,7 @@ class _Eigh(_AutogradFunction):
 
     @override
     @staticmethod
-    def backward(
-        ctx: FunctionCtx, G_w: Tensor | None, G_V: Tensor | None
-    ) -> Tensor:
+    def backward(ctx: FunctionCtx, G_w: Tensor | None, G_V: Tensor | None) -> Tensor:
         w, V = ctx.saved_tensors
         dA: Tensor | None = None
         if G_w is not None:
@@ -1747,9 +1731,7 @@ def matrix_rank(
         )
     if tol is not None:
         if atol is not None or rtol is not None:
-            raise ValueError(
-                "matrix_rank: tol cannot be specified together with atol or rtol"
-            )
+            raise ValueError("matrix_rank: tol cannot be specified together with atol or rtol")
         atol, rtol = tol, 0.0
     with _autocast_entry("matrix_rank", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
@@ -1842,8 +1824,7 @@ def cond(input: Tensor, p: int | float | str | None = None) -> Tensor:
     """
     if p not in _COND_ORDERS:
         raise ValueError(
-            f"cond: unsupported order p={p!r}; expected None, ±1, ±2, ±inf, "
-            f"'fro' or 'nuc'"
+            f"cond: unsupported order p={p!r}; expected None, ±1, ±2, ±inf, " f"'fro' or 'nuc'"
         )
     if input.ndim < 2:
         raise ValueError(
@@ -1858,8 +1839,7 @@ def cond(input: Tensor, p: int | float | str | None = None) -> Tensor:
     if input.is_complex():
         needs = "SVD" if p is None or p in (2, -2, "nuc") else "inverse"
         raise NotImplementedError(
-            f"cond(p={p!r}): a complex A needs a complex {needs}, which linalg "
-            "does not have yet"
+            f"cond(p={p!r}): a complex A needs a complex {needs}, which linalg " "does not have yet"
         )
     with _autocast_entry("cond", _unwrap(input)) as (a_impl,):
         return _cond_compute(_wrap(a_impl), p, square)
@@ -1980,9 +1960,7 @@ def solve_triangular(
     # right-hand side) and the gradient in both operands.
     if not left:
         # X A = B  ⟺  Aᵀ Xᵀ = Bᵀ — solve the transposed system, transpose result.
-        XT = _la.solve_triangular(
-            _unwrap(input.mT), _unwrap(B.mT), not upper, unitriangular
-        )
+        XT = _la.solve_triangular(_unwrap(input.mT), _unwrap(B.mT), not upper, unitriangular)
         return _wrap(XT).mT
     return _wrap(_la.solve_triangular(_unwrap(input), _unwrap(B), upper, unitriangular))
 
@@ -2049,9 +2027,7 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tenso
     shape = tuple(vec.shape)
     cols = shape[-1] if N is None else int(N)
     if cols < 0:
-        raise _C_engine.InvalidArgument(
-            f"linalg.vander: N must be non-negative, got {cols}"
-        )
+        raise _C_engine.InvalidArgument(f"linalg.vander: N must be non-negative, got {cols}")
     powers = lucid.cumprod(vec.unsqueeze(-1).expand(*shape, max(cols - 1, 0)), -1)
     ones = lucid.ones(*shape, min(cols, 1), dtype=powers.dtype, device=vec.device)
     out = lucid.cat([ones, powers], -1)
@@ -2061,9 +2037,7 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tenso
 _COMPLEX_DTYPES = (lucid.complex64, lucid.complex128)
 
 
-def _cast_for_norm(
-    x: Tensor, dtype: object, op: str = "vector_norm"
-) -> _C_engine.TensorImpl:
+def _cast_for_norm(x: Tensor, dtype: object, op: str = "vector_norm") -> _C_engine.TensorImpl:
     """``x`` cast to the ``dtype`` a norm was asked to compute in.
 
     The argument used to be accepted and dropped: ``dtype=float64`` on a
@@ -2175,11 +2149,7 @@ def vector_norm(
     """
     xi = _require_normable(_unwrap(input), "vector_norm")
     with _autocast_entry("vector_norm", xi) as (xi_cast,):
-        xi = (
-            _cast_for_norm(input, dtype, "vector_norm")
-            if dtype is not None
-            else xi_cast
-        )
+        xi = _cast_for_norm(input, dtype, "vector_norm") if dtype is not None else xi_cast
         # Every order below is a function of the magnitudes |x_i| alone, and
         # this is the one place in linalg where a norm takes them: a complex
         # input is replaced by its (real) magnitudes before any order sees it.
@@ -2187,11 +2157,7 @@ def vector_norm(
         # through this function instead of repeating the step (CHA-147, CHA-231).
         r = _C_engine.abs(xi) if xi.dtype in (_C_engine.C64, _C_engine.C128) else xi
         # Every axis, rather than a flatten, for ``dim=None`` so ``keepdim`` retains rank.
-        axes = (
-            list(range(len(r.shape)))
-            if dim is None
-            else _reduction_axes(r, dim, "vector_norm")
-        )
+        axes = list(range(len(r.shape))) if dim is None else _reduction_axes(r, dim, "vector_norm")
         if ord == 0:
             nz = _C_engine.not_equal(r, _C_engine.zeros_like(r))
             return _wrap(_C_engine.astype(_C_engine.sum(nz, axes, keepdim), r.dtype))
@@ -2262,9 +2228,7 @@ def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:
     c0 = _C_engine.sub(_C_engine.mul(x1, y2), _C_engine.mul(x2, y1))
     c1 = _C_engine.sub(_C_engine.mul(x2, y0), _C_engine.mul(x0, y2))
     c2 = _C_engine.sub(_C_engine.mul(x0, y1), _C_engine.mul(x1, y0))
-    return _wrap(
-        _C_engine.concatenate([_C_engine.unsqueeze(c, d) for c in (c0, c1, c2)], d)
-    )
+    return _wrap(_C_engine.concatenate([_C_engine.unsqueeze(c, d) for c in (c0, c1, c2)], d))
 
 
 def vecdot(x: Tensor, y: Tensor, *, dim: int = -1) -> Tensor:
@@ -2529,19 +2493,13 @@ def matrix_norm(
     """
     xi = _require_normable(_unwrap(input), "matrix_norm")
     with _autocast_entry("matrix_norm", xi) as (xi_cast,):
-        xi = (
-            _cast_for_norm(input, dtype, "matrix_norm")
-            if dtype is not None
-            else xi_cast
-        )
+        xi = _cast_for_norm(input, dtype, "matrix_norm") if dtype is not None else xi_cast
         if dtype is None:
             input = _wrap(xi)
         d0, d1 = _check_matrix_norm_dims(len(xi.shape), dim)
 
         # Entry-wise orders reduce through ``vector_norm``, which owns taking |x|.
-        if ord == "fro" or (
-            ord in (1, float("inf")) and (xi.shape[d0] == 0 or xi.shape[d1] == 0)
-        ):
+        if ord == "fro" or (ord in (1, float("inf")) and (xi.shape[d0] == 0 or xi.shape[d1] == 0)):
             return vector_norm(input, 2, [d0, d1], keepdim, dtype=dtype)
 
         if ord in (1, -1, float("inf"), float("-inf")):
@@ -2967,9 +2925,7 @@ def _bunch_kaufman_steps(piv: list[int], n: int) -> list[tuple[int, int, int]]:
     return steps
 
 
-def ldl_solve(
-    LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False
-) -> Tensor:
+def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False) -> Tensor:
     r"""Solve a symmetric linear system using an LDL factorization.
 
     Given :math:`A = L\,D\,L^\top` produced by :func:`ldl_factor`,
@@ -3180,14 +3136,10 @@ def _solve_bunch_kaufman_d(
     k = int(Y.shape[-1])
     d = LD.diagonal(dim1=-2, dim2=-1).unsqueeze(-1)  # (*, n, 1)
     d_o = lucid.gather(d, -2, partner_col)
-    Y_o = lucid.gather(
-        Y, -2, lucid.broadcast_to(partner_col, tuple(Y.shape[:-1]) + (k,))
-    )
+    Y_o = lucid.gather(Y, -2, lucid.broadcast_to(partner_col, tuple(Y.shape[:-1]) + (k,)))
     one = lucid.ones_like(d)
     b = lucid.where(paired, offdiag, one)
-    blocks = ((d_o / b) * (Y / b) - Y_o / b) / lucid.where(
-        paired, (d / b) * (d_o / b) - 1.0, one
-    )
+    blocks = ((d_o / b) * (Y / b) - Y_o / b) / lucid.where(paired, (d / b) * (d_o / b) - 1.0, one)
     return lucid.where(paired, blocks, Y / lucid.where(paired, one, d))
 
 
@@ -3268,11 +3220,7 @@ def matrix_exp(input: Tensor) -> Tensor:
     # Upper bound for the 1-norm: max element × n (safe over-estimate).
     # An empty matrix has nothing to bound (and ``max`` of nothing is refused).
     norm_bound: float = float(A.abs().max().item()) * n if A.numel() else 0.0
-    s: int = (
-        max(0, _math.ceil(_math.log2(norm_bound / _theta)))
-        if norm_bound > _theta
-        else 0
-    )
+    s: int = max(0, _math.ceil(_math.log2(norm_bound / _theta))) if norm_bound > _theta else 0
     A_sc: Tensor = A * (2.0 ** (-s))
 
     # -- Matrix powers ---------------------------------------------------------

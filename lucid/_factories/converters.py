@@ -147,9 +147,7 @@ def _is_ndarray(obj: object) -> TypeGuard[np.ndarray]:
     return cls.__module__ == "numpy" and cls.__name__ == "ndarray"
 
 
-def _ndarray_impl(
-    arr: np.ndarray, device_eng: _C_engine.Device
-) -> _C_engine.TensorImpl:
+def _ndarray_impl(arr: np.ndarray, device_eng: _C_engine.Device) -> _C_engine.TensorImpl:
     """The one handoff of an ndarray to the engine, at the array's own rank.
 
     Every ndarray ingest ends here.  ``np.ascontiguousarray`` returns an
@@ -209,9 +207,7 @@ def _to_impl(
             data = _widen_unsigned(data)
         return _ndarray_impl(data, _default_device_enum_cached())
 
-    _dtype_eng, _device_eng, _rg = normalize_factory_kwargs(
-        dtype, device, requires_grad
-    )
+    _dtype_eng, _device_eng, _rg = normalize_factory_kwargs(dtype, device, requires_grad)
 
     if isinstance(data, (_Tensor, _C_engine.TensorImpl)):
         return _source_impl(
@@ -646,18 +642,14 @@ def _dlpack_device_kind(ext_tensor: object) -> int | None:
     return kind if isinstance(kind, int) else None
 
 
-def _finish_dlpack_import(
-    out: Tensor, *, device: DeviceLike, copy: bool | None
-) -> Tensor:
+def _finish_dlpack_import(out: Tensor, *, device: DeviceLike, copy: bool | None) -> Tensor:
     from lucid._dispatch import _parse_device
 
     if device is not None:
         target_dev = _parse_device(device)
         if target_dev != out._impl.device:
             if copy is False:
-                raise BufferError(
-                    "from_dlpack: cannot move across devices when copy=False"
-                )
+                raise BufferError("from_dlpack: cannot move across devices when copy=False")
             return out.to(device=target_dev)
     return out.clone() if copy else out
 
@@ -711,18 +703,12 @@ def from_dlpack(
             alias = _wrap(ext_tensor._impl.data_alias())
         return _finish_dlpack_import(alias, device=device, copy=copy)
 
-    if (
-        device is not None
-        and copy is False
-        and _parse_device(device) != _C_engine.Device.CPU
-    ):
+    if device is not None and copy is False and _parse_device(device) != _C_engine.Device.CPU:
         raise BufferError("from_dlpack: cannot move across devices when copy=False")
     np = _require_numpy("lucid.from_dlpack")
     arr = np.from_dlpack(ext_tensor)  # type: ignore[attr-defined]
     if copy is False:
-        raise BufferError(
-            "from_dlpack: cannot avoid a copy when importing an external host buffer"
-        )
+        raise BufferError("from_dlpack: cannot avoid a copy when importing an external host buffer")
     return tensor(arr, device="cpu" if device is None else device)
 
 

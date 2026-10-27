@@ -179,18 +179,14 @@ class _Case:
         self.nominal = nominal or {}
 
 
-def _plain(
-    name: str, nominal: dict[str, Any], values: list[Any] | None = None
-) -> _Case:
+def _plain(name: str, nominal: dict[str, Any], values: list[Any] | None = None) -> _Case:
     """A distribution whose parameters are all scalars passed by keyword."""
 
     def build(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> Any:
         kw = {k: t(o.get(k, v)) for k, v in nominal.items()}
         return getattr(M, name)(**kw, validate_args=va)
 
-    return _Case(
-        build, {k: _SCALARS for k in nominal}, values or _SCALAR_VALUES, nominal
-    )
+    return _Case(build, {k: _SCALARS for k in nominal}, values or _SCALAR_VALUES, nominal)
 
 
 def _dual(
@@ -265,9 +261,7 @@ def _independent(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> 
 
 def _transformed(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> Any:
     base = M.Normal(t(0.0), t(1.0))
-    return M.TransformedDistribution(
-        base, [M.transforms.ExpTransform()], validate_args=va
-    )
+    return M.TransformedDistribution(base, [M.transforms.ExpTransform()], validate_args=va)
 
 
 def _mixture(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> Any:
@@ -319,9 +313,7 @@ CASES: dict[str, _Case] = {
     "Beta": _plain("Beta", {"concentration1": 2.0, "concentration0": 3.0}),
     "Gumbel": _plain("Gumbel", {"loc": 0.5, "scale": 1.5}),
     "InverseGamma": _plain("InverseGamma", {"concentration": 2.0, "rate": 1.5}),
-    "Kumaraswamy": _plain(
-        "Kumaraswamy", {"concentration1": 2.0, "concentration0": 3.0}
-    ),
+    "Kumaraswamy": _plain("Kumaraswamy", {"concentration1": 2.0, "concentration0": 3.0}),
     "LogisticNormal": _Case(
         _logistic_normal,
         {
@@ -332,9 +324,7 @@ CASES: dict[str, _Case] = {
         {"loc": [0.0, 0.5], "scale": [1.0, 1.5]},
     ),
     "Poisson": _plain("Poisson", {"rate": 1.5}),
-    "Dirichlet": _Case(
-        _dirichlet, {"concentration": _CONCENTRATION_VECTORS}, _VECTOR_VALUES
-    ),
+    "Dirichlet": _Case(_dirichlet, {"concentration": _CONCENTRATION_VECTORS}, _VECTOR_VALUES),
     "Bernoulli": _binary("Bernoulli"),
     "Geometric": _binary("Geometric"),
     "ContinuousBernoulli": _binary("ContinuousBernoulli"),
@@ -343,12 +333,8 @@ CASES: dict[str, _Case] = {
     "RelaxedBernoulli": _binary("RelaxedBernoulli", {"temperature": 0.5}),
     "Categorical": _categorical("Categorical"),
     "OneHotCategorical": _categorical("OneHotCategorical"),
-    "OneHotCategoricalStraightThrough": _categorical(
-        "OneHotCategoricalStraightThrough"
-    ),
-    "RelaxedOneHotCategorical": _categorical(
-        "RelaxedOneHotCategorical", {"temperature": 0.5}
-    ),
+    "OneHotCategoricalStraightThrough": _categorical("OneHotCategoricalStraightThrough"),
+    "RelaxedOneHotCategorical": _categorical("RelaxedOneHotCategorical", {"temperature": 0.5}),
     "Multinomial": _categorical("Multinomial", {"total_count": 5}),
     "MultivariateNormal": _Case(
         _mvn,
@@ -446,9 +432,7 @@ def _admits(constraint: Any, value: Any) -> bool:
 def _judge(name: str, aspect: str, differences: list[Any]) -> None:
     reason = _EXCEPTIONS.get((name, aspect))
     if reason is None:
-        assert (
-            not differences
-        ), f"{name} {aspect} differs from the reference: {differences}"
+        assert not differences, f"{name} {aspect} differs from the reference: {differences}"
     else:
         assert differences, (
             f"{name} {aspect} now matches the reference; remove its entry from "
@@ -564,9 +548,7 @@ def _agree(ours: tuple[str, Any], theirs: tuple[str, Any]) -> bool:
     if ours[0] != "ok":
         return True
     a, b = ours[1], theirs[1]
-    return a.shape == b.shape and bool(
-        np.allclose(a, b, rtol=1e-4, atol=1e-5, equal_nan=True)
-    )
+    return a.shape == b.shape and bool(np.allclose(a, b, rtol=1e-4, atol=1e-5, equal_nan=True))
 
 
 _SCORER_PARAMS = [
@@ -595,9 +577,7 @@ def test_scored_value_validation(name: str, method: str, device: str, ref: Any) 
 
 
 @pytest.mark.parametrize("name,method,device", _SCORER_PARAMS)
-def test_scored_values_without_validation(
-    name: str, method: str, device: str, ref: Any
-) -> None:
+def test_scored_values_without_validation(name: str, method: str, device: str, ref: Any) -> None:
     case = CASES[name]
     lt, rt = _lucid_on(device), _ref_tensor(ref)
     ours_dist = case.build(D, lt, False)
@@ -621,9 +601,7 @@ def test_scored_values_without_validation(
 def test_mode(name: str, device: str, ref: Any) -> None:
     case = CASES[name]
     ours = _outcome(lambda: case.build(D, _lucid_on(device), True).mode)
-    theirs = _outcome(
-        lambda: case.build(ref.distributions, _ref_tensor(ref), True).mode
-    )
+    theirs = _outcome(lambda: case.build(ref.distributions, _ref_tensor(ref), True).mode)
     _judge(name, "mode", [] if _agree(ours, theirs) else [(ours, theirs)])
 
 
@@ -680,20 +658,12 @@ def _construction(build: Callable[[], Any]) -> str:
 
 
 @pytest.mark.parametrize("validate", [True, False], ids=["validate", "no-validate"])
-@pytest.mark.parametrize(
-    "name,param,value", _SUB_RANK, ids=[f"{n}.{p}" for n, p, _ in _SUB_RANK]
-)
-def test_sub_rank_parameter(
-    name: str, param: str, value: Any, validate: bool, ref: Any
-) -> None:
+@pytest.mark.parametrize("name,param,value", _SUB_RANK, ids=[f"{n}.{p}" for n, p, _ in _SUB_RANK])
+def test_sub_rank_parameter(name: str, param: str, value: Any, validate: bool, ref: Any) -> None:
     case = CASES[name]
-    ours = _construction(
-        lambda: case.build(D, _lucid_tensor, validate, **{param: value})
-    )
+    ours = _construction(lambda: case.build(D, _lucid_tensor, validate, **{param: value}))
     theirs = _construction(
-        lambda: case.build(
-            ref.distributions, _ref_tensor(ref), validate, **{param: value}
-        )
+        lambda: case.build(ref.distributions, _ref_tensor(ref), validate, **{param: value})
     )
     assert ours == theirs
 
@@ -737,9 +707,7 @@ def _close(ours: tuple[str, Any], theirs: tuple[str, Any], dtype: Any) -> bool:
     # of the incomplete gamma takes pi in single precision (1e-9), and
     # Lucid's agree with the exact values in both.
     rtol, atol = (1e-7, 1e-10) if dtype == np.float64 else (1e-4, 1e-5)
-    return a.shape == b.shape and bool(
-        np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=True)
-    )
+    return a.shape == b.shape and bool(np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=True))
 
 
 def _admitted(case: _Case, ref: Any) -> list[Any]:
@@ -768,9 +736,7 @@ def _matrix_params() -> list[Any]:
         for method in _METHODS:
             reason = _PENDING.get((name, method))
             marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
-            params.append(
-                pytest.param(name, method, marks=marks, id=f"{name}.{method}")
-            )
+            params.append(pytest.param(name, method, marks=marks, id=f"{name}.{method}"))
     return params
 
 
@@ -805,9 +771,7 @@ def test_method_values(name: str, method: str, place: Any, ref: Any) -> None:
     # In float64 the reference's GeneralizedPareto.log_survival_function raises
     # RuntimeError ('Double did not match Float') because it passes an untyped
     # scalar 0.0 tensor to isclose; compare against its float32 answer.
-    ref_dtype = (
-        np.float32 if (name == "GeneralizedPareto" and method == "cdf") else dtype
-    )
+    ref_dtype = np.float32 if (name == "GeneralizedPareto" and method == "cdf") else dtype
     lt, rt = _lucid_at(device, dtype), _ref_at(ref, ref_dtype)
     ours_dist = case.build(D, lt, False)
     theirs_dist = case.build(ref.distributions, rt, False)
@@ -888,29 +852,19 @@ def _grad_points(case: _Case, method: str, ref: Any) -> list[Any]:
     if method == "icdf":
         return [0.1, 0.5, 0.9]
     # Inside the support, away from its edges, where a derivative exists.
-    return [
-        v
-        for v in _admitted(case, ref)
-        if np.all(np.isfinite(v)) and v not in (0.0, 1.0)
-    ]
+    return [v for v in _admitted(case, ref) if np.all(np.isfinite(v)) and v not in (0.0, 1.0)]
 
 
-_GRAD_PARAMS = [
-    (n, m, p) for n in sorted(CASES) for m in _METHODS for p in CASES[n].nominal
-]
+_GRAD_PARAMS = [(n, m, p) for n in sorted(CASES) for m in _METHODS for p in CASES[n].nominal]
 _GRAD_IDS = [f"{n}.{m}.{p}" for n, m, p in _GRAD_PARAMS]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("name,method,param", _GRAD_PARAMS, ids=_GRAD_IDS)
-def test_method_gradients(
-    name: str, method: str, param: str, device: str, ref: Any
-) -> None:
+def test_method_gradients(name: str, method: str, param: str, device: str, ref: Any) -> None:
     case = CASES[name]
     dtype = np.float64 if device == "cpu" else np.float32
-    ref_dtype = (
-        np.float32 if (name == "GeneralizedPareto" and method == "cdf") else dtype
-    )
+    ref_dtype = np.float32 if (name == "GeneralizedPareto" and method == "cdf") else dtype
     points = _grad_points(case, method, ref)
     if not points:
         pytest.skip(f"{name} offers no interior support point")
@@ -936,9 +890,7 @@ def test_method_gradients(
 # ── enumerate_support (LCD-453) ───────────────────────────────────────────────
 
 
-def _check_support_enumeration(
-    ours_dist: Any, theirs_dist: Any, device: str, expand: bool
-) -> None:
+def _check_support_enumeration(ours_dist: Any, theirs_dist: Any, device: str, expand: bool) -> None:
     assert ours_dist.has_enumerate_support == theirs_dist.has_enumerate_support
     if not theirs_dist.has_enumerate_support:
         with pytest.raises(NotImplementedError):
@@ -988,9 +940,7 @@ _ENUM_BATCH_BUILDERS: list[tuple[str, Callable[[Any, Callable[[Any], Any]], Any]
     ("Categorical.probs.1d", lambda M, t: M.Categorical(probs=t([0.2, 0.3, 0.5]))),
     (
         "Categorical.logits.2d",
-        lambda M, t: M.Categorical(
-            logits=t([[[0.0, 1.0, 2.0, -1.0], [1.0, 0.0, -1.0, 2.0]]])
-        ),
+        lambda M, t: M.Categorical(logits=t([[[0.0, 1.0, 2.0, -1.0], [1.0, 0.0, -1.0, 2.0]]])),
     ),
     (
         "OneHotCategorical.probs.1d",

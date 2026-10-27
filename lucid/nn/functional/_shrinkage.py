@@ -154,8 +154,6 @@ def softshrink(input: Tensor, lambd: float = 0.5) -> Tensor:
         _C_engine.greater(xi, lam), _C_engine.sub(xi, lam), _dead_zone_zero(input)
     )
     return _keep_in_graph(
-        _wrap(
-            _C_engine.where(_C_engine.less(xi, neg_lam), _C_engine.add(xi, lam), out)
-        ),
+        _wrap(_C_engine.where(_C_engine.less(xi, neg_lam), _C_engine.add(xi, lam), out)),
         input,
     )

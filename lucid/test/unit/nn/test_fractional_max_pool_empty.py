@@ -21,9 +21,7 @@ _LEADS = [("empty-batch", (0, 3)), ("empty-channels", (2, 0)), ("unbatched", (0,
 
 
 @pytest.mark.parametrize("n", [2, 3])
-@pytest.mark.parametrize(
-    "lead", [lead for _, lead in _LEADS], ids=[k for k, _ in _LEADS]
-)
+@pytest.mark.parametrize("lead", [lead for _, lead in _LEADS], ids=[k for k, _ in _LEADS])
 @pytest.mark.parametrize("return_indices", [False, True], ids=["values", "indices"])
 def test_no_plane_pools_to_an_empty_result(
     device: str, n: int, lead: tuple[int, ...], return_indices: bool

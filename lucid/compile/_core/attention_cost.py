@@ -51,8 +51,7 @@ def long_attention(tracer: _C_engine.compile.Tracer) -> str | None:
     if os.environ.get("LUCID_COMPILE_LONG_ATTENTION") == "compile":
         return None
     shapes: dict[int, tuple[list[int], object]] = {
-        int(fid): (list(impl.shape), impl.dtype)
-        for fid, impl in tracer.external_feeds.items()
+        int(fid): (list(impl.shape), impl.dtype) for fid, impl in tracer.external_feeds.items()
     }
     for node in tracer.graph.ops:
         for out in node.outputs:

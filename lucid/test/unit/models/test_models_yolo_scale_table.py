@@ -160,9 +160,7 @@ class TestTableMismatchIsRefused:
             YOLOV3Config(strides=(16, 32), anchor_masks=((0, 1, 2), ()))
 
     def test_tiny_refuses_the_three_scale_table(self) -> None:
-        with pytest.raises(
-            ValueError, match=r"YOLOv3-Tiny predicts at 2 scales .* describes 3"
-        ):
+        with pytest.raises(ValueError, match=r"YOLOv3-Tiny predicts at 2 scales .* describes 3"):
             YOLOV3TinyForObjectDetection(YOLOV3Config(num_classes=_CLASSES))
 
     def test_full_model_refuses_the_two_scale_table(self) -> None:
@@ -175,9 +173,7 @@ class TestTableMismatchIsRefused:
         [{"strides": (8, 16)}, {"anchors": ((12.0, 16.0),) * 6}],
         ids=["two-strides", "six-anchors"],
     )
-    def test_v4_needs_nine_anchors_and_three_strides(
-        self, overrides: dict[str, Any]
-    ) -> None:
+    def test_v4_needs_nine_anchors_and_three_strides(self, overrides: dict[str, Any]) -> None:
         with pytest.raises(ValueError, match=r"YOLOV4Config needs 9 anchors and 3"):
             YOLOV4Config(**overrides)
 

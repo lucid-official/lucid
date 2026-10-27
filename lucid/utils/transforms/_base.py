@@ -338,14 +338,9 @@ def _filter_boxes_in_sample(
             min_visibility=params.min_visibility,
         )
     if isinstance(obj, dict):
-        return {
-            k: _filter_boxes_in_sample(v, orig_areas, params, counter)
-            for k, v in obj.items()
-        }
+        return {k: _filter_boxes_in_sample(v, orig_areas, params, counter) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
-        return type(obj)(
-            _filter_boxes_in_sample(v, orig_areas, params, counter) for v in obj
-        )
+        return type(obj)(_filter_boxes_in_sample(v, orig_areas, params, counter) for v in obj)
     return obj
 
 

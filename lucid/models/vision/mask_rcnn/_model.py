@@ -141,9 +141,7 @@ class _MaskRCNNPredictor(nn.Module):
     (Conv1×1) emits one logit map per class.
     """
 
-    def __init__(
-        self, in_channels: int, hidden_channels: int, num_classes: int
-    ) -> None:
+    def __init__(self, in_channels: int, hidden_channels: int, num_classes: int) -> None:
         super().__init__()
         self.conv5_mask = nn.ConvTranspose2d(in_channels, hidden_channels, 2, stride=2)
         self.mask_fcn_logits = nn.Conv2d(hidden_channels, num_classes, 1)
@@ -193,14 +191,10 @@ class _MaskRoIHeads(nn.Module):
     ) -> None:
         super().__init__()
         # Box branch — identical to the Faster R-CNN RoI heads.
-        self.box_head = _TwoMLPHead(
-            in_channels * roi_size * roi_size, representation_size
-        )
+        self.box_head = _TwoMLPHead(in_channels * roi_size * roi_size, representation_size)
         self.box_predictor = _FastRCNNPredictor(representation_size, num_classes)
         # Mask branch.
-        self.mask_head = _MaskRCNNHeads(
-            in_channels, mask_hidden_channels, mask_num_convs
-        )
+        self.mask_head = _MaskRCNNHeads(in_channels, mask_hidden_channels, mask_num_convs)
         self.mask_predictor = _MaskRCNNPredictor(
             mask_hidden_channels, mask_predictor_hidden, num_classes
         )
@@ -296,9 +290,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         num_anchors = len(config.rpn_anchor_ratios)
         self.rpn = _RegionProposalNetwork(C, num_anchors)
 
-        sizes: tuple[tuple[int, ...], ...] = tuple(
-            (s,) for s in config.rpn_anchor_sizes
-        )
+        sizes: tuple[tuple[int, ...], ...] = tuple((s,) for s in config.rpn_anchor_sizes)
         ratios: tuple[tuple[float, ...], ...] = tuple(
             tuple(config.rpn_anchor_ratios) for _ in config.rpn_anchor_sizes
         )
@@ -432,9 +424,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
 
         keep = lucid.tensor(index_parts, device=dev).long()
         labels_cat = lucid.cat(labels, dim=0)[keep]
-        return maskrcnn_loss(
-            mask_logits[keep], labels_cat, lucid.cat(target_parts, dim=0)
-        )
+        return maskrcnn_loss(mask_logits[keep], labels_cat, lucid.cat(target_parts, dim=0))
 
     @override
     def forward(
@@ -561,9 +551,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
             cls_loss, box_loss = self._roi_loss(
                 class_logits, box_deltas, roi_labels, roi_reg_targets
             )
-            mask_loss = self._mask_loss(
-                mask_logits, proposals, roi_labels, roi_matched, targets
-            )
+            mask_loss = self._mask_loss(mask_logits, proposals, roi_labels, roi_matched, targets)
             loss = rpn_obj_loss + rpn_reg_loss + cls_loss + box_loss + mask_loss
 
         return InstanceSegmentationOutput(
@@ -687,9 +675,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         if proposals is None:
             proposals = list(output.proposals) if output.proposals is not None else None
         if proposals is None:
-            raise ValueError(
-                "postprocess() needs the per-image proposals used in forward()."
-            )
+            raise ValueError("postprocess() needs the per-image proposals used in forward().")
 
         logits = output.logits
         pred_boxes = output.pred_boxes  # (N, K, 4)
@@ -710,9 +696,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
             # As in Faster R-CNN, an image past the end of ``image_sizes``
             # keeps the canvas it was decoded on.
             size_i = (
-                image_sizes[idx]
-                if image_sizes is not None and idx < len(image_sizes)
-                else None
+                image_sizes[idx] if image_sizes is not None and idx < len(image_sizes) else None
             )
             # An empty result carries the mask shape a non-empty one would.
             mask_hw = size_i if size_i is not None else roi_hw
@@ -730,9 +714,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
 
             for c in range(1, cfg.num_classes):  # skip background slot 0
                 bx_class = bx_i[:, c, :]  # (N_i, 4)
-                mask = [
-                    i for i, row in enumerate(host_scores) if row[c] > cfg.score_thresh
-                ]
+                mask = [i for i, row in enumerate(host_scores) if row[c] > cfg.score_thresh]
                 if not mask:
                     continue
                 mask_t = lucid.tensor(mask, device=dev).long()

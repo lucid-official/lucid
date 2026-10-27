@@ -87,9 +87,7 @@ def test_empty_result_keeps_autograd_edge(name: str, device: str) -> None:
 
 
 @pytest.mark.parametrize("name", _REF_CASES)
-def test_empty_result_matches_reference(
-    ref: ModuleType, name: str, device: str
-) -> None:
+def test_empty_result_matches_reference(ref: ModuleType, name: str, device: str) -> None:
     y, grad = _run(lucid, name, device)
     want_y, want_grad = _run(ref, name, "cpu")
     assert tuple(y.shape) == tuple(want_y.shape)

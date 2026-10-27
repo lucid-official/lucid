@@ -116,9 +116,7 @@ class _GPT2SelfAttention(nn.Module):
                 if not is_compiled_decode_tracing():
                     cache_kwargs["read_len"] = past_len + T
             k, v = past_key_value.update(k, v, layer_idx, cache_kwargs=cache_kwargs)
-        t_total = int(
-            k.shape[2]
-        )  # DynamicCache: past_len+T; StaticCache: max_cache_len
+        t_total = int(k.shape[2])  # DynamicCache: past_len+T; StaticCache: max_cache_len
 
         if isinstance(past_key_value, StaticCache) and cache_position is not None:
             # StaticCache returns the fixed max_len buffer, and the write
@@ -334,9 +332,7 @@ class GPT2Model(PretrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.hidden_size)
         self.wpe = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.drop = nn.Dropout(p=config.hidden_dropout)
-        self.h = nn.ModuleList(
-            [_GPT2Block(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.h = nn.ModuleList([_GPT2Block(config) for _ in range(config.num_hidden_layers)])
         self.ln_f = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         pos = lucid.arange(config.max_position_embeddings).long().unsqueeze(0)
@@ -347,9 +343,7 @@ class GPT2Model(PretrainedModel):
         # relative to this baseline.
         _init_weights(self, config.initializer_range)
         if config.scale_residual_init:
-            _scale_residual_init(
-                self, config.num_hidden_layers, config.initializer_range
-            )
+            _scale_residual_init(self, config.num_hidden_layers, config.initializer_range)
 
     @override
     def get_input_embeddings(self) -> nn.Module:
@@ -379,9 +373,7 @@ class GPT2Model(PretrainedModel):
         # remembered to pass the flag.
         use_cache = self._use_cache if use_cache is None else use_cache
         B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
-        past_len = (
-            past_key_values.get_seq_length() if past_key_values is not None else 0
-        )
+        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
         if past_len + T > self._max_pos:
             raise ValueError(
                 f"Sequence length {past_len + T} exceeds "
@@ -408,9 +400,7 @@ class GPT2Model(PretrainedModel):
         # Keys span the cached history plus the new tokens, so the padding
         # mask has to be that wide -- a T-wide mask would broadcast onto the
         # wrong columns (or fail outright) once a cache is in play.
-        ext_mask = extended_attention_mask(
-            attention_mask, (B, T), key_length=past_len + T
-        )
+        ext_mask = extended_attention_mask(attention_mask, (B, T), key_length=past_len + T)
         for layer_idx, block in enumerate(self.h):
             hidden = block(
                 hidden,
@@ -809,9 +799,7 @@ class GPT2DoubleHeadsModel(LanguageModelingModel):
         L = int(input_ids.shape[2])
 
         flat_ids = input_ids.reshape(N * C, L)
-        flat_mask = (
-            attention_mask.reshape(N * C, L) if attention_mask is not None else None
-        )
+        flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
         outputs = self.transformer(flat_ids, attention_mask=flat_mask)
         hidden = outputs.last_hidden_state
         H = int(hidden.shape[-1])

@@ -69,9 +69,7 @@ def test_survives_a_checkpoint() -> None:
 # ── conj, which silently no-opped ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "arr,dtype", [(Z128, lucid.complex128), (Z64, lucid.complex64)]
-)
+@pytest.mark.parametrize("arr,dtype", [(Z128, lucid.complex128), (Z64, lucid.complex64)])
 def test_conj_negates_the_imaginary_part(arr, dtype) -> None:
     out = lucid.conj(lucid.tensor(arr))
     assert out.dtype is dtype
@@ -127,9 +125,7 @@ def test_the_parts_survive_a_round_trip() -> None:
 def test_complex_of_an_infinite_part_is_not_nan() -> None:
     """``re + 1j*im`` would make the real part ``im * 0`` — NaN when the
     imaginary part is infinite.  The parts are laid out, not computed."""
-    out = lucid.complex(
-        lucid.tensor(np.array([np.inf])), lucid.tensor(np.array([np.inf]))
-    )
+    out = lucid.complex(lucid.tensor(np.array([np.inf])), lucid.tensor(np.array([np.inf])))
     assert _v(out)[0] == complex(np.inf, np.inf)
 
 

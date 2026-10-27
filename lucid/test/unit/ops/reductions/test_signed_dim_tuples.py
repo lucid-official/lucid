@@ -89,9 +89,7 @@ def test_matches_reference(ref, device, op, keepdim, arity):
         if tuple(y.shape) != tuple(yr.shape):
             failures.append(f"{dims}: shape {tuple(y.shape)} != {tuple(yr.shape)}")
             continue
-        if not np.allclose(
-            y.detach().numpy(), yr.detach().numpy(), rtol=1e-5, atol=1e-5
-        ):
+        if not np.allclose(y.detach().numpy(), yr.detach().numpy(), rtol=1e-5, atol=1e-5):
             failures.append(f"{dims}: forward values differ")
             continue
         if not differentiable:

@@ -54,9 +54,7 @@ _CFG_V1 = StableDiffusionConfig()
     default_config=_CFG_V1,
     summary="auto",
 )
-def stable_diffusion(
-    pretrained: bool = False, **overrides: object
-) -> StableDiffusionModel:
+def stable_diffusion(pretrained: bool = False, **overrides: object) -> StableDiffusionModel:
     """Construct the v1 architecture — 512 pixels, CLIP ViT-L/14 width.
 
     Parameters
@@ -151,7 +149,5 @@ def stable_diffusion_gen(
     model = StableDiffusionForImageGeneration(apply_overrides(_CFG_V1, overrides))
     entry = weights_mod.resolve_weights(StableDiffusionWeights, pretrained, None)
     if entry is not None:
-        weights_mod.load_weight_entry(
-            model.stable_diffusion, entry, name="stable_diffusion_gen"
-        )
+        weights_mod.load_weight_entry(model.stable_diffusion, entry, name="stable_diffusion_gen")
     return model

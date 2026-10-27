@@ -10,9 +10,7 @@ def _sample(h: int = 40, w: int = 40) -> dict[str, object]:
     return {
         "image": T.Image(lucid.rand(3, h, w)),
         "mask": T.Mask(lucid.rand(1, h, w)),
-        "boxes": T.BoundingBoxes(
-            lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)
-        ),
+        "boxes": T.BoundingBoxes(lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)),
         "kp": T.Keypoints(lucid.tensor([[20.0, 20.0]]), (h, w)),
     }
 
@@ -41,9 +39,7 @@ class TestDistortionShapes:
 
     def test_optical_zero_is_near_identity(self) -> None:
         x = lucid.rand(3, 24, 24)
-        out = T.OpticalDistortion(
-            distort_limit=(0.0, 0.0), shift_limit=(0.0, 0.0), p=1.0
-        )(x)
+        out = T.OpticalDistortion(distort_limit=(0.0, 0.0), shift_limit=(0.0, 0.0), p=1.0)(x)
         assert float((out - x).abs().max().item()) < 1e-4
 
     def test_grid_canvas_preserved(self) -> None:

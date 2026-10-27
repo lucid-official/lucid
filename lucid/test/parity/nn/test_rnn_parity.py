@@ -21,9 +21,7 @@ from lucid.test._helpers.compare import assert_close
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _copy_weights_by_name(
-    src_module: Any, dst_module: nn.Module, param_names: list[str]
-) -> None:
+def _copy_weights_by_name(src_module: Any, dst_module: nn.Module, param_names: list[str]) -> None:
     """Copy named parameters from reference module to lucid module (same names)."""
     from lucid._C import engine as _C_engine
 
@@ -76,9 +74,7 @@ class TestLSTMParity:
         return l_out, ref_out, (l_h, l_c), (ref_h, ref_c)
 
     def test_standard(self, ref: Any) -> None:
-        l_out, ref_out, (l_h, l_c), (ref_h, ref_c) = self._run(
-            ref, hidden=8, inp=4, seq=5, batch=2
-        )
+        l_out, ref_out, (l_h, l_c), (ref_h, ref_c) = self._run(ref, hidden=8, inp=4, seq=5, batch=2)
         assert_close(l_out, ref_out, atol=1e-4)
         assert_close(l_h, ref_h, atol=1e-4)
         assert_close(l_c, ref_c, atol=1e-4)

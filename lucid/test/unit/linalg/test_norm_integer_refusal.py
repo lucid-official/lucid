@@ -29,10 +29,7 @@ def _calls(m: ModuleType) -> list[tuple[str, Callable[[object], object]]]:
     """Every norm door, once per order, as ``(id, call)`` on module ``m``."""
     functional = m.nn.functional if m is not lucid else F
     out: list[tuple[str, Callable[[object], object]]] = []
-    out += [
-        (f"vector_norm-{o}", lambda x, o=o: m.linalg.vector_norm(x, o))
-        for o in _VECTOR_ORDS
-    ]
+    out += [(f"vector_norm-{o}", lambda x, o=o: m.linalg.vector_norm(x, o)) for o in _VECTOR_ORDS]
     out += [
         (
             f"vector_norm-dtype-{o}",
@@ -40,13 +37,8 @@ def _calls(m: ModuleType) -> list[tuple[str, Callable[[object], object]]]:
         )
         for o in (2, 1)
     ]
-    out += [
-        (f"matrix_norm-{o}", lambda x, o=o: m.linalg.matrix_norm(x, o))
-        for o in _MATRIX_ORDS
-    ]
-    out += [
-        (f"norm-{o}", lambda x, o=o: m.linalg.norm(x, o)) for o in (None, "fro", 2, 1)
-    ]
+    out += [(f"matrix_norm-{o}", lambda x, o=o: m.linalg.matrix_norm(x, o)) for o in _MATRIX_ORDS]
+    out += [(f"norm-{o}", lambda x, o=o: m.linalg.norm(x, o)) for o in (None, "fro", 2, 1)]
     out += [
         ("cdist", lambda x: m.cdist(x, x)),
         ("normalize", lambda x: functional.normalize(x)),

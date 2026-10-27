@@ -48,9 +48,7 @@ def _source_pipeline(source: str) -> dict[str, object]:
         if timm is None:
             pytest.skip("the model-zoo oracle is not installed")
         pretrained = timm.models.get_pretrained_cfg(identifier)
-        assert (
-            pretrained is not None
-        ), f"the oracle has no configuration for {identifier}"
+        assert pretrained is not None, f"the oracle has no configuration for {identifier}"
         cfg = timm.data.resolve_data_config(pretrained_cfg=pretrained.to_dict())
         assert cfg.get("crop_mode", "center") == "center", cfg
         crop = int(cfg["input_size"][-1])

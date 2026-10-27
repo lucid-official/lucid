@@ -30,18 +30,14 @@ _U = {"float16": 2.0**-11, "bfloat16": 2.0**-8}
 _RANKS = {1: (6, 4, 5), 2: (2, 4, 3, 5), 3: (2, 4, 2, 3, 3)}
 _DEVICES = [
     "cpu",
-    pytest.param(
-        "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 _BN_SLOTS = ("running_mean", "running_var", "weight", "bias")
 
 
 def _on_grid(a: np.ndarray, dtype: str) -> np.ndarray:
     """``a`` rounded to the half, so float32 and the half see the same values."""
-    return (
-        lucid.tensor(a.astype(np.float32)).to(_HALVES[dtype]).to(lucid.float32).numpy()
-    )
+    return lucid.tensor(a.astype(np.float32)).to(_HALVES[dtype]).to(lucid.float32).numpy()
 
 
 def _normal(seed: int, shape: tuple[int, ...], scale: float = 1.0) -> np.ndarray:
@@ -86,20 +82,13 @@ def _run_bn(arrays: list[np.ndarray], dtype: object, device: str) -> list[np.nda
 
 
 def _run_grn(arrays: list[np.ndarray], dtype: object, device: str) -> list[np.ndarray]:
-    x, g, b = (
-        lucid.tensor(a, dtype=dtype, device=device, requires_grad=True)
-        for a in arrays[:3]
-    )
-    out = _wrap(
-        _C_engine.nn.global_response_norm(_unwrap(x), _unwrap(g), _unwrap(b), 1e-6)
-    )
+    x, g, b = (lucid.tensor(a, dtype=dtype, device=device, requires_grad=True) for a in arrays[:3])
+    out = _wrap(_C_engine.nn.global_response_norm(_unwrap(x), _unwrap(g), _unwrap(b), 1e-6))
     out.backward(lucid.tensor(arrays[3], dtype=dtype, device=device))
     return _collect(dtype, out, x, g, b)
 
 
-def _collect(
-    dtype: object, out: lucid.Tensor, *leaves: lucid.Tensor
-) -> list[np.ndarray]:
+def _collect(dtype: object, out: lucid.Tensor, *leaves: lucid.Tensor) -> list[np.ndarray]:
     """The output and every leaf's gradient, each checked to be in ``dtype``."""
     found = [out]
     for leaf in leaves:
@@ -113,8 +102,7 @@ _Inputs = Callable[[str], list[np.ndarray]]
 _Runner = Callable[[list[np.ndarray], object, str], list[np.ndarray]]
 _KERNELS: dict[str, tuple[_Inputs, _Runner]] = {
     **{
-        f"batch_norm{rank}d_eval": (functools.partial(_bn_inputs, rank), _run_bn)
-        for rank in _RANKS
+        f"batch_norm{rank}d_eval": (functools.partial(_bn_inputs, rank), _run_bn) for rank in _RANKS
     },
     "global_response_norm": (_grn_inputs, _run_grn),
 }

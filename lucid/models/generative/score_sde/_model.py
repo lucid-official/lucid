@@ -232,9 +232,7 @@ class ScoreSDEModel(PretrainedModel):
         target = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
         perturbed = mean + shaped * target
         noise = self.predict_noise(perturbed, t)
-        return ScoreSDEOutput(
-            score=-noise / shaped, noise=noise, target=target, std=std
-        )
+        return ScoreSDEOutput(score=-noise / shaped, noise=noise, target=target, std=std)
 
 
 class ScoreSDEForImageGeneration(ImageGenerationModel):
@@ -360,9 +358,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         noise = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
         return cast(Tensor, x + drift * (-dt) + g * (dt**0.5) * noise)
 
-    def _corrector(
-        self, x: Tensor, t: Tensor, guidance: _Guidance | None = None
-    ) -> Tensor:
+    def _corrector(self, x: Tensor, t: Tensor, guidance: _Guidance | None = None) -> Tensor:
         """Langevin steps at fixed ``t`` — the 'corrector' half."""
         # The step size is read from two norms, taken at float32 or wider:
         # a float16 score's squares overflow once summed over an image.
@@ -372,14 +368,10 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             noise = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
             count = int(x.shape[0])
             grad_norm = float(
-                ((score.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5)
-                .mean()
-                .item()
+                ((score.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5).mean().item()
             )
             noise_norm = float(
-                ((noise.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5)
-                .mean()
-                .item()
+                ((noise.reshape(count, -1).to(work) ** 2).sum(dim=-1) ** 0.5).mean().item()
             )
             if grad_norm == 0.0:
                 break
@@ -499,13 +491,9 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
 
         def rhs(t_scalar: Tensor, flat: Tensor) -> Tensor:
             x = flat.reshape(*shape)
-            t = lucid.ones((count,), dtype=flat.dtype, device=device) * float(
-                t_scalar.item()
-            )
+            t = lucid.ones((count,), dtype=flat.dtype, device=device) * float(t_scalar.item())
             g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))
-            drift = self.sde.drift(x, t) - 0.5 * g**2 * self._guided_score(
-                x, t, guidance
-            )
+            drift = self.sde.drift(x, t) - 0.5 * g**2 * self._guided_score(x, t, guidance)
             return drift.reshape(-1)
 
         start = self.sde.prior_sampling(shape, device, dtype=dtype).reshape(-1)
@@ -517,9 +505,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         )
         return cast(Tensor, path[-1]).reshape(*shape)
 
-    def log_likelihood(
-        self, x: Tensor, *, steps: int = 100, eps: Tensor | None = None
-    ) -> Tensor:
+    def log_likelihood(self, x: Tensor, *, steps: int = 100, eps: Tensor | None = None) -> Tensor:
         r"""Exact log-likelihood of the data, in nats.
 
         Parameters
@@ -603,9 +589,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             state = current.detach()
             state.requires_grad = True
             g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))
-            drift = self.sde.drift(state, t) - 0.5 * g**2 * self.score_sde.score(
-                state, t
-            )
+            drift = self.sde.drift(state, t) - 0.5 * g**2 * self.score_sde.score(state, t)
             # eps^T (d drift / d x) eps, by one vector-Jacobian product.
             (drift * probe).sum().backward()
             assert state.grad is not None
@@ -632,6 +616,4 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
             dims *= size
         variance = self.sde.prior_variance
         flat = x.reshape(count, -1).to(_float32_or_wider(x.dtype))
-        return -0.5 * (
-            dims * math.log(2.0 * math.pi * variance) + (flat**2).sum(dim=-1) / variance
-        )
+        return -0.5 * (dims * math.log(2.0 * math.pi * variance) + (flat**2).sum(dim=-1) / variance)

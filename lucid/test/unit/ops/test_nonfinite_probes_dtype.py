@@ -145,19 +145,13 @@ def test_probe_on_complex_cpu(op: str, dtype: lucid.dtype) -> None:
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_FLOATS))
-def test_nan_to_num_defaults_are_the_dtype_extremes(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_nan_to_num_defaults_are_the_dtype_extremes(device: str, dtype: lucid.dtype) -> None:
     values = _specials(dtype)
     top, _ = _LIMITS[dtype]
     got = lucid.nan_to_num(_make(values, dtype, device))
     assert got.dtype == dtype
     want = [
-        (
-            0.0
-            if math.isnan(v)
-            else top if v == math.inf else -top if v == -math.inf else v
-        )
+        (0.0 if math.isnan(v) else top if v == math.inf else -top if v == -math.inf else v)
         for v in values
     ]
     _assert_bits_equal(_widened(got), np.array(want))
@@ -170,9 +164,7 @@ def test_nan_to_num_none_means_default(device: str, dtype: lucid.dtype) -> None:
         _widened(lucid.nan_to_num(x, nan=None, posinf=None, neginf=None)),
         _widened(lucid.nan_to_num(x)),
     )
-    _assert_bits_equal(
-        _widened(x.nan_to_num(posinf=None)), _widened(lucid.nan_to_num(x))
-    )
+    _assert_bits_equal(_widened(x.nan_to_num(posinf=None)), _widened(lucid.nan_to_num(x)))
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_FLOATS))
@@ -183,9 +175,7 @@ def test_nan_to_num_explicit_values(device: str, dtype: lucid.dtype) -> None:
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_HALVES))
-def test_nan_to_num_out_of_range_replacement_is_infinite(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_nan_to_num_out_of_range_replacement_is_infinite(device: str, dtype: lucid.dtype) -> None:
     """An explicit replacement is cast, not clamped: one the dtype cannot
     hold becomes its infinity, as in the reference framework."""
     x = _make([float("nan"), math.inf, -math.inf], dtype, device)
@@ -194,9 +184,7 @@ def test_nan_to_num_out_of_range_replacement_is_infinite(
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_INTEGRAL))
-def test_nan_to_num_on_integers_and_bool_is_identity(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_nan_to_num_on_integers_and_bool_is_identity(device: str, dtype: lucid.dtype) -> None:
     values = [1, 0, 1] if dtype == lucid.bool else [0, -3, 7]
     x = lucid.tensor(values).to(dtype).to(device)
     got = lucid.nan_to_num(x, posinf=1e30)
@@ -208,9 +196,7 @@ def test_nan_to_num_on_integers_and_bool_is_identity(
 def test_nan_to_num_on_complex_cpu_replaces_each_part(dtype: lucid.dtype) -> None:
     top = _LIMITS[lucid.float32 if dtype == lucid.complex64 else lucid.float64][0]
     nan, inf = float("nan"), math.inf
-    x = lucid.tensor(
-        [complex(nan, 1.0), complex(1.0, inf), complex(-inf, nan)], dtype=dtype
-    )
+    x = lucid.tensor([complex(nan, 1.0), complex(1.0, inf), complex(-inf, nan)], dtype=dtype)
     got = lucid.nan_to_num(x).tolist()
     assert got == [complex(0.0, 1.0), complex(1.0, top), complex(-top, 0.0)]
 
@@ -282,9 +268,7 @@ def test_large_input_across_parallel_chunks_cpu(dtype: lucid.dtype) -> None:
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_HALVES))
-def test_nan_to_num_gradient_is_zero_where_replaced(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_nan_to_num_gradient_is_zero_where_replaced(device: str, dtype: lucid.dtype) -> None:
     x = (
         lucid.tensor([1.0, float("nan"), math.inf, -math.inf, 2.0])
         .to(dtype)
@@ -336,9 +320,7 @@ _SCALER_HALVES = [lucid.bfloat16]
 
 @pytest.mark.parametrize("device,dtype", _cells(_SCALER_HALVES))
 @pytest.mark.parametrize("bad", [math.inf, -math.inf, float("nan")], ids=str)
-def test_grad_scaler_sees_half_overflow(
-    device: str, dtype: lucid.dtype, bad: float
-) -> None:
+def test_grad_scaler_sees_half_overflow(device: str, dtype: lucid.dtype, bad: float) -> None:
     """The overflow step is skipped and the scale backs off."""
     opt = _CountingOptimizer([_half_grad([1.0, bad, 2.0], dtype, device)])
     scaler = lucid.amp.GradScaler(init_scale=4.0, backoff_factor=0.5)
@@ -349,9 +331,7 @@ def test_grad_scaler_sees_half_overflow(
 
 
 @pytest.mark.parametrize("device,dtype", _cells(_SCALER_HALVES))
-def test_grad_scaler_steps_on_finite_half_gradient(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_grad_scaler_steps_on_finite_half_gradient(device: str, dtype: lucid.dtype) -> None:
     """The dtype's largest value is finite: no false alarm at the edge."""
     top = _LIMITS[dtype][0]
     p = _half_grad([4.0, 8.0, top], dtype, device)
@@ -374,9 +354,7 @@ def _ref_dtype(ref: object, dtype: lucid.dtype) -> object:
 
 @pytest.mark.parametrize("device,dtype", _cells(_FLOATS + [lucid.int32, lucid.bool]))
 @pytest.mark.parametrize("op", [*_PROBES, "nan_to_num"])
-def test_matches_reference(
-    ref: object, op: str, device: str, dtype: lucid.dtype
-) -> None:
+def test_matches_reference(ref: object, op: str, device: str, dtype: lucid.dtype) -> None:
     if dtype == lucid.bool:
         x = lucid.tensor([True, False, True]).to(device)
         r = ref.tensor([True, False, True])  # type: ignore[attr-defined]
@@ -419,9 +397,7 @@ def test_explicit_replacements_round_like_reference(
 
 @pytest.mark.parametrize("dtype", _COMPLEX, ids=str)
 @pytest.mark.parametrize("op", [*_PROBES, "nan_to_num"])
-def test_complex_matches_reference_cpu(
-    ref: object, op: str, dtype: lucid.dtype
-) -> None:
+def test_complex_matches_reference_cpu(ref: object, op: str, dtype: lucid.dtype) -> None:
     nan, inf = float("nan"), math.inf
     values = [
         complex(nan, 1.0),

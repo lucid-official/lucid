@@ -88,9 +88,7 @@ class TestCompose:
 
 class TestImageClassificationPreset:
     def test_unbatched(self) -> None:
-        out = T.ImageClassification(crop_size=224, resize_size=256)(
-            lucid.rand(3, 300, 400)
-        )
+        out = T.ImageClassification(crop_size=224, resize_size=256)(lucid.rand(3, 300, 400))
         assert tuple(out.shape) == (3, 224, 224)
 
     def test_default_imagenet_stats(self) -> None:

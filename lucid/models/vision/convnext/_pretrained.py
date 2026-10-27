@@ -121,9 +121,7 @@ def convnext_small(pretrained: bool = False, **overrides: object) -> ConvNeXt:
     (1, 768)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "convnext_small", alternative="convnext_small_cls"
-        )
+        reject_unavailable_pretrained("convnext_small", alternative="convnext_small_cls")
     return ConvNeXt(apply_overrides(_CFG_S, overrides))
 
 
@@ -228,9 +226,7 @@ def convnext_large(pretrained: bool = False, **overrides: object) -> ConvNeXt:
     (1, 1536)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "convnext_large", alternative="convnext_large_cls"
-        )
+        reject_unavailable_pretrained("convnext_large", alternative="convnext_large_cls")
     return ConvNeXt(apply_overrides(_CFG_L, overrides))
 
 
@@ -283,9 +279,7 @@ def convnext_xlarge(pretrained: bool = False, **overrides: object) -> ConvNeXt:
     (1, 2048)
     """
     if pretrained:
-        reject_unavailable_pretrained(
-            "convnext_xlarge", alternative="convnext_xlarge_cls"
-        )
+        reject_unavailable_pretrained("convnext_xlarge", alternative="convnext_xlarge_cls")
     return ConvNeXt(apply_overrides(_CFG_XL, overrides))
 
 

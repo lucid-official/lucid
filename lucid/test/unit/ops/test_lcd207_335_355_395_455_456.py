@@ -39,9 +39,7 @@ _DEVICES = [
 
 @pytest.mark.parity
 @pytest.mark.parametrize("device", _DEVICES)
-def test_vdot_complex64_forward_and_backward_parity(
-    ref: ModuleType, device: str
-) -> None:
+def test_vdot_complex64_forward_and_backward_parity(ref: ModuleType, device: str) -> None:
     a_np = np.array([1.0 + 2.0j, -3.0 + 0.5j, 2.5 - 1.5j], dtype=np.complex64)
     b_np = np.array([-0.5 + 1.0j, 4.0 - 2.0j, 1.5 + 3.0j], dtype=np.complex64)
 
@@ -119,9 +117,7 @@ def test_func_transforms_shared_helpers_and_validation() -> None:
     y = lucid.tensor([4.0, 5.0, 6.0])
 
     (gx, gy), aux = func.grad(f, argnums=(0, 1), has_aux=True)(x, y, 2.0)
-    (gx2, gy2), (val, aux2) = func.grad_and_value(f, argnums=(0, 1), has_aux=True)(
-        x, y, 2.0
-    )
+    (gx2, gy2), (val, aux2) = func.grad_and_value(f, argnums=(0, 1), has_aux=True)(x, y, 2.0)
     np.testing.assert_allclose(gx.numpy(), (y * 2.0).numpy())
     np.testing.assert_allclose(gy.numpy(), (x * 2.0).numpy())
     np.testing.assert_allclose(gx2.numpy(), gx.numpy())
@@ -163,9 +159,7 @@ def test_ldl_factor_hermitian_is_keyword_only_and_cholesky_ex_partial(
         lucid.linalg.ldl_factor_ex(a, False)  # type: ignore[misc]
 
     # Fails at minor k = 3: leading 2x2 Cholesky factor must match the reference.
-    bad_np = np.array(
-        [[4.0, 2.0, 0.0], [2.0, 5.0, 0.0], [0.0, 0.0, -1.0]], dtype=np.float32
-    )
+    bad_np = np.array([[4.0, 2.0, 0.0], [2.0, 5.0, 0.0], [0.0, 0.0, -1.0]], dtype=np.float32)
     l_res, l_info = lucid.linalg.cholesky_ex(lucid.tensor(bad_np))
     t_res, t_info = ref.linalg.cholesky_ex(ref.tensor(bad_np))
     assert int(l_info.item()) == int(t_info.item()) == 3
@@ -178,9 +172,7 @@ def test_ldl_factor_hermitian_is_keyword_only_and_cholesky_ex_partial(
 
 @pytest.mark.parametrize("a_val", [1e7, 1e8])
 @pytest.mark.parametrize("k_std", [-10.0, -6.0, -4.6, -4.5, 4.5, 4.6, 6.0])
-def test_gammainc_large_a_matches_mpmath_outside_temme_band(
-    a_val: float, k_std: float
-) -> None:
+def test_gammainc_large_a_matches_mpmath_outside_temme_band(a_val: float, k_std: float) -> None:
     mpmath.mp.dps = 50
     x_val = a_val + k_std * math.sqrt(a_val)
     a_t = lucid.tensor([a_val], dtype=lucid.float64)

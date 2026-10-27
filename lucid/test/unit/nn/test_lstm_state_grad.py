@@ -68,9 +68,7 @@ def _inputs(
     }
 
 
-def _loss(
-    out: object, h: object, c: object, which: str, w: dict, packed: bool
-) -> object:
+def _loss(out: object, h: object, c: object, which: str, w: dict, packed: bool) -> object:
     """Weighted so no two gradient entries coincide; works on either library.
 
     A packed output is compared through its ``.data`` — both libraries lay it
@@ -90,9 +88,7 @@ def _pack(x: lucid.Tensor, device: str) -> PackedSequence:
     """Pack on CPU and move the data: unsorted packing does not run on Metal
     (its permutation index stays on CPU), and that is not what is tested here."""
     p = pack_padded_sequence(x, _LENGTHS, enforce_sorted=False)
-    return PackedSequence(
-        p.data.to(device), p.batch_sizes, p.sorted_indices, p.unsorted_indices
-    )
+    return PackedSequence(p.data.to(device), p.batch_sizes, p.sorted_indices, p.unsorted_indices)
 
 
 def _run_ours(
@@ -106,9 +102,7 @@ def _run_ours(
     if packed:
         assert isinstance(out, PackedSequence)
         out = out.data
-    w = {
-        k: lucid.tensor(v, device=device) for k, v in data.items() if k.startswith("w_")
-    }
+    w = {k: lucid.tensor(v, device=device) for k, v in data.items() if k.startswith("w_")}
     _loss(out, h, c, which, w, packed).backward()
     grads = {"x": x.grad, "h0": h0.grad, "c0": c0.grad}
     grads.update({n: p.grad for n, p in model.named_parameters()})
@@ -148,9 +142,7 @@ def _assert_grads_match(
 # ── the matrix the card asks for ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "device,dtype", device_dtype_params((lucid.float32, lucid.float64))
-)
+@pytest.mark.parametrize("device,dtype", device_dtype_params((lucid.float32, lucid.float64)))
 @pytest.mark.parametrize("packed", [False, True], ids=["dense", "packed"])
 @pytest.mark.parametrize("which", _LOSSES)
 def test_every_output_carries_the_reference_gradient(
@@ -163,9 +155,7 @@ def test_every_output_carries_the_reference_gradient(
     _assert_grads_match(got, want, _TOL[dtype])
 
 
-@pytest.mark.parametrize(
-    "device,dtype", device_dtype_params((lucid.float32, lucid.float64))
-)
+@pytest.mark.parametrize("device,dtype", device_dtype_params((lucid.float32, lucid.float64)))
 @pytest.mark.parametrize("packed", [False, True], ids=["dense", "packed"])
 @pytest.mark.parametrize(
     "config",
@@ -185,9 +175,7 @@ def test_the_state_gradient_survives_stacking_directions_and_projection(
     _assert_grads_match(got, want, _TOL[dtype])
 
 
-@pytest.mark.parametrize(
-    "device,dtype", device_dtype_params((lucid.float32, lucid.float64))
-)
+@pytest.mark.parametrize("device,dtype", device_dtype_params((lucid.float32, lucid.float64)))
 def test_an_encoder_learns_through_the_state_it_hands_a_decoder(
     ref: ModuleType, device: str, dtype: lucid.dtype
 ) -> None:
@@ -204,9 +192,7 @@ def test_an_encoder_learns_through_the_state_it_hands_a_decoder(
     ref_out, _ = ref_dec(ref.tensor(data["x"]), ref_state)
     (ref_out * ref.tensor(data["w_out"])).sum().backward()
 
-    for (name, p), (_, q) in zip(
-        enc.named_parameters(), ref_enc.named_parameters(), strict=True
-    ):
+    for (name, p), (_, q) in zip(enc.named_parameters(), ref_enc.named_parameters(), strict=True):
         assert p.grad is not None, f"encoder {name} got no gradient"
         np.testing.assert_allclose(
             p.grad.to("cpu").numpy(), q.grad.numpy(), rtol=_TOL[dtype], atol=_TOL[dtype]
@@ -249,9 +235,7 @@ def test_autograd_grad_reaches_through_the_final_state() -> None:
     assert float(gx.abs().sum().item()) > 0.0
 
 
-@pytest.mark.parametrize(
-    "device,dtype", device_dtype_params((lucid.float32, lucid.float64))
-)
+@pytest.mark.parametrize("device,dtype", device_dtype_params((lucid.float32, lucid.float64)))
 def test_hooks_on_the_outputs_see_and_replace_each_slots_gradient(
     ref: ModuleType, device: str, dtype: lucid.dtype
 ) -> None:
@@ -283,9 +267,7 @@ def test_hooks_on_the_outputs_see_and_replace_each_slots_gradient(
         return [_numpy(g) for g in seen]
 
     x = lucid.tensor(data["x"], device=device, requires_grad=True)
-    w = {
-        k: lucid.tensor(v, device=device) for k, v in data.items() if k.startswith("w_")
-    }
+    w = {k: lucid.tensor(v, device=device) for k, v in data.items() if k.startswith("w_")}
     got_seen = run(ours, x, w)
     rx = ref.tensor(data["x"], requires_grad=True)
     want_seen = run(theirs, rx, {k: ref.tensor(v) for k, v in data.items()})
@@ -295,12 +277,8 @@ def test_hooks_on_the_outputs_see_and_replace_each_slots_gradient(
     for g, want in zip(sorted(got_seen, key=np.size), sorted(want_seen, key=np.size)):
         np.testing.assert_allclose(g, want, rtol=tol, atol=tol)
     np.testing.assert_allclose(_numpy(x.grad), _numpy(rx.grad), rtol=tol, atol=tol)
-    for (name, p), (_, q) in zip(
-        ours.named_parameters(), theirs.named_parameters(), strict=True
-    ):
-        np.testing.assert_allclose(
-            _numpy(p.grad), _numpy(q.grad), rtol=tol, atol=tol, err_msg=name
-        )
+    for (name, p), (_, q) in zip(ours.named_parameters(), theirs.named_parameters(), strict=True):
+        np.testing.assert_allclose(_numpy(p.grad), _numpy(q.grad), rtol=tol, atol=tol, err_msg=name)
 
 
 @pytest.mark.parametrize("proj_size", [0, 3])
@@ -331,9 +309,7 @@ def test_float64_matches_the_reference_forward_to_double_precision(
     ref_out, (ref_h, ref_c) = theirs(ref.tensor(data["x"]))
     for got, want in ((out, ref_out), (h, ref_h), (c, ref_c)):
         assert got.dtype is lucid.float64
-        np.testing.assert_allclose(
-            got.numpy(), want.detach().numpy(), rtol=1e-13, atol=1e-13
-        )
+        np.testing.assert_allclose(got.numpy(), want.detach().numpy(), rtol=1e-13, atol=1e-13)
 
 
 def _as_f32(t: lucid.Tensor) -> np.ndarray:
@@ -342,9 +318,7 @@ def _as_f32(t: lucid.Tensor) -> np.ndarray:
 
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16], ids=["f16", "bf16"])
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-def test_half_precision_trains_and_tracks_float32(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_half_precision_trains_and_tracks_float32(device: str, dtype: lucid.dtype) -> None:
     if device == "metal" and not metal_available():
         pytest.skip("Metal device not available on this host")
     tol = 2e-2 if dtype is lucid.float16 else 1e-1

@@ -187,12 +187,8 @@ def calculate_qparams(
     lucid.quantization.QDtype : Supplies ``quant_min`` / ``quant_max`` / ``signed``.
     lucid.quantization.quantize : Applies the derived parameters to produce codes.
     """
-    min_t: Tensor = (
-        min_val if isinstance(min_val, Tensor) else lucid.tensor(float(min_val))
-    )
-    max_t: Tensor = (
-        max_val if isinstance(max_val, Tensor) else lucid.tensor(float(max_val))
-    )
+    min_t: Tensor = min_val if isinstance(min_val, Tensor) else lucid.tensor(float(min_val))
+    max_t: Tensor = max_val if isinstance(max_val, Tensor) else lucid.tensor(float(max_val))
 
     quant_min, quant_max = qdtype.quant_min, qdtype.quant_max
     # Extend the range so that zero is always representable.
@@ -209,7 +205,5 @@ def calculate_qparams(
             zero_point = lucid.full_like(scale, float((quant_max + quant_min + 1) // 2))
     else:
         scale = lucid.maximum((max_t - min_t) / (quant_max - quant_min), eps_t)
-        zero_point = lucid.clip(
-            quant_min - lucid.round(min_t / scale), quant_min, quant_max
-        )
+        zero_point = lucid.clip(quant_min - lucid.round(min_t / scale), quant_min, quant_max)
     return scale, zero_point

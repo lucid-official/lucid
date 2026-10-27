@@ -95,9 +95,7 @@ def timestep_embedding(
     half = dim // 2
     work = _float32_or_wider(t.dtype if dtype is None else dtype)
     freqs = lucid.exp(
-        -math.log(max_period)
-        * lucid.arange(half, dtype=work, device=t.device.type)
-        / float(half)
+        -math.log(max_period) * lucid.arange(half, dtype=work, device=t.device.type) / float(half)
     )
     args = t.to(work).reshape(-1, 1) * freqs.reshape(1, -1)
     emb = lucid.cat([lucid.cos(args), lucid.sin(args)], dim=-1)
@@ -165,9 +163,7 @@ def sincos_position_embedding(dim: int, side: int) -> Tensor:
     return lucid.cat([cols, rows], dim=-1).reshape(1, side * side, -1)
 
 
-def check_latent_size(
-    height: int, width: int, grid: int, patch: int, family: str
-) -> None:
+def check_latent_size(height: int, width: int, grid: int, patch: int, family: str) -> None:
     """Refuse a latent of a size the patch grid was not built for.
 
     The position table holds one entry per patch of a ``grid x grid`` grid
@@ -316,9 +312,7 @@ class DiTBlock(nn.Module):
             nn.Linear(inner, hidden_size),
         )
         fan = 6 if gated else 4
-        self.ada_ln = nn.Sequential(
-            nn.SiLU(), nn.Linear(hidden_size, fan * hidden_size)
-        )
+        self.ada_ln = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, fan * hidden_size))
 
     def zero_conditioning(self) -> None:
         """Zero the modulation projection — the "Zero" of adaLN-Zero."""
@@ -347,10 +341,7 @@ class DiTBlock(nn.Module):
         params = self.ada_ln(cond)
         width = int(x.shape[2])
         fan = 6 if self.gated else 4
-        chunks = [
-            params[:, i * width : (i + 1) * width].reshape(-1, 1, width)
-            for i in range(fan)
-        ]
+        chunks = [params[:, i * width : (i + 1) * width].reshape(-1, 1, width) for i in range(fan)]
         if self.gated:
             shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = chunks
         else:

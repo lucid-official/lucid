@@ -49,9 +49,7 @@ def _data() -> tuple[lucid.Tensor, lucid.Tensor]:
 def _assign_load(module: nn.Module, seed: int) -> None:
     rng = np.random.default_rng(seed)
     state = {
-        k: lucid.tensor(rng.standard_normal(tuple(v.shape)).astype(np.float32)).to(
-            "metal"
-        )
+        k: lucid.tensor(rng.standard_normal(tuple(v.shape)).astype(np.float32)).to("metal")
         for k, v in module.state_dict().items()
     }
     module.load_state_dict(state, assign=True)
@@ -76,9 +74,7 @@ def _flat(module: nn.Module) -> list[np.ndarray]:
     return [np.asarray(p.detach().numpy()) for p in module.parameters()]
 
 
-def _make_step_run(
-    model: nn.Sequential, change: Callable[[nn.Sequential], None]
-) -> list[float]:
+def _make_step_run(model: nn.Sequential, change: Callable[[nn.Sequential], None]) -> list[float]:
     x, t = _data()
     step = make_step(model, F.mse_loss)
     opt = optim.SGD(model.parameters(), lr=0.1)
@@ -97,9 +93,7 @@ def _make_step_run(
     return losses
 
 
-def _eager_run(
-    model: nn.Sequential, change: Callable[[nn.Sequential], None]
-) -> list[float]:
+def _eager_run(model: nn.Sequential, change: Callable[[nn.Sequential], None]) -> list[float]:
     x, t = _data()
     opt = optim.SGD(model.parameters(), lr=0.1)
     losses = []
@@ -174,6 +168,4 @@ def test_a_compiled_module_answers_with_a_submodules_new_weights() -> None:
     compiled = lucid.compile(model)
     compiled(x)
     _assign_load(model[0], 2)
-    np.testing.assert_allclose(
-        compiled(x).numpy(), model(x).numpy(), rtol=_TOL, atol=_TOL
-    )
+    np.testing.assert_allclose(compiled(x).numpy(), model(x).numpy(), rtol=_TOL, atol=_TOL)

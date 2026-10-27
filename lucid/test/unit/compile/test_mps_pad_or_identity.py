@@ -52,15 +52,11 @@ def test_pad_tensor_only_in_pad_or_identity_helper() -> None:
 
     for rel in _CALLER_RELS:
         text = (_COMPILE_DIR / rel).read_text(encoding="utf-8")
-        assert (
-            "pad_or_identity(" in text
-        ), f"{rel} must route padding through pad_or_identity"
+        assert "pad_or_identity(" in text, f"{rel} must route padding through pad_or_identity"
 
 
 class _FnModule(nn.Module):
-    def __init__(
-        self, shape: tuple[int, ...], fn: Callable[[lucid.Tensor], lucid.Tensor]
-    ) -> None:
+    def __init__(self, shape: tuple[int, ...], fn: Callable[[lucid.Tensor], lucid.Tensor]) -> None:
         super().__init__()
         lucid.manual_seed(0)
         self.w = nn.Parameter((lucid.rand(*shape) + 0.5).to(COMPILE_DEVICE))

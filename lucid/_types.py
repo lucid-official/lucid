@@ -237,9 +237,7 @@ type StateDict = dict[str, Tensor]
 # Hook signatures for Module.register_forward_pre_hook / register_forward_hook.
 # Module is typed as object here to avoid a circular import (module.py → _types.py → module.py).
 type _ForwardPreHook = Callable[[object, tuple[Tensor, ...]], tuple[Tensor, ...] | None]
-type _ForwardHook = Callable[
-    [object, tuple[Tensor, ...], _ModuleOutput], _ModuleOutput | None
-]
+type _ForwardHook = Callable[[object, tuple[Tensor, ...], _ModuleOutput], _ModuleOutput | None]
 type _BackwardHook = Callable[..., None]
 
 

@@ -237,9 +237,7 @@ class TestGradientRouting:
         prior_grads = [p.grad for n, p in model.named_parameters() if "prior_head" in n]
         assert prior_grads and all(g is None for g in prior_grads)
 
-        posterior_grads = [
-            p.grad for n, p in model.named_parameters() if "posterior_head" in n
-        ]
+        posterior_grads = [p.grad for n, p in model.named_parameters() if "posterior_head" in n]
         assert posterior_grads and all(g is not None for g in posterior_grads)
 
     def test_the_kl_is_what_trains_the_prior_head(self) -> None:
@@ -297,9 +295,7 @@ class TestObjective:
         assert out.loss is not None and out.recon_loss is not None
         assert out.kl_loss is not None and out.reward_loss is not None
         expected = (
-            float(out.recon_loss.item())
-            + float(out.kl_loss.item())
-            + float(out.reward_loss.item())
+            float(out.recon_loss.item()) + float(out.kl_loss.item()) + float(out.reward_loss.item())
         )
         assert abs(float(out.loss.item()) - expected) < 1e-2
 
@@ -313,10 +309,7 @@ class TestObjective:
         assert a.recon_loss is not None and a.reward_loss is not None
         # With the weight at zero the KL is reported but does not enter.
         assert (
-            abs(
-                float(a.loss.item())
-                - (float(a.recon_loss.item()) + float(a.reward_loss.item()))
-            )
+            abs(float(a.loss.item()) - (float(a.recon_loss.item()) + float(a.reward_loss.item())))
             < 1e-3
         )
 
@@ -467,9 +460,7 @@ class TestRSSMCategorical:
 
         q = [[0.7, 0.2, 0.1], [0.3, 0.3, 0.4]]
         p = [[0.2, 0.3, 0.5], [0.5, 0.25, 0.25]]
-        expected = sum(
-            sum(a * math.log(a / b) for a, b in zip(qv, pv)) for qv, pv in zip(q, p)
-        )
+        expected = sum(sum(a * math.log(a / b) for a, b in zip(qv, pv)) for qv, pv in zip(q, p))
         got = float(
             categorical_kl(
                 lucid.tensor([[[math.log(x) for x in v] for v in q]]),
@@ -527,16 +518,12 @@ class TestUnimix:
         floored = self._peaked(0.01)
         embed, actions = lucid.randn((300, 1, 4)), lucid.randn((300, 1, 2))
         wild = float(
-            categorical_kl(
-                *(s.logits for s in reversed(unbounded.observe(embed, actions)))
-            )
+            categorical_kl(*(s.logits for s in reversed(unbounded.observe(embed, actions))))
             .max()
             .item()
         )
         tame = float(
-            categorical_kl(
-                *(s.logits for s in reversed(floored.observe(embed, actions)))
-            )
+            categorical_kl(*(s.logits for s in reversed(floored.observe(embed, actions))))
             .max()
             .item()
         )
@@ -604,9 +591,7 @@ class TestGumbelArgmax:
         counts = collections.Counter(int(v) for v in drawn)
         for index, expected in enumerate(probabilities):
             empirical = counts[index] / 4000
-            assert (
-                abs(empirical - expected) < 0.03
-            ), f"class {index}: {empirical:.3f} vs {expected}"
+            assert abs(empirical - expected) < 0.03, f"class {index}: {empirical:.3f} vs {expected}"
 
     def test_a_deterministic_logit_is_drawn_every_time(self) -> None:
         """Guards the test above: a broken draw could pass it by chance."""
@@ -738,9 +723,7 @@ class TestOvershooting:
         lucid.manual_seed(0)
         on = PlaNetForWorldModeling(_tiny_cfg()).eval()(obs, act, rewards=rew)
         lucid.manual_seed(0)
-        off = PlaNetForWorldModeling(_tiny_cfg(overshoot_distance=1)).eval()(
-            obs, act, rewards=rew
-        )
+        off = PlaNetForWorldModeling(_tiny_cfg(overshoot_distance=1)).eval()(obs, act, rewards=rew)
         assert on.loss is not None and off.loss is not None
         assert float(on.loss.item()) > float(off.loss.item())
 
@@ -761,9 +744,7 @@ class TestOvershooting:
         lucid.manual_seed(0)
         a = PlaNetForWorldModeling(_tiny_cfg()).eval()(obs, act, rewards=rew)
         lucid.manual_seed(0)
-        b = PlaNetForWorldModeling(_tiny_cfg(overshoot_distance=1)).eval()(
-            obs, act, rewards=rew
-        )
+        b = PlaNetForWorldModeling(_tiny_cfg(overshoot_distance=1)).eval()(obs, act, rewards=rew)
         assert a.loss is not None and b.loss is not None
         assert abs(float(a.loss.item()) - float(b.loss.item())) < 1e-4
 
@@ -819,9 +800,7 @@ class TestPlanner:
 
         defaults = {
             name: parameter.default
-            for name, parameter in inspect.signature(
-                PlaNetForWorldModeling.plan
-            ).parameters.items()
+            for name, parameter in inspect.signature(PlaNetForWorldModeling.plan).parameters.items()
         }
         assert defaults["horizon"] == 12
         assert defaults["iterations"] == 10
@@ -860,9 +839,7 @@ class TestPlanner:
             ({"candidates": 0}, "candidates"),
         ],
     )
-    def test_rejects_invalid_arguments(
-        self, kwargs: dict[str, object], match: str
-    ) -> None:
+    def test_rejects_invalid_arguments(self, kwargs: dict[str, object], match: str) -> None:
         model = PlaNetForWorldModeling(_tiny_cfg()).eval()
         base: dict[str, object] = {
             "horizon": 3,
@@ -883,9 +860,7 @@ class TestPlanner:
         the reward a signal it can chase and the planner must find it.
         """
         lucid.manual_seed(0)
-        model = PlaNetForWorldModeling(
-            _tiny_cfg(reward_hidden=16, overshoot_distance=1)
-        )
+        model = PlaNetForWorldModeling(_tiny_cfg(reward_hidden=16, overshoot_distance=1))
         opt = lucid.optim.Adam(model.parameters(), lr=3e-3)
         model.train()
         for _ in range(120):

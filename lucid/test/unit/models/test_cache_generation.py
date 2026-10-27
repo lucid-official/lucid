@@ -123,9 +123,7 @@ class TestGPT2Cache:
         m = _gpt2()
         prompt = lucid.tensor([[3, 7, 1]]).long()
         g_cache = m.generate(prompt, max_new_tokens=6, do_sample=False, use_cache=True)
-        g_nocache = m.generate(
-            prompt, max_new_tokens=6, do_sample=False, use_cache=False
-        )
+        g_nocache = m.generate(prompt, max_new_tokens=6, do_sample=False, use_cache=False)
         assert_close(g_cache, g_nocache, atol=0.0)
 
     def test_static_cache_equals_dynamic(self) -> None:
@@ -164,9 +162,7 @@ class TestGPT2Cache:
             cache_implementation="static",
             max_cache_len=32,  # 3 + 6 = 9 filled, buffer is 32 → mostly empty
         )
-        g_dynamic = m.generate(
-            prompt, max_new_tokens=6, do_sample=False, use_cache=True
-        )
+        g_dynamic = m.generate(prompt, max_new_tokens=6, do_sample=False, use_cache=True)
         assert_close(g_static, g_dynamic, atol=0.0)
 
     def test_static_cache_incremental_equals_full(self) -> None:
@@ -197,9 +193,7 @@ class TestGPTCache:
         m = _gpt()
         prompt = lucid.tensor([[3, 7, 1]]).long()
         g_cache = m.generate(prompt, max_new_tokens=6, do_sample=False, use_cache=True)
-        g_nocache = m.generate(
-            prompt, max_new_tokens=6, do_sample=False, use_cache=False
-        )
+        g_nocache = m.generate(prompt, max_new_tokens=6, do_sample=False, use_cache=False)
         assert_close(g_cache, g_nocache, atol=0.0)
 
     def test_static_cache_equals_dynamic(self) -> None:

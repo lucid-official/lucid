@@ -159,9 +159,7 @@ class TestSaveRequiresAWarmCache:
         with pytest.raises(RuntimeError, match="no executable .* has run"):
             lc.save_compiled(compiled, os.path.join(str(tmp_path), "cold"))
 
-    def test_a_call_that_needed_gradients_says_how_to_compile(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_call_that_needed_gradients_says_how_to_compile(self, tmp_path: object) -> None:
         """Under grad mode a trainable module ran eagerly: nothing to save."""
         compiled = lc.compile(to_metal(nn.Linear(8, 4)))
         with lucid.enable_grad():
@@ -170,9 +168,7 @@ class TestSaveRequiresAWarmCache:
         with pytest.raises(RuntimeError, match=r"lucid\.no_grad\(\)"):
             lc.save_compiled(compiled, os.path.join(str(tmp_path), "eager"))
 
-    def test_an_executable_that_has_not_run_is_not_saved(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_executable_that_has_not_run_is_not_saved(self, tmp_path: object) -> None:
         """A grad-mode call traces a closure tensor's graph and caches it
         unrun; only the ``no_grad`` call that runs it makes it savable."""
         weight = metal_tensor(8, 4).requires_grad_(True)

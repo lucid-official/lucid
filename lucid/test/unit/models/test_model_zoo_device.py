@@ -128,9 +128,7 @@ def _agree(cpu_out, metal_out, tol, what):
     assert a.shape == b.shape, what
     assert not np.isnan(b).any(), what
     scale = max(float(np.abs(a).max()), 1e-8)
-    assert (
-        np.abs(a - b).max() / scale < tol
-    ), f"{what}: rel {np.abs(a - b).max() / scale}"
+    assert np.abs(a - b).max() / scale < tol, f"{what}: rel {np.abs(a - b).max() / scale}"
 
 
 def test_neural_ode_matches_across_devices():
@@ -183,9 +181,7 @@ def test_flow_matching_matches_across_devices():
         1e-4,
         "flow_matching velocity",
     )
-    _agree(
-        cpu.path_sample(x1, x0, t), metal.path_sample(g1, g0, gt), 1e-5, "path_sample"
-    )
+    _agree(cpu.path_sample(x1, x0, t), metal.path_sample(g1, g0, gt), 1e-5, "path_sample")
     _agree(
         cpu.conditional_target(x1, x0, t),
         metal.conditional_target(g1, g0, gt),
@@ -257,9 +253,7 @@ def test_rectified_flow_matches_across_devices():
         1e-6,
         "target",
     )
-    _agree(
-        cpu.sample(noise=x0, steps=8), metal.sample(noise=g0, steps=8), 1e-4, "sample"
-    )
+    _agree(cpu.sample(noise=x0, steps=8), metal.sample(noise=g0, steps=8), 1e-4, "sample")
     _agree(cpu.one_step(x0), metal.one_step(g0), 1e-4, "one_step")
 
     s_cpu = float(cpu.straightness(x0, steps=8))
@@ -699,9 +693,7 @@ def test_dreamer_three_losses_backward_on_device(device):
 def test_dreamer_discount_head_runs_on_device(device):
     """`pcont` swaps a Python float for a tensor inside the return recursion."""
     lucid.manual_seed(0)
-    model = M.create_model("dreamer_world_model", pcont=True, **_DREAMER_SMALL).to(
-        device
-    )
+    model = M.create_model("dreamer_world_model", pcont=True, **_DREAMER_SMALL).to(device)
     model.train()
 
     out = model(
@@ -718,9 +710,7 @@ def test_dreamer_discount_head_runs_on_device(device):
 
     model.zero_grad()
     out.pcont_loss.backward()
-    grads = [
-        p.grad for p in model.dreamer.pcont_head.parameters() if p.grad is not None
-    ]
+    grads = [p.grad for p in model.dreamer.pcont_head.parameters() if p.grad is not None]
     assert grads, "dreamer: the discount head received no gradient"
     for g in grads:
         assert str(g.device) == f"device('{device}')"
@@ -738,9 +728,7 @@ def test_dreamer_rollout_stays_on_device(device):
 
         def step(self, action):
             self.t += 1
-            return StepResult(
-                lucid.rand((3, 64, 64), device=device), 1.0, False, self.t >= 4
-            )
+            return StepResult(lucid.rand((3, 64, 64), device=device), 1.0, False, self.t >= 4)
 
     lucid.manual_seed(0)
     model = M.create_model("dreamer", **_DREAMER_SMALL).to(device).eval()
@@ -959,9 +947,7 @@ def test_dreamer_v3_return_normaliser_sorts_on_device(device):
     """The percentile spread, which is the one sort in this family."""
     from lucid.models.generative.dreamer_v3._objectives import percentile
 
-    values = lucid.tensor(
-        [float(i) for i in range(101)], device=device, dtype=lucid.float32
-    )
+    values = lucid.tensor([float(i) for i in range(101)], device=device, dtype=lucid.float32)
     for fraction in (5.0, 50.0, 95.0):
         got = percentile(values, fraction)
         assert str(got.device) == f"device('{device}')"
@@ -1206,9 +1192,7 @@ def test_set_prediction_family_trains_one_step_on_device(family, device):
     model = M.create_model(factory, **overrides).to(device)
     model.train()
     optimizer = lucid.optim.SGD(model.parameters(), lr=1e-2)
-    before = {
-        n: p.detach().to("cpu").numpy().copy() for n, p in model.named_parameters()
-    }
+    before = {n: p.detach().to("cpu").numpy().copy() for n, p in model.named_parameters()}
 
     out = model(_set_images().to(device), targets=_set_targets(family, device))
     loss = out.loss

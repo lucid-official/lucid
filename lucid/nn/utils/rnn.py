@@ -70,9 +70,7 @@ def _length_list(lengths: Tensor | Sequence[int]) -> list[int]:
     return [int(v) for v in _int_tensor_to_list(t)]
 
 
-def _check_lengths(
-    lengths: list[int], batch: int, steps: int, enforce_sorted: bool
-) -> None:
+def _check_lengths(lengths: list[int], batch: int, steps: int, enforce_sorted: bool) -> None:
     """Refuse a ``lengths`` that would build a corrupt ``batch_sizes``.
 
     Every packing entry point validates here, before anything is gathered:
@@ -121,9 +119,7 @@ def _cpu_int64(values: list[int]) -> Tensor:
 def _batch_size_list(batch_sizes: Tensor, rows: int) -> list[int]:
     """A packed sequence's ``batch_sizes`` as ints, refused unless it describes ``rows`` rows."""
     if batch_sizes.ndim != 1:
-        raise ValueError(
-            f"batch_sizes must be 1-D, got shape {tuple(batch_sizes.shape)}"
-        )
+        raise ValueError(f"batch_sizes must be 1-D, got shape {tuple(batch_sizes.shape)}")
     sizes = [int(v) for v in _int_tensor_to_list(batch_sizes)]
     if not sizes or sizes[-1] <= 0 or any(a < b for a, b in pairwise(sizes)):
         raise ValueError(
@@ -131,9 +127,7 @@ def _batch_size_list(batch_sizes: Tensor, rows: int) -> list[int]:
             f"counts, got {sizes}"
         )
     if sum(sizes) != rows:
-        raise ValueError(
-            f"batch_sizes sums to {sum(sizes)} but the packed data has {rows} rows"
-        )
+        raise ValueError(f"batch_sizes sums to {sum(sizes)} but the packed data has {rows} rows")
     return sizes
 
 
@@ -144,9 +138,7 @@ def _check_sequences(sequences: Sequence[Tensor]) -> None:
     first = sequences[0]
     for i, s in enumerate(sequences):
         if s.ndim == 0:
-            raise ValueError(
-                f"sequence {i} is 0-d; every sequence needs a leading time axis"
-            )
+            raise ValueError(f"sequence {i} is 0-d; every sequence needs a leading time axis")
         if tuple(s.shape[1:]) != tuple(first.shape[1:]):
             raise _C_engine.ShapeMismatch(
                 f"sequence {i} has trailing shape {tuple(s.shape[1:])}, but "
@@ -155,8 +147,7 @@ def _check_sequences(sequences: Sequence[Tensor]) -> None:
             )
         if s.device != first.device:
             raise _C_engine.DeviceMismatch(
-                f"sequence {i} is on {s.device}, but sequence 0 is on "
-                f"{first.device}"
+                f"sequence {i} is on {s.device}, but sequence 0 is on " f"{first.device}"
             )
 
 
@@ -291,8 +282,7 @@ def pack_padded_sequence(
         )
     if input.numel() == 0:
         raise ValueError(
-            f"pack_padded_sequence: cannot pack an empty tensor (shape "
-            f"{tuple(input.shape)})"
+            f"pack_padded_sequence: cannot pack an empty tensor (shape " f"{tuple(input.shape)})"
         )
     if batch_first:
         input = input.permute(1, 0, *range(2, input.ndim))
@@ -314,9 +304,7 @@ def pack_padded_sequence(
         lengths_list = [lengths_list[i] for i in order]
 
     # Sorted descending, so the sequences alive at step t are a prefix.
-    batch_sizes_list = [
-        sum(1 for n in lengths_list if n > t) for t in range(lengths_list[0])
-    ]
+    batch_sizes_list = [sum(1 for n in lengths_list if n > t) for t in range(lengths_list[0])]
     data = lucid.cat([input[t, :bs] for t, bs in enumerate(batch_sizes_list)], 0)
     return PackedSequence(data, _cpu_int64(batch_sizes_list), sorted_t, unsorted_t)
 
@@ -566,6 +554,4 @@ def pack_sequence(
     """
     padded: Tensor = pad_sequence(sequences, batch_first=False)
     lengths: list[int] = [int(s.shape[0]) for s in sequences]
-    return pack_padded_sequence(
-        padded, lengths, batch_first=False, enforce_sorted=enforce_sorted
-    )
+    return pack_padded_sequence(padded, lengths, batch_first=False, enforce_sorted=enforce_sorted)

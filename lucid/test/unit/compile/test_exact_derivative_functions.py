@@ -80,10 +80,7 @@ def _data(device: str) -> tuple[Tensor, Tensor]:
 
 
 def _grads(model: nn.Module) -> dict[str, list[object] | None]:
-    return {
-        n: None if p.grad is None else p.grad.tolist()
-        for n, p in model.named_parameters()
-    }
+    return {n: None if p.grad is None else p.grad.tolist() for n, p in model.named_parameters()}
 
 
 def _params(model: nn.Module) -> dict[str, list[object]]:
@@ -136,11 +133,7 @@ def test_tracked_checkpoint_compiles_under_make_step_and_matches_eager(
     factory = (
         (lambda: _interior_checkpoint_model(use_reentrant=use_reentrant, device=device))
         if kind == "interior"
-        else (
-            lambda: _first_layer_checkpoint_model(
-                use_reentrant=use_reentrant, device=device
-            )
-        )
+        else (lambda: _first_layer_checkpoint_model(use_reentrant=use_reentrant, device=device))
     )
     want_grads, want_params = _eager_grads_and_updated(factory, x, t)
 
@@ -163,9 +156,7 @@ def test_interior_checkpoint_compiles_under_segmented_step_and_matches_eager(
 ) -> None:
     device = device_gpu_only
     x, t = _data(device)
-    factory = lambda: _interior_checkpoint_model(
-        use_reentrant=use_reentrant, device=device
-    )
+    factory = lambda: _interior_checkpoint_model(use_reentrant=use_reentrant, device=device)
     want_grads, _ = _eager_grads_and_updated(factory, x, t)
 
     model = factory()
@@ -194,11 +185,7 @@ def test_tracked_checkpoint_compiles_under_fused_step_and_matches_eager(
     factory = (
         (lambda: _interior_checkpoint_model(use_reentrant=use_reentrant, device=device))
         if kind == "interior"
-        else (
-            lambda: _first_layer_checkpoint_model(
-                use_reentrant=use_reentrant, device=device
-            )
-        )
+        else (lambda: _first_layer_checkpoint_model(use_reentrant=use_reentrant, device=device))
     )
     _, want_params = _eager_grads_and_updated(factory, x, t)
 
@@ -230,11 +217,7 @@ def test_tracked_checkpoint_compiles_under_compiled_step_and_matches_eager(
     factory = (
         (lambda: _interior_checkpoint_model(use_reentrant=use_reentrant, device=device))
         if kind == "interior"
-        else (
-            lambda: _first_layer_checkpoint_model(
-                use_reentrant=use_reentrant, device=device
-            )
-        )
+        else (lambda: _first_layer_checkpoint_model(use_reentrant=use_reentrant, device=device))
     )
     want_grads, _ = _eager_grads_and_updated(factory, x, t)
 

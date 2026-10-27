@@ -119,9 +119,7 @@ class TestTheReportedCases:
         y[0] = -3e38
         assert y[0].item() < -1e38 and math.isfinite(y[0].item())
 
-    def test_a_repeated_index_writing_one_value_writes_it_once(
-        self, device: str
-    ) -> None:
+    def test_a_repeated_index_writing_one_value_writes_it_once(self, device: str) -> None:
         x = lucid.full((3,), 10.0, device=device)
         x[_i([1, 1], device)] = 3.0
         assert x.tolist() == [10.0, 3.0, 10.0]
@@ -136,9 +134,7 @@ class TestARepeatedIndex:
         x = lucid.full((3,), 10.0)
         x[_i([1, 1], "cpu")] = lucid.tensor([3.0, 5.0])
         assert x.tolist() == [10.0, 5.0, 10.0]
-        out = lucid.scatter(
-            lucid.full((3,), 10.0), 0, _i([1, 1], "cpu"), lucid.tensor([5.0, 7.0])
-        )
+        out = lucid.scatter(lucid.full((3,), 10.0), 0, _i([1, 1], "cpu"), lucid.tensor([5.0, 7.0]))
         assert out.tolist() == [10.0, 7.0, 10.0]
         # Along an inner axis, each line in index order.
         base = lucid.zeros(2, 3)
@@ -164,9 +160,7 @@ class TestARepeatedIndex:
 # ``(name, write)``: ``write(x, idx, val)`` assigns into ``x`` — a NumPy array
 # or a Lucid tensor — with ``idx`` making an index array and ``val`` a value
 # array of ``x``'s dtype in the same library.
-_Writer = Callable[
-    [object, Callable[[object], object], Callable[[object], object]], None
-]
+_Writer = Callable[[object, Callable[[object], object], Callable[[object], object]], None]
 
 _SETITEM_1D: list[tuple[str, _Writer]] = [
     ("int", lambda x, idx, val: x.__setitem__(2, 0)),
@@ -181,9 +175,7 @@ _SETITEM_1D: list[tuple[str, _Writer]] = [
     ),
     (
         "mask-scalar",
-        lambda x, idx, val: x.__setitem__(
-            idx([False, True, False, True, False, True]), 0
-        ),
+        lambda x, idx, val: x.__setitem__(idx([False, True, False, True, False, True]), 0),
     ),
     ("advanced", lambda x, idx, val: x.__setitem__(idx([4, 0, 2]), val([1, 0, 3]))),
     ("negative", lambda x, idx, val: x.__setitem__(idx([-1, 1]), val([0, 2]))),
@@ -194,9 +186,7 @@ _SETITEM_2D: list[tuple[str, _Writer]] = [
     ("row-scalar", lambda x, idx, val: x.__setitem__(1, 0)),
     (
         "rows-block",
-        lambda x, idx, val: x.__setitem__(
-            (idx([2, 0]), slice(1, 3)), val([[1, 0], [0, 4]])
-        ),
+        lambda x, idx, val: x.__setitem__((idx([2, 0]), slice(1, 3)), val([[1, 0], [0, 4]])),
     ),
     (
         "pairs",
@@ -220,18 +210,14 @@ def _run_setitem(
 
     def lu_idx(v: object) -> lucid.Tensor:
         a = np.asarray(v)
-        return lucid.tensor(
-            a if a.dtype == np.bool_ else a.astype(np.int64), device=device
-        )
+        return lucid.tensor(a if a.dtype == np.bool_ else a.astype(np.int64), device=device)
 
     write(got, lu_idx, lambda v: _t(v, dtype, device))
     return got, want
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_ALL_DTYPES))
-@pytest.mark.parametrize(
-    ("kind", "write"), _SETITEM_1D, ids=[k for k, _ in _SETITEM_1D]
-)
+@pytest.mark.parametrize(("kind", "write"), _SETITEM_1D, ids=[k for k, _ in _SETITEM_1D])
 def test_setitem_writes_every_dtype(
     device: str, dtype: lucid.dtype, kind: str, write: _Writer
 ) -> None:
@@ -241,9 +227,7 @@ def test_setitem_writes_every_dtype(
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_ALL_DTYPES))
-@pytest.mark.parametrize(
-    ("kind", "write"), _SETITEM_2D, ids=[k for k, _ in _SETITEM_2D]
-)
+@pytest.mark.parametrize(("kind", "write"), _SETITEM_2D, ids=[k for k, _ in _SETITEM_2D])
 def test_setitem_writes_every_dtype_in_two_dims(
     device: str, dtype: lucid.dtype, kind: str, write: _Writer
 ) -> None:
@@ -270,16 +254,12 @@ class TestTheOverwritesTakeEveryDtype:
     the CPU (CHA-27), and int64 and complex64 on Metal too."""
 
     def test_scatter(self, device: str, dtype: lucid.dtype) -> None:
-        out = lucid.scatter(
-            _t(_BASE, dtype, device), 0, _i(_POS, device), _t(_SRC, dtype, device)
-        )
+        out = lucid.scatter(_t(_BASE, dtype, device), 0, _i(_POS, device), _t(_SRC, dtype, device))
         assert out.dtype == dtype
         _same(out, _expected(dtype))
 
     def test_index_copy(self, device: str, dtype: lucid.dtype) -> None:
-        out = _t(_BASE, dtype, device).index_copy(
-            0, _i(_POS, device), _t(_SRC, dtype, device)
-        )
+        out = _t(_BASE, dtype, device).index_copy(0, _i(_POS, device), _t(_SRC, dtype, device))
         _same(out, _expected(dtype))
 
     def test_index_put(self, device: str, dtype: lucid.dtype) -> None:
@@ -289,16 +269,12 @@ class TestTheOverwritesTakeEveryDtype:
         _same(out, _expected(dtype))
 
     def test_put(self, device: str, dtype: lucid.dtype) -> None:
-        out = lucid.put(
-            _t(_BASE, dtype, device), _i(_POS, device), _t(_SRC, dtype, device)
-        )
+        out = lucid.put(_t(_BASE, dtype, device), _i(_POS, device), _t(_SRC, dtype, device))
         _same(out, _expected(dtype))
 
     def test_masked_scatter(self, device: str, dtype: lucid.dtype) -> None:
         mask = lucid.tensor([True, False, True, False, True, False], device=device)
-        out = lucid.masked_scatter(
-            _t(_BASE, dtype, device), mask, _t(_SRC, dtype, device)
-        )
+        out = lucid.masked_scatter(_t(_BASE, dtype, device), mask, _t(_SRC, dtype, device))
         _same(out, _expected(dtype, [0, 2, 4]))
 
 
@@ -323,9 +299,7 @@ class TestScatterShapes:
         _same(out, want)
 
     def test_a_view_base_is_read_as_its_elements(self, device: str) -> None:
-        base = (
-            lucid.arange(12.0, device=device).reshape(3, 4).mT
-        )  # (4, 3), non-contiguous
+        base = lucid.arange(12.0, device=device).reshape(3, 4).mT  # (4, 3), non-contiguous
         out = lucid.scatter(
             base,
             0,
@@ -367,9 +341,7 @@ class TestScatterShapes:
         # the cast is the caller's to make (LCD-336).  DtypeMismatch is a
         # TypeError.
         with pytest.raises(TypeError, match="src must have self's dtype"):
-            lucid.scatter(
-                lucid.zeros(3, device=device), 0, _i([1], device), _i([7], device)
-            )
+            lucid.scatter(lucid.zeros(3, device=device), 0, _i([1], device), _i([7], device))
 
     def test_the_cpu_refuses_an_index_out_of_range(self) -> None:
         with pytest.raises(IndexError):
@@ -471,13 +443,9 @@ class TestGradients:
         assert b.grad.tolist() == [[0.0, 1.0, 2.0, 0.0], [0.0, 5.0, 0.0, 7.0]]
         assert s.grad.tolist() == [[3.0, 3.0], [4.0, 6.0]]
 
-    def test_a_larger_source_sends_its_gradient_to_the_corner_it_gave(
-        self, device: str
-    ) -> None:
+    def test_a_larger_source_sends_its_gradient_to_the_corner_it_gave(self, device: str) -> None:
         s = lucid.ones(2, 3, requires_grad=True, device=device)
-        out = lucid.scatter(
-            lucid.zeros(3, 3, device=device), 0, _i([[2, 0]], device), s
-        )
+        out = lucid.scatter(lucid.zeros(3, 3, device=device), 0, _i([[2, 0]], device), s)
         (out * 2.0).sum().backward()
         assert s.grad is not None
         assert s.grad.tolist() == [[2.0, 2.0, 0.0], [0.0, 0.0, 0.0]]

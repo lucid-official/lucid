@@ -138,6 +138,4 @@ def test_saliency_loop_follows_the_reference(ref: Any) -> None:
     ref_model = ref.nn.Linear(3, 1, bias=False)
     with ref.no_grad():
         ref_model.weight.fill_(1.0)
-    assert _saliency(lucid, lucid.ones(4, 3), model) == _saliency(
-        ref, ref.ones(4, 3), ref_model
-    )
+    assert _saliency(lucid, lucid.ones(4, 3), model) == _saliency(ref, ref.ones(4, 3), ref_model)

@@ -54,16 +54,12 @@ def test_the_eigenvector_gradient_has_the_right_sign() -> None:
     e = rng.standard_normal((4, 4))
     e = e + e.T  # a symmetric step: unambiguous whatever triangle is read
     numeric = _central(lambda s: float((r * np.linalg.eigh(a0 + s * e)[1] ** 4).sum()))
-    assert float((np.asarray(a.grad.numpy()) * e).sum()) == pytest.approx(
-        numeric, rel=1e-6
-    )
+    assert float((np.asarray(a.grad.numpy()) * e).sum()) == pytest.approx(numeric, rel=1e-6)
 
 
 def test_a_triangular_solve_records_its_gradient() -> None:
     rng = np.random.default_rng(2)
-    a = lucid.tensor(
-        np.triu(rng.standard_normal((4, 4))) + 4 * np.eye(4), requires_grad=True
-    )
+    a = lucid.tensor(np.triu(rng.standard_normal((4, 4))) + 4 * np.eye(4), requires_grad=True)
     b = lucid.tensor(rng.standard_normal((4, 3)), requires_grad=True)
     x = LA.solve_triangular(a, b, upper=True)
     assert x.requires_grad and x.grad_fn is not None
@@ -136,11 +132,7 @@ def test_the_second_derivative_matches_central_differences(
     for k, analytic in enumerate(second):
         e = rng.standard_normal(base[k].shape)
         numeric = _central(
-            lambda s: projected_gradient(
-                [b + s * e if i == k else b for i, b in enumerate(base)]
-            )
+            lambda s: projected_gradient([b + s * e if i == k else b for i, b in enumerate(base)])
         )
-        exact = (
-            0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
-        )
+        exact = 0.0 if analytic is None else float((np.asarray(analytic.numpy()) * e).sum())
         assert exact == pytest.approx(numeric, rel=1e-5, abs=1e-6), k

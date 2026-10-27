@@ -54,9 +54,7 @@ class _CountedStep:
     state alive until the cyclic collector ran.
     """
 
-    def __init__(
-        self, optimizer: Optimizer, inner: Callable[..., object] | None
-    ) -> None:
+    def __init__(self, optimizer: Optimizer, inner: Callable[..., object] | None) -> None:
         self._optimizer = weakref.ref(optimizer)
         # A step already on the instance is the one that runs.  A method of
         # this optimizer is kept unbound, as the class's step (``None``,
@@ -67,9 +65,7 @@ class _CountedStep:
             self._method = inner.__func__
         else:
             self._inner = inner
-        functools.update_wrapper(
-            self, self._method or self._inner or type(optimizer).step
-        )
+        functools.update_wrapper(self, self._method or self._inner or type(optimizer).step)
 
     def on(self, optimizer: Optimizer) -> _CountedStep:
         """The same step, counted for ``optimizer`` — a copy's own counter."""
@@ -86,9 +82,7 @@ class _CountedStep:
         """Record the step, then take it, forwarding every argument."""
         optimizer = self._optimizer()
         if optimizer is None:
-            raise ReferenceError(
-                "optimizer.step was called after its optimizer was freed"
-            )
+            raise ReferenceError("optimizer.step was called after its optimizer was freed")
         _record_step(optimizer)
         if self._inner is not None:
             return self._inner(*args, **kwargs)

@@ -71,9 +71,7 @@ def _restore(params: list[Tensor], saved: list[Tensor]) -> None:
         p.copy_(value)
 
 
-def _evaluate(
-    closure: Callable[[], Tensor], params: list[Tensor]
-) -> tuple[float, Tensor]:
+def _evaluate(closure: Callable[[], Tensor], params: list[Tensor]) -> tuple[float, Tensor]:
     with lucid.enable_grad():
         loss = closure()
     return float(loss), _flat_grad(params)
@@ -148,9 +146,7 @@ def _wolfe_bracket(
     prev, new = start, obj(t)
     ls_iter = 0
     while ls_iter < max_ls:
-        if new.f > start.f + _C1 * new.t * start.gtd or (
-            ls_iter > 1 and new.f >= prev.f
-        ):
+        if new.f > start.f + _C1 * new.t * start.gtd or (ls_iter > 1 and new.f >= prev.f):
             return [prev, new], False, ls_iter
         if abs(new.gtd) <= -_C2 * start.gtd:
             return [new], True, ls_iter
@@ -162,9 +158,7 @@ def _wolfe_bracket(
     return [start, new], False, ls_iter
 
 
-def _safeguard(
-    t: _Scalar, a: _Scalar, b: _Scalar, insuf_progress: bool
-) -> tuple[_Scalar, bool]:
+def _safeguard(t: _Scalar, a: _Scalar, b: _Scalar, insuf_progress: bool) -> tuple[_Scalar, bool]:
     """Move a zoom trial ``t`` off the ends of ``[a, b]`` when progress stalls."""
     hi, lo = _max2(a, b), _min2(a, b)
     eps = 0.1 * (hi - lo)
@@ -307,25 +301,19 @@ class _LBFGSState:
             setattr(self, name, v)
 
     @classmethod
-    def restore(
-        cls, snap: dict[str, object], to_tensor: Callable[[object], Tensor | None]
-    ) -> Self:
+    def restore(cls, snap: dict[str, object], to_tensor: Callable[[object], Tensor | None]) -> Self:
         """Rebuild from :meth:`snapshot`; a wrongly typed entry raises ``TypeError``."""
 
         def tensor(v: object, key: str) -> Tensor:
             out = to_tensor(v)
             if out is None:
-                raise TypeError(
-                    f"LBFGS state '{key}' must hold arrays, got {type(v).__name__}"
-                )
+                raise TypeError(f"LBFGS state '{key}' must hold arrays, got {type(v).__name__}")
             return out
 
         def tensors(key: str) -> list[Tensor]:
             v = snap.get(key, [])
             if not isinstance(v, list):
-                raise TypeError(
-                    f"LBFGS state '{key}' must be a list, got {type(v).__name__}"
-                )
+                raise TypeError(f"LBFGS state '{key}' must be a list, got {type(v).__name__}")
             return [tensor(x, key) for x in v]
 
         def optional_tensor(key: str) -> Tensor | None:
@@ -560,9 +548,7 @@ class LBFGS(Optimizer):
             When the optimizer already has its parameter group.
         """
         if self.param_groups:
-            raise ValueError(
-                "LBFGS doesn't support per-parameter options (parameter groups)"
-            )
+            raise ValueError("LBFGS doesn't support per-parameter options (parameter groups)")
         super().add_param_group(group)
 
     @override
@@ -586,9 +572,7 @@ class LBFGS(Optimizer):
 
     def _params(self) -> list[Tensor]:
         params = self.param_groups[0]["params"]
-        if not isinstance(params, list) or not all(
-            isinstance(p, Tensor) for p in params
-        ):
+        if not isinstance(params, list) or not all(isinstance(p, Tensor) for p in params):
             raise TypeError("LBFGS: the parameter group must hold a list of tensors")
         return params
 
@@ -730,9 +714,7 @@ class LBFGS(Optimizer):
 
         # The group is read below as it is; an edited one is checked first.
         self._sync_hyperparams()
-        cfg = _Settings(
-            **self._hyperparam_dict(self._hyperparams_of(self.param_groups[0]))
-        )
+        cfg = _Settings(**self._hyperparam_dict(self._hyperparams_of(self.param_groups[0])))
         params = self._params()
         with lucid.no_grad():
             with lucid.enable_grad():
@@ -763,11 +745,7 @@ class LBFGS(Optimizer):
             d = st.d = self._direction(flat_grad, cfg.history_size)
             st.prev_flat_grad, st.prev_loss = flat_grad, loss
             # The first step of all is scaled down by the gradient's 1-norm.
-            t = (
-                _min2(1.0, 1.0 / flat_grad.abs().sum()) * cfg.lr
-                if st.n_iter == 1
-                else cfg.lr
-            )
+            t = _min2(1.0, 1.0 / flat_grad.abs().sum()) * cfg.lr if st.n_iter == 1 else cfg.lr
             st.t = t
             gtd = lucid.linalg.dot(flat_grad, d)
             if gtd > -cfg.tolerance_change:
@@ -776,9 +754,7 @@ class LBFGS(Optimizer):
             if cfg.line_search_fn is not None:
                 obj = partial(self._probe, closure, params, _snapshot(params), d)
                 start = _LinePoint(0.0, loss, flat_grad, gtd)
-                point, evals = _strong_wolfe(
-                    obj, d, start, t, cfg.max_eval - current_evals
-                )
+                point, evals = _strong_wolfe(obj, d, start, t, cfg.max_eval - current_evals)
                 loss, flat_grad, st.t = point.f, point.g, point.t
                 _add_step(params, point.t, d)
             else:

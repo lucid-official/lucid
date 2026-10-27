@@ -34,9 +34,7 @@ _HALF_DTYPES = [lucid.float16, lucid.bfloat16]
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", _HALF_DTYPES)
-def test_thousand_duplicate_index_add_and_scatter_add(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_thousand_duplicate_index_add_and_scatter_add(device: str, dtype: lucid.dtype) -> None:
     n = 1000
     idx = lucid.zeros(n, dtype=lucid.int64, device=device)
     src = lucid.ones(n, dtype=dtype, device=device)
@@ -58,9 +56,7 @@ def test_thousand_duplicate_index_add_and_scatter_add(
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", _HALF_DTYPES)
-def test_thousand_duplicate_scatter_reduce_sum_and_mean(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_thousand_duplicate_scatter_reduce_sum_and_mean(device: str, dtype: lucid.dtype) -> None:
     n = 1000
     idx = lucid.zeros(n, dtype=lucid.int64, device=device)
     src = lucid.ones(n, dtype=dtype, device=device)
@@ -71,9 +67,7 @@ def test_thousand_duplicate_scatter_reduce_sum_and_mean(
     assert out_sum.dtype == dtype
     assert out_sum.to("cpu").to(lucid.float32).tolist() == [1000.0, 0.0, 0.0, 0.0]
 
-    out_sum_no_self = lucid.scatter_reduce(
-        base_one, 0, idx, src, reduce="sum", include_self=False
-    )
+    out_sum_no_self = lucid.scatter_reduce(base_one, 0, idx, src, reduce="sum", include_self=False)
     assert out_sum_no_self.dtype == dtype
     assert out_sum_no_self.to("cpu").to(lucid.float32).tolist() == [
         1000.0,
@@ -232,11 +226,7 @@ def test_scatter_prod_and_float32_bit_identity() -> None:
     src_f32 = lucid.ones(1000, dtype=lucid.float32)
     base_f32 = lucid.zeros(4, dtype=lucid.float32)
     cpu_sa = base_f32.scatter_add(0, idx_f32, src_f32)
-    gpu_sa = (
-        base_f32.to("metal")
-        .scatter_add(0, idx_f32.to("metal"), src_f32.to("metal"))
-        .to("cpu")
-    )
+    gpu_sa = base_f32.to("metal").scatter_add(0, idx_f32.to("metal"), src_f32.to("metal")).to("cpu")
     assert np.array_equal(cpu_sa.numpy(), gpu_sa.numpy())
 
     w_cpu = lucid.ones(4, 2, dtype=lucid.float32, requires_grad=True)
@@ -265,9 +255,7 @@ def test_bfloat16_scatter_reduce_amax_ties_and_grid_sample_backward(
     (out * 1000.0).sum().backward()
     assert src.grad is not None
     assert src.grad.dtype == lucid.bfloat16
-    assert src.grad[0].to("cpu").to(lucid.float32).item() == pytest.approx(
-        1.0, rel=1e-2
-    )
+    assert src.grad[0].to("cpu").to(lucid.float32).item() == pytest.approx(1.0, rel=1e-2)
 
     # 1000 output grid points sampling the top-left corner (-1, -1) accumulate
     # 1000.0 into input[0, 0, 0, 0] in bfloat16.

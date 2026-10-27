@@ -17,9 +17,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid.test._fixtures.devices import metal_available
 
-pytestmark = pytest.mark.skipif(
-    not metal_available(), reason="Metal device not available"
-)
+pytestmark = pytest.mark.skipif(not metal_available(), reason="Metal device not available")
 
 _FLOAT_DTYPES = [lucid.float32, lucid.float16, lucid.bfloat16]
 _INT_DTYPES = [lucid.int8, lucid.int16, lucid.int32, lucid.int64]
@@ -32,9 +30,7 @@ def test_gather_float_dtypes_in_and_out_of_range(
     src_dtype: lucid.dtype, idx_dtype: lucid.dtype
 ) -> None:
     src = lucid.arange(12, dtype=src_dtype, device="metal").reshape(3, 4)
-    idx = lucid.tensor(
-        [[0, -1, 4, -5], [2, 3, -4, 99]], dtype=idx_dtype, device="metal"
-    )
+    idx = lucid.tensor([[0, -1, 4, -5], [2, 3, -4, 99]], dtype=idx_dtype, device="metal")
     out = lucid.gather(src, 1, idx).to(lucid.float32).tolist()
     assert out[0][0] == 0.0
     assert out[0][1] == 3.0
@@ -62,9 +58,7 @@ def test_gather_bool_and_complex64_out_of_range() -> None:
     b_idx = lucid.tensor([[0, 2, 3, -4]], dtype=lucid.int64, device="metal")
     assert lucid.gather(b_src, 1, b_idx).tolist() == [[True, True, False, False]]
 
-    c_src = lucid.tensor(
-        [[1.0 + 2.0j, 3.0 - 4.0j]], dtype=lucid.complex64, device="metal"
-    )
+    c_src = lucid.tensor([[1.0 + 2.0j, 3.0 - 4.0j]], dtype=lucid.complex64, device="metal")
     c_idx = lucid.tensor([[1, -2, 5, -3]], dtype=lucid.int64, device="metal")
     c_out = lucid.gather(c_src, 1, c_idx).tolist()[0]
     assert c_out[0] == complex(3.0, -4.0)
@@ -103,11 +97,7 @@ def test_gather_3d_axes_and_64bit_bounds(axis: int) -> None:
 def test_embedding_take_dtypes_and_strict_negative_bounds(
     src_dtype: lucid.dtype,
 ) -> None:
-    weight = (
-        lucid.arange(12, dtype=lucid.float32, device="metal")
-        .reshape(4, 3)
-        .to(src_dtype)
-    )
+    weight = lucid.arange(12, dtype=lucid.float32, device="metal").reshape(4, 3).to(src_dtype)
     idx = lucid.tensor([[2, -1], [4, 2**40]], dtype=lucid.int64, device="metal")
     out = _wrap(_C_engine.nn.embedding(_unwrap(weight), _unwrap(idx), -1))
     assert out.shape == (2, 2, 3)
@@ -139,17 +129,13 @@ def test_non_contiguous_views_and_empty_outputs() -> None:
     empty_out = lucid.gather(base, 1, empty_idx)
     assert empty_out.shape == (4, 0)
 
-    empty_emb = F.embedding(
-        lucid.zeros((0, 3), dtype=lucid.int64, device="metal"), base
-    )
+    empty_emb = F.embedding(lucid.zeros((0, 3), dtype=lucid.int64, device="metal"), base)
     assert empty_emb.shape == (0, 3, 5)
 
 
 def test_fused_gather_and_sink_take_zero_host_syncs() -> None:
     x = lucid.arange(24, dtype=lucid.float32, device="metal").reshape(4, 6)
-    idx_g = lucid.tensor(
-        [[0, 6, -1], [2, -7, 2**40]], dtype=lucid.int64, device="metal"
-    )
+    idx_g = lucid.tensor([[0, 6, -1], [2, -7, 2**40]], dtype=lucid.int64, device="metal")
     idx_s = lucid.tensor([1, 4, -1, 99], dtype=lucid.int64, device="metal")
     lucid.eval(x, idx_g, idx_s)
 

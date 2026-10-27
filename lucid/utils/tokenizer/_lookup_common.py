@@ -74,9 +74,7 @@ def _load_vocab_txt_and_specials(
     """Load ``vocab.txt`` + optional ``special_tokens_map.json`` from ``directory``."""
     vocab_path = os.path.join(directory, "vocab.txt")
     if not os.path.isfile(vocab_path):
-        raise FileNotFoundError(
-            f"{caller}.from_file: vocab.txt not found in {directory}"
-        )
+        raise FileNotFoundError(f"{caller}.from_file: vocab.txt not found in {directory}")
     vocab = _load_vocab_txt(vocab_path)
     st = special_tokens or _load_special_tokens_map(directory)
     return vocab, st
@@ -183,9 +181,7 @@ class _VocabTokenizer(Tokenizer):
         special_tokens: SpecialTokens | None = None,
     ) -> Self:
         """Load from a directory containing ``vocab.txt``."""
-        vocab, st = _load_vocab_txt_and_specials(
-            directory, special_tokens, cls.__name__
-        )
+        vocab, st = _load_vocab_txt_and_specials(directory, special_tokens, cls.__name__)
         return cls(vocab=vocab, special_tokens=st)
 
     from_pretrained = from_file

@@ -80,9 +80,7 @@ _REAL_FLOATS: frozenset[_C_engine.Dtype] = frozenset(
 )
 
 
-def _scalar_power(
-    base: _C_engine.TensorImpl, exponent: object
-) -> _C_engine.TensorImpl | None:
+def _scalar_power(base: _C_engine.TensorImpl, exponent: object) -> _C_engine.TensorImpl | None:
     """``base ** exponent`` through ``pow_scalar`` when that is the same op.
 
     A Python number as the exponent of a real floating tensor is a constant
@@ -130,9 +128,7 @@ def _refuse_bool_subtraction(a: object, b: object) -> None:
         )
 
 
-def _integer_impl(
-    x: int, dt: _C_engine.Dtype, device: _C_engine.Device
-) -> _C_engine.TensorImpl:
+def _integer_impl(x: int, dt: _C_engine.Dtype, device: _C_engine.Device) -> _C_engine.TensorImpl:
     """A 0-d integer impl holding ``x`` exactly, wrapped to ``dt``'s width.
 
     ``full`` takes its fill value as a C double, so an integer past 2**53
@@ -167,9 +163,7 @@ def _scalar_impl(
     exactly; everything else is a ``full`` of the float value.
     """
     if isinstance(x, complex):
-        part = (
-            _C_engine.Dtype.F64 if dt == _C_engine.Dtype.C128 else _C_engine.Dtype.F32
-        )
+        part = _C_engine.Dtype.F64 if dt == _C_engine.Dtype.C128 else _C_engine.Dtype.F32
         out = _C_engine.complex(
             _C_engine.full([], x.real, part, device),
             _C_engine.full([], x.imag, part, device),
@@ -233,9 +227,7 @@ def _unwrap_or_scalar(
     raise TypeError(f"Cannot convert {type(x).__name__} to TensorImpl")
 
 
-def _is_opmath_operand(
-    impl: _C_engine.TensorImpl, peer_device: _C_engine.Device
-) -> bool:
+def _is_opmath_operand(impl: _C_engine.TensorImpl, peer_device: _C_engine.Device) -> bool:
     """Whether a tensor operand may reach a half op-math op uncast.
 
     The engine's mul/div/floordiv read a 0-d float32 (float64 on the CPU)
@@ -539,14 +531,10 @@ def _check_grad_dtype(dtype: _C_engine.Dtype, requires_grad: bool) -> None:
         If ``requires_grad`` is set and ``dtype`` is bool or an integer.
     """
     if requires_grad and _promotion.is_integral(dtype):
-        raise RuntimeError(
-            "only Tensors of floating point and complex dtype can require gradients"
-        )
+        raise RuntimeError("only Tensors of floating point and complex dtype can require gradients")
 
 
-def _impl_with_grad(
-    impl: _C_engine.TensorImpl, requires_grad: bool
-) -> _C_engine.TensorImpl:
+def _impl_with_grad(impl: _C_engine.TensorImpl, requires_grad: bool) -> _C_engine.TensorImpl:
     """An alias of ``impl`` — same storage, no copy — with ``requires_grad`` set.
 
     Python code takes a ``clone_with_grad`` alias only through here, so no
@@ -583,9 +571,7 @@ def _set_grad(owner: _C_engine.TensorImpl, v: Tensor | None) -> None:
         owner.set_grad(_unwrap(v))
 
 
-def _swap_data(
-    old: _C_engine.TensorImpl, value: _C_engine.TensorImpl
-) -> _C_engine.TensorImpl:
+def _swap_data(old: _C_engine.TensorImpl, value: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     """The impl a tensor holding ``old`` takes for ``.data = value``.
 
     The one home of that swap (``Tensor.data``'s setter, and ``Module._apply``
@@ -623,9 +609,7 @@ def _swap_data(
         new.set_grad(grad)
     owner_ref = _GRAD_OWNERS.get(old)
     owner = owner_ref() if owner_ref is not None else None
-    if owner is not None and (
-        owner.grad_as_impl() is old or owner.grad_to_tensor() is old
-    ):
+    if owner is not None and (owner.grad_as_impl() is old or owner.grad_to_tensor() is old):
         owner.set_grad(new)
         slot = _read_grad(owner)
         if slot is not None:

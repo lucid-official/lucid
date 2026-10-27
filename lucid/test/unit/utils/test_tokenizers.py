@@ -182,9 +182,7 @@ def test_padding_without_a_pad_token_is_refused():
 
 
 def test_truncation_caps_the_length():
-    result = _word()(
-        ["the quick brown fox and the lazy dog"], truncation=True, max_length=3
-    )
+    result = _word()(["the quick brown fox and the lazy dog"], truncation=True, max_length=3)
     assert all(len(row) <= 3 for row in result["input_ids"])
 
 

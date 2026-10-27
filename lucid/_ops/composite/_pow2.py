@@ -106,11 +106,7 @@ def _reads_bits(work: Tensor) -> bool:
     Metal float32 reads and writes subnormals through ``_bitcast``; a
     phantom tensor has no bits to read.
     """
-    return (
-        work.device.type == "metal"
-        and work.dtype == lucid.float32
-        and not work._impl.is_phantom
-    )
+    return work.device.type == "metal" and work.dtype == lucid.float32 and not work._impl.is_phantom
 
 
 def _normalize_metal_f32(work: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -125,9 +121,7 @@ def _normalize_metal_f32(work: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         abs_bits = bits & 0x7FFFFFFF
         is_sub = ((abs_bits >> 23) == 0) & (abs_bits != 0)
         signed_frac = lucid.where(bits < 0, -abs_bits, abs_bits).to(dtype=lucid.float32)
-        shift = lucid.where(
-            is_sub, lucid.full_like(work, 149.0), lucid.zeros_like(work)
-        )
+        shift = lucid.where(is_sub, lucid.full_like(work, 149.0), lucid.zeros_like(work))
     return lucid.where(is_sub, signed_frac, work), shift, bits
 
 
@@ -156,12 +150,7 @@ def _restore_metal_f32_subnormals(
             & (~lucid.isnan(work_norm))
             & (~lucid.isnan(exp_eff))
         )
-        flushed = (
-            finite_nz
-            & (lucid.abs(out) == 0.0)
-            & (scaled >= 0.5)
-            & (scaled <= float(1 << 23))
-        )
+        flushed = finite_nz & (lucid.abs(out) == 0.0) & (scaled >= 0.5) & (scaled <= float(1 << 23))
         sign_bit = bits & (-0x80000000)
         sub_bits = sign_bit | lucid.round(scaled).to(dtype=lucid.int32)
         sub_f32 = _wrap(_C_engine._bitcast(sub_bits._impl, _C_engine.Dtype.F32))
@@ -198,9 +187,7 @@ def _frexp_arith(work: Tensor) -> tuple[Tensor, Tensor]:
     abs_x = lucid.abs(work)
     special = (abs_x == 0.0) | lucid.isinf(work) | lucid.isnan(work)
     safe_abs = lucid.where(special, lucid.full_like(work, 1.0), abs_x)
-    e = lucid.where(
-        special, lucid.zeros_like(work), lucid.floor(lucid.log2(safe_abs)) + 1.0
-    )
+    e = lucid.where(special, lucid.zeros_like(work), lucid.floor(lucid.log2(safe_abs)) + 1.0)
     e1 = lucid.trunc(e * 0.5)
     m = (work * _pow2(-e1)) * _pow2(-(e - e1))
     hi = (~special) & (lucid.abs(m) >= 1.0)
@@ -238,9 +225,7 @@ class _Ldexp(Function):
 
     @override
     @staticmethod
-    def backward(
-        ctx: FunctionCtx, grad: Tensor
-    ) -> tuple[Tensor | None, Tensor | None, None]:
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[Tensor | None, Tensor | None, None]:
         saved = ctx.saved_tensors
         e = saved[0]
         needs_x, needs_e, _ = ctx.needs_input_grad
@@ -400,9 +385,7 @@ def _copysign(x: Tensor, y: Tensor) -> Tensor:
             obits = _wrap(_C_engine._bitcast(out._impl, int_dt))
             neg_obits = obits | _SIGN_BIT_MASK[out.dtype]
             fixed_bits = lucid.where(lucid.isnan(out) & sb, neg_obits, obits)
-            fixed = _wrap(
-                _C_engine._bitcast(fixed_bits._impl, _SIGN_FLOAT_DTYPE[out.dtype])
-            )
+            fixed = _wrap(_C_engine._bitcast(fixed_bits._impl, _SIGN_FLOAT_DTYPE[out.dtype]))
         if not out.requires_grad:
             return fixed
         out = lucid.where(lucid.isnan(out), fixed, out)

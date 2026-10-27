@@ -320,11 +320,7 @@ class TestRelaxed:
         assert (s > 0).all() and (s < 1).all()
 
     def test_relaxed_ohc_simplex(self) -> None:
-        s = (
-            D.RelaxedOneHotCategorical(0.5, probs=lucid.tensor([0.2, 0.5, 0.3]))
-            .rsample()
-            .numpy()
-        )
+        s = D.RelaxedOneHotCategorical(0.5, probs=lucid.tensor([0.2, 0.5, 0.3])).rsample().numpy()
         assert abs(s.sum() - 1.0) < 1e-5
 
 
@@ -343,10 +339,7 @@ class TestTransforms:
         ref = D.LogNormal(0.0, 1.0)
         for v in (0.5, 1.0, 2.0, 3.0):
             assert (
-                abs(
-                    td.log_prob(lucid.tensor(v)).item()
-                    - ref.log_prob(lucid.tensor(v)).item()
-                )
+                abs(td.log_prob(lucid.tensor(v)).item() - ref.log_prob(lucid.tensor(v)).item())
                 < 1e-4
             )
 

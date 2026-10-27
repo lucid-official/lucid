@@ -94,9 +94,7 @@ def _weighted_unique_epochs(generator):
 
 def _split_epochs(generator):
     dataset = Indices(_N)
-    return lambda: random_split(dataset, [_N // 2, _N // 2], generator=generator)[
-        0
-    ].indices
+    return lambda: random_split(dataset, [_N // 2, _N // 2], generator=generator)[0].indices
 
 
 # Every public ``generator=`` taker, and how to draw one epoch from it.

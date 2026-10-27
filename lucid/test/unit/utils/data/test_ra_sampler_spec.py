@@ -100,9 +100,7 @@ class TestPaperFormulaInvariants:
     @pytest.mark.parametrize("N", [10, 20, 47, 100])
     @pytest.mark.parametrize("W", [1, 2, 4])
     @pytest.mark.parametrize("R", [1, 3, 4])
-    def test_iter_length_matches_num_selected_samples(
-        self, N: int, W: int, R: int
-    ) -> None:
+    def test_iter_length_matches_num_selected_samples(self, N: int, W: int, R: int) -> None:
         """Iteration emits exactly ``num_selected_samples`` indices."""
         ds = _ToyDataset(N)
         s = D.RASampler(ds, num_replicas=W, num_repeats=R, shuffle=False)
@@ -144,9 +142,7 @@ class TestRepeatStructure:
         full_runs = N // R
         for run_idx in range(full_runs):
             chunk = out[run_idx * R : (run_idx + 1) * R]
-            assert (
-                chunk == [run_idx] * R
-            ), f"Run {run_idx} expected {[run_idx] * R}, got {chunk}"
+            assert chunk == [run_idx] * R, f"Run {run_idx} expected {[run_idx] * R}, got {chunk}"
 
     @pytest.mark.parametrize("R", [2, 3, 4])
     def test_repeat_counts_with_shuffle(self, R: int) -> None:

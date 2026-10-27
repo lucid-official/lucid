@@ -253,9 +253,7 @@ def constant_(tensor: Tensor, val: float) -> Tensor:
     """
     return _fill_from_impl(
         tensor,
-        _C_engine.full(
-            list(tensor.shape), val, tensor._impl.dtype, tensor._impl.device
-        ),
+        _C_engine.full(list(tensor.shape), val, tensor._impl.dtype, tensor._impl.device),
     )
 
 
@@ -381,9 +379,7 @@ def eye_(tensor: Tensor) -> Tensor:
     if tensor.ndim != 2:
         raise ValueError("eye_() requires a 2D tensor")
     n, m = tensor.shape
-    return _fill_from_impl(
-        tensor, _C_engine.eye(n, m, 0, tensor._impl.dtype, tensor._impl.device)
-    )
+    return _fill_from_impl(tensor, _C_engine.eye(n, m, 0, tensor._impl.dtype, tensor._impl.device))
 
 
 @_skippable
@@ -828,9 +824,7 @@ def orthogonal_(
     rows: int = int(tensor.shape[0])
     cols: int = int(tensor.numel() // rows)
     # All work on the engine — no numpy.
-    flat: Tensor = _lucid.randn(
-        rows, cols, device=tensor._impl.device, generator=generator
-    )
+    flat: Tensor = _lucid.randn(rows, cols, device=tensor._impl.device, generator=generator)
     # Use QR on the (max-dim × min-dim) shape so we always get an
     # orthonormal Q with the right number of columns, and multiply by
     # sign(diag(R)) so Q is Haar-distributed on O(n).
@@ -843,9 +837,7 @@ def orthogonal_(
         q = q.mT
     if gain != 1.0:
         q = q * gain
-    src_t: Tensor = _lucid.tensor(
-        q, dtype=tensor._impl.dtype, device=tensor._impl.device
-    )
+    src_t: Tensor = _lucid.tensor(q, dtype=tensor._impl.dtype, device=tensor._impl.device)
     return _fill_from_impl(tensor, src_t._impl)
 
 
@@ -920,9 +912,7 @@ def sparse_(
     dev = tensor._impl.device
     # Per-column random row selection: ``argsort`` of uniform draws gives a
     # uniform permutation; take the first ``n_zero`` rows of each column.
-    src: Tensor = _lucid.normal(
-        0.0, std, size=(rows, cols), device=dev, generator=generator
-    )
+    src: Tensor = _lucid.normal(0.0, std, size=(rows, cols), device=dev, generator=generator)
     if n_zero > 0:
         # noise is shape (rows, cols); per-column argsort along dim=0.
         noise: Tensor = _lucid.rand(rows, cols, device=dev, generator=generator)
@@ -992,9 +982,7 @@ def dirac_(tensor: Tensor, groups: int = 1) -> Tensor:
     out_ch: int = int(tensor.shape[0])
     in_ch_per_group: int = int(tensor.shape[1])
     if out_ch % groups != 0:
-        raise ValueError(
-            f"out_channels ({out_ch}) must be divisible by groups ({groups})"
-        )
+        raise ValueError(f"out_channels ({out_ch}) must be divisible by groups ({groups})")
     if tensor.numel() == 0:
         return tensor
 
@@ -1019,9 +1007,7 @@ def dirac_(tensor: Tensor, groups: int = 1) -> Tensor:
             _lucid.tensor(in_idx_list, dtype=_lucid.int64, device=dev),
         ]
         for c in spatial_centres:
-            idx_tensors.append(
-                _lucid.tensor([c] * n_writes, dtype=_lucid.int64, device=dev)
-            )
+            idx_tensors.append(_lucid.tensor([c] * n_writes, dtype=_lucid.int64, device=dev))
         src = _lucid.index_put(
             src,
             tuple(idx_tensors),

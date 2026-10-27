@@ -27,9 +27,7 @@ _ORDERS = {"sorted": [5, 3, 2], "unsorted": [3, 5, 2]}
 
 
 def _pack(x: lucid.Tensor, lengths: list[int], device: str) -> PackedSequence:
-    return pack_padded_sequence(
-        x.to(device), lengths, enforce_sorted=lengths == _ORDERS["sorted"]
-    )
+    return pack_padded_sequence(x.to(device), lengths, enforce_sorted=lengths == _ORDERS["sorted"])
 
 
 def _state(state: object) -> list[object]:
@@ -52,8 +50,7 @@ def test_packed_hx_follows_the_callers_batch_order(
     for b, n in enumerate(lengths):
         x_np[n:, b] = 0.0
     hx_np = [
-        rng.standard_normal((1, _B, _H)).astype(np_dt)
-        for _ in range(2 if kind == "LSTM" else 1)
+        rng.standard_normal((1, _B, _H)).astype(np_dt) for _ in range(2 if kind == "LSTM" else 1)
     ]
     w_out = rng.standard_normal((sum(lengths), _H)).astype(np_dt)
     w_state = rng.standard_normal((1, _B, _H)).astype(np_dt)
@@ -78,9 +75,7 @@ def test_packed_hx_follows_the_callers_batch_order(
     rx = ref.tensor(x_np, requires_grad=True)
     rhx = [ref.tensor(h, requires_grad=True) for h in hx_np]
     rfeed = (tuple(rhx) if kind == "LSTM" else rhx[0]) if given else None
-    rpacked = ref.nn.utils.rnn.pack_padded_sequence(
-        rx, lengths, enforce_sorted=order == "sorted"
-    )
+    rpacked = ref.nn.utils.rnn.pack_padded_sequence(rx, lengths, enforce_sorted=order == "sorted")
     rout, rstate = theirs(rpacked, rfeed)
     rloss = (rout.data * ref.tensor(w_out)).sum()
     for s in _state(rstate):

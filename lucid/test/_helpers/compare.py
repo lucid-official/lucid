@@ -45,12 +45,9 @@ def assert_close(
     e = _to_numpy(expected)
     if a.shape != e.shape:
         raise AssertionError(
-            f"{msg + ': ' if msg else ''}shape mismatch — "
-            f"actual={a.shape} expected={e.shape}"
+            f"{msg + ': ' if msg else ''}shape mismatch — " f"actual={a.shape} expected={e.shape}"
         )
-    np.testing.assert_allclose(
-        a, e, atol=atol, rtol=rtol, err_msg=msg or "values do not match"
-    )
+    np.testing.assert_allclose(a, e, atol=atol, rtol=rtol, err_msg=msg or "values do not match")
 
 
 def assert_equal_int(actual: Any, expected: Any, *, msg: str = "") -> None:
@@ -59,8 +56,7 @@ def assert_equal_int(actual: Any, expected: Any, *, msg: str = "") -> None:
     e = _to_numpy(expected)
     if a.shape != e.shape:
         raise AssertionError(
-            f"{msg + ': ' if msg else ''}shape mismatch — "
-            f"actual={a.shape} expected={e.shape}"
+            f"{msg + ': ' if msg else ''}shape mismatch — " f"actual={a.shape} expected={e.shape}"
         )
     np.testing.assert_array_equal(a, e, err_msg=msg or "values do not match")
 

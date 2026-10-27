@@ -214,12 +214,8 @@ class GeneralizedPareto(Distribution):
     def log_prob(self, value: Tensor) -> Tensor:
         """Log-probability density evaluated at ``value``."""
         z = self._z(value)
-        eq_zero = lucid.isclose(
-            self.concentration, lucid.zeros_like(self.concentration)
-        )
-        safe_conc = lucid.where(
-            eq_zero, lucid.ones_like(self.concentration), self.concentration
-        )
+        eq_zero = lucid.isclose(self.concentration, lucid.zeros_like(self.concentration))
+        safe_conc = lucid.where(eq_zero, lucid.ones_like(self.concentration), self.concentration)
         y = 1.0 / safe_conc + lucid.ones_like(z)
         where_nonzero = lucid.where(y == 0.0, y, y * lucid.log1p(safe_conc * z))
         return -self.scale.log() - lucid.where(eq_zero, z, where_nonzero)
@@ -230,12 +226,8 @@ class GeneralizedPareto(Distribution):
 
     def _log_survival_unvalidated(self, value: Tensor) -> Tensor:
         z = self._z(value)
-        eq_zero = lucid.isclose(
-            self.concentration, lucid.zeros_like(self.concentration)
-        )
-        safe_conc = lucid.where(
-            eq_zero, lucid.ones_like(self.concentration), self.concentration
-        )
+        eq_zero = lucid.isclose(self.concentration, lucid.zeros_like(self.concentration))
+        safe_conc = lucid.where(eq_zero, lucid.ones_like(self.concentration), self.concentration)
         where_nonzero = -lucid.log1p(safe_conc * z) / safe_conc
         return lucid.where(eq_zero, -z, where_nonzero)
 
@@ -415,9 +407,7 @@ class VonMises(Distribution):
         validate_args: bool | None = None,
     ) -> None:
         """Initialise a :class:`VonMises` distribution."""
-        self.loc, self.concentration = _broadcast_pair(
-            _as_tensor(loc), _as_tensor(concentration)
-        )
+        self.loc, self.concentration = _broadcast_pair(_as_tensor(loc), _as_tensor(concentration))
         super().__init__(
             batch_shape=tuple(self.loc.shape),
             event_shape=(),

@@ -125,9 +125,7 @@ def _csgo_tag(pretrained: bool | str) -> bool | str:
     return _tag(pretrained)
 
 
-def _actions_for(
-    entry: WeightsEnum | None, overrides: dict[str, object]
-) -> dict[str, object]:
+def _actions_for(entry: WeightsEnum | None, overrides: dict[str, object]) -> dict[str, object]:
     """Add the checkpoint's action count to ``overrides`` when one applies.
 
     Atari exposes a different minimal action set per game — 3 for
@@ -278,9 +276,7 @@ def diamond_world_model(
     ((1, 3, 3, 16, 16), (1, 3))
     """
     entry = weights_mod.resolve_weights(DIAMONDWeights, _tag(pretrained), weights)
-    model = DIAMONDForWorldModeling(
-        apply_overrides(_CFG_ATARI, _actions_for(entry, overrides))
-    )
+    model = DIAMONDForWorldModeling(apply_overrides(_CFG_ATARI, _actions_for(entry, overrides)))
     if entry is not None:
         # The checkpoint is the agent's; this wrapper keeps it under
         # ``diamond``, so the load targets that rather than the wrapper.

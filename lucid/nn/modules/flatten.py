@@ -336,9 +336,7 @@ class Unfold(Module):
         """
         from lucid.nn.functional.sampling import unfold as _unfold
 
-        return _unfold(
-            input, self.kernel_size, self.dilation, self.padding, self.stride
-        )
+        return _unfold(input, self.kernel_size, self.dilation, self.padding, self.stride)
 
     @override
     def extra_repr(self) -> str:
@@ -469,18 +467,12 @@ class Fold(Module):
         """Initialise the Fold module. See the class docstring for parameter semantics."""
         super().__init__()
         self.output_size = (
-            output_size
-            if isinstance(output_size, tuple)
-            else (output_size, output_size)
+            output_size if isinstance(output_size, tuple) else (output_size, output_size)
         )
         self.kernel_size = (
-            kernel_size
-            if isinstance(kernel_size, tuple)
-            else (kernel_size, kernel_size)
+            kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
         )
-        self.dilation = (
-            dilation if isinstance(dilation, tuple) else (dilation, dilation)
-        )
+        self.dilation = dilation if isinstance(dilation, tuple) else (dilation, dilation)
         self.padding = padding if isinstance(padding, tuple) else (padding, padding)
         self.stride = stride if isinstance(stride, tuple) else (stride, stride)
 

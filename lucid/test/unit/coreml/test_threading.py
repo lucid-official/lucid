@@ -63,11 +63,7 @@ def _slow_enough() -> nn.Module:
     slower machine moves both sides together.
     """
     return nn.Sequential(
-        *[
-            layer
-            for _ in range(12)
-            for layer in (nn.Conv2d(64, 64, 3, padding=1), nn.ReLU())
-        ]
+        *[layer for _ in range(12) for layer in (nn.Conv2d(64, 64, 3, padding=1), nn.ReLU())]
     ).eval()
 
 
@@ -128,8 +124,7 @@ class TestOtherThreadsKeepRunning:
         # whole prediction — there is no lucky round — so the minimum is
         # the statistic that separates the two.
         stalls = [
-            _longest_stall(lambda: [exported.predict(x) for _ in range(20)])[0]
-            for _ in range(3)
+            _longest_stall(lambda: [exported.predict(x) for _ in range(20)])[0] for _ in range(3)
         ]
         best = min(stalls)
         assert best < each / 3, (

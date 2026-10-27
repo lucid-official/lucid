@@ -36,16 +36,12 @@ def _precision_to_scale_tril(precision: Tensor) -> Tensor:
     """
     flipped = lucid.linalg.cholesky(lucid.flip(precision, (-2, -1)))
     l_inv = lucid.flip(flipped, (-2, -1)).mT
-    eye = lucid.eye(
-        int(precision.shape[-1]), dtype=precision.dtype, device=precision.device
-    )
+    eye = lucid.eye(int(precision.shape[-1]), dtype=precision.dtype, device=precision.device)
     eye = eye.broadcast_to(tuple(l_inv.shape))
     return lucid.linalg.solve_triangular(l_inv, eye, upper=False)
 
 
-def _scale_tril_of(
-    covariance_matrix: Tensor | None, precision_matrix: Tensor | None
-) -> Tensor:
+def _scale_tril_of(covariance_matrix: Tensor | None, precision_matrix: Tensor | None) -> Tensor:
     """The lower Cholesky factor of the covariance given by one of the two.
 
     Shared by every family parameterised by a covariance, a precision or a
@@ -215,9 +211,7 @@ class MultivariateNormal(Distribution):
             With validation off, if a covariance or precision matrix has no
             Cholesky factorisation.
         """
-        n_set = sum(
-            x is not None for x in (covariance_matrix, precision_matrix, scale_tril)
-        )
+        n_set = sum(x is not None for x in (covariance_matrix, precision_matrix, scale_tril))
         if n_set != 1:
             raise ValueError(
                 "MultivariateNormal: exactly one of covariance_matrix / "
@@ -428,9 +422,7 @@ def _batch_lowrank_logdet(D: Tensor, capacitance_tril: Tensor) -> Tensor:
     return 2.0 * diag_c.log().sum(dim=-1) + D.log().sum(dim=-1)
 
 
-def _batch_lowrank_mahalanobis(
-    W: Tensor, D: Tensor, x: Tensor, capacitance_tril: Tensor
-) -> Tensor:
+def _batch_lowrank_mahalanobis(W: Tensor, D: Tensor, x: Tensor, capacitance_tril: Tensor) -> Tensor:
     r"""Woodbury matrix identity for the squared Mahalanobis distance
     :math:`\mathbf{x}^\top (W W^\top + D)^{-1} \mathbf{x}`:
 
@@ -441,9 +433,7 @@ def _batch_lowrank_mahalanobis(
     """
     Wt_Dinv = W.mT / D.unsqueeze(-2)
     Wt_Dinv_x = _batch_mv(Wt_Dinv, x)
-    sol = lucid.linalg.solve_triangular(
-        capacitance_tril, Wt_Dinv_x.unsqueeze(-1), upper=False
-    )
+    sol = lucid.linalg.solve_triangular(capacitance_tril, Wt_Dinv_x.unsqueeze(-1), upper=False)
     mahalanobis_term1 = (x * x / D).sum(dim=-1)
     mahalanobis_term2 = (sol * sol).sum(dim=(-2, -1))
     return mahalanobis_term1 - mahalanobis_term2
@@ -505,13 +495,10 @@ class LowRankMultivariateNormal(Distribution):
             )
         if int(cov_factor.shape[-2]) != event_shape[0]:
             raise ValueError(
-                f"cov_factor must be a batch of matrices with shape "
-                f"{event_shape[0]} x m"
+                f"cov_factor must be a batch of matrices with shape " f"{event_shape[0]} x m"
             )
         if int(cov_diag.shape[-1]) != event_shape[0]:
-            raise ValueError(
-                f"cov_diag must be a batch of vectors with shape {event_shape}"
-            )
+            raise ValueError(f"cov_diag must be a batch of vectors with shape {event_shape}")
 
         loc_dummy = loc.unsqueeze(-1)
         cov_diag_dummy = cov_diag.unsqueeze(-1)
@@ -544,9 +531,7 @@ class LowRankMultivariateNormal(Distribution):
         loc_shape = batch_shape + self.event_shape
         new.loc = self.loc.expand(loc_shape)
         new.cov_diag = self.cov_diag.expand(loc_shape)
-        new.cov_factor = self.cov_factor.expand(
-            loc_shape + (int(self.cov_factor.shape[-1]),)
-        )
+        new.cov_factor = self.cov_factor.expand(loc_shape + (int(self.cov_factor.shape[-1]),))
         new._unbroadcasted_cov_factor = self._unbroadcasted_cov_factor
         new._unbroadcasted_cov_diag = self._unbroadcasted_cov_diag
         new._capacitance_tril = self._capacitance_tril
@@ -575,9 +560,7 @@ class LowRankMultivariateNormal(Distribution):
     def variance(self) -> Tensor:
         r"""Marginal variances :math:`\operatorname{diag}(W W^\top) + d`."""
         return (
-            (self._unbroadcasted_cov_factor * self._unbroadcasted_cov_factor).sum(
-                dim=-1
-            )
+            (self._unbroadcasted_cov_factor * self._unbroadcasted_cov_factor).sum(dim=-1)
             + self._unbroadcasted_cov_diag
         ).expand(self._batch_shape + self._event_shape)
 
@@ -591,9 +574,7 @@ class LowRankMultivariateNormal(Distribution):
             n, dtype=Dinvsqrt_W.dtype, device=Dinvsqrt_W.device
         )
         scale_sqrt = cov_diag_sqrt_unsqueeze * lucid.linalg.cholesky(K)
-        return scale_sqrt.expand(
-            self._batch_shape + self._event_shape + self._event_shape
-        )
+        return scale_sqrt.expand(self._batch_shape + self._event_shape + self._event_shape)
 
     @_lazy_param
     def covariance_matrix(self) -> Tensor:
@@ -602,24 +583,15 @@ class LowRankMultivariateNormal(Distribution):
             self._unbroadcasted_cov_factor @ self._unbroadcasted_cov_factor.mT
             + lucid.diag_embed(self._unbroadcasted_cov_diag)
         )
-        return covariance_matrix.expand(
-            self._batch_shape + self._event_shape + self._event_shape
-        )
+        return covariance_matrix.expand(self._batch_shape + self._event_shape + self._event_shape)
 
     @_lazy_param
     def precision_matrix(self) -> Tensor:
         r"""Precision matrix :math:`\Sigma^{-1}` computed via the Woodbury identity."""
-        Wt_Dinv = (
-            self._unbroadcasted_cov_factor.mT
-            / self._unbroadcasted_cov_diag.unsqueeze(-2)
-        )
+        Wt_Dinv = self._unbroadcasted_cov_factor.mT / self._unbroadcasted_cov_diag.unsqueeze(-2)
         A = lucid.linalg.solve_triangular(self._capacitance_tril, Wt_Dinv, upper=False)
-        precision_matrix = (
-            lucid.diag_embed(1.0 / self._unbroadcasted_cov_diag) - A.mT @ A
-        )
-        return precision_matrix.expand(
-            self._batch_shape + self._event_shape + self._event_shape
-        )
+        precision_matrix = lucid.diag_embed(1.0 / self._unbroadcasted_cov_diag) - A.mT @ A
+        return precision_matrix.expand(self._batch_shape + self._event_shape + self._event_shape)
 
     @override
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:

@@ -212,12 +212,8 @@ def test_prod_accepts_every_shared_dtype(dtype_name: str, np_dtype) -> None:
 @pytest.mark.parametrize("device", _DEVICES)
 def test_conv2d_accepts_float16(device: str) -> None:
     """``conv_nd_forward`` handled F32 and F64 only; Metal took F16."""
-    x = _tensor(
-        np.random.default_rng(0).random((1, 2, 4, 4)), "float16", np.float16, device
-    )
-    w = _tensor(
-        np.random.default_rng(1).random((2, 2, 3, 3)), "float16", np.float16, device
-    )
+    x = _tensor(np.random.default_rng(0).random((1, 2, 4, 4)), "float16", np.float16, device)
+    w = _tensor(np.random.default_rng(1).random((2, 2, 3, 3)), "float16", np.float16, device)
     out = F.conv2d(x, w, None, padding=1)
     assert out.shape == (1, 2, 4, 4)
     assert str(out.dtype).endswith("float16")
@@ -258,9 +254,7 @@ def test_half_conversion_has_one_home() -> None:
 
     root = Path(lucid.__file__).parent / "_C"
     definitions = [
-        path
-        for path in root.rglob("*.h")
-        if "inline float half_bits_to_float" in path.read_text()
+        path for path in root.rglob("*.h") if "inline float half_bits_to_float" in path.read_text()
     ]
     assert len(definitions) == 1, [str(p) for p in definitions]
     assert definitions[0].name == "Half.h"
@@ -282,12 +276,8 @@ def test_scatter_add_reads_its_index_at_the_right_width(dtype_name: str) -> None
     refuse it (LCD-288); int32 and int64 are read at their own width.
     """
     base = lucid.tensor(np.zeros((2, 4), dtype=np.float32))
-    index = lucid.tensor(
-        np.array([[0, 1, 2, 3], [3, 2, 1, 0]]), dtype=getattr(lucid, dtype_name)
-    )
-    source = lucid.tensor(
-        np.array([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]], np.float32)
-    )
+    index = lucid.tensor(np.array([[0, 1, 2, 3], [3, 2, 1, 0]]), dtype=getattr(lucid, dtype_name))
+    source = lucid.tensor(np.array([[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]], np.float32))
     if dtype_name in ("int8", "int16"):
         with pytest.raises((TypeError, IndexError), match="index"):
             lucid.scatter_add(base, 1, index, source)
@@ -348,11 +338,7 @@ def test_lu_solve_agrees_with_solve_at_every_pivot_width(dtype_name: str) -> Non
     a, b = _pivoting_system()
     reference = lucid.linalg.solve(a, b).numpy().ravel()
     lu, pivots = lucid.linalg.lu_factor(a)
-    got = (
-        lucid.linalg.lu_solve(lu, pivots.to(getattr(lucid, dtype_name)), b)
-        .numpy()
-        .ravel()
-    )
+    got = lucid.linalg.lu_solve(lu, pivots.to(getattr(lucid, dtype_name)), b).numpy().ravel()
     assert np.allclose(got, reference, rtol=1e-9), dtype_name
 
 
@@ -438,9 +424,7 @@ _NAN_VECTOR = np.array([1.0, np.nan, 3.0, -1.0], dtype=np.float32)
 def _both_devices(name, values=_NAN_VECTOR):
     out = []
     for device in _DEVICES:
-        got = getattr(lucid, name)(
-            lucid.tensor(values, dtype=lucid.float32, device=device)
-        )
+        got = getattr(lucid, name)(lucid.tensor(values, dtype=lucid.float32, device=device))
         got = got[0] if isinstance(got, tuple) else got
         out.append(np.asarray(got.numpy()).ravel())
     return out
@@ -659,9 +643,7 @@ def test_cumulative_scans_poison_after_a_nan(name: str, device: str) -> None:
     it too, so both devices were wrong and in different ways.
     """
     values = np.array([1.0, np.nan, 3.0, -1.0], dtype=np.float32)
-    out = getattr(lucid, name)(
-        lucid.tensor(values, dtype=lucid.float32, device=device), 0
-    )
+    out = getattr(lucid, name)(lucid.tensor(values, dtype=lucid.float32, device=device), 0)
     out = out[0] if isinstance(out, tuple) else out
     got = np.asarray(out.numpy()).ravel()
     assert got[0] == 1.0
@@ -673,9 +655,7 @@ def test_cumulative_scans_poison_after_a_nan(name: str, device: str) -> None:
 def test_cumulative_scans_unchanged_without_a_nan(name: str, device: str) -> None:
     """Guard the instrument."""
     values = np.array([1.0, 5.0, 3.0, -1.0], dtype=np.float32)
-    out = getattr(lucid, name)(
-        lucid.tensor(values, dtype=lucid.float32, device=device), 0
-    )
+    out = getattr(lucid, name)(lucid.tensor(values, dtype=lucid.float32, device=device), 0)
     out = out[0] if isinstance(out, tuple) else out
     expected = [1.0, 5.0, 5.0, 5.0] if name == "cummax" else [1.0, 1.0, 1.0, -1.0]
     assert np.allclose(np.asarray(out.numpy()).ravel(), expected)
@@ -753,9 +733,7 @@ def test_bfloat16_agrees_across_devices(name: str) -> None:
         "matmul": lambda t: lucid.matmul(t, t),
     }
     outs = [
-        np.asarray(
-            ops[name](lucid.tensor(values, dtype=lucid.bfloat16, device=d)).numpy()
-        )
+        np.asarray(ops[name](lucid.tensor(values, dtype=lucid.bfloat16, device=d)).numpy())
         for d in _DEVICES
     ]
     assert np.allclose(outs[0], outs[1], rtol=2e-2), name
@@ -779,9 +757,7 @@ def test_integer_matmul_agrees_everywhere(dtype_name: str, device: str) -> None:
 
 
 @pytest.mark.parametrize("dtype_name", ["int8", "int16"])
-@pytest.mark.parametrize(
-    "name", ["sort", "argsort", "argmax", "kthvalue", "cummax", "cummin"]
-)
+@pytest.mark.parametrize("name", ["sort", "argsort", "argmax", "kthvalue", "cummax", "cummin"])
 def test_ordering_ops_take_narrow_integers(name: str, dtype_name: str) -> None:
     """Ordering is exact through int64, so the narrow widths widen.
 
@@ -801,9 +777,7 @@ def test_ordering_ops_take_narrow_integers(name: str, dtype_name: str) -> None:
     }
     outs = []
     for device in _DEVICES:
-        got = ops[name](
-            lucid.tensor(values, dtype=getattr(lucid, dtype_name), device=device)
-        )
+        got = ops[name](lucid.tensor(values, dtype=getattr(lucid, dtype_name), device=device))
         got = got[0] if isinstance(got, tuple) else got
         outs.append(np.asarray(got.numpy()))
     assert np.array_equal(outs[0], outs[1]), f"{name} disagrees across devices"
@@ -820,14 +794,11 @@ def test_sort_narrow_integer_keeps_its_dtype() -> None:
     for device in _DEVICES:
         x = lucid.tensor(values, dtype=lucid.int8, device=device)
         sorted_values = lucid.sort(x)
-        sorted_values = (
-            sorted_values[0] if isinstance(sorted_values, tuple) else sorted_values
-        )
+        sorted_values = sorted_values[0] if isinstance(sorted_values, tuple) else sorted_values
         assert str(sorted_values.dtype).endswith("int8"), device
 
     index_dtypes = {
-        str(lucid.argsort(lucid.tensor(values, dtype=lucid.int8, device=d)).dtype)
-        for d in _DEVICES
+        str(lucid.argsort(lucid.tensor(values, dtype=lucid.int8, device=d)).dtype) for d in _DEVICES
     }
     assert len(index_dtypes) == 1, f"index dtype differs across devices: {index_dtypes}"
 
@@ -855,9 +826,7 @@ def test_pooling_takes_half_on_both_devices(name: str) -> None:
     call, shape = _POOLING[name]
     outs = []
     for device in _DEVICES:
-        x = np.ascontiguousarray(
-            np.random.default_rng(0).random(shape).astype(np.float16)
-        )
+        x = np.ascontiguousarray(np.random.default_rng(0).random(shape).astype(np.float16))
         got = call(lucid.tensor(x, dtype=lucid.float16, device=device))
         got = got[0] if isinstance(got, tuple) else got
         assert str(got.dtype).endswith("float16"), f"{name} on {device}"
@@ -905,9 +874,7 @@ def test_integer_avg_pool_truncates_toward_zero() -> None:
     for device in _DEVICES:
         for values, expected in ((positive, 4), (negative, -4)):
             got = F.avg_pool2d(
-                lucid.tensor(
-                    np.ascontiguousarray(values), dtype=lucid.int32, device=device
-                ),
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device),
                 2,
             )
             assert int(np.asarray(got.numpy()).ravel()[0]) == expected, device
@@ -942,9 +909,7 @@ def test_real_valued_layer_ops_promote_integers(name: str) -> None:
     values = np.array([[1, 2, 3]], dtype=np.int32)
     outs = []
     for device in _DEVICES:
-        got = _PROMOTING_LAYER_OPS[name](
-            lucid.tensor(values, dtype=lucid.int32, device=device)
-        )
+        got = _PROMOTING_LAYER_OPS[name](lucid.tensor(values, dtype=lucid.int32, device=device))
         assert lucid.is_floating_point(got), f"{name} on {device} stayed integral"
         outs.append(np.asarray(got.numpy(), dtype=np.float64))
     assert np.allclose(outs[0], outs[1], atol=1e-5), f"{name} disagrees across devices"
@@ -964,9 +929,7 @@ def test_softmax_of_integers_is_a_distribution() -> None:
         assert np.allclose(row, [0.09003057, 0.24472847, 0.66524096], atol=1e-6), device
 
 
-@pytest.mark.parametrize(
-    "name", ["rand_like", "randn_like", "dropout", "uniform", "normal"]
-)
+@pytest.mark.parametrize("name", ["rand_like", "randn_like", "dropout", "uniform", "normal"])
 def test_random_generators_draw_half(name: str) -> None:
     """No input to widen, so the draw is made wide and rounded.
 
@@ -999,9 +962,7 @@ def test_metal_storage_dtype_matches_its_bytes() -> None:
     got = F.avg_pool2d(
         lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device="metal"), 2
     )
-    assert (
-        abs(int(np.asarray(got.numpy()).ravel()[0])) < 100
-    ), "bytes were reinterpreted"
+    assert abs(int(np.asarray(got.numpy()).ravel()[0])) < 100, "bytes were reinterpreted"
 
 
 def test_bool_has_no_negation_on_either_device() -> None:
@@ -1014,9 +975,7 @@ def test_bool_has_no_negation_on_either_device() -> None:
     """
     values = np.array([[True, False], [False, True]])
     for device in _DEVICES:
-        with pytest.raises(
-            Exception
-        ):  # noqa: B017 - the two backends raise differently
+        with pytest.raises(Exception):  # noqa: B017 - the two backends raise differently
             lucid.neg(lucid.tensor(values, dtype=lucid.bool, device=device))
 
 
@@ -1030,9 +989,7 @@ def test_ordering_of_bools_is_refused_on_both_devices(name: str) -> None:
     """
     values = np.array([[True, False], [False, True]])
     for device in _DEVICES:
-        with pytest.raises(
-            Exception
-        ):  # noqa: B017 - the two backends raise differently
+        with pytest.raises(Exception):  # noqa: B017 - the two backends raise differently
             getattr(lucid, name)(lucid.tensor(values, dtype=lucid.bool, device=device))
 
 
@@ -1091,9 +1048,7 @@ def test_eye_builds_an_int64_identity_on_both_devices() -> None:
     for device in _DEVICES:
         got = lucid.nn.init.eye(lucid.zeros((3, 3), dtype=lucid.int64, device=device))
         assert str(got.dtype).endswith("int64"), device
-        assert np.array_equal(
-            np.asarray(got.numpy()), np.eye(3, dtype=np.int64)
-        ), device
+        assert np.array_equal(np.asarray(got.numpy()), np.eye(3, dtype=np.int64)), device
 
 
 def test_local_response_norm_promotes_rather_than_degenerating() -> None:
@@ -1109,9 +1064,7 @@ def test_local_response_norm_promotes_rather_than_degenerating() -> None:
         got = F.local_response_norm(x, 2)
         assert lucid.is_floating_point(got), device
         flat = np.asarray(got.numpy(), dtype=np.float64).ravel()
-        assert not np.array_equal(
-            flat, values.ravel()
-        ), f"{device}: became the identity"
+        assert not np.array_equal(flat, values.ravel()), f"{device}: became the identity"
         # Against the float path rather than a literal — the numbers are
         # the composition's, not mine, and writing them out by hand was
         # how this assertion first failed.
@@ -1131,9 +1084,7 @@ def test_local_response_norm_promotes_rather_than_degenerating() -> None:
 # ── NaN, and the gradient of an op that has none ─────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "dtype_name,np_dtype", [("float32", np.float32), ("float64", np.float64)]
-)
+@pytest.mark.parametrize("dtype_name,np_dtype", [("float32", np.float32), ("float64", np.float64)])
 @pytest.mark.parametrize("name", ["minimum", "maximum"])
 def test_minimum_and_maximum_propagate_nan_at_both_widths(
     name: str, dtype_name: str, np_dtype
@@ -1152,20 +1103,12 @@ def test_minimum_and_maximum_propagate_nan_at_both_widths(
         if dtype_name == "float64" and device == "metal":
             continue  # Metal has no float64
         got = getattr(lucid, name)(
-            lucid.tensor(
-                np.ascontiguousarray(a), dtype=getattr(lucid, dtype_name), device=device
-            ),
-            lucid.tensor(
-                np.ascontiguousarray(b), dtype=getattr(lucid, dtype_name), device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(a), dtype=getattr(lucid, dtype_name), device=device),
+            lucid.tensor(np.ascontiguousarray(b), dtype=getattr(lucid, dtype_name), device=device),
         )
         flat = np.asarray(got.numpy(), dtype=np.float64)
-        assert np.isnan(
-            flat[0]
-        ), f"{name}/{dtype_name}/{device}: lost NaN from the left"
-        assert np.isnan(
-            flat[1]
-        ), f"{name}/{dtype_name}/{device}: lost NaN from the right"
+        assert np.isnan(flat[0]), f"{name}/{dtype_name}/{device}: lost NaN from the left"
+        assert np.isnan(flat[1]), f"{name}/{dtype_name}/{device}: lost NaN from the right"
         assert flat[2] == (2.0 if name == "minimum" else 3.0)
 
 
@@ -1256,9 +1199,7 @@ def test_running_extremes_accept_bool(name: str) -> None:
     values = np.array([[True, False], [False, True]])
     outs = []
     for device in _DEVICES:
-        got = getattr(lucid, name)(
-            lucid.tensor(values, dtype=lucid.bool, device=device), 0
-        )
+        got = getattr(lucid, name)(lucid.tensor(values, dtype=lucid.bool, device=device), 0)
         got = got[0] if isinstance(got, tuple) else got
         assert str(got.dtype).endswith("bool"), f"{name} on {device}"
         outs.append(np.asarray(got.numpy()).tolist())
@@ -1304,13 +1245,9 @@ def test_dropout_refuses_integers_on_both_devices() -> None:
     """
     values = np.array([[1, 2], [3, 4]], dtype=np.int32)
     for device in _DEVICES:
-        with pytest.raises(
-            Exception
-        ):  # noqa: B017 - the two backends raise differently
+        with pytest.raises(Exception):  # noqa: B017 - the two backends raise differently
             F.dropout(
-                lucid.tensor(
-                    np.ascontiguousarray(values), dtype=lucid.int32, device=device
-                ),
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device),
                 p=0.5,
             )
 
@@ -1343,9 +1280,7 @@ def test_dropout_still_takes_every_float(dtype_name: str) -> None:
         ("div_", [0.5, 2.0], [-0.375, -10.0]),
     ],
 )
-def test_inplace_binary_ops_carry_both_gradients(
-    name: str, expected_dx, expected_dy
-) -> None:
+def test_inplace_binary_ops_carry_both_gradients(name: str, expected_dx, expected_dy) -> None:
     """``z.mul_(y)`` gave ``dx = 1`` and ``dy = None``.
 
     The binary in-place helper took the forward's storage and left its
@@ -1499,18 +1434,14 @@ def test_batch_norm_keeps_float32_statistics_under_a_half_input() -> None:
     values = (np.random.default_rng(0).random((2, 3, 2, 2)) * 10).astype(np.float16)
     means = []
     for device in _DEVICES:
-        x = lucid.tensor(
-            np.ascontiguousarray(values), dtype=lucid.float16, device=device
-        )
+        x = lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float16, device=device)
         f32 = lambda a: lucid.tensor(  # noqa: E731
             np.ascontiguousarray(np.asarray(a, dtype=np.float32)),
             dtype=lucid.float32,
             device=device,
         )
         running_mean, running_var = f32(np.zeros(3)), f32(np.ones(3))
-        got = F.batch_norm(
-            x, running_mean, running_var, f32(np.ones(3)), f32(np.zeros(3)), True
-        )
+        got = F.batch_norm(x, running_mean, running_var, f32(np.ones(3)), f32(np.zeros(3)), True)
         assert str(got.dtype).endswith("float16"), device
         assert str(running_mean.dtype).endswith("float32"), device
         means.append(np.asarray(running_mean.numpy(), dtype=np.float64))
@@ -1578,9 +1509,7 @@ def test_fold_masks_its_padding_by_selecting() -> None:
     outs = []
     for device in _DEVICES:
         got = F.fold(
-            lucid.tensor(
-                np.ascontiguousarray(values), dtype=lucid.float32, device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device),
             (2, 2),
             2,
         )
@@ -1604,18 +1533,14 @@ def test_multi_head_attention_forward_runs_on_metal(supplied: str) -> None:
     for device in _DEVICES:
 
         def make(array, dev=device):
-            return lucid.tensor(
-                np.ascontiguousarray(array), dtype=lucid.float32, device=dev
-            )
+            return lucid.tensor(np.ascontiguousarray(array), dtype=lucid.float32, device=dev)
 
         extra = (
             {"in_proj_weight": make(rng.random((3 * embed, embed)).astype(np.float32))}
             if supplied == "partial"
             else {}
         )
-        out, _ = F.multi_head_attention_forward(
-            make(q), make(q), make(q), embed, heads, **extra
-        )
+        out, _ = F.multi_head_attention_forward(make(q), make(q), make(q), embed, heads, **extra)
         assert tuple(out.shape) == (length, batch, embed), device
         assert device in str(out.device), device
 
@@ -1632,9 +1557,7 @@ def test_autograd_functionals_refuse_a_discrete_input(name: str) -> None:
     """
     fn = getattr(lucid.autograd, name)
     for device in _DEVICES:
-        x = lucid.tensor(
-            np.array([1, 2, 3], dtype=np.int32), dtype=lucid.int32, device=device
-        )
+        x = lucid.tensor(np.array([1, 2, 3], dtype=np.int32), dtype=lucid.int32, device=device)
         rest = (x.to(lucid.float32),) if name in ("vjp", "jvp") else ()
         with pytest.raises(TypeError, match="floating-point input"):
             fn(lambda a: a * a, x, *rest)
@@ -1700,9 +1623,7 @@ def test_initialisers_keep_the_parameter_they_were_given(dtype_name: str) -> Non
     """
     for name in ("eye", "constant", "xavier_uniform", "orthogonal", "zeros_", "ones_"):
         fn = getattr(lucid.nn.init, name)
-        p = lucid.nn.Parameter(
-            lucid.tensor(np.zeros((4, 4)), dtype=getattr(lucid, dtype_name))
-        )
+        p = lucid.nn.Parameter(lucid.tensor(np.zeros((4, 4)), dtype=getattr(lucid, dtype_name)))
         before = id(p._impl)
         fn(p, 1.0) if name == "constant" else fn(p)
         assert str(p.dtype).endswith(dtype_name), f"{name} changed the dtype"

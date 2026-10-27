@@ -43,9 +43,7 @@ def test_a_spelling_with_knowledge_of_its_own_keeps_it(qualname: str) -> None:
     assert _surface.recorded_as(qualname) == qualname
 
 
-@pytest.mark.parametrize(
-    "axis", [StabilityAxis(), GradientAxis()], ids=["stability", "grad"]
-)
+@pytest.mark.parametrize("axis", [StabilityAxis(), GradientAxis()], ids=["stability", "grad"])
 @pytest.mark.parametrize("name", ["acosh", "logit", "gcd", "heaviside", "expm1"])
 def test_a_twin_gets_the_free_functions_verdict(
     axis: StabilityAxis | GradientAxis, name: str

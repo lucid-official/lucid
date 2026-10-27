@@ -77,17 +77,13 @@ class AlignResult:
         if self.unmatched_lucid or self.unmatched_timm:
             lines = ["State-dict alignment is incomplete:"]
             if self.unmatched_lucid:
-                lines.append(
-                    f"  Lucid keys with no timm match ({len(self.unmatched_lucid)}):"
-                )
+                lines.append(f"  Lucid keys with no timm match ({len(self.unmatched_lucid)}):")
                 for k in self.unmatched_lucid[:8]:
                     lines.append(f"    {k}")
                 if len(self.unmatched_lucid) > 8:
                     lines.append(f"    … and {len(self.unmatched_lucid) - 8} more")
             if self.unmatched_timm:
-                lines.append(
-                    f"  timm keys with no Lucid match ({len(self.unmatched_timm)}):"
-                )
+                lines.append(f"  timm keys with no Lucid match ({len(self.unmatched_timm)}):")
                 for k in self.unmatched_timm[:8]:
                     lines.append(f"    {k}")
             raise AssertionError("\n".join(lines))
@@ -209,9 +205,7 @@ def transfer(
     }
     timm_sd = dict(timm_model.state_dict())
 
-    timm_sd_np: dict[str, np.ndarray] = {
-        k: v.detach().cpu().numpy() for k, v in timm_sd.items()
-    }
+    timm_sd_np: dict[str, np.ndarray] = {k: v.detach().cpu().numpy() for k, v in timm_sd.items()}
 
     result = align(lucid_sd_np, timm_sd_np, remap, key_transform)
 
@@ -227,9 +221,7 @@ def transfer(
             if arr.size == int(np.prod(expected_shape)):
                 arr = arr.reshape(expected_shape)
             else:
-                true_mismatches.append(
-                    f"{lk} → {tk}: lucid {arr.shape} vs timm {expected_shape}"
-                )
+                true_mismatches.append(f"{lk} → {tk}: lucid {arr.shape} vs timm {expected_shape}")
                 del result.matched[lk]
                 result.unmatched_lucid.append(lk)
                 result.unmatched_timm.append(tk)
@@ -298,8 +290,7 @@ def transfer_positional(lucid_model: Any, timm_model: Any) -> None:
         trivial = arr.shape in ((), (1,)) and tuple(destination.shape) in ((), (1,))
         if arr.shape != tuple(destination.shape) and not trivial:
             mismatches.append(
-                f"  [{what} {index}] lucid={arr.shape} "
-                f"vs timm={tuple(destination.shape)}"
+                f"  [{what} {index}] lucid={arr.shape} " f"vs timm={tuple(destination.shape)}"
             )
             return
         destination.data.copy_(_ref.from_numpy(arr).reshape(destination.shape))
@@ -310,9 +301,7 @@ def transfer_positional(lucid_model: Any, timm_model: Any) -> None:
         _copy(i, lb, tb, "buffer")
 
     if mismatches:
-        raise AssertionError(
-            "positional transfer shape mismatches:\n" + "\n".join(mismatches[:5])
-        )
+        raise AssertionError("positional transfer shape mismatches:\n" + "\n".join(mismatches[:5]))
 
 
 # ── Layer-by-layer diagnostic ─────────────────────────────────────────────────

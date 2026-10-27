@@ -24,9 +24,7 @@ class TestAMPTraining:
             device=device,
         )
 
-        model = nn.Sequential(nn.Linear(4, 16), nn.ReLU(), nn.Linear(16, 1)).to(
-            device=device
-        )
+        model = nn.Sequential(nn.Linear(4, 16), nn.ReLU(), nn.Linear(16, 1)).to(device=device)
         opt = optim.Adam(model.parameters(), lr=0.05)
 
         first = float(F.mse_loss(model(x), y).item())

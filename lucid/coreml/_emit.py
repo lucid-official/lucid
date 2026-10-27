@@ -443,9 +443,7 @@ _BINARY_MIL = {
 #: Binary operations whose result is boolean. Their operands have to
 #: agree with each other rather than with the result — casting them to
 #: ``bool`` to match the output would compare two truth values.
-_COMPARISONS = frozenset(
-    {"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"}
-)
+_COMPARISONS = frozenset({"equal", "not_equal", "greater", "greater_equal", "less", "less_equal"})
 
 
 def _runtime_base(b: Builder, op: TracedOp, base: str, exponent: str) -> str:
@@ -811,17 +809,10 @@ def _sdpa(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
         rows, cols = _flex.Dims(scores_shape, op.name)[-2:]
         offset = cols - rows
         mask = lucid.tensor(
-            [
-                [0.0 if j <= i + offset else -1.0e4 for j in range(cols)]
-                for i in range(rows)
-            ]
+            [[0.0 if j <= i + offset else -1.0e4 for j in range(cols)] for i in range(rows)]
         )
-        scaled = b.emit(
-            "add", [("x", scaled), ("y", b.const_from_tensor(mask))], scores_shape
-        )
-    weights = b.emit(
-        "softmax", [("x", scaled), ("axis", b.const_int(-1))], scores_shape
-    )
+        scaled = b.emit("add", [("x", scaled), ("y", b.const_from_tensor(mask))], scores_shape)
+    weights = b.emit("softmax", [("x", scaled), ("axis", b.const_int(-1))], scores_shape)
     return "matmul", [
         ("x", weights),
         ("y", value),
@@ -1177,9 +1168,7 @@ def _scatter_set(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     return _scatter_along_axis(b, op, ins, "update")
 
 
-def _scatter_along_axis(
-    b: Builder, op: TracedOp, ins: list[str], mode: str
-) -> EmitResult:
+def _scatter_along_axis(b: Builder, op: TracedOp, ins: list[str], mode: str) -> EmitResult:
     """``scatter_along_axis`` in ``mode``, for every result type Lucid has.
 
     A bool scatter (``mask[0] = True``) runs on int32 copies of 1 and 0
@@ -1447,9 +1436,7 @@ def _dot(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
 def _as_matrix(b: Builder, value: str, rows: int, cols: int) -> str:
     if b.shape_of(value) == [rows, cols]:
         return value
-    return b.emit(
-        "reshape", [("x", value), ("shape", b.const_ints([rows, cols]))], [rows, cols]
-    )
+    return b.emit("reshape", [("x", value), ("shape", b.const_ints([rows, cols]))], [rows, cols])
 
 
 @_emitter("inner")
@@ -1492,9 +1479,7 @@ def _tensordot(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     free_a = [i for i in range(len(sa)) if i not in axes_a]
     free_b = [i for i in range(len(sb)) if i not in axes_b]
 
-    def arranged(
-        value: str, shape: Sequence[int], perm: list[int], rows: int, cols: int
-    ) -> str:
+    def arranged(value: str, shape: Sequence[int], perm: list[int], rows: int, cols: int) -> str:
         if perm != list(range(len(shape))):
             value = b.emit(
                 "transpose",
@@ -1527,9 +1512,7 @@ def _loss_reduction(b: Builder, op: TracedOp, loss: str) -> EmitResult:
     reduction = _as_int(_attr(op, "reduction"))
     if reduction == 0:
         return "identity", [("x", loss)]
-    return _reduce_every_axis(
-        b, loss, "reduce_mean" if reduction == 1 else "reduce_sum"
-    )
+    return _reduce_every_axis(b, loss, "reduce_mean" if reduction == 1 else "reduce_sum")
 
 
 @_emitter("mse_loss")
@@ -1551,9 +1534,7 @@ def _huber_loss(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     quadratic = b.emit("mul", [("x", squared), ("y", b.const_float(0.5))], shape)
     beyond = b.emit("sub", [("x", size), ("y", b.const_float(0.5 * delta))], shape)
     linear = b.emit("mul", [("x", beyond), ("y", b.const_float(delta))], shape)
-    near = b.emit(
-        "less", [("x", size), ("y", b.const_float(delta))], shape, dtype=_MIL_BOOL
-    )
+    near = b.emit("less", [("x", size), ("y", b.const_float(delta))], shape, dtype=_MIL_BOOL)
     loss = b.emit("select", [("cond", near), ("a", quadratic), ("b", linear)], shape)
     return _loss_reduction(b, op, loss)
 
@@ -1642,9 +1623,7 @@ def _unbind(b: Builder, op: TracedOp, ins: list[str]) -> Bound:
             b.result_dims(op, i),
         )
         if source != ins[0]:
-            piece = b.emit(
-                *emit_cast(b, piece, "bool"), b.result_dims(op, i), _MIL_BOOL
-            )
+            piece = b.emit(*emit_cast(b, piece, "bool"), b.result_dims(op, i), _MIL_BOOL)
         pieces.append(piece)
     return Bound(pieces)
 
@@ -1768,18 +1747,12 @@ def _nan_to_num(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     x = ins[0]
     shape = b.shape_of(x)
     is_nan = b.emit("not_equal", [("x", x), ("y", x)], shape, dtype=_MIL_BOOL)
-    is_pos = b.emit(
-        "equal", [("x", x), ("y", b.const_float(math.inf))], shape, dtype=_MIL_BOOL
-    )
-    is_neg = b.emit(
-        "equal", [("x", x), ("y", b.const_float(-math.inf))], shape, dtype=_MIL_BOOL
-    )
+    is_pos = b.emit("equal", [("x", x), ("y", b.const_float(math.inf))], shape, dtype=_MIL_BOOL)
+    is_neg = b.emit("equal", [("x", x), ("y", b.const_float(-math.inf))], shape, dtype=_MIL_BOOL)
     replaced = x
     for mask, key in ((is_nan, "nan"), (is_pos, "posinf")):
         value = b.const_float(_as_float(_attr(op, key)))
-        replaced = b.emit(
-            "select", [("cond", mask), ("a", value), ("b", replaced)], shape
-        )
+        replaced = b.emit("select", [("cond", mask), ("a", value), ("b", replaced)], shape)
     neginf = b.const_float(_as_float(_attr(op, "neginf")))
     return "select", [("cond", is_neg), ("a", neginf), ("b", replaced)]
 
@@ -1897,9 +1870,7 @@ def _rms_norm(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
         ],
         kept,
     )
-    shifted = b.emit(
-        "add", [("x", mean), ("y", b.const_float(_as_float(_attr(op, "eps"))))], kept
-    )
+    shifted = b.emit("add", [("x", mean), ("y", b.const_float(_as_float(_attr(op, "eps"))))], kept)
     scale = b.emit("rsqrt", [("x", shifted), ("epsilon", b.const_float(0.0))], kept)
     normalised = b.emit("mul", [("x", ins[0]), ("y", scale)], shape)
     if len(ins) < 2:
@@ -1921,9 +1892,7 @@ def _repeat(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     axis = axis if axis >= 0 else axis + len(shape)
 
     spread = shape[: axis + 1] + [1] + shape[axis + 1 :]
-    expanded = b.emit(
-        "expand_dims", [("x", ins[0]), ("axes", b.const_ints([axis + 1]))], spread
-    )
+    expanded = b.emit("expand_dims", [("x", ins[0]), ("axes", b.const_ints([axis + 1]))], spread)
     reps = [1] * len(spread)
     reps[axis + 1] = repeats
     tiled_shape = list(spread)
@@ -2040,13 +2009,9 @@ def _meshgrid(b: Builder, op: TracedOp, ins: list[str]) -> Bound:
         axis = (1 - index) if swapped and index < 2 else index
         spread = [1] * len(grid)
         spread[axis] = grid[axis]
-        laid = b.emit(
-            "reshape", [("x", source), ("shape", b.const_ints(spread))], spread
-        )
+        laid = b.emit("reshape", [("x", source), ("shape", b.const_ints(spread))], spread)
         reps = [grid[i] if i != axis else 1 for i in range(len(grid))]
-        produced.append(
-            b.emit("tile", [("x", laid), ("reps", b.const_ints(reps))], grid)
-        )
+        produced.append(b.emit("tile", [("x", laid), ("reps", b.const_ints(reps))], grid))
     return Bound(produced)
 
 
@@ -2330,13 +2295,9 @@ def _interpolate_nearest_3d(b: Builder, op: TracedOp, ins: list[str]) -> EmitRes
     if scale_d != 1:
         area = out[3] * out[4]
         rows = [batch * channels, depth, area]
-        flat = b.emit(
-            "reshape", [("x", resampled), ("shape", b.const_ints(rows))], rows
-        )
+        flat = b.emit("reshape", [("x", resampled), ("shape", b.const_ints(rows))], rows)
         spread = [batch * channels, depth, 1, area]
-        spaced = b.emit(
-            "reshape", [("x", flat), ("shape", b.const_ints(spread))], spread
-        )
+        spaced = b.emit("reshape", [("x", flat), ("shape", b.const_ints(spread))], spread)
         repeated = [batch * channels, depth, scale_d, area]
         tiled = b.emit(
             "tile",
@@ -2376,9 +2337,7 @@ _ERFINV_TAIL = (
 )
 
 
-def _horner(
-    b: Builder, coefficients: tuple[float, ...], w: str, shape: Sequence[int]
-) -> str:
+def _horner(b: Builder, coefficients: tuple[float, ...], w: str, shape: Sequence[int]) -> str:
     """Evaluate a polynomial in ``w`` by Horner's rule."""
     value = b.const_float(coefficients[0])
     for coefficient in coefficients[1:]:
@@ -2464,9 +2423,7 @@ def _interpolate_trilinear(b: Builder, op: TracedOp, ins: list[str]) -> EmitResu
         grown,
     )
     spatial = [batch, channels, depth, out[3], out[4]]
-    restored = b.emit(
-        "reshape", [("x", resampled), ("shape", b.const_ints(spatial))], spatial
-    )
+    restored = b.emit("reshape", [("x", resampled), ("shape", b.const_ints(spatial))], spatial)
     if out[2] == depth:
         return "identity", [("x", restored)]
 
@@ -2565,9 +2522,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                 [batch, channels, length],
             )
             grid = [batch * channels, blocks_h, blocks_w]
-            block = b.emit(
-                "reshape", [("x", picked), ("shape", b.const_ints(grid))], grid
-            )
+            block = b.emit("reshape", [("x", picked), ("shape", b.const_ints(grid))], grid)
 
             # Space the blocks out by the stride, one axis at a time, on a
             # rank-4 view so the inserted axis stays inside Core ML's cap.
@@ -2641,11 +2596,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                 ],
                 plane,
             )
-            total = (
-                placed
-                if total is None
-                else b.emit("add", [("x", total), ("y", placed)], plane)
-            )
+            total = placed if total is None else b.emit("add", [("x", total), ("y", placed)], plane)
 
     assert total is not None
     if any(padding):
@@ -2656,9 +2607,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                 ("begin", b.const_ints([0, padding[0], padding[1]])),
                 (
                     "end",
-                    b.const_ints(
-                        [batch * channels, padding[0] + size[0], padding[1] + size[1]]
-                    ),
+                    b.const_ints([batch * channels, padding[0] + size[0], padding[1] + size[1]]),
                 ),
                 ("stride", b.const_ints([1, 1, 1])),
             ],

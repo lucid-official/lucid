@@ -38,9 +38,7 @@ class _LstmHead(nn.Module):
     emit path (single-layer / unidirectional / F32 / no-proj envelope).
     """
 
-    def __init__(
-        self, input_size: int = 16, hidden_size: int = 32, n_classes: int = 10
-    ) -> None:
+    def __init__(self, input_size: int = 16, hidden_size: int = 32, n_classes: int = 10) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size)
         self.fc = nn.Linear(hidden_size, n_classes)

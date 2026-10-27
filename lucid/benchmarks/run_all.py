@@ -20,9 +20,7 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(
-    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from lucid.benchmarks import bench_ops, bench_transfer, bench_train
 
@@ -110,10 +108,7 @@ def _is_latency_key(key: str) -> bool:
     measurement noise than mean or p95.  Fall back to mean if median
     is not present.
     """
-    return any(
-        key.endswith(suf)
-        for suf in ("_median_us", "_mean_us", "_median_ms", "_mean_ms")
-    )
+    return any(key.endswith(suf) for suf in ("_median_us", "_mean_us", "_median_ms", "_mean_ms"))
 
 
 def _is_throughput_key(key: str) -> bool:
@@ -135,9 +130,7 @@ def check_regressions(
         if key not in baseline:
             continue
         base_val = baseline[key]
-        if not isinstance(cur_val, (int, float)) or not isinstance(
-            base_val, (int, float)
-        ):
+        if not isinstance(cur_val, (int, float)) or not isinstance(base_val, (int, float)):
             continue
         if base_val == 0:
             continue
@@ -173,9 +166,7 @@ def print_comparison(
         if key not in baseline:
             continue
         base_val = baseline[key]
-        if not isinstance(cur_val, (int, float)) or not isinstance(
-            base_val, (int, float)
-        ):
+        if not isinstance(cur_val, (int, float)) or not isinstance(base_val, (int, float)):
             continue
         if base_val == 0:
             continue
@@ -183,15 +174,11 @@ def print_comparison(
         if _is_latency_key(key):
             pct = (float(cur_val) - float(base_val)) / float(base_val) * 100.0
             if pct < -threshold_pct:
-                improvements.append(
-                    f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} ({pct:+.1f}%)"
-                )
+                improvements.append(f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} ({pct:+.1f}%)")
         elif _is_throughput_key(key):
             pct = (float(cur_val) - float(base_val)) / float(base_val) * 100.0
             if pct > threshold_pct:
-                improvements.append(
-                    f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} (+{pct:.1f}%)"
-                )
+                improvements.append(f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} (+{pct:.1f}%)")
 
     print(f"\n── Comparison vs baseline (threshold={threshold_pct:.0f}%) ────────")
     if improvements:

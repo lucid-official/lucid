@@ -186,11 +186,7 @@ def _values(out: object) -> list[object]:
 
 def _dtypes(out: object) -> list[str]:
     return [
-        (
-            str(getattr(p, "dtype")).rsplit(".", 1)[-1]
-            if hasattr(p, "dtype")
-            else type(p).__name__
-        )
+        (str(getattr(p, "dtype")).rsplit(".", 1)[-1] if hasattr(p, "dtype") else type(p).__name__)
         for p in _parts(out)
     ]
 
@@ -200,9 +196,7 @@ def _close(a: object, b: object) -> bool:
         return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=True))
     if isinstance(a, bool) or isinstance(b, bool):
         return a == b
-    if not isinstance(a, int | float | complex) or not isinstance(
-        b, int | float | complex
-    ):
+    if not isinstance(a, int | float | complex) or not isinstance(b, int | float | complex):
         return False
     if isinstance(a, complex) or isinstance(b, complex):
         return abs(complex(a) - complex(b)) <= 1e-5 * max(1.0, abs(complex(b)))
@@ -268,9 +262,7 @@ def test_the_signature_is_the_free_functions_after_its_first(name: str) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize("name", sorted(_CASES))
-def test_the_reference_method_binds_our_keywords_to_our_values(
-    ref: ModuleType, name: str
-) -> None:
+def test_the_reference_method_binds_our_keywords_to_our_values(ref: ModuleType, name: str) -> None:
     """Every parameter passed by the name Lucid gives it: a renamed or
     missing keyword fails here, a different answer below."""
     assert hasattr(ref.Tensor, name)
@@ -295,26 +287,20 @@ def test_copysign_takes_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None
 #: Lucid has none: ``fill_`` / ``zero_`` / ``copy_`` write a given value,
 #: ``normal_`` / ``uniform_`` draw into the tensor, ``share_memory_`` moves
 #: it — and ``cube_``, which the reference has in neither form.
-_NO_TWIN = frozenset(
-    {"copy_", "cube_", "fill_", "normal_", "share_memory_", "uniform_", "zero_"}
-)
+_NO_TWIN = frozenset({"copy_", "cube_", "fill_", "normal_", "share_memory_", "uniform_", "zero_"})
 
 
 def _inplace_methods() -> list[str]:
     return sorted(
         n
         for n in dir(lucid.Tensor)
-        if n.endswith("_")
-        and not n.startswith("_")
-        and callable(getattr(lucid.Tensor, n))
+        if n.endswith("_") and not n.startswith("_") and callable(getattr(lucid.Tensor, n))
     )
 
 
 def test_every_inplace_method_has_its_out_of_place_twin() -> None:
     missing = [
-        n
-        for n in _inplace_methods()
-        if n not in _NO_TWIN and not hasattr(lucid.Tensor, n[:-1])
+        n for n in _inplace_methods() if n not in _NO_TWIN and not hasattr(lucid.Tensor, n[:-1])
     ]
     assert missing == []
     # The list holds only names that are there to be excused.
@@ -421,11 +407,7 @@ def test_signbit_copysign_and_atan2_preserve_ieee_signs_across_special_values(
     tol = (
         3e-3
         if dtype is lucid.float16
-        else (
-            2e-2
-            if dtype is lucid.bfloat16
-            else (1e-6 if dtype is lucid.float32 else 1e-15)
-        )
+        else (2e-2 if dtype is lucid.bfloat16 else (1e-6 if dtype is lucid.float32 else 1e-15))
     )
     for i in range(len(vals)):
         for j in range(len(vals)):

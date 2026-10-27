@@ -62,12 +62,8 @@ class _BERTEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(
             config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
         )
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
-        )
-        self.token_type_embeddings = nn.Embedding(
-            config.type_vocab_size, config.hidden_size
-        )
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         # HF names: ``LayerNorm`` (capitalised) so checkpoints port directly.
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.hidden_dropout)
@@ -355,9 +351,7 @@ class _BERTLayer(nn.Module):
 class _BERTEncoder(nn.Module):
     def __init__(self, config: BERTConfig) -> None:
         super().__init__()
-        self.layer = nn.ModuleList(
-            [_BERTLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([_BERTLayer(config) for _ in range(config.num_hidden_layers)])
 
     @override
     def forward(
@@ -388,9 +382,7 @@ class _BERTEncoder(nn.Module):
             # A per-layer head mask is indexed by depth; a single (H,) mask
             # applies to every layer, which is the usual probing setup.
             layer_head_mask = (
-                head_mask[i]
-                if head_mask is not None and head_mask.ndim > 1
-                else head_mask
+                head_mask[i] if head_mask is not None and head_mask.ndim > 1 else head_mask
             )
             hidden, weights = layer(
                 hidden,
@@ -635,9 +627,7 @@ class _BERTLMPredictionHead(nn.Module):
         if have != vocab:
             kept = self.bias.detach()[: min(have, vocab)]
             if vocab > have:
-                pad = lucid.zeros(
-                    vocab - have, dtype=kept.dtype, device=kept.device.type
-                )
+                pad = lucid.zeros(vocab - have, dtype=kept.dtype, device=kept.device.type)
                 kept = lucid.cat([kept, pad])
             self.bias = nn.Parameter(kept)
 
@@ -1052,9 +1042,7 @@ class BERTForQuestionAnswering(SequenceClassificationModel):
                     + F.cross_entropy(end_logits, end_t, ignore_index=ignored)
                 ) / 2.0
 
-        return QuestionAnsweringOutput(
-            start_logits=start_logits, end_logits=end_logits, loss=loss
-        )
+        return QuestionAnsweringOutput(start_logits=start_logits, end_logits=end_logits, loss=loss)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1135,9 +1123,7 @@ class _BERTPreTrainingHeads(nn.Module):
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     @override
-    def forward(
-        self, sequence_output: Tensor, pooled_output: Tensor
-    ) -> tuple[Tensor, Tensor]:
+    def forward(self, sequence_output: Tensor, pooled_output: Tensor) -> tuple[Tensor, Tensor]:
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
@@ -1240,9 +1226,7 @@ class BERTForPreTraining(SequenceClassificationModel, MaskedLMMixin):
         if labels is not None:
             mlm_loss = self.compute_lm_loss(prediction_scores, labels)
         if next_sentence_label is not None:
-            nsp_loss = F.cross_entropy(
-                seq_relationship_score, next_sentence_label.long()
-            )
+            nsp_loss = F.cross_entropy(seq_relationship_score, next_sentence_label.long())
         if mlm_loss is not None and nsp_loss is not None:
             total_loss = mlm_loss + nsp_loss
         elif mlm_loss is not None:

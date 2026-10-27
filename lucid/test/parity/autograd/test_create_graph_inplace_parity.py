@@ -44,9 +44,7 @@ def _derivatives(
     if not g.requires_grad:
         return first, np.zeros_like(first)
     (h,) = autograd.grad(g.sum(), v, allow_unused=True)
-    second = (
-        np.zeros_like(first) if h is None else np.asarray(h.tolist(), dtype=np.float64)
-    )
+    second = np.zeros_like(first) if h is None else np.asarray(h.tolist(), dtype=np.float64)
     return first, second
 
 
@@ -82,9 +80,7 @@ def test_a_destination_without_grad(write: str, device: str, ref: ModuleType) ->
 def test_a_write_into_a_gradient(op: str, device: str, ref: ModuleType) -> None:
     # ``p.grad.<op>(w)`` with ``w`` requiring grad: the write lands in the
     # gradient, which then differentiates with respect to ``w``.
-    def run(
-        mod: ModuleType, p: object, w: object
-    ) -> tuple[list[float], list[float], bool]:
+    def run(mod: ModuleType, p: object, w: object) -> tuple[list[float], list[float], bool]:
         (p * 2.0).sum().backward()
         g = p.grad
         getattr(g, op)(w)

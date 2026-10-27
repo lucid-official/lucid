@@ -75,9 +75,7 @@ def _select_int(impl: _C_engine.TensorImpl, dim: int, i: int) -> _C_engine.Tenso
     length = impl.shape[dim]
     normalized = i + length if i < 0 else i
     if normalized < 0 or normalized >= length:
-        raise IndexError(
-            f"index {i} is out of bounds for dimension {dim} with size {length}"
-        )
+        raise IndexError(f"index {i} is out of bounds for dimension {dim} with size {length}")
     hi = normalized + 1
     if normalized == 0 and hi == length:
         sliced = impl
@@ -103,9 +101,7 @@ def _narrow(
     return _C_engine.split_at(impl, [start, stop], dim)[1]
 
 
-def _select_slice(
-    impl: _C_engine.TensorImpl, dim: int, s: slice
-) -> _C_engine.TensorImpl:
+def _select_slice(impl: _C_engine.TensorImpl, dim: int, s: slice) -> _C_engine.TensorImpl:
     """Slice along dim using a Python slice object."""
     length = impl.shape[dim]
     start, stop, step = s.indices(length)
@@ -133,9 +129,7 @@ def _select_slice(
         # window axis squeezed away.  split_at, unfold_dim and squeeze each
         # make a view, and each already has an emitter on every path.  A
         # negative step copies below, as the reference does not have one.
-        windows = _C_engine.unfold_dim(
-            _narrow(impl, dim, start, stop, length), dim, 1, step
-        )
+        windows = _C_engine.unfold_dim(_narrow(impl, dim, start, stop, length), dim, 1, step)
         return _C_engine.squeeze(windows, len(windows.shape) - 1)
     else:
         # Element count of the slice.  The hand-rolled ceil-division dropped
@@ -192,11 +186,7 @@ class _Key:
 def _is_bool_scalar(token: object) -> bool:
     if isinstance(token, bool):
         return True
-    return (
-        isinstance(token, _C_engine.TensorImpl)
-        and token.dtype == _BOOL
-        and not token.shape
-    )
+    return isinstance(token, _C_engine.TensorImpl) and token.dtype == _BOOL and not token.shape
 
 
 def _token(part: object, op: str) -> object:
@@ -231,9 +221,7 @@ def _token(part: object, op: str) -> object:
                 f"{type(part).__name__}"
             )
         try:
-            impl = _to_impl(
-                part, dtype=_I64 if isinstance(part, list) and not part else None
-            )
+            impl = _to_impl(part, dtype=_I64 if isinstance(part, list) and not part else None)
         except (TypeError, ValueError) as err:
             raise IndexError(
                 "a list index holds only integers or only bools; to index "
@@ -271,9 +259,7 @@ def _consumes(token: object) -> int:
     return 1
 
 
-def _on_device(
-    index: _C_engine.TensorImpl, device: _C_engine.Device
-) -> _C_engine.TensorImpl:
+def _on_device(index: _C_engine.TensorImpl, device: _C_engine.Device) -> _C_engine.TensorImpl:
     """``index`` on ``device``.
 
     Index tensors are built on the CPU far more often than not — a list
@@ -299,9 +285,7 @@ def _mask_indices(mask: _C_engine.TensorImpl) -> list[_C_engine.TensorImpl]:
     if k == 1:
         return [_C_engine.reshape(nz, [-1])]
     return [
-        _C_engine.contiguous(
-            _C_engine.squeeze(_C_engine.split_at(nz, [d, d + 1], 1)[1], 1)
-        )
+        _C_engine.contiguous(_C_engine.squeeze(_C_engine.split_at(nz, [d, d + 1], 1)[1], 1))
         for d in range(k)
     ]
 
@@ -315,9 +299,7 @@ def _bool_scalar_index(
     return _mask_indices(_C_engine.reshape(_on_device(token, device), [1]))[0]
 
 
-def _normalize_key(
-    key: object, shape: Sequence[int], device: _C_engine.Device, *, op: str
-) -> _Key:
+def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device, *, op: str) -> _Key:
     """Normalise ``key`` against a tensor of ``shape`` on ``device`` for ``op``.
 
     The single owner of what an index key means: ``Tensor.__getitem__``,
@@ -356,9 +338,7 @@ def _normalize_key(
     ndim = len(shape)
     used = sum(_consumes(token) for token in tokens)
     if used > ndim:
-        raise IndexError(
-            f"too many indices for tensor of dimension {ndim} ({used} given)"
-        )
+        raise IndexError(f"too many indices for tensor of dimension {ndim} ({used} given)")
     out = _Key()
     sizes = list(shape)  # the source's sizes, axes inserted so far included
     dim = 0  # the source dim the next token addresses
@@ -405,9 +385,7 @@ def _inserted(impl: _C_engine.TensorImpl, axes: list[int]) -> _C_engine.TensorIm
 # ── basic indexing (int / slice / None only) ──────────────────────────────────
 
 
-def _apply_basic_index(
-    impl: _C_engine.TensorImpl, idx_list: list[object]
-) -> _C_engine.TensorImpl:
+def _apply_basic_index(impl: _C_engine.TensorImpl, idx_list: list[object]) -> _C_engine.TensorImpl:
     """Apply a list of basic (int/slice/None) indices to impl."""
     dim = 0
     for i in idx_list:
@@ -496,9 +474,7 @@ def _coordinate_select(
             continue
         size = scalar(shape[k])
         idx = _C_engine.where(_C_engine.less(idx, zero), _C_engine.add(idx, size), idx)
-        bad = _C_engine.logical_or(
-            _C_engine.less(idx, zero), _C_engine.greater_equal(idx, size)
-        )
+        bad = _C_engine.logical_or(_C_engine.less(idx, zero), _C_engine.greater_equal(idx, size))
         if dev == _CPU and not bad.is_phantom:
             # Only decides whether to raise — ``bad`` reaches the result
             # through ``outside`` below, not through this read — so a trace
@@ -539,9 +515,7 @@ def _refuse_out_of_range(index: _C_engine.TensorImpl, size: int) -> None:
     values = _C_engine.reshape(index, [-1]).tolist()
     assert isinstance(values, list)
     first = next(v for v in values if not -size <= v < size)
-    raise IndexError(
-        f"index {first} is out of bounds for an indexed dimension with size {size}"
-    )
+    raise IndexError(f"index {first} is out of bounds for an indexed dimension with size {size}")
 
 
 # ── main advanced getitem ─────────────────────────────────────────────────────
@@ -566,9 +540,7 @@ def _advanced_getitem(
             expanded.append(("__slice__", item))
 
     # Phase 2: Find the span of tensor indices (first to last)
-    tensor_positions = [
-        k for k, (kind, _) in enumerate(expanded) if kind == "__tensor__"
-    ]
+    tensor_positions = [k for k, (kind, _) in enumerate(expanded) if kind == "__tensor__"]
     first_t = tensor_positions[0]
     last_t = tensor_positions[-1]
 
@@ -654,9 +626,7 @@ def _advanced_getitem(
                     result = _select_slice(result, adv_start_dim + ld, cast(slice, val))
                 elif kind == "__none__":
                     result = _C_engine.unsqueeze(result, adv_start_dim + ld)
-        result = _fancy_select(
-            result, adv_start_dim + tensor_local_dims[0], tensor_impls[0]
-        )
+        result = _fancy_select(result, adv_start_dim + tensor_local_dims[0], tensor_impls[0])
         # Apply basic ops after the tensor dim
         post_base = adv_start_dim + tensor_local_dims[0] + adv_out_ndim
         offset = 0
@@ -725,9 +695,7 @@ def _advanced_getitem(
                 real += 1
 
         t_dims_abs = [
-            t
-            for t, (_, k, _) in zip(targets, mid_entries, strict=True)
-            if k == "__tensor__"
+            t for t, (_, k, _) in zip(targets, mid_entries, strict=True) if k == "__tensor__"
         ]
         indexed = set(t_dims_abs)
         keep = [d for d in range(len(result.shape)) if d not in indexed]
@@ -758,9 +726,7 @@ def _advanced_getitem(
     # Phase 5: apply post block (after last tensor in original idx).
     # Result dims: [*pre_dims, *adv_dims, *mid_basic, *post]
     # post ops start after all mid dims
-    n_mid_basic_kept = sum(
-        1 for _, k, _ in basic_local_dims if k in ("__slice__", "__none__")
-    )
+    n_mid_basic_kept = sum(1 for _, k, _ in basic_local_dims if k in ("__slice__", "__none__"))
     cur_dim = (
         post_start
         if post_start is not None
@@ -824,9 +790,7 @@ def broadcast_shapes(*shapes: Sequence[int]) -> tuple[int, ...]:
     ]
     for s in norm:
         if any(d < 0 for d in s):
-            raise ValueError(
-                f"Attempting to broadcast a dimension with negative length in {s}!"
-            )
+            raise ValueError(f"Attempting to broadcast a dimension with negative length in {s}!")
     rank = max((len(s) for s in norm), default=0)
     out: list[int] = []
     for axis in range(-rank, 0):
@@ -876,8 +840,7 @@ def broadcast_tensors(*tensors: Tensor) -> tuple[Tensor, ...]:
     for i, t in enumerate(tensors):
         if _promotion.try_unwrap(t) is None or not hasattr(t, "broadcast_to"):
             raise TypeError(
-                f"broadcast_tensors(): expected Tensor at position {i}, "
-                f"got {type(t).__name__}"
+                f"broadcast_tensors(): expected Tensor at position {i}, " f"got {type(t).__name__}"
             )
     target_shape = broadcast_shapes(*(t.shape for t in tensors))
     return tuple(t.broadcast_to(target_shape) for t in tensors)
@@ -1117,9 +1080,7 @@ def _written_positions(
     dtype = _C_engine.Dtype.I32 if total < 2**31 - 1 else _I64
     shifted = key.unchecked and device != _CPU
     first = 1 if shifted else 0
-    positions = _C_engine.reshape(
-        _C_engine.arange(first, total + first, 1, dtype, device), shape
-    )
+    positions = _C_engine.reshape(_C_engine.arange(first, total + first, 1, dtype, device), shape)
     positions = _inserted(positions, key.unsqueeze)
     if key.advanced:
         target = _advanced_getitem(positions, key.items, key.unchecked)
@@ -1185,9 +1146,7 @@ def _setitem(t: Tensor, idx: _IndexType, value: TensorOrScalar) -> None:
     # reach the result — copied in, ``t`` kept their graph, and
     # ``w * 2`` assigned ``5`` sent ``w`` a gradient of 2.
     whole = bool(key.items) and not key.unsqueeze
-    whole = whole and all(
-        isinstance(item, slice) and item == slice(None) for item in key.items
-    )
+    whole = whole and all(isinstance(item, slice) and item == slice(None) for item in key.items)
     if whole:
         val = _normalize_value(value, impl, shape)
         records = _C_engine.grad_enabled()
@@ -1207,7 +1166,5 @@ def _setitem(t: Tensor, idx: _IndexType, value: TensorOrScalar) -> None:
     base = _read_for_write(t, flat_val)
     if not base.is_contiguous():
         base = _C_engine.contiguous(base)
-    flat_out = _C_engine.scatter(
-        _C_engine.reshape(base, [_prod(shape)]), 0, flat_idx, flat_val
-    )
+    flat_out = _C_engine.scatter(_C_engine.reshape(base, [_prod(shape)]), 0, flat_idx, flat_val)
     _rebind(t, _C_engine.reshape(flat_out, shape))

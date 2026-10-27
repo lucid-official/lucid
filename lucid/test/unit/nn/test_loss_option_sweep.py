@@ -58,9 +58,7 @@ def test_smoothing_raises_the_loss_off_a_confident_fit():
     confident = np.eye(4)[TARGET] * 10.0
     plain = float(F.cross_entropy(_t(confident), _t(TARGET, dtype=lucid.int32)).item())
     smoothed = float(
-        F.cross_entropy(
-            _t(confident), _t(TARGET, dtype=lucid.int32), label_smoothing=0.2
-        ).item()
+        F.cross_entropy(_t(confident), _t(TARGET, dtype=lucid.int32), label_smoothing=0.2).item()
     )
     assert smoothed > plain
 
@@ -72,9 +70,7 @@ def test_bce_with_logits_matches_bce_of_the_sigmoid():
     """The logit form exists to be stable, not different: it has to agree
     with the two-step version wherever the two-step version is finite."""
     target = (RNG.uniform(size=(6, 4)) > 0.5).astype(np.float64)
-    logit_form = float(
-        F.binary_cross_entropy_with_logits(_t(LOGITS), _t(target)).item()
-    )
+    logit_form = float(F.binary_cross_entropy_with_logits(_t(LOGITS), _t(target)).item())
     two_step = float(F.binary_cross_entropy(F.sigmoid(_t(LOGITS)), _t(target)).item())
     assert np.isclose(logit_form, two_step, atol=1e-6)
 

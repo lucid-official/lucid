@@ -64,9 +64,7 @@ def test_quantile_along_an_axis(dim, keepdim):
     )
 
 
-@pytest.mark.parametrize(
-    "interpolation", ["linear", "lower", "higher", "nearest", "midpoint"]
-)
+@pytest.mark.parametrize("interpolation", ["linear", "lower", "higher", "nearest", "midpoint"])
 def test_every_interpolation_rule(interpolation):
     """``0.37`` lands between two samples, so the five rules give five
     different answers — a constant ``q`` would hide four of them."""
@@ -138,9 +136,7 @@ def test_nanquantile_along_an_axis_uses_each_slices_own_count(dim):
     )
 
 
-@pytest.mark.parametrize(
-    "interpolation", ["linear", "lower", "higher", "nearest", "midpoint"]
-)
+@pytest.mark.parametrize("interpolation", ["linear", "lower", "higher", "nearest", "midpoint"])
 def test_nanquantile_honours_the_interpolation_rule_along_an_axis(interpolation):
     _close(
         _v(lucid.nanquantile(_t(X_NAN), 0.37, dim=0, interpolation=interpolation)),
@@ -258,9 +254,7 @@ def test_bincount_pads_to_minlength():
 
 def test_bincount_sums_weights():
     w = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
-    _close(
-        _v(lucid.bincount(_ints(COUNTS), weights=_t(w))), np.bincount(COUNTS, weights=w)
-    )
+    _close(_v(lucid.bincount(_ints(COUNTS), weights=_t(w))), np.bincount(COUNTS, weights=w))
 
 
 # ── histogram ─────────────────────────────────────────────────────────────────

@@ -47,16 +47,12 @@ def _assert_roll_parity(
         ref_fn = ref.roll(r_fn, shifts)
 
     assert tuple(out_fn.shape) == tuple(ref_fn.shape)
-    np.testing.assert_allclose(
-        out_fn.numpy(), ref_fn.detach().numpy(), rtol=1e-6, atol=1e-6
-    )
+    np.testing.assert_allclose(out_fn.numpy(), ref_fn.detach().numpy(), rtol=1e-6, atol=1e-6)
 
     (out_fn * lucid.tensor(w_vals, device=device)).sum().backward()
     (ref_fn * ref.tensor(w_vals)).sum().backward()
     assert x_fn.grad is not None
-    np.testing.assert_allclose(
-        x_fn.grad.numpy(), r_fn.grad.numpy(), rtol=1e-6, atol=1e-6
-    )
+    np.testing.assert_allclose(x_fn.grad.numpy(), r_fn.grad.numpy(), rtol=1e-6, atol=1e-6)
 
     # 2. Tensor method: Tensor.roll vs ref Tensor.roll
     x_m = lucid.tensor(vals, device=device, requires_grad=True)
@@ -69,9 +65,7 @@ def _assert_roll_parity(
         ref_m = r_m.roll(shifts)
 
     assert tuple(out_m.shape) == tuple(ref_m.shape)
-    np.testing.assert_allclose(
-        out_m.numpy(), ref_m.detach().numpy(), rtol=1e-6, atol=1e-6
-    )
+    np.testing.assert_allclose(out_m.numpy(), ref_m.detach().numpy(), rtol=1e-6, atol=1e-6)
 
     (out_m * lucid.tensor(w_vals, device=device)).sum().backward()
     (ref_m * ref.tensor(w_vals)).sum().backward()

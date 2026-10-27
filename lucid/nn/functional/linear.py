@@ -156,9 +156,7 @@ def bilinear(
     # autocast row (WIDEST on Metal) covers it too.
     bias_impl = _unwrap(bias) if bias is not None else None
     return _wrap(
-        _C_engine.nn.bilinear_layer(
-            _unwrap(input1), _unwrap(input2), _unwrap(weight), bias_impl
-        )
+        _C_engine.nn.bilinear_layer(_unwrap(input1), _unwrap(input2), _unwrap(weight), bias_impl)
     )
 
 
@@ -217,15 +215,11 @@ def fused_linear_relu(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
     if needs_grad:
         # Training path: unfused standard ops — autograd graph is correct.
         return _wrap(
-            _C_engine.relu(
-                _C_engine.nn.linear(_unwrap(x), _unwrap(weight), _unwrap(bias))
-            )
+            _C_engine.relu(_C_engine.nn.linear(_unwrap(x), _unwrap(weight), _unwrap(bias)))
         )
 
     # Inference path: single-pass BLAS+vDSP fused kernel.
-    return _wrap(
-        _C_engine._fused_linear_relu(_unwrap(x), _unwrap(weight), _unwrap(bias))
-    )
+    return _wrap(_C_engine._fused_linear_relu(_unwrap(x), _unwrap(weight), _unwrap(bias)))
 
 
 def fused_linear_gelu(
@@ -296,9 +290,7 @@ def fused_linear_gelu(
         return _gelu(pre, approximate=approximate)
 
     if approximate == "tanh":
-        return _wrap(
-            _C_engine._fused_linear_gelu(_unwrap(x), _unwrap(weight), _unwrap(bias))
-        )
+        return _wrap(_C_engine._fused_linear_gelu(_unwrap(x), _unwrap(weight), _unwrap(bias)))
     # exact erf path — no fused kernel available, fall back to two-op path.
     pre = _wrap(_C_engine.nn.linear(_unwrap(x), _unwrap(weight), _unwrap(bias)))
     return _gelu(pre, approximate="none")
@@ -433,13 +425,9 @@ def noisy_linear(
 
     out_features, in_features = (int(v) for v in weight_mu.shape)
     if epsilon_in is None:
-        epsilon_in = _l.randn(
-            (in_features,), device=weight_mu.device, dtype=weight_mu.dtype
-        )
+        epsilon_in = _l.randn((in_features,), device=weight_mu.device, dtype=weight_mu.dtype)
     if epsilon_out is None:
-        epsilon_out = _l.randn(
-            (out_features,), device=weight_mu.device, dtype=weight_mu.dtype
-        )
+        epsilon_out = _l.randn((out_features,), device=weight_mu.device, dtype=weight_mu.dtype)
 
     f_in = scaled_noise(epsilon_in)
     f_out = scaled_noise(epsilon_out)

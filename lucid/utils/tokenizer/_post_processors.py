@@ -146,9 +146,7 @@ def _parse_template(template: str | list[str]) -> list[_Piece]:
     return [_parse_piece(item) for item in items]
 
 
-def _check_template(
-    pieces: list[_Piece], sequences: tuple[str, ...], which: str
-) -> None:
+def _check_template(pieces: list[_Piece], sequences: tuple[str, ...], which: str) -> None:
     """Require each sequence in ``sequences`` exactly once and no other."""
     for kind in ("A", "B"):
         count = sum(1 for p in pieces if p.kind == kind)
@@ -283,9 +281,7 @@ class TemplateProcessing(PostProcessor):
         elif len(encodings) == 2:
             template = self._pair
         else:
-            raise ValueError(
-                f"TemplateProcessing: expected 1 or 2 sequences, got {len(encodings)}"
-            )
+            raise ValueError(f"TemplateProcessing: expected 1 or 2 sequences, got {len(encodings)}")
         out: list[list[int]] = []
         for piece in template:
             if piece.kind == "A":
@@ -647,9 +643,7 @@ def _pieces_from_config(value: object, where: str) -> list[_Piece]:
         elif "SpecialToken" in entry:
             special = as_object(entry["SpecialToken"], where)
             name = get_str(special, "id", where, "")
-            pieces.append(
-                _Piece("special", name, get_int(special, "type_id", where, 0))
-            )
+            pieces.append(_Piece("special", name, get_int(special, "type_id", where, 0)))
         else:
             raise ValueError(f"{where}: unknown template piece {entry!r}")
     return pieces

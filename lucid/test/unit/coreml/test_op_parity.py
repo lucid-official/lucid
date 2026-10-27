@@ -196,9 +196,7 @@ _OTHER = [
 
 
 @pytest.mark.parametrize(("name", "fn", "positive"), _UNARY, ids=[c[0] for c in _UNARY])
-def test_a_unary_op_matches(
-    name: str, fn: object, positive: bool, tmp_path: object
-) -> None:
+def test_a_unary_op_matches(name: str, fn: object, positive: bool, tmp_path: object) -> None:
     x = lucid.rand(1, 4, 6, 6) + 0.5 if positive else lucid.randn(1, 4, 6, 6)
     _check(fn, x, tmp_path)
 
@@ -209,9 +207,7 @@ def test_an_activation_matches(name: str, fn: object, tmp_path: object) -> None:
 
 
 @pytest.mark.parametrize(("name", "fn", "positive"), _OTHER, ids=[c[0] for c in _OTHER])
-def test_a_structural_op_matches(
-    name: str, fn: object, positive: bool, tmp_path: object
-) -> None:
+def test_a_structural_op_matches(name: str, fn: object, positive: bool, tmp_path: object) -> None:
     x = lucid.rand(1, 4, 6, 6) + 0.5 if positive else lucid.randn(1, 4, 6, 6)
     _check(fn, x, tmp_path)
 
@@ -235,10 +231,7 @@ class TestCoreMLDoesNotPromote:
         [
             (
                 "int-times-scalar",
-                lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) * 3).to(
-                    lucid.float32
-                )
-                + x,
+                lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) * 3).to(lucid.float32) + x,
             ),
             (
                 "float-times-int-tensor",
@@ -246,24 +239,18 @@ class TestCoreMLDoesNotPromote:
             ),
             (
                 "int-compared-to-scalar",
-                lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) > 1).to(
-                    lucid.float32
-                )
-                + x,
+                lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) > 1).to(lucid.float32) + x,
             ),
             (
                 "float-compared-to-float",
-                lambda x: (x > lucid.arange(x.shape[-1]).to(lucid.float32)).to(
-                    lucid.float32
-                ),
+                lambda x: (x > lucid.arange(x.shape[-1]).to(lucid.float32)).to(lucid.float32),
             ),
             (
                 # ``arange(n)`` is int64 and reaches the package as an
                 # integer buffer, which was recorded as float: the
                 # computed side was cast to float to "match" it.
                 "int-buffer-compared-to-computed-int",
-                lambda x: x
-                * (lucid.arange(x.shape[0]) == x.argmax(-1)).to(lucid.float32)[:, None],
+                lambda x: x * (lucid.arange(x.shape[0]) == x.argmax(-1)).to(lucid.float32)[:, None],
             ),
         ],
         ids=[
@@ -317,9 +304,7 @@ class TestRankSixIsStagedRatherThanRefused:
         finally:
             exported.close()
 
-    def test_a_rank_six_tensor_nothing_stages_is_still_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_rank_six_tensor_nothing_stages_is_still_refused(self, tmp_path: object) -> None:
         """The cap is a format limit, and saying so beats a parse error.
 
         A rank-6 value that is read for real — not consumed by a pattern
@@ -403,9 +388,7 @@ class TestWorkThatDoesNotDependOnTheInput:
 
         exported = cml.export(model, first, f"{tmp_path}/reads.mlpackage")
         try:
-            moved = float(
-                (exported.predict(first) - exported.predict(second)).abs().max().item()
-            )
+            moved = float((exported.predict(first) - exported.predict(second)).abs().max().item())
             assert moved > 1e-6
             assert exported.verify(model, second, relative=True) < 1e-5
         finally:
@@ -464,9 +447,7 @@ class TestHalfPrecisionKeepsItsIntegers:
     Neither failed on the float32 path, which is the one the tests ran.
     """
 
-    def test_an_integer_output_survives_a_float16_export(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_integer_output_survives_a_float16_export(self, tmp_path: object) -> None:
         class _Indices(nn.Module):
             def forward(self, x: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor]:
                 return x * 2.0, lucid.argmax(x, dim=1)
@@ -552,19 +533,13 @@ class TestWhereTheWorkActuallyGoes:
         finally:
             exported.close()
 
-    def test_float16_reaches_the_neural_engine_and_stays_quiet(
-        self, tmp_path: object
-    ) -> None:
+    def test_float16_reaches_the_neural_engine_and_stays_quiet(self, tmp_path: object) -> None:
         lucid.manual_seed(0)
         # Big enough that Core ML's planner bothers to dispatch: a
         # two-operation model stays on the CPU at any precision, which is
         # the planner's choice rather than an answer about float16.
         model = nn.Sequential(
-            *[
-                layer
-                for _ in range(8)
-                for layer in (nn.Conv2d(64, 64, 3, padding=1), nn.ReLU())
-            ]
+            *[layer for _ in range(8) for layer in (nn.Conv2d(64, 64, 3, padding=1), nn.ReLU())]
         ).eval()
         x = lucid.randn(1, 64, 32, 32)
 
@@ -621,9 +596,7 @@ class TestAnEmptyConstantIsRefused:
     where it came from.
     """
 
-    def test_an_empty_constant_says_where_the_shape_came_from(
-        self, tmp_path: object
-    ) -> None:
+    def test_an_empty_constant_says_where_the_shape_came_from(self, tmp_path: object) -> None:
         class _Empty(nn.Module):
             def forward(self, x: lucid.Tensor) -> lucid.Tensor:
                 # A constant with no elements, of the shape a proposal
@@ -632,9 +605,7 @@ class TestAnEmptyConstantIsRefused:
                 return lucid.concat([x, nothing], dim=0)
 
         with pytest.raises(Exception, match="empty tensor"):
-            cml.export(
-                _Empty().eval(), lucid.randn(2, 4), f"{tmp_path}/empty.mlpackage"
-            )
+            cml.export(_Empty().eval(), lucid.randn(2, 4), f"{tmp_path}/empty.mlpackage")
 
 
 class TestTheOutputBufferIsReadCorrectly:
@@ -652,15 +623,11 @@ class TestTheOutputBufferIsReadCorrectly:
         [cml.ComputeUnits.ALL, cml.ComputeUnits.CPU_ONLY, cml.ComputeUnits.CPU_AND_NE],
         ids=["all", "cpu", "cpu_and_ne"],
     )
-    def test_a_padded_output_is_not_read_as_packed(
-        self, units: object, tmp_path: object
-    ) -> None:
+    def test_a_padded_output_is_not_read_as_packed(self, units: object, tmp_path: object) -> None:
         x = lucid.arange(0, 12).reshape(1, 1, 3, 4) * 1.0
         model = _Apply(lambda t: lucid.tile(t, (1, 1, 1, 2))).eval()
         reference = model(x)
-        exported = cml.export(
-            model, x, f"{tmp_path}/strided.mlpackage", compute_units=units
-        )
+        exported = cml.export(model, x, f"{tmp_path}/strided.mlpackage", compute_units=units)
         try:
             got = exported.predict(x)
             assert float((got - reference).abs().max().item()) == 0.0
@@ -668,9 +635,7 @@ class TestTheOutputBufferIsReadCorrectly:
             exported.close()
 
 
-@pytest.mark.parametrize(
-    ("name", "fn", "shape"), _SPATIAL, ids=[c[0] for c in _SPATIAL]
-)
+@pytest.mark.parametrize(("name", "fn", "shape"), _SPATIAL, ids=[c[0] for c in _SPATIAL])
 def test_a_spatial_op_matches(
     name: str, fn: object, shape: tuple[int, ...], tmp_path: object
 ) -> None:
@@ -778,9 +743,7 @@ class TestTheGapAgainstCompileIsAccountedFor:
 
         registry = {s.name for s in _C_engine.op_registry_all() if not s.internal}
         compiled = {
-            name
-            for name in registry | set(EMITTERS)
-            if _C_engine.compile.emitter_registered(name)
+            name for name in registry | set(EMITTERS) if _C_engine.compile.emitter_registered(name)
         }
         accounted = (
             self.IMPOSSIBLE
@@ -814,9 +777,7 @@ class TestTheOperationsMilDoesNotHave:
     def test_unfold_matches_exactly(self, tmp_path: object) -> None:
         for kernel, stride, padding in ((2, 1, 0), (3, 2, 1)):
             _check(
-                lambda x, k=kernel, s=stride, p=padding: F.unfold(
-                    x, k, stride=s, padding=p
-                ),
+                lambda x, k=kernel, s=stride, p=padding: F.unfold(x, k, stride=s, padding=p),
                 lucid.randn(1, 3, 8, 8),
                 tmp_path,
             )
@@ -860,9 +821,7 @@ class TestTheOperationsMilDoesNotHave:
                 tmp_path,
             )
 
-    def test_erfinv_is_an_approximation_and_says_how_close(
-        self, tmp_path: object
-    ) -> None:
+    def test_erfinv_is_an_approximation_and_says_how_close(self, tmp_path: object) -> None:
         """MIL has no inverse error function; this one is a polynomial.
 
         Looser than the other ops on purpose, and measured rather than
@@ -893,9 +852,7 @@ class TestNanToNumReplacesEachSpecialValue:
             tmp_path,
         )
 
-    def test_the_default_replacements_are_float32s_extremes(
-        self, tmp_path: object
-    ) -> None:
+    def test_the_default_replacements_are_float32s_extremes(self, tmp_path: object) -> None:
         _check(lucid.nan_to_num, lucid.tensor(self._SPECIAL), tmp_path)
 
 
@@ -916,9 +873,7 @@ class TestMeshgridCarriesAllOfItsOperands:
 
     @pytest.mark.parametrize("indexing", ["ij", "xy"])
     @pytest.mark.parametrize("square", [False, True], ids=["oblong", "square"])
-    def test_both_indexings_match(
-        self, indexing: str, square: bool, tmp_path: object
-    ) -> None:
+    def test_both_indexings_match(self, indexing: str, square: bool, tmp_path: object) -> None:
         import lucid.nn as nn
 
         second = 3 if square else 4
@@ -932,9 +887,7 @@ class TestMeshgridCarriesAllOfItsOperands:
 
         model = UsesMeshgrid().eval()
         x = lucid.randn(2, 2)
-        exported = cml.export(
-            model, x, f"{tmp_path}/mesh_{indexing}_{second}.mlpackage"
-        )
+        exported = cml.export(model, x, f"{tmp_path}/mesh_{indexing}_{second}.mlpackage")
         try:
             assert exported.verify(model, x, relative=True) < 1e-5
         finally:
@@ -990,9 +943,7 @@ class TestTheSamplingGridIsTheOneTheModelAsked:
         tmp_path: object,
     ) -> None:
         _check(
-            lambda x: F.interpolate(
-                x, size=size, mode=mode, align_corners=align_corners
-            ),
+            lambda x: F.interpolate(x, size=size, mode=mode, align_corners=align_corners),
             lucid.randn(*shape),
             tmp_path,
         )
@@ -1114,9 +1065,7 @@ class TestTheWindowPartitionGetsPastTheRankCap:
         lucid.manual_seed(0)
         _check(merge, lucid.randn(16, 2, 2, 3), tmp_path)
 
-    def test_a_permutation_that_is_not_one_adjacent_swap(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_permutation_that_is_not_one_adjacent_swap(self, tmp_path: object) -> None:
         """MaxViT's grid partition moves three axes, not two.
 
         Staging by adjacent swaps covers it without special-casing —
@@ -1132,9 +1081,7 @@ class TestTheWindowPartitionGetsPastTheRankCap:
         lucid.manual_seed(0)
         _check(grid, lucid.randn(1, 8, 8, 3), tmp_path)
 
-    def test_a_tall_tensor_that_does_not_collapse_is_still_refused(
-        self, tmp_path: object
-    ) -> None:
+    def test_a_tall_tensor_that_does_not_collapse_is_still_refused(self, tmp_path: object) -> None:
         """The cap is real; only the transient case can be staged.
 
         A rank-6 value that something other than the triple reads has to
@@ -1147,9 +1094,7 @@ class TestTheWindowPartitionGetsPastTheRankCap:
                 return x.reshape(1, 4, 2, 4, 2, 3).sum(dim=5)
 
         with pytest.raises(cml.UnsupportedRank):
-            cml.export(
-                Tall().eval(), lucid.randn(1, 8, 8, 3), f"{tmp_path}/tall.mlpackage"
-            )
+            cml.export(Tall().eval(), lucid.randn(1, 8, 8, 3), f"{tmp_path}/tall.mlpackage")
 
 
 class TestAHostComputedResultSaysSo:
@@ -1313,9 +1258,7 @@ _UNREACHED = [
 ]
 
 
-@pytest.mark.parametrize(
-    ("name", "fn"), _UNREACHED, ids=[name for name, _fn in _UNREACHED]
-)
+@pytest.mark.parametrize(("name", "fn"), _UNREACHED, ids=[name for name, _fn in _UNREACHED])
 def test_an_emitter_no_test_had_reached(name, fn, tmp_path) -> None:
     lucid.manual_seed(0)
     _check(fn, lucid.randn(3, 5), tmp_path)
@@ -1433,9 +1376,7 @@ def test_a_model_that_does_nothing_is_refused(tmp_path: object) -> None:
 
     lucid.manual_seed(0)
     with pytest.raises(ValueError, match="never reached an op"):
-        cml.export(
-            DoesNothing().eval(), lucid.randn(3, 5), f"{tmp_path}/nothing.mlpackage"
-        )
+        cml.export(DoesNothing().eval(), lucid.randn(3, 5), f"{tmp_path}/nothing.mlpackage")
 
 
 class TestDrawingRandomNumbersIsRefused:
@@ -1461,6 +1402,4 @@ class TestDrawingRandomNumbersIsRefused:
 
         lucid.manual_seed(0)
         with pytest.raises(cml.UnsupportedOp, match="fixed sample"):
-            cml.export(
-                Samples().eval(), lucid.randn(3, 5), f"{tmp_path}/sampled.mlpackage"
-            )
+            cml.export(Samples().eval(), lucid.randn(3, 5), f"{tmp_path}/sampled.mlpackage")

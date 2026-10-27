@@ -137,9 +137,7 @@ def test_categories_are_mutually_disjoint() -> None:
     seen: dict[str, str] = {}
     for category, members in ALL_CATEGORIES:
         for name in members:
-            assert (
-                name not in seen
-            ), f"{name} is listed in both {seen[name]} and {category}"
+            assert name not in seen, f"{name} is listed in both {seen[name]} and {category}"
             seen[name] = category
 
 
@@ -148,9 +146,7 @@ def test_every_lucid_function_is_classified_in_exactly_one_category() -> None:
     classified = frozenset().union(*(members for _, members in ALL_CATEGORIES))
     unclassified = sorted(found - classified)
     stale = sorted(classified - found)
-    assert (
-        not unclassified
-    ), f"Unclassified Function subclasses in lucid/: {unclassified}"
+    assert not unclassified, f"Unclassified Function subclasses in lucid/: {unclassified}"
     assert not stale, f"Classified names no longer in lucid/: {stale}"
     assert trace_forms == TRACE_FORM
     assert exact_derivatives == EXACT

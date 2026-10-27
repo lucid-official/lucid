@@ -249,9 +249,7 @@ class _Actor(nn.Module):
         # A one-hot needs one score per alternative; a squashed Gaussian
         # needs a location and a scale per dimension.
         width = action_dim if discrete else 2 * action_dim
-        self.head = DenseHead(
-            latent_size, hidden, layers, out_features=width, act_fn=act_fn
-        )
+        self.head = DenseHead(latent_size, hidden, layers, out_features=width, act_fn=act_fn)
 
     def distribution(self, feature: Tensor) -> tuple[Tensor, Tensor]:
         """Return the pre-squash ``(mean, std)`` for a state.
@@ -304,9 +302,7 @@ class _Actor(nn.Module):
         mean, std = self.distribution(feature)
         if not sample:
             return lucid.tanh(mean)
-        noise = lucid.randn(
-            tuple(int(s) for s in mean.shape), device=mean.device, dtype=mean.dtype
-        )
+        noise = lucid.randn(tuple(int(s) for s in mean.shape), device=mean.device, dtype=mean.dtype)
         return lucid.tanh(mean + std * noise)
 
     def logits(self, feature: Tensor) -> Tensor:
@@ -383,9 +379,7 @@ class DreamerModel(PretrainedModel):
 
     def __init__(self, config: DreamerConfig) -> None:
         super().__init__(config)
-        self.encoder = PixelEncoder(
-            config.in_channels, config.cnn_depth, config.cnn_act
-        )
+        self.encoder = PixelEncoder(config.in_channels, config.cnn_depth, config.cnn_act)
         self.rssm = RSSM(
             stoch_size=config.stoch_size,
             deter_size=config.deter_size,
@@ -569,8 +563,7 @@ class DreamerModel(PretrainedModel):
         """
         if self.pcont_head is None:
             raise ValueError(
-                "this model has no discount head; construct it with "
-                "DreamerConfig(pcont=True)"
+                "this model has no discount head; construct it with " "DreamerConfig(pcont=True)"
             )
         return self.pcont_head(state.feature)
 
@@ -1020,9 +1013,7 @@ class DreamerForWorldModeling(WorldModelingModel):
                 dtype=returns.dtype,
             )
         else:
-            ones = lucid.ones(
-                (int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype
-            )
+            ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
             running = lucid.cat([ones, pcont[:, : self._horizon - 1]], dim=1)
             weight = lucid.cumprod(running, dim=1).detach()
 

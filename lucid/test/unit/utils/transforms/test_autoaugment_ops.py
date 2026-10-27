@@ -238,9 +238,7 @@ class TestApplyOp:
         and bottom-left of the canvas (or vice versa for negative).
         Verify that triangle is filled with the requested constant."""
         x = lucid.full((3, 16, 16), 1.0)
-        out = apply_op(
-            x, "ShearX", 0.3, fill=0.7, interpolation=Interpolation.BILINEAR
-        ).numpy()
+        out = apply_op(x, "ShearX", 0.3, fill=0.7, interpolation=Interpolation.BILINEAR).numpy()
         # Far top-right pixel is fully outside the sheared source.
         assert float(out[0, 0, 15]) == pytest.approx(1.0)  # in-bounds (top edge)
         assert float(out[0, 15, 15]) == pytest.approx(0.7, abs=1e-5)
@@ -254,9 +252,7 @@ class TestSampleSignedMagnitude:
         # Across many draws we should see both positive and negative signs.
         lucid.manual_seed(0)
         mags = [1.0, 2.0, 3.0]
-        signs = {
-            math.copysign(1.0, sample_signed_magnitude(mags, 1)) for _ in range(200)
-        }
+        signs = {math.copysign(1.0, sample_signed_magnitude(mags, 1)) for _ in range(200)}
         assert signs == {-1.0, 1.0}
 
     def test_magnitude_magnitude_preserved(self) -> None:

@@ -157,9 +157,7 @@ class _Fixture:
         self.origin = tmp_path / "origin.git"
         self.dev = tmp_path / "dev"
         self.runner = tmp_path / "runner"
-        subprocess.run(
-            ["git", "init", "-q", "--bare", str(self.origin)], env=self.env, check=True
-        )
+        subprocess.run(["git", "init", "-q", "--bare", str(self.origin)], env=self.env, check=True)
         d = self.dev
         d.mkdir()
         _git(d, self.env, "init", "-q")
@@ -176,9 +174,7 @@ class _Fixture:
             d / "web/scripts/build-api-data-cached.py",
         )
         (d / "scripts").mkdir()
-        shutil.copy(
-            ROOT / "scripts/ci_api_data_push.sh", d / "scripts/ci_api_data_push.sh"
-        )
+        shutil.copy(ROOT / "scripts/ci_api_data_push.sh", d / "scripts/ci_api_data_push.sh")
         _write(d, f"{API}/_summaries.json", _SUMMARIES)
         _git(d, self.env, "add", "-A")
         _git(d, self.env, "commit", "-qm", "init")
@@ -256,9 +252,7 @@ class _Fixture:
     def summary(self) -> str:
         return (self.runner.parent / "step_summary").read_text()
 
-    def check(
-        self, root: Path, write: bool = False
-    ) -> subprocess.CompletedProcess[str]:
+    def check(self, root: Path, write: bool = False) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "scripts/build-api-data-cached.py"]
             + (["--write-cache"] if write else ["--check"]),
@@ -468,19 +462,14 @@ def test_a_main_that_keeps_moving_fails_loudly_naming_the_stale_slugs(
     )
     result = repo.push(LUCID_API_DATA_PUSH_ATTEMPTS="2", STUB_ON_BUILD=again)
     assert result.returncode == 1, result.stdout + result.stderr
-    assert (
-        "::error::api-data was not pushed: the push was refused 2 times"
-        in result.stderr
-    )
+    assert "::error::api-data was not pushed: the push was refused 2 times" in result.stderr
     assert "  moved on main during the rebuild:\n" in result.stderr
     assert "    - lucid.beta" in result.stderr
     assert "    - lucid.ops" in result.stderr
     assert "    - lucid.alpha" not in result.stderr
     assert "pushed=false" in repo.pushed()
     tip = _git(repo.dev, repo.env, "ls-remote", str(repo.origin), "refs/heads/main")
-    assert (
-        _git(repo.dev, repo.env, "log", "--format=%s", "-1", tip.split()[0]) == "again"
-    )
+    assert _git(repo.dev, repo.env, "log", "--format=%s", "-1", tip.split()[0]) == "again"
 
 
 def test_a_generator_that_moved_fails_loudly(repo: _Fixture) -> None:

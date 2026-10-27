@@ -107,11 +107,7 @@ class Adam(Optimizer):
 
     @override
     def _append_engine_optim(self, group: dict[str, object]) -> None:
-        cls = (
-            _C_engine.AdamW
-            if group.get("decoupled_weight_decay", False)
-            else _C_engine.Adam
-        )
+        cls = _C_engine.AdamW if group.get("decoupled_weight_decay", False) else _C_engine.Adam
         self._engines.append(self._build_engine(cls, group))
 
     @override

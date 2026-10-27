@@ -145,9 +145,7 @@ def test_pad_packed_sequence_round_trip(
 ) -> None:
     lengths = _FLAT[case]
     longest = max(lengths)
-    total_length = {None: None, "max": longest, "longer": longest + 2}.get(
-        total, longest - 1
-    )
+    total_length = {None: None, "max": longest, "longer": longest + 2}.get(total, longest - 1)
     x = _padded(batch_first, seed=1)
     packed = pack_padded_sequence(
         lucid.tensor(x, device=device), lengths, batch_first, enforce_sorted
@@ -159,14 +157,10 @@ def test_pad_packed_sequence_round_trip(
         with pytest.raises(ValueError, match="total_length"):
             pad_packed_sequence(packed, batch_first, -1.0, total_length)
         with pytest.raises(ValueError, match="total_length"):
-            ref.nn.utils.rnn.pad_packed_sequence(
-                rpacked, batch_first, -1.0, total_length
-            )
+            ref.nn.utils.rnn.pad_packed_sequence(rpacked, batch_first, -1.0, total_length)
         return
     out, out_len = pad_packed_sequence(packed, batch_first, -1.0, total_length)
-    rout, rlen = ref.nn.utils.rnn.pad_packed_sequence(
-        rpacked, batch_first, -1.0, total_length
-    )
+    rout, rlen = ref.nn.utils.rnn.pad_packed_sequence(rpacked, batch_first, -1.0, total_length)
     assert out.device == lucid.device(device)
     assert out_len.device == lucid.device("cpu") and out_len.dtype == lucid.int64
     np.testing.assert_array_equal(_np(out), rout.numpy())
@@ -175,9 +169,7 @@ def test_pad_packed_sequence_round_trip(
 
 @pytest.mark.parametrize("enforce_sorted", [True, False], ids=["enforce", "sort"])
 @pytest.mark.parametrize("case", ["sorted", "unsorted", "zero"])
-def test_pack_sequence(
-    ref: ModuleType, case: str, enforce_sorted: bool, device: str
-) -> None:
+def test_pack_sequence(ref: ModuleType, case: str, enforce_sorted: bool, device: str) -> None:
     lengths = _FLAT[case]
     rng = np.random.default_rng(2)
     seqs = [rng.standard_normal((n, _F)).astype(np.float32) for n in lengths]
@@ -200,16 +192,12 @@ def test_pack_sequence(
 
 @pytest.mark.parametrize("batch_first", [False, True], ids=["TB", "BT"])
 @pytest.mark.parametrize("case", ["sorted", "unsorted", "zero"])
-def test_pad_sequence(
-    ref: ModuleType, case: str, batch_first: bool, device: str
-) -> None:
+def test_pad_sequence(ref: ModuleType, case: str, batch_first: bool, device: str) -> None:
     lengths = _FLAT[case]
     rng = np.random.default_rng(3)
     seqs = [rng.standard_normal((n, _F)).astype(np.float32) for n in lengths]
     got = pad_sequence([lucid.tensor(s, device=device) for s in seqs], batch_first, 7.0)
-    want = ref.nn.utils.rnn.pad_sequence(
-        [ref.tensor(s) for s in seqs], batch_first, 7.0
-    )
+    want = ref.nn.utils.rnn.pad_sequence([ref.tensor(s) for s in seqs], batch_first, 7.0)
     assert got.device == lucid.device(device)
     np.testing.assert_array_equal(_np(got), want.numpy())
 
@@ -294,9 +282,7 @@ def test_gradients_through_pack_lstm_pad(
     (out * lucid.tensor(w_np, device=device)).sum().backward()
 
     rx = ref.tensor(x_np, requires_grad=True)
-    rpacked = ref.nn.utils.rnn.pack_padded_sequence(
-        rx, lengths, batch_first, enforce_sorted
-    )
+    rpacked = ref.nn.utils.rnn.pack_padded_sequence(rx, lengths, batch_first, enforce_sorted)
     rout, _ = ref.nn.utils.rnn.pad_packed_sequence(theirs(rpacked)[0], batch_first)
     (rout * ref.tensor(w_np)).sum().backward()
 

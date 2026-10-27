@@ -91,9 +91,7 @@ def zfnet(pretrained: bool = False, **overrides: object) -> ZFNet:
     default_config=_CFG,
     params=62357608,
 )
-def zfnet_cls(
-    pretrained: bool = False, **overrides: object
-) -> ZFNetForImageClassification:
+def zfnet_cls(pretrained: bool = False, **overrides: object) -> ZFNetForImageClassification:
     r"""ZFNet image classifier (backbone + FC6 + FC7 + linear head).
 
     Builds a :class:`ZFNetForImageClassification` with the paper-cited

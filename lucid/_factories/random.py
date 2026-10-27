@@ -71,8 +71,7 @@ def _require_holds(
     """
     if dt in _PART_DTYPE:
         raise _C_engine.NotImplementedError(
-            f"{op}: a draw of integers is not implemented for "
-            f"{_ENGINE_TO_DTYPE[dt]}"
+            f"{op}: a draw of integers is not implemented for " f"{_ENGINE_TO_DTYPE[dt]}"
         )
     floating = dt != _C_engine.Bool and not _promotion.is_integer(dt)
     if dt == _C_engine.Bool:
@@ -85,8 +84,7 @@ def _require_holds(
     name = _ENGINE_TO_DTYPE[dt]
     if low < least:
         raise _C_engine.InvalidArgument(
-            f"{op}: from={low} is out of bounds for {name}, whose least value "
-            f"is {least}"
+            f"{op}: from={low} is out of bounds for {name}, whose least value " f"is {least}"
         )
     if high - 1 > most:
         raise _C_engine.InvalidArgument(
@@ -639,19 +637,13 @@ def randint(
     >>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}
     """
     _check_random()
-    _dt, _dev, _ = normalize_factory_kwargs(
-        dtype if dtype is not None else int64, device
-    )
+    _dt, _dev, _ = normalize_factory_kwargs(dtype if dtype is not None else int64, device)
     _require_holds("randint", low, high, _dt)
     draw_dt = (
-        _C_engine.I64
-        if _dev == _C_engine.Device.CPU and not _promotion.is_integer(_dt)
-        else _dt
+        _C_engine.I64 if _dev == _C_engine.Device.CPU and not _promotion.is_integer(_dt) else _dt
     )
     impl = _C_engine.randint(list(size), low, high, draw_dt, _dev, generator)
-    return _wrap(
-        _leaf(_C_engine.astype(impl, _dt) if draw_dt != _dt else impl, requires_grad)
-    )
+    return _wrap(_leaf(_C_engine.astype(impl, _dt) if draw_dt != _dt else impl, requires_grad))
 
 
 def bernoulli(
@@ -708,30 +700,22 @@ def bernoulli(
             f"not {type(input).__name__}"
         )
     if input.is_complex():
-        raise _C_engine.NotImplementedError(
-            f'"bernoulli" not implemented for {input.dtype}'
-        )
+        raise _C_engine.NotImplementedError(f'"bernoulli" not implemented for {input.dtype}')
     dt, dev, gen = impl.dtype, impl.device, generator
     if p is not None:
         p_num = _promotion.as_number(p)
         if isinstance(p_num, bool) or not isinstance(p_num, (int, float)):
-            raise TypeError(
-                f"bernoulli(): argument 'p' must be float, not {type(p).__name__}"
-            )
+            raise TypeError(f"bernoulli(): argument 'p' must be float, not {type(p).__name__}")
         pf = float(p_num)
         if not 0.0 <= pf <= 1.0:
-            raise _C_engine.InvalidArgument(
-                f"bernoulli_ expects p to be in [0, 1], but got p={pf}"
-            )
+            raise _C_engine.InvalidArgument(f"bernoulli_ expects p to be in [0, 1], but got p={pf}")
         draw_dt = dt if input.is_floating_point() else _C_engine.Dtype.F32
         impl = _C_engine.bernoulli(list(input.shape), pf, draw_dt, dev, gen)
         if draw_dt != dt:
             impl = _C_engine.astype(impl, dt)
         return _wrap(_leaf(impl, False))
     if not input.is_floating_point():
-        raise _C_engine.NotImplementedError(
-            f'"bernoulli_tensor" not implemented for {input.dtype}'
-        )
+        raise _C_engine.NotImplementedError(f'"bernoulli_tensor" not implemented for {input.dtype}')
     if input.numel() > 0 and not hasattr(input._impl, "_in_dim"):
         from lucid._engine_scope import untraced
 
@@ -977,9 +961,7 @@ def _int_bounds(op: str, low: object, high: object) -> tuple[int, int]:
     bounds = []
     for what, bound in (("low", low), ("high", high)):
         if isinstance(bound, bool) or not isinstance(bound, SupportsIndex):
-            raise TypeError(
-                f"{op}(): {what} must be an int, got {type(bound).__name__}"
-            )
+            raise TypeError(f"{op}(): {what} must be an int, got {type(bound).__name__}")
         bounds.append(operator.index(bound))
     lo, hi = bounds
     if lo >= hi:
@@ -1112,9 +1094,7 @@ _PART_DTYPE = {_C_engine.C64: _C_engine.F32, _C_engine.C128: _C_engine.F64}
 def _draw_like(
     input: Tensor,
     name: str,
-    draw: Callable[
-        [list[int], _C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl
-    ],
+    draw: Callable[[list[int], _C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl],
 ) -> Tensor:
     """``draw``'s samples in ``input``'s shape, dtype and device.
 
@@ -1135,9 +1115,7 @@ def _draw_like(
         _C_engine.F32,
         _C_engine.F64,
     ):
-        raise _C_engine.NotImplementedError(
-            f'"{name}" not implemented for {input.dtype}'
-        )
+        raise _C_engine.NotImplementedError(f'"{name}" not implemented for {input.dtype}')
     return _wrap(draw(list(impl.shape), impl.dtype, impl.device))
 
 
@@ -1185,9 +1163,7 @@ def _uniform_like(
             f"uniform_: expects a [from, to) range, got from={low} > to={high}"
         )
 
-    def draw(
-        shape: list[int], dt: _C_engine.Dtype, dev: _C_engine.Device
-    ) -> _C_engine.TensorImpl:
+    def draw(shape: list[int], dt: _C_engine.Dtype, dev: _C_engine.Device) -> _C_engine.TensorImpl:
         if low != high:
             return _C_engine.uniform(shape, low, high, dt, dev, generator)
         _C_engine.uniform(shape, 0.0, 1.0, dt, dev, generator)
@@ -1291,9 +1267,7 @@ def randperm(
     if n == 0:
         impl = _C_engine.zeros([0], _dt, _dev)
         return _wrap(_leaf(impl, requires_grad))
-    keys_impl = _C_engine.randint(
-        [n], -(2**63), 2**63 - 1, _C_engine.I64, _dev, generator
-    )
+    keys_impl = _C_engine.randint([n], -(2**63), 2**63 - 1, _C_engine.I64, _dev, generator)
     perm_impl = _C_engine.argsort(keys_impl, -1)
     if perm_impl.dtype != _dt:
         perm_impl = _C_engine.astype(perm_impl, _dt)

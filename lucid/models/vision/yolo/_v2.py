@@ -209,9 +209,7 @@ class YOLOV2Config(ModelConfig):
                 f"anchors length ({len(self.anchors)}) must equal "
                 f"num_anchors ({self.num_anchors})"
             )
-        object.__setattr__(
-            self, "anchors", tuple((float(a), float(b)) for a, b in self.anchors)
-        )
+        object.__setattr__(self, "anchors", tuple((float(a), float(b)) for a, b in self.anchors))
 
 
 # ---------------------------------------------------------------------------
@@ -355,9 +353,7 @@ def _darknet_reorg(x: Tensor, block_size: int) -> Tensor:
     batch, channels, height, width = x.shape
     bs = block_size
     if bs <= 0 or channels % (bs * bs) or height % bs or width % bs:
-        raise ValueError(
-            "darknet reorg requires divisible channels and spatial dimensions"
-        )
+        raise ValueError("darknet reorg requires divisible channels and spatial dimensions")
     return (
         x.reshape(batch, channels // (bs * bs), height, bs, width, bs)
         .permute(0, 3, 5, 1, 2, 4)
@@ -485,9 +481,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         # Passthrough: 1x1 reduce to 64 ch, then space_to_depth → (B, 256, ...)
         route = self.route_reduce(route)
         passthrough = (
-            _darknet_reorg(route, 2)
-            if self.config.darknet_reorg
-            else _space_to_depth(route, 2)
+            _darknet_reorg(route, 2) if self.config.darknet_reorg else _space_to_depth(route, 2)
         )
 
         # Concatenate along channel axis
@@ -527,9 +521,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         by = (F.sigmoid(raw_r[..., 1]) + row_offsets) * stride_h
         bw = aw_t * lucid.exp(raw_r[..., 2].clamp(min=-10.0, max=10.0)) * stride_w
         bh = ah_t * lucid.exp(raw_r[..., 3].clamp(min=-10.0, max=10.0)) * stride_h
-        return lucid.stack(
-            [bx - bw / 2.0, by - bh / 2.0, bx + bw / 2.0, by + bh / 2.0], dim=-1
-        )
+        return lucid.stack([bx - bw / 2.0, by - bh / 2.0, bx + bw / 2.0, by + bh / 2.0], dim=-1)
 
     def _decode_predictions(
         self,

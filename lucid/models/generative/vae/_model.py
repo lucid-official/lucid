@@ -145,9 +145,7 @@ class _VAEEncoder(nn.Module):
         )
 
     @override
-    def forward(
-        self, x: Tensor
-    ) -> tuple[Tensor, Tensor] | tuple[list[Tensor], list[Tensor]]:
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor] | tuple[list[Tensor], list[Tensor]]:
         self._check_input_size(int(x.shape[-2]), int(x.shape[-1]))
         h = x
         if self._hier:
@@ -217,14 +215,10 @@ class _VAEDecoder(nn.Module):
         # rev_channels has L entries; we want L upsample blocks.  After the
         # last upsample the channel count stays at rev_channels[-1].
         for out_ch in rev_channels[1:]:
-            up_blocks.append(
-                nn.ConvTranspose2d(in_ch, out_ch, kernel_size=4, stride=2, padding=1)
-            )
+            up_blocks.append(nn.ConvTranspose2d(in_ch, out_ch, kernel_size=4, stride=2, padding=1))
             in_ch = out_ch
         # Final upsample keeps channel count.
-        up_blocks.append(
-            nn.ConvTranspose2d(in_ch, in_ch, kernel_size=4, stride=2, padding=1)
-        )
+        up_blocks.append(nn.ConvTranspose2d(in_ch, in_ch, kernel_size=4, stride=2, padding=1))
         self.up_blocks = nn.ModuleList(up_blocks)
         self.head = nn.Conv2d(in_ch, config.out_channels, kernel_size=3, padding=1)
 
@@ -250,14 +244,10 @@ class _VAEDecoder(nn.Module):
             # latents and skip in forward.
             for lvl in range(L - 1):
                 # post_channels[lvl] is the channel count after this block.
-                inject.append(
-                    nn.Linear(config.latent_dims[L - 2 - lvl], post_channels[lvl])
-                )
+                inject.append(nn.Linear(config.latent_dims[L - 2 - lvl], post_channels[lvl]))
             self.injectors = nn.ModuleList(inject)
         # Cache for forward dispatch.
-        self._post_channels = (
-            tuple(rev_channels[1:]) + (rev_channels[-1],) if self._hier else ()
-        )
+        self._post_channels = tuple(rev_channels[1:]) + (rev_channels[-1],) if self._hier else ()
 
     @override
     def forward(
@@ -265,9 +255,7 @@ class _VAEDecoder(nn.Module):
         z_or_zs: Tensor | list[Tensor],
     ) -> Tensor:
         if self._hier:
-            assert isinstance(
-                z_or_zs, list
-            ), "Hierarchical decoder expects a list of z_l"
+            assert isinstance(z_or_zs, list), "Hierarchical decoder expects a list of z_l"
             zs = z_or_zs
             # Bottom-up encoder produced (z_0, …, z_{L-1}); decoder consumes
             # them top-down.
@@ -393,9 +381,7 @@ class VAEModel(PretrainedModel):
     def latent_dims(self) -> tuple[int, ...]:
         return self._latent_dims
 
-    def encode(
-        self, x: Tensor
-    ) -> tuple[Tensor, Tensor] | tuple[list[Tensor], list[Tensor]]:
+    def encode(self, x: Tensor) -> tuple[Tensor, Tensor] | tuple[list[Tensor], list[Tensor]]:
         """Return posterior parameters of ``q(z|x)``.
 
         Vanilla mode → ``(mu, logvar)``.  Hierarchical mode → ``(mus,

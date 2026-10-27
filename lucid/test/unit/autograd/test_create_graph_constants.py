@@ -80,9 +80,7 @@ _CASES = {
     "cumsum": lambda e, x: e.L.cumsum(x, 0),
     "getitem_adv": lambda e, x: x[[0, 2, 2]],
     "index_select": lambda e, x: e.L.index_select(x, 0, e.t([0, 3, 3])),
-    "gather": lambda e, x: e.L.gather(
-        x.reshape(4, 4), 1, e.t([[0, 2], [1, 3], [0, 0], [3, 3]])
-    ),
+    "gather": lambda e, x: e.L.gather(x.reshape(4, 4), 1, e.t([[0, 2], [1, 3], [0, 0], [3, 3]])),
     "masked_select": lambda e, x: e.L.masked_select(x, x > 0),
     "masked_fill": lambda e, x: x.masked_fill(x < 0, 0.0),
     "where": lambda e, x: e.L.where(x > 0, x, e.zeros(16)),
@@ -113,9 +111,7 @@ _CASES = {
     "pixel_shuffle": lambda e, x: e.F.pixel_shuffle(x.reshape(1, 4, 2, 2), 2),
     "pixel_unshuffle": lambda e, x: e.F.pixel_unshuffle(x.reshape(1, 1, 4, 4), 2),
     "pad_constant": lambda e, x: e.F.pad(x.reshape(1, 1, 4, 4), (1, 1, 1, 1)),
-    "pad_circular": lambda e, x: e.F.pad(
-        x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="circular"
-    ),
+    "pad_circular": lambda e, x: e.F.pad(x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="circular"),
     "interp_nearest": lambda e, x: e.F.interpolate(
         x.reshape(1, 1, 4, 4), scale_factor=2, mode="nearest"
     ),
@@ -128,14 +124,10 @@ _CASES = {
     "interp_linear": lambda e, x: e.F.interpolate(
         x.reshape(1, 1, 16), scale_factor=2, mode="linear", align_corners=False
     ),
-    "linear_layer": lambda e, x: e.F.linear(
-        x.reshape(4, 4), e.t([[1.0, 2, 3, 4], [0, 1, 0, 1]])
-    ),
+    "linear_layer": lambda e, x: e.F.linear(x.reshape(4, 4), e.t([[1.0, 2, 3, 4], [0, 1, 0, 1]])),
     "matmul": lambda e, x: x.reshape(4, 4) @ e.t([[1.0], [2.0], [3.0], [4.0]]),
     "hinge": lambda e, x: e.F.hinge_embedding_loss(x, e.t([1.0, -1] * 8)),
-    "margin_rank": lambda e, x: e.F.margin_ranking_loss(
-        x, e.zeros(16), e.t([1.0, -1] * 8)
-    ),
+    "margin_rank": lambda e, x: e.F.margin_ranking_loss(x, e.zeros(16), e.t([1.0, -1] * 8)),
     # a backward that reads the input: kept in the graph
     "relu": lambda e, x: e.F.relu(x),
     "relu6": lambda e, x: e.F.relu6(x),
@@ -167,31 +159,21 @@ _CASES = {
     "norm_1": lambda e, x: e.L.linalg.norm(x, 1),
     "norm_inf": lambda e, x: e.L.linalg.norm(x, float("inf")),
     "cdist": lambda e, x: e.L.cdist(x.reshape(4, 4), e.t([[0.0] * 4])),
-    "cosine_sim": lambda e, x: e.F.cosine_similarity(
-        x.reshape(4, 4), e.t([[1.0, 2, 3, 4]] * 4)
-    ),
+    "cosine_sim": lambda e, x: e.F.cosine_similarity(x.reshape(4, 4), e.t([[1.0, 2, 3, 4]] * 4)),
     "max_pool1d": lambda e, x: e.F.max_pool1d(x.reshape(1, 1, 16), 2),
     "max_pool2d": lambda e, x: e.F.max_pool2d(x.reshape(1, 1, 4, 4), 2),
     "max_pool3d": lambda e, x: e.F.max_pool3d(x.reshape(1, 1, 2, 2, 4), 2),
     "adaptive_max_pool1d": lambda e, x: e.F.adaptive_max_pool1d(x.reshape(1, 1, 16), 4),
-    "adaptive_max_pool2d": lambda e, x: e.F.adaptive_max_pool2d(
-        x.reshape(1, 1, 4, 4), 2
-    ),
+    "adaptive_max_pool2d": lambda e, x: e.F.adaptive_max_pool2d(x.reshape(1, 1, 4, 4), 2),
     "avg_pool1d": lambda e, x: e.F.avg_pool1d(x.reshape(1, 1, 16), 2),
     "avg_pool2d": lambda e, x: e.F.avg_pool2d(x.reshape(1, 1, 4, 4), 2),
     "avg_pool3d": lambda e, x: e.F.avg_pool3d(x.reshape(1, 1, 2, 2, 4), 2),
     "adaptive_avg_pool1d": lambda e, x: e.F.adaptive_avg_pool1d(x.reshape(1, 1, 16), 4),
-    "adaptive_avg_pool2d": lambda e, x: e.F.adaptive_avg_pool2d(
-        x.reshape(1, 1, 4, 4), 2
-    ),
+    "adaptive_avg_pool2d": lambda e, x: e.F.adaptive_avg_pool2d(x.reshape(1, 1, 4, 4), 2),
     "lp_pool1d": lambda e, x: e.F.lp_pool1d(x.reshape(1, 1, 16), 2.0, 2),
-    "interp_area": lambda e, x: e.F.interpolate(
-        x.reshape(1, 1, 4, 4), size=(2, 2), mode="area"
-    ),
+    "interp_area": lambda e, x: e.F.interpolate(x.reshape(1, 1, 4, 4), size=(2, 2), mode="area"),
     "conv1d": lambda e, x: e.F.conv1d(x.reshape(1, 1, 16), e.t([[[1.0, -2.0, 0.5]]])),
-    "conv2d": lambda e, x: e.F.conv2d(
-        x.reshape(1, 1, 4, 4), e.t([[[[1.0, 2.0], [3.0, 4.0]]]])
-    ),
+    "conv2d": lambda e, x: e.F.conv2d(x.reshape(1, 1, 4, 4), e.t([[[[1.0, 2.0], [3.0, 4.0]]]])),
     "conv_transpose2d": lambda e, x: e.F.conv_transpose2d(
         x.reshape(1, 1, 4, 4), e.t([[[[1.0, 2.0], [3.0, 4.0]]]])
     ),
@@ -216,9 +198,7 @@ _CASES = {
     # gradient in the graph (derivative zero).
     "dropout_eval": lambda e, x: e.F.dropout(x, 0.5, training=False),
     "dropout_p0": lambda e, x: e.F.dropout(x, 0.0, training=True),
-    "dropout2d_eval": lambda e, x: e.F.dropout2d(
-        x.reshape(1, 4, 2, 2), 0.5, training=False
-    ),
+    "dropout2d_eval": lambda e, x: e.F.dropout2d(x.reshape(1, 4, 2, 2), 0.5, training=False),
     "alpha_dropout_eval": lambda e, x: e.F.alpha_dropout(x, 0.5, training=False),
     "batch_norm_eval": lambda e, x: e.F.batch_norm(
         x.reshape(4, 4),
@@ -256,15 +236,11 @@ _CASES = {
     "cross_entropy_smooth": lambda e, x: e.F.cross_entropy(
         x.reshape(4, 4), e.t([0, 1, 2, 3]), label_smoothing=0.1
     ),
-    "multi_margin_loss": lambda e, x: e.F.multi_margin_loss(
-        x.reshape(4, 4), e.t([0, 1, 2, 3])
-    ),
+    "multi_margin_loss": lambda e, x: e.F.multi_margin_loss(x.reshape(4, 4), e.t([0, 1, 2, 3])),
     "soft_margin_loss": lambda e, x: e.F.soft_margin_loss(x, e.t([1.0, -1] * 8)),
     "kl_div": lambda e, x: e.F.kl_div(x, e.t([0.0625] * 16), reduction="sum"),
     "poisson_nll_loss": lambda e, x: e.F.poisson_nll_loss(x, e.t([1.0] * 16)),
-    "bce_with_logits": lambda e, x: e.F.binary_cross_entropy_with_logits(
-        x, e.t([1.0] * 16)
-    ),
+    "bce_with_logits": lambda e, x: e.F.binary_cross_entropy_with_logits(x, e.t([1.0] * 16)),
     "triplet_margin_loss": lambda e, x: e.F.triplet_margin_loss(
         x.reshape(4, 4), e.zeros(4, 4), e.t([[1.0] * 4] * 4)
     ),
@@ -273,20 +249,12 @@ _CASES = {
     "softshrink": lambda e, x: e.F.softshrink(x, 0.5),
     "threshold": lambda e, x: e.F.threshold(x, 0.5, -1.0),
     "rrelu_eval": lambda e, x: e.F.rrelu(x, training=False),
-    "pad_reflect": lambda e, x: e.F.pad(
-        x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="reflect"
-    ),
-    "pad_replicate": lambda e, x: e.F.pad(
-        x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="replicate"
-    ),
+    "pad_reflect": lambda e, x: e.F.pad(x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="reflect"),
+    "pad_replicate": lambda e, x: e.F.pad(x.reshape(1, 1, 4, 4), (1, 1, 1, 1), mode="replicate"),
     "pad_reflect1d": lambda e, x: e.F.pad(x.reshape(1, 1, 16), (2, 2), mode="reflect"),
-    "pad_replicate1d": lambda e, x: e.F.pad(
-        x.reshape(1, 1, 16), (2, 2), mode="replicate"
-    ),
+    "pad_replicate1d": lambda e, x: e.F.pad(x.reshape(1, 1, 16), (2, 2), mode="replicate"),
     "nll_loss": lambda e, x: e.F.nll_loss(x.reshape(4, 4), e.t([0, 1, 2, 3])),
-    "nll_loss_2d": lambda e, x: e.F.nll_loss(
-        x.reshape(1, 4, 2, 2), e.t([[[0, 1], [2, 3]]])
-    ),
+    "nll_loss_2d": lambda e, x: e.F.nll_loss(x.reshape(1, 4, 2, 2), e.t([[[0, 1], [2, 3]]])),
 }
 
 # Lucid's clamp backward attaches a zero derivative so composites over clamp
@@ -351,9 +319,7 @@ def test_hessian_strict_matches_reference(ref, device, kind, fn):
             return None, err
 
     want, want_err = run(ref, ref.tensor([1.0, 2.0], dtype=ref.float64))
-    got, got_err = run(
-        lucid, lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device)
-    )
+    got, got_err = run(lucid, lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device))
     assert (got_err is None) == (want_err is None), (kind, got_err, want_err)
     if want_err is None:
         assert got.flatten().tolist() == pytest.approx(want.flatten().tolist())
@@ -379,9 +345,7 @@ def test_jacobian_strict_create_graph_matches_reference(ref, device, kind, fn):
             return None, err
 
     want, want_err = run(ref, ref.tensor([1.0, 2.0], dtype=ref.float64))
-    got, got_err = run(
-        lucid, lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device)
-    )
+    got, got_err = run(lucid, lucid.tensor([1.0, 2.0], dtype=lucid.float32, device=device))
     assert (got_err is None) == (want_err is None), (kind, got_err, want_err)
     if want_err is None:
         assert got.flatten().tolist() == pytest.approx(want.flatten().tolist())

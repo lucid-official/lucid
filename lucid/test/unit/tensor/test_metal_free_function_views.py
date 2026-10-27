@@ -103,9 +103,7 @@ def _after(view: View, write: Callable[[lucid.Tensor], object], shape: tuple[int
 
 @pytest.mark.parametrize("write", list(WRITES))
 @pytest.mark.parametrize("name", list(FREE_VIEWS))
-def test_a_write_through_a_free_function_view_matches_the_cpu(
-    name: str, write: str
-) -> None:
+def test_a_write_through_a_free_function_view_matches_the_cpu(name: str, write: str) -> None:
     shape, view = FREE_VIEWS[name]
     out = _after(view, WRITES[write], shape)
     assert out["cpu"] != _base(shape, "cpu").tolist()  # the CPU wrote at all
@@ -242,9 +240,7 @@ def test_a_free_function_detach_is_writable_under_autograd() -> None:
 # zero_ is a fill, which every element can take at once: it goes through
 # (test_fill_into_overlapping_views.py).
 @pytest.mark.parametrize("write", [w for w in WRITES if w != "zero_"])
-def test_a_write_into_overlapping_elements_is_refused_as_on_the_cpu(
-    view: View, write: str
-) -> None:
+def test_a_write_into_overlapping_elements_is_refused_as_on_the_cpu(view: View, write: str) -> None:
     for dev in ("cpu", "metal"):
         x = lucid.zeros(1, 3, 4).to(dev)
         with pytest.raises(RuntimeError, match="overlap"):

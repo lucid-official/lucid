@@ -161,9 +161,7 @@ def _assert_bits(got: np.ndarray, want: np.ndarray, where: np.ndarray) -> None:
     uint = np.uint32 if got.dtype == np.float32 else np.uint64
     bad = (gnan != wnan) | (~gnan & (got.view(uint) != want.view(uint)))
     idx = np.flatnonzero(bad)
-    assert idx.size == 0, [
-        (repr(where[i]), repr(got[i]), repr(want[i])) for i in idx[:8]
-    ]
+    assert idx.size == 0, [(repr(where[i]), repr(got[i]), repr(want[i])) for i in idx[:8]]
 
 
 def _special_points(name: str, dtype: type) -> np.ndarray:
@@ -314,9 +312,7 @@ def test_a_fixed_tile_leaves_its_other_values_alone(name: str, n: int) -> None:
         plain = getattr(lucid, name)(_t(x)).numpy()
         at = sorted({0, n - 1} | {i for i in (1023, 1024, 2047, 16383, 16384) if i < n})
         y = x.copy()
-        y[at] = np.array(
-            [-0.0, 0.0, 1e-20, -1e-9, 0.0, -0.0, 1e-30][: len(at)], dtype=dtype
-        )
+        y[at] = np.array([-0.0, 0.0, 1e-20, -1e-9, 0.0, -0.0, 1e-30][: len(at)], dtype=dtype)
         got = getattr(lucid, name)(_t(y)).numpy()
         keep = np.ones(n, dtype=bool)
         keep[at] = False
@@ -344,7 +340,9 @@ def test_strided_and_tanh_gelu_inputs() -> None:
         edge = _ODD_X[dtype]
         xs = np.concatenate(
             [
-                np.array([0.0, -0.0, 1e-30, -1e-30, 1e-6, -1e-4, edge, -edge, 0.5, -2.0], dtype=dtype),
+                np.array(
+                    [0.0, -0.0, 1e-30, -1e-30, 1e-6, -1e-4, edge, -edge, 0.5, -2.0], dtype=dtype
+                ),
                 rng.uniform(-edge, edge, 2048).astype(dtype),
                 rng.uniform(-4.0, 4.0, 2048).astype(dtype),
             ]
@@ -395,12 +393,8 @@ def _plateau(name: str, k: int, dtype: type) -> tuple[np.ndarray, np.ndarray]:
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-@pytest.mark.parametrize(
-    ("name", "k"), [("sin", 1), ("sin", 3), ("cos", 2), ("cos", 4)]
-)
-def test_plateaus_away_from_zero_fall_short_on_cpu(
-    name: str, k: int, dtype: type
-) -> None:
+@pytest.mark.parametrize(("name", "k"), [("sin", 1), ("sin", 3), ("cos", 2), ("cos", 4)])
+def test_plateaus_away_from_zero_fall_short_on_cpu(name: str, k: int, dtype: type) -> None:
     # A recorded bound, not a bug to be fixed here (see the module
     # docstring).  Measured: float32 misses ~70% of a plateau, by 1 or
     # 2 ulp; float64 ~96%, by 1 to 3.  If vForce starts returning ±1 here,
@@ -416,9 +410,7 @@ def test_plateaus_away_from_zero_fall_short_on_cpu(
 
 
 @pytest.mark.skipif(not metal_available(), reason="needs Metal")
-@pytest.mark.parametrize(
-    ("name", "k"), [("sin", 1), ("sin", 3), ("cos", 2), ("cos", 4)]
-)
+@pytest.mark.parametrize(("name", "k"), [("sin", 1), ("sin", 3), ("cos", 2), ("cos", 4)])
 def test_plateaus_away_from_zero_are_exact_on_metal(name: str, k: int) -> None:
     x, want = _plateau(name, k, np.float32)
     got = getattr(lucid, name)(_t(x, "metal")).cpu().numpy()
@@ -508,9 +500,15 @@ def test_mish_lstm_rope_and_randn_vforce_parity(dtype: type, ref: ModuleType) ->
         rx_s = ref.from_numpy(x_seq.copy()).requires_grad_(True)
         l_out, (l_hn, l_cn) = l_lstm(lx_s)
         r_out, (r_hn, r_cn) = r_lstm(rx_s)
-        np.testing.assert_allclose(l_out.detach().numpy(), r_out.detach().numpy(), rtol=rtol, atol=atol)
-        np.testing.assert_allclose(l_hn.detach().numpy(), r_hn.detach().numpy(), rtol=rtol, atol=atol)
-        np.testing.assert_allclose(l_cn.detach().numpy(), r_cn.detach().numpy(), rtol=rtol, atol=atol)
+        np.testing.assert_allclose(
+            l_out.detach().numpy(), r_out.detach().numpy(), rtol=rtol, atol=atol
+        )
+        np.testing.assert_allclose(
+            l_hn.detach().numpy(), r_hn.detach().numpy(), rtol=rtol, atol=atol
+        )
+        np.testing.assert_allclose(
+            l_cn.detach().numpy(), r_cn.detach().numpy(), rtol=rtol, atol=atol
+        )
         (l_out.sum() + l_hn.sum() + l_cn.sum()).backward()
         (r_out.sum() + r_hn.sum() + r_cn.sum()).backward()
         assert lx_s.grad is not None and rx_s.grad is not None

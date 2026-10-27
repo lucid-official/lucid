@@ -49,9 +49,7 @@ def test_topk_k_outside_the_axis_is_refused(ref, device, k):
         lucid.topk(lucid.zeros(3, device=device), k)
 
 
-@pytest.mark.parametrize(
-    ("shape", "dim"), [((0,), 0), ((2, 0), 1), ((0, 3), 0)], ids=str
-)
+@pytest.mark.parametrize(("shape", "dim"), [((0,), 0), ((2, 0), 1), ((0, 3), 0)], ids=str)
 def test_kthvalue_of_an_empty_axis_is_an_index_error(ref, device, shape, dim):
     with pytest.raises(IndexError):
         ref.kthvalue(ref.zeros(shape), 1, dim=dim)

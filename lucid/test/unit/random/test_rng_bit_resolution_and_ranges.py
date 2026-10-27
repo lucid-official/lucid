@@ -51,17 +51,12 @@ class TestFloat64BitResolution:
         assert abs(float(n.std()) - 0.5) < 0.02
 
         z_like = lucid.randn_like(lucid.empty(10_000, dtype=lucid.float64)).numpy()
-        assert (
-            np.count_nonzero(z_like.astype(np.float32).astype(np.float64) != z_like)
-            > 9_900
-        )
+        assert np.count_nonzero(z_like.astype(np.float32).astype(np.float64) != z_like) > 9_900
 
         w = lucid.empty(10_000, dtype=lucid.float64)
         nn.init.normal_(w, mean=0.0, std=1.0)
         w_np = w.numpy()
-        assert (
-            np.count_nonzero(w_np.astype(np.float32).astype(np.float64) != w_np) > 9_900
-        )
+        assert np.count_nonzero(w_np.astype(np.float32).astype(np.float64) != w_np) > 9_900
 
     def test_bernoulli_float64_compares_against_53_bit_uniform(self) -> None:
         # Find a generator state where the top 24 bits of word 0 are non-zero, and compare
@@ -76,9 +71,7 @@ class TestFloat64BitResolution:
             if u53 > u24:
                 p = 0.5 * (u24 + u53)
                 g.counter = counter
-                b = lucid.bernoulli(
-                    lucid.tensor([p], dtype=lucid.float64), generator=g
-                ).item()
+                b = lucid.bernoulli(lucid.tensor([p], dtype=lucid.float64), generator=g).item()
                 # Since u24 < p < u53, a 24-bit draw would yield 1.0 whereas the 53-bit draw yields 0.0.
                 assert b == 0.0
                 return
@@ -140,9 +133,7 @@ class TestRandintWideRangesAndDtypes:
         assert len(set(arr.tolist())) > 20
 
     @pytest.mark.parametrize("device", DEVICES)
-    @pytest.mark.parametrize(
-        "shape", [(), (0,), (3, 0, 2)], ids=["scalar", "empty-1d", "empty-3d"]
-    )
+    @pytest.mark.parametrize("shape", [(), (0,), (3, 0, 2)], ids=["scalar", "empty-1d", "empty-3d"])
     def test_randint_edge_shapes(self, device: str, shape: tuple[int, ...]) -> None:
         t = lucid.randint(0, 1 << 35, shape, device=device)
         assert t.shape == shape

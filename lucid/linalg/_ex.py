@@ -774,9 +774,7 @@ class _LDLFactorGrad(Function):
 
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx, A: Tensor, LD: Tensor, pivots: Tensor, info: Tensor
-    ) -> Tensor:
+    def forward(ctx: FunctionCtx, A: Tensor, LD: Tensor, pivots: Tensor, info: Tensor) -> Tensor:
         out = LD.detach()
         ctx.save_for_backward(out, pivots, info)
         return out
@@ -789,8 +787,7 @@ class _LDLFactorGrad(Function):
             return lucid.zeros_like(grad_out), None, None, None
         n, batch = int(LD.shape[-1]), tuple(LD.shape[:-2])
         steps = [
-            _ldl_steps([int(p.item()) for p in row])
-            for row in pivots.to("cpu").reshape(-1, n)
+            _ldl_steps([int(p.item()) for p in row]) for row in pivots.to("cpu").reshape(-1, n)
         ]
         dev = LD.device
         first = lucid.tensor([s[0] for s in steps], device=dev).reshape(*batch, n)
@@ -817,15 +814,11 @@ class _LDLFactorGrad(Function):
         return lucid.where(failed, lucid.zeros_like(grad), grad), None, None, None
 
 
-def _complete_svd_basis(
-    factor: Tensor, full_dim: int, k: int, *, columns: bool
-) -> Tensor:
+def _complete_svd_basis(factor: Tensor, full_dim: int, k: int, *, columns: bool) -> Tensor:
     """Complete a thin orthogonal factor ``factor`` with its null-space basis."""
     batch = tuple(int(s) for s in factor.shape[:-2])
     if 0 in batch:
-        return lucid.zeros(
-            *batch, full_dim, full_dim, dtype=factor.dtype, device=factor.device
-        )
+        return lucid.zeros(*batch, full_dim, full_dim, dtype=factor.dtype, device=factor.device)
     if k == 0:
         eye = lucid.eye(full_dim, dtype=factor.dtype, device=factor.device)
         return lucid.broadcast_to(eye, (*batch, full_dim, full_dim)).contiguous()
@@ -866,9 +859,7 @@ def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResul
             "'reduced', 'complete', or 'r'"
         )
     if mode == "r":
-        return _QrResult(
-            _wrap(_C_engine.zeros([0], A.dtype._engine, A.device._engine)), R
-        )
+        return _QrResult(_wrap(_C_engine.zeros([0], A.dtype._engine, A.device._engine)), R)
     if mode == "complete":
         m, n = int(A.shape[-2]), int(A.shape[-1])
         if m > n:
@@ -915,9 +906,7 @@ def _sv_cutoff(
         rtol_t = _tol_tensor(default_rtol, A, sv.dtype, op)
     else:
         zero = lucid.zeros_like(atol_t)
-        rtol_t = lucid.where(
-            atol_t > zero, zero, _tol_tensor(default_rtol, A, sv.dtype, op)
-        )
+        rtol_t = lucid.where(atol_t > zero, zero, _tol_tensor(default_rtol, A, sv.dtype, op))
     if sv.numel() == 0:
         return atol_t
     max_sv = _wrap(_C_engine.max(_unwrap(sv), [-1], True))
@@ -1076,8 +1065,7 @@ def tensorsolve(
     b_shape = tuple(int(s) for s in B.shape)
     if k > len(a_shape):
         raise _C_engine.ShapeMismatch(
-            f"linalg.tensorsolve: expected input.ndim ({len(a_shape)}) >= "
-            f"other.ndim ({k})"
+            f"linalg.tensorsolve: expected input.ndim ({len(a_shape)}) >= " f"other.ndim ({k})"
         )
     front, back = a_shape[:k], a_shape[k:]
     m = 1
@@ -1122,9 +1110,7 @@ def _lu_solve_general(
         )
     n = lu_sh[-1]
     if len(b_sh) < 2 or b_sh[-2] != n:
-        raise _C_engine.ShapeMismatch(
-            f"lu_solve: B must have shape (*, {n}, k), got {b_sh}"
-        )
+        raise _C_engine.ShapeMismatch(f"lu_solve: B must have shape (*, {n}, k), got {b_sh}")
     batch = _broadcast_batch(lu_sh[:-2], b_sh[:-2])
     k = b_sh[-1]
     if n == 0 or k == 0 or 0 in batch:
@@ -1144,9 +1130,7 @@ def _check_lstsq_shapes(
     """Return ``(vec_rhs, b_batch)`` or raise ``ValueError`` for malformed shapes."""
     a_ndim, b_ndim = len(a_shape), len(b_shape)
     if a_ndim < 2:
-        raise ValueError(
-            f"lstsq: A must have at least 2 dimensions, got shape {a_shape}"
-        )
+        raise ValueError(f"lstsq: A must have at least 2 dimensions, got shape {a_shape}")
     if b_ndim < 1 or not (0 <= a_ndim - b_ndim <= 1):
         raise ValueError(
             f"lstsq: A.ndim must be >= B.ndim and A.ndim - B.ndim <= 1, "
@@ -1306,10 +1290,7 @@ def _householder_product(H: Tensor, tau: Tensor) -> Tensor:
         use_ops = (
             H_cast.ndim > 2
             or r != k
-            or (
-                (H_cast.requires_grad or tau_cast.requires_grad)
-                and lucid.is_grad_enabled()
-            )
+            or ((H_cast.requires_grad or tau_cast.requires_grad) and lucid.is_grad_enabled())
         )
         if use_ops:
             return _householder_product_ops(H_cast, tau_cast)
@@ -1319,9 +1300,7 @@ def _householder_product(H: Tensor, tau: Tensor) -> Tensor:
 def _check_matrix_norm_dims(rank: int, dim: tuple[int, int]) -> tuple[int, int]:
     """Validate ``rank`` and ``dim`` for ``matrix_norm`` and return ``(d0, d1)``."""
     if rank < 2:
-        raise ValueError(
-            f"matrix_norm: the input must have at least 2 dimensions, got {rank}"
-        )
+        raise ValueError(f"matrix_norm: the input must have at least 2 dimensions, got {rank}")
     if len(dim) != 2:
         raise ValueError(f"matrix_norm: dim must be a pair of axes, got {dim!r}")
     d0 = _wrap_dim(int(dim[0]), rank, "linalg.matrix_norm")

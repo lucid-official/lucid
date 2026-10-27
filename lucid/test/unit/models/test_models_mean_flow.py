@@ -172,9 +172,7 @@ class TestObjective:
         zeros_r, ones_t = lucid.zeros_like(r), lucid.ones_like(t)
         _, both = lucid.func.jvp(field, (z, r, t), (v, zeros_r, ones_t))
         _, along_z = lucid.func.jvp(field, (z, r, t), (v, zeros_r, lucid.zeros_like(t)))
-        _, along_t = lucid.func.jvp(
-            field, (z, r, t), (lucid.zeros_like(z), zeros_r, ones_t)
-        )
+        _, along_t = lucid.func.jvp(field, (z, r, t), (lucid.zeros_like(z), zeros_r, ones_t))
         gap = float((both - (along_z + along_t)).abs().max().item())
         assert gap < 1e-5, f"d/dt u did not decompose: {gap}"
 
@@ -258,9 +256,7 @@ class TestSampling:
         model.mean_flow = _Ones(config)
         latent = lucid.randn((2, 4, 8, 8))
         out = model.generate(2, noise=latent, steps=1).samples
-        assert (
-            float((out - (latent - lucid.ones_like(latent))).abs().max().item()) < 1e-6
-        )
+        assert float((out - (latent - lucid.ones_like(latent))).abs().max().item()) < 1e-6
 
     def test_subdividing_the_interval_changes_nothing_on_a_constant_field(
         self,

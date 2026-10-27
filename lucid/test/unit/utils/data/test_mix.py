@@ -21,9 +21,7 @@ import lucid.utils.data as D
 
 def _make_batch(b: int = 4, c: int = 3, h: int = 8, w: int = 8) -> list[tuple]:
     """Build a batch list of ``(image, label)`` tuples for collate input."""
-    return [
-        (lucid.rand(c, h, w), lucid.tensor(i % 10, dtype=lucid.int64)) for i in range(b)
-    ]
+    return [(lucid.rand(c, h, w), lucid.tensor(i % 10, dtype=lucid.int64)) for i in range(b)]
 
 
 # ── MixupCollator ───────────────────────────────────────────────────

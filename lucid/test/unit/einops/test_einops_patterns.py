@@ -268,9 +268,7 @@ _ORACLES: list[tuple[_Case, Any]] = [
 
 
 @pytest.mark.parametrize("case, oracle", _ORACLES, ids=[_id(c) for c, _ in _ORACLES])
-def test_the_values_follow_the_pattern_s_order(
-    case: _Case, oracle: Any, device: str
-) -> None:
+def test_the_values_follow_the_pattern_s_order(case: _Case, oracle: Any, device: str) -> None:
     x = _input(case[2], case[3])
     got = _call(le, case, lucid.tensor(x, device=device)).numpy()
     np.testing.assert_array_equal(got, oracle(x))
@@ -313,9 +311,7 @@ _GRAD_CASES: list[_Case] = [
 
 @pytest.mark.parity
 @pytest.mark.parametrize("case", _GRAD_CASES, ids=[_id(c) for c in _GRAD_CASES])
-def test_gradients_match_einops_over_the_reference(
-    case: _Case, device: str, ref: Any
-) -> None:
+def test_gradients_match_einops_over_the_reference(case: _Case, device: str, ref: Any) -> None:
     einops = pytest.importorskip("einops")
     x = _input(case[2], None)
     tx = ref.tensor(x, requires_grad=True)
@@ -353,9 +349,7 @@ def test_mean_of_an_integer_tensor_is_refused_as_the_reference_does() -> None:
     with pytest.raises(NotImplementedError, match="floating-point"):
         le.reduce(lucid.ones(2, 3, dtype=lucid.int32), "a b -> a", "mean")
     # Without an axis to reduce there is no mean to take.
-    assert le.reduce(
-        lucid.ones(2, 3, dtype=lucid.int32), "a b -> b a", "mean"
-    ).shape == (
+    assert le.reduce(lucid.ones(2, 3, dtype=lucid.int32), "a b -> b a", "mean").shape == (
         3,
         2,
     )

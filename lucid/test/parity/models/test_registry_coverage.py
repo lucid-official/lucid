@@ -61,11 +61,7 @@ class TestTheRegistryIsFullyReached:
     def test_no_spec_is_registered_and_never_run(self) -> None:
         collected, unimportable = _collected_spec_ids()
         orphans = sorted({spec.id for spec in SPECS} - collected)
-        note = (
-            f"  (modules that did not import: {'; '.join(unimportable)})"
-            if unimportable
-            else ""
-        )
+        note = f"  (modules that did not import: {'; '.join(unimportable)})" if unimportable else ""
         assert not orphans, (
             "registered but collected by no test — add the factory to the "
             f"matching module's _FACTORIES: {', '.join(orphans)}{note}"

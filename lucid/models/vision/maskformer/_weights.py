@@ -80,8 +80,7 @@ class MaskFormerResNet101Weights(WeightsEnum):
     """
 
     ADE20K = WeightEntry(
-        url=f"{HUB_BASE}/maskformer-resnet-101/resolve/main/"
-        "ADE20K/model.safetensors",
+        url=f"{HUB_BASE}/maskformer-resnet-101/resolve/main/" "ADE20K/model.safetensors",
         sha256="224ba1214a3b2b5d5c6e4fb01cc9ccf5cbb79a297f0e5898eb0860e901aefffd",
         num_classes=150,
         transforms=_PRESET,

@@ -68,9 +68,7 @@ class _Frozen(nn.Module):
 
 _Batch = tuple[tuple[lucid.Tensor, ...], dict[str, Any]]
 _Grads = dict[str, np.ndarray]
-_needs_metal = pytest.mark.skipif(
-    not metal_available(), reason="the matrix runs on Metal"
-)
+_needs_metal = pytest.mark.skipif(not metal_available(), reason="the matrix runs on Metal")
 
 
 def _batches(x: lucid.Tensor) -> list[_Batch]:
@@ -119,9 +117,7 @@ def test_a_mode_whose_compiled_step_is_unusable_is_nonfinite(
 
 
 @_needs_metal
-@pytest.mark.parametrize(
-    ("reference", "status"), [("finite", "wrong"), ("nan", "nonfinite")]
-)
+@pytest.mark.parametrize(("reference", "status"), [("finite", "wrong"), ("nan", "nonfinite")])
 def test_a_nonfinite_float64_arm_is_nonfinite_not_wrong(
     reference: str, status: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -148,9 +144,7 @@ def test_a_nonfinite_float64_arm_is_nonfinite_not_wrong(
 
     monkeypatch.setattr(zoo, "_compiled_step", compiled)
     monkeypatch.setattr(zoo, "_float64_reference", float64)
-    got, detail = zoo._check_mode(
-        "synthetic", "test", model, "eval", _batches(lucid.ones(1, 3))
-    )
+    got, detail = zoo._check_mode("synthetic", "test", model, "eval", _batches(lucid.ones(1, 3)))
     assert got == status, detail
     if status == "nonfinite":
         assert detail == "float64 verdict, float64 without dropout: loss is nan"

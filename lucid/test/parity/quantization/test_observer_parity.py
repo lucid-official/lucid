@@ -43,9 +43,7 @@ class TestObserverParity:
         rng = np.random.default_rng(1)
         w = rng.standard_normal((6, 10)).astype(np.float32)
 
-        lp = Q.PerChannelMinMaxObserver(
-            ch_axis=0, qscheme=Q.per_channel_symmetric, qdtype=Q.qint8
-        )
+        lp = Q.PerChannelMinMaxObserver(ch_axis=0, qscheme=Q.per_channel_symmetric, qdtype=Q.qint8)
         tp = obs.PerChannelMinMaxObserver(
             ch_axis=0, dtype=ref.qint8, qscheme=ref.per_channel_symmetric
         )

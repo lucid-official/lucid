@@ -120,9 +120,7 @@ def _masked_fill_(self: Tensor, mask: Tensor, value: float | Tensor) -> Tensor:
 
     if _is_tensor(value):
         if value.ndim != 0:
-            raise RuntimeError(
-                "masked_fill_ only supports a 0-dimensional value tensor"
-            )
+            raise RuntimeError("masked_fill_ only supports a 0-dimensional value tensor")
         if value.requires_grad:
             import lucid
 
@@ -135,9 +133,7 @@ def _masked_fill_(self: Tensor, mask: Tensor, value: float | Tensor) -> Tensor:
         scalar = float(value.item())
     else:
         scalar = float(value)
-    return _write_inplace(
-        self, "masked_fill_", lambda base: base.masked_fill(mask, scalar)
-    )
+    return _write_inplace(self, "masked_fill_", lambda base: base.masked_fill(mask, scalar))
 
 
 def _scatter_(
@@ -210,16 +206,12 @@ def _scatter_reduce_(
     return _write_inplace(
         self,
         "scatter_reduce_",
-        lambda base: _sr(
-            base, dim, index, src, reduce=reduce, include_self=include_self
-        ),
+        lambda base: _sr(base, dim, index, src, reduce=reduce, include_self=include_self),
         src,
     )
 
 
-def _put_(
-    self: Tensor, index: Tensor, source: Tensor, accumulate: bool = False
-) -> Tensor:
+def _put_(self: Tensor, index: Tensor, source: Tensor, accumulate: bool = False) -> Tensor:
     """Write ``source`` into ``self`` at flat ``index`` positions, in place."""
     from lucid._ops.composite.indexing import _write_inplace, put as _put
 
@@ -253,9 +245,7 @@ def _masked_scatter_(self: Tensor, mask: Tensor, source: Tensor) -> Tensor:
     )
 
 
-def _bincount(
-    self: Tensor, weights: Tensor | None = None, minlength: int = 0
-) -> Tensor:
+def _bincount(self: Tensor, weights: Tensor | None = None, minlength: int = 0) -> Tensor:
     """Count occurrences of each value in 1-D non-negative integer ``self``."""
     from lucid._ops.composite.statistics import bincount as _bc
 
@@ -389,18 +379,14 @@ def _logcumsumexp(self: Tensor, dim: int) -> Tensor:
     return _lce(self, dim=dim)
 
 
-def _addcmul(
-    self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
-) -> Tensor:
+def _addcmul(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """Element-wise ``self + value * tensor1 * tensor2``."""
     from lucid._ops.composite.blas import addcmul as _acm
 
     return _acm(self, tensor1, tensor2, value=value)
 
 
-def _addcdiv(
-    self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
-) -> Tensor:
+def _addcdiv(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """Element-wise ``self + value * tensor1 / tensor2``."""
     from lucid._ops.composite.blas import addcdiv as _acd
 
@@ -437,9 +423,7 @@ def _is_set_to(self: Tensor, tensor: Tensor) -> bool:
 # ── in-place forms with no engine kernel ─────────────────────────────────────
 
 
-def _write(
-    self: Tensor, name: str, result_of: Callable[[Tensor], Tensor], *args: object
-) -> Tensor:
+def _write(self: Tensor, name: str, result_of: Callable[[Tensor], Tensor], *args: object) -> Tensor:
     """Make ``result_of(self)`` the values of ``self`` in place; return ``self``.
 
     ``args`` are the op's other arguments: the tensors among them may carry
@@ -531,9 +515,7 @@ def _bitwise_left_shift_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.bitwise_left_shift_(2)
     tensor([4, 12], dtype=lucid.int64)
     """
-    return _binary_inplace(
-        self, other, "bitwise_left_shift_", _C_engine.bitwise_left_shift
-    )
+    return _binary_inplace(self, other, "bitwise_left_shift_", _C_engine.bitwise_left_shift)
 
 
 def _bitwise_right_shift_(self: Tensor, other: TensorOrScalar) -> Tensor:
@@ -546,9 +528,7 @@ def _bitwise_right_shift_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.bitwise_right_shift_(2)
     tensor([1, 3], dtype=lucid.int64)
     """
-    return _binary_inplace(
-        self, other, "bitwise_right_shift_", _C_engine.bitwise_right_shift
-    )
+    return _binary_inplace(self, other, "bitwise_right_shift_", _C_engine.bitwise_right_shift)
 
 
 def _remainder_(self: Tensor, other: TensorOrScalar) -> Tensor:
@@ -588,9 +568,7 @@ def _floor_divide_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.floor_divide_(2)
     tensor([3., -4.])
     """
-    return _binary_inplace(
-        self, other, "floor_divide_", _C_engine.floordiv, opmath=True
-    )
+    return _binary_inplace(self, other, "floor_divide_", _C_engine.floordiv, opmath=True)
 
 
 def _logical_and_(self: Tensor, other: TensorOrScalar) -> Tensor:
@@ -603,9 +581,7 @@ def _logical_and_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.logical_and_(lucid.tensor([1.0, 1.0, 0.0]))
     tensor([0., 1., 0.])
     """
-    return _binary_inplace(
-        self, other, "logical_and_", _C_engine.logical_and, promotes=False
-    )
+    return _binary_inplace(self, other, "logical_and_", _C_engine.logical_and, promotes=False)
 
 
 def _logical_or_(self: Tensor, other: TensorOrScalar) -> Tensor:
@@ -616,9 +592,7 @@ def _logical_or_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.logical_or_(lucid.tensor([0, 7, 0]))
     tensor([0, 1, 1], dtype=lucid.int64)
     """
-    return _binary_inplace(
-        self, other, "logical_or_", _C_engine.logical_or, promotes=False
-    )
+    return _binary_inplace(self, other, "logical_or_", _C_engine.logical_or, promotes=False)
 
 
 def _logical_xor_(self: Tensor, other: TensorOrScalar) -> Tensor:
@@ -629,9 +603,7 @@ def _logical_xor_(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> x.logical_xor_(lucid.tensor([True, False, False]))
     tensor([False, True, False], dtype=lucid.bool)
     """
-    return _binary_inplace(
-        self, other, "logical_xor_", _C_engine.logical_xor, promotes=False
-    )
+    return _binary_inplace(self, other, "logical_xor_", _C_engine.logical_xor, promotes=False)
 
 
 def _logical_not_(self: Tensor) -> Tensor:
@@ -670,9 +642,7 @@ def _lerp_(self: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
     return _write(self, "lerp_", lambda base: base.lerp(end, weight), end, weight)
 
 
-def _addcmul_(
-    self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
-) -> Tensor:
+def _addcmul_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """In-place :func:`lucid.addcmul`: ``self`` gains ``value * tensor1 * tensor2``.
 
     A float product into an integer ``self`` raises ``RuntimeError`` before
@@ -691,9 +661,7 @@ def _addcmul_(
     return _write(self, "addcmul_", result_of, tensor1, tensor2)
 
 
-def _addcdiv_(
-    self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
-) -> Tensor:
+def _addcdiv_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     """In-place :func:`lucid.addcdiv`: ``self`` gains ``value * tensor1 / tensor2``.
 
     The quotient is floating point, so an integer ``self`` is refused, as
@@ -865,17 +833,13 @@ def _make_binary_inplace(name: str) -> Callable[[Tensor, TensorOrScalar], Tensor
 def _make_scan_inplace(name: str) -> Callable[..., Tensor]:
     op_name = name[:-1]
 
-    def method(
-        self: Tensor, dim: int = -1, *, dtype: DTypeLike | None = None
-    ) -> Tensor:
+    def method(self: Tensor, dim: int = -1, *, dtype: DTypeLike | None = None) -> Tensor:
         """Write the cumulative scan along ``dim`` into ``self`` in place."""
         import lucid
         from lucid._dtype import to_engine_dtype
 
         if self.dtype == lucid.bool:
-            raise _C_engine.NotImplementedError(
-                f"{name} is not implemented for {self.dtype}"
-            )
+            raise _C_engine.NotImplementedError(f"{name} is not implemented for {self.dtype}")
         if dtype is not None:
             target = to_engine_dtype(dtype)
             if target != self._impl.dtype:
@@ -940,23 +904,17 @@ def _float_power_(self: Tensor, exponent: TensorOrScalar) -> Tensor:
             f"the base given to float_power_ has dtype {self.dtype} but the "
             "operation's result requires dtype lucid.float64"
         )
-    return _write(
-        self, "float_power_", lambda base: lucid.float_power(base, exponent), exponent
-    )
+    return _write(self, "float_power_", lambda base: lucid.float_power(base, exponent), exponent)
 
 
 def _heaviside_(self: Tensor, values: TensorOrScalar) -> Tensor:
     """Write ``lucid.heaviside(self, values)`` into ``self`` in place."""
     import lucid
 
-    return _write(
-        self, "heaviside_", lambda base: lucid.heaviside(base, values), values
-    )
+    return _write(self, "heaviside_", lambda base: lucid.heaviside(base, values), values)
 
 
-def _divide(
-    self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None = None
-) -> Tensor:
+def _divide(self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None = None) -> Tensor:
     """Element-wise division — :meth:`Tensor.div` under its longer name."""
     import lucid
 
@@ -970,9 +928,7 @@ def _true_divide(self: Tensor, other: TensorOrScalar) -> Tensor:
     return lucid.true_divide(self, other)
 
 
-def _divide_(
-    self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None = None
-) -> Tensor:
+def _divide_(self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None = None) -> Tensor:
     """Write ``lucid.divide(self, other, rounding_mode=rounding_mode)`` in place."""
     import lucid
 
@@ -988,9 +944,7 @@ def _subtract_(self: Tensor, other: TensorOrScalar, *, alpha: float = 1.0) -> Te
     """Write ``lucid.subtract(self, other, alpha=alpha)`` into ``self`` in place."""
     import lucid
 
-    return _write(
-        self, "subtract_", lambda base: lucid.subtract(base, other, alpha=alpha), other
-    )
+    return _write(self, "subtract_", lambda base: lucid.subtract(base, other, alpha=alpha), other)
 
 
 def _logit_(self: Tensor, eps: float | None = None) -> Tensor:
@@ -1020,9 +974,7 @@ def _renorm_(self: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
     """Write ``lucid.renorm(self, p, dim, maxnorm)`` into ``self`` in place."""
     import lucid
 
-    return _write(
-        self, "renorm_", lambda base: lucid.renorm(base, p=p, dim=dim, maxnorm=maxnorm)
-    )
+    return _write(self, "renorm_", lambda base: lucid.renorm(base, p=p, dim=dim, maxnorm=maxnorm))
 
 
 def _addmm_(
@@ -1129,9 +1081,7 @@ def _bernoulli_(
 
     def _draw(base: Tensor) -> Tensor:
         if isinstance(p, lucid.Tensor):
-            return lucid.bernoulli(p.expand(base.shape), generator=generator).to(
-                base.dtype
-            )
+            return lucid.bernoulli(p.expand(base.shape), generator=generator).to(base.dtype)
         return lucid.bernoulli(base, p, generator=generator)
 
     return _fill_drawn(self, "bernoulli_", _draw)
@@ -1174,9 +1124,7 @@ def _normal_(
     """
     from lucid._factories.random import _normal_like
 
-    return _fill_drawn(
-        self, "normal_", lambda base: _normal_like(base, mean, std, generator)
-    )
+    return _fill_drawn(self, "normal_", lambda base: _normal_like(base, mean, std, generator))
 
 
 def _uniform_(
@@ -1216,9 +1164,7 @@ def _uniform_(
     """
     from lucid._factories.random import _uniform_like
 
-    return _fill_drawn(
-        self, "uniform_", lambda base: _uniform_like(base, from_, to, generator)
-    )
+    return _fill_drawn(self, "uniform_", lambda base: _uniform_like(base, from_, to, generator))
 
 
 _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (

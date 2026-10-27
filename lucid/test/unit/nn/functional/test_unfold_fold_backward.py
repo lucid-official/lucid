@@ -144,9 +144,7 @@ def test_lppool1d_backward(device):
 @pytest.mark.parametrize("alpha", [1e-4, 1.0])
 def test_local_response_norm_backward(device, alpha):
     """The missing path scaled with ``alpha``, so a large alpha exposes it."""
-    _check_grad(
-        (2, 6, 4, 4), lambda t: F.local_response_norm(t, 3, alpha=alpha), device
-    )
+    _check_grad((2, 6, 4, 4), lambda t: F.local_response_norm(t, 3, alpha=alpha), device)
 
 
 @pytest.mark.parametrize("device", DEVICES)
@@ -201,9 +199,7 @@ def test_fold_is_adjoint_of_unfold(cols, out_hw, k, s, p, d, device):
         device=device,
         dtype=dt,
     )
-    lhs = float(
-        (F.fold(x, out_hw, k, stride=s, padding=p, dilation=d) * y).sum().item()
-    )
+    lhs = float((F.fold(x, out_hw, k, stride=s, padding=p, dilation=d) * y).sum().item())
     rhs = float((x * F.unfold(y, k, stride=s, padding=p, dilation=d)).sum().item())
     tol = 1e-12 if device == "cpu" else 1e-5
     assert abs(lhs - rhs) / max(abs(lhs), abs(rhs), 1e-12) < tol

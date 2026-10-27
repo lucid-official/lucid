@@ -65,9 +65,7 @@ def test_regression_loss_reductions(name, fn, reduction, ref):
 
 @pytest.mark.parametrize("reduction", REDUCTIONS)
 def test_cross_entropy_reductions(reduction, ref):
-    got = _v(
-        F.cross_entropy(_t(LOGITS), _t(TARGET, dtype=lucid.int32), reduction=reduction)
-    )
+    got = _v(F.cross_entropy(_t(LOGITS), _t(TARGET, dtype=lucid.int32), reduction=reduction))
     want = np.asarray(
         ref.nn.functional.cross_entropy(
             ref.from_numpy(LOGITS.copy()),
@@ -81,9 +79,7 @@ def test_cross_entropy_reductions(reduction, ref):
 def test_cross_entropy_with_class_weights(ref):
     weight = np.array([0.5, 2.0, 1.0, 0.25])
     got = float(
-        F.cross_entropy(
-            _t(LOGITS), _t(TARGET, dtype=lucid.int32), weight=_t(weight)
-        ).item()
+        F.cross_entropy(_t(LOGITS), _t(TARGET, dtype=lucid.int32), weight=_t(weight)).item()
     )
     want = float(
         ref.nn.functional.cross_entropy(
@@ -98,9 +94,7 @@ def test_cross_entropy_with_class_weights(ref):
 @pytest.mark.parametrize("smoothing", [0.0, 0.1, 0.3])
 def test_cross_entropy_label_smoothing(smoothing, ref):
     got = float(
-        F.cross_entropy(
-            _t(LOGITS), _t(TARGET, dtype=lucid.int32), label_smoothing=smoothing
-        ).item()
+        F.cross_entropy(_t(LOGITS), _t(TARGET, dtype=lucid.int32), label_smoothing=smoothing).item()
     )
     want = float(
         ref.nn.functional.cross_entropy(
@@ -115,9 +109,7 @@ def test_cross_entropy_label_smoothing(smoothing, ref):
 @pytest.mark.parametrize("reduction", REDUCTIONS)
 def test_nll_loss_reductions(reduction, ref):
     log_probs = np.log(np.exp(LOGITS) / np.exp(LOGITS).sum(axis=1, keepdims=True))
-    got = _v(
-        F.nll_loss(_t(log_probs), _t(TARGET, dtype=lucid.int32), reduction=reduction)
-    )
+    got = _v(F.nll_loss(_t(log_probs), _t(TARGET, dtype=lucid.int32), reduction=reduction))
     want = np.asarray(
         ref.nn.functional.nll_loss(
             ref.from_numpy(log_probs),
@@ -184,11 +176,7 @@ def test_margin_ranking_loss(reduction, ref):
 @pytest.mark.parametrize("margin", [0.5, 1.0, 2.5])
 def test_triplet_margin_loss_margin(margin, ref):
     anchor, positive, negative = A, B, RNG.standard_normal((6, 4))
-    got = float(
-        F.triplet_margin_loss(
-            _t(anchor), _t(positive), _t(negative), margin=margin
-        ).item()
-    )
+    got = float(F.triplet_margin_loss(_t(anchor), _t(positive), _t(negative), margin=margin).item())
     want = float(
         ref.nn.functional.triplet_margin_loss(
             ref.from_numpy(anchor.copy()),

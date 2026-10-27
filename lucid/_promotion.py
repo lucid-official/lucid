@@ -197,17 +197,13 @@ def check_pow_scalar(d: _C_engine.Dtype, exponent: object) -> None:
         if isinstance(exponent, int):
             bits = _BY_CODE[c][1]
             if not -(1 << (bits - 1)) <= exponent < (1 << (bits - 1)):
-                raise RuntimeError(
-                    f"value cannot be converted to type {d.name} without overflow"
-                )
+                raise RuntimeError(f"value cannot be converted to type {d.name} without overflow")
         return
     if c in _HALF_C:
         val = float(exponent)
         limit = _F16_MAX if c == _F16_C else _BF16_MAX
         if math.isfinite(val) and abs(val) > limit:
-            raise RuntimeError(
-                f"value cannot be converted to type {d.name} without overflow"
-            )
+            raise RuntimeError(f"value cannot be converted to type {d.name} without overflow")
 
 
 def _complex_code(c: int) -> int:

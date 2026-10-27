@@ -75,9 +75,7 @@ class StaticCache(Cache):
         """Return the full ``(keys, values)`` buffers for ``layer_idx``."""
         if 0 <= layer_idx < len(self.key_cache):
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
-        raise KeyError(
-            f"Cache has {len(self.key_cache)} layers; no entry for layer {layer_idx}."
-        )
+        raise KeyError(f"Cache has {len(self.key_cache)} layers; no entry for layer {layer_idx}.")
 
     def __iter__(self) -> Iterator[tuple[Tensor, Tensor]]:
         """Iterate the per-layer ``(keys, values)`` buffers."""
@@ -160,16 +158,12 @@ class StaticCache(Cache):
             self._lazy_init(layer_idx, key_states)
 
         n = int(key_states.shape[_SEQ_DIM])
-        cp_raw = (
-            cache_kwargs.get("cache_position") if cache_kwargs is not None else None
-        )
+        cp_raw = cache_kwargs.get("cache_position") if cache_kwargs is not None else None
         if isinstance(cp_raw, Tensor):
             cache_position = cp_raw
         else:
             start = self._cumulative_length[layer_idx]
-            cache_position = lucid.arange(
-                start, start + n, device=key_states.device.type
-            ).long()
+            cache_position = lucid.arange(start, start + n, device=key_states.device.type).long()
 
         self.key_cache[layer_idx] = lucid.index_copy(
             self.key_cache[layer_idx], _SEQ_DIM, cache_position, key_states
@@ -220,12 +214,8 @@ class StaticCache(Cache):
         """Reindex every layer's buffers along the batch dimension with
         ``beam_idx`` (in place) to keep beams aligned after a beam permutation."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, beam_idx
-            )
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, beam_idx
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
 
     def reset(self) -> None:
         """Zero every buffer and reset the length counters in place."""
@@ -251,9 +241,7 @@ class StaticCache(Cache):
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat every batch row ``repeats`` times along the batch dimension."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(
-                repeats, dim=0
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
             self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(
                 repeats, dim=0
             )
@@ -261,9 +249,5 @@ class StaticCache(Cache):
     def batch_select_indices(self, indices: Tensor) -> None:
         """Keep only the batch rows named by ``indices`` along the batch dim."""
         for layer_idx in range(len(self.key_cache)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, indices
-            )
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, indices
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, indices)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, indices)

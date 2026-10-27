@@ -40,10 +40,7 @@ _FAILING = [
 
 def _broken(n: int, order: int) -> list[list[float]]:
     """An SPD ``n``-square matrix whose leading minor ``order`` fails."""
-    a = [
-        [float(n if i == j else 1.0 / (1 + abs(i - j))) for j in range(n)]
-        for i in range(n)
-    ]
+    a = [[float(n if i == j else 1.0 / (1 + abs(i - j))) for j in range(n)] for i in range(n)]
     a[order - 1][order - 1] = -5.0
     return a
 
@@ -75,9 +72,7 @@ def test_cholesky_ex_returns_the_leading_factor(
 
 
 @pytest.mark.parametrize("upper", [False, True], ids=["lower", "upper"])
-def test_a_batch_mixes_full_and_partial_factors(
-    ref: ModuleType, device: str, upper: bool
-) -> None:
+def test_a_batch_mixes_full_and_partial_factors(ref: ModuleType, device: str, upper: bool) -> None:
     ok = [[4.0, 2.0], [2.0, 3.0]]
     a = [ok, _FAILING[0], [[9.0, 3.0], [3.0, 5.0]], _FAILING[1]]
     got, info = LA.cholesky_ex(lucid.tensor(a, device=device), upper=upper)
@@ -104,9 +99,7 @@ def test_ldl_factors_a_real_matrix_either_way(
     ref: ModuleType, device: str, hermitian: bool
 ) -> None:
     a = [[4.0, 1.0, -2.0], [1.0, -3.0, 0.5], [-2.0, 0.5, 1.0]]
-    want_ld, want_piv, want_info = ref.linalg.ldl_factor_ex(
-        ref.tensor(a), hermitian=hermitian
-    )
+    want_ld, want_piv, want_info = ref.linalg.ldl_factor_ex(ref.tensor(a), hermitian=hermitian)
     x = lucid.tensor(a, device=device)
     for ld, piv in (
         LA.ldl_factor(x, hermitian=hermitian),

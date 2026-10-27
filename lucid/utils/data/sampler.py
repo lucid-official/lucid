@@ -197,9 +197,7 @@ class RandomSampler(Sampler):
             # Caught here rather than at the first ``len()``, where it
             # surfaced as ``__len__() should return >= 0`` — an error about
             # the protocol rather than about the argument that caused it.
-            raise ValueError(
-                f"num_samples must be a positive integer, got {num_samples}."
-            )
+            raise ValueError(f"num_samples must be a positive integer, got {num_samples}.")
         self._num_samples = num_samples
         self.generator: Generator | None = _as_generator(generator, "RandomSampler")
 
@@ -210,11 +208,7 @@ class RandomSampler(Sampler):
         Returns the explicit ``num_samples`` argument if provided,
         otherwise ``len(data_source)``.
         """
-        return (
-            self._num_samples
-            if self._num_samples is not None
-            else len(self.data_source)
-        )
+        return self._num_samples if self._num_samples is not None else len(self.data_source)
 
     @override
     def __iter__(self) -> Iterator[int]:
@@ -230,9 +224,7 @@ class RandomSampler(Sampler):
         n = len(self.data_source)
         if n == 0:
             if self.num_samples:
-                raise ValueError(
-                    f"cannot draw {self.num_samples} samples from an empty dataset."
-                )
+                raise ValueError(f"cannot draw {self.num_samples} samples from an empty dataset.")
             return
         rng = self.generator
         if rng is None:
@@ -283,9 +275,7 @@ class SubsetRandomSampler(Sampler):
     True
     """
 
-    def __init__(
-        self, indices: Sequence[int], generator: Generator | int | None = None
-    ) -> None:
+    def __init__(self, indices: Sequence[int], generator: Generator | int | None = None) -> None:
         """Store the index pool and optional generator handle.
 
         Parameters
@@ -296,9 +286,7 @@ class SubsetRandomSampler(Sampler):
             See class docstring.
         """
         self.indices = list(indices)
-        self.generator: Generator | None = _as_generator(
-            generator, "SubsetRandomSampler"
-        )
+        self.generator: Generator | None = _as_generator(generator, "SubsetRandomSampler")
 
     @override
     def __iter__(self) -> Iterator[int]:
@@ -416,9 +404,7 @@ class WeightedRandomSampler(Sampler):
         )
         self.weights: list[float] = [float(w) for w in values]
         if num_samples <= 0:
-            raise ValueError(
-                f"num_samples must be a positive integer, got {num_samples}."
-            )
+            raise ValueError(f"num_samples must be a positive integer, got {num_samples}.")
         if not replacement and num_samples > len(self.weights):
             # There are not that many distinct indices to give.  Refused
             # here rather than silently repeating, which is what this did.
@@ -432,14 +418,10 @@ class WeightedRandomSampler(Sampler):
         if not all(math.isfinite(w) for w in self.weights):
             raise ValueError("weights must be finite.")
         if replacement and not any(w > 0 for w in self.weights):
-            raise ValueError(
-                "weights must contain a positive entry to draw with replacement."
-            )
+            raise ValueError("weights must contain a positive entry to draw with replacement.")
         self.num_samples = num_samples
         self.replacement = replacement
-        self.generator: Generator | None = _as_generator(
-            generator, "WeightedRandomSampler"
-        )
+        self.generator: Generator | None = _as_generator(generator, "WeightedRandomSampler")
 
     @override
     def __iter__(self) -> Iterator[int]:
@@ -457,9 +439,7 @@ class WeightedRandomSampler(Sampler):
             # The last index a draw may land on: past it every weight is
             # zero, and a draw rounding up to ``total`` must not reach them.
             last = max(i for i, w in enumerate(weights) if w > 0)
-            draws = cast(
-                list[float], _uniform_doubles(self.num_samples, self.generator).tolist()
-            )
+            draws = cast(list[float], _uniform_doubles(self.num_samples, self.generator).tolist())
             for u in draws:
                 yield min(bisect.bisect_right(cumulative, u * total), last)
             return
@@ -538,9 +518,7 @@ class BatchSampler(Sampler):
         if batch_size <= 0:
             # Otherwise the first ``len()`` divides by it and the caller
             # gets a ``ZeroDivisionError`` from inside the sampler.
-            raise ValueError(
-                f"batch_size must be a positive integer, got {batch_size}."
-            )
+            raise ValueError(f"batch_size must be a positive integer, got {batch_size}.")
         self.batch_size = batch_size
         self.drop_last = drop_last
 
@@ -655,9 +633,7 @@ class DistributedSampler(Sampler):
         if num_replicas < 1:
             raise ValueError(f"num_replicas must be >= 1, got {num_replicas}")
         if rank < 0 or rank >= num_replicas:
-            raise ValueError(
-                f"rank {rank} is out of range for num_replicas={num_replicas}"
-            )
+            raise ValueError(f"rank {rank} is out of range for num_replicas={num_replicas}")
         self.dataset: Dataset = dataset
         self.num_replicas: int = num_replicas
         self.rank: int = rank
@@ -823,9 +799,7 @@ class RASampler(Sampler):
         else:
             repeated = repeated[: self.total_size]
         # Replica's slab.
-        slab = repeated[
-            self.rank * self.num_samples : (self.rank + 1) * self.num_samples
-        ]
+        slab = repeated[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
         # Truncate so the epoch size per rank matches an un-repeated pass.
         return iter(slab[: self.num_selected_samples])
 

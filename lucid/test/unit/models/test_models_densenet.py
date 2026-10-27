@@ -60,9 +60,7 @@ class TestDenseNetParamCounts(unittest.TestCase):
         self.assertEqual(densenet_201().num_parameters(), 18_092_928)
 
     def test_densenet264_has_more_params(self) -> None:
-        self.assertGreater(
-            densenet_264().num_parameters(), densenet_201().num_parameters()
-        )
+        self.assertGreater(densenet_264().num_parameters(), densenet_201().num_parameters())
 
 
 class TestDenseNetBackbone(unittest.TestCase):
@@ -120,9 +118,7 @@ class TestDenseNetClassifier(unittest.TestCase):
         self.assertEqual(out.loss.shape, ())
 
     def test_custom_classes_and_dropout(self) -> None:
-        cfg = DenseNetConfig(
-            block_config=(6, 12, 24, 16), num_classes=10, dropout_rate=0.2
-        )
+        cfg = DenseNetConfig(block_config=(6, 12, 24, 16), num_classes=10, dropout_rate=0.2)
         m = DenseNetForImageClassification(cfg)
         m.eval()
         x = lucid.randn(1, 3, 224, 224)
@@ -232,9 +228,7 @@ class TestDenseNetWeightsEnums(unittest.TestCase):
         from lucid.models.weights import DenseNet201Weights
 
         meta = DenseNet201Weights.IMAGENET1K_V1.meta
-        self.assertEqual(
-            meta["source"], "reference_vision/DenseNet201_Weights.IMAGENET1K_V1"
-        )
+        self.assertEqual(meta["source"], "reference_vision/DenseNet201_Weights.IMAGENET1K_V1")
         self.assertEqual(meta["num_params"], 20_013_928)
 
     def test_registry_discoverable(self) -> None:

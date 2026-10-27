@@ -15,9 +15,7 @@ def _box_sample(h: int = 40, w: int = 40) -> dict[str, object]:
     return {
         "image": T.Image(lucid.rand(3, h, w)),
         "mask": T.Mask(lucid.rand(1, h, w)),
-        "boxes": T.BoundingBoxes(
-            lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)
-        ),
+        "boxes": T.BoundingBoxes(lucid.tensor([[5.0, 5.0, 35.0, 35.0]]), "xyxy", (h, w)),
         "kp": T.Keypoints(lucid.tensor([[20.0, 5.0]]), (h, w)),
     }
 
@@ -88,9 +86,7 @@ class TestReproducibility:
 
 
 @pytest.mark.parametrize(("src_points", "dst_points"), [(4, 3), (4, 5), (5, 5)])
-def test_perspective_matrix_wants_four_corners_a_side(
-    src_points: int, dst_points: int
-) -> None:
+def test_perspective_matrix_wants_four_corners_a_side(src_points: int, dst_points: int) -> None:
     """Anything but four corners a side says so, naming both counts.
 
     A fifth destination used to be dropped without a word, and five on

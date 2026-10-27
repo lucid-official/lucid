@@ -58,9 +58,7 @@ def test_the_parent_keeps_the_compiled_subtree() -> None:
 
     assert _names(parent) == _names(plain)
     assert list(parent.state_dict()) == list(plain.state_dict())
-    assert sum(p.numel() for p in parent.parameters()) == sum(
-        p.numel() for p in plain.parameters()
-    )
+    assert sum(p.numel() for p in parent.parameters()) == sum(p.numel() for p in plain.parameters())
     # The attribute answers with the wrapper; the tree holds the model.
     assert isinstance(parent.body, CompiledModule)
     assert dict(parent.named_children())["body"] is body
@@ -96,8 +94,7 @@ def test_an_assign_load_reaches_the_cache(through_parent: bool) -> None:
 
     target = parent if through_parent else body
     fresh = {
-        key: lucid.randn(*value.shape, device="metal")
-        for key, value in target.state_dict().items()
+        key: lucid.randn(*value.shape, device="metal") for key, value in target.state_dict().items()
     }
     target.load_state_dict(fresh, assign=True)
 
@@ -116,8 +113,7 @@ def test_a_copy_load_keeps_the_cache_and_is_seen() -> None:
     x = lucid.randn(2, 8, device="metal")
     compiled(x)
     fresh = {
-        key: lucid.randn(*value.shape, device="metal")
-        for key, value in model.state_dict().items()
+        key: lucid.randn(*value.shape, device="metal") for key, value in model.state_dict().items()
     }
     model.load_state_dict(fresh)
     np.testing.assert_allclose(compiled(x).numpy(), model(x).numpy(), atol=1e-5)

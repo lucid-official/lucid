@@ -258,9 +258,7 @@ def default_collate(
         return {key: default_collate([d[key] for d in batch]) for key in elem}
 
     if isinstance(elem, tuple) and hasattr(elem, "_fields"):
-        return type(elem)(
-            *(default_collate([d[i] for d in batch]) for i in range(len(elem)))
-        )
+        return type(elem)(*(default_collate([d[i] for d in batch]) for i in range(len(elem))))
 
     if isinstance(elem, (list, tuple)):
         collated = [default_collate([d[i] for d in batch]) for i in range(len(elem))]
@@ -450,11 +448,7 @@ class _ResultQueue(_mpq.Queue):  # type: ignore[type-arg]
     """
 
     def _on_queue_feeder_error(self, e: Exception, obj: object) -> None:
-        if (
-            isinstance(obj, tuple)
-            and len(obj) == 3
-            and not isinstance(obj[2], _WorkerError)
-        ):
+        if isinstance(obj, tuple) and len(obj) == 3 and not isinstance(obj[2], _WorkerError):
             info = get_worker_info()
             worker = info.id if info is not None else "?"
             where = f"while sending a batch from DataLoader worker process {worker}"
@@ -534,9 +528,7 @@ def _worker_loop(
     base_seed: int,
 ) -> None:
     """Worker process: pull tasks, fetch data, push ``(epoch, seq, result)``."""
-    init_error = _init_worker(
-        worker_id, num_workers, dataset, worker_init_fn, base_seed
-    )
+    init_error = _init_worker(worker_id, num_workers, dataset, worker_init_fn, base_seed)
     parent = _mp.parent_process()
     fetcher: _MapFetcher | _IterableFetcher | None = None
     fetcher_epoch = -1
@@ -579,14 +571,10 @@ def _worker_loop(
                     data = (
                         _IterableEnd()
                         if spec.iterable
-                        else _WorkerError(
-                            exc, f"in DataLoader worker process {worker_id}"
-                        )
+                        else _WorkerError(exc, f"in DataLoader worker process {worker_id}")
                     )
                 except Exception as exc:  # noqa: BLE001 — re-raised in main
-                    data = _WorkerError(
-                        exc, f"in DataLoader worker process {worker_id}"
-                    )
+                    data = _WorkerError(exc, f"in DataLoader worker process {worker_id}")
             result_queue.put((epoch, seq, data))
             del data
     except KeyboardInterrupt:
@@ -700,9 +688,7 @@ class _MultiProcessDataLoaderIter:
 
     def _begin_epoch(self, loader: DataLoader) -> None:
         self._index_iter: Iterator[object] = (
-            itertools.repeat(None)
-            if self._iterable
-            else iter(cast(Sampler, loader._index_sampler))
+            itertools.repeat(None) if self._iterable else iter(cast(Sampler, loader._index_sampler))
         )
         self._index_exhausted = False
         self._send_idx = 0  # next task to dispatch
@@ -765,9 +751,7 @@ class _MultiProcessDataLoaderIter:
             if deadline is not None:
                 wait = min(wait, max(deadline - time.monotonic(), 0.0))
             try:
-                return cast(
-                    tuple[int, int, object], self._result_queue.get(timeout=wait)
-                )
+                return cast(tuple[int, int, object], self._result_queue.get(timeout=wait))
             except queue.Empty:
                 pass
             except Exception:
@@ -869,9 +853,7 @@ class _MultiProcessDataLoaderIter:
 # ── argument checks ───────────────────────────────────────────────────────────
 
 
-def _require_count(
-    name: str, value: object, *, minimum: int, optional: bool = False
-) -> None:
+def _require_count(name: str, value: object, *, minimum: int, optional: bool = False) -> None:
     """``value`` is an ``int`` (not a ``bool``) ``>= minimum`` — or ``None``."""
     if optional and value is None:
         return
@@ -1063,9 +1045,7 @@ class DataLoader:
         _require_count("num_workers", num_workers, minimum=0)
         _require_count("prefetch_factor", prefetch_factor, minimum=1, optional=True)
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-            raise TypeError(
-                f"timeout must be a number of seconds, got {type(timeout).__name__}"
-            )
+            raise TypeError(f"timeout must be a number of seconds, got {type(timeout).__name__}")
         if not timeout >= 0:  # NaN included
             raise ValueError(f"timeout must be >= 0, got {timeout}")
         for name, fn in (
@@ -1082,8 +1062,7 @@ class DataLoader:
             ):
                 if given:
                     raise ValueError(
-                        f"{name} only applies to worker processes; it needs "
-                        "num_workers > 0."
+                        f"{name} only applies to worker processes; it needs " "num_workers > 0."
                     )
         _mp_context(multiprocessing_context)  # unknown or wrong type: refused now
         if batch_size is None and drop_last:
@@ -1151,9 +1130,7 @@ class DataLoader:
                     else SequentialSampler(dataset)
                 )
             self.batch_sampler = (
-                BatchSampler(sampler, batch_size, drop_last)
-                if batch_size is not None
-                else None
+                BatchSampler(sampler, batch_size, drop_last) if batch_size is not None else None
             )
             self.sampler = sampler
 
@@ -1181,9 +1158,7 @@ class DataLoader:
             collate_fn=self.collate_fn,
             batch_size=self.batch_size or 1,
             drop_last=self.drop_last,
-            use_getitems=(
-                not self._iterable_style and auto and self.collate_fn is default_collate
-            ),
+            use_getitems=(not self._iterable_style and auto and self.collate_fn is default_collate),
         )
 
     def __iter__(self) -> Iterator[Tensor | tuple[Tensor, ...]]:

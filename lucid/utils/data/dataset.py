@@ -337,8 +337,7 @@ class ConcatDataset(Dataset):
             idx = len(self) + idx
         dataset_idx = 0
         while (
-            dataset_idx < len(self.cumulative_sizes)
-            and idx >= self.cumulative_sizes[dataset_idx]
+            dataset_idx < len(self.cumulative_sizes) and idx >= self.cumulative_sizes[dataset_idx]
         ):
             dataset_idx += 1
         if dataset_idx == 0:
@@ -555,13 +554,9 @@ class ChainDataset(IterableDataset):
         TypeError
             If any element is not an :class:`IterableDataset`.
         """
-        bad: list[type] = [
-            type(d) for d in datasets if not isinstance(d, IterableDataset)
-        ]
+        bad: list[type] = [type(d) for d in datasets if not isinstance(d, IterableDataset)]
         if bad:
-            raise TypeError(
-                f"ChainDataset requires IterableDataset children, got {bad}"
-            )
+            raise TypeError(f"ChainDataset requires IterableDataset children, got {bad}")
         self.datasets: list[IterableDataset] = list(datasets)
 
     @override
@@ -646,8 +641,7 @@ class StackDataset(Dataset):
         for child in children[1:]:
             if len(child) != n:
                 raise ValueError(
-                    f"StackDataset children must agree in length; "
-                    f"saw {n} then {len(child)}"
+                    f"StackDataset children must agree in length; " f"saw {n} then {len(child)}"
                 )
         self.datasets: tuple[Dataset, ...] = children
         self._keys: tuple[str, ...] | None = tuple(kwargs.keys()) if kwargs else None

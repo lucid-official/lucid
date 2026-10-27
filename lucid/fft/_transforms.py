@@ -63,9 +63,7 @@ def _scale_after_ifft(N: int, norm: str) -> float:
 # ── Axis / shape canonicalisation ────────────────────────────────────────────
 
 
-def _as_axis_list(
-    dim: int | Sequence[int] | None, rank: int, default_all: bool
-) -> list[int]:
+def _as_axis_list(dim: int | Sequence[int] | None, rank: int, default_all: bool) -> list[int]:
     if dim is None:
         if default_all:
             return list(range(rank))
@@ -122,9 +120,7 @@ def _prepare(
     s_list = _as_size_list(s)
     if dim is None and s_list:
         if len(s_list) > rank:
-            raise ValueError(
-                f"{op}: len(s)={len(s_list)} exceeds the input's {rank} dimensions"
-            )
+            raise ValueError(f"{op}: len(s)={len(s_list)} exceeds the input's {rank} dimensions")
         axes = list(range(rank - len(s_list), rank))
     else:
         axes = _normalise_axes(_as_axis_list(dim, rank, default_all=True), rank)
@@ -392,9 +388,7 @@ class _FftnAutograd(_AutogradFunction):
         # grad_x = ifft(grad_out, dual(norm)) at the output's size for fft,
         # and the mirror for ifft, then resized to the input's.
         p = _plan(ctx)
-        g = _transform(
-            _FftnAutograd, grad_out, [], p.axes, "backward", p.N, not p.inverse
-        )
+        g = _transform(_FftnAutograd, grad_out, [], p.axes, "backward", p.N, not p.inverse)
         scale = _scale_after_fft if p.inverse else _scale_after_ifft
         return _input_grad(g, p, scale(p.N, _dual_norm(p.norm)))
 

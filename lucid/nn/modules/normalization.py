@@ -162,9 +162,7 @@ class LayerNorm(Module):
         Tensor
             Normalised tensor of the same shape as ``input``.
         """
-        return layer_norm(
-            input, list(self.normalized_shape), self.weight, self.bias, self.eps
-        )
+        return layer_norm(input, list(self.normalized_shape), self.weight, self.bias, self.eps)
 
     @override
     def extra_repr(self) -> str:
@@ -466,9 +464,7 @@ class _NormBase(Module):
         bias: bool = True,
     ) -> None:
         """Initialise the shared state.  See the subclasses for the parameters."""
-        self._init_norm_attrs(
-            num_features, eps, momentum, affine, track_running_stats, bias
-        )
+        self._init_norm_attrs(num_features, eps, momentum, affine, track_running_stats, bias)
         self._make_state(num_features, device, dtype)
 
     def _init_norm_attrs(
@@ -516,18 +512,14 @@ class _NormBase(Module):
 
             empty_0 = _lucid.empty(0, dtype=dtype, device=device)
             self.register_parameter("weight", UninitializedParameter(empty_0))
-            self.register_parameter(
-                "bias", UninitializedParameter(empty_0) if bias else None
-            )
+            self.register_parameter("bias", UninitializedParameter(empty_0) if bias else None)
 
     def _initialize(self, num_features: int) -> None:
         """Size the layer: make its state ``num_features`` long."""
         self.num_features = num_features
         self._make_state(num_features, self._device, self._dtype)
 
-    def _make_state(
-        self, num_features: int, device: DeviceLike, dtype: DTypeLike
-    ) -> None:
+    def _make_state(self, num_features: int, device: DeviceLike, dtype: DTypeLike) -> None:
         """Make the parameters and buffers this layer keeps, ``num_features`` long."""
         if self.affine:
             # ``fill``: a lazy layer's placeholders are what anything that
@@ -771,9 +763,7 @@ class _BatchNormBase(_NormBase):
         # (``model_has_cumulative_bn``).
         tracing = _C_engine.compile.current_tracer() is not None
         update = (
-            self.training
-            and self.track_running_stats
-            and not (tracing and self.momentum is None)
+            self.training and self.track_running_stats and not (tracing and self.momentum is None)
         )
         use_running = not self.training and self.track_running_stats
         wants_buffers = use_running or update
@@ -1618,9 +1608,7 @@ class _LazyNormMixin(_LazyModule, _NormBase):
         *,
         bias: bool = True,
     ) -> None:
-        self._init_lazy_state(
-            eps, momentum, affine, track_running_stats, device, dtype, bias
-        )
+        self._init_lazy_state(eps, momentum, affine, track_running_stats, device, dtype, bias)
 
 
 class _LazyBatchNormMixin(_LazyNormMixin, _BatchNormBase):

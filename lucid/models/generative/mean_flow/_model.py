@@ -213,9 +213,7 @@ class MeanFlowModel(PretrainedModel):
                 for _ in range(config.depth)
             ]
         )
-        self.final = DiTFinalLayer(
-            config.hidden_size, config.patch_size, config.out_channels
-        )
+        self.final = DiTFinalLayer(config.hidden_size, config.patch_size, config.out_channels)
         self._zero_init_conditioning()
 
     def _num_time_inputs(self) -> int:
@@ -290,9 +288,7 @@ class MeanFlowModel(PretrainedModel):
         tokens = tokens + self.pos_embed
 
         cond = self.time_mlps[0](self._time_inputs(r, t)[0])
-        for mlp, scalar in zip(
-            list(self.time_mlps)[1:], self._time_inputs(r, t)[1:], strict=True
-        ):
+        for mlp, scalar in zip(list(self.time_mlps)[1:], self._time_inputs(r, t)[1:], strict=True):
             cond = cond + mlp(scalar)
 
         if labels is None:
@@ -370,12 +366,10 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
             b = lucid.rand((batch,), device=device)
         else:
             a = F.sigmoid(
-                lucid.randn((batch,), device=device) * config.lognorm_std
-                + config.lognorm_mean
+                lucid.randn((batch,), device=device) * config.lognorm_std + config.lognorm_mean
             )
             b = F.sigmoid(
-                lucid.randn((batch,), device=device) * config.lognorm_std
-                + config.lognorm_mean
+                lucid.randn((batch,), device=device) * config.lognorm_std + config.lognorm_mean
             )
         t = lucid.maximum(a, b)
         r = lucid.minimum(a, b)
@@ -406,9 +400,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
 
         with lucid.no_grad():
             uncond = self.mean_flow(z, t, t, None).sample
-            cond = (
-                self.mean_flow(z, t, t, labels).sample if labels is not None else uncond
-            )
+            cond = self.mean_flow(z, t, t, labels).sample if labels is not None else uncond
         guided = omega * v + kappa * cond + (1.0 - omega - kappa) * uncond
         return guided * inside + v * (1.0 - inside)
 
@@ -493,9 +485,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
         # The adaptive weight is the loss's own magnitude fed back as a
         # stop-gradiented scale.  ``p = 0`` is the plain squared error and
         # underperforms; ``p = 1`` is the paper's default and its best.
-        weight = 1.0 / (squared + config.adaptive_weight_eps) ** (
-            config.adaptive_weight_power
-        )
+        weight = 1.0 / (squared + config.adaptive_weight_eps) ** (config.adaptive_weight_power)
         loss = (weight.detach() * squared).mean()
         return MeanFlowOutput(loss=loss, prediction=u, target=target)
 
@@ -555,9 +545,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
         side = patch_grid_side(config.sample_size)
         device = resolve_generation_device(self, device)
         if noise is None:
-            noise = start_noise(
-                self, (n_samples, config.in_channels, side, side), device
-            )
+            noise = start_noise(self, (n_samples, config.in_channels, side, side), device)
 
         z = noise
         with lucid.no_grad():

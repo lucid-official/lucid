@@ -37,16 +37,12 @@ def _np_attention(q: np.ndarray, k: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 
 class _SdpaOp(nn.Module):
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.scaled_dot_product_attention(q, k, v, scale=1.0)
 
 
 class _ManualAttn(nn.Module):  # manual q@kᵀ; softmax; @v
-    def forward(
-        self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor
-    ) -> lucid.Tensor:
+    def forward(self, q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         return F.softmax(q @ k.permute(0, 1, 3, 2), dim=-1) @ v
 
 

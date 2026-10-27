@@ -67,18 +67,14 @@ def _matrix(
         for mode, align in modes:
             corner = "" if align is None else ("-corners" if align else "-centres")
             sid = "x".join(map(str, shape[2:])) + "->" + "x".join(map(str, size))
-            out.append(
-                pytest.param(shape, size, mode, align, id=f"{mode}{corner}-{sid}")
-            )
+            out.append(pytest.param(shape, size, mode, align, id=f"{mode}{corner}-{sid}"))
     return out
 
 
 MATRIX = _matrix(CASES_2D, MODES_2D) + _matrix(CASES_3D, MODES_3D)
 
 
-def _resize(
-    x: lucid.Tensor, size: tuple[int, ...], mode: str, align: bool | None
-) -> lucid.Tensor:
+def _resize(x: lucid.Tensor, size: tuple[int, ...], mode: str, align: bool | None) -> lucid.Tensor:
     if align is None:
         return F.interpolate(x, size=size, mode=mode)
     return F.interpolate(x, size=size, mode=mode, align_corners=align)
@@ -172,9 +168,7 @@ def test_backward_matches_eager(
 
 def test_a_dynamic_batch_compiles_the_resize() -> None:
     """Only the trailing axes are gathered, so a symbolic batch rides through."""
-    fn = (
-        lambda t: F.interpolate(t, size=(13, 5, 17), mode="trilinear") * 1
-    )  # noqa: E731
+    fn = lambda t: F.interpolate(t, size=(13, 5, 17), mode="trilinear") * 1  # noqa: E731
     _C_engine.compile.session_cache_clear()
     compiled = lucid.compile(fn, dynamic=True)
     for batch in (1, 3):

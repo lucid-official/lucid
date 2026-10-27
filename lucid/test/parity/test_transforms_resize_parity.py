@@ -21,9 +21,7 @@ _SIZES = [(256, 341), (240, 320), (100, 100), (400, 533), (256, 800)]
 @pytest.mark.parity
 @pytest.mark.parametrize("mode", ["bilinear", "bicubic"])
 @pytest.mark.parametrize("size", _SIZES, ids=[f"{h}x{w}" for h, w in _SIZES])
-def test_resize_matches_the_reference(
-    ref: Any, mode: str, size: tuple[int, int]
-) -> None:
+def test_resize_matches_the_reference(ref: Any, mode: str, size: tuple[int, int]) -> None:
     x = np.random.default_rng(0).random((1, 3, 480, 640), dtype=np.float32)
     got = TF.resize(lucid.from_numpy(x.copy()), size, interpolation=mode).numpy()
     want = ref.nn.functional.interpolate(
