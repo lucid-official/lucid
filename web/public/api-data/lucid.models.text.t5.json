@@ -1,0 +1,3613 @@
+{
+  "slug": "lucid.models.text.t5",
+  "name": "t5",
+  "path": "lucid.models.text.t5",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/__init__.py#L1",
+  "members": [
+    {
+      "name": "T5Config",
+      "path": "lucid.models.text.t5._config.T5Config",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "LanguageModelConfig"
+      ],
+      "labels": [],
+      "signature": "T5Config(vocab_size: int = 32128, hidden_size: int = 512, num_hidden_layers: int = 6, num_attention_heads: int = 8, intermediate_size: int = 2048, hidden_act: TextActivation = 'relu', max_position_embeddings: int = 512, pad_token_id: int | None = 0, bos_token_id: int | None = None, eos_token_id: int | None = 1, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-06, tie_word_embeddings: bool = True, use_cache: bool = True, head_dim: int = 64, num_decoder_layers: int = 6, relative_attention_num_buckets: int = 32, relative_attention_max_distance: int = 128, decoder_start_token_id: int = 0, initializer_factor: float = 1.0)",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_config.py#L30",
+      "subcategory": "config",
+      "methods": [
+        {
+          "name": "inner_dim",
+          "path": "lucid.models.text.t5._config.T5Config.inner_dim",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "inner_dim: int",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_config.py#L169",
+          "summary": "Attention width — `num_attention_heads * head_dim`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "__init__",
+          "path": "lucid.models.text.t5._config.T5Config.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(vocab_size: int = 32128, hidden_size: int = 512, num_hidden_layers: int = 6, num_attention_heads: int = 8, intermediate_size: int = 2048, hidden_act: TextActivation = 'relu', max_position_embeddings: int = 512, pad_token_id: int | None = 0, bos_token_id: int | None = None, eos_token_id: int | None = 1, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-06, tie_word_embeddings: bool = True, use_cache: bool = True, head_dim: int = 64, num_decoder_layers: int = 6, relative_attention_num_buckets: int = 32, relative_attention_max_distance: int = 128, decoder_start_token_id: int = 0, initializer_factor: float = 1.0)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_config.py#L1",
+          "subcategory": "config",
+          "summary": "Initialise the trunk. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Configuration for every T5 variant (Raffel et al., 2020, §3.7).",
+      "extended": "The defaults are T5-Small.  `vocab_size` is the 32 000-piece\nSentencePiece vocabulary with 100 sentinels, padded to 32 128 rows.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5._config import T5Config\n>>> cfg = T5Config()\n>>> cfg.model_type\n't5'\n>>> cfg.hidden_size, cfg.inner_dim, cfg.vocab_size\n(512, 512, 32128)\nThe attention width is num_attention_heads * head_dim, which need\nnot be the model width:\n>>> T5Config(hidden_size=1024, num_attention_heads=32, head_dim=128).inner_dim\n4096"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "T5ForSeq2SeqLM",
+      "path": "lucid.models.text.t5._model.T5ForSeq2SeqLM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "LanguageModelingModel"
+      ],
+      "labels": [],
+      "signature": "T5ForSeq2SeqLM(config: T5Config)",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L553",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.models.text.t5._model.T5ForSeq2SeqLM.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: T5Config)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L610",
+          "subcategory": "model",
+          "summary": "Initialise the model. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.models.text.t5._model.T5ForSeq2SeqLM.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input_ids: Tensor, decoder_input_ids: Tensor | None = None, attention_mask: Tensor | None = None, decoder_attention_mask: Tensor | None = None, labels: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L648",
+          "subcategory": "model",
+          "summary": "Teacher-forced pass, with the loss when `labels` are given.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "input_ids",
+              "annotation": "Tensor",
+              "description": "`(B, S)` source token ids.",
+              "default": null
+            },
+            {
+              "name": "decoder_input_ids",
+              "annotation": "Tensor or None",
+              "description": "`(B, T)` target ids, shifted right.  Built from `labels`\nwhen omitted.",
+              "default": "None"
+            },
+            {
+              "name": "attention_mask",
+              "annotation": "Tensor or None",
+              "description": "`(B, S)` source padding mask.",
+              "default": "None"
+            },
+            {
+              "name": "decoder_attention_mask",
+              "annotation": "Tensor or None",
+              "description": "`(B, T)` target padding mask.",
+              "default": "None"
+            },
+            {
+              "name": "labels",
+              "annotation": "Tensor or None",
+              "description": "`(B, T)` target ids; `-100` marks a position the loss skips.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "Seq2SeqLMOutput",
+            "description": "`logits` of shape `(B, T, vocab_size)`, the loss when\n`labels` were given, and the encoder output."
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "If neither `decoder_input_ids` nor `labels` is given."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "generate",
+          "path": "lucid.models.text.t5._model.T5ForSeq2SeqLM.generate",
+          "kind": "function",
+          "labels": [],
+          "signature": "generate(input_ids: Tensor, max_length: int = 20, attention_mask: Tensor | None = None, use_cache: bool = True, do_sample: bool = False, temperature: float = 1.0, top_k: int | None = None, top_p: float | None = None, repetition_penalty: float = 1.0, decoder_start_token_id: int | None = None, eos_token_id: int | None = None, pad_token_id: int | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L710",
+          "subcategory": "model",
+          "summary": "Decode an answer for each source — greedy unless `do_sample`.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "input_ids",
+              "annotation": "Tensor",
+              "description": "`(B, S)` source ids, task prefix included (`\"translate\nEnglish to German: …\"`).",
+              "default": null
+            },
+            {
+              "name": "max_length",
+              "annotation": "int",
+              "description": "Cap on the returned length, start token included.",
+              "default": "20, keyword-only"
+            },
+            {
+              "name": "attention_mask",
+              "annotation": "(Tensor or None, optional, keyword - only)",
+              "description": "`(B, S)` source padding mask.",
+              "default": "None"
+            },
+            {
+              "name": "use_cache",
+              "annotation": "bool",
+              "description": "Decode one token per step against an encoder-decoder cache.",
+              "default": "True, keyword-only"
+            },
+            {
+              "name": "do_sample",
+              "annotation": "bool",
+              "description": "Sample instead of taking the `argmax`.",
+              "default": "False, keyword-only"
+            },
+            {
+              "name": "temperature",
+              "annotation": "float",
+              "description": "Logit temperature for sampling.",
+              "default": "1.0, keyword-only"
+            },
+            {
+              "name": "top_k",
+              "annotation": "(int or None, optional, keyword - only)",
+              "description": "Sample among the `top_k` most likely tokens only.",
+              "default": "None"
+            },
+            {
+              "name": "top_p",
+              "annotation": "(float or None, optional, keyword - only)",
+              "description": "Sample from the smallest set reaching probability `top_p`.",
+              "default": "None"
+            },
+            {
+              "name": "repetition_penalty",
+              "annotation": "float",
+              "description": "Down-weights tokens the row has already produced.",
+              "default": "1.0, keyword-only"
+            },
+            {
+              "name": "decoder_start_token_id",
+              "annotation": "(int or None, optional, keyword - only)",
+              "description": "First target token; `config.decoder_start_token_id` (the\npad id) by default.",
+              "default": "None"
+            },
+            {
+              "name": "eos_token_id",
+              "annotation": "(int or None, optional, keyword - only)",
+              "description": "Token that finishes a row; `config.eos_token_id` by default.",
+              "default": "None"
+            },
+            {
+              "name": "pad_token_id",
+              "annotation": "(int or None, optional, keyword - only)",
+              "description": "Fills a finished row; `config.pad_token_id` by default.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`(B, T_out)` int64 target ids beginning with the start token."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "T5 with its language-modelling head — the model every T5 task trains.",
+      "extended": "Wraps `T5Model` with a bias-free projection to the vocabulary.\nWith `config.tie_word_embeddings` (the paper's setting) the\nprojection *is* the shared token table, and the decoder output is\nscaled by $d_{\\text{model}}^{-1/2}$ first: the table is drawn at\nunit variance for the input side, so the tied output would otherwise\nbe $\\sqrt{d_{\\text{model}}}$ too large.\n\nPass `labels` alone and the decoder input is built from them —\n`decoder_start_token_id` followed by the labels shifted right, with\n`-100` replaced by the pad id — as the paper's teacher forcing does.",
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "T5Config",
+          "description": "Hyperparameters; `tie_word_embeddings` and\n`decoder_start_token_id` shape the head.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.text.t5 import T5Config, T5ForSeq2SeqLM\n>>> cfg = T5Config(vocab_size=100, hidden_size=32, num_hidden_layers=2,\n...                num_decoder_layers=2, num_attention_heads=4,\n...                head_dim=8, intermediate_size=64)\n>>> model = T5ForSeq2SeqLM(cfg).eval()\n>>> src = lucid.tensor([[13, 5, 42, 1]])\n>>> labels = lucid.tensor([[7, 9, 1]])\n>>> out = model(src, labels=labels)\n>>> out.logits.shape, out.loss.shape\n((1, 3, 100), ())"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §2.1 and §3.1.4.\n\nWith `labels` the loss is the mean per-token cross-entropy over\npositions not labelled `-100`:\n\n\n\n$$\n\\mathcal{L} = -\\frac{1}{|V|} \\sum_{(b, t) \\in V}\n    \\log p_\\theta(y_{b,t} \\mid x_b,\\, y_{b,<t}).\n$$"
+      ],
+      "attributes": [
+        {
+          "name": "t5",
+          "annotation": "T5Model",
+          "description": "The encoder-decoder trunk."
+        },
+        {
+          "name": "lm_head",
+          "annotation": "nn.Linear",
+          "description": "`(d_model → vocab_size)` projection, the shared table when tied."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "T5Model",
+      "path": "lucid.models.text.t5._model.T5Model",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PretrainedModel"
+      ],
+      "labels": [],
+      "signature": "T5Model(config: T5Config)",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L368",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.models.text.t5._model.T5Model.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: T5Config)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L429",
+          "subcategory": "model",
+          "summary": "Initialise the trunk. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_input_embeddings",
+          "path": "lucid.models.text.t5._model.T5Model.get_input_embeddings",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_input_embeddings()",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L439",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_input_embeddings",
+          "path": "lucid.models.text.t5._model.T5Model.set_input_embeddings",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_input_embeddings(value: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L443",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "encode",
+          "path": "lucid.models.text.t5._model.T5Model.encode",
+          "kind": "function",
+          "labels": [],
+          "signature": "encode(src_ids: Tensor, src_attention_mask: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L451",
+          "subcategory": "model",
+          "summary": "Run the encoder alone.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "src_ids",
+              "annotation": "Tensor",
+              "description": "`(B, S)` source token ids.",
+              "default": null
+            },
+            {
+              "name": "src_attention_mask",
+              "annotation": "Tensor or None",
+              "description": "`(B, S)` mask, 1 for a token and 0 for padding.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`(B, S, d_model)` encoder output."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "decode",
+          "path": "lucid.models.text.t5._model.T5Model.decode",
+          "kind": "function",
+          "labels": [],
+          "signature": "decode(tgt_ids: Tensor, memory: Tensor, tgt_attention_mask: Tensor | None = None, memory_attention_mask: Tensor | None = None, past_key_value: EncoderDecoderCache | None = None, use_cache: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L468",
+          "subcategory": "model",
+          "summary": "Run the decoder against an already-computed encoder output.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "tgt_ids",
+              "annotation": "Tensor",
+              "description": "`(B, T)` target ids to decode now — the whole prefix, or\nonly the new ones when a cache holds the rest.",
+              "default": null
+            },
+            {
+              "name": "memory",
+              "annotation": "Tensor",
+              "description": "`(B, S, d_model)` from `encode`.",
+              "default": null
+            },
+            {
+              "name": "tgt_attention_mask",
+              "annotation": "(Tensor or None, optional, keyword - only)",
+              "description": "Target padding mask, as wide as the cached history plus `T`.",
+              "default": "None"
+            },
+            {
+              "name": "memory_attention_mask",
+              "annotation": "(Tensor or None, optional, keyword - only)",
+              "description": "`(B, S)` source padding mask, applied in cross-attention.",
+              "default": "None"
+            },
+            {
+              "name": "past_key_value",
+              "annotation": "(EncoderDecoderCache or None, optional, keyword - only)",
+              "description": "Decoder self-attention history and the cross-attention keys\nand values; read and extended in place.",
+              "default": "None"
+            },
+            {
+              "name": "use_cache",
+              "annotation": "bool",
+              "description": "Read and write `past_key_value`.",
+              "default": "False, keyword-only"
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`(B, T, d_model)` decoder output for the `T` new positions."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.models.text.t5._model.T5Model.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input_ids: Tensor, decoder_input_ids: Tensor, attention_mask: Tensor | None = None, decoder_attention_mask: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L511",
+          "subcategory": "model",
+          "summary": "Encode the source and decode the target against it.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "input_ids",
+              "annotation": "Tensor",
+              "description": "`(B, S)` source token ids.",
+              "default": null
+            },
+            {
+              "name": "decoder_input_ids",
+              "annotation": "Tensor",
+              "description": "`(B, T)` target ids, already shifted right.",
+              "default": null
+            },
+            {
+              "name": "attention_mask",
+              "annotation": "Tensor or None",
+              "description": "`(B, S)` source padding mask.",
+              "default": "None"
+            },
+            {
+              "name": "decoder_attention_mask",
+              "annotation": "Tensor or None",
+              "description": "`(B, T)` target padding mask.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "T5ModelOutput",
+            "description": "Decoder and encoder outputs; `T5ForSeq2SeqLM` projects\nthe decoder side to the vocabulary."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Bare T5 encoder-decoder trunk.",
+      "extended": "Implements the architecture of Raffel, Shazeer, Roberts, Lee, Narang,\nMatena, Zhou, Li and Liu, 2020.  One token table embeds both the\nsource and the target.  The encoder stack reads the source with\nbidirectional attention; the decoder stack reads the target causally\nand cross-attends to the encoder output.  Neither side adds a\nposition to its tokens: each stack's blocks add one learned\nper-head bias, indexed by bucketed relative distance, to their\nself-attention logits.",
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "T5Config",
+          "description": "Vocabulary, width, depth on each side, head count and width,\nrelative-position bucketing, dropout and the init scale.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.text.t5 import T5Config, T5Model\n>>> cfg = T5Config(vocab_size=100, hidden_size=32, num_hidden_layers=2,\n...                num_decoder_layers=2, num_attention_heads=4,\n...                head_dim=8, intermediate_size=64)\n>>> model = T5Model(cfg).eval()\n>>> src = lucid.tensor([[13, 5, 42, 1]])\n>>> tgt = lucid.tensor([[0, 7, 9]])\n>>> out = model(src, decoder_input_ids=tgt)\n>>> out.last_hidden_state.shape, out.encoder_last_hidden_state.shape\n((1, 3, 32), (1, 4, 32))"
+      ],
+      "notes": [
+        "Reference: Raffel et al., *\"Exploring the Limits of Transfer Learning\nwith a Unified Text-to-Text Transformer\"*, JMLR 21(140), 2020\n([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §2.1 and §3.1.\n\nHead $h$ of every block scores query $i$ against key\n$j$ as\n\n\n\n$$\nA_{ij} = q_i^{\\top} k_j + b_{h,\\,\\beta(j - i)},\n$$\n\nunscaled, and every sub-layer $f$ updates the stream as\n$x \\leftarrow x + f\\bigl(x / \\mathrm{RMS}(x) \\odot \\gamma\\bigr)$."
+      ],
+      "attributes": [
+        {
+          "name": "shared",
+          "annotation": "nn.Embedding",
+          "description": "The `(vocab_size, d_model)` table both stacks embed with."
+        },
+        {
+          "name": "encoder",
+          "annotation": "nn.Module",
+          "description": "Bidirectional stack of `num_hidden_layers` blocks."
+        },
+        {
+          "name": "decoder",
+          "annotation": "nn.Module",
+          "description": "Causal stack of `num_decoder_layers` blocks with cross-attention."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "T5ModelOutput",
+      "path": "lucid.models.text.t5._model.T5ModelOutput",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "ModelOutput"
+      ],
+      "labels": [],
+      "signature": "T5ModelOutput(last_hidden_state: Tensor, encoder_last_hidden_state: Tensor)",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L337",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.models.text.t5._model.T5ModelOutput.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(last_hidden_state: Tensor, encoder_last_hidden_state: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_model.py#L1",
+          "subcategory": "model",
+          "summary": "Initialise the trunk. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Output of the bare T5 trunk (no language-modelling head).",
+      "extended": null,
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.text.t5._model import T5ModelOutput\n>>> out = T5ModelOutput(\n...     last_hidden_state=lucid.zeros(2, 7, 512),\n...     encoder_last_hidden_state=lucid.zeros(2, 20, 512),\n... )\n>>> out.last_hidden_state.shape, out.encoder_last_hidden_state.shape\n((2, 7, 512), (2, 20, 512))\nThese are activations of width d_model; T5ForSeq2SeqLM\nis the model that turns the decoder side into vocabulary logits."
+      ],
+      "notes": [],
+      "attributes": [
+        {
+          "name": "last_hidden_state",
+          "annotation": "Tensor",
+          "description": "Decoder output after the final norm, `(B, T_dec, d_model)`."
+        },
+        {
+          "name": "encoder_last_hidden_state",
+          "annotation": "Tensor",
+          "description": "Encoder output after the final norm, `(B, T_src, d_model)` —\nwhat every decoder block cross-attends to."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "t5_3b",
+      "path": "lucid.models.text.t5._pretrained.t5_3b",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_3b(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L229",
+      "subcategory": "pretrained",
+      "summary": "T5-3B trunk — Large's depth and width, a wider inside.",
+      "extended": "The feed-forward grows to $d_{ff} = 16384$ and attention to 32\nheads of width 128, so each block attends at 4096 channels while the\nresidual stream stays at 1024.",
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No converted 3B checkpoint exists for Lucid yet; `True` raises.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Changes to the 3B configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5Model",
+        "description": "2.85B-parameter trunk."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_3b\n>>> t5_3b().config.inner_dim\n4096"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7.\nBuilding it allocates about 11 GB of float32 weights."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 2851598336,
+      "model_summary": {
+        "name": "T5Model",
+        "type": "T5Model",
+        "params": 2851598336,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "shared",
+            "type": "Embedding",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          },
+          {
+            "name": "encoder",
+            "type": "_T5Stack",
+            "params": 1208010752,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 1208008704,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 50333696,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 16777216,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 4194304,
+                            "own_params": 4194304,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 33554432,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 16777216,
+                            "own_params": 16777216,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "decoder",
+            "type": "_T5Stack",
+            "params": 1610688512,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 1610686464,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 67111936,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 16777216,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 4194304,
+                            "own_params": 4194304,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "cross_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "cross_attention",
+                        "type": "_T5Attention",
+                        "params": 16777216,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 4194304,
+                            "own_params": 4194304,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 33554432,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 16777216,
+                            "own_params": 16777216,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_3b_seq2seq",
+      "path": "lucid.models.text.t5._pretrained.t5_3b_seq2seq",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_3b_seq2seq(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L435",
+      "subcategory": "pretrained",
+      "summary": "`t5_3b` with the tied text-to-text head.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "`True` raises until the 3B weights are converted for Lucid.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`T5Config` fields to change from the 3B defaults.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5ForSeq2SeqLM",
+        "description": "3B trunk and head, 2.85B parameters."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_3b_seq2seq\n>>> t5_3b_seq2seq().config.intermediate_size\n16384"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 2851598336,
+      "model_summary": {
+        "name": "T5ForSeq2SeqLM",
+        "type": "T5ForSeq2SeqLM",
+        "params": 2851598336,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "t5",
+            "type": "T5Model",
+            "params": 2851598336,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "shared",
+                "type": "Embedding",
+                "params": 32899072,
+                "own_params": 32899072,
+                "children": []
+              },
+              {
+                "name": "encoder",
+                "type": "_T5Stack",
+                "params": 1208010752,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 1208008704,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 50333696,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 16777216,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 4194304,
+                                "own_params": 4194304,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 33554432,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 16777216,
+                                "own_params": 16777216,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "decoder",
+                "type": "_T5Stack",
+                "params": 1610688512,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 1610686464,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 67111936,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 16777216,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 4194304,
+                                "own_params": 4194304,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "cross_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "cross_attention",
+                            "type": "_T5Attention",
+                            "params": 16777216,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 4194304,
+                                "own_params": 4194304,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 33554432,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 16777216,
+                                "own_params": 16777216,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "lm_head",
+            "type": "Linear",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_11b",
+      "path": "lucid.models.text.t5._pretrained.t5_11b",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_11b(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L271",
+      "subcategory": "pretrained",
+      "summary": "T5-11B trunk — the paper's largest model.",
+      "extended": "Large's depth and $d_{\\text{model}} = 1024$, with\n$d_{ff} = 65536$ and 128 heads of width 128: attention runs at\nsixteen times the residual width.",
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "The 11B weights are not hosted for Lucid; `True` raises.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Changes to the 11B configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5Model",
+        "description": "11.3B-parameter trunk."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_11b\n>>> t5_11b().config.num_attention_heads\n128"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7 and\nTable 14, where the fine-tuned 11B model set the state of the art on\nGLUE, SuperGLUE, SQuAD and CNN/Daily Mail.  Building it allocates\nabout 45 GB of float32 weights."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 11307321344,
+      "model_summary": {
+        "name": "T5Model",
+        "type": "T5Model",
+        "params": 11307321344,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "shared",
+            "type": "Embedding",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          },
+          {
+            "name": "encoder",
+            "type": "_T5Stack",
+            "params": 4831892480,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 4096,
+                "own_params": 4096,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 4831887360,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 201328640,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 67108864,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 16777216,
+                            "own_params": 16777216,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 134217728,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 67108864,
+                            "own_params": 67108864,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "decoder",
+            "type": "_T5Stack",
+            "params": 6442529792,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 4096,
+                "own_params": 4096,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 6442524672,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 268438528,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 67108864,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 16777216,
+                            "own_params": 16777216,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "cross_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "cross_attention",
+                        "type": "_T5Attention",
+                        "params": 67108864,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 16777216,
+                            "own_params": 16777216,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 134217728,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 67108864,
+                            "own_params": 67108864,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_11b_seq2seq",
+      "path": "lucid.models.text.t5._pretrained.t5_11b_seq2seq",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_11b_seq2seq(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L472",
+      "subcategory": "pretrained",
+      "summary": "`t5_11b` with the tied text-to-text head.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "The 11B weights are not hosted for Lucid, so `True` raises.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Changes to the 11B configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5ForSeq2SeqLM",
+        "description": "11B trunk and head, 11.3B parameters — the model behind the\npaper's Table 14 results."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_11b_seq2seq\n>>> t5_11b_seq2seq().config.head_dim\n128"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 11307321344,
+      "model_summary": {
+        "name": "T5ForSeq2SeqLM",
+        "type": "T5ForSeq2SeqLM",
+        "params": 11307321344,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "t5",
+            "type": "T5Model",
+            "params": 11307321344,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "shared",
+                "type": "Embedding",
+                "params": 32899072,
+                "own_params": 32899072,
+                "children": []
+              },
+              {
+                "name": "encoder",
+                "type": "_T5Stack",
+                "params": 4831892480,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 4096,
+                    "own_params": 4096,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 4831887360,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 201328640,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 67108864,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 16777216,
+                                "own_params": 16777216,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 134217728,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 67108864,
+                                "own_params": 67108864,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "decoder",
+                "type": "_T5Stack",
+                "params": 6442529792,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 4096,
+                    "own_params": 4096,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 6442524672,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 268438528,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 67108864,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 16777216,
+                                "own_params": 16777216,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "cross_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "cross_attention",
+                            "type": "_T5Attention",
+                            "params": 67108864,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 16777216,
+                                "own_params": 16777216,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 134217728,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 67108864,
+                                "own_params": 67108864,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "lm_head",
+            "type": "Linear",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_base",
+      "path": "lucid.models.text.t5._pretrained.t5_base",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_base(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L145",
+      "subcategory": "pretrained",
+      "summary": "T5-Base trunk — the size every ablation of §3.1–§3.6 runs at.",
+      "extended": "BERT-Base on each side: twelve blocks, $d_{\\text{model}} = 768$,\n$d_{ff} = 3072$, twelve heads of width 64.",
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "`True` raises: the released T5-Base weights have not been\nconverted for Lucid.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`T5Config` fields to change from the Base defaults.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5Model",
+        "description": "The 220M-parameter trunk, about twice BERT-Base for its two stacks."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_base\n>>> t5_base().config.num_hidden_layers\n12"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.1.1 and\n§3.7.  The baseline of the paper's systematic study pre-trains this\nmodel for $2^{19}$ steps on C4."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 222903552,
+      "model_summary": {
+        "name": "T5Model",
+        "type": "T5Model",
+        "params": 222903552,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "shared",
+            "type": "Embedding",
+            "params": 24674304,
+            "own_params": 24674304,
+            "children": []
+          },
+          {
+            "name": "encoder",
+            "type": "_T5Stack",
+            "params": 84954240,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 384,
+                "own_params": 384,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 84953088,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 7079424,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 2359296,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 589824,
+                            "own_params": 589824,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 4718592,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 2359296,
+                            "own_params": 2359296,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 12
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "decoder",
+            "type": "_T5Stack",
+            "params": 113275008,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 384,
+                "own_params": 384,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 113273856,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 9439488,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 2359296,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 589824,
+                            "own_params": 589824,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "cross_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": []
+                      },
+                      {
+                        "name": "cross_attention",
+                        "type": "_T5Attention",
+                        "params": 2359296,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 589824,
+                            "own_params": 589824,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 4718592,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 2359296,
+                            "own_params": 2359296,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 12
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_base_seq2seq",
+      "path": "lucid.models.text.t5._pretrained.t5_base_seq2seq",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_base_seq2seq(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L360",
+      "subcategory": "pretrained",
+      "summary": "`t5_base` with the tied text-to-text head.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "The T5-Base text-to-text weights are not hosted for Lucid, so\n`True` raises.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Field overrides applied on top of the Base configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5ForSeq2SeqLM",
+        "description": "The baseline model of the paper's systematic study."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_base_seq2seq\n>>> t5_base_seq2seq().lm_head.out_features\n32128"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.1."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 222903552,
+      "model_summary": {
+        "name": "T5ForSeq2SeqLM",
+        "type": "T5ForSeq2SeqLM",
+        "params": 222903552,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "t5",
+            "type": "T5Model",
+            "params": 222903552,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "shared",
+                "type": "Embedding",
+                "params": 24674304,
+                "own_params": 24674304,
+                "children": []
+              },
+              {
+                "name": "encoder",
+                "type": "_T5Stack",
+                "params": 84954240,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 384,
+                    "own_params": 384,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 84953088,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 7079424,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 768,
+                            "own_params": 768,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 2359296,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 589824,
+                                "own_params": 589824,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 768,
+                            "own_params": 768,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 4718592,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 2359296,
+                                "own_params": 2359296,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 12
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "decoder",
+                "type": "_T5Stack",
+                "params": 113275008,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 384,
+                    "own_params": 384,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 113273856,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 9439488,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 768,
+                            "own_params": 768,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 2359296,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 589824,
+                                "own_params": 589824,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "cross_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 768,
+                            "own_params": 768,
+                            "children": []
+                          },
+                          {
+                            "name": "cross_attention",
+                            "type": "_T5Attention",
+                            "params": 2359296,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 589824,
+                                "own_params": 589824,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 768,
+                            "own_params": 768,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 4718592,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 2359296,
+                                "own_params": 2359296,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 12
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "lm_head",
+            "type": "Linear",
+            "params": 24674304,
+            "own_params": 24674304,
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_large",
+      "path": "lucid.models.text.t5._pretrained.t5_large",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_large(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L188",
+      "subcategory": "pretrained",
+      "summary": "T5-Large trunk — BERT-Large on each side.",
+      "extended": "Twenty-four blocks per stack, $d_{\\text{model}} = 1024$,\n$d_{ff} = 4096$, sixteen heads of width 64.",
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "`True` raises until the released T5-Large checkpoint is hosted\nfor Lucid.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Field overrides applied on top of the Large configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5Model",
+        "description": "Trunk of 737.7M parameters (the paper quotes about 770M)."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_large\n>>> t5_large().config.hidden_size\n1024"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 737668096,
+      "model_summary": {
+        "name": "T5Model",
+        "type": "T5Model",
+        "params": 737668096,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "shared",
+            "type": "Embedding",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          },
+          {
+            "name": "encoder",
+            "type": "_T5Stack",
+            "params": 302040576,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 512,
+                "own_params": 512,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 302039040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 12584960,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 4194304,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 1048576,
+                            "own_params": 1048576,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 8388608,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 4194304,
+                            "own_params": 4194304,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "decoder",
+            "type": "_T5Stack",
+            "params": 402728448,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 512,
+                "own_params": 512,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 402726912,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 16780288,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 4194304,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 1048576,
+                            "own_params": 1048576,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "cross_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "cross_attention",
+                        "type": "_T5Attention",
+                        "params": 4194304,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 1048576,
+                            "own_params": 1048576,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 8388608,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 4194304,
+                            "own_params": 4194304,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_large_seq2seq",
+      "path": "lucid.models.text.t5._pretrained.t5_large_seq2seq",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_large_seq2seq(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L398",
+      "subcategory": "pretrained",
+      "summary": "`t5_large` with the tied text-to-text head.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No converted T5-Large checkpoint exists for Lucid; `True` raises.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "Changes to the Large configuration.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5ForSeq2SeqLM",
+        "description": "Large trunk and head, 737.7M parameters."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.text.t5 import t5_large_seq2seq\n>>> t5_large_seq2seq().config.num_decoder_layers\n24"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 737668096,
+      "model_summary": {
+        "name": "T5ForSeq2SeqLM",
+        "type": "T5ForSeq2SeqLM",
+        "params": 737668096,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "t5",
+            "type": "T5Model",
+            "params": 737668096,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "shared",
+                "type": "Embedding",
+                "params": 32899072,
+                "own_params": 32899072,
+                "children": []
+              },
+              {
+                "name": "encoder",
+                "type": "_T5Stack",
+                "params": 302040576,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 512,
+                    "own_params": 512,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 302039040,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 12584960,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 4194304,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 1048576,
+                                "own_params": 1048576,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 8388608,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 4194304,
+                                "own_params": 4194304,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "decoder",
+                "type": "_T5Stack",
+                "params": 402728448,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 512,
+                    "own_params": 512,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 402726912,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 16780288,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 4194304,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 1048576,
+                                "own_params": 1048576,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "cross_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "cross_attention",
+                            "type": "_T5Attention",
+                            "params": 4194304,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 1048576,
+                                "own_params": 1048576,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 1024,
+                            "own_params": 1024,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 8388608,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 4194304,
+                                "own_params": 4194304,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 24
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "lm_head",
+            "type": "Linear",
+            "params": 32899072,
+            "own_params": 32899072,
+            "children": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_small",
+      "path": "lucid.models.text.t5._pretrained.t5_small",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_small(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L98",
+      "subcategory": "pretrained",
+      "summary": "T5-Small trunk — the 60M model of the paper's scaling study.",
+      "extended": "Six blocks on each side, $d_{\\text{model}} = 512$,\n$d_{ff} = 2048$ and eight heads of width 64.",
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "Google's T5-Small checkpoint is not hosted for Lucid yet, so\n`True` raises `NotImplementedError` instead of returning an\nuntrained model.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`T5Config` fields to change from the Small defaults.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5Model",
+        "description": "Encoder-decoder trunk with no language-modelling head."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.text.t5 import t5_small\n>>> model = t5_small().eval()\n>>> out = model(lucid.tensor([[13, 5, 42, 1]]), lucid.tensor([[0, 7]]))\n>>> out.last_hidden_state.shape\n(1, 2, 512)"
+      ],
+      "notes": [
+        "Reference: Raffel et al., *\"Exploring the Limits of Transfer Learning\nwith a Unified Text-to-Text Transformer\"*, JMLR 21(140), 2020\n([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 60506624,
+      "model_summary": {
+        "name": "T5Model",
+        "type": "T5Model",
+        "params": 60506624,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "shared",
+            "type": "Embedding",
+            "params": 16449536,
+            "own_params": 16449536,
+            "children": []
+          },
+          {
+            "name": "encoder",
+            "type": "_T5Stack",
+            "params": 18881280,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 256,
+                "own_params": 256,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 18880512,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 3146752,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 512,
+                        "own_params": 512,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 1048576,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 262144,
+                            "own_params": 262144,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 512,
+                        "own_params": 512,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 2097152,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 1048576,
+                            "own_params": 1048576,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 6
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 512,
+                "own_params": 512,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "decoder",
+            "type": "_T5Stack",
+            "params": 25175808,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "relative_attention_bias",
+                "type": "Embedding",
+                "params": 256,
+                "own_params": 256,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 25175040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_T5Block",
+                    "params": 4195840,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "self_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 512,
+                        "own_params": 512,
+                        "children": []
+                      },
+                      {
+                        "name": "self_attention",
+                        "type": "_T5Attention",
+                        "params": 1048576,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 262144,
+                            "own_params": 262144,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "cross_attention_norm",
+                        "type": "RMSNorm",
+                        "params": 512,
+                        "own_params": 512,
+                        "children": []
+                      },
+                      {
+                        "name": "cross_attention",
+                        "type": "_T5Attention",
+                        "params": 1048576,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "q",
+                            "type": "Linear",
+                            "params": 262144,
+                            "own_params": 262144,
+                            "children": [],
+                            "repeat": 4
+                          }
+                        ]
+                      },
+                      {
+                        "name": "feed_forward_norm",
+                        "type": "RMSNorm",
+                        "params": 512,
+                        "own_params": 512,
+                        "children": []
+                      },
+                      {
+                        "name": "feed_forward",
+                        "type": "_T5FeedForward",
+                        "params": 2097152,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "wi",
+                            "type": "Linear",
+                            "params": 1048576,
+                            "own_params": 1048576,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "dropout",
+                        "type": "Dropout",
+                        "params": 0,
+                        "own_params": 0,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 6
+                  }
+                ]
+              },
+              {
+                "name": "final_layer_norm",
+                "type": "RMSNorm",
+                "params": 512,
+                "own_params": 512,
+                "children": []
+              },
+              {
+                "name": "dropout",
+                "type": "Dropout",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "t5_small_seq2seq",
+      "path": "lucid.models.text.t5._pretrained.t5_small_seq2seq",
+      "kind": "function",
+      "labels": [],
+      "signature": "t5_small_seq2seq(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/t5/_pretrained.py#L318",
+      "subcategory": "pretrained",
+      "summary": "`t5_small` with the tied text-to-text head.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "`True` raises until the T5-Small checkpoint is hosted for Lucid.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`T5Config` fields to change from the Small defaults.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "T5ForSeq2SeqLM",
+        "description": "The model T5 trains and fine-tunes every task with."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.text.t5 import t5_small_seq2seq\n>>> model = t5_small_seq2seq().eval()\n>>> source = lucid.tensor([[13, 5, 42, 1]])\n>>> model(source, labels=lucid.tensor([[7, 9, 1]])).logits.shape\n(1, 3, 32128)\n>>> model.generate(source, max_length=4).shape[0]\n1"
+      ],
+      "notes": [
+        "Reference: Raffel et al., JMLR 2020 ([arXiv:1910.10683](https://arxiv.org/abs/1910.10683)), §2.4 and §3.7."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 60506624,
+      "model_summary": {
+        "name": "T5ForSeq2SeqLM",
+        "type": "T5ForSeq2SeqLM",
+        "params": 60506624,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "t5",
+            "type": "T5Model",
+            "params": 60506624,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "shared",
+                "type": "Embedding",
+                "params": 16449536,
+                "own_params": 16449536,
+                "children": []
+              },
+              {
+                "name": "encoder",
+                "type": "_T5Stack",
+                "params": 18881280,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 256,
+                    "own_params": 256,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 18880512,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 3146752,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 512,
+                            "own_params": 512,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 1048576,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 262144,
+                                "own_params": 262144,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 512,
+                            "own_params": 512,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 2097152,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 1048576,
+                                "own_params": 1048576,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 6
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 512,
+                    "own_params": 512,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "decoder",
+                "type": "_T5Stack",
+                "params": 25175808,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "relative_attention_bias",
+                    "type": "Embedding",
+                    "params": 256,
+                    "own_params": 256,
+                    "children": []
+                  },
+                  {
+                    "name": "blocks",
+                    "type": "ModuleList",
+                    "params": 25175040,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "0",
+                        "type": "_T5Block",
+                        "params": 4195840,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "self_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 512,
+                            "own_params": 512,
+                            "children": []
+                          },
+                          {
+                            "name": "self_attention",
+                            "type": "_T5Attention",
+                            "params": 1048576,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 262144,
+                                "own_params": 262144,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "cross_attention_norm",
+                            "type": "RMSNorm",
+                            "params": 512,
+                            "own_params": 512,
+                            "children": []
+                          },
+                          {
+                            "name": "cross_attention",
+                            "type": "_T5Attention",
+                            "params": 1048576,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "q",
+                                "type": "Linear",
+                                "params": 262144,
+                                "own_params": 262144,
+                                "children": [],
+                                "repeat": 4
+                              }
+                            ]
+                          },
+                          {
+                            "name": "feed_forward_norm",
+                            "type": "RMSNorm",
+                            "params": 512,
+                            "own_params": 512,
+                            "children": []
+                          },
+                          {
+                            "name": "feed_forward",
+                            "type": "_T5FeedForward",
+                            "params": 2097152,
+                            "own_params": 0,
+                            "children": [
+                              {
+                                "name": "wi",
+                                "type": "Linear",
+                                "params": 1048576,
+                                "own_params": 1048576,
+                                "children": [],
+                                "repeat": 2
+                              },
+                              {
+                                "name": "dropout",
+                                "type": "Dropout",
+                                "params": 0,
+                                "own_params": 0,
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "name": "dropout",
+                            "type": "Dropout",
+                            "params": 0,
+                            "own_params": 0,
+                            "children": []
+                          }
+                        ],
+                        "repeat": 6
+                      }
+                    ]
+                  },
+                  {
+                    "name": "final_layer_norm",
+                    "type": "RMSNorm",
+                    "params": 512,
+                    "own_params": 512,
+                    "children": []
+                  },
+                  {
+                    "name": "dropout",
+                    "type": "Dropout",
+                    "params": 0,
+                    "own_params": 0,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "lm_head",
+            "type": "Linear",
+            "params": 16449536,
+            "own_params": 16449536,
+            "children": []
+          }
+        ]
+      }
+    }
+  ],
+  "summary": "T5 family — Raffel et al., 2020 (text-to-text encoder-decoder).",
+  "extended": null,
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": [],
+  "canonical_name": "T5",
+  "citation": "Raffel, Colin, et al. \"Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer.\" Journal of Machine Learning Research, vol. 21, no. 140, 2020, pp. 1–67.",
+  "theory": "T5 casts every task — translation, summarisation, classification,\nregression — as **text in, text out**: a task prefix such as\n`\"summarize: \"` is prepended to the input and the answer is decoded\nas tokens, so one encoder-decoder, one loss and one decoding procedure\nserve them all.\n\n**Relative position bias.**  No position is added to the tokens.\nEach attention head instead adds a learned scalar to its logits,\nlooked up by the bucketed distance $j - i$ from query to key:\n\n\n\n$$\nA_{ij} = q_i^{\\top} k_j + b_{h,\\,\\beta(j - i)},\n$$\n\nwith **no** $1/\\sqrt{d_{kv}}$ scaling — the Mesh TensorFlow\ninitialisation folds it into the query projection.  The bucket map\n$\\beta$ is exact for the $m$ nearest distances and\nlogarithmic beyond, saturating at `relative_attention_max_distance`\n$D$.  For $n$ buckets per direction and $m = n/2$,\n\n\n\n$$\n\\beta(r) =\n\\begin{cases}\n    |r| & |r| < m, \\\\\n    \\min\\!\\Bigl(n - 1,\\; m + \\Bigl\\lfloor\n        \\dfrac{\\log(|r| / m)}{\\log(D / m)}\\,(n - m)\n    \\Bigr\\rfloor\\Bigr) & \\text{otherwise.}\n\\end{cases}\n$$\n\nThe encoder splits its 32 buckets between the two signs of\n$r$ ($n = 16$); the causal decoder uses all 32 for\n$r \\le 0$.  One table per stack, computed once and shared by\nevery layer.\n\n**Simplified layer norm.**  Every sub-layer reads\n$x / \\mathrm{RMS}(x) \\odot \\gamma$ — no mean subtraction, no\nbias — and adds its output back to the unnormalised stream\n(pre-norm residual), with a final norm closing each stack.\n\n**Objective.**  Pre-training corrupts 15% of the input tokens in\nspans of mean length 3, replaces each span with a unique sentinel\nand asks the decoder for the dropped spans, each after its sentinel.\nEvery task then trains the same per-token cross-entropy\n\n\n\n$$\n\\mathcal{L} = -\\sum_{t} \\log p_\\theta(y_t \\mid x,\\, y_{<t}),\n$$\n\nthe decoder reading the target shifted right behind\n`decoder_start_token_id`.  The paper's five sizes span 60M to 11B\nparameters; T5-11B set the state of the art on GLUE, SuperGLUE,\nSQuAD and CNN/Daily Mail at publication.",
+  "tasks": [
+    "language-modeling"
+  ]
+}

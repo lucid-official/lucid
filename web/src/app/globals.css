@@ -17,26 +17,26 @@
   --font-sans: "Pretendard", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
 
-  /* Background / Surface */
-  --color-lucid-bg:       #0d0c15;
-  --color-lucid-surface:  #14121f;
-  --color-lucid-elevated: #1e1c30;
-  --color-lucid-border:   #2a2845;
-  --color-lucid-border-subtle: #1e1c30;
+  /* Background / Surface — anchored on assets/source/spec.json (Night #121214, Ink #282337) */
+  --color-lucid-bg:       #121214;
+  --color-lucid-surface:  #181622;
+  --color-lucid-elevated: #282337;
+  --color-lucid-border:   #322c46;
+  --color-lucid-border-subtle: #211d2f;
 
-  /* Primary — light violet + indigo */
-  --color-lucid-primary:       #9580ff;
-  --color-lucid-primary-dark:  #7b63f0;
-  --color-lucid-primary-light: #b8abff;
-  --color-lucid-primary-pale:  #d4ceff;
+  /* Primary — Lucid Brand Kit palette (Violet #9576E4, Shade #6E4FD0, Tint #C4B3F4, Lavender #F1EDFC) */
+  --color-lucid-primary:       #9576E4;
+  --color-lucid-primary-dark:  #6E4FD0;
+  --color-lucid-primary-light: #C4B3F4;
+  --color-lucid-primary-pale:  #F1EDFC;
 
   /* Blue accent — Obsidian 청색 언더톤 */
   --color-lucid-blue:       #6b8aff;
   --color-lucid-blue-dark:  #4d6fef;
   --color-lucid-blue-light: #a3b8ff;
 
-  /* Text hierarchy */
-  --color-lucid-text-high:     #f0eeff;
+  /* Text hierarchy — anchored on assets/source/spec.json (text_on_dark #F5F4F8) */
+  --color-lucid-text-high:     #F5F4F8;
   --color-lucid-text-mid:      #b4afce;
   --color-lucid-text-low:      #6e6a8a;
   --color-lucid-text-disabled: #3d3a55;
@@ -159,21 +159,21 @@
  * the lightness flips. */
 :root[data-theme="light"] {
   --color-lucid-bg:           #fdfcfb;
-  --color-lucid-surface:      #f6f5f9;
+  --color-lucid-surface:      #F1EDFC;
   --color-lucid-elevated:     #ffffff;
   --color-lucid-border:       #dad7e6;
   --color-lucid-border-subtle: #ececf3;
 
-  --color-lucid-primary:        #6750e8;
-  --color-lucid-primary-dark:   #4f3bc8;
-  --color-lucid-primary-light:  #8674f0;
-  --color-lucid-primary-pale:   #c8bfff;
+  --color-lucid-primary:        #6E4FD0;
+  --color-lucid-primary-dark:   #5639b5;
+  --color-lucid-primary-light:  #9576E4;
+  --color-lucid-primary-pale:   #C4B3F4;
 
   --color-lucid-blue:        #3a55cc;
   --color-lucid-blue-dark:   #233aa8;
   --color-lucid-blue-light:  #6a7fdf;
 
-  --color-lucid-text-high:     #14121f;
+  --color-lucid-text-high:     #16141F;
   --color-lucid-text-mid:      #3d3a55;
   --color-lucid-text-low:      #6e6a8a;
   --color-lucid-text-disabled: #afabc6;

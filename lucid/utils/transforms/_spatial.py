@@ -842,8 +842,10 @@ class SafeRotate(Rotate):
     Like :class:`Rotate` but enlarges the output canvas so the full
     rotated rectangle fits without clipping.  The new size is
 
-    .. math:: (W',\, H') = \left(\lceil W\cos\theta + H\sin\theta\rceil,
-        \; \lceil W\sin\theta + H\cos\theta\rceil\right),
+    .. math::
+
+        (W',\, H') = \left(\lceil W\cos\theta + H\sin\theta\rceil,\;
+            \lceil W\sin\theta + H\cos\theta\rceil\right),
 
     with :math:`\theta` sampled per call from ``limit``.  The affine
     matrix is built as "rotate about the old center, then translate

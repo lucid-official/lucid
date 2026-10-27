@@ -9,12 +9,13 @@ import { ThemeBoot, ThemeProvider } from "@/components/layout/ThemeProvider";
 import { RecentPageTracker } from "@/components/layout/RecentPageTracker";
 import { InlineCodeCopy } from "@/components/layout/InlineCodeCopy";
 import { RouteProgress } from "@/components/layout/RouteProgress";
+import { brandColors } from "@/lib/brand-kit";
 import { SITE_ORIGIN, brandAsset } from "@/lib/site";
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)",  color: "#0d0c15" },
-    { media: "(prefers-color-scheme: light)", color: "#fdfcfb" },
+    { media: "(prefers-color-scheme: dark)",  color: brandColors.night },
+    { media: "(prefers-color-scheme: light)", color: brandColors.lavender },
   ],
   colorScheme: "dark light",
 };
@@ -29,11 +30,14 @@ export const metadata: Metadata = {
   // + app/icon.svg (see scripts/sync-brand.mjs for the basePath bug that
   // drops the favicon from the home page).  Order as in the kit README:
   // the .ico for browsers without SVG favicons, then the optically
-  // corrected SVG.
+  // corrected SVG and raster fallbacks.
   icons: {
     icon: [
       { url: brandAsset("favicon.ico"), sizes: "16x16 32x32 48x48", type: "image/x-icon" },
       { url: brandAsset("favicon.svg"), type: "image/svg+xml" },
+      { url: brandAsset("favicon-16.png"), sizes: "16x16", type: "image/png" },
+      { url: brandAsset("favicon-32.png"), sizes: "32x32", type: "image/png" },
+      { url: brandAsset("favicon-48.png"), sizes: "48x48", type: "image/png" },
     ],
     apple: [{ url: brandAsset("apple-touch-icon.png"), sizes: "180x180", type: "image/png" }],
   },

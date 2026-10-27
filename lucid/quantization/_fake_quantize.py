@@ -52,13 +52,13 @@ class FakeQuantize(nn.Module):
     passthrough (the observer may still watch).
 
     **The straight-through fake-quant.** Writing :math:`S, Z` for the current
-    ``(scale, zero_point)`` and :math:`[q_\min, q_\max]` for the grid, the forward
+    ``(scale, zero_point)`` and :math:`[q_{\min}, q_{\max}]` for the grid, the forward
     computes the quantize→dequantize round-trip in the float domain:
 
     .. math::
 
         \hat{x} = \bigl(\operatorname{clip}(\operatorname{round}(x/S) + Z,\
-            q_\min,\ q_\max) - Z\bigr)\,S.
+            q_{\min},\ q_{\max}) - Z\bigr)\,S.
 
     The :math:`\operatorname{round}` step has a zero (a.e.) derivative, which would kill
     training, so the backward substitutes the **straight-through estimator** — gradient
@@ -68,7 +68,7 @@ class FakeQuantize(nn.Module):
 
         \frac{\partial \hat{x}}{\partial x} =
         \begin{cases}
-            1 & q_\min \le \operatorname{round}(x/S) + Z \le q_\max \\
+            1 & q_{\min} \le \operatorname{round}(x/S) + Z \le q_{\max} \\
             0 & \text{otherwise}
         \end{cases}
 

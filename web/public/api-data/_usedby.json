@@ -2738,6 +2738,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.text.t5._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.text.transformer._model"
     },
     {
@@ -3388,6 +3392,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.text.t5._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.text.transformer._model"
     },
     {
@@ -3507,6 +3515,10 @@
     {
       "kind": "module",
       "module": "lucid.models"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._model"
     },
     {
       "kind": "module",
@@ -3715,6 +3727,10 @@
     {
       "kind": "module",
       "module": "lucid.models.text.roformer._pretrained"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._pretrained"
     },
     {
       "kind": "module",
@@ -6881,6 +6897,112 @@
     {
       "kind": "module",
       "module": "lucid.models.weights"
+    }
+  ],
+  "lucid.models.text.t5": [
+    {
+      "kind": "module",
+      "module": "lucid.models"
+    }
+  ],
+  "lucid.models.text.t5._config.T5Config": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._pretrained"
+    }
+  ],
+  "lucid.models.text.t5._model.T5ForSeq2SeqLM": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._pretrained"
+    }
+  ],
+  "lucid.models.text.t5._model.T5Model": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._pretrained"
+    }
+  ],
+  "lucid.models.text.t5._model.T5ModelOutput": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_11b": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_11b_seq2seq": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_3b": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_3b_seq2seq": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_base": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_base_seq2seq": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_large": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_large_seq2seq": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_small": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
+    }
+  ],
+  "lucid.models.text.t5._pretrained.t5_small_seq2seq": [
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5"
     }
   ],
   "lucid.models.text.transformer": [
@@ -12388,6 +12510,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.text.t5._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.text.transformer._model"
     },
     {
@@ -12851,6 +12977,10 @@
     {
       "kind": "module",
       "module": "lucid.models.text.roformer._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._model"
     },
     {
       "kind": "module",
@@ -17238,11 +17368,19 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.text._common._seq2seq"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.text.gpt._model"
     },
     {
       "kind": "module",
       "module": "lucid.models.text.gpt2._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text.t5._model"
     },
     {
       "kind": "module",

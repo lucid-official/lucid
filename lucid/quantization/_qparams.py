@@ -98,7 +98,7 @@ def calculate_qparams(
     The shared calibration math behind every observer. Given the ``[min_val, max_val]``
     range an observer recorded, it solves for the affine map
     :math:`q = \operatorname{round}(x / s) + z` that packs that range into the target
-    grid ``[q_\min, q_\max]``. The observed range is first **extended to include zero**
+    grid ``[q_{\min}, q_{\max}]``. The observed range is first **extended to include zero**
     (``min <- min(min, 0)``, ``max <- max(max, 0)``) so that real 0 is always exactly
     representable — a property the padding / masking paths rely on.
 
@@ -107,18 +107,18 @@ def calculate_qparams(
     .. math::
 
         \textbf{affine:}\quad
-        s = \frac{\max - \min}{q_\max - q_\min},\qquad
-        z = \operatorname{clip}\!\bigl(q_\min - \operatorname{round}(\min / s),\;
-            q_\min,\; q_\max\bigr)
+        s = \frac{\max - \min}{q_{\max} - q_{\min}},\qquad
+        z = \operatorname{clip}\!\bigl(q_{\min} - \operatorname{round}(\min / s),\;
+            q_{\min},\; q_{\max}\bigr)
 
     .. math::
 
         \textbf{symmetric:}\quad
-        s = \frac{\max(\lvert\min\rvert,\ \lvert\max\rvert)}{(q_\max - q_\min) / 2},
+        s = \frac{\max(\lvert\min\rvert,\ \lvert\max\rvert)}{(q_{\max} - q_{\min}) / 2},
         \qquad
         z = \begin{cases}
             0 & \text{signed} \\
-            \lfloor (q_\max + q_\min + 1)/2 \rfloor & \text{unsigned}
+            \lfloor (q_{\max} + q_{\min} + 1)/2 \rfloor & \text{unsigned}
         \end{cases}
 
     ``scale`` is floored at ``eps`` in every branch so a degenerate (constant) range

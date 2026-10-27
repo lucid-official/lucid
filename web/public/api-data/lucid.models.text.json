@@ -3,7 +3,7 @@
   "name": "text",
   "path": "lucid.models.text",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/4642f33/lucid/models/text/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/b75f9b36c/lucid/models/text/__init__.py#L1",
   "members": [],
   "summary": "Text model families — Phase 4 of the model zoo.",
   "extended": "Houses BERT / GPT / GPT-2 / RoFormer and the shared base config /\nactivation alias.  Positional-encoding primitives (RoPE, sinusoidal PE) live\nin `lucid.nn` — text families just import them from there.",
@@ -31,6 +31,10 @@
     {
       "slug": "lucid.models.text.roformer",
       "label": "roformer"
+    },
+    {
+      "slug": "lucid.models.text.t5",
+      "label": "t5"
     },
     {
       "slug": "lucid.models.text.transformer",
