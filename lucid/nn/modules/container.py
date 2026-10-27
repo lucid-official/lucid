@@ -4,13 +4,7 @@ Container modules: Sequential, ModuleList, ModuleDict.
 
 import operator
 from collections import OrderedDict
-from collections.abc import (
-    Iterable,
-    ItemsView,
-    KeysView,
-    Mapping,
-    ValuesView,
-)
+from collections.abc import Iterable, ItemsView, KeysView, Mapping, ValuesView
 from typing import Iterator, cast, overload, override
 from lucid.nn.module import Module, _ModuleWrapper
 from lucid.nn.parameter import Parameter

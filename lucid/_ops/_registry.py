@@ -89,10 +89,7 @@ class OpEntry:
 
 
 def _bind_leading(
-    op: str,
-    names: tuple[str, ...],
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
+    op: str, names: tuple[str, ...], args: tuple[object, ...], kwargs: dict[str, object]
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     """``args`` / ``kwargs`` with the operands named in ``names`` moved to position.
 

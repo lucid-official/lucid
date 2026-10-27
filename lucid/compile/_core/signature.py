@@ -611,10 +611,7 @@ def _same_roots(refs: Sequence[weakref.ref[Module]], roots: Sequence[Module]) ->
 def _registry_slots(subs: Sequence[Module]) -> Iterator[tuple[_Slot, Tensor | None]]:
     """Every parameter and buffer slot of ``subs``, with what it holds."""
     for pos, sub in enumerate(subs):
-        for kind, registry in (
-            ("parameter", sub._parameters),
-            ("buffer", sub._buffers),
-        ):
+        for kind, registry in (("parameter", sub._parameters), ("buffer", sub._buffers)):
             for name, tensor in registry.items():
                 yield (pos, kind, name), tensor
 
@@ -1029,9 +1026,7 @@ def _as_tensor(value: object) -> Tensor | None:
 type _Held = tuple[int, object, int]
 
 
-def _outside_tensors(
-    model: Module,
-) -> dict[_Held, tuple[Module | None, str | tuple[str, str]]]:
+def _outside_tensors(model: Module) -> dict[_Held, tuple[Module | None, str | tuple[str, str]]]:
     """Every tensor the tree's modules hold as plain attributes, and the
     wrapped callable's cells and globals hold, with where it sits."""
     from lucid._tensor.tensor import Tensor
@@ -1210,9 +1205,7 @@ class ParamFingerprint(_ModuleWrapper):
         return frozenset(_outside_tensors(self.model))
 
     def settle(
-        self,
-        fed: Iterable[_C_engine.TensorImpl] = (),
-        before: frozenset[_Held] = frozenset(),
+        self, fed: Iterable[_C_engine.TensorImpl] = (), before: frozenset[_Held] = frozenset()
     ) -> None:
         """Record the tree as the owner's executables read it: it just traced.
 

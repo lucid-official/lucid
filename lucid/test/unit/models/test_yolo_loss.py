@@ -17,10 +17,7 @@ import pytest
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.models._output import ObjectDetectionOutput
-from lucid.models._utils._detection_results import (
-    detection_result,
-    empty_detection_result,
-)
+from lucid.models._utils._detection_results import detection_result, empty_detection_result
 from lucid.models.vision.yolo._v1 import YOLOConfig, YOLOForObjectDetection
 from lucid.models.vision.yolo._v2 import YOLOV2Config, YOLOV2ForObjectDetection
 from lucid.models.vision.yolo._v3 import (
@@ -102,10 +99,7 @@ def _ref_v1(raw: Tensor, targets: list[dict], cfg: YOLOConfig, hw) -> float:
                 p = cell[row][col][b * 5 : b * 5 + 4]
                 px, py = (p[0] + col) * cw, (p[1] + row) * ch
                 pw, ph = p[2] ** 2 * W, p[3] ** 2 * H
-                v = _iou(
-                    (px - pw / 2, py - ph / 2, px + pw / 2, py + ph / 2),
-                    (x1, y1, x2, y2),
-                )
+                v = _iou((px - pw / 2, py - ph / 2, px + pw / 2, py + ph / 2), (x1, y1, x2, y2))
                 if v > best:
                     best, best_b = v, b
             assigned[(row, col, best_b)] = (cx, cy, w, h, best, c)
@@ -270,9 +264,7 @@ def _v1_v2_reads(monkeypatch: pytest.MonkeyPatch, grid: int) -> dict[str, int]:
     return reads.calls
 
 
-def test_v1_v2_losses_read_nothing_per_predictor(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_v1_v2_losses_read_nothing_per_predictor(monkeypatch: pytest.MonkeyPatch) -> None:
     """The only host reads left are ``one_hot``'s index-range guard (one per
     call on the CPU), so the count must not grow with the grid."""
     small = _v1_v2_reads(monkeypatch, 4)
@@ -318,9 +310,7 @@ def _det_output(n: int, ncls: int) -> ObjectDetectionOutput:
     xy = lucid.rand(1, n, 2) * 50.0
     boxes = lucid.cat([xy, xy + 20.0], dim=-1)
     return ObjectDetectionOutput(
-        logits=lucid.randn(1, n, ncls) * 3.0,
-        pred_boxes=boxes,
-        objectness=lucid.ones((1, n)),
+        logits=lucid.randn(1, n, ncls) * 3.0, pred_boxes=boxes, objectness=lucid.ones((1, n))
     )
 
 

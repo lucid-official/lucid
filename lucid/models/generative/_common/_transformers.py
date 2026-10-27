@@ -39,10 +39,7 @@ __all__ = [
 
 
 def timestep_embedding(
-    t: Tensor,
-    dim: int,
-    max_period: float = 10000.0,
-    dtype: lucid.dtype | None = None,
+    t: Tensor, dim: int, max_period: float = 10000.0, dtype: lucid.dtype | None = None
 ) -> Tensor:
     r"""Sinusoidal embedding of a scalar, as in the transformer.
 
@@ -288,11 +285,7 @@ class DiTBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        mlp_ratio: float = 4.0,
-        gated: bool = True,
+        self, hidden_size: int, num_heads: int, mlp_ratio: float = 4.0, gated: bool = True
     ) -> None:
         """Initialise the block. See the class docstring for parameters."""
         super().__init__()

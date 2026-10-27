@@ -21,11 +21,7 @@ from lucid.distributions.constraints import open_unit_interval  # noqa: F401
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _clamp_probs,
-    _lazy_param,
-)
+from lucid.distributions._util import _as_tensor, _clamp_probs, _lazy_param
 from lucid.special import xlog1py
 
 

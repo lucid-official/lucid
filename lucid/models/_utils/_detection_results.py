@@ -56,10 +56,7 @@ def check_per_image(owner: str, batch: int, **per_image: Sized | None) -> None:
 
 
 def detection_result(
-    boxes: Tensor,
-    scores: Tensor,
-    labels: Tensor,
-    masks: Tensor | None = None,
+    boxes: Tensor, scores: Tensor, labels: Tensor, masks: Tensor | None = None
 ) -> dict[str, Tensor]:
     """One image's postprocess result — the dict every detector returns.
 

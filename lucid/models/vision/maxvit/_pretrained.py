@@ -13,11 +13,7 @@ from lucid.models.vision.maxvit._weights import (
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 _CFG_T = MaxViTConfig(
-    depths=(2, 2, 5, 2),
-    dims=(64, 128, 256, 512),
-    window_size=7,
-    head_dim=32,
-    mlp_ratio=4.0,
+    depths=(2, 2, 5, 2), dims=(64, 128, 256, 512), window_size=7, head_dim=32, mlp_ratio=4.0
 )
 
 _CFG_S = MaxViTConfig(
@@ -39,19 +35,11 @@ _CFG_B = MaxViTConfig(
 )
 
 _CFG_L = MaxViTConfig(
-    depths=(2, 6, 14, 2),
-    dims=(128, 256, 512, 1024),
-    window_size=7,
-    head_dim=32,
-    mlp_ratio=4.0,
+    depths=(2, 6, 14, 2), dims=(128, 256, 512, 1024), window_size=7, head_dim=32, mlp_ratio=4.0
 )
 
 _CFG_XL = MaxViTConfig(
-    depths=(2, 6, 14, 2),
-    dims=(192, 384, 768, 1536),
-    window_size=7,
-    head_dim=32,
-    mlp_ratio=4.0,
+    depths=(2, 6, 14, 2), dims=(192, 384, 768, 1536), window_size=7, head_dim=32, mlp_ratio=4.0
 )
 
 
@@ -324,10 +312,7 @@ def maxvit_xlarge(pretrained: bool = False, **overrides: object) -> MaxViT:
     params=30916528,
 )
 def maxvit_tiny_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: MaxViTTinyWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: MaxViTTinyWeights | None = None, **overrides: object
 ) -> MaxViTForImageClassification:
     r"""MaxViT-Tiny image classifier (Tu et al., 2022).
 
@@ -448,10 +433,7 @@ def maxvit_small_cls(
     params=119467708,
 )
 def maxvit_base_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: MaxViTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: MaxViTBaseWeights | None = None, **overrides: object
 ) -> MaxViTForImageClassification:
     r"""MaxViT-Base image classifier (Tu et al., 2022).
 

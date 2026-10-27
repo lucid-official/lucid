@@ -39,21 +39,12 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
 from lucid.models.generative._common._dists import OneHotCategorical
-from lucid.models.generative._common._pixel_nets import (
-    DenseHead,
-    PixelDecoder,
-    PixelEncoder,
-)
+from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
 from lucid.models.generative._common._returns import lambda_return
 from lucid.models.generative._common._rssm import RSSM, RSSMState, rssm_kl
 from lucid.models.generative.dreamer._config import DreamerConfig
 
-__all__ = [
-    "DreamerModel",
-    "DreamerForWorldModeling",
-    "DreamerOutput",
-    "DreamerBehaviorOutput",
-]
+__all__ = ["DreamerModel", "DreamerForWorldModeling", "DreamerOutput", "DreamerBehaviorOutput"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -843,12 +834,7 @@ class DreamerForWorldModeling(WorldModelingModel):
             :meth:`actor_parameters` and :meth:`value_parameters`.
         """
         model = self.dreamer
-        modules: list[nn.Module] = [
-            model.encoder,
-            model.rssm,
-            model.decoder,
-            model.reward_head,
-        ]
+        modules: list[nn.Module] = [model.encoder, model.rssm, model.decoder, model.reward_head]
         if model.pcont_head is not None:
             modules.append(model.pcont_head)
         return [p for module in modules for p in module.parameters()]

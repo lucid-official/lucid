@@ -273,10 +273,7 @@ def test_within_the_measured_ulp_bound_in_slow_blocks(name: str) -> None:
     got = getattr(lucid, name)(_t(x.reshape(-1))).numpy().reshape(-1, 16)[:, :15]
     d = _ulp(got, _oracle(name, x[:, :15]))
     worst = int(d.max())
-    assert worst <= _ULP_SLOW_BLOCK[name], (
-        worst,
-        repr(x[:, :15].flat[int(d.argmax())]),
-    )
+    assert worst <= _ULP_SLOW_BLOCK[name], (worst, repr(x[:, :15].flat[int(d.argmax())]))
 
 
 @pytest.mark.parametrize("name", _FUNCS)
@@ -468,8 +465,7 @@ def test_mish_lstm_rope_and_randn_vforce_parity(dtype: type, ref: ModuleType) ->
     xs = np.concatenate(
         [
             np.array(
-                [-30.0, -20.0, -12.0, -10.0, -9.0, -1.0, -0.0, 0.0, 0.5, 2.0, 10.0],
-                dtype=dtype,
+                [-30.0, -20.0, -12.0, -10.0, -9.0, -1.0, -0.0, 0.0, 0.5, 2.0, 10.0], dtype=dtype
             ),
             rng.uniform(-14.0, 4.0, 2055).astype(dtype),
         ]

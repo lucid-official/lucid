@@ -29,19 +29,14 @@ residual that is the CPU kernel's rather than the conversion's.
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
-from lucid.models.generative.stable_diffusion._weights import (
-    StableDiffusionWeights,
-)
+from lucid.models.generative.stable_diffusion._weights import StableDiffusionWeights
 from lucid.models.generative.stable_diffusion._model import (
     StableDiffusionForImageGeneration,
     StableDiffusionModel,
 )
 from lucid.models._utils._common import apply_overrides
 
-__all__ = [
-    "stable_diffusion",
-    "stable_diffusion_gen",
-]
+__all__ = ["stable_diffusion", "stable_diffusion_gen"]
 
 _CFG_V1 = StableDiffusionConfig()
 

@@ -34,8 +34,7 @@ from lucid.coreml import _cache
 from lucid.test.unit.coreml._helpers import bundles_under
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -400,11 +399,7 @@ class TestADiskTooFullForCoreML:
         monkeypatch.setattr(_cache, "_free_bytes", lambda path: 64 << 20)
 
     def test_a_new_package_is_refused_before_compiling(
-        self,
-        tmp_path: Path,
-        cache: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        full: None,
+        self, tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch, full: None
     ) -> None:
         compiles = _Counting(_C_engine.coreml.compile_model)
         monkeypatch.setattr(_C_engine.coreml, "compile_model", compiles)
@@ -670,11 +665,7 @@ class TestReexportingAndRewriting:
 class TestACompiledModelIsOpenedWhereItIs:
     @pytest.mark.parametrize("limit", ["4G", "0"])
     def test_without_compiling_or_caching_it(
-        self,
-        tmp_path: Path,
-        cache: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        limit: str,
+        self, tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch, limit: str
     ) -> None:
         _write(tmp_path / "m.mlpackage")
         (entry,) = _entries(cache)

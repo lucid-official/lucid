@@ -305,10 +305,7 @@ def _with_partial_factors(out: Tensor, A: Tensor, info: Tensor, upper: bool) -> 
 
 
 def cholesky_ex(
-    input: Tensor,
-    *,
-    upper: bool = False,
-    check_errors: bool = False,
+    input: Tensor, *, upper: bool = False, check_errors: bool = False
 ) -> tuple[Tensor, Tensor]:
     r"""Cholesky factorization with an explicit success flag.
 
@@ -441,11 +438,7 @@ def inv_ex(A: Tensor, *, check_errors: bool = False) -> tuple[Tensor, Tensor]:
 
 
 def solve_ex(
-    A: Tensor,
-    B: Tensor,
-    *,
-    left: bool = True,
-    check_errors: bool = False,
+    A: Tensor, B: Tensor, *, left: bool = True, check_errors: bool = False
 ) -> tuple[Tensor, Tensor]:
     r"""Solve :math:`AX = B` with an explicit success flag.
 
@@ -512,10 +505,7 @@ def solve_ex(
 
 
 def lu_factor_ex(
-    A: Tensor,
-    *,
-    pivot: bool = True,
-    check_errors: bool = False,
+    A: Tensor, *, pivot: bool = True, check_errors: bool = False
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""LU factorization with partial pivoting and an explicit status.
 
@@ -570,11 +560,7 @@ def _lu_factor_ex(A: Tensor, *, check_errors: bool, op: str) -> _LuFactorExResul
     return _LuFactorExResult(LU, pivots, info)
 
 
-def ldl_factor(
-    input: Tensor,
-    *,
-    hermitian: bool = False,
-) -> tuple[Tensor, Tensor]:
+def ldl_factor(input: Tensor, *, hermitian: bool = False) -> tuple[Tensor, Tensor]:
     r"""LDL factorization of a symmetric (or Hermitian) matrix.
 
     For a real symmetric matrix :math:`A` (possibly indefinite),
@@ -652,10 +638,7 @@ def ldl_factor(
 
 
 def ldl_factor_ex(
-    input: Tensor,
-    *,
-    hermitian: bool = False,
-    check_errors: bool = False,
+    input: Tensor, *, hermitian: bool = False, check_errors: bool = False
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""LDL factorization with an explicit status.
 
@@ -865,11 +848,7 @@ def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResul
         if m > n:
             Q = _complete_svd_basis(Q, m, n, columns=True)
             pad = lucid.zeros(
-                *tuple(int(s) for s in A.shape[:-2]),
-                m - n,
-                n,
-                dtype=R.dtype,
-                device=R.device,
+                *tuple(int(s) for s in A.shape[:-2]), m - n, n, dtype=R.dtype, device=R.device
             )
             R = lucid.cat([R, pad], dim=-2)
     return _QrResult(Q, R)
@@ -914,11 +893,7 @@ def _sv_cutoff(
 
 
 def _pinv_with_tol(
-    A: Tensor,
-    *,
-    atol: float | Tensor | None,
-    rtol: float | Tensor | None,
-    hermitian: bool,
+    A: Tensor, *, atol: float | Tensor | None, rtol: float | Tensor | None, hermitian: bool
 ) -> Tensor:
     """Compute ``pinv(A)`` under custom ``atol``/``rtol`` or ``hermitian=True``."""
     if A.ndim < 2 or (hermitian and A.shape[-1] != A.shape[-2]):
@@ -1026,9 +1001,7 @@ def tensorinv(input: Tensor, ind: int = 2) -> Tensor:
 
 
 def tensorsolve(
-    input: Tensor,
-    other: Tensor,
-    dims: tuple[int, ...] | list[int] | None = None,
+    input: Tensor, other: Tensor, dims: tuple[int, ...] | list[int] | None = None
 ) -> Tensor:
     r"""Solve the tensor equation ``tensordot(A, X, dims=X.ndim) = B`` for ``X``.
 
@@ -1282,10 +1255,7 @@ def _householder_product(H: Tensor, tau: Tensor) -> Tensor:
     k, r = _check_householder_shapes(
         tuple(int(s) for s in H.shape), tuple(int(s) for s in tau.shape)
     )
-    with _autocast_entry("householder_product", _unwrap(H), _unwrap(tau)) as (
-        h_impl,
-        t_impl,
-    ):
+    with _autocast_entry("householder_product", _unwrap(H), _unwrap(tau)) as (h_impl, t_impl):
         H_cast, tau_cast = _wrap(h_impl), _wrap(t_impl)
         use_ops = (
             H_cast.ndim > 2

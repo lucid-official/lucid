@@ -204,8 +204,7 @@ class TestLangevinSampling:
 
 class TestNCSNRegistry:
     @pytest.mark.parametrize(
-        "name",
-        ["ncsn_cifar", "ncsn_celeba", "ncsn_cifar_gen", "ncsn_celeba_gen"],
+        "name", ["ncsn_cifar", "ncsn_celeba", "ncsn_cifar_gen", "ncsn_celeba_gen"]
     )
     def test_registered(self, name: str) -> None:
         assert is_model(name)
@@ -224,10 +223,7 @@ class TestNCSNRegistry:
             sigma_max=10.0,
         )
         assert isinstance(m, NCSNModel)
-        out = m.eval()(
-            lucid.randn((1, 3, 16, 16)),
-            lucid.tensor([0]).long(),
-        )
+        out = m.eval()(lucid.randn((1, 3, 16, 16)), lucid.tensor([0]).long())
         assert tuple(out.sample.shape) == (1, 3, 16, 16)
 
     def test_auto_image_generation_dispatch(self) -> None:
@@ -297,9 +293,7 @@ class TestNCSNRefineNetBackbone:
 
     def test_instance_norm_plus_plus_keeps_the_brightness_pattern(self) -> None:
         """§3.3's whole point: plain instance norm throws this away."""
-        from lucid.models.generative.ncsn._refinenet import (
-            CondInstanceNormPlusPlus,
-        )
+        from lucid.models.generative.ncsn._refinenet import CondInstanceNormPlusPlus
 
         def make(means: list[float]) -> Tensor:
             return lucid.tensor([[[[m - 0.5, m + 0.5]] for m in means]])

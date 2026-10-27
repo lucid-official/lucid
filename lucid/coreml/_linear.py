@@ -48,11 +48,7 @@ def matmul(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
         rank = len(dims)
         rhs = b.emit(
             "slice_by_size",
-            [
-                ("x", rhs),
-                ("begin", b.const_ints([0] * rank)),
-                ("size", b.const_ints([-1] * rank)),
-            ],
+            [("x", rhs), ("begin", b.const_ints([0] * rank)), ("size", b.const_ints([-1] * rank))],
             dims,
         )
     return "matmul", [
@@ -157,7 +153,4 @@ def fused_linear_gelu(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
         MIL's ``gelu`` in ``TANH_APPROXIMATION`` mode reading the
         pre-activation, as plain ``gelu`` translates.
     """
-    return "gelu", [
-        ("x", _pre_activation(b, op, ins)),
-        ("mode", b.const_str("TANH_APPROXIMATION")),
-    ]
+    return "gelu", [("x", _pre_activation(b, op, ins)), ("mode", b.const_str("TANH_APPROXIMATION"))]

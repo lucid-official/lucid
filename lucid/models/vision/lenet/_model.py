@@ -337,11 +337,7 @@ class LeNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         self._build_classifier(84, config.num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         _check_input_size(int(x.shape[-2]), int(x.shape[-1]), classifier=True)
         x = self.features(x)
         # C5 output is (B, 120, 1, 1) — flatten spatial dims

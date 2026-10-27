@@ -47,9 +47,7 @@ def test_semantic_class_axis_is_channels_not_image_width() -> None:
     assert parity._compare_fields([("masks_queries_logits", wanted, got)])["top1_agrees"] is True
 
 
-def test_parameter_limit_applies_to_vision_before_loading(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_parameter_limit_applies_to_vision_before_loading(monkeypatch: pytest.MonkeyPatch) -> None:
     def forbidden(*args: object, **kwargs: object) -> None:
         pytest.fail("a model beyond the memory bound must not be loaded")
 
@@ -59,8 +57,7 @@ def test_parameter_limit_applies_to_vision_before_loading(
 
 
 def test_default_selection_and_partial_evidence_survive_interruption(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     path = tmp_path / "progress.json"
     wrong = SimpleNamespace(value=SimpleNamespace(meta={"source": "timm/wrong", "num_params": 1}))
@@ -68,8 +65,7 @@ def test_default_selection_and_partial_evidence_survive_interruption(
         value=SimpleNamespace(meta={"source": "timm/default", "num_params": 1})
     )
     enum = SimpleNamespace(
-        DEFAULT=correct,
-        __members__={"OLD": wrong, "CURRENT": correct, "DEFAULT": correct},
+        DEFAULT=correct, __members__={"OLD": wrong, "CURRENT": correct, "DEFAULT": correct}
     )
     monkeypatch.setattr(parity, "_WEIGHTS_BY_MODEL", {"first": enum, "second": enum})
     monkeypatch.setattr(parity, "_factory_default", lambda name: correct)
@@ -95,10 +91,7 @@ def test_default_selection_and_partial_evidence_survive_interruption(
 @pytest.mark.parametrize("timeout,previous", [(None, None), (17.0, "0"), (90.0, "1")])
 @pytest.mark.parametrize("interrupted", [False, True])
 def test_reference_io_is_read_only_bounded_and_restores_caller_settings(
-    monkeypatch,
-    timeout,
-    previous,
-    interrupted,
+    monkeypatch, timeout, previous, interrupted
 ) -> None:
     import socket
 
@@ -123,11 +116,7 @@ def test_reference_io_is_read_only_bounded_and_restores_caller_settings(
     "source,kind,identifier",
     [
         ("diffusers/google/ddpm-cifar10-32", "diffusers", "google/ddpm-cifar10-32"),
-        (
-            "facebook/maskformer-resnet50-ade",
-            "transformers",
-            "facebook/maskformer-resnet50-ade",
-        ),
+        ("facebook/maskformer-resnet50-ade", "transformers", "facebook/maskformer-resnet50-ade"),
         (
             "facebook/mask2former-swin-tiny-ade-semantic",
             "transformers",
@@ -139,9 +128,7 @@ def test_existing_checkpoint_sources_select_their_actual_adapter(source, kind, i
     assert parity._reference_for(source) == (kind, identifier)
 
 
-def test_denoising_adapter_uses_identical_samples_and_fixed_timestep(
-    monkeypatch,
-) -> None:
+def test_denoising_adapter_uses_identical_samples_and_fixed_timestep(monkeypatch) -> None:
     import lucid
 
     seen = []
@@ -288,13 +275,7 @@ def test_stable_diffusion_wrapper_weights_are_discoverable() -> None:
 
 
 @pytest.mark.parametrize(
-    "base",
-    [
-        "clip_vit_base_32",
-        "clip_vit_base_16",
-        "clip_vit_large_14",
-        "clip_vit_large_14_336",
-    ],
+    "base", ["clip_vit_base_32", "clip_vit_base_16", "clip_vit_large_14", "clip_vit_large_14_336"]
 )
 def test_clip_zero_shot_weights_are_discoverable(base: str) -> None:
     from lucid.weights import list_pretrained, weights_for
@@ -309,9 +290,7 @@ def test_clip_zero_shot_weights_are_discoverable(base: str) -> None:
     )
 
 
-def test_missing_darknet_reader_is_unverified_not_a_conversion_failure(
-    monkeypatch,
-) -> None:
+def test_missing_darknet_reader_is_unverified_not_a_conversion_failure(monkeypatch) -> None:
     original_import = parity.importlib.import_module
     monkeypatch.setattr(
         parity.importlib,
@@ -325,9 +304,7 @@ def test_missing_darknet_reader_is_unverified_not_a_conversion_failure(
     assert "error" not in result
 
 
-def test_darknet_epsilon_is_adapted_before_import_without_editing_checkpoint(
-    tmp_path,
-) -> None:
+def test_darknet_epsilon_is_adapted_before_import_without_editing_checkpoint(tmp_path) -> None:
     import struct
 
     path = tmp_path / "original.weights"
@@ -344,9 +321,7 @@ def test_darknet_epsilon_is_adapted_before_import_without_editing_checkpoint(
         parity._darknet_oracle_blob(path, [(2, 3, True)])
 
 
-def test_original_diamond_modules_are_isolated_and_removed_on_failure(
-    monkeypatch,
-) -> None:
+def test_original_diamond_modules_are_isolated_and_removed_on_failure(monkeypatch) -> None:
     import io
     import sys
 

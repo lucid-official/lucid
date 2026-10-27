@@ -110,9 +110,7 @@ def test_a_live_instance_survives_traversal_and_collection(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(_SUBCLASSES))
-def test_a_python_subclass_instance_survives_traversal_and_collection(
-    name: str,
-) -> None:
+def test_a_python_subclass_instance_survives_traversal_and_collection(name: str) -> None:
     _assert_survived(_run(_SUBCLASSES[name] + _EXERCISE.format(name=name)))
 
 

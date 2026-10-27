@@ -208,12 +208,7 @@ class TestDenseNetWeightsEnums(unittest.TestCase):
             DenseNet201Weights,
         )
 
-        for cls in (
-            DenseNet121Weights,
-            DenseNet161Weights,
-            DenseNet169Weights,
-            DenseNet201Weights,
-        ):
+        for cls in (DenseNet121Weights, DenseNet161Weights, DenseNet169Weights, DenseNet201Weights):
             self.assertIs(cls.DEFAULT, cls.IMAGENET1K_V1)
 
     def test_entry_fields(self) -> None:

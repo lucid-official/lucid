@@ -29,13 +29,7 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.diffeq import _flatten
-from lucid.diffeq._solvers import (
-    _pack_state,
-    _resolve_grid,
-    _validate_method,
-    _unpack,
-    odeint,
-)
+from lucid.diffeq._solvers import _pack_state, _resolve_grid, _validate_method, _unpack, odeint
 from lucid.diffeq._tableau import ButcherTableau
 from lucid.diffeq._typing import RightHandSide, State
 
@@ -60,8 +54,7 @@ class _Config:
 
 
 def _resolve_params(
-    func: Callable[..., object],
-    adjoint_params: Sequence[Tensor] | None,
+    func: Callable[..., object], adjoint_params: Sequence[Tensor] | None
 ) -> tuple[Tensor, ...]:
     """Decide which tensors the adjoint should accumulate gradients for.
 
@@ -105,9 +98,7 @@ def _resolve_params(
 
 
 def _augmented_dynamics(
-    cfg: _Config,
-    params: tuple[Tensor, ...],
-    shapes: list[tuple[int, ...]],
+    cfg: _Config, params: tuple[Tensor, ...], shapes: list[tuple[int, ...]]
 ) -> RightHandSide:
     """Build the right-hand side of the augmented backward system.
 
@@ -142,10 +133,7 @@ def _augmented_dynamics(
             y_leaf = y.detach().requires_grad_(True)
             f = cfg.func(t.detach(), y_leaf)
             vjps = lucid.autograd.grad(
-                f,
-                [y_leaf, *params],
-                grad_outputs=[-adjoint.detach()],
-                allow_unused=True,
+                f, [y_leaf, *params], grad_outputs=[-adjoint.detach()], allow_unused=True
             )
 
         d_adjoint = vjps[0] if vjps[0] is not None else lucid.zeros_like(y)
@@ -420,8 +408,7 @@ def odeint_adjoint(
         adjoint_atol=atol if adjoint_atol is None else adjoint_atol,
         adjoint_method=method if adjoint_method is None else adjoint_method,
         adjoint_options=_resolve_adjoint_norm(
-            options if adjoint_options is None else adjoint_options,
-            int(flat_y0.shape[0]),
+            options if adjoint_options is None else adjoint_options, int(flat_y0.shape[0])
         ),
         n_params=len(params),
     )

@@ -27,17 +27,7 @@ Acceptance gate (Plan §1.4):
 
 import time
 from dataclasses import dataclass, field, replace
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Iterator,
-    Mapping,
-    Protocol,
-    Self,
-    cast,
-    final,
-    override,
-)
+from typing import TYPE_CHECKING, Callable, Iterator, Mapping, Protocol, Self, cast, final, override
 
 
 # Engine-side objects exposed via pybind11; the binding doesn't carry
@@ -60,12 +50,7 @@ class _ExecutableLike(Protocol):
 
 from lucid._C import engine as _C_engine
 
-from lucid.compile._core.fallback import (
-    EagerFallbackSet,
-    _fallback_notice,
-    _narrate,
-    run_eager,
-)
+from lucid.compile._core.fallback import EagerFallbackSet, _fallback_notice, _narrate, run_eager
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
@@ -472,9 +457,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         # — through a parent module, or on the model itself — and a cached
         # call would go on answering with the old weights.
         object.__setattr__(
-            self,
-            "_param_fp",
-            ParamFingerprint(model, on_replaced=self._tensors_replaced),
+            self, "_param_fp", ParamFingerprint(model, on_replaced=self._tensors_replaced)
         )
         # Lazy training-step callables, keyed by ``id(loss_fn)``.  The
         # first ``cm.step(..., loss_fn=fn)`` call creates a make_step
@@ -721,11 +704,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     # ── Training-step compile surface ────────────────────────────
 
-    def step(
-        self,
-        *args: object,
-        loss_fn: Callable[..., Tensor] | None,
-    ) -> object:
+    def step(self, *args: object, loss_fn: Callable[..., Tensor] | None) -> object:
         """Run one compiled training step.
 
         Equivalent to::
@@ -875,18 +854,10 @@ class CompiledModule[**P, R](_ModuleWrapper):
         # as concrete tuple/dict (PEP 612), so cast at the boundary into
         # the signature-agnostic dispatcher and re-tag the result as R.
         return cast(
-            R,
-            self._dispatch_call(
-                cast(tuple[object, ...], args),
-                cast(dict[str, object], kwargs),
-            ),
+            R, self._dispatch_call(cast(tuple[object, ...], args), cast(dict[str, object], kwargs))
         )
 
-    def _dispatch_call(
-        self,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
-    ) -> object:
+    def _dispatch_call(self, args: tuple[object, ...], kwargs: dict[str, object]) -> object:
         """Signature-agnostic cache lookup + execute (body of :meth:`__call__`)."""
         from lucid.compile._core.trace_context import recording_active
 
@@ -948,11 +919,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         )
 
     def _compile_and_cache(
-        self,
-        key: CacheKey,
-        symbolic: bool,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, key: CacheKey, symbolic: bool, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> tuple[CacheKey, _CacheEntry | None]:
         """Trace and compile a signature not cached yet; ``None`` if it cannot be.
 
@@ -1018,11 +985,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         return run_eager(self._model, args, kwargs)
 
     def _execute(
-        self,
-        key: CacheKey,
-        entry: _CacheEntry,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, key: CacheKey, entry: _CacheEntry, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> object:
         """Run ``entry``; on its first run, answer eagerly if MPSGraph fails.
 
@@ -1087,10 +1050,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         return graph_symbolic_safe(graph, int(first.shape[0]), batch_ids, constants)
 
     def _built_in_call(
-        self,
-        tracer: _TracerLike | None,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, tracer: _TracerLike | None, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> list[tuple[int, ...]]:
         """Shapes of the feeds the call built itself — a folded constant, a
         literal — rather than took as an argument or the model's state.  One
@@ -1104,11 +1064,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         ]
 
     def _emit(
-        self,
-        graph: object,
-        ext: dict[int, object],
-        use_dynamic: bool,
-        explicit_outputs: list[int],
+        self, graph: object, ext: dict[int, object], use_dynamic: bool, explicit_outputs: list[int]
     ) -> _ExecutableLike | None:
         """Lower ``graph`` to an executable (symbolic or static).
 
@@ -1154,16 +1110,11 @@ class CompiledModule[**P, R](_ModuleWrapper):
         return cast(_ExecutableLike, exe)
 
     def _trace_forward(
-        self,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> tuple[Tracer, object] | None:
         """Trace ``self._model(*args, **kwargs)`` in the caller's grad mode."""
         from lucid._tensor.tensor import Tensor
-        from lucid.compile._core.trace_context import (
-            notice_if_tensor_hook_error,
-            recording,
-        )
+        from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
         try:
             with recording(watch=(args, kwargs), module=self._model, fold_constants=True) as tracer:
@@ -1178,9 +1129,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         return tracer, return_value
 
     def _compile_for(
-        self,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> _CacheEntry | None:
         """Trace + compile + wrap one signature into a :class:`_CacheEntry`.
 
@@ -1322,10 +1271,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         )
 
     def _run(
-        self,
-        entry: _CacheEntry,
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self, entry: _CacheEntry, args: tuple[object, ...], kwargs: dict[str, object]
     ) -> object:
         """Execute a cached entry and re-pack the output into the user's structure.
 

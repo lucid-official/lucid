@@ -19,16 +19,9 @@ import os
 import tempfile
 
 import lucid
-from lucid.utils.tokenizer import (
-    BPETokenizer,
-    BPETokenizerFast,
-    SpecialTokens,
-)
+from lucid.utils.tokenizer import BPETokenizer, BPETokenizerFast, SpecialTokens
 from lucid.utils.tokenizer._normalizers import NFC, Lowercase, Sequence
-from lucid.utils.tokenizer._pre_tokenizers import (
-    ByteLevel,
-    WhitespacePunctuationSplit,
-)
+from lucid.utils.tokenizer._pre_tokenizers import ByteLevel, WhitespacePunctuationSplit
 
 # ── Shared fixtures ─────────────────────────────────────────────────
 
@@ -79,10 +72,7 @@ def test_bpe_train_produces_merges() -> None:
     """Train should produce at least one merge on a corpus with
     repeated bigrams."""
     tok = BPETokenizer(vocab={}, merges=[])
-    tok.train(
-        ["abab abab abab", "abc abc abc abc"],
-        vocab_size=30,
-    )
+    tok.train(["abab abab abab", "abc abc abc abc"], vocab_size=30)
     assert len(tok._merges) > 0
     assert tok.vocab_size > 0
 
@@ -101,17 +91,8 @@ def test_bpe_python_fast_parity_simple() -> None:
     """Train on Python, build Fast from the same vocab+merges,
     encode both → must match bit-for-bit."""
     slow = _train_tiny(BPETokenizer)
-    fast = BPETokenizerFast(
-        vocab=slow.get_vocab(),
-        merges=slow._merges,
-    )
-    for text in [
-        "the dog",
-        "the quick brown fox",
-        "lazy dog",
-        "",
-        "the the the the",
-    ]:
+    fast = BPETokenizerFast(vocab=slow.get_vocab(), merges=slow._merges)
+    for text in ["the dog", "the quick brown fox", "lazy dog", "", "the the the the"]:
         ids_slow = slow.encode(text, add_special_tokens=False)
         ids_fast = fast.encode(text, add_special_tokens=False)
         assert ids_slow == ids_fast, (
@@ -124,10 +105,7 @@ def test_bpe_python_fast_parity_with_specials() -> None:
     must wrap identically (the special-token-insertion logic lives
     on the shared base class, so both should agree)."""
     slow = _train_tiny(BPETokenizer)
-    fast = BPETokenizerFast(
-        vocab=slow.get_vocab(),
-        merges=slow._merges,
-    )
+    fast = BPETokenizerFast(vocab=slow.get_vocab(), merges=slow._merges)
     bos_tok = "<bos>"
     eos_tok = "<eos>"
     for tok in (slow, fast):
@@ -160,10 +138,7 @@ def test_bpe_python_fast_parity_with_specials() -> None:
 def test_bpe_python_fast_parity_batched() -> None:
     """Batched encode parity."""
     slow = _train_tiny(BPETokenizer)
-    fast = BPETokenizerFast(
-        vocab=slow.get_vocab(),
-        merges=slow._merges,
-    )
+    fast = BPETokenizerFast(vocab=slow.get_vocab(), merges=slow._merges)
     batch = ["the dog", "the lazy dog", "fox"]
     assert slow.encode_batch(batch, add_special_tokens=False) == fast.encode_batch(
         batch, add_special_tokens=False
@@ -254,11 +229,7 @@ def test_call_batched_padding_longest() -> None:
     tok._special = SpecialTokens(pad=pad)
     tok._refresh_special_ids()
 
-    out = tok(
-        ["the dog", "the lazy dog the dog"],
-        padding=True,
-        add_special_tokens=False,
-    )
+    out = tok(["the dog", "the lazy dog the dog"], padding=True, add_special_tokens=False)
     rows = out["input_ids"]
     assert len({len(r) for r in rows}) == 1  # rectangular
     assert "attention_mask" in out
@@ -280,10 +251,7 @@ def test_call_return_tensors_lucid() -> None:
     tok._refresh_special_ids()
 
     out = tok(
-        ["the dog", "the lazy dog"],
-        padding=True,
-        return_tensors="lucid",
-        add_special_tokens=False,
+        ["the dog", "the lazy dog"], padding=True, return_tensors="lucid", add_special_tokens=False
     )
     assert isinstance(out["input_ids"], lucid.Tensor)
     assert out["input_ids"].dtype == lucid.int32

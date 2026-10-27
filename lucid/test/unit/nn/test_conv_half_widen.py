@@ -62,9 +62,5 @@ def test_half_conv_matches_float32_on_cpu(name: str, dtype: str) -> None:
         ("output", "input grad", "weight grad", "bias grad"), got, want, strict=True
     ):
         np.testing.assert_allclose(
-            g,
-            w,
-            rtol=0,
-            atol=_TOL[dtype] * max(1.0, float(np.abs(w).max())),
-            err_msg=what,
+            g, w, rtol=0, atol=_TOL[dtype] * max(1.0, float(np.abs(w).max())), err_msg=what
         )

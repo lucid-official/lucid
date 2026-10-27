@@ -94,15 +94,7 @@ class _MBConv(nn.Module):
         # (Table 9), not the configuration its reported numbers use.
         self.expand = nn.Conv2d(in_ch, mid_ch, 1, stride=stride, bias=False)
         self.bn_exp = nn.BatchNorm2d(mid_ch)
-        self.dw = nn.Conv2d(
-            mid_ch,
-            mid_ch,
-            3,
-            stride=1,
-            padding=1,
-            groups=mid_ch,
-            bias=False,
-        )
+        self.dw = nn.Conv2d(mid_ch, mid_ch, 3, stride=1, padding=1, groups=mid_ch, bias=False)
         self.bn_dw = nn.BatchNorm2d(mid_ch)
         self.se = _SE(mid_ch, se_ch)
         self.project = nn.Conv2d(mid_ch, out_ch, 1, bias=True)
@@ -358,10 +350,7 @@ class _RelAttnBlock(nn.Module):
             return
         with lucid.no_grad():
             resized = _resize_rel_table(
-                self.rel_bias,
-                self.num_heads,
-                (self.grid_h, self.grid_w),
-                (grid_h, grid_w),
+                self.rel_bias, self.num_heads, (self.grid_h, self.grid_w), (grid_h, grid_w)
             )
         self.rel_bias = nn.Parameter(resized)
         self.grid_h, self.grid_w = grid_h, grid_w
@@ -575,12 +564,7 @@ def _build_body(
     s3_out_ch: int
     if config.mixed_s3 is None:
         s3 = _TransformerStage(
-            d[1],
-            d[2],
-            n[2],
-            heads[0],
-            input_grid=s3_grid,
-            dpr=[_next_dp() for _ in range(n[2])],
+            d[1], d[2], n[2], heads[0], input_grid=s3_grid, dpr=[_next_dp() for _ in range(n[2])]
         )
         s3_out_ch = d[2]
     else:
@@ -598,9 +582,7 @@ def _build_body(
         # Paper §A.2 only says "double the hidden dimension"; we realise it
         # as the standard 1×1 conv + BN + GELU used elsewhere in CoAtNet.
         s3_expand = nn.Sequential(
-            nn.Conv2d(d[2], D_attn, 1, bias=False),
-            nn.BatchNorm2d(D_attn),
-            nn.GELU(),
+            nn.Conv2d(d[2], D_attn, 1, bias=False), nn.BatchNorm2d(D_attn), nn.GELU()
         )
         # Transformer sub-stage at width D_attn, grid 1/16 (no further pool).
         # Head count comes from config.attn_heads[0] — paper convention is
@@ -623,12 +605,7 @@ def _build_body(
     # ------------------------------------------------------------------ S4
     s4_grid = (img_size // 16, img_size // 16)  # input to S4
     s4 = _TransformerStage(
-        s3_out_ch,
-        d[3],
-        n[3],
-        heads[1],
-        input_grid=s4_grid,
-        dpr=[_next_dp() for _ in range(n[3])],
+        s3_out_ch, d[3], n[3], heads[1], input_grid=s4_grid, dpr=[_next_dp() for _ in range(n[3])]
     )
     # After S4: H/32 × W/32
 
@@ -849,8 +826,7 @@ class CoAtNetForImageClassification(ImageClassificationModel, ClassificationHead
         # Optional hidden layer (timm head_hidden_size=768 for coatnet_0)
         if config.head_hidden_size is not None:
             self.pre_logits: nn.Sequential = nn.Sequential(
-                nn.Linear(feat_dim, config.head_hidden_size),
-                nn.Tanh(),
+                nn.Linear(feat_dim, config.head_hidden_size), nn.Tanh()
             )
             head_in = config.head_hidden_size
         else:
@@ -859,11 +835,7 @@ class CoAtNetForImageClassification(ImageClassificationModel, ClassificationHead
         self._build_classifier(head_in, config.num_classes, dropout=config.dropout)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         x = self.s1(x)
         x = self.s2(x)

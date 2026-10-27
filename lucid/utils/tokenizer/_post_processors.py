@@ -27,14 +27,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import override
 
-from lucid.utils.tokenizer._config import (
-    as_list,
-    as_object,
-    get_bool,
-    get_int,
-    get_str,
-    type_of,
-)
+from lucid.utils.tokenizer._config import as_list, as_object, get_bool, get_int, get_str, type_of
 
 
 class PostProcessor(ABC):
@@ -222,10 +215,7 @@ class TemplateProcessing(PostProcessor):
         self._init_pieces(single_pieces, pair_pieces, specials)
 
     def _init_pieces(
-        self,
-        single: list[_Piece],
-        pair: list[_Piece] | None,
-        specials: dict[str, list[int]],
+        self, single: list[_Piece], pair: list[_Piece] | None, specials: dict[str, list[int]]
     ) -> None:
         """Validate parsed templates and store them."""
         if pair is None:
@@ -247,10 +237,7 @@ class TemplateProcessing(PostProcessor):
 
     @classmethod
     def _from_pieces(
-        cls,
-        single: list[_Piece],
-        pair: list[_Piece] | None,
-        specials: dict[str, list[int]],
+        cls, single: list[_Piece], pair: list[_Piece] | None, specials: dict[str, list[int]]
     ) -> TemplateProcessing:
         """Build from already-parsed pieces (the ``tokenizer.json`` path)."""
         obj = cls.__new__(cls)
@@ -385,11 +372,7 @@ class BertProcessing(PostProcessor):
         dict of str to object
             ``{"type": "BertProcessing", "sep": [s, id], "cls": [c, id]}``.
         """
-        return {
-            "type": "BertProcessing",
-            "sep": list(self._sep),
-            "cls": list(self._cls),
-        }
+        return {"type": "BertProcessing", "sep": list(self._sep), "cls": list(self._cls)}
 
 
 class RobertaProcessing(PostProcessor):
@@ -501,10 +484,7 @@ class ByteLevel(PostProcessor):
     """
 
     def __init__(
-        self,
-        add_prefix_space: bool = True,
-        trim_offsets: bool = True,
-        use_regex: bool = True,
+        self, add_prefix_space: bool = True, trim_offsets: bool = True, use_regex: bool = True
     ) -> None:
         r"""Record the offset flags.
 
@@ -610,10 +590,7 @@ class Sequence(PostProcessor):
         dict of str to object
             ``{"type": "Sequence", "processors": [...]}``.
         """
-        return {
-            "type": "Sequence",
-            "processors": [p.to_config() for p in self._processors],
-        }
+        return {"type": "Sequence", "processors": [p.to_config() for p in self._processors]}
 
 
 def _token_and_id(value: object, where: str) -> tuple[str, int]:

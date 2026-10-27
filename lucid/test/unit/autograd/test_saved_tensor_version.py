@@ -120,9 +120,7 @@ def test_a_write_before_the_forward_is_what_the_forward_reads(device: str) -> No
     assert w.grad.tolist() == [4.0, 4.0, 4.0]
 
 
-def test_an_inplace_op_that_gives_the_saved_tensor_a_new_buffer_is_refused(
-    device: str,
-) -> None:
+def test_an_inplace_op_that_gives_the_saved_tensor_a_new_buffer_is_refused(device: str) -> None:
     # ``exp_`` leaves the saved bytes alone and hands ``buf`` a new buffer,
     # so the gradient would have come out right; the reference refuses the
     # backward all the same, because ``buf`` is no longer what was saved.

@@ -481,32 +481,24 @@ def adaptive_avg_pool2d(input: Tensor, output_size: _OutSize) -> Tensor:
 
 @overload
 def adaptive_max_pool2d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[False] = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[False] = False
 ) -> Tensor: ...
 
 
 @overload
 def adaptive_max_pool2d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[True],
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[True]
 ) -> tuple[Tensor, Tensor]: ...
 
 
 @overload
 def adaptive_max_pool2d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]: ...
 
 
 def adaptive_max_pool2d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]:
     r"""2-D adaptive max pooling — fixed-shape ``(H, W)`` via per-cell max.
 
@@ -555,32 +547,24 @@ def adaptive_max_pool2d(
 
 @overload
 def adaptive_max_pool1d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[False] = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[False] = False
 ) -> Tensor: ...
 
 
 @overload
 def adaptive_max_pool1d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[True],
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[True]
 ) -> tuple[Tensor, Tensor]: ...
 
 
 @overload
 def adaptive_max_pool1d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]: ...
 
 
 def adaptive_max_pool1d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]:
     r"""1-D adaptive max pooling — produces a fixed output length.
 
@@ -631,32 +615,24 @@ def adaptive_max_pool1d(
 
 @overload
 def adaptive_max_pool3d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[False] = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[False] = False
 ) -> Tensor: ...
 
 
 @overload
 def adaptive_max_pool3d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: Literal[True],
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: Literal[True]
 ) -> tuple[Tensor, Tensor]: ...
 
 
 @overload
 def adaptive_max_pool3d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]: ...
 
 
 def adaptive_max_pool3d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-    return_indices: bool = False,
+    input: Tensor, output_size: int | tuple[int | None, ...], return_indices: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]:
     r"""3-D adaptive max pooling — produces a fixed ``(D, H, W)``.
 
@@ -702,10 +678,7 @@ def adaptive_max_pool3d(
     return _adaptive_max_pool(input, output_size, 3, return_indices)
 
 
-def adaptive_avg_pool3d(
-    input: Tensor,
-    output_size: int | tuple[int | None, ...],
-) -> Tensor:
+def adaptive_avg_pool3d(input: Tensor, output_size: int | tuple[int | None, ...]) -> Tensor:
     r"""3-D adaptive average pooling — produces a fixed ``(D, H, W)``.
 
     Volumetric counterpart of :func:`adaptive_avg_pool2d`.  Used by

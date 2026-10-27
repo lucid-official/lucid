@@ -97,9 +97,7 @@ def test_smooth_l1_divides_the_quadratic_region_by_beta(beta):
     diff = X - Y
     want = np.where(np.abs(diff) < beta, 0.5 * diff**2 / beta, np.abs(diff) - 0.5 * beta)
     assert np.allclose(
-        _v(F.smooth_l1_loss(_t(X), _t(Y), beta=beta, reduction="none")),
-        want,
-        atol=1e-6,
+        _v(F.smooth_l1_loss(_t(X), _t(Y), beta=beta, reduction="none")), want, atol=1e-6
     )
 
 
@@ -137,9 +135,7 @@ def test_smooth_l1_at_beta_zero_is_l1():
     """The degenerate limit, and the one where dividing by ``beta`` would
     otherwise be a division by zero."""
     assert np.allclose(
-        _v(F.smooth_l1_loss(_t(X), _t(Y), beta=0.0, reduction="none")),
-        np.abs(X - Y),
-        atol=1e-6,
+        _v(F.smooth_l1_loss(_t(X), _t(Y), beta=0.0, reduction="none")), np.abs(X - Y), atol=1e-6
     )
 
 
@@ -186,9 +182,7 @@ def test_cross_entropy_weights_each_class_and_normalises_by_the_weights():
     w = weights[CLASSES]
     want = (picked * w).sum() / w.sum()
     assert np.isclose(
-        _f(F.cross_entropy(_t(LOGITS), _i(CLASSES), weight=_t(weights))),
-        want,
-        atol=1e-5,
+        _f(F.cross_entropy(_t(LOGITS), _i(CLASSES), weight=_t(weights))), want, atol=1e-5
     )
 
 
@@ -199,9 +193,7 @@ def test_cross_entropy_skips_the_ignored_index_entirely():
     logp = _log_softmax(LOGITS)
     want = -logp[kept, targets[kept]].mean()
     assert np.isclose(
-        _f(F.cross_entropy(_t(LOGITS), _i(targets), ignore_index=-100)),
-        want,
-        atol=1e-5,
+        _f(F.cross_entropy(_t(LOGITS), _i(targets), ignore_index=-100)), want, atol=1e-5
     )
 
 
@@ -212,9 +204,7 @@ def test_label_smoothing_mixes_in_the_uniform_target(smoothing):
     uniform = -logp.mean(axis=1)
     want = ((1 - smoothing) * picked + smoothing * uniform).mean()
     assert np.isclose(
-        _f(F.cross_entropy(_t(LOGITS), _i(CLASSES), label_smoothing=smoothing)),
-        want,
-        atol=1e-5,
+        _f(F.cross_entropy(_t(LOGITS), _i(CLASSES), label_smoothing=smoothing)), want, atol=1e-5
     )
 
 
@@ -358,21 +348,13 @@ def test_kl_div_accepts_a_log_target():
 MODULE_PAIRS = [
     ("MSELoss", lambda: nn.MSELoss(), lambda a, b: F.mse_loss(a, b)),
     ("L1Loss", lambda: nn.L1Loss(), lambda a, b: F.l1_loss(a, b)),
-    (
-        "HuberLoss",
-        lambda: nn.HuberLoss(delta=2.0),
-        lambda a, b: F.huber_loss(a, b, delta=2.0),
-    ),
+    ("HuberLoss", lambda: nn.HuberLoss(delta=2.0), lambda a, b: F.huber_loss(a, b, delta=2.0)),
     (
         "SmoothL1Loss",
         lambda: nn.SmoothL1Loss(beta=0.5),
         lambda a, b: F.smooth_l1_loss(a, b, beta=0.5),
     ),
-    (
-        "SoftMarginLoss",
-        lambda: nn.SoftMarginLoss(),
-        lambda a, b: F.soft_margin_loss(a, b),
-    ),
+    ("SoftMarginLoss", lambda: nn.SoftMarginLoss(), lambda a, b: F.soft_margin_loss(a, b)),
 ]
 
 
@@ -392,8 +374,7 @@ def test_the_smooth_l1_module_forwards_its_beta():
     """Directly, because the parametrised check above would pass on a
     module that ignored ``beta`` if the function did too."""
     assert not np.isclose(
-        _f(nn.SmoothL1Loss(beta=0.5)(_t(X), _t(Y))),
-        _f(nn.SmoothL1Loss(beta=2.0)(_t(X), _t(Y))),
+        _f(nn.SmoothL1Loss(beta=0.5)(_t(X), _t(Y))), _f(nn.SmoothL1Loss(beta=2.0)(_t(X), _t(Y)))
     )
 
 
@@ -436,9 +417,7 @@ def test_a_regression_loss_descends(loss):
 
 
 @pytest.mark.parametrize(
-    "dtype",
-    [lucid.int64, lucid.int32, lucid.int16],
-    ids=["int64-the-default", "int32", "int16"],
+    "dtype", [lucid.int64, lucid.int32, lucid.int16], ids=["int64-the-default", "int32", "int16"]
 )
 def test_multilabel_margin_accepts_any_integer_target(dtype):
     """``lucid.tensor`` of ints gives int64, and int64 used to raise.

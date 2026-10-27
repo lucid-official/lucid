@@ -45,14 +45,7 @@ class _ConvEmbed(nn.Module):
     No explicit positional embeddings needed since conv is position-aware.
     """
 
-    def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel: int,
-        stride: int,
-        padding: int,
-    ) -> None:
+    def __init__(self, in_ch: int, out_ch: int, kernel: int, stride: int, padding: int) -> None:
         super().__init__()
         self.proj = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=padding)
         self.norm = nn.LayerNorm(out_ch)
@@ -83,26 +76,14 @@ class _ConvProj(nn.Module):
     For Q: stride=1 (no downsampling, full resolution).
     """
 
-    def __init__(
-        self,
-        dim: int,
-        kernel: int = 3,
-        stride: int = 1,
-        padding: int = 1,
-    ) -> None:
+    def __init__(self, dim: int, kernel: int = 3, stride: int = 1, padding: int = 1) -> None:
         super().__init__()
         # Depthwise conv (groups=dim) + BN.  The reference CvT
         # checkpoints disable the conv bias (the following BN already
         # absorbs any per-channel additive term), so we match that
         # exactly to keep the state-dict 1:1.
         self.dw = nn.Conv2d(
-            dim,
-            dim,
-            kernel,
-            stride=stride,
-            padding=padding,
-            groups=dim,
-            bias=False,
+            dim, dim, kernel, stride=stride, padding=padding, groups=dim, bias=False
         )
         self.bn = nn.BatchNorm2d(dim)
         # Linear projection — biased to match the Microsoft / HF
@@ -201,11 +182,7 @@ class _CvTAttention(nn.Module):
         # per-head default), so it must be passed explicitly.  The fused
         # kernel runs unless attention dropout is on.
         out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            dropout_p=self.attn_drop_p if self.training else 0.0,
-            scale=self.scale,
+            q, k, v, dropout_p=self.attn_drop_p if self.training else 0.0, scale=self.scale
         )
         out = out.permute(0, 2, 1, 3).reshape(B, Nq, C)
         return self.proj_drop(self.out_proj(out))
@@ -379,13 +356,7 @@ def _build_stages(config: CvTConfig) -> tuple[list[_CvTStage], list[FeatureInfo]
     # own linspace(0, drop_path_rate, depth), rather than one schedule spanning
     # the whole trunk.
     for i, (dim, depth, heads, stride) in enumerate(
-        zip(
-            config.dims,
-            config.depths,
-            config.num_heads,
-            config.embed_strides,
-            strict=True,
-        )
+        zip(config.dims, config.depths, config.num_heads, config.embed_strides, strict=True)
     ):
         with_cls = bool(config.cls_token[i]) if i < len(config.cls_token) else False
         if depth > 1:
@@ -593,11 +564,7 @@ class CvTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         init_transformer_trunc_normal(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         cls: Tensor | None = None
         for stage in self.stages:
             out = stage(x)

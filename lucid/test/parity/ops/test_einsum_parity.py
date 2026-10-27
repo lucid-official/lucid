@@ -32,13 +32,7 @@ _EINSUM_PAIRS: list[tuple[str, tuple[int, ...], tuple[int, ...]]] = [
 @pytest.mark.parity
 class TestEinsumParity:
     @pytest.mark.parametrize("eq,sa,sb", _EINSUM_PAIRS, ids=[p[0] for p in _EINSUM_PAIRS])
-    def test_forward(
-        self,
-        ref: Any,
-        eq: str,
-        sa: tuple[int, ...],
-        sb: tuple[int, ...],
-    ) -> None:
+    def test_forward(self, ref: Any, eq: str, sa: tuple[int, ...], sb: tuple[int, ...]) -> None:
         np.random.seed(0)
         a = np.random.randn(*sa).astype(np.float32)
         b = np.random.randn(*sb).astype(np.float32)

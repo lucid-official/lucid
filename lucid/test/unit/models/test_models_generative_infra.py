@@ -42,7 +42,7 @@ from lucid.models._registry import _REGISTRY
 # channel fields at all, is listed here with the reason.
 _CHANNELS_NOT_CHECKED: dict[str, str] = {
     "vjepa2_ac": "predicts V-JEPA 2 feature tokens; its config has no "
-    "in_channels / out_channels pair to disagree",
+    "in_channels / out_channels pair to disagree"
 }
 
 
@@ -512,12 +512,7 @@ class TestRSSM:
 
     def test_std_is_floored_at_min_std(self) -> None:
         rssm = RSSM(
-            stoch_size=4,
-            deter_size=8,
-            hidden_size=8,
-            action_dim=2,
-            embed_size=6,
-            min_std=0.5,
+            stoch_size=4, deter_size=8, hidden_size=8, action_dim=2, embed_size=6, min_std=0.5
         ).eval()
         _, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
         assert float(posteriors.std.min().item()) >= 0.5

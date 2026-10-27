@@ -25,10 +25,7 @@ from lucid.distributions.distribution import ExponentialFamily
 _MAX_GAMMA_RETRIES: int = 8
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _broadcast_pair,
-)
+from lucid.distributions._util import _as_tensor, _broadcast_pair
 from lucid.special import gammainc, xlog1py
 
 
@@ -289,10 +286,7 @@ class Gamma(ExponentialFamily):
     has_rsample = True
 
     def __init__(
-        self,
-        concentration: Tensor | float,
-        rate: Tensor | float,
-        validate_args: bool | None = None,
+        self, concentration: Tensor | float, rate: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Gamma distribution.
 
@@ -336,9 +330,7 @@ class Gamma(ExponentialFamily):
         self.rate = _as_tensor(rate)
         self.concentration, self.rate = _broadcast_pair(self.concentration, self.rate)
         super().__init__(
-            batch_shape=tuple(self.concentration.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.concentration.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -599,11 +591,7 @@ class Chi2(Gamma):
 
     arg_constraints = {"df": positive}
 
-    def __init__(
-        self,
-        df: Tensor | float,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, df: Tensor | float, validate_args: bool | None = None) -> None:
         r"""Construct a Chi-squared distribution.
 
         Parameters
@@ -1063,11 +1051,7 @@ class Dirichlet(ExponentialFamily):
     support: Constraint | None = simplex
     has_rsample = True
 
-    def __init__(
-        self,
-        concentration: Tensor,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, concentration: Tensor, validate_args: bool | None = None) -> None:
         r"""Construct a Dirichlet distribution.
 
         Parameters
@@ -1109,9 +1093,7 @@ class Dirichlet(ExponentialFamily):
         self.concentration = _as_tensor(concentration)
         shape = tuple(self.concentration.shape)
         super().__init__(
-            batch_shape=shape[:-1],
-            event_shape=shape[-1:],
-            validate_args=validate_args,
+            batch_shape=shape[:-1], event_shape=shape[-1:], validate_args=validate_args
         )
 
     @override

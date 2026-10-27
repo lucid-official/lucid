@@ -79,11 +79,7 @@ def _accumulate_grads(
         backward(roots, seeds)
 
 
-def compiled_step(
-    model: Module,
-    x: Tensor,
-    loss_fn: Callable[[Tensor], Tensor],
-) -> Tensor:
+def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
     """Run one compiled training step: forward + backward + grad accumulation.
 
     Parameters

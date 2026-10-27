@@ -183,9 +183,7 @@ def test_multi_tensor_tuple_inputs_and_outputs(
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    ("shape_x", "shape_y"),
-    [((), (3,)), ((2,), (2, 3))],
-    ids=["0d-1d", "1d-2d"],
+    ("shape_x", "shape_y"), [((), (3,)), ((2,), (2, 3))], ids=["0d-1d", "1d-2d"]
 )
 def test_unused_inputs_return_zeros_matching_reference(
     ref: ModuleType, shape_x: tuple[int, ...], shape_y: tuple[int, ...]

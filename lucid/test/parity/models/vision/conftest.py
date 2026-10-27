@@ -7,9 +7,7 @@ Mirrors the same pattern used by ``lucid/test/unit/models/conftest.py``.
 
 import importlib
 
-_PENDING_MODULES = {
-    "test_inception_resnet_v2.py": ("lucid.models.vision.inception_resnet",),
-}
+_PENDING_MODULES = {"test_inception_resnet_v2.py": ("lucid.models.vision.inception_resnet",)}
 
 collect_ignore: list[str] = []
 for _file, _modules in _PENDING_MODULES.items():

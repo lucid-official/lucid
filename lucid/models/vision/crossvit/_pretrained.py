@@ -9,10 +9,7 @@ load with a direct ``blocks → stages`` key rename.
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.crossvit._config import CrossViTConfig
-from lucid.models.vision.crossvit._model import (
-    CrossViT,
-    CrossViTForImageClassification,
-)
+from lucid.models.vision.crossvit._model import CrossViT, CrossViTForImageClassification
 from lucid.models.vision.crossvit._weights import (
     CrossViT9Weights,
     CrossViT15Weights,
@@ -42,40 +39,22 @@ _MLP_BCT = (4.0, 4.0, 1.0)  # tiny / small / base
 _MLP_9_15_18 = (3.0, 3.0, 1.0)  # 9 / 15 / 18
 
 _CFG_TINY = CrossViTConfig(
-    embed_dims=(96, 192),
-    depths=_DEPTH_TINY,
-    num_heads=(3, 3),
-    mlp_ratio=_MLP_BCT,
+    embed_dims=(96, 192), depths=_DEPTH_TINY, num_heads=(3, 3), mlp_ratio=_MLP_BCT
 )
 _CFG_SMALL = CrossViTConfig(
-    embed_dims=(192, 384),
-    depths=_DEPTH_SMALL,
-    num_heads=(6, 6),
-    mlp_ratio=_MLP_BCT,
+    embed_dims=(192, 384), depths=_DEPTH_SMALL, num_heads=(6, 6), mlp_ratio=_MLP_BCT
 )
 _CFG_BASE = CrossViTConfig(
-    embed_dims=(384, 768),
-    depths=_DEPTH_BASE,
-    num_heads=(12, 12),
-    mlp_ratio=_MLP_BCT,
+    embed_dims=(384, 768), depths=_DEPTH_BASE, num_heads=(12, 12), mlp_ratio=_MLP_BCT
 )
 _CFG_9 = CrossViTConfig(
-    embed_dims=(128, 256),
-    depths=_DEPTH_9,
-    num_heads=(4, 4),
-    mlp_ratio=_MLP_9_15_18,
+    embed_dims=(128, 256), depths=_DEPTH_9, num_heads=(4, 4), mlp_ratio=_MLP_9_15_18
 )
 _CFG_15 = CrossViTConfig(
-    embed_dims=(192, 384),
-    depths=_DEPTH_15,
-    num_heads=(6, 6),
-    mlp_ratio=_MLP_9_15_18,
+    embed_dims=(192, 384), depths=_DEPTH_15, num_heads=(6, 6), mlp_ratio=_MLP_9_15_18
 )
 _CFG_18 = CrossViTConfig(
-    embed_dims=(224, 448),
-    depths=_DEPTH_18,
-    num_heads=(7, 7),
-    mlp_ratio=_MLP_9_15_18,
+    embed_dims=(224, 448), depths=_DEPTH_18, num_heads=(7, 7), mlp_ratio=_MLP_9_15_18
 )
 
 
@@ -491,10 +470,7 @@ def crossvit_base_cls(
     params=8_553_296,
 )
 def crossvit_9_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CrossViT9Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CrossViT9Weights | None = None, **overrides: object
 ) -> CrossViTForImageClassification:
     r"""CrossViT-9 image classifier — ``embed_dims=(128, 256)``, depths
     ``((1, 3, 0)) x 3``, 4 heads per branch.  ~8.6M params; paper
@@ -547,10 +523,7 @@ def crossvit_9_cls(
     params=27_528_464,
 )
 def crossvit_15_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CrossViT15Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CrossViT15Weights | None = None, **overrides: object
 ) -> CrossViTForImageClassification:
     r"""CrossViT-15 image classifier — ``embed_dims=(192, 384)``, depths
     ``((1, 5, 0)) x 3``, 6 heads per branch.  ~27.4M params; paper
@@ -603,10 +576,7 @@ def crossvit_15_cls(
     params=43_271_408,
 )
 def crossvit_18_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CrossViT18Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CrossViT18Weights | None = None, **overrides: object
 ) -> CrossViTForImageClassification:
     r"""CrossViT-18 image classifier — ``embed_dims=(224, 448)``, depths
     ``((1, 6, 0)) x 3``, 7 heads per branch.  ~43.3M params; paper

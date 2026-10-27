@@ -152,11 +152,7 @@ class _SpectralNorm(Module):
     _v: Tensor
 
     def __init__(
-        self,
-        weight: Tensor,
-        n_power_iterations: int = 1,
-        dim: int = 0,
-        eps: float = 1e-12,
+        self, weight: Tensor, n_power_iterations: int = 1, dim: int = 0, eps: float = 1e-12
     ) -> None:
         super().__init__()
         ndim = weight.ndim
@@ -315,11 +311,7 @@ class _Orthogonal(Module):
     base: Tensor
 
     def __init__(
-        self,
-        weight: Tensor,
-        orthogonal_map: str,
-        *,
-        use_trivialization: bool = True,
+        self, weight: Tensor, orthogonal_map: str, *, use_trivialization: bool = True
     ) -> None:
         super().__init__()
         if weight.is_complex() and orthogonal_map == "householder":
@@ -394,9 +386,7 @@ class _Orthogonal(Module):
             Q = Q.clone() if _is_orthogonal(Q, atol) else _make_orthogonal(Q)
         else:
             tail = lucid.randn(
-                *(tuple(int(s) for s in Q.shape[:-2]) + (n, n - k)),
-                dtype=Q.dtype,
-                device=Q.device,
+                *(tuple(int(s) for s in Q.shape[:-2]) + (n, n - k)), dtype=Q.dtype, device=Q.device
             )
             Q = _make_orthogonal(lucid.cat([Q, tail], dim=-1))
         self.base = Q

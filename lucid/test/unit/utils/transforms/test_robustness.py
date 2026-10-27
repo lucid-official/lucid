@@ -70,10 +70,7 @@ class TestMaskLabelPreservation:
         # needs an image-shaped reference for shape-derived params).
         lucid.manual_seed(0)
         h, w = 32, 40
-        sample = {
-            "image": T.Image(lucid.rand(3, h, w)),
-            "mask": _label_mask(h, w, n_labels=5),
-        }
+        sample = {"image": T.Image(lucid.rand(3, h, w)), "mask": _label_mask(h, w, n_labels=5)}
         original_labels = _label_set(sample["mask"])
         out = make_tf()(sample)
         out_labels = _label_set(out["mask"])
@@ -129,9 +126,7 @@ class TestMultiChannelCoverage:
             make_tf()(T.Image(img))
 
     @pytest.mark.parametrize(
-        "make_tf",
-        _CHANNEL_AGNOSTIC,
-        ids=[f.__qualname__ for f in _CHANNEL_AGNOSTIC],
+        "make_tf", _CHANNEL_AGNOSTIC, ids=[f.__qualname__ for f in _CHANNEL_AGNOSTIC]
     )
     @pytest.mark.parametrize("channels", [1, 3, 4, 7])
     def test_channel_agnostic_accepts_any(

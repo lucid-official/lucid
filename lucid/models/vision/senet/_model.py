@@ -149,11 +149,7 @@ class _SEBottleneck(nn.Module):
         # way, so a checkpoint from the wrong geometry loads silently and
         # simply computes the wrong thing.
         self.conv1 = nn.Conv2d(
-            in_channels,
-            out_channels,
-            1,
-            stride=stride if legacy_stride else 1,
-            bias=False,
+            in_channels, out_channels, 1, stride=stride if legacy_stride else 1, bias=False
         )
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = nn.Conv2d(
@@ -524,11 +520,7 @@ class SENetForImageClassification(ImageClassificationModel, ClassificationHeadMi
             _zero_init_residual(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = F.relu(self.bn1(self.conv1(x)))
         x = self.maxpool(x)
         x = self.layer1(x)

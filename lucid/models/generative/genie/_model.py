@@ -39,12 +39,7 @@ from lucid.models._tasks import WorldModelingModel
 from lucid.models._utils._generative import model_dtype
 from lucid.models.generative.genie._config import GenieConfig
 
-__all__ = [
-    "GenieModel",
-    "GenieForWorldModeling",
-    "GenieOutput",
-    "GenieRolloutOutput",
-]
+__all__ = ["GenieModel", "GenieForWorldModeling", "GenieOutput", "GenieRolloutOutput"]
 
 
 _ACTIVATIONS: dict[str, type[nn.Module]] = {
@@ -272,11 +267,7 @@ class _Codebook(nn.Module):
     candidates: Tensor
 
     def __init__(
-        self,
-        num_codes: int,
-        dim: int,
-        commitment_cost: float,
-        reset_threshold: float,
+        self, num_codes: int, dim: int, commitment_cost: float, reset_threshold: float
     ) -> None:
         super().__init__()
         self.num_codes = num_codes
@@ -397,10 +388,7 @@ class _VideoTokenizer(nn.Module):
         self.encoder = _STTransformer(config, "tokenizer_encoder", rows * cols)
         self.to_code = nn.Linear(config.tokenizer_encoder_dim, config.code_dim)
         self.quantizer = _Codebook(
-            config.num_codes,
-            config.code_dim,
-            config.commitment_cost,
-            config.code_reset_threshold,
+            config.num_codes, config.code_dim, config.commitment_cost, config.code_reset_threshold
         )
         self.decoder_in = nn.Linear(config.code_dim, config.tokenizer_decoder_dim)
         self.decoder = _STTransformer(config, "tokenizer_decoder", rows * cols)
@@ -523,11 +511,7 @@ class _DynamicsModel(nn.Module):
         if frames > 1:
             steps = self.action_embedding(actions)
             first = lucid.zeros(
-                int(steps.shape[0]),
-                1,
-                int(steps.shape[2]),
-                dtype=steps.dtype,
-                device=steps.device,
+                int(steps.shape[0]), 1, int(steps.shape[2]), dtype=steps.dtype, device=steps.device
             )
             hidden = hidden + lucid.cat([first, steps], dim=1).unsqueeze(2)
         return self.to_logits(self.transformer(hidden))
@@ -912,9 +896,7 @@ class GenieModel(PretrainedModel):
         inputs = tokens + (self.dynamics.mask_token - tokens) * hide
         logits = self.dynamics(inputs, actions)
         per_token = F.cross_entropy(
-            logits.reshape(b * t * n, config.num_codes),
-            tokens.reshape(b * t * n),
-            reduction="none",
+            logits.reshape(b * t * n, config.num_codes), tokens.reshape(b * t * n), reduction="none"
         )
         flat_mask = mask.reshape(b * t * n)
         loss = (per_token * flat_mask).sum() / flat_mask.sum().clamp(min=1.0)

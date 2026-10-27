@@ -20,11 +20,7 @@ class TestAutogradParity:
         x_r = ref.tensor(x_np.copy(), requires_grad=True)
         (x_r * x_r).sum().backward()
 
-        np.testing.assert_allclose(
-            x_l.grad.numpy(),
-            x_r.grad.detach().cpu().numpy(),
-            atol=1e-5,
-        )
+        np.testing.assert_allclose(x_l.grad.numpy(), x_r.grad.detach().cpu().numpy(), atol=1e-5)
 
     def test_chain_backward(self, ref: Any) -> None:
         x_np = np.array([1.5, 2.5], dtype=np.float32)
@@ -35,11 +31,7 @@ class TestAutogradParity:
         x_r = ref.tensor(x_np.copy(), requires_grad=True)
         (x_r.exp().sum() + x_r.sin().sum()).backward()
 
-        np.testing.assert_allclose(
-            x_l.grad.numpy(),
-            x_r.grad.detach().cpu().numpy(),
-            atol=1e-5,
-        )
+        np.testing.assert_allclose(x_l.grad.numpy(), x_r.grad.detach().cpu().numpy(), atol=1e-5)
 
     def test_matmul_backward(self, ref: Any) -> None:
         np.random.seed(0)
@@ -54,16 +46,8 @@ class TestAutogradParity:
         b_r = ref.tensor(b_np.copy(), requires_grad=True)
         (a_r @ b_r).sum().backward()
 
-        np.testing.assert_allclose(
-            a_l.grad.numpy(),
-            a_r.grad.detach().cpu().numpy(),
-            atol=1e-4,
-        )
-        np.testing.assert_allclose(
-            b_l.grad.numpy(),
-            b_r.grad.detach().cpu().numpy(),
-            atol=1e-4,
-        )
+        np.testing.assert_allclose(a_l.grad.numpy(), a_r.grad.detach().cpu().numpy(), atol=1e-4)
+        np.testing.assert_allclose(b_l.grad.numpy(), b_r.grad.detach().cpu().numpy(), atol=1e-4)
 
 
 @pytest.mark.parity
@@ -84,11 +68,7 @@ class TestSecondOrderParity:
         (g_r,) = ref.autograd.grad(y_r, [x_r], create_graph=True)
         g_r.sum().backward()
 
-        np.testing.assert_allclose(
-            x_l.grad.numpy(),
-            x_r.grad.detach().cpu().numpy(),
-            atol=1e-5,
-        )
+        np.testing.assert_allclose(x_l.grad.numpy(), x_r.grad.detach().cpu().numpy(), atol=1e-5)
 
     def test_quadratic_hessian(self, ref: Any) -> None:
         # f(x) = sum(x²) → grad = 2x → hess diagonal = 2.
@@ -102,11 +82,7 @@ class TestSecondOrderParity:
         (g_r,) = ref.autograd.grad((x_r * x_r).sum(), [x_r], create_graph=True)
         g_r.sum().backward()
 
-        np.testing.assert_allclose(
-            x_l.grad.numpy(),
-            x_r.grad.detach().cpu().numpy(),
-            atol=1e-5,
-        )
+        np.testing.assert_allclose(x_l.grad.numpy(), x_r.grad.detach().cpu().numpy(), atol=1e-5)
 
     def test_jacobian_shape(self, ref: Any) -> None:
         # jacobian of f(x)=(x², 2x, 3x): shape should be (3, 3).

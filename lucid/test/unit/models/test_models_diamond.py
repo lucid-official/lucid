@@ -15,11 +15,7 @@ import pytest
 import lucid
 import lucid.nn.init as init
 import lucid.nn as nn
-from lucid.models.generative.diamond import (
-    DIAMONDConfig,
-    DIAMONDForWorldModeling,
-    DIAMONDModel,
-)
+from lucid.models.generative.diamond import DIAMONDConfig, DIAMONDForWorldModeling, DIAMONDModel
 from lucid.models.generative.diamond._model import _SelfAttention2d
 from lucid.test._fixtures.devices import metal_available
 
@@ -128,9 +124,7 @@ class TestReleaseGeometry:
         assert out.shape == (1, 3, 30, 56)
         assert bool(out.isfinite().all().item())
 
-    def test_conv_in_reads_the_history_first_and_the_noised_frame_last(
-        self,
-    ) -> None:
+    def test_conv_in_reads_the_history_first_and_the_noised_frame_last(self) -> None:
         """Channel order and the two different rescalings.
 
         The checkpoint settles it: ``conv_in``'s per-input-channel weight
@@ -230,13 +224,7 @@ class TestPreconditioning:
         frames, actions = _history(config=config), _actions(config=config)
         clean = lucid.randn((2, 3, 16, 16))
         with lucid.no_grad():
-            out = model.denoise(
-                clean,
-                lucid.tensor([1e-8, 1e-8]),
-                frames,
-                actions,
-                quantize=False,
-            )
+            out = model.denoise(clean, lucid.tensor([1e-8, 1e-8]), frames, actions, quantize=False)
         assert float((out - clean).abs().max().item()) < 1e-3
 
     def test_the_offset_noise_folds_into_sigma_before_anything_else(self) -> None:
@@ -512,11 +500,7 @@ class TestObjectives:
     def test_the_denoiser_loss_reaches_the_denoiser(self) -> None:
         config = _tiny()
         model = DIAMONDModel(config)
-        out = model(
-            _history(config=config),
-            _actions(config=config),
-            lucid.randn((2, 3, 16, 16)),
-        )
+        out = model(_history(config=config), _actions(config=config), lucid.randn((2, 3, 16, 16)))
         out.loss.backward()
         assert sum(1 for p in model.denoiser.parameters() if p.grad is not None) > 0
 

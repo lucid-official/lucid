@@ -165,9 +165,7 @@ class NCSNModel(PretrainedModel):
         else:
             self.unet = _DDPMUNet(_to_unet_config(config))
         sigmas = make_sigma_schedule(
-            config.num_noise_levels,
-            sigma_max=config.sigma_max,
-            sigma_min=config.sigma_min,
+            config.num_noise_levels, sigma_max=config.sigma_max, sigma_min=config.sigma_min
         )
         self.register_buffer("sigmas", sigmas, persistent=False)
         self._num_levels = config.num_noise_levels
@@ -178,11 +176,7 @@ class NCSNModel(PretrainedModel):
         return self._num_levels
 
     @override
-    def forward(
-        self,
-        sample: Tensor,
-        sigma_idx: Tensor,
-    ) -> DiffusionModelOutput:
+    def forward(self, sample: Tensor, sigma_idx: Tensor) -> DiffusionModelOutput:
         """Predict the score at ``sample`` for the given noise-level indices.
 
         Args:
@@ -298,9 +292,7 @@ class NCSNForImageGeneration(ImageGenerationModel):
         self.register_buffer(
             "sigmas",
             make_sigma_schedule(
-                config.num_noise_levels,
-                sigma_max=config.sigma_max,
-                sigma_min=config.sigma_min,
+                config.num_noise_levels, sigma_max=config.sigma_max, sigma_min=config.sigma_min
             ),
             persistent=False,
         )
@@ -423,6 +415,5 @@ class NCSNForImageGeneration(ImageGenerationModel):
             x = x + (sigma_last**2) * score_last
 
         return GenerationOutput(
-            samples=x,
-            intermediates=tuple(intermediates) if return_intermediates else None,
+            samples=x, intermediates=tuple(intermediates) if return_intermediates else None
         )

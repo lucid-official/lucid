@@ -107,8 +107,7 @@ def test_the_second_derivative_at_zero_is_exact(device: str) -> None:
     [
         "cpu",
         pytest.param(
-            "metal",
-            marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
+            "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
         ),
     ],
 )

@@ -159,15 +159,7 @@ def test_every_subsystem_key_resolves() -> None:
 
 
 @pytest.mark.parametrize(
-    "name",
-    [
-        "conv2d",
-        "max_pool2d",
-        "adaptive_avg_pool2d",
-        "batch_norm",
-        "layer_norm",
-        "embedding",
-    ],
+    "name", ["conv2d", "max_pool2d", "adaptive_avg_pool2d", "batch_norm", "layer_norm", "embedding"]
 )
 def test_the_families_that_used_to_be_skipped_have_specs(name: str) -> None:
     """Every convolution, pooling and normalisation was unreachable before."""
@@ -238,8 +230,7 @@ def test_a_known_good_op_passes_the_gradient_axis() -> None:
     """Guard the instrument: if nothing can pass, nothing can fail either."""
     axis = _axes.GradientAxis()
     finding = axis.run(
-        _surface.Symbol("lucid.tanh", "lucid", "op", lucid.tanh),
-        _axes.Context(quick=True),
+        _surface.Symbol("lucid.tanh", "lucid", "op", lucid.tanh), _axes.Context(quick=True)
     )
     assert finding.status is Status.PASS, finding.detail
 

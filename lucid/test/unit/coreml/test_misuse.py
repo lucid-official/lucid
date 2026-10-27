@@ -33,8 +33,7 @@ import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -240,11 +239,7 @@ class TestTheOtherFourAxesReachingThisOne:
         lucid.manual_seed(0)
         model = _Small().eval().to("metal")
         with pytest.raises(ValueError, match="parameters are on the GPU"):
-            cml.export(
-                model,
-                lucid.randn(1, 3, 8, 8, device="metal"),
-                f"{tmp_path}/gpu.mlpackage",
-            )
+            cml.export(model, lucid.randn(1, 3, 8, 8, device="metal"), f"{tmp_path}/gpu.mlpackage")
 
     def test_and_the_move_is_all_it_takes(self, tmp_path) -> None:
         """The refusal has to be worth following."""
@@ -268,9 +263,7 @@ class TestTheOtherFourAxesReachingThisOne:
         compiled = lucid.compile(_Small().eval().to("metal"))
         with pytest.raises(TypeError, match="lucid.compile wrapper"):
             cml.export(
-                compiled,
-                lucid.randn(1, 3, 8, 8, device="metal"),
-                f"{tmp_path}/compiled.mlpackage",
+                compiled, lucid.randn(1, 3, 8, 8, device="metal"), f"{tmp_path}/compiled.mlpackage"
             )
 
     def test_a_model_whose_weights_are_buffers_is_caught_too(self, tmp_path) -> None:

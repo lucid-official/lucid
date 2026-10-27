@@ -89,8 +89,7 @@ B = np.array([-1.0, 0.5, -0.5, 2.5, 1.0])
 
 
 @pytest.mark.parametrize(
-    "name,lf,rf",
-    [("maximum", lucid.maximum, "maximum"), ("minimum", lucid.minimum, "minimum")],
+    "name,lf,rf", [("maximum", lucid.maximum, "maximum"), ("minimum", lucid.minimum, "minimum")]
 )
 @pytest.mark.parametrize("wrt", ["a", "b"])
 def test_comparison_first_derivative(name, lf, rf, wrt, ref) -> None:
@@ -128,9 +127,7 @@ def test_gather_is_differentiable_twice(ref) -> None:
 
     r = ref.from_numpy(values.copy()).requires_grad_(True)
     (rg,) = ref.autograd.grad(
-        (ref.gather(r, 1, ref.from_numpy(indices).long()) ** 2).sum(),
-        [r],
-        create_graph=True,
+        (ref.gather(r, 1, ref.from_numpy(indices).long()) ** 2).sum(), [r], create_graph=True
     )
     assert np.allclose(np.asarray(g.numpy()), np.asarray(rg.tolist()))
 

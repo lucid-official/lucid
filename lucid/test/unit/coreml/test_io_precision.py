@@ -20,8 +20,7 @@ from lucid.coreml import _build
 from lucid.coreml._model import PlacementSummary
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -120,10 +119,7 @@ class TestTheRecordedPrecision:
         monkeypatch.setattr(_build, "_PRECISION_KEY", "elsewhere.precision")
         monkeypatch.setattr(_build, "_IO_PRECISION_KEY", "elsewhere.io")
         cml.export(
-            _small(),
-            lucid.randn(2, 8),
-            f"{tmp_path}/m.mlpackage",
-            precision=cml.Precision.FLOAT16,
+            _small(), lucid.randn(2, 8), f"{tmp_path}/m.mlpackage", precision=cml.Precision.FLOAT16
         ).close()
         with cml.load(f"{tmp_path}/m.mlpackage") as reopened:
             assert reopened.precision == "UNKNOWN"

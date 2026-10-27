@@ -84,11 +84,7 @@ def test_packed_hx_follows_the_callers_batch_order(
 
     def close(got: lucid.Tensor, want: object, what: str) -> None:
         np.testing.assert_allclose(
-            got.to("cpu").numpy(),
-            want.detach().numpy(),
-            rtol=tol,
-            atol=tol,
-            err_msg=what,
+            got.to("cpu").numpy(), want.detach().numpy(), rtol=tol, atol=tol, err_msg=what
         )
 
     close(out.data, rout.data, "output")

@@ -16,8 +16,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -60,8 +59,7 @@ class TestMultipleFunctions:
         model = Shared().eval()
         together = str(tmp_path / "together.mlpackage")
         handles = cml.export_functions(
-            {"one": (model, lucid.randn(1, 64)), "two": (model, lucid.randn(4, 64))},
-            together,
+            {"one": (model, lucid.randn(1, 64)), "two": (model, lucid.randn(4, 64))}, together
         )
         for handle in handles.values():
             handle.close()

@@ -7,18 +7,8 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
-from lucid.nn.modules._conv_common import (
-    _single,
-    _conv_parameters,
-    _LazyConvMixin,
-    _pair,
-    _triple,
-)
-from lucid.nn.functional.conv import (
-    _ConvArgs,
-    _conv_transposend,
-    _output_padding_for_size,
-)
+from lucid.nn.modules._conv_common import _single, _conv_parameters, _LazyConvMixin, _pair, _triple
+from lucid.nn.functional.conv import _ConvArgs, _conv_transposend, _output_padding_for_size
 
 
 def _transpose_padding(module: Module, padding: object, mode: str) -> str:
@@ -383,11 +373,7 @@ class ConvTranspose2d(_ConvTransposeNd):
         self.groups = groups
         self.dilation = _pair(dilation, "dilation")
         self.weight, self.bias = _conv_parameters(
-            (in_channels, out_channels // groups, kh, kw),
-            out_channels,
-            bias,
-            device,
-            dtype,
+            (in_channels, out_channels // groups, kh, kw), out_channels, bias, device, dtype
         )
 
     @override
@@ -533,11 +519,7 @@ class ConvTranspose3d(_ConvTransposeNd):
         self.groups = groups
         self.dilation = _triple(dilation, "dilation")
         self.weight, self.bias = _conv_parameters(
-            (in_channels, out_channels // groups, kd, kh, kw),
-            out_channels,
-            bias,
-            device,
-            dtype,
+            (in_channels, out_channels // groups, kd, kh, kw), out_channels, bias, device, dtype
         )
 
     @override

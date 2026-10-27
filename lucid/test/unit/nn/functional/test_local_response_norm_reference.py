@@ -24,17 +24,10 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid.test._fixtures.devices import device_dtype_params
 
-_SHAPES = {
-    "3d": (2, 5, 6),
-    "4d": (2, 5, 3, 4),
-    "5d": (1, 5, 2, 3, 2),
-}
+_SHAPES = {"3d": (2, 5, 6), "4d": (2, 5, 3, 4), "5d": (1, 5, 2, 3, 2)}
 # Window sizes 1-5, and 7 — wider than the 5 channels.
 _SIZES = (1, 2, 3, 4, 5, 7)
-_PARAMS = {
-    "default": {},
-    "custom": {"alpha": 0.5, "beta": 0.6, "k": 1.5},
-}
+_PARAMS = {"default": {}, "custom": {"alpha": 0.5, "beta": 0.6, "k": 1.5}}
 _DEVICE_DTYPES = device_dtype_params((lucid.float32, lucid.float64))
 _TOL = {lucid.float32: 2e-5, lucid.float64: 1e-12}
 
@@ -97,13 +90,7 @@ def test_forward_and_derivatives_match_reference(
     w = _values(shape, seed=200 + size).astype(np_dtype)
 
     got = _derivatives(
-        lucid,
-        lambda x: F.local_response_norm(x, size, **kw),
-        a,
-        v,
-        w,
-        device=device,
-        dtype=dtype,
+        lucid, lambda x: F.local_response_norm(x, size, **kw), a, v, w, device=device, dtype=dtype
     )
     want = _derivatives(
         ref, lambda x: ref.nn.functional.local_response_norm(x, size, **kw), a, v, w

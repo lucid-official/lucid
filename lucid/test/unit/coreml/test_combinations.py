@@ -30,15 +30,11 @@ import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 #: How the body computes.
-PRECISIONS = [
-    ("fp32", cml.Precision.FLOAT32),
-    ("fp16", cml.Precision.FLOAT16),
-]
+PRECISIONS = [("fp32", cml.Precision.FLOAT32), ("fp16", cml.Precision.FLOAT16)]
 
 #: How the weights are stored. Each takes a different path through the
 #: writer: plain blob, int8 codes with per-channel scales, sub-byte keys
@@ -87,9 +83,7 @@ class _Net(nn.Module):
 
 
 @pytest.mark.parametrize(
-    ("precision", "weights", "interface"),
-    CASES,
-    ids=[f"{p[0]}-{w[0]}-{i[0]}" for p, w, i in CASES],
+    ("precision", "weights", "interface"), CASES, ids=[f"{p[0]}-{w[0]}-{i[0]}" for p, w, i in CASES]
 )
 def test_a_combination_exports_and_runs(precision, weights, interface, tmp_path):
     """Built, loaded, and asked for an answer.
@@ -214,10 +208,7 @@ class _Branching(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.body = nn.Sequential(
-            nn.Conv2d(3, 64, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, 3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(3, 64, 3, padding=1), nn.ReLU(), nn.Conv2d(64, 64, 3, padding=1), nn.ReLU()
         )
         self.head = nn.Linear(64, 5)
 
@@ -389,10 +380,7 @@ class _Samples(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.body = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 32, 3, padding=1),
-            nn.ReLU(),
+            nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU()
         )
         self.mu = nn.Linear(32, 5)
         self.logvar = nn.Linear(32, 5)
@@ -488,9 +476,7 @@ _AWARE_CASES = list(itertools.product(PRECISIONS, WEIGHTS[1:]))
 
 
 @pytest.mark.parametrize(
-    ("precision", "weights"),
-    _AWARE_CASES,
-    ids=[f"{p[0]}-{w[0]}" for p, w in _AWARE_CASES],
+    ("precision", "weights"), _AWARE_CASES, ids=[f"{p[0]}-{w[0]}" for p, w in _AWARE_CASES]
 )
 def test_training_against_the_compression_then_exporting_with_it(precision, weights, tmp_path):
     """A settled model has to export as the compression it was settled to.

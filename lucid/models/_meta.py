@@ -63,10 +63,7 @@ class ModelFamilyMeta:
 
 @dataclass_transform(frozen_default=True, field_specifiers=(field,))
 def model_family_meta[C: type[ModelConfig]](
-    *,
-    canonical_name: str,
-    citation: str,
-    theory: str,
+    *, canonical_name: str, citation: str, theory: str
 ) -> Callable[[C], C]:
     r"""Class decorator: attach paper / theory / display metadata to a
     ``ModelConfig`` subclass.
@@ -144,11 +141,7 @@ def model_family_meta[C: type[ModelConfig]](
                 f"arch-models-family-contract.md."
             )
 
-    meta = ModelFamilyMeta(
-        canonical_name=canonical_name,
-        citation=citation,
-        theory=theory,
-    )
+    meta = ModelFamilyMeta(canonical_name=canonical_name, citation=citation, theory=theory)
 
     def _wrap(cls: C) -> C:
         # Per-class structural checks at decorator-application time.

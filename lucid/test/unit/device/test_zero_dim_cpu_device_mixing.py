@@ -36,69 +36,33 @@ DIFF_BINARY_OPS = [
     ("remainder", lambda a, b: a % b, lambda r, a, b: r.remainder(a, b)),
     ("atan2", lambda a, b: lucid.atan2(a, b), lambda r, a, b: r.atan2(a, b)),
     ("hypot", lambda a, b: lucid.hypot(a, b), lambda r, a, b: r.hypot(a, b)),
-    (
-        "logaddexp",
-        lambda a, b: lucid.logaddexp(a, b),
-        lambda r, a, b: r.logaddexp(a, b),
-    ),
+    ("logaddexp", lambda a, b: lucid.logaddexp(a, b), lambda r, a, b: r.logaddexp(a, b)),
     ("xlogy", lambda a, b: lucid.xlogy(a, b), lambda r, a, b: r.xlogy(a, b)),
-    (
-        "xlog1py",
-        lambda a, b: lucid.special.xlog1py(a, b),
-        lambda r, a, b: r.special.xlog1py(a, b),
-    ),
+    ("xlog1py", lambda a, b: lucid.special.xlog1py(a, b), lambda r, a, b: r.special.xlog1py(a, b)),
 ]
 
 # ── Non-differentiable / special binary ops ─────────────────────────────────
 
 NONDIFF_FLOAT_BINARY_OPS = [
-    (
-        "floordiv",
-        lambda a, b: a // b,
-        lambda r, a, b: r.div(a, b, rounding_mode="floor"),
-    ),
+    ("floordiv", lambda a, b: a // b, lambda r, a, b: r.div(a, b, rounding_mode="floor")),
     ("equal", lambda a, b: a == b, lambda r, a, b: a == b),
     ("not_equal", lambda a, b: a != b, lambda r, a, b: a != b),
     ("less", lambda a, b: a < b, lambda r, a, b: a < b),
     ("less_equal", lambda a, b: a <= b, lambda r, a, b: a <= b),
     ("greater", lambda a, b: a > b, lambda r, a, b: a > b),
     ("greater_equal", lambda a, b: a >= b, lambda r, a, b: a >= b),
-    (
-        "nextafter",
-        lambda a, b: lucid.nextafter(a, b),
-        lambda r, a, b: r.nextafter(a, b),
-    ),
+    ("nextafter", lambda a, b: lucid.nextafter(a, b), lambda r, a, b: r.nextafter(a, b)),
     ("isclose", lambda a, b: lucid.isclose(a, b), lambda r, a, b: r.isclose(a, b)),
-    (
-        "logical_and",
-        lambda a, b: lucid.logical_and(a, b),
-        lambda r, a, b: r.logical_and(a, b),
-    ),
-    (
-        "logical_or",
-        lambda a, b: lucid.logical_or(a, b),
-        lambda r, a, b: r.logical_or(a, b),
-    ),
-    (
-        "logical_xor",
-        lambda a, b: lucid.logical_xor(a, b),
-        lambda r, a, b: r.logical_xor(a, b),
-    ),
-    (
-        "igamma",
-        lambda a, b: lucid.special.gammainc(a, b),
-        lambda r, a, b: r.special.gammainc(a, b),
-    ),
+    ("logical_and", lambda a, b: lucid.logical_and(a, b), lambda r, a, b: r.logical_and(a, b)),
+    ("logical_or", lambda a, b: lucid.logical_or(a, b), lambda r, a, b: r.logical_or(a, b)),
+    ("logical_xor", lambda a, b: lucid.logical_xor(a, b), lambda r, a, b: r.logical_xor(a, b)),
+    ("igamma", lambda a, b: lucid.special.gammainc(a, b), lambda r, a, b: r.special.gammainc(a, b)),
     (
         "igammac",
         lambda a, b: lucid.special.gammaincc(a, b),
         lambda r, a, b: r.special.gammaincc(a, b),
     ),
-    (
-        "zeta",
-        lambda a, b: lucid.special.zeta(a, b),
-        lambda r, a, b: r.special.zeta(a, b),
-    ),
+    ("zeta", lambda a, b: lucid.special.zeta(a, b), lambda r, a, b: r.special.zeta(a, b)),
 ]
 
 BITWISE_INT_OPS = [
@@ -181,9 +145,7 @@ def test_diff_binary_zero_dim_cpu_with_metal(
 
 
 @pytest.mark.parametrize(
-    "name,l_fn,t_fn",
-    NONDIFF_FLOAT_BINARY_OPS,
-    ids=[x[0] for x in NONDIFF_FLOAT_BINARY_OPS],
+    "name,l_fn,t_fn", NONDIFF_FLOAT_BINARY_OPS, ids=[x[0] for x in NONDIFF_FLOAT_BINARY_OPS]
 )
 @pytest.mark.parametrize("cpu_first", [True, False], ids=["cpu0_metal", "metal_cpu0"])
 def test_nondiff_and_special_binary_zero_dim_cpu_with_metal(ref, name, l_fn, t_fn, cpu_first):
@@ -236,12 +198,7 @@ def test_bitwise_int_zero_dim_cpu_with_metal(ref, name, l_fn, t_fn, cpu_first):
         ((1, "cpu"), (1, "metal")),
         ((1, "metal"), (1, "cpu")),
     ],
-    ids=[
-        "0d_metal_shaped_cpu",
-        "shaped_cpu_0d_metal",
-        "shaped_cpu_metal",
-        "shaped_metal_cpu",
-    ],
+    ids=["0d_metal_shaped_cpu", "shaped_cpu_0d_metal", "shaped_cpu_metal", "shaped_metal_cpu"],
 )
 def test_binary_rejects_disallowed_cross_device_pairs(name, l_fn, _, a_spec, b_spec):
     def _make(ndim: int, dev: str) -> lucid.Tensor:
@@ -257,17 +214,11 @@ def test_binary_rejects_disallowed_cross_device_pairs(name, l_fn, _, a_spec, b_s
 
 
 @pytest.mark.parametrize(
-    "name,l_fn,_",
-    NONDIFF_FLOAT_BINARY_OPS,
-    ids=[x[0] for x in NONDIFF_FLOAT_BINARY_OPS],
+    "name,l_fn,_", NONDIFF_FLOAT_BINARY_OPS, ids=[x[0] for x in NONDIFF_FLOAT_BINARY_OPS]
 )
 @pytest.mark.parametrize(
     "a_spec,b_spec",
-    [
-        ((0, "metal"), (1, "cpu")),
-        ((1, "cpu"), (0, "metal")),
-        ((1, "cpu"), (1, "metal")),
-    ],
+    [((0, "metal"), (1, "cpu")), ((1, "cpu"), (0, "metal")), ((1, "cpu"), (1, "metal"))],
     ids=["0d_metal_shaped_cpu", "shaped_cpu_0d_metal", "shaped_cpu_metal"],
 )
 def test_nondiff_binary_rejects_disallowed_cross_device_pairs(name, l_fn, _, a_spec, b_spec):
@@ -292,12 +243,7 @@ def test_nondiff_binary_rejects_disallowed_cross_device_pairs(name, l_fn, _, a_s
         ((1, "cpu"), (1, "metal")),
         ((1, "metal"), (1, "cpu")),
     ],
-    ids=[
-        "0d_metal_shaped_cpu",
-        "shaped_cpu_0d_metal",
-        "shaped_cpu_metal",
-        "shaped_metal_cpu",
-    ],
+    ids=["0d_metal_shaped_cpu", "shaped_cpu_0d_metal", "shaped_cpu_metal", "shaped_metal_cpu"],
 )
 def test_bitwise_int_rejects_disallowed_cross_device_pairs(name, l_fn, _, a_spec, b_spec):
     def _make(ndim: int, dev: str) -> lucid.Tensor:

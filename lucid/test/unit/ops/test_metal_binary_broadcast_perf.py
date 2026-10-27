@@ -37,10 +37,7 @@ FLOAT_OPS: dict[str, BinaryFn] = {
     "remainder": lambda a, b: a % b,
 }
 
-FLOAT_COMPARE_OPS: dict[str, BinaryFn] = {
-    "eq": lambda a, b: a == b,
-    "lt": lambda a, b: a < b,
-}
+FLOAT_COMPARE_OPS: dict[str, BinaryFn] = {"eq": lambda a, b: a == b, "lt": lambda a, b: a < b}
 
 INT_OPS: dict[str, BinaryFn] = {
     "add": lambda a, b: a + b,
@@ -120,14 +117,10 @@ def _build_float_pair(
     if layout == "negative_stride_view":
         raw_b = (np.abs(rng.standard_normal((1, 6))) + 0.5).astype(np.float32)
         a_leaf = lucid.tensor(
-            np.ascontiguousarray(base_a[::-1]),
-            device=device,
-            requires_grad=requires_grad,
+            np.ascontiguousarray(base_a[::-1]), device=device, requires_grad=requires_grad
         )
         b_leaf = lucid.tensor(
-            np.ascontiguousarray(raw_b[:, ::-1]),
-            device=device,
-            requires_grad=requires_grad,
+            np.ascontiguousarray(raw_b[:, ::-1]), device=device, requires_grad=requires_grad
         )
         return a_leaf, b_leaf, lucid.flip(a_leaf, dims=(0,)), b_leaf[:, ::-1]
 
@@ -157,10 +150,7 @@ def _build_int_pair(layout: str, device: str) -> tuple[lucid.Tensor, lucid.Tenso
     if layout == "transposed_view":
         raw_a = rng.integers(1, 7, size=(6, 4), dtype=np.int32)
         raw_b = rng.integers(1, 5, size=(6, 1), dtype=np.int32)
-        return (
-            lucid.tensor(raw_a, device=device).t(),
-            lucid.tensor(raw_b, device=device).t(),
-        )
+        return (lucid.tensor(raw_a, device=device).t(), lucid.tensor(raw_b, device=device).t())
     if layout == "sliced_view":
         raw_a = rng.integers(1, 7, size=(5, 8), dtype=np.int32)
         raw_b = rng.integers(1, 5, size=(3, 8), dtype=np.int32)
@@ -313,8 +303,7 @@ def test_metal_binary_broadcast_saved_version_contract(layout: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "op_name",
-    ["add", "sub", "mul", "div", "pow", "maximum", "minimum", "floordiv", "remainder"],
+    "op_name", ["add", "sub", "mul", "div", "pow", "maximum", "minimum", "floordiv", "remainder"]
 )
 @pytest.mark.parametrize("layout", ["scalar_0d", "row_1xN", "col_Mx1", "broadcast_3d"])
 def test_metal_binary_broadcast_does_not_materialize_expanded_operand(

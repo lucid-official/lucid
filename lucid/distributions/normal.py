@@ -6,22 +6,13 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions.constraints import (
-    Constraint,
-    positive,
-    real,
-)
+from lucid.distributions.constraints import Constraint, positive, real
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _broadcast_pair,
-    _image_cdf,
-    _image_icdf,
-)
+from lucid.distributions._util import _as_tensor, _broadcast_pair, _image_cdf, _image_icdf
 
 
 class Normal(ExponentialFamily):
@@ -113,10 +104,7 @@ class Normal(ExponentialFamily):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Normal distribution.
 
@@ -133,9 +121,7 @@ class Normal(ExponentialFamily):
         self.scale = _as_tensor(scale)
         self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -426,10 +412,7 @@ class LogNormal(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Log-Normal distribution.
 
@@ -446,9 +429,7 @@ class LogNormal(Distribution):
         self.loc = self._base.loc
         self.scale = self._base.scale
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override

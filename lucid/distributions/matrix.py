@@ -204,9 +204,7 @@ class Wishart(Distribution):
         batch_shape: tuple[int, ...] = tuple(given.shape[:-2])
         event_shape: tuple[int, ...] = (dim, dim)
         super().__init__(
-            batch_shape=batch_shape,
-            event_shape=event_shape,
-            validate_args=validate_args,
+            batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args
         )
         if scale_tril is None:
             self.scale_tril = _scale_tril_of(covariance_matrix, precision_matrix)
@@ -353,11 +351,7 @@ class Wishart(Distribution):
         return t1 + t2 + t3 + t4 + t5
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Wishart` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(Wishart, _instance)
         batch_shape = tuple(batch_shape)
@@ -371,9 +365,7 @@ class Wishart(Distribution):
         if "precision_matrix" in self.__dict__:
             new.precision_matrix = self.precision_matrix.expand(cov_shape)
         super(Wishart, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new
@@ -451,10 +443,7 @@ class LKJCholesky(Distribution):
     has_rsample: bool = False
 
     def __init__(
-        self,
-        dim: int,
-        concentration: Tensor | float = 1.0,
-        validate_args: bool | None = None,
+        self, dim: int, concentration: Tensor | float = 1.0, validate_args: bool | None = None
     ) -> None:
         r"""Initialise an LKJ distribution over Cholesky factors.
 
@@ -497,9 +486,7 @@ class LKJCholesky(Distribution):
         batch_shape: tuple[int, ...] = tuple(self.concentration.shape)
         event_shape: tuple[int, ...] = (dim, dim)
         super().__init__(
-            batch_shape=batch_shape,
-            event_shape=event_shape,
-            validate_args=validate_args,
+            batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args
         )
 
     @override
@@ -543,9 +530,7 @@ class LKJCholesky(Distribution):
         w_sq_sum = (w * w).sum(dim=-1)  # (*s, *b, d)
         eps = 1e-6
         diag_elems = lucid.where(
-            1.0 - w_sq_sum < eps,
-            lucid.full_like(w_sq_sum, eps),
-            1.0 - w_sq_sum,
+            1.0 - w_sq_sum < eps, lucid.full_like(w_sq_sum, eps), 1.0 - w_sq_sum
         ).sqrt()
 
         # Assemble L = strictly-lower part + diagonal
@@ -604,11 +589,7 @@ class LKJCholesky(Distribution):
         return pi_constant + numerator - denominator
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`LKJCholesky` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(LKJCholesky, _instance)
         batch_shape = tuple(batch_shape)
@@ -616,9 +597,7 @@ class LKJCholesky(Distribution):
         new.concentration = self.concentration.expand(batch_shape)
         new._beta = self._beta.expand(batch_shape + (self.dim,))
         super(LKJCholesky, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new

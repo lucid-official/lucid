@@ -8,16 +8,8 @@ it to the velocity where the jump lands — an objective that bounds the
 its RMS-normalised DiT is for.
 """
 
-from lucid.models.generative.tvm._config import (
-    TimeEmbeddingInit,
-    TimeSampler,
-    TVMConfig,
-)
-from lucid.models.generative.tvm._model import (
-    TVMForImageGeneration,
-    TVMModel,
-    TVMOutput,
-)
+from lucid.models.generative.tvm._config import TimeEmbeddingInit, TimeSampler, TVMConfig
+from lucid.models.generative.tvm._model import TVMForImageGeneration, TVMModel, TVMOutput
 from lucid.models.generative.tvm._pretrained import (
     tvm_imagenet256,
     tvm_imagenet256_gen,

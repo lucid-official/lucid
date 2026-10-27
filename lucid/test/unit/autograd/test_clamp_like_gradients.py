@@ -23,24 +23,7 @@ import lucid
 
 _NAN = float("nan")
 _INF = float("inf")
-_BASE = [
-    0.5,
-    -1.0,
-    2.0,
-    0.25,
-    -3.0,
-    0.0,
-    0.75,
-    -0.5,
-    1.25,
-    0.1,
-    -2.0,
-    0.3,
-    0.6,
-    -0.7,
-    0.9,
-    1.1,
-]
+_BASE = [0.5, -1.0, 2.0, 0.25, -3.0, 0.0, 0.75, -0.5, 1.25, 0.1, -2.0, 0.3, 0.6, -0.7, 0.9, 1.1]
 _SLOT = 5
 
 
@@ -133,11 +116,7 @@ _TENSOR_CLAMPS = {
 @pytest.mark.parametrize("name", list(_TENSOR_CLAMPS))
 def test_tensor_bound_clamp_matches_reference(ref, device, name, triple):
     call = _TENSOR_CLAMPS[name]
-    columns = [
-        _planted(triple[0]),
-        _planted(triple[1], _LO_BASE),
-        _planted(triple[2], _HI_BASE),
-    ]
+    columns = [_planted(triple[0]), _planted(triple[1], _LO_BASE), _planted(triple[2], _HI_BASE)]
     rx, rlo, rhi = (ref.tensor(c) for c in columns)
     lx, llo, lhi = (lucid.tensor(c, device=device) for c in columns)
     _same(call(lucid, lx, llo, lhi).tolist(), call(ref, rx, rlo, rhi).tolist())

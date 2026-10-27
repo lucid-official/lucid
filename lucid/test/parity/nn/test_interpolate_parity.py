@@ -76,22 +76,12 @@ def _cases() -> list[Any]:
 
 _AA_SHAPE = (2, 3, 11, 14)
 _ANTIALIAS = [
-    pytest.param(
-        mode,
-        shape,
-        kw,
-        corners,
-        id=f"{mode}-{tag}-{'corners' if corners else 'edges'}",
-    )
+    pytest.param(mode, shape, kw, corners, id=f"{mode}-{tag}-{'corners' if corners else 'edges'}")
     for mode in ("bilinear", "bicubic", "lanczos")
     for tag, shape, kw in (
         ("x0.5", _AA_SHAPE, {"scale_factor": 0.5}),
         ("x0.3", _AA_SHAPE, {"scale_factor": 0.3}),
-        (
-            "x0.37-recompute",
-            _AA_SHAPE,
-            {"scale_factor": 0.37, "recompute_scale_factor": True},
-        ),
+        ("x0.37-recompute", _AA_SHAPE, {"scale_factor": 0.37, "recompute_scale_factor": True}),
         ("tuple", _AA_SHAPE, {"scale_factor": (0.75, 0.21)}),
         ("size", _AA_SHAPE, {"size": (4, 3)}),
         # H = 4 at x1.1 keeps its size; the reference leaves such an axis
@@ -193,14 +183,7 @@ class TestUpsampleModules:
         [
             ("Upsample", {"scale_factor": 0.6, "mode": "bilinear"}),
             ("Upsample", {"scale_factor": 1.7, "mode": "nearest"}),
-            (
-                "Upsample",
-                {
-                    "scale_factor": 1.7,
-                    "mode": "bicubic",
-                    "recompute_scale_factor": True,
-                },
-            ),
+            ("Upsample", {"scale_factor": 1.7, "mode": "bicubic", "recompute_scale_factor": True}),
             ("UpsamplingNearest2d", {"scale_factor": 1.7}),
             ("UpsamplingBilinear2d", {"scale_factor": 1.7}),
         ],

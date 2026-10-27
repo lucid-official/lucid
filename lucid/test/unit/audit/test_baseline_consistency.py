@@ -41,10 +41,7 @@ GOOD = {
             "line_covered": 3,
             "line_total": 4,
             "percent": 75.0,
-            "files": {
-                "a.py": {"covered": 1, "total": 1},
-                "b.py": {"covered": 2, "total": 3},
-            },
+            "files": {"a.py": {"covered": 1, "total": 1}, "b.py": {"covered": 2, "total": 3}},
         }
     ),
 }
@@ -74,10 +71,7 @@ def test_what_the_audit_writes_passes(tmp_path: Path) -> None:
         _doctests.DoctestResult(3, 10, {"lucid.a": 1, "lucid.b": 2}, ran=True),
     )
     result = _suite.SuiteResult(
-        ran=True,
-        line_covered=3,
-        line_total=7,
-        per_file={"a.py": (1, 4), "b.py": (2, 3)},
+        ran=True, line_covered=3, line_total=7, per_file={"a.py": (1, 4), "b.py": (2, 3)}
     )
     _suite.save_floor(tmp_path / "suite.json", result)
 
@@ -106,16 +100,10 @@ INCONSISTENT = [
         id="coverage-unrecorded-status",
     ),
     pytest.param(
-        COVERAGE,
-        _coverage(1, {"lucid.exp": "pass"}),
-        "not 'axis::symbol'",
-        id="coverage-key",
+        COVERAGE, _coverage(1, {"lucid.exp": "pass"}), "not 'axis::symbol'", id="coverage-key"
     ),
     pytest.param(
-        COVERAGE,
-        json.dumps({"answered": {}}),
-        "'cells' is not a count",
-        id="coverage-no-cells",
+        COVERAGE, json.dumps({"answered": {}}), "'cells' is not a count", id="coverage-no-cells"
     ),
     pytest.param(
         DOCTEST,
@@ -190,12 +178,7 @@ def scratch(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         ["commit", "-q", "-m", "init"],
     ):
         proc = subprocess.run(
-            ["git", *args],
-            cwd=root,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+            ["git", *args], cwd=root, env=env, capture_output=True, text=True, check=False
         )
         assert proc.returncode == 0, (args, proc.stderr)
     return root, env
@@ -204,12 +187,7 @@ def scratch(tmp_path: Path) -> tuple[Path, dict[str, str]]:
 def _commit(root: Path, env: dict[str, str], mode: str) -> subprocess.CompletedProcess[str]:
     def git(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", *args],
-            cwd=root,
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+            ["git", *args], cwd=root, env=env, capture_output=True, text=True, check=False
         )
 
     if mode == "staged":
@@ -251,10 +229,6 @@ def test_the_hook_judges_the_index_not_the_working_tree(
     assert subprocess.run(["git", "add", COVERAGE], cwd=root, env=env, check=False).returncode == 0
     (root / COVERAGE).write_text("{ an unstaged edit that is not even JSON")
     result = subprocess.run(
-        ["git", "commit", "-q", "-m", "baseline"],
-        cwd=root,
-        env=env,
-        capture_output=True,
-        text=True,
+        ["git", "commit", "-q", "-m", "baseline"], cwd=root, env=env, capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr

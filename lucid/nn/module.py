@@ -6,16 +6,7 @@ import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Iterator,
-    Self,
-    cast,
-    override,
-)
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterator, Self, cast, override
 
 from lucid._C import engine as _C_engine
 from lucid import _promotion
@@ -266,10 +257,7 @@ class Module:
             args, kwargs = self._call_forward_pre_hook(hook, args, kwargs, with_kwargs=with_kwargs)
         for key, hook in self._forward_pre_hooks.items():
             args, kwargs = self._call_forward_pre_hook(
-                hook,
-                args,
-                kwargs,
-                with_kwargs=key in self._forward_pre_hooks_with_kwargs,
+                hook, args, kwargs, with_kwargs=key in self._forward_pre_hooks_with_kwargs
             )
 
         backward_state = None
@@ -287,11 +275,7 @@ class Module:
             output = self._call_forward_hook(hook, args, kwargs, output, with_kwargs=with_kwargs)
         for key, hook in self._forward_hooks.items():
             output = self._call_forward_hook(
-                hook,
-                args,
-                kwargs,
-                output,
-                with_kwargs=key in self._forward_hooks_with_kwargs,
+                hook, args, kwargs, output, with_kwargs=key in self._forward_hooks_with_kwargs
             )
         if backward_state is not None:
             output = self._attach_output_backward_hooks(output, backward_state)
@@ -356,10 +340,7 @@ class Module:
         return output if hook_out is None else hook_out  # type: ignore[return-value]
 
     def _call_always_forward_hooks(
-        self,
-        args: tuple[Tensor, ...],
-        kwargs: dict[str, object],
-        output: _ModuleOutput | None,
+        self, args: tuple[Tensor, ...], kwargs: dict[str, object], output: _ModuleOutput | None
     ) -> None:
         """Run the ``always_call`` forward hooks after ``forward`` raised.
 
@@ -403,8 +384,7 @@ class Module:
         )
 
     def _prepare_backward_hooks(
-        self,
-        args: tuple[Tensor, ...],
+        self, args: tuple[Tensor, ...]
     ) -> tuple[tuple[Tensor, ...], object]:
         # The engine state is owned by the call's graph alone (LCD-167): the
         # runners keep the module alive as long as the graph is, and nothing
@@ -432,9 +412,7 @@ class Module:
         return tuple(wrapped_args), engine_state
 
     def _attach_output_backward_hooks(
-        self,
-        output: _ModuleOutput,
-        engine_state: object,
+        self, output: _ModuleOutput, engine_state: object
     ) -> _ModuleOutput:
         if isinstance(output, tuple):
             items: tuple[object, ...] = output  # it returns anything, too
@@ -704,10 +682,7 @@ class Module:
             yield p
 
     def named_parameters(
-        self,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[tuple[str, Parameter]]:
         """Yield ``(qualified_name, Parameter)`` pairs from this module's tree.
 
@@ -760,10 +735,7 @@ class Module:
             yield b
 
     def named_buffers(
-        self,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[tuple[str, Tensor]]:
         """Yield (name, buffer) pairs."""
         seen: set[int] = set()
@@ -794,10 +766,7 @@ class Module:
             yield module
 
     def named_modules(
-        self,
-        memo: set[int] | None = None,
-        prefix: str = "",
-        remove_duplicate: bool = True,
+        self, memo: set[int] | None = None, prefix: str = "", remove_duplicate: bool = True
     ) -> Iterator[tuple[str, Module]]:
         """Yield (name, module) pairs."""
         if memo is None:
@@ -1123,12 +1092,7 @@ class Module:
         del args, kwargs
         return self
 
-    def to_empty(
-        self,
-        *,
-        device: object = None,
-        recurse: bool = True,
-    ) -> Self:
+    def to_empty(self, *, device: object = None, recurse: bool = True) -> Self:
         """Move parameters and buffers to ``device`` without copying data.
 
         The reference framework uses ``to_empty`` to materialise a
@@ -1228,10 +1192,7 @@ class Module:
         return destination
 
     def _save_to_state_dict(
-        self,
-        destination: dict[str, Tensor],
-        prefix: str,
-        keep_vars: bool,
+        self, destination: dict[str, Tensor], prefix: str, keep_vars: bool
     ) -> None:
         """Write this module's own params + persistent buffers into destination.
 
@@ -1285,10 +1246,7 @@ class Module:
         )
 
     def load_state_dict(
-        self,
-        state_dict: dict[str, Tensor],
-        strict: bool = True,
-        assign: bool = False,
+        self, state_dict: dict[str, Tensor], strict: bool = True, assign: bool = False
     ) -> object:
         """Load parameters from a state_dict.
 
@@ -1317,10 +1275,7 @@ class Module:
 
         return _driver(self, state_dict, strict=strict, assign=assign)
 
-    def register_load_state_dict_pre_hook(
-        self,
-        hook: Callable[..., object],
-    ) -> RemovableHandle:
+    def register_load_state_dict_pre_hook(self, hook: Callable[..., object]) -> RemovableHandle:
         """Register a pre-hook called when this module loads state_dict.
 
         Hook signature:
@@ -1333,10 +1288,7 @@ class Module:
         self._load_state_dict_pre_hooks[key] = hook
         return RemovableHandle(self._load_state_dict_pre_hooks, key)  # type: ignore[arg-type]
 
-    def register_load_state_dict_post_hook(
-        self,
-        hook: Callable[..., object],
-    ) -> RemovableHandle:
+    def register_load_state_dict_post_hook(self, hook: Callable[..., object]) -> RemovableHandle:
         """Register a post-hook called after this module loads state_dict.
 
         Hook signature: ``hook(module, incompatible_keys) -> None``.
@@ -1348,11 +1300,7 @@ class Module:
     # ── hooks ─────────────────────────────────────────────────────────────
 
     def register_forward_pre_hook(
-        self,
-        hook: _ForwardPreHook,
-        *,
-        prepend: bool = False,
-        with_kwargs: bool = False,
+        self, hook: _ForwardPreHook, *, prepend: bool = False, with_kwargs: bool = False
     ) -> RemovableHandle:
         """Register a hook called before forward()."""
         key = _next_hook_id()
@@ -1391,10 +1339,7 @@ class Module:
         )
 
     def register_full_backward_pre_hook(
-        self,
-        hook: _BackwardHook,
-        *,
-        prepend: bool = False,
+        self, hook: _BackwardHook, *, prepend: bool = False
     ) -> RemovableHandle:
         """Register a hook to be called before backward hooks."""
         key = _next_hook_id()
@@ -1404,10 +1349,7 @@ class Module:
         return RemovableHandle(self._backward_pre_hooks, key)  # type: ignore[arg-type]
 
     def register_full_backward_hook(
-        self,
-        hook: _BackwardHook,
-        *,
-        prepend: bool = False,
+        self, hook: _BackwardHook, *, prepend: bool = False
     ) -> RemovableHandle:
         """Register a backward hook. Returns a RemovableHandle."""
         key = _next_hook_id()

@@ -113,13 +113,7 @@ Bindings = list[tuple[str, str | Sequence[str]]]
 EmitResult = tuple[str, Bindings]
 
 # Lucid dtype name -> the spelling MIL's ``cast`` expects.
-_CAST_TARGETS = {
-    "F32": "fp32",
-    "F16": "fp16",
-    "I64": "int32",
-    "I32": "int32",
-    "Bool": "bool",
-}
+_CAST_TARGETS = {"F32": "fp32", "F16": "fp16", "I64": "int32", "I32": "int32", "Bool": "bool"}
 
 
 class MultiOutput(NamedTuple):
@@ -320,11 +314,7 @@ def _integer_clip(b: Builder, value: str, low: int, high: int | None) -> EmitRes
 @_emitter("log2")
 def _log2(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
     """``log2(x)`` as ``log(x) * 1/ln 2`` — MIL carries no base-2 log."""
-    natural = b.emit(
-        "log",
-        [("x", ins[0]), ("epsilon", b.const_float(0.0))],
-        b.shape_of(ins[0]),
-    )
+    natural = b.emit("log", [("x", ins[0]), ("epsilon", b.const_float(0.0))], b.shape_of(ins[0]))
     return "mul", [("x", natural), ("y", b.const_float(1.0 / _LN2))]
 
 
@@ -563,11 +553,7 @@ def _arg_reduce(b: Builder, op: TracedOp, ins: list[str], mil_type: str) -> Emit
     keep = bool(attrs.get("keepdim", False))
     source = ins[0]
     if raw_axis is None:
-        source = b.emit(
-            "reshape",
-            [("x", source), ("shape", b.const_ints([-1]))],
-            [-1],
-        )
+        source = b.emit("reshape", [("x", source), ("shape", b.const_ints([-1]))], [-1])
         axis = 0
     else:
         axis = _as_int(raw_axis)
@@ -680,11 +666,7 @@ def _layer_norm(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     x, weight = ins[0], ins[1]
     rank = len(b.shape_of(weight))
     axes = list(range(-rank, 0))
-    bindings: Bindings = [
-        ("x", x),
-        ("axes", b.const_ints(axes)),
-        ("gamma", weight),
-    ]
+    bindings: Bindings = [("x", x), ("axes", b.const_ints(axes)), ("gamma", weight)]
     if len(ins) > 2:
         bindings.append(("beta", ins[2]))
     bindings.append(("epsilon", b.const_float(_as_float(op.attrs["eps"]))))
@@ -728,12 +710,7 @@ def _split_at(b: Builder, op: TracedOp, ins: list[str]) -> MultiOutput | Bound:
     if any(size < 0 for size in sizes):
         return Bound(_sized.split_at_run_time(b, op, ins[0], traced_axis, axis))
     return MultiOutput(
-        "split",
-        [
-            ("x", ins[0]),
-            ("split_sizes", b.const_ints(sizes)),
-            ("axis", b.const_int(axis)),
-        ],
+        "split", [("x", ins[0]), ("split_sizes", b.const_ints(sizes)), ("axis", b.const_int(axis))]
     )
 
 
@@ -790,9 +767,7 @@ def _sdpa(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
         scores_shape,
     )
     scaled = b.emit(
-        "mul",
-        [("x", scores), ("y", b.const_float(_as_float(attrs["scale"])))],
-        scores_shape,
+        "mul", [("x", scores), ("y", b.const_float(_as_float(attrs["scale"])))], scores_shape
     )
     if attrs.get("has_mask"):
         # The mask is already an additive float tensor in the trace — it
@@ -1238,19 +1213,14 @@ _SELU_SCALE = 1.0507009873554805
 
 @_emitter("elu")
 def _elu(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
-    return "elu", [
-        ("x", ins[0]),
-        ("alpha", b.const_float(_as_float(_attr(op, "alpha")))),
-    ]
+    return "elu", [("x", ins[0]), ("alpha", b.const_float(_as_float(_attr(op, "alpha"))))]
 
 
 @_emitter("selu")
 def _selu(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
     """MIL's ``elu`` scaled — there is no ``selu`` in the opset."""
     shaped = b.emit(
-        "elu",
-        [("x", ins[0]), ("alpha", b.const_float(_SELU_ALPHA))],
-        b.shape_of(ins[0]),
+        "elu", [("x", ins[0]), ("alpha", b.const_float(_SELU_ALPHA))], b.shape_of(ins[0])
     )
     return "mul", [("x", shaped), ("y", b.const_float(_SELU_SCALE))]
 
@@ -1283,11 +1253,7 @@ def _log_softmax(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     kept[axis if axis >= 0 else axis + len(kept)] = 1
     total = b.emit(
         "reduce_log_sum_exp",
-        [
-            ("x", ins[0]),
-            ("axes", b.const_ints([axis])),
-            ("keep_dims", b.const_bool(True)),
-        ],
+        [("x", ins[0]), ("axes", b.const_ints([axis])), ("keep_dims", b.const_bool(True))],
         kept,
     )
     return "sub", [("x", ins[0]), ("y", total)]
@@ -1364,10 +1330,7 @@ def _truth_reduce(b: Builder, ins: list[str], mil_name: str) -> EmitResult:
     truth = ins[0]
     if b.dtype_of(truth) != _MIL_BOOL:
         truth = b.emit(
-            "not_equal",
-            [("x", truth), ("y", scalar_like(b, truth, 0))],
-            shape,
-            dtype=_MIL_BOOL,
+            "not_equal", [("x", truth), ("y", scalar_like(b, truth, 0))], shape, dtype=_MIL_BOOL
         )
     counted = b.emit(*emit_cast(b, truth, "int32"), shape, dtype=_MIL_INT32)
     name, bindings = _reduce_every_axis(b, counted, mil_name)
@@ -1401,9 +1364,7 @@ def _var(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     kept = [1 if i in dims else s for i, s in enumerate(shape.declared())]
     axes = b.const_ints(dims)
     mean = b.emit(
-        "reduce_mean",
-        [("x", x), ("axes", axes), ("keep_dims", b.const_bool(True))],
-        kept,
+        "reduce_mean", [("x", x), ("axes", axes), ("keep_dims", b.const_bool(True))], kept
     )
     deviation = b.emit("sub", [("x", x), ("y", mean)], shape)
     squared = b.emit("mul", [("x", deviation), ("y", deviation)], shape)
@@ -1482,9 +1443,7 @@ def _tensordot(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     def arranged(value: str, shape: Sequence[int], perm: list[int], rows: int, cols: int) -> str:
         if perm != list(range(len(shape))):
             value = b.emit(
-                "transpose",
-                [("x", value), ("perm", b.const_ints(perm))],
-                [shape[i] for i in perm],
+                "transpose", [("x", value), ("perm", b.const_ints(perm))], [shape[i] for i in perm]
             )
         return _as_matrix(b, value, rows, cols)
 
@@ -1543,11 +1502,7 @@ def _huber_loss(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
 def _trace(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
     """The diagonal read from the flattened matrix, every ``cols + 1``-th value."""
     rows, cols = b.shape_of(ins[0])
-    flat = b.emit(
-        "reshape",
-        [("x", ins[0]), ("shape", b.const_ints([rows * cols]))],
-        [rows * cols],
-    )
+    flat = b.emit("reshape", [("x", ins[0]), ("shape", b.const_ints([rows * cols]))], [rows * cols])
     steps = [i * (cols + 1) for i in range(min(rows, cols))]
     diagonal = b.emit(
         "gather",
@@ -1863,11 +1818,7 @@ def _rms_norm(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     squared = b.emit("mul", [("x", ins[0]), ("y", ins[0])], shape)
     mean = b.emit(
         "reduce_mean",
-        [
-            ("x", squared),
-            ("axes", b.const_ints(axes)),
-            ("keep_dims", b.const_bool(True)),
-        ],
+        [("x", squared), ("axes", b.const_ints(axes)), ("keep_dims", b.const_bool(True))],
         kept,
     )
     shifted = b.emit("add", [("x", mean), ("y", b.const_float(_as_float(_attr(op, "eps"))))], kept)
@@ -1922,11 +1873,7 @@ def _hard_swish(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
     """``x * hard_sigmoid(x)`` — there is no ``hard_swish`` in the opset."""
     gate = b.emit(
         "sigmoid_hard",
-        [
-            ("x", ins[0]),
-            ("alpha", b.const_float(1.0 / 6.0)),
-            ("beta", b.const_float(0.5)),
-        ],
+        [("x", ins[0]), ("alpha", b.const_float(1.0 / 6.0)), ("beta", b.const_float(0.5))],
         b.shape_of(ins[0]),
     )
     return "mul", [("x", ins[0]), ("y", gate)]
@@ -2102,18 +2049,12 @@ def _bilinear_layer(b: Builder, _op: TracedOp, ins: list[str]) -> EmitResult:
         [batch, outputs, inner_i],
     )
     spread = b.emit(
-        "reshape",
-        [("x", x1), ("shape", b.shape_operand([batch, 1, inner_i]))],
-        [batch, 1, inner_i],
+        "reshape", [("x", x1), ("shape", b.shape_operand([batch, 1, inner_i]))], [batch, 1, inner_i]
     )
     weighted = b.emit("mul", [("x", folded), ("y", spread)], [batch, outputs, inner_i])
     summed = b.emit(
         "reduce_sum",
-        [
-            ("x", weighted),
-            ("axes", b.const_ints([2])),
-            ("keep_dims", b.const_bool(False)),
-        ],
+        [("x", weighted), ("axes", b.const_ints([2])), ("keep_dims", b.const_bool(False))],
         [batch, outputs],
     )
     if len(ins) < 4:
@@ -2139,22 +2080,14 @@ def _lp_normalize(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     if order == 2.0:
         total = b.emit(
             "reduce_l2_norm",
-            [
-                ("x", ins[0]),
-                ("axes", b.const_ints([axis])),
-                ("keep_dims", b.const_bool(True)),
-            ],
+            [("x", ins[0]), ("axes", b.const_ints([axis])), ("keep_dims", b.const_bool(True))],
             kept,
         )
     else:
         raised = b.emit("pow", [("x", magnitude), ("y", b.const_float(order))], shape)
         summed = b.emit(
             "reduce_sum",
-            [
-                ("x", raised),
-                ("axes", b.const_ints([axis])),
-                ("keep_dims", b.const_bool(True)),
-            ],
+            [("x", raised), ("axes", b.const_ints([axis])), ("keep_dims", b.const_bool(True))],
             kept,
         )
         total = b.emit("pow", [("x", summed), ("y", b.const_float(1.0 / order))], kept)
@@ -2187,12 +2120,7 @@ def _unfold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     padded = list(shape)
     if any(padding):
         pads = [0, 0, 0, 0, padding[0], padding[0], padding[1], padding[1]]
-        padded = [
-            shape[0],
-            shape[1],
-            shape[2] + 2 * padding[0],
-            shape[3] + 2 * padding[1],
-        ]
+        padded = [shape[0], shape[1], shape[2] + 2 * padding[0], shape[3] + 2 * padding[1]]
         source = b.emit(
             "pad",
             [
@@ -2233,21 +2161,14 @@ def _unfold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
             blocks.append(
                 b.emit(
                     "reshape",
-                    [
-                        ("x", window),
-                        ("shape", b.const_ints([batch, channels, 1, length])),
-                    ],
+                    [("x", window), ("shape", b.const_ints([batch, channels, 1, length]))],
                     [batch, channels, 1, length],
                 )
             )
 
     stacked = b.emit(
         "concat",
-        [
-            ("values", blocks),
-            ("axis", b.const_int(2)),
-            ("interleave", b.const_bool(False)),
-        ],
+        [("values", blocks), ("axis", b.const_int(2)), ("interleave", b.const_bool(False))],
         [batch, channels, len(blocks), length],
     )
     return "reshape", [("x", stacked), ("shape", b.const_ints(out))]
@@ -2300,9 +2221,7 @@ def _interpolate_nearest_3d(b: Builder, op: TracedOp, ins: list[str]) -> EmitRes
         spaced = b.emit("reshape", [("x", flat), ("shape", b.const_ints(spread))], spread)
         repeated = [batch * channels, depth, scale_d, area]
         tiled = b.emit(
-            "tile",
-            [("x", spaced), ("reps", b.const_ints([1, 1, scale_d, 1]))],
-            repeated,
+            "tile", [("x", spaced), ("reps", b.const_ints([1, 1, scale_d, 1]))], repeated
         )
         resampled = tiled
 
@@ -2534,9 +2453,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                 current = b.shape_of(spread)
                 opened = list(current[: axis + 1]) + [1] + list(current[axis + 1 :])
                 widened = b.emit(
-                    "reshape",
-                    [("x", spread), ("shape", b.const_ints(opened))],
-                    opened,
+                    "reshape", [("x", spread), ("shape", b.const_ints(opened))], opened
                 )
                 pads = [0] * (2 * len(opened))
                 pads[2 * (axis + 1) + 1] = step - 1
@@ -2555,9 +2472,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                 merged = list(current)
                 merged[axis] = current[axis] * step
                 spread = b.emit(
-                    "reshape",
-                    [("x", padded_block), ("shape", b.const_ints(merged))],
-                    merged,
+                    "reshape", [("x", padded_block), ("shape", b.const_ints(merged))], merged
                 )
             stretched = b.shape_of(spread)
             if stretched[1] != span[0] or stretched[2] != span[1]:
@@ -2581,14 +2496,7 @@ def _fold(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
                     (
                         "pad",
                         b.const_ints(
-                            [
-                                0,
-                                0,
-                                top,
-                                padded[0] - top - span[0],
-                                left,
-                                padded[1] - left - span[1],
-                            ]
+                            [0, 0, top, padded[0] - top - span[0], left, padded[1] - left - span[1]]
                         ),
                     ),
                     ("mode", b.const_str("constant")),

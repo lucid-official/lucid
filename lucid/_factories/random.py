@@ -647,10 +647,7 @@ def randint(
 
 
 def bernoulli(
-    input: Tensor,
-    p: float | None = None,
-    *,
-    generator: _C_engine.Generator | None = None,
+    input: Tensor, p: float | None = None, *, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Draw binary random numbers (``0`` or ``1``) from a Bernoulli distribution.
 
@@ -876,8 +873,7 @@ def rand_like(
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(
-        dtype if dtype is not None else input.dtype,
-        device if device is not None else input.device,
+        dtype if dtype is not None else input.dtype, device if device is not None else input.device
     )
     impl = _C_engine.rand(list(input.shape), _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
@@ -949,8 +945,7 @@ def randn_like(
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(
-        dtype if dtype is not None else input.dtype,
-        device if device is not None else input.device,
+        dtype if dtype is not None else input.dtype, device if device is not None else input.device
     )
     impl = _C_engine.randn(list(input.shape), _dt, _dev, generator)
     return _wrap(_leaf(impl, requires_grad))
@@ -1076,8 +1071,7 @@ def randint_like(
         raise TypeError("randint_like() missing 1 required argument: 'high'")
     lo, hi = _int_bounds("randint_like", low, high)
     _dt, _dev, _ = normalize_factory_kwargs(
-        dtype if dtype is not None else input.dtype,
-        device if device is not None else input.device,
+        dtype if dtype is not None else input.dtype, device if device is not None else input.device
     )
     _require_holds("randint_like", lo, hi, _dt, stacklevel=4)  # past the bound reader
     shape = list(input.shape)
@@ -1109,21 +1103,13 @@ def _draw_like(
     if part is not None:
         pairs = draw([*impl.shape, 2], part, impl.device)
         return _wrap(_C_engine.view_as_complex(pairs))
-    if impl.dtype not in (
-        _C_engine.F16,
-        _C_engine.BF16,
-        _C_engine.F32,
-        _C_engine.F64,
-    ):
+    if impl.dtype not in (_C_engine.F16, _C_engine.BF16, _C_engine.F32, _C_engine.F64):
         raise _C_engine.NotImplementedError(f'"{name}" not implemented for {input.dtype}')
     return _wrap(draw(list(impl.shape), impl.dtype, impl.device))
 
 
 def _normal_like(
-    input: Tensor,
-    mean: float,
-    std: float,
-    generator: _C_engine.Generator | None,
+    input: Tensor, mean: float, std: float, generator: _C_engine.Generator | None
 ) -> Tensor:
     r"""Samples of $\mathcal{N}(\text{mean}, \text{std}^2)$ shaped like ``input``.
 
@@ -1144,10 +1130,7 @@ def _normal_like(
 
 
 def _uniform_like(
-    input: Tensor,
-    low: float,
-    high: float,
-    generator: _C_engine.Generator | None,
+    input: Tensor, low: float, high: float, generator: _C_engine.Generator | None
 ) -> Tensor:
     r"""Samples of $U[\text{low}, \text{high})$ shaped like ``input``.
 

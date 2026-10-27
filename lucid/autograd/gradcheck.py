@@ -118,8 +118,7 @@ def _mismatch(
     thresh = _C_engine.add(
         _C_engine.full(list(diff.shape), atol, _C_engine.F64, diff.device),
         _C_engine.mul(
-            _C_engine.full(list(diff.shape), rtol, _C_engine.F64, diff.device),
-            _C_engine.abs(nu),
+            _C_engine.full(list(diff.shape), rtol, _C_engine.F64, diff.device), _C_engine.abs(nu)
         ),
     )
     if bool(_wrap(_C_engine.all(_C_engine.less_equal(diff, thresh))).item()):
@@ -329,10 +328,5 @@ def gradgradcheck(
         return result
 
     return gradcheck(
-        _scalar_grad_fn,
-        inputs,
-        eps=eps,
-        atol=atol,
-        rtol=rtol,
-        raise_exception=raise_exception,
+        _scalar_grad_fn, inputs, eps=eps, atol=atol, rtol=rtol, raise_exception=raise_exception
     )

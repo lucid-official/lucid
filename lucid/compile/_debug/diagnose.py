@@ -191,10 +191,7 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
         op_counts[node.name] += 1
         if node.name not in op_samples and node.outputs:
             primary = node.outputs[0]
-            op_samples[node.name] = (
-                tuple(int(d) for d in primary.shape),
-                primary.dtype.name,
-            )
+            op_samples[node.name] = (tuple(int(d) for d in primary.shape), primary.dtype.name)
 
     registered: list[OpInfo] = []
     grad_sinks: list[OpInfo] = []

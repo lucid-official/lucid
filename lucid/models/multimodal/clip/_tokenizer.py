@@ -63,13 +63,7 @@ from lucid.utils.tokenizer._bpe import BPETokenizer
 from lucid.utils.tokenizer._normalizers import Normalizer
 from lucid.utils.tokenizer._pre_tokenizers import ByteLevel, Chunk, PreTokenizer
 
-__all__ = [
-    "CLIPTokenizer",
-    "CLIPTokenizerFast",
-    "CLIP_SOS",
-    "CLIP_EOS",
-    "END_OF_WORD",
-]
+__all__ = ["CLIPTokenizer", "CLIPTokenizerFast", "CLIP_SOS", "CLIP_EOS", "END_OF_WORD"]
 
 CLIP_SOS = "<|startoftext|>"
 CLIP_EOS = "<|endoftext|>"
@@ -274,8 +268,7 @@ class CLIPTokenizer(BPETokenizer):
         'ab ab'
         """
         return super().encode(
-            _whitespace_clean(_basic_clean(text)).lower(),
-            add_special_tokens=add_special_tokens,
+            _whitespace_clean(_basic_clean(text)).lower(), add_special_tokens=add_special_tokens
         )
 
     def tokenize(self, text: str, context_length: int = 77) -> list[int]:

@@ -70,10 +70,7 @@ def _cases():
 
 def _close(got, want, dtype):
     np.testing.assert_allclose(
-        got.astype(np.float64),
-        want.astype(np.float64),
-        rtol=_TOL[dtype],
-        atol=_TOL[dtype],
+        got.astype(np.float64), want.astype(np.float64), rtol=_TOL[dtype], atol=_TOL[dtype]
     )
 
 
@@ -92,12 +89,7 @@ def test_matches_reference(ref, device, dtype, reduce, include_self, case):
     xl = lucid.tensor(x_np, device=device, requires_grad=True)
     sl = lucid.tensor(src_np, device=device, requires_grad=True)
     got = lucid.scatter_reduce(
-        xl,
-        dim,
-        lucid.tensor(index_np, device=device),
-        sl,
-        reduce,
-        include_self=include_self,
+        xl, dim, lucid.tensor(index_np, device=device), sl, reduce, include_self=include_self
     )
     got.backward(lucid.tensor(grad_np, device=device))
 

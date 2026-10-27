@@ -134,10 +134,7 @@ def _grad_create_graph_under_no_grad(
     y = Cube.apply(x).sum()
     with _caller_mode(m, mode):
         (g,) = m.autograd.grad(y, x, create_graph=create_graph)
-    return [
-        bool(g.requires_grad),
-        [round(float(v), 5) for v in g.detach().cpu().tolist()],
-    ]
+    return [bool(g.requires_grad), [round(float(v), 5) for v in g.detach().cpu().tolist()]]
 
 
 _SCENARIOS: dict[str, Scenario] = {

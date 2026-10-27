@@ -35,11 +35,7 @@ import pytest
 
 import lucid
 import lucid.utils.data as D
-from lucid.utils.data._mix import (
-    CutMixCollator,
-    MixupCollator,
-    _sample_lambda,
-)
+from lucid.utils.data._mix import CutMixCollator, MixupCollator, _sample_lambda
 from lucid.test._fixtures.ref_framework import require_ref, require_ref_vision
 from lucid.test._helpers.compare import assert_close
 
@@ -55,17 +51,13 @@ _ref_vision = require_ref_vision(module_level=True)
 try:
     v2 = importlib.import_module(f"{_ref_vision.__name__}.transforms.v2")
 except ImportError:  # pragma: no cover - depends on the installed version
-    pytest.skip(
-        "the reference vision package ships no transforms.v2",
-        allow_module_level=True,
-    )
+    pytest.skip("the reference vision package ships no transforms.v2", allow_module_level=True)
 
 # The reference vision package ships MixUp / CutMix only on recent versions
 # — skip cleanly when running against an older install.
 if not hasattr(v2, "MixUp") or not hasattr(v2, "CutMix"):
     pytest.skip(
-        "the reference vision package is missing MixUp/CutMix — skipping",
-        allow_module_level=True,
+        "the reference vision package is missing MixUp/CutMix — skipping", allow_module_level=True
     )
 
 
@@ -73,12 +65,7 @@ if not hasattr(v2, "MixUp") or not hasattr(v2, "CutMix"):
 
 
 def _make_batch(
-    b: int = 4,
-    c: int = 3,
-    h: int = 8,
-    w: int = 8,
-    num_classes: int = 10,
-    seed: int = 0,
+    b: int = 4, c: int = 3, h: int = 8, w: int = 8, num_classes: int = 10, seed: int = 0
 ) -> list[tuple[lucid.Tensor, lucid.Tensor]]:
     """A reproducible list of ``(image, label)`` tuples for collate input."""
     rng = np.random.default_rng(seed)
@@ -341,10 +328,7 @@ class TestLambdaDistributionParity:
         _ = ref
         n_samples = 2000
         lucid.manual_seed(0)
-        samples = np.array(
-            [_sample_lambda(alpha) for _ in range(n_samples)],
-            dtype=np.float64,
-        )
+        samples = np.array([_sample_lambda(alpha) for _ in range(n_samples)], dtype=np.float64)
         # All samples lie in [0, 1].
         assert float(samples.min()) >= 0.0
         assert float(samples.max()) <= 1.0
@@ -398,10 +382,7 @@ class TestEndToEndShapeParity:
         # (images, labels) pair, not a list of (image, label).
         rng = np.random.default_rng(20)
         r_imgs = ref.from_numpy(
-            np.stack(
-                [rng.random((c, h, w), dtype=np.float32) for _ in range(b)],
-                axis=0,
-            )
+            np.stack([rng.random((c, h, w), dtype=np.float32) for _ in range(b)], axis=0)
         )
         r_labels = ref.tensor([i % num_classes for i in range(b)], dtype=ref.int64)
         r_mix = v2.MixUp(num_classes=num_classes, alpha=0.2)
@@ -423,10 +404,7 @@ class TestEndToEndShapeParity:
         # Reference path.
         rng = np.random.default_rng(21)
         r_imgs = ref.from_numpy(
-            np.stack(
-                [rng.random((c, h, w), dtype=np.float32) for _ in range(b)],
-                axis=0,
-            )
+            np.stack([rng.random((c, h, w), dtype=np.float32) for _ in range(b)], axis=0)
         )
         r_labels = ref.tensor([i % num_classes for i in range(b)], dtype=ref.int64)
         r_cut = v2.CutMix(num_classes=num_classes, alpha=1.0)

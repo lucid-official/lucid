@@ -25,42 +25,8 @@ _INF = float("inf")
 _WIDTH = 16
 _SLOT = 5
 # Background values that never tie between the operands.
-_BASE_A = [
-    0.5,
-    -1.0,
-    2.0,
-    0.25,
-    -3.0,
-    0.0,
-    0.75,
-    -0.5,
-    1.25,
-    0.1,
-    -2.0,
-    0.3,
-    0.6,
-    -0.7,
-    0.9,
-    1.1,
-]
-_BASE_B = [
-    1.5,
-    -2.0,
-    0.5,
-    1.25,
-    -1.0,
-    0.0,
-    -0.75,
-    0.5,
-    0.25,
-    0.9,
-    -0.2,
-    0.8,
-    -0.6,
-    0.7,
-    1.9,
-    -1.1,
-]
+_BASE_A = [0.5, -1.0, 2.0, 0.25, -3.0, 0.0, 0.75, -0.5, 1.25, 0.1, -2.0, 0.3, 0.6, -0.7, 0.9, 1.1]
+_BASE_B = [1.5, -2.0, 0.5, 1.25, -1.0, 0.0, -0.75, 0.5, 0.25, 0.9, -0.2, 0.8, -0.6, 0.7, 1.9, -1.1]
 # Distinct weights so a gradient landing on the wrong slot shows.
 _WEIGHTS = [float(i + 1) for i in range(_WIDTH)]
 
@@ -200,24 +166,7 @@ _REDUCE_TIES = {
 def test_reduction_ties_split_evenly(ref, device, name):
     """The siblings' rule: ``amax``/``amin`` and the full ``max``/``min``
     split a tie evenly across every extremum, as the reference does."""
-    vals = [
-        5.0,
-        5.0,
-        1.0,
-        5.0,
-        -2.0,
-        -2.0,
-        -2.0,
-        0.0,
-        -0.0,
-        0.0,
-        -1.0,
-        1.0,
-        3.0,
-        3.0,
-        3.0,
-        3.0,
-    ]
+    vals = [5.0, 5.0, 1.0, 5.0, -2.0, -2.0, -2.0, 0.0, -0.0, 0.0, -1.0, 1.0, 3.0, 3.0, 3.0, 3.0]
     call = _REDUCE_TIES[name]
 
     def run(lib, **kw):

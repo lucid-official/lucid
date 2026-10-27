@@ -68,12 +68,7 @@ class _ConvBnReLU(nn.Module):
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
         )
         self.bn = nn.BatchNorm2d(out_channels, eps=_BN_EPS)
 
@@ -130,10 +125,7 @@ class _Mixed4a(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.branch0 = nn.Sequential(
-            _ConvBnReLU(160, 64, 1),
-            _ConvBnReLU(64, 96, 3),
-        )
+        self.branch0 = nn.Sequential(_ConvBnReLU(160, 64, 1), _ConvBnReLU(64, 96, 3))
         self.branch1 = nn.Sequential(
             _ConvBnReLU(160, 64, 1),
             _ConvBnReLU(64, 64, (1, 7), padding=(0, 3)),
@@ -186,10 +178,7 @@ class _InceptionA(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.branch0 = _ConvBnReLU(384, 96, 1)
-        self.branch1 = nn.Sequential(
-            _ConvBnReLU(384, 64, 1),
-            _ConvBnReLU(64, 96, 3, padding=1),
-        )
+        self.branch1 = nn.Sequential(_ConvBnReLU(384, 64, 1), _ConvBnReLU(64, 96, 3, padding=1))
         self.branch2 = nn.Sequential(
             _ConvBnReLU(384, 64, 1),
             _ConvBnReLU(64, 96, 3, padding=1),
@@ -298,10 +287,7 @@ class _ReductionB(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.branch0 = nn.Sequential(
-            _ConvBnReLU(1024, 192, 1),
-            _ConvBnReLU(192, 192, 3, stride=2),
-        )
+        self.branch0 = nn.Sequential(_ConvBnReLU(1024, 192, 1), _ConvBnReLU(192, 192, 3, stride=2))
         self.branch1 = nn.Sequential(
             _ConvBnReLU(1024, 256, 1),
             _ConvBnReLU(256, 256, (1, 7), padding=(0, 3)),
@@ -359,23 +345,11 @@ class _InceptionC(nn.Module):
         x0 = self.branch0(x)
 
         x1_0 = self.branch1_0(x)
-        x1 = lucid.cat(
-            [
-                self.branch1_1a(x1_0),
-                self.branch1_1b(x1_0),
-            ],
-            dim=1,
-        )
+        x1 = lucid.cat([self.branch1_1a(x1_0), self.branch1_1b(x1_0)], dim=1)
 
         x2_0 = self.branch2_0(x)
         x2_2 = self.branch2_2(self.branch2_1(x2_0))
-        x2 = lucid.cat(
-            [
-                self.branch2_3a(x2_2),
-                self.branch2_3b(x2_2),
-            ],
-            dim=1,
-        )
+        x2 = lucid.cat([self.branch2_3a(x2_2), self.branch2_3b(x2_2)], dim=1)
 
         x3 = self.branch3(x)
         return lucid.cat([x0, x1, x2, x3], dim=1)  # 256 + 512 + 512 + 256
@@ -640,11 +614,7 @@ class InceptionV4ForImageClassification(ImageClassificationModel):
         self.last_linear = nn.Linear(self.last_linear.in_features, num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> InceptionV4Output:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionV4Output:
         r"""Classify a batch of images.
 
         Parameters

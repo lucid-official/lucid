@@ -131,10 +131,7 @@ class TestTheBackwardReducesToo:
 
         layer = nn.GroupNorm(_GROUPS, channels, eps=1e-6)
         layer.load_state_dict(
-            {
-                "weight": lucid.tensor(weight.astype(cast)),
-                "bias": lucid.tensor(bias.astype(cast)),
-            }
+            {"weight": lucid.tensor(weight.astype(cast)), "bias": lucid.tensor(bias.astype(cast))}
         )
         inp = lucid.tensor(x.astype(cast), requires_grad=True)
         layer(inp).backward(lucid.tensor(upstream.astype(cast)))

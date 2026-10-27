@@ -280,9 +280,7 @@ def test_training_matches_the_reference_over_five_epochs(
 
 
 def test_batchnorm_running_stats_match_with_weights_frozen(
-    device: str,
-    ref: ModuleType,
-    mnist: tuple[np.ndarray, ...],
+    device: str, ref: ModuleType, mnist: tuple[np.ndarray, ...]
 ) -> None:
     """BatchNorm's running statistics, isolated from trajectory divergence.
 

@@ -191,8 +191,7 @@ def test_running_stats_survive_a_state_dict_round_trip(cls, shape):
     target = cls(6)
     target.load_state_dict(source.state_dict())
     assert np.allclose(
-        np.asarray(source.running_mean.numpy()),
-        np.asarray(target.running_mean.numpy()),
+        np.asarray(source.running_mean.numpy()), np.asarray(target.running_mean.numpy())
     )
     source.eval()
     target.eval()

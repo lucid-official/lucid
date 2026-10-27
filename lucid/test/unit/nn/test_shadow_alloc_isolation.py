@@ -149,10 +149,7 @@ def test_overlapping_blocks_each_last_until_their_own_exit() -> None:
 
 _LATE_MODULE = "lucid_test_shadow_late_import"
 # Read at collection, before any block has opened.
-_ORIGINAL_UNWRAPS = {
-    "_unwrap": _dispatch._unwrap,
-    "_unwrap_or_scalar": _dispatch._unwrap_or_scalar,
-}
+_ORIGINAL_UNWRAPS = {"_unwrap": _dispatch._unwrap, "_unwrap_or_scalar": _dispatch._unwrap_or_scalar}
 
 
 def _single() -> None:

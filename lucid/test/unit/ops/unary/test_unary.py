@@ -47,13 +47,7 @@ _UNARY_OPS: list[tuple[str, Callable, Callable, tuple[float, float], float]] = [
     ("asin", lambda t: lucid.asin(t), np.arcsin, (-0.9, 0.9), 1e-5),
     ("acos", lambda t: lucid.acos(t), np.arccos, (-0.9, 0.9), 1e-5),
     ("atan", lambda t: lucid.atan(t), np.arctan, (-2.0, 2.0), 1e-5),
-    (
-        "sigmoid",
-        lambda t: t.sigmoid(),
-        lambda x: 1.0 / (1.0 + np.exp(-x)),
-        (-3.0, 3.0),
-        1e-5,
-    ),
+    ("sigmoid", lambda t: t.sigmoid(), lambda x: 1.0 / (1.0 + np.exp(-x)), (-3.0, 3.0), 1e-5),
     (
         "erf",
         lambda t: lucid.erf(t),

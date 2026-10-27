@@ -192,10 +192,7 @@ class ParametrizationList(ModuleList):
     ntensors: int
 
     def __init__(
-        self,
-        modules: Sequence[Module],
-        original: Tensor | Parameter,
-        unsafe: bool = False,
+        self, modules: Sequence[Module], original: Tensor | Parameter, unsafe: bool = False
     ) -> None:
         """Initialise the instance.  See the class docstring for parameter semantics."""
         if len(modules) == 0:
@@ -436,11 +433,7 @@ def _check_appended(parametrization: Module, current: Tensor) -> None:
 
 
 def register_parametrization(
-    module: Module,
-    tensor_name: str,
-    parametrization: Module,
-    *,
-    unsafe: bool = False,
+    module: Module, tensor_name: str, parametrization: Module, *, unsafe: bool = False
 ) -> Module:
     r"""Install a parametrization on a parameter or buffer of ``module``.
 
@@ -594,9 +587,7 @@ def is_parametrized(module: Module, tensor_name: str | None = None) -> bool:
 
 
 def remove_parametrizations(
-    module: Module,
-    tensor_name: str,
-    leave_parametrized: bool = True,
+    module: Module, tensor_name: str, leave_parametrized: bool = True
 ) -> Module:
     r"""Undo :func:`register_parametrization` on ``tensor_name``.
 

@@ -37,10 +37,7 @@ from lucid.models.multimodal.clip._weights import (
     CLIPViTLarge14_336Weights,
     CLIPViTLarge14Weights,
 )
-from lucid.models.multimodal.clip._model import (
-    CLIPModel,
-    CLIPForZeroShotImageClassification,
-)
+from lucid.models.multimodal.clip._model import CLIPModel, CLIPForZeroShotImageClassification
 from lucid.models._utils._common import apply_overrides
 
 __all__ = [

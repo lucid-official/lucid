@@ -316,11 +316,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         # exactly DDPM's objective, and the paper's point.
         loss = ((out.noise - out.target) ** 2).reshape(count, -1).sum(dim=-1).mean()
         return ScoreSDEOutput(
-            score=out.score,
-            noise=out.noise,
-            target=out.target,
-            std=out.std,
-            loss=loss,
+            score=out.score, noise=out.noise, target=out.target, std=out.std, loss=loss
         )
 
     def _timesteps(self, steps: int, device: str) -> Tensor:
@@ -498,10 +494,7 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
 
         start = self.sde.prior_sampling(shape, device, dtype=dtype).reshape(-1)
         path = odeint(
-            rhs,
-            start,
-            lucid.linspace(1.0, self.sde.t_min, steps, device=device),
-            method="rk4",
+            rhs, start, lucid.linspace(1.0, self.sde.t_min, steps, device=device), method="rk4"
         )
         return cast(Tensor, path[-1]).reshape(*shape)
 

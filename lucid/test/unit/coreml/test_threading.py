@@ -50,8 +50,7 @@ import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -72,10 +71,7 @@ def heavy(tmp_path_factory):
     lucid.manual_seed(0)
     path = tmp_path_factory.mktemp("threading") / "heavy.mlpackage"
     exported = cml.export(
-        _slow_enough(),
-        lucid.randn(8, 64, 112, 112),
-        str(path),
-        precision=cml.Precision.FLOAT16,
+        _slow_enough(), lucid.randn(8, 64, 112, 112), str(path), precision=cml.Precision.FLOAT16
     )
     yield exported, lucid.randn(8, 64, 112, 112), str(path)
     exported.close()

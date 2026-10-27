@@ -47,12 +47,7 @@ from lucid.models import (
 from lucid.models.generative.dreamer_v3 import DreamerV3BehaviorOutput, DreamerV3Output
 from lucid.models._utils._generative import generative_activation
 from lucid.models.generative._common._actor import Actor
-from lucid.models.generative._common._rssm import (
-    RSSM,
-    BlockLinear,
-    RSSMState,
-    categorical_kl,
-)
+from lucid.models.generative._common._rssm import RSSM, BlockLinear, RSSMState, categorical_kl
 from lucid.models.generative.dreamer_v3._config import DREAMER_V3_SIZES
 from lucid.models.generative.dreamer_v3._objectives import (
     ReturnNormaliser,
@@ -505,11 +500,7 @@ class TestActorObjective:
         target, weight = lucid.randn((6, 4)), lucid.ones((6, 4))
         aligned, _ = model._actor_objective(states, proposed, target, weight, 1.0)
         shifted, _ = model._actor_objective(
-            states,
-            lucid.cat([proposed[:, 1:], proposed[:, :1]], dim=1),
-            target,
-            weight,
-            1.0,
+            states, lucid.cat([proposed[:, 1:], proposed[:, :1]], dim=1), target, weight, 1.0
         )
         assert abs(float(aligned.item()) - float(shifted.item())) > 1e-4
 
@@ -741,11 +732,7 @@ class TestGradientRouting:
 
     def test_the_groups_partition_the_learnable_model(self) -> None:
         model = DreamerV3ForWorldModeling(_tiny_cfg())
-        groups = [
-            model.world_parameters(),
-            model.actor_parameters(),
-            model.value_parameters(),
-        ]
+        groups = [model.world_parameters(), model.actor_parameters(), model.value_parameters()]
         ids = [id(p) for group in groups for p in group]
         assert len(ids) == len(set(ids)), "no parameter in two optimisers"
         slow = {id(p) for p in model.dreamer_v3.slow_value_head.parameters()}

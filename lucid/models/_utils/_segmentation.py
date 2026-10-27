@@ -149,11 +149,7 @@ def dice_loss(mask_logits: Tensor, gt_masks: Tensor) -> Tensor:
     return (1.0 - (2.0 * inter + 1.0) / (denom + 1.0)).mean()
 
 
-def sample_point_coords(
-    num_points: int,
-    *,
-    device: str = "cpu",
-) -> Tensor:
+def sample_point_coords(num_points: int, *, device: str = "cpu") -> Tensor:
     """Draw uniformly random point coordinates in the unit square.
 
     Mask2Former 3.2.2 evaluates its mask terms on ``K`` sampled points

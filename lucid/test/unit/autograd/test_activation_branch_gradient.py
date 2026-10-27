@@ -118,12 +118,7 @@ def _check(ref, device, dtype_name, value, lucid_call, ref_call):
 def test_activation_gradient_matches_reference(ref, device, name, value, dtype_name):
     call = _ACTIVATIONS[name]
     _check(
-        ref,
-        device,
-        dtype_name,
-        value,
-        lambda x: call(F, x),
-        lambda x: call(ref.nn.functional, x),
+        ref, device, dtype_name, value, lambda x: call(F, x), lambda x: call(ref.nn.functional, x)
     )
 
 
@@ -132,11 +127,4 @@ def test_activation_gradient_matches_reference(ref, device, name, value, dtype_n
 @pytest.mark.parametrize("name", list(_TENSOR_OPS))
 def test_tensor_op_gradient_matches_reference(ref, device, name, value, dtype_name):
     call = _TENSOR_OPS[name]
-    _check(
-        ref,
-        device,
-        dtype_name,
-        value,
-        lambda x: call(lucid, x),
-        lambda x: call(ref, x),
-    )
+    _check(ref, device, dtype_name, value, lambda x: call(lucid, x), lambda x: call(ref, x))

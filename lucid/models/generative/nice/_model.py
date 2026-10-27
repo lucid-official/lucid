@@ -26,11 +26,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
-from lucid.models._utils._generative import (
-    flow_prior_log_prob,
-    generative_activation,
-    start_noise,
-)
+from lucid.models._utils._generative import flow_prior_log_prob, generative_activation, start_noise
 from lucid.models.generative.nice._config import NICEConfig
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -333,9 +329,7 @@ class NICEModel(PretrainedModel):
     def forward(self, x: Tensor) -> NormalizingFlowOutput:
         h, log_det = self.encode(x)
         return NormalizingFlowOutput(
-            latent=h,
-            log_det_jacobian=log_det,
-            log_prob=self._density(h, log_det),
+            latent=h, log_det_jacobian=log_det, log_prob=self._density(h, log_det)
         )
 
 
@@ -419,12 +413,7 @@ class NICEForImageGeneration(ImageGenerationModel):
         )
 
     @lucid.no_grad()
-    def generate(
-        self,
-        n_samples: int = 1,
-        *,
-        device: str | None = None,
-    ) -> GenerationOutput:
+    def generate(self, n_samples: int = 1, *, device: str | None = None) -> GenerationOutput:
         """Sample ``n_samples`` vectors by inverting a prior draw.
 
         Parameters

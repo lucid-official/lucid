@@ -18,13 +18,7 @@ same way, so a lowercasing pipeline still finds them.
 import re
 from dataclasses import dataclass
 
-from lucid.utils.tokenizer._config import (
-    WHITE_SPACE,
-    as_list,
-    as_object,
-    get_bool,
-    get_str,
-)
+from lucid.utils.tokenizer._config import WHITE_SPACE, as_list, as_object, get_bool, get_str
 from lucid.utils.tokenizer._normalizers import Normalizer
 
 #: One piece of split text: the text, the added token's id when the piece

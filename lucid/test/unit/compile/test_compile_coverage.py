@@ -21,12 +21,7 @@ import lucid
 import lucid.models as M
 import lucid.nn as nn
 
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_compiles,
-    metal_tensor,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_compiles, metal_tensor, to_metal
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
 pytestmark = pytest.mark.usefixtures("inference")
@@ -67,9 +62,7 @@ class _LSTMHead(nn.Module):
 # (id, factory, input factory) — every entry MUST compile with no eager fallback.
 _VISION_CASES = [
     pytest.param(
-        lambda: M.lenet_5(num_classes=10),
-        lambda: metal_tensor(2, 1, 32, 32),
-        id="lenet_5",
+        lambda: M.lenet_5(num_classes=10), lambda: metal_tensor(2, 1, 32, 32), id="lenet_5"
     ),
     pytest.param(lambda: M.resnet_18(num_classes=10), _img, id="resnet_18"),
     pytest.param(lambda: M.vgg_11(num_classes=10), _img, id="vgg_11"),

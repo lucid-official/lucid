@@ -112,11 +112,7 @@ class TestEfficientFormerWeightsEnums(unittest.TestCase):
             EfficientFormerL7Weights,
         )
 
-        return (
-            EfficientFormerL1Weights,
-            EfficientFormerL3Weights,
-            EfficientFormerL7Weights,
-        )
+        return (EfficientFormerL1Weights, EfficientFormerL3Weights, EfficientFormerL7Weights)
 
     def test_default_aliases_snap_dist_in1k(self) -> None:
         for cls in self._enums():

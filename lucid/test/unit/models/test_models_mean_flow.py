@@ -25,14 +25,7 @@ from lucid.models.generative.mean_flow import (
 
 def _tiny(**overrides: object) -> MeanFlowConfig:
     """A model small enough to instantiate per test."""
-    base = dict(
-        sample_size=8,
-        patch_size=2,
-        hidden_size=32,
-        depth=2,
-        num_heads=4,
-        num_classes=10,
-    )
+    base = dict(sample_size=8, patch_size=2, hidden_size=32, depth=2, num_heads=4, num_classes=10)
     base.update(overrides)
     return MeanFlowConfig(**base)  # type: ignore[arg-type]
 
@@ -64,11 +57,7 @@ class TestField:
         projections was missed.
         """
         model = MeanFlowModel(_tiny()).eval()
-        out = model(
-            lucid.randn((2, 4, 8, 8)),
-            lucid.tensor([0.0, 0.2]),
-            lucid.tensor([1.0, 0.7]),
-        )
+        out = model(lucid.randn((2, 4, 8, 8)), lucid.tensor([0.0, 0.2]), lucid.tensor([1.0, 0.7]))
         assert isinstance(out, DiffusionModelOutput) and out.loss is None
         assert float(out.sample.abs().max().item()) == 0.0
 
@@ -258,9 +247,7 @@ class TestSampling:
         out = model.generate(2, noise=latent, steps=1).samples
         assert float((out - (latent - lucid.ones_like(latent))).abs().max().item()) < 1e-6
 
-    def test_subdividing_the_interval_changes_nothing_on_a_constant_field(
-        self,
-    ) -> None:
+    def test_subdividing_the_interval_changes_nothing_on_a_constant_field(self) -> None:
         """Two half-steps equal one whole one when ``u`` is constant.
 
         A sampler that used the wrong interval width per step — ``1``

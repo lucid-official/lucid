@@ -55,10 +55,7 @@ class TestDeterministicCoords:
         assert _xy(out["kps"]) == pytest.approx([(1.0, 6.0), (9.0, 8.0), (4.5, 0.5)], abs=1e-5)
 
     def test_transpose_swaps_xy(self) -> None:
-        s = {
-            "image": T.Image(lucid.rand(3, 8, 10)),
-            "kps": _kps([[1.0, 2.0], [4.5, 6.5]], (8, 10)),
-        }
+        s = {"image": T.Image(lucid.rand(3, 8, 10)), "kps": _kps([[1.0, 2.0], [4.5, 6.5]], (8, 10))}
         out = T.Transpose(p=1.0)(s)
         # transpose swaps x and y; canvas becomes (W, H).
         assert _xy(out["kps"]) == pytest.approx([(2.0, 1.0), (6.5, 4.5)], abs=1e-5)
@@ -75,10 +72,7 @@ class TestDeterministicCoords:
         assert out["kps"].canvas_size == (20, 20)
 
     def test_centercrop_shifts_origin(self) -> None:
-        s = {
-            "image": T.Image(lucid.rand(3, 32, 40)),
-            "kps": _kps([[20.0, 16.0]], (32, 40)),
-        }
+        s = {"image": T.Image(lucid.rand(3, 32, 40)), "kps": _kps([[20.0, 16.0]], (32, 40))}
         # CenterCrop(20, 24) → offsets (h-20)//2 = 6, (w-24)//2 = 8.
         out = T.CenterCrop(20, 24, p=1.0)(s)
         assert _xy(out["kps"]) == pytest.approx([(12.0, 10.0)], abs=1e-5)
@@ -133,17 +127,9 @@ def _invariant_check(tf_factory: object, name: str) -> None:
     h, w = 64, 80
     n = 8
     xy_extra = [
-        [
-            float((i * 11) % w),
-            float((i * 7) % h),
-            1.0,  # visibility flag column
-        ]
-        for i in range(n)
+        [float((i * 11) % w), float((i * 7) % h), 1.0] for i in range(n)  # visibility flag column
     ]
-    s = {
-        "image": T.Image(lucid.rand(3, h, w)),
-        "kps": _kps(xy_extra, (h, w)),
-    }
+    s = {"image": T.Image(lucid.rand(3, h, w)), "kps": _kps(xy_extra, (h, w))}
     out = tf_factory()(s)  # type: ignore[operator]
     assert (
         int(out["kps"].data.shape[0]) == n
@@ -166,10 +152,7 @@ class TestStochasticInvariants:
             ("Affine", lambda: T.Affine(translate_percent=0.1, scale=0.9, p=1.0)),
             ("ShiftScaleRotate", lambda: T.ShiftScaleRotate(p=1.0)),
             ("Perspective", lambda: T.Perspective(scale=(0.05, 0.1), p=1.0)),
-            (
-                "ElasticTransform",
-                lambda: T.ElasticTransform(alpha=10.0, sigma=3.0, p=1.0),
-            ),
+            ("ElasticTransform", lambda: T.ElasticTransform(alpha=10.0, sigma=3.0, p=1.0)),
             ("GridDistortion", lambda: T.GridDistortion(p=1.0)),
             ("OpticalDistortion", lambda: T.OpticalDistortion(p=1.0)),
         ],

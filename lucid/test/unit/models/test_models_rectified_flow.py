@@ -30,11 +30,7 @@ from lucid.models import (
     is_model,
 )
 from lucid.models.generative.flow_matching import FlowMatchingConfig, FlowMatchingModel
-from lucid.models.generative.rectified_flow._model import (
-    _TIME_SCALE,
-    _FIRResample,
-    _VelocityField,
-)
+from lucid.models.generative.rectified_flow._model import _TIME_SCALE, _FIRResample, _VelocityField
 from lucid.test._fixtures.devices import metal_available
 
 
@@ -86,8 +82,7 @@ def test_data_dim() -> None:
 
 
 @pytest.mark.parametrize(
-    "schedule,expected",
-    [("uniform", False), ("t0", True), ("t1", True), (4, True)],
+    "schedule,expected", [("uniform", False), ("t0", True), ("t1", True), (4, True)]
 )
 def test_is_distillation(schedule: object, expected: bool) -> None:
     assert RectifiedFlowConfig(t_schedule=schedule).is_distillation is expected  # type: ignore[arg-type]
@@ -473,11 +468,7 @@ def test_fir_matches_an_independent_transcription(taps: tuple[int, ...], up: boo
     overhang = len(taps) - 2
     if up:
         want = _reference_upfirdn2d(
-            data.astype(np.float64),
-            taps,
-            2,
-            1,
-            ((overhang + 1) // 2 + 1, overhang // 2),
+            data.astype(np.float64), taps, 2, 1, ((overhang + 1) // 2 + 1, overhang // 2)
         )
     else:
         want = _reference_upfirdn2d(

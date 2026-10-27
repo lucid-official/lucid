@@ -303,10 +303,5 @@ def test_ops_built_on_max_still_answer_an_empty_input(device: str) -> None:
 def test_eye_takes_an_empty_side(device: str) -> None:
     # 0 was read as "no width given" (3 x 0 came back 3 x 3), and MLX
     # refuses an identity with an empty side outright.
-    for args, shape in (
-        ((0,), (0, 0)),
-        ((0, 3), (0, 3)),
-        ((3, 0), (3, 0)),
-        ((2, 4), (2, 4)),
-    ):
+    for args, shape in (((0,), (0, 0)), ((0, 3), (0, 3)), ((3, 0), (3, 0)), ((2, 4), (2, 4))):
         assert tuple(lucid.eye(*args, device=device).shape) == shape

@@ -138,8 +138,7 @@ class RandomPolicy:
             index = min(index, self.action_dim - 1)
             return (
                 lucid.nn.functional.one_hot(
-                    lucid.tensor([index], device=device),
-                    num_classes=self.action_dim,
+                    lucid.tensor([index], device=device), num_classes=self.action_dim
                 )
                 .reshape(self.action_dim)
                 .to(lucid.float32)
@@ -251,9 +250,7 @@ class LatentPolicy:
             action = (
                 action
                 + lucid.randn(
-                    tuple(int(s) for s in action.shape),
-                    device=action.device,
-                    dtype=action.dtype,
+                    tuple(int(s) for s in action.shape), device=action.device, dtype=action.dtype
                 )
                 * self.noise
             )
@@ -269,11 +266,7 @@ class LatentPolicy:
 
 
 def rollout(
-    env: Environment,
-    policy: Policy,
-    *,
-    action_repeat: int = 1,
-    max_steps: int | None = None,
+    env: Environment, policy: Policy, *, action_repeat: int = 1, max_steps: int | None = None
 ) -> tuple[Episode, float]:
     r"""Run one episode and return it, ready for the replay buffer.
 

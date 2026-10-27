@@ -90,11 +90,7 @@ def _cells(table: Mapping[str, _Bad], spellings: Mapping[str, _Call], *lead: str
                 if device in bad.devices:
                     cells.append(
                         pytest.param(
-                            *lead,
-                            spelling,
-                            case,
-                            device,
-                            id=f"{spelling}-{case}-{device}",
+                            *lead, spelling, case, device, id=f"{spelling}-{case}-{device}"
                         )
                     )
     return cells
@@ -151,17 +147,12 @@ _DTYPE = {"index_copy": _R, "index_add": _R, "index_fill": _I, "index_select": _
 
 _BAD: dict[str, _Bad] = {
     # The LCD-586 repro: as many slices as the index has elements.
-    "2d-index": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(4, 3)),
-        _RANK,
-    ),
+    "2d-index": _Bad(lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(4, 3)), _RANK),
     "2d-index-short-source": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(2, 3)),
-        _RANK,
+        lambda m: (m.zeros(5, 3), 0, m.tensor([[0, 1], [2, 3]]), m.ones(2, 3)), _RANK
     ),
     "empty-2d-index": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.zeros(0, 1, dtype=m.int64), m.ones(0, 3)),
-        _RANK,
+        lambda m: (m.zeros(5, 3), 0, m.zeros(0, 1, dtype=m.int64), m.ones(0, 3)), _RANK
     ),
     "float-index": _Bad(lambda m: (m.zeros(5, 3), 0, m.tensor([0.0, 1.0]), m.ones(2, 3)), _DTYPE),
     "bool-index": _Bad(lambda m: (m.zeros(5, 3), 0, m.tensor([True, False]), m.ones(2, 3)), _DTYPE),
@@ -179,20 +170,17 @@ _BAD: dict[str, _Bad] = {
         {"index_copy": _I, "index_add": _R},
     ),
     "source-other-dims": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor([0, 2]), m.ones(2, 4)),
-        _same(_R, _SOURCED),
+        lambda m: (m.zeros(5, 3), 0, m.tensor([0, 2]), m.ones(2, 4)), _same(_R, _SOURCED)
     ),
     "source-other-dims-dim1": _Bad(
-        lambda m: (m.zeros(2, 3), 1, m.tensor([2, 0]), m.ones(3, 2)),
-        _same(_R, _SOURCED),
+        lambda m: (m.zeros(2, 3), 1, m.tensor([2, 0]), m.ones(3, 2)), _same(_R, _SOURCED)
     ),
     "source-more-dims": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor([0, 2]), m.ones(2, 3, 1)),
         {"index_copy": _I, "index_add": _R},
     ),
     "0d-index-1d-source": _Bad(
-        lambda m: (m.zeros(5, 3), 0, m.tensor(1), m.ones(3)),
-        {"index_copy": _I, "index_add": _R},
+        lambda m: (m.zeros(5, 3), 0, m.tensor(1), m.ones(3)), {"index_copy": _I, "index_add": _R}
     ),
     "0d-source-into-a-matrix": _Bad(
         lambda m: (m.zeros(5, 3), 0, m.tensor(1), m.tensor(7.0)), _same(_R, _SOURCED)
@@ -365,8 +353,7 @@ _VALID: dict[str, _Valid] = {
         lambda m: (_matrix(m), 0, m.zeros(0, dtype=m.int64), m.zeros(0, 2)),
         {
             **dict.fromkeys(
-                _SOURCED | {"index_fill"},
-                ((3, 2), [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0]]),
+                _SOURCED | {"index_fill"}, ((3, 2), [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0]])
             ),
             "index_select": ((0, 2), []),
         },
@@ -394,8 +381,7 @@ _VALID: dict[str, _Valid] = {
         },
     ),
     "0d-input-1d-source": _Valid(
-        lambda m: (m.tensor(3.0), 0, m.tensor(0), m.tensor([5.0])),
-        {"index_copy": ((), 5.0)},
+        lambda m: (m.tensor(3.0), 0, m.tensor(0), m.tensor([5.0])), {"index_copy": ((), 5.0)}
     ),
     "0d-source-into-a-vector": _Valid(
         lambda m: (m.zeros(3), 0, m.tensor(1), m.tensor(7.0)),
@@ -470,9 +456,7 @@ _PUT_BAD: dict[str, _Bad] = {
     "source-size": _Bad(lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(3)), {"put": _I}),
     "empty-input": _Bad(lambda m: (m.zeros(0), 0, m.tensor([0]), m.ones(1)), {"put": _I}),
     "index-value-past-the-end": _Bad(
-        lambda m: (m.zeros(4, 3), 0, m.tensor([12]), m.ones(1)),
-        {"put": _I},
-        devices=_CPU,
+        lambda m: (m.zeros(4, 3), 0, m.tensor([12]), m.ones(1)), {"put": _I}, devices=_CPU
     ),
     # The reference's GPU device has no put; the class is its CPU one's.
     "index-on-the-cpu": _Bad(
@@ -501,16 +485,14 @@ _SCATTERS: dict[str, _Call] = {
 
 _SCATTER_BAD: dict[str, _Bad] = {
     "index-fewer-dims": _Bad(
-        lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(4, 3)),
-        {"scatter_reduce": _R},
+        lambda m: (m.zeros(4, 3), 0, m.tensor([0, 1]), m.ones(4, 3)), {"scatter_reduce": _R}
     ),
     "index-more-dims": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.zeros(2, 3, 1, dtype=m.int64), m.ones(4, 3)),
         {"scatter_reduce": _R},
     ),
     "src-more-dims": _Bad(
-        lambda m: (m.zeros(2, 3), 0, m.tensor([[0, 1]]), m.ones(2, 3, 1)),
-        {"scatter_reduce": _R},
+        lambda m: (m.zeros(2, 3), 0, m.tensor([[0, 1]]), m.ones(2, 3, 1)), {"scatter_reduce": _R}
     ),
     "float-index": _Bad(
         lambda m: (m.zeros(4, 3), 0, m.tensor([[0.0, 1.0, 2.0]]), m.ones(4, 3)),
@@ -626,10 +608,7 @@ _EMPTY_INDEX_SHAPES: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = (
 @pytest.mark.parametrize(("idx_shape", "src_shape"), _EMPTY_INDEX_SHAPES)
 @pytest.mark.parametrize("op", list(_EMPTY_SCATTER_OPS))
 def test_empty_index_scatter_returns_input_and_propagates_grad(
-    device: str,
-    op: str,
-    idx_shape: tuple[int, ...],
-    src_shape: tuple[int, ...],
+    device: str, op: str, idx_shape: tuple[int, ...], src_shape: tuple[int, ...]
 ) -> None:
     base = lucid.arange(1.0, 7.0, device=device).reshape(2, 3).requires_grad_(True)
     idx = lucid.zeros(idx_shape, dtype=lucid.int64, device=device)
@@ -648,10 +627,7 @@ def test_empty_index_scatter_returns_input_and_propagates_grad(
 @pytest.mark.parametrize(("idx_shape", "src_shape"), _EMPTY_INDEX_SHAPES)
 @pytest.mark.parametrize("op", list(_EMPTY_SCATTER_OPS))
 def test_empty_index_scatter_matches_reference(
-    ref: ModuleType,
-    op: str,
-    idx_shape: tuple[int, ...],
-    src_shape: tuple[int, ...],
+    ref: ModuleType, op: str, idx_shape: tuple[int, ...], src_shape: tuple[int, ...]
 ) -> None:
     base = lucid.arange(1.0, 7.0).reshape(2, 3)
     idx = lucid.zeros(idx_shape, dtype=lucid.int64)

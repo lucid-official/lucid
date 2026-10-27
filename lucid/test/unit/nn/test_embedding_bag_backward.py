@@ -133,9 +133,7 @@ def test_rows_no_bag_touched_stay_at_zero() -> None:
 def test_the_forward_still_reduces_the_way_it_did(mode) -> None:
     out = np.asarray(
         F.embedding_bag(
-            lucid.tensor(INDICES, dtype=lucid.int32),
-            lucid.tensor(WEIGHT.copy()),
-            mode=mode,
+            lucid.tensor(INDICES, dtype=lucid.int32), lucid.tensor(WEIGHT.copy()), mode=mode
         ).numpy()
     )
     reduce = {"sum": np.sum, "mean": np.mean, "max": np.max}[mode]

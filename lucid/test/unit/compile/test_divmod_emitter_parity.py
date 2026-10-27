@@ -38,11 +38,7 @@ _OPS: dict[str, OpFn] = {
     "remainder": lucid.remainder,
     "fmod": lucid.fmod,
 }
-_KIND = {
-    "floordiv": "floor",
-    "remainder": "remainder",
-    "fmod": "fmod",
-}
+_KIND = {"floordiv": "floor", "remainder": "remainder", "fmod": "fmod"}
 _HAS_COREML = hasattr(_C_engine, "coreml")
 
 
@@ -140,9 +136,7 @@ def test_compiled_float_divmod_matches_eager_bit_for_bit(dtype: lucid.dtype, op_
 )
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
 def test_compiled_half_with_python_scalar_matches_eager(
-    dtype: lucid.dtype,
-    op_fn: Callable[[lucid.Tensor, float], lucid.Tensor],
-    divisor: float,
+    dtype: lucid.dtype, op_fn: Callable[[lucid.Tensor, float], lucid.Tensor], divisor: float
 ) -> None:
     """Compiled half tensor with Python float scalar matches eager bit-for-bit."""
     _C_engine.compile.session_cache_clear()
@@ -157,8 +151,7 @@ def test_compiled_half_with_python_scalar_matches_eager(
     assert compiled.cache_info()["eager_only"] == ()
     assert got.dtype == dtype
     np.testing.assert_array_equal(
-        _bits(got.to(lucid.float32).numpy()),
-        _bits(eager.to(lucid.float32).numpy()),
+        _bits(got.to(lucid.float32).numpy()), _bits(eager.to(lucid.float32).numpy())
     )
 
 
@@ -189,8 +182,7 @@ def test_coreml_float_divmod_matches_eager_bit_for_bit(
     assert isinstance(got, lucid.Tensor)
     assert got.dtype == dtype
     np.testing.assert_array_equal(
-        _bits(got.to(lucid.float32).numpy()),
-        _bits(want.to(lucid.float32).numpy()),
+        _bits(got.to(lucid.float32).numpy()), _bits(want.to(lucid.float32).numpy())
     )
 
 

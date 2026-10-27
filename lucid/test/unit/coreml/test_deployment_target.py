@@ -27,8 +27,7 @@ import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -40,9 +39,7 @@ def _small() -> nn.Module:
 def _compressible() -> nn.Module:
     """Weights above the threshold, so a request to compress takes."""
     return nn.Sequential(
-        nn.Conv2d(3, 64, 3, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(64, 64, 3, padding=1),
+        nn.Conv2d(3, 64, 3, padding=1), nn.ReLU(), nn.Conv2d(64, 64, 3, padding=1)
     ).eval()
 
 
@@ -108,10 +105,7 @@ class TestAPackageKnowsItsFloor:
         lucid.manual_seed(0)
         path = f"{tmp_path}/reopened.mlpackage"
         exported = cml.export(
-            _compressible(),
-            lucid.randn(1, 3, 32, 32),
-            path,
-            weights=cml.Palettize(bits=4),
+            _compressible(), lucid.randn(1, 3, 32, 32), path, weights=cml.Palettize(bits=4)
         )
         written = exported.deployment_target
         exported.close()

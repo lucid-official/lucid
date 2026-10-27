@@ -44,14 +44,7 @@ CASES = [
         6,
         {"stride": 2, "padding": 1, "dilation": 2, "groups": 2},
     ),
-    (
-        "conv2d stride past the last window",
-        F.conv2d,
-        (2, 2, 8, 7),
-        (3, 2, 3, 3),
-        3,
-        {"stride": 2},
-    ),
+    ("conv2d stride past the last window", F.conv2d, (2, 2, 8, 7), (3, 2, 3, 3), 3, {"stride": 2}),
     (
         "conv2d mixed settings grouped",
         F.conv2d,
@@ -60,14 +53,7 @@ CASES = [
         4,
         {"stride": (2, 1), "padding": (1, 0), "dilation": (1, 2), "groups": 2},
     ),
-    (
-        "conv2d depthwise",
-        F.conv2d,
-        (2, 3, 6, 6),
-        (3, 1, 3, 3),
-        3,
-        {"padding": 1, "groups": 3},
-    ),
+    ("conv2d depthwise", F.conv2d, (2, 3, 6, 6), (3, 1, 3, 3), 3, {"padding": 1, "groups": 3}),
     (
         "conv3d strided dilated",
         F.conv3d,
@@ -140,11 +126,7 @@ def test_the_second_derivative_matches_central_differences(
     kw: dict[str, object],
 ) -> None:
     rng = np.random.default_rng(len(name))
-    x0, w0, b0 = (
-        rng.standard_normal(xs),
-        rng.standard_normal(ws),
-        rng.standard_normal(nb),
-    )
+    x0, w0, b0 = (rng.standard_normal(xs), rng.standard_normal(ws), rng.standard_normal(nb))
     r0 = rng.standard_normal(op(_t(x0), _t(w0), _t(b0), **kw).shape)
     u = rng.standard_normal(xs if first == "input" else ws)
 
@@ -156,9 +138,7 @@ def test_the_second_derivative_matches_central_differences(
 
     x, w = _t(x0, grad_=True), _t(w0, grad_=True)
     (g,) = grad(
-        _loss(op, x, w, _t(b0), _t(r0), kw),
-        [x if first == "input" else w],
-        create_graph=True,
+        _loss(op, x, w, _t(b0), _t(r0), kw), [x if first == "input" else w], create_graph=True
     )
     by_x, by_w = grad((g * _t(u)).sum(), [x, w], allow_unused=True)
 
@@ -192,24 +172,13 @@ def test_the_checks_above_see_a_curved_loss() -> None:
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
 @pytest.mark.parametrize(
-    "name,op,xs,ws,nb,kw",
-    [CASES[0], CASES[2], CASES[6]],
-    ids=[CASES[i][0] for i in (0, 2, 6)],
+    "name,op,xs,ws,nb,kw", [CASES[0], CASES[2], CASES[6]], ids=[CASES[i][0] for i in (0, 2, 6)]
 )
 def test_metal_differentiates_twice_as_the_cpu_does(
-    name: str,
-    op: Conv,
-    xs: tuple[int, ...],
-    ws: tuple[int, ...],
-    nb: int,
-    kw: dict[str, object],
+    name: str, op: Conv, xs: tuple[int, ...], ws: tuple[int, ...], nb: int, kw: dict[str, object]
 ) -> None:
     rng = np.random.default_rng(1)
-    x0, w0, b0 = (
-        rng.standard_normal(xs),
-        rng.standard_normal(ws),
-        rng.standard_normal(nb),
-    )
+    x0, w0, b0 = (rng.standard_normal(xs), rng.standard_normal(ws), rng.standard_normal(nb))
     x0, w0, b0 = (a.astype(np.float32) for a in (x0, w0, b0))
     answers = {}
     for device in ("cpu", "metal"):

@@ -19,10 +19,7 @@ import pytest
 from lucid.models.text.bert import BERTTokenizer, BERTTokenizerFast
 from lucid.models.text.gpt import GPTTokenizer, GPTTokenizerFast
 from lucid.models.text.gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from lucid.models.text.roformer import (
-    RoFormerTokenizer,
-    RoFormerTokenizerFast,
-)
+from lucid.models.text.roformer import RoFormerTokenizer, RoFormerTokenizerFast
 
 CORPUS = [
     "the quick brown fox jumps over the lazy dog",

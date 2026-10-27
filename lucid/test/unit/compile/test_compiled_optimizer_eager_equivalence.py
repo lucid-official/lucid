@@ -56,10 +56,7 @@ def _net() -> _Net:
 
 def _data() -> tuple[lucid.Tensor, lucid.Tensor]:
     lucid.manual_seed(1)
-    return (
-        lucid.randn(10, 6).to(COMPILE_DEVICE),
-        lucid.randn(10, 3).to(COMPILE_DEVICE),
-    )
+    return (lucid.randn(10, 6).to(COMPILE_DEVICE), lucid.randn(10, 3).to(COMPILE_DEVICE))
 
 
 def _snapshot(model: nn.Module) -> list[lucid.Tensor]:
@@ -199,15 +196,9 @@ def test_other_hyper_parameters_are_read_every_step(mode: str) -> None:
 SGD_MOMENTUM_EDITS = [
     pytest.param({"momentum": 0.9, "dampening": 0.5}, {}, id="damped-from-the-start"),
     pytest.param({}, {"momentum": 0.9, "dampening": 0.5}, id="switched-on"),
+    pytest.param({"momentum": 0.9, "dampening": 0.3}, {"momentum": 0.0}, id="switched-off"),
     pytest.param(
-        {"momentum": 0.9, "dampening": 0.3},
-        {"momentum": 0.0},
-        id="switched-off",
-    ),
-    pytest.param(
-        {"momentum": 0.9, "nesterov": True},
-        {"lr": 0.05, "weight_decay": 0.1},
-        id="nesterov",
+        {"momentum": 0.9, "nesterov": True}, {"lr": 0.05, "weight_decay": 0.1}, id="nesterov"
     ),
 ]
 
@@ -341,29 +332,18 @@ def _no_decay_groups(model: nn.Module, cls: type, **kw: object) -> optim.Optimiz
     weights = [p for n, p in model.named_parameters() if n.endswith("weight")]
     biases = [p for n, p in model.named_parameters() if n.endswith("bias")]
     return cls(  # type: ignore[no-any-return]
-        [{"params": weights}, {"params": biases, "weight_decay": 0.0, "lr": 0.01}],
-        **kw,
+        [{"params": weights}, {"params": biases, "weight_decay": 0.0, "lr": 0.01}], **kw
     )
 
 
 MULTI_GROUP = [
-    pytest.param(
-        lambda m: _no_decay_groups(m, optim.AdamW, lr=0.05, weight_decay=0.1),
-        id="AdamW",
-    ),
+    pytest.param(lambda m: _no_decay_groups(m, optim.AdamW, lr=0.05, weight_decay=0.1), id="AdamW"),
     pytest.param(lambda m: _no_decay_groups(m, optim.Adam, lr=0.05, weight_decay=0.1), id="Adam"),
     pytest.param(
-        lambda m: _no_decay_groups(m, optim.Adamax, lr=0.05, weight_decay=0.1),
-        id="Adamax",
+        lambda m: _no_decay_groups(m, optim.Adamax, lr=0.05, weight_decay=0.1), id="Adamax"
     ),
-    pytest.param(
-        lambda m: _no_decay_groups(m, optim.NAdam, lr=0.05, weight_decay=0.1),
-        id="NAdam",
-    ),
-    pytest.param(
-        lambda m: _no_decay_groups(m, optim.RAdam, lr=0.05, weight_decay=0.1),
-        id="RAdam",
-    ),
+    pytest.param(lambda m: _no_decay_groups(m, optim.NAdam, lr=0.05, weight_decay=0.1), id="NAdam"),
+    pytest.param(lambda m: _no_decay_groups(m, optim.RAdam, lr=0.05, weight_decay=0.1), id="RAdam"),
     pytest.param(
         lambda m: optim.Rprop(
             [
@@ -376,8 +356,7 @@ MULTI_GROUP = [
         id="Rprop",
     ),
     pytest.param(
-        lambda m: _no_decay_groups(m, optim.SGD, lr=0.2, momentum=0.9, weight_decay=0.05),
-        id="SGD",
+        lambda m: _no_decay_groups(m, optim.SGD, lr=0.2, momentum=0.9, weight_decay=0.05), id="SGD"
     ),
 ]
 
@@ -437,8 +416,7 @@ STATEFUL = [
     pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05, amsgrad=True), id="Adam_amsgrad"),
     pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05), id="AdamW"),
     pytest.param(
-        lambda m: optim.RMSprop(m.parameters(), lr=0.01, momentum=0.9, centered=True),
-        id="RMSprop",
+        lambda m: optim.RMSprop(m.parameters(), lr=0.01, momentum=0.9, centered=True), id="RMSprop"
     ),
     pytest.param(lambda m: optim.Adagrad(m.parameters(), lr=0.1), id="Adagrad"),
     pytest.param(lambda m: optim.Adadelta(m.parameters()), id="Adadelta"),
@@ -476,9 +454,7 @@ def test_state_dict_matches_the_eager_one(make_opt: OptFactory) -> None:
 
 
 @pytest.mark.parametrize("make_opt", STATEFUL)
-def test_fused_step_state_reaches_the_optimizer_state_dict(
-    make_opt: OptFactory,
-) -> None:
+def test_fused_step_state_reaches_the_optimizer_state_dict(make_opt: OptFactory) -> None:
     """After ``fused_step`` the optimizer the user holds checkpoints its state."""
     x, t = _data()
     eager, comp = _both("fused", make_opt)
@@ -689,8 +665,7 @@ def test_lbfgs_keeps_its_eager_state_and_step() -> None:
 
 FREEZABLE = [
     pytest.param(
-        lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1),
-        id="SGD",
+        lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1), id="SGD"
     ),
     pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"),
     pytest.param(lambda m: optim.Adam(m.parameters(), lr=0.05, weight_decay=0.1), id="Adam"),
@@ -769,10 +744,7 @@ def test_an_active_set_that_keeps_changing_uses_one_masked_executable() -> None:
 def _run_child(code: str) -> subprocess.CompletedProcess[str]:
     """Run ``code`` in a fresh interpreter — an abort there is an exit code here."""
     return subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code)],
-        capture_output=True,
-        text=True,
-        timeout=300,
+        [sys.executable, "-c", textwrap.dedent(code)], capture_output=True, text=True, timeout=300
     )
 
 
@@ -890,8 +862,7 @@ class _Gated(nn.Module):
 
 GATED_OPTS = [
     pytest.param(
-        lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1),
-        id="SGD",
+        lambda m: optim.SGD(m.parameters(), lr=0.1, momentum=0.9, weight_decay=0.1), id="SGD"
     ),
     pytest.param(lambda m: optim.AdamW(m.parameters(), lr=0.05, weight_decay=0.1), id="AdamW"),
 ]

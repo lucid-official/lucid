@@ -44,7 +44,7 @@ def _embedding_step(module: nn.Module, device: str) -> None:
 
 #: name -> (build, step that runs the scaled backward)
 _SITES: dict[str, tuple[Callable[[str], nn.Module], Callable[[nn.Module, str], None]]] = {
-    "embedding-scale-grad-by-freq": (_embedding_scale_grad_by_freq, _embedding_step),
+    "embedding-scale-grad-by-freq": (_embedding_scale_grad_by_freq, _embedding_step)
 }
 
 
@@ -198,10 +198,7 @@ def test_scale_grad_by_freq_supports_create_graph_and_compiled_steps(
         out = emb(idx)  # type: ignore[operator]
         (dw,) = lib.autograd.grad((out * cot).sum(), (emb.weight,), create_graph=True)
         (dcot,) = lib.autograd.grad((dw * dw).sum(), (cot,))
-        return (
-            dw.reshape(-1).detach().cpu().tolist(),
-            dcot.reshape(-1).detach().cpu().tolist(),
-        )
+        return (dw.reshape(-1).detach().cpu().tolist(), dcot.reshape(-1).detach().cpu().tolist())
 
     got_dw, got_dcot = _second_deriv(lucid, device)
     want_dw, _ = _second_deriv(ref, "cpu")

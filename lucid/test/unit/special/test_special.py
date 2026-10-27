@@ -175,9 +175,7 @@ class TestPolygamma:
     def test_n0_eq_digamma(self) -> None:
         x = lucid.tensor([1.0, 2.0, 5.0])
         np.testing.assert_allclose(
-            lucid.special.polygamma(0, x).numpy(),
-            lucid.digamma(x).numpy(),
-            atol=1e-5,
+            lucid.special.polygamma(0, x).numpy(), lucid.digamma(x).numpy(), atol=1e-5
         )
 
     def test_n1_at_one_pi2_over_6(self) -> None:
@@ -252,9 +250,7 @@ class TestMultigammaln:
         # multigammaln(a, p=1) = lgamma(a).
         x = lucid.tensor([2.0, 3.0, 4.0])
         np.testing.assert_allclose(
-            lucid.special.multigammaln(x, 1).numpy(),
-            lucid.lgamma(x).numpy(),
-            atol=1e-5,
+            lucid.special.multigammaln(x, 1).numpy(), lucid.lgamma(x).numpy(), atol=1e-5
         )
 
 
@@ -278,9 +274,7 @@ class TestOrthogonalPolynomials:
     def test_chebyshev_u_known(self) -> None:
         # U_2(x) = 4x²-1; at 0.5 → 0.
         np.testing.assert_allclose(
-            lucid.special.chebyshev_polynomial_u(lucid.tensor([0.5]), 2).numpy(),
-            [0.0],
-            atol=1e-6,
+            lucid.special.chebyshev_polynomial_u(lucid.tensor([0.5]), 2).numpy(), [0.0], atol=1e-6
         )
 
     def test_shifted_chebyshev_at_one(self) -> None:
@@ -288,9 +282,7 @@ class TestOrthogonalPolynomials:
         x = lucid.tensor([1.0])
         for n in range(4):
             np.testing.assert_allclose(
-                lucid.special.shifted_chebyshev_polynomial_t(x, n).numpy(),
-                [1.0],
-                atol=1e-6,
+                lucid.special.shifted_chebyshev_polynomial_t(x, n).numpy(), [1.0], atol=1e-6
             )
 
     def test_hermite_h_known(self) -> None:
@@ -308,9 +300,7 @@ class TestOrthogonalPolynomials:
     def test_legendre_p_known(self) -> None:
         # P_2(x) = (3x²-1)/2; at 0.5 → -0.125.
         np.testing.assert_allclose(
-            lucid.special.legendre_polynomial_p(lucid.tensor([0.5]), 2).numpy(),
-            [-0.125],
-            atol=1e-6,
+            lucid.special.legendre_polynomial_p(lucid.tensor([0.5]), 2).numpy(), [-0.125], atol=1e-6
         )
 
     def test_laguerre_l_known(self) -> None:
@@ -318,9 +308,7 @@ class TestOrthogonalPolynomials:
         x = lucid.tensor([1.0])
         for n, expected in [(0, 1.0), (1, 0.0), (2, -0.5)]:
             np.testing.assert_allclose(
-                lucid.special.laguerre_polynomial_l(x, n).numpy(),
-                [expected],
-                atol=1e-6,
+                lucid.special.laguerre_polynomial_l(x, n).numpy(), [expected], atol=1e-6
             )
 
 
@@ -342,14 +330,10 @@ class TestBessel:
     def test_y0_y1_known(self) -> None:
         x = lucid.tensor([1.0, 5.0, 10.0])
         np.testing.assert_allclose(
-            lucid.special.bessel_y0(x).numpy(),
-            [0.08825696, -0.30851763, 0.05567117],
-            atol=1e-4,
+            lucid.special.bessel_y0(x).numpy(), [0.08825696, -0.30851763, 0.05567117], atol=1e-4
         )
         np.testing.assert_allclose(
-            lucid.special.bessel_y1(x).numpy(),
-            [-0.78121282, 0.14786314, 0.24901543],
-            atol=1e-4,
+            lucid.special.bessel_y1(x).numpy(), [-0.78121282, 0.14786314, 0.24901543], atol=1e-4
         )
 
     def test_modified_k0_k1_known(self) -> None:

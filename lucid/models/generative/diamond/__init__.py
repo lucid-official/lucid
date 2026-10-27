@@ -12,11 +12,7 @@ from lucid.models.generative.diamond._model import (
     DIAMONDModel,
     DIAMONDOutput,
 )
-from lucid.models.generative.diamond._pretrained import (
-    diamond,
-    diamond_csgo,
-    diamond_world_model,
-)
+from lucid.models.generative.diamond._pretrained import diamond, diamond_csgo, diamond_world_model
 from lucid.models.generative.diamond._weights import DIAMONDWeights
 
 __all__ = [

@@ -54,9 +54,7 @@ def _worst(a: lucid.Tensor, b: lucid.Tensor) -> float:
 
 
 @pytest.mark.parametrize(
-    ("family", "factory", "overrides", "make_inputs"),
-    CASES,
-    ids=[_family_of(c) for c in CASES],
+    ("family", "factory", "overrides", "make_inputs"), CASES, ids=[_family_of(c) for c in CASES]
 )
 def test_training_step_is_the_same_with_inplace_off(
     family: str, factory: str, overrides: dict[str, Any], make_inputs: Any

@@ -17,12 +17,7 @@ from typing import TYPE_CHECKING, TypeGuard
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _impl_with_grad, normalize_factory_kwargs
-from lucid._factories._build import (
-    _from_values,
-    _infer_dtype,
-    _is_scalar_leaf,
-    _leaf,
-)
+from lucid._factories._build import _from_values, _infer_dtype, _is_scalar_leaf, _leaf
 from lucid._types import DeviceLike, DTypeLike
 
 if TYPE_CHECKING:
@@ -94,9 +89,7 @@ def _flatten_with_shape(data: object) -> tuple[list[int], list[object]] | None:
 
 
 def _python_literal_impl(
-    data: object,
-    dtype_eng: _C_engine.Dtype | None,
-    device_eng: _C_engine.Device,
+    data: object, dtype_eng: _C_engine.Dtype | None, device_eng: _C_engine.Device
 ) -> _C_engine.TensorImpl | None:
     """Build a Python literal (scalar or nested list/tuple) without numpy.
 
@@ -187,11 +180,7 @@ def _require_numpy(operation: str) -> object:
 
 
 def _to_impl(
-    data: object,
-    *,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
-    requires_grad: bool = False,
+    data: object, *, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False
 ) -> _C_engine.TensorImpl:
     """Convert list/scalar/ndarray/Tensor -> TensorImpl."""
     from lucid._tensor.tensor import Tensor as _Tensor
@@ -266,9 +255,7 @@ def _source_impl(
 
 
 def _numpy_impl(
-    data: object,
-    dtype_eng: _C_engine.Dtype | None,
-    device_eng: _C_engine.Device,
+    data: object, dtype_eng: _C_engine.Dtype | None, device_eng: _C_engine.Device
 ) -> _C_engine.TensorImpl:
     """Build an ndarray — or anything ``np.array`` accepts — in its final dtype.
 
@@ -320,11 +307,7 @@ def _engine_dtype_to_np(d: _C_engine.Dtype) -> str:
 
 
 def _copy_tensor(
-    src: Tensor,
-    *,
-    dtype: DTypeLike,
-    device: DeviceLike,
-    requires_grad: bool,
+    src: Tensor, *, dtype: DTypeLike, device: DeviceLike, requires_grad: bool
 ) -> _C_engine.TensorImpl:
     """A fresh copy of ``src`` for :func:`tensor`, as a leaf of its own.
 
@@ -354,11 +337,7 @@ def _copy_tensor(
 
 
 def tensor(
-    data: object,
-    *,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
-    requires_grad: bool = False,
+    data: object, *, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False
 ) -> Tensor:
     r"""Construct a new :class:`Tensor` from Python data, a NumPy array, or another Tensor.
 
@@ -449,12 +428,7 @@ def tensor(
     )
 
 
-def as_tensor(
-    data: object,
-    *,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
-) -> Tensor:
+def as_tensor(data: object, *, dtype: DTypeLike = None, device: DeviceLike = None) -> Tensor:
     r"""Convert data to a tensor, avoiding a copy when the source already matches.
 
     Unlike :func:`tensor`, ``as_tensor`` is "best-effort no-copy":
@@ -631,13 +605,7 @@ def _dlpack_device_kind(ext_tensor: object) -> int | None:
         return None
     try:
         kind, _index = dl_device()
-    except (
-        AttributeError,
-        NotImplementedError,
-        RuntimeError,
-        TypeError,
-        ValueError,
-    ):
+    except (AttributeError, NotImplementedError, RuntimeError, TypeError, ValueError):
         return None
     return kind if isinstance(kind, int) else None
 
@@ -655,10 +623,7 @@ def _finish_dlpack_import(out: Tensor, *, device: DeviceLike, copy: bool | None)
 
 
 def from_dlpack(
-    ext_tensor: object,
-    *,
-    device: DeviceLike = None,
-    copy: bool | None = None,
+    ext_tensor: object, *, device: DeviceLike = None, copy: bool | None = None
 ) -> Tensor:
     """Construct a Lucid tensor from any object exposing the DLPack
     protocol (``__dlpack__``) or from a raw PyCapsule.

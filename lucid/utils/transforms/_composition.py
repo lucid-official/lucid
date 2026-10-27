@@ -11,12 +11,7 @@ from typing import override
 
 from lucid._tensor import Tensor
 from lucid.utils.transforms import _random
-from lucid.utils.transforms._base import (
-    Empty,
-    Transform,
-    TransformLike,
-    _NoParams,
-)
+from lucid.utils.transforms._base import Empty, Transform, TransformLike, _NoParams
 
 
 def _force(tf: TransformLike, inputs: object) -> object:

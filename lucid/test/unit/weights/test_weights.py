@@ -283,9 +283,7 @@ class TestARenamedCheckpointLoads:
         flat = {"1.weight": lucid.ones(2, 3), "1.bias": lucid.zeros(2)}
         self._patch(monkeypatch, {"weight": flat["1.weight"], "bias": flat["1.bias"]})
         W.load_weight_entry(
-            model,
-            self._entry({"weight": "1.weight", "bias": "1.bias"}),
-            name="renamed",
+            model, self._entry({"weight": "1.weight", "bias": "1.bias"}), name="renamed"
         )
         assert float(model[1].weight.sum().item()) == 6.0
 
@@ -383,9 +381,7 @@ class TestAnEntryDeclaresTheArchitectureItNeeds:
     def test_a_model_without_a_config_cannot_be_checked(self) -> None:
         with pytest.raises(RuntimeError, match="no config"):
             W.load_weight_entry(
-                lucid.nn.Linear(2, 2),
-                self._entry({"min_attn_channels": 16}),
-                name="configless",
+                lucid.nn.Linear(2, 2), self._entry({"min_attn_channels": 16}), name="configless"
             )
 
     def test_a_tuple_and_its_list_describe_the_same_architecture(self) -> None:

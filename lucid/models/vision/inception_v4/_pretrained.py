@@ -4,10 +4,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.vision.inception_v4._config import InceptionV4Config
-from lucid.models.vision.inception_v4._model import (
-    InceptionV4,
-    InceptionV4ForImageClassification,
-)
+from lucid.models.vision.inception_v4._model import InceptionV4, InceptionV4ForImageClassification
 from lucid.models.vision.inception_v4._weights import InceptionV4Weights
 
 _CFG = InceptionV4Config()

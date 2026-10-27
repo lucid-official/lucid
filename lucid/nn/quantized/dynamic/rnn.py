@@ -164,9 +164,7 @@ class LSTM(_DynamicRecurrent[nn.LSTM]):
 
     @override
     def forward(
-        self,
-        input: Tensor | PackedSequence,
-        hx: tuple[Tensor, Tensor] | None = None,
+        self, input: Tensor | PackedSequence, hx: tuple[Tensor, Tensor] | None = None
     ) -> tuple[Tensor | PackedSequence, tuple[Tensor, Tensor]]:
         """Inject dequantized weights into the shell and run it.
 

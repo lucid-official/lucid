@@ -5,10 +5,7 @@ from dataclasses import replace
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.inception._config import InceptionConfig
-from lucid.models.vision.inception._model import (
-    InceptionV3,
-    InceptionV3ForImageClassification,
-)
+from lucid.models.vision.inception._model import InceptionV3, InceptionV3ForImageClassification
 from lucid.models.vision.inception._weights import InceptionV3Weights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 

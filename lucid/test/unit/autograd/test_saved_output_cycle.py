@@ -163,14 +163,8 @@ _SAVES_OUTPUT: dict[
         _spd,
         lambda A: lucid.linalg.solve_triangular(A, _rhs(A), upper=False),
     ),
-    "LUSolveBackward": (
-        _spd,
-        lambda A: lucid.linalg.lu_solve(*lucid.linalg.lu_factor(A), _rhs(A)),
-    ),
-    "NormBackward": (
-        _spd,
-        _engine(lambda a: _C_engine.linalg.norm(a, 2.0, [], False)),
-    ),
+    "LUSolveBackward": (_spd, lambda A: lucid.linalg.lu_solve(*lucid.linalg.lu_factor(A), _rhs(A))),
+    "NormBackward": (_spd, _engine(lambda a: _C_engine.linalg.norm(a, 2.0, [], False))),
     # The scatter_reduce nodes, which held it strongly.
     "ScatterExtremumNode[amax]": (_vector, _scatter("amax")),
     "ScatterExtremumNode[amin]": (_vector, _scatter("amin")),
@@ -411,9 +405,7 @@ def _write_under_no_grad_then_drop(y: lucid.Tensor) -> lucid.Tensor:
 
 
 @pytest.mark.parametrize(
-    "write",
-    [_replace_by_setitem, _write_under_no_grad_then_drop],
-    ids=["setitem", "no_grad"],
+    "write", [_replace_by_setitem, _write_under_no_grad_then_drop], ids=["setitem", "no_grad"]
 )
 @pytest.mark.parametrize("mode", ["amax", "amin", "prod"])
 def test_a_write_and_then_dropping_the_result_is_refused(
@@ -429,9 +421,7 @@ def test_a_write_and_then_dropping_the_result_is_refused(
 
 
 @pytest.mark.parametrize(
-    "write",
-    [_replace_by_setitem, _write_under_no_grad_then_drop],
-    ids=["setitem", "no_grad"],
+    "write", [_replace_by_setitem, _write_under_no_grad_then_drop], ids=["setitem", "no_grad"]
 )
 @pytest.mark.parametrize("node", list(_SAVES_OUTPUT))
 def test_every_saved_output_node_refuses_a_rebind_or_dropped_write(

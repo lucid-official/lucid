@@ -35,10 +35,7 @@ from lucid._C import engine as _C_engine
 
 from lucid.utils.tokenizer._base import SpecialTokens, Tokenizer
 from lucid.utils.tokenizer._normalizers import NFC, Normalizer
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    WhitespaceSplit,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, WhitespaceSplit
 
 # ── Vocab loader helpers (shared between BPE + BPEFast) ─────────────
 
@@ -88,9 +85,7 @@ def _load_merges_txt(path: str) -> list[tuple[str, str]]:
     return merges
 
 
-def _load_unified_tokenizer_json(
-    path: str,
-) -> tuple[dict[str, int], list[tuple[str, str]]]:
+def _load_unified_tokenizer_json(path: str) -> tuple[dict[str, int], list[tuple[str, str]]]:
     """Parse a Hugging Face Fast-tokenizers ``tokenizer.json``.
 
     The Rust ``tokenizers`` crate emits this as a single file with
@@ -202,15 +197,8 @@ class _BPECommonMixin(Tokenizer):
 
 
 def _load_bpe_checkpoint(
-    directory: str,
-    special_tokens: SpecialTokens | None,
-    caller: str,
-) -> tuple[
-    dict[str, int],
-    list[tuple[str, str]],
-    SpecialTokens | None,
-    dict[str, object],
-]:
+    directory: str, special_tokens: SpecialTokens | None, caller: str
+) -> tuple[dict[str, int], list[tuple[str, str]], SpecialTokens | None, dict[str, object]]:
     """Load vocab, merges, special tokens, and optional model dict from ``directory``."""
     unified = os.path.join(directory, "tokenizer.json")
     model_data: dict[str, object] = {}
@@ -253,13 +241,7 @@ def _load_bpe_from_file[T](
     vocab, merges, st, _ = _load_bpe_checkpoint(
         directory, special_tokens, getattr(cls, "__name__", "BPETokenizer")
     )
-    return cls(
-        vocab,
-        merges,
-        normalizer=normalizer,
-        pre_tokenizer=pre_tokenizer,
-        special_tokens=st,
-    )
+    return cls(vocab, merges, normalizer=normalizer, pre_tokenizer=pre_tokenizer, special_tokens=st)
 
 
 # ── Pure-Python reference impl ──────────────────────────────────────
@@ -472,12 +454,7 @@ class BPETokenizer(_BPECommonMixin, Tokenizer):
 
     # ── Training ────────────────────────────────────────────────────
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train this tokenizer from scratch on ``corpus``.
 
         Implements the classical Sennrich-2016 training loop:
@@ -768,12 +745,7 @@ class BPETokenizerFast(_BPECommonMixin, Tokenizer):
 
     # ── Training ────────────────────────────────────────────────────
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train in C++.
 
         Materialises ``corpus`` into a list before handing off (the

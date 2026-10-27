@@ -7,11 +7,7 @@ time, MeanFlow learns the average velocity over an interval, which *is*
 that integral, and reads a sample off a single evaluation.
 """
 
-from lucid.models.generative.mean_flow._config import (
-    MeanFlowConfig,
-    TimeConditioning,
-    TimeSampler,
-)
+from lucid.models.generative.mean_flow._config import MeanFlowConfig, TimeConditioning, TimeSampler
 from lucid.models.generative.mean_flow._model import (
     MeanFlowForImageGeneration,
     MeanFlowModel,

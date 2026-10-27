@@ -48,8 +48,7 @@ def test_f16_to_f32_all_65536_bit_patterns() -> None:
     nan_mask = np.isnan(expected_f32)
     assert np.array_equal(np.isnan(got_f32), nan_mask)
     assert np.array_equal(
-        got_f32[~nan_mask].view(np.uint32),
-        expected_f32[~nan_mask].view(np.uint32),
+        got_f32[~nan_mask].view(np.uint32), expected_f32[~nan_mask].view(np.uint32)
     )
 
     roundtrip_u16 = _u16_of_f16_tensor(lucid.from_numpy(got_f32).to(lucid.float16))

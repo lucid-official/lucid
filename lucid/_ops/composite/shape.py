@@ -13,11 +13,7 @@ from lucid._globals import get_default_device
 from lucid._types import DTypeLike, DeviceLike
 from lucid._ops._dims import _dim_size, _require_real_axis, _to_axes, _wrap_dim
 from lucid._ops.composite._shared import _swap_dims
-from lucid._tensor._indexing import (
-    _broadcast_shape,
-    broadcast_shapes,
-    broadcast_tensors,
-)
+from lucid._tensor._indexing import _broadcast_shape, broadcast_shapes, broadcast_tensors
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -125,9 +121,7 @@ def swapdims(input: Tensor, dim0: int, dim1: int) -> Tensor:
 
 
 def moveaxis(
-    input: Tensor,
-    source: int | Sequence[int],
-    destination: int | Sequence[int],
+    input: Tensor, source: int | Sequence[int], destination: int | Sequence[int]
 ) -> Tensor:
     r"""Move one or more axes to new positions.
 
@@ -599,10 +593,7 @@ def _section_count(indices_or_sections: object, op: str) -> int | None:
 
 
 def _split_along(
-    x: Tensor,
-    indices_or_sections: int | Sequence[int],
-    dim: int,
-    op: str = "tensor_split",
+    x: Tensor, indices_or_sections: int | Sequence[int], dim: int, op: str = "tensor_split"
 ) -> list[Tensor]:
     """The pieces of ``x`` for a section count or a list of cut indices.
 
@@ -625,8 +616,7 @@ def _split_along(
     """
     dim = _wrap_dim(dim, x.ndim, op)
     _require_real_axis(
-        x.ndim,
-        f"{op} expected at least a 1-dimensional tensor, but got a tensor " "with 0 dims",
+        x.ndim, f"{op} expected at least a 1-dimensional tensor, but got a tensor " "with 0 dims"
     )
     n = _dim_size(x.shape, dim)
     k = _section_count(indices_or_sections, op)
@@ -646,11 +636,7 @@ def _split_along(
 
 
 def _split_evenly_along(
-    op: str,
-    input: Tensor,
-    indices_or_sections: int | Sequence[int],
-    min_ndim: int,
-    dim: int,
+    op: str, input: Tensor, indices_or_sections: int | Sequence[int], min_ndim: int, dim: int
 ) -> list[Tensor]:
     """``vsplit`` / ``hsplit`` / ``dsplit``: :func:`_split_along` with their checks.
 
@@ -820,9 +806,7 @@ def dsplit(input: Tensor, indices_or_sections: int | Sequence[int]) -> list[Tens
 
 
 def tensor_split(
-    input: Tensor,
-    indices_or_sections: int | Sequence[int],
-    dim: int = 0,
+    input: Tensor, indices_or_sections: int | Sequence[int], dim: int = 0
 ) -> list[Tensor]:
     r"""Split a tensor along ``dim``, permitting unequal final-piece sizes.
 
@@ -976,13 +960,7 @@ def take_along_dim(input: Tensor, indices: Tensor, dim: int | None = None) -> Te
 
 
 def _triangle_indices(
-    row: int,
-    col: int | None,
-    offset: int,
-    *,
-    lower: bool,
-    dtype: DTypeLike,
-    device: DeviceLike,
+    row: int, col: int | None, offset: int, *, lower: bool, dtype: DTypeLike, device: DeviceLike
 ) -> Tensor:
     """The ``(2, N)`` coordinates where ``j - i <= offset`` (``lower``) or
     ``>= offset`` holds in a ``(row, col)`` matrix, in row-major order.
@@ -1074,11 +1052,7 @@ def triu_indices(
     return _triangle_indices(row, col, offset, lower=False, dtype=dtype, device=device)
 
 
-def combinations(
-    input: Tensor,
-    r: int = 2,
-    with_replacement: bool = False,
-) -> Tensor:
+def combinations(input: Tensor, r: int = 2, with_replacement: bool = False) -> Tensor:
     """All ``r``-length combinations of the elements of a 1-D ``input``.
 
     The positions of every combination are built on the CPU, then read
@@ -1225,12 +1199,7 @@ def rot90(input: Tensor, k: int = 1, dims: Sequence[int] = (0, 1)) -> Tensor:
     return _swap_dims(lucid.flip(input, [d0]), d0, d1)
 
 
-def diag_embed(
-    input: Tensor,
-    offset: int = 0,
-    dim1: int = -2,
-    dim2: int = -1,
-) -> Tensor:
+def diag_embed(input: Tensor, offset: int = 0, dim1: int = -2, dim2: int = -1) -> Tensor:
     """Embed the last dimension of ``input`` as the diagonal of a new matrix.
 
     Inverse of :func:`lucid.diagonal`.  For a 1-D input of length ``n``

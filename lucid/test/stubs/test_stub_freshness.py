@@ -22,10 +22,7 @@ def test_check_stubs_passes() -> None:
     if not _CHECK_STUBS.exists():
         pytest.skip(f"{_CHECK_STUBS} not present")
     result = subprocess.run(
-        [sys.executable, str(_CHECK_STUBS)],
-        capture_output=True,
-        text=True,
-        cwd=_REPO_ROOT,
+        [sys.executable, str(_CHECK_STUBS)], capture_output=True, text=True, cwd=_REPO_ROOT
     )
     assert result.returncode == 0, (
         f"check_stubs.py failed:\n--- stdout ---\n{result.stdout}\n"
@@ -129,9 +126,7 @@ def test_class_check_reports_every_kind_of_drift() -> None:
     from tools.stub_namespaces import class_drift
 
     problems = class_drift(
-        _CLASS_STUB,
-        Demo,
-        lambda name: ["mask", "value"] if name == "forwarded" else None,
+        _CLASS_STUB, Demo, lambda name: ["mask", "value"] if name == "forwarded" else None
     )
     assert problems == [
         "Demo.gone: in the stub, not at runtime",
@@ -158,8 +153,7 @@ half = dtype
 __version__: str
 """
     problems = module_all_drift(
-        sample_stub,
-        ["dtype", "finfo", "iinfo", "zeros", "Tensor", "half", "__version__"],
+        sample_stub, ["dtype", "finfo", "iinfo", "zeros", "Tensor", "half", "__version__"]
     )
     assert problems == [
         "lucid.finfo: in lucid.__all__, not exported in lucid/__init__.pyi",

@@ -66,13 +66,7 @@ class _Bottleneck(nn.Module):
         self.conv1 = nn.Conv2d(in_ch, mid_ch, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(mid_ch)
         self.conv2 = nn.Conv2d(
-            mid_ch,
-            mid_ch,
-            3,
-            stride=stride,
-            padding=dilation,
-            dilation=dilation,
-            bias=False,
+            mid_ch, mid_ch, 3, stride=stride, padding=dilation, dilation=dilation, bias=False
         )
         self.bn2 = nn.BatchNorm2d(mid_ch)
         self.conv3 = nn.Conv2d(mid_ch, out_ch, 1, bias=False)
@@ -113,8 +107,7 @@ def _make_layer(
     ds: nn.Sequential | None = None
     if stride != 1 or in_ch != out_ch:
         ds = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False),
-            nn.BatchNorm2d(out_ch),
+            nn.Conv2d(in_ch, out_ch, 1, stride=stride, bias=False), nn.BatchNorm2d(out_ch)
         )
     blocks: list[nn.Module] = [
         _Bottleneck(in_ch, mid_ch, stride=stride, dilation=first_dilation, downsample=ds)
@@ -140,11 +133,7 @@ class _DilatedResNet(nn.Module):
         c5_channels: Channel count of layer4 output (for FCN head).
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        layers: tuple[int, int, int, int],
-    ) -> None:
+    def __init__(self, in_channels: int, layers: tuple[int, int, int, int]) -> None:
         super().__init__()
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, 64, 7, stride=2, padding=3, bias=False),
@@ -197,11 +186,7 @@ class _FCNHead(nn.Sequential):
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int,
-        num_classes: int,
-        dropout: float = 0.1,
+        self, in_channels: int, hidden_channels: int, num_classes: int, dropout: float = 0.1
     ) -> None:
         super().__init__(
             nn.Conv2d(in_channels, hidden_channels, 3, padding=1, bias=False),
@@ -361,11 +346,7 @@ class FCNForSemanticSegmentation(SemanticSegmentationModel):
         )
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        targets: Tensor | None = None,
-    ) -> SemanticSegmentationOutput:
+    def forward(self, x: Tensor, targets: Tensor | None = None) -> SemanticSegmentationOutput:
         """Run FCN forward pass.
 
         Args:

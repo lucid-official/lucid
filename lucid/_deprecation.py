@@ -45,12 +45,7 @@ import os
 import warnings
 from collections.abc import Callable
 
-__all__ = [
-    "LucidDeprecationWarning",
-    "MIN_MINOR_RELEASES",
-    "deprecated",
-    "warn_deprecated",
-]
+__all__ = ["LucidDeprecationWarning", "MIN_MINOR_RELEASES", "deprecated", "warn_deprecated"]
 
 #: A deprecated name stays at least this many minor releases, unless its
 #: removal waits for the next major version.

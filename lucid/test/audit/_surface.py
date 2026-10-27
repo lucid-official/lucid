@@ -249,12 +249,7 @@ class Symbol:
         return f"Symbol({self.qualname!r}, {self.kind})"
 
 
-_PREFIX = {
-    "lucid": "lucid.",
-    "tensor": "Tensor.",
-    "nn.functional": "F.",
-    "nn": "nn.",
-}
+_PREFIX = {"lucid": "lucid.", "tensor": "Tensor.", "nn.functional": "F.", "nn": "nn."}
 
 
 def _names(module: Any) -> list[str]:

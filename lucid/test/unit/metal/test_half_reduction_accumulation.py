@@ -122,14 +122,16 @@ _RNG = np.random.default_rng(35)
 _NORMAL = _RNG.standard_normal(1 << 17)
 
 
-def _cases() -> list[
-    tuple[
-        str,
-        Callable[[], np.ndarray],
-        Callable[..., lucid.Tensor],
-        Callable[[np.ndarray], float],
+def _cases() -> (
+    list[
+        tuple[
+            str,
+            Callable[[], np.ndarray],
+            Callable[..., lucid.Tensor],
+            Callable[[np.ndarray], float],
+        ]
     ]
-]:
+):
     """(id, input values, the op on a Metal tensor, the float64 truth)."""
     shifted = 3.0 + 2.0 * _NORMAL
     return [
@@ -163,12 +165,7 @@ def _cases() -> list[
             lambda t: lucid.logsumexp(t, dim=0),
             lambda v: math.log(np.exp(v).sum()),
         ),
-        (
-            "softmax",
-            lambda: np.zeros(_N),
-            lambda t: F.softmax(t, dim=0)[0],
-            lambda v: 1.0 / v.size,
-        ),
+        ("softmax", lambda: np.zeros(_N), lambda t: F.softmax(t, dim=0)[0], lambda v: 1.0 / v.size),
         (
             "log_softmax",
             lambda: np.zeros(_N),
@@ -347,10 +344,7 @@ def _outlier_first(shape: tuple[int, ...], dims: tuple[int, ...] | None) -> np.n
 @pytest.mark.parametrize("correction", [0, 1])
 @pytest.mark.parametrize("shape,dims", _VARIANCE_ROUTES, ids=[str(r[0]) for r in _VARIANCE_ROUTES])
 def test_variance_with_an_outlier_first_is_the_rounded_exact_answer(
-    shape: tuple[int, ...],
-    dims: tuple[int, ...] | None,
-    correction: int,
-    dtype: lucid.dtype,
+    shape: tuple[int, ...], dims: tuple[int, ...] | None, correction: int, dtype: lucid.dtype
 ) -> None:
     """The kernels took their deviations from the first element of the
     whole reduction, so M2 was the difference of two sums of the outlier's
@@ -367,10 +361,7 @@ def test_variance_with_an_outlier_first_is_the_rounded_exact_answer(
 
 
 def _half_vs_float32(
-    make: Callable[[], nn.Module],
-    shape: tuple[int, ...],
-    dtype: lucid.dtype,
-    scale: float,
+    make: Callable[[], nn.Module], shape: tuple[int, ...], dtype: lucid.dtype, scale: float
 ) -> tuple[nn.Module, nn.Module]:
     """The half layer against the same layer in float32, on the same
     half-representable input, through forward and backward.

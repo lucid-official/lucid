@@ -140,11 +140,7 @@ def test_batch_size_none_honours_shuffle_and_a_custom_collate():
 
 
 def test_batch_size_none_streams_an_iterable_dataset_sample_by_sample():
-    assert [int(s) for s in DataLoader(Stream(3, shard=False), batch_size=None)] == [
-        0,
-        1,
-        2,
-    ]
+    assert [int(s) for s in DataLoader(Stream(3, shard=False), batch_size=None)] == [0, 1, 2]
 
 
 def test_batch_size_none_with_drop_last_is_refused():
@@ -181,10 +177,7 @@ def test_an_iterable_loader_checks_its_batch_size_too():
         ({"prefetch_factor": 2}, "prefetch_factor"),
         ({"multiprocessing_context": "spawn"}, "multiprocessing_context"),
         ({"persistent_workers": True}, "persistent_workers"),
-        (
-            {"multiprocessing_context": "no-such-method", "num_workers": 1},
-            "no-such-method",
-        ),
+        ({"multiprocessing_context": "no-such-method", "num_workers": 1}, "no-such-method"),
     ],
 )
 def test_a_bad_value_is_refused_at_construction(kwargs, match):
@@ -199,10 +192,7 @@ def test_a_bad_value_is_refused_at_construction(kwargs, match):
         ({"timeout": "5"}, "timeout"),
         ({"collate_fn": 3}, "collate_fn"),
         ({"worker_init_fn": "init", "num_workers": 1}, "worker_init_fn"),
-        (
-            {"multiprocessing_context": object(), "num_workers": 1},
-            "multiprocessing_context",
-        ),
+        ({"multiprocessing_context": object(), "num_workers": 1}, "multiprocessing_context"),
         ({"generator": object(), "shuffle": True}, "generator"),
         # ``generator=True`` reads as a switch; taking it as the seed 1
         # would turn a typo into a fixed shuffle.

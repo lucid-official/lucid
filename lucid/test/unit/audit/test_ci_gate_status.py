@@ -16,18 +16,12 @@ import pytest
     "stage,next_marker",
     [
         ("Symbol x axis audit", "# Docstring examples"),
-        (
-            "Docstring examples (against the doctest floor)",
-            "# Model-zoo family contract",
-        ),
+        ("Docstring examples (against the doctest floor)", "# Model-zoo family contract"),
     ],
 )
 @pytest.mark.parametrize("status", [0, 1, 2])
 def test_required_ci_stage_preserves_failure(
-    tmp_path: Path,
-    stage: str,
-    next_marker: str,
-    status: int,
+    tmp_path: Path, stage: str, next_marker: str, status: int
 ) -> None:
     root = Path(__file__).resolve().parents[4]
     script = (root / "scripts/ci_full.sh").read_text()
@@ -46,11 +40,7 @@ def test_required_ci_stage_preserves_failure(
     )
     result = subprocess.run(
         ["bash", "-c", harness],
-        env={
-            **os.environ,
-            "PYTHON_BIN": str(fake_python),
-            "TEST_STAGE_STATUS": str(status),
-        },
+        env={**os.environ, "PYTHON_BIN": str(fake_python), "TEST_STAGE_STATUS": str(status)},
         capture_output=True,
         text=True,
         check=False,
@@ -86,9 +76,7 @@ def test_part_core_and_coverage_do_not_abort_on_first_failure_or_collection_erro
         assert "--continue-on-collection-errors" in line
 
 
-def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(
-    tmp_path: Path,
-) -> None:
+def test_part_coreml_runs_the_export_smoke_after_a_red_first_process(tmp_path: Path) -> None:
     """Since 10-21 one red Core ML test meant the export smoke never ran."""
     root = Path(__file__).resolve().parents[4]
     ci_full = (root / "scripts/ci_full.sh").read_text()
@@ -220,9 +208,7 @@ def test_no_ci_pytest_command_stops_at_its_first_failure() -> None:
     assert not offenders, "\n".join(offenders)
 
 
-def test_part_checks_stage_helper_continues_and_exits_one_at_end(
-    tmp_path: Path,
-) -> None:
+def test_part_checks_stage_helper_continues_and_exits_one_at_end(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[4]
     ci_full = (root / "scripts/ci_full.sh").read_text()
     part_checks = ci_full.split("part_checks() {", 1)[1].split("\npart_zoo()", 1)[0]

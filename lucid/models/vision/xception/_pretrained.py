@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.xception._config import XceptionConfig
-from lucid.models.vision.xception._model import (
-    Xception,
-    XceptionForImageClassification,
-)
+from lucid.models.vision.xception._model import Xception, XceptionForImageClassification
 from lucid.models.vision.xception._weights import XceptionWeights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
@@ -85,10 +82,7 @@ def xception(pretrained: bool = False, **overrides: object) -> Xception:
     params=22855952,
 )
 def xception_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: XceptionWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: XceptionWeights | None = None, **overrides: object
 ) -> XceptionForImageClassification:
     r"""Xception image classifier (backbone + dropout + linear head).
 

@@ -167,9 +167,7 @@ def _legacy_type_name(impl: _C_engine.TensorImpl) -> str:
     return name
 
 
-def _type_target(
-    dst_type: object,
-) -> tuple[_C_engine.Device | None, _C_engine.Dtype]:
+def _type_target(dst_type: object) -> tuple[_C_engine.Device | None, _C_engine.Dtype]:
     """The ``(device, dtype)`` ``Tensor.type(dst_type)`` casts to.
 
     Takes what the reference's ``type`` takes: a dtype, which keeps the
@@ -213,9 +211,7 @@ def _fast_device_enum(dev_in: object) -> _C_engine.Device | None:
 
 
 def _resolve_to_targets(
-    self: Tensor,
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
+    self: Tensor, args: tuple[object, ...], kwargs: dict[str, object]
 ) -> tuple[_C_engine.Device, _C_engine.Dtype, bool]:
     target_device = self._impl.device
     target_dtype = self._impl.dtype
@@ -239,9 +235,7 @@ def _resolve_to_targets(
 
 
 def _transfer_impl(
-    src_impl: _C_engine.TensorImpl,
-    target_device: _C_engine.Device,
-    target_dtype: _C_engine.Dtype,
+    src_impl: _C_engine.TensorImpl, target_device: _C_engine.Device, target_dtype: _C_engine.Dtype
 ) -> Tensor:
     # A shared tensor is already one whole contiguous buffer, and
     # ``contiguous`` copied it into an ordinary one, so the relabel below
@@ -390,10 +384,7 @@ def _check_memory_format(memory_format: object, method: str) -> str:
 
 
 def _cast(
-    self: Tensor,
-    target: _dtype_cls,
-    memory_format: object = None,
-    method: str = "to",
+    self: Tensor, target: _dtype_cls, memory_format: object = None, method: str = "to"
 ) -> Tensor:
     """``self`` at ``target``'s dtype: ``self`` itself when it is there already."""
     fmt = _check_memory_format(memory_format, method)

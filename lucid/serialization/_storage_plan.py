@@ -102,11 +102,7 @@ def _numel(shape: list[int]) -> int:
 
 def _own_geometry(t: _T) -> tuple[list[int], list[int], int]:
     """``t``'s shape, stride and offset in its storage, in elements."""
-    return (
-        [int(d) for d in t.shape],
-        [int(s) for s in t.stride()],
-        int(t.storage_offset()),
-    )
+    return ([int(d) for d in t.shape], [int(s) for s in t.stride()], int(t.storage_offset()))
 
 
 def _window_positions(size: tuple[int, ...], stride: tuple[int, ...], start: int) -> _T:
@@ -298,11 +294,7 @@ def _compact_strided_cluster(plan: _StoragePlan, cluster: list[_Member], n: int)
             return False
         remapped.append((m, stride, offset))
     buf = _C_engine.TensorImpl.from_bytes(
-        top.raw,
-        [_numel(top.shape)],
-        top.tensor._impl.dtype,
-        _C_engine.Device.CPU,
-        False,
+        top.raw, [_numel(top.shape)], top.tensor._impl.dtype, _C_engine.Device.CPU, False
     )
     for m, stride, offset in remapped:
         back = _C_engine.TensorImpl._make_view(buf, m.shape, stride, offset)

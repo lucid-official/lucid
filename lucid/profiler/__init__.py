@@ -345,10 +345,7 @@ class Profiler:
 
 
 @contextmanager
-def profile(
-    activities: list[str] | None = None,
-    with_memory: bool = True,
-) -> Iterator[Profiler]:
+def profile(activities: list[str] | None = None, with_memory: bool = True) -> Iterator[Profiler]:
     r"""Context manager that records ops executed within the ``with`` block.
 
     The canonical entry point for ad-hoc profiling: enter the context,
@@ -433,11 +430,4 @@ def record_function(name: str) -> Iterator[None]:
     yield
 
 
-__all__ = [
-    "Profiler",
-    "OpEvent",
-    "ProfileSummary",
-    "MemoryStats",
-    "profile",
-    "record_function",
-]
+__all__ = ["Profiler", "OpEvent", "ProfileSummary", "MemoryStats", "profile", "record_function"]

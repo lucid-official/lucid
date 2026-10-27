@@ -36,10 +36,7 @@ from lucid.models import (
     list_models,
 )
 from lucid.models.generative.dreamer_v2 import DreamerV2BehaviorOutput, DreamerV2Output
-from lucid.models.generative._common._dists import (
-    OneHotCategorical,
-    TruncatedNormal,
-)
+from lucid.models.generative._common._dists import OneHotCategorical, TruncatedNormal
 from lucid.models.generative.dreamer_v2._model import balanced_kl
 
 
@@ -170,11 +167,7 @@ class TestKLBalancing:
             )
 
         rssm = model.dreamer_v2.rssm
-        return (
-            float(out.kl_loss.item()),
-            total(rssm.prior_head),
-            total(rssm.posterior_head),
-        )
+        return (float(out.kl_loss.item()), total(rssm.prior_head), total(rssm.posterior_head))
 
     def test_all_pressure_on_the_prior(self) -> None:
         weights = DreamerV2ForWorldModeling(_tiny_cfg()).state_dict()
@@ -638,11 +631,7 @@ class TestDiscreteActionSpace:
 
     def test_imagined_actions_are_one_hot(self) -> None:
         model = self._discrete()
-        out = model(
-            lucid.randn((2, 4, 3, 64, 64)),
-            lucid.randn((2, 4, 4)),
-            lucid.randn((2, 4)),
-        )
+        out = model(lucid.randn((2, 4, 3, 64, 64)), lucid.randn((2, 4, 4)), lucid.randn((2, 4)))
         assert out.behavior is not None
         drawn = out.behavior.imagined_action
         assert drawn.shape == (8, 4, 4)
@@ -650,11 +639,7 @@ class TestDiscreteActionSpace:
 
     def test_the_actor_still_trains(self) -> None:
         model = self._discrete()
-        out = model(
-            lucid.randn((2, 4, 3, 64, 64)),
-            lucid.randn((2, 4, 4)),
-            lucid.randn((2, 4)),
-        )
+        out = model(lucid.randn((2, 4, 3, 64, 64)), lucid.randn((2, 4, 4)), lucid.randn((2, 4)))
         assert out.behavior is not None
         model.zero_grad()
         out.behavior.actor_loss.backward()

@@ -20,11 +20,7 @@ import numpy as np
 import pytest
 
 import lucid
-from lucid.models.generative.realnvp import (
-    RealNVPConfig,
-    RealNVPForImageGeneration,
-    RealNVPModel,
-)
+from lucid.models.generative.realnvp import RealNVPConfig, RealNVPForImageGeneration, RealNVPModel
 
 pytestmark = [pytest.mark.parity]
 
@@ -182,10 +178,7 @@ def test_log_det_parity(ref: ModuleType) -> None:
     _z, log_det = model.encode(lucid.tensor(x_np))
     _z_ref, log_det_ref = _ref_encode(ref, model, x_np)
     np.testing.assert_allclose(
-        log_det.numpy(),
-        log_det_ref.numpy().astype(np.float32),
-        rtol=1e-4,
-        atol=1e-3,
+        log_det.numpy(), log_det_ref.numpy().astype(np.float32), rtol=1e-4, atol=1e-3
     )
 
 

@@ -153,9 +153,7 @@ def test_general_cosine_reproduces_blackman():
 
 def test_general_cosine_reproduces_nuttall():
     assert np.allclose(
-        _v(W.general_cosine(32, COSINE_WINDOWS["nuttall"])),
-        _v(W.nuttall(32)),
-        atol=1e-6,
+        _v(W.general_cosine(32, COSINE_WINDOWS["nuttall"])), _v(W.nuttall(32)), atol=1e-6
     )
 
 

@@ -80,10 +80,7 @@ def test_reference_refuses_empty_sequence(ref: ModuleType, kind: str, layout: st
 def test_empty_packed_sequence_is_refused(kind: str, device: str) -> None:
     module = getattr(nn, kind)(_I, _H).to(device)
     packed = PackedSequence(
-        lucid.randn(0, _I, device=device),
-        lucid.tensor([], dtype=lucid.int64),
-        None,
-        None,
+        lucid.randn(0, _I, device=device), lucid.tensor([], dtype=lucid.int64), None, None
     )
     with pytest.raises(ValueError, match=_REFUSAL):
         module(packed)
@@ -102,16 +99,7 @@ def test_engine_lstm_refuses_empty_sequence(device: str, requires_grad: bool) ->
     ]
     with pytest.raises(ValueError, match=_REFUSAL) as info:
         _C_engine.nn.lstm_forward(
-            _unwrap(x),
-            None,
-            None,
-            [_unwrap(w) for w in weights],
-            _H,
-            1,
-            False,
-            False,
-            True,
-            0,
+            _unwrap(x), None, None, [_unwrap(w) for w in weights], _H, 1, False, False, True, 0
         )
     assert isinstance(info.value, _C_engine.InvalidArgument)
 

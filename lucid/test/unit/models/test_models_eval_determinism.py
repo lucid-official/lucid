@@ -124,15 +124,10 @@ def _with_dropout_on(factory: str, overrides: dict[str, Any]) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    ("family", "factory", "overrides", "make_inputs"),
-    CASES,
-    ids=[_family_of(c) for c in CASES],
+    ("family", "factory", "overrides", "make_inputs"), CASES, ids=[_family_of(c) for c in CASES]
 )
 def test_eval_is_deterministic(
-    family: str,
-    factory: str,
-    overrides: dict[str, Any],
-    make_inputs: Any,
+    family: str, factory: str, overrides: dict[str, Any], make_inputs: Any
 ) -> None:
     """Two calls, one input, one answer — with dropout turned up."""
     # A model whose forward is a reparameterised draw is held to the same
@@ -185,9 +180,7 @@ def test_the_dropout_really_was_turned_on() -> None:
 
 #: Families whose kept tables outlive the model, by the call that drops them:
 #: a fresh model alone does not make its first trace a cold one.
-_SHARED_TABLES: dict[str, Callable[[], None]] = {
-    "coatnet": _coatnet._INDEX_CACHE.clear,
-}
+_SHARED_TABLES: dict[str, Callable[[], None]] = {"coatnet": _coatnet._INDEX_CACHE.clear}
 
 #: Families that build a derived constant table on first use and keep it,
 #: with the ops that build it.  None of them may enter a recording.
@@ -234,10 +227,7 @@ def _only_in(cold: list[str], warm: list[str]) -> str:
 
 @pytest.mark.parametrize(("family", "factory", "overrides", "make_inputs"), _trace_cases())
 def test_a_trace_records_the_same_graph_cold_or_warm(
-    family: str,
-    factory: str,
-    overrides: dict[str, Any],
-    make_inputs: Any,
+    family: str, factory: str, overrides: dict[str, Any], make_inputs: Any
 ) -> None:
     """A recording does not depend on what the model ran before (LCD-627)."""
     drop = _SHARED_TABLES.get(family)

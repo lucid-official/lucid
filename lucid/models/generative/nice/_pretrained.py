@@ -50,38 +50,22 @@ from lucid.models._utils._common import apply_overrides, reject_unavailable_pret
 
 # Paper Figure 3 — MNIST: 784 dims, 5 hidden layers of 1000, logistic prior.
 _CFG_MNIST = NICEConfig(
-    input_dim=784,
-    num_coupling_layers=4,
-    num_hidden_layers=5,
-    hidden_dim=1_000,
-    prior="logistic",
+    input_dim=784, num_coupling_layers=4, num_hidden_layers=5, hidden_dim=1_000, prior="logistic"
 )
 
 # Paper Figure 3 — TFD: 2304 dims, 4 hidden layers of 5000, normal prior.
 _CFG_TFD = NICEConfig(
-    input_dim=2_304,
-    num_coupling_layers=4,
-    num_hidden_layers=4,
-    hidden_dim=5_000,
-    prior="gaussian",
+    input_dim=2_304, num_coupling_layers=4, num_hidden_layers=4, hidden_dim=5_000, prior="gaussian"
 )
 
 # Paper Figure 3 — SVHN: 3072 dims, 4 hidden layers of 2000, logistic prior.
 _CFG_SVHN = NICEConfig(
-    input_dim=3_072,
-    num_coupling_layers=4,
-    num_hidden_layers=4,
-    hidden_dim=2_000,
-    prior="logistic",
+    input_dim=3_072, num_coupling_layers=4, num_hidden_layers=4, hidden_dim=2_000, prior="logistic"
 )
 
 # Paper Figure 3 — CIFAR-10: same topology as SVHN.
 _CFG_CIFAR = NICEConfig(
-    input_dim=3_072,
-    num_coupling_layers=4,
-    num_hidden_layers=4,
-    hidden_dim=2_000,
-    prior="logistic",
+    input_dim=3_072, num_coupling_layers=4, num_hidden_layers=4, hidden_dim=2_000, prior="logistic"
 )
 
 

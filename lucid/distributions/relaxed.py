@@ -15,16 +15,8 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import (
-    _align_device,
-    _as_tensor,
-    _clamp_probs,
-    _lazy_param,
-)
-from lucid.distributions.bernoulli import (
-    _logits_to_probs,
-    _probs_to_logits,
-)
+from lucid.distributions._util import _align_device, _as_tensor, _clamp_probs, _lazy_param
+from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
     positive,
@@ -122,11 +114,7 @@ class RelaxedBernoulli(Distribution):
     # there: a probability of 0 or 1 is held one epsilon inside it
     # (``logits``), and a value of 0 or 1 is scored one step inside it
     # (:meth:`log_prob`).
-    arg_constraints = {
-        "temperature": positive,
-        "probs": unit_interval,
-        "logits": real,
-    }
+    arg_constraints = {"temperature": positive, "probs": unit_interval, "logits": real}
     support: Constraint | None = unit_interval
     has_rsample = True
 
@@ -283,11 +271,7 @@ class RelaxedBernoulli(Distribution):
         return tau.log() + diff - 2.0 * diff.softplus() - log_y - log_1my
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`RelaxedBernoulli` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(RelaxedBernoulli, _instance)
         batch_shape = tuple(batch_shape)
@@ -389,11 +373,7 @@ class RelaxedOneHotCategorical(Distribution):
     # either, and produces the same non-finite draw.  Stricter than the
     # reference on purpose — listed in the constraint-parity test's
     # exceptions.
-    arg_constraints = {
-        "temperature": positive,
-        "probs": simplex,
-        "logits": real_vector,
-    }
+    arg_constraints = {"temperature": positive, "probs": simplex, "logits": real_vector}
     support: Constraint | None = simplex
     has_rsample = True
 
@@ -429,10 +409,7 @@ class RelaxedOneHotCategorical(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        from lucid.distributions.categorical import (
-            _normalize_logits,
-            _normalize_probs,
-        )
+        from lucid.distributions.categorical import _normalize_logits, _normalize_probs
 
         if (probs is None) == (logits is None):
             raise ValueError("RelaxedOneHotCategorical: pass exactly one of `probs` or `logits`.")
@@ -452,9 +429,7 @@ class RelaxedOneHotCategorical(Distribution):
         )
         self._num_events = shape[-1]
         super().__init__(
-            batch_shape=shape[:-1],
-            event_shape=shape[-1:],
-            validate_args=validate_args,
+            batch_shape=shape[:-1], event_shape=shape[-1:], validate_args=validate_args
         )
 
     @_lazy_param
@@ -544,11 +519,7 @@ class RelaxedOneHotCategorical(Distribution):
         )
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`RelaxedOneHotCategorical` expanded to ``batch_shape``."""
         new = self._get_checked_instance(RelaxedOneHotCategorical, _instance)
         batch_shape = tuple(batch_shape)
@@ -561,9 +532,7 @@ class RelaxedOneHotCategorical(Distribution):
         if "logits" in self.__dict__:
             new.logits = self.logits.expand(param_shape)
         super(RelaxedOneHotCategorical, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self._event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self._event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new

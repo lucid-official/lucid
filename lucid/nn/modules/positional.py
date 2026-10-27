@@ -23,10 +23,7 @@ import lucid
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
-from lucid.nn.functional.positional import (
-    sinusoidal_embedding,
-    sinusoidal_embedding_2d,
-)
+from lucid.nn.functional.positional import sinusoidal_embedding, sinusoidal_embedding_2d
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sinusoidal positional embedding — 1D
@@ -75,13 +72,7 @@ class SinusoidalEmbedding(Module):
 
     pe: Tensor
 
-    def __init__(
-        self,
-        num_positions: int,
-        embedding_dim: int,
-        *,
-        base: float = 10_000.0,
-    ) -> None:
+    def __init__(self, num_positions: int, embedding_dim: int, *, base: float = 10_000.0) -> None:
         super().__init__()
         if embedding_dim % 2 != 0:
             raise ValueError(
@@ -147,12 +138,7 @@ class SinusoidalEmbedding2D(Module):
     pe: Tensor
 
     def __init__(
-        self,
-        height: int,
-        width: int,
-        embedding_dim: int,
-        *,
-        base: float = 10_000.0,
+        self, height: int, width: int, embedding_dim: int, *, base: float = 10_000.0
     ) -> None:
         super().__init__()
         if embedding_dim % 4 != 0:
@@ -225,12 +211,7 @@ class RotaryEmbedding(Module):
     cos_cached: Tensor
     sin_cached: Tensor
 
-    def __init__(
-        self,
-        head_dim: int,
-        max_position_embeddings: int,
-        base: float = 10_000.0,
-    ) -> None:
+    def __init__(self, head_dim: int, max_position_embeddings: int, base: float = 10_000.0) -> None:
         super().__init__()
         if head_dim % 2 != 0:
             raise ValueError(f"RotaryEmbedding requires an even head_dim, got {head_dim}")
@@ -314,12 +295,7 @@ class TimestepEmbedding(Module):
     """
 
     def __init__(
-        self,
-        in_dim: int,
-        out_dim: int,
-        *,
-        base: float = 10_000.0,
-        flip_sin_to_cos: bool = True,
+        self, in_dim: int, out_dim: int, *, base: float = 10_000.0, flip_sin_to_cos: bool = True
     ) -> None:
         super().__init__()
         if in_dim % 2 != 0:

@@ -84,10 +84,7 @@ def test_an_unknown_interpolation_rule_is_refused():
 
 def test_nanquantile_ignores_the_nans():
     _close(_v(lucid.nanquantile(_t(V_NAN), 0.5)), np.nanquantile(V_NAN, 0.5))
-    _close(
-        _v(lucid.nanquantile(_t(V_NAN), [0.25, 0.75])),
-        np.nanquantile(V_NAN, [0.25, 0.75]),
-    )
+    _close(_v(lucid.nanquantile(_t(V_NAN), [0.25, 0.75])), np.nanquantile(V_NAN, [0.25, 0.75]))
 
 
 def test_a_single_nan_is_what_separates_it_from_quantile():
@@ -115,8 +112,7 @@ def test_quantile_poisons_only_the_slices_holding_a_nan(dim, keepdim):
 
 def test_quantile_poisons_per_slice_for_a_list_of_quantiles():
     _close(
-        _v(lucid.quantile(_t(X_NAN), [0.25, 0.75], dim=0)),
-        np.quantile(X_NAN, [0.25, 0.75], axis=0),
+        _v(lucid.quantile(_t(X_NAN), [0.25, 0.75], dim=0)), np.quantile(X_NAN, [0.25, 0.75], axis=0)
     )
 
 
@@ -130,10 +126,7 @@ def test_nanquantile_along_an_axis_uses_each_slices_own_count(dim):
     of 5.6, so every column was read as if it had five entries and
     *three of the five columns holding no NaN at all* came back wrong.
     """
-    _close(
-        _v(lucid.nanquantile(_t(X_NAN), 0.5, dim=dim)),
-        np.nanquantile(X_NAN, 0.5, axis=dim),
-    )
+    _close(_v(lucid.nanquantile(_t(X_NAN), 0.5, dim=dim)), np.nanquantile(X_NAN, 0.5, axis=dim))
 
 
 @pytest.mark.parametrize("interpolation", ["linear", "lower", "higher", "nearest", "midpoint"])
@@ -246,10 +239,7 @@ def test_bincount_counts_each_value():
 
 
 def test_bincount_pads_to_minlength():
-    _close(
-        _v(lucid.bincount(_ints(COUNTS), minlength=12)),
-        np.bincount(COUNTS, minlength=12),
-    )
+    _close(_v(lucid.bincount(_ints(COUNTS), minlength=12)), np.bincount(COUNTS, minlength=12))
 
 
 def test_bincount_sums_weights():

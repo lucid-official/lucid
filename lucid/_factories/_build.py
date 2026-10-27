@@ -237,10 +237,7 @@ def _pack(flat: Sequence[object], dtype: _C_engine.Dtype) -> bytes:
 
 
 def _from_values(
-    flat: Sequence[object],
-    shape: list[int],
-    dtype: _C_engine.Dtype,
-    device: _C_engine.Device,
+    flat: Sequence[object], shape: list[int], dtype: _C_engine.Dtype, device: _C_engine.Device
 ) -> _C_engine.TensorImpl:
     r"""A tensor (not yet a leaf of the caller's choosing) holding ``flat``."""
     if dtype == _D.BF16:
@@ -255,10 +252,7 @@ _EXACT_IN_DOUBLE = 2**53
 
 
 def _fill(
-    shape: list[int],
-    value: object,
-    dtype: _C_engine.Dtype,
-    device: _C_engine.Device,
+    shape: list[int], value: object, dtype: _C_engine.Dtype, device: _C_engine.Device
 ) -> _C_engine.TensorImpl:
     r"""``shape`` filled with ``value``, exact in ``dtype``.
 

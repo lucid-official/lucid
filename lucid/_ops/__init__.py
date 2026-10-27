@@ -131,11 +131,7 @@ def _parse_pybind_signature(fn: object) -> inspect.Signature | None:
             if not pname.isidentifier():
                 return None
             params.append(
-                inspect.Parameter(
-                    pname,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                    default=default,
-                )
+                inspect.Parameter(pname, inspect.Parameter.POSITIONAL_OR_KEYWORD, default=default)
             )
         else:
             if ch in "[(":
@@ -243,14 +239,8 @@ def _signature_for_entry(entry: OpEntry) -> inspect.Signature:
         except (TypeError, ValueError, NameError):  # fmt: skip
             sig = _parse_pybind_signature(fn) or inspect.Signature(
                 parameters=[
-                    inspect.Parameter(
-                        "args",
-                        inspect.Parameter.VAR_POSITIONAL,
-                    ),
-                    inspect.Parameter(
-                        "kwargs",
-                        inspect.Parameter.VAR_KEYWORD,
-                    ),
+                    inspect.Parameter("args", inspect.Parameter.VAR_POSITIONAL),
+                    inspect.Parameter("kwargs", inspect.Parameter.VAR_KEYWORD),
                 ]
             )
 
@@ -259,17 +249,9 @@ def _signature_for_entry(entry: OpEntry) -> inspect.Signature:
         # level) with the user-facing ``tensors: list[Tensor]``.
         params = list(sig.parameters.values())
         if params:
-            params[0] = inspect.Parameter(
-                "tensors",
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
+            params[0] = inspect.Parameter("tensors", inspect.Parameter.POSITIONAL_OR_KEYWORD)
         else:
-            params = [
-                inspect.Parameter(
-                    "tensors",
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-            ]
+            params = [inspect.Parameter("tensors", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
         return sig.replace(parameters=params)
 
     return _rename_leading_tensor_params(sig, entry.n_tensor_args, entry.name)

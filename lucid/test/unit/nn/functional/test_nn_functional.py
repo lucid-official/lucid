@@ -175,11 +175,7 @@ class TestFractionalPool:
         x = lucid.randn(1, 1, 4, 4)
         samples = lucid.zeros(1, 1, 2)  # deterministic: starts=[0,2]
         out, idx = F.fractional_max_pool2d(  # type: ignore[misc]
-            x,
-            kernel_size=2,
-            output_size=2,
-            return_indices=True,
-            _random_samples=samples,
+            x, kernel_size=2, output_size=2, return_indices=True, _random_samples=samples
         )
         x_np = x.numpy()[0, 0]  # (4, 4)
         out_np = out.numpy()[0, 0]  # (2, 2)
@@ -419,10 +415,7 @@ class TestSoftmaxAndReductionDtype:
                 lucid.log_softmax(x, dim=-1, dtype=lucid.float32),
                 ref_mod.log_softmax(rx, dim=-1, dtype=ref_mod.float32),
             ),
-            (
-                x.softmax(dim=-1, dtype=lucid.float32),
-                rx.softmax(dim=-1, dtype=ref_mod.float32),
-            ),
+            (x.softmax(dim=-1, dtype=lucid.float32), rx.softmax(dim=-1, dtype=ref_mod.float32)),
             (
                 x.log_softmax(dim=-1, dtype=lucid.float32),
                 rx.log_softmax(dim=-1, dtype=ref_mod.float32),
@@ -456,8 +449,7 @@ class TestSoftmaxAndReductionDtype:
 
     @pytest.mark.parametrize("device", ["cpu", "metal"])
     @pytest.mark.parametrize(
-        "op_name",
-        ["sum", "mean", "prod", "cumsum", "cumprod", "nansum", "nanmean"],
+        "op_name", ["sum", "mean", "prod", "cumsum", "cumprod", "nansum", "nanmean"]
     )
     def test_reduction_dtype_keyword(self, ref: object, device: str, op_name: str) -> None:
         if device == "metal" and not lucid.metal.is_available():

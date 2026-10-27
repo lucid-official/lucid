@@ -45,10 +45,7 @@ from lucid.models._utils._detection import (
     clip_boxes_to_image,
     decode_boxes,
 )
-from lucid.models._utils._detection_results import (
-    check_per_image,
-    merge_class_detections,
-)
+from lucid.models._utils._detection_results import check_per_image, merge_class_detections
 from lucid.models.vision.rcnn._config import RCNNConfig
 from lucid.models._utils._common import host_rows
 
@@ -152,12 +149,7 @@ class _FCHead(nn.Module):
     recover geometry.
     """
 
-    def __init__(
-        self,
-        feat_dim: int,
-        num_classes: int,
-        dropout: float,
-    ) -> None:
+    def __init__(self, feat_dim: int, num_classes: int, dropout: float) -> None:
         super().__init__()
         self.fc6 = nn.Linear(feat_dim, 4096)
         self.fc7 = nn.Linear(4096, 4096)
@@ -285,11 +277,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _warp_proposals(
-        self,
-        img: Tensor,
-        proposals: Tensor,
-    ) -> Tensor:
+    def _warp_proposals(self, img: Tensor, proposals: Tensor) -> Tensor:
         """Warp all proposals from one image into roi_size × roi_size crops.
 
         Args:
@@ -344,10 +332,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
         return lucid.cat(crops, dim=0)
 
     def _decode_all_class_boxes(
-        self,
-        proposals: Tensor,
-        bbox_deltas: Tensor,
-        image_size: tuple[int, int],
+        self, proposals: Tensor, bbox_deltas: Tensor, image_size: tuple[int, int]
     ) -> Tensor:
         """Decode every class's bbox deltas for each proposal.
 
@@ -384,11 +369,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
     # ------------------------------------------------------------------
 
     def _stage_losses(
-        self,
-        logits: Tensor,
-        deltas: Tensor,
-        proposals: Tensor,
-        target: dict[str, Tensor],
+        self, logits: Tensor, deltas: Tensor, proposals: Tensor, target: dict[str, Tensor]
     ) -> tuple[Tensor, Tensor]:
         """Stage-1 and stage-3 losses for one image.
 
@@ -550,10 +531,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
             )
 
         return ObjectDetectionOutput(
-            logits=final_logits,
-            pred_boxes=final_boxes,
-            loss=loss,
-            proposals=tuple(proposals),
+            logits=final_logits, pred_boxes=final_boxes, loss=loss, proposals=tuple(proposals)
         )
 
     # ------------------------------------------------------------------
@@ -561,9 +539,7 @@ class RCNNForObjectDetection(ObjectDetectionModel):
     # ------------------------------------------------------------------
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        proposals: list[Tensor] | None = None,
+        self, output: ObjectDetectionOutput, proposals: list[Tensor] | None = None
     ) -> list[dict[str, Tensor]]:
         """Apply score threshold + per-class NMS to raw R-CNN output.
 

@@ -90,8 +90,7 @@ def test_engine_drift_catches_missing_and_phantom_members() -> None:
 
     # 2. Add phantom Profiler.reset to stub -> reported as phantom in stub
     phantom_method_stub = stub_text.replace(
-        "class Profiler:\n",
-        "class Profiler:\n    def reset(self) -> None: ...\n",
+        "class Profiler:\n", "class Profiler:\n    def reset(self) -> None: ...\n"
     )
     assert engine_drift(phantom_method_stub, _C_engine) == [
         "Profiler.reset: in the stub, not in the engine"
@@ -99,8 +98,7 @@ def test_engine_drift_catches_missing_and_phantom_members() -> None:
 
     # 3. Remove Generator.counter.setter -> reported as missing setter
     missing_setter_stub = stub_text.replace(
-        "    @counter.setter\n    def counter(self, value: SupportsInt) -> None: ...\n",
-        "",
+        "    @counter.setter\n    def counter(self, value: SupportsInt) -> None: ...\n", ""
     )
     assert missing_setter_stub != stub_text
     assert engine_drift(missing_setter_stub, _C_engine) == [

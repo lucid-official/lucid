@@ -262,12 +262,7 @@ def _array(values: list[float | None]) -> np.ndarray:
 
 
 def _reference(
-    ref: Any,
-    shape: tuple[int, ...],
-    mode: str,
-    pad: str,
-    align: bool,
-    point: list[float],
+    ref: Any, shape: tuple[int, ...], mode: str, pad: str, align: bool, point: list[float]
 ) -> dict[str, np.ndarray]:
     image = np.arange(float(math.prod(shape)), dtype=np.float32).reshape(shape)
     grid = np.array(point, dtype=np.float32).reshape((1,) * (len(shape) - 1) + (len(point),))
@@ -346,14 +341,7 @@ def test_rotate_far_or_nan_centre(
         ("float16", 1001.0, 3.0, -1.0, 3002.0, 3004.0),
         ("bfloat16", 129.0, 3.0, -1.0, 386.0, 388.0),
         ("float32", 1e10, 3.0, -1.0, 29999998976.0, 30000001024.0),
-        (
-            "float64",
-            float(2**52 + 1),
-            3.0,
-            -1.0,
-            float(3 * 2**52 + 2),
-            float(3 * 2**52 + 4),
-        ),
+        ("float64", float(2**52 + 1), 3.0, -1.0, float(3 * 2**52 + 2), float(3 * 2**52 + 4)),
     ],
 )
 def test_fma_single_rounding_and_gradients(
@@ -451,12 +439,7 @@ def test_fma_bf16_double_rounding_traps_and_random_corpus(device: str) -> None:
         s = float(np.float32(float(exact)))
         diff = exact - Fraction(s)
         if diff != 0:
-            s = float(
-                np.nextafter(
-                    np.float32(s),
-                    np.float32(math.inf if diff > 0 else -math.inf),
-                )
-            )
+            s = float(np.nextafter(np.float32(s), np.float32(math.inf if diff > 0 else -math.inf)))
         rto_f32.append(s)
     want = lucid.tensor(rto_f32, dtype=lucid.bfloat16).tolist()
     assert got == want

@@ -124,10 +124,7 @@ for symbol in _surface.enumerate_surface():
 print("\\n".join(offenders))
 """
     done = subprocess.run(
-        [sys.executable, "-W", "ignore", "-c", code],
-        capture_output=True,
-        text=True,
-        check=True,
+        [sys.executable, "-W", "ignore", "-c", code], capture_output=True, text=True, check=True
     )
     offenders = [line for line in done.stdout.splitlines() if line.strip()]
     losses = [o for o in offenders if "loss" in o]
@@ -290,10 +287,7 @@ for name in failed:
     print(name)
 """
     done = subprocess.run(
-        [sys.executable, "-W", "ignore", "-c", code],
-        capture_output=True,
-        text=True,
-        check=True,
+        [sys.executable, "-W", "ignore", "-c", code], capture_output=True, text=True, check=True
     )
     lines = [ln for ln in done.stdout.splitlines() if ln.strip()]
     built, total = lines[0].split("/")

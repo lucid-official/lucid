@@ -14,13 +14,7 @@ import pytest
 
 import lucid
 from lucid.test.audit import _specs, _surface
-from lucid.test.audit._axes import (
-    NOT_DIFFERENTIABLE,
-    Context,
-    EdgeAxis,
-    GradientAxis,
-    _try_forward,
-)
+from lucid.test.audit._axes import NOT_DIFFERENTIABLE, Context, EdgeAxis, GradientAxis, _try_forward
 from lucid.test.audit._axes_stability import ContiguityAxis
 from lucid.test.audit._result import Status
 
@@ -60,10 +54,7 @@ _SOLVES = (
 def test_a_resized_solve_keeps_its_sides_and_pivots_coherent(qualname: str) -> None:
     fn, call = _first_call(qualname)
     shape = call.base.shape
-    for array in (
-        np.zeros((0, *shape[1:])),
-        np.full((1,) * len(shape), 0.7),
-    ):
+    for array in (np.zeros((0, *shape[1:])), np.full((1,) * len(shape), 0.7)):
         resized = call.resized(array)
         matrix, rhs = resized.args[0], resized.args[-1]
         assert matrix.shape[-1] == matrix.shape[-2], matrix.shape
@@ -72,30 +63,18 @@ def test_a_resized_solve_keeps_its_sides_and_pivots_coherent(qualname: str) -> N
             pivots = resized.args[1].numpy()
             assert pivots.shape == tuple(matrix.shape[:-1])
             np.testing.assert_array_equal(
-                pivots,
-                np.broadcast_to(np.arange(1, matrix.shape[-1] + 1), pivots.shape),
+                pivots, np.broadcast_to(np.arange(1, matrix.shape[-1] + 1), pivots.shape)
             )
         fn(*resized.args, **call.kwargs)
 
 
 #: An in-place clamp cannot grow its receiver, so its tensor bounds shrink
 #: with it (LCD-532, once LCD-519 made ``clamp_`` refuse as ``add_`` does).
-_CLAMPS_IN_PLACE = (
-    "Tensor.clamp_",
-    "Tensor.clamp_min_",
-    "Tensor.clamp_max_",
-    "Tensor.clip_",
-)
+_CLAMPS_IN_PLACE = ("Tensor.clamp_", "Tensor.clamp_min_", "Tensor.clamp_max_", "Tensor.clip_")
 
 
 @pytest.mark.parametrize(
-    "qualname",
-    (
-        *_SOLVES,
-        "lucid.nn.utils.pack_padded_sequence",
-        "F.ctc_loss",
-        *_CLAMPS_IN_PLACE,
-    ),
+    "qualname", (*_SOLVES, "lucid.nn.utils.pack_padded_sequence", "F.ctc_loss", *_CLAMPS_IN_PLACE)
 )
 def test_the_edge_axis_answers_ops_with_joint_operands(qualname: str) -> None:
     finding = EdgeAxis().run(_symbol(qualname), Context())
@@ -145,9 +124,7 @@ def test_a_resized_ctc_problem_keeps_its_targets_and_lengths_coherent() -> None:
 
 
 @pytest.mark.parametrize("qualname", ["Tensor.view", "lucid.view"])
-def test_view_is_probed_with_a_shape_a_strided_slice_can_express(
-    qualname: str,
-) -> None:
+def test_view_is_probed_with_a_shape_a_strided_slice_can_express(qualname: str) -> None:
     finding = ContiguityAxis().run(_symbol(qualname), Context())
     assert finding.status == Status.PASS, finding.detail
     assert "vacuous" not in finding.detail
@@ -155,12 +132,7 @@ def test_view_is_probed_with_a_shape_a_strided_slice_can_express(
 
 @pytest.mark.parametrize(
     "qualname",
-    [
-        "lucid.autograd.grad",
-        "lucid.autograd.vjp",
-        "lucid.autograd.jvp",
-        "Tensor.retain_grad",
-    ],
+    ["lucid.autograd.grad", "lucid.autograd.vjp", "lucid.autograd.jvp", "Tensor.retain_grad"],
 )
 def test_graph_taking_callables_have_an_invocation_that_runs(qualname: str) -> None:
     _first_call(qualname)

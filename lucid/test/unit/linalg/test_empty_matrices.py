@@ -61,11 +61,7 @@ def test_svd_of_an_empty_matrix(shape, expected_full, expected_reduced) -> None:
 
 @pytest.mark.parametrize(
     "shape,expected",
-    [
-        ((0, 0), [(0, 0), (0, 0)]),
-        ((0, 3), [(0, 0), (0, 3)]),
-        ((3, 0), [(3, 0), (0, 0)]),
-    ],
+    [((0, 0), [(0, 0), (0, 0)]), ((0, 3), [(0, 0), (0, 3)]), ((3, 0), [(3, 0), (0, 0)])],
 )
 def test_qr_of_an_empty_matrix(shape, expected) -> None:
     assert _shapes(L.qr(_t(shape))) == expected
@@ -208,8 +204,4 @@ def test_non_degenerate_matrices_still_decompose(shape) -> None:
     vh_np = np.asarray(vh.numpy())
     assert np.allclose(u_np.T @ u_np, np.eye(m), atol=1e-6)
     assert np.allclose(vh_np @ vh_np.T, np.eye(n), atol=1e-6)
-    assert np.allclose(
-        u_np[:, :k] @ np.diag(np.asarray(s.numpy())) @ vh_np[:k, :],
-        a,
-        atol=1e-8,
-    )
+    assert np.allclose(u_np[:, :k] @ np.diag(np.asarray(s.numpy())) @ vh_np[:k, :], a, atol=1e-8)

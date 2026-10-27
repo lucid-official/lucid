@@ -94,12 +94,7 @@ def test_inverse_gamma_moments_never_go_negative(concentration: float) -> None:
     [
         ("Cauchy", lambda: D.Cauchy(loc=_T(0.0), scale=_T(1.0)), "nan", "inf"),
         ("HalfCauchy", lambda: D.HalfCauchy(scale=_T(1.0)), "inf", "inf"),
-        (
-            "Categorical",
-            lambda: D.Categorical(probs=_T(0.5, 0.5)),
-            "nan",
-            "nan",
-        ),
+        ("Categorical", lambda: D.Categorical(probs=_T(0.5, 0.5)), "nan", "nan"),
     ],
 )
 def test_undefined_moments_answer_rather_than_raise(
@@ -135,11 +130,7 @@ def test_one_hot_categorical_has_the_moments_categorical_cannot() -> None:
 
 @pytest.mark.parametrize(
     "probs,sample_shape",
-    [
-        ([0.25, 0.75], (64,)),
-        ([[0.25, 0.75], [0.6, 0.4]], (5,)),
-        ([[0.25, 0.75], [0.6, 0.4]], ()),
-    ],
+    [([0.25, 0.75], (64,)), ([[0.25, 0.75], [0.6, 0.4]], (5,)), ([[0.25, 0.75], [0.6, 0.4]], ())],
 )
 def test_categorical_can_score_its_own_samples(probs, sample_shape) -> None:
     """It could not, when the batch shape was empty.
@@ -159,9 +150,7 @@ def test_categorical_can_score_its_own_samples(probs, sample_shape) -> None:
 
 
 @pytest.mark.parametrize("temperature", [0.0, -1.0])
-def test_relaxed_families_refuse_a_non_positive_temperature(
-    temperature: float,
-) -> None:
+def test_relaxed_families_refuse_a_non_positive_temperature(temperature: float) -> None:
     """The temperature divides the logits, so zero is a division by zero.
 
     Declared ``real``, it was never checked, and the draw came back

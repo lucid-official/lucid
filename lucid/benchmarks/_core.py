@@ -68,9 +68,7 @@ class BenchResult:
 
 
 def bench_cpu(
-    fn: Callable[[], object],
-    warmup: int = WARMUP_CPU,
-    iters: int = ITERS_CPU,
+    fn: Callable[[], object], warmup: int = WARMUP_CPU, iters: int = ITERS_CPU
 ) -> list[int]:
     """Time a CPU-synchronous callable. Returns nanosecond samples."""
     for _ in range(warmup):
@@ -84,9 +82,7 @@ def bench_cpu(
 
 
 def bench_gpu_lucid(
-    fn: Callable[[], object],
-    warmup: int = WARMUP_GPU,
-    iters: int = ITERS_GPU,
+    fn: Callable[[], object], warmup: int = WARMUP_GPU, iters: int = ITERS_GPU
 ) -> list[int]:
     """Time a Lucid GPU op, forcing MLX eval after each call.
 
@@ -115,9 +111,7 @@ def bench_gpu_lucid(
 
 
 def bench_gpu_mlx(
-    fn: Callable[[], object],
-    warmup: int = WARMUP_GPU,
-    iters: int = ITERS_GPU,
+    fn: Callable[[], object], warmup: int = WARMUP_GPU, iters: int = ITERS_GPU
 ) -> list[int]:
     """Time a raw MLX op, forcing eval after each call.
 

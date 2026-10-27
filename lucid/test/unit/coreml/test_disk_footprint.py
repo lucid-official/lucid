@@ -26,8 +26,7 @@ from lucid._C import engine as _C_engine
 from lucid.test.unit.coreml._helpers import bundles_under
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 #: What the writing test left, for the one after it to look for.

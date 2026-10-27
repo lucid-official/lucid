@@ -154,9 +154,7 @@ def test_detaching_the_gradient_detaches_it(device: str) -> None:
     assert v.tolist() == [5.0, 5.0, 5.0]
 
 
-def test_detach_in_place_detaches_every_holder_of_the_same_impl(
-    device: str,
-) -> None:
+def test_detach_in_place_detaches_every_holder_of_the_same_impl(device: str) -> None:
     x = lucid.tensor([1.0, 2.0, 3.0], device=device, requires_grad=True)
     y = x * 2.0
     holder = lucid.Tensor.__new_from_impl__(y._impl)
@@ -176,9 +174,7 @@ def test_detach_in_place_detaches_every_holder_of_the_same_impl(
     assert holder.grad_fn is None and not holder.requires_grad and holder.is_leaf
 
 
-def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(
-    device: str,
-) -> None:
+def test_an_assigned_gradient_that_requires_grad_stops_requiring_it(device: str) -> None:
     p = nn.Parameter(lucid.ones(3, device=device))
     w = lucid.full((3,), 2.0, device=device, requires_grad=True)
     p.grad = w
@@ -316,10 +312,7 @@ def test_the_writers_change_the_held_gradient(
 @pytest.mark.parity
 @pytest.mark.parametrize(("write", "expected"), _WRITERS)
 def test_the_writers_match_the_reference(
-    write: Callable[[Any, Any], None],
-    expected: list[float],
-    device: str,
-    ref: ModuleType,
+    write: Callable[[Any, Any], None], expected: list[float], device: str, ref: ModuleType
 ) -> None:
     # Versions are left out: the reference's fused unscale does not move one.
     values, same, _ = _write(lucid, write, device)
@@ -439,9 +432,7 @@ _HELD_APART_WRITERS: dict[str, Callable[[nn.Parameter], None]] = {
 @pytest.mark.parametrize("write", _HELD_APART_WRITERS.values(), ids=_HELD_APART_WRITERS.keys())
 @pytest.mark.parametrize("kind", _HELD_APART.values(), ids=_HELD_APART.keys())
 def test_a_written_held_apart_gradient_stays_the_gradient(
-    kind: Callable[[nn.Parameter], None],
-    write: Callable[[nn.Parameter], None],
-    device: str,
+    kind: Callable[[nn.Parameter], None], write: Callable[[nn.Parameter], None], device: str
 ) -> None:
     p = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0], device=device))
     kind(p)

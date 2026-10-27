@@ -32,19 +32,11 @@ def _sync_conv2d(ref: Any, *, bias: bool = True) -> tuple[Any, Any, np.ndarray]:
 class TestConvBiasParity:
     def test_conv2d_with_bias(self, ref: Any) -> None:
         l_conv, r_conv, x_np = _sync_conv2d(ref, bias=True)
-        assert_close(
-            l_conv(lucid.tensor(x_np.copy())),
-            r_conv(ref.tensor(x_np.copy())),
-            atol=1e-4,
-        )
+        assert_close(l_conv(lucid.tensor(x_np.copy())), r_conv(ref.tensor(x_np.copy())), atol=1e-4)
 
     def test_conv2d_no_bias(self, ref: Any) -> None:
         l_conv, r_conv, x_np = _sync_conv2d(ref, bias=False)
-        assert_close(
-            l_conv(lucid.tensor(x_np.copy())),
-            r_conv(ref.tensor(x_np.copy())),
-            atol=1e-4,
-        )
+        assert_close(l_conv(lucid.tensor(x_np.copy())), r_conv(ref.tensor(x_np.copy())), atol=1e-4)
 
     def test_conv2d_no_bias_backward(self, ref: Any) -> None:
         l_conv, r_conv, x_np = _sync_conv2d(ref, bias=False)
@@ -68,11 +60,7 @@ class TestConvBiasParity:
         l_conv.weight = nn.Parameter(lucid.tensor(w.copy()))
         r_conv.weight = ref.nn.Parameter(ref.tensor(w.copy()))
 
-        assert_close(
-            l_conv(lucid.tensor(x.copy())),
-            r_conv(ref.tensor(x.copy())),
-            atol=1e-4,
-        )
+        assert_close(l_conv(lucid.tensor(x.copy())), r_conv(ref.tensor(x.copy())), atol=1e-4)
 
     def test_conv_transpose2d_no_bias(self, ref: Any) -> None:
         np.random.seed(2)
@@ -84,11 +72,7 @@ class TestConvBiasParity:
         l_ct.weight = nn.Parameter(lucid.tensor(w.copy()))
         r_ct.weight = ref.nn.Parameter(ref.tensor(w.copy()))
 
-        assert_close(
-            l_ct(lucid.tensor(x.copy())),
-            r_ct(ref.tensor(x.copy())),
-            atol=1e-4,
-        )
+        assert_close(l_ct(lucid.tensor(x.copy())), r_ct(ref.tensor(x.copy())), atol=1e-4)
 
 
 @pytest.mark.parity
@@ -115,22 +99,14 @@ class TestConvGroupedParity:
         l_conv.bias = nn.Parameter(lucid.tensor(b.copy()))
         r_conv.bias = ref.nn.Parameter(ref.tensor(b.copy()))
 
-        assert_close(
-            l_conv(lucid.tensor(x.copy())),
-            r_conv(ref.tensor(x.copy())),
-            atol=1e-4,
-        )
+        assert_close(l_conv(lucid.tensor(x.copy())), r_conv(ref.tensor(x.copy())), atol=1e-4)
 
     @pytest.mark.parametrize(
         "in_ch, out_ch, groups",
         [
             (4, 8, 2),
             (8, 8, 4),
-            (
-                16,
-                16,
-                16,
-            ),  # the depthwise case that used to raise inside engine_backward
+            (16, 16, 16),  # the depthwise case that used to raise inside engine_backward
         ],
         ids=["g2", "g4", "depthwise"],
     )

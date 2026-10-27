@@ -17,30 +17,9 @@ _WINDOWS: list[tuple[str, Callable, str, dict, dict, float]] = [
     ("bartlett", W.bartlett, "bartlett", {}, {}, 1e-6),
     ("nuttall", W.nuttall, "nuttall", {}, {}, 1e-6),
     ("cosine", W.cosine, "cosine", {}, {}, 1e-6),
-    (
-        "gaussian",
-        W.gaussian,
-        "gaussian",
-        {"std": 2.0},
-        {"std": 2.0},
-        1e-6,
-    ),
-    (
-        "kaiser",
-        W.kaiser,
-        "kaiser",
-        {"beta": 4.0},
-        {"beta": 4.0},
-        1e-4,
-    ),
-    (
-        "exponential",
-        W.exponential,
-        "exponential",
-        {"tau": 2.0},
-        {"tau": 2.0},
-        1e-6,
-    ),
+    ("gaussian", W.gaussian, "gaussian", {"std": 2.0}, {"std": 2.0}, 1e-6),
+    ("kaiser", W.kaiser, "kaiser", {"beta": 4.0}, {"beta": 4.0}, 1e-4),
+    ("exponential", W.exponential, "exponential", {"tau": 2.0}, {"tau": 2.0}, 1e-6),
     (
         "general_cosine",
         W.general_cosine,
@@ -62,18 +41,10 @@ _WINDOWS: list[tuple[str, Callable, str, dict, dict, float]] = [
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "name,lucid_fn,ref_attr,kw_l,kw_r,atol",
-    _WINDOWS,
-    ids=[w[0] for w in _WINDOWS],
+    "name,lucid_fn,ref_attr,kw_l,kw_r,atol", _WINDOWS, ids=[w[0] for w in _WINDOWS]
 )
 def test_window_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_attr: str,
-    kw_l: dict,
-    kw_r: dict,
-    atol: float,
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_attr: str, kw_l: dict, kw_r: dict, atol: float, ref: Any
 ) -> None:
     for M in [8, 16, 33]:
         l = lucid_fn(M, **kw_l).numpy()

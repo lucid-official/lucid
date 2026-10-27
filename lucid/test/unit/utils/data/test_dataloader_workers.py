@@ -161,10 +161,7 @@ def test_worker_info_describes_the_pool_and_runs_before_the_first_fetch():
     example, ``range(info.id, n, info.num_workers)``, failed on step 0."""
     samples = list(
         _loader(
-            wd.Info(6),
-            batch_size=None,
-            collate_fn=wd.as_is,
-            worker_init_fn=wd.offset_by_worker,
+            wd.Info(6), batch_size=None, collate_fn=wd.as_is, worker_init_fn=wd.offset_by_worker
         )
     )
     seeds = {}

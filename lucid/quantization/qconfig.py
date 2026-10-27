@@ -16,12 +16,7 @@ at every insertion site.
 from typing import Callable, NamedTuple
 
 import lucid.nn as nn
-from lucid.quantization._qscheme import (
-    per_channel_symmetric,
-    per_tensor_affine,
-    qint8,
-    quint8,
-)
+from lucid.quantization._qscheme import per_channel_symmetric, per_tensor_affine, qint8, quint8
 from lucid.quantization._fake_quantize import FakeQuantize
 from lucid.quantization.observer import (
     HistogramObserver,
@@ -243,9 +238,7 @@ def get_default_qat_qconfig() -> QConfig:
     """
     return QConfig(
         activation=FakeQuantize.with_args(
-            observer=MovingAverageMinMaxObserver,
-            qscheme=per_tensor_affine,
-            qdtype=quint8,
+            observer=MovingAverageMinMaxObserver, qscheme=per_tensor_affine, qdtype=quint8
         ),
         weight=FakeQuantize.with_args(
             observer=PerChannelMinMaxObserver,

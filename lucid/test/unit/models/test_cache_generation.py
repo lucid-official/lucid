@@ -18,10 +18,7 @@ from lucid.models.text.gpt2._model import GPT2LMHeadModel
 from lucid.models.text.t5._config import T5Config
 from lucid.models.text.t5._model import T5ForSeq2SeqLM, T5Model
 from lucid.models.text.transformer._config import TransformerConfig
-from lucid.models.text.transformer._model import (
-    TransformerForSeq2SeqLM,
-    TransformerModel,
-)
+from lucid.models.text.transformer._model import TransformerForSeq2SeqLM, TransformerModel
 from lucid.test._helpers.compare import assert_close
 from lucid.utils.cache import DynamicCache
 
@@ -80,10 +77,7 @@ type _Seq2Seq = TransformerForSeq2SeqLM | T5ForSeq2SeqLM
 
 #: The encoder-decoder families: each trunk exposes ``encode`` / ``decode``
 #: with the same signature, so one set of cache invariants covers them all.
-_SEQ2SEQ = [
-    pytest.param(_seq2seq, id="transformer"),
-    pytest.param(_t5, id="t5"),
-]
+_SEQ2SEQ = [pytest.param(_seq2seq, id="transformer"), pytest.param(_t5, id="t5")]
 
 
 def _trunk(model: _Seq2Seq) -> TransformerModel | T5Model:
@@ -131,11 +125,7 @@ class TestGPT2Cache:
         m = _gpt2()
         prompt = lucid.tensor([[3, 7, 1]]).long()
         g_static = m.generate(
-            prompt,
-            max_new_tokens=6,
-            do_sample=False,
-            use_cache=True,
-            cache_implementation="static",
+            prompt, max_new_tokens=6, do_sample=False, use_cache=True, cache_implementation="static"
         )
         g_dynamic = m.generate(
             prompt,
@@ -204,10 +194,7 @@ class TestGPTCache:
         m = _gpt()
         prompt = lucid.tensor([[3, 7, 1]]).long()
         g_static = m.generate(
-            prompt,
-            max_new_tokens=6,
-            do_sample=False,
-            cache_implementation="static",
+            prompt, max_new_tokens=6, do_sample=False, cache_implementation="static"
         )
         g_dynamic = m.generate(prompt, max_new_tokens=6, do_sample=False)
         assert_close(g_static, g_dynamic, atol=0.0)
@@ -224,12 +211,7 @@ class TestStaticCacheValidation:
         m = _gpt2()  # max_position_embeddings=32
         prompt = lucid.tensor([[3, 7, 1, 9]]).long()
         with pytest.raises(ValueError, match="max_position_embeddings"):
-            m.generate(
-                prompt,
-                max_length=40,
-                do_sample=False,
-                cache_implementation="static",
-            )
+            m.generate(prompt, max_length=40, do_sample=False, cache_implementation="static")
 
     def test_max_cache_len_too_small_raises(self) -> None:
         import pytest
@@ -264,12 +246,7 @@ class TestSeq2SeqCache:
         cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
         steps = []
         for t in range(T):
-            dec = trunk.decode(
-                tgt[:, t : t + 1],
-                memory,
-                past_key_value=cache,
-                use_cache=True,
-            )
+            dec = trunk.decode(tgt[:, t : t + 1], memory, past_key_value=cache, use_cache=True)
             steps.append(dec[:, -1, :])
         inc = lucid.stack(steps, dim=1)
 

@@ -241,8 +241,7 @@ MULTI_STEP_FACTORIES = [
     ),
     pytest.param(lambda p: optim.ASGD(p, lr=0.05, lambd=0.1), id="ASGD"),
     pytest.param(
-        lambda p: optim.ASGD(p, lr=0.05, lambd=0.1, t0=2.0, weight_decay=0.1),
-        id="ASGD_averaging",
+        lambda p: optim.ASGD(p, lr=0.05, lambd=0.1, t0=2.0, weight_decay=0.1), id="ASGD_averaging"
     ),
 ]
 

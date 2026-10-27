@@ -94,10 +94,7 @@ def test_sdpa_zeroes_a_row_with_no_key(
     rng = np.random.default_rng(0)
     q, k, v = (
         lucid.tensor(
-            _draw(rng, dtype, N, H, n, D),
-            dtype=_DTYPES[dtype],
-            device=device,
-            requires_grad=True,
+            _draw(rng, dtype, N, H, n, D), dtype=_DTYPES[dtype], device=device, requires_grad=True
         )
         for n in (L, S, S)
     )

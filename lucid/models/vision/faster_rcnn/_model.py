@@ -205,11 +205,7 @@ class _RoIHeads(nn.Module):
     """RoI heads container — ``box_head`` (TwoMLPHead) + ``box_predictor``."""
 
     def __init__(
-        self,
-        in_channels: int,
-        roi_size: int,
-        representation_size: int,
-        num_classes: int,
+        self, in_channels: int, roi_size: int, representation_size: int, num_classes: int
     ) -> None:
         super().__init__()
         self.box_head = _TwoMLPHead(in_channels * roi_size * roi_size, representation_size)
@@ -404,20 +400,12 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
         """``(rpn_matcher, roi_matcher)`` built from this model's config."""
         cfg = self._cfg
         return (
-            Matcher(
-                cfg.rpn_fg_iou_thresh,
-                cfg.rpn_bg_iou_thresh,
-                allow_low_quality_matches=True,
-            ),
+            Matcher(cfg.rpn_fg_iou_thresh, cfg.rpn_bg_iou_thresh, allow_low_quality_matches=True),
             Matcher(cfg.roi_fg_iou_thresh, cfg.roi_bg_iou_thresh),
         )
 
     def _assign_anchors(
-        self,
-        anchors: Tensor,
-        gt_boxes: Tensor,
-        matcher: Matcher,
-        image_size: tuple[int, int],
+        self, anchors: Tensor, gt_boxes: Tensor, matcher: Matcher, image_size: tuple[int, int]
     ) -> tuple[Tensor, Tensor]:
         return assign_anchors_to_targets(
             anchors,
@@ -451,9 +439,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
         )
 
     def _select_training_samples(
-        self,
-        proposals: list[Tensor],
-        targets: list[dict[str, Tensor]],
+        self, proposals: list[Tensor], targets: list[dict[str, Tensor]]
     ) -> tuple[list[Tensor], list[Tensor], list[Tensor], list[Tensor]]:
         cfg = self._cfg
         _, roi_matcher = self._matchers()
@@ -588,17 +574,11 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
             loss = rpn_obj_loss + rpn_reg_loss + roi_cls_loss + roi_reg_loss
 
         return ObjectDetectionOutput(
-            logits=class_logits,
-            pred_boxes=pred_boxes,
-            loss=loss,
-            proposals=tuple(proposals),
+            logits=class_logits, pred_boxes=pred_boxes, loss=loss, proposals=tuple(proposals)
         )
 
     def _decode_per_class(
-        self,
-        proposals: list[Tensor],
-        box_deltas: Tensor,
-        image_size: tuple[int, int],
+        self, proposals: list[Tensor], box_deltas: Tensor, image_size: tuple[int, int]
     ) -> Tensor:
         """Decode ``(N, K*4)`` deltas against proposals → ``(N, K, 4)`` boxes."""
         dev = box_deltas.device.type

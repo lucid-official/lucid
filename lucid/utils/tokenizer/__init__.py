@@ -53,25 +53,13 @@ matching that family (e.g. ``BERTTokenizer`` ←
 from lucid.utils.tokenizer._base import SpecialTokens, Tokenizer
 from lucid.utils.tokenizer._bpe import BPETokenizer, BPETokenizerFast
 from lucid.utils.tokenizer._byte import ByteTokenizer, ByteTokenizerFast
-from lucid.utils.tokenizer._byte_bpe import (
-    ByteLevelBPETokenizer,
-    ByteLevelBPETokenizerFast,
-)
+from lucid.utils.tokenizer._byte_bpe import ByteLevelBPETokenizer, ByteLevelBPETokenizerFast
 from lucid.utils.tokenizer._char import CharTokenizer, CharTokenizerFast
 from lucid.utils.tokenizer._regex import RegexTokenizer, RegexTokenizerFast
-from lucid.utils.tokenizer._unigram import (
-    UnigramTokenizer,
-    UnigramTokenizerFast,
-)
-from lucid.utils.tokenizer._whitespace import (
-    WhitespaceTokenizer,
-    WhitespaceTokenizerFast,
-)
+from lucid.utils.tokenizer._unigram import UnigramTokenizer, UnigramTokenizerFast
+from lucid.utils.tokenizer._whitespace import WhitespaceTokenizer, WhitespaceTokenizerFast
 from lucid.utils.tokenizer._word import WordTokenizer, WordTokenizerFast
-from lucid.utils.tokenizer._wordpiece import (
-    WordPieceTokenizer,
-    WordPieceTokenizerFast,
-)
+from lucid.utils.tokenizer._wordpiece import WordPieceTokenizer, WordPieceTokenizerFast
 from lucid.utils.tokenizer import _decoders as decoders
 from lucid.utils.tokenizer import _normalizers as normalizers
 from lucid.utils.tokenizer import _post_processors as post_processors

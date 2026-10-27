@@ -15,13 +15,11 @@ import lucid.models as M
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 Model_pb2 = pytest.importorskip(
-    "coremltools.proto.Model_pb2",
-    reason="the description is read back with the reference parser",
+    "coremltools.proto.Model_pb2", reason="the description is read back with the reference parser"
 )
 
 

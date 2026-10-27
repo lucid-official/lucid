@@ -602,11 +602,7 @@ def resolve_neg(input: Tensor) -> Tensor:
 
 
 def allclose(
-    input: Tensor,
-    other: Tensor,
-    rtol: float = 1e-5,
-    atol: float = 1e-8,
-    equal_nan: bool = False,
+    input: Tensor, other: Tensor, rtol: float = 1e-5, atol: float = 1e-8, equal_nan: bool = False
 ) -> bool:
     r"""Return ``True`` iff every element pair is close within tolerance.
 

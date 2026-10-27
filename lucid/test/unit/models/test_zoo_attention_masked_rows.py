@@ -90,9 +90,7 @@ def test_bert_head_mask_accepts_a_per_head_multiplier(shape: tuple[int, ...]) ->
     # silently; the others would crash in the multiply.
     [(B, HEADS, T, T), (HEADS + 1,), (B, HEADS, 1, 2), (3, HEADS, 1, 1)],
 )
-def test_bert_head_mask_refuses_anything_finer_than_per_head(
-    shape: tuple[int, ...],
-) -> None:
+def test_bert_head_mask_refuses_anything_finer_than_per_head(shape: tuple[int, ...]) -> None:
     cfg = BERTConfig(**{**_SMALL, "hidden_size": HEADS * T})
     attn = _BERTSelfAttention(cfg).eval()
     with pytest.raises(ValueError, match="one multiplier per head"):
@@ -105,10 +103,7 @@ def _gpt(cls: type, cfg: type) -> lucid.nn.Module:
 
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda: _gpt(_GPTSelfAttention, GPTConfig),
-        lambda: _gpt(_GPT2SelfAttention, GPT2Config),
-    ],
+    [lambda: _gpt(_GPTSelfAttention, GPTConfig), lambda: _gpt(_GPT2SelfAttention, GPT2Config)],
     ids=["gpt", "gpt2"],
 )
 def test_causal_lm_dropout_path_keeps_a_dead_row_finite(build) -> None:

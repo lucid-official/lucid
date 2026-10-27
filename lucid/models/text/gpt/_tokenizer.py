@@ -27,10 +27,7 @@ from typing import override
 from lucid.utils.tokenizer._base import SpecialTokens
 from lucid.utils.tokenizer._bpe import BPETokenizer
 from lucid.utils.tokenizer._normalizers import Lowercase, NFC, Normalizer, Sequence
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    WhitespacePunctuationSplit,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, WhitespacePunctuationSplit
 
 __all__ = ["GPTTokenizer", "GPTTokenizerFast", "END_OF_WORD"]
 

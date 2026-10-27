@@ -49,11 +49,7 @@ _PER_STAGE: list[tuple[type[ModelConfig], dict[str, Any], str]] = [
     (SwinConfig, {"num_heads": (1, 2, 4)}, rf"depths, num_heads {_STAGES}"),
     (
         DIAMONDConfig,
-        {
-            "upsampler_channels": (8, 8),
-            "upsampler_layers": (1,),
-            "upsampling_factor": 2,
-        },
+        {"upsampler_channels": (8, 8), "upsampler_layers": (1,), "upsampling_factor": 2},
         r"upsampler_channels and upsampler_layers describe the same resolutions",
     ),
     (
@@ -82,9 +78,7 @@ def test_per_stage_tuples_must_agree(
 
 
 @pytest.mark.parametrize("config_class", [FasterRCNNConfig, MaskRCNNConfig])
-def test_rcnn_anchor_sizes_are_one_per_fpn_level(
-    config_class: type[ModelConfig],
-) -> None:
+def test_rcnn_anchor_sizes_are_one_per_fpn_level(config_class: type[ModelConfig]) -> None:
     with pytest.raises(ValueError, match=r"one anchor size per FPN level .* emits 5 .*got 4"):
         config_class(rpn_anchor_sizes=(32, 64, 128, 256))
 

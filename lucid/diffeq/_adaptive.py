@@ -209,12 +209,7 @@ def parse_options(options: dict[str, object] | None) -> AdaptiveOptions:
 
 
 def optimal_step_size(
-    last_step: float,
-    ratio: float,
-    safety: float,
-    ifactor: float,
-    dfactor: float,
-    order: int,
+    last_step: float, ratio: float, safety: float, ifactor: float, dfactor: float, order: int
 ) -> float:
     """Propose the next step magnitude from the last one and its error ratio.
 
@@ -628,20 +623,11 @@ class Stepper:
                 f_next = ks[-1]
             else:
                 f_next = self._check(
-                    self._func(self._scalar(t_next), y_next),
-                    self.accepted,
-                    tableau.stages,
+                    self._func(self._scalar(t_next), y_next), self.accepted, tableau.stages
                 )
 
             step = Step(
-                t0=self.t,
-                t1=t_next,
-                dt=dt,
-                y0=self.y,
-                y1=y_next,
-                f0=self.f,
-                f1=f_next,
-                ks=ks,
+                t0=self.t, t1=t_next, dt=dt, y0=self.y, y1=y_next, f0=self.f, f1=f_next, ks=ks
             )
             self.t, self.y, self.f = t_next, y_next, f_next
             self.step = proposed

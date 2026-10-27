@@ -39,8 +39,7 @@ from lucid._C import engine as _C_engine
 from lucid.quantization import FakeQuantize
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -126,10 +125,7 @@ class TestAQuantizationAwareModelExports:
 
     @pytest.mark.parametrize(
         ("name", "weights"),
-        [
-            ("float", cml.WeightPrecision.FLOAT),
-            ("int8", cml.WeightPrecision.INT8),
-        ],
+        [("float", cml.WeightPrecision.FLOAT), ("int8", cml.WeightPrecision.INT8)],
     )
     def test_the_package_computes_what_the_model_does(self, name, weights, tmp_path) -> None:
         """Exactly, and int8 is free here — which is the point of QAT.
@@ -234,10 +230,7 @@ class TestAConvertedModelCrossesToo:
 
         plain = cml.export(model, x, f"{tmp_path}/plain.mlpackage")
         again = cml.export(
-            model,
-            x,
-            f"{tmp_path}/again.mlpackage",
-            weights=cml.WeightPrecision.INT8,
+            model, x, f"{tmp_path}/again.mlpackage", weights=cml.WeightPrecision.INT8
         )
         try:
             wanted = model(x).cpu()
@@ -333,10 +326,7 @@ class TestDroppingTheActivationSimulation:
             if isinstance(m, FakeQuantize)
         ]
         cml.export(
-            model,
-            x,
-            f"{tmp_path}/restored.mlpackage",
-            activations=cml.Activations.DROPPED,
+            model, x, f"{tmp_path}/restored.mlpackage", activations=cml.Activations.DROPPED
         ).close()
         after = [
             getattr(m, "_fake_quant_enabled", False)

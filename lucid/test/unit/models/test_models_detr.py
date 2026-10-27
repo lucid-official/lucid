@@ -5,11 +5,7 @@ import unittest
 
 import lucid
 import lucid.models as models
-from lucid.models.vision.detr import (
-    DETRConfig,
-    DETRForObjectDetection,
-    detr_resnet50,
-)
+from lucid.models.vision.detr import DETRConfig, DETRForObjectDetection, detr_resnet50
 
 
 class TestDETRConfig(unittest.TestCase):
@@ -93,10 +89,7 @@ class TestDETRWeightsEnums(unittest.TestCase):
     """Static contract of the per-variant Weights enums — no network."""
 
     def _enums(self) -> tuple[type, ...]:
-        from lucid.models.vision.detr import (
-            DETRResNet50Weights,
-            DETRResNet101Weights,
-        )
+        from lucid.models.vision.detr import DETRResNet50Weights, DETRResNet101Weights
 
         return (DETRResNet50Weights, DETRResNet101Weights)
 

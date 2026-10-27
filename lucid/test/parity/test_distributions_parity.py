@@ -386,8 +386,7 @@ class TestTransformedDistributionParity:
         x = np.array([0.5, 1.0, 2.0], dtype=np.float32)
         l_dist = D.TransformedDistribution(D.Normal(0.0, 1.0), D.ExpTransform())
         r_dist = ref.distributions.TransformedDistribution(
-            ref.distributions.Normal(0.0, 1.0),
-            ref.distributions.ExpTransform(),
+            ref.distributions.Normal(0.0, 1.0), ref.distributions.ExpTransform()
         )
         l = l_dist.log_prob(lucid.tensor(x.copy())).numpy()
         r = r_dist.log_prob(ref.tensor(x.copy())).detach().cpu().numpy()

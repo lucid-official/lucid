@@ -119,12 +119,7 @@ class TestGPTCausalLMMixin:
         m = GPTLMHeadModel(_tiny_config()).eval()
         prompt = lucid.tensor([[1, 2, 3]]).long()
         out = m.generate(
-            prompt,
-            max_length=8,
-            do_sample=True,
-            temperature=0.8,
-            top_k=10,
-            top_p=0.95,
+            prompt, max_length=8, do_sample=True, temperature=0.8, top_k=10, top_p=0.95
         )
         assert tuple(out.shape) == (1, 8)
         # All sampled tokens must be inside the vocabulary.
@@ -184,10 +179,7 @@ class TestCausalMask:
 
 
 class TestGPTRegistry:
-    @pytest.mark.parametrize(
-        "name",
-        ["gpt", "gpt_lm", "gpt_cls"],
-    )
+    @pytest.mark.parametrize("name", ["gpt", "gpt_lm", "gpt_cls"])
     def test_registered(self, name: str) -> None:
         assert is_model(name)
 

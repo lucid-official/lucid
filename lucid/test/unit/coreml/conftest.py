@@ -139,9 +139,7 @@ def _cache_files(root: Path | None) -> set[Path]:
 
 @pytest.fixture(autouse=True)
 def _nothing_written_outlives_its_test(
-    request: pytest.FixtureRequest,
-    core_ml_home: Path | None,
-    compile_cache: Path | None,
+    request: pytest.FixtureRequest, core_ml_home: Path | None, compile_cache: Path | None
 ) -> Iterator[None]:
     room: Path | None = None
     if "tmp_path" in request.fixturenames:

@@ -127,7 +127,4 @@ def test_training_step_updates_original_and_matches_eager(device: str) -> None:
     _close(c_original, e_original)
     _close(c_original.grad, e_original.grad)
     if device == "metal":
-        assert len(step.cache) == 1 and not step.eager_only, (
-            step.cache,
-            step.eager_only,
-        )
+        assert len(step.cache) == 1 and not step.eager_only, (step.cache, step.eager_only)

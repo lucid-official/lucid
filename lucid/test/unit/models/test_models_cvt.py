@@ -4,13 +4,7 @@ import unittest
 
 import lucid
 import lucid.models as models
-from lucid.models.vision.cvt import (
-    CvTConfig,
-    CvT,
-    CvTForImageClassification,
-    cvt_13,
-    cvt_13_cls,
-)
+from lucid.models.vision.cvt import CvTConfig, CvT, CvTForImageClassification, cvt_13, cvt_13_cls
 
 
 class TestCvTConfig(unittest.TestCase):
@@ -72,14 +66,7 @@ class TestCvTRegistry(unittest.TestCase):
 
     def test_variants_registered(self) -> None:
         names = models.list_models(family="cvt")
-        for n in (
-            "cvt_13",
-            "cvt_13_cls",
-            "cvt_21",
-            "cvt_21_cls",
-            "cvt_w24",
-            "cvt_w24_cls",
-        ):
+        for n in ("cvt_13", "cvt_13_cls", "cvt_21", "cvt_21_cls", "cvt_w24", "cvt_w24_cls"):
             self.assertIn(n, names)
 
     def test_create_model(self) -> None:

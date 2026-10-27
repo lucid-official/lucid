@@ -618,33 +618,19 @@ def test_arithmetic_ops_take_input_and_other_by_keyword(entry: OpEntry, device: 
         ),
         lambda x, y: (lucid.histc(input=x, bins=4), lucid.histc(x, 4)),
         lambda x, y: (lucid.complex(real=x, imag=y), lucid.complex(x, y)),
-        lambda x, y: (
-            lucid.squeeze(input=x.unsqueeze(0), dim=0),
-            lucid.squeeze(x.unsqueeze(0), 0),
-        ),
+        lambda x, y: (lucid.squeeze(input=x.unsqueeze(0), dim=0), lucid.squeeze(x.unsqueeze(0), 0)),
         lambda x, y: (lucid.sum(input=x, dim=0), lucid.sum(x, 0)),
         lambda x, y: (lucid.reshape(input=x, shape=(3,)), lucid.reshape(x, (3,))),
-        lambda x, y: (
-            lucid.split(tensor=x, split_size_or_sections=2)[0],
-            lucid.split(x, 2)[0],
-        ),
-        lambda x, y: (
-            lucid.tensordot(a=x, b=y, dims=1),
-            lucid.tensordot(x, y, 1),
-        ),
-        lambda x, y: (
-            lucid.clamp(input=x, min=0.0, max=1.0),
-            lucid.clamp(x, 0.0, 1.0),
-        ),
+        lambda x, y: (lucid.split(tensor=x, split_size_or_sections=2)[0], lucid.split(x, 2)[0]),
+        lambda x, y: (lucid.tensordot(a=x, b=y, dims=1), lucid.tensordot(x, y, 1)),
+        lambda x, y: (lucid.clamp(input=x, min=0.0, max=1.0), lucid.clamp(x, 0.0, 1.0)),
         lambda x, y: (
             lucid.gather(input=x, dim=0, index=lucid.tensor([2, 0], device=x.device)),
             lucid.gather(x, 0, lucid.tensor([2, 0], device=x.device)),
         ),
         lambda x, y: (
             lucid.masked_fill(
-                input=x,
-                mask=lucid.tensor([True, False, True], device=x.device),
-                value=0.0,
+                input=x, mask=lucid.tensor([True, False, True], device=x.device), value=0.0
             ),
             lucid.masked_fill(x, lucid.tensor([True, False, True], device=x.device), 0.0),
         ),
@@ -738,12 +724,7 @@ def test_lcd412_ops_and_tensor_keywords_match_reference(ref: ModuleType, device:
     assert rc_view.tolist() == pytest.approx([1.23, -2.56, 125.0])
 
     rep = lucid.tensor([1, 2, 1], device=device)
-    assert lucid.repeat_interleave(x, rep, dim=0, output_size=4).tolist() == [
-        1.0,
-        2.0,
-        2.0,
-        3.0,
-    ]
+    assert lucid.repeat_interleave(x, rep, dim=0, output_size=4).tolist() == [1.0, 2.0, 2.0, 3.0]
 
     seq = lucid.tensor([1.0, 3.0, 5.0], device=device)
     vals = lucid.tensor([3.0, 0.0], device=device)
@@ -754,12 +735,7 @@ def test_lcd412_ops_and_tensor_keywords_match_reference(ref: ModuleType, device:
 
     prep = lucid.tensor([0.0], device=device)
     app = lucid.tensor([6.0], device=device)
-    assert x.diff(n=1, dim=0, prepend=prep, append=app).tolist() == [
-        1.0,
-        1.0,
-        1.0,
-        3.0,
-    ]
+    assert x.diff(n=1, dim=0, prepend=prep, append=app).tolist() == [1.0, 1.0, 1.0, 3.0]
     assert lucid.isin(x, lucid.tensor([2.0, 4.0], device=device), assume_unique=True).tolist() == [
         False,
         True,
@@ -799,34 +775,21 @@ def test_lcd412_optim_autograd_and_amp_keywords_match_reference() -> None:
 
     x = lucid.tensor([2.0, 3.0], requires_grad=True)
     y = lucid.tensor([5.0], requires_grad=True)
-    gx, gy = lucid.autograd.grad(
-        (x**2).sum(),
-        (x, y),
-        allow_unused=True,
-        materialize_grads=True,
-    )
+    gx, gy = lucid.autograd.grad((x**2).sum(), (x, y), allow_unused=True, materialize_grads=True)
     assert gx.tolist() == [4.0, 6.0] and gy.tolist() == [0.0]
 
     v = lucid.tensor([[1.0, 0.0], [0.0, 1.0]])
     (bg,) = lucid.autograd.grad(
-        x * lucid.tensor([2.0, 3.0]),
-        x,
-        grad_outputs=v,
-        is_grads_batched=True,
+        x * lucid.tensor([2.0, 3.0]), x, grad_outputs=v, is_grads_batched=True
     )
     assert bg.tolist() == [[2.0, 0.0], [0.0, 3.0]]
 
     j = lucid.autograd.jacobian(
-        lambda t: t**2,
-        lucid.tensor([2.0, 3.0]),
-        strategy="forward-mode",
-        vectorize=True,
+        lambda t: t**2, lucid.tensor([2.0, 3.0]), strategy="forward-mode", vectorize=True
     )
     assert j.tolist() == [[4.0, 0.0], [0.0, 6.0]]
     h = lucid.autograd.hessian(
-        lambda t: (t**3).sum(),
-        lucid.tensor([1.0, 2.0]),
-        outer_jacobian_strategy="reverse-mode",
+        lambda t: (t**3).sum(), lucid.tensor([1.0, 2.0]), outer_jacobian_strategy="reverse-mode"
     )
     assert h.tolist() == [[6.0, 0.0], [0.0, 12.0]]
 
@@ -851,12 +814,7 @@ def test_lcd412_optim_autograd_and_amp_keywords_match_reference() -> None:
     assert opt.param_groups[0]["momentum"] == pytest.approx(0.8)
 
     one = lucid.optim.lr_scheduler.OneCycleLR(
-        opt,
-        max_lr=0.1,
-        epochs=2,
-        steps_per_epoch=5,
-        three_phase=True,
-        cycle_momentum=True,
+        opt, max_lr=0.1, epochs=2, steps_per_epoch=5, three_phase=True, cycle_momentum=True
     )
     one.step()
     assert 0.004 < opt.param_groups[0]["lr"] < 0.1

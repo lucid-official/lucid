@@ -29,12 +29,7 @@ from lucid._dispatch import _wrap
 from lucid.test._fixtures.devices import metal_available
 
 _DEVICES = ["cpu", "metal"] if metal_available() else ["cpu"]
-_DTYPES = {
-    "f16": lucid.float16,
-    "bf16": lucid.bfloat16,
-    "f32": lucid.float32,
-    "f64": lucid.float64,
-}
+_DTYPES = {"f16": lucid.float16, "bf16": lucid.bfloat16, "f32": lucid.float32, "f64": lucid.float64}
 
 _Impl = _C_engine.TensorImpl
 _Call = Callable[..., _Impl]
@@ -68,11 +63,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
         [],
         lambda a, b: _C_engine.nn.huber_loss(a, b, 1.0, 0),
     ),
-    "mse_loss": (
-        [_normal(3, 4), _normal(3, 4)],
-        [],
-        lambda a, b: _C_engine.nn.mse_loss(a, b, 0),
-    ),
+    "mse_loss": ([_normal(3, 4), _normal(3, 4)], [], lambda a, b: _C_engine.nn.mse_loss(a, b, 0)),
     "bce_loss": (
         [_unit(3, 4), _unit(3, 4), _unit(3, 4)],
         [],
@@ -93,11 +84,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
         [lucid.tensor([0, 2, 1])],
         lambda a, w, t: _C_engine.nn.nll_loss(a, t, w, 0),
     ),
-    "linear": (
-        [_normal(3, 4), _normal(5, 4), _normal(5)],
-        [],
-        _C_engine.nn.linear,
-    ),
+    "linear": ([_normal(3, 4), _normal(5, 4), _normal(5)], [], _C_engine.nn.linear),
     "bilinear_layer": (
         [_normal(3, 4), _normal(3, 4), _normal(2, 4, 4)],
         [],
@@ -128,11 +115,7 @@ _CASES: dict[str, tuple[list[lucid.Tensor], list[lucid.Tensor], _Call]] = {
         [],
         lambda x, w, b: _C_engine.nn.group_norm(x, w, b, 2, 1e-5),
     ),
-    "rms_norm": (
-        [_normal(3, 4), _normal(4)],
-        [],
-        lambda x, w: _C_engine.nn.rms_norm(x, w, 1e-5),
-    ),
+    "rms_norm": ([_normal(3, 4), _normal(4)], [], lambda x, w: _C_engine.nn.rms_norm(x, w, 1e-5)),
     "batch_norm": (
         [_normal(4, 3, 2, 2), _normal(3), _normal(3)],
         [],
@@ -186,10 +169,7 @@ def _cells() -> list[object]:
                 dtypes[i] = odd
                 cells.append(
                     pytest.param(
-                        name,
-                        device,
-                        tuple(dtypes),
-                        id=f"{name}-{device}-{'-'.join(dtypes)}",
+                        name, device, tuple(dtypes), id=f"{name}-{device}-{'-'.join(dtypes)}"
                     )
                 )
     return cells

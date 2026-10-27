@@ -115,8 +115,7 @@ def test_nextafter_steps_one_ulp() -> None:
 
 
 @pytest.mark.parametrize(
-    ("sa", "sb"),
-    [((6,), (6,)), ((4, 6), (4, 6)), ((4, 6), (3, 6)), ((2, 3, 6), (5, 6))],
+    ("sa", "sb"), [((6,), (6,)), ((4, 6), (4, 6)), ((4, 6), (3, 6)), ((2, 3, 6), (5, 6))]
 )
 def test_inner_contracts_the_last_axis(sa: tuple[int, ...], sb: tuple[int, ...]) -> None:
     """[M, K] · [M, K] is [M, M]; the old emitter gave [M]."""

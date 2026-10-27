@@ -30,12 +30,7 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.models.generative.genie import GenieConfig, GenieModel
-from lucid.models.generative.genie._model import (
-    _Attention,
-    _patchify,
-    _STBlock,
-    _unpatchify,
-)
+from lucid.models.generative.genie._model import _Attention, _patchify, _STBlock, _unpatchify
 
 
 def _np(tensor: Any) -> Any:

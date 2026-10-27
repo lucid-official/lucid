@@ -96,13 +96,7 @@ def test_conv_matches_the_reference(
         padding=pad,
         dilation=1,
     )
-    want = ref_fn(
-        ref.from_numpy(x),
-        ref.from_numpy(w),
-        ref.from_numpy(b),
-        stride=step,
-        padding=pad,
-    )
+    want = ref_fn(ref.from_numpy(x), ref.from_numpy(w), ref.from_numpy(b), stride=step, padding=pad)
     _close(got, want)
 
 
@@ -138,10 +132,7 @@ def test_conv_transpose_matches_the_reference(
     fn = getattr(F, f"conv_transpose{rank}d")
     ref_fn = getattr(ref.nn.functional, f"conv_transpose{rank}d")
     got = fn(
-        lucid.tensor(x, device=device),
-        lucid.tensor(w, device=device),
-        stride=step,
-        padding=pad,
+        lucid.tensor(x, device=device), lucid.tensor(w, device=device), stride=step, padding=pad
     )
     want = ref_fn(ref.from_numpy(x), ref.from_numpy(w), stride=step, padding=pad)
     _close(got, want)
@@ -161,24 +152,12 @@ _POOL_STRIDES = ("none", "empty", "1", "2", "per_axis")
 
 
 def _pool_stride(spelling: str, rank: int) -> object:
-    return {
-        "none": None,
-        "empty": (),
-        "1": 1,
-        "2": 2,
-        "per_axis": _per_axis(1, rank, 1),
-    }[spelling]
+    return {"none": None, "empty": (), "1": 1, "2": 2, "per_axis": _per_axis(1, rank, 1)}[spelling]
 
 
 _POOLS: dict[str, Callable[[ModuleType, int], tuple[Callable, Callable]]] = {
-    "max": lambda r, n: (
-        getattr(F, f"max_pool{n}d"),
-        getattr(r.nn.functional, f"max_pool{n}d"),
-    ),
-    "avg": lambda r, n: (
-        getattr(F, f"avg_pool{n}d"),
-        getattr(r.nn.functional, f"avg_pool{n}d"),
-    ),
+    "max": lambda r, n: (getattr(F, f"max_pool{n}d"), getattr(r.nn.functional, f"max_pool{n}d")),
+    "avg": lambda r, n: (getattr(F, f"avg_pool{n}d"), getattr(r.nn.functional, f"avg_pool{n}d")),
 }
 
 

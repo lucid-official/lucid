@@ -180,13 +180,7 @@ class TestFlowMatching:
 
 
 class TestRectifiedFlow:
-    CONFIG = dict(
-        sample_size=8,
-        base_channels=8,
-        num_res_blocks=1,
-        resnet_groups=2,
-        solver="euler",
-    )
+    CONFIG = dict(sample_size=8, base_channels=8, num_res_blocks=1, resnet_groups=2, solver="euler")
 
     def test_a_training_step_reaches_every_parameter(self) -> None:
         model = models.rectified_flow_cifar(**self.CONFIG)  # type: ignore[arg-type]
@@ -323,10 +317,7 @@ class TestCLIP:
         """Two images against three prompts, so the logits are (2, 3)."""
         model = models.clip_vit_base_32_zero_shot(**self.CONFIG).eval()  # type: ignore[arg-type]
         with lucid.no_grad():
-            out = model(
-                lucid.randn((2, 3, 16, 16)),
-                lucid.zeros((3, 8), dtype=lucid.int64),
-            )
+            out = model(lucid.randn((2, 3, 16, 16)), lucid.zeros((3, 8), dtype=lucid.int64))
         _assert_finite(out.logits, (2, 3))
 
 
@@ -474,10 +465,7 @@ class TestDIAMONDAtari:
     )
 
     def _batch(self) -> tuple[lucid.Tensor, lucid.Tensor]:
-        return (
-            lucid.randn((2, 4, 3, 16, 16)),
-            lucid.zeros((2, 4), dtype=lucid.int64),
-        )
+        return (lucid.randn((2, 4, 3, 16, 16)), lucid.zeros((2, 4), dtype=lucid.int64))
 
     def test_the_denoiser_trains(self) -> None:
         model = models.diamond(**self.CONFIG)  # type: ignore[arg-type]

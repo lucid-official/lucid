@@ -104,10 +104,7 @@ def _close(got: object, want: object, tol: float = _TOL) -> None:
 _REDUCE: dict[str, tuple[Callable[..., lucid.Tensor], Callable[..., object]]] = {
     "prod": (lambda t: t.prod(), lambda t: t.prod()),
     "prod_dim0": (lambda t: t.prod(0), lambda t: t.prod(0)),
-    "prod_dim1_keepdim": (
-        lambda t: t.prod(1, keepdim=True),
-        lambda t: t.prod(1, keepdim=True),
-    ),
+    "prod_dim1_keepdim": (lambda t: t.prod(1, keepdim=True), lambda t: t.prod(1, keepdim=True)),
     "cumprod_dim0": (lambda t: t.cumprod(0), lambda t: t.cumprod(0)),
     "cumprod_dim1": (lambda t: t.cumprod(1), lambda t: t.cumprod(1)),
 }
@@ -275,10 +272,7 @@ def test_zero_dim_prod_passes_the_gradient(device: str, value: float) -> None:
 
 @pytest.mark.parametrize("device", _DEVICES)
 def test_3d_middle_axis_prod_and_int32_scatter_prod_gradients(ref: ModuleType, device: str) -> None:
-    vals = [
-        [[2.0, 0.0], [3.0, -2.0], [0.5, 4.0]],
-        [[0.0, 1.5], [0.0, 0.0], [2.0, -3.0]],
-    ]
+    vals = [[[2.0, 0.0], [3.0, -2.0], [0.5, 4.0]], [[0.0, 1.5], [0.0, 0.0], [2.0, -3.0]]]
     xr = ref.tensor(vals, requires_grad=True)
     wr = ref.tensor(_weights((2, 2)))
     (xr.prod(dim=1) * wr).sum().backward()

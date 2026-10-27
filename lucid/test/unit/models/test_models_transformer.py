@@ -187,8 +187,7 @@ class TestEncoderOnlyHeadsCarryNoDeadWeight:
     """LCD-204: the classification heads kept the decoder's final norm."""
 
     @pytest.mark.parametrize(
-        "head",
-        [TransformerForSequenceClassification, TransformerForTokenClassification],
+        "head", [TransformerForSequenceClassification, TransformerForTokenClassification]
     )
     def test_every_parameter_gets_a_gradient(self, head: type) -> None:
         m = head(_tiny_config(hidden_dropout=0.0)).train()
@@ -266,8 +265,5 @@ class TestTransformerRegistry:
             max_position_embeddings=_MAX_POS,
         )
         assert isinstance(m, TransformerModel)
-        out = m.eval()(
-            lucid.tensor([[1, 2, 3]]).long(),
-            lucid.tensor([[1]]).long(),
-        )
+        out = m.eval()(lucid.tensor([[1, 2, 3]]).long(), lucid.tensor([[1]]).long())
         assert tuple(out.last_hidden_state.shape) == (1, 1, _HIDDEN)

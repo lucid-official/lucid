@@ -32,12 +32,7 @@ from typing import Protocol, override, runtime_checkable
 
 from lucid._tensor import Tensor
 from lucid.utils.transforms import _random
-from lucid.utils.transforms._datatypes import (
-    BoundingBoxes,
-    Image,
-    Keypoints,
-    Mask,
-)
+from lucid.utils.transforms._datatypes import BoundingBoxes, Image, Keypoints, Mask
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,10 +327,7 @@ def _filter_boxes_in_sample(
         counter[0] += 1
         areas = orig_areas[idx] if idx < len(orig_areas) else None
         return filter_boxes(
-            obj,
-            orig_areas=areas,
-            min_area=params.min_area,
-            min_visibility=params.min_visibility,
+            obj, orig_areas=areas, min_area=params.min_area, min_visibility=params.min_visibility
         )
     if isinstance(obj, dict):
         return {k: _filter_boxes_in_sample(v, orig_areas, params, counter) for k, v in obj.items()}

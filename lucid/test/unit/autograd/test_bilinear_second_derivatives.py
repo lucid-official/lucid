@@ -26,12 +26,7 @@ CASES = [
 @pytest.mark.parametrize("first", [0, 1, 2])
 @pytest.mark.parametrize("name,s1,s2,sw,bias", CASES, ids=[c[0] for c in CASES])
 def test_the_second_derivative_matches_central_differences(
-    first: int,
-    name: str,
-    s1: tuple[int, ...],
-    s2: tuple[int, ...],
-    sw: tuple[int, ...],
-    bias: bool,
+    first: int, name: str, s1: tuple[int, ...], s2: tuple[int, ...], sw: tuple[int, ...], bias: bool
 ) -> None:
     rng = np.random.default_rng(len(name) + first)
     base = [rng.standard_normal(s) for s in (s1, s2, sw)]

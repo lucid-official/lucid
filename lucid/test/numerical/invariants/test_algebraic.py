@@ -14,10 +14,7 @@ from lucid.test._helpers.compare import assert_close
 
 def _rand(shape: tuple[int, ...], device: str, seed: int = 0) -> lucid.Tensor:
     rng = np.random.default_rng(seed)
-    return lucid.tensor(
-        rng.uniform(-1.0, 1.0, size=shape).astype(np.float32),
-        device=device,
-    )
+    return lucid.tensor(rng.uniform(-1.0, 1.0, size=shape).astype(np.float32), device=device)
 
 
 # ── + and × algebra ─────────────────────────────────────────────────────

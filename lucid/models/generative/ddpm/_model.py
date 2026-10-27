@@ -84,8 +84,7 @@ class _ResBlock(nn.Module):
         g_in = groups
         if in_channels % g_in != 0:
             g_in = next(
-                (g for g in range(min(groups, in_channels), 0, -1) if in_channels % g == 0),
-                1,
+                (g for g in range(min(groups, in_channels), 0, -1) if in_channels % g == 0), 1
             )
         g_out = min(groups, out_channels) if out_channels % groups != 0 else groups
 
@@ -138,13 +137,7 @@ class _AttentionBlock(nn.Module):
     Output is added to the input (residual).
     """
 
-    def __init__(
-        self,
-        channels: int,
-        *,
-        num_heads: int = 1,
-        groups: int = 32,
-    ) -> None:
+    def __init__(self, channels: int, *, num_heads: int = 1, groups: int = 32) -> None:
         super().__init__()
         if channels % num_heads != 0:
             raise ValueError(f"channels ({channels}) must be divisible by num_heads ({num_heads})")
@@ -348,11 +341,7 @@ class _DDPMUNet(nn.Module):
                 ch = out_ch
                 if spatial in config.attention_resolutions:
                     self.down_attn.append(
-                        _AttentionBlock(
-                            ch,
-                            num_heads=config.num_heads,
-                            groups=config.resnet_groups,
-                        )
+                        _AttentionBlock(ch, num_heads=config.num_heads, groups=config.resnet_groups)
                     )
                 else:
                     self.down_attn.append(nn.Identity())
@@ -378,11 +367,7 @@ class _DDPMUNet(nn.Module):
             groups=config.resnet_groups,
             scale_shift=config.use_scale_shift_norm,
         )
-        self.mid_attn = _AttentionBlock(
-            ch,
-            num_heads=config.num_heads,
-            groups=config.resnet_groups,
-        )
+        self.mid_attn = _AttentionBlock(ch, num_heads=config.num_heads, groups=config.resnet_groups)
         self.mid_block2 = _ResBlock(
             ch,
             ch,
@@ -413,11 +398,7 @@ class _DDPMUNet(nn.Module):
                 ch = out_ch
                 if spatial in config.attention_resolutions:
                     self.up_attn.append(
-                        _AttentionBlock(
-                            ch,
-                            num_heads=config.num_heads,
-                            groups=config.resnet_groups,
-                        )
+                        _AttentionBlock(ch, num_heads=config.num_heads, groups=config.resnet_groups)
                     )
                 else:
                     self.up_attn.append(nn.Identity())

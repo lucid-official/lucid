@@ -121,9 +121,7 @@ class TestArangeDtype:
             lucid.set_default_dtype(previous)
 
     @pytest.mark.parametrize(
-        "dtype",
-        [lucid.float32, lucid.int32, lucid.int64],
-        ids=["float32", "int32", "int64"],
+        "dtype", [lucid.float32, lucid.int32, lucid.int64], ids=["float32", "int32", "int64"]
     )
     def test_an_explicit_dtype_wins(self, device: str, dtype: lucid.dtype) -> None:
         assert lucid.arange(4, dtype=dtype, device=device).dtype == dtype
@@ -156,14 +154,7 @@ class TestArangeDtype:
             (lambda: np.float32(4.0), False),
             (lambda: lucid.tensor(4.0), False),
         ],
-        ids=[
-            "bool",
-            "numpy-int",
-            "int64-tensor",
-            "int32-tensor",
-            "numpy-float",
-            "float-tensor",
-        ],
+        ids=["bool", "numpy-int", "int64-tensor", "int32-tensor", "numpy-float", "float-tensor"],
     )
     def test_other_scalars_count_as_what_they_hold(self, make: object, integral: bool) -> None:
         bound = make()  # type: ignore[operator]

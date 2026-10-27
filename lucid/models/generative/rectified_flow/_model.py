@@ -48,10 +48,7 @@ from lucid.models._utils._generative import (
     start_noise,
     trace_probe,
 )
-from lucid.models.generative.rectified_flow._config import (
-    RectifiedFlowConfig,
-    TimeSchedule,
-)
+from lucid.models.generative.rectified_flow._config import RectifiedFlowConfig, TimeSchedule
 
 # What ``lucid.diffeq`` calls a state: one tensor, or a tuple of them when
 # more than one quantity is integrated at once.
@@ -240,9 +237,7 @@ def _sinusoidal(t: Tensor, dim: int, base: float = 10_000.0) -> Tensor:
     denom = max(half - 1, 1)
     step = math.log(base) / denom
     freqs = lucid.tensor(
-        [math.exp(-step * index) for index in range(half)],
-        dtype=t.dtype,
-        device=t.device,
+        [math.exp(-step * index) for index in range(half)], dtype=t.dtype, device=t.device
     )
     angles = t.reshape(-1, 1) * freqs.reshape(1, -1)
     emb = lucid.cat([lucid.sin(angles), lucid.cos(angles)], dim=-1)
@@ -922,11 +917,7 @@ class RectifiedFlowModel(PretrainedModel):
 
     def _check_image(self, x: Tensor, what: str = "Rectified Flow") -> None:
         channels, height, width = self._image_shape
-        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (
-            channels,
-            height,
-            width,
-        ):
+        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
             raise ValueError(
                 f"{what} expects (B, {channels}, {height}, {width}) samples, "
                 f"got shape {tuple(x.shape)}"
@@ -1167,11 +1158,7 @@ class RectifiedFlowModel(PretrainedModel):
         return self._t_schedule != "uniform"
 
     def _integrate(
-        self,
-        func: Callable[..., object],
-        state: _State,
-        t0: float,
-        t1: float,
+        self, func: Callable[..., object], state: _State, t0: float, t1: float
     ) -> _State:
         """One adaptive solve, endpoint only."""
         return cast(
@@ -1259,10 +1246,7 @@ class RectifiedFlowModel(PretrainedModel):
         flat = noise.reshape(batch, -1)
 
         if steps is None:
-            out = cast(
-                Tensor,
-                self._integrate(self.dynamics.velocity, flat, self._time_eps, 1.0),
-            )
+            out = cast(Tensor, self._integrate(self.dynamics.velocity, flat, self._time_eps, 1.0))
         else:
             if steps <= 0:
                 raise ValueError(f"steps must be positive, got {steps}")
@@ -1283,9 +1267,7 @@ class RectifiedFlowModel(PretrainedModel):
         x = flat
         for index in range(steps):
             t = lucid.tensor(
-                index / steps * span + self._time_eps,
-                dtype=flat.dtype,
-                device=flat.device,
+                index / steps * span + self._time_eps, dtype=flat.dtype, device=flat.device
             )
             x = x + self.dynamics.velocity(t, x) * dt
         return x

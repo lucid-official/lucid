@@ -220,13 +220,7 @@ class TestDistributedSlabs:
         ds = _ToyDataset(N)
         outs = []
         for rank in range(W):
-            s = D.RASampler(
-                ds,
-                num_replicas=W,
-                rank=rank,
-                num_repeats=3,
-                shuffle=False,
-            )
+            s = D.RASampler(ds, num_replicas=W, rank=rank, num_repeats=3, shuffle=False)
             outs.append(list(s))
         expected = N // W
         for out in outs:
@@ -317,13 +311,7 @@ class TestEdgeCases:
         W = 3
         ds = _ToyDataset(N)
         for rank in range(W):
-            s = D.RASampler(
-                ds,
-                num_replicas=W,
-                rank=rank,
-                num_repeats=1,
-                shuffle=False,
-            )
+            s = D.RASampler(ds, num_replicas=W, rank=rank, num_repeats=1, shuffle=False)
             out = list(s)
             assert len(out) == N // W
             # With R=1 the master list is just [0,1,...,N-1] padded to
@@ -352,13 +340,7 @@ class TestEdgeCases:
         """N == num_replicas → num_selected_samples = 1 per rank."""
         ds = _ToyDataset(4)
         for rank in range(4):
-            s = D.RASampler(
-                ds,
-                num_replicas=4,
-                rank=rank,
-                num_repeats=3,
-                shuffle=False,
-            )
+            s = D.RASampler(ds, num_replicas=4, rank=rank, num_repeats=3, shuffle=False)
             assert s.num_selected_samples == 1
             assert len(list(s)) == 1
 

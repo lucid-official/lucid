@@ -42,10 +42,7 @@ def _x(shape=(2, 4)):
 
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda mods: nn.Sequential(*mods),
-        lambda mods: nn.ModuleList(mods),
-    ],
+    [lambda mods: nn.Sequential(*mods), lambda mods: nn.ModuleList(mods)],
     ids=["sequential", "modulelist"],
 )
 def test_deleting_removes_the_module_and_renumbers_the_rest(build):
@@ -58,10 +55,7 @@ def test_deleting_removes_the_module_and_renumbers_the_rest(build):
 
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda mods: nn.Sequential(*mods),
-        lambda mods: nn.ModuleList(mods),
-    ],
+    [lambda mods: nn.Sequential(*mods), lambda mods: nn.ModuleList(mods)],
     ids=["sequential", "modulelist"],
 )
 def test_deleting_a_slice(build):
@@ -125,10 +119,7 @@ def test_deleting_an_absent_key_from_a_module_dict_is_refused():
 
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda mods: nn.Sequential(*mods),
-        lambda mods: nn.ModuleList(mods),
-    ],
+    [lambda mods: nn.Sequential(*mods), lambda mods: nn.ModuleList(mods)],
     ids=["sequential", "modulelist"],
 )
 def test_deleting_before_a_compiled_child_keeps_it_compiled(build):
@@ -161,10 +152,7 @@ def test_deleting_from_a_module_dict_clears_a_compiled_childs_wrapper():
 
 @pytest.mark.parametrize(
     "build",
-    [
-        lambda mods: nn.Sequential(*mods),
-        lambda mods: nn.ModuleList(mods),
-    ],
+    [lambda mods: nn.Sequential(*mods), lambda mods: nn.ModuleList(mods)],
     ids=["sequential", "modulelist"],
 )
 def test_inserting_shifts_everything_after_it(build):

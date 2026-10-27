@@ -188,10 +188,7 @@ _SETITEM_2D: list[tuple[str, _Writer]] = [
         "rows-block",
         lambda x, idx, val: x.__setitem__((idx([2, 0]), slice(1, 3)), val([[1, 0], [0, 4]])),
     ),
-    (
-        "pairs",
-        lambda x, idx, val: x.__setitem__((idx([0, 2]), idx([3, 0])), val([0, 7])),
-    ),
+    ("pairs", lambda x, idx, val: x.__setitem__((idx([0, 2]), idx([3, 0])), val([0, 7]))),
 ]
 
 
@@ -287,10 +284,7 @@ class TestScatterShapes:
         src = np.arange(100, 115, dtype=np.float32).reshape(3, 5)
         idx = np.array([[3, 0, 1], [2, 2, 0]])
         out = lucid.scatter(
-            lucid.tensor(base, device=device),
-            0,
-            _i(idx, device),
-            lucid.tensor(src, device=device),
+            lucid.tensor(base, device=device), 0, _i(idx, device), lucid.tensor(src, device=device)
         )
         want = base.copy()
         for r in range(2):
@@ -301,10 +295,7 @@ class TestScatterShapes:
     def test_a_view_base_is_read_as_its_elements(self, device: str) -> None:
         base = lucid.arange(12.0, device=device).reshape(3, 4).mT  # (4, 3), non-contiguous
         out = lucid.scatter(
-            base,
-            0,
-            _i([[3, 0, 1]], device),
-            lucid.tensor([[-1.0, -2.0, -3.0]], device=device),
+            base, 0, _i([[3, 0, 1]], device), lucid.tensor([[-1.0, -2.0, -3.0]], device=device)
         )
         want = np.arange(12.0, dtype=np.float32).reshape(3, 4).T.copy()
         want[3, 0], want[0, 1], want[1, 2] = -1.0, -2.0, -3.0
@@ -312,17 +303,11 @@ class TestScatterShapes:
 
     def test_a_0d_tensor_scatters_its_one_element(self, device: str) -> None:
         out = lucid.scatter(
-            lucid.zeros((), device=device),
-            0,
-            _i(0, device),
-            lucid.tensor(5.0, device=device),
+            lucid.zeros((), device=device), 0, _i(0, device), lucid.tensor(5.0, device=device)
         )
         assert out.shape == () and out.item() == 5.0
         out = lucid.scatter(
-            lucid.zeros(3, device=device),
-            0,
-            _i(2, device),
-            lucid.tensor(5.0, device=device),
+            lucid.zeros(3, device=device), 0, _i(2, device), lucid.tensor(5.0, device=device)
         )
         assert out.tolist() == [0.0, 0.0, 5.0]
 
@@ -352,10 +337,7 @@ class TestScatterShapes:
     def test_an_index_into_an_empty_axis_is_refused(self, device: str) -> None:
         with pytest.raises(IndexError):
             lucid.scatter(
-                lucid.zeros(0, device=device),
-                0,
-                _i([0], device),
-                lucid.ones(1, device=device),
+                lucid.zeros(0, device=device), 0, _i([0], device), lucid.ones(1, device=device)
             )
 
 

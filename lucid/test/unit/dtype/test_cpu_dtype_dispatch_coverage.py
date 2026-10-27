@@ -89,9 +89,7 @@ def test_transpose_backward_matches_direct_path(dtype: lucid.dtype) -> None:
 
 
 @pytest.mark.parametrize(
-    "dtype",
-    [*_FLOATS, lucid.int8, lucid.int16, lucid.int32, lucid.int64, lucid.bool],
-    ids=str,
+    "dtype", [*_FLOATS, lucid.int8, lucid.int16, lucid.int32, lucid.int64, lucid.bool], ids=str
 )
 def test_tril_every_dtype(dtype: lucid.dtype) -> None:
     x = lucid.ones(3, 3).to(dtype)

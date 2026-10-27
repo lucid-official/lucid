@@ -76,10 +76,7 @@ _ENGINE_REDUCTIONS = {
     "logsumexp": "logsumexp",
 }
 
-_REPEATS = {
-    (2, 3, 4): [(0, 0), (1, -2), (0, -3), (2, 0, -1)],
-    (): [(0, 0), (0, -1)],
-}
+_REPEATS = {(2, 3, 4): [(0, 0), (1, -2), (0, -3), (2, 0, -1)], (): [(0, 0), (0, -1)]}
 _REPEAT_CASES = [(shape, dims) for shape, all_dims in _REPEATS.items() for dims in all_dims]
 
 
@@ -165,12 +162,7 @@ def test_rot90_refuses_one_axis_twice(device, dims, k):
 
 @pytest.mark.parametrize("k", [0, 1])
 def test_rot90_refuses_bad_dims_length_or_input_rank(ref, device, k):
-    for shape, dims in [
-        ((2, 3), (0,)),
-        ((2, 3), (0, 1, 2)),
-        ((3,), (0, 1)),
-        ((), (0, 1)),
-    ]:
+    for shape, dims in [((2, 3), (0,)), ((2, 3), (0, 1, 2)), ((3,), (0, 1)), ((), (0, 1))]:
         want_err = _outcome(lambda: ref.rot90(ref.ones(shape), k, dims))[1]
         got_err = _outcome(lambda: lucid.rot90(lucid.ones(shape, device=device), k, dims))[1]
         _same_refusal(got_err, want_err)
@@ -185,48 +177,13 @@ def test_rot90_refuses_bad_dims_length_or_input_rank(ref, device, k):
         ("squeeze", (), lambda E, t: E.squeeze(t, 0), lambda r, t: r.squeeze(t, 0)),
         ("squeeze", (), lambda E, t: E.squeeze(t, -1), lambda r, t: r.squeeze(t, -1)),
         ("squeeze", (), lambda E, t: E.squeeze(t, 1), lambda r, t: r.squeeze(t, 1)),
-        (
-            "squeeze",
-            (1, 3),
-            lambda E, t: E.squeeze(t, -3),
-            lambda r, t: r.squeeze(t, -3),
-        ),
-        (
-            "unsqueeze",
-            (),
-            lambda E, t: E.unsqueeze(t, 1),
-            lambda r, t: r.unsqueeze(t, 1),
-        ),
-        (
-            "unsqueeze",
-            (),
-            lambda E, t: E.unsqueeze(t, -2),
-            lambda r, t: r.unsqueeze(t, -2),
-        ),
-        (
-            "unsqueeze",
-            (2,),
-            lambda E, t: E.unsqueeze(t, 2),
-            lambda r, t: r.unsqueeze(t, 2),
-        ),
-        (
-            "unsqueeze",
-            (2,),
-            lambda E, t: E.unsqueeze(t, 3),
-            lambda r, t: r.unsqueeze(t, 3),
-        ),
-        (
-            "stack",
-            (2,),
-            lambda E, t: E.stack([t, t], 2),
-            lambda r, t: r.stack([t, t], 2),
-        ),
-        (
-            "stack",
-            (2,),
-            lambda E, t: E.stack([t, t], -3),
-            lambda r, t: r.stack([t, t], -3),
-        ),
+        ("squeeze", (1, 3), lambda E, t: E.squeeze(t, -3), lambda r, t: r.squeeze(t, -3)),
+        ("unsqueeze", (), lambda E, t: E.unsqueeze(t, 1), lambda r, t: r.unsqueeze(t, 1)),
+        ("unsqueeze", (), lambda E, t: E.unsqueeze(t, -2), lambda r, t: r.unsqueeze(t, -2)),
+        ("unsqueeze", (2,), lambda E, t: E.unsqueeze(t, 2), lambda r, t: r.unsqueeze(t, 2)),
+        ("unsqueeze", (2,), lambda E, t: E.unsqueeze(t, 3), lambda r, t: r.unsqueeze(t, 3)),
+        ("stack", (2,), lambda E, t: E.stack([t, t], 2), lambda r, t: r.stack([t, t], 2)),
+        ("stack", (2,), lambda E, t: E.stack([t, t], -3), lambda r, t: r.stack([t, t], -3)),
         (
             "unflatten",
             (6,),
@@ -239,36 +196,11 @@ def test_rot90_refuses_bad_dims_length_or_input_rank(ref, device, k):
             lambda E, t: E.unflatten(t, 0, [1]),
             lambda r, t: r.unflatten(t, 0, (1,)),
         ),
-        (
-            "unfold",
-            (),
-            lambda E, t: E.unfold_dim(t, 0, 1, 1),
-            lambda r, t: t.unfold(0, 1, 1),
-        ),
-        (
-            "unfold",
-            (),
-            lambda E, t: E.unfold_dim(t, -1, 1, 3),
-            lambda r, t: t.unfold(-1, 1, 3),
-        ),
-        (
-            "unfold",
-            (),
-            lambda E, t: E.unfold_dim(t, 1, 1, 1),
-            lambda r, t: t.unfold(1, 1, 1),
-        ),
-        (
-            "unfold",
-            (),
-            lambda E, t: E.unfold_dim(t, 0, 2, 1),
-            lambda r, t: t.unfold(0, 2, 1),
-        ),
-        (
-            "unfold",
-            (4,),
-            lambda E, t: E.unfold_dim(t, -2, 2, 1),
-            lambda r, t: t.unfold(-2, 2, 1),
-        ),
+        ("unfold", (), lambda E, t: E.unfold_dim(t, 0, 1, 1), lambda r, t: t.unfold(0, 1, 1)),
+        ("unfold", (), lambda E, t: E.unfold_dim(t, -1, 1, 3), lambda r, t: t.unfold(-1, 1, 3)),
+        ("unfold", (), lambda E, t: E.unfold_dim(t, 1, 1, 1), lambda r, t: t.unfold(1, 1, 1)),
+        ("unfold", (), lambda E, t: E.unfold_dim(t, 0, 2, 1), lambda r, t: t.unfold(0, 2, 1)),
+        ("unfold", (4,), lambda E, t: E.unfold_dim(t, -2, 2, 1), lambda r, t: t.unfold(-2, 2, 1)),
     ],
     ids=lambda c: c[0],
 )

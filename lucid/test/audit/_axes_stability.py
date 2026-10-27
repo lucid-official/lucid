@@ -257,28 +257,12 @@ _EXTREME_CASES: dict[str, list[tuple[str, Any, Any]]] = {
         ("wide spread", lambda: (_f64([-800.0, 0.0, 800.0]),), _sums_to_one),
     ],
     "log_softmax": [
-        (
-            "logits +1000",
-            lambda: (_f64([1000.0, 999.0, 998.0]),),
-            _finite("log-probabilities"),
-        ),
-        (
-            "wide spread",
-            lambda: (_f64([-800.0, 0.0, 800.0]),),
-            _finite("log-probabilities"),
-        ),
+        ("logits +1000", lambda: (_f64([1000.0, 999.0, 998.0]),), _finite("log-probabilities")),
+        ("wide spread", lambda: (_f64([-800.0, 0.0, 800.0]),), _finite("log-probabilities")),
     ],
     "logsumexp": [
-        (
-            "all +1000",
-            lambda: (_f64([1000.0, 1000.0]),),
-            _close_to(1000.0 + float(np.log(2.0))),
-        ),
-        (
-            "all -1000",
-            lambda: (_f64([-1000.0, -1000.0]),),
-            _close_to(-1000.0 + float(np.log(2.0))),
-        ),
+        ("all +1000", lambda: (_f64([1000.0, 1000.0]),), _close_to(1000.0 + float(np.log(2.0)))),
+        ("all -1000", lambda: (_f64([-1000.0, -1000.0]),), _close_to(-1000.0 + float(np.log(2.0)))),
     ],
     "sigmoid": [
         ("+1000", lambda: (_f64([1000.0]),), _close_to(1.0)),
@@ -290,32 +274,16 @@ _EXTREME_CASES: dict[str, list[tuple[str, Any, Any]]] = {
     ],
     "softplus": [
         ("+1000 must not overflow", lambda: (_f64([1000.0]),), _close_to(1000.0, 1e-9)),
-        (
-            "-1000 must not underflow to -inf",
-            lambda: (_f64([-1000.0]),),
-            _finite("softplus"),
-        ),
+        ("-1000 must not underflow to -inf", lambda: (_f64([-1000.0]),), _finite("softplus")),
     ],
-    "log1p": [
-        (
-            "1e-16 must not round to zero",
-            lambda: (_f64([1e-16]),),
-            _close_to(1e-16, 1e-3),
-        ),
-    ],
-    "expm1": [
-        (
-            "1e-16 must not round to zero",
-            lambda: (_f64([1e-16]),),
-            _close_to(1e-16, 1e-3),
-        ),
-    ],
+    "log1p": [("1e-16 must not round to zero", lambda: (_f64([1e-16]),), _close_to(1e-16, 1e-3))],
+    "expm1": [("1e-16 must not round to zero", lambda: (_f64([1e-16]),), _close_to(1e-16, 1e-3))],
     "logaddexp": [
         (
             "both +1000",
             lambda: (_f64([1000.0]), _f64([1000.0])),
             _close_to(1000.0 + float(np.log(2.0))),
-        ),
+        )
     ],
     "logsigmoid": [
         ("-1000", lambda: (_f64([-1000.0]),), _close_to(-1000.0, 1e-9)),
@@ -323,32 +291,24 @@ _EXTREME_CASES: dict[str, list[tuple[str, Any, Any]]] = {
     ],
     "norm": [
         ("1e200 must not overflow", lambda: (_f64([1e200, 1e200]),), _finite("norm")),
-        (
-            "1e-200 must not underflow",
-            lambda: (_f64([1e-200, 1e-200]),),
-            _finite("norm"),
-        ),
+        ("1e-200 must not underflow", lambda: (_f64([1e-200, 1e-200]),), _finite("norm")),
     ],
     "hypot": [
-        (
-            "1e200 must not overflow",
-            lambda: (_f64([1e200]), _f64([1e200])),
-            _finite("hypot"),
-        ),
+        ("1e200 must not overflow", lambda: (_f64([1e200]), _f64([1e200])), _finite("hypot"))
     ],
     "var": [
         (
             "large mean, small spread",
             lambda: (_f64([1e8, 1e8 + 1.0, 1e8 + 2.0]),),
             _close_to(1.0, 1e-3),
-        ),
+        )
     ],
     "std": [
         (
             "large mean, small spread",
             lambda: (_f64([1e8, 1e8 + 1.0, 1e8 + 2.0]),),
             _close_to(1.0, 1e-3),
-        ),
+        )
     ],
 }
 
@@ -407,11 +367,7 @@ class ContiguityAxis(Axis):
                 "the varied argument is not a tensor — nothing to vary",
             )
         if base.ndim < 1:
-            return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                "0-d input has no layout to vary",
-            )
+            return self._finding(symbol, Status.NOT_APPLICABLE, "0-d input has no layout to vary")
 
         # A tensor twice the size in the last axis, whose every second
         # column holds the probe.  Slicing it back gives the same values
@@ -661,9 +617,7 @@ class RankAxis(Axis):
             )
         if base.ndim < 2:
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                f"already rank {base.ndim} — nothing to take away",
+                symbol, Status.NOT_APPLICABLE, f"already rank {base.ndim} — nothing to take away"
             )
 
         # Flatten to rank 1, keeping every element.  A reduced *shape*
@@ -680,9 +634,7 @@ class RankAxis(Axis):
             out = fn(*args, **call.kwargs)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.PASS,
-                f"rank {base.ndim} -> 1 refused: {type(exc).__name__}",
+                symbol, Status.PASS, f"rank {base.ndim} -> 1 refused: {type(exc).__name__}"
             )
 
         got = _probe.to_numpy(out)

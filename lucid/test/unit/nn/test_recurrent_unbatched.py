@@ -77,10 +77,7 @@ def _leaves(fw: ModuleType, arrays: dict[str, np.ndarray], device: str) -> dict[
 
 
 def _run_module(
-    fw: ModuleType,
-    module: object,
-    kind: str,
-    leaves: dict[str, object],
+    fw: ModuleType, module: object, kind: str, leaves: dict[str, object]
 ) -> tuple[list[object], dict[str, object]]:
     """Forward ``module`` and backpropagate a loss over every output; return
     the outputs and the gradients of every leaf and parameter."""

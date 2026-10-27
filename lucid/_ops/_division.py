@@ -24,10 +24,7 @@ _DIV_SIGNATURE = _BINARY_SIGNATURE.replace(
     parameters=[
         *_BINARY_SIGNATURE.parameters.values(),
         inspect.Parameter(
-            "rounding_mode",
-            inspect.Parameter.KEYWORD_ONLY,
-            default=None,
-            annotation=str | None,
+            "rounding_mode", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str | None
         ),
     ]
 )
@@ -36,12 +33,7 @@ _DIV_SIGNATURE = _BINARY_SIGNATURE.replace(
 _ROUND_SIGNATURE = inspect.Signature(
     [
         inspect.Parameter("input", inspect.Parameter.POSITIONAL_OR_KEYWORD),
-        inspect.Parameter(
-            "decimals",
-            inspect.Parameter.KEYWORD_ONLY,
-            default=0,
-            annotation=int,
-        ),
+        inspect.Parameter("decimals", inspect.Parameter.KEYWORD_ONLY, default=0, annotation=int),
     ]
 )
 

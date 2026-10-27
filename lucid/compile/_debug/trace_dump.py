@@ -33,11 +33,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from lucid._C.engine.compile import OpNode, TensorMeta, TraceGraph
 
-__all__ = [
-    "trace_to_dict",
-    "trace_to_json",
-    "dump_to_path_if_debug_enabled",
-]
+__all__ = ["trace_to_dict", "trace_to_json", "dump_to_path_if_debug_enabled"]
 
 
 # Module-level monotonic counter for trace file names so two traces in

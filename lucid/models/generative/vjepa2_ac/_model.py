@@ -11,16 +11,9 @@ from lucid.models._mixins import BackboneMixin, FeatureInfo
 from lucid.models._output import ModelOutput
 from lucid.models._tasks import WorldModelingModel
 from lucid.models.generative.vjepa2_ac._config import VJEPA2ACConfig
-from lucid.models.vision.vjepa2._model import (
-    _ActionConditionedPredictor,
-    _RoPEVideoEncoder,
-)
+from lucid.models.vision.vjepa2._model import _ActionConditionedPredictor, _RoPEVideoEncoder
 
-__all__ = [
-    "VJEPA2ACModel",
-    "VJEPA2ACForWorldModeling",
-    "VJEPA2ACOutput",
-]
+__all__ = ["VJEPA2ACModel", "VJEPA2ACForWorldModeling", "VJEPA2ACOutput"]
 
 
 @dataclass(slots=True)
@@ -108,11 +101,7 @@ class VJEPA2ACModel(PretrainedModel, BackboneMixin):
             rope_base=config.rope_base,
         )
         self._feature_info = [
-            FeatureInfo(
-                stage=1,
-                num_channels=config.encoder_dim,
-                reduction=config.patch_size,
-            )
+            FeatureInfo(stage=1, num_channels=config.encoder_dim, reduction=config.patch_size)
         ]
 
     @override
@@ -136,11 +125,7 @@ class VJEPA2ACModel(PretrainedModel, BackboneMixin):
         _, frames, channels, height, width = (int(s) for s in video.shape)
         if frames < 1:
             raise ValueError(f"video must carry at least one frame, got {frames}")
-        expected = (
-            self.config.in_channels,
-            self.config.image_size,
-            self.config.image_size,
-        )
+        expected = (self.config.in_channels, self.config.image_size, self.config.image_size)
         if (channels, height, width) != expected:
             raise ValueError(
                 f"video frames must have shape (C, H, W) = {expected}, got "
@@ -178,11 +163,7 @@ class VJEPA2ACModel(PretrainedModel, BackboneMixin):
         return F.layer_norm(tokens, (int(tokens.shape[-1]),))
 
     def predict(
-        self,
-        context: Tensor,
-        actions: Tensor,
-        states: Tensor,
-        extrinsics: Tensor | None = None,
+        self, context: Tensor, actions: Tensor, states: Tensor, extrinsics: Tensor | None = None
     ) -> Tensor:
         """Predict the next latent grids from encoded context and controls."""
         if extrinsics is None:
@@ -193,11 +174,7 @@ class VJEPA2ACModel(PretrainedModel, BackboneMixin):
 
     @override
     def forward(
-        self,
-        video: Tensor,
-        actions: Tensor,
-        states: Tensor,
-        extrinsics: Tensor | None = None,
+        self, video: Tensor, actions: Tensor, states: Tensor, extrinsics: Tensor | None = None
     ) -> VJEPA2ACOutput:
         r"""One teacher-forced transition step over a clip.
 
@@ -278,11 +255,7 @@ class VJEPA2ACForWorldModeling(WorldModelingModel):
 
     @override
     def forward(
-        self,
-        video: Tensor,
-        actions: Tensor,
-        states: Tensor,
-        extrinsics: Tensor | None = None,
+        self, video: Tensor, actions: Tensor, states: Tensor, extrinsics: Tensor | None = None
     ) -> VJEPA2ACOutput:
         """Return an action-conditioned latent transition."""
         if extrinsics is None:

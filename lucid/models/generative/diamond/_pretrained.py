@@ -21,10 +21,7 @@ published checkpoints hold.
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.generative.diamond._config import DIAMONDConfig
-from lucid.models.generative.diamond._model import (
-    DIAMONDForWorldModeling,
-    DIAMONDModel,
-)
+from lucid.models.generative.diamond._model import DIAMONDForWorldModeling, DIAMONDModel
 from lucid.models.generative.diamond._weights import DIAMONDWeights
 from lucid.weights import WeightsEnum
 from lucid.models._utils._common import apply_overrides
@@ -165,10 +162,7 @@ def _actions_for(entry: WeightsEnum | None, overrides: dict[str, object]) -> dic
     summary="auto",
 )
 def diamond(
-    pretrained: bool | str = False,
-    *,
-    weights: DIAMONDWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DIAMONDWeights | None = None, **overrides: object
 ) -> DIAMONDModel:
     """Construct the Atari agent — denoiser, reward/end model, actor-critic.
 
@@ -224,10 +218,7 @@ def diamond(
     summary="auto",
 )
 def diamond_world_model(
-    pretrained: bool | str = False,
-    *,
-    weights: DIAMONDWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DIAMONDWeights | None = None, **overrides: object
 ) -> DIAMONDForWorldModeling:
     r"""Construct DIAMOND with its objectives and imagination rollout.
 
@@ -299,10 +290,7 @@ def diamond_world_model(
     summary="auto",
 )
 def diamond_csgo(
-    pretrained: bool | str = False,
-    *,
-    weights: DIAMONDWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DIAMONDWeights | None = None, **overrides: object
 ) -> DIAMONDModel:
     r"""Construct the *Counter-Strike* world model.
 

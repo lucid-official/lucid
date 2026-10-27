@@ -29,10 +29,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models._utils._common import (
-    zero_init_last_bn,
-    make_divisible as _make_divisible,
-)
+from lucid.models._utils._common import zero_init_last_bn, make_divisible as _make_divisible
 from lucid.models.vision.resnest._config import ResNeStConfig
 
 # ---------------------------------------------------------------------------
@@ -101,11 +98,7 @@ class _SplitAttn(nn.Module):
         super().__init__()
         self._radix = radix
         mid_chs = out_channels * radix
-        attn_chs = _make_divisible(
-            in_channels * radix * rd_ratio,
-            divisor=rd_divisor,
-            min_value=32,
-        )
+        attn_chs = _make_divisible(in_channels * radix * rd_ratio, divisor=rd_divisor, min_value=32)
 
         # Single grouped conv producing all radix branches simultaneously
         self.conv = nn.Conv2d(
@@ -377,8 +370,7 @@ def _make_layer(
             downsample = _make_avg_downsample(inplanes, out_ch, stride)
         else:
             downsample = nn.Sequential(
-                nn.Conv2d(inplanes, out_ch, 1, stride=stride, bias=False),
-                nn.BatchNorm2d(out_ch),
+                nn.Conv2d(inplanes, out_ch, 1, stride=stride, bias=False), nn.BatchNorm2d(out_ch)
             )
 
     blocks: list[nn.Module] = [
@@ -468,9 +460,7 @@ def _make_stem(
             nn.Conv2d(stem_width, out, 3, stride=1, padding=1, bias=False),
         )
     else:
-        conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out, 7, stride=2, padding=3, bias=False),
-        )
+        conv1 = nn.Sequential(nn.Conv2d(in_channels, out, 7, stride=2, padding=3, bias=False))
     bn1 = nn.BatchNorm2d(out)
     return conv1, bn1, out
 
@@ -480,7 +470,9 @@ def _make_stem(
 # ---------------------------------------------------------------------------
 
 
-def _build_resnest_body(config: ResNeStConfig) -> tuple[
+def _build_resnest_body(
+    config: ResNeStConfig,
+) -> tuple[
     nn.MaxPool2d,  # maxpool
     nn.Sequential,  # layer1
     nn.Sequential,  # layer2
@@ -777,11 +769,7 @@ class ResNeStForImageClassification(ImageClassificationModel, ClassificationHead
         self._build_classifier(out_ch, config.num_classes, dropout=config.dropout)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.conv1(x)
         x = self.act1(self.bn1(x))
         x = self.maxpool(x)

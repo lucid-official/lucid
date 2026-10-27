@@ -77,9 +77,7 @@ def test_tile_takes_dims(ref: ModuleType, device: str) -> None:
         "tile-free-spread",
     ],
 )
-def test_the_old_lucid_spellings_are_refused(
-    call: Callable[[ModuleType], object],
-) -> None:
+def test_the_old_lucid_spellings_are_refused(call: Callable[[ModuleType], object]) -> None:
     # The reference's free ``tile`` takes the counts as one list, as its
     # method does not need to.
     with pytest.raises(TypeError):
@@ -190,10 +188,7 @@ def test_operands_take_the_reference_names(device: str) -> None:
     assert lucid.pow(a, exponent=2).tolist() == a.pow(exponent=2).tolist()
     assert v.dot(tensor=v).item() == 5.0
     assert v.outer(vec2=v).shape == (2, 2)
-    assert lucid.where(condition=a > 2, input=a, other=0.0).tolist() == [
-        [0.0, 0.0],
-        [3.0, 4.0],
-    ]
+    assert lucid.where(condition=a > 2, input=a, other=0.0).tolist() == [[0.0, 0.0], [3.0, 4.0]]
     assert lucid.take(a, index=lucid.tensor([3], device=device)).tolist() == [4.0]
     for old in (
         lambda: lucid.mm(a, other=a),

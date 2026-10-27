@@ -114,11 +114,7 @@ _CONV_SMALL = _Arch(
     stages=(
         _stage(_conv(32, 3, 2), _conv(32, 1)),
         _stage(_conv(96, 3, 2), _conv(64, 1)),
-        _stage(
-            _uib(96, 5, 5, 2, 3.0),
-            _uib(96, 0, 3, 1, 2.0, repeat=4),
-            _uib(96, 3, 0, 1, 4.0),
-        ),
+        _stage(_uib(96, 5, 5, 2, 3.0), _uib(96, 0, 3, 1, 2.0, repeat=4), _uib(96, 3, 0, 1, 4.0)),
         _stage(
             _uib(128, 3, 3, 2, 6.0),
             _uib(128, 5, 5, 1, 4.0),
@@ -314,13 +310,7 @@ class _ConvNorm(nn.Module):
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
-            in_ch,
-            out_ch,
-            kernel,
-            stride=stride,
-            padding=kernel // 2,
-            groups=groups,
-            bias=False,
+            in_ch, out_ch, kernel, stride=stride, padding=kernel // 2, groups=groups, bias=False
         )
         self.bn = nn.BatchNorm2d(out_ch)
         self.act = act if act is not None else nn.Identity()
@@ -334,12 +324,7 @@ class _ConvBlock(nn.Module):
     """Plain conv-norm-act layer, no residual (the ``Conv2D`` table rows)."""
 
     def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel: int,
-        stride: int,
-        act: Literal["relu", "gelu"],
+        self, in_ch: int, out_ch: int, kernel: int, stride: int, act: Literal["relu", "gelu"]
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, kernel, stride=stride, padding=kernel // 2, bias=False)
@@ -542,13 +527,7 @@ class _MobileMQA(nn.Module):
 
 def _build_trunk(
     cfg: MobileNetV4Config,
-) -> tuple[
-    nn.Conv2d,
-    nn.BatchNorm2d,
-    nn.ReLU | nn.GELU,
-    nn.Sequential,
-    list[FeatureInfo],
-]:
+) -> tuple[nn.Conv2d, nn.BatchNorm2d, nn.ReLU | nn.GELU, nn.Sequential, list[FeatureInfo]]:
     """Return ``(conv_stem, bn1, act, blocks, feature_info)`` for ``cfg``."""
     arch = _ARCHS[cfg.variant]
     conv_stem = nn.Conv2d(cfg.in_channels, arch.stem, 3, stride=2, padding=1, bias=False)
@@ -587,12 +566,7 @@ def _build_trunk(
                 )
             else:
                 block = _MobileMQA(
-                    in_ch,
-                    spec.heads,
-                    spec.key_dim,
-                    spec.kv_stride,
-                    arch.layer_scale,
-                    dpr,
+                    in_ch, spec.heads, spec.key_dim, spec.kv_stride, arch.layer_scale, dpr
                 )
             blocks.append(block)
             reduction *= spec.stride
@@ -830,11 +804,7 @@ class MobileNetV4ForImageClassification(ImageClassificationModel, Classification
         _init_weights(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = _chain(
             x,
             self.conv_stem,

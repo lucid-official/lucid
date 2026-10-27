@@ -48,10 +48,7 @@ _SCOPES = [
     ),
     pytest.param("cpu", lucid.bfloat16, id="cpu-bf16"),
 ]
-_TARGETS = [
-    pytest.param(lucid.float32, id="f32"),
-    pytest.param(lucid.float16, id="f16"),
-]
+_TARGETS = [pytest.param(lucid.float32, id="f32"), pytest.param(lucid.float16, id="f16")]
 _DEVICES = ["cpu", "metal"] if metal_available() else ["cpu"]
 
 # ``(lib, x, y) -> x`` — one way to write into ``x`` in place, for either library.
@@ -209,16 +206,7 @@ def test_float32_arithmetic_under_autocast_is_exactly_float32(
 @pytest.mark.parametrize(("device", "amp"), _SCOPES)
 @pytest.mark.parametrize(
     "spelling",
-    [
-        "mul_",
-        "exp_",
-        "sqrt_",
-        "pow_",
-        "x *= y",
-        "F.silu(inplace)",
-        "F.elu(inplace)",
-        "index_add_",
-    ],
+    ["mul_", "exp_", "sqrt_", "pow_", "x *= y", "F.silu(inplace)", "F.elu(inplace)", "index_add_"],
 )
 def test_inplace_op_under_autocast_differentiates_in_target_dtype(
     ref: ModuleType, spelling: str, device: str, amp: lucid.dtype

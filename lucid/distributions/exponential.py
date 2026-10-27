@@ -6,19 +6,11 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions.constraints import (
-    Constraint,
-    nonnegative,
-    positive,
-    real,
-)
+from lucid.distributions.constraints import Constraint, nonnegative, positive, real
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _broadcast_pair,
-)
+from lucid.distributions._util import _as_tensor, _broadcast_pair
 
 
 class Exponential(ExponentialFamily):
@@ -86,11 +78,7 @@ class Exponential(ExponentialFamily):
     support: Constraint | None = nonnegative
     has_rsample = True
 
-    def __init__(
-        self,
-        rate: Tensor | float,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, rate: Tensor | float, validate_args: bool | None = None) -> None:
         r"""Construct an Exponential distribution.
 
         Parameters
@@ -121,9 +109,7 @@ class Exponential(ExponentialFamily):
         """
         self.rate = _as_tensor(rate)
         super().__init__(
-            batch_shape=tuple(self.rate.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.rate.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -441,10 +427,7 @@ class Laplace(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Laplace distribution.
 
@@ -482,9 +465,7 @@ class Laplace(Distribution):
         self.scale = _as_tensor(scale)
         self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -746,10 +727,7 @@ class Cauchy(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Cauchy distribution.
 
@@ -786,9 +764,7 @@ class Cauchy(Distribution):
         self.scale = _as_tensor(scale)
         self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override

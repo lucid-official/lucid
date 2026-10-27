@@ -230,11 +230,7 @@ def test_hooks_run_in_registration_order_each_on_the_last_result(device: str) ->
     for hook in (first, second, third):
         y.register_hook(hook)
     y.sum().backward()
-    assert seen == [
-        ("first", [1.0, 1.0]),
-        ("second", [2.0, 2.0]),
-        ("third", [2.0, 2.0]),
-    ]
+    assert seen == [("first", [1.0, 1.0]), ("second", [2.0, 2.0]), ("third", [2.0, 2.0])]
     assert x.grad is not None and x.grad.tolist() == [20.0, 20.0]
 
 
@@ -312,9 +308,7 @@ def test_a_non_tensor_result_is_a_type_error_naming_the_hook(
     ids=["shape", "dtype"],
 )
 def test_a_result_of_another_kind_is_refused(
-    make: Callable[[lucid.Tensor], lucid.Tensor],
-    error: type[BaseException],
-    device: str,
+    make: Callable[[lucid.Tensor], lucid.Tensor], error: type[BaseException], device: str
 ) -> None:
     x = lucid.ones(2, device=device, requires_grad=True)
     y = x * 1.0

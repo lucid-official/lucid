@@ -168,14 +168,8 @@ _ENTRIES: dict[str, Callable[[str, str], _Armed]] = {
 _COUNT_ERRORS: dict[str, tuple[type[BaseException], str]] = {
     "tensor-hook": (TypeError, "tensor or None"),
     "leaf-hook": (TypeError, "tensor or None"),
-    "module-full-hook": (
-        RuntimeError,
-        "invalid number of grad_input, got 2, but expected 1",
-    ),
-    "module-pre-hook": (
-        RuntimeError,
-        "invalid number of grad_output, got 2, but expected 1",
-    ),
+    "module-full-hook": (RuntimeError, "invalid number of grad_input, got 2, but expected 1"),
+    "module-pre-hook": (RuntimeError, "invalid number of grad_output, got 2, but expected 1"),
     "grad-assignment": (TypeError, "Tensor"),
 }
 
@@ -287,9 +281,7 @@ def test_a_gradient_for_an_input_that_takes_none_is_refused(device: str) -> None
     assert x.grad is None
 
 
-def test_a_module_whose_inputs_take_no_gradient_hands_its_hooks_none(
-    device: str,
-) -> None:
+def test_a_module_whose_inputs_take_no_gradient_hands_its_hooks_none(device: str) -> None:
     """One ``None`` per positional argument, as the reference passes them —
     and a hook may hand them back, but not put a gradient in their place."""
 

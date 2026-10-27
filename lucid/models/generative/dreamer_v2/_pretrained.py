@@ -34,10 +34,7 @@ from dataclasses import replace
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.generative.dreamer_v2._config import DreamerV2Config
-from lucid.models.generative.dreamer_v2._model import (
-    DreamerV2ForWorldModeling,
-    DreamerV2Model,
-)
+from lucid.models.generative.dreamer_v2._model import DreamerV2ForWorldModeling, DreamerV2Model
 
 _CFG_DREAMER_V2 = DreamerV2Config()
 

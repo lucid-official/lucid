@@ -65,12 +65,7 @@ class TestColorSemantics:
         out = T.Solarize(p=1.0)(s)
         from lucid.utils.transforms._datatypes import to_xyxy
 
-        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [
-            1.0,
-            2.0,
-            8.0,
-            9.0,
-        ]
+        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [1.0, 2.0, 8.0, 9.0]
 
 
 class TestReproducibility:

@@ -35,10 +35,7 @@ _CFG_BASE = RoFormerConfig()  # paper default — the only published size
     default_config=_CFG_BASE,
 )
 def roformer(
-    pretrained: bool | str = False,
-    *,
-    weights: RoFormerWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: RoFormerWeights | None = None, **overrides: object
 ) -> RoFormerModel:
     r"""Construct a RoFormer encoder trunk.
 
@@ -176,10 +173,7 @@ def roformer_mlm(
     default_config=_CFG_BASE,
 )
 def roformer_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: RoFormerWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: RoFormerWeights | None = None, **overrides: object
 ) -> RoFormerForSequenceClassification:
     r"""Construct a RoFormer model with a sequence-classification head.
 
@@ -242,10 +236,7 @@ def roformer_cls(
     default_config=_CFG_BASE,
 )
 def roformer_token_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: RoFormerWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: RoFormerWeights | None = None, **overrides: object
 ) -> RoFormerForTokenClassification:
     r"""Construct a RoFormer model with a per-token classification head.
 
@@ -308,10 +299,7 @@ def roformer_token_cls(
     default_config=_CFG_BASE,
 )
 def roformer_multiple_choice(
-    pretrained: bool | str = False,
-    *,
-    weights: RoFormerWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: RoFormerWeights | None = None, **overrides: object
 ) -> RoFormerForMultipleChoice:
     r"""Construct a RoFormer model with a multiple-choice head.
 
@@ -377,10 +365,7 @@ def roformer_multiple_choice(
     default_config=_CFG_BASE,
 )
 def roformer_qa(
-    pretrained: bool | str = False,
-    *,
-    weights: RoFormerWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: RoFormerWeights | None = None, **overrides: object
 ) -> RoFormerForQuestionAnswering:
     r"""Construct a RoFormer model with an extractive span head.
 

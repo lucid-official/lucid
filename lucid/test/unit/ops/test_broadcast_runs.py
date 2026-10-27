@@ -86,8 +86,7 @@ def test_a_broadcasting_binary_op_sums_its_gradient_in_output_order(src, dst) ->
 
 
 @pytest.mark.parametrize(
-    "shape,axes",
-    [((4, 5, 6), (1,)), ((4, 5, 6), (0, 2)), ((4, 5, 6), (2,)), ((7,), (0,))],
+    "shape,axes", [((4, 5, 6), (1,)), ((4, 5, 6), (0, 2)), ((4, 5, 6), (2,)), ((7,), (0,))]
 )
 @pytest.mark.parametrize("keepdim", [False, True])
 def test_a_reductions_gradient_is_the_upstream_broadcast(shape, axes, keepdim) -> None:

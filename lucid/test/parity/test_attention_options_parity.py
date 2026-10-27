@@ -84,13 +84,7 @@ _FUNCTIONAL = {
     "zero_attn_bias_kv": {"add_zero_attn": True, "bias_kv": True},
     "separate_kdim6_vdim4": {"separate": True, "kdim": 6, "vdim": 4},
     "separate_stacked": {"separate": True},
-    "everything": {
-        "separate": True,
-        "kdim": 6,
-        "vdim": 4,
-        "add_zero_attn": True,
-        "bias_kv": True,
-    },
+    "everything": {"separate": True, "kdim": 6, "vdim": 4, "add_zero_attn": True, "bias_kv": True},
 }
 
 

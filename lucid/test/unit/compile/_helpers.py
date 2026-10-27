@@ -56,10 +56,7 @@ def unwrap(out: object) -> Tensor:
 
 
 def assert_compile_parity(
-    model: nn.Module,
-    *inputs: Tensor,
-    atol: float = 1e-4,
-    rtol: float = 1e-5,
+    model: nn.Module, *inputs: Tensor, atol: float = 1e-4, rtol: float = 1e-5
 ) -> tuple[Tensor, Tensor]:
     """Assert ``compile(model)(x)`` matches eager ``model(x)`` within fp32 tolerance.
 
@@ -121,11 +118,7 @@ def assert_cache_hit(compiled_model: object, expected_entries: int = 1) -> None:
     )
 
 
-def assert_compiles(
-    model: nn.Module,
-    *inputs: Tensor,
-    atol: float = 1e-4,
-) -> None:
+def assert_compiles(model: nn.Module, *inputs: Tensor, atol: float = 1e-4) -> None:
     """Assert ``model`` actually COMPILES (no eager fallback) and matches eager.
 
     The plain :func:`assert_compile_parity` only checks the *output* — which

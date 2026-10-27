@@ -41,10 +41,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, ModelOutput
-from lucid.models._utils._generative import (
-    generative_activation,
-    resolve_generation_device,
-)
+from lucid.models._utils._generative import generative_activation, resolve_generation_device
 from lucid.models.generative.vqvae._config import VQVAEConfig
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -178,9 +175,7 @@ class _VQVAEEncoder(nn.Module):
         self.residuals = nn.ModuleList(
             [
                 _VQVAEResidualBlock(
-                    config.hidden_channels,
-                    config.residual_hidden_channels,
-                    config.act_fn,
+                    config.hidden_channels, config.residual_hidden_channels, config.act_fn
                 )
                 for _ in range(config.num_residual_layers)
             ]
@@ -225,9 +220,7 @@ class _VQVAEDecoder(nn.Module):
         self.residuals = nn.ModuleList(
             [
                 _VQVAEResidualBlock(
-                    config.hidden_channels,
-                    config.residual_hidden_channels,
-                    config.act_fn,
+                    config.hidden_channels, config.residual_hidden_channels, config.act_fn
                 )
                 for _ in range(config.num_residual_layers)
             ]
@@ -528,12 +521,7 @@ class VQVAEForImageGeneration(ImageGenerationModel):
         )
 
     @lucid.no_grad()
-    def generate(
-        self,
-        n_samples: int = 1,
-        *,
-        device: str | None = None,
-    ) -> GenerationOutput:
+    def generate(self, n_samples: int = 1, *, device: str | None = None) -> GenerationOutput:
         r"""Sample ``n_samples`` images from the uniform codebook prior.
 
         Draws an index field uniformly over :math:`[0, K)` and decodes it.

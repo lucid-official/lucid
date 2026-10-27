@@ -74,10 +74,7 @@ class TestConvTranspose3dCompiles:
             ("plain", {}),
             ("strided", {"stride": 2}),
             ("strided and padded", {"stride": 2, "padding": 1}),
-            (
-                "output padding",
-                {"stride": 2, "padding": 1, "output_padding": 1},
-            ),
+            ("output padding", {"stride": 2, "padding": 1, "output_padding": 1}),
         ],
         ids=["plain", "strided", "strided-padded", "output-padding"],
     )

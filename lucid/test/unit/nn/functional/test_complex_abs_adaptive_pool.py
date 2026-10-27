@@ -96,8 +96,7 @@ def test_complex_abs_propagates_infinity(device):
     producing computation broke, so the distinction is not worth a special case.
     """
     z = np.array(
-        [complex(np.inf, 1), complex(1, np.inf), complex(np.inf, np.inf)],
-        dtype=np.complex64,
+        [complex(np.inf, 1), complex(1, np.inf), complex(np.inf, np.inf)], dtype=np.complex64
     )
     got = lucid.tensor(z, device=device).abs().numpy()
     assert not np.isnan(got).any()
@@ -148,8 +147,7 @@ def _reference_adaptive(x, out, mode):
             np.stack(
                 [
                     np.stack(
-                        [red(x[..., a:b, c:d, e:f], (-3, -2, -1)) for e, f in spans(2)],
-                        axis=-1,
+                        [red(x[..., a:b, c:d, e:f], (-3, -2, -1)) for e, f in spans(2)], axis=-1
                     )
                     for c, d in spans(1)
                 ],

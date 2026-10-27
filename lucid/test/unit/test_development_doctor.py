@@ -43,9 +43,7 @@ def test_doctor_detects_source_contract_drift(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("returncode", [1, -6])
 def test_doctor_reports_failed_or_crashed_runtime(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    returncode: int,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], returncode: int
 ) -> None:
     def failed_probe(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(["python"], returncode, "", "native load failed")
@@ -97,9 +95,7 @@ def test_an_mlx_below_the_interop_floor_warns_without_failing(
     assert "[warn] mlx (interop)" in capsys.readouterr().out
 
 
-def test_a_macos_below_the_pinned_floor_is_an_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_macos_below_the_pinned_floor_is_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(doctor.fetch_mlx, "read_pin", lambda path: _PIN)
     monkeypatch.setattr(doctor.platform, "mac_ver", lambda: ("26.1", ("", "", ""), ""))
     monkeypatch.setattr(doctor, "_vendored_mlx_checks", lambda pin: [])
@@ -109,9 +105,7 @@ def test_a_macos_below_the_pinned_floor_is_an_error(
     assert "26.2" in check["detail"]
 
 
-def test_an_engine_on_another_mlx_names_the_rebuild(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_an_engine_on_another_mlx_names_the_rebuild(monkeypatch: pytest.MonkeyPatch) -> None:
     def probe(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(["python"], 0, '{"mlx_runtime": "0.32.0"}', "")
 

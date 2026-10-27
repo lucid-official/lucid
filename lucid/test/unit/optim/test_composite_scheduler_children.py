@@ -126,9 +126,7 @@ def test_sequential_runs_a_chain_first_as_the_reference_does(add_at: int | None,
 
 
 @pytest.mark.parity
-def test_a_chain_taking_over_at_a_milestone_starts_as_a_chain_run_first(
-    ref: Any,
-) -> None:
+def test_a_chain_taking_over_at_a_milestone_starts_as_a_chain_run_first(ref: Any) -> None:
     """The reference has no closed form for a chain and fails at its milestone."""
 
     def rates(lib: Any, first: bool, steps: int) -> list[float]:

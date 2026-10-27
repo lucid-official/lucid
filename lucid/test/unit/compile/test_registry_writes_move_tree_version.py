@@ -81,10 +81,7 @@ _WRITES: dict[str, tuple[Callable[[_Holder], object], Callable[[_Holder], object
     ),
     "delattr a parameter": (_none, lambda m: delattr(m.lin, "bias")),
     "delattr a buffer": (_none, lambda m: delattr(m, "buf")),
-    "parameter .data =": (
-        _none,
-        lambda m: setattr(m.lin.weight, "data", lucid.ones(4, 4)),
-    ),
+    "parameter .data =": (_none, lambda m: setattr(m.lin.weight, "data", lucid.ones(4, 4))),
     "buffer .data =": (_none, lambda m: setattr(m.buf, "data", lucid.ones(2))),
     "assign load": (_none, _assign_load),
     ".to() a buffer": (_none, lambda m: m.half()),
@@ -115,15 +112,9 @@ _WRITES: dict[str, tuple[Callable[[_Holder], object], Callable[[_Holder], object
         lambda m: prune.remove(m.lin, "weight"),
     ),
     "weight_norm": (_none, lambda m: weight_norm(m.lin)),
-    "remove_weight_norm": (
-        lambda m: weight_norm(m.lin),
-        lambda m: remove_weight_norm(m.lin),
-    ),
+    "remove_weight_norm": (lambda m: weight_norm(m.lin), lambda m: remove_weight_norm(m.lin)),
     "spectral_norm": (_none, lambda m: spectral_norm(m.lin)),
-    "remove_spectral_norm": (
-        lambda m: spectral_norm(m.lin),
-        lambda m: remove_spectral_norm(m.lin),
-    ),
+    "remove_spectral_norm": (lambda m: spectral_norm(m.lin), lambda m: remove_spectral_norm(m.lin)),
 }
 
 

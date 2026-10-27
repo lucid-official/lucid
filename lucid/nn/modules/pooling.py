@@ -1432,11 +1432,7 @@ class LPPool1d(Module):
     """
 
     def __init__(
-        self,
-        norm_type: float,
-        kernel_size: int,
-        stride: int | None = None,
-        ceil_mode: bool = False,
+        self, norm_type: float, kernel_size: int, stride: int | None = None, ceil_mode: bool = False
     ) -> None:
         """Initialise the LPPool1d module. See the class docstring for parameter semantics."""
         super().__init__()
@@ -1575,11 +1571,7 @@ class LPPool2d(Module):
             Pooled output tensor.
         """
         return lp_pool2d(
-            input,
-            self.norm_type,
-            (self.kh, self.kw),
-            (self.sh, self.sw),
-            self.ceil_mode,
+            input, self.norm_type, (self.kh, self.kw), (self.sh, self.sw), self.ceil_mode
         )
 
     @override
@@ -1720,12 +1712,7 @@ class _MaxUnpoolNd[S = int](Module):
     :meth:`forward` by delegating to the appropriate functional call.
     """
 
-    def __init__(
-        self,
-        kernel_size: S,
-        stride: S | None = None,
-        padding: S | int = 0,
-    ) -> None:
+    def __init__(self, kernel_size: S, stride: S | None = None, padding: S | int = 0) -> None:
         """Initialise the _MaxUnpoolNd module. See the class docstring for parameter semantics."""
         super().__init__()
         self.kernel_size: S = kernel_size
@@ -1815,10 +1802,7 @@ class MaxUnpool1d(_MaxUnpoolNd[int]):
 
     @override
     def forward(
-        self,
-        input: Tensor,
-        indices: Tensor,
-        output_size: tuple[int, ...] | None = None,
+        self, input: Tensor, indices: Tensor, output_size: tuple[int, ...] | None = None
     ) -> Tensor:
         r"""Apply the pooling operation to the input tensor.
 
@@ -1920,10 +1904,7 @@ class MaxUnpool2d(_MaxUnpoolNd[_Size2d]):
 
     @override
     def forward(
-        self,
-        input: Tensor,
-        indices: Tensor,
-        output_size: tuple[int, ...] | None = None,
+        self, input: Tensor, indices: Tensor, output_size: tuple[int, ...] | None = None
     ) -> Tensor:
         r"""Apply the pooling operation to the input tensor.
 
@@ -2011,10 +1992,7 @@ class MaxUnpool3d(_MaxUnpoolNd[_Size3d]):
 
     @override
     def forward(
-        self,
-        input: Tensor,
-        indices: Tensor,
-        output_size: tuple[int, ...] | None = None,
+        self, input: Tensor, indices: Tensor, output_size: tuple[int, ...] | None = None
     ) -> Tensor:
         r"""Apply the pooling operation to the input tensor.
 

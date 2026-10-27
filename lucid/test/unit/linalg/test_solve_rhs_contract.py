@@ -89,8 +89,7 @@ def _oracle(A: np.ndarray, B: np.ndarray, vector: bool) -> np.ndarray:
     rhs = B[..., None] if vector else B
     batch = np.broadcast_shapes(A.shape[:-2], rhs.shape[:-2])
     X = np.linalg.solve(
-        np.broadcast_to(A, (*batch, N, N)),
-        np.broadcast_to(rhs, (*batch, N, rhs.shape[-1])),
+        np.broadcast_to(A, (*batch, N, N)), np.broadcast_to(rhs, (*batch, N, rhs.shape[-1]))
     )
     return X[..., 0] if vector else X
 
@@ -125,9 +124,7 @@ def test_forward_matches_the_reference_reading(op: str, case: str, device: str) 
     B = np.random.default_rng(1).standard_normal(b_shape)
     dt = _dtype(device)
     X = _call(
-        op,
-        lucid.tensor(A, dtype=dt, device=device),
-        lucid.tensor(B, dtype=dt, device=device),
+        op, lucid.tensor(A, dtype=dt, device=device), lucid.tensor(B, dtype=dt, device=device)
     )
     want = _oracle(A, B, _is_vector(op, a_batch, b_shape))
     assert X.shape == want.shape
@@ -214,8 +211,7 @@ def test_a_solve_through_a_transposed_view_reads_the_view(device: str) -> None:
     A = _well_conditioned((), 5)
     B = np.random.default_rng(6).standard_normal((N, 2))
     X = LA.solve(
-        lucid.tensor(A, dtype=dt, device=device).mT,
-        lucid.tensor(B, dtype=dt, device=device),
+        lucid.tensor(A, dtype=dt, device=device).mT, lucid.tensor(B, dtype=dt, device=device)
     )
     np.testing.assert_allclose(
         X.numpy(), np.linalg.solve(A.T, B), rtol=_tol(device), atol=_tol(device)
@@ -229,9 +225,7 @@ def test_an_empty_rhs_gives_an_empty_solution(op: str) -> None:
     assert _call(op, A, lucid.zeros(0, N, 2, dtype=lucid.float64)).shape == (0, N, 2)
 
 
-def test_kl_between_an_unbatched_and_a_batched_mvn_matches_the_reference(
-    ref: Any,
-) -> None:
+def test_kl_between_an_unbatched_and_a_batched_mvn_matches_the_reference(ref: Any) -> None:
     """``kl_divergence`` solves ``Lq`` (batch (n,)) against ``Lp`` (n, n).
 
     ``Lp`` has the shape ``Lq.shape[:-1]``; read as a batch of vectors it
@@ -315,9 +309,7 @@ def _singular_slogdet(device: str) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Te
 
 
 @pytest.mark.parametrize("device", _devices())
-def test_slogdet_gradient_at_a_singular_matrix_is_inf_along_the_adjugate(
-    device: str,
-) -> None:
+def test_slogdet_gradient_at_a_singular_matrix_is_inf_along_the_adjugate(device: str) -> None:
     """``g · cof(A) / det(A)``: infinite wherever the cofactor is nonzero."""
     A, sign, logabs = _singular_slogdet(device)
     assert float(logabs.item()) == -np.inf
@@ -330,10 +322,7 @@ def test_slogdet_gradient_at_a_singular_matrix_is_inf_along_the_adjugate(
     ).all()
 
 
-@pytest.mark.parametrize(
-    "device",
-    ["cpu", *(["metal"] if metal_available() else [])],
-)
+@pytest.mark.parametrize("device", ["cpu", *(["metal"] if metal_available() else [])])
 def test_slogdet_at_a_singular_matrix_keeps_the_signed_zero(device: str) -> None:
     """The reference: det = -0.0 (one row swap), so the grad is [-inf, inf, inf, -inf]."""
     A, _, _ = _singular_slogdet(device)

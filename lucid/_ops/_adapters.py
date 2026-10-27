@@ -82,11 +82,7 @@ def _keep_engine_signature(
 #: The engine ops that compute a half tensor against a 0-d float32 operand
 #: in float32 (op-math); the reference does so for mul, div and floor
 #: division only.  ``div`` has an adapter of its own (``_make_div_adapter``).
-_OPMATH_OPS = (
-    _C_engine.mul,
-    _C_engine.mul_,
-    _C_engine.floordiv,
-)
+_OPMATH_OPS = (_C_engine.mul, _C_engine.mul_, _C_engine.floordiv)
 
 
 #: ``(input, other)`` without annotations: either operand may be a tensor or
@@ -127,9 +123,7 @@ def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar) -> _Impl:
 
 
 def _make_arith_adapter(
-    engine_fn: Callable[[_Impl, _Impl], _Impl],
-    *,
-    inplace: bool = False,
+    engine_fn: Callable[[_Impl, _Impl], _Impl], *, inplace: bool = False
 ) -> Callable[..., _Impl]:
     """Wrap a binary engine function with scalars and dtype promotion.
 
@@ -223,12 +217,7 @@ def _detach_adapter(x_impl: _Impl) -> _Impl:
     return x_impl.data_alias()
 
 
-def _scatter_add_adapter(
-    x_impl: _Impl,
-    dim: int,
-    index: Tensor,
-    src: Tensor,
-) -> _Impl:
+def _scatter_add_adapter(x_impl: _Impl, dim: int, index: Tensor, src: Tensor) -> _Impl:
     """scatter_add(x, dim, index, src) — Python order → engine order.
 
     The index goes over at full width: the engine checks an ``int64`` index
@@ -296,11 +285,7 @@ _SCATTER_REDUCE = {"add": _C_engine.scatter_add, "multiply": _C_engine.scatter_p
 
 
 def _scatter_adapter(
-    x_impl: _Impl,
-    dim: int,
-    index: Tensor,
-    src: Tensor | Scalar,
-    reduce: str | None = None,
+    x_impl: _Impl, dim: int, index: Tensor, src: Tensor | Scalar, reduce: str | None = None
 ) -> _Impl:
     """scatter(base, dim, index, src, reduce=None).
 
@@ -393,11 +378,7 @@ def _sort_adapter(
 
 
 def _argsort_adapter(
-    a_impl: _Impl,
-    dim: int = -1,
-    descending: bool = False,
-    *,
-    stable: bool = False,
+    a_impl: _Impl, dim: int = -1, descending: bool = False, *, stable: bool = False
 ) -> _Impl:
     """argsort(a, dim=-1, descending=False, *, stable=False).
 
@@ -417,11 +398,7 @@ def _argsort_adapter(
 
 
 def _topk_adapter(
-    a_impl: _Impl,
-    k: int,
-    dim: int = -1,
-    largest: bool = True,
-    sorted: bool = True,
+    a_impl: _Impl, k: int, dim: int = -1, largest: bool = True, sorted: bool = True
 ) -> _ValuesIndices[_Impl]:
     """topk(a, k, dim=-1, largest=True, sorted=True) — ``(values, indices)``, best first.
 
@@ -467,10 +444,7 @@ def _swapaxes_adapter(a_impl: _Impl, axis0: int, axis1: int) -> _Impl:
 
 
 def _kthvalue_adapter(
-    a_impl: _Impl,
-    k: int,
-    dim: int = -1,
-    keepdim: bool = False,
+    a_impl: _Impl, k: int, dim: int = -1, keepdim: bool = False
 ) -> _ValuesIndices[_Impl]:
     """kthvalue(a, k, dim=-1, keepdim=False) — ``(values, indices)``."""
     values = _C_engine.kthvalue(a_impl, int(k), int(dim), bool(keepdim))
@@ -514,10 +488,7 @@ def _integers(name: str, value: object) -> tuple[int, ...]:
 
 
 def _as_strided_adapter(
-    x_impl: _Impl,
-    size: Sequence[int],
-    stride: Sequence[int],
-    storage_offset: int | None = None,
+    x_impl: _Impl, size: Sequence[int], stride: Sequence[int], storage_offset: int | None = None
 ) -> _Impl:
     """as_strided(x, size, stride, storage_offset=None), all in elements."""
     if storage_offset is not None and not _is_count(storage_offset):
@@ -551,9 +522,7 @@ def _contiguous_adapter(a_impl: _Impl) -> _Impl:
 
 
 def _movedim_adapter(
-    a_impl: _Impl,
-    source: int | Sequence[int],
-    destination: int | Sequence[int],
+    a_impl: _Impl, source: int | Sequence[int], destination: int | Sequence[int]
 ) -> _Impl:
     """movedim(a, source, destination) — accept int or list for either arg."""
     return _C_engine.movedim(
@@ -568,11 +537,7 @@ def _unflatten_adapter(a_impl: _Impl, dim: int, sizes: Sequence[int]) -> _Impl:
     return _C_engine.unflatten(a_impl, int(dim), [int(s) for s in sizes])
 
 
-def _int_list(
-    value: int | Sequence[int],
-    name: str = "op",
-    what: str = "dims",
-) -> list[int]:
+def _int_list(value: int | Sequence[int], name: str = "op", what: str = "dims") -> list[int]:
     """An int-list argument as a list: one int is a list of one.
 
     The method spellings ``x.view(2, 3)`` reach these adapters as one tuple
@@ -637,9 +602,7 @@ def _flip_adapter(x_impl: _Impl, dims: int | Sequence[int]) -> _Impl:
 
 
 def _roll_adapter(
-    a_impl: _Impl,
-    shifts: int | Sequence[int],
-    dims: int | Sequence[int] | None = None,
+    a_impl: _Impl, shifts: int | Sequence[int], dims: int | Sequence[int] | None = None
 ) -> _Impl:
     """roll(input, shifts, dims=None) — no ``dims`` rolls the flat order.
 
@@ -704,10 +667,7 @@ def _tile_adapter(a_impl: _Impl, dims: int | Sequence[int]) -> _Impl:
     return _C_engine.tile(a_impl, [1] * short + counts)
 
 
-def _squeeze_adapter(
-    x_impl: _Impl,
-    dim: int | Sequence[int] | None = None,
-) -> _Impl:
+def _squeeze_adapter(x_impl: _Impl, dim: int | Sequence[int] | None = None) -> _Impl:
     """squeeze(x, dim=None) — None drops all size-1; list squeezes multiple.
 
     A dim that is not size 1 is left alone, as the reference does — and the
@@ -782,11 +742,7 @@ def _repeat_interleave_tensor(base: _Impl, rep_impl: _Impl, axis: int) -> _Impl:
 
 
 def _repeat_interleave_adapter(
-    a_impl: _Impl,
-    repeats: int | Tensor,
-    dim: int | None = None,
-    *,
-    output_size: int | None = None,
+    a_impl: _Impl, repeats: int | Tensor, dim: int | None = None, *, output_size: int | None = None
 ) -> _Impl:
     """repeat_interleave(x, repeats, dim=None, *, output_size=None)."""
     base = _C_engine.reshape(a_impl, [int(a_impl.numel())]) if dim is None else a_impl
@@ -862,9 +818,7 @@ def _split_pieces(x_impl: _Impl, sections: int | Sequence[int], dim: int, what: 
 
 
 def _split_adapter(
-    x_impl: _Impl,
-    split_size_or_sections: int | Sequence[int],
-    dim: int = 0,
+    x_impl: _Impl, split_size_or_sections: int | Sequence[int], dim: int = 0
 ) -> list[_Impl]:
     """split(x, sections, dim=0) — int → pieces of that size, the last one
     shorter when it does not divide; list → exactly those sizes."""
@@ -882,9 +836,7 @@ def _split_method_adapter(
 
 
 def _tensordot_adapter(
-    a_impl: _Impl,
-    b_impl: _Impl,
-    dims: int | Sequence[Sequence[int]] = 2,
+    a_impl: _Impl, b_impl: _Impl, dims: int | Sequence[Sequence[int]] = 2
 ) -> _Impl:
     """tensordot(a, b, dims=2) — an int, or a pair of axis lists."""
     dims = _promotion.as_number(dims)
@@ -963,25 +915,18 @@ def _clip_with_nan(out: _Impl, any_nan: _Impl, is_float: bool) -> _Impl:
 def _clip_both_impls(x_impl: _Impl, lo_impl: _Impl, hi_impl: _Impl, is_float: bool) -> _Impl:
     """Two-sided tensor-bound clamp matching the reference's tie and NaN rules."""
     use_x = _C_engine.logical_and(
-        _C_engine.greater_equal(x_impl, lo_impl),
-        _C_engine.less_equal(x_impl, hi_impl),
+        _C_engine.greater_equal(x_impl, lo_impl), _C_engine.less_equal(x_impl, hi_impl)
     )
     use_lo = _C_engine.logical_and(
-        _C_engine.less(x_impl, lo_impl),
-        _C_engine.less(lo_impl, hi_impl),
+        _C_engine.less(x_impl, lo_impl), _C_engine.less(lo_impl, hi_impl)
     )
     use_hi = _C_engine.logical_or(
-        _C_engine.greater(x_impl, hi_impl),
-        _C_engine.greater(lo_impl, hi_impl),
+        _C_engine.greater(x_impl, hi_impl), _C_engine.greater(lo_impl, hi_impl)
     )
     out = _C_engine.where(
         use_x,
         x_impl,
-        _C_engine.where(
-            use_lo,
-            lo_impl,
-            _C_engine.where(use_hi, hi_impl, hi_impl.data_alias()),
-        ),
+        _C_engine.where(use_lo, lo_impl, _C_engine.where(use_hi, hi_impl, hi_impl.data_alias())),
     )
     if not is_float:
         return out
@@ -1020,9 +965,7 @@ def _clip_scalar_bounds(
 
 
 def _clip_dtype(
-    x_impl: _Impl,
-    min: TensorOrScalar | None,
-    max: TensorOrScalar | None,
+    x_impl: _Impl, min: TensorOrScalar | None, max: TensorOrScalar | None
 ) -> _C_engine.Dtype:
     """The dtype ``clip(x, min, max)`` computes in: ``x``'s, promoted with its bounds.
 
@@ -1040,9 +983,7 @@ def _clip_dtype(
 
 
 def _clip_adapter(
-    x_impl: _Impl,
-    min: TensorOrScalar | None = None,
-    max: TensorOrScalar | None = None,
+    x_impl: _Impl, min: TensorOrScalar | None = None, max: TensorOrScalar | None = None
 ) -> _Impl:
     """clip(x, min, max) — either bound may be omitted or a tensor.
 
@@ -1068,16 +1009,12 @@ def _clip_adapter(
     if lo_impl is not None and hi_impl is None:
         out = _C_engine.where(_C_engine.less(x_impl, lo_impl), lo_impl, x_impl)
         return _clip_with_nan(
-            out,
-            _C_engine.logical_or(_C_engine.isnan(x_impl), _C_engine.isnan(lo_impl)),
-            is_float,
+            out, _C_engine.logical_or(_C_engine.isnan(x_impl), _C_engine.isnan(lo_impl)), is_float
         )
     if hi_impl is not None and lo_impl is None:
         out = _C_engine.where(_C_engine.greater(x_impl, hi_impl), hi_impl, x_impl)
         return _clip_with_nan(
-            out,
-            _C_engine.logical_or(_C_engine.isnan(x_impl), _C_engine.isnan(hi_impl)),
-            is_float,
+            out, _C_engine.logical_or(_C_engine.isnan(x_impl), _C_engine.isnan(hi_impl)), is_float
         )
     assert lo_impl is not None and hi_impl is not None
     return _clip_both_impls(x_impl, lo_impl, hi_impl, is_float)
@@ -1098,9 +1035,7 @@ def _clamp_max_adapter(x_impl: _Impl, max: TensorOrScalar) -> _Impl:
 
 
 def _where_adapter(
-    condition: Tensor,
-    input: TensorOrScalar | None = None,
-    other: TensorOrScalar | None = None,
+    condition: Tensor, input: TensorOrScalar | None = None, other: TensorOrScalar | None = None
 ) -> _Impl | tuple[_Impl, ...]:
     """where(cond, x, y) — bool-cast the condition, promote the branches.
 
@@ -1185,12 +1120,7 @@ def _masked_fill_adapter(x_impl: _Impl, mask: Tensor, value: float) -> _Impl:
 # ── Stats / search / combinatorial ───────────────────────────────────────────
 
 
-def _histc_adapter(
-    a_impl: _Impl,
-    bins: int = 100,
-    min: float = 0.0,
-    max: float = 0.0,
-) -> _Impl:
+def _histc_adapter(a_impl: _Impl, bins: int = 100, min: float = 0.0, max: float = 0.0) -> _Impl:
     """histc(a, bins=100, min=0, max=0) — counts over ``[min, max]``, as the reference.
 
     ``min == max`` takes the range from the data; a range that is still a
@@ -1250,12 +1180,7 @@ def _prepare_unique_rows(
     a_impl: _Impl, dim: int | None, op_name: str
 ) -> tuple[_Impl, int | None, list[int], list[int]]:
     if dim is None:
-        return (
-            _C_engine.reshape(a_impl, [a_impl.numel(), 1]),
-            None,
-            [],
-            list(a_impl.shape),
-        )
+        return (_C_engine.reshape(a_impl, [a_impl.numel(), 1]), None, [], list(a_impl.shape))
     ndim = len(a_impl.shape)
     if ndim == 0:
         raise IndexError(f"Dimension specified as {dim} but tensor has no dimensions")
@@ -1272,12 +1197,7 @@ def _prepare_unique_rows(
 
 
 def _run_unique(
-    a_impl: _Impl,
-    return_inverse: bool,
-    return_counts: bool,
-    dim: int | None,
-    *,
-    consecutive: bool,
+    a_impl: _Impl, return_inverse: bool, return_counts: bool, dim: int | None, *, consecutive: bool
 ) -> _Impl | tuple[_Impl, ...]:
     op_name = "unique_consecutive" if consecutive else "unique"
     plain = dim is None and not (return_inverse or return_counts)
@@ -1326,10 +1246,7 @@ def _unique_adapter(
 
 
 def _unique_consecutive_adapter(
-    a_impl: _Impl,
-    return_inverse: bool = False,
-    return_counts: bool = False,
-    dim: int | None = None,
+    a_impl: _Impl, return_inverse: bool = False, return_counts: bool = False, dim: int | None = None
 ) -> _Impl | tuple[_Impl, ...]:
     """unique_consecutive(a, return_inverse=False, return_counts=False, dim=None)."""
     return _run_unique(a_impl, return_inverse, return_counts, dim, consecutive=True)
@@ -1369,8 +1286,7 @@ def _unique_rows(
             _C_engine.zeros([n - 1], _C_engine.I64, device),
         )
     starts = _C_engine.concatenate(
-        [_C_engine.ones([1], _C_engine.Bool, device), _C_engine.reshape(differs, [-1])],
-        0,
+        [_C_engine.ones([1], _C_engine.Bool, device), _C_engine.reshape(differs, [-1])], 0
     )
     first = _C_engine.reshape(_C_engine.nonzero(starts), [-1])
     groups: _Impl | None = None

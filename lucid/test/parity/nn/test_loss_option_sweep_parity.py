@@ -68,9 +68,7 @@ def test_cross_entropy_reductions(reduction, ref):
     got = _v(F.cross_entropy(_t(LOGITS), _t(TARGET, dtype=lucid.int32), reduction=reduction))
     want = np.asarray(
         ref.nn.functional.cross_entropy(
-            ref.from_numpy(LOGITS.copy()),
-            ref.from_numpy(TARGET).long(),
-            reduction=reduction,
+            ref.from_numpy(LOGITS.copy()), ref.from_numpy(TARGET).long(), reduction=reduction
         ).tolist()
     )
     assert np.allclose(got, want, atol=1e-6)
@@ -98,9 +96,7 @@ def test_cross_entropy_label_smoothing(smoothing, ref):
     )
     want = float(
         ref.nn.functional.cross_entropy(
-            ref.from_numpy(LOGITS.copy()),
-            ref.from_numpy(TARGET).long(),
-            label_smoothing=smoothing,
+            ref.from_numpy(LOGITS.copy()), ref.from_numpy(TARGET).long(), label_smoothing=smoothing
         )
     )
     assert np.isclose(got, want, atol=1e-6)
@@ -112,9 +108,7 @@ def test_nll_loss_reductions(reduction, ref):
     got = _v(F.nll_loss(_t(log_probs), _t(TARGET, dtype=lucid.int32), reduction=reduction))
     want = np.asarray(
         ref.nn.functional.nll_loss(
-            ref.from_numpy(log_probs),
-            ref.from_numpy(TARGET).long(),
-            reduction=reduction,
+            ref.from_numpy(log_probs), ref.from_numpy(TARGET).long(), reduction=reduction
         ).tolist()
     )
     assert np.allclose(got, want, atol=1e-6)
@@ -141,10 +135,7 @@ def test_binary_cross_entropy_reductions(reduction, ref):
 @pytest.mark.parametrize("reduction", REDUCTIONS)
 @pytest.mark.parametrize(
     "name,fn",
-    [
-        ("hinge_embedding_loss", F.hinge_embedding_loss),
-        ("soft_margin_loss", F.soft_margin_loss),
-    ],
+    [("hinge_embedding_loss", F.hinge_embedding_loss), ("soft_margin_loss", F.soft_margin_loss)],
 )
 def test_sign_target_losses(name, fn, reduction, ref):
     sign = np.where(RNG.uniform(size=(6, 4)) > 0.5, 1.0, -1.0)

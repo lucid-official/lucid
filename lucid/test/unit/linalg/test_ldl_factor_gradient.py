@@ -104,9 +104,7 @@ def test_metal_agrees_with_the_cpu_gradient(name: str, device: str) -> None:
     assert float((got - A64.grad).abs().max().item()) <= 1e-4 * scale
 
 
-def test_a_batch_differentiates_per_matrix_and_skips_the_failed_one(
-    device: str,
-) -> None:
+def test_a_batch_differentiates_per_matrix_and_skips_the_failed_one(device: str) -> None:
     good = [_SWAPS_AND_2X2, _spd(4, 3)]
     A = lucid.tensor(good + [[[0.0] * 4] * 4], device=device, requires_grad=True)
     LD, _, info = LA.ldl_factor_ex(A)

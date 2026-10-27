@@ -173,11 +173,7 @@ def test_the_guard_can_actually_fail(tmp_path: pathlib.Path) -> None:
 
 def test_every_module_still_imports() -> None:
     """A NameError at import time would be louder, but check anyway."""
-    for name in (
-        "lucid._ops.composite.elementwise",
-        "lucid._tensor._to",
-        "lucid._tensor._methods",
-    ):
+    for name in ("lucid._ops.composite.elementwise", "lucid._tensor._to", "lucid._tensor._methods"):
         assert importlib.import_module(name) is not None
 
 

@@ -22,14 +22,8 @@ unchanged.
 
 from lucid.utils.tokenizer._base import SpecialTokens
 from lucid.utils.tokenizer._normalizers import BERTNormalizer, Normalizer
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    WhitespacePunctuationSplit,
-)
-from lucid.utils.tokenizer._wordpiece import (
-    WordPieceTokenizer,
-    WordPieceTokenizerFast,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, WhitespacePunctuationSplit
+from lucid.utils.tokenizer._wordpiece import WordPieceTokenizer, WordPieceTokenizerFast
 
 
 def _roformer_special_tokens() -> SpecialTokens:
@@ -42,13 +36,7 @@ def _roformer_special_tokens() -> SpecialTokens:
         ``sep=[SEP]``, ``mask=[MASK]``.  RoFormer reuses BERT's
         vocab + special-token layout verbatim.
     """
-    return SpecialTokens(
-        unk="[UNK]",
-        pad="[PAD]",
-        cls="[CLS]",
-        sep="[SEP]",
-        mask="[MASK]",
-    )
+    return SpecialTokens(unk="[UNK]", pad="[PAD]", cls="[CLS]", sep="[SEP]", mask="[MASK]")
 
 
 class RoFormerTokenizer(WordPieceTokenizer):

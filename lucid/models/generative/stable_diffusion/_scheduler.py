@@ -358,9 +358,7 @@ class DDIMScheduler:
         previous = alpha_prev**0.5 * predicted_x0 + direction
         if sigma > 0.0:
             previous = previous + sigma * lucid.randn(
-                tuple(int(s) for s in latent.shape),
-                device=latent.device.type,
-                dtype=latent.dtype,
+                tuple(int(s) for s in latent.shape), device=latent.device.type, dtype=latent.dtype
             )
         return cast(Tensor, previous)
 

@@ -117,9 +117,7 @@ def test_autocast_actually_casts(device_gpu_only: str) -> None:
     assert model(x).dtype == lucid.float32, "autocast leaked past its block"
 
 
-def test_grad_scaler_skips_the_step_on_a_non_finite_gradient(
-    device_gpu_only: str,
-) -> None:
+def test_grad_scaler_skips_the_step_on_a_non_finite_gradient(device_gpu_only: str) -> None:
     """The scaler's real job: drop the update when the gradient overflowed.
 
     Half precision overflows at 65,504, and a scaled loss reaches that
@@ -163,9 +161,7 @@ def test_grad_scaler_skips_the_step_on_a_non_finite_gradient(
     )
 
 
-def test_grad_scaler_keeps_the_scale_when_gradients_are_finite(
-    device_gpu_only: str,
-) -> None:
+def test_grad_scaler_keeps_the_scale_when_gradients_are_finite(device_gpu_only: str) -> None:
     """The other half of the contract, and the reason the test above needs a
     real infinity: backing off on a merely *large* gradient would shrink the
     scale until half precision underflows instead."""
@@ -189,8 +185,7 @@ def test_grad_scaler_keeps_the_scale_when_gradients_are_finite(
 
 
 def test_amp_training_reaches_float32_quality(
-    device_gpu_only: str,
-    mnist: tuple[np.ndarray, ...],
+    device_gpu_only: str, mnist: tuple[np.ndarray, ...]
 ) -> None:
     """Half-precision training must land in the same place as float32.
 

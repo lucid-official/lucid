@@ -379,14 +379,7 @@ def scaled_dot_product_attention(
         # Square, unmasked and without dropout: every row keeps key 0, so
         # there is no empty row to guard and the kernel's own triangle runs.
         return _fused_attention(query, key, value, None, scale_val, True)
-    out, _ = _masked_attention(
-        query,
-        key,
-        value,
-        attn_mask,
-        scale_val,
-        dropout_p=dropout_p,
-    )
+    out, _ = _masked_attention(query, key, value, attn_mask, scale_val, dropout_p=dropout_p)
     return out
 
 

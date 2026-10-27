@@ -288,9 +288,7 @@ _CASES: dict[str, _Case] = {
         lambda lib, F, m: lib.einsum("ij,jk->ik", m(3, 4), m(4, 2)),
     ),
     "linear": _Case(lambda lib, F, m: F.linear(m(2, 4), m(3, 4), m(3))),
-    "lstm_cell": _Case(
-        lambda lib, F, m: lib.nn.LSTMCell(4, 5).to(m.device)(m(2, 4))[0],
-    ),
+    "lstm_cell": _Case(lambda lib, F, m: lib.nn.LSTMCell(4, 5).to(m.device)(m(2, 4))[0]),
     "matmul": _Case(lambda lib, F, m: m(3, 4) @ m(4, 2)),
     "mm": _Case(lambda lib, F, m: lib.mm(m(3, 4), m(4, 2))),
     "multi_dot": _Case(lambda lib, F, m: lib.linalg.multi_dot([m(3, 4), m(4, 2), m(2, 2)])),
@@ -311,10 +309,7 @@ _CASES: dict[str, _Case] = {
     "cross_entropy_loss": _Case(lambda lib, F, m: F.cross_entropy(m(3, 5), m.ints([0, 2, 4]))),
     "ctc_loss": _Case(
         lambda lib, F, m: F.ctc_loss(
-            m(6, 1, 4).log_softmax(-1),
-            m.ints([[1, 2]]),
-            lib.tensor([6]),
-            lib.tensor([2]),
+            m(6, 1, 4).log_softmax(-1), m.ints([[1, 2]]), lib.tensor([6]), lib.tensor([2])
         )
     ),
     "hinge_embedding_loss": _Case(lambda lib, F, m: F.hinge_embedding_loss(m(4), m.signs(4))),
@@ -404,8 +399,7 @@ _CASES: dict[str, _Case] = {
     "bilinear_layer": _Case(lambda lib, F, m: F.bilinear(m(2, 3), m(2, 4), m(5, 3, 4))),
     "concatenate": _Case(lambda lib, F, m: lib.cat([m(4), m(4)])),
     "dot_1d": _Case(
-        lambda lib, F, m: lib.linalg.dot(m(4), m(4)),
-        lambda lib, F, m: lib.dot(m(4), m(4)),
+        lambda lib, F, m: lib.linalg.dot(m(4), m(4)), lambda lib, F, m: lib.dot(m(4), m(4))
     ),
     "index_copy": _Case(lambda lib, F, m: lib.index_copy(m(4), 0, m.ints([0, 2]), m(2))),
     "index_put": _Case(
@@ -441,9 +435,7 @@ _CASES: dict[str, _Case] = {
     ),
     "max_unpool3d": _cpu(
         lambda lib, F, m: F.max_unpool3d(
-            m(1, 1, 2, 2, 2),
-            m.ints([[[[[0, 1], [8, 9]], [[32, 33], [40, 41]]]]]),
-            2,
+            m(1, 1, 2, 2, 2), m.ints([[[[[0, 1], [8, 9]], [[32, 33], [40, 41]]]]]), 2
         )
     ),
     "mv": _Case(lambda lib, F, m: lib.mv(m(3, 4), m(4))),
@@ -561,11 +553,7 @@ def test_an_op_without_a_row_keeps_its_dtype(
 @pytest.mark.parametrize("name", sorted(_ENGINE_ONLY))
 def test_an_engine_only_row_gives_its_dtype(name: str, device: str, autocast_dt: str) -> None:
     """``cube`` and ``cube_root`` have no public spelling; they follow ``pow``."""
-    engine_dtype = {
-        "float32": _C_engine.F32,
-        "float16": _C_engine.F16,
-        "bfloat16": _C_engine.BF16,
-    }
+    engine_dtype = {"float32": _C_engine.F32, "float16": _C_engine.F16, "bfloat16": _C_engine.BF16}
     for input_dt in _INPUTS:
         dtype = getattr(lucid, autocast_dt if input_dt == "half" else "float32")
         x = lucid.rand(4, device=device).to(dtype)
@@ -756,10 +744,7 @@ def test_cpu_ctc_loss_takes_a_bfloat16_log_softmax() -> None:
     assert logits.grad is not None and logits.grad.dtype == lucid.bfloat16
 
     want = lucid.nn.functional.ctc_loss(
-        logits.detach().float().log_softmax(-1),
-        targets,
-        lucid.tensor([6]),
-        lucid.tensor([2]),
+        logits.detach().float().log_softmax(-1), targets, lucid.tensor([6]), lucid.tensor([2])
     )
     assert abs(loss.item() - want.item()) < 5e-2
 

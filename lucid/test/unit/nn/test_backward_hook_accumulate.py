@@ -64,10 +64,7 @@ def _dtype(lib: ModuleType, name: str) -> object:
 
 
 def _run(
-    scenario: Callable[..., dict[str, object]],
-    ref: ModuleType,
-    device: str,
-    dtype: str = "float32",
+    scenario: Callable[..., dict[str, object]], ref: ModuleType, device: str, dtype: str = "float32"
 ) -> None:
     if device == "metal" and dtype == "float64":
         pytest.skip("Metal holds no float64")

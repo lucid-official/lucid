@@ -68,9 +68,7 @@ _LAYOUTS: dict[str, list[tuple[tuple[int, ...], tuple[int, ...], int]]] = {
 }
 
 
-def _covered(
-    layout: Sequence[tuple[tuple[int, ...], tuple[int, ...], int]],
-) -> np.ndarray:
+def _covered(layout: Sequence[tuple[tuple[int, ...], tuple[int, ...], int]]) -> np.ndarray:
     """Which elements of the base the layout's parameters read."""
     mask = np.zeros(int(np.prod(_BASE_SHAPE)), dtype=bool)
     for shape, stride, offset in layout:
@@ -260,10 +258,7 @@ def test_lbfgs_steps_strided_parameters_into_their_base(device: str, ref: Any) -
 
 @pytest.mark.parametrize(
     "make",
-    [
-        lambda ps: optim.SGD(ps, lr=0.1, momentum=0.9),
-        lambda ps: optim.Adam(ps, lr=0.1),
-    ],
+    [lambda ps: optim.SGD(ps, lr=0.1, momentum=0.9), lambda ps: optim.Adam(ps, lr=0.1)],
     ids=["SGD", "Adam"],
 )
 def test_a_parameter_whose_elements_overlap_is_refused(

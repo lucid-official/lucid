@@ -488,9 +488,7 @@ def test_which_outputs_are_differentiable_matches_the_reference(
     assert got == want
 
 
-def test_marked_outputs_add_no_stand_in_detach_to_grad_mode_trace(
-    device: str,
-) -> None:
+def test_marked_outputs_add_no_stand_in_detach_to_grad_mode_trace(device: str) -> None:
     """Non-differentiable output stand-in aliases do not emit extra detach ops (LCD-612)."""
     from lucid.compile._core.trace_context import recording
 
@@ -506,10 +504,7 @@ def test_marked_outputs_add_no_stand_in_detach_to_grad_mode_trace(
 
         @staticmethod
         def backward(
-            ctx: FunctionCtx,
-            gy: lucid.Tensor,
-            gm1: lucid.Tensor,
-            gm2: lucid.Tensor,
+            ctx: FunctionCtx, gy: lucid.Tensor, gm1: lucid.Tensor, gm2: lucid.Tensor
         ) -> lucid.Tensor:
             del ctx, gm1, gm2
             return gy * 2.0

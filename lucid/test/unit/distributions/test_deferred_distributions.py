@@ -180,11 +180,7 @@ class TestStackTransform:
 
 class TestCatTransform:
     def test_forward_inverse(self) -> None:
-        t = D.CatTransform(
-            [D.ExpTransform(), D.AffineTransform(1.0, 2.0)],
-            dim=-1,
-            lengths=[3, 4],
-        )
+        t = D.CatTransform([D.ExpTransform(), D.AffineTransform(1.0, 2.0)], dim=-1, lengths=[3, 4])
         x = lucid.randn(7)
         y = t(x)
         assert y.shape == (7,)

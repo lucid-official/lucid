@@ -166,9 +166,7 @@ def _yolo_targets(device: str) -> list[dict[str, Tensor]]:
 
 class TestYOLOTrainsOnDevice:
     @pytest.mark.parametrize(
-        "name,overrides,style",
-        [_YOLO_CASES[0], _YOLO_CASES[1]],
-        ids=_YOLO_IDS[:2],
+        "name,overrides,style", [_YOLO_CASES[0], _YOLO_CASES[1]], ids=_YOLO_IDS[:2]
     )
     def test_one_step(
         self, name: str, overrides: dict[str, object], style: str, device: str
@@ -372,10 +370,7 @@ def test_ddpm_generate_honours_an_explicit_device() -> None:
     lucid.manual_seed(0)
     model = M.create_model("ddpm_cifar_gen", **_DDPM_SMALL).eval()
     out = model.generate(
-        DDPMScheduler(num_train_timesteps=20),
-        n_samples=1,
-        num_inference_steps=2,
-        device="cpu",
+        DDPMScheduler(num_train_timesteps=20), n_samples=1, num_inference_steps=2, device="cpu"
     )
     assert _on(out.samples, "cpu")
 

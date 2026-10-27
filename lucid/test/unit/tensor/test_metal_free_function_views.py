@@ -124,10 +124,7 @@ PIECES: dict[str, tuple[tuple[int, ...], Callable[[lucid.Tensor], object]]] = {
     "split (sizes)": ((2, 3, 4), lambda x: lucid.split(x, [1, 3], 2)),
     # The method names the sizes ``split_size``; the free function's
     # keywords reach the replay by position (LCD-410).
-    "split (keywords)": (
-        (2, 3, 4),
-        lambda x: lucid.split(x, split_size_or_sections=3, dim=2),
-    ),
+    "split (keywords)": ((2, 3, 4), lambda x: lucid.split(x, split_size_or_sections=3, dim=2)),
     "chunk": ((2, 3, 4), lambda x: lucid.chunk(x, 2, 2)),
     "unbind": ((2, 3, 4), lambda x: lucid.unbind(x, 1)),
     "hsplit": ((2, 3, 4), lambda x: lucid.hsplit(x, 3)),
@@ -156,14 +153,8 @@ def test_every_piece_of_a_free_function_split_writes_back(name: str) -> None:
 
 
 CHAINS: dict[str, tuple[tuple[int, ...], View]] = {
-    "squeeze of transpose": (
-        (1, 3, 4),
-        lambda x: lucid.squeeze(lucid.transpose(x, 1, 2), 0),
-    ),
-    "narrow of permute": (
-        (2, 3, 4),
-        lambda x: lucid.narrow(lucid.permute(x, (2, 0, 1)), 0, 1, 2),
-    ),
+    "squeeze of transpose": ((1, 3, 4), lambda x: lucid.squeeze(lucid.transpose(x, 1, 2), 0)),
+    "narrow of permute": ((2, 3, 4), lambda x: lucid.narrow(lucid.permute(x, (2, 0, 1)), 0, 1, 2)),
     "free of method": ((2, 3, 4), lambda x: lucid.narrow(x.transpose(0, 1), 0, 1, 2)),
     "method of free": ((2, 3, 4), lambda x: lucid.movedim(x, 0, 2)[1].t()),
     "piece of a view": ((2, 3, 4), lambda x: lucid.split(lucid.view(x, (4, 6)), 2)[1]),
@@ -331,12 +322,7 @@ def test_contiguous_returns_self_when_already_contiguous() -> None:
 
 
 def test_the_free_functions_keep_their_signatures() -> None:
-    assert list(inspect.signature(lucid.narrow).parameters) == [
-        "input",
-        "dim",
-        "start",
-        "length",
-    ]
+    assert list(inspect.signature(lucid.narrow).parameters) == ["input", "dim", "start", "length"]
     assert lucid.squeeze.__name__ == "squeeze"
     assert lucid.squeeze.__doc__ == inspect.unwrap(lucid.squeeze).__doc__
     assert "data" in inspect.signature(lucid.Tensor).parameters

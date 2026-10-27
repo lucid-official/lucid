@@ -82,20 +82,12 @@ class _GatedAdjointBlock(nn.Module):
         opts = {"step_size": 0.25}
         if lucid.is_grad_enabled():
             traj = cast(
-                lucid.Tensor,
-                diffeq.odeint_adjoint(_rhs, h, grid, method="euler", options=opts),
+                lucid.Tensor, diffeq.odeint_adjoint(_rhs, h, grid, method="euler", options=opts)
             )
             return traj[-1]
         return cast(
             lucid.Tensor,
-            diffeq.odeint(
-                _rhs,
-                h,
-                grid,
-                method="euler",
-                options=opts,
-                return_trajectory=False,
-            ),
+            diffeq.odeint(_rhs, h, grid, method="euler", options=opts, return_trajectory=False),
         )
 
 
@@ -109,10 +101,7 @@ class _GatedCheckpointBlock(nn.Module):
 
     def forward(self, h: lucid.Tensor) -> lucid.Tensor:
         if lucid.is_grad_enabled():
-            return cast(
-                lucid.Tensor,
-                checkpoint(self._body, h, use_reentrant=False),
-            )
+            return cast(lucid.Tensor, checkpoint(self._body, h, use_reentrant=False))
         return self._body(h)
 
 
@@ -161,19 +150,12 @@ class _BookkeepingBlock(nn.Module):
 
 def _seq_model(middle_factory: Callable[[], nn.Module], seed: int = 0) -> nn.Sequential:
     lucid.manual_seed(seed)
-    return nn.Sequential(
-        nn.Linear(4, 4),
-        middle_factory(),
-        nn.Linear(4, 3),
-    ).to("metal")
+    return nn.Sequential(nn.Linear(4, 4), middle_factory(), nn.Linear(4, 3)).to("metal")
 
 
 def _batch(seed: int = 1) -> tuple[lucid.Tensor, lucid.Tensor]:
     lucid.manual_seed(seed)
-    return (
-        lucid.randn(5, 4, device="metal"),
-        lucid.randn(5, 3, device="metal"),
-    )
+    return (lucid.randn(5, 4, device="metal"), lucid.randn(5, 3, device="metal"))
 
 
 def _run_entry(
@@ -233,11 +215,7 @@ def _run_entry(
         for n, p in model.named_parameters():
             assert p.grad is not None, n
             np.testing.assert_allclose(
-                p.grad.detach().cpu().numpy(),
-                want_grads[n],
-                rtol=1e-4,
-                atol=1e-5,
-                err_msg=n,
+                p.grad.detach().cpu().numpy(), want_grads[n], rtol=1e-4, atol=1e-5, err_msg=n
             )
         optim.SGD(model.parameters(), lr=0.25).step()
         if kind == "segments_2":
@@ -259,31 +237,20 @@ def _run_entry(
     )
     for n, p in model.named_parameters():
         np.testing.assert_allclose(
-            p.detach().cpu().numpy(),
-            want_params[n],
-            rtol=1e-4,
-            atol=1e-5,
-            err_msg=n,
+            p.detach().cpu().numpy(), want_params[n], rtol=1e-4, atol=1e-5, err_msg=n
         )
 
 
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
 def test_gated_ste_falls_back_to_eager_and_matches_gradients(kind: str) -> None:
     _run_entry(
-        kind,
-        lambda: _seq_model(_GatedSTEBlock),
-        expect_compiled=False,
-        warn_match="_RoundSTE",
+        kind, lambda: _seq_model(_GatedSTEBlock), expect_compiled=False, warn_match="_RoundSTE"
     )
 
 
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
 def test_gated_functionless_branch_compiles_and_matches_eager(kind: str) -> None:
-    _run_entry(
-        kind,
-        lambda: _seq_model(_GatedPlainBlock),
-        expect_compiled=True,
-    )
+    _run_entry(kind, lambda: _seq_model(_GatedPlainBlock), expect_compiled=True)
 
 
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
@@ -298,11 +265,7 @@ def test_gated_odeint_adjoint_falls_back_to_eager_with_warning(kind: str) -> Non
 
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
 def test_gated_checkpoint_compiles_and_matches_eager(kind: str) -> None:
-    _run_entry(
-        kind,
-        lambda: _seq_model(lambda: _GatedCheckpointBlock(4)),
-        expect_compiled=True,
-    )
+    _run_entry(kind, lambda: _seq_model(lambda: _GatedCheckpointBlock(4)), expect_compiled=True)
 
 
 @pytest.mark.parametrize("hook_kind", ["hook", "retain_grad"])
@@ -320,23 +283,11 @@ def test_requires_grad_guarded_hook_or_retain_grad_falls_back_to_eager(
 
 
 @pytest.mark.parametrize(
-    "op_kind",
-    [
-        "trunc_div",
-        "round_decimals",
-        "setitem",
-        "fill_",
-        "index_fill_",
-        "relu_inplace",
-    ],
+    "op_kind", ["trunc_div", "round_decimals", "setitem", "fill_", "index_fill_", "relu_inplace"]
 )
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
 def test_bookkeeping_trace_forms_compile_and_match_eager(kind: str, op_kind: str) -> None:
-    _run_entry(
-        kind,
-        lambda: _seq_model(lambda: _BookkeepingBlock(op_kind)),
-        expect_compiled=True,
-    )
+    _run_entry(kind, lambda: _seq_model(lambda: _BookkeepingBlock(op_kind)), expect_compiled=True)
 
 
 @pytest.mark.parametrize("kind", _ENTRY_KINDS)
@@ -388,11 +339,7 @@ def test_bn_relu_inplace_cnn_compiles_and_matches_eager(kind: str) -> None:
     )
     for (n, p), (_, want_p) in zip(model.named_parameters(), eager.named_parameters(), strict=True):
         np.testing.assert_allclose(
-            p.detach().cpu().numpy(),
-            want_p.detach().cpu().numpy(),
-            rtol=1e-4,
-            atol=1e-5,
-            err_msg=n,
+            p.detach().cpu().numpy(), want_p.detach().cpu().numpy(), rtol=1e-4, atol=1e-5, err_msg=n
         )
     if kind != "segments_2":
         for (n, b), (_, want_b) in zip(model.named_buffers(), eager.named_buffers(), strict=True):
@@ -436,10 +383,9 @@ class _RandomLinearBlock(nn.Module):
 def test_rng_bit_equal_on_first_second_and_refused_calls(kind: str, refuse_compile: bool) -> None:
     def build() -> nn.Sequential:
         lucid.manual_seed(0)
-        return nn.Sequential(
-            _RandomLinearBlock(refuse_compile=refuse_compile),
-            nn.Linear(4, 3),
-        ).to("metal")
+        return nn.Sequential(_RandomLinearBlock(refuse_compile=refuse_compile), nn.Linear(4, 3)).to(
+            "metal"
+        )
 
     x, t = _batch()
     eager = build()
@@ -476,10 +422,7 @@ def test_rng_bit_equal_on_first_second_and_refused_calls(kind: str, refuse_compi
 
             np.testing.assert_array_equal(got_rng, want_rng)
             np.testing.assert_allclose(
-                float(got_loss.item()),
-                float(want_loss.item()),
-                rtol=1e-4,
-                atol=1e-5,
+                float(got_loss.item()), float(want_loss.item()), rtol=1e-4, atol=1e-5
             )
 
     if kind == "fused_step" and refuse_compile:

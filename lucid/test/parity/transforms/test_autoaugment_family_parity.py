@@ -174,11 +174,7 @@ class TestApplyOpDispatchParity:
         cl, ct = self._marker_image(src_y, src_x)
         out_l = apply_op(cl, "ShearX", magnitude, interpolation=Interpolation.NEAREST)
         out_t = ref_apply_op(
-            ct,
-            "ShearX",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=[0.0],
+            ct, "ShearX", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=[0.0]
         )
         pos_l = self._marker_pos(out_l.numpy())
         pos_t = self._marker_pos(np.asarray(out_t))
@@ -199,11 +195,7 @@ class TestApplyOpDispatchParity:
         cl, ct = self._marker_image(src_y, src_x)
         out_l = apply_op(cl, "ShearY", magnitude, interpolation=Interpolation.NEAREST)
         out_t = ref_apply_op(
-            ct,
-            "ShearY",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=[0.0],
+            ct, "ShearY", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=[0.0]
         )
         pos_l = self._marker_pos(out_l.numpy())
         pos_t = self._marker_pos(np.asarray(out_t))
@@ -221,12 +213,7 @@ class TestApplyOpDispatchParity:
         self._skip_if_ref_apply_op_missing()
         size = 24
         cl, ct = self._marker_image(src_y, src_x, size=size)
-        out_l = apply_op(
-            cl,
-            "TranslateX",
-            pixels / size,
-            interpolation=Interpolation.NEAREST,
-        )
+        out_l = apply_op(cl, "TranslateX", pixels / size, interpolation=Interpolation.NEAREST)
         out_t = ref_apply_op(
             ct,
             "TranslateX",
@@ -249,12 +236,7 @@ class TestApplyOpDispatchParity:
         self._skip_if_ref_apply_op_missing()
         size = 24
         cl, ct = self._marker_image(src_y, src_x, size=size)
-        out_l = apply_op(
-            cl,
-            "TranslateY",
-            pixels / size,
-            interpolation=Interpolation.NEAREST,
-        )
+        out_l = apply_op(cl, "TranslateY", pixels / size, interpolation=Interpolation.NEAREST)
         out_t = ref_apply_op(
             ct,
             "TranslateY",
@@ -286,11 +268,7 @@ class TestApplyOpDispatchParity:
         cl, ct = self._marker_image(src_y, src_x)
         out_l = apply_op(cl, "Rotate", magnitude, interpolation=Interpolation.NEAREST)
         out_t = ref_apply_op(
-            ct,
-            "Rotate",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=[0.0],
+            ct, "Rotate", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=[0.0]
         )
         pos_l = self._marker_pos(out_l.numpy())
         pos_t = self._marker_pos(np.asarray(out_t))
@@ -343,11 +321,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=6)
         out_l = apply_op(chw_l, "Brightness", magnitude)
         out_t = ref_apply_op(
-            chw_t,
-            "Brightness",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Brightness", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=1e-4, rtol=1e-4)
 
@@ -357,11 +331,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=7)
         out_l = apply_op(chw_l, "Color", magnitude)
         out_t = ref_apply_op(
-            chw_t,
-            "Color",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Color", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=1e-4, rtol=1e-4)
 
@@ -371,11 +341,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=8)
         out_l = apply_op(chw_l, "Contrast", magnitude)
         out_t = ref_apply_op(
-            chw_t,
-            "Contrast",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Contrast", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=1e-4, rtol=1e-4)
 
@@ -388,11 +354,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=9)
         out_l = apply_op(chw_l, "Sharpness", magnitude)
         out_t = ref_apply_op(
-            chw_t,
-            "Sharpness",
-            magnitude,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Sharpness", magnitude, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         # 2/256 tolerance; uint8-bucketed smoothing → ~1 LSB drift.
         out_l_np = out_l.numpy()
@@ -445,11 +407,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=12)
         out_l = apply_op(chw_l, "AutoContrast", 0.0)
         out_t = ref_apply_op(
-            chw_t,
-            "AutoContrast",
-            0.0,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "AutoContrast", 0.0, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=1e-4, rtol=1e-4)
 
@@ -459,11 +417,7 @@ class TestApplyOpDispatchParity:
         chw_l, _, chw_u8 = _make_image(seed=13)
         out_l = apply_op(chw_l, "Equalize", 0.0)
         out_t_u8 = ref_apply_op(
-            chw_u8,
-            "Equalize",
-            0.0,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_u8, "Equalize", 0.0, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         out_t_f = _uint8_to_float(out_t_u8)
         # Histogram equalization is sensitive to per-bucket rounding —
@@ -481,11 +435,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=14)
         out_l = apply_op(chw_l, "Invert", 0.0)
         out_t = ref_apply_op(
-            chw_t,
-            "Invert",
-            0.0,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Invert", 0.0, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=1e-6, rtol=0.0)
 
@@ -494,11 +444,7 @@ class TestApplyOpDispatchParity:
         chw_l, chw_t, _ = _make_image(seed=15)
         out_l = apply_op(chw_l, "Identity", 0.0)
         out_t = ref_apply_op(
-            chw_t,
-            "Identity",
-            0.0,
-            interpolation=T_ref.InterpolationMode.NEAREST,
-            fill=None,
+            chw_t, "Identity", 0.0, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
         )
         assert_close(out_l, out_t, atol=0.0, rtol=0.0)
 
@@ -510,11 +456,7 @@ class TestApplyOpDispatchParity:
             apply_op(chw_l, "NotAnOp", 0.0)
         with pytest.raises(ValueError):
             ref_apply_op(
-                chw_t,
-                "NotAnOp",
-                0.0,
-                interpolation=T_ref.InterpolationMode.NEAREST,
-                fill=None,
+                chw_t, "NotAnOp", 0.0, interpolation=T_ref.InterpolationMode.NEAREST, fill=None
             )
 
 
@@ -544,16 +486,7 @@ class TestMagnitudeLookupParity:
         return out
 
     @pytest.mark.parametrize(
-        "op",
-        [
-            "ShearX",
-            "ShearY",
-            "Rotate",
-            "Brightness",
-            "Color",
-            "Contrast",
-            "Sharpness",
-        ],
+        "op", ["ShearX", "ShearY", "Rotate", "Brightness", "Color", "Contrast", "Sharpness"]
     )
     def test_linear_ops_match(self, op: str) -> None:
         """Linear-grid ops (Shear, Rotate, Brightness/Color/Contrast/Sharpness)
@@ -714,8 +647,7 @@ class TestTrivialAugmentWideDistribution:
         _ref.manual_seed(1234)
         tf_t = T_ref.TrivialAugmentWide()
         t_imgs = np.stack(
-            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
-            axis=0,
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)], axis=0
         )
 
         # Per-pixel mean / std across the N draws — should match to
@@ -723,10 +655,7 @@ class TestTrivialAugmentWideDistribution:
         l_mean = l_imgs.mean(axis=0)
         t_mean = t_imgs.mean(axis=0)
         np.testing.assert_allclose(
-            l_mean.mean(),
-            t_mean.mean(),
-            atol=5e-2,
-            err_msg="overall mean pixel value mismatch",
+            l_mean.mean(), t_mean.mean(), atol=5e-2, err_msg="overall mean pixel value mismatch"
         )
         # Pixel-wise mean variance — both implementations augment by
         # roughly the same envelope so variance should be in the same
@@ -785,8 +714,7 @@ class TestRandAugmentDistribution:
         _ref.manual_seed(99)
         tf_t = T_ref.RandAugment(num_ops=2, magnitude=9)
         t_imgs = np.stack(
-            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
-            axis=0,
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)], axis=0
         )
 
         l_mean_all = float(l_imgs.mean())
@@ -875,8 +803,7 @@ class TestAutoAugmentDistribution:
         _ref.manual_seed(2026)
         tf_t = T_ref.AutoAugment(policy=AutoAugmentPolicy.IMAGENET)
         t_imgs = np.stack(
-            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)],
-            axis=0,
+            [tf_t(chw_u8).numpy().astype(np.float32) / 255.0 for _ in range(_N_SAMPLES)], axis=0
         )
 
         l_mean = float(l_imgs.mean())
@@ -922,16 +849,8 @@ def _normalize_lucid_table(
     for sub in lucid_table:
         out.append(
             (
-                (
-                    sub[0][0],
-                    sub[0][1],
-                    0 if sub[0][0] in NO_MAGNITUDE_OPS else sub[0][2],
-                ),
-                (
-                    sub[1][0],
-                    sub[1][1],
-                    0 if sub[1][0] in NO_MAGNITUDE_OPS else sub[1][2],
-                ),
+                (sub[0][0], sub[0][1], 0 if sub[0][0] in NO_MAGNITUDE_OPS else sub[0][2]),
+                (sub[1][0], sub[1][1], 0 if sub[1][0] in NO_MAGNITUDE_OPS else sub[1][2]),
             )
         )
     return tuple(out)

@@ -81,9 +81,7 @@ def _check_seed(where: str, index: int, out: Tensor, seed: object) -> Tensor | N
 
 
 def _make_seeds(
-    where: str,
-    outputs: Sequence[Tensor],
-    grads: Tensor | Sequence[Tensor | None] | None,
+    where: str, outputs: Sequence[Tensor], grads: Tensor | Sequence[Tensor | None] | None
 ) -> list[Tensor | None]:
     """Match the seed gradients a caller passed to the outputs, one each.
 
@@ -255,13 +253,7 @@ def backward(
     seeds = _make_seeds("backward", roots, grad_tensors)
     _retain = retain_graph if retain_graph is not None else create_graph
     if inputs is not None:
-        _backward_into(
-            roots,
-            seeds,
-            _backward_inputs(inputs),
-            _retain,
-            create_graph=create_graph,
-        )
+        _backward_into(roots, seeds, _backward_inputs(inputs), _retain, create_graph=create_graph)
         return
     _refuse_trace()
     # One pass from every root, as the reference runs it: a pass per root
@@ -347,9 +339,7 @@ def _backward_into(
 
 
 def _raw_grad_list(
-    where: str,
-    outs: Sequence[Tensor],
-    grads: Tensor | Sequence[Tensor | None] | None,
+    where: str, outs: Sequence[Tensor], grads: Tensor | Sequence[Tensor | None] | None
 ) -> list[object]:
     """Normalize ``grads`` into a list matching ``len(outs)``."""
     from lucid._tensor.tensor import Tensor
@@ -371,8 +361,7 @@ def _raw_grad_list(
 
 
 def _check_batched_seeds(
-    outs: list[Tensor],
-    grad_outputs: Tensor | Sequence[Tensor | None] | None,
+    outs: list[Tensor], grad_outputs: Tensor | Sequence[Tensor | None] | None
 ) -> tuple[list[Tensor], int]:
     """Validate batched ``grad_outputs`` and return ``(batched_seeds, batch_size)``."""
     from lucid._tensor.tensor import Tensor

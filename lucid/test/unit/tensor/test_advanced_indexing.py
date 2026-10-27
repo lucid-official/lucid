@@ -111,31 +111,11 @@ def test_adjacent_arrays_keep_the_result_where_the_block_was():
     [
         (lambda t: t[:, _i(I1), :, _i([1, 2, 3])], lambda n: n[:, I1, :, [1, 2, 3]], A),
         (lambda t: t[_i([0, 1]), :, _i([2, 3])], lambda n: n[[0, 1], :, [2, 3]], A),
-        (
-            lambda t: t[_i([0, 1]), :, :, _i([0, 1])],
-            lambda n: n[[0, 1], :, :, [0, 1]],
-            A,
-        ),
-        (
-            lambda t: t[:, _i(I1), 1:3, _i([1, 2, 3])],
-            lambda n: n[:, I1, 1:3, [1, 2, 3]],
-            A,
-        ),
-        (
-            lambda t: t[1:, _i(I1), :, _i([1, 2, 3])],
-            lambda n: n[1:, I1, :, [1, 2, 3]],
-            A,
-        ),
-        (
-            lambda t: t[:, _i(I1), ::2, _i([1, 2, 3])],
-            lambda n: n[:, I1, ::2, [1, 2, 3]],
-            A,
-        ),
-        (
-            lambda t: t[:, _i(I1), :, _i([1, 2, 3]), :],
-            lambda n: n[:, I1, :, [1, 2, 3], :],
-            B,
-        ),
+        (lambda t: t[_i([0, 1]), :, :, _i([0, 1])], lambda n: n[[0, 1], :, :, [0, 1]], A),
+        (lambda t: t[:, _i(I1), 1:3, _i([1, 2, 3])], lambda n: n[:, I1, 1:3, [1, 2, 3]], A),
+        (lambda t: t[1:, _i(I1), :, _i([1, 2, 3])], lambda n: n[1:, I1, :, [1, 2, 3]], A),
+        (lambda t: t[:, _i(I1), ::2, _i([1, 2, 3])], lambda n: n[:, I1, ::2, [1, 2, 3]], A),
+        (lambda t: t[:, _i(I1), :, _i([1, 2, 3]), :], lambda n: n[:, I1, :, [1, 2, 3], :], B),
         (
             lambda t: t[_i([0, 1]), :, _i([1, 2]), :, _i([0, 1])],
             lambda n: n[[0, 1], :, [1, 2], :, [0, 1]],
@@ -161,14 +141,8 @@ def test_split_index_arrays_move_the_result_to_the_front(take, expect, array):
 @pytest.mark.parametrize(
     "take,expect",
     [
-        (
-            lambda t: t[:, _i(I1), None, :, _i([1, 2, 3])],
-            lambda n: n[:, I1, None, :, [1, 2, 3]],
-        ),
-        (
-            lambda t: t[None, :, _i(I1), :, _i([1, 2, 3])],
-            lambda n: n[None, :, I1, :, [1, 2, 3]],
-        ),
+        (lambda t: t[:, _i(I1), None, :, _i([1, 2, 3])], lambda n: n[:, I1, None, :, [1, 2, 3]]),
+        (lambda t: t[None, :, _i(I1), :, _i([1, 2, 3])], lambda n: n[None, :, I1, :, [1, 2, 3]]),
     ],
 )
 def test_a_new_axis_inside_a_split_block(take, expect):
@@ -241,27 +215,11 @@ def test_an_integer_split_from_an_array_follows_the_reference():
 
 SET_CASES = [
     # basic keys
-    (
-        "whole",
-        lambda t: t.__setitem__(slice(None), 9.0),
-        lambda n: n.__setitem__(slice(None), 9.0),
-    ),
-    (
-        "ellipsis",
-        lambda t: t.__setitem__(Ellipsis, 9.0),
-        lambda n: n.__setitem__(Ellipsis, 9.0),
-    ),
+    ("whole", lambda t: t.__setitem__(slice(None), 9.0), lambda n: n.__setitem__(slice(None), 9.0)),
+    ("ellipsis", lambda t: t.__setitem__(Ellipsis, 9.0), lambda n: n.__setitem__(Ellipsis, 9.0)),
     ("row", lambda t: t.__setitem__(1, 9.0), lambda n: n.__setitem__(1, 9.0)),
-    (
-        "row from the end",
-        lambda t: t.__setitem__(-1, 9.0),
-        lambda n: n.__setitem__(-1, 9.0),
-    ),
-    (
-        "cell",
-        lambda t: t.__setitem__((1, 2), 9.0),
-        lambda n: n.__setitem__((1, 2), 9.0),
-    ),
+    ("row from the end", lambda t: t.__setitem__(-1, 9.0), lambda n: n.__setitem__(-1, 9.0)),
+    ("cell", lambda t: t.__setitem__((1, 2), 9.0), lambda n: n.__setitem__((1, 2), 9.0)),
     (
         "row slice",
         lambda t: t.__setitem__(slice(1, 3), 9.0),
@@ -283,11 +241,7 @@ SET_CASES = [
         lambda n: n.__setitem__((slice(1, 3), slice(None, None, 2)), 9.0),
     ),
     # one index array
-    (
-        "rows by array",
-        lambda t: t.__setitem__(_i(I1), 9.0),
-        lambda n: n.__setitem__(I1, 9.0),
-    ),
+    ("rows by array", lambda t: t.__setitem__(_i(I1), 9.0), lambda n: n.__setitem__(I1, 9.0)),
     (
         "columns by array",
         lambda t: t.__setitem__((slice(None), _i(I2)), 9.0),
@@ -310,11 +264,7 @@ SET_CASES = [
         lambda n: n.__setitem__((I1, I2), 9.0),
     ),
     # masks
-    (
-        "full mask",
-        lambda t: t.__setitem__(_t(M > 10), 9.0),
-        lambda n: n.__setitem__(M > 10, 9.0),
-    ),
+    ("full mask", lambda t: t.__setitem__(_t(M > 10), 9.0), lambda n: n.__setitem__(M > 10, 9.0)),
     (
         "row mask",
         lambda t: t.__setitem__(_t([True, False, True, False]), 9.0),
@@ -393,14 +343,8 @@ def test_a_reversed_slice_assigns_in_reverse():
             lambda t: t.__setitem__((slice(None), _i(I1)), 9.0),
             lambda n: n.__setitem__((slice(None), I1), 9.0),
         ),
-        (
-            lambda t: t.__setitem__((0, 1, 2, 3), 9.0),
-            lambda n: n.__setitem__((0, 1, 2, 3), 9.0),
-        ),
-        (
-            lambda t: t.__setitem__((Ellipsis, 0), 9.0),
-            lambda n: n.__setitem__((Ellipsis, 0), 9.0),
-        ),
+        (lambda t: t.__setitem__((0, 1, 2, 3), 9.0), lambda n: n.__setitem__((0, 1, 2, 3), 9.0)),
+        (lambda t: t.__setitem__((Ellipsis, 0), 9.0), lambda n: n.__setitem__((Ellipsis, 0), 9.0)),
         (
             lambda t: t.__setitem__((slice(None), _i(I1), slice(None), _i([1, 2, 3])), 9.0),
             lambda n: n.__setitem__((slice(None), I1, slice(None), [1, 2, 3]), 9.0),

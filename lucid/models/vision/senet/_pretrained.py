@@ -21,16 +21,10 @@ _CFG_18 = SENetConfig(block_type="basic", layers=(2, 2, 2, 2), legacy_pool=True)
 _CFG_34 = SENetConfig(block_type="basic", layers=(3, 4, 6, 3), legacy_pool=True)
 _CFG_50 = SENetConfig(block_type="bottleneck", layers=(3, 4, 6, 3))
 _CFG_101 = SENetConfig(
-    block_type="bottleneck",
-    layers=(3, 4, 23, 3),
-    legacy_pool=True,
-    legacy_stride=True,
+    block_type="bottleneck", layers=(3, 4, 23, 3), legacy_pool=True, legacy_stride=True
 )
 _CFG_152 = SENetConfig(
-    block_type="bottleneck",
-    layers=(3, 8, 36, 3),
-    legacy_pool=True,
-    legacy_stride=True,
+    block_type="bottleneck", layers=(3, 8, 36, 3), legacy_pool=True, legacy_stride=True
 )
 
 
@@ -40,11 +34,7 @@ _CFG_152 = SENetConfig(
 
 
 @register_model(
-    task="base",
-    family="senet",
-    model_type="senet",
-    model_class=SENet,
-    default_config=_CFG_18,
+    task="base", family="senet", model_type="senet", model_class=SENet, default_config=_CFG_18
 )
 def se_resnet_18(pretrained: bool = False, **overrides: object) -> SENet:
     r"""SE-ResNet-18 feature-extracting backbone (no classification head).
@@ -94,11 +84,7 @@ def se_resnet_18(pretrained: bool = False, **overrides: object) -> SENet:
 
 
 @register_model(
-    task="base",
-    family="senet",
-    model_type="senet",
-    model_class=SENet,
-    default_config=_CFG_34,
+    task="base", family="senet", model_type="senet", model_class=SENet, default_config=_CFG_34
 )
 def se_resnet_34(pretrained: bool = False, **overrides: object) -> SENet:
     r"""SE-ResNet-34 feature-extracting backbone (no classification head).
@@ -146,11 +132,7 @@ def se_resnet_34(pretrained: bool = False, **overrides: object) -> SENet:
 
 
 @register_model(
-    task="base",
-    family="senet",
-    model_type="senet",
-    model_class=SENet,
-    default_config=_CFG_50,
+    task="base", family="senet", model_type="senet", model_class=SENet, default_config=_CFG_50
 )
 def se_resnet_50(pretrained: bool = False, **overrides: object) -> SENet:
     r"""SE-ResNet-50 feature-extracting backbone (no classification head).
@@ -203,11 +185,7 @@ def se_resnet_50(pretrained: bool = False, **overrides: object) -> SENet:
 
 
 @register_model(
-    task="base",
-    family="senet",
-    model_type="senet",
-    model_class=SENet,
-    default_config=_CFG_101,
+    task="base", family="senet", model_type="senet", model_class=SENet, default_config=_CFG_101
 )
 def se_resnet_101(pretrained: bool = False, **overrides: object) -> SENet:
     r"""SE-ResNet-101 feature-extracting backbone (no classification head).
@@ -258,11 +236,7 @@ def se_resnet_101(pretrained: bool = False, **overrides: object) -> SENet:
 
 
 @register_model(
-    task="base",
-    family="senet",
-    model_type="senet",
-    model_class=SENet,
-    default_config=_CFG_152,
+    task="base", family="senet", model_type="senet", model_class=SENet, default_config=_CFG_152
 )
 def se_resnet_152(pretrained: bool = False, **overrides: object) -> SENet:
     r"""SE-ResNet-152 feature-extracting backbone (no classification head).
@@ -324,10 +298,7 @@ def se_resnet_152(pretrained: bool = False, **overrides: object) -> SENet:
     default_config=_CFG_18,
 )
 def se_resnet_18_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SEResNet18Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SEResNet18Weights | None = None, **overrides: object
 ) -> SENetForImageClassification:
     r"""SE-ResNet-18 image classifier (backbone + GAP + linear head).
 
@@ -390,10 +361,7 @@ def se_resnet_18_cls(
     default_config=_CFG_34,
 )
 def se_resnet_34_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SEResNet34Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SEResNet34Weights | None = None, **overrides: object
 ) -> SENetForImageClassification:
     r"""SE-ResNet-34 image classifier (backbone + GAP + linear head).
 
@@ -456,10 +424,7 @@ def se_resnet_34_cls(
     default_config=_CFG_50,
 )
 def se_resnet_50_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SEResNet50Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SEResNet50Weights | None = None, **overrides: object
 ) -> SENetForImageClassification:
     r"""SE-ResNet-50 image classifier (backbone + GAP + linear head).
 

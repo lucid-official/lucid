@@ -42,11 +42,7 @@ from lucid.models.vision._common._transformers import (
 )
 from lucid.models.vision.ijepa._config import IJEPAConfig
 
-__all__ = [
-    "IJEPAModel",
-    "IJEPAForImageClassification",
-    "IJEPAOutput",
-]
+__all__ = ["IJEPAModel", "IJEPAForImageClassification", "IJEPAOutput"]
 
 
 # ── positions ────────────────────────────────────────────────────────────────
@@ -180,11 +176,7 @@ class _Predictor(nn.Module):
         tokens = tokens + _gather_tokens(
             positions
             + lucid.zeros(
-                int(context.shape[0]),
-                1,
-                1,
-                dtype=positions.dtype,
-                device=positions.device,
+                int(context.shape[0]), 1, 1, dtype=positions.dtype, device=positions.device
             ),
             context_indices,
         )

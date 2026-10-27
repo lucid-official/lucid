@@ -19,10 +19,7 @@ from typing import Iterable, override
 from lucid._C import engine as _C_engine
 
 from lucid.utils.tokenizer._base import SpecialTokens
-from lucid.utils.tokenizer._lookup_common import (
-    _FastVocabTokenizer,
-    _VocabTokenizer,
-)
+from lucid.utils.tokenizer._lookup_common import _FastVocabTokenizer, _VocabTokenizer
 
 
 def _split_codepoints(text: str) -> list[str]:
@@ -63,10 +60,7 @@ class CharTokenizer(_VocabTokenizer):
     _model_type = "Char"
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a pure-Python character tokenizer.
 
@@ -99,12 +93,7 @@ class CharTokenizer(_VocabTokenizer):
         """Concatenate codepoint surface forms for known ids."""
         return "".join(self._id_to_token[i] for i in ids if i in self._id_to_token)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 1000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 1000) -> None:
         """Build vocab by collecting unique codepoints in insertion order.
 
         Stops when ``vocab_size`` distinct codepoints have been
@@ -148,10 +137,7 @@ class CharTokenizerFast(_FastVocabTokenizer):
     _model_type = "Char"
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a C++-backed character tokenizer.
 
@@ -178,12 +164,7 @@ class CharTokenizerFast(_FastVocabTokenizer):
         )
         self._init_fast_vocab_tokenizer(cpp, v, special_tokens=special_tokens)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 1000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 1000) -> None:
         """Train in C++; mirror the resulting vocab back into Python state.
 
         Parameters

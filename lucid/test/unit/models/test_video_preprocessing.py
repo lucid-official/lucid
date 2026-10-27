@@ -31,10 +31,7 @@ import pytest
 import lucid
 import lucid.utils.transforms as T
 from lucid.models.generative.vjepa2_ac import VJEPA2ACWeights
-from lucid.models.vision.vjepa2 import (
-    VJEPA2ViTGiant384Weights,
-    VJEPA2ViTLargeWeights,
-)
+from lucid.models.vision.vjepa2 import VJEPA2ViTGiant384Weights, VJEPA2ViTLargeWeights
 
 
 class TestReleasedGeometry:

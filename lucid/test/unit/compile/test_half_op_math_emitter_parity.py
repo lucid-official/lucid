@@ -33,18 +33,7 @@ def _metal_ok() -> bool:
 
 pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 
-VALUES: list[float] = [
-    3.09375,
-    -3.09375,
-    1.5,
-    -1.5,
-    2.0,
-    -2.0,
-    0.3,
-    -0.3,
-    1.7,
-    -1.7,
-]
+VALUES: list[float] = [3.09375, -3.09375, 1.5, -1.5, 2.0, -2.0, 0.3, -0.3, 1.7, -1.7]
 
 SCALARS: list[float] = [0.1, 0.3, 1.7]
 
@@ -71,10 +60,7 @@ def _assert_bits_equal(got: lucid.Tensor, want: lucid.Tensor) -> None:
         f"(bits={want_f32.view(np.uint32).tolist()})"
     )
     non_nan = ~np.isnan(want_f32)
-    assert np.array_equal(
-        got_f32.view(np.uint32)[non_nan],
-        want_f32.view(np.uint32)[non_nan],
-    )
+    assert np.array_equal(got_f32.view(np.uint32)[non_nan], want_f32.view(np.uint32)[non_nan])
 
 
 class _ScalarOpModule(nn.Module):
@@ -112,10 +98,7 @@ def test_bf16_3_09375_mul_0_1_compiles_without_pre_rounding() -> None:
 @pytest.mark.parametrize("scalar_val", SCALARS)
 @pytest.mark.parametrize("as_0d_tensor", [False, True], ids=["py_float", "0d_f32"])
 def test_compile_half_op_math_matches_eager_bit_for_bit(
-    dtype: object,
-    op_name: str,
-    scalar_val: float,
-    as_0d_tensor: bool,
+    dtype: object, op_name: str, scalar_val: float, as_0d_tensor: bool
 ) -> None:
     x = lucid.tensor(VALUES, dtype=dtype, device=COMPILE_DEVICE)
     scalar: float | lucid.Tensor = (
@@ -139,11 +122,7 @@ def test_compile_half_op_math_matches_eager_bit_for_bit(
 @pytest.mark.parametrize("scalar_val", SCALARS)
 @pytest.mark.parametrize("as_0d_tensor", [False, True], ids=["py_float", "0d_f32"])
 def test_coreml_float16_op_math_matches_eager_bit_for_bit(
-    tmp_path: Path,
-    precision: cml.Precision,
-    op_name: str,
-    scalar_val: float,
-    as_0d_tensor: bool,
+    tmp_path: Path, precision: cml.Precision, op_name: str, scalar_val: float, as_0d_tensor: bool
 ) -> None:
     x = lucid.tensor(VALUES, dtype=lucid.float16)
     scalar: float | lucid.Tensor = (
@@ -154,11 +133,7 @@ def test_coreml_float16_op_math_matches_eager_bit_for_bit(
 
     pkg_path = tmp_path / f"{op_name}_{scalar_val}_{as_0d_tensor}_{precision.value}.mlpackage"
     exported = cml.export(
-        model,
-        x,
-        str(pkg_path),
-        precision=precision,
-        compute_units=cml.ComputeUnits.CPU_ONLY,
+        model, x, str(pkg_path), precision=precision, compute_units=cml.ComputeUnits.CPU_ONLY
     )
     try:
         got = exported.predict(x)

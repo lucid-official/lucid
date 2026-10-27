@@ -19,11 +19,7 @@ class TestMLPForwardBackward:
         x = lucid.tensor(np.random.standard_normal((64, 32)).astype(np.float32), device=device)
         y = lucid.tensor(np.random.standard_normal((64, 1)).astype(np.float32), device=device)
         model = nn.Sequential(
-            nn.Linear(32, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
+            nn.Linear(32, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 1)
         ).to(device=device)
 
         def step() -> tuple[lucid.Tensor, list[lucid.Tensor | None]]:

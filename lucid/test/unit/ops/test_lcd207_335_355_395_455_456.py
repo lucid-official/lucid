@@ -12,25 +12,14 @@ import pytest
 import lucid
 import lucid.func as func
 from lucid._tensor.tensor import Tensor
-from lucid.distributions import (
-    Bernoulli,
-    Beta,
-    Chi2,
-    Dirichlet,
-    Exponential,
-    Gamma,
-    Normal,
-)
+from lucid.distributions import Bernoulli, Beta, Chi2, Dirichlet, Exponential, Gamma, Normal
 from lucid.distributions.distribution import ExponentialFamily
 from lucid.special import gammainc, gammaincc, modified_bessel_i0
 from lucid.test._fixtures.devices import metal_available
 
 _DEVICES = [
     "cpu",
-    pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 
 
@@ -143,9 +132,7 @@ def test_func_transforms_shared_helpers_and_validation() -> None:
 
 
 @pytest.mark.parity
-def test_ldl_factor_hermitian_is_keyword_only_and_cholesky_ex_partial(
-    ref: ModuleType,
-) -> None:
+def test_ldl_factor_hermitian_is_keyword_only_and_cholesky_ex_partial(ref: ModuleType) -> None:
     for fn in (lucid.linalg.ldl_factor, lucid.linalg.ldl_factor_ex):
         sig = inspect.signature(fn)
         param = sig.parameters["hermitian"]
@@ -198,10 +185,7 @@ def test_exponential_family_bregman_entropy_matches_closed_form() -> None:
         Exponential(rate=lucid.tensor([0.5, 3.0])),
         Gamma(concentration=lucid.tensor([2.5, 4.0]), rate=lucid.tensor([1.5, 0.8])),
         Chi2(df=lucid.tensor([3.0, 6.0])),
-        Beta(
-            concentration1=lucid.tensor([2.0, 0.7]),
-            concentration0=lucid.tensor([3.5, 1.8]),
-        ),
+        Beta(concentration1=lucid.tensor([2.0, 0.7]), concentration0=lucid.tensor([3.5, 1.8])),
         Dirichlet(lucid.tensor([[1.5, 2.5, 3.5], [0.8, 1.2, 2.0]])),
     ]
     for dist in families:
@@ -233,9 +217,7 @@ def test_exponential_family_bregman_entropy_matches_closed_form() -> None:
     rate = lucid.tensor([1.0, 2.0, 4.0])
     custom = _CustomExp(rate)
     np.testing.assert_allclose(
-        custom.entropy().detach().numpy(),
-        (1.0 - rate.log()).numpy(),
-        rtol=1e-5,
+        custom.entropy().detach().numpy(), (1.0 - rate.log()).numpy(), rtol=1e-5
     )
 
 
@@ -249,8 +231,5 @@ def test_modified_bessel_i0_float16_no_overflow(ref: ModuleType, device: str) ->
     out_t = ref.special.modified_bessel_i0(x_t).to(ref.float16)
     assert out_l.dtype == lucid.float16
     np.testing.assert_allclose(
-        out_l.cpu().to(lucid.float32).numpy(),
-        out_t.float().numpy(),
-        rtol=2e-3,
-        atol=1e-3,
+        out_l.cpu().to(lucid.float32).numpy(), out_t.float().numpy(), rtol=2e-3, atol=1e-3
     )

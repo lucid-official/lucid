@@ -24,19 +24,12 @@ class TestMLPTraining:
         # y = x · w + b with a known target so the model can fit it.
         w = np.array([[1.0, -1.0, 0.5, 2.0]], dtype=np.float32)
         y = x @ w.T + 0.3
-        return (
-            lucid.tensor(x, device=device),
-            lucid.tensor(y, device=device),
-        )
+        return (lucid.tensor(x, device=device), lucid.tensor(y, device=device))
 
     def test_loss_shrinks(self, device: str) -> None:
         x, y = self._build_data(device)
 
-        model = nn.Sequential(
-            nn.Linear(4, 16),
-            nn.ReLU(),
-            nn.Linear(16, 1),
-        ).to(device=device)
+        model = nn.Sequential(nn.Linear(4, 16), nn.ReLU(), nn.Linear(16, 1)).to(device=device)
         opt = optim.SGD(model.parameters(), lr=0.05)
 
         losses: list[float] = []
@@ -54,11 +47,7 @@ class TestMLPTraining:
 
     def test_adam_also_shrinks(self, device: str) -> None:
         x, y = self._build_data(device)
-        model = nn.Sequential(
-            nn.Linear(4, 16),
-            nn.Tanh(),
-            nn.Linear(16, 1),
-        ).to(device=device)
+        model = nn.Sequential(nn.Linear(4, 16), nn.Tanh(), nn.Linear(16, 1)).to(device=device)
         opt = optim.Adam(model.parameters(), lr=0.05)
 
         first = float(F.mse_loss(model(x), y).item())

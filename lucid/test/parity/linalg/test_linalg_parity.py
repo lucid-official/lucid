@@ -27,9 +27,7 @@ class TestLinalgParity:
     def test_norm_l2(self, ref: Any) -> None:
         v = np.array([3.0, 4.0], dtype=np.float32)
         assert_close(
-            LA.norm(lucid.tensor(v.copy())),
-            ref.linalg.norm(ref.tensor(v.copy())),
-            atol=1e-5,
+            LA.norm(lucid.tensor(v.copy())), ref.linalg.norm(ref.tensor(v.copy())), atol=1e-5
         )
 
     def test_solve(self, ref: Any) -> None:
@@ -44,9 +42,7 @@ class TestLinalgParity:
     def test_inv(self, ref: Any) -> None:
         A = _spd()
         assert_close(
-            LA.inv(lucid.tensor(A.copy())),
-            ref.linalg.inv(ref.tensor(A.copy())),
-            atol=1e-3,
+            LA.inv(lucid.tensor(A.copy())), ref.linalg.inv(ref.tensor(A.copy())), atol=1e-3
         )
 
     def test_cholesky_reconstruction(self, ref: Any) -> None:

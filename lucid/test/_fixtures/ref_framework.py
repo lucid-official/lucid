@@ -150,8 +150,7 @@ def require_ref(*, module_level: bool = False) -> ModuleType:
     mod = ref_module()
     if mod is None:
         pytest.skip(
-            f"reference framework ({_REF_NAME}) is not installed",
-            allow_module_level=module_level,
+            f"reference framework ({_REF_NAME}) is not installed", allow_module_level=module_level
         )
     return mod
 

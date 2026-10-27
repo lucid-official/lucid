@@ -160,10 +160,7 @@ def _output_padding_for_size(
 
 
 def _check_output_padding(
-    name: str,
-    output_padding: tuple[int, ...],
-    stride: tuple[int, ...],
-    dilation: tuple[int, ...],
+    name: str, output_padding: tuple[int, ...], stride: tuple[int, ...], dilation: tuple[int, ...]
 ) -> None:
     """Refuse an ``output_padding`` the transposed convolution cannot mean.
 

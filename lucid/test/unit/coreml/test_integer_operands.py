@@ -23,8 +23,7 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 _INTEGER_TYPES = ["int8", "int16", "int32", "int64"]
@@ -104,12 +103,7 @@ def test_a_histogram_exports_and_follows_its_input(tmp_path: object) -> None:
 
 #: Bounds past int32: the body is int32, so they saturate exactly. Written
 #: as given, Core ML kept their low 32 bits — ``2**40`` became ``0``.
-_WIDE_BOUNDS = [
-    (0, 2**40),
-    (-(2**40), 3),
-    (0, 2**31),
-    (-(2**31) - 1, 2**31),
-]
+_WIDE_BOUNDS = [(0, 2**40), (-(2**40), 3), (0, 2**31), (-(2**31) - 1, 2**31)]
 
 
 @pytest.mark.parametrize(("low", "high"), _WIDE_BOUNDS)

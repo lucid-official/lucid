@@ -8,18 +8,9 @@ References
 - YOLOv4: Bochkovskiy et al., arXiv 2020
 """
 
-from lucid.models.vision.yolo._v1 import (
-    YOLOConfig,
-    YOLOForObjectDetection,
-    yolo,
-    yolo_tiny,
-)
+from lucid.models.vision.yolo._v1 import YOLOConfig, YOLOForObjectDetection, yolo, yolo_tiny
 from lucid.models._utils._detection import MultiScaleResolution
-from lucid.models.vision.yolo._v2 import (
-    YOLOV2Config,
-    YOLOV2ForObjectDetection,
-    yolo_v2,
-)
+from lucid.models.vision.yolo._v2 import YOLOV2Config, YOLOV2ForObjectDetection, yolo_v2
 from lucid.models.vision.yolo._v3 import (
     YOLOV3Config,
     YOLOV3ForObjectDetection,
@@ -27,11 +18,7 @@ from lucid.models.vision.yolo._v3 import (
     yolo_v3,
     yolo_v3_tiny,
 )
-from lucid.models.vision.yolo._v4 import (
-    YOLOV4Config,
-    YOLOV4ForObjectDetection,
-    yolo_v4,
-)
+from lucid.models.vision.yolo._v4 import YOLOV4Config, YOLOV4ForObjectDetection, yolo_v4
 from lucid.models.vision.yolo._weights import (
     YOLOV2Weights,
     YOLOV3TinyWeights,

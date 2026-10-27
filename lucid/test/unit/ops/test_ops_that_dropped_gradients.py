@@ -107,10 +107,7 @@ def test_ctc_differentiates_through_log_softmax(reduction: str) -> None:
 def test_ctc_on_metal_with_cpu_or_metal_integers() -> None:
     logits, padded, il, tl = _ctc_case()
     cpu = F.ctc_loss(
-        F.log_softmax(lucid.tensor(logits.astype(np.float32)), dim=-1),
-        lucid.tensor(padded),
-        il,
-        tl,
+        F.log_softmax(lucid.tensor(logits.astype(np.float32)), dim=-1), lucid.tensor(padded), il, tl
     )
     for where in ("cpu", "metal"):
         x = lucid.tensor(logits.astype(np.float32), device="metal", requires_grad=True)
@@ -163,9 +160,7 @@ def test_lstsq_is_the_minimum_norm_solution_and_differentiates(shape) -> None:  
     if shape != "rank-deficient":  # a rank change has no derivative
         w = rng.standard_normal(got.shape)
         analytic, numeric = _directional(
-            lambda x: (lucid.linalg.lstsq(x, lucid.tensor(b))[0] * lucid.tensor(w)).sum(),
-            a,
-            rng,
+            lambda x: (lucid.linalg.lstsq(x, lucid.tensor(b))[0] * lucid.tensor(w)).sum(), a, rng
         )
         assert analytic == pytest.approx(numeric, rel=1e-6, abs=1e-8)
 
@@ -221,11 +216,7 @@ def test_householder_product_differentiates_in_both_inputs() -> None:
 def test_eig_differentiates_its_values_and_phase_free_vectors() -> None:
     rng = np.random.default_rng(11)
     a = rng.standard_normal((4, 4))
-    c1, c2, wv = (
-        rng.standard_normal(4),
-        rng.standard_normal(4),
-        rng.standard_normal((4, 4)),
-    )
+    c1, c2, wv = (rng.standard_normal(4), rng.standard_normal(4), rng.standard_normal((4, 4)))
 
     def f(x):  # type: ignore[no-untyped-def]
         w, V = lucid.linalg.eig(x)

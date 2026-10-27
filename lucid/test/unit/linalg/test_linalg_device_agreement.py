@@ -47,17 +47,11 @@ _CASES: dict[str, tuple[np.ndarray, int]] = {
     "singular_triangle": (np.array([[1.0, 2.0], [0.0, 0.0]]), 1),
     "nan": (np.array([[_NAN, 2.0], [3.0, 4.0]]), 1),
     "inf": (np.array([[_INF, 2.0], [3.0, 4.0]]), 1),
-    "mixed_batch": (
-        np.array([[[1.0, 2.0], [0.0, 0.0]], [[2.0, 1.0], [0.0, 4.0]]]),
-        1,
-    ),
+    "mixed_batch": (np.array([[[1.0, 2.0], [0.0, 0.0]], [[2.0, 1.0], [0.0, 4.0]]]), 1),
     # Symmetric, the second indefinite: its LDLᵀ takes a 2 x 2 pivot block,
     # so the two matrices' pivots differ (CHA-192: Metal returned the first
     # matrix's pivots, then whatever memory followed them).
-    "indefinite_batch": (
-        np.array([[[2.0, 1.0], [1.0, 4.0]], [[0.0, 1.0], [1.0, 0.0]]]),
-        1,
-    ),
+    "indefinite_batch": (np.array([[[2.0, 1.0], [1.0, 4.0]], [[0.0, 1.0], [1.0, 0.0]]]), 1),
     "empty": (np.zeros((0, 0)), 1),
     "empty_batch": (np.zeros((0, 2, 2)), 1),
     "no_rhs": (np.array([[2.0, 1.0], [0.0, 4.0]]), 0),
@@ -77,10 +71,7 @@ def _lu_solve(M: Any, a: Any, b: Any) -> Any:
 
 _OPS: dict[str, _Op] = {
     "solve_triangular": (lambda M, a, b: M.solve_triangular(a, b, upper=True), True),
-    "solve_triangular_lower": (
-        lambda M, a, b: M.solve_triangular(a.mT, b, upper=False),
-        True,
-    ),
+    "solve_triangular_lower": (lambda M, a, b: M.solve_triangular(a.mT, b, upper=False), True),
     "solve_triangular_unit": (
         lambda M, a, b: M.solve_triangular(a, b, upper=True, unitriangular=True),
         True,
@@ -227,11 +218,7 @@ def test_matches_the_reference(
     ref_dtype = ref.float64 if dtype is lucid.float64 else ref.float32
     fn = _OPS[op][0]
     want = _kind(
-        lambda: fn(
-            ref.linalg,
-            ref.tensor(a, dtype=ref_dtype),
-            ref.tensor(b, dtype=ref_dtype),
-        ),
+        lambda: fn(ref.linalg, ref.tensor(a, dtype=ref_dtype), ref.tensor(b, dtype=ref_dtype)),
         lambda t: t.numpy(),
         op,
     )
@@ -271,9 +258,7 @@ def test_pinv_all_inf_is_nan_while_single_inf_is_zero(device: str, dtype: lucid.
     """``pinv([[inf, inf], [inf, inf]])`` is all-NaN while a single leading
     ``inf`` gives zeros, matching LAPACK ``gesdd`` on both devices."""
     batch = lucid.tensor(
-        [[[_INF, _INF], [_INF, _INF]], [[_INF, 2.0], [3.0, 4.0]]],
-        dtype=dtype,
-        device=device,
+        [[[_INF, _INF], [_INF, _INF]], [[_INF, 2.0], [3.0, 4.0]]], dtype=dtype, device=device
     )
     out = LA.pinv(batch).to("cpu").numpy()
     assert np.isnan(out[0]).all()

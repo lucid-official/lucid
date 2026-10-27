@@ -45,19 +45,11 @@ class TestSaveLoadStateDict:
     def test_module_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "model.lucid"
-            model = nn.Sequential(
-                nn.Linear(4, 8),
-                nn.ReLU(),
-                nn.Linear(8, 2),
-            )
+            model = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 2))
             sd = model.state_dict()
             lucid.save(sd, str(path))
 
-            model2 = nn.Sequential(
-                nn.Linear(4, 8),
-                nn.ReLU(),
-                nn.Linear(8, 2),
-            )
+            model2 = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 2))
             loaded = lucid.load(str(path), weights_only=False)
             model2.load_state_dict(loaded)
 
@@ -65,10 +57,7 @@ class TestSaveLoadStateDict:
             for k, v in sd.items():
                 v2 = dict(model2.state_dict())[k]
                 np.testing.assert_allclose(
-                    v.numpy(),
-                    v2.numpy(),
-                    atol=1e-6,
-                    err_msg=f"parameter {k} drifted on round-trip",
+                    v.numpy(), v2.numpy(), atol=1e-6, err_msg=f"parameter {k} drifted on round-trip"
                 )
 
 
@@ -186,12 +175,7 @@ class TestParameterGradAndStorageSharing:
 
         for wo in (True, False):
             r = self._roundtrip(
-                {
-                    "p_grad": p_grad,
-                    "p_nograd": p_nograd,
-                    "t_grad": t_grad,
-                    "t_nograd": t_nograd,
-                },
+                {"p_grad": p_grad, "p_nograd": p_nograd, "t_grad": t_grad, "t_nograd": t_nograd},
                 weights_only=wo,
             )
             assert isinstance(r, dict)
@@ -290,10 +274,7 @@ class TestWeightsOnlyWhitelistAndMapLocationContainers:
 
     @staticmethod
     def _save_load(
-        obj: object,
-        *,
-        weights_only: bool = True,
-        map_location: object = None,
+        obj: object, *, weights_only: bool = True, map_location: object = None
     ) -> object:
         import io
 
@@ -301,9 +282,7 @@ class TestWeightsOnlyWhitelistAndMapLocationContainers:
         lucid.save(obj, buf)
         buf.seek(0)
         return lucid.load(
-            buf,
-            weights_only=weights_only,
-            map_location=map_location,  # type: ignore[arg-type]
+            buf, weights_only=weights_only, map_location=map_location  # type: ignore[arg-type]
         )
 
     def test_weights_only_allows_dtypes_devices_and_builtins(self) -> None:
@@ -385,8 +364,7 @@ class TestWeightsOnlyWhitelistAndMapLocationContainers:
         from lucid.serialization import _apply_map_location
 
         remapped = _apply_map_location(
-            {"dd": dd, "cnt": cnt, "nt": nt, "s": {1, 2}},
-            lambda t, _d: t.to("cpu"),
+            {"dd": dd, "cnt": cnt, "nt": nt, "s": {1, 2}}, lambda t, _d: t.to("cpu")
         )
         assert isinstance(remapped, dict)
         assert isinstance(remapped["dd"], defaultdict)

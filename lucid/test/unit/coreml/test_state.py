@@ -19,8 +19,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -103,11 +102,7 @@ class TestStateRefusals:
         still accumulating.
         """
         with pytest.raises(cml.StatefulModel) as excinfo:
-            cml.export(
-                MutatesItsBuffer().eval(),
-                lucid.ones(1, 4),
-                f"{tmp_path}/buffer.mlpackage",
-            )
+            cml.export(MutatesItsBuffer().eval(), lucid.ones(1, 4), f"{tmp_path}/buffer.mlpackage")
         assert excinfo.value.names == ["total"]
 
     def test_a_model_that_leaves_its_buffers_alone_still_exports(self, tmp_path: object) -> None:

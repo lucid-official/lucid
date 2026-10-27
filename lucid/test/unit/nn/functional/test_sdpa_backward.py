@@ -66,31 +66,19 @@ def test_sdpa_backward_gradcheck_metal(config: str) -> None:
     k = _mk(_KV, dev)
     v = _mk(_VV, dev)
     gradcheck(
-        lambda qq: _call(qq, k, v, config, dev),
-        [_mk(_QV, dev)],
-        eps=1e-3,
-        atol=2e-2,
-        rtol=2e-2,
+        lambda qq: _call(qq, k, v, config, dev), [_mk(_QV, dev)], eps=1e-3, atol=2e-2, rtol=2e-2
     )
     # dK
     q = _mk(_QV, dev)
     v = _mk(_VV, dev)
     gradcheck(
-        lambda kk: _call(q, kk, v, config, dev),
-        [_mk(_KV, dev)],
-        eps=1e-3,
-        atol=2e-2,
-        rtol=2e-2,
+        lambda kk: _call(q, kk, v, config, dev), [_mk(_KV, dev)], eps=1e-3, atol=2e-2, rtol=2e-2
     )
     # dV
     q = _mk(_QV, dev)
     k = _mk(_KV, dev)
     gradcheck(
-        lambda vv: _call(q, k, vv, config, dev),
-        [_mk(_VV, dev)],
-        eps=1e-3,
-        atol=2e-2,
-        rtol=2e-2,
+        lambda vv: _call(q, k, vv, config, dev), [_mk(_VV, dev)], eps=1e-3, atol=2e-2, rtol=2e-2
     )
 
 
@@ -108,11 +96,7 @@ def test_sdpa_backward_metal_matches_cpu(config: str) -> None:
         v = _mk(_VV, device)
         v.requires_grad = True
         _call(q, k, v, config, device).sum().backward()
-        return (
-            q.grad.numpy(),
-            k.grad.numpy(),
-            v.grad.numpy(),
-        )
+        return (q.grad.numpy(), k.grad.numpy(), v.grad.numpy())
 
     gq_c, gk_c, gv_c = grads("cpu")
     gq_m, gk_m, gv_m = grads("metal")

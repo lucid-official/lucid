@@ -15,10 +15,7 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import (
-    GenerativeActivation,
-    WorldModelConfig,
-)
+from lucid.models.generative._common._config import GenerativeActivation, WorldModelConfig
 
 #: The released scaling ladder, ``name -> (deter, hidden, classes, depth, units)``.
 #: The paper reports six sizes from 12M to 400M parameters; the released

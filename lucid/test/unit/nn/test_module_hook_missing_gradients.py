@@ -95,9 +95,7 @@ def _pre_hook_drops_one(m: ModuleType, device: str) -> object:
 def _unused_input(m: ModuleType, device: str) -> object:
     seen: list[object] = []
     mod = _module(
-        m,
-        lambda a, b: a * 2.0,
-        full=lambda _m, gi, go: seen.append([_values(g) for g in gi]),
+        m, lambda a, b: a * 2.0, full=lambda _m, gi, go: seen.append([_values(g) for g in gi])
     )
     a, b = _operands(m, device)
     mod(a, b).sum().backward()

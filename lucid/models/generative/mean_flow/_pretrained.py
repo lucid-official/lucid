@@ -21,10 +21,7 @@ does.
 
 from lucid.models._registry import register_model
 from lucid.models.generative.mean_flow._config import MeanFlowConfig
-from lucid.models.generative.mean_flow._model import (
-    MeanFlowForImageGeneration,
-    MeanFlowModel,
-)
+from lucid.models.generative.mean_flow._model import MeanFlowForImageGeneration, MeanFlowModel
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 __all__ = [

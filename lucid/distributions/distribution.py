@@ -386,10 +386,7 @@ class Distribution:
         return self.__new__(type(self)) if _instance is None else _instance
 
     def _finish_expand(
-        self,
-        new: Self,
-        batch_shape: Sequence[int],
-        event_shape: tuple[int, ...] = (),
+        self, new: Self, batch_shape: Sequence[int], event_shape: tuple[int, ...] = ()
     ) -> Self:
         """Initialise ``new``'s shape metadata and copy ``_validate_args``."""
         new._batch_shape = tuple(batch_shape)
@@ -413,10 +410,7 @@ class Distribution:
         return self._finish_expand(new, batch_shape_t, event_shape)
 
     def _expand_probs_or_logits(
-        self,
-        cls: type[Distribution],
-        batch_shape: Sequence[int],
-        _instance: Self | None,
+        self, cls: type[Distribution], batch_shape: Sequence[int], _instance: Self | None
     ) -> Self:
         """Allocate ``new`` and expand its active ``probs`` or ``logits`` parameter."""
         new = self._get_checked_instance(cls, _instance)

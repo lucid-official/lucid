@@ -217,12 +217,7 @@ class TestSwinWeightsEnums(unittest.TestCase):
             SwinTinyWeights,
         )
 
-        return (
-            SwinTinyWeights,
-            SwinSmallWeights,
-            SwinBaseWeights,
-            SwinLargeWeights,
-        )
+        return (SwinTinyWeights, SwinSmallWeights, SwinBaseWeights, SwinLargeWeights)
 
     def test_default_aliases(self) -> None:
         # Each enum's DEFAULT points at its single shipped tag member.

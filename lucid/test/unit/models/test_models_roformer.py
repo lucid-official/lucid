@@ -194,13 +194,7 @@ class TestRoFormerClassifiers:
 
 class TestRoFormerRegistry:
     @pytest.mark.parametrize(
-        "name",
-        [
-            "roformer",
-            "roformer_mlm",
-            "roformer_cls",
-            "roformer_token_cls",
-        ],
+        "name", ["roformer", "roformer_mlm", "roformer_cls", "roformer_token_cls"]
     )
     def test_registered(self, name: str) -> None:
         assert is_model(name)
@@ -237,9 +231,7 @@ class TestRoFormerExtras:
         m = RoFormerForQuestionAnswering(cfg).eval()
         ids = lucid.tensor([[1, 2, 3, 4, 5, 6]]).long()
         out = m(
-            ids,
-            start_positions=lucid.tensor([2]).long(),
-            end_positions=lucid.tensor([4]).long(),
+            ids, start_positions=lucid.tensor([2]).long(), end_positions=lucid.tensor([4]).long()
         )
         assert tuple(out.start_logits.shape) == (1, 6)
         assert tuple(out.end_logits.shape) == (1, 6)
@@ -302,8 +294,7 @@ class TestRoFormerEncoderPretrainedTransfer:
     """
 
     @pytest.mark.parametrize(
-        "head_cls",
-        [RoFormerForSequenceClassification, RoFormerForTokenClassification],
+        "head_cls", [RoFormerForSequenceClassification, RoFormerForTokenClassification]
     )
     def test_encoder_state_loads_into_roformer_submodule(self, head_cls: type) -> None:
         cfg = _tiny_config()

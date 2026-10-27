@@ -99,10 +99,7 @@ def _magnitudes_for(op: str, num_bins: int) -> tuple[list[float], bool]:
         return (lin(0.9), True)  # factor offset; factor = 1 + signed_mag
     if op == "Posterize":
         # Bits stepped 8 → 4 across the bins (rounded).
-        return (
-            [int(8 - round(i / (last / 4.0))) for i in range(num_bins)],
-            False,
-        )
+        return ([int(8 - round(i / (last / 4.0))) for i in range(num_bins)], False)
     if op == "Solarize":
         # Threshold stepped 1.0 → 0.0.
         return (lin(1.0)[::-1], False)
@@ -261,40 +258,20 @@ def apply_op(
         #    Negate the angle to absorb this.
         deg = math.degrees(math.atan(magnitude))
         return _apply_affine(
-            img,
-            shear_x_deg=-deg,
-            cx=0.0,
-            cy=0.0,
-            interpolation=interpolation,
-            fill=fill,
+            img, shear_x_deg=-deg, cx=0.0, cy=0.0, interpolation=interpolation, fill=fill
         )
     if op == "ShearY":
         # Same two convention flips as ShearX (see comment above).
         deg = math.degrees(math.atan(magnitude))
         return _apply_affine(
-            img,
-            shear_y_deg=-deg,
-            cx=0.0,
-            cy=0.0,
-            interpolation=interpolation,
-            fill=fill,
+            img, shear_y_deg=-deg, cx=0.0, cy=0.0, interpolation=interpolation, fill=fill
         )
     if op == "TranslateX":
         _, w = F._spatial_hw(img)
-        return _apply_affine(
-            img,
-            translate_x=magnitude * w,
-            interpolation=interpolation,
-            fill=fill,
-        )
+        return _apply_affine(img, translate_x=magnitude * w, interpolation=interpolation, fill=fill)
     if op == "TranslateY":
         h, _ = F._spatial_hw(img)
-        return _apply_affine(
-            img,
-            translate_y=magnitude * h,
-            interpolation=interpolation,
-            fill=fill,
-        )
+        return _apply_affine(img, translate_y=magnitude * h, interpolation=interpolation, fill=fill)
     if op == "Rotate":
         # Negate to align with reference-framework / PIL rotation convention.
         # Lucid's ``affine_matrix`` uses the math convention (positive
@@ -302,12 +279,7 @@ def apply_op(
         # uses the image convention (positive degrees → clockwise).
         # Flipping the sign here makes ``apply_op("Rotate", +deg)`` agree
         # with the reference framework's ``_apply_op("Rotate", +deg)``.
-        return _apply_affine(
-            img,
-            angle_deg=-magnitude,
-            interpolation=interpolation,
-            fill=fill,
-        )
+        return _apply_affine(img, angle_deg=-magnitude, interpolation=interpolation, fill=fill)
     if op == "Brightness":
         return F.adjust_brightness(img, 1.0 + magnitude)
     if op == "Color":
@@ -463,11 +435,7 @@ class TrivialAugmentWide(PhotometricTransform[_SingleOpParams]):
     @override
     def _apply_image(self, img: Tensor, params: _SingleOpParams) -> Tensor:
         return apply_op(
-            img,
-            params.op_name,
-            params.magnitude,
-            interpolation=self.interpolation,
-            fill=self.fill,
+            img, params.op_name, params.magnitude, interpolation=self.interpolation, fill=self.fill
         )
 
     @override
@@ -593,13 +561,7 @@ class RandAugment(PhotometricTransform[_RandAugmentParams]):
     def _apply_image(self, img: Tensor, params: _RandAugmentParams) -> Tensor:
         out = img
         for op_name, mag in params.ops:
-            out = apply_op(
-                out,
-                op_name,
-                mag,
-                interpolation=self.interpolation,
-                fill=self.fill,
-            )
+            out = apply_op(out, op_name, mag, interpolation=self.interpolation, fill=self.fill)
         return out
 
     @override
@@ -848,13 +810,7 @@ class AutoAugment(PhotometricTransform[_AutoAugmentParams]):
     def _apply_image(self, img: Tensor, params: _AutoAugmentParams) -> Tensor:
         out = img
         for op_name, mag in params.ops:
-            out = apply_op(
-                out,
-                op_name,
-                mag,
-                interpolation=self.interpolation,
-                fill=self.fill,
-            )
+            out = apply_op(out, op_name, mag, interpolation=self.interpolation, fill=self.fill)
         return out
 
     @override

@@ -75,11 +75,7 @@ def test_one_triangle_solves_a_batch_of_right_hand_sides() -> None:
 
 
 CASES: list[tuple[str, list[tuple[int, ...]], Fn]] = [
-    (
-        "solve_triangular",
-        [(4, 4), (4, 3)],
-        lambda a, b: LA.solve_triangular(a, b, upper=True),
-    ),
+    ("solve_triangular", [(4, 4), (4, 3)], lambda a, b: LA.solve_triangular(a, b, upper=True)),
     (
         "solve_triangular unit lower",
         [(4, 4), (4, 2)],

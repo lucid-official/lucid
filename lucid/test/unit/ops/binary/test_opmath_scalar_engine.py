@@ -93,11 +93,7 @@ class TestReferenceValues:
         assert _call("mul", s, t).tolist() == [0.30859375]
 
     def test_ones_over_1e5_does_not_underflow(self, device: str) -> None:
-        out = _call(
-            "div",
-            lucid.ones(3, dtype=lucid.float16, device=device),
-            _scalar(1e5, device),
-        )
+        out = _call("div", lucid.ones(3, dtype=lucid.float16, device=device), _scalar(1e5, device))
         assert out.tolist() == [1.0013580322265625e-05] * 3
 
     def test_1e5_does_not_overflow(self, device: str) -> None:
@@ -109,11 +105,7 @@ class TestReferenceValues:
         # float32 is a little over a tenth, so the floor is 9, as the
         # reference says.
         t = _half([1.0, -1.0, 7.0], lucid.float16, device)
-        assert _call("floordiv", t, _scalar(0.1, device)).tolist() == [
-            9.0,
-            -10.0,
-            69.0,
-        ]
+        assert _call("floordiv", t, _scalar(0.1, device)).tolist() == [9.0, -10.0, 69.0]
         # f16(1e-3) // 1e-5 is floor(100.04) = 100; with 1e-5 rounded to
         # float16 first it would be floor(99.9) = 99.
         t = _half([1e-3], lucid.float16, device)
@@ -322,11 +314,7 @@ class TestOtherMixedPairsStillRefused:
     @pytest.mark.parametrize("op", ["add", "sub"])
     def test_other_ops_do_not_take_the_pair(self, device: str, op: str) -> None:
         with pytest.raises(_C_engine.DtypeMismatch):
-            _call(
-                op,
-                lucid.ones(3, dtype=lucid.float16, device=device),
-                _scalar(0.1, device),
-            )
+            _call(op, lucid.ones(3, dtype=lucid.float16, device=device), _scalar(0.1, device))
 
 
 class TestTrace:

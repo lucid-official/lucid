@@ -51,10 +51,7 @@ class _LSTMHead(nn.Module):
     def __init__(self, num_layers: int = 1, bidirectional: bool = False) -> None:
         super().__init__()
         self.lstm = nn.LSTM(
-            input_size=16,
-            hidden_size=32,
-            num_layers=num_layers,
-            bidirectional=bidirectional,
+            input_size=16, hidden_size=32, num_layers=num_layers, bidirectional=bidirectional
         )
         self.fc = nn.Linear(32 * (2 if bidirectional else 1), 4)
 
@@ -78,9 +75,7 @@ def test_lstm_bidirectional_compiles() -> None:
 
 def test_lstm_multi_layer_bidirectional_compiles() -> None:
     _compile_and_check(
-        _LSTMHead(num_layers=2, bidirectional=True),
-        metal_tensor(8, 4, 16),
-        should_compile=True,
+        _LSTMHead(num_layers=2, bidirectional=True), metal_tensor(8, 4, 16), should_compile=True
     )
 
 

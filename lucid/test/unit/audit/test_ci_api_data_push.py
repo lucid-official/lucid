@@ -119,11 +119,7 @@ def _env(tmp_path: Path) -> dict[str, str]:
         "[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n"
         "[gc]\n\tauto = 0\n[receive]\n\tautogc = false\n"
     )
-    env.update(
-        GIT_CONFIG_GLOBAL=str(config),
-        GIT_CONFIG_NOSYSTEM="1",
-        PYTHON_BIN=sys.executable,
-    )
+    env.update(GIT_CONFIG_GLOBAL=str(config), GIT_CONFIG_NOSYSTEM="1", PYTHON_BIN=sys.executable)
     return env
 
 
@@ -217,15 +213,7 @@ class _Fixture:
     def nightly_build(self) -> None:
         """Check out as actions/checkout does — depth 1 — and rebuild."""
         subprocess.run(
-            [
-                "git",
-                "clone",
-                "-q",
-                "--depth",
-                "1",
-                f"file://{self.origin}",
-                str(self.runner),
-            ],
+            ["git", "clone", "-q", "--depth", "1", f"file://{self.origin}", str(self.runner)],
             env=self.env,
             check=True,
         )
@@ -267,9 +255,7 @@ class _Fixture:
         """A fresh clone of what main now holds."""
         where = tmp_path / "after"
         subprocess.run(
-            ["git", "clone", "-q", str(self.origin), str(where)],
-            env=self.env,
-            check=True,
+            ["git", "clone", "-q", str(self.origin), str(where)], env=self.env, check=True
         )
         return where
 
@@ -316,10 +302,7 @@ def test_a_main_that_moved_gets_the_refresh_with_its_moved_pages_rebuilt(
     after = repo.main_tree(tmp_path)
     log = _git(after, repo.env, "log", "--format=%s", "-4").splitlines()
     assert log[0].startswith("docs(api-data): nightly refresh"), log
-    assert log[1:3] == [
-        f"change {API}/_summaries.json",
-        "change lucid/beta/__init__.py",
-    ]
+    assert log[1:3] == [f"change {API}/_summaries.json", "change lucid/beta/__init__.py"]
     beta = repo.page(after, "lucid.beta")
     assert beta["source"] == "BETA = 2\n"
     # Rebuilt at the tip it was carried onto — a commit on main, so its
@@ -377,14 +360,7 @@ def test_a_full_regeneration_on_main_does_not_rebuild_anything(
     assert "rebuilding 0 page(s) there" in result.stdout, result.stdout
     after = repo.main_tree(tmp_path)
     for slug in ("lucid.alpha", "lucid.beta", "lucid.models.gamma", "lucid.ops"):
-        _git(
-            after,
-            repo.env,
-            "merge-base",
-            "--is-ancestor",
-            repo.page(after, slug)["sha"],
-            "HEAD",
-        )
+        _git(after, repo.env, "merge-base", "--is-ancestor", repo.page(after, slug)["sha"], "HEAD")
     assert repo.page(after, "lucid.alpha")["source"] == "ALPHA = 2\n"
     assert repo.check(after).returncode == 0, repo.check(after).stdout
 
@@ -410,15 +386,9 @@ def test_a_summary_that_moved_rebuilds_the_page_embedding_it(
     ("env", "command"),
     [
         # In a subshell, inside a function.
-        (
-            {"STUB_POST_FAIL": "1"},
-            '`"$PYTHON_BIN" "scripts/$step.py"` failed with exit 3',
-        ),
+        ({"STUB_POST_FAIL": "1"}, '`"$PYTHON_BIN" "scripts/$step.py"` failed with exit 3'),
         # In the main loop.
-        (
-            {"LUCID_API_DATA_REMOTE": "nowhere"},
-            '`git fetch -q "$REMOTE" "$BRANCH"` failed',
-        ),
+        ({"LUCID_API_DATA_REMOTE": "nowhere"}, '`git fetch -q "$REMOTE" "$BRANCH"` failed'),
     ],
     ids=["post-processor", "fetch"],
 )
@@ -449,9 +419,7 @@ def test_a_module_main_deleted_stays_deleted(repo: _Fixture, tmp_path: Path) -> 
     assert repo.check(after).returncode == 0, repo.check(after).stdout
 
 
-def test_a_main_that_keeps_moving_fails_loudly_naming_the_stale_slugs(
-    repo: _Fixture,
-) -> None:
+def test_a_main_that_keeps_moving_fails_loudly_naming_the_stale_slugs(repo: _Fixture) -> None:
     repo.nightly_build()
     repo.land("lucid/beta/__init__.py", "BETA = 2\n")
     # Every partial rebuild sees main move again before its push.

@@ -184,9 +184,7 @@ def stage_zero_stuff(builder: Any, source: str, plan: StuffRewrite) -> str:
             continue
         split = current[:axis] + [current[axis], 1] + current[axis + 1 :]
         value = builder.emit(
-            "reshape",
-            [("x", value), ("shape", builder.shape_operand(split))],
-            split,
+            "reshape", [("x", value), ("shape", builder.shape_operand(split))], split
         )
         pads = [0] * (2 * len(split))
         pads[2 * (axis + 1) + 1] = factor - 1
@@ -204,9 +202,7 @@ def stage_zero_stuff(builder: Any, source: str, plan: StuffRewrite) -> str:
         )
         current[axis] = current[axis] * factor if current[axis] >= 0 else -1
         value = builder.emit(
-            "reshape",
-            [("x", value), ("shape", builder.shape_operand(current))],
-            list(current),
+            "reshape", [("x", value), ("shape", builder.shape_operand(current))], list(current)
         )
     return value
 
@@ -274,15 +270,11 @@ def stage_permutation(builder: Any, source: str, plan: WindowRewrite) -> str:
             right = _volume(shape[i + 2 :])
             grouped = [left, shape[i], shape[i + 1], right]
             viewed = builder.emit(
-                "reshape",
-                [("x", name), ("shape", builder.shape_operand(grouped))],
-                grouped,
+                "reshape", [("x", name), ("shape", builder.shape_operand(grouped))], grouped
             )
             swapped = [left, shape[i + 1], shape[i], right]
             name = builder.emit(
-                "transpose",
-                [("x", viewed), ("perm", builder.const_ints([0, 2, 1, 3]))],
-                swapped,
+                "transpose", [("x", viewed), ("perm", builder.const_ints([0, 2, 1, 3]))], swapped
             )
             shape[i], shape[i + 1] = shape[i + 1], shape[i]
             order[i], order[i + 1] = order[i + 1], order[i]

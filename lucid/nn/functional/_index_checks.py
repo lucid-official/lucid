@@ -240,10 +240,7 @@ def _poison(scale: Tensor, usable: Tensor | None, like: Tensor, dtype: _dtype) -
 @overload
 def _poison(scale: None, usable: Tensor | None, like: Tensor, dtype: _dtype) -> Tensor | None: ...
 def _poison(
-    scale: Tensor | None,
-    usable: Tensor | None,
-    like: Tensor,
-    dtype: _dtype,
+    scale: Tensor | None, usable: Tensor | None, like: Tensor, dtype: _dtype
 ) -> Tensor | None:
     """The per-sample factor ``scale``, NaN at each out-of-range target.
 
@@ -261,14 +258,7 @@ def _poison(
 # ── tables and class axes ───────────────────────────────────────────────────
 
 
-def _check_indices(
-    index: Tensor,
-    extent: int,
-    op: str,
-    *,
-    what: str,
-    axis: str,
-) -> None:
+def _check_indices(index: Tensor, extent: int, op: str, *, what: str, axis: str) -> None:
     """Refuse an entry of ``index`` outside ``[0, extent)`` with
     ``IndexError``, before the consumer reads with it.
 
@@ -290,13 +280,7 @@ def _check_indices(
 
 
 #: The integer dtypes an embedding table can be indexed with.
-_TABLE_INDEX_DTYPES = (
-    _lucid.int8,
-    _lucid.int16,
-    _lucid.int32,
-    _lucid.int64,
-    _lucid.bool_,
-)
+_TABLE_INDEX_DTYPES = (_lucid.int8, _lucid.int16, _lucid.int32, _lucid.int64, _lucid.bool_)
 
 
 def _check_table(x: Tensor, weight: Tensor, op: str) -> None:
@@ -316,20 +300,11 @@ def _check_table(x: Tensor, weight: Tensor, op: str) -> None:
             f"cast with .to(lucid.int64) first"
         )
     rows = int(weight.shape[0])
-    _check_indices(
-        x,
-        rows,
-        op,
-        what="index",
-        axis=f"a table with {rows} entries",
-    )
+    _check_indices(x, rows, op, what="index", axis=f"a table with {rows} entries")
 
 
 def _check_unpool(
-    x: Tensor,
-    indices: Tensor,
-    output_spatial: tuple[int, ...],
-    op: str,
+    x: Tensor, indices: Tensor, output_spatial: tuple[int, ...], op: str
 ) -> tuple[Tensor, int]:
     """Check the flat spatial ``indices`` and ``output_spatial`` extents of
     ``max_unpool{1,2,3}d``, before its ``scatter_add``.

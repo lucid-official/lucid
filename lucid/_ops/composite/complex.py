@@ -215,12 +215,7 @@ def view_as_complex(input: Tensor) -> Tensor:
     return _wrap(_C_engine.view_as_complex(_unwrap(input)))
 
 
-__all__ = [
-    "angle",
-    "polar",
-    "view_as_real",
-    "view_as_complex",
-]
+__all__ = ["angle", "polar", "view_as_real", "view_as_complex"]
 
 # Bound at runtime, not only for type checking: PEP 649 evaluates a
 # function's annotations in its own module globals when something asks

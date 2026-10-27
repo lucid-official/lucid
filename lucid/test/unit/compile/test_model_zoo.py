@@ -24,10 +24,7 @@ import lucid
 import lucid.models as M
 import lucid.nn as nn
 
-from lucid.test.unit.compile._helpers import (
-    assert_compile_parity,
-    metal_tensor,
-)
+from lucid.test.unit.compile._helpers import assert_compile_parity, metal_tensor
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
 pytestmark = pytest.mark.usefixtures("inference")
@@ -91,12 +88,7 @@ MODEL_CASES = [
         lambda: metal_tensor(1, 3, 224, 224),
         id="vit_base_16",
     ),
-    pytest.param(
-        "lstm_head",
-        _LstmHead,
-        lambda: metal_tensor(8, 4, 16),
-        id="lstm_head",
-    ),
+    pytest.param("lstm_head", _LstmHead, lambda: metal_tensor(8, 4, 16), id="lstm_head"),
 ]
 
 

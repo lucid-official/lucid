@@ -199,11 +199,7 @@ class TestBERTEncoderPretrainedTransfer:
 
     @pytest.mark.parametrize(
         "head_cls",
-        [
-            BERTForSequenceClassification,
-            BERTForTokenClassification,
-            BERTForQuestionAnswering,
-        ],
+        [BERTForSequenceClassification, BERTForTokenClassification, BERTForQuestionAnswering],
     )
     def test_encoder_state_loads_into_bert_submodule(self, head_cls: type) -> None:
         cfg = _tiny_config()
@@ -244,8 +240,7 @@ class TestBERTEncoderPretrainedTransfer:
         assert isinstance(m, BERTForSequenceClassification)
 
     @pytest.mark.parametrize(
-        "factory_name",
-        ["bert_base_cls", "bert_large_cls", "bert_base_token_cls", "bert_base_qa"],
+        "factory_name", ["bert_base_cls", "bert_large_cls", "bert_base_token_cls", "bert_base_qa"]
     )
     def test_factory_exposes_weights_kwarg(self, factory_name: str) -> None:
         import importlib
@@ -280,12 +275,7 @@ class TestBERTTaskWeights:
         ],
     )
     def test_entry_fields(
-        self,
-        enum_name: str,
-        tag: str,
-        slug: str,
-        num_classes: int,
-        license_id: str,
+        self, enum_name: str, tag: str, slug: str, num_classes: int, license_id: str
     ) -> None:
         cls = self._enum(enum_name)
         assert cls.DEFAULT is cls[tag]
@@ -349,15 +339,7 @@ class TestBERTTaskWeights:
 
 class TestBERTRegistry:
     @pytest.mark.parametrize(
-        "name",
-        [
-            "bert_tiny",
-            "bert_mini",
-            "bert_small",
-            "bert_medium",
-            "bert_base",
-            "bert_large",
-        ],
+        "name", ["bert_tiny", "bert_mini", "bert_small", "bert_medium", "bert_base", "bert_large"]
     )
     def test_base_variants_registered(self, name: str) -> None:
         assert is_model(name)
@@ -400,11 +382,7 @@ class TestBERTRegistry:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-from lucid.models import (
-    BERTForCausalLM,
-    BERTForNextSentencePrediction,
-    BERTForPreTraining,
-)
+from lucid.models import BERTForCausalLM, BERTForNextSentencePrediction, BERTForPreTraining
 
 
 class TestBERTForPreTraining:

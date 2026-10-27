@@ -16,10 +16,7 @@ import pytest
 from lucid.test._fixtures.ref_framework import ref_module, require_ref_vision
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config,
-    items: list[pytest.Item],
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if ref_module() is not None:
         return
     skip_marker = pytest.mark.skip(

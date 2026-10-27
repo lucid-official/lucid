@@ -148,20 +148,13 @@ class TestVAEForImageGeneration:
 
 
 class TestVAERegistry:
-    @pytest.mark.parametrize(
-        "name",
-        ["vae", "hvae", "vae_gen", "hvae_gen"],
-    )
+    @pytest.mark.parametrize("name", ["vae", "hvae", "vae_gen", "hvae_gen"])
     def test_registered(self, name: str) -> None:
         assert is_model(name)
 
     def test_factory_with_override(self) -> None:
         m = create_model(
-            "vae",
-            sample_size=16,
-            in_channels=3,
-            latent_dim=8,
-            down_block_channels=(8, 16),
+            "vae", sample_size=16, in_channels=3, latent_dim=8, down_block_channels=(8, 16)
         )
         assert isinstance(m, VAEModel)
         out = m.eval()(lucid.randn((1, 3, 16, 16)))
@@ -213,11 +206,7 @@ class TestHierarchicalVAEConfig:
 
     def test_zero_entry_rejected(self) -> None:
         with pytest.raises(ValueError, match="latent_dim entries"):
-            VAEConfig(
-                latent_dim=(8, 0, 16),
-                down_block_channels=(16, 32, 64),
-                sample_size=32,
-            )
+            VAEConfig(latent_dim=(8, 0, 16), down_block_channels=(16, 32, 64), sample_size=32)
 
 
 class TestHierarchicalVAEModel:

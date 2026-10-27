@@ -121,15 +121,7 @@ _REFUSED = [
     (3, TypeError),
     ([1], TypeError),
 ]
-_REFUSED_IDS = [
-    "dtype name",
-    "prefixed dtype name",
-    "bogus",
-    "float",
-    "int",
-    "int value",
-    "list",
-]
+_REFUSED_IDS = ["dtype name", "prefixed dtype name", "bogus", "float", "int", "int value", "list"]
 
 
 def _spelled(spelling, prefix):

@@ -6,18 +6,11 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions.constraints import (
-    Constraint,
-    interval,
-    real,
-)
+from lucid.distributions.constraints import Constraint, interval, real
 from lucid.distributions.distribution import Distribution
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _broadcast_pair,
-)
+from lucid.distributions._util import _as_tensor, _broadcast_pair
 
 
 class Uniform(Distribution):
@@ -93,10 +86,7 @@ class Uniform(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        low: Tensor | float,
-        high: Tensor | float,
-        validate_args: bool | None = None,
+        self, low: Tensor | float, high: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Construct a Uniform distribution on ``[low, high)``.
 
@@ -133,9 +123,7 @@ class Uniform(Distribution):
         self.high = _as_tensor(high)
         self.low, self.high = _broadcast_pair(self.low, self.high)
         super().__init__(
-            batch_shape=tuple(self.low.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.low.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -304,12 +292,7 @@ class Uniform(Distribution):
         return lucid.where(
             in_support,
             log_density + value * 0,
-            lucid.full(
-                tuple(value.shape),
-                -math.inf,
-                device=value.device,
-                dtype=value.dtype,
-            ),
+            lucid.full(tuple(value.shape), -math.inf, device=value.device, dtype=value.dtype),
         )
 
     @override

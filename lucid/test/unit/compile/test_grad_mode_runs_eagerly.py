@@ -335,9 +335,7 @@ def test_unfreezing_after_the_trace_is_seen() -> None:
 
 
 @_METAL
-def test_alternating_grad_and_no_grad_traces_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_alternating_grad_and_no_grad_traces_once(monkeypatch: pytest.MonkeyPatch) -> None:
     traces = 0
     trace = CompiledModule._trace_forward
 

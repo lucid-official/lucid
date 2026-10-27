@@ -117,13 +117,7 @@ def test_sdpa_refuses_what_the_reference_refuses(
 @pytest.mark.parametrize("spelling", ["spatial", "full"])
 @pytest.mark.parametrize("lazy", [False, True], ids=["eager", "lazy"])
 def test_conv_transpose_output_size_matches_the_reference(
-    ref: ModuleType,
-    device: str,
-    rank: int,
-    batched: bool,
-    extra: int,
-    spelling: str,
-    lazy: bool,
+    ref: ModuleType, device: str, rank: int, batched: bool, extra: int, spelling: str, lazy: bool
 ) -> None:
     kwargs = dict(kernel_size=3, stride=3, padding=1, dilation=1)
     ref_layer = getattr(ref.nn, f"ConvTranspose{rank}d")(3, 2, **kwargs)
@@ -318,11 +312,7 @@ def test_fractional_max_pool_matches_the_reference(
         **kwargs,
     )
     want, want_idx = getattr(ref.nn.functional, name)(
-        xr,
-        kernel,
-        return_indices=True,
-        _random_samples=ref.from_numpy(samples),
-        **kwargs,
+        xr, kernel, return_indices=True, _random_samples=ref.from_numpy(samples), **kwargs
     )
     _close(got, want)
     np.testing.assert_array_equal(got_idx.numpy(), want_idx.numpy())

@@ -481,13 +481,7 @@ class _MBConv(nn.Module):
         # so we store padding=0 and apply _tf_same_pad2d manually in forward.
         self._conv2_stride = stride
         self.conv2_kxk = nn.Conv2d(
-            mid,
-            mid,
-            3,
-            stride=stride,
-            padding=0 if stride > 1 else 1,
-            groups=mid,
-            bias=False,
+            mid, mid, 3, stride=stride, padding=0 if stride > 1 else 1, groups=mid, bias=False
         )
         self.norm2 = nn.BatchNorm2d(mid, eps=1e-3, momentum=_BN_MOMENTUM)
         self.se = _SE(mid)
@@ -699,12 +693,7 @@ class _Stem(nn.Module):
 
 def _build_maxvit(
     cfg: MaxViTConfig,
-) -> tuple[
-    _Stem,
-    nn.ModuleList[_MaxViTStage],
-    list[FeatureInfo],
-    int,
-]:
+) -> tuple[_Stem, nn.ModuleList[_MaxViTStage], list[FeatureInfo], int]:
     """Build shared MaxViT body: stem + stages.
 
     Stem: Conv3×3(s=2, bias) → BN → GELU → Conv3×3(s=1, bias)
@@ -970,11 +959,7 @@ class MaxViTForImageClassification(ImageClassificationModel, ClassificationHeadM
         self.head.fc = nn.Linear(self.head.fc.in_features, num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)

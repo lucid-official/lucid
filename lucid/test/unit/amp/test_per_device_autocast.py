@@ -26,10 +26,7 @@ OFF = (False, None)
 
 
 def _state(device_type: str | None = None) -> tuple[bool, lucid.dtype | None]:
-    return (
-        autocast.is_autocast_enabled(device_type),
-        autocast.get_autocast_dtype(device_type),
-    )
+    return (autocast.is_autocast_enabled(device_type), autocast.get_autocast_dtype(device_type))
 
 
 @pytest.fixture(autouse=True)
@@ -140,10 +137,7 @@ def test_metal_autocast_does_not_cast_cpu_ops() -> None:
 
 @pytest.mark.skipif(not metal_available(), reason="Metal not available")
 def test_nested_cpu_and_metal_autocast_independent_dtypes() -> None:
-    with (
-        autocast("cpu", dtype=lucid.bfloat16),
-        autocast("metal", dtype=lucid.float16),
-    ):
+    with autocast("cpu", dtype=lucid.bfloat16), autocast("metal", dtype=lucid.float16):
         assert _state("cpu") == (True, lucid.bfloat16)
         assert _state("metal") == (True, lucid.float16)
         cpu_dtypes = _run_promote_ops("cpu")
@@ -170,10 +164,7 @@ def test_inner_disabled_scope_only_disables_target_device() -> None:
     x_cpu = lucid.randn(4, 4, device="cpu", dtype=lucid.float32)
     x_gpu = lucid.randn(4, 4, device="metal", dtype=lucid.float32)
 
-    with (
-        autocast("cpu", dtype=lucid.bfloat16),
-        autocast("metal", dtype=lucid.float16),
-    ):
+    with autocast("cpu", dtype=lucid.bfloat16), autocast("metal", dtype=lucid.float16):
         assert (x_cpu @ x_cpu).dtype == lucid.bfloat16
         assert (x_gpu @ x_gpu).dtype == lucid.float16
 
@@ -218,10 +209,7 @@ def test_inner_disabled_scope_only_disables_target_device() -> None:
 )
 @pytest.mark.parametrize("requires_grad", [False, True])
 def test_var_std_logsumexp_float32_stay_float32_under_autocast(
-    ref: object,
-    device: str,
-    amp_dtype: lucid.dtype,
-    requires_grad: bool,
+    ref: object, device: str, amp_dtype: lucid.dtype, requires_grad: bool
 ) -> None:
     """LCD-120: ``var``, ``std``, and ``logsumexp`` of float32 inputs stay float32
     under autocast even though their composite steps use elementwise helpers."""

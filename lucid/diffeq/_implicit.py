@@ -129,11 +129,7 @@ def _tolerance(y: Tensor) -> float:
 
 
 def _broyden(
-    residual: Callable[[Tensor], Tensor],
-    guess: Tensor,
-    max_iters: int,
-    tol: float,
-    where: str,
+    residual: Callable[[Tensor], Tensor], guess: Tensor, max_iters: int, tol: float, where: str
 ) -> Tensor:
     """Solve ``residual(x) == 0`` by Broyden's method, starting from ``guess``.
 
@@ -303,11 +299,7 @@ def _step(
 
             seed = check(func(scalar(stage_t[i]), known), step_index, i)
             solved = _broyden(
-                residual,
-                seed.reshape(width),
-                opts.max_iters,
-                tol,
-                f"t={t0!r}, stage {i}",
+                residual, seed.reshape(width), opts.max_iters, tol, f"t={t0!r}, stage {i}"
             )
             ks.append(solved.reshape(shape))
         return _fused.combine(y, ks, tableau.b, dt)
@@ -326,11 +318,7 @@ def _step(
 
     initial = check(func(scalar(t0), y), step_index, 0).reshape(width)
     solved = _broyden(
-        coupled,
-        lucid.concat([initial] * stages, dim=0),
-        opts.max_iters,
-        tol,
-        f"t={t0!r}",
+        coupled, lucid.concat([initial] * stages, dim=0), opts.max_iters, tol, f"t={t0!r}"
     )
     ks = [solved[i * width : (i + 1) * width].reshape(shape) for i in range(stages)]
     return _fused.combine(y, ks, tableau.b, dt)

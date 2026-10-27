@@ -67,11 +67,7 @@ def _rosenbrock(lib: _Lib, x: Any) -> Any:
 
 
 def _run(
-    lib: _Lib,
-    objective: Callable[[_Lib, Any], Any],
-    x0: np.ndarray,
-    steps: int = 1,
-    **kwargs: Any,
+    lib: _Lib, objective: Callable[[_Lib, Any], Any], x0: np.ndarray, steps: int = 1, **kwargs: Any
 ) -> tuple[np.ndarray, int, float, Any]:
     """Return the trajectory, closure calls, first ``step`` return, optimizer."""
     x = lib.param(x0)
@@ -163,14 +159,7 @@ def test_rosenbrock_trajectory_matches_the_reference(
     # lr 0.5 and five iterations per step keep both runs well inside the
     # region where float32 rounding does not change the path.
     got, want = _both(
-        ref,
-        device,
-        _rosenbrock,
-        x0,
-        steps=3,
-        lr=0.5,
-        max_iter=5,
-        line_search_fn=line_search_fn,
+        ref, device, _rosenbrock, x0, steps=3, lr=0.5, max_iter=5, line_search_fn=line_search_fn
     )
     assert got[1] == want[1], "closure calls"
     np.testing.assert_allclose(got[0], want[0], rtol=0, atol=1e-4)
@@ -329,13 +318,7 @@ def test_a_reloaded_state_continues_identically(device: str, line_search_fn: str
 @pytest.mark.parametrize("line_search_fn", _LINE_SEARCHES)
 def test_state_keys_are_the_references(ref: Any, line_search_fn: str | None) -> None:
     got, want = _both(
-        ref,
-        "cpu",
-        _rosenbrock,
-        _ROSEN_4,
-        lr=0.5,
-        max_iter=4,
-        line_search_fn=line_search_fn,
+        ref, "cpu", _rosenbrock, _ROSEN_4, lr=0.5, max_iter=4, line_search_fn=line_search_fn
     )
     mine = got[3].state_dict()["state"]
     theirs = want[3].state_dict()["state"]
@@ -373,10 +356,7 @@ def test_a_second_group_cannot_be_added_later() -> None:
 
 @pytest.mark.parametrize(
     ("kwargs", "message"),
-    [
-        ({"line_search_fn": "armijo"}, "line_search_fn"),
-        ({"history_size": 0}, "history_size"),
-    ],
+    [({"line_search_fn": "armijo"}, "line_search_fn"), ({"history_size": 0}, "history_size")],
 )
 def test_an_option_the_step_cannot_run_is_refused_up_front(
     kwargs: dict[str, Any], message: str

@@ -88,17 +88,11 @@ def test_resnet18_pretrained_stage_activations_match(ref) -> None:
     assert set(got) == set(wanted) == {name for name, _, _ in pairs}
     for name in got:
         np.testing.assert_allclose(
-            got[name],
-            wanted[name],
-            atol=1e-4,
-            rtol=1e-4,
-            err_msg=f"first differing stage: {name}",
+            got[name], wanted[name], atol=1e-4, rtol=1e-4, err_msg=f"first differing stage: {name}"
         )
 
 
-def test_model_construction_failure_is_not_reported_as_a_download_skip(
-    monkeypatch,
-) -> None:
+def test_model_construction_failure_is_not_reported_as_a_download_skip(monkeypatch) -> None:
     import lucid.models.vision.resnet as resnet
 
     def broken(**kwargs):

@@ -195,10 +195,7 @@ _CASES: dict[str, _Case] = {
     ),
     "grid_sample_5d_nearest": _Case(
         lambda F, m: F.grid_sample(
-            m(1, 2, 2, 3, 3),
-            _grid(m, 1, 2, 2, 2, 3),
-            mode="nearest",
-            align_corners=True,
+            m(1, 2, 2, 3, 3), _grid(m, 1, 2, 2, 2, 3), mode="nearest", align_corners=True
         ),
         "half",
         "float32",
@@ -212,19 +209,13 @@ _CASES: dict[str, _Case] = {
     ),
     # The resampling composite: no row, as the reference's kernels have none.
     "interpolate_linear": _Case(
-        lambda F, m: F.interpolate(m(1, 2, 5), scale_factor=1.5, mode="linear"),
-        "half",
-        "half",
+        lambda F, m: F.interpolate(m(1, 2, 5), scale_factor=1.5, mode="linear"), "half", "half"
     ),
     "interpolate_bicubic": _Case(
-        lambda F, m: F.interpolate(m(1, 1, 3, 3), scale_factor=2, mode="bicubic"),
-        "half",
-        "half",
+        lambda F, m: F.interpolate(m(1, 1, 3, 3), scale_factor=2, mode="bicubic"), "half", "half"
     ),
     "interpolate_bilinear_fractional": _Case(
-        lambda F, m: F.interpolate(m(1, 1, 3, 3), scale_factor=1.7, mode="bilinear"),
-        "half",
-        "half",
+        lambda F, m: F.interpolate(m(1, 1, 3, 3), scale_factor=1.7, mode="bilinear"), "half", "half"
     ),
     "interpolate_bilinear_antialias": _Case(
         lambda F, m: F.interpolate(m(1, 1, 8, 8), size=(3, 3), mode="bilinear", antialias=True),
@@ -248,16 +239,10 @@ _CASES: dict[str, _Case] = {
     # half case keeps its dtype where the reference runs float32: the
     # documented ``pad`` departure (LCD-500 E2, AmpPolicyTable.def).
     "pad_reflect": _Case(
-        lambda F, m: F.pad(m(1, 2, 5), (1, 2), mode="reflect"),
-        "half",
-        "half",
-        devices=("metal",),
+        lambda F, m: F.pad(m(1, 2, 5), (1, 2), mode="reflect"), "half", "half", devices=("metal",)
     ),
     "pad_replicate": _Case(
-        lambda F, m: F.pad(m(1, 2, 5), (1, 2), mode="replicate"),
-        "half",
-        "half",
-        devices=("metal",),
+        lambda F, m: F.pad(m(1, 2, 5), (1, 2), mode="replicate"), "half", "half", devices=("metal",)
     ),
     # No row, as the reference's norm and log_sigmoid have none: the FP32
     # Metal rows of vector_norm and softplus inside must not apply.
@@ -324,8 +309,7 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
         decomposed=True,
     ),
     ("l1_loss", "float32_target"): _Loss(
-        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1).float(), reduction=r),
-        mixed=True,
+        lambda F, m, r: F.l1_loss(m(4, 4), m(4, 4, seed=1).float(), reduction=r), mixed=True
     ),
     ("smooth_l1_loss", ""): _Loss(
         lambda F, m, r: F.smooth_l1_loss(m(4, 4), m(4, 4, seed=1), reduction=r, beta=0.5)
@@ -415,11 +399,7 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
     # Lucid's Metal row is FP32 too; the reference has no MPS kernel.
     ("ctc_loss", ""): _Loss(
         lambda F, m, r: F.ctc_loss(
-            m(5, 2, 4),
-            m.ints([[1, 2], [3, 1]]),
-            m.ints([5, 5]),
-            m.ints([2, 2]),
-            reduction=r,
+            m(5, 2, 4), m.ints([[1, 2], [3, 1]]), m.ints([5, 5]), m.ints([2, 2]), reduction=r
         )
     ),
     ("multi_margin_loss", ""): _Loss(
@@ -430,9 +410,7 @@ _LOSSES: dict[tuple[str, str], _Loss] = {
     ),
     ("multilabel_margin_loss", ""): _Loss(
         lambda F, m, r: F.multilabel_margin_loss(
-            m(3, 4),
-            m.ints([[0, 2, -1, 0], [1, -1, 0, 0], [3, 0, -1, 0]]),
-            reduction=r,
+            m(3, 4), m.ints([[0, 2, -1, 0], [1, -1, 0, 0], [3, 0, -1, 0]]), reduction=r
         )
     ),
     ("soft_margin_loss", ""): _Loss(
@@ -533,11 +511,7 @@ def test_a_composite_under_autocast_runs_and_keeps_its_values(
     # decomposed case's parts apply theirs, so it rounds between them.
     tol = _TOL[autocast_dt] if case.decomposed else _EXACT
     np.testing.assert_allclose(
-        out.detach().float().numpy(),
-        want.float().numpy(),
-        rtol=tol,
-        atol=tol,
-        err_msg=name,
+        out.detach().float().numpy(), want.float().numpy(), rtol=tol, atol=tol, err_msg=name
     )
 
 
@@ -653,10 +627,7 @@ _COMPUTED_NAMES: dict[tuple[str, str], frozenset[str]] = {
 }
 # The entries themselves, which hand on their caller's name.
 _FORWARDING = frozenset(
-    {
-        ("lucid/_ops/_autocast.py", "_autocast_entry"),
-        ("lucid/_ops/_autocast.py", "at_entry"),
-    }
+    {("lucid/_ops/_autocast.py", "_autocast_entry"), ("lucid/_ops/_autocast.py", "at_entry")}
 )
 
 

@@ -368,9 +368,7 @@ def _register(
 ) -> _Callable[[_Callable[[], dict[str, object]]], _Callable[[], dict[str, object]]]:
     """Register a batch loader for a set of lazily-imported names."""
 
-    def decorator(
-        fn: _Callable[[], dict[str, object]],
-    ) -> _Callable[[], dict[str, object]]:
+    def decorator(fn: _Callable[[], dict[str, object]]) -> _Callable[[], dict[str, object]]:
         """Bind ``fn`` as the loader for every name in the enclosing group."""
         for name in names:
             _GROUP_LOADERS[name] = fn

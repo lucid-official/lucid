@@ -191,11 +191,7 @@ _EXACT: list[tuple[str, lucid.dtype, Callable[[Any, Any], Any], Any]] = [
 
 @pytest.mark.parametrize("dt,op,s", [c[1:] for c in _EXACT], ids=[c[0] for c in _EXACT])
 def test_integer_and_complex_numbers_arrive_exactly(
-    dt: lucid.dtype,
-    op: Callable[[Any, Any], Any],
-    s: Any,
-    device: str,
-    ref: ModuleType,
+    dt: lucid.dtype, op: Callable[[Any, Any], Any], s: Any, device: str, ref: ModuleType
 ) -> None:
     base = [1, -2] if dt is not lucid.complex64 else [1 + 1j, -2 + 0.5j]
     rt = ref.tensor(base, dtype=getattr(ref, str(dt).removeprefix("lucid.")))

@@ -323,8 +323,7 @@ class MotionBlur(PhotometricTransform[MotionParam]):
         kernel is symmetric under 180° rotation.
         """
         return MotionParam(
-            ksize=_odd(_random.randint(3, self.blur_limit + 1)),
-            angle=_random.uniform(0.0, 180.0),
+            ksize=_odd(_random.randint(3, self.blur_limit + 1)), angle=_random.uniform(0.0, 180.0)
         )
 
     @override
@@ -440,10 +439,7 @@ class GaussNoise(PhotometricTransform[NoiseParam]):
     """
 
     def __init__(
-        self,
-        var_limit: tuple[float, float] = (10.0, 50.0),
-        mean: float = 0.0,
-        p: float = 0.5,
+        self, var_limit: tuple[float, float] = (10.0, 50.0), mean: float = 0.0, p: float = 0.5
     ) -> None:
         super().__init__(p=p)
         self.var_limit = var_limit
@@ -635,12 +631,7 @@ class Downscale(PhotometricTransform[ScaleParam]):
     (3, 32, 32)
     """
 
-    def __init__(
-        self,
-        scale_min: float = 0.25,
-        scale_max: float = 0.25,
-        p: float = 0.5,
-    ) -> None:
+    def __init__(self, scale_min: float = 0.25, scale_max: float = 0.25, p: float = 0.5) -> None:
         super().__init__(p=p)
         self.scale_min = scale_min
         self.scale_max = scale_max

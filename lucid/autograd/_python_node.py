@@ -59,10 +59,7 @@ def _sum_to(grad: Tensor, shape: tuple[int, ...]) -> Tensor:
 
 
 def _per_input(
-    name: str,
-    grads: list[object],
-    is_tensor_arg: tuple[bool, ...],
-    n_tensors: int,
+    name: str, grads: list[object], is_tensor_arg: tuple[bool, ...], n_tensors: int
 ) -> list[object]:
     """Line ``backward``'s results up with the node's tensor inputs.
 
@@ -227,10 +224,7 @@ def _register(
         _cpp_ctx: object, *grad_impls: _C_engine.TensorImpl | None
     ) -> list[_C_engine.TensorImpl | None]:
         """Called by C++ engine: (cpp_ctx, *grad_impls) → list[TensorImpl | None]"""
-        grads = fn_class.backward(
-            py_ctx,
-            *(None if g is None else _wrap(g) for g in grad_impls),
-        )
+        grads = fn_class.backward(py_ctx, *(None if g is None else _wrap(g) for g in grad_impls))
         returned: list[object] = list(grads) if isinstance(grads, (list, tuple)) else [grads]
 
         result: list[_C_engine.TensorImpl | None] = []

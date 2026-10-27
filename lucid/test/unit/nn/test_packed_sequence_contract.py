@@ -206,14 +206,8 @@ def test_pad_sequence(ref: ModuleType, case: str, batch_first: bool, device: str
     "build, error",
     [
         (lambda d: [], ValueError),
-        (
-            lambda d: [lucid.tensor(1.0, device=d), lucid.tensor(2.0, device=d)],
-            ValueError,
-        ),
-        (
-            lambda d: [lucid.zeros(2, 3, device=d), lucid.zeros(3, 4, device=d)],
-            ValueError,
-        ),
+        (lambda d: [lucid.tensor(1.0, device=d), lucid.tensor(2.0, device=d)], ValueError),
+        (lambda d: [lucid.zeros(2, 3, device=d), lucid.zeros(3, 4, device=d)], ValueError),
         (lambda d: [lucid.zeros(2, 3, device=d), lucid.zeros(3, device=d)], ValueError),
     ],
     ids=["empty", "zero-d", "trailing-shape", "rank"],

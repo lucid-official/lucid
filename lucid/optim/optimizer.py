@@ -44,9 +44,7 @@ class _EngineOptimizer(Protocol):
 
     def set_hyperparams(self, values: dict[str, Any]) -> None: ...
 
-    def state_buffers(
-        self,
-    ) -> Sequence[tuple[str, Sequence[_C_engine.TensorImpl | None]]]: ...
+    def state_buffers(self) -> Sequence[tuple[str, Sequence[_C_engine.TensorImpl | None]]]: ...
 
     def load_state_buffers(self, bufs: Sequence[tuple[str, Sequence[Any]]]) -> None: ...
 
@@ -77,9 +75,7 @@ class _OneKey:
         return (group[self._key],)
 
 
-def _hyperparam_reader(
-    keys: tuple[str, ...],
-) -> _GroupReader | None:
+def _hyperparam_reader(keys: tuple[str, ...]) -> _GroupReader | None:
     """Return a reader of ``keys`` out of a param group, as one tuple.
 
     ``operator.itemgetter`` does the reading in C, so comparing a group with
@@ -232,10 +228,7 @@ def _resolve_one_cycle_steps(step_cfg: _OneCycleSteps) -> int:
 
 
 def _one_cycle_phases(
-    step_cfg: _OneCycleSteps,
-    pct_start: float,
-    anneal_strategy: str,
-    three_phase: bool,
+    step_cfg: _OneCycleSteps, pct_start: float, anneal_strategy: str, three_phase: bool
 ) -> tuple[int, list[tuple[float, str, str, str, str]]]:
     """Resolve ``total_steps`` and the ``(end_step, start_lr, end_lr, start_mom, end_mom)`` phases."""
     steps = _resolve_one_cycle_steps(step_cfg)
@@ -245,13 +238,7 @@ def _one_cycle_phases(
         raise ValueError(
             f"anneal_strategy must be one of 'cos' or 'linear', instead got {anneal_strategy}"
         )
-    p1 = (
-        float(pct_start * steps) - 1.0,
-        "initial_lr",
-        "max_lr",
-        "max_momentum",
-        "base_momentum",
-    )
+    p1 = (float(pct_start * steps) - 1.0, "initial_lr", "max_lr", "max_momentum", "base_momentum")
     if three_phase:
         phases = [
             p1,
@@ -262,25 +249,10 @@ def _one_cycle_phases(
                 "base_momentum",
                 "max_momentum",
             ),
-            (
-                float(steps - 1),
-                "initial_lr",
-                "min_lr",
-                "max_momentum",
-                "max_momentum",
-            ),
+            (float(steps - 1), "initial_lr", "min_lr", "max_momentum", "max_momentum"),
         ]
     else:
-        phases = [
-            p1,
-            (
-                float(steps - 1),
-                "max_lr",
-                "min_lr",
-                "base_momentum",
-                "max_momentum",
-            ),
-        ]
+        phases = [p1, (float(steps - 1), "max_lr", "min_lr", "base_momentum", "max_momentum")]
     return steps, phases
 
 
@@ -418,10 +390,7 @@ def _cyclic_get_lr(sched: _CyclicLike, cycle: int) -> list[float]:
     s = _cyclic_scale(sched, cycle)
     if sched.cycle_momentum:
         for group, base_m, max_m in zip(
-            sched.optimizer.param_groups,
-            sched.base_momentums,
-            sched.max_momentums,
-            strict=False,
+            sched.optimizer.param_groups, sched.base_momentums, sched.max_momentums, strict=False
         ):
             _set_group_momentum(sched.use_beta1, group, max_m - (max_m - base_m) * sf * s)
     return [
@@ -685,9 +654,7 @@ class Optimizer:
             _C_engine.eval_tensors(impls)
 
     def __init__(
-        self,
-        params: Iterable[Parameter] | Iterable[dict[str, object]],
-        defaults: dict[str, object],
+        self, params: Iterable[Parameter] | Iterable[dict[str, object]], defaults: dict[str, object]
     ) -> None:
         """Initialise the Optimizer.  See the class docstring for parameter semantics."""
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):

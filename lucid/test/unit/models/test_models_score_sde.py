@@ -259,12 +259,7 @@ class TestModel:
         lucid.manual_seed(0)
         model = create_model("score_sde_vp_gen", **_TINY).eval()
         for steps in (3, 11):
-            assert model.generate(1, method="euler", steps=steps).samples.shape == (
-                1,
-                3,
-                8,
-                8,
-            )
+            assert model.generate(1, method="euler", steps=steps).samples.shape == (1, 3, 8, 8)
 
 
 class TestRegistry:

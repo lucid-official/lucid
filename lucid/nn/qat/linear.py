@@ -140,11 +140,7 @@ class Linear(nn.Linear):
     """
 
     def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        bias: bool = True,
-        qconfig: QConfig | None = None,
+        self, in_features: int, out_features: int, bias: bool = True, qconfig: QConfig | None = None
     ) -> None:
         super().__init__(in_features, out_features, bias)
         if qconfig is None:

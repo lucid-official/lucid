@@ -44,11 +44,7 @@ from typing import ClassVar, cast, override
 
 import lucid
 from lucid._tensor import Tensor
-from lucid.utils.transforms._autoaugment import (
-    AutoAugment,
-    RandAugment,
-    TrivialAugmentWide,
-)
+from lucid.utils.transforms._autoaugment import AutoAugment, RandAugment, TrivialAugmentWide
 from lucid.utils.transforms._base import (
     BboxParams,
     Compose,
@@ -160,10 +156,7 @@ class TransformsPreset(_NoParams, Transform[Empty], abc.ABC):
             Two-key dict suitable for :func:`json.dump` and
             :meth:`AutoTransformsPreset.from_dict` round-trip.
         """
-        return {
-            "preprocessor_type": self.preset_type,
-            "init_kwargs": self._init_kwargs(),
-        }
+        return {"preprocessor_type": self.preset_type, "init_kwargs": self._init_kwargs()}
 
     @classmethod
     def from_dict(cls, cfg: dict[str, object]) -> TransformsPreset:
@@ -355,10 +348,7 @@ class _ReferenceStretch(Resize):
         if not img.is_floating_point():
             return _resize_eight_bit(img, (self.height, self.width), self.interpolation)
         return resize(
-            img,
-            (self.height, self.width),
-            interpolation=self.interpolation,
-            antialias=True,
+            img, (self.height, self.width), interpolation=self.interpolation, antialias=True
         )
 
 
@@ -649,13 +639,8 @@ class ImageClassificationAugment(TransformsPreset):
 
         stages: list[TransformLike] = [
             RandomResizedCrop(
-                crop_size,
-                crop_size,
-                scale=scale,
-                ratio=ratio,
-                interpolation=interpolation,
-                p=1.0,
-            ),
+                crop_size, crop_size, scale=scale, ratio=ratio, interpolation=interpolation, p=1.0
+            )
         ]
         if hflip_prob > 0.0:
             stages.append(HorizontalFlip(p=hflip_prob))
@@ -859,8 +844,7 @@ class Detection(TransformsPreset):
             Normalize(self.mean, self.std, max_pixel_value=1.0),
         ]
         self._pipeline = Compose(
-            stages,
-            bbox_params=BboxParams(min_area=min_area, min_visibility=min_visibility),
+            stages, bbox_params=BboxParams(min_area=min_area, min_visibility=min_visibility)
         )
 
     @property

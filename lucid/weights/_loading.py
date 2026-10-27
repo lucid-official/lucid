@@ -16,9 +16,7 @@ if TYPE_CHECKING:
 
 
 def resolve_weights(
-    enum_cls: type[WeightsEnum],
-    pretrained: bool | str,
-    weights: WeightsEnum | None,
+    enum_cls: type[WeightsEnum], pretrained: bool | str, weights: WeightsEnum | None
 ) -> WeightsEnum | None:
     r"""Resolve a factory's ``pretrained`` / ``weights`` args to a member.
 
@@ -74,11 +72,7 @@ def resolve_weights(
 
 
 def load_weight_entry(
-    model: Module,
-    weights: WeightsEnum | WeightEntry,
-    *,
-    name: str,
-    strict: bool = True,
+    model: Module, weights: WeightsEnum | WeightEntry, *, name: str, strict: bool = True
 ) -> object:
     r"""Download the checkpoint described by ``weights`` and load it.
 

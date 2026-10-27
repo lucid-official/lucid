@@ -36,14 +36,8 @@ family.  Set ``do_lower_case=False`` (or pass an explicit
 
 from lucid.utils.tokenizer._base import SpecialTokens
 from lucid.utils.tokenizer._normalizers import BERTNormalizer, Normalizer
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    WhitespacePunctuationSplit,
-)
-from lucid.utils.tokenizer._wordpiece import (
-    WordPieceTokenizer,
-    WordPieceTokenizerFast,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, WhitespacePunctuationSplit
+from lucid.utils.tokenizer._wordpiece import WordPieceTokenizer, WordPieceTokenizerFast
 
 
 def _bert_special_tokens() -> SpecialTokens:
@@ -57,13 +51,7 @@ def _bert_special_tokens() -> SpecialTokens:
         both :class:`BERTTokenizer` and :class:`BERTTokenizerFast`
         when the caller does not pass an explicit ``special_tokens``.
     """
-    return SpecialTokens(
-        unk="[UNK]",
-        pad="[PAD]",
-        cls="[CLS]",
-        sep="[SEP]",
-        mask="[MASK]",
-    )
+    return SpecialTokens(unk="[UNK]", pad="[PAD]", cls="[CLS]", sep="[SEP]", mask="[MASK]")
 
 
 class BERTTokenizer(WordPieceTokenizer):

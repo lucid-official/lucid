@@ -78,10 +78,7 @@ class TestFormulaErrors:
 
     @pytest.mark.parametrize(
         "precision,loc,x",
-        [
-            (_PRECISION, [0.5, -1.0], [1.0, 0.3]),
-            (_PRECISION_3, [0.0, 0.0, 0.0], [0.2, -0.4, 1.1]),
-        ],
+        [(_PRECISION, [0.5, -1.0], [1.0, 0.3]), (_PRECISION_3, [0.0, 0.0, 0.0], [0.2, -0.4, 1.1])],
         ids=["2d", "3d"],
     )
     def test_mvn_precision_log_prob(
@@ -307,9 +304,7 @@ class TestSupportBoundaries:
         np.testing.assert_allclose(_np(gamma.log_prob(_t(0.0, device))), 0.0, atol=1e-6)
         gamma = D.Gamma(_t(1.0, device), _t(2.5, device))
         np.testing.assert_allclose(
-            _np(gamma.log_prob(_t([0.0, 1.0], device))),
-            [0.91629076, -1.58370924],
-            atol=1e-5,
+            _np(gamma.log_prob(_t([0.0, 1.0], device))), [0.91629076, -1.58370924], atol=1e-5
         )
         chi2 = D.Chi2(_t(2.0, device))
         np.testing.assert_allclose(_np(chi2.log_prob(_t(0.0, device))), -0.69314718, atol=1e-5)
@@ -321,9 +316,7 @@ class TestSupportBoundaries:
         )
         beta = D.Beta(_t(1.0, device), _t(3.0, device))
         np.testing.assert_allclose(
-            _np(beta.log_prob(_t([0.0, 0.5], device))),
-            [1.09861231, -0.28768206],
-            atol=1e-5,
+            _np(beta.log_prob(_t([0.0, 0.5], device))), [1.09861231, -0.28768206], atol=1e-5
         )
         # Dirichlet(1, 1, 2) on a face of the simplex:
         # log Γ(4) − log Γ(2) + (2 − 1) log 0.5 = log 6 − log 2.
@@ -468,8 +461,7 @@ class TestSupportBoundaries:
             RD.Bernoulli(probs=rt(probs)).log_prob(rt(v)),
         )
         same(
-            D.Bernoulli(probs=_t(probs, device)).entropy(),
-            RD.Bernoulli(probs=rt(probs)).entropy(),
+            D.Bernoulli(probs=_t(probs, device)).entropy(), RD.Bernoulli(probs=rt(probs)).entropy()
         )
         same(
             D.Gamma(_t([1.0, 2.0], device), _t([2.5, 1.0], device)).log_prob(
@@ -501,18 +493,13 @@ class TestSupportBoundaries:
         for kwargs in ({"probs": [0.0, 0.5, 0.5]}, {"logits": [-_INF, 0.0, 1.0]}):
             lucid_kw = {k: _t(v, device) for k, v in kwargs.items()}
             ref_kw = {k: rt(v) for k, v in kwargs.items()}
+            same(D.Categorical(**lucid_kw).entropy(), RD.Categorical(**ref_kw).entropy())
             same(
-                D.Categorical(**lucid_kw).entropy(),
-                RD.Categorical(**ref_kw).entropy(),
-            )
-            same(
-                D.OneHotCategorical(**lucid_kw).entropy(),
-                RD.OneHotCategorical(**ref_kw).entropy(),
+                D.OneHotCategorical(**lucid_kw).entropy(), RD.OneHotCategorical(**ref_kw).entropy()
             )
             same(
                 D.kl_divergence(
-                    D.Categorical(**lucid_kw),
-                    D.Categorical(probs=_t(q_probs, device)),
+                    D.Categorical(**lucid_kw), D.Categorical(probs=_t(q_probs, device))
                 ),
                 RD.kl_divergence(RD.Categorical(**ref_kw), RD.Categorical(probs=rt(q_probs))),
             )
@@ -603,13 +590,11 @@ class TestReferenceDomains:
         """At rate 0 the reference answers NaN, and ``inf`` for
         ``Geometric(1)`` against itself.  These are the exact divergences."""
         poisson = D.kl_divergence(
-            D.Poisson(_t([0.0, 0.0, 1.5], device)),
-            D.Poisson(_t([1.5, 0.0, 0.0], device)),
+            D.Poisson(_t([0.0, 0.0, 1.5], device)), D.Poisson(_t([1.5, 0.0, 0.0], device))
         )
         np.testing.assert_allclose(_np(poisson), [1.5, 0.0, _INF], atol=1e-6)
         geometric = D.kl_divergence(
-            D.Geometric(_t([1.0, 1.0, 0.3], device)),
-            D.Geometric(_t([0.3, 1.0, 1.0], device)),
+            D.Geometric(_t([1.0, 1.0, 0.3], device)), D.Geometric(_t([0.3, 1.0, 1.0], device))
         )
         np.testing.assert_allclose(_np(geometric), [-np.log(0.3), 0.0, _INF], atol=1e-6)
 
@@ -619,9 +604,7 @@ class TestReferenceDomains:
         r.requires_grad_(True)
         nb = D.NegativeBinomial(r, probs=_t(0.5, device))
         np.testing.assert_allclose(
-            _np(nb.log_prob(_t([0.0, 1.0, 2.0], device))),
-            [0.0, -_INF, -_INF],
-            atol=1e-6,
+            _np(nb.log_prob(_t([0.0, 1.0, 2.0], device))), [0.0, -_INF, -_INF], atol=1e-6
         )
         np.testing.assert_allclose(_np(nb.mean), 0.0)
         np.testing.assert_allclose(_np(nb.variance), 0.0)
@@ -671,13 +654,7 @@ class TestReferenceDomains:
     def test_integer_constraints_refuse_infinity(self, device: str) -> None:
         c = D.constraints
         values = _t([0.0, 2.0, _INF, 1.5, -1.0], device)
-        assert _flags(c.nonnegative_integer.check(values)) == [
-            True,
-            True,
-            False,
-            False,
-            False,
-        ]
+        assert _flags(c.nonnegative_integer.check(values)) == [True, True, False, False, False]
         assert _flags(c.integer_interval(0, 5).check(_t(_INF, device))) == [False]
 
     def test_positive_definite_requires_symmetry(self, device: str) -> None:
@@ -690,11 +667,7 @@ class TestReferenceDomains:
     def test_reference_constraints_added(self, device: str) -> None:
         c = D.constraints
         half_open = c.half_open_interval(0.0, 1.0)
-        assert _flags(half_open.check(_t([0.0, 0.5, 1.0], device))) == [
-            True,
-            True,
-            False,
-        ]
+        assert _flags(half_open.check(_t([0.0, 0.5, 1.0], device))) == [True, True, False]
         assert c.one_hot.is_discrete and c.one_hot.event_dim == 1
         vectors = _t([[0.0, 1.0], [1.0, 1.0], [0.5, 0.5]], device)
         assert _flags(c.one_hot.check(vectors)) == [True, False, False]
@@ -703,10 +676,7 @@ class TestReferenceDomains:
         assert _flags(c.corr_cholesky.check(factors)) == [True, False]
         counts = c.independent(c.nonnegative_integer, 1)
         assert counts.is_discrete and counts.event_dim == 1
-        assert _flags(counts.check(_t([[0.0, 2.0], [1.0, 0.5]], device))) == [
-            True,
-            False,
-        ]
+        assert _flags(counts.check(_t([[0.0, 2.0], [1.0, 0.5]], device))) == [True, False]
         with pytest.raises(ValueError):
             c.independent(c.real, -1)
 

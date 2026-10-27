@@ -131,8 +131,7 @@ class Embedding(nn.Module):
         self.padding_idx = padding_idx
         self.weight_ch_axis = 0
         self.register_buffer(
-            "weight_int8",
-            lucid.zeros((num_embeddings, embedding_dim), dtype=lucid.int8),
+            "weight_int8", lucid.zeros((num_embeddings, embedding_dim), dtype=lucid.int8)
         )
         self.register_buffer("weight_scale", lucid.ones(num_embeddings))
         self.register_buffer("weight_zero_point", lucid.zeros(num_embeddings))
@@ -276,8 +275,7 @@ class EmbeddingBag(nn.Module):
         self.padding_idx = padding_idx
         self.weight_ch_axis = 0
         self.register_buffer(
-            "weight_int8",
-            lucid.zeros((num_embeddings, embedding_dim), dtype=lucid.int8),
+            "weight_int8", lucid.zeros((num_embeddings, embedding_dim), dtype=lucid.int8)
         )
         self.register_buffer("weight_scale", lucid.ones(num_embeddings))
         self.register_buffer("weight_zero_point", lucid.zeros(num_embeddings))

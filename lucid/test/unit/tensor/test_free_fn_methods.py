@@ -94,10 +94,7 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "acosh": (_t([1.5, 3.0]), (), {}),
     "addbmm": (
         _t([[0.5, 1.0, -1.0], [2.0, 0.0, 1.0]]),
-        (
-            _t([[[1.0, 2.0], [0.5, -1.0]]] * 2),
-            _t([[[1.0, 0.0, 2.0], [3.0, 1.0, -1.0]]] * 2),
-        ),
+        (_t([[[1.0, 2.0], [0.5, -1.0]]] * 2), _t([[[1.0, 0.0, 2.0], [3.0, 1.0, -1.0]]] * 2)),
         {"beta": 0.5, "alpha": 2.0},
     ),
     "addmv": (
@@ -206,14 +203,7 @@ def _close(a: object, b: object) -> bool:
 
 
 #: Twins a registry entry gives their method (``OpEntry.method_name``).
-_REGISTRY_TWINS = (
-    "conj",
-    "greater",
-    "greater_equal",
-    "less",
-    "less_equal",
-    "not_equal",
-)
+_REGISTRY_TWINS = ("conj", "greater", "greater_equal", "less", "less_equal", "not_equal")
 
 
 def test_every_twin_has_a_case_and_one_owner() -> None:
@@ -328,11 +318,7 @@ def test_signbit_reads_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None:
         ("cpu", lucid.float32),
         ("cpu", lucid.float64),
         *(
-            [
-                ("metal", lucid.float16),
-                ("metal", lucid.bfloat16),
-                ("metal", lucid.float32),
-            ]
+            [("metal", lucid.float16), ("metal", lucid.bfloat16), ("metal", lucid.float32)]
             if lucid.metal.is_available()
             else []
         ),
@@ -345,18 +331,7 @@ def test_signbit_copysign_and_atan2_preserve_ieee_signs_across_special_values(
     from lucid._dispatch import _wrap
 
     ref_dtype = getattr(ref, str(dtype).split(".")[-1])
-    vals = [
-        0.0,
-        -0.0,
-        1.0,
-        -1.0,
-        2.5,
-        -2.5,
-        math.inf,
-        -math.inf,
-        float("nan"),
-        float("nan"),
-    ]
+    vals = [0.0, -0.0, 1.0, -1.0, 2.5, -2.5, math.inf, -math.inf, float("nan"), float("nan")]
     t = lucid.tensor(vals, dtype=dtype, device=device)
     rt = ref.tensor(vals, dtype=ref_dtype)
 
@@ -439,9 +414,7 @@ def _published_functions() -> set[str]:
 
 
 @pytest.mark.parity
-def test_every_reference_method_of_a_published_function_is_a_method(
-    ref: ModuleType,
-) -> None:
+def test_every_reference_method_of_a_published_function_is_a_method(ref: ModuleType) -> None:
     lacking = sorted(
         n
         for n in _published_functions()
@@ -503,7 +476,4 @@ def test_isreal_is_false_where_the_imaginary_part_is_not_zero(device: str) -> No
     x = lucid.tensor([1 + 0j, 1j, 2 - 3j, _NAN + 0j], device=device)
     assert lucid.isreal(x).tolist() == [True, False, False, True]
     assert x.isreal().tolist() == [True, False, False, True]
-    assert lucid.isreal(lucid.tensor([1.0, _NAN], device=device)).tolist() == [
-        True,
-        True,
-    ]
+    assert lucid.isreal(lucid.tensor([1.0, _NAN], device=device)).tolist() == [True, True]

@@ -18,13 +18,7 @@ from lucid.test.parity.models._utils import (
     _spec_param,
 )
 
-_FACTORIES = frozenset(
-    {
-        M.cspresnet_50_cls,
-        M.cspresnext_50_cls,
-        M.cspdarknet_53_cls,
-    }
-)
+_FACTORIES = frozenset({M.cspresnet_50_cls, M.cspresnext_50_cls, M.cspdarknet_53_cls})
 _SPECS = [s for s in SPECS if s.lucid_factory in _FACTORIES]
 _TIMM = [s for s in _SPECS if s.timm_name is not None]
 _SC = [s for s in _SPECS if s.timm_name is None]

@@ -64,9 +64,7 @@ def test_full_sweep_keeps_removed_symbols_in_the_baseline() -> None:
 
 
 @pytest.mark.parametrize("selection", [["--axis", "layout"], ["--limit", "1"], ["--quick"]])
-def test_partial_sweep_cannot_overwrite_full_coverage_baseline(
-    selection: list[str],
-) -> None:
+def test_partial_sweep_cannot_overwrite_full_coverage_baseline(selection: list[str]) -> None:
     from lucid.test.audit.__main__ import main
 
     assert main(["--audit-only", "--update-coverage", "--no-log", *selection]) == 2
@@ -83,10 +81,7 @@ def test_only_verdicts_are_recorded() -> None:
         ("grad", "lucid.cos", Status.UNSUPPORTED),
         ("grad", "lucid.tan", Status.NOT_APPLICABLE),
     )
-    assert _answered(report) == {
-        "grad::lucid.exp": "pass",
-        "grad::lucid.log": "fail",
-    }
+    assert _answered(report) == {"grad::lucid.exp": "pass", "grad::lucid.log": "fail"}
 
 
 def test_a_baseline_round_trips(tmp_path) -> None:
@@ -120,10 +115,7 @@ def test_a_cell_that_stops_answering_is_a_regression(capsys) -> None:
     """The case the whole file exists for: the op is still exported, the
     audit just cannot reach it any more."""
     recorded = {"grad::lucid.exp": "pass", "grad::lucid.log": "pass"}
-    now = _report(
-        ("grad", "lucid.exp", Status.PASS),
-        ("grad", "lucid.log", Status.UNSUPPORTED),
-    )
+    now = _report(("grad", "lucid.exp", Status.PASS), ("grad", "lucid.log", Status.UNSUPPORTED))
     regressions = report_coverage_diff(now, recorded, _quiet())
     assert regressions == 1
     out = capsys.readouterr().out
@@ -139,10 +131,7 @@ def test_a_pass_turning_into_a_failure_is_a_regression(capsys) -> None:
 
 def test_a_newly_answered_cell_is_progress_not_a_regression(capsys) -> None:
     recorded = {"grad::lucid.exp": "pass"}
-    now = _report(
-        ("grad", "lucid.exp", Status.PASS),
-        ("grad", "lucid.log", Status.PASS),
-    )
+    now = _report(("grad", "lucid.exp", Status.PASS), ("grad", "lucid.log", Status.PASS))
     assert report_coverage_diff(now, recorded, _quiet()) == 0
     out = capsys.readouterr().out
     assert "NEW" in out and "update-coverage" in out

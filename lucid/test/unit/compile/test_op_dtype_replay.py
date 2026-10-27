@@ -26,12 +26,7 @@ import pytest
 import lucid
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
-from lucid.test.unit.compile._op_matrix import (
-    CASE_BY_NAME,
-    EXPECTED_EAGER,
-    all_params,
-    run,
-)
+from lucid.test.unit.compile._op_matrix import CASE_BY_NAME, EXPECTED_EAGER, all_params, run
 
 
 def _metal_ok() -> bool:

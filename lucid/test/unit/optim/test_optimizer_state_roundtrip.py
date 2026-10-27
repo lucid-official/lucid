@@ -63,10 +63,7 @@ def _params(arrays: list[np.ndarray], device: str) -> list[nn.Parameter]:
 
 
 def _feed(
-    params: list[nn.Parameter],
-    grads: list[np.ndarray],
-    device: str,
-    frozen: tuple[int, ...] = (),
+    params: list[nn.Parameter], grads: list[np.ndarray], device: str, frozen: tuple[int, ...] = ()
 ) -> None:
     """Give every parameter its gradient for one step; ``frozen`` get none."""
     for i, (p, g) in enumerate(zip(params, grads)):
@@ -155,10 +152,7 @@ def _resume(
     for idx, entry in saved["state"].items():
         assert set(again[idx]) == set(entry)
         for key, value in entry.items():
-            assert np.array_equal(_as_array(again[idx][key]), _as_array(value)), (
-                idx,
-                key,
-            )
+            assert np.array_equal(_as_array(again[idx][key]), _as_array(value)), (idx, key)
 
     for k, g in enumerate(grads[_N_BEFORE:]):
         _feed(live, g, device)
@@ -176,8 +170,7 @@ def test_a_restored_optimizer_continues_bit_identically(
 
 
 @pytest.mark.parametrize(
-    "case",
-    [pytest.param(("NAdam", {}), id="NAdam"), pytest.param(("RAdam", {}), id="RAdam")],
+    "case", [pytest.param(("NAdam", {}), id="NAdam"), pytest.param(("RAdam", {}), id="RAdam")]
 )
 def test_a_float64_run_round_trips_exactly(case: tuple[str, dict[str, object]]) -> None:
     # F64 parameters keep their scalar state (NAdam's mu_product) at F64.
@@ -248,20 +241,14 @@ def _engine_asgd_averaging() -> _EngineFactory:
     "make, keys",
     [
         pytest.param(
-            _engine_rmsprop_centered(0.0),
-            {"step", "square_avg", "grad_avg"},
-            id="RMSprop-centered",
+            _engine_rmsprop_centered(0.0), {"step", "square_avg", "grad_avg"}, id="RMSprop-centered"
         ),
         pytest.param(
             _engine_rmsprop_centered(0.9),
             {"step", "square_avg", "momentum_buffer", "grad_avg"},
             id="RMSprop-centered-momentum",
         ),
-        pytest.param(
-            _engine_asgd_averaging(),
-            {"step", "eta", "mu", "ax"},
-            id="ASGD-averaging",
-        ),
+        pytest.param(_engine_asgd_averaging(), {"step", "eta", "mu", "ax"}, id="ASGD-averaging"),
     ],
 )
 def test_engine_state_round_trips(make: _EngineFactory, keys: set[str], device: str) -> None:

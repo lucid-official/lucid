@@ -529,10 +529,7 @@ class ChannelDropout(PhotometricTransform[ChannelDropParams]):
     """
 
     def __init__(
-        self,
-        channel_drop_range: tuple[int, int] = (1, 1),
-        fill_value: float = 0.0,
-        p: float = 0.5,
+        self, channel_drop_range: tuple[int, int] = (1, 1), fill_value: float = 0.0, p: float = 0.5
     ) -> None:
         super().__init__(p=p)
         self.channel_drop_range = channel_drop_range
@@ -662,10 +659,7 @@ class CLAHE(_NoParams, PhotometricTransform[Empty]):
     """
 
     def __init__(
-        self,
-        clip_limit: float = 4.0,
-        tile_grid_size: tuple[int, int] = (8, 8),
-        p: float = 0.5,
+        self, clip_limit: float = 4.0, tile_grid_size: tuple[int, int] = (8, 8), p: float = 0.5
     ) -> None:
         super().__init__(p=p)
         self.clip_limit = clip_limit
@@ -798,12 +792,7 @@ class Posterize(PhotometricTransform[Empty]):
     True
     """
 
-    def __init__(
-        self,
-        num_bits: int = 4,
-        mode: str = "uint8_mask",
-        p: float = 0.5,
-    ) -> None:
+    def __init__(self, num_bits: int = 4, mode: str = "uint8_mask", p: float = 0.5) -> None:
         super().__init__(p=p)
         if not 1 <= num_bits <= 7:
             raise ValueError(f"num_bits must be in [1, 7], got {num_bits}")
@@ -945,11 +934,7 @@ class ToSepia(_NoParams, PhotometricTransform[Empty]):
     (3, 32, 32)
     """
 
-    _M = (
-        (0.393, 0.769, 0.189),
-        (0.349, 0.686, 0.168),
-        (0.272, 0.534, 0.131),
-    )
+    _M = ((0.393, 0.769, 0.189), (0.349, 0.686, 0.168), (0.272, 0.534, 0.131))
 
     def __init__(self, p: float = 0.5) -> None:
         super().__init__(p=p)
@@ -1033,9 +1018,7 @@ class Sharpen(PhotometricTransform[TripletParams]):
             uniformity with sibling sharpen-family ops).
         """
         return TripletParams(
-            a=_random.uniform(*self.alpha),
-            b=_random.uniform(*self.lightness),
-            c=0.0,
+            a=_random.uniform(*self.alpha), b=_random.uniform(*self.lightness), c=0.0
         )
 
     @override
@@ -1109,9 +1092,7 @@ class Emboss(PhotometricTransform[TripletParams]):
             uniformity).
         """
         return TripletParams(
-            a=_random.uniform(*self.alpha),
-            b=_random.uniform(*self.strength),
-            c=0.0,
+            a=_random.uniform(*self.alpha), b=_random.uniform(*self.strength), c=0.0
         )
 
     @override

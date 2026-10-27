@@ -25,11 +25,7 @@ _NO_METAL = pytest.mark.skipif(not metal_available(), reason="needs Metal")
 #: name -> (base values, the overlapping view of the base, base indices it reads)
 _VIEWS: dict[str, tuple[list[float], Callable[[lucid.Tensor], lucid.Tensor], set[int]]] = {
     "expand": ([1.0, 2.0, 3.0], lambda b: b.reshape(1, 3).expand(2, 3), {0, 1, 2}),
-    "unfold": (
-        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        lambda b: b.unfold(0, 3, 2),
-        {0, 1, 2, 3, 4},
-    ),
+    "unfold": ([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], lambda b: b.unfold(0, 3, 2), {0, 1, 2, 3, 4}),
     "as_strided": (
         [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
         lambda b: b.as_strided((3, 3), (1, 1)),
@@ -101,9 +97,7 @@ def test_a_value_dependent_write_is_refused_and_writes_nothing(
 
 
 @pytest.mark.parametrize("device", _devices())
-def test_a_fill_into_a_view_of_a_leaf_that_requires_grad_is_still_refused(
-    device: str,
-) -> None:
+def test_a_fill_into_a_view_of_a_leaf_that_requires_grad_is_still_refused(device: str) -> None:
     w = lucid.zeros(1, 3, device=device, requires_grad=True)
     with pytest.raises(RuntimeError, match="leaf"):
         w.expand(2, 3).fill_(1.0)
@@ -147,10 +141,7 @@ def test_overlapping_unfold_and_as_strided_write_refusal_is_a_documented_departu
     r_unf.unfold(0, 2, 1).add_(100.0)
     assert r_unf.tolist() == [100.0, 201.0, 202.0, 203.0, 204.0, 105.0]
 
-    for make in (
-        lambda b: b.unfold(0, 2, 1),
-        lambda b: b.as_strided((5, 2), (1, 1)),
-    ):
+    for make in (lambda b: b.unfold(0, 2, 1), lambda b: b.as_strided((5, 2), (1, 1))):
         base = lucid.arange(6.0, device=device)
         with pytest.raises(RuntimeError, match="overlap"):
             make(base).add_(100.0)

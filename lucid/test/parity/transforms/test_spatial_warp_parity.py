@@ -99,12 +99,9 @@ class TestAffine:
     def test_marker_within_one_pixel(self, angle):
         """NEAREST rotated marker within ±1 px."""
         chw, _ = _marker(8, 20)
-        out_l = T.Affine(
-            rotate=(angle, angle),
-            interpolation="nearest",
-            border_mode=0,
-            p=1.0,
-        )(T.Image(chw)).data.numpy()
+        out_l = T.Affine(rotate=(angle, angle), interpolation="nearest", border_mode=0, p=1.0)(
+            T.Image(chw)
+        ).data.numpy()
         hwc = np.zeros((24, 24, 1), dtype=np.float32)
         hwc[8, 20, 0] = 1.0
         out_a = A.Affine(rotate=(angle, angle), interpolation=0, border_mode=0, p=1.0)(image=hwc)[
@@ -171,12 +168,7 @@ class TestShiftScaleRotate:
         """All limits zero → bit-exact."""
         chw, hwc = _image(2)
         out_l = _run_lucid(
-            T.ShiftScaleRotate(
-                shift_limit=(0, 0),
-                scale_limit=(0, 0),
-                rotate_limit=(0, 0),
-                p=1.0,
-            ),
+            T.ShiftScaleRotate(shift_limit=(0, 0), scale_limit=(0, 0), rotate_limit=(0, 0), p=1.0),
             chw,
         )
         np.testing.assert_allclose(out_l, hwc, atol=1e-5)
@@ -186,19 +178,13 @@ class TestShiftScaleRotate:
         chw, hwc = _image(8)
         out_l = _run_lucid(
             T.ShiftScaleRotate(
-                shift_limit=(0.02, 0.02),
-                scale_limit=(0.05, 0.05),
-                rotate_limit=(5, 5),
-                p=1.0,
+                shift_limit=(0.02, 0.02), scale_limit=(0.05, 0.05), rotate_limit=(5, 5), p=1.0
             ),
             chw,
         )
         out_a = _run_albu(
             A.ShiftScaleRotate(
-                shift_limit=(0.02, 0.02),
-                scale_limit=(0.05, 0.05),
-                rotate_limit=(5, 5),
-                p=1.0,
+                shift_limit=(0.02, 0.02), scale_limit=(0.05, 0.05), rotate_limit=(5, 5), p=1.0
             ),
             hwc,
         )

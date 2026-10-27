@@ -168,9 +168,7 @@ class FakeQuantize(nn.Module):
     zero_point: Tensor
 
     def __init__(
-        self,
-        observer: type[ObserverBase] = MovingAverageMinMaxObserver,
-        **observer_kwargs: object,
+        self, observer: type[ObserverBase] = MovingAverageMinMaxObserver, **observer_kwargs: object
     ) -> None:
         super().__init__()
         self.activation_post_process: ObserverBase = observer(**observer_kwargs)  # type: ignore[arg-type]

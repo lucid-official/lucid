@@ -158,19 +158,9 @@ class TestUnbatchedMultiheadAttention:
         with pytest.raises(ValueError, match="expected key and value to be 3-D"):
             mha(q3, q2, q3)
         with pytest.raises(ValueError, match="expected key_padding_mask to be 1-D"):
-            mha(
-                q2,
-                q2,
-                q2,
-                key_padding_mask=lucid.zeros(1, 4, dtype=lucid.bool_, device=device),
-            )
+            mha(q2, q2, q2, key_padding_mask=lucid.zeros(1, 4, dtype=lucid.bool_, device=device))
         with pytest.raises(ValueError, match="expected key_padding_mask to be 2-D"):
-            mha(
-                q3,
-                q3,
-                q3,
-                key_padding_mask=lucid.zeros(4, dtype=lucid.bool_, device=device),
-            )
+            mha(q3, q3, q3, key_padding_mask=lucid.zeros(4, dtype=lucid.bool_, device=device))
 
 
 class TestUnbatchedConvPoolAndRankGuards:
@@ -226,12 +216,7 @@ class TestTransformerAPIParity:
     @pytest.mark.parametrize("norm_first", [False, True])
     @pytest.mark.parametrize("batch_first", [False, True])
     def test_transformer_bias_norm_first_and_causal_parity(
-        self,
-        ref: ModuleType,
-        device: str,
-        bias: bool,
-        norm_first: bool,
-        batch_first: bool,
+        self, ref: ModuleType, device: str, bias: bool, norm_first: bool, batch_first: bool
     ) -> None:
         rng = np.random.default_rng(7)
         D, H, FF = 8, 2, 16
@@ -316,19 +301,13 @@ class TestTransformerAPIParity:
 
     def test_custom_encoder_decoder_and_unbatched_transformer(self, device: str) -> None:
         enc = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(8, 2, 16, dropout=0.0, device=device),
-            num_layers=1,
+            nn.TransformerEncoderLayer(8, 2, 16, dropout=0.0, device=device), num_layers=1
         )
         dec = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(8, 2, 16, dropout=0.0, device=device),
-            num_layers=1,
+            nn.TransformerDecoderLayer(8, 2, 16, dropout=0.0, device=device), num_layers=1
         )
         model = nn.Transformer(
-            d_model=8,
-            nhead=2,
-            custom_encoder=enc,
-            custom_decoder=dec,
-            device=device,
+            d_model=8, nhead=2, custom_encoder=enc, custom_decoder=dec, device=device
         ).eval()
         assert model.encoder is enc
         assert model.decoder is dec
@@ -343,15 +322,9 @@ class TestTransformerAPIParity:
         with pytest.raises(RuntimeError, match="number of dimensions"):
             model(lucid.randn(5, 2, 8, device=device), tgt)
         with pytest.raises(RuntimeError, match="batch number"):
-            model(
-                lucid.randn(5, 2, 8, device=device),
-                lucid.randn(4, 3, 8, device=device),
-            )
+            model(lucid.randn(5, 2, 8, device=device), lucid.randn(4, 3, 8, device=device))
         with pytest.raises(RuntimeError, match="feature number"):
-            model(
-                lucid.randn(5, 2, 16, device=device),
-                lucid.randn(4, 2, 8, device=device),
-            )
+            model(lucid.randn(5, 2, 16, device=device), lucid.randn(4, 2, 8, device=device))
 
     def test_encoder_nested_tensor_and_mask_check_flags(self, device: str) -> None:
         layer = nn.TransformerEncoderLayer(8, 2, 16, device=device)

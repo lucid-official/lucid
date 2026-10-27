@@ -70,16 +70,7 @@ _CASES: list[tuple[str, dict[str, Any]]] = [
     ("RMSprop", {"lr": 0.01, "centered": True, "momentum": 0.9}),
     # 1 - alpha above 0.5 takes the lerp's other form.
     ("RMSprop", {"lr": 0.01, "centered": True, "alpha": 0.3}),
-    (
-        "RMSprop",
-        {
-            "lr": 0.01,
-            "centered": True,
-            "momentum": 0.5,
-            "weight_decay": 0.1,
-            "alpha": 0.9,
-        },
-    ),
+    ("RMSprop", {"lr": 0.01, "centered": True, "momentum": 0.5, "weight_decay": 0.1, "alpha": 0.9}),
     (
         "RMSprop",
         {
@@ -97,91 +88,31 @@ _CASES: list[tuple[str, dict[str, Any]]] = [
     ("ASGD", {"lr": 0.05, "t0": 2.0, "lambd": 0.1}),
     ("ASGD", {"lr": 0.05, "t0": 0.0, "alpha": 0.5, "lambd": 0.01}),
     ("ASGD", {"lr": 0.05, "t0": 3.0, "weight_decay": 0.1}),
-    (
-        "ASGD",
-        {"lr": 0.05, "lambd": 0.1, "alpha": 0.5, "t0": 2.0, "weight_decay": 0.1},
-    ),
+    ("ASGD", {"lr": 0.05, "lambd": 0.1, "alpha": 0.5, "t0": 2.0, "weight_decay": 0.1}),
     # The first momentum step starts the buffer at the gradient, undamped.
     ("SGD", {"lr": 0.1, "momentum": 0.9}),
     ("SGD", {"lr": 0.1, "momentum": 0.9, "dampening": 0.5}),
     ("SGD", {"lr": 0.1, "momentum": 0.5, "dampening": 0.3, "weight_decay": 0.1}),
     ("SGD", {"lr": 0.1, "momentum": 0.9, "nesterov": True}),
-    (
-        "SGD",
-        {"lr": 0.1, "momentum": 0.9, "weight_decay": 0.1, "nesterov": True},
-    ),
+    ("SGD", {"lr": 0.1, "momentum": 0.9, "weight_decay": 0.1, "nesterov": True}),
     # Exaggerated hyper-parameters across the remaining optimizers (LCD-221):
     # large eps (1e-3), non-default betas, weight_decay, and variant flags
     # expose update-rule placement differences hidden at default eps=1e-8.
-    (
-        "Adam",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": False,
-        },
-    ),
-    (
-        "Adam",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": True,
-        },
-    ),
+    ("Adam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": False}),
+    ("Adam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": True}),
     (
         "AdamW",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": False,
-        },
+        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": False},
     ),
-    (
-        "AdamW",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": True,
-        },
-    ),
-    (
-        "NAdam",
-        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1},
-    ),
+    ("AdamW", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": True}),
+    ("NAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
     # beta2 = 0.8 keeps rho_t <= 5 for early steps; beta2 = 0.5 reaches rho_t > 5.
-    (
-        "RAdam",
-        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1},
-    ),
-    (
-        "RAdam",
-        {"lr": 0.05, "betas": (0.7, 0.5), "eps": 1e-3, "weight_decay": 0.1},
-    ),
-    (
-        "Adamax",
-        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1},
-    ),
-    (
-        "Adadelta",
-        {"lr": 0.5, "rho": 0.7, "eps": 1e-3, "weight_decay": 0.1},
-    ),
-    (
-        "Rprop",
-        {"lr": 0.05, "etas": (0.4, 1.5), "step_sizes": (1e-2, 0.2)},
-    ),
-    (
-        "SparseAdam",
-        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3},
-    ),
+    ("RAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
+    ("RAdam", {"lr": 0.05, "betas": (0.7, 0.5), "eps": 1e-3, "weight_decay": 0.1}),
+    ("Adamax", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
+    ("Adadelta", {"lr": 0.5, "rho": 0.7, "eps": 1e-3, "weight_decay": 0.1}),
+    ("Rprop", {"lr": 0.05, "etas": (0.4, 1.5), "step_sizes": (1e-2, 0.2)}),
+    ("SparseAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3}),
 ]
 
 
@@ -207,9 +138,7 @@ def _shapes(name: str = "") -> tuple[tuple[int, ...], ...]:
 
 
 def _arrays(
-    seed: int,
-    dtype: lucid.dtype,
-    shapes: tuple[tuple[int, ...], ...] = _SHAPES,
+    seed: int, dtype: lucid.dtype, shapes: tuple[tuple[int, ...], ...] = _SHAPES
 ) -> list[np.ndarray]:
     rng = np.random.default_rng(seed)
     return [np.asarray(rng.standard_normal(s), dtype=_np_dtype(dtype)) for s in shapes]
@@ -326,10 +255,7 @@ def test_adamax_adds_eps_inside_exp_inf(device: str, ref: Any) -> None:
     exp_inf = _as_array(opt.state_dict()["state"][0]["exp_inf"])
     np.testing.assert_allclose(exp_inf, [0.002, 0.003], rtol=1e-6, atol=1e-6)
     np.testing.assert_allclose(
-        exp_inf,
-        ref_opt.state_dict()["state"][0]["exp_inf"].detach().numpy(),
-        rtol=1e-6,
-        atol=1e-6,
+        exp_inf, ref_opt.state_dict()["state"][0]["exp_inf"].detach().numpy(), rtol=1e-6, atol=1e-6
     )
     np.testing.assert_allclose(w.numpy(), rw.detach().numpy(), rtol=1e-6, atol=1e-6)
 
@@ -425,10 +351,7 @@ def test_a_restored_run_continues_bit_identically(
     for idx, entry in saved["state"].items():
         assert set(again[idx]) == set(entry)
         for key, value in entry.items():
-            assert np.array_equal(_as_array(again[idx][key]), _as_array(value)), (
-                idx,
-                key,
-            )
+            assert np.array_equal(_as_array(again[idx][key]), _as_array(value)), (idx, key)
 
     for k in range(before, before + after):
         grads = _arrays(100 + k, dtype)

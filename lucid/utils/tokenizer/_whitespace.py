@@ -18,10 +18,7 @@ from typing import Iterable, override
 from lucid._C import engine as _C_engine
 
 from lucid.utils.tokenizer._base import SpecialTokens
-from lucid.utils.tokenizer._lookup_common import (
-    _FastVocabTokenizer,
-    _VocabTokenizer,
-)
+from lucid.utils.tokenizer._lookup_common import _FastVocabTokenizer, _VocabTokenizer
 
 
 def _whitespace_split(text: str) -> list[str]:
@@ -60,10 +57,7 @@ class WhitespaceTokenizer(_VocabTokenizer):
     _model_type = "Whitespace"
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a pure-Python whitespace tokenizer.
 
@@ -94,12 +88,7 @@ class WhitespaceTokenizer(_VocabTokenizer):
         """Join known token surface forms with single spaces."""
         return " ".join(self._id_to_token[i] for i in ids if i in self._id_to_token)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Collect unique whitespace-split words in insertion order.
 
         Parameters
@@ -142,10 +131,7 @@ class WhitespaceTokenizerFast(_FastVocabTokenizer):
     _model_type = "Whitespace"
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a C++-backed whitespace tokenizer.
 
@@ -165,12 +151,7 @@ class WhitespaceTokenizerFast(_FastVocabTokenizer):
         )
         self._init_fast_vocab_tokenizer(cpp, v, special_tokens=special_tokens)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         r"""Collect unique whitespace-split words via the C++ trainer.
 
         Parameters

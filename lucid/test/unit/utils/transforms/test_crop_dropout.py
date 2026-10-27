@@ -41,12 +41,7 @@ class TestCropPad:
         assert out["boxes"].canvas_size == (50, 50)
         assert out["kp"].canvas_size == (50, 50)
         # box shifted by the centering pad (5 each side).
-        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [
-            10.0,
-            10.0,
-            40.0,
-            40.0,
-        ]
+        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [10.0, 10.0, 40.0, 40.0]
 
     @pytest.mark.parametrize(
         "position, dx, dy",
@@ -95,12 +90,7 @@ class TestDropout:
 
     def test_dropout_leaves_boxes(self) -> None:
         out = T.CoarseDropout(p=1.0)(_sample())
-        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [
-            5.0,
-            5.0,
-            35.0,
-            35.0,
-        ]
+        assert to_xyxy(out["boxes"]).numpy().reshape(-1).tolist() == [5.0, 5.0, 35.0, 35.0]
 
 
 class TestValueScaling:

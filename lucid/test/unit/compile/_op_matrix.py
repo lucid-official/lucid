@@ -38,12 +38,7 @@ from lucid._C import engine as _C_engine
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 DEV = COMPILE_DEVICE
-DTYPES = {
-    "f32": lucid.float32,
-    "i64": lucid.int64,
-    "i32": lucid.int32,
-    "bool": lucid.bool_,
-}
+DTYPES = {"f32": lucid.float32, "i64": lucid.int64, "i32": lucid.int32, "bool": lucid.bool_}
 
 
 @dataclass(frozen=True)
@@ -300,16 +295,8 @@ def _cases() -> list[Case]:
     add("invert", lambda t: ~t, dtypes=("i64", "i32", "bool"))
     add("bitwise_or", lambda t: t | t.flip([0]), dtypes=("i64", "i32", "bool"))
     add("bitwise_xor", lambda t: t ^ t.flip([0]), dtypes=("i64", "i32", "bool"))
-    add(
-        "shift_left",
-        lambda t: t << t.flip([0]).abs().clamp(max=3),
-        dtypes=("i64", "i32"),
-    )
-    add(
-        "shift_right",
-        lambda t: t >> t.flip([0]).abs().clamp(max=3),
-        dtypes=("i64", "i32"),
-    )
+    add("shift_left", lambda t: t << t.flip([0]).abs().clamp(max=3), dtypes=("i64", "i32"))
+    add("shift_right", lambda t: t >> t.flip([0]).abs().clamp(max=3), dtypes=("i64", "i32"))
     add("shift_right_scalar", lambda t: t >> 1, dtypes=("i64", "i32"))
 
     # ── reductions
@@ -406,18 +393,8 @@ def _cases() -> list[Case]:
     add("outer", lambda t: lucid.linalg.outer(t[0], t[1]))
     add("tensordot", lambda t: lucid.tensordot(t, _w(6, 3), dims=1), dtypes=("f32",))
     add("matrix_power", lambda t: lucid.linalg.matrix_power(t, 3), shape=(4, 4))
-    add(
-        "det",
-        lambda t: lucid.linalg.det(t + 3 * _eye(3)),
-        shape=(3, 3),
-        dtypes=("f32",),
-    )
-    add(
-        "inv",
-        lambda t: lucid.linalg.inv(t + 3 * _eye(2)),
-        shape=(2, 2),
-        dtypes=("f32",),
-    )
+    add("det", lambda t: lucid.linalg.det(t + 3 * _eye(3)), shape=(3, 3), dtypes=("f32",))
+    add("inv", lambda t: lucid.linalg.inv(t + 3 * _eye(2)), shape=(2, 2), dtypes=("f32",))
     add("einsum", lambda t: lucid.einops.einsum("ij,kj->ik", t, t), dtypes=("f32",))
 
     # ── nn.functional (float)
@@ -442,12 +419,7 @@ def _cases() -> list[Case]:
     add("leaky_relu", lambda t: F.leaky_relu(t, 0.1), dtypes=fo)
     add("layer_norm", lambda t: F.layer_norm(t, (6,), _w(6), _w(6)), dtypes=fo)
     add("rms_norm", lambda t: F.rms_norm(t, (6,), _w(6)), dtypes=fo)
-    add(
-        "group_norm",
-        lambda t: F.group_norm(t, 2, _w(4), _w(4)),
-        shape=(2, 4, 5),
-        dtypes=fo,
-    )
+    add("group_norm", lambda t: F.group_norm(t, 2, _w(4), _w(4)), shape=(2, 4, 5), dtypes=fo)
     add(
         "batch_norm_eval",
         lambda t: F.batch_norm(t, _w(3).abs(), _w(3).abs() + 1, _w(3), _w(3), False),
@@ -471,30 +443,16 @@ def _cases() -> list[Case]:
     )
     # A grid built inside the traced function — a stub until Mask2Former's
     # point sampling needed it.
-    add(
-        "linspace_scale",
-        lambda t: t * lucid.linspace(-1.0, 2.0, 6, device=t.device),
-        dtypes=fo,
-    )
+    add("linspace_scale", lambda t: t * lucid.linspace(-1.0, 2.0, 6, device=t.device), dtypes=fo)
     add("normalize", lambda t: F.normalize(t, dim=1), dtypes=fo)
-    add(
-        "conv1d",
-        lambda t: F.conv1d(t, _w(4, 3, 3), _w(4), padding=1),
-        shape=(2, 3, 8),
-        dtypes=fo,
-    )
+    add("conv1d", lambda t: F.conv1d(t, _w(4, 3, 3), _w(4), padding=1), shape=(2, 3, 8), dtypes=fo)
     add(
         "conv2d",
         lambda t: F.conv2d(t, _w(4, 3, 3, 3), _w(4), stride=2),
         shape=(2, 3, 8, 8),
         dtypes=fo,
     )
-    add(
-        "conv3d",
-        lambda t: F.conv3d(t, _w(2, 3, 2, 2, 2), None),
-        shape=(1, 3, 4, 4, 4),
-        dtypes=fo,
-    )
+    add("conv3d", lambda t: F.conv3d(t, _w(2, 3, 2, 2, 2), None), shape=(1, 3, 4, 4, 4), dtypes=fo)
     add(
         "conv_transpose1d",
         lambda t: F.conv_transpose1d(t, _w(3, 2, 3), None, stride=2),
@@ -551,18 +509,8 @@ def _cases() -> list[Case]:
         shape=(2, 3, 8, 8),
         dtypes=fo,
     )
-    add(
-        "max_pool1d",
-        lambda t: F.max_pool1d(t, 3, 2, padding=1),
-        shape=(2, 3, 9),
-        dtypes=fo,
-    )
-    add(
-        "avg_pool1d",
-        lambda t: F.avg_pool1d(t, 3, 2, padding=1),
-        shape=(2, 3, 9),
-        dtypes=fo,
-    )
+    add("max_pool1d", lambda t: F.max_pool1d(t, 3, 2, padding=1), shape=(2, 3, 9), dtypes=fo)
+    add("avg_pool1d", lambda t: F.avg_pool1d(t, 3, 2, padding=1), shape=(2, 3, 9), dtypes=fo)
     add(
         "avg_pool1d_nopad",
         lambda t: F.avg_pool1d(t, 3, 2, padding=1, count_include_pad=False),
@@ -570,12 +518,7 @@ def _cases() -> list[Case]:
         dtypes=fo,
     )
     add("max_pool3d", lambda t: F.max_pool3d(t, 2), shape=(1, 2, 4, 4, 4), dtypes=fo)
-    add(
-        "avg_pool3d",
-        lambda t: F.avg_pool3d(t, 3, 2, padding=1),
-        shape=(1, 2, 5, 5, 5),
-        dtypes=fo,
-    )
+    add("avg_pool3d", lambda t: F.avg_pool3d(t, 3, 2, padding=1), shape=(1, 2, 5, 5, 5), dtypes=fo)
     add(
         "interp_nearest",
         lambda t: F.interpolate(t, scale_factor=2, mode="nearest"),
@@ -644,17 +587,9 @@ def _cases() -> list[Case]:
         shape=(2, 3, 4, 3),
         dtypes=fo,
     )
-    add(
-        "embedding",
-        lambda t: F.embedding(t.abs().clamp(max=4), _w(5, 3)),
-        dtypes=("i64", "i32"),
-    )
+    add("embedding", lambda t: F.embedding(t.abs().clamp(max=4), _w(5, 3)), dtypes=("i64", "i32"))
     add("cross_entropy", lambda t: F.cross_entropy(t, _idx(0, 5, 2, 1)), dtypes=fo)
-    add(
-        "nll_loss",
-        lambda t: F.nll_loss(F.log_softmax(t, dim=1), _idx(0, 5, 2, 1)),
-        dtypes=fo,
-    )
+    add("nll_loss", lambda t: F.nll_loss(F.log_softmax(t, dim=1), _idx(0, 5, 2, 1)), dtypes=fo)
     add("mse_loss", lambda t: F.mse_loss(t, t.flip([0])), dtypes=fo)
     add("huber_loss", lambda t: F.huber_loss(t, t.flip([0])), dtypes=fo)
     add(
@@ -682,12 +617,7 @@ def _cases() -> list[Case]:
     add("dropout_eval", lambda t: F.dropout(t, 0.5, training=False), dtypes=fo)
 
     # ── random — values differ by design
-    add(
-        "dropout_train",
-        lambda t: F.dropout(t, 0.5, training=True),
-        dtypes=fo,
-        random=True,
-    )
+    add("dropout_train", lambda t: F.dropout(t, 0.5, training=True), dtypes=fo, random=True)
     add("rand_like", lambda t: t + lucid.rand_like(t), dtypes=fo, random=True)
     add("randn_like", lambda t: t + lucid.randn_like(t), dtypes=fo, random=True)
     return C
@@ -784,11 +714,7 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     **_each("logaddexp", _NON_FLOAT, _both(_NOT_IMPL, "logaddexp takes floating tensors")),
     # A norm has no integer form; the reference refuses every order (LCD-384).
     **_each("norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
-    **_each(
-        "vector_norm",
-        _NON_FLOAT,
-        _both(_C_engine.DtypeMismatch, "a norm takes floats"),
-    ),
+    **_each("vector_norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
 }
 
 

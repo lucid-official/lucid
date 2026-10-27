@@ -56,11 +56,7 @@ _CASES: dict[str, tuple[Callable[[Any], Any], Callable[[Any], Any], type]] = {
     "LSTMCell": (lambda lib: lib.nn.LSTMCell(4, 6), _step, nnqd.LSTMCell),
     "GRUCell": (lambda lib: lib.nn.GRUCell(4, 6), _step, nnqd.GRUCell),
     "RNNCell-tanh": (lambda lib: lib.nn.RNNCell(4, 6), _step, nnqd.RNNCell),
-    "RNNCell-relu": (
-        lambda lib: lib.nn.RNNCell(4, 6, nonlinearity="relu"),
-        _step,
-        nnqd.RNNCell,
-    ),
+    "RNNCell-relu": (lambda lib: lib.nn.RNNCell(4, 6, nonlinearity="relu"), _step, nnqd.RNNCell),
 }
 
 
@@ -121,12 +117,7 @@ def test_default_spec_quantizes_every_recurrent_type() -> None:
     lucid.manual_seed(2)
     model = nn.Sequential(nn.GRU(4, 4), nn.LSTMCell(4, 4), nn.GRUCell(4, 4), nn.RNNCell(4, 4))
     qmodel = Q.quantize_dynamic(model)
-    assert [type(m) for m in qmodel] == [
-        nnqd.GRU,
-        nnqd.LSTMCell,
-        nnqd.GRUCell,
-        nnqd.RNNCell,
-    ]
+    assert [type(m) for m in qmodel] == [nnqd.GRU, nnqd.LSTMCell, nnqd.GRUCell, nnqd.RNNCell]
 
 
 def test_spec_filters_recurrent_types() -> None:

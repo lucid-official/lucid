@@ -111,12 +111,7 @@ class TestAxisSplitParity:
     @pytest.mark.parametrize(("head_dim", "axis"), [(64, 20), (48, 16), (32, 10), (16, 4), (8, 2)])
     def test_each_axis_takes_the_released_width(self, ref: Any, head_dim: int, axis: int) -> None:
         attention = _RoPEAttention(
-            head_dim * 2,
-            2,
-            grid_size=4,
-            rope_base=10_000.0,
-            qkv_bias=True,
-            attn_drop_rate=0.0,
+            head_dim * 2, 2, grid_size=4, rope_base=10_000.0, qkv_bias=True, attn_drop_rate=0.0
         )
         assert attention.depth_dim == axis
         assert attention.height_dim == axis

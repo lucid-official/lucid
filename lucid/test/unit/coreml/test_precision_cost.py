@@ -32,8 +32,7 @@ import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -128,8 +127,6 @@ class TestItAnswersBothPrecisions:
         """
         lucid.manual_seed(0)
         cost = cml.precision_cost(
-            _Deep().eval(),
-            lucid.randn(1, 16, 16, 16),
-            weights=cml.WeightPrecision.INT8,
+            _Deep().eval(), lucid.randn(1, 16, 16, 16), weights=cml.WeightPrecision.INT8
         )
         assert set(cost) == {"float32", "float16"}

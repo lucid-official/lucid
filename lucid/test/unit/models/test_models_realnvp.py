@@ -94,8 +94,7 @@ class TestRealNVPConfig:
             RealNVPConfig(data_constraint=1.0)
 
     @pytest.mark.parametrize(
-        ("field", "value"),
-        [("num_scales", 0), ("residual_blocks", 0), ("base_dim", 0)],
+        ("field", "value"), [("num_scales", 0), ("residual_blocks", 0), ("base_dim", 0)]
     )
     def test_non_positive_knobs_rejected(self, field: str, value: int) -> None:
         with pytest.raises(ValueError, match=field):
@@ -371,11 +370,7 @@ class TestRealNVPRegistry:
 
     def test_factory_with_override(self) -> None:
         m = create_model(
-            "realnvp_cifar",
-            sample_size=8,
-            num_scales=2,
-            residual_blocks=1,
-            base_dim=4,
+            "realnvp_cifar", sample_size=8, num_scales=2, residual_blocks=1, base_dim=4
         )
         assert isinstance(m, RealNVPModel)
         out = m.eval()(lucid.rand((1, 3, 8, 8)))

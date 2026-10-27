@@ -124,19 +124,11 @@ def _masked(h: lucid.Tensor) -> lucid.Tensor:
 #: name → (the Function the step goes through, its first layer, the block).
 _CASES: dict[str, tuple[str, type[nn.Linear], Callable[..., lucid.Tensor]]] = {
     "scaled backward": ("_Scaled", nn.Linear, _Scaled.apply),
-    "straight-through estimator": (
-        "_StraightThrough",
-        nn.Linear,
-        _StraightThrough.apply,
-    ),
+    "straight-through estimator": ("_StraightThrough", nn.Linear, _StraightThrough.apply),
     "gradient reversal": ("_Reversal", nn.Linear, _Reversal.apply),
     "non-differentiable output": ("_WithMask", nn.Linear, _masked),
     "second output unused": ("_TwoOutputs", nn.Linear, _first),
-    "fake-quantized weight": (
-        "_FakeQuantizeAffine",
-        _FakeQuantizedLinear,
-        lambda h: h,
-    ),
+    "fake-quantized weight": ("_FakeQuantizeAffine", _FakeQuantizedLinear, lambda h: h),
 }
 
 
@@ -259,9 +251,7 @@ def test_compiled_step_refuses(case: str, device_gpu_only: str) -> None:
     assert all(p.grad is None for p in model.parameters())
 
 
-def test_a_function_off_the_gradient_path_still_compiles(
-    device_gpu_only: str,
-) -> None:
+def test_a_function_off_the_gradient_path_still_compiles(device_gpu_only: str) -> None:
     """Applied to the target only, no gradient the step computes crosses it."""
     model = nn.Linear(4, 3).to(device_gpu_only)
     step = make_step(model, lambda y, t: F.mse_loss(y, _Scaled.apply(t)))
@@ -346,10 +336,7 @@ class _HandsBack(Function):
 _CLAUSES: dict[str, tuple[str, Callable[..., lucid.Tensor]]] = {
     # The trace never records ``w``: only "an input is a leaf that requires
     # grad" sees that a gradient goes to it.
-    "leaf input forward ignores": (
-        "_IgnoresWeight",
-        lambda w, x: _IgnoresWeight.apply(w, x),
-    ),
+    "leaf input forward ignores": ("_IgnoresWeight", lambda w, x: _IgnoresWeight.apply(w, x)),
     # ``w * 2`` comes from a parameter, the output only from the batch: only
     # the inputs' side of "comes from a source" sees it.
     "input computed from a parameter": (

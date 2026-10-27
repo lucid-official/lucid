@@ -188,14 +188,7 @@ _LOSS_PARAMS = {
         "reduction=",
         "label_smoothing=",
     ],
-    "kl_div": [
-        "input",
-        "target",
-        "size_average=",
-        "reduce=",
-        "reduction=",
-        "log_target=",
-    ],
+    "kl_div": ["input", "target", "size_average=", "reduce=", "reduction=", "log_target="],
     "ctc_loss": [
         "log_probs",
         "targets",

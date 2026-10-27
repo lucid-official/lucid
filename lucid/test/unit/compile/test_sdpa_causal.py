@@ -35,11 +35,7 @@ pytestmark = pytest.mark.usefixtures("inference")
 
 
 def _qkv(B: int, H: int, Lq: int, Lk: int, D: int) -> tuple[lucid.Tensor, ...]:
-    return (
-        metal_tensor(B, H, Lq, D),
-        metal_tensor(B, H, Lk, D),
-        metal_tensor(B, H, Lk, D),
-    )
+    return (metal_tensor(B, H, Lq, D), metal_tensor(B, H, Lk, D), metal_tensor(B, H, Lk, D))
 
 
 class _Causal(nn.Module):

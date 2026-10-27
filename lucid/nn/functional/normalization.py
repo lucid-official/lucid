@@ -585,11 +585,7 @@ def instance_norm(
 
 
 def local_response_norm(
-    input: Tensor,
-    size: int,
-    alpha: float = 1e-4,
-    beta: float = 0.75,
-    k: float = 1.0,
+    input: Tensor, size: int, alpha: float = 1e-4, beta: float = 0.75, k: float = 1.0
 ) -> Tensor:
     r"""Local response normalization (Krizhevsky, Sutskever & Hinton, 2012).
 

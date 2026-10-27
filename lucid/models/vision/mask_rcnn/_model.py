@@ -114,8 +114,7 @@ class _MaskRCNNHeads(nn.Sequential):
         for _ in range(num_convs):
             blocks.append(
                 nn.Sequential(
-                    nn.Conv2d(ch_in, hidden_channels, 3, padding=1),
-                    nn.ReLU(inplace=True),
+                    nn.Conv2d(ch_in, hidden_channels, 3, padding=1), nn.ReLU(inplace=True)
                 )
             )
             ch_in = hidden_channels
@@ -325,11 +324,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         identical proposals.
         """
         return _FasterRCNNForObjectDetection._rpn_proposals(
-            cast(_FasterRCNNForObjectDetection, self),
-            logits,
-            deltas,
-            anchors,
-            image_size,
+            cast(_FasterRCNNForObjectDetection, self), logits, deltas, anchors, image_size
         )
 
     # ------------------------------------------------------------------
@@ -354,11 +349,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
             deltas,
             anchors,
             targets,
-            Matcher(
-                cfg.rpn_fg_iou_thresh,
-                cfg.rpn_bg_iou_thresh,
-                allow_low_quality_matches=True,
-            ),
+            Matcher(cfg.rpn_fg_iou_thresh, cfg.rpn_bg_iou_thresh, allow_low_quality_matches=True),
             BalancedPositiveNegativeSampler(
                 cfg.rpn_batch_size_per_image, cfg.rpn_positive_fraction
             ),
@@ -366,9 +357,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         )
 
     def _select_training_samples(
-        self,
-        proposals: list[Tensor],
-        targets: list[dict[str, Tensor]],
+        self, proposals: list[Tensor], targets: list[dict[str, Tensor]]
     ) -> tuple[list[Tensor], list[Tensor], list[Tensor], list[Tensor]]:
         cfg = self._cfg
         return select_training_samples(
@@ -495,12 +484,9 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         roi_reg_targets: list[Tensor] | None = None
         roi_matched: list[Tensor] | None = None
         if targets is not None:
-            (
-                proposals,
-                roi_labels,
-                roi_reg_targets,
-                roi_matched,
-            ) = self._select_training_samples(proposals, targets)
+            proposals, roi_labels, roi_reg_targets, roi_matched = self._select_training_samples(
+                proposals, targets
+            )
 
         # 3. MultiScale RoI Align over the four FPN detection levels (P2-P5).
         det_feats = features[:4]
@@ -565,17 +551,11 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         )
 
     def _decode_per_class(
-        self,
-        proposals: list[Tensor],
-        box_deltas: Tensor,
-        image_size: tuple[int, int],
+        self, proposals: list[Tensor], box_deltas: Tensor, image_size: tuple[int, int]
     ) -> Tensor:
         """Decode ``(N, K*4)`` deltas against proposals → ``(N, K, 4)`` boxes."""
         return _FasterRCNNForObjectDetection._decode_per_class(
-            cast(_FasterRCNNForObjectDetection, self),
-            proposals,
-            box_deltas,
-            image_size,
+            cast(_FasterRCNNForObjectDetection, self), proposals, box_deltas, image_size
         )
 
     # ------------------------------------------------------------------
@@ -801,12 +781,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
             # act on.  ``image_sizes`` is what makes the canvas known; without
             # it the RoI-space probabilities are returned unchanged.
             if size_i is not None and int(det_b.shape[0]) > 0:
-                det_m = paste_masks_in_image(
-                    det_m,
-                    det_b,
-                    size_i,
-                    threshold=cfg.mask_thresh,
-                )
+                det_m = paste_masks_in_image(det_m, det_b, size_i, threshold=cfg.mask_thresh)
 
             results.append(detection_result(det_b, det_s, det_l, det_m))
         return results

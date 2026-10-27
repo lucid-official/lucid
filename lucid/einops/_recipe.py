@@ -483,10 +483,7 @@ def _mismatch(
 
 @functools.lru_cache(maxsize=1024)
 def _plan(
-    pattern: str,
-    operation: str,
-    shape: tuple[int, ...],
-    keywords: tuple[tuple[str, int], ...],
+    pattern: str, operation: str, shape: tuple[int, ...], keywords: tuple[tuple[str, int], ...]
 ) -> _Plan:
     recipe = _recipe(pattern, operation, tuple(name for name, _ in keywords), len(shape))
     lengths, must_split = _resolve_lengths(recipe, shape, keywords)
@@ -520,10 +517,7 @@ def _length(name: str, value: SupportsIndex) -> int:
 
 
 def plan(
-    pattern: str,
-    operation: str,
-    shape: tuple[int, ...],
-    axes_lengths: Mapping[str, SupportsIndex],
+    pattern: str, operation: str, shape: tuple[int, ...], axes_lengths: Mapping[str, SupportsIndex]
 ) -> _Plan:
     """The engine steps for ``operation`` with ``pattern`` on ``shape``.
 

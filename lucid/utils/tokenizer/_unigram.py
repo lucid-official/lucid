@@ -59,16 +59,9 @@ from lucid.utils.tokenizer._added_tokens import (
 from lucid.utils.tokenizer._base import SpecialTokens, Tokenizer
 from lucid.utils.tokenizer._bpe import _special_tokens_from_map
 from lucid.utils.tokenizer._decoders import Decoder, decoder_from_config
-from lucid.utils.tokenizer._normalizers import (
-    NFKC,
-    Normalizer,
-    normalizer_from_config,
-)
+from lucid.utils.tokenizer._normalizers import NFKC, Normalizer, normalizer_from_config
 from lucid.utils.tokenizer._post_processors import post_processor_from_config
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    pre_tokenizer_from_config,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, pre_tokenizer_from_config
 
 #: Hugging Face scores an unknown character at the lowest piece score
 #: minus this, so an unknown is always the costliest step on a path.
@@ -174,10 +167,7 @@ def _pieces_from_model(model: dict[str, object], path: str) -> list[tuple[str, f
 
 
 def _save_unigram_pieces_json(
-    pieces: list[tuple[str, float]],
-    path: str,
-    unk_token: str,
-    unk_log_prob: float,
+    pieces: list[tuple[str, float]], path: str, unk_token: str, unk_log_prob: float
 ) -> None:
     """Write the unified ``tokenizer.json`` for Unigram."""
     payload = {
@@ -467,11 +457,7 @@ class _UnigramCommonMixin(Tokenizer):
         return self._decoder.decode(tokens)
 
     def _apply_file_config(
-        self,
-        config: _UnigramFileConfig,
-        *,
-        normalizer_given: bool,
-        pre_tokenizer_given: bool,
+        self, config: _UnigramFileConfig, *, normalizer_given: bool, pre_tokenizer_given: bool
     ) -> None:
         """Install the pipeline a ``tokenizer.json`` describes.
 
@@ -864,12 +850,7 @@ class UnigramTokenizer(_UnigramCommonMixin, Tokenizer):
         raw = "".join(self._id_to_piece[i] for i in ids if i in self._id_to_piece)
         return raw.replace(SentencePiecePreTokenizer.SP_SPACE, " ")
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train this tokenizer from scratch on ``corpus``."""
         prepared: list[str] = []
         for doc in corpus:
@@ -1009,12 +990,7 @@ class UnigramTokenizerFast(_UnigramCommonMixin, Tokenizer):
         raw = self._cpp.decode(list(ids))
         return raw.replace(SentencePiecePreTokenizer.SP_SPACE, " ")
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train in C++ (EM with vocab pruning, Kudo 2018)."""
         prepared: list[str] = []
         for doc in corpus:

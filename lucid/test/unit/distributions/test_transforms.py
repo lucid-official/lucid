@@ -68,11 +68,7 @@ ELEMENTWISE = [
         T.ComposeTransform([T.ExpTransform(), T.AffineTransform(1.0, 2.0)]),
         X,
     ),
-    (
-        "compose sigmoid then exp",
-        T.ComposeTransform([T.SigmoidTransform(), T.ExpTransform()]),
-        X,
-    ),
+    ("compose sigmoid then exp", T.ComposeTransform([T.SigmoidTransform(), T.ExpTransform()]), X),
 ]
 
 
@@ -142,8 +138,7 @@ def test_stick_breaking_lands_on_the_simplex():
 
 
 @pytest.mark.parametrize(
-    "x",
-    [np.array([0.3, -1.2, 0.7]), np.array([0.0, 0.0]), np.array([1.5, -0.5, 0.2, 0.9])],
+    "x", [np.array([0.3, -1.2, 0.7]), np.array([0.0, 0.0]), np.array([1.5, -0.5, 0.2, 0.9])]
 )
 def test_stick_breaking_round_trips(x):
     transform = T.StickBreakingTransform()
@@ -495,11 +490,7 @@ def _transform_constraint_cases(ref):
             T.LowerCholeskyTransform(),
             rt.LowerCholeskyTransform(),
             [[[1.0, 0.0], [0.5, 2.0]], [[1.0, 2.0], [0.5, -1.0]]],
-            [
-                [[1.0, 0.0], [0.5, 2.0]],
-                [[1.0, 2.0], [0.5, 2.0]],
-                [[1.0, 0.0], [0.5, -1.0]],
-            ],
+            [[[1.0, 0.0], [0.5, 2.0]], [[1.0, 2.0], [0.5, 2.0]], [[1.0, 0.0], [0.5, -1.0]]],
         ),
         (
             "CorrCholeskyTransform",
@@ -512,13 +503,7 @@ def _transform_constraint_cases(ref):
                 [[2.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             ],
         ),
-        (
-            "AbsTransform",
-            T.AbsTransform(),
-            rt.AbsTransform(),
-            [-2.0, 0.0, 2.0],
-            [-1.0, 0.0, 2.0],
-        ),
+        ("AbsTransform", T.AbsTransform(), rt.AbsTransform(), [-2.0, 0.0, 2.0], [-1.0, 0.0, 2.0]),
         (
             "IndependentTransform",
             T.IndependentTransform(T.ExpTransform(), 1),
@@ -587,22 +572,18 @@ def test_every_transform_declares_matching_domain_and_codomain(ref):
         x_l = _t(dom_vals)
         x_r = ref.tensor(np.asarray(dom_vals, dtype=np.float64))
         assert np.array_equal(
-            _v(ours.domain.check(x_l)),
-            theirs.domain.check(x_r).numpy(),
+            _v(ours.domain.check(x_l)), theirs.domain.check(x_r).numpy()
         ), f"{name} domain.check mismatch"
 
         y_l = _t(cod_vals)
         y_r = ref.tensor(np.asarray(cod_vals, dtype=np.float64))
         assert np.array_equal(
-            _v(ours.codomain.check(y_l)),
-            theirs.codomain.check(y_r).numpy(),
+            _v(ours.codomain.check(y_l)), theirs.codomain.check(y_r).numpy()
         ), f"{name} codomain.check mismatch"
 
 
 def test_transformed_distribution_reexport_and_support_validation(ref):
-    from lucid.distributions.transformed_distribution import (
-        TransformedDistribution as DirectTD,
-    )
+    from lucid.distributions.transformed_distribution import TransformedDistribution as DirectTD
 
     assert DirectTD is T.TransformedDistribution
     assert DirectTD is D.TransformedDistribution
@@ -732,8 +713,7 @@ def test_a_log_det_of_lower_rank_than_the_event_is_summed_whole(ref):
     )
     theirs = rd.TransformedDistribution(
         rd.Independent(
-            rd.Normal(ref.zeros(4, 3, dtype=ref.float64), ref.ones(4, 3, dtype=ref.float64)),
-            2,
+            rd.Normal(ref.zeros(4, 3, dtype=ref.float64), ref.ones(4, 3, dtype=ref.float64)), 2
         ),
         [_RefConstantLogDet(0.0, 2.0)],
     )
@@ -745,8 +725,7 @@ def test_a_log_det_of_lower_rank_than_the_event_is_summed_whole(ref):
 
 def test_an_empty_batch_has_an_empty_transformed_log_prob():
     pushed = T.TransformedDistribution(
-        D.Independent(D.Normal(_t(np.zeros(3)), _t(np.ones(3))), 1),
-        [T.ExpTransform()],
+        D.Independent(D.Normal(_t(np.zeros(3)), _t(np.ones(3))), 1), [T.ExpTransform()]
     )
     assert tuple(pushed.log_prob(_t(np.ones((0, 3)))).shape) == (0,)
 
@@ -777,10 +756,7 @@ def test_independent_transform_with_event_dim_inner_matches_reference(
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-@pytest.mark.parametrize(
-    ("dim", "lengths"),
-    [(-1, [2, 2]), (1, [2, 2]), (0, [1, 2]), (-2, [1, 2])],
-)
+@pytest.mark.parametrize(("dim", "lengths"), [(-1, [2, 2]), (1, [2, 2]), (0, [1, 2]), (-2, [1, 2])])
 def test_cat_transform_mixed_event_dim_matches_reference(ref, device, dim, lengths):
     """LCD-507: ``CatTransform.log_abs_det_jacobian`` reduces partitions with
     smaller ``event_dim`` via ``_sum_rightmost`` and concatenates or sums
@@ -791,14 +767,10 @@ def test_cat_transform_mixed_event_dim_matches_reference(ref, device, dim, lengt
     rx = ref.tensor(raw)
 
     ours = T.CatTransform(
-        [T.ExpTransform(), T.IndependentTransform(T.ExpTransform(), 1)],
-        dim=dim,
-        lengths=lengths,
+        [T.ExpTransform(), T.IndependentTransform(T.ExpTransform(), 1)], dim=dim, lengths=lengths
     )
     theirs = rt.CatTransform(
-        [rt.ExpTransform(), rt.IndependentTransform(rt.ExpTransform(), 1)],
-        dim=dim,
-        lengths=lengths,
+        [rt.ExpTransform(), rt.IndependentTransform(rt.ExpTransform(), 1)], dim=dim, lengths=lengths
     )
     y = ours(x)
     ry = theirs(rx)

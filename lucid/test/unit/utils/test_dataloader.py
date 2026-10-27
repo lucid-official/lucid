@@ -119,12 +119,7 @@ def test_each_epoch_reshuffles():
 
 def test_shuffle_and_an_explicit_sampler_are_mutually_exclusive():
     with pytest.raises(ValueError):
-        DataLoader(
-            _dataset(6),
-            batch_size=2,
-            shuffle=True,
-            sampler=SequentialSampler(_dataset(6)),
-        )
+        DataLoader(_dataset(6), batch_size=2, shuffle=True, sampler=SequentialSampler(_dataset(6)))
 
 
 # ── samplers ──────────────────────────────────────────────────────────────────
@@ -218,11 +213,7 @@ def test_a_chained_iterable_dataset_streams_through_the_loader():
 
 
 def test_a_custom_collate_applies_to_an_iterable_dataset():
-    assert list(DataLoader(_Counting(0, 5), batch_size=2, collate_fn=list)) == [
-        [0, 1],
-        [2, 3],
-        [4],
-    ]
+    assert list(DataLoader(_Counting(0, 5), batch_size=2, collate_fn=list)) == [[0, 1], [2, 3], [4]]
 
 
 def test_shuffling_an_iterable_dataset_is_refused():

@@ -436,12 +436,7 @@ class PretrainedModel(nn.Module):
         model.load_state_dict(sd, strict=strict)
         return model
 
-    def save_pretrained(
-        self,
-        path: str,
-        *,
-        safe_serialization: bool = False,
-    ) -> None:
+    def save_pretrained(self, path: str, *, safe_serialization: bool = False) -> None:
         r"""Write ``config.json`` and weights to ``path``.
 
         Parameters

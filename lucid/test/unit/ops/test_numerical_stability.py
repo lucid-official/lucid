@@ -187,8 +187,7 @@ def test_lgamma_covers_the_negative_half() -> None:
 def test_lgamma_is_infinite_at_its_poles() -> None:
     """Γ has poles at 0 and the negative integers; lgamma is +inf there."""
     got = np.asarray(
-        lucid.lgamma(lucid.tensor(np.array([0.0, -1.0, -2.0]))).numpy(),
-        dtype=np.float64,
+        lucid.lgamma(lucid.tensor(np.array([0.0, -1.0, -2.0]))).numpy(), dtype=np.float64
     )
     assert np.isinf(got).all() and (got > 0).all(), got
 
@@ -248,9 +247,7 @@ def test_threshold_keeps_a_nan() -> None:
     for device in _DEVICES:
         got = np.asarray(
             F.threshold(
-                lucid.tensor(np.ascontiguousarray(x), dtype=lucid.float32, device=device),
-                1.0,
-                9.0,
+                lucid.tensor(np.ascontiguousarray(x), dtype=lucid.float32, device=device), 1.0, 9.0
             ).numpy(),
             dtype=np.float64,
         )
@@ -325,10 +322,7 @@ def test_unfold_gradient_ignores_the_padding_on_both_devices() -> None:
     grads = []
     for device in _DEVICES:
         t = lucid.tensor(
-            np.ascontiguousarray(x),
-            dtype=lucid.float32,
-            device=device,
-            requires_grad=True,
+            np.ascontiguousarray(x), dtype=lucid.float32, device=device, requires_grad=True
         )
         F.unfold(t, 2, padding=1).sum().backward()
         grads.append(np.asarray(t.grad.numpy(), dtype=np.float64).ravel())
@@ -512,8 +506,7 @@ def test_posterize_carries_a_nan_pixel() -> None:
     for device in _DEVICES:
         got = np.asarray(
             lucid.utils.transforms.functional.posterize(
-                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device),
-                4,
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device), 4
             ).numpy(),
             dtype=np.float64,
         )

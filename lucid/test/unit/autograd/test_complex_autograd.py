@@ -82,8 +82,7 @@ def test_abs_gradient_at_exactly_zero_is_zero_not_nan() -> None:
 
 
 @pytest.mark.parametrize(
-    "value,expected",
-    [(1e20 + 1e20j, np.sqrt(2.0) * 1e20), (1e-30 + 0j, 1e-30), (3 + 4j, 5.0)],
+    "value,expected", [(1e20 + 1e20j, np.sqrt(2.0) * 1e20), (1e-30 + 0j, 1e-30), (3 + 4j, 5.0)]
 )
 def test_the_magnitude_itself_is_unchanged(value, expected) -> None:
     """Guard the guard: the dedicated backward must not have cost the

@@ -169,10 +169,7 @@ class TestLinearLRParity:
             _dummy_lucid_optimizer(lr0), start_factor=0.2, end_factor=1.0, total_iters=5
         )
         ref_sched = ref.optim.lr_scheduler.LinearLR(
-            _dummy_ref_optimizer(lr0, ref),
-            start_factor=0.2,
-            end_factor=1.0,
-            total_iters=5,
+            _dummy_ref_optimizer(lr0, ref), start_factor=0.2, end_factor=1.0, total_iters=5
         )
 
         _assert_lr_sequence(_collect_lrs(lucid_sched, 8), _collect_lrs(ref_sched, 8))
@@ -263,11 +260,7 @@ class TestCyclicLRParity:
     def test_triangular(self, ref: Any) -> None:
         lr0 = 0.01
         lucid_sched = optim.lr_scheduler.CyclicLR(
-            _dummy_lucid_optimizer(lr0),
-            base_lr=0.01,
-            max_lr=0.1,
-            step_size_up=5,
-            mode="triangular",
+            _dummy_lucid_optimizer(lr0), base_lr=0.01, max_lr=0.1, step_size_up=5, mode="triangular"
         )
         ref_sched = ref.optim.lr_scheduler.CyclicLR(
             _dummy_ref_optimizer(lr0, ref),
@@ -328,9 +321,7 @@ class TestOneCycleLRParity:
         )
 
         _assert_lr_sequence(
-            _collect_lrs(lucid_sched, total_steps),
-            _collect_lrs(ref_sched, total_steps),
-            atol=1e-6,
+            _collect_lrs(lucid_sched, total_steps), _collect_lrs(ref_sched, total_steps), atol=1e-6
         )
 
     def test_linear_anneal(self, ref: Any) -> None:
@@ -352,9 +343,7 @@ class TestOneCycleLRParity:
         )
 
         _assert_lr_sequence(
-            _collect_lrs(lucid_sched, total_steps),
-            _collect_lrs(ref_sched, total_steps),
-            atol=1e-6,
+            _collect_lrs(lucid_sched, total_steps), _collect_lrs(ref_sched, total_steps), atol=1e-6
         )
 
 

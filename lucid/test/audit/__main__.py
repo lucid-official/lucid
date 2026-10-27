@@ -77,9 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     stage = p.add_argument_group("stages")
     stage.add_argument(
-        "--audit-only",
-        action="store_true",
-        help="the probe sweep alone, without the test suite",
+        "--audit-only", action="store_true", help="the probe sweep alone, without the test suite"
     )
     stage.add_argument(
         "--tests-only",
@@ -117,14 +115,10 @@ def build_parser() -> argparse.ArgumentParser:
         "(e.g. --suite-ignore lucid/test/parity/models)",
     )
     stage.add_argument(
-        "--no-doctests",
-        action="store_true",
-        help="skip the docstring-example stage",
+        "--no-doctests", action="store_true", help="skip the docstring-example stage"
     )
     stage.add_argument(
-        "--no-self-check",
-        action="store_true",
-        help="skip proving the axes can go red",
+        "--no-self-check", action="store_true", help="skip proving the axes can go red"
     )
     stage.add_argument(
         "--doctest-baseline",
@@ -175,11 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=_DEFAULT_LOG,
         help=f"mirror the run to this file as it happens (default {_DEFAULT_LOG})",
     )
-    out.add_argument(
-        "--no-log",
-        action="store_true",
-        help="do not write the transcript",
-    )
+    out.add_argument("--no-log", action="store_true", help="do not write the transcript")
     out.add_argument("--width", type=int, default=None)
     out.add_argument("--show", default="fail,error,vacuous", help="statuses to list in full")
 
@@ -222,19 +212,9 @@ def _list_subsystems(console: Console) -> int:
         if not of_key:
             continue
         inert = sum(1 for s in of_key if s.inert)
-        rows.append(
-            [
-                key,
-                str(len(of_key)),
-                str(len(of_key) - inert),
-                _surface.SUBSYSTEMS[key][1],
-            ]
-        )
+        rows.append([key, str(len(of_key)), str(len(of_key) - inert), _surface.SUBSYSTEMS[key][1]])
     console.table(
-        ["subsystem", "symbols", "stateful", "kind"],
-        rows,
-        ["l", "r", "r", "l"],
-        always=True,
+        ["subsystem", "symbols", "stateful", "kind"], rows, ["l", "r", "r", "l"], always=True
     )
     console.always("")
     for name, why in _surface.EXCLUDED.items():
@@ -283,8 +263,7 @@ def _self_check(console: Console) -> int:
         console.rule(f"unproven · {len(unproven)}", "yellow")
         console.always(
             console.paint(
-                "  no mutant exercises these, so nothing here says they can fail:",
-                "grey",
+                "  no mutant exercises these, so nothing here says they can fail:", "grey"
             )
         )
         for name in unproven:
@@ -361,8 +340,7 @@ def _report_coverage(console: Console) -> int:
     if absent:
         console.always(
             console.paint(
-                f"  {len(absent)} object(s) the walk found and the surface did not:",
-                "red",
+                f"  {len(absent)} object(s) the walk found and the surface did not:", "red"
             )
         )
         for name in sorted(absent)[:20]:
@@ -550,8 +528,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
                             + console.paint(console.bar(index, len(applicable)), "cyan")
                             + f"  {index:>5}/{len(applicable)}"
                             + console.paint(
-                                f"  {100 * index // max(len(applicable), 1):>3}%",
-                                "grey",
+                                f"  {100 * index // max(len(applicable), 1):>3}%", "grey"
                             )
                             + console.paint(
                                 f"   {axis_timer}  "
@@ -729,10 +706,7 @@ def save_coverage(path: Path, report: Report) -> int:
     return len(answered)
 
 
-def _scoped_coverage(
-    recorded: dict[str, str],
-    args: argparse.Namespace,
-) -> dict[str, str]:
+def _scoped_coverage(recorded: dict[str, str], args: argparse.Namespace) -> dict[str, str]:
     """A filtered sweep cannot answer cells outside the requested scope.
 
     Keep the complete baseline for full runs, including removed symbols,
@@ -857,11 +831,7 @@ def report_uncovered(console: Console, args: argparse.Namespace) -> int:
     for s in without:
         by_sub.setdefault(s.subsystem, []).append(s.short)
     rows = [
-        [
-            key,
-            str(len(names)),
-            ", ".join(sorted(names)[:6]) + ("…" if len(names) > 6 else ""),
-        ]
+        [key, str(len(names)), ", ".join(sorted(names)[:6]) + ("…" if len(names) > 6 else "")]
         for key, names in sorted(by_sub.items())
     ]
     console.table(["subsystem", "count", "examples"], rows, ["l", "r", "l"], always=True)
@@ -881,39 +851,29 @@ def report_uncovered(console: Console, args: argparse.Namespace) -> int:
     console.always("")
     console.always(
         console.paint(
-            "  Each reason names the parameter that stopped it.  A required argument",
-            "grey",
+            "  Each reason names the parameter that stopped it.  A required argument", "grey"
         )
     )
     console.always(
         console.paint(
-            "  the derivation has no value for is closed by one entry in _autospec's",
-            "grey",
+            "  the derivation has no value for is closed by one entry in _autospec's", "grey"
         )
     )
     console.always(
         console.paint(
-            "  name table, which then covers every other op that spells it the same",
-            "grey",
+            "  name table, which then covers every other op that spells it the same", "grey"
         )
     )
     console.always(
-        console.paint(
-            "  way — writing a per-op spec is the last resort, not the first.",
-            "grey",
-        )
+        console.paint("  way — writing a per-op spec is the last resort, not the first.", "grey")
     )
     console.always(
         console.paint(
-            "  Reaching a symbol is still not verifying it: the authoritative gap is",
-            "grey",
+            "  Reaching a symbol is still not verifying it: the authoritative gap is", "grey"
         )
     )
     console.always(
-        console.paint(
-            "  the SKIP list of an actual run, from `--json report.json`.",
-            "grey",
-        )
+        console.paint("  the SKIP list of an actual run, from `--json report.json`.", "grey")
     )
     return 0
 
@@ -947,8 +907,7 @@ def _run_audit_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
         recorded = save_coverage(args.coverage_baseline, report)
         console.always(
             console.paint(
-                f"  {recorded} answered cells recorded in {args.coverage_baseline}",
-                "grey",
+                f"  {recorded} answered cells recorded in {args.coverage_baseline}", "grey"
             )
         )
         return 0, 0
@@ -960,8 +919,7 @@ def _run_audit_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
             console.always("")
             console.always(
                 console.paint(
-                    "  no coverage baseline yet — run --update-coverage to record one",
-                    "grey",
+                    "  no coverage baseline yet — run --update-coverage to record one", "grey"
                 )
             )
         else:
@@ -986,10 +944,7 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
     """
     console.banner("Suite", "the values, where the sweep checks the contracts")
     result = _suite.run_suite(
-        console,
-        args.suite_path,
-        with_coverage=not args.no_line_coverage,
-        ignore=args.suite_ignore,
+        console, args.suite_path, with_coverage=not args.no_line_coverage, ignore=args.suite_ignore
     )
     _suite.report_suite(result, console)
 
@@ -1004,10 +959,7 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
         else:
             _suite.save_floor(args.suite_baseline, result)
             console.always(
-                console.paint(
-                    f"  {result.percent:.2f}% recorded in {args.suite_baseline}",
-                    "grey",
-                )
+                console.paint(f"  {result.percent:.2f}% recorded in {args.suite_baseline}", "grey")
             )
         # A recorded floor is not a licence to ignore a broken test — the
         # two are independent, and only the floor was just accepted.
@@ -1020,8 +972,7 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
             console.always("")
             console.always(
                 console.paint(
-                    "  no line-coverage floor yet — run --update-suite to record one",
-                    "grey",
+                    "  no line-coverage floor yet — run --update-suite to record one", "grey"
                 )
             )
         else:
@@ -1050,12 +1001,10 @@ def _run_doctest_stage(args: argparse.Namespace, console: Console) -> int:
         "  "
         + console.paint("examples".ljust(22), "grey")
         + console.paint(
-            f"{result.attempted - result.failed}/{result.attempted} run as written ",
-            "white",
+            f"{result.attempted - result.failed}/{result.attempted} run as written ", "white"
         )
         + console.paint(
-            f"({100 * (result.attempted - result.failed) / result.attempted:.1f}%)",
-            "cyan",
+            f"({100 * (result.attempted - result.failed) / result.attempted:.1f}%)", "cyan"
         )
     )
 

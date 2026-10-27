@@ -209,11 +209,7 @@ class ReturnNormaliser(nn.Module):
     spread: Tensor
 
     def __init__(
-        self,
-        decay: float = 0.99,
-        low: float = 5.0,
-        high: float = 95.0,
-        floor: float = 1.0,
+        self, decay: float = 0.99, low: float = 5.0, high: float = 95.0, floor: float = 1.0
     ) -> None:
         """Initialise the estimate. See the class docstring for parameters."""
         super().__init__()

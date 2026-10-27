@@ -97,10 +97,7 @@ def _gather_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], ob
             lambda d: lucid.index_select(table(d), 0, _ix([2, bad], d)),
             [[6.0, 7.0, 8.0], nan_row],
         ),
-        "take": (
-            lambda d: lucid.take(grid(d)[:, :2], _ix([3, bad], d)),
-            [5.0, NAN],
-        ),
+        "take": (lambda d: lucid.take(grid(d)[:, :2], _ix([3, bad], d)), [5.0, NAN]),
         "getitem": (
             lambda d: lucid.arange(N, dtype=lucid.float32).to(d)[_ix([1, bad], d)],
             [1.0, NAN],
@@ -248,18 +245,9 @@ def _scatter_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], o
             ),
             [[False, True, False, False], [False, False, False, True]],
         ),
-        "scatter_reduce_amax": (
-            amax,
-            [[0.0, 100.0, 2.0, 3.0], [4.0, 5.0, 6.0, 100.0]],
-        ),
-        "scatter_reduce_amin": (
-            amin,
-            [[0.0, -100.0, 2.0, 3.0], [4.0, 5.0, 6.0, -100.0]],
-        ),
-        "scatter_reduce_prod": (
-            prod,
-            [[0.0, 3.0, 2.0, 3.0], [4.0, 5.0, 6.0, 21.0]],
-        ),
+        "scatter_reduce_amax": (amax, [[0.0, 100.0, 2.0, 3.0], [4.0, 5.0, 6.0, 100.0]]),
+        "scatter_reduce_amin": (amin, [[0.0, -100.0, 2.0, 3.0], [4.0, 5.0, 6.0, -100.0]]),
+        "scatter_reduce_prod": (prod, [[0.0, 3.0, 2.0, 3.0], [4.0, 5.0, 6.0, 21.0]]),
         "index_add": (
             lambda d: flat(d).index_add(0, _ix([1, bad], d), lucid.full((2,), 10.0).to(d)),
             [0.0, 10.0, 0.0, 0.0],

@@ -94,11 +94,7 @@ def test_src_of_another_dtype_is_refused(
     ref: ModuleType, device: str, op: str, self_dt: str, src_dt: str
 ) -> None:
     with pytest.raises(RuntimeError):
-        _OPS[op](
-            _ref(ref, _BASE, self_dt),
-            _ref(ref, _INDEX, "int64"),
-            _ref(ref, _SRC, src_dt),
-        )
+        _OPS[op](_ref(ref, _BASE, self_dt), _ref(ref, _INDEX, "int64"), _ref(ref, _SRC, src_dt))
     x = _lucid(_BASE, self_dt, device)
     i = _lucid(_INDEX, "int64", device)
     s = _lucid(_SRC, src_dt, device)
@@ -145,9 +141,7 @@ def test_index_that_is_not_an_integer_tensor_is_refused(
     if op != "scatter_set":
         with pytest.raises(RuntimeError):
             _OPS[op](
-                _ref(ref, _BASE, "float32"),
-                _ref(ref, _INDEX, index_dt),
-                _ref(ref, _SRC, "float32"),
+                _ref(ref, _BASE, "float32"), _ref(ref, _INDEX, index_dt), _ref(ref, _SRC, "float32")
             )
     x = _lucid(_BASE, "float32", device)
     i = _lucid(_INDEX, index_dt, device)
@@ -173,11 +167,7 @@ def _match_params() -> list[object]:
 def test_matching_dtypes_still_scatter(
     ref: ModuleType, device: str, op: str, dtype: str, index_dt: str
 ) -> None:
-    want = _OPS[op](
-        _ref(ref, _BASE, dtype),
-        _ref(ref, _INDEX, "int64"),
-        _ref(ref, _SRC, dtype),
-    )
+    want = _OPS[op](_ref(ref, _BASE, dtype), _ref(ref, _INDEX, "int64"), _ref(ref, _SRC, dtype))
     got = _engine(
         op,
         _lucid(_BASE, dtype, device),

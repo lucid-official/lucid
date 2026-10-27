@@ -37,8 +37,7 @@ _DEFAULT_THRESHOLD = 15.0  # percent regression limit
 def _git_sha() -> str:
     try:
         out = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL,
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
         )
         return out.decode().strip()
     except (subprocess.CalledProcessError, OSError):
@@ -117,9 +116,7 @@ def _is_throughput_key(key: str) -> bool:
 
 
 def check_regressions(
-    current: dict[str, object],
-    baseline: dict[str, object],
-    threshold_pct: float,
+    current: dict[str, object], baseline: dict[str, object], threshold_pct: float
 ) -> list[str]:
     """
     Return a list of human-readable regression strings.
@@ -155,9 +152,7 @@ def check_regressions(
 
 
 def print_comparison(
-    current: dict[str, object],
-    baseline: dict[str, object],
-    threshold_pct: float,
+    current: dict[str, object], baseline: dict[str, object], threshold_pct: float
 ) -> list[str]:
     regressions = check_regressions(current, baseline, threshold_pct)
     improvements: list[str] = []

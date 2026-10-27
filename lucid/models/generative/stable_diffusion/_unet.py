@@ -186,21 +186,13 @@ class _TransformerBlock(nn.Module):
         self.attn1 = nn.MultiheadAttention(channels, heads, bias=False, batch_first=True)
         self.norm2 = nn.LayerNorm(channels)
         self.attn2 = nn.MultiheadAttention(
-            channels,
-            heads,
-            kdim=context_dim,
-            vdim=context_dim,
-            bias=False,
-            batch_first=True,
+            channels, heads, kdim=context_dim, vdim=context_dim, bias=False, batch_first=True
         )
         # Restores the output bias ``bias=False`` removed above.
         self.attn1_out_bias = nn.Parameter(lucid.zeros((channels,)))
         self.attn2_out_bias = nn.Parameter(lucid.zeros((channels,)))
         self.norm3 = nn.LayerNorm(channels)
-        self.ff = nn.Sequential(
-            _GEGLU(channels, channels * 4),
-            nn.Linear(channels * 4, channels),
-        )
+        self.ff = nn.Sequential(_GEGLU(channels, channels * 4), nn.Linear(channels * 4, channels))
 
     @override
     def forward(self, x: Tensor, context: Tensor) -> Tensor:
@@ -250,12 +242,7 @@ class _SpatialTransformer(nn.Module):
     """
 
     def __init__(
-        self,
-        channels: int,
-        heads: int,
-        context_dim: int,
-        groups: int,
-        depth: int = 1,
+        self, channels: int, heads: int, context_dim: int, groups: int, depth: int = 1
     ) -> None:
         """Initialise the module. See the class docstring for parameters."""
         super().__init__()
@@ -430,9 +417,7 @@ class UNet2DConditionModel(nn.Module):
         # float32 at least and handed to the time MLP in the U-Net's dtype.
         emb = self.time_mlp(
             timestep_embedding(
-                steps,
-                self.config.unet_block_out_channels[0],
-                dtype=self.conv_in.weight.dtype,
+                steps, self.config.unet_block_out_channels[0], dtype=self.conv_in.weight.dtype
             )
         )
         if int(context.shape[-1]) != self.config.cross_attention_dim:

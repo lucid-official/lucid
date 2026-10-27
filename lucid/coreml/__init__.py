@@ -773,10 +773,7 @@ def precision_cost(
 
     measured: dict[str, float] = {}
     with tempfile.TemporaryDirectory() as room:
-        for name, precision in (
-            ("float32", Precision.FLOAT32),
-            ("float16", Precision.FLOAT16),
-        ):
+        for name, precision in (("float32", Precision.FLOAT32), ("float16", Precision.FLOAT16)):
             exported = export(
                 model,
                 example,
@@ -792,11 +789,7 @@ def precision_cost(
     return measured
 
 
-def load(
-    path: str,
-    *,
-    compute_units: ComputeUnits = ComputeUnits.ALL,
-) -> CoreMLModel:
+def load(path: str, *, compute_units: ComputeUnits = ComputeUnits.ALL) -> CoreMLModel:
     """Load an existing ``.mlpackage``.
 
     Feature names are read from the package, so this works on packages
@@ -877,12 +870,7 @@ def load(
     # load — and, with each load compiling afresh, a second full copy of
     # the weights in Core ML's cache.
     model = CoreMLModel(
-        path,
-        [],
-        [],
-        compute_units=compute_units,
-        precision="UNKNOWN",
-        io_precision="UNKNOWN",
+        path, [], [], compute_units=compute_units, precision="UNKNOWN", io_precision="UNKNOWN"
     )
     try:
         handle = model._handle

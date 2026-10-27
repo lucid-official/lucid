@@ -74,10 +74,7 @@ def test_skip_sequence_matches_away_from_known_boundary(init_scale_exp: int) -> 
     assert eager_scales == comp_scales
 
 
-@pytest.mark.parametrize(
-    "seed,init_scale_exp",
-    [(1, 18), (1, 19), (36, 17), (36, 18), (36, 19)],
-)
+@pytest.mark.parametrize("seed,init_scale_exp", [(1, 18), (1, 19), (36, 17), (36, 18), (36, 19)])
 def test_skip_sequence_matches_at_overflow_boundary(seed: int, init_scale_exp: int) -> None:
     eager_scales, comp_scales = _scale_sequence(seed=seed, init_scale=2.0**init_scale_exp)
     assert eager_scales == comp_scales

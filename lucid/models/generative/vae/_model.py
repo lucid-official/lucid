@@ -250,10 +250,7 @@ class _VAEDecoder(nn.Module):
         self._post_channels = tuple(rev_channels[1:]) + (rev_channels[-1],) if self._hier else ()
 
     @override
-    def forward(
-        self,
-        z_or_zs: Tensor | list[Tensor],
-    ) -> Tensor:
+    def forward(self, z_or_zs: Tensor | list[Tensor]) -> Tensor:
         if self._hier:
             assert isinstance(z_or_zs, list), "Hierarchical decoder expects a list of z_l"
             zs = z_or_zs
@@ -406,12 +403,7 @@ class VAEModel(PretrainedModel):
             mu_flat = lucid.cat(mus, dim=-1)
             logvar_flat = lucid.cat(logvars, dim=-1)
             z_flat = lucid.cat(zs, dim=-1)
-            return VAEOutput(
-                sample=recon,
-                latent=z_flat,
-                mu=mu_flat,
-                logvar=logvar_flat,
-            )
+            return VAEOutput(sample=recon, latent=z_flat, mu=mu_flat, logvar=logvar_flat)
 
         mu, logvar = cast(tuple[Tensor, Tensor], self.encode(x))
         z = reparameterize(mu, logvar)
@@ -579,12 +571,7 @@ class VAEForImageGeneration(ImageGenerationModel):
         )
 
     @lucid.no_grad()
-    def generate(
-        self,
-        n_samples: int = 1,
-        *,
-        device: str | None = None,
-    ) -> GenerationOutput:
+    def generate(self, n_samples: int = 1, *, device: str | None = None) -> GenerationOutput:
         """Sample ``n_samples`` images from the prior ``N(0, I)``."""
         if self._is_hierarchical:
             zs = [start_noise(self, (n_samples, d), device) for d in self._latent_dims]

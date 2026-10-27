@@ -167,7 +167,7 @@ EXPECTED_EAGER_GRAD: dict[str, str] = {
     **dict.fromkeys(
         ("floordiv", "remainder", "fmod"),
         "LCD-444: no compile VJP (or emitter) for floordiv / remainder / fmod",
-    ),
+    )
 }
 
 #: Case → why it has no manual VJP yet, although MPSGraph's autodiff

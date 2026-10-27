@@ -38,10 +38,7 @@ class _DropScaleNet(nn.Module):
 class _NestedBNNet(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.block = nn.Sequential(
-            nn.Linear(8, 8),
-            nn.BatchNorm1d(8),
-        )
+        self.block = nn.Sequential(nn.Linear(8, 8), nn.BatchNorm1d(8))
         self.head = nn.Linear(8, 4)
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
@@ -413,10 +410,7 @@ def test_backward_hooks_on_submodule_under_make_step() -> None:
 def test_global_module_hook_and_internal_weight_norm_hook() -> None:
     """Global hooks route to eager while active; internal weight_norm pre-hooks still compile."""
     # Internal weight_norm hook is traced into the graph, not treated as an eager-only user hook.
-    wn_model = nn.Sequential(
-        nn.utils.weight_norm(nn.Linear(8, 8)),
-        nn.ReLU(),
-    ).to(COMPILE_DEVICE)
+    wn_model = nn.Sequential(nn.utils.weight_norm(nn.Linear(8, 8)), nn.ReLU()).to(COMPILE_DEVICE)
     wn_model.eval()
     assert not model_has_active_hooks(wn_model)
     cm = lucid.compile(wn_model)

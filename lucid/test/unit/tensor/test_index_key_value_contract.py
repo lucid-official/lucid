@@ -265,8 +265,7 @@ def test_retain_grad_survives_an_assignment(device: str) -> None:
 
 def test_index_put_reads_a_bool_mask_as_a_mask(device: str) -> None:
     out = lucid.zeros(4, device=device).index_put(
-        (lucid.tensor([False, False, True, True], device=device),),
-        lucid.tensor(5.0, device=device),
+        (lucid.tensor([False, False, True, True], device=device),), lucid.tensor(5.0, device=device)
     )
     assert out.tolist() == [0.0, 0.0, 5.0, 5.0]
 

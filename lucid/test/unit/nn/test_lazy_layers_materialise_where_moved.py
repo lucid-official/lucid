@@ -36,10 +36,7 @@ _LAZY = {
     "LazyBatchNorm3d": ({}, (4, 6, 3, 3, 3)),
     "LazyInstanceNorm1d": (dict(affine=True, track_running_stats=True), (4, 6, 8)),
     "LazyInstanceNorm2d": (dict(affine=True, track_running_stats=True), (4, 6, 5, 5)),
-    "LazyInstanceNorm3d": (
-        dict(affine=True, track_running_stats=True),
-        (4, 6, 3, 3, 3),
-    ),
+    "LazyInstanceNorm3d": (dict(affine=True, track_running_stats=True), (4, 6, 3, 3, 3)),
 }
 _NAMES = list(_LAZY)
 
@@ -81,11 +78,7 @@ def test_moved_before_the_first_input_it_materialises_there(name, device):
 @pytest.mark.parametrize("name", _NAMES)
 @pytest.mark.parametrize(
     "convert",
-    [
-        lambda m: m.double(),
-        lambda m: m.to(lucid.float64),
-        lambda m: m.type(lucid.float64),
-    ],
+    [lambda m: m.double(), lambda m: m.to(lucid.float64), lambda m: m.type(lucid.float64)],
     ids=["double", "to-dtype", "type"],
 )
 def test_cast_before_the_first_input_it_materialises_in_that_dtype(name, convert):

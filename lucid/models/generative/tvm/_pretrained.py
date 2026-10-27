@@ -30,12 +30,7 @@ from lucid.models._utils._common import apply_overrides, reject_unavailable_pret
 from lucid.models.generative.tvm._config import TVMConfig
 from lucid.models.generative.tvm._model import TVMForImageGeneration, TVMModel
 
-__all__ = [
-    "tvm_imagenet256",
-    "tvm_imagenet512",
-    "tvm_imagenet256_gen",
-    "tvm_imagenet512_gen",
-]
+__all__ = ["tvm_imagenet256", "tvm_imagenet512", "tvm_imagenet256_gen", "tvm_imagenet512_gen"]
 
 # Table 6, first column — the released ``im256_w2`` run.
 _CFG_IMAGENET256 = TVMConfig()

@@ -14,12 +14,7 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.utils.rollout._env import Episode
 
-__all__ = [
-    "SequenceReplay",
-    "SumTree",
-    "PrioritizedBatch",
-    "PrioritizedSequenceReplay",
-]
+__all__ = ["SequenceReplay", "SumTree", "PrioritizedBatch", "PrioritizedSequenceReplay"]
 
 
 class SequenceReplay:

@@ -1,10 +1,7 @@
 """Swin Transformer family — Liu et al., 2021."""
 
 from lucid.models.vision.swin._config import SwinConfig
-from lucid.models.vision.swin._model import (
-    SwinTransformer,
-    SwinTransformerForImageClassification,
-)
+from lucid.models.vision.swin._model import SwinTransformer, SwinTransformerForImageClassification
 from lucid.models.vision.swin._pretrained import (
     swin_tiny,
     swin_tiny_cls,

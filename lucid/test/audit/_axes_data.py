@@ -96,17 +96,7 @@ def _tiny_vocab() -> dict[str, int]:
         for i in range(1, len(word)):
             vocab.setdefault(word[:i], len(vocab))
             vocab.setdefault("##" + word[i:], len(vocab))
-    for token in (
-        "<unk>",
-        "<pad>",
-        "<bos>",
-        "<eos>",
-        "<mask>",
-        "[UNK]",
-        "[PAD]",
-        "[CLS]",
-        "[SEP]",
-    ):
+    for token in ("<unk>", "<pad>", "<bos>", "<eos>", "<mask>", "[UNK]", "[PAD]", "[CLS]", "[SEP]"):
         vocab.setdefault(token, len(vocab))
     return vocab
 
@@ -242,18 +232,12 @@ _BUILD_BY_NAME: dict[str, Any] = {
     # siblings reject an empty sequence by design, which is the right
     # refusal and left them unconstructible for want of one element.
     "transform": lambda: lucid.distributions.ExpTransform(),
-    "parts": lambda: [
-        lucid.distributions.ExpTransform(),
-        lucid.distributions.AbsTransform(),
-    ],
+    "parts": lambda: [lucid.distributions.ExpTransform(), lucid.distributions.AbsTransform()],
     "tseq": lambda: [lucid.distributions.ExpTransform()],
     # ``CatTransform``/``StackTransform``/``ComposeTransform`` all refuse
     # an empty sequence, which is the right refusal — the table used to
     # supply ``[]`` and the three of them were unconstructible for it.
-    "transforms": lambda: [
-        lucid.distributions.ExpTransform(),
-        lucid.distributions.AbsTransform(),
-    ],
+    "transforms": lambda: [lucid.distributions.ExpTransform(), lucid.distributions.AbsTransform()],
     "reinterpreted_batch_ndims": lambda: 1,
     "registered": list,
     "engine_dtype": lambda: lucid.float32._engine_dtype,
@@ -264,8 +248,7 @@ _BUILD_BY_NAME: dict[str, Any] = {
     # with a ``cdf``, and the annotation only says ``Distribution``.
     "distribution": lambda: lucid.distributions.Normal(0.0, 1.0),
     "base_distribution": lambda: lucid.distributions.Normal(
-        lucid.tensor(np.zeros(3, dtype=np.float32)),
-        lucid.tensor(np.ones(3, dtype=np.float32)),
+        lucid.tensor(np.zeros(3, dtype=np.float32)), lucid.tensor(np.ones(3, dtype=np.float32))
     ),
     # A Wishart needs more degrees of freedom than the scale's order.
     "df": lambda: 5.0,
@@ -273,8 +256,7 @@ _BUILD_BY_NAME: dict[str, Any] = {
         probs=lucid.tensor(np.full(3, 1.0 / 3.0, dtype=np.float32))
     ),
     "component_distribution": lambda: lucid.distributions.Normal(
-        lucid.tensor(np.zeros(3, dtype=np.float32)),
-        lucid.tensor(np.ones(3, dtype=np.float32)),
+        lucid.tensor(np.zeros(3, dtype=np.float32)), lucid.tensor(np.ones(3, dtype=np.float32))
     ),
     "in_shape": lambda: (2, 3),
     "out_shape": lambda: (3, 2),
@@ -344,7 +326,7 @@ _BY_CLASS: dict[str, dict[str, Any]] = {
 #: (LCD-492) — so they are built on it.  ``ChainedScheduler`` takes its
 #: optimizer after the children, defaulting to theirs.
 _BUILD_FROM_SIBLINGS: dict[str, Any] = {
-    "schedulers": lambda built: _nested_schedulers(built.get("optimizer")),
+    "schedulers": lambda built: _nested_schedulers(built.get("optimizer"))
 }
 
 
@@ -477,10 +459,7 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
         # Both attempts, because they fail for different reasons and
         # reporting only the first sends the reader to fix a parameter
         # the second attempt had already supplied.
-        return (
-            None,
-            f"{first}; with optionals filled: {type(exc).__name__}: {str(exc)[:60]}",
-        )
+        return (None, f"{first}; with optionals filled: {type(exc).__name__}: {str(exc)[:60]}")
 
 
 class TransformAxis(Axis):
@@ -538,9 +517,7 @@ class TransformAxis(Axis):
             first = instance(source)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.UNSUPPORTED,
-                f"apply: {type(exc).__name__}: {str(exc)[:70]}",
+                symbol, Status.UNSUPPORTED, f"apply: {type(exc).__name__}: {str(exc)[:70]}"
             )
 
         tensor = _as_tensor(first)
@@ -552,10 +529,7 @@ class TransformAxis(Axis):
             return self._finding(symbol, Status.FAIL, "returned an empty tensor")
         if not np.isfinite(values.astype(np.float64)).all():
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "output contains NaN or infinity",
-                shape=values.shape,
+                symbol, Status.FAIL, "output contains NaN or infinity", shape=values.shape
             )
 
         after = source.numpy()
@@ -571,9 +545,7 @@ class TransformAxis(Axis):
             second = _as_tensor(instance(_image()))
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"second application raised: {type(exc).__name__}: {exc}",
+                symbol, Status.FAIL, f"second application raised: {type(exc).__name__}: {exc}"
             )
         if second is None or second.shape != tensor.shape:
             return self._finding(
@@ -582,10 +554,7 @@ class TransformAxis(Axis):
                 f"same seed gave shape {getattr(second, 'shape', None)} then {tensor.shape}",
             )
         if not np.allclose(
-            second.numpy().astype(np.float64),
-            values.astype(np.float64),
-            rtol=1e-5,
-            atol=1e-6,
+            second.numpy().astype(np.float64), values.astype(np.float64), rtol=1e-5, atol=1e-6
         ):
             return self._finding(
                 symbol,
@@ -643,9 +612,7 @@ class DataAxis(Axis):
             info = fn()
             if info is not None:
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"reported {type(info).__name__} outside a worker process",
+                    symbol, Status.FAIL, f"reported {type(info).__name__} outside a worker process"
                 )
             return self._finding(symbol, Status.PASS, "None outside a worker")
 
@@ -664,9 +631,7 @@ class DataAxis(Axis):
             seen = sorted(i for p in parts for i in getattr(p, "indices", []))
             if seen and seen != list(range(6)):
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"the parts cover {seen}, not each of 0..5 exactly once",
+                    symbol, Status.FAIL, f"the parts cover {seen}, not each of 0..5 exactly once"
                 )
             return self._finding(symbol, Status.PASS, f"split 6 into {sizes}")
 
@@ -681,9 +646,7 @@ class DataAxis(Axis):
             return self._finding(symbol, Status.PASS, f"converted to {type(out).__name__}")
         if not isinstance(out, (list, tuple)) or not out:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"collated a 3-sample batch into {type(out).__name__}",
+                symbol, Status.FAIL, f"collated a 3-sample batch into {type(out).__name__}"
             )
         stacked = out[0]
         if getattr(stacked, "shape", (0,))[0] != 3:
@@ -724,9 +687,7 @@ class DataAxis(Axis):
             # ``Dataset`` and ``Sampler`` are the protocol, not an
             # implementation of it; refusing to answer is the contract.
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                "abstract base — __len__ is the subclass's",
+                symbol, Status.NOT_APPLICABLE, "abstract base — __len__ is the subclass's"
             )
         except Exception as exc:  # noqa: BLE001
             return self._finding(symbol, Status.FAIL, f"len() raised: {type(exc).__name__}: {exc}")
@@ -752,15 +713,11 @@ class DataAxis(Axis):
             produced = list(_bounded(instance, limit=64))
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.UNSUPPORTED,
-                f"iteration: {type(exc).__name__}: {str(exc)[:70]}",
+                symbol, Status.UNSUPPORTED, f"iteration: {type(exc).__name__}: {str(exc)[:70]}"
             )
         if declared is not None and len(produced) != declared:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"len() says {declared} but iterating yielded {len(produced)}",
+                symbol, Status.FAIL, f"len() says {declared} but iterating yielded {len(produced)}"
             )
         return self._finding(
             symbol,
@@ -801,9 +758,7 @@ def _call_if_collator(axis: Axis, symbol: Symbol, instance: Any) -> Finding:
         out = instance(batch)
     except Exception as exc:  # noqa: BLE001
         return axis._finding(
-            symbol,
-            Status.UNSUPPORTED,
-            f"collate: {type(exc).__name__}: {str(exc)[:70]}",
+            symbol, Status.UNSUPPORTED, f"collate: {type(exc).__name__}: {str(exc)[:70]}"
         )
     if out is None:
         return axis._finding(symbol, Status.FAIL, "collating a 4-sample batch returned None")
@@ -846,9 +801,7 @@ class TokenizerAxis(Axis):
             ids = instance.encode(self._TEXT)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.UNSUPPORTED,
-                f"encode: {type(exc).__name__}: {str(exc)[:70]}",
+                symbol, Status.UNSUPPORTED, f"encode: {type(exc).__name__}: {str(exc)[:70]}"
             )
         ids = list(ids)
         if not ids:
@@ -868,9 +821,7 @@ class TokenizerAxis(Axis):
             text = instance.decode(ids)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"decode of its own ids raised: {type(exc).__name__}: {exc}",
+                symbol, Status.FAIL, f"decode of its own ids raised: {type(exc).__name__}: {exc}"
             )
         if text == self._TEXT:
             return self._finding(symbol, Status.PASS, f"round trip exact over {len(ids)} ids")
@@ -879,15 +830,11 @@ class TokenizerAxis(Axis):
             again = instance.decode(list(instance.encode(self._TEXT)))
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"second encode / decode raised: {type(exc).__name__}: {exc}",
+                symbol, Status.FAIL, f"second encode / decode raised: {type(exc).__name__}: {exc}"
             )
         if again != text:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "encoding the same text twice decoded to two different strings",
+                symbol, Status.FAIL, "encoding the same text twice decoded to two different strings"
             )
         # Not a pass.  The axis's question is whether ``decode(encode(t))``
         # gives ``t`` back; when it does not, "at least it is repeatable"
@@ -969,9 +916,7 @@ class SchedulerAxis(Axis):
         bad = [r for r in rates if not math.isfinite(r) or r < 0.0]
         if bad:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"produced a negative or non-finite rate: {bad[:3]}",
+                symbol, Status.FAIL, f"produced a negative or non-finite rate: {bad[:3]}"
             )
 
         if not hasattr(instance, "state_dict"):
@@ -1069,17 +1014,6 @@ def _walk(scheduler: Any, optimizer: Any, epochs: int) -> list[float] | None:
 
 
 #: Registered into ``ALL_AXES`` beside the other subsystem axes.
-DATA_AXES: tuple[Axis, ...] = (
-    TransformAxis(),
-    DataAxis(),
-    TokenizerAxis(),
-    SchedulerAxis(),
-)
+DATA_AXES: tuple[Axis, ...] = (TransformAxis(), DataAxis(), TokenizerAxis(), SchedulerAxis())
 
-__all__ = [
-    "DATA_AXES",
-    "DataAxis",
-    "SchedulerAxis",
-    "TokenizerAxis",
-    "TransformAxis",
-]
+__all__ = ["DATA_AXES", "DataAxis", "SchedulerAxis", "TokenizerAxis", "TransformAxis"]

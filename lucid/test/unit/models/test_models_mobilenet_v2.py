@@ -43,10 +43,7 @@ class TestMobileNetV2Config(unittest.TestCase):
 class TestMobileNetV2ParamCounts(unittest.TestCase):
 
     def test_full_has_more_params_than_075(self) -> None:
-        self.assertGreater(
-            mobilenet_v2().num_parameters(),
-            mobilenet_v2_075().num_parameters(),
-        )
+        self.assertGreater(mobilenet_v2().num_parameters(), mobilenet_v2_075().num_parameters())
 
     def test_exact_param_counts(self) -> None:
         """Pin the counts, not just their ordering.

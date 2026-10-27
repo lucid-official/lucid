@@ -125,9 +125,7 @@ class TestCrossViTPaperParamCounts(unittest.TestCase):
         n = float(getattr(models, factory_name)().num_parameters()) / 1e6
         delta = abs(n - paper_M) / paper_M
         self.assertLess(
-            delta,
-            0.02,
-            f"{factory_name}: {n:.2f}M deviates {delta*100:.1f}% from paper {paper_M}M",
+            delta, 0.02, f"{factory_name}: {n:.2f}M deviates {delta*100:.1f}% from paper {paper_M}M"
         )
 
     def test_tiny(self) -> None:
@@ -156,8 +154,7 @@ class TestCrossViTKeyParityWithTimm(unittest.TestCase):
     """State-dict key topology should mirror timm's so the converter is trivial."""
 
     @unittest.skipUnless(
-        __import__("importlib").util.find_spec("timm") is not None,
-        "timm not installed",
+        __import__("importlib").util.find_spec("timm") is not None, "timm not installed"
     )
     def test_tiny_key_count_matches_timm(self) -> None:
         import timm

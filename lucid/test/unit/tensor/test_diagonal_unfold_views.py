@@ -85,12 +85,7 @@ def test_non_overlapping_windows_are_a_writable_view() -> None:
 def test_overlapping_windows_read_but_refuse_a_write() -> None:
     x = lucid.arange(6).float()
     u = x.unfold(0, 3, 1)
-    assert u.tolist() == [
-        [0.0, 1.0, 2.0],
-        [1.0, 2.0, 3.0],
-        [2.0, 3.0, 4.0],
-        [3.0, 4.0, 5.0],
-    ]
+    assert u.tolist() == [[0.0, 1.0, 2.0], [1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]]
     with pytest.raises(Exception, match="overlap"):
         u.add_(1.0)
 

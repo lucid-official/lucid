@@ -81,16 +81,11 @@ def _write_clean_fixture(tmp_path: Path) -> set[str]:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
-    return {
-        "lucid/_C/backend/cpu/methods/Binary.cpp",
-        "lucid/_C/backend/gpu/methods/Binary.cpp",
-    }
+    return {"lucid/_C/backend/cpu/methods/Binary.cpp", "lucid/_C/backend/gpu/methods/Binary.cpp"}
 
 
 def test_real_backend_tree_passes() -> None:
-    violations = check_backend_layout.scan_backend_layout(
-        root=check_backend_layout.ROOT,
-    )
+    violations = check_backend_layout.scan_backend_layout(root=check_backend_layout.ROOT)
     assert violations == []
     assert check_backend_layout.check() == 0
 
@@ -149,18 +144,14 @@ def test_rejects_untracked_cpp_non_member_and_extra_include(tmp_path: Path) -> N
     assert [v.rule for v in violations] == ["non-member-definition"]
 
     # 3. Extra #include in methods/Binary.cpp
-    cpu_bin.write_text(
-        "#include <vector>\n" + _CLEAN_CPU_BINARY,
-        encoding="utf-8",
-    )
+    cpu_bin.write_text("#include <vector>\n" + _CLEAN_CPU_BINARY, encoding="utf-8")
     violations = check_backend_layout.scan_backend_layout(tmp_path, tracked)
     assert [v.rule for v in violations] == ["methods-preamble"]
 
     # 4. Unallowed std::tanh / std::sin in CPU backend compute file (LCD-608)
     cpu_bin.write_text(
         _CLEAN_CPU_BINARY.replace(
-            "return a;",
-            "float y = std::tanh(0.5f) + std::sin(0.5f); (void)y;\n    return a;",
+            "return a;", "float y = std::tanh(0.5f) + std::sin(0.5f); (void)y;\n    return a;"
         ),
         encoding="utf-8",
     )

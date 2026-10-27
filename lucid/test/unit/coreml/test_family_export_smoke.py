@@ -27,8 +27,7 @@ import lucid.models as M
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 #: The bound every single-image family is held to.  There is no exception
@@ -130,37 +129,19 @@ TOKEN_FAMILIES = [
 MULTI_INPUT = [
     ("ddpm_cifar", lambda: (lucid.randn(1, 3, 32, 32), lucid.zeros(1).to(lucid.int64))),
     ("flow_matching_cifar", lambda: (lucid.randn(1, 3, 32, 32), lucid.zeros(1))),
-    (
-        "ncsn_celeba",
-        lambda: (lucid.randn(1, 3, 32, 32), lucid.zeros(1).to(lucid.int64)),
-    ),
+    ("ncsn_celeba", lambda: (lucid.randn(1, 3, 32, 32), lucid.zeros(1).to(lucid.int64))),
     ("dit_base_2", lambda: (lucid.randn(1, 4, 32, 32), lucid.zeros(1).to(lucid.int64))),
-    (
-        "mean_flow_base_2",
-        lambda: (lucid.randn(1, 4, 32, 32), lucid.zeros(1), lucid.zeros(1)),
-    ),
+    ("mean_flow_base_2", lambda: (lucid.randn(1, 4, 32, 32), lucid.zeros(1), lucid.zeros(1))),
     (
         "transformer_base",
-        lambda: (
-            lucid.zeros(1, 16).to(lucid.int64),
-            lucid.zeros(1, 16).to(lucid.int64),
-        ),
+        lambda: (lucid.zeros(1, 16).to(lucid.int64), lucid.zeros(1, 16).to(lucid.int64)),
     ),
     # The same two streams; T5's position bias depends on their lengths
     # only, so the trace fixes it along with the shapes.
-    (
-        "t5_small",
-        lambda: (
-            lucid.zeros(1, 16).to(lucid.int64),
-            lucid.zeros(1, 16).to(lucid.int64),
-        ),
-    ),
+    ("t5_small", lambda: (lucid.zeros(1, 16).to(lucid.int64), lucid.zeros(1, 16).to(lucid.int64))),
     # Pixels beside token ids, and a mixed-dtype multiply Core ML will
     # not promote — the export inserts the cast now.
-    (
-        "clip_vit_base_16",
-        lambda: (lucid.randn(1, 3, 224, 224), lucid.zeros(1, 77).to(lucid.int64)),
-    ),
+    ("clip_vit_base_16", lambda: (lucid.randn(1, 3, 224, 224), lucid.zeros(1, 77).to(lucid.int64))),
     # Upsamples by splitting an axis, padding zeros into it and merging
     # back, which wants rank 6 for two axes at once. Staged one axis at a
     # time so no step passes the cap. At 64 rather than its native 256,
@@ -191,7 +172,7 @@ SMALL: dict[str, dict[str, object]] = {
         "depth": 1,
         "num_heads": 4,
         "num_classes": 4,
-    },
+    }
 }
 
 #: Families whose ``forward`` draws random numbers, exported with the
@@ -458,10 +439,7 @@ def test_a_sampling_family_exports_with_its_draws_lifted(factory, make_inputs, t
     inputs = make_inputs()
 
     exported = cml.export(
-        model,
-        inputs,
-        str(tmp_path / f"{factory}.mlpackage"),
-        draws=cml.Draws.AS_INPUT,
+        model, inputs, str(tmp_path / f"{factory}.mlpackage"), draws=cml.Draws.AS_INPUT
     )
     try:
         assert exported.noise_inputs

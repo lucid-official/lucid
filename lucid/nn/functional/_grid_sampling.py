@@ -223,11 +223,7 @@ def _unnormalize(coord: Tensor, size: int, align_corners: bool, volumetric: bool
 
 
 def _pad(
-    position: Tensor,
-    size: int,
-    padding_mode: str,
-    align_corners: bool,
-    volumetric: bool,
+    position: Tensor, size: int, padding_mode: str, align_corners: bool, volumetric: bool
 ) -> Tensor:
     """Bring a pixel-space position inside the axis as ``padding_mode`` says.
 
@@ -421,11 +417,7 @@ def _nearest(flat: Tensor, coords: list[Tensor], sizes: list[int]) -> Tensor:
 
 
 def _bicubic(
-    flat: Tensor,
-    coords: list[Tensor],
-    sizes: list[int],
-    padding_mode: str,
-    align_corners: bool,
+    flat: Tensor, coords: list[Tensor], sizes: list[int], padding_mode: str, align_corners: bool
 ) -> Tensor:
     """Bicubic: a 4 x 4 neighbourhood weighted by the cubic kernel.
 

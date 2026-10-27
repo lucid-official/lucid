@@ -37,14 +37,7 @@ BROADCAST_PAIRS: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = (
 
 
 # Shapes that exercise edge conditions (empty, 1-element, 0-D).
-EDGE_SHAPES: tuple[tuple[int, ...], ...] = (
-    (),
-    (1,),
-    (0,),
-    (0, 3),
-    (3, 0, 5),
-    (1, 1, 1),
-)
+EDGE_SHAPES: tuple[tuple[int, ...], ...] = ((), (1,), (0,), (0, 3), (3, 0, 5), (1, 1, 1))
 
 
 def reduction_axes(shape: tuple[int, ...]) -> Iterator[int | tuple[int, ...]]:

@@ -116,16 +116,7 @@ class Call:
         that has a backward.
     """
 
-    __slots__ = (
-        "args",
-        "kwargs",
-        "primary",
-        "note",
-        "same_shape",
-        "domain",
-        "joint",
-        "strided",
-    )
+    __slots__ = ("args", "kwargs", "primary", "note", "same_shape", "domain", "joint", "strided")
 
     def __init__(
         self,
@@ -408,11 +399,7 @@ def _loss(name: str, domain: str) -> Iterator[Call]:
         negative = _f((_N, classes), domain)
         yield Call([logits, same, sign], {}, 0, "loss(a, b, target sign)", same_shape=(1,))
         yield Call(
-            [logits, same, negative],
-            {},
-            0,
-            "loss(anchor, positive, negative)",
-            same_shape=(1, 2),
+            [logits, same, negative], {}, 0, "loss(anchor, positive, negative)", same_shape=(1, 2)
         )
     # The elementwise regressions, and the fallback for anything unmatched.
     yield Call([logits, same], {}, 0, "loss(input, target) same shape", same_shape=(1,))
@@ -425,12 +412,7 @@ def _embedding(name: str, domain: str) -> Iterator[Call]:
     idx = _int((_N, 3), vocab)
     if "bag" in name:
         offsets = _probe.as_int(np.array([0, 3]))
-        yield Call(
-            [idx.reshape(-1), weight, offsets],
-            {},
-            1,
-            "embedding_bag(idx, weight, offsets)",
-        )
+        yield Call([idx.reshape(-1), weight, offsets], {}, 1, "embedding_bag(idx, weight, offsets)")
         yield Call([idx, weight], {}, 1, "embedding_bag(idx2d, weight)")
     else:
         yield Call([idx, weight], {}, 1, "embedding(idx, weight)")
@@ -517,15 +499,7 @@ def _einops(name: str, domain: str) -> Iterator[Call]:
     elif "reduce" in name:
         yield Call([x, "b c h w -> b c", "mean"], {}, 0, "reduce")
     elif "repeat" in name:
-        yield Call(
-            [
-                x,
-                "b c h w -> b c h w r",
-            ],
-            {"r": 2},
-            0,
-            "repeat",
-        )
+        yield Call([x, "b c h w -> b c h w r"], {"r": 2}, 0, "repeat")
     elif "pack" in name or "unpack" in name:
         yield Call([[x, x], "b c h *"], {}, 0, "pack")
 
@@ -580,10 +554,7 @@ def _ternary(name: str, domain: str) -> Iterator[Call]:
         # gradient cannot tell apart.
         addend = _f(_probe.SHAPE, domain)
         yield Call(
-            [same, addend, _f(_probe.SHAPE, "positive")],
-            {"value": 0.5},
-            0,
-            "addc*(t, a, b)",
+            [same, addend, _f(_probe.SHAPE, "positive")], {"value": 0.5}, 0, "addc*(t, a, b)"
         )
         yield Call([same, addend, _f(_probe.SHAPE, "positive")], {}, 0, "addc*(t, a, b)")
     if name == "lerp":
@@ -650,10 +621,7 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
     elif name in ("normal",):
         yield Call([0.0, 1.0, shape], {}, 0, "normal(mean, std, shape)")
         yield Call(
-            [_f(_probe.SHAPE, domain), _f(_probe.SHAPE, "positive")],
-            {},
-            0,
-            "normal(mu, sigma)",
+            [_f(_probe.SHAPE, domain), _f(_probe.SHAPE, "positive")], {}, 0, "normal(mu, sigma)"
         )
     elif name in ("cartesian_prod",):
         yield Call([_f((3,), domain), _f((2,), domain)], {}, 0, "cartesian_prod(1-D, 1-D)")
@@ -742,10 +710,7 @@ def _indexing(name: str, domain: str) -> Iterator[Call]:
         yield Call([x, 0, idx_row], {}, 0, "index_select(x, dim, index)")
     elif name in ("take",):
         yield Call(
-            [x, _probe.as_int(_probe.rng(3).integers(0, 20, (5,)))],
-            {},
-            0,
-            "take(x, flat idx)",
+            [x, _probe.as_int(_probe.rng(3).integers(0, 20, (5,)))], {}, 0, "take(x, flat idx)"
         )
     elif name in ("masked_fill", "masked_fill_"):
         mask = lucid.tensor((_probe.rng(4).random((4, 5)) > 0.5))
@@ -762,12 +727,7 @@ def _indexing(name: str, domain: str) -> Iterator[Call]:
         yield Call([cond, x, src], {}, 1, "where(cond, a, b)")
     elif name in ("index_put", "index_put_"):
         rows = _probe.as_int(_probe.rng(3).permutation(4)[:3])
-        yield Call(
-            [x, (rows,), _f((3, 5), domain)],
-            {},
-            0,
-            "index_put(x, (rows,), values)",
-        )
+        yield Call([x, (rows,), _f((3, 5), domain)], {}, 0, "index_put(x, (rows,), values)")
 
 
 def _shape_with_args(name: str, domain: str) -> Iterator[Call]:
@@ -891,15 +851,7 @@ def _linalg_extra(name: str, domain: str) -> Iterator[Call]:
         yield Call([_probe.as_f64(sym)], {}, 0, "eigh(symmetric)")
     elif name in ("eig", "eigvals"):
         yield Call([_probe.as_f64(square)], {}, 0, "eig(square)")
-    elif name in (
-        "inv",
-        "det",
-        "slogdet",
-        "matrix_exp",
-        "lu",
-        "lu_factor",
-        "ldl_factor",
-    ):
+    elif name in ("inv", "det", "slogdet", "matrix_exp", "lu", "lu_factor", "ldl_factor"):
         yield Call([_probe.as_f64(square)], {}, 0, "linalg(well-conditioned square)")
     elif name in ("matrix_power",):
         yield Call([_probe.as_f64(square), 2], {}, 0, "matrix_power(A, 2)")
@@ -907,10 +859,7 @@ def _linalg_extra(name: str, domain: str) -> Iterator[Call]:
         yield Call([_probe.as_f64(square), _probe.as_f64(rhs)], {}, 0, "solve(A, B)")
     elif name in ("solve_triangular",):
         yield Call(
-            [_probe.as_f64(upper), _probe.as_f64(rhs)],
-            {"upper": True},
-            0,
-            "solve_triangular",
+            [_probe.as_f64(upper), _probe.as_f64(rhs)], {"upper": True}, 0, "solve_triangular"
         )
     elif name in ("lu_solve", "ldl_solve"):
         yield Call([_probe.as_f64(square), _probe.as_f64(rhs)], {}, 0, "lu_solve(LU, B)")
@@ -936,10 +885,7 @@ def _linalg_extra(name: str, domain: str) -> Iterator[Call]:
         yield Call([_probe.as_f64(square.reshape(2, 2, 2, 2))], {}, 0, "tensorinv((2,2,2,2))")
     elif name in ("tensorsolve",):
         yield Call(
-            [
-                _probe.as_f64(square.reshape(2, 2, 2, 2)),
-                _probe.as_f64(rhs[:2, :2]),
-            ],
+            [_probe.as_f64(square.reshape(2, 2, 2, 2)), _probe.as_f64(rhs[:2, :2])],
             {},
             0,
             "tensorsolve(A(2,2,2,2), B(2,2))",
@@ -1001,10 +947,7 @@ def _complex(name: str, domain: str) -> Iterator[Call]:
             built = None
     if name == "view_as_complex":
         yield Call(
-            [_probe.as_f64(_probe.sample(domain, (2, 4, 2)))],
-            {},
-            0,
-            "view_as_complex(...,2)",
+            [_probe.as_f64(_probe.sample(domain, (2, 4, 2)))], {}, 0, "view_as_complex(...,2)"
         )
         return
     if built is not None:
@@ -1017,12 +960,7 @@ def _dtype_util(name: str, domain: str) -> Iterator[Call]:
     if name in ("can_cast", "promote_types"):
         yield Call([lucid.float32, lucid.float64], {}, 0, f"{name}(dtype, dtype)")
     elif name in ("result_type",):
-        yield Call(
-            [_f(_probe.SHAPE, domain), _f(_probe.SHAPE, domain)],
-            {},
-            0,
-            "result_type(a, b)",
-        )
+        yield Call([_f(_probe.SHAPE, domain), _f(_probe.SHAPE, domain)], {}, 0, "result_type(a, b)")
     elif name in ("type", "astype"):
         # ``Tensor.type`` takes the *name*, not the dtype object.
         yield Call([_f(_probe.SHAPE, domain), "float32"], {}, 0, "type(x, 'float32')")
@@ -1033,12 +971,7 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
     """The functional entries with signatures no other family covers."""
     if name in ("lp_pool1d", "lp_pool2d", "lp_pool3d"):
         rank = _rank_of(name)
-        yield Call(
-            [_f((_N, _CIN, *_spatial(rank)), "positive"), 2.0, 2],
-            {},
-            0,
-            "lp_pool(x, p, k)",
-        )
+        yield Call([_f((_N, _CIN, *_spatial(rank)), "positive"), 2.0, 2], {}, 0, "lp_pool(x, p, k)")
     elif name in ("max_unpool1d", "max_unpool2d", "max_unpool3d"):
         rank = _rank_of(name)
         spatial = _spatial(rank)
@@ -1057,10 +990,7 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
         )
     elif name in ("multilabel_margin_loss",):
         yield Call(
-            [
-                _f((_N, 4), domain),
-                _probe.as_int(np.array([[0, -1, -1, -1], [1, -1, -1, -1]])),
-            ],
+            [_f((_N, 4), domain), _probe.as_int(np.array([[0, -1, -1, -1], [1, -1, -1, -1]]))],
             {},
             0,
             "multilabel_margin(input, target)",
@@ -1071,31 +1001,18 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
         log_probs = _f((t, n, c), domain)
         targets = _probe.as_int(_probe.rng(8).integers(1, c, (n, 3)))
         yield Call(
-            [
-                log_probs,
-                targets,
-                _probe.as_int(np.array([t, t])),
-                _probe.as_int(np.array([3, 3])),
-            ],
+            [log_probs, targets, _probe.as_int(np.array([t, t])), _probe.as_int(np.array([3, 3]))],
             {},
             0,
             "ctc_loss(log_probs, targets, input_lengths, target_lengths)",
         )
     elif name in ("threshold", "threshold_"):
-        yield Call(
-            [_f(_probe.SHAPE, domain), 0.0, 0.0],
-            {},
-            0,
-            "threshold(x, threshold, value)",
-        )
+        yield Call([_f(_probe.SHAPE, domain), 0.0, 0.0], {}, 0, "threshold(x, threshold, value)")
     elif name in ("fused_linear_relu", "fused_linear_gelu"):
         w, b = _f((_COUT, _CIN), domain), _f((_COUT,), domain)
         yield Call([_f((_N, _CIN), domain), w, b], {}, 0, "fused_linear(x, weight, bias)")
         yield Call(
-            [_f((_N, _CIN), domain)],
-            {"weight": w, "bias": b},
-            0,
-            "fused_linear(x, weight=, bias=)",
+            [_f((_N, _CIN), domain)], {"weight": w, "bias": b}, 0, "fused_linear(x, weight=, bias=)"
         )
     elif name in ("sinusoidal_embedding",):
         yield Call([_probe.as_f64(np.arange(4.0)), 8], {}, 0, "sinusoidal_embedding(pos, dim)")
@@ -1105,15 +1022,7 @@ def _nn_leftover(name: str, domain: str) -> Iterator[Call]:
         seq, batch, embed = 4, 2, 8
         q = _f((seq, batch, embed), domain)
         yield Call(
-            [
-                q,
-                q,
-                q,
-                embed,
-                2,
-                _f((3 * embed, embed), domain),
-                _f((3 * embed,), domain),
-            ],
+            [q, q, q, embed, 2, _f((3 * embed, embed), domain), _f((3 * embed,), domain)],
             {},
             0,
             "mha_forward(q, k, v, embed, heads, in_proj_w, in_proj_b)",
@@ -1173,24 +1082,15 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
         r"repeat|roll|unflatten|unfold|dsplit|hsplit|vsplit|tensor_split|view)$",
         _shape_with_args,
     ),
-    (
-        r"^(bmm|mm|dot|vdot|inner|outer|ger|multi_dot|einsum|float_power|matmul)$",
-        _matmul,
-    ),
+    (r"^(bmm|mm|dot|vdot|inner|outer|ger|multi_dot|einsum|float_power|matmul)$", _matmul),
     (
         r"^(cholesky(_ex)?|eig|eigh|eigvals|eigvalsh|inv|det|slogdet|matrix_exp|"
         r"matrix_power|lu|lu_factor|lu_solve|ldl_factor|ldl_solve|solve|"
         r"solve_triangular|lstsq|householder_product|tensorinv|tensorsolve|vander)$",
         _linalg_extra,
     ),
-    (
-        r"^(multi_dot|pad_sequence|pack_sequence|pad_packed_sequence)$",
-        _sequences,
-    ),
-    (
-        r"^fused_linear_(relu|gelu)$",
-        _fused_linear,
-    ),
+    (r"^(multi_dot|pad_sequence|pack_sequence|pad_packed_sequence)$", _sequences),
+    (r"^fused_linear_(relu|gelu)$", _fused_linear),
     (
         r"^i?(rfft|hfft|fft)[2n]?$|^ifft[2n]?$|^irfft[2n]?$|^ihfft[2n]?$|"
         r"^r?fftfreq$|^i?fftshift$",
@@ -1206,10 +1106,7 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
     (r"^(fractional_max_pool)[23]d$", _fractional_pool),
     (r"^adaptive_(avg|max)_pool[123]d$", _adaptive_pool),
     (r"^(avg|max|lp)_pool[123]d$", _pool),
-    (
-        r"norm$|^batch_norm|^layer_norm|^group_norm|^instance_norm|^local_response",
-        _norm,
-    ),
+    (r"norm$|^batch_norm|^layer_norm|^group_norm|^instance_norm|^local_response", _norm),
     # ``binary_cross_entropy`` ends in neither: it fell through to the
     # signature-derived call, whose target of another shape the loss
     # refuses, and every axis filed it unanswered.
@@ -1252,26 +1149,12 @@ _EXACT: dict[str, Callable[[str, str], Iterator[Call]]] = {
     # axis had nothing to take away from it.
     **{
         metric: lambda n, d: iter(
-            [
-                Call(
-                    [_f((_N, 4), d), _int((_N,), 4)],
-                    {},
-                    0,
-                    "metric(logits, class index)",
-                )
-            ]
+            [Call([_f((_N, 4), d), _int((_N,), 4)], {}, 0, "metric(logits, class index)")]
         )
         for metric in ("accuracy", "correct_count")
     },
     "linear": lambda n, d: iter(
-        [
-            Call(
-                [_f((_N, _CIN), d), _f((_COUT, _CIN), d), _f((_COUT,), d)],
-                {},
-                0,
-                "linear",
-            )
-        ]
+        [Call([_f((_N, _CIN), d), _f((_COUT, _CIN), d), _f((_COUT,), d)], {}, 0, "linear")]
     ),
     "bilinear": lambda n, d: iter(
         [
@@ -1357,14 +1240,7 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     **{f"lucid.autograd.{op}": _input_tangent(op) for op in ("jvp", "hvp", "vhp")},
     "Tensor.retain_grad": _retain_grad,
     "lucid.einops.repeat": lambda d: iter(
-        [
-            Call(
-                [_f((2, 3), d), "a b -> a b r"],
-                {"r": 2},
-                0,
-                "einops.repeat(x, pattern, **axes)",
-            )
-        ]
+        [Call([_f((2, 3), d), "a b -> a b r"], {"r": 2}, 0, "einops.repeat(x, pattern, **axes)")]
     ),
     "lucid.einops.rearrange": lambda d: iter(
         [Call([_f((2, 3, 4), d), "a b c -> a c b"], {}, 0, "einops.rearrange")]
@@ -1375,11 +1251,7 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "Tensor.where": lambda d: iter(
         [
             Call(
-                [
-                    _f((3, 4), d),
-                    lucid.tensor(_probe.rng(6).random((3, 4)) > 0.5),
-                    _f((3, 4), d),
-                ],
+                [_f((3, 4), d), lucid.tensor(_probe.rng(6).random((3, 4)) > 0.5), _f((3, 4), d)],
                 {},
                 0,
                 "x.where(cond, other)",
@@ -1396,14 +1268,7 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
         [Call([_f((2, 3), d), (2, 2), 0.5], {}, 0, "x.new_full(shape, value)")]
     ),
     "lucid.linalg.vander": lambda d: iter(
-        [
-            Call(
-                [_probe.as_f64(_probe.rng(3).uniform(0.5, 1.5, (4,)))],
-                {},
-                0,
-                "vander(1-D)",
-            )
-        ]
+        [Call([_probe.as_f64(_probe.rng(3).uniform(0.5, 1.5, (4,)))], {}, 0, "vander(1-D)")]
     ),
     "lucid.normal": lambda d: iter(
         [Call([0.0, 1.0], {"size": (2, 3)}, 0, "normal(mean, std, size=)")]
@@ -1431,12 +1296,7 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     ),
     "F.sinusoidal_embedding": lambda d: iter(
         [
-            Call(
-                [_probe.as_f64(np.arange(4.0)), 8],
-                {},
-                0,
-                "sinusoidal_embedding(t, dim)",
-            ),
+            Call([_probe.as_f64(np.arange(4.0)), 8], {}, 0, "sinusoidal_embedding(t, dim)"),
             Call([4, 8], {}, 0, "sinusoidal_embedding(n, dim)"),
         ]
     ),
@@ -1573,14 +1433,7 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
     # (``with_primary``), except ``joint``: this function *is* the call's
     # joint rule, and carried, ``resized`` would hand the call back to it.
     peers = Call(
-        call.args,
-        call.kwargs,
-        call.primary,
-        call.note,
-        bounds,
-        call.domain,
-        None,
-        call.strided,
+        call.args, call.kwargs, call.primary, call.note, bounds, call.domain, None, call.strided
     )
     return peers.resized(array)
 
@@ -1599,10 +1452,7 @@ _JOINT_RESIZE: dict[str, Callable[[Call, np.ndarray], Call]] = {
 
 
 def invocations(
-    name: str,
-    domain: str,
-    qualname: str | None = None,
-    fn: Any = None,
+    name: str, domain: str, qualname: str | None = None, fn: Any = None
 ) -> Iterator[Call]:
     """Every candidate call for ``name``, best guess first.
 

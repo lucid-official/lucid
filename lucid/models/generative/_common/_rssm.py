@@ -538,16 +538,10 @@ class RSSM(nn.Module):
             self.cell = nn.GRUCell(hidden_size, deter_size)
 
         self.prior_head: nn.ModuleList[nn.Linear] = nn.ModuleList(
-            [
-                nn.Linear(deter_size, hidden_size),
-                nn.Linear(hidden_size, head_width),
-            ]
+            [nn.Linear(deter_size, hidden_size), nn.Linear(hidden_size, head_width)]
         )
         self.posterior_head: nn.ModuleList[nn.Linear] = nn.ModuleList(
-            [
-                nn.Linear(deter_size + embed_size, hidden_size),
-                nn.Linear(hidden_size, head_width),
-            ]
+            [nn.Linear(deter_size + embed_size, hidden_size), nn.Linear(hidden_size, head_width)]
         )
 
     # ── internals ────────────────────────────────────────────────────────
@@ -847,12 +841,7 @@ class RSSM(nn.Module):
         return latent._replace(deter=deter)
 
     def posterior_step(
-        self,
-        state: RSSMState,
-        action: Tensor,
-        embed: Tensor,
-        *,
-        sample: bool = True,
+        self, state: RSSMState, action: Tensor, embed: Tensor, *, sample: bool = True
     ) -> tuple[RSSMState, RSSMState]:
         r"""Advance one step *with* an observation.
 
@@ -927,12 +916,7 @@ class RSSM(nn.Module):
         )
 
     def observe(
-        self,
-        embed: Tensor,
-        actions: Tensor,
-        state: RSSMState | None = None,
-        *,
-        sample: bool = True,
+        self, embed: Tensor, actions: Tensor, state: RSSMState | None = None, *, sample: bool = True
     ) -> tuple[RSSMState, RSSMState]:
         r"""Filter a sequence of observations into posterior states.
 
@@ -1047,10 +1031,7 @@ class RSSM(nn.Module):
 
     @override
     def forward(
-        self,
-        embed: Tensor,
-        actions: Tensor,
-        state: RSSMState | None = None,
+        self, embed: Tensor, actions: Tensor, state: RSSMState | None = None
     ) -> tuple[RSSMState, RSSMState]:
         """Alias for :meth:`observe`, so the module is callable."""
         return self.observe(embed, actions, state)

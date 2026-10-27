@@ -13,23 +13,12 @@ import math
 import pytest
 
 import lucid
-from lucid.models.generative.dit import (
-    DiTConfig,
-    DiTForImageGeneration,
-    DiTModel,
-)
+from lucid.models.generative.dit import DiTConfig, DiTForImageGeneration, DiTModel
 
 
 def _tiny(**overrides: object) -> DiTConfig:
     """A model small enough to instantiate per test."""
-    base = dict(
-        sample_size=8,
-        patch_size=2,
-        hidden_size=32,
-        depth=2,
-        num_heads=4,
-        num_classes=10,
-    )
+    base = dict(sample_size=8, patch_size=2, hidden_size=32, depth=2, num_heads=4, num_classes=10)
     base.update(overrides)
     return DiTConfig(**base)  # type: ignore[arg-type]
 
@@ -120,9 +109,7 @@ class TestBackbone:
         """
         import math
 
-        from lucid.models.generative._common._transformers import (
-            timestep_embedding,
-        )
+        from lucid.models.generative._common._transformers import timestep_embedding
 
         got = timestep_embedding(lucid.tensor([300.0]), 8)
         half = 4
@@ -141,9 +128,7 @@ class TestBackbone:
         and quietly corrupts any ported checkpoint — this asserts the
         order directly, without needing the reference to hand.
         """
-        from lucid.models.generative._common._transformers import (
-            sincos_position_embedding,
-        )
+        from lucid.models.generative._common._transformers import sincos_position_embedding
 
         side, dim = 4, 16
         table = sincos_position_embedding(dim, side)
@@ -163,9 +148,7 @@ class TestBackbone:
         """
         model = DiTModel(_tiny(conditioning=mode)).eval()
         out = model(
-            lucid.randn((1, 4, 8, 8)),
-            lucid.tensor([100.0]),
-            lucid.tensor([2], dtype=lucid.int64),
+            lucid.randn((1, 4, 8, 8)), lucid.tensor([100.0]), lucid.tensor([2], dtype=lucid.int64)
         )
         assert out.sample.shape == (1, 8, 8, 8)
 
@@ -215,19 +198,10 @@ class TestScaling:
         """Table 1, recorded so a config edit cannot quietly rewrite it."""
         from lucid.models import dit_base_2, dit_large_2, dit_small_2, dit_xlarge_2
 
-        assert (dit_small_2().config.depth, dit_small_2().config.hidden_size) == (
-            12,
-            384,
-        )
+        assert (dit_small_2().config.depth, dit_small_2().config.hidden_size) == (12, 384)
         assert (dit_base_2().config.depth, dit_base_2().config.hidden_size) == (12, 768)
-        assert (dit_large_2().config.depth, dit_large_2().config.hidden_size) == (
-            24,
-            1024,
-        )
-        assert (dit_xlarge_2().config.depth, dit_xlarge_2().config.hidden_size) == (
-            28,
-            1152,
-        )
+        assert (dit_large_2().config.depth, dit_large_2().config.hidden_size) == (24, 1024)
+        assert (dit_xlarge_2().config.depth, dit_xlarge_2().config.hidden_size) == (28, 1152)
 
 
 class TestObjective:

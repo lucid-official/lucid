@@ -309,12 +309,6 @@ def quantized_matmul(
     lucid.nn.quantized.QuantizedLinearMLX : Wraps this into a drop-in linear layer.
     """
     out = _C_engine.quantized.quantized_matmul(
-        _unwrap(x),
-        _unwrap(wq),
-        _unwrap(scales),
-        _unwrap(biases),
-        transpose,
-        group_size,
-        bits,
+        _unwrap(x), _unwrap(wq), _unwrap(scales), _unwrap(biases), transpose, group_size, bits
     )
     return _wrap(out)

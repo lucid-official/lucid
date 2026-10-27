@@ -50,20 +50,14 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
             "layer_norm",
             "x/weight",
             lambda dev: F.layer_norm(
-                lucid.randn(2, 4),
-                (4,),
-                weight=lucid.ones(4, device=dev),
-                bias=lucid.zeros(4),
+                lucid.randn(2, 4), (4,), weight=lucid.ones(4, device=dev), bias=lucid.zeros(4)
             ),
         ),
         (
             "layer_norm",
             "x/bias",
             lambda dev: F.layer_norm(
-                lucid.randn(2, 4),
-                (4,),
-                weight=lucid.ones(4),
-                bias=lucid.zeros(4, device=dev),
+                lucid.randn(2, 4), (4,), weight=lucid.ones(4), bias=lucid.zeros(4, device=dev)
             ),
         ),
         (
@@ -142,20 +136,14 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
             "group_norm",
             "x/weight",
             lambda dev: F.group_norm(
-                lucid.randn(2, 4, 3, 3),
-                2,
-                weight=lucid.ones(4, device=dev),
-                bias=lucid.zeros(4),
+                lucid.randn(2, 4, 3, 3), 2, weight=lucid.ones(4, device=dev), bias=lucid.zeros(4)
             ),
         ),
         (
             "group_norm",
             "x/bias",
             lambda dev: F.group_norm(
-                lucid.randn(2, 4, 3, 3),
-                2,
-                weight=lucid.ones(4),
-                bias=lucid.zeros(4, device=dev),
+                lucid.randn(2, 4, 3, 3), 2, weight=lucid.ones(4), bias=lucid.zeros(4, device=dev)
             ),
         ),
         (
@@ -187,54 +175,42 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
             "instance_norm",
             "x/weight",
             lambda dev: F.instance_norm(
-                lucid.randn(2, 3, 4, 4),
-                weight=lucid.ones(3, device=dev),
-                bias=lucid.zeros(3),
+                lucid.randn(2, 3, 4, 4), weight=lucid.ones(3, device=dev), bias=lucid.zeros(3)
             ),
         ),
         (
             "instance_norm",
             "x/bias",
             lambda dev: F.instance_norm(
-                lucid.randn(2, 3, 4, 4),
-                weight=lucid.ones(3),
-                bias=lucid.zeros(3, device=dev),
+                lucid.randn(2, 3, 4, 4), weight=lucid.ones(3), bias=lucid.zeros(3, device=dev)
             ),
         ),
         (
             "conv2d",
             "x/weight",
             lambda dev: F.conv2d(
-                lucid.randn(1, 2, 4, 4),
-                lucid.randn(3, 2, 3, 3, device=dev),
-                lucid.zeros(3),
+                lucid.randn(1, 2, 4, 4), lucid.randn(3, 2, 3, 3, device=dev), lucid.zeros(3)
             ),
         ),
         (
             "conv2d",
             "x/bias",
             lambda dev: F.conv2d(
-                lucid.randn(1, 2, 4, 4),
-                lucid.randn(3, 2, 3, 3),
-                lucid.zeros(3, device=dev),
+                lucid.randn(1, 2, 4, 4), lucid.randn(3, 2, 3, 3), lucid.zeros(3, device=dev)
             ),
         ),
         (
             "conv_transpose2d",
             "x/weight",
             lambda dev: F.conv_transpose2d(
-                lucid.randn(1, 2, 4, 4),
-                lucid.randn(2, 3, 3, 3, device=dev),
-                lucid.zeros(3),
+                lucid.randn(1, 2, 4, 4), lucid.randn(2, 3, 3, 3, device=dev), lucid.zeros(3)
             ),
         ),
         (
             "conv_transpose2d",
             "x/bias",
             lambda dev: F.conv_transpose2d(
-                lucid.randn(1, 2, 4, 4),
-                lucid.randn(2, 3, 3, 3),
-                lucid.zeros(3, device=dev),
+                lucid.randn(1, 2, 4, 4), lucid.randn(2, 3, 3, 3), lucid.zeros(3, device=dev)
             ),
         ),
         (
@@ -281,18 +257,14 @@ def _device_cases() -> list[tuple[str, str, Callable[[str], object]]]:
             "where",
             "x/condition",
             lambda dev: lucid.where(
-                lucid.tensor([True, False], device=dev),
-                lucid.ones(2),
-                lucid.zeros(2),
+                lucid.tensor([True, False], device=dev), lucid.ones(2), lucid.zeros(2)
             ),
         ),
         (
             "where",
             "x/y",
             lambda dev: lucid.where(
-                lucid.tensor([True, False]),
-                lucid.ones(2),
-                lucid.zeros(2, device=dev),
+                lucid.tensor([True, False]), lucid.ones(2), lucid.zeros(2, device=dev)
             ),
         ),
         (
@@ -352,30 +324,21 @@ def test_multi_operand_device_mismatch_names_offending_pair(
             "bilinear_layer",
             "x1/x2",
             lambda dt: F.bilinear(
-                lucid.randn(2, 3),
-                lucid.randn(2, 4, dtype=dt),
-                lucid.randn(5, 3, 4),
-                lucid.zeros(5),
+                lucid.randn(2, 3), lucid.randn(2, 4, dtype=dt), lucid.randn(5, 3, 4), lucid.zeros(5)
             ),
         ),
         (
             "bilinear_layer",
             "x1/weight",
             lambda dt: F.bilinear(
-                lucid.randn(2, 3),
-                lucid.randn(2, 4),
-                lucid.randn(5, 3, 4, dtype=dt),
-                lucid.zeros(5),
+                lucid.randn(2, 3), lucid.randn(2, 4), lucid.randn(5, 3, 4, dtype=dt), lucid.zeros(5)
             ),
         ),
         (
             "bilinear_layer",
             "x1/bias",
             lambda dt: F.bilinear(
-                lucid.randn(2, 3),
-                lucid.randn(2, 4),
-                lucid.randn(5, 3, 4),
-                lucid.zeros(5, dtype=dt),
+                lucid.randn(2, 3), lucid.randn(2, 4), lucid.randn(5, 3, 4), lucid.zeros(5, dtype=dt)
             ),
         ),
         (

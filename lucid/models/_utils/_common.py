@@ -95,11 +95,7 @@ def check_stage_lengths(owner: str, **per_stage: Sized) -> None:
         )
 
 
-def make_divisible(
-    v: float,
-    divisor: int = 8,
-    min_value: int | None = None,
-) -> int:
+def make_divisible(v: float, divisor: int = 8, min_value: int | None = None) -> int:
     """Round ``v`` to the nearest multiple of ``divisor``.
 
     The result is at least ``min_value`` (falls back to ``divisor`` when
@@ -280,11 +276,7 @@ def zero_init_last_bn(model: nn.Module, block_types: tuple[type, ...], attr: str
 
 
 def init_transformer_trunc_normal(
-    model: nn.Module,
-    std: float = 0.02,
-    *,
-    init_tokens: bool = True,
-    zero_head: str | None = None,
+    model: nn.Module, std: float = 0.02, *, init_tokens: bool = True, zero_head: str | None = None
 ) -> None:
     r"""Reference ViT-lineage initialisation: ``trunc_normal_(std)`` + zero bias.
 
@@ -349,13 +341,7 @@ def init_transformer_trunc_normal(
         # sweep above never reaches them.  Left at exact zeros (a common
         # oversight) a CLS token carries no signal to break symmetry with, and
         # every reference draws these from the same truncated normal.
-        marks = (
-            "cls_token",
-            "class_token",
-            "pos_embed",
-            "position_embed",
-            "dist_token",
-        )
+        marks = ("cls_token", "class_token", "pos_embed", "position_embed", "dist_token")
         for name, prm in model.named_parameters():
             leaf = name.rsplit(".", 1)[-1]
             if any(mk in leaf for mk in marks):
@@ -626,12 +612,7 @@ def truncated_svd_linear(layer: nn.Linear, rank: int) -> nn.Sequential:
 
 
 def fit_linear_svm(
-    features: Tensor,
-    labels: Tensor,
-    *,
-    c: float = 1e-3,
-    steps: int = 200,
-    lr: float = 0.01,
+    features: Tensor, labels: Tensor, *, c: float = 1e-3, steps: int = 200, lr: float = 0.01
 ) -> tuple[Tensor, Tensor]:
     r"""Fit one binary linear SVM by minimising hinge loss with L2.
 
@@ -804,10 +785,7 @@ def mine_hard_negatives(
 
         # A negative scoring above -1 is inside the margin: the SVM either
         # calls it foreground or is not confident enough about it.
-        scores = cast(
-            list[float],
-            ((negative_pool @ w.reshape(-1, 1)).reshape(-1) + b).tolist(),
-        )
+        scores = cast(list[float], ((negative_pool @ w.reshape(-1, 1)).reshape(-1) + b).tolist())
         seen = set(working)
         offenders = sorted(
             (i for i, v in enumerate(scores) if v > -1.0 and i not in seen),

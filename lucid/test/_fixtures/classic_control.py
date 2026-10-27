@@ -91,11 +91,7 @@ def _blob(ys: Tensor, xs: Tensor, y: float, x: float, width: float) -> Tensor:
 
 
 def _segment(
-    ys: Tensor,
-    xs: Tensor,
-    start: tuple[float, float],
-    end: tuple[float, float],
-    width: float,
+    ys: Tensor, xs: Tensor, start: tuple[float, float], end: tuple[float, float], width: float
 ) -> Tensor:
     """A soft line from ``start`` to ``end``, both ``(y, x)``.
 
@@ -176,11 +172,7 @@ class Pendulum:
     """
 
     def __init__(
-        self,
-        horizon: int = 120,
-        dt: float = 0.05,
-        torque: float = 0.35,
-        device: str = "cpu",
+        self, horizon: int = 120, dt: float = 0.05, torque: float = 0.35, device: str = "cpu"
     ) -> None:
         """Initialise the task. See the class docstring for parameters."""
         if not 0.0 < torque < 1.0:

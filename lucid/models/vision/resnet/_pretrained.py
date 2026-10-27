@@ -356,10 +356,7 @@ def resnet_152(pretrained: bool = False, **overrides: object) -> ResNet:
     params=11689512,
 )
 def resnet_18_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNet18Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNet18Weights | None = None, **overrides: object
 ) -> ResNetForImageClassification:
     r"""ResNet-18 image classifier (backbone + GAP + linear head).
 
@@ -438,10 +435,7 @@ def resnet_18_cls(
     params=21797672,
 )
 def resnet_34_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNet34Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNet34Weights | None = None, **overrides: object
 ) -> ResNetForImageClassification:
     r"""ResNet-34 image classifier (backbone + GAP + linear head).
 
@@ -506,10 +500,7 @@ def resnet_34_cls(
     params=25557032,
 )
 def resnet_50_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNet50Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNet50Weights | None = None, **overrides: object
 ) -> ResNetForImageClassification:
     r"""ResNet-50 image classifier (backbone + GAP + linear head).
 
@@ -588,10 +579,7 @@ def resnet_50_cls(
     params=44549160,
 )
 def resnet_101_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNet101Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNet101Weights | None = None, **overrides: object
 ) -> ResNetForImageClassification:
     r"""ResNet-101 image classifier (backbone + GAP + linear head).
 
@@ -656,10 +644,7 @@ def resnet_101_cls(
     params=60192808,
 )
 def resnet_152_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNet152Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNet152Weights | None = None, **overrides: object
 ) -> ResNetForImageClassification:
     r"""ResNet-152 image classifier (backbone + GAP + linear head).
 

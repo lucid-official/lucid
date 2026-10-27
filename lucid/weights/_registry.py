@@ -16,9 +16,7 @@ _WEIGHTS_BY_MODEL: dict[str, type[WeightsEnum]] = {}
 _WEIGHTS_BY_ENUM: dict[str, type[WeightsEnum]] = {}
 
 
-def register_weights(
-    model_name: str,
-) -> Callable[[type[WeightsEnum]], type[WeightsEnum]]:
+def register_weights(model_name: str) -> Callable[[type[WeightsEnum]], type[WeightsEnum]]:
     r"""Class decorator registering a :class:`WeightsEnum` for discovery.
 
     Parameters

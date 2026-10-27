@@ -84,12 +84,7 @@ def _ref_bag(
 @pytest.mark.parametrize("max_norm", [None, 1.0])
 @pytest.mark.parametrize("mode", ["sum", "mean"])
 def test_matches_the_reference(
-    mode: str,
-    max_norm: float | None,
-    scale: bool,
-    pad: int | None,
-    device: str,
-    ref: ModuleType,
+    mode: str, max_norm: float | None, scale: bool, pad: int | None, device: str, ref: ModuleType
 ) -> None:
     got = _lucid_bag(device, mode, max_norm, scale, pad)
     want = _ref_bag(ref, mode, max_norm, scale, pad)

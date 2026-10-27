@@ -18,12 +18,7 @@ import pytest
 import lucid
 
 _INF = math.inf
-_UPDATES = [
-    complex(1.0, _INF),
-    complex(-_INF, 2.0),
-    complex(_INF, -_INF),
-    complex(3.0, -4.0),
-]
+_UPDATES = [complex(1.0, _INF), complex(-_INF, 2.0), complex(_INF, -_INF), complex(3.0, -4.0)]
 
 Scatter = Callable[[lucid.Tensor, lucid.Tensor, lucid.Tensor], lucid.Tensor]
 

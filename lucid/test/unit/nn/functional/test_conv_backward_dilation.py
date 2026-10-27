@@ -77,20 +77,14 @@ def test_conv1d_and_conv3d_dilated_backward_metal_matches_cpu() -> None:
     w1 = r.standard_normal((4, 3, 3)).astype(np.float32)
     f1 = lambda x, w: F.conv1d(x, w, dilation=2)
     np.testing.assert_allclose(
-        _grads(f1, x1, w1, "metal", 5)[1],
-        _grads(f1, x1, w1, "cpu", 5)[1],
-        atol=1e-4,
-        rtol=1e-3,
+        _grads(f1, x1, w1, "metal", 5)[1], _grads(f1, x1, w1, "cpu", 5)[1], atol=1e-4, rtol=1e-3
     )
 
     x3 = r.standard_normal((1, 2, 7, 7, 7)).astype(np.float32)
     w3 = r.standard_normal((3, 2, 3, 3, 3)).astype(np.float32)
     f3 = lambda x, w: F.conv3d(x, w, dilation=2)
     np.testing.assert_allclose(
-        _grads(f3, x3, w3, "metal", 5)[1],
-        _grads(f3, x3, w3, "cpu", 5)[1],
-        atol=1e-4,
-        rtol=1e-3,
+        _grads(f3, x3, w3, "metal", 5)[1], _grads(f3, x3, w3, "cpu", 5)[1], atol=1e-4, rtol=1e-3
     )
 
 

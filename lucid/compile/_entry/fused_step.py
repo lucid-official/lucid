@@ -347,9 +347,7 @@ class _FusedPlan:
 
 
 def _verify_target_shapes(
-    graph: TraceGraph,
-    checked_ids: list[int],
-    output_targets: list[Tensor],
+    graph: TraceGraph, checked_ids: list[int], output_targets: list[Tensor]
 ) -> None:
     """Guard against misordering between ``checked_ids`` and ``output_targets``."""
     id_to_shape: dict[int, tuple[int, ...]] = {}
@@ -374,9 +372,7 @@ def _require_tid(tracer: Tracer, t: Tensor, msg: str) -> int:
     return int(tid)
 
 
-def _pinned_resolver(
-    impl: _C_engine.TensorImpl,
-) -> Callable[[], _C_engine.TensorImpl]:
+def _pinned_resolver(impl: _C_engine.TensorImpl) -> Callable[[], _C_engine.TensorImpl]:
     """Return a zero-argument callable returning ``impl``."""
     return lambda: impl
 
@@ -585,11 +581,7 @@ class _FusedStep:
         if model_has_active_hooks(self._model) or tensors_have_active_hooks(leaves):
             return self._run_eager(args)
         flags = copt._flags_now()
-        key = self._key(
-            self._members() if self._reachable is not None else (),
-            flags,
-            args,
-        )
+        key = self._key(self._members() if self._reachable is not None else (), flags, args)
         if key in self._eager_only:
             return self._run_eager(args)
         plan = self._plans.get(key) if self._reachable is not None else None
@@ -624,9 +616,7 @@ class _FusedStep:
             copt._pstate[:] = prev_pstate
             _fallback_notice(_fallback_category(why), msg)
             fallback_key = self._key(
-                self._members() if self._reachable is not None else (),
-                flags,
-                args,
+                self._members() if self._reachable is not None else (), flags, args
             )
             self._eager_only.add(fallback_key)
             return self._run_eager(args)
@@ -695,10 +685,7 @@ class _FusedStep:
     # ── Internals ───────────────────────────────────────────────
 
     def _key(
-        self,
-        members: tuple[int, ...],
-        flags: tuple[_Flags, ...],
-        args: tuple[Tensor, ...] = (),
+        self, members: tuple[int, ...], flags: tuple[_Flags, ...], args: tuple[Tensor, ...] = ()
     ) -> tuple[object, ...]:
         """Plan key: participants, structural flags, per-parameter classes, inputs, params.
 
@@ -711,15 +698,7 @@ class _FusedStep:
         amp_sig = (amp_active, _C_engine.amp_active_dtype() if amp_active else None)
         partition = self._copt._partition(members)
         binding = self._fingerprint.binding(args, {})
-        return (
-            members,
-            flags,
-            partition,
-            arg_sig,
-            amp_sig,
-            self._fingerprint.get(),
-            binding,
-        )
+        return (members, flags, partition, arg_sig, amp_sig, self._fingerprint.get(), binding)
 
     def _members(self) -> tuple[int, ...]:
         """Parameters that step: reach the loss and require grad (eager's rule)."""
@@ -811,11 +790,7 @@ class _FusedStep:
         return final_outputs, slots, found_inf_f32
 
     def _trace_fused_graph(
-        self,
-        args: tuple[Tensor, ...],
-        flags: tuple[_Flags, ...],
-        *,
-        scaler_enabled: bool,
+        self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...], *, scaler_enabled: bool
     ) -> _FusedTrace:
         """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
@@ -850,11 +825,7 @@ class _FusedStep:
                         found_inf_f32: Tensor | None = None
                         if scaler_enabled:
                             opt_outputs, slots, found_inf_f32 = self._emit_scaled_update(
-                                ghost_grads,
-                                layout,
-                                vectors,
-                                flags,
-                                loss_for_bwd,
+                                ghost_grads, layout, vectors, flags, loss_for_bwd
                             )
                         else:
                             opt_outputs, slots = copt._emit(
@@ -894,11 +865,7 @@ class _FusedStep:
             )
         for i in traced.members:
             traced.param_ids.append(
-                _require_tid(
-                    tracer,
-                    params[i],
-                    "fused_step: a parameter vanished from the trace",
-                )
+                _require_tid(tracer, params[i], "fused_step: a parameter vanished from the trace")
             )
             traced.ghost_grad_ids.append(
                 _require_tid(
@@ -909,27 +876,18 @@ class _FusedStep:
             )
         for o in traced.opt_outputs:
             traced.output_target_ids.append(
-                _require_tid(
-                    tracer,
-                    o,
-                    "fused_step: optimizer output tensor missing from trace",
-                )
+                _require_tid(tracer, o, "fused_step: optimizer output tensor missing from trace")
             )
         if traced.scaler_enabled and traced.found_inf_f32 is not None:
             traced.output_target_ids.append(
                 _require_tid(
-                    tracer,
-                    traced.found_inf_f32,
-                    "fused_step: found_inf scalar missing from trace",
+                    tracer, traced.found_inf_f32, "fused_step: found_inf scalar missing from trace"
                 )
             )
 
     def _collect_stateful_targets(self, traced: _FusedTrace) -> None:
         """Collect dropout state pairs and BatchNorm running-stat target pairs."""
-        from lucid.compile._core.bn_runstats import (
-            bn_writeback_targets,
-            model_has_cumulative_bn,
-        )
+        from lucid.compile._core.bn_runstats import bn_writeback_targets, model_has_cumulative_bn
 
         for node in traced.graph.ops:
             if node.name == "dropout_stateful" and len(node.inputs) >= 2 and len(node.outputs) >= 2:
@@ -956,11 +914,7 @@ class _FusedStep:
         """Lower the combined forward+backward+optimizer trace into an executable."""
         import os as _os
 
-        params_as_vars = _os.environ.get("LUCID_COMPILE_VARS", "0") in (
-            "1",
-            "true",
-            "True",
-        )
+        params_as_vars = _os.environ.get("LUCID_COMPILE_VARS", "0") in ("1", "true", "True")
         if params_as_vars or traced.dropout_pairs:
             variable_pairs: list[tuple[int, int]] = []
             if params_as_vars:
@@ -1000,10 +954,7 @@ class _FusedStep:
         return lambda: _unwrap_hot(self._current_args[slot])
 
     def _build_resolvers(
-        self,
-        exe: CompiledExecutable,
-        traced: _FusedTrace,
-        args: tuple[Tensor, ...],
+        self, exe: CompiledExecutable, traced: _FusedTrace, args: tuple[Tensor, ...]
     ) -> list[Callable[[], _C_engine.TensorImpl]]:
         """Build per-input resolvers mapping ``exe.input_ids`` to live ``TensorImpl``s."""
         from lucid._tensor.tensor import Tensor
@@ -1161,11 +1112,7 @@ class _FusedStep:
         if plan.scaled_loss_sink is None:
             output_targets = [_unwrap_hot(loss_tensor), *plan.target_impls]
         else:
-            output_targets = [
-                plan.scaled_loss_sink,
-                *plan.target_impls,
-                _unwrap_hot(loss_tensor),
-            ]
+            output_targets = [plan.scaled_loss_sink, *plan.target_impls, _unwrap_hot(loss_tensor)]
         _C_engine.compile.run_executable_inplace(plan.exe, feeds, output_targets)
         advance_bn_counters(plan.bn_counters)
 

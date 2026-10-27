@@ -16,9 +16,4 @@ from lucid.utils.cache._dynamic import DynamicCache
 from lucid.utils.cache._encoder_decoder import EncoderDecoderCache
 from lucid.utils.cache._static import StaticCache
 
-__all__ = [
-    "Cache",
-    "DynamicCache",
-    "EncoderDecoderCache",
-    "StaticCache",
-]
+__all__ = ["Cache", "DynamicCache", "EncoderDecoderCache", "StaticCache"]

@@ -365,20 +365,14 @@ _DERIVATIVES: dict[str, tuple[UnaryFn, list[float]]] = {
     "i0e": (lambda v: S.i1e(v) - lucid.sign(v) * S.i0e(v), _ALL),
     # I1' = I0 - I1/x: 1/2 at 0, which an odd form sign(x)·g(|x|) flattens to 0.
     "i1": (lambda v: lucid.i0(v) - _over_x(S.i1)(v), _ALL),
-    "i1e": (
-        lambda v: S.i0e(v) - _over_x(S.i1e)(v) - lucid.sign(v) * S.i1e(v),
-        _ALL,
-    ),
+    "i1e": (lambda v: S.i0e(v) - _over_x(S.i1e)(v) - lucid.sign(v) * S.i1e(v), _ALL),
     "j0": (lambda v: -S.bessel_j1(v), _ALL),
     "j1": (lambda v: S.bessel_j0(v) - _over_x(S.bessel_j1)(v), _ALL),
     "y0": (lambda v: -S.bessel_y1(v), _POS),
     "y1": (lambda v: S.bessel_y0(v) - S.bessel_y1(v) / v, _POS),
     "k0": (lambda v: -S.modified_bessel_k1(v), _POS),
     "k1": (lambda v: -S.modified_bessel_k0(v) - S.modified_bessel_k1(v) / v, _POS),
-    "k0e": (
-        lambda v: S.scaled_modified_bessel_k0(v) - S.scaled_modified_bessel_k1(v),
-        _POS,
-    ),
+    "k0e": (lambda v: S.scaled_modified_bessel_k0(v) - S.scaled_modified_bessel_k1(v), _POS),
     "k1e": (
         lambda v: (
             S.scaled_modified_bessel_k1(v)

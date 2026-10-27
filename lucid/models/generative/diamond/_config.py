@@ -319,11 +319,7 @@ class DIAMONDConfig(GenerativeModelConfig):
         ):
             object.__setattr__(self, name, tuple(getattr(self, name)))
 
-        for optional in (
-            "upsampler_channels",
-            "upsampler_layers",
-            "upsampler_attn_depths",
-        ):
+        for optional in ("upsampler_channels", "upsampler_layers", "upsampler_attn_depths"):
             value = getattr(self, optional)
             if value is not None:
                 object.__setattr__(self, optional, tuple(value))

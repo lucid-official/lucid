@@ -207,14 +207,7 @@ def test_non_viewable_reshape_does_not_write_back_on_metal() -> None:
     flat = x.t().flatten()
     flat.add_(10.0)
     assert x.tolist() == before
-    assert flat.tolist() == [
-        0.0 + 10.0,
-        3.0 + 10.0,
-        1.0 + 10.0,
-        4.0 + 10.0,
-        2.0 + 10.0,
-        5.0 + 10.0,
-    ]
+    assert flat.tolist() == [0.0 + 10.0, 3.0 + 10.0, 1.0 + 10.0, 4.0 + 10.0, 2.0 + 10.0, 5.0 + 10.0]
 
     y = lucid.arange(12.0, device="metal").reshape(3, 4)
     y_before = y.tolist()

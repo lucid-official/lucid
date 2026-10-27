@@ -14,10 +14,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.vision.vjepa2._config import VJEPA2Config
-from lucid.models.vision.vjepa2._model import (
-    VJEPA2ForVideoClassification,
-    VJEPA2Model,
-)
+from lucid.models.vision.vjepa2._model import VJEPA2ForVideoClassification, VJEPA2Model
 from lucid.models.vision.vjepa2._weights import (
     VJEPA2ViTGiant384Weights,
     VJEPA2ViTGiantWeights,
@@ -39,13 +36,7 @@ __all__ = [
 
 _CFG_LARGE = VJEPA2Config(dim=1024, depth=24, num_heads=16, image_size=256)
 _CFG_HUGE = VJEPA2Config(dim=1280, depth=32, num_heads=16, image_size=256)
-_CFG_GIANT = VJEPA2Config(
-    dim=1408,
-    depth=40,
-    num_heads=22,
-    mlp_ratio=48.0 / 11.0,
-    image_size=256,
-)
+_CFG_GIANT = VJEPA2Config(dim=1408, depth=40, num_heads=22, mlp_ratio=48.0 / 11.0, image_size=256)
 _CFG_GIANT_384 = replace(_CFG_GIANT, image_size=384)
 
 

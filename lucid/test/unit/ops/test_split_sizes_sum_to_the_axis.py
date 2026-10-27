@@ -88,11 +88,7 @@ _SIZE_LISTS = [
 @pytest.mark.parametrize("spelling", list(_SPELLINGS))
 @pytest.mark.parametrize(("sizes", "dim"), _SIZE_LISTS, ids=str)
 def test_a_size_list_splits_as_the_reference_splits(
-    ref: ModuleType,
-    device: str,
-    spelling: str,
-    sizes: list[int],
-    dim: int,
+    ref: ModuleType, device: str, spelling: str, sizes: list[int], dim: int
 ) -> None:
     split = _SPELLINGS[spelling]
     x, r = _pair(ref, device)
@@ -121,12 +117,7 @@ def test_a_size_list_splits_as_the_reference_splits(
     ids=str,
 )
 def test_a_split_size_splits_as_the_reference_splits(
-    ref: ModuleType,
-    device: str,
-    spelling: str,
-    shape: tuple[int, ...],
-    size: int,
-    dim: int,
+    ref: ModuleType, device: str, spelling: str, shape: tuple[int, ...], size: int, dim: int
 ) -> None:
     split = _SPELLINGS[spelling]
     x, r = _pair(ref, device, shape)
@@ -150,12 +141,7 @@ def test_a_split_size_splits_as_the_reference_splits(
     ids=str,
 )
 def test_chunk_splits_as_the_reference_splits(
-    ref: ModuleType,
-    device: str,
-    method: bool,
-    shape: tuple[int, ...],
-    chunks: int,
-    dim: int,
+    ref: ModuleType, device: str, method: bool, shape: tuple[int, ...], chunks: int, dim: int
 ) -> None:
     x, r = _pair(ref, device, shape)
 

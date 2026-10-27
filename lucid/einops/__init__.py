@@ -76,10 +76,7 @@ def _reduce_axes(
 
 
 def _transform(
-    tensor: Tensor,
-    pattern: str,
-    operation: str,
-    axes_lengths: Mapping[str, SupportsIndex],
+    tensor: Tensor, pattern: str, operation: str, axes_lengths: Mapping[str, SupportsIndex]
 ) -> Tensor:
     """Run the at most six engine steps a pattern lowers to."""
     inp = _unwrap(tensor)
@@ -157,12 +154,7 @@ def rearrange(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
     return _transform(tensor, pattern, "rearrange", dict(axes_lengths))
 
 
-def reduce(
-    tensor: Tensor,
-    pattern: str,
-    reduction: str,
-    **axes_lengths: int,
-) -> Tensor:
+def reduce(tensor: Tensor, pattern: str, reduction: str, **axes_lengths: int) -> Tensor:
     r"""Reduce ``tensor`` along axes implied by an einops pattern.
 
     Generalises standard ``sum`` / ``mean`` / ``max`` / ``min`` /

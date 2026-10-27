@@ -230,9 +230,7 @@ class MultivariateNormal(Distribution):
         D = int(self.loc.shape[-1])
         self._D = D
         super().__init__(
-            batch_shape=tuple(self.loc.shape[:-1]),
-            event_shape=(D,),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape[:-1]), event_shape=(D,), validate_args=validate_args
         )
         if scale_tril is None:
             self.scale_tril = _scale_tril_of(covariance_matrix, precision_matrix)
@@ -374,11 +372,7 @@ class MultivariateNormal(Distribution):
         return 0.5 * self._D * (1.0 + math.log(2.0 * math.pi)) + log_det
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`MultivariateNormal` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(MultivariateNormal, _instance)
         batch_shape = tuple(batch_shape)
@@ -392,9 +386,7 @@ class MultivariateNormal(Distribution):
         if "precision_matrix" in self.__dict__:
             new.precision_matrix = self.precision_matrix.expand(cov_shape)
         super(MultivariateNormal, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new
@@ -478,11 +470,7 @@ class LowRankMultivariateNormal(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor,
-        cov_factor: Tensor,
-        cov_diag: Tensor,
-        validate_args: bool | None = None,
+        self, loc: Tensor, cov_factor: Tensor, cov_diag: Tensor, validate_args: bool | None = None
     ) -> None:
         """Initialise a :class:`LowRankMultivariateNormal` distribution."""
         if loc.ndim < 1:
@@ -514,17 +502,11 @@ class LowRankMultivariateNormal(Distribution):
             self._unbroadcasted_cov_factor, self._unbroadcasted_cov_diag
         )
         super().__init__(
-            batch_shape=batch_shape,
-            event_shape=event_shape,
-            validate_args=validate_args,
+            batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args
         )
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`LowRankMultivariateNormal` instance expanded to ``batch_shape``."""
         new = self._get_checked_instance(LowRankMultivariateNormal, _instance)
         batch_shape = tuple(batch_shape)
@@ -536,9 +518,7 @@ class LowRankMultivariateNormal(Distribution):
         new._unbroadcasted_cov_diag = self._unbroadcasted_cov_diag
         new._capacitance_tril = self._capacitance_tril
         super(LowRankMultivariateNormal, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new
@@ -614,18 +594,12 @@ class LowRankMultivariateNormal(Distribution):
             diff,
             self._capacitance_tril,
         )
-        log_det = _batch_lowrank_logdet(
-            self._unbroadcasted_cov_diag,
-            self._capacitance_tril,
-        )
+        log_det = _batch_lowrank_logdet(self._unbroadcasted_cov_diag, self._capacitance_tril)
         return -0.5 * (self._event_shape[0] * math.log(2.0 * math.pi) + log_det + M)
 
     @override
     def entropy(self) -> Tensor:
         """Differential entropy of the :class:`LowRankMultivariateNormal` distribution."""
-        log_det = _batch_lowrank_logdet(
-            self._unbroadcasted_cov_diag,
-            self._capacitance_tril,
-        )
+        log_det = _batch_lowrank_logdet(self._unbroadcasted_cov_diag, self._capacitance_tril)
         H = 0.5 * (self._event_shape[0] * (1.0 + math.log(2.0 * math.pi)) + log_det)
         return H.expand(self._batch_shape)

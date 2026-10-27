@@ -84,9 +84,7 @@ def test_bitwise_ops(n: int, dtype: type) -> None:
     in_range = (s64 >= 0) & (s64 < bits)
     left = np.where(in_range, a << np.clip(shifts, 0, bits - 1), 0).astype(dtype)
     right = np.where(
-        s64 < 0,
-        0,
-        np.where(s64 >= bits, np.where(a < 0, -1, 0), a >> np.clip(shifts, 0, bits - 1)),
+        s64 < 0, 0, np.where(s64 >= bits, np.where(a < 0, -1, 0), a >> np.clip(shifts, 0, bits - 1))
     ).astype(dtype)
     np.testing.assert_array_equal((la << ls).numpy(), left)
     np.testing.assert_array_equal((la >> ls).numpy(), right)
@@ -224,8 +222,7 @@ def test_count_nonzero_is_an_exact_int64() -> None:
 
 
 @pytest.mark.parametrize(
-    "op",
-    ["exp", "log", "sqrt", "tanh", "sin", "cos", "erf", "sigmoid", "arctan", "sinh"],
+    "op", ["exp", "log", "sqrt", "tanh", "sin", "cos", "erf", "sigmoid", "arctan", "sinh"]
 )
 def test_transcendentals_split_across_cores_give_the_same_bits(op: str) -> None:
     # vForce calls (and erf, and the fused sigmoid) run in chunks across

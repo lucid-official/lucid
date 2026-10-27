@@ -33,8 +33,7 @@ from lucid.test.unit.coreml._helpers import (
 )
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -128,8 +127,7 @@ class TestAgreementWithEager:
         cm.close()
 
     @pytest.mark.parametrize(
-        "factory",
-        ["resnet_18_cls", "mobilenet_v2_cls", "densenet_121_cls", "convnext_tiny_cls"],
+        "factory", ["resnet_18_cls", "mobilenet_v2_cls", "densenet_121_cls", "convnext_tiny_cls"]
     )
     def test_zoo_classifiers_match(self, factory: str, tmp_path: object) -> None:
         """Unmodified factories, output dataclass and all.
@@ -288,10 +286,7 @@ class TestTextModels:
         scale = float(reference.abs().max().item())
 
         cm = cml.export(
-            model,
-            ids,
-            str(tmp_path / f"{factory}.mlpackage"),
-            output_field="last_hidden_state",
+            model, ids, str(tmp_path / f"{factory}.mlpackage"), output_field="last_hidden_state"
         )
 
         got = cm.predict(ids)
@@ -351,9 +346,7 @@ class TestTextModels:
 
         with pytest.raises(TypeError, match="no tensor to export"):
             cml.export(
-                ReturnsNothingUseful().eval(),
-                lucid.randn(1, 4),
-                str(tmp_path / "none.mlpackage"),
+                ReturnsNothingUseful().eval(), lucid.randn(1, 4), str(tmp_path / "none.mlpackage")
             )
 
 
@@ -523,11 +516,7 @@ class TestQuantizedWeights:
         packed = str(tmp_path / "int8.mlpackage")
         a = cml.export(model, x, plain, precision=cml.Precision.FLOAT16)
         b = cml.export(
-            model,
-            x,
-            packed,
-            precision=cml.Precision.FLOAT16,
-            weights=cml.WeightPrecision.INT8,
+            model, x, packed, precision=cml.Precision.FLOAT16, weights=cml.WeightPrecision.INT8
         )
         try:
             # Halved, near enough: the per-channel scales and the weights
@@ -627,10 +616,7 @@ class TestAPlanningFailureSaysWhichHalfFailed:
         ids = lucid.zeros(1, 16).to(lucid.int64)
 
         exported = cml.export(
-            model,
-            ids,
-            str(tmp_path / "roformer_all.mlpackage"),
-            compute_units=cml.ComputeUnits.ALL,
+            model, ids, str(tmp_path / "roformer_all.mlpackage"), compute_units=cml.ComputeUnits.ALL
         )
         try:
             assert exported.verify(model, ids, relative=True) < 1e-4

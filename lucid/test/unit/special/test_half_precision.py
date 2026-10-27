@@ -92,8 +92,7 @@ def _args(name: str, make: Callable[[list[float]], Any]) -> list[Any]:
     [
         "cpu",
         pytest.param(
-            "metal",
-            marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
+            "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
         ),
     ],
 )

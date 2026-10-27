@@ -726,10 +726,7 @@ class MultiheadAttention(Module):
                     # cache_position is the in-place write slot for a StaticCache
                     # (compiled decode); a DynamicCache ignores it and appends.
                     kh, vh = self_cache.update(
-                        kh,
-                        vh,
-                        layer_idx,
-                        cache_kwargs={"cache_position": cache_position},
+                        kh, vh, layer_idx, cache_kwargs={"cache_position": cache_position}
                     )
                 Tk = int(kh.shape[2])
 
@@ -781,11 +778,7 @@ class MultiheadAttention(Module):
             )
         else:
             attn_out = scaled_dot_product_attention(
-                qh,
-                kh,
-                vh,
-                attn_mask=merged_mask,
-                is_causal=is_causal,
+                qh, kh, vh, attn_mask=merged_mask, is_causal=is_causal
             )
             attn_weights = None
 

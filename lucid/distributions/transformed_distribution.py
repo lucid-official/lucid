@@ -485,16 +485,13 @@ class TransformedDistribution(Distribution):
             reinterpreted_batch_ndims = transform.domain.event_dim - base_event_dim
             if reinterpreted_batch_ndims > 0 and len(base_shape) >= transform.domain.event_dim:
                 base_distribution = Independent(
-                    base_distribution,
-                    reinterpreted_batch_ndims,
-                    validate_args=validate_args,
+                    base_distribution, reinterpreted_batch_ndims, validate_args=validate_args
                 )
             transform_change_in_event_dim = (
                 transform.codomain.event_dim - transform.domain.event_dim
             )
             event_dim = max(
-                transform.codomain.event_dim,
-                base_event_dim + transform_change_in_event_dim,
+                transform.codomain.event_dim, base_event_dim + transform_change_in_event_dim
             )
             cut = max(0, len(forward_shape) - event_dim)
             batch_shape = forward_shape[:cut]
@@ -504,9 +501,7 @@ class TransformedDistribution(Distribution):
             event_shape = tuple(base_distribution.event_shape)
         self.base_dist = base_distribution
         super().__init__(
-            batch_shape=batch_shape,
-            event_shape=event_shape,
-            validate_args=validate_args,
+            batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args
         )
 
     @override
@@ -562,24 +557,18 @@ class TransformedDistribution(Distribution):
             prev = t._inverse(cur)
             event_dim += t.domain.event_dim - t.codomain.event_dim
             log_det = log_det + _sum_rightmost(
-                t.log_abs_det_jacobian(prev, cur),
-                event_dim - t.domain.event_dim,
+                t.log_abs_det_jacobian(prev, cur), event_dim - t.domain.event_dim
             )
             cur = prev
         return (
             _sum_rightmost(
-                self.base_dist.log_prob(cur),
-                event_dim - len(self.base_dist.event_shape),
+                self.base_dist.log_prob(cur), event_dim - len(self.base_dist.event_shape)
             )
             - log_det
         )
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`TransformedDistribution` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(TransformedDistribution, _instance)
         batch_shape = tuple(batch_shape)
@@ -590,9 +579,7 @@ class TransformedDistribution(Distribution):
         new.base_dist = self.base_dist.expand(base_batch_shape)
         new.transforms = self.transforms
         super(TransformedDistribution, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new

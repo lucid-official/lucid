@@ -18,10 +18,7 @@ def _flat(t: lucid.Tensor) -> list[float]:
 
 def test_it_reads_the_elements_its_strides_name() -> None:
     x = lucid.arange(12).float()
-    assert lucid.as_strided(x, (2, 3), (4, 1)).tolist() == [
-        [0.0, 1.0, 2.0],
-        [4.0, 5.0, 6.0],
-    ]
+    assert lucid.as_strided(x, (2, 3), (4, 1)).tolist() == [[0.0, 1.0, 2.0], [4.0, 5.0, 6.0]]
 
 
 def test_the_method_form_with_an_explicit_offset() -> None:

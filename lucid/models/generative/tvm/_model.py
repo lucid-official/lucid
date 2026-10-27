@@ -51,11 +51,7 @@ from lucid.models.generative._common._transformers import (
 from lucid.models.generative.tvm._config import TVMConfig
 from lucid.nn.utils import skip_init
 
-__all__ = [
-    "TVMModel",
-    "TVMForImageGeneration",
-    "TVMOutput",
-]
+__all__ = ["TVMModel", "TVMForImageGeneration", "TVMOutput"]
 
 # Every norm in the released network uses this epsilon — the token norms,
 # the query/key norms and the modulation norm alike.
@@ -283,11 +279,7 @@ class _FinalLayer(nn.Module):
     """
 
     def __init__(
-        self,
-        hidden_size: int,
-        patch_size: int,
-        out_channels: int,
-        modulation_norm: bool,
+        self, hidden_size: int, patch_size: int, out_channels: int, modulation_norm: bool
     ) -> None:
         """Initialise the head. See the class docstring for parameters."""
         super().__init__()
@@ -403,17 +395,12 @@ class TVMModel(PretrainedModel):
         width = config.hidden_size
 
         self.patch_embed = nn.Conv2d(
-            config.in_channels,
-            width,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
+            config.in_channels, width, kernel_size=config.patch_size, stride=config.patch_size
         )
         # Derived from the config and frozen in the reference too, so it is
         # rebuilt here rather than carried in a checkpoint.
         self.register_buffer(
-            "pos_embed",
-            sincos_position_embedding(width, self.grid),
-            persistent=False,
+            "pos_embed", sincos_position_embedding(width, self.grid), persistent=False
         )
 
         freq = config.frequency_embedding_size
@@ -461,12 +448,7 @@ class TVMModel(PretrainedModel):
         with lucid.no_grad():
             _spectral_(self.patch_embed.weight)
             for block in self.blocks:
-                for linear in (
-                    block.attn.qkv,
-                    block.attn.proj,
-                    block.mlp.fc1,
-                    block.mlp.fc2,
-                ):
+                for linear in (block.attn.qkv, block.attn.proj, block.mlp.fc1, block.mlp.fc2):
                     _spectral_(linear.weight)
                 _zero_projection(block.ada_ln)
             for embedder in (self.time_embed, self.interval_embed, self.guidance_embed):
@@ -543,11 +525,7 @@ class TVMModel(PretrainedModel):
             parameterisation and :math:`F_\theta` otherwise.
         """
         check_latent_size(
-            int(x.shape[-2]),
-            int(x.shape[-1]),
-            self.grid,
-            self.config.patch_size,
-            "TVM",
+            int(x.shape[-2]), int(x.shape[-1]), self.grid, self.config.patch_size, "TVM"
         )
         batch = int(x.shape[0])
         device = x.device.type
@@ -556,10 +534,7 @@ class TVMModel(PretrainedModel):
             guidance = lucid.full((batch,), float(guidance), device=device, dtype=x.dtype)
         if labels is None:
             labels = lucid.full(
-                (batch,),
-                float(self.config.num_classes),
-                dtype=lucid.int64,
-                device=device,
+                (batch,), float(self.config.num_classes), dtype=lucid.int64, device=device
             )
 
         tokens = self.patch_embed(x)
@@ -575,10 +550,7 @@ class TVMModel(PretrainedModel):
         for block in self.blocks:
             tokens = block(tokens, cond)
         out = unpatchify(
-            self.final(tokens, cond),
-            self.grid,
-            self.config.patch_size,
-            self.config.out_channels,
+            self.final(tokens, cond), self.grid, self.config.patch_size, self.config.out_channels
         )
         if self.config.scaled_parameterization:
             out = out * guidance.reshape(-1, 1, 1, 1)

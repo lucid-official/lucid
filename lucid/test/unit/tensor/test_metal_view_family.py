@@ -235,10 +235,7 @@ def test_a_write_to_the_base_of_a_saved_cpu_view_is_refused() -> None:
     y = x * 1.0
     v = y.view(2, 2)
     z = (v * v).sum()
-    with (
-        lucid.no_grad(),
-        pytest.raises(NotImplementedError, match="saved for backward"),
-    ):
+    with lucid.no_grad(), pytest.raises(NotImplementedError, match="saved for backward"):
         y.add_(1.0)
     assert z.requires_grad
 

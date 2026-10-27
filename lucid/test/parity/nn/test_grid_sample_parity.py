@@ -49,13 +49,7 @@ def _operands(rank: int) -> tuple[np.ndarray, np.ndarray, np.random.Generator]:
 class TestGridSampleMatrix:
     @pytest.mark.parametrize(("rank", "mode", "padding_mode", "align_corners"), _CASES)
     def test_values_and_gradients(
-        self,
-        ref: Any,
-        device: str,
-        rank: int,
-        mode: str,
-        padding_mode: str,
-        align_corners: bool,
+        self, ref: Any, device: str, rank: int, mode: str, padding_mode: str, align_corners: bool
     ) -> None:
         x, grid, rng = _operands(rank)
         kw = dict(mode=mode, padding_mode=padding_mode, align_corners=align_corners)
@@ -80,9 +74,7 @@ class TestGridSampleMatrix:
 @pytest.mark.parity
 class TestAffineGrid:
     @pytest.mark.parametrize(
-        "size",
-        [(2, 3, 5, 6), (2, 3, 4, 5, 6), (2, 1, 1, 3, 1)],
-        ids=["2d", "3d", "3d-unit-axes"],
+        "size", [(2, 3, 5, 6), (2, 3, 4, 5, 6), (2, 1, 1, 3, 1)], ids=["2d", "3d", "3d-unit-axes"]
     )
     @pytest.mark.parametrize("align_corners", [True, False], ids=["corners", "edges"])
     # The reference warns about unit-size axes with align_corners; the

@@ -88,14 +88,7 @@ class TestMetalKernelRunner:
         """Kernel dispatched over 1024 elements."""
         n = 1024
         x = lucid.ones(n)
-        y = metal.run_kernel(
-            _MSL_ADD1,
-            "add_one",
-            [x],
-            (n,),
-            grid=(n, 1, 1),
-            threads=(1, 1, 1),
-        )
+        y = metal.run_kernel(_MSL_ADD1, "add_one", [x], (n,), grid=(n, 1, 1), threads=(1, 1, 1))
         np.testing.assert_allclose(y.numpy(), [2.0] * n, atol=1e-6)
 
     def test_run_metal_kernel_is_available(self) -> None:

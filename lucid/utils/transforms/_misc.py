@@ -19,13 +19,7 @@ from lucid.utils.transforms import _random
 from lucid.utils.transforms import functional as F
 from lucid.utils.transforms._base import Empty, Transform, _NoParams, _find_reference
 from lucid.utils.transforms._crop import Crop
-from lucid.utils.transforms._datatypes import (
-    BoundingBoxes,
-    Image,
-    Keypoints,
-    Mask,
-    to_xyxy,
-)
+from lucid.utils.transforms._datatypes import BoundingBoxes, Image, Keypoints, Mask, to_xyxy
 from lucid.utils.transforms._geometric import Resize
 
 
@@ -373,9 +367,7 @@ class MaskDropout(_NoParams, Transform[Empty]):
             chosen.append(pool.pop(k))
 
         keep = lucid.ones(
-            *mask_obj.data.shape,
-            dtype=mask_obj.data.dtype,
-            device=mask_obj.data.device,
+            *mask_obj.data.shape, dtype=mask_obj.data.dtype, device=mask_obj.data.device
         )
         for lab in chosen:
             keep = keep * (mask_obj.data != lab).to(mask_obj.data.dtype)

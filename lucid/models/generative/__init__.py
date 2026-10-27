@@ -22,10 +22,7 @@ from lucid.models.generative._common._config import (
     NormalizingFlowConfig,
 )
 from lucid.models.generative._common._rssm import RSSM, RSSMState
-from lucid.models.generative._common._schedulers import (
-    DDPMScheduler,
-    DiffusionScheduler,
-)
+from lucid.models.generative._common._schedulers import DDPMScheduler, DiffusionScheduler
 
 __all__ = [
     "BetaSchedule",

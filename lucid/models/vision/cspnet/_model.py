@@ -69,13 +69,7 @@ class _ConvBnAct(nn.Module):
         if padding is None:
             padding = (kernel_size - 1) // 2
         self.conv = nn.Conv2d(
-            in_chs,
-            out_chs,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            groups=groups,
-            bias=False,
+            in_chs, out_chs, kernel_size, stride=stride, padding=padding, groups=groups, bias=False
         )
         self.bn = nn.BatchNorm2d(out_chs)
         self.apply_act = apply_act
@@ -106,11 +100,7 @@ class _BottleneckBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        in_chs: int,
-        out_chs: int,
-        bottle_ratio: float = 0.5,
-        groups: int = 1,
+        self, in_chs: int, out_chs: int, bottle_ratio: float = 0.5, groups: int = 1
     ) -> None:
         super().__init__()
         mid = int(round(out_chs * bottle_ratio))
@@ -146,11 +136,7 @@ class _DarkBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        in_chs: int,
-        out_chs: int,
-        bottle_ratio: float = 0.5,
-        groups: int = 1,
+        self, in_chs: int, out_chs: int, bottle_ratio: float = 0.5, groups: int = 1
     ) -> None:
         super().__init__()
         mid = int(round(out_chs * bottle_ratio))
@@ -238,11 +224,7 @@ class _CrossStage(nn.Module):
         self.conv_down: _ConvBnAct | nn.Identity
         if stride > 1:
             self.conv_down = _ConvBnAct(
-                in_chs,
-                down_chs,
-                kernel_size=3,
-                stride=stride,
-                groups=groups,
+                in_chs, down_chs, kernel_size=3, stride=stride, groups=groups
             )
         else:
             self.conv_down = nn.Identity()
@@ -260,12 +242,7 @@ class _CrossStage(nn.Module):
         # even-split throughout, and they load key-for-key only against
         # this shape.  A caller reproducing darknet's own trained weights
         # needs the asymmetric form, which is a different model.
-        self.conv_exp = _ConvBnAct(
-            down_chs,
-            exp_chs,
-            kernel_size=1,
-            apply_act=not cross_linear,
-        )
+        self.conv_exp = _ConvBnAct(down_chs, exp_chs, kernel_size=1, apply_act=not cross_linear)
         self.expand_chs = exp_chs
 
         # ── blocks ──  (only the "process" half goes through these)
@@ -283,35 +260,19 @@ class _CrossStage(nn.Module):
             if block_type == "bottle":
                 blocks.append(
                     _BottleneckBlock(
-                        block_in,
-                        block_out_chs,
-                        bottle_ratio=bottle_ratio,
-                        groups=groups,
+                        block_in, block_out_chs, bottle_ratio=bottle_ratio, groups=groups
                     )
                 )
             else:
                 blocks.append(
-                    _DarkBlock(
-                        block_in,
-                        block_out_chs,
-                        bottle_ratio=bottle_ratio,
-                        groups=groups,
-                    )
+                    _DarkBlock(block_in, block_out_chs, bottle_ratio=bottle_ratio, groups=groups)
                 )
             block_in = block_out_chs
         self.blocks = nn.Sequential(*blocks)
 
         # ── transitions ──
-        self.conv_transition_b = _ConvBnAct(
-            block_out_chs,
-            exp_chs // 2,
-            kernel_size=1,
-        )
-        self.conv_transition = _ConvBnAct(
-            exp_chs,
-            out_chs,
-            kernel_size=1,
-        )
+        self.conv_transition_b = _ConvBnAct(block_out_chs, exp_chs // 2, kernel_size=1)
+        self.conv_transition = _ConvBnAct(exp_chs, out_chs, kernel_size=1)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -335,12 +296,7 @@ class _Stem(nn.Module):
     """Single-conv stem matching timm's ``stem.conv1`` + optional max-pool."""
 
     def __init__(
-        self,
-        in_channels: int,
-        out_chs: int,
-        kernel_size: int,
-        stride: int,
-        pool: str = "max",
+        self, in_channels: int, out_chs: int, kernel_size: int, stride: int, pool: str = "max"
     ) -> None:
         super().__init__()
         self.conv1 = _ConvBnAct(in_channels, out_chs, kernel_size, stride=stride)
@@ -369,12 +325,9 @@ class _Stem(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-def _build_trunk(cfg: CSPNetConfig) -> tuple[
-    _Stem,
-    nn.ModuleList[_CrossStage],
-    list[FeatureInfo],
-    int,
-]:
+def _build_trunk(
+    cfg: CSPNetConfig,
+) -> tuple[_Stem, nn.ModuleList[_CrossStage], list[FeatureInfo], int]:
     """Returns ``(stem, stages, feature_info, final_chs)``."""
     stem = _Stem(
         cfg.in_channels,
@@ -545,11 +498,7 @@ class CSPNetForImageClassification(ImageClassificationModel, ClassificationHeadM
             _zero_init_last(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)

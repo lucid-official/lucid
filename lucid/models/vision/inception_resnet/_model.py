@@ -78,12 +78,7 @@ class _ConvBnReLU(nn.Module):
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
         )
         self.bn = nn.BatchNorm2d(out_channels, eps=1e-3)
 
@@ -110,13 +105,7 @@ class _AvgPoolExclPad(nn.Module):
     yields the exclude-pad mean exactly.
     """
 
-    def __init__(
-        self,
-        kernel_size: int,
-        *,
-        stride: int = 1,
-        padding: int = 1,
-    ) -> None:
+    def __init__(self, kernel_size: int, *, stride: int = 1, padding: int = 1) -> None:
         super().__init__()
         self._pool = nn.AvgPool2d(kernel_size, stride=stride, padding=padding)
         self._area = float(kernel_size * kernel_size)
@@ -149,10 +138,7 @@ class _Mixed5b(nn.Module):
         # branch0: 1×1 → 96
         self.branch0 = _ConvBnReLU(192, 96, 1)
         # branch1: 1×1(48) → 5×5(64)
-        self.branch1 = nn.Sequential(
-            _ConvBnReLU(192, 48, 1),
-            _ConvBnReLU(48, 64, 5, padding=2),
-        )
+        self.branch1 = nn.Sequential(_ConvBnReLU(192, 48, 1), _ConvBnReLU(48, 64, 5, padding=2))
         # branch2: 1×1(64) → 3×3(96) → 3×3(96)
         self.branch2 = nn.Sequential(
             _ConvBnReLU(192, 64, 1),
@@ -163,8 +149,7 @@ class _Mixed5b(nn.Module):
         # from the divisor to match the canonical timm / TF-Slim
         # Inception-ResNet v2 (``count_include_pad=False``).
         self.branch3 = nn.Sequential(
-            _AvgPoolExclPad(3, stride=1, padding=1),
-            _ConvBnReLU(192, 64, 1),
+            _AvgPoolExclPad(3, stride=1, padding=1), _ConvBnReLU(192, 64, 1)
         )
 
     @override
@@ -193,10 +178,7 @@ class _Block35(nn.Module):
         super().__init__()
         self.scale = scale
         self.branch0 = _ConvBnReLU(320, 32, 1)
-        self.branch1 = nn.Sequential(
-            _ConvBnReLU(320, 32, 1),
-            _ConvBnReLU(32, 32, 3, padding=1),
-        )
+        self.branch1 = nn.Sequential(_ConvBnReLU(320, 32, 1), _ConvBnReLU(32, 32, 3, padding=1))
         self.branch2 = nn.Sequential(
             _ConvBnReLU(320, 32, 1),
             _ConvBnReLU(32, 48, 3, padding=1),
@@ -301,14 +283,8 @@ class _Mixed7a(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self.branch0 = nn.Sequential(
-            _ConvBnReLU(1088, 256, 1),
-            _ConvBnReLU(256, 384, 3, stride=2),
-        )
-        self.branch1 = nn.Sequential(
-            _ConvBnReLU(1088, 256, 1),
-            _ConvBnReLU(256, 288, 3, stride=2),
-        )
+        self.branch0 = nn.Sequential(_ConvBnReLU(1088, 256, 1), _ConvBnReLU(256, 384, 3, stride=2))
+        self.branch1 = nn.Sequential(_ConvBnReLU(1088, 256, 1), _ConvBnReLU(256, 288, 3, stride=2))
         self.branch2 = nn.Sequential(
             _ConvBnReLU(1088, 256, 1),
             _ConvBnReLU(256, 288, 3, padding=1),
@@ -731,11 +707,7 @@ class InceptionResNetV2ForImageClassification(ImageClassificationModel):
         self.classif = nn.Linear(self.classif.in_features, num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> InceptionResNetOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionResNetOutput:
         x = self._forward_stem(x)
         x = self.mixed_5b(x)
         x = self.repeat(x)

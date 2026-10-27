@@ -105,10 +105,7 @@ def _promote(x: Tensor) -> Tensor:
 
 
 def _prepare(
-    input: Tensor,
-    s: int | Sequence[int] | None,
-    dim: int | Sequence[int] | None,
-    op: str,
+    input: Tensor, s: int | Sequence[int] | None, dim: int | Sequence[int] | None, op: str
 ) -> tuple[Tensor, list[int], list[int]]:
     """The promoted input, its normalised transform axes, and ``s`` as a list.
 
@@ -285,13 +282,7 @@ class _Plan:
 
     @classmethod
     def of(
-        cls,
-        x: Tensor,
-        axes: list[int],
-        norm: str,
-        N: int,
-        sizes: list[int],
-        inverse: bool = False,
+        cls, x: Tensor, axes: list[int], norm: str, N: int, sizes: list[int], inverse: bool = False
     ) -> _Plan:
         in_sizes = _input_sizes_along_axes(tuple(x.shape), axes)
         return cls(axes, in_sizes, not x.is_complex(), norm, N, sizes, inverse)
@@ -369,13 +360,7 @@ class _FftnAutograd(_AutogradFunction):
     @override
     @staticmethod
     def forward(
-        ctx: FunctionCtx,
-        x: Tensor,
-        s: list[int],
-        axes: list[int],
-        norm: str,
-        N: int,
-        inverse: bool,
+        ctx: FunctionCtx, x: Tensor, s: list[int], axes: list[int], norm: str, N: int, inverse: bool
     ) -> Tensor:
         plan = _Plan.of(x, axes, norm, N, [], inverse)
         if inverse:

@@ -156,10 +156,7 @@ def _grad_seeds(m: ModuleType, device: str) -> object:
     gs = m.autograd.grad(
         [y, y * 2],
         [x],
-        grad_outputs=[
-            m.tensor([1.0, 3.0], device=device),
-            m.tensor([2.0, 0.5], device=device),
-        ],
+        grad_outputs=[m.tensor([1.0, 3.0], device=device), m.tensor([2.0, 0.5], device=device)],
     )
     return [_values(g) for g in gs]
 
@@ -217,11 +214,7 @@ def _one_root_saves_the_other_does_not(m: ModuleType, device: str) -> object:
     a, b = (x * x).sum(), (w + 1).sum()
     m.autograd.backward([a, b])
     b.backward()
-    return [
-        _values(x.grad),
-        _values(w.grad),
-        _outcome(m, device, lambda mm, d: a.backward()),
-    ]
+    return [_values(x.grad), _values(w.grad), _outcome(m, device, lambda mm, d: a.backward())]
 
 
 _SCENARIOS: dict[str, Scenario] = {

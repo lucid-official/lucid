@@ -29,11 +29,7 @@ def _grid(n: int, t1: float = 1.0) -> list[float]:
 
 
 def _ref_odeint(
-    ref: Any,
-    func: Callable[[Any, Any], Any],
-    y0: Any,
-    t: Sequence[float],
-    method: str,
+    ref: Any, func: Callable[[Any, Any], Any], y0: Any, t: Sequence[float], method: str
 ) -> Any:
     """Unfused reference implementation of the same fixed-step RK loop."""
     tableau = _METHODS[method]
@@ -83,11 +79,7 @@ class TestOdeintParity:
     ) -> None:
         grid = _grid(16)
         lucid_final = diffeq.odeint(
-            lambda t, y: y * y - t,
-            y0_pair[0],
-            grid,
-            method=method,
-            return_trajectory=False,
+            lambda t, y: y * y - t, y0_pair[0], grid, method=method, return_trajectory=False
         )
         ref_final = _ref_odeint(ref, lambda t, y: y * y - t, y0_pair[1], grid, method)[-1]
         assert_close(lucid_final, ref_final, atol=1e-10, rtol=1e-9)
@@ -111,11 +103,7 @@ class TestOdeintParity:
         grid = _grid(12)
 
         lucid_out = diffeq.odeint(
-            lambda t, y: -y + lucid.sin(t),
-            lucid_y0,
-            grid,
-            method=method,
-            return_trajectory=False,
+            lambda t, y: -y + lucid.sin(t), lucid_y0, grid, method=method, return_trajectory=False
         )
         (lucid_out * lucid_out).sum().backward()
 
@@ -135,11 +123,7 @@ class TestOdeintParity:
         lucid_y0 = lucid.tensor([1.0], dtype=lucid.float64, requires_grad=True)
         lucid_k = lucid.tensor([0.5], dtype=lucid.float64, requires_grad=True)
         lucid_out = diffeq.odeint(
-            lambda t, y: -lucid_k * y,
-            lucid_y0,
-            grid,
-            method=method,
-            return_trajectory=False,
+            lambda t, y: -lucid_k * y, lucid_y0, grid, method=method, return_trajectory=False
         )
         (lucid_g,) = lucid.autograd.grad(lucid_out.sum(), lucid_y0, create_graph=True)
         (lucid_mixed,) = lucid.autograd.grad(lucid_g.sum(), lucid_k)
@@ -253,14 +237,7 @@ class TestReferenceOdeParity:
         assert tab.mid == tuple(ref_mid.tolist())
 
 
-ADAPTIVE_METHODS = [
-    "dopri5",
-    "dopri8",
-    "tsit5",
-    "bosh3",
-    "fehlberg2",
-    "adaptive_heun",
-]
+ADAPTIVE_METHODS = ["dopri5", "dopri8", "tsit5", "bosh3", "fehlberg2", "adaptive_heun"]
 
 # Step count for an adaptive method scales like ``tol ** (-1 / order)``, so a
 # single tight tolerance would make the second-order methods take minutes
@@ -312,13 +289,7 @@ class TestFusedPrimitiveParity:
         dt, rtol, atol = 0.037, 1e-5, 1e-8
 
         got = _fused.error_ratio(
-            lucid_ts[0],
-            lucid_ts[1],
-            lucid_ts[2 : 2 + n][:n],
-            tableau.b_error[:n],
-            dt,
-            rtol,
-            atol,
+            lucid_ts[0], lucid_ts[1], lucid_ts[2 : 2 + n][:n], tableau.b_error[:n], dt, rtol, atol
         )
 
         y0, y1 = ref_ts[0], ref_ts[1]
@@ -401,20 +372,10 @@ class TestAdaptiveAgreement:
 
         rtol, atol, want_tol = ADAPTIVE_TOL[method]
         adaptive = diffeq.odeint(
-            rhs,
-            y0,
-            [0.0, 1.0],
-            method=method,
-            rtol=rtol,
-            atol=atol,
-            return_trajectory=False,
+            rhs, y0, [0.0, 1.0], method=method, rtol=rtol, atol=atol, return_trajectory=False
         )
         fixed = diffeq.odeint(
-            rhs,
-            y0,
-            [i / 512 for i in range(513)],
-            method="rk4",
-            return_trajectory=False,
+            rhs, y0, [i / 512 for i in range(513)], method="rk4", return_trajectory=False
         )
         assert_close(adaptive, fixed, atol=want_tol, rtol=want_tol * 10)
 
@@ -430,13 +391,7 @@ class TestOdeintDenseParity:
         y0_val = 0.75
         y0 = lucid.tensor([y0_val], dtype=lucid.float64)
         dense = diffeq.odeint_dense(
-            lambda t, y: -y + lucid.sin(t),
-            y0,
-            0.0,
-            1.3,
-            method=method,
-            rtol=rtol,
-            atol=atol,
+            lambda t, y: -y + lucid.sin(t), y0, 0.0, 1.3, method=method, rtol=rtol, atol=atol
         )
         # A time inside a step carries the interpolant's error on top of the
         # solver's, and the two are not always comparable: measured here,
@@ -470,12 +425,7 @@ class TestOdeintDenseParity:
         y0 = lucid.tensor([1.0, -2.0], dtype=lucid.float64)
         rhs = lambda t, y: -y + lucid.sin(t)  # noqa: E731
         dense = diffeq.odeint_dense(
-            rhs,
-            y0,
-            0.0,
-            1.0,
-            method="rk4",
-            options={"step_size": 1 / 64, "interp": "cubic"},
+            rhs, y0, 0.0, 1.0, method="rk4", options={"step_size": 1 / 64, "interp": "cubic"}
         )
         fine = diffeq.odeint(rhs, y0, [i / 1024 for i in range(1025)], method="rk4")
         for i in (0, 256, 512, 1024):
@@ -526,12 +476,7 @@ class TestAdjointParity:
         k = lucid.tensor([k_val], dtype=lucid.float64, requires_grad=True)
         y0 = lucid.tensor([y0_val], dtype=lucid.float64, requires_grad=True)
         diffeq.odeint_adjoint(
-            lambda t, y: -k * y,
-            y0,
-            [0.0, horizon],
-            rtol=1e-12,
-            atol=1e-14,
-            adjoint_params=[k],
+            lambda t, y: -k * y, y0, [0.0, horizon], rtol=1e-12, atol=1e-14, adjoint_params=[k]
         )[-1].sum().backward()
 
         assert float(y0.grad.item()) == pytest.approx(float(ry0.grad), abs=1e-8)
@@ -557,13 +502,7 @@ class TestEventParity:
             return lucid.stack([y[1], lucid.tensor(-g, dtype=y.dtype)], dim=0)
 
         event_t, sol = diffeq.odeint_event(
-            fall,
-            y0,
-            0.0,
-            event_fn=lambda t, y: y[0],
-            method=method,
-            rtol=1e-12,
-            atol=1e-14,
+            fall, y0, 0.0, event_fn=lambda t, y: y[0], method=method, rtol=1e-12, atol=1e-14
         )
         want = ref.sqrt(ref.tensor(2 * h0 / g, dtype=ref.float64))
         assert float(event_t.item()) == pytest.approx(float(want), abs=1e-7)
@@ -575,12 +514,7 @@ class TestEventParity:
         y0_val, threshold = 3.0, 0.4
         y0 = lucid.tensor([y0_val], dtype=lucid.float64)
         event_t, sol = diffeq.odeint_event(
-            lambda t, y: -y,
-            y0,
-            0.0,
-            event_fn=lambda t, y: y[0] - threshold,
-            rtol=1e-12,
-            atol=1e-14,
+            lambda t, y: -y, y0, 0.0, event_fn=lambda t, y: y[0] - threshold, rtol=1e-12, atol=1e-14
         )
         want = ref.log(ref.tensor(y0_val / threshold, dtype=ref.float64))
         assert float(event_t.item()) == pytest.approx(float(want), abs=1e-9)
@@ -592,20 +526,10 @@ class TestEventParity:
         y0 = lucid.tensor([2.0, -1.0], dtype=lucid.float64)
         rhs = lambda t, y: -y + lucid.sin(t)  # noqa: E731
         event_t, sol = diffeq.odeint_event(
-            rhs,
-            y0,
-            0.0,
-            event_fn=lambda t, y: y[0] - 0.9,
-            rtol=1e-12,
-            atol=1e-14,
+            rhs, y0, 0.0, event_fn=lambda t, y: y[0] - 0.9, rtol=1e-12, atol=1e-14
         )
         direct = diffeq.odeint(
-            rhs,
-            y0,
-            [0.0, float(event_t.item())],
-            rtol=1e-12,
-            atol=1e-14,
-            return_trajectory=False,
+            rhs, y0, [0.0, float(event_t.item())], rtol=1e-12, atol=1e-14, return_trajectory=False
         )
         assert_close(sol[-1], direct, atol=1e-9)
 
@@ -731,10 +655,7 @@ class TestMultistepParity:
             options={"max_order": max_order},
         )
         want = diffeq.odeint(
-            lambda t, y: -y,
-            lucid.tensor(y0_val, dtype=lucid.float64),
-            grid,
-            method="rk4",
+            lambda t, y: -y, lucid.tensor(y0_val, dtype=lucid.float64), grid, method="rk4"
         )
         assert float((got - want).abs().max().item()) == 0.0
 

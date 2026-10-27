@@ -213,11 +213,7 @@ class TestDreamerV3BeatsTheBlindCeiling:
         inner = model.dreamer_v3
         evaluator = LatentPolicy(inner.encode, inner.rssm, lambda s: inner.act(s, sample=False), 2)
         collector = LatentPolicy(
-            inner.encode,
-            inner.rssm,
-            lambda s: inner.act(s, sample=False),
-            2,
-            noise=0.3,
+            inner.encode, inner.rssm, lambda s: inner.act(s, sample=False), 2, noise=0.3
         )
 
         curve: list[float] = []

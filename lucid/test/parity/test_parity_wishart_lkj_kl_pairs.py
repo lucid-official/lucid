@@ -138,9 +138,7 @@ class TestNewKLPairsParity:
     def test_laplace_laplace(self, ref: Any) -> None:
         lucid_kl = self._kl(D.Laplace(0.0, 1.0), D.Laplace(0.5, 2.0))
         ref_kl = _ref_kl(
-            ref,
-            ref.distributions.Laplace(0.0, 1.0),
-            ref.distributions.Laplace(0.5, 2.0),
+            ref, ref.distributions.Laplace(0.0, 1.0), ref.distributions.Laplace(0.5, 2.0)
         )
         assert abs(lucid_kl - ref_kl) < 1e-5
 
@@ -154,9 +152,7 @@ class TestNewKLPairsParity:
     def test_uniform_uniform_contained(self, ref: Any) -> None:
         lucid_kl = self._kl(D.Uniform(0.0, 1.0), D.Uniform(-0.5, 1.5))
         ref_kl = _ref_kl(
-            ref,
-            ref.distributions.Uniform(0.0, 1.0),
-            ref.distributions.Uniform(-0.5, 1.5),
+            ref, ref.distributions.Uniform(0.0, 1.0), ref.distributions.Uniform(-0.5, 1.5)
         )
         assert abs(lucid_kl - ref_kl) < 1e-5
 
@@ -178,9 +174,7 @@ class TestNewKLPairsParity:
     def test_lognormal_lognormal(self, ref: Any) -> None:
         lucid_kl = self._kl(D.LogNormal(0.0, 1.0), D.LogNormal(0.5, 1.5))
         ref_kl = _ref_kl(
-            ref,
-            ref.distributions.LogNormal(0.0, 1.0),
-            ref.distributions.LogNormal(0.5, 1.5),
+            ref, ref.distributions.LogNormal(0.0, 1.0), ref.distributions.LogNormal(0.5, 1.5)
         )
         assert abs(lucid_kl - ref_kl) < 1e-4
 

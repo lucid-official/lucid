@@ -50,11 +50,7 @@ def test_a_step_slice_is_a_view() -> None:
 def test_a_step_along_a_later_axis_is_a_view() -> None:
     x = lucid.arange(12).float().reshape(3, 4)
     x[:, 1::2].zero_()
-    assert x.tolist() == [
-        [0.0, 0.0, 2.0, 0.0],
-        [4.0, 0.0, 6.0, 0.0],
-        [8.0, 0.0, 10.0, 0.0],
-    ]
+    assert x.tolist() == [[0.0, 0.0, 2.0, 0.0], [4.0, 0.0, 6.0, 0.0], [8.0, 0.0, 10.0, 0.0]]
 
 
 def test_a_step_slice_of_a_transposed_view_reads_through_both() -> None:

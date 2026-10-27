@@ -3,9 +3,7 @@
 Paper: "EfficientDet: Scalable and Efficient Object Detection"
 """
 
-from lucid.models.vision.efficientdet._config import (
-    EfficientDetConfig,
-)
+from lucid.models.vision.efficientdet._config import EfficientDetConfig
 from lucid.models.vision.efficientdet._model import EfficientDetForObjectDetection
 from lucid.models.vision.efficientdet._pretrained import (
     efficientdet_d0,

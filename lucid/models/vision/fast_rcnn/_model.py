@@ -46,10 +46,7 @@ from lucid.models._utils._detection import (
     encode_boxes,
     roi_pool,
 )
-from lucid.models._utils._detection_results import (
-    check_per_image,
-    merge_class_detections,
-)
+from lucid.models._utils._detection_results import check_per_image, merge_class_detections
 from lucid.models.vision.fast_rcnn._config import FastRCNNConfig
 from lucid.models._utils._common import host_floats, host_ints, host_rows
 
@@ -127,13 +124,7 @@ class _FastRCNNHead(nn.Module):
       bbox    : 4 096 → num_classes × 4  (linear)
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        roi_size: int,
-        num_classes: int,
-        dropout: float,
-    ) -> None:
+    def __init__(self, in_channels: int, roi_size: int, num_classes: int, dropout: float) -> None:
         super().__init__()
         flat = in_channels * roi_size * roi_size  # 25 088 for VGG16 + 7×7
 
@@ -287,10 +278,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
     # ------------------------------------------------------------------
 
     def _assign_proposals(
-        self,
-        proposals: Tensor,
-        gt_boxes: Tensor,
-        gt_labels: Tensor,
+        self, proposals: Tensor, gt_boxes: Tensor, gt_labels: Tensor
     ) -> tuple[Tensor, Tensor]:
         """Assign each proposal a GT class label and regression target.
 
@@ -366,11 +354,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
         cfg = cast(FastRCNNConfig, self.config)
         sampler = BalancedPositiveNegativeSampler(cfg.batch_size_per_image, cfg.positive_fraction)
         # The sampler speaks 1/0/-1; class ids carry more than that.
-        binary = lucid.where(
-            labels > 0,
-            1,
-            lucid.where(labels == 0, lucid.zeros_like(labels), -1),
-        )
+        binary = lucid.where(labels > 0, 1, lucid.where(labels == 0, lucid.zeros_like(labels), -1))
         pos, neg = sampler(binary)
         both = [*cast(list[int], pos.tolist()), *cast(list[int], neg.tolist())]
         return lucid.tensor(sorted(both), device=labels.device.type).long()
@@ -428,9 +412,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
             # Regression targets only for foreground (label > 0)
             reg_tgt_i = encode_boxes(matched_boxes_i, props_s, self._bbox_weights)
             weight_i = lucid.where(
-                labels_i > 0,
-                lucid.ones_like(labels_i).float(),
-                lucid.zeros_like(labels_i).float(),
+                labels_i > 0, lucid.ones_like(labels_i).float(), lucid.zeros_like(labels_i).float()
             )
 
             all_cls_labels.append(labels_i)
@@ -453,10 +435,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
             cls_loss: Tensor = all_logits.new_zeros(1)
         else:
             valid_t = lucid.tensor(valid_mask, device=dev).long()
-            cls_loss = F.cross_entropy(
-                all_logits[valid_t],
-                cls_labels[valid_t],
-            )
+            cls_loss = F.cross_entropy(all_logits[valid_t], cls_labels[valid_t])
 
         # --- Bbox regression loss (smooth-L1, foreground only) ---
         N_total = int(all_deltas.shape[0])
@@ -529,10 +508,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
 
         # 2. RoI Pool on the shared feature map
         roi_crops = roi_pool(
-            feat_map,
-            proposals,
-            output_size=self._roi_size,
-            spatial_scale=self._spatial_scale,
+            feat_map, proposals, output_size=self._roi_size, spatial_scale=self._spatial_scale
         )  # (Σ N_i, 512, roi_size, roi_size)
 
         # 3. FC head
@@ -549,17 +525,11 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
             loss = self._compute_loss(proposals, all_logits, all_deltas, targets)
 
         return ObjectDetectionOutput(
-            logits=all_logits,
-            pred_boxes=all_boxes,
-            proposals=tuple(proposals),
-            loss=loss,
+            logits=all_logits, pred_boxes=all_boxes, proposals=tuple(proposals), loss=loss
         )
 
     def _decode_all_boxes(
-        self,
-        proposals: list[Tensor],
-        all_deltas: Tensor,
-        image_size: tuple[int, int],
+        self, proposals: list[Tensor], all_deltas: Tensor, image_size: tuple[int, int]
     ) -> Tensor:
         """Decode bbox deltas per class, returning ``(N_total, K, 4)``.
 
@@ -591,9 +561,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
     # ------------------------------------------------------------------
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        proposals: list[Tensor],
+        self, output: ObjectDetectionOutput, proposals: list[Tensor]
     ) -> list[dict[str, Tensor]]:
         """Apply per-class NMS to raw Fast R-CNN output.
 
@@ -644,10 +612,7 @@ class FastRCNNForObjectDetection(ObjectDetectionModel):
                 bx_c = bx_class[mask_t]
 
                 keep = batched_nms(
-                    bx_c,
-                    sc_c,
-                    lucid.zeros(int(sc_c.shape[0]), device=dev),
-                    self._nms_thresh,
+                    bx_c, sc_c, lucid.zeros(int(sc_c.shape[0]), device=dev), self._nms_thresh
                 )
                 # ``max_detections`` is a *per image* limit applied once after a
                 # global score sort.  Capping inside the class loop let each of

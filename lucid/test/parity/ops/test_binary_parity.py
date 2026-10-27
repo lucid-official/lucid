@@ -38,38 +38,10 @@ _BIN_OPS: list[tuple[str, Callable, str, float, float, float]] = [
 
 # ── Backward parity: (name, lucid_fn, ref_fn, lo, hi, atol) ──────────────────
 _BIN_BACKWARD_OPS: list[tuple[str, Callable, Callable, float, float, float]] = [
-    (
-        "add_bwd",
-        lambda a, b: (a + b).sum(),
-        lambda r, a, b: (r.add(a, b)).sum(),
-        -2.0,
-        2.0,
-        1e-5,
-    ),
-    (
-        "mul_bwd",
-        lambda a, b: (a * b).sum(),
-        lambda r, a, b: (r.mul(a, b)).sum(),
-        -2.0,
-        2.0,
-        1e-5,
-    ),
-    (
-        "div_bwd",
-        lambda a, b: (a / b).sum(),
-        lambda r, a, b: (r.div(a, b)).sum(),
-        0.5,
-        2.0,
-        1e-4,
-    ),
-    (
-        "pow_bwd",
-        lambda a, b: (a**b).sum(),
-        lambda r, a, b: (r.pow(a, b)).sum(),
-        0.5,
-        2.0,
-        1e-4,
-    ),
+    ("add_bwd", lambda a, b: (a + b).sum(), lambda r, a, b: (r.add(a, b)).sum(), -2.0, 2.0, 1e-5),
+    ("mul_bwd", lambda a, b: (a * b).sum(), lambda r, a, b: (r.mul(a, b)).sum(), -2.0, 2.0, 1e-5),
+    ("div_bwd", lambda a, b: (a / b).sum(), lambda r, a, b: (r.div(a, b)).sum(), 0.5, 2.0, 1e-4),
+    ("pow_bwd", lambda a, b: (a**b).sum(), lambda r, a, b: (r.pow(a, b)).sum(), 0.5, 2.0, 1e-4),
     (
         "atan2_bwd",
         lambda a, b: lucid.atan2(a, b).sum(),
@@ -83,18 +55,10 @@ _BIN_BACKWARD_OPS: list[tuple[str, Callable, Callable, float, float, float]] = [
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "name,lucid_fn,ref_attr,low,high,atol",
-    _BIN_OPS,
-    ids=[op[0] for op in _BIN_OPS],
+    "name,lucid_fn,ref_attr,low,high,atol", _BIN_OPS, ids=[op[0] for op in _BIN_OPS]
 )
 def test_binary_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_attr: str,
-    low: float,
-    high: float,
-    atol: float,
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_attr: str, low: float, high: float, atol: float, ref: Any
 ) -> None:
     np.random.seed(0)
     shape = (4, 5)
@@ -163,10 +127,7 @@ def test_addcmul_parity(ref: Any) -> None:
     t1 = np.random.uniform(-1.0, 1.0, size=(4, 5)).astype(np.float32)
     t2 = np.random.uniform(-1.0, 1.0, size=(4, 5)).astype(np.float32)
     l_out = lucid.addcmul(
-        lucid.tensor(inp.copy()),
-        lucid.tensor(t1.copy()),
-        lucid.tensor(t2.copy()),
-        value=0.5,
+        lucid.tensor(inp.copy()), lucid.tensor(t1.copy()), lucid.tensor(t2.copy()), value=0.5
     )
     r_out = ref.addcmul(
         ref.tensor(inp.copy()), ref.tensor(t1.copy()), ref.tensor(t2.copy()), value=0.5
@@ -181,10 +142,7 @@ def test_addcdiv_parity(ref: Any) -> None:
     t1 = np.random.uniform(-1.0, 1.0, size=(4, 5)).astype(np.float32)
     t2 = np.random.uniform(0.5, 2.0, size=(4, 5)).astype(np.float32)
     l_out = lucid.addcdiv(
-        lucid.tensor(inp.copy()),
-        lucid.tensor(t1.copy()),
-        lucid.tensor(t2.copy()),
-        value=0.5,
+        lucid.tensor(inp.copy()), lucid.tensor(t1.copy()), lucid.tensor(t2.copy()), value=0.5
     )
     r_out = ref.addcdiv(
         ref.tensor(inp.copy()), ref.tensor(t1.copy()), ref.tensor(t2.copy()), value=0.5
@@ -194,18 +152,10 @@ def test_addcdiv_parity(ref: Any) -> None:
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "name,lucid_fn,ref_fn,low,high,atol",
-    _BIN_BACKWARD_OPS,
-    ids=[op[0] for op in _BIN_BACKWARD_OPS],
+    "name,lucid_fn,ref_fn,low,high,atol", _BIN_BACKWARD_OPS, ids=[op[0] for op in _BIN_BACKWARD_OPS]
 )
 def test_binary_backward_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_fn: Callable,
-    low: float,
-    high: float,
-    atol: float,
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_fn: Callable, low: float, high: float, atol: float, ref: Any
 ) -> None:
     np.random.seed(10)
     shape = (3, 4)

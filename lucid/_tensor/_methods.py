@@ -26,13 +26,7 @@ from typing import TYPE_CHECKING, cast
 
 from lucid import _promotion
 from lucid._C import engine as _C_engine
-from lucid._dispatch import (
-    _REAL_FLOATS,
-    _binary_operands,
-    _cannot_cast_inplace,
-    _unwrap,
-    _wrap,
-)
+from lucid._dispatch import _REAL_FLOATS, _binary_operands, _cannot_cast_inplace, _unwrap, _wrap
 from lucid._tensor._indexing import _adopt_inplace
 from lucid._ops._adapters import _clip_adapter, _clip_dtype, _clip_scalar_bounds
 from lucid._ops._registry import _REGISTRY, OpEntry, _bind_leading
@@ -137,11 +131,7 @@ def _masked_fill_(self: Tensor, mask: Tensor, value: float | Tensor) -> Tensor:
 
 
 def _scatter_(
-    self: Tensor,
-    dim: int,
-    index: Tensor,
-    src: Tensor | float,
-    reduce: str | None = None,
+    self: Tensor, dim: int, index: Tensor, src: Tensor | float, reduce: str | None = None
 ) -> Tensor:
     """Write ``src`` into ``self`` along ``dim`` at ``index``, in place."""
     from lucid._ops.composite._shared import _is_tensor
@@ -149,15 +139,10 @@ def _scatter_(
 
     if _is_tensor(src):
         return _write_inplace(
-            self,
-            "scatter_",
-            lambda base: base.scatter(dim, index, src, reduce=reduce),
-            src,
+            self, "scatter_", lambda base: base.scatter(dim, index, src, reduce=reduce), src
         )
     return _write_inplace(
-        self,
-        "scatter_",
-        lambda base: base.scatter(dim, index, src, reduce=reduce),
+        self, "scatter_", lambda base: base.scatter(dim, index, src, reduce=reduce)
     )
 
 
@@ -165,12 +150,7 @@ def _scatter_add_(self: Tensor, dim: int, index: Tensor, src: Tensor) -> Tensor:
     """Add ``src`` into ``self`` along ``dim`` at ``index``, in place."""
     from lucid._ops.composite.indexing import _write_inplace
 
-    return _write_inplace(
-        self,
-        "scatter_add_",
-        lambda base: base.scatter_add(dim, index, src),
-        src,
-    )
+    return _write_inplace(self, "scatter_add_", lambda base: base.scatter_add(dim, index, src), src)
 
 
 def _scatter_reduce(
@@ -198,10 +178,7 @@ def _scatter_reduce_(
     include_self: bool = True,
 ) -> Tensor:
     """In-place ``scatter_reduce_`` along ``dim``."""
-    from lucid._ops.composite.indexing import (
-        _write_inplace,
-        scatter_reduce as _sr,
-    )
+    from lucid._ops.composite.indexing import _write_inplace, scatter_reduce as _sr
 
     return _write_inplace(
         self,
@@ -216,10 +193,7 @@ def _put_(self: Tensor, index: Tensor, source: Tensor, accumulate: bool = False)
     from lucid._ops.composite.indexing import _write_inplace, put as _put
 
     return _write_inplace(
-        self,
-        "put_",
-        lambda base: _put(base, index, source, accumulate=accumulate),
-        source,
+        self, "put_", lambda base: _put(base, index, source, accumulate=accumulate), source
     )
 
 
@@ -232,17 +206,9 @@ def _masked_scatter(self: Tensor, mask: Tensor, source: Tensor) -> Tensor:
 
 def _masked_scatter_(self: Tensor, mask: Tensor, source: Tensor) -> Tensor:
     """In-place ``masked_scatter_`` where ``mask`` is ``True``."""
-    from lucid._ops.composite.indexing import (
-        _write_inplace,
-        masked_scatter as _ms,
-    )
+    from lucid._ops.composite.indexing import _write_inplace, masked_scatter as _ms
 
-    return _write_inplace(
-        self,
-        "masked_scatter_",
-        lambda base: _ms(base, mask, source),
-        source,
-    )
+    return _write_inplace(self, "masked_scatter_", lambda base: _ms(base, mask, source), source)
 
 
 def _bincount(self: Tensor, weights: Tensor | None = None, minlength: int = 0) -> Tensor:
@@ -681,10 +647,7 @@ def _addcdiv_(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 
 
 
 def _clamp_inplace(
-    self: Tensor,
-    min: TensorOrScalar | None,
-    max: TensorOrScalar | None,
-    name: str,
+    self: Tensor, min: TensorOrScalar | None, max: TensorOrScalar | None, name: str
 ) -> Tensor:
     """``self`` clamped to ``[min, max]`` in place, by :meth:`Tensor.clamp`'s rules.
 
@@ -715,9 +678,7 @@ def _clamp_inplace(
 
 
 def _clip_(
-    self: Tensor,
-    min: Tensor | float | None = None,
-    max: Tensor | float | None = None,
+    self: Tensor, min: Tensor | float | None = None, max: Tensor | float | None = None
 ) -> Tensor:
     """In-place :meth:`clip`, another name for :meth:`Tensor.clamp_`.
 
@@ -872,12 +833,7 @@ def _make_bmm_inplace(name: str) -> Callable[..., Tensor]:
     op_name = name[:-1]
 
     def method(
-        self: Tensor,
-        batch1: Tensor,
-        batch2: Tensor,
-        *,
-        beta: float = 1.0,
-        alpha: float = 1.0,
+        self: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
     ) -> Tensor:
         """Write the batched matrix-multiply accumulate into ``self`` in place."""
         import lucid
@@ -933,10 +889,7 @@ def _divide_(self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None =
     import lucid
 
     return _write(
-        self,
-        "divide_",
-        lambda base: lucid.divide(base, other, rounding_mode=rounding_mode),
-        other,
+        self, "divide_", lambda base: lucid.divide(base, other, rounding_mode=rounding_mode), other
     )
 
 
@@ -955,10 +908,7 @@ def _logit_(self: Tensor, eps: float | None = None) -> Tensor:
 
 
 def _nan_to_num_(
-    self: Tensor,
-    nan: float | None = None,
-    posinf: float | None = None,
-    neginf: float | None = None,
+    self: Tensor, nan: float | None = None, posinf: float | None = None, neginf: float | None = None
 ) -> Tensor:
     """Write ``lucid.nan_to_num(self, nan, posinf, neginf)`` into ``self`` in place."""
     import lucid
@@ -978,12 +928,7 @@ def _renorm_(self: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
 
 
 def _addmm_(
-    self: Tensor,
-    mat1: Tensor,
-    mat2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    self: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     """Write ``lucid.addmm(self, mat1, mat2, beta=beta, alpha=alpha)`` in place."""
     import lucid
@@ -998,50 +943,29 @@ def _addmm_(
 
 
 def _addmv_(
-    self: Tensor,
-    mat: Tensor,
-    vec: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    self: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     """Write ``lucid.addmv(self, mat, vec, beta=beta, alpha=alpha)`` in place."""
     import lucid
 
     return _write(
-        self,
-        "addmv_",
-        lambda base: lucid.addmv(base, mat, vec, beta=beta, alpha=alpha),
-        mat,
-        vec,
+        self, "addmv_", lambda base: lucid.addmv(base, mat, vec, beta=beta, alpha=alpha), mat, vec
     )
 
 
 def _addr_(
-    self: Tensor,
-    vec1: Tensor,
-    vec2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    self: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     """Write ``lucid.addr(self, vec1, vec2, beta=beta, alpha=alpha)`` in place."""
     import lucid
 
     return _write(
-        self,
-        "addr_",
-        lambda base: lucid.addr(base, vec1, vec2, beta=beta, alpha=alpha),
-        vec1,
-        vec2,
+        self, "addr_", lambda base: lucid.addr(base, vec1, vec2, beta=beta, alpha=alpha), vec1, vec2
     )
 
 
 def _bernoulli(
-    self: Tensor,
-    p: float | None = None,
-    *,
-    generator: _C_engine.Generator | None = None,
+    self: Tensor, p: float | None = None, *, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     """Draw binary random numbers (0 or 1) from a Bernoulli distribution."""
     import lucid
@@ -1071,10 +995,7 @@ def _fill_drawn(self: Tensor, name: str, draw: Callable[[Tensor], Tensor]) -> Te
 
 
 def _bernoulli_(
-    self: Tensor,
-    p: Tensor | float = 0.5,
-    *,
-    generator: _C_engine.Generator | None = None,
+    self: Tensor, p: Tensor | float = 0.5, *, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     """Fill ``self`` with independent Bernoulli draws from ``p``, in place."""
     import lucid
@@ -1344,10 +1265,7 @@ def _make_method(e: OpEntry, tensor_cls: type) -> object:
     if e.n_tensor_args == -1:
 
         def method_list(
-            self: Tensor,
-            tensors: list[Tensor],
-            *args: object,
-            **kwargs: object,
+            self: Tensor, tensors: list[Tensor], *args: object, **kwargs: object
         ) -> Tensor:
             """Variadic-tensor method body — prepends ``self`` to the unwrapped tensor list."""
             all_tensors = [_unwrap(t) for t in [self] + list(tensors)]

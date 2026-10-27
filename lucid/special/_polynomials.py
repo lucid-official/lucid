@@ -530,11 +530,7 @@ def hermite_polynomial_he(x: TensorOrScalar, n: TensorOrScalar) -> Tensor:
     tensor([2., -0., -2.])
     """
     return _ortho_poly(
-        "hermite_polynomial_he",
-        x,
-        n,
-        lambda v: v,
-        lambda v, p, q, k: v * p - float(k) * q,
+        "hermite_polynomial_he", x, n, lambda v: v, lambda v, p, q, k: v * p - float(k) * q
     )
 
 

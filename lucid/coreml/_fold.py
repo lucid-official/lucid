@@ -126,10 +126,7 @@ def foldable(
 
 
 def _constant_op(
-    op: _Op,
-    constant: set[int],
-    traced_values: Mapping[int, object],
-    varying: set[int],
+    op: _Op, constant: set[int], traced_values: Mapping[int, object], varying: set[int]
 ) -> bool:
     """Whether ``op``'s results are constant, given what already is."""
     if not op.outputs:
@@ -170,10 +167,7 @@ def f32_opmath_scalars(graph: _Graph, feeds: Mapping[int, _Feed]) -> set[int]:
     }
     for op in graph.ops:
         for o in op.outputs:
-            meta[int(o.id)] = (
-                str(o.dtype).split(".")[-1],
-                tuple(int(d) for d in o.shape),
-            )
+            meta[int(o.id)] = (str(o.dtype).split(".")[-1], tuple(int(d) for d in o.shape))
     scalars: set[int] = set()
     for op in graph.ops:
         sid = _opmath_scalar_input(op, meta)

@@ -96,12 +96,7 @@ class _ConvNorm(nn.Module):
     ) -> None:
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_ch,
-            out_ch,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
+            in_ch, out_ch, kernel_size, stride=stride, padding=padding, bias=False
         )
         self.normalization = nn.BatchNorm2d(out_ch)
         self._act = activation
@@ -143,13 +138,7 @@ class _ResNetBottleneck(nn.Module):
 
     expansion: ClassVar[int] = 4
 
-    def __init__(
-        self,
-        in_ch: int,
-        mid_ch: int,
-        stride: int = 1,
-        downsample: bool = False,
-    ) -> None:
+    def __init__(self, in_ch: int, mid_ch: int, stride: int = 1, downsample: bool = False) -> None:
         super().__init__()
         out_ch = mid_ch * self.expansion
         self.shortcut: _ConvNorm | None
@@ -174,13 +163,7 @@ class _ResNetBottleneck(nn.Module):
 class _ResNetStage(nn.Module):
     """A stack of bottleneck ``layers``; the first carries the stride/downsample."""
 
-    def __init__(
-        self,
-        in_ch: int,
-        mid_ch: int,
-        num_blocks: int,
-        stride: int,
-    ) -> None:
+    def __init__(self, in_ch: int, mid_ch: int, num_blocks: int, stride: int) -> None:
         super().__init__()
         out_ch = mid_ch * _ResNetBottleneck.expansion
         blocks: list[nn.Module] = [_ResNetBottleneck(in_ch, mid_ch, stride=stride, downsample=True)]
@@ -233,11 +216,7 @@ class _ResNetBackbone(nn.Module):
     prefix strip.
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        layers: tuple[int, int, int, int],
-    ) -> None:
+    def __init__(self, in_channels: int, layers: tuple[int, int, int, int]) -> None:
         super().__init__()
         self.embedder = _ResNetEmbedder(in_channels)
         self.encoder = _ResNetEncoderStages(layers)
@@ -305,12 +284,7 @@ class _FPNModel(nn.Module):
     pixel decoder uses the last (highest-resolution) one.
     """
 
-    def __init__(
-        self,
-        in_features: int,
-        lateral_widths: list[int],
-        feature_size: int,
-    ) -> None:
+    def __init__(self, in_features: int, lateral_widths: list[int], feature_size: int) -> None:
         super().__init__()
         self.stem = _FPNConvLayer(in_features, feature_size)
         fpn_layers = [_FPNLayer(feature_size, lw) for lw in lateral_widths[::-1]]
@@ -467,9 +441,7 @@ class _DecoderLayer(nn.Module):
         # Cross-attention (query pos to Q, spatial pos to K, plain memory V).
         residual = hidden
         hidden = self.encoder_attn(
-            _with_pos(hidden, query_pos),
-            _with_pos(memory, spatial_pos),
-            memory,
+            _with_pos(hidden, query_pos), _with_pos(memory, spatial_pos), memory
         )
         hidden = residual + self.dropout2(hidden)
         hidden = self.encoder_attn_layer_norm(hidden)
@@ -487,12 +459,7 @@ class _TransformerDecoder(nn.Module):
     """Stack of decoder layers + a trailing ``layernorm`` (reference layout)."""
 
     def __init__(
-        self,
-        d_model: int,
-        n_head: int,
-        dim_ff: int,
-        depth: int,
-        dropout: float = 0.0,
+        self, d_model: int, n_head: int, dim_ff: int, depth: int, dropout: float = 0.0
     ) -> None:
         super().__init__()
         self.layers: nn.ModuleList[_DecoderLayer] = nn.ModuleList(
@@ -502,11 +469,7 @@ class _TransformerDecoder(nn.Module):
 
     @override
     def forward(
-        self,
-        hidden: Tensor,
-        memory: Tensor,
-        spatial_pos: Tensor,
-        query_pos: Tensor,
+        self, hidden: Tensor, memory: Tensor, spatial_pos: Tensor, query_pos: Tensor
     ) -> list[Tensor]:
         """Return the normalised output of *every* layer, deepest last.
 
@@ -549,11 +512,7 @@ class _TransformerModule(nn.Module):
         self.encoder: nn.ModuleList[nn.TransformerEncoderLayer] = nn.ModuleList(
             [
                 nn.TransformerEncoderLayer(
-                    d_model,
-                    n_head,
-                    dim_feedforward=dim_ff,
-                    dropout=dropout,
-                    batch_first=True,
+                    d_model, n_head, dim_feedforward=dim_ff, dropout=dropout, batch_first=True
                 )
                 for _ in range(encoder_depth)
             ]
@@ -892,9 +851,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: dict[str, Tensor] | None = None,
+        self, x: Tensor, targets: dict[str, Tensor] | None = None
     ) -> SemanticSegmentationOutput:
         """Run MaskFormer.
 
@@ -1038,9 +995,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
 
             # Downsample GT masks to feature resolution for matching
             gt_masks_small: Tensor = F.interpolate(
-                gt_masks_t.reshape(M, 1, seg_H, seg_W),
-                size=(fH, fW),
-                mode="nearest",
+                gt_masks_t.reshape(M, 1, seg_H, seg_W), size=(fH, fW), mode="nearest"
             ).reshape(M, fH, fW)
 
             # Hungarian match
@@ -1093,8 +1048,7 @@ class MaskFormerForSemanticSegmentation(SemanticSegmentationModel):
                 focal_m, dice_m = _focal_dice_terms(sel_pred, sel_gt)
                 n_match = len(pred_idx)
                 diag: Tensor = lucid.tensor(
-                    [i * n_match + i for i in range(n_match)],
-                    device=ml_b.device.type,
+                    [i * n_match + i for i in range(n_match)], device=ml_b.device.type
                 ).long()
                 focal_d: Tensor = focal_m.reshape(-1).index_select(0, diag)
                 dice_d: Tensor = dice_m.reshape(-1).index_select(0, diag)

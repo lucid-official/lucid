@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.resnest._config import ResNeStConfig
-from lucid.models.vision.resnest._model import (
-    ResNeSt,
-    ResNeStForImageClassification,
-)
+from lucid.models.vision.resnest._model import ResNeSt, ResNeStForImageClassification
 from lucid.models.vision.resnest._weights import (
     ResNeSt50Weights,
     ResNeSt101Weights,
@@ -471,10 +468,7 @@ def resnest_26_cls(pretrained: bool = False, **overrides: object) -> ResNeStForI
     params=27483240,
 )
 def resnest_50_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNeSt50Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNeSt50Weights | None = None, **overrides: object
 ) -> ResNeStForImageClassification:
     r"""ResNeSt-50 image classifier (backbone + GAP + linear head).
 
@@ -539,10 +533,7 @@ def resnest_50_cls(
     params=48275016,
 )
 def resnest_101_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNeSt101Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNeSt101Weights | None = None, **overrides: object
 ) -> ResNeStForImageClassification:
     r"""ResNeSt-101 image classifier (backbone + GAP + linear head).
 
@@ -605,10 +596,7 @@ def resnest_101_cls(
     params=70201544,
 )
 def resnest_200_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNeSt200Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNeSt200Weights | None = None, **overrides: object
 ) -> ResNeStForImageClassification:
     r"""ResNeSt-200 image classifier (backbone + GAP + linear head).
 
@@ -671,10 +659,7 @@ def resnest_200_cls(
     params=110929480,
 )
 def resnest_269_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ResNeSt269Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ResNeSt269Weights | None = None, **overrides: object
 ) -> ResNeStForImageClassification:
     r"""ResNeSt-269 image classifier (backbone + GAP + linear head).
 

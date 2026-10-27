@@ -426,11 +426,7 @@ def decode_boxes(
 # ---------------------------------------------------------------------------
 
 
-def nms(
-    boxes: Tensor,
-    scores: Tensor,
-    iou_threshold: float,
-) -> Tensor:
+def nms(boxes: Tensor, scores: Tensor, iou_threshold: float) -> Tensor:
     """Greedy NMS — returns indices of surviving boxes, sorted by score desc.
 
     Algorithm:
@@ -498,12 +494,7 @@ def nms(
     return lucid.tensor(keep, device=dev).long()
 
 
-def batched_nms(
-    boxes: Tensor,
-    scores: Tensor,
-    idxs: Tensor,
-    iou_threshold: float,
-) -> Tensor:
+def batched_nms(boxes: Tensor, scores: Tensor, idxs: Tensor, iou_threshold: float) -> Tensor:
     """NMS applied independently per class via the class-offset trick.
 
     Boxes from different classes are offset by a large class-dependent
@@ -844,10 +835,7 @@ def _gather_corner(
 
 
 def paste_masks_in_image(
-    masks: Tensor,
-    boxes: Tensor,
-    image_size: tuple[int, int],
-    threshold: float = 0.5,
+    masks: Tensor, boxes: Tensor, image_size: tuple[int, int], threshold: float = 0.5
 ) -> Tensor:
     """Resize each RoI mask onto its box and paste it into a full-image canvas.
 
@@ -893,10 +881,7 @@ def paste_masks_in_image(
         x2, y2 = max(x1 + 1, min(x2, W)), max(y1 + 1, min(y2, H))
 
         resized: Tensor = F.interpolate(
-            masks[i : i + 1],
-            size=(y2 - y1, x2 - x1),
-            mode="bilinear",
-            align_corners=False,
+            masks[i : i + 1], size=(y2 - y1, x2 - x1), mode="bilinear", align_corners=False
         )
         binary: Tensor = (resized > threshold).float()  # (1, 1, bh, bw)
         planes.append(F.pad(binary, (x1, W - x2, y1, H - y2)))
@@ -1065,11 +1050,7 @@ def multi_scale_deformable_attention(
         )
         sampled.append(
             F.grid_sample(
-                value_l,
-                grid_l,
-                mode="bilinear",
-                padding_mode="zeros",
-                align_corners=False,
+                value_l, grid_l, mode="bilinear", padding_mode="zeros", align_corners=False
             )
         )  # (bs*num_heads, head_dim, num_queries, num_points)
 
@@ -1122,12 +1103,7 @@ class FPN(nn.Module):
     shared across all of them.
     """
 
-    def __init__(
-        self,
-        in_channels: list[int],
-        out_channels: int,
-        extra_blocks: int = 1,
-    ) -> None:
+    def __init__(self, in_channels: list[int], out_channels: int, extra_blocks: int = 1) -> None:
         super().__init__()
         self.out_channels = out_channels
         n = len(in_channels)
@@ -1235,10 +1211,7 @@ class RPN(nn.Module):
 
     @override
     def forward(
-        self,
-        features: list[Tensor],
-        anchors: list[Tensor],
-        image_size: tuple[int, int],
+        self, features: list[Tensor], anchors: list[Tensor], image_size: tuple[int, int]
     ) -> tuple[list[Tensor], list[Tensor]]:
         """Run RPN over all FPN levels and return proposals per image.
 
@@ -1400,9 +1373,7 @@ class RoIHead(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-def solve_assignment(
-    cost: list[list[float]],
-) -> tuple[list[int], list[int]]:
+def solve_assignment(cost: list[list[float]]) -> tuple[list[int], list[int]]:
     """Min-cost bipartite assignment for a rectangular ``(n_rows × n_cols)``
     cost matrix with ``n_rows ≤ n_cols``.
 
@@ -1561,10 +1532,7 @@ class Matcher:
     BETWEEN_THRESHOLDS: int = -2
 
     def __init__(
-        self,
-        high_threshold: float,
-        low_threshold: float,
-        allow_low_quality_matches: bool = False,
+        self, high_threshold: float, low_threshold: float, allow_low_quality_matches: bool = False
     ) -> None:
         if low_threshold > high_threshold:
             raise ValueError(
@@ -1703,10 +1671,7 @@ class BalancedPositiveNegativeSampler:
         pos_sel = _sample_without_replacement(pos, num_pos)
         neg_sel = _sample_without_replacement(neg, num_neg)
         dev = labels.device.type
-        return (
-            lucid.tensor(pos_sel, device=dev).long(),
-            lucid.tensor(neg_sel, device=dev).long(),
-        )
+        return (lucid.tensor(pos_sel, device=dev).long(), lucid.tensor(neg_sel, device=dev).long())
 
 
 def _sample_without_replacement(pool: list[int], k: int) -> list[int]:
@@ -1885,11 +1850,7 @@ def rpn_loss(
     for b, tgt in enumerate(targets):
         gt_boxes = tgt["boxes"]
         labels, matched = assign_anchors_to_targets(
-            anchors_cat,
-            gt_boxes,
-            matcher,
-            image_size,
-            ignore_cross_boundary=ignore_cross_boundary,
+            anchors_cat, gt_boxes, matcher, image_size, ignore_cross_boundary=ignore_cross_boundary
         )
         pos, neg = sampler(labels)
         n_pos = int(pos.shape[0])
@@ -1907,12 +1868,7 @@ def rpn_loss(
             matched_gt = gt_boxes[matched[pos].long()]
             reg_targets = encode_boxes(matched_gt, anchors_cat[pos], (1.0, 1.0, 1.0, 1.0))
             reg_parts.append(
-                F.smooth_l1_loss(
-                    pred_deltas[b][pos],
-                    reg_targets,
-                    beta=1.0 / 9.0,
-                    reduction="sum",
-                )
+                F.smooth_l1_loss(pred_deltas[b][pos], reg_targets, beta=1.0 / 9.0, reduction="sum")
             )
 
     if n_sampled == 0:
@@ -2017,8 +1973,7 @@ def select_training_samples(
 
         pos, neg = sampler(binary)
         keep = lucid.tensor(
-            sorted([*cast(list[int], pos.tolist()), *cast(list[int], neg.tolist())]),
-            device=dev,
+            sorted([*cast(list[int], pos.tolist()), *cast(list[int], neg.tolist())]), device=dev
         ).long()
 
         props_k = props[keep]
@@ -2031,10 +1986,7 @@ def select_training_samples(
 
 
 def fastrcnn_loss(
-    class_logits: Tensor,
-    box_deltas: Tensor,
-    labels: list[Tensor],
-    reg_targets: list[Tensor],
+    class_logits: Tensor, box_deltas: Tensor, labels: list[Tensor], reg_targets: list[Tensor]
 ) -> tuple[Tensor, Tensor]:
     """Box-head classification + regression loss.
 
@@ -2096,8 +2048,7 @@ def fastrcnn_loss(
     # Gather (row, its own class) without forming the (P, K, 4) block.
     chosen = per_class[pos].reshape(len(pos_idx) * k, 4)
     offsets = lucid.tensor(
-        [i * k + int(c) for i, c in enumerate(cast(list[int], pos_labels.tolist()))],
-        device=dev,
+        [i * k + int(c) for i, c in enumerate(cast(list[int], pos_labels.tolist()))], device=dev
     ).long()
     pred = chosen[offsets]
 
@@ -2109,10 +2060,7 @@ def fastrcnn_loss(
 
 
 def project_masks_on_boxes(
-    gt_masks: Tensor,
-    proposals: Tensor,
-    matched_idxs: Tensor,
-    mask_size: int,
+    gt_masks: Tensor, proposals: Tensor, matched_idxs: Tensor, mask_size: int
 ) -> Tensor:
     """Crop each proposal's ground-truth mask to the head's output grid.
 
@@ -2154,21 +2102,12 @@ def project_masks_on_boxes(
     picked = gt_masks[matched_idxs.long()].unsqueeze(1).to(proposals.dtype)
     rois = [proposals[i : i + 1] for i in range(p_count)]
     cropped = roi_align(
-        picked,
-        rois,
-        output_size=mask_size,
-        spatial_scale=1.0,
-        sampling_ratio=1,
-        aligned=True,
+        picked, rois, output_size=mask_size, spatial_scale=1.0, sampling_ratio=1, aligned=True
     )
     return cropped[:, 0]
 
 
-def maskrcnn_loss(
-    mask_logits: Tensor,
-    labels: Tensor,
-    mask_targets: Tensor,
-) -> Tensor:
+def maskrcnn_loss(mask_logits: Tensor, labels: Tensor, mask_targets: Tensor) -> Tensor:
     r"""``L_mask`` — per-pixel sigmoid BCE on the ground-truth class only.
 
     3: "The mask branch has a :math:`Km^2`-dimensional output for each RoI,
@@ -2392,10 +2331,7 @@ class _ResNetBody(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        layers: tuple[int, int, int, int],
-        bn_eps: float = 0.0,
+        self, in_channels: int, layers: tuple[int, int, int, int], bn_eps: float = 0.0
     ) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, 64, 7, stride=2, padding=3, bias=False)
@@ -2476,9 +2412,7 @@ class _ReferenceAnchorGenerator(nn.Module):
     """
 
     def __init__(
-        self,
-        sizes: tuple[tuple[int, ...], ...],
-        aspect_ratios: tuple[tuple[float, ...], ...],
+        self, sizes: tuple[tuple[int, ...], ...], aspect_ratios: tuple[tuple[float, ...], ...]
     ) -> None:
         super().__init__()
         self.sizes = sizes
@@ -2497,14 +2431,7 @@ class _ReferenceAnchorGenerator(nn.Module):
             for scale in scales:
                 ws = w_ratio * float(scale)
                 hs = h_ratio * float(scale)
-                rows.append(
-                    [
-                        round(-ws / 2.0),
-                        round(-hs / 2.0),
-                        round(ws / 2.0),
-                        round(hs / 2.0),
-                    ]
-                )
+                rows.append([round(-ws / 2.0), round(-hs / 2.0), round(ws / 2.0), round(hs / 2.0)])
         return lucid.tensor(rows)
 
     def _grid_anchors(

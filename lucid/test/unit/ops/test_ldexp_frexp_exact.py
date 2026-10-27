@@ -108,12 +108,7 @@ def _assert_close(got: list[float], want: list[float], what: str, *, rel_tol: fl
 
 
 def _assert_grad(
-    got: list[float],
-    want: list[float],
-    what: str,
-    *,
-    exact: bool,
-    rel_tol: float = 3e-7,
+    got: list[float], want: list[float], what: str, *, exact: bool, rel_tol: float = 3e-7
 ) -> None:
     """A gradient: ``want`` where that is normal, zero or non-finite.
 
@@ -173,10 +168,7 @@ def test_ldexp_float32_gradients_are_those_of_the_exact_product(
     _, want_gx, want_ge = _ref_ldexp(ref, xs, es, "float32")
     x = lucid.tensor(xs, dtype=lucid.float32, device=device, requires_grad=True)
     e = lucid.tensor(
-        [float(v) for v in es],
-        dtype=lucid.float32,
-        device=device,
-        requires_grad=exp_grad,
+        [float(v) for v in es], dtype=lucid.float32, device=device, requires_grad=exp_grad
     )
     lucid.ldexp(x, e).sum().backward()
     assert x.grad is not None
@@ -262,10 +254,7 @@ def test_ldexp_fractional_exponent_reaches_subnormal_answers(device: str) -> Non
 def test_ldexp_gradient_does_not_depend_on_a_subnormal_input(device: str) -> None:
     # The LCD-468 report: on Metal the gradient was 0 wherever x was subnormal.
     x = lucid.tensor(
-        [1e-40, 3e-39, 1e-45, 1.0],
-        dtype=lucid.float32,
-        device=device,
-        requires_grad=True,
+        [1e-40, 3e-39, 1e-45, 1.0], dtype=lucid.float32, device=device, requires_grad=True
     )
     e = lucid.tensor([10, 3, 100, 1], device=device)
     lucid.ldexp(x, e).sum().backward()
@@ -297,8 +286,7 @@ def test_ldexp_half_is_exact_and_differentiable(
 
 
 @pytest.mark.parametrize(
-    ("dtype_name", "xs"),
-    [("float32", _F32_X), *((name, xs) for name, xs, _ in _HALF_CASES)],
+    ("dtype_name", "xs"), [("float32", _F32_X), *((name, xs) for name, xs, _ in _HALF_CASES)]
 )
 def test_frexp_is_exact_and_its_mantissa_gradient_is_two_to_minus_e(
     ref: ModuleType, device: str, dtype_name: str, xs: list[float]
@@ -319,17 +307,12 @@ def test_frexp_is_exact_and_its_mantissa_gradient_is_two_to_minus_e(
     assert m.dtype == l_dt and e.dtype == lucid.int32
     assert e.to("cpu").tolist() == re.tolist()
     _assert_same(
-        m.to(dtype=lucid.float32).to("cpu").tolist(),
-        rm.detach().float().tolist(),
-        "mantissa",
+        m.to(dtype=lucid.float32).to("cpu").tolist(), rm.detach().float().tolist(), "mantissa"
     )
     m.sum().backward()
     assert x.grad is not None
     _assert_grad(
-        x.grad.to(dtype=lucid.float32).to("cpu").tolist(),
-        want_grad,
-        "d mantissa / dx",
-        exact=True,
+        x.grad.to(dtype=lucid.float32).to("cpu").tolist(), want_grad, "d mantissa / dx", exact=True
     )
 
 
@@ -361,9 +344,7 @@ def test_ldexp_gradients_reduce_to_broadcast_operands(device: str) -> None:
     assert x.grad.shape == (3,) and k.grad.shape == (2, 1)
     assert x.grad.to("cpu").tolist() == [2.25, 2.25, 2.25]
     _assert_close(
-        k.grad.to("cpu").reshape(-1).tolist(),
-        [3.75 * 2.0 * _LN2, 3.75 * 0.25 * _LN2],
-        "d/dk",
+        k.grad.to("cpu").reshape(-1).tolist(), [3.75 * 2.0 * _LN2, 3.75 * 0.25 * _LN2], "d/dk"
     )
 
 
@@ -454,23 +435,14 @@ def test_compiled_ldexp_reaches_the_smallest_normal() -> None:
     e = lucid.tensor([-126, -125, -125, -126], device="metal")
     got = _compiled(lambda a, b: lucid.ldexp(a, b))(x, e)
     assert isinstance(got, lucid.Tensor)
-    assert got.to("cpu").tolist() == [
-        2.0**-126,
-        2.0**-125,
-        0.75 * 2.0**-125,
-        -1.5 * 2.0**-126,
-    ]
+    assert got.to("cpu").tolist() == [2.0**-126, 2.0**-125, 0.75 * 2.0**-125, -1.5 * 2.0**-126]
 
 
 @_needs_metal
-def test_compiled_ldexp_and_frexp_match_eager_bits_on_normal_values(
-    ref: ModuleType,
-) -> None:
+def test_compiled_ldexp_and_frexp_match_eager_bits_on_normal_values(ref: ModuleType) -> None:
     _assert_compiled_matches_eager(*_split_cells(ref, subnormal=False))
 
 
 @_needs_metal
-def test_compiled_ldexp_and_frexp_match_eager_bits_on_subnormals(
-    ref: ModuleType,
-) -> None:
+def test_compiled_ldexp_and_frexp_match_eager_bits_on_subnormals(ref: ModuleType) -> None:
     _assert_compiled_matches_eager(*_split_cells(ref, subnormal=True))

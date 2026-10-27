@@ -211,14 +211,8 @@ def _windows_max(x: np.ndarray) -> np.ndarray:
 # Order-sensitive rows, each against a numpy oracle: these hold on every
 # run, where the einops package (and so the parity values) may be absent.
 _ORACLES: list[tuple[_Case, Any]] = [
-    (
-        ("repeat", "h w -> (h 2) w", (2, 3), None, {}, None),
-        lambda x: np.repeat(x, 2, 0),
-    ),
-    (
-        ("repeat", "h w -> (2 h) w", (2, 3), None, {}, None),
-        lambda x: np.tile(x, (2, 1)),
-    ),
+    (("repeat", "h w -> (h 2) w", (2, 3), None, {}, None), lambda x: np.repeat(x, 2, 0)),
+    (("repeat", "h w -> (2 h) w", (2, 3), None, {}, None), lambda x: np.tile(x, (2, 1))),
     (
         ("repeat", "h w -> (2 h) (w 3)", (2, 3), None, {}, None),
         lambda x: np.repeat(np.tile(x, (2, 1)), 3, 1),
@@ -243,15 +237,9 @@ _ORACLES: list[tuple[_Case, Any]] = [
         ),
         _patchify,
     ),
-    (
-        ("rearrange", "b n (h d) -> b h n d", (2, 5, 12), None, {"h": 3}, None),
-        _split_heads,
-    ),
+    (("rearrange", "b n (h d) -> b h n d", (2, 5, 12), None, {"h": 3}, None), _split_heads),
     (("rearrange", "b h n d -> b n (h d)", (2, 3, 5, 4), None, {}, None), _merge_heads),
-    (
-        ("rearrange", "a b c -> c a b", (2, 3, 4), None, {}, None),
-        lambda x: x.transpose(2, 0, 1),
-    ),
+    (("rearrange", "a b c -> c a b", (2, 3, 4), None, {}, None), lambda x: x.transpose(2, 0, 1)),
     (
         ("rearrange", "a ... b -> b ... a", (2, 3, 4, 5), None, {}, None),
         lambda x: x.swapaxes(0, -1),
@@ -260,10 +248,7 @@ _ORACLES: list[tuple[_Case, Any]] = [
         ("rearrange", "(a b) c -> b (c a)", (6, 4), None, {"b": 3}, None),
         lambda x: x.reshape(2, 3, 4).transpose(1, 2, 0).reshape(3, 8),
     ),
-    (
-        ("rearrange", "b ... -> (...) b", (2, 3, 4, 5), None, {}, None),
-        lambda x: x.reshape(2, -1).T,
-    ),
+    (("rearrange", "b ... -> (...) b", (2, 3, 4, 5), None, {}, None), lambda x: x.reshape(2, -1).T),
 ]
 
 
@@ -349,10 +334,7 @@ def test_mean_of_an_integer_tensor_is_refused_as_the_reference_does() -> None:
     with pytest.raises(NotImplementedError, match="floating-point"):
         le.reduce(lucid.ones(2, 3, dtype=lucid.int32), "a b -> a", "mean")
     # Without an axis to reduce there is no mean to take.
-    assert le.reduce(lucid.ones(2, 3, dtype=lucid.int32), "a b -> b a", "mean").shape == (
-        3,
-        2,
-    )
+    assert le.reduce(lucid.ones(2, 3, dtype=lucid.int32), "a b -> b a", "mean").shape == (3, 2)
 
 
 @pytest.mark.parametrize("value", ["2", 2.0, None], ids=["str", "float", "none"])

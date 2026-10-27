@@ -25,11 +25,7 @@ from lucid.models._utils._classification import DropPath
 from lucid.models._utils._common import update_averages
 from lucid.models.vision.vjepa2._config import VJEPA2Config
 
-__all__ = [
-    "VJEPA2Model",
-    "VJEPA2ForVideoClassification",
-    "VJEPA2Output",
-]
+__all__ = ["VJEPA2Model", "VJEPA2ForVideoClassification", "VJEPA2Output"]
 
 
 class _EncoderArguments(TypedDict):
@@ -56,11 +52,7 @@ class _EncoderArguments(TypedDict):
 
 def _gather_tokens(tokens: Tensor, indices: Tensor) -> Tensor:
     """Gather a per-batch token index matrix from ``(B, N, D)`` tokens."""
-    batch, count, width = (
-        int(indices.shape[0]),
-        int(indices.shape[1]),
-        int(tokens.shape[2]),
-    )
+    batch, count, width = (int(indices.shape[0]), int(indices.shape[1]), int(tokens.shape[2]))
     expanded = indices.unsqueeze(-1) + lucid.zeros(
         batch, count, width, dtype=indices.dtype, device=tokens.device
     )
@@ -157,17 +149,7 @@ class _RoPEAttention(nn.Module):
 
         if action_tokens:
             return self._forward_action_conditioned(
-                q,
-                k,
-                value,
-                temporal,
-                height,
-                width,
-                action_tokens,
-                attn_mask,
-                batch,
-                count,
-                dim,
+                q, k, value, temporal, height, width, action_tokens, attn_mask, batch, count, dim
             )
 
         if token_indices is None:
@@ -205,11 +187,7 @@ class _RoPEAttention(nn.Module):
         k = lucid.cat(k_parts, dim=-1)
 
         attended = F.scaled_dot_product_attention(
-            q,
-            k,
-            value,
-            attn_mask=attn_mask,
-            dropout_p=self._dropout_p(),
+            q, k, value, attn_mask=attn_mask, dropout_p=self._dropout_p()
         )
         attended = attended.permute(0, 2, 1, 3).reshape(batch, count, dim)
         return self.proj_drop(self.proj(attended))
@@ -320,12 +298,7 @@ class _FeedForward(nn.Module):
     """The GELU or wide-SiLU feed-forward used by the released blocks."""
 
     def __init__(
-        self,
-        dim: int,
-        hidden: int,
-        use_silu: bool,
-        wide_silu: bool,
-        drop_rate: float = 0.0,
+        self, dim: int, hidden: int, use_silu: bool, wide_silu: bool, drop_rate: float = 0.0
     ) -> None:
         super().__init__()
         self.use_silu = use_silu
@@ -374,13 +347,7 @@ class _Block(nn.Module):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim, eps=layer_norm_eps)
         self.attn = _RoPEAttention(
-            dim,
-            num_heads,
-            grid_size,
-            rope_base,
-            qkv_bias,
-            attn_drop_rate,
-            drop_rate,
+            dim, num_heads, grid_size, rope_base, qkv_bias, attn_drop_rate, drop_rate
         )
         self.drop_path = DropPath(drop_path_rate)
         self.norm2 = nn.LayerNorm(dim, eps=layer_norm_eps)
@@ -647,13 +614,7 @@ class _RoPEVideoPredictor(nn.Module):
         sorted_masks = lucid.gather(masks, 1, order)
         rows = self.grid_size
         for block in self.predictor_blocks:
-            hidden = block(
-                hidden,
-                sorted_masks,
-                temporal=self.grid_depth,
-                height=rows,
-                width=rows,
-            )
+            hidden = block(hidden, sorted_masks, temporal=self.grid_depth, height=rows, width=rows)
         hidden = self.predictor_norm(hidden)
         inverse = order.argsort(dim=1)
         inverse_gather = inverse.unsqueeze(-1) + lucid.zeros(
@@ -733,11 +694,7 @@ class _ActionConditionedPredictor(nn.Module):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        actions: Tensor,
-        states: Tensor,
-        extrinsics: Tensor | None = None,
+        self, x: Tensor, actions: Tensor, states: Tensor, extrinsics: Tensor | None = None
     ) -> Tensor:
         batch, token_count, _ = (int(s) for s in x.shape)
         spatial = self.grid_size * self.grid_size
@@ -840,10 +797,7 @@ def _sincos_3d(
             encoded = lucid.cat([lucid.sin(angles), lucid.cos(angles)], dim=1)
             if int(encoded.shape[1]) < width:
                 pad = lucid.zeros(
-                    int(encoded.shape[0]),
-                    width - int(encoded.shape[1]),
-                    dtype=work,
-                    device=device,
+                    int(encoded.shape[0]), width - int(encoded.shape[1]), dtype=work, device=device
                 )
                 encoded = lucid.cat([encoded, pad], dim=1)
             axes.append(encoded[:, :width])
@@ -852,10 +806,7 @@ def _sincos_3d(
 
 
 def _scale_projection(
-    attention_proj: nn.Linear,
-    mlp: _FeedForward,
-    depth_index: int,
-    init_std: float,
+    attention_proj: nn.Linear, mlp: _FeedForward, depth_index: int, init_std: float
 ) -> None:
     factor = init_std / math.sqrt(2.0 * float(depth_index))
     nn.init.trunc_normal_(attention_proj.weight, std=factor)
@@ -950,10 +901,7 @@ class _AttentivePooler(nn.Module):
         self.blocks = nn.ModuleList(
             [
                 _SelfAttentionBlock(
-                    config.dim,
-                    config.num_heads,
-                    config.mlp_ratio,
-                    config.layer_norm_eps,
+                    config.dim, config.num_heads, config.mlp_ratio, config.layer_norm_eps
                 )
                 for _ in range(config.num_pooler_layers)
             ]
@@ -980,8 +928,7 @@ class _AttentivePooler(nn.Module):
         # by one past it — with no blocks at all that factor is the first.
         cross_depth = max(config.num_pooler_layers, 1)
         nn.init.trunc_normal_(
-            self.mlp.fc2.weight,
-            std=config.init_std / math.sqrt(2.0 * float(cross_depth)),
+            self.mlp.fc2.weight, std=config.init_std / math.sqrt(2.0 * float(cross_depth))
         )
 
     @override
@@ -1179,12 +1126,7 @@ class VJEPA2Model(PretrainedModel, BackboneMixin):
                 target = F.layer_norm(target, (int(target.shape[-1]),))
             target = _gather_tokens(target, target_indices)
         context = self.encoder(x, context_indices)
-        prediction = self.predictor(
-            context,
-            context_indices,
-            target_indices,
-            mask_index=mask_index,
-        )
+        prediction = self.predictor(context, context_indices, target_indices, mask_index=mask_index)
         # With ``predictor_return_all_tokens`` the predictor answers at the
         # context positions too, and only the held-out ones have a target to
         # be scored against — the objective takes that tail, while the output

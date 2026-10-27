@@ -158,8 +158,7 @@ def make_resnet(lib: ModuleType, nn_: ModuleType, F_: ModuleType) -> Any:
                 self.shortcut = nn_.Identity()
             else:
                 self.shortcut = nn_.Sequential(
-                    nn_.Conv2d(cin, cout, 1, stride=stride, bias=False),
-                    nn_.BatchNorm2d(cout),
+                    nn_.Conv2d(cin, cout, 1, stride=stride, bias=False), nn_.BatchNorm2d(cout)
                 )
 
         def forward(self, x: Any) -> Any:

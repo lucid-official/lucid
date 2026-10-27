@@ -40,9 +40,7 @@ def _skip_metal_64bit(device: str, dtype: str) -> None:
         pytest.skip(f"Metal does not support {dtype}")
 
 
-def _ref_ops(
-    m: ModuleType,
-) -> dict[str, Callable[[object, object], object]]:
+def _ref_ops(m: ModuleType) -> dict[str, Callable[[object, object], object]]:
     functional = m.nn.functional if m is not lucid else F
     mod = m.nn if m is not lucid else nn
     return {
@@ -79,8 +77,7 @@ def test_distance_and_cosine_refuse_complex_inputs(
         else op_id.split("-")[0]
     )
     with pytest.raises(
-        _C_engine.DtypeMismatch,
-        match=rf"^{expected_op}: expected a floating point tensor",
+        _C_engine.DtypeMismatch, match=rf"^{expected_op}: expected a floating point tensor"
     ) as exc_info:
         _ref_ops(lucid)[op_id](lx, ly)
     assert isinstance(exc_info.value, TypeError)
@@ -98,10 +95,7 @@ def test_pdist_short_circuit_rows_still_refuse_non_floating_dtype(
         ref.nn.functional.pdist(rx)
 
     lx = lucid.zeros((n_rows, 2), dtype=getattr(lucid, dtype), device=device)
-    with pytest.raises(
-        _C_engine.DtypeMismatch,
-        match=r"^pdist: expected a floating point tensor",
-    ):
+    with pytest.raises(_C_engine.DtypeMismatch, match=r"^pdist: expected a floating point tensor"):
         F.pdist(lx)
 
 
@@ -169,11 +163,7 @@ def test_pairwise_distance_real_and_complex_parity(
 @pytest.mark.parametrize("p", [2.0, 1.0, math.inf, 3.0], ids=str)
 @pytest.mark.parametrize("dim", [1, 0, -1, (0, 1), None], ids=str)
 def test_normalize_real_and_complex_parity_forward_and_backward(
-    ref: ModuleType,
-    device: str,
-    dtype: str,
-    p: float,
-    dim: int | tuple[int, int] | None,
+    ref: ModuleType, device: str, dtype: str, p: float, dim: int | tuple[int, int] | None
 ) -> None:
     _skip_metal_64bit(device, dtype)
     is_cplx = dtype.startswith("complex")

@@ -1,10 +1,4 @@
-from lucid._factories.converters import (
-    tensor,
-    as_tensor,
-    from_numpy,
-    from_dlpack,
-    to_dlpack,
-)
+from lucid._factories.converters import tensor, as_tensor, from_numpy, from_dlpack, to_dlpack
 from lucid._factories.creation import (
     zeros,
     ones,

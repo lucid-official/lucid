@@ -345,13 +345,7 @@ def _is_punctuation(ch: str) -> bool:
 _WHITE_SPACE = frozenset(WHITE_SPACE)
 
 #: Split behaviours, in the snake-case spelling the Python API uses.
-_BEHAVIORS = (
-    "removed",
-    "isolated",
-    "merged_with_previous",
-    "merged_with_next",
-    "contiguous",
-)
+_BEHAVIORS = ("removed", "isolated", "merged_with_previous", "merged_with_next", "contiguous")
 
 #: ``tokenizer.json`` spells behaviours in CamelCase.
 _BEHAVIOR_FROM_CONFIG = {
@@ -490,10 +484,7 @@ class Metaspace(PreTokenizer):
     """
 
     def __init__(
-        self,
-        replacement: str = "▁",
-        prepend_scheme: str = "always",
-        split: bool = True,
+        self, replacement: str = "▁", prepend_scheme: str = "always", split: bool = True
     ) -> None:
         r"""Record the marker, the prepend scheme and the split flag.
 
@@ -586,12 +577,7 @@ class Split(PreTokenizer):
     ['ab', '12', 'c']
     """
 
-    def __init__(
-        self,
-        pattern: str | re.Pattern[str],
-        behavior: str,
-        invert: bool = False,
-    ) -> None:
+    def __init__(self, pattern: str | re.Pattern[str], behavior: str, invert: bool = False) -> None:
         r"""Compile the pattern and record the behaviour.
 
         Parameters

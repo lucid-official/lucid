@@ -213,9 +213,7 @@ def _refused_once(opt: Any, sched: Any) -> None:
     ("build", "loop"),
     [
         pytest.param(
-            _second_scheduler_after_a_step,
-            _scheduler_first,
-            id="second-built-after-a-step",
+            _second_scheduler_after_a_step, _scheduler_first, id="second-built-after-a-step"
         ),
         pytest.param(_replaced_after, _optimizer_first, id="step-replaced-after"),
         pytest.param(_replaced_before, _optimizer_first, id="step-replaced-before"),
@@ -273,9 +271,7 @@ def test_the_step_counter_forwards_the_call() -> None:
     [copy.copy, copy.deepcopy, lambda o: pickle.loads(pickle.dumps(o))],
     ids=["copy", "deepcopy", "pickle"],
 )
-def test_a_watched_optimizer_copies_with_its_counter(
-    clone: Callable[[Any], Any],
-) -> None:
+def test_a_watched_optimizer_copies_with_its_counter(clone: Callable[[Any], Any]) -> None:
     """The copy's counter steps and reports the copy, not the one it came from."""
     opt = optim.SGD([nn.Parameter(lucid.zeros(2))], lr=LR)
     optim.StepLR(opt, step_size=2)

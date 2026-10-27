@@ -75,9 +75,7 @@ def test_new_op_supports_inline_backend_headers(tmp_path: Path) -> None:
     assert "Storage dummy_bop(const Storage& a, const Storage& b," in gpu_hdr
 
 
-def test_new_op_supports_split_backend_headers_and_methods_cpp(
-    tmp_path: Path,
-) -> None:
+def test_new_op_supports_split_backend_headers_and_methods_cpp(tmp_path: Path) -> None:
     be_dir = _copy_real_split_backends(tmp_path)
 
     new_op._mod_cpu_unary("dummy_uop", dry_run=False, be_dir=be_dir, root=tmp_path)

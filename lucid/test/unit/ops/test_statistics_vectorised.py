@@ -34,8 +34,7 @@ def test_bincount_counts_as_the_reference(
 ) -> None:
     want = ref.bincount(ref.tensor(_COUNTS, dtype=getattr(ref, index_dtype)), minlength=minlength)
     got = lucid.bincount(
-        lucid.tensor(_COUNTS, dtype=getattr(lucid, index_dtype), device=device),
-        minlength=minlength,
+        lucid.tensor(_COUNTS, dtype=getattr(lucid, index_dtype), device=device), minlength=minlength
     )
     assert got.dtype == lucid.int64
     assert got.device.type == device
@@ -53,8 +52,7 @@ def test_bincount_sums_weights_in_the_reference_dtype(
     if weight_dtype == "int64":
         weights = [int(w) for w in weights]
     want = ref.bincount(
-        ref.tensor(_COUNTS),
-        weights=ref.tensor(weights, dtype=getattr(ref, weight_dtype)),
+        ref.tensor(_COUNTS), weights=ref.tensor(weights, dtype=getattr(ref, weight_dtype))
     )
     got = lucid.bincount(
         lucid.tensor(_COUNTS, device=device),
@@ -96,8 +94,7 @@ def test_bincount_refuses_what_the_reference_refuses(
 def test_bincount_refuses_weights_of_another_length(device: str) -> None:
     with pytest.raises(ValueError, match="as long as input"):
         lucid.bincount(
-            lucid.tensor([1, 2], device=device),
-            weights=lucid.tensor([1.0], device=device),
+            lucid.tensor([1, 2], device=device), weights=lucid.tensor([1.0], device=device)
         )
 
 
@@ -216,8 +213,7 @@ def test_combinations_refuse_a_negative_length_and_a_matrix(device: str) -> None
 @pytest.mark.parity
 @pytest.mark.parametrize("which", ["tril_indices", "triu_indices"])
 @pytest.mark.parametrize(
-    ("row", "col", "offset"),
-    [(3, 3, 0), (3, 5, 1), (4, 2, -1), (0, 3, 0), (3, 3, -5), (2, 4, 9)],
+    ("row", "col", "offset"), [(3, 3, 0), (3, 5, 1), (4, 2, -1), (0, 3, 0), (3, 3, -5), (2, 4, 9)]
 )
 def test_triangle_indices_match_the_reference(
     ref: ModuleType, device: str, which: str, row: int, col: int, offset: int

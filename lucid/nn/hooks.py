@@ -73,10 +73,7 @@ class RemovableHandle:
     """
 
     def __init__(
-        self,
-        hooks: dict[int, object],
-        key: int,
-        extra_sets: tuple[set[int], ...] = (),
+        self, hooks: dict[int, object], key: int, extra_sets: tuple[set[int], ...] = ()
     ) -> None:
         """Initialise the handle.  See the class docstring for parameter semantics."""
         self._hooks: dict[int, object] = (
@@ -106,9 +103,7 @@ class RemovableHandle:
 
 
 def register_module_forward_pre_hook(
-    hook: Callable[..., object],
-    *,
-    with_kwargs: bool = False,
+    hook: Callable[..., object], *, with_kwargs: bool = False
 ) -> RemovableHandle:
     r"""Register a global pre-forward hook fired on every ``Module.__call__``.
 
@@ -159,10 +154,7 @@ def register_module_forward_pre_hook(
 
 
 def register_module_forward_hook(
-    hook: Callable[..., object],
-    *,
-    with_kwargs: bool = False,
-    always_call: bool = False,
+    hook: Callable[..., object], *, with_kwargs: bool = False, always_call: bool = False
 ) -> RemovableHandle:
     r"""Register a global post-forward hook fired after every ``Module.__call__``.
 
@@ -219,9 +211,7 @@ def register_module_forward_hook(
     return RemovableHandle(_GLOBAL_FORWARD_HOOKS, key)  # type: ignore[arg-type]
 
 
-def register_module_full_backward_pre_hook(
-    hook: Callable[..., object],
-) -> RemovableHandle:
+def register_module_full_backward_pre_hook(hook: Callable[..., object]) -> RemovableHandle:
     r"""Register a global pre-hook fired before any module's backward pass.
 
     Invoked at the moment Lucid's autograd engine is about to compute
@@ -262,9 +252,7 @@ def register_module_full_backward_pre_hook(
     return RemovableHandle(_GLOBAL_BACKWARD_PRE_HOOKS, key)  # type: ignore[arg-type]
 
 
-def register_module_full_backward_hook(
-    hook: Callable[..., object],
-) -> RemovableHandle:
+def register_module_full_backward_hook(hook: Callable[..., object]) -> RemovableHandle:
     r"""Register a global post-hook fired after a module's backward pass.
 
     Invoked once Lucid's autograd engine has finished accumulating
@@ -306,9 +294,7 @@ def register_module_full_backward_hook(
     return RemovableHandle(_GLOBAL_BACKWARD_HOOKS, key)  # type: ignore[arg-type]
 
 
-def register_module_load_state_dict_pre_hook(
-    hook: Callable[..., object],
-) -> RemovableHandle:
+def register_module_load_state_dict_pre_hook(hook: Callable[..., object]) -> RemovableHandle:
     r"""Register a global pre-hook fired for every Module during ``load_state_dict``.
 
     Invoked **before** a module attempts to copy values from a state-dict
@@ -357,9 +343,7 @@ def register_module_load_state_dict_pre_hook(
     return RemovableHandle(_GLOBAL_LOAD_STATE_DICT_PRE_HOOKS, key)  # type: ignore[arg-type]
 
 
-def register_module_load_state_dict_post_hook(
-    hook: Callable[..., object],
-) -> RemovableHandle:
+def register_module_load_state_dict_post_hook(hook: Callable[..., object]) -> RemovableHandle:
     r"""Register a global post-hook fired after every Module's ``load_state_dict``.
 
     Invoked **after** the copy from state-dict to parameters has happened.

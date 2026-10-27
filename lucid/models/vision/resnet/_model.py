@@ -538,11 +538,7 @@ class ResNetForImageClassification(ImageClassificationModel, ClassificationHeadM
             _zero_init_residual(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)

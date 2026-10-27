@@ -72,10 +72,7 @@ def test_a_wholly_skipped_chunk_is_not_a_dead_chunk(tmp_path: Path) -> None:
         "def test_one(): pass\n"
     )
     result = run_suite(
-        Console(colour=False, quiet=True),
-        path="suite",
-        with_coverage=False,
-        root=tmp_path,
+        Console(colour=False, quiet=True), path="suite", with_coverage=False, root=tmp_path
     )
     assert result.unfinished == [], result.unfinished
     assert result.counts.get("skipped") == 1
@@ -90,10 +87,7 @@ def test_a_killed_chunk_is_named(tmp_path: Path) -> None:
     # reaches a summary line, which is the shape of the -9 death.
     (folder / "test_dies.py").write_text("import os\nos._exit(9)\n")
     result = run_suite(
-        Console(colour=False, quiet=True),
-        path="suite",
-        with_coverage=False,
-        root=tmp_path,
+        Console(colour=False, quiet=True), path="suite", with_coverage=False, root=tmp_path
     )
     assert result.unfinished, "a chunk that died silently was not recorded"
     assert "suite" in result.unfinished[0]

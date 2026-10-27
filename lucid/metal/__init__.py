@@ -384,9 +384,7 @@ def run_kernel(
 
 
 def shared_tensor(
-    shape: tuple[int, ...] | list[int],
-    dtype: object = None,
-    requires_grad: bool = False,
+    shape: tuple[int, ...] | list[int], dtype: object = None, requires_grad: bool = False
 ) -> lucid.Tensor:
     """Allocate a zero-filled tensor in Metal shared memory (no memcpy ever).
 

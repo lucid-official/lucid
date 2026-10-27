@@ -20,22 +20,9 @@ from lucid.nn.functional._grid_sampling import (
     reflect_grid as _reflect_grid,
 )
 from lucid.nn.functional._interpolate import resample as _resample
-from lucid.nn.functional._spatial_args import (
-    _add_batch_axis,
-    _drop_batch_axis,
-    _ntuple,
-)
-from lucid.nn.functional._index_checks import (
-    _check_offsets,
-    _check_table,
-    _padding_index,
-)
-from lucid.nn.functional.sparse import (
-    _bag_by_lookup,
-    _bag_of_each_index,
-    _bag_mode,
-    _renorm_rows,
-)
+from lucid.nn.functional._spatial_args import _add_batch_axis, _drop_batch_axis, _ntuple
+from lucid.nn.functional._index_checks import _check_offsets, _check_table, _padding_index
+from lucid.nn.functional.sparse import _bag_by_lookup, _bag_of_each_index, _bag_mode, _renorm_rows
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -142,13 +129,7 @@ def interpolate(
     (1, 3, 8, 8)
     """
     return _resample(
-        input,
-        size,
-        scale_factor,
-        mode,
-        align_corners,
-        recompute_scale_factor,
-        antialias,
+        input, size, scale_factor, mode, align_corners, recompute_scale_factor, antialias
     )
 
 
@@ -272,9 +253,7 @@ def _grid_sample(
 
 
 def affine_grid(
-    theta: Tensor,
-    size: list[int] | tuple[int, ...],
-    align_corners: bool | None = None,
+    theta: Tensor, size: list[int] | tuple[int, ...], align_corners: bool | None = None
 ) -> Tensor:
     r"""Generate a sampling grid from a batch of affine transform matrices.
 
@@ -791,10 +770,7 @@ def _pad_one_dim(x: Tensor, dim: int, lo: int, hi: int, mode: str) -> Tensor:
 
 
 def pad(
-    input: Tensor,
-    pad: Sequence[int],
-    mode: str = "constant",
-    value: float | None = None,
+    input: Tensor, pad: Sequence[int], mode: str = "constant", value: float | None = None
 ) -> Tensor:
     r"""Pad an N-D tensor along an arbitrary set of trailing dimensions.
 

@@ -72,12 +72,7 @@ _POLYNOMIALS = [
 
 # ``nn.functional`` forms the reference takes an integer for; softsign and
 # tanhshrink refuse a bool there.
-_FUNCTIONAL_OPS = {
-    "sigmoid": True,
-    "tanh": True,
-    "softsign": False,
-    "tanhshrink": False,
-}
+_FUNCTIONAL_OPS = {"sigmoid": True, "tanh": True, "softsign": False, "tanhshrink": False}
 
 
 def _attr(root: Any, path: str) -> Callable[..., Any]:
@@ -161,12 +156,7 @@ def _assert_matches(ref: ModuleType, got: lucid.Tensor, want: Any, device: str) 
     indirect=["default_dtype"],
 )
 def test_integer_input_matches_reference(
-    spelling: str,
-    name: str,
-    dtype: str,
-    device: str,
-    default_dtype: str,
-    ref: ModuleType,
+    spelling: str, name: str, dtype: str, device: str, default_dtype: str, ref: ModuleType
 ) -> None:
     x, rx = _inputs(ref, dtype, device)
     want = _call(ref, spelling, name, rx)

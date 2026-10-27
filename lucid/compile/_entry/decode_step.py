@@ -184,10 +184,7 @@ def _collect_cache_write_ids(
     buf_slot: dict[int, int] = {}
     for i in range(len(static_cache.key_cache)):
         for slot_kv, (buf_after, buf_before) in enumerate(
-            (
-                (static_cache.key_cache[i], orig_key[i]),
-                (static_cache.value_cache[i], orig_val[i]),
-            )
+            ((static_cache.key_cache[i], orig_key[i]), (static_cache.value_cache[i], orig_val[i]))
         ):
             wid = tracer.lookup_id(_unwrap(buf_after))
             if wid is None:
@@ -268,10 +265,7 @@ def _compile_decode_entry(
 
 
 def _run_decode_entry(
-    entry: _DecodeEntry,
-    static_cache: StaticCache,
-    input_ids: Tensor,
-    cache_position: Tensor,
+    entry: _DecodeEntry, static_cache: StaticCache, input_ids: Tensor, cache_position: Tensor
 ) -> Tensor:
     """Run one cached decode step + roll the cache forward (rebind, no copy)."""
     from lucid._dispatch import _unwrap, _wrap
@@ -317,8 +311,7 @@ def _run_decode_entry(
 
 
 def compiled_decode_step(
-    forward_fn: Callable[[Tensor, Tensor], Tensor],
-    static_cache: StaticCache,
+    forward_fn: Callable[[Tensor, Tensor], Tensor], static_cache: StaticCache
 ) -> Callable[[Tensor, Tensor], Tensor]:
     """Return a ``step(input_ids, cache_position)`` running one compiled decode.
 
@@ -359,8 +352,7 @@ def compiled_decode_step(
 
         try:  # ``key_of`` drops what read replaced tensors
             key = replace(
-                fingerprint.key_of((input_ids, cache_position), {}, dynamic=False),
-                grad_mode=False,
+                fingerprint.key_of((input_ids, cache_position), {}, dynamic=False), grad_mode=False
             )
         except (TypeError, AttributeError):
             key = None

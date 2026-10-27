@@ -136,12 +136,7 @@ class _WindowAttention(nn.Module):
     rel_pos_idx: Tensor
 
     def __init__(
-        self,
-        dim: int,
-        window_size: int,
-        num_heads: int,
-        attn_drop: float,
-        proj_drop: float = 0.0,
+        self, dim: int, window_size: int, num_heads: int, attn_drop: float, proj_drop: float = 0.0
     ) -> None:
         super().__init__()
         self.dim = dim
@@ -175,11 +170,7 @@ class _WindowAttention(nn.Module):
         self.register_buffer("rel_pos_idx", rel_idx, persistent=False)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+    def forward(self, x: Tensor, mask: Tensor | None = None) -> Tensor:
         B_, N, C = x.shape  # B_ = num_windows*B
         qkv = self.qkv(x)
         qkv = qkv.reshape(B_, N, 3, self.num_heads, C // self.num_heads)
@@ -671,11 +662,7 @@ class SwinTransformerForImageClassification(ImageClassificationModel, Classifica
         init_transformer_trunc_normal(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.patch_embed(x)
         for stage in self.stages:
             x = stage(x)

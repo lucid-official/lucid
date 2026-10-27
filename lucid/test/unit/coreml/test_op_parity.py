@@ -22,8 +22,7 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -90,10 +89,7 @@ _ACTIVATION = [
     ("log_softmax", lambda x: F.log_softmax(x, dim=1)),
 ]
 
-_ACTIVATION += [
-    ("hard_sigmoid", F.hardsigmoid),
-    ("hard_swish", F.hardswish),
-]
+_ACTIVATION += [("hard_sigmoid", F.hardsigmoid), ("hard_swish", F.hardswish)]
 
 _SPATIAL = [
     ("conv1d", nn.Conv1d(4, 2, 3).eval(), (1, 4, 10)),
@@ -113,11 +109,7 @@ _SPATIAL = [
     # would notice if that stopped being true.
     ("conv_transpose1d", nn.ConvTranspose1d(4, 2, 3, stride=2).eval(), (1, 4, 10)),
     ("conv_transpose2d", nn.ConvTranspose2d(4, 2, 3, stride=2).eval(), (1, 4, 6, 6)),
-    (
-        "conv_transpose3d",
-        nn.ConvTranspose3d(4, 2, 3, stride=2).eval(),
-        (1, 4, 6, 6, 6),
-    ),
+    ("conv_transpose3d", nn.ConvTranspose3d(4, 2, 3, stride=2).eval(), (1, 4, 6, 6, 6)),
     (
         "conv_transpose1d_grouped",
         nn.ConvTranspose1d(4, 4, 3, stride=2, groups=2).eval(),
@@ -180,11 +172,7 @@ _OTHER = [
     ("argmax", lambda x: lucid.argmax(x, dim=1).to(lucid.float32), False),
     ("argmin", lambda x: lucid.argmin(x, dim=1).to(lucid.float32), False),
     ("argmax_flat", lambda x: lucid.argmax(x).to(lucid.float32), False),
-    (
-        "argmax_keepdim",
-        lambda x: lucid.argmax(x, dim=1, keepdim=True).to(lucid.float32),
-        False,
-    ),
+    ("argmax_keepdim", lambda x: lucid.argmax(x, dim=1, keepdim=True).to(lucid.float32), False),
     (
         "one_hot",
         lambda x: F.one_hot(lucid.argmax(x, dim=1), num_classes=4).to(lucid.float32),
@@ -233,10 +221,7 @@ class TestCoreMLDoesNotPromote:
                 "int-times-scalar",
                 lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) * 3).to(lucid.float32) + x,
             ),
-            (
-                "float-times-int-tensor",
-                lambda x: x * lucid.arange(x.shape[-1]).to(lucid.float32),
-            ),
+            ("float-times-int-tensor", lambda x: x * lucid.arange(x.shape[-1]).to(lucid.float32)),
             (
                 "int-compared-to-scalar",
                 lambda x: (lucid.arange(x.shape[-1]).to(lucid.int64) > 1).to(lucid.float32) + x,
@@ -253,13 +238,7 @@ class TestCoreMLDoesNotPromote:
                 lambda x: x * (lucid.arange(x.shape[0]) == x.argmax(-1)).to(lucid.float32)[:, None],
             ),
         ],
-        ids=[
-            "int-scalar",
-            "float-int",
-            "int-compare",
-            "float-compare",
-            "int-buffer-compare",
-        ],
+        ids=["int-scalar", "float-int", "int-compare", "float-compare", "int-buffer-compare"],
     )
     def test_a_mixed_operand_pair_is_reconciled(
         self, name: str, fn: object, tmp_path: object
@@ -456,10 +435,7 @@ class TestHalfPrecisionKeepsItsIntegers:
         model = _Indices().eval()
         x = lucid.randn(2, 6)
         exported = cml.export(
-            model,
-            x,
-            f"{tmp_path}/ints.mlpackage",
-            precision=cml.Precision.FLOAT16,
+            model, x, f"{tmp_path}/ints.mlpackage", precision=cml.Precision.FLOAT16
         )
         try:
             got = exported.predict(x)
@@ -487,10 +463,7 @@ class TestHalfPrecisionKeepsItsIntegers:
         model = _Casts().eval()
         x = lucid.randn(2, 6)
         exported = cml.export(
-            model,
-            x,
-            f"{tmp_path}/casts.mlpackage",
-            precision=cml.Precision.FLOAT16,
+            model, x, f"{tmp_path}/casts.mlpackage", precision=cml.Precision.FLOAT16
         )
         try:
             assert exported.verify(model, x, relative=True) < 1e-2
@@ -518,10 +491,7 @@ class TestWhereTheWorkActuallyGoes:
         x = lucid.randn(1, 3, 32, 32)
 
         exported = cml.export(
-            model,
-            x,
-            f"{tmp_path}/f32.mlpackage",
-            compute_units=cml.ComputeUnits.CPU_AND_NE,
+            model, x, f"{tmp_path}/f32.mlpackage", compute_units=cml.ComputeUnits.CPU_AND_NE
         )
         try:
             plan = exported.compute_plan()
@@ -571,10 +541,7 @@ class TestWhereTheWorkActuallyGoes:
         x = lucid.randn(1, 3, 32, 32)
 
         exported = cml.export(
-            model,
-            x,
-            f"{tmp_path}/cpu.mlpackage",
-            compute_units=cml.ComputeUnits.CPU_ONLY,
+            model, x, f"{tmp_path}/cpu.mlpackage", compute_units=cml.ComputeUnits.CPU_ONLY
         )
         try:
             assert exported.compute_plan().note == ""
@@ -807,11 +774,7 @@ class TestTheOperationsMilDoesNotHave:
         weight = lucid.randn(3, 4, 4)
         _check(lambda x: F.bilinear(x, x, weight), lucid.randn(1, 4), tmp_path)
         for order in (1, 2):
-            _check(
-                lambda x, p=order: F.normalize(x, p=p, dim=1),
-                lucid.randn(1, 4, 6, 6),
-                tmp_path,
-            )
+            _check(lambda x, p=order: F.normalize(x, p=p, dim=1), lucid.randn(1, 4, 6, 6), tmp_path)
 
     def test_three_dimensional_resampling_matches(self, tmp_path: object) -> None:
         for mode in ("nearest", "trilinear"):
@@ -927,12 +890,7 @@ class TestTheSamplingGridIsTheOneTheModelAsked:
             ((5, 7, 6), (1, 2, 3, 4, 4), "trilinear"),
             ((3, 8, 8), (1, 2, 3, 4, 4), "trilinear"),
         ],
-        ids=[
-            "bilinear",
-            "trilinear-grown",
-            "trilinear-fractional",
-            "trilinear-same-depth",
-        ],
+        ids=["bilinear", "trilinear-grown", "trilinear-fractional", "trilinear-same-depth"],
     )
     def test_both_settings_export_to_what_they_mean(
         self,
@@ -976,11 +934,7 @@ class TestGridSampleReachesTheExport:
 
         _check(
             lambda x: F.grid_sample(
-                x,
-                grid,
-                mode=mode,
-                padding_mode=padding_mode,
-                align_corners=align_corners,
+                x, grid, mode=mode, padding_mode=padding_mode, align_corners=align_corners
             ),
             lucid.randn(1, 3, 5, 5),
             tmp_path,
@@ -1025,11 +979,7 @@ class TestTheOpsetTheWriterDeclares:
         """``embedding`` takes the other branch and already had it."""
         lucid.manual_seed(0)
         table = nn.Embedding(4, 8).eval()
-        _check(
-            lambda ids: table(ids),
-            lucid.tensor([[0, 2, 1]]).to(lucid.int64),
-            tmp_path,
-        )
+        _check(lambda ids: table(ids), lucid.tensor([[0, 2, 1]]).to(lucid.int64), tmp_path)
 
 
 class TestTheWindowPartitionGetsPastTheRankCap:
@@ -1114,11 +1064,7 @@ class TestAHostComputedResultSaysSo:
                 return lucid.tensor([x.sum().item()] * 4)
 
         with pytest.raises(ValueError, match="host"):
-            cml.export(
-                ReadsValues().eval(),
-                lucid.randn(16),
-                f"{tmp_path}/host.mlpackage",
-            )
+            cml.export(ReadsValues().eval(), lucid.randn(16), f"{tmp_path}/host.mlpackage")
 
 
 class TestJoiningTwoMasks:
@@ -1208,11 +1154,7 @@ class TestBitsAreNotBooleans:
 
         lucid.manual_seed(0)
         with pytest.raises(cml.UnsupportedOp, match="bit level"):
-            cml.export(
-                _Apply(bits).eval(),
-                lucid.randn(3, 6) * 8.0,
-                f"{tmp_path}/bits.mlpackage",
-            )
+            cml.export(_Apply(bits).eval(), lucid.randn(3, 6) * 8.0, f"{tmp_path}/bits.mlpackage")
 
     def test_a_shift_is_refused_as_unmapped(self, tmp_path: object) -> None:
         """Core ML has no shift at all, so this one needs no special case."""
@@ -1223,9 +1165,7 @@ class TestBitsAreNotBooleans:
         lucid.manual_seed(0)
         with pytest.raises(cml.UnsupportedOp, match="bitwise_left_shift"):
             cml.export(
-                _Apply(shifted).eval(),
-                lucid.randn(3, 6) * 8.0,
-                f"{tmp_path}/shift.mlpackage",
+                _Apply(shifted).eval(), lucid.randn(3, 6) * 8.0, f"{tmp_path}/shift.mlpackage"
             )
 
 

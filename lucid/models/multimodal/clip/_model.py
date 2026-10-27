@@ -33,17 +33,10 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._output import ModelOutput
-from lucid.models.multimodal.clip._towers import (
-    TransformerTower,
-)
+from lucid.models.multimodal.clip._towers import TransformerTower
 from lucid.models.multimodal.clip._config import CLIPConfig
 
-__all__ = [
-    "CLIPModel",
-    "CLIPForZeroShotImageClassification",
-    "CLIPOutput",
-    "CLIPZeroShotOutput",
-]
+__all__ = ["CLIPModel", "CLIPForZeroShotImageClassification", "CLIPOutput", "CLIPZeroShotOutput"]
 
 
 @final
@@ -78,11 +71,7 @@ class _VisionTransformer(nn.Module):
         self.num_patches = grid * grid
 
         self.conv1 = nn.Conv2d(
-            3,
-            width,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-            bias=False,
+            3, width, kernel_size=config.patch_size, stride=config.patch_size, bias=False
         )
         # Created at zeros and filled by :meth:`CLIPModel._init_weights`.
         self.class_embedding = nn.Parameter(lucid.zeros((width,)))
@@ -348,10 +337,7 @@ class CLIPModel(PretrainedModel):
         with lucid.no_grad():
             nn.init.normal_(self.textual.token_embedding.weight, std=0.02)
             nn.init.normal_(self.textual.positional_embedding, std=0.01)
-            nn.init.normal_(
-                self.textual.text_projection,
-                std=config.text_width**-0.5,
-            )
+            nn.init.normal_(self.textual.text_projection, std=config.text_width**-0.5)
 
             vision_std = config.vision_width**-0.5
             nn.init.normal_(self.visual.class_embedding, std=vision_std)
@@ -482,10 +468,7 @@ class CLIPModel(PretrainedModel):
 
     @override
     def forward(
-        self,
-        pixel_values: Tensor,
-        input_ids: Tensor,
-        return_loss: bool = False,
+        self, pixel_values: Tensor, input_ids: Tensor, return_loss: bool = False
     ) -> CLIPOutput:
         """Score every image against every caption in the batch.
 

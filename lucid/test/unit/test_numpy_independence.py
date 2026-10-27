@@ -75,10 +75,7 @@ def test_lucid_works_without_numpy() -> None:
         print("OK")
         """)
     result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=60,
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=60
     )
     assert result.returncode == 0, (
         f"numpy-blocked smoke test failed:\n"

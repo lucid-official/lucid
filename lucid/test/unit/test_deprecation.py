@@ -49,10 +49,7 @@ def test_the_warning_reaches_the_person_running_the_code() -> None:
 
 
 def test_the_snapshot_records_the_promise() -> None:
-    assert _released._entry(_old)["deprecated"] == {
-        "since": "3.16.0",
-        "removal": "3.18.0",
-    }
+    assert _released._entry(_old)["deprecated"] == {"since": "3.16.0", "removal": "3.18.0"}
     assert _released._entry(_Renamed)["deprecated"]["removal"] == "4.0.0"
     assert "deprecated" not in _released._entry(_Base)
     # The signature a caller sees is the old one, not the warning's wrapper.
@@ -61,12 +58,7 @@ def test_the_snapshot_records_the_promise() -> None:
 
 @pytest.mark.parametrize(
     "since,removal",
-    [
-        ("3.16.0", "3.17.0"),
-        ("3.16.0", "3.16.5"),
-        ("3.16.0", "2.0.0"),
-        ("3.16", "3.18.0"),
-    ],
+    [("3.16.0", "3.17.0"), ("3.16.0", "3.16.5"), ("3.16.0", "2.0.0"), ("3.16", "3.18.0")],
 )
 def test_a_removal_too_soon_or_malformed_is_refused(since: str, removal: str) -> None:
     with pytest.raises(ValueError):

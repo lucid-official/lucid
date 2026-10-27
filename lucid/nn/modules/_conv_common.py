@@ -71,11 +71,7 @@ def _init_conv_weights(weight: Parameter, bias: Parameter | None) -> None:
 
 
 def _conv_parameters(
-    shape: tuple[int, ...],
-    out_channels: int,
-    bias: bool,
-    device: DeviceLike,
-    dtype: DTypeLike,
+    shape: tuple[int, ...], out_channels: int, bias: bool, device: DeviceLike, dtype: DTypeLike
 ) -> tuple[Parameter, Parameter | None]:
     """A convolution's ``weight`` of ``shape`` and its bias, initialised."""
     weight = Parameter(empty(*shape, dtype=dtype, device=device))
@@ -125,11 +121,7 @@ class _LazyConvMixin(_LazyModule):
         else:
             lead = (self.out_channels, in_channels // self.groups)
         weight, bias = _conv_parameters(
-            (*lead, *self._kernel()),
-            self.out_channels,
-            self._has_bias,
-            self._device,
-            self._dtype,
+            (*lead, *self._kernel()), self.out_channels, self._has_bias, self._device, self._dtype
         )
         # ``fill`` and not assignment — the placeholder object is what
         # anything that read ``parameters()`` early is holding on to.

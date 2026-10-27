@@ -38,10 +38,7 @@ from typing import Iterable, override
 from lucid._C import engine as _C_engine
 
 from lucid.utils.tokenizer._base import SpecialTokens
-from lucid.utils.tokenizer._lookup_common import (
-    _FastVocabTokenizer,
-    _VocabTokenizer,
-)
+from lucid.utils.tokenizer._lookup_common import _FastVocabTokenizer, _VocabTokenizer
 from lucid.utils.tokenizer._whitespace import _whitespace_split
 
 
@@ -89,10 +86,7 @@ class WordTokenizer(_VocabTokenizer):
     _model_type = "Word"
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a pure-Python word tokenizer.
 
@@ -136,12 +130,7 @@ class WordTokenizer(_VocabTokenizer):
         """Algorithm-specific decode: join known ids with a single space."""
         return " ".join(self._id_to_token[i] for i in ids if i in self._id_to_token)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Collect unique words in insertion order until ``vocab_size``.
 
         Same algorithm as :meth:`WhitespaceTokenizer.train` — pure
@@ -209,10 +198,7 @@ class WordTokenizerFast(_FastVocabTokenizer):
     _sync_cpp_specials = True
 
     def __init__(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         r"""Construct a C++-backed word tokenizer.
 
@@ -256,12 +242,7 @@ class WordTokenizerFast(_FastVocabTokenizer):
                     )
         return list(self._cpp.encode(text))
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train in C++; refresh Python-side caches afterwards.
 
         Parameters

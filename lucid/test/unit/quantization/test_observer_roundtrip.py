@@ -18,11 +18,7 @@ from lucid.quantization import (
     PerChannelMinMaxObserver,
 )
 
-_OBSERVERS = [
-    MinMaxObserver,
-    PerChannelMinMaxObserver,
-    MovingAveragePerChannelMinMaxObserver,
-]
+_OBSERVERS = [MinMaxObserver, PerChannelMinMaxObserver, MovingAveragePerChannelMinMaxObserver]
 
 
 @pytest.mark.parametrize("cls", _OBSERVERS)

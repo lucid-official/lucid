@@ -44,18 +44,9 @@ _FUNCTIONALS: dict[str, tuple[_Call, tuple[int, ...]]] = {
     "rrelu": (lambda f, x, ip: f.rrelu(x, 0.1, 0.3, False, inplace=ip), (2, 3, 4)),
     "dropout": (lambda f, x, ip: f.dropout(x, 1.0, True, inplace=ip), (2, 3, 4)),
     "dropout1d": (lambda f, x, ip: f.dropout1d(x, 1.0, True, inplace=ip), (2, 3, 4)),
-    "dropout2d": (
-        lambda f, x, ip: f.dropout2d(x, 1.0, True, inplace=ip),
-        (2, 3, 2, 2),
-    ),
-    "dropout3d": (
-        lambda f, x, ip: f.dropout3d(x, 1.0, True, inplace=ip),
-        (1, 2, 2, 2, 2),
-    ),
-    "alpha_dropout": (
-        lambda f, x, ip: f.alpha_dropout(x, 1.0, True, inplace=ip),
-        (2, 3, 4),
-    ),
+    "dropout2d": (lambda f, x, ip: f.dropout2d(x, 1.0, True, inplace=ip), (2, 3, 2, 2)),
+    "dropout3d": (lambda f, x, ip: f.dropout3d(x, 1.0, True, inplace=ip), (1, 2, 2, 2, 2)),
+    "alpha_dropout": (lambda f, x, ip: f.alpha_dropout(x, 1.0, True, inplace=ip), (2, 3, 4)),
     "feature_alpha_dropout": (
         lambda f, x, ip: f.feature_alpha_dropout(x, 1.0, True, inplace=ip),
         (2, 3, 4),

@@ -48,10 +48,7 @@ class _ModuleBackwardState:
     ) -> Iterator[object]:
         """Run the backward pre-hooks on the output gradients."""
         grad_outputs = _wrap_grads(grad_output_impls)
-        hooks = (
-            *_GLOBAL_BACKWARD_PRE_HOOKS.values(),
-            *self.module._backward_pre_hooks.values(),
-        )
+        hooks = (*_GLOBAL_BACKWARD_PRE_HOOKS.values(), *self.module._backward_pre_hooks.values())
         for hook in hooks:
             result = hook(self.module, grad_outputs)
             if result is not None:
@@ -66,10 +63,7 @@ class _ModuleBackwardState:
         """Run the full backward hooks on the input and output gradients."""
         grad_inputs = _wrap_grads(grad_input_impls)
         grad_outputs = _wrap_grads(grad_output_impls)
-        hooks = (
-            *_GLOBAL_BACKWARD_HOOKS.values(),
-            *self.module._backward_hooks.values(),
-        )
+        hooks = (*_GLOBAL_BACKWARD_HOOKS.values(), *self.module._backward_hooks.values())
         for hook in hooks:
             result = hook(self.module, grad_inputs, grad_outputs)
             if result is not None:
@@ -77,8 +71,6 @@ class _ModuleBackwardState:
                 grad_inputs = tuple(cast(Iterable[Tensor | None], result))
 
 
-def _wrap_grads(
-    impls: tuple[_C_engine.TensorImpl | None, ...],
-) -> tuple[Tensor | None, ...]:
+def _wrap_grads(impls: tuple[_C_engine.TensorImpl | None, ...]) -> tuple[Tensor | None, ...]:
     """The engine's gradients as the tensors a backward hook is handed."""
     return tuple(None if g is None else _wrap(g) for g in impls)

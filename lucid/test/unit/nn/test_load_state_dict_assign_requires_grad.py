@@ -26,17 +26,8 @@ def _state(module, lib, *, buffers_grad):
 
 def _flags(module):
     return {
-        name: (
-            getattr(module, name).requires_grad,
-            type(getattr(module, name)).__name__,
-        )
-        for name in (
-            "weight",
-            "bias",
-            "running_mean",
-            "running_var",
-            "num_batches_tracked",
-        )
+        name: (getattr(module, name).requires_grad, type(getattr(module, name)).__name__)
+        for name in ("weight", "bias", "running_mean", "running_var", "num_batches_tracked")
     }
 
 

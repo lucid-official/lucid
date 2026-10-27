@@ -101,8 +101,7 @@ def _framed_word_tokenizer() -> WordTokenizer:
     vocab = {"<unk>": 0, "<s>": 1, "</s>": 2, "<pad>": 3}
     vocab.update({ch: 4 + i for i, ch in enumerate("abcdefgh")})
     return WordTokenizer(
-        vocab,
-        special_tokens=SpecialTokens(unk="<unk>", bos="<s>", eos="</s>", pad="<pad>"),
+        vocab, special_tokens=SpecialTokens(unk="<unk>", bos="<s>", eos="</s>", pad="<pad>")
     )
 
 
@@ -115,12 +114,7 @@ class TestTruncationKeepsSpecialTokens:
 
     def test_batch_and_padding(self) -> None:
         tok = _framed_word_tokenizer()
-        out = tok(
-            ["a b c d e f", "a"],
-            truncation=True,
-            max_length=4,
-            padding="max_length",
-        )
+        out = tok(["a b c d e f", "a"], truncation=True, max_length=4, padding="max_length")
         assert out["input_ids"] == [[1, 4, 5, 2], [1, 4, 2, 3]]
         assert out["attention_mask"] == [[1, 1, 1, 1], [1, 1, 1, 0]]
 
@@ -148,12 +142,7 @@ class TestTruncationKeepsSpecialTokens:
         """CLIP's ``encode`` defaults to no framing; ``__call__`` still frames."""
         from lucid.models.multimodal.clip import CLIPTokenizer
 
-        vocab = {
-            "a</w>": 0,
-            "b</w>": 1,
-            "<|startoftext|>": 2,
-            "<|endoftext|>": 3,
-        }
+        vocab = {"a</w>": 0, "b</w>": 1, "<|startoftext|>": 2, "<|endoftext|>": 3}
         tok = CLIPTokenizer(vocab=vocab, merges=[])
         ids = tok("a b a b", truncation=True, max_length=4)["input_ids"]
         assert ids == [2, 0, 1, 3]
@@ -249,10 +238,7 @@ class TestPostProcessors:
     def test_sequence_keeps_the_pair_apart(self) -> None:
         """A ByteLevel step must not merge a pair before the template runs."""
         proc = post_processor_from_config(
-            {
-                "type": "Sequence",
-                "processors": [{"type": "ByteLevel"}, _T5_TEMPLATE],
-            }
+            {"type": "Sequence", "processors": [{"type": "ByteLevel"}, _T5_TEMPLATE]}
         )
         assert isinstance(proc, ProcessorSequence)
         assert proc.process([7], [8]) == [7, 1, 8, 1]
@@ -331,12 +317,7 @@ class TestPreTokenizers:
         )
         assert _chunks(never, "hi you") == ["hi", "▁you"]
         split = pre_tokenizer_from_config(
-            {
-                "type": "Split",
-                "pattern": {"Regex": r"\s+"},
-                "behavior": "Removed",
-                "invert": False,
-            }
+            {"type": "Split", "pattern": {"Regex": r"\s+"}, "behavior": "Removed", "invert": False}
         )
         assert _chunks(split, "a  b") == ["a", "b"]
         assert _chunks(pre_tokenizer_from_config(None), "as is") == ["as is"]
@@ -348,21 +329,12 @@ class TestPreTokenizers:
         pre_tokenizers = pytest.importorskip("tokenizers.pre_tokenizers")
         cases = [
             (Metaspace(), pre_tokenizers.Metaspace()),
-            (
-                Metaspace(prepend_scheme="never"),
-                pre_tokenizers.Metaspace(prepend_scheme="never"),
-            ),
+            (Metaspace(prepend_scheme="never"), pre_tokenizers.Metaspace(prepend_scheme="never")),
             (Whitespace(), pre_tokenizers.Whitespace()),
             (Digits(), pre_tokenizers.Digits()),
             (Punctuation(), pre_tokenizers.Punctuation()),
-            (
-                Split(" ", "merged_with_next"),
-                pre_tokenizers.Split(" ", "merged_with_next"),
-            ),
-            (
-                Split(" ", "contiguous"),
-                pre_tokenizers.Split(" ", "contiguous"),
-            ),
+            (Split(" ", "merged_with_next"), pre_tokenizers.Split(" ", "merged_with_next")),
+            (Split(" ", "contiguous"), pre_tokenizers.Split(" ", "contiguous")),
         ]
         texts = [
             "Hello  world",
@@ -553,16 +525,9 @@ class TestAddedTokens:
 
     def test_strip_and_single_word(self) -> None:
         vocab = AddedVocabulary(
-            [
-                AddedToken("<m>", 5, lstrip=True, rstrip=True),
-                AddedToken("cat", 6, single_word=True),
-            ]
+            [AddedToken("<m>", 5, lstrip=True, rstrip=True), AddedToken("cat", 6, single_word=True)]
         )
-        assert vocab.split_raw("a  <m>  b") == [
-            ("a", None, 0),
-            ("  <m>  ", 5, 1),
-            ("b", None, 8),
-        ]
+        assert vocab.split_raw("a  <m>  b") == [("a", None, 0), ("  <m>  ", 5, 1), ("b", None, 8)]
         assert [seg[1] for seg in vocab.split_raw("concat cat")] == [None, 6]
 
     def test_normalized_tokens_match_after_normalizing(self) -> None:
@@ -617,11 +582,7 @@ def _t5_style_json(**overrides: object) -> dict[str, object]:
         "truncation": None,
         "padding": None,
         "added_tokens": _added([("<pad>", 0), ("</s>", 1), ("<s>", 2), ("<unk>", 3)]),
-        "normalizer": {
-            "type": "Replace",
-            "pattern": {"Regex": " {2,}"},
-            "content": " ",
-        },
+        "normalizer": {"type": "Replace", "pattern": {"Regex": " {2,}"}, "content": " "},
         "pre_tokenizer": {
             "type": "Metaspace",
             "replacement": "▁",
@@ -674,10 +635,7 @@ class TestUnigramFromTokenizerJson:
         with tempfile.TemporaryDirectory() as d:
             _write(d, _t5_style_json())
             tok = cls.from_file(d)
-        assert tok.encode("hi    there", add_special_tokens=False) == [
-            _ID["▁hi"],
-            _ID["▁there"],
-        ]
+        assert tok.encode("hi    there", add_special_tokens=False) == [_ID["▁hi"], _ID["▁there"]]
 
     def test_literal_added_token_is_cut_out(self, cls: type) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -689,11 +647,7 @@ class TestUnigramFromTokenizerJson:
         with tempfile.TemporaryDirectory() as d:
             _write(d, _t5_style_json())
             tok = cls.from_file(d)
-        assert tok.encode("hi zzz", add_special_tokens=False) == [
-            _ID["▁hi"],
-            _ID["▁"],
-            3,
-        ]
+        assert tok.encode("hi zzz", add_special_tokens=False) == [_ID["▁hi"], _ID["▁"], 3]
 
     def test_decode(self, cls: type) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -811,11 +765,7 @@ def t5_pair() -> tuple[object, object, object]:
     if snapshot is None:
         pytest.skip("t5-small is not in the Hugging Face cache")
     theirs = tokenizers.Tokenizer.from_file(os.path.join(snapshot, "tokenizer.json"))
-    return (
-        theirs,
-        UnigramTokenizer.from_file(snapshot),
-        UnigramTokenizerFast.from_file(snapshot),
-    )
+    return (theirs, UnigramTokenizer.from_file(snapshot), UnigramTokenizerFast.from_file(snapshot))
 
 
 class TestT5SmallParity:

@@ -33,10 +33,7 @@ from lucid.compile import fused_step, make_step
 from lucid.compile._core.custom_backward import CustomBackwardInTrace
 from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
 from lucid.compile._entry.function import compiled_step
-from lucid.test.unit.compile.test_function_compile_classes import (
-    EXACT,
-    _scan_lucid_functions,
-)
+from lucid.test.unit.compile.test_function_compile_classes import EXACT, _scan_lucid_functions
 
 
 class _CheckpointedBlock(nn.Module):
@@ -59,19 +56,16 @@ def _interior_checkpoint_model(*, use_reentrant: bool, device: str) -> nn.Sequen
     """Stem ``Linear`` -> checkpointed block -> head ``Linear``."""
     lucid.manual_seed(0)
     return nn.Sequential(
-        nn.Linear(4, 4),
-        _CheckpointedBlock(use_reentrant=use_reentrant),
-        nn.Linear(4, 3),
+        nn.Linear(4, 4), _CheckpointedBlock(use_reentrant=use_reentrant), nn.Linear(4, 3)
     ).to(device)
 
 
 def _first_layer_checkpoint_model(*, use_reentrant: bool, device: str) -> nn.Sequential:
     """Checkpointed block fed raw ``x`` (no grad) -> head ``Linear``."""
     lucid.manual_seed(0)
-    return nn.Sequential(
-        _CheckpointedBlock(use_reentrant=use_reentrant),
-        nn.Linear(4, 3),
-    ).to(device)
+    return nn.Sequential(_CheckpointedBlock(use_reentrant=use_reentrant), nn.Linear(4, 3)).to(
+        device
+    )
 
 
 def _data(device: str) -> tuple[Tensor, Tensor]:
@@ -118,12 +112,7 @@ def test_ast_exact_derivative_set_matches_table() -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "use_reentrant"),
-    [
-        ("interior", False),
-        ("interior", True),
-        ("first_layer", False),
-    ],
+    ("kind", "use_reentrant"), [("interior", False), ("interior", True), ("first_layer", False)]
 )
 def test_tracked_checkpoint_compiles_under_make_step_and_matches_eager(
     device_gpu_only: str, kind: str, use_reentrant: bool
@@ -170,12 +159,7 @@ def test_interior_checkpoint_compiles_under_segmented_step_and_matches_eager(
 
 
 @pytest.mark.parametrize(
-    ("kind", "use_reentrant"),
-    [
-        ("interior", False),
-        ("interior", True),
-        ("first_layer", False),
-    ],
+    ("kind", "use_reentrant"), [("interior", False), ("interior", True), ("first_layer", False)]
 )
 def test_tracked_checkpoint_compiles_under_fused_step_and_matches_eager(
     device_gpu_only: str, kind: str, use_reentrant: bool
@@ -202,12 +186,7 @@ def test_tracked_checkpoint_compiles_under_fused_step_and_matches_eager(
 
 
 @pytest.mark.parametrize(
-    ("kind", "use_reentrant"),
-    [
-        ("interior", False),
-        ("interior", True),
-        ("first_layer", False),
-    ],
+    ("kind", "use_reentrant"), [("interior", False), ("interior", True), ("first_layer", False)]
 )
 def test_tracked_checkpoint_compiles_under_compiled_step_and_matches_eager(
     device_gpu_only: str, kind: str, use_reentrant: bool
@@ -226,9 +205,7 @@ def test_tracked_checkpoint_compiles_under_compiled_step_and_matches_eager(
     _assert_close_maps(_grads(model), want_grads)
 
 
-def test_reentrant_checkpoint_with_closure_only_params_is_refused(
-    device_gpu_only: str,
-) -> None:
+def test_reentrant_checkpoint_with_closure_only_params_is_refused(device_gpu_only: str) -> None:
     """``checkpoint(fn, x, use_reentrant=True)`` on ungrad ``x``: eager drops the block's grads."""
     device = device_gpu_only
     x, t = _data(device)
@@ -242,8 +219,7 @@ def test_reentrant_checkpoint_with_closure_only_params_is_refused(
 
     model = factory()
     with pytest.raises(
-        CustomBackwardInTrace,
-        match="receives no input that requires grad.*closed over",
+        CustomBackwardInTrace, match="receives no input that requires grad.*closed over"
     ):
         compiled_step(model, x, lambda y: F.mse_loss(y, t))
 
@@ -291,8 +267,7 @@ def test_reentrant_checkpoint_after_detached_parameter_path_is_refused(
 
     model = factory()
     with pytest.raises(
-        CustomBackwardInTrace,
-        match="receives no input that requires grad.*closed over",
+        CustomBackwardInTrace, match="receives no input that requires grad.*closed over"
     ):
         compiled_step(model, x, lambda y: F.mse_loss(y, t))
 

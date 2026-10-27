@@ -112,11 +112,7 @@ class TestPaperConfigurations:
         # usual way this creeps back in.
         model = IJEPAModel(_tiny())
         positions = model.encoder.pos_embed
-        assert tuple(int(s) for s in positions.shape) == (
-            1,
-            model.config.num_patches,
-            16,
-        )
+        assert tuple(int(s) for s in positions.shape) == (1, model.config.num_patches, 16)
         assert not any("cls" in name for name, _ in model.named_parameters())
 
     def test_no_weights_are_published_here(self) -> None:

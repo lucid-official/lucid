@@ -233,9 +233,7 @@ def test_a_write_through_a_view_at_an_offset_lands_there(x: lucid.Tensor) -> Non
     assert _flat(x) == [0.0, 1.0, 3.0, 4.0, 5.0, 5.0]
 
 
-def test_a_write_through_a_transposed_view_reaches_every_element(
-    x: lucid.Tensor,
-) -> None:
+def test_a_write_through_a_transposed_view_reaches_every_element(x: lucid.Tensor) -> None:
     t = _strided(x, [3, 2], [1, 3])  # x viewed as (2, 3), transposed
     t.mul_(10.0)
     assert _flat(x) == [0.0, 10.0, 20.0, 30.0, 40.0, 50.0]

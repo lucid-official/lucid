@@ -41,16 +41,7 @@ import sys
 import types
 from contextlib import contextmanager
 from collections.abc import Iterable
-from typing import (
-    TYPE_CHECKING,
-    Callable,
-    Iterator,
-    Protocol,
-    cast,
-    final,
-    overload,
-    override,
-)
+from typing import TYPE_CHECKING, Callable, Iterator, Protocol, cast, final, overload, override
 
 from lucid._C import engine as _C_engine
 from lucid._tensor import Tensor
@@ -400,10 +391,7 @@ def _refuse_if_already_recording() -> None:
 
 @contextmanager
 def _tracing(
-    watch: Iterable[object] = (),
-    module: _Module | None = None,
-    *,
-    fold_constants: bool = False,
+    watch: Iterable[object] = (), module: _Module | None = None, *, fold_constants: bool = False
 ) -> Iterator[Tracer]:
     """Install a fresh :class:`Tracer` for the calling thread.
 

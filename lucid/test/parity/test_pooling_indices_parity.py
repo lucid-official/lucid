@@ -58,9 +58,7 @@ def test_the_indices_round_trip_through_max_unpool2d(ref: Any) -> None:
 
 
 @pytest.mark.parity
-def test_overlapping_windows_unpool_like_the_reference_forward_and_back(
-    ref: Any,
-) -> None:
+def test_overlapping_windows_unpool_like_the_reference_forward_and_back(ref: Any) -> None:
     # Kernel 3, stride 2: neighbouring windows share an element and can
     # both report it, so an index repeats.  The forward writes it once, as
     # the reference does.  The gradient deliberately differs there: Lucid

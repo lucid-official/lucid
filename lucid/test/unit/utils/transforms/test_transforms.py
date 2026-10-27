@@ -40,11 +40,7 @@ class TestResizeFamily:
 
     def test_smallest_max_size(self) -> None:
         # shorter side (100) -> 64; 120 -> 77
-        assert tuple(T.SmallestMaxSize(64)(lucid.rand(3, 100, 120)).shape) == (
-            3,
-            64,
-            77,
-        )
+        assert tuple(T.SmallestMaxSize(64)(lucid.rand(3, 100, 120)).shape) == (3, 64, 77)
 
     def test_longest_max_size(self) -> None:
         # longer side (120) -> 60; 100 -> 50

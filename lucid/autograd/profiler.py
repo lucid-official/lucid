@@ -8,20 +8,6 @@ code that uses the ``autograd.profiler.profile`` path keeps working
 without forcing a redundant copy of the context manager.
 """
 
-from lucid.profiler import (
-    MemoryStats,
-    OpEvent,
-    ProfileSummary,
-    Profiler,
-    profile,
-    record_function,
-)
+from lucid.profiler import MemoryStats, OpEvent, ProfileSummary, Profiler, profile, record_function
 
-__all__ = [
-    "profile",
-    "record_function",
-    "Profiler",
-    "ProfileSummary",
-    "OpEvent",
-    "MemoryStats",
-]
+__all__ = ["profile", "record_function", "Profiler", "ProfileSummary", "OpEvent", "MemoryStats"]

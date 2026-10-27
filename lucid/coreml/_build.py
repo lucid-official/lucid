@@ -178,12 +178,7 @@ def _select_outputs(output: object, field: str | None) -> list[tuple[str, Tensor
         for position, value in enumerate(output):
             if not isinstance(value, lucid.Tensor):
                 continue
-            named.append(
-                (
-                    labels[position] if labels is not None else f"output_{position}",
-                    value,
-                )
-            )
+            named.append((labels[position] if labels is not None else f"output_{position}", value))
         if named:
             return named
     if dataclasses.is_dataclass(output) and not isinstance(output, type):
@@ -447,9 +442,7 @@ def _bind_traced_inputs(
 
 
 def _bind_traced_outputs(
-    selected: list[tuple[str, Tensor]],
-    answered: dict[str, Tensor],
-    tracer: Tracer,
+    selected: list[tuple[str, Tensor]], answered: dict[str, Tensor], tracer: Tracer
 ) -> list[tuple[str, int, Tensor]]:
     """Bind each selected output to its trace value id."""
     outputs: list[tuple[str, int, Tensor]] = []
@@ -467,9 +460,7 @@ def _bind_traced_outputs(
 
 
 def _restore_traced_examples(
-    tracer: Tracer | None,
-    examples: list[tuple[str, Tensor]],
-    held: list[_C_engine.TensorImpl],
+    tracer: Tracer | None, examples: list[tuple[str, Tensor]], held: list[_C_engine.TensorImpl]
 ) -> list[tuple[str, bool]]:
     if tracer is not None:
         tracer.restore_outside_writes()
@@ -1039,11 +1030,7 @@ def _values_already_there(ordered: Tensor, count: int) -> Tensor | None:
     """
     groups = int(ordered.shape[0])
     fresh = lucid.concat(
-        [
-            lucid.ones(groups, 1),
-            (ordered[:, 1:] != ordered[:, :-1]).to(lucid.float32),
-        ],
-        dim=1,
+        [lucid.ones(groups, 1), (ordered[:, 1:] != ordered[:, :-1]).to(lucid.float32)], dim=1
     )
     slot = (lucid.cumsum(fresh, dim=1) - 1.0).to(lucid.int64)
     if int(slot.max().item()) >= count:
@@ -1096,9 +1083,7 @@ def _palettes_for(rows: Tensor, count: int) -> Tensor:
         # its zero population would put a NaN in the table and take the
         # whole row's bisection with it.
         moved = lucid.where(
-            weights > 0,
-            totals / lucid.where(weights > 0, weights, ones[:, :1]),
-            centres,
+            weights > 0, totals / lucid.where(weights > 0, weights, ones[:, :1]), centres
         )
         # Re-sorted because the bisection needs a monotone table, and a
         # row whose entries crossed would otherwise answer nonsense.
@@ -1543,10 +1528,7 @@ class Builder:
         if len(kinds) < 2 and (target is None or kinds <= {target}):
             return names
         if target is None:
-            floats = {
-                _C_engine.coreml.DTYPE_FLOAT16,
-                _C_engine.coreml.DTYPE_FLOAT32,
-            }
+            floats = {_C_engine.coreml.DTYPE_FLOAT16, _C_engine.coreml.DTYPE_FLOAT32}
             settled = self._body_mil if kinds & floats else max(kinds)
         else:
             settled = target
@@ -1603,9 +1585,7 @@ class Builder:
         emitter does not have to know which case it is in.
         """
         return self.emit(
-            *emit_cast(self, name, "int32"),
-            self.shape_of(name),
-            dtype=_C_engine.coreml.DTYPE_INT32,
+            *emit_cast(self, name, "int32"), self.shape_of(name), dtype=_C_engine.coreml.DTYPE_INT32
         )
 
     def result_is_float(self, op: TracedOp, index: int = 0) -> bool:
@@ -1802,11 +1782,7 @@ class Builder:
         return name
 
     def emit(
-        self,
-        mil_type: str,
-        bindings: Bindings,
-        shape: Sequence[int],
-        dtype: int | None = None,
+        self, mil_type: str, bindings: Bindings, shape: Sequence[int], dtype: int | None = None
     ) -> str:
         """Append an intermediate operation and return its value name.
 
@@ -2190,10 +2166,7 @@ def _buffer_marks(model: Module) -> dict[str, float]:
 
 
 def _probe(
-    model: Module,
-    example: Tensor,
-    probes: list[tuple[int, ...]],
-    output_field: str | None,
+    model: Module, example: Tensor, probes: list[tuple[int, ...]], output_field: str | None
 ) -> _flex.Flexibility:
     """Which axes of which traced values change with the input shape.
 
@@ -2230,11 +2203,7 @@ def _record(model: Module, probe: Tensor, output_field: str | None) -> _flex.Rec
     given = int(inputs[0][1])
     return _flex.Record(
         [
-            (
-                op.name,
-                dict(op.attrs),
-                [tuple(int(d) for d in out.shape) for out in op.outputs],
-            )
+            (op.name, dict(op.attrs), [tuple(int(d) for d in out.shape) for out in op.outputs])
             for op in ops
         ],
         [out.id for op in ops for out in op.outputs],
@@ -2543,10 +2512,7 @@ def _init_program_and_state(ctx: _BuildCtx) -> None:
 
 
 def _write_palettized_const(
-    ctx: _BuildCtx,
-    name: str,
-    shape: list[int],
-    palettized: tuple[bytes, Tensor, list[int], int],
+    ctx: _BuildCtx, name: str, shape: list[int], palettized: tuple[bytes, Tensor, list[int], int]
 ) -> None:
     keys, palettes, lut_shape, key_bits = palettized
     offset = ctx.blob.append_bytes(keys, _C_engine.coreml.BLOB_SUBBYTE[str(key_bits)])
@@ -2566,10 +2532,7 @@ def _write_palettized_const(
 
 
 def _write_sparse_const(
-    ctx: _BuildCtx,
-    name: str,
-    shape: list[int],
-    sparse: tuple[Tensor, bytes, int],
+    ctx: _BuildCtx, name: str, shape: list[int], sparse: tuple[Tensor, bytes, int]
 ) -> None:
     values, mask, kept = sparse
     if ctx.half:
@@ -2685,12 +2648,7 @@ def _plan_rewrites_and_folding(ctx: _BuildCtx) -> None:
     ctx.absorbed = absorbed
     output_ids = {tid for _n, tid, _t in ctx.outputs}
     ctx.precomputed, ctx.folded = _fold.foldable(
-        ctx.graph,
-        ctx.feeds,
-        set(ctx.input_ids),
-        ctx.traced_values,
-        set(ctx.varying),
-        output_ids,
+        ctx.graph, ctx.feeds, set(ctx.input_ids), ctx.traced_values, set(ctx.varying), output_ids
     )
     staged_or_absorbed = set(ctx.rewrites) | set(ctx.stuffing) | absorbed
     ctx.thinned = _unit_axis_rewrites(ctx.graph, staged_or_absorbed, ctx.folded)
@@ -2703,10 +2661,7 @@ def _prepare_builder_and_inputs(ctx: _BuildCtx) -> None:
     builder.flex = ctx.flexibility
     builder.traced_names = ctx.names
     builder.thinned = set(ctx.thinned)
-    for held_name, held_shape in {
-        **ctx.weight_shapes,
-        **ctx.builder_shapes_state,
-    }.items():
+    for held_name, held_shape in {**ctx.weight_shapes, **ctx.builder_shapes_state}.items():
         builder.declare(held_name, held_shape)
     for weight_name in ctx.weight_shapes:
         builder.mark_const(weight_name)
@@ -2726,11 +2681,7 @@ def _prepare_builder_and_inputs(ctx: _BuildCtx) -> None:
         source = name
         if ctx.image_input is not None and name not in ctx.lifted_names:
             source = _declare_image(
-                ctx.program,
-                builder,
-                name,
-                [int(d) for d in tensor.shape],
-                ctx.image_input,
+                ctx.program, builder, name, [int(d) for d in tensor.shape], ctx.image_input
             )
             builder.declare(source, shape)
             ctx.names[tid] = source
@@ -2772,8 +2723,7 @@ def _emit_one_folded_constant(ctx: _BuildCtx, tid: int) -> bool:
         return True
     if folded_value.dtype in (lucid.int8, lucid.int16, lucid.int32, lucid.int64):
         ctx.names[tid] = builder.const_ints_shaped(
-            [int(v) for v in _flatten(folded_value, _as_int)],
-            [int(d) for d in folded_value.shape],
+            [int(v) for v in _flatten(folded_value, _as_int)], [int(d) for d in folded_value.shape]
         )
         return True
     return False
@@ -2830,11 +2780,7 @@ def _emit_single_op(ctx: _BuildCtx, op: TraceNode) -> None:
     if emitter is None:
         raise UnsupportedOp(op.name)
     operands = [_named(ctx.names, i, f"operation {op.name!r}") for i in op.inputs]
-    result = emitter(
-        builder,
-        _flex.GuardedOp(op, ctx.varying) if ctx.varying else op,
-        operands,
-    )
+    result = emitter(builder, _flex.GuardedOp(op, ctx.varying) if ctx.varying else op, operands)
     if isinstance(result, Constant):
         ctx.names[op.outputs[0].id] = result.name
         return
@@ -2929,9 +2875,7 @@ def _set_package_metadata(ctx: _BuildCtx) -> None:
         _C_engine.coreml.finish_package(ctx.paths, ctx.program.serialize())
 
 
-def _declare_outputs_and_metadata(
-    ctx: _BuildCtx,
-) -> list[tuple[str, tuple[int, ...]]]:
+def _declare_outputs_and_metadata(ctx: _BuildCtx) -> list[tuple[str, tuple[int, ...]]]:
     """Declare program outputs, state write-backs, classifier head, and metadata."""
     if ctx.classifier is not None:
         _check_classifier(ctx.classifier, ctx.outputs)
@@ -2940,8 +2884,7 @@ def _declare_outputs_and_metadata(
     for field, tid, tensor in ctx.outputs:
         if field in written:
             ctx.program.write_state(
-                written[field],
-                _named(ctx.names, tid, f"the state written from {field!r}"),
+                written[field], _named(ctx.names, tid, f"the state written from {field!r}")
             )
             continue
         value = _named(ctx.names, tid, f"output {field!r}")
@@ -2976,9 +2919,7 @@ def _declare_outputs_and_metadata(
     return declared
 
 
-def _weights_summary_name(
-    weights: WeightPrecision | _spec.Palettize | _spec.Sparsify,
-) -> str:
+def _weights_summary_name(weights: WeightPrecision | _spec.Palettize | _spec.Sparsify) -> str:
     if isinstance(weights, WeightPrecision):
         return weights.value
     if isinstance(weights, _spec.Palettize):
@@ -3108,10 +3049,7 @@ def build_package(
             "precision=Precision.FLOAT16 as well"
         )
     target = _settle_target(
-        minimum_deployment_target,
-        state=state,
-        weights=weights,
-        functions=into is not None,
+        minimum_deployment_target, state=state, weights=weights, functions=into is not None
     )
     body_mil, body_blob = _spec.body_dtypes(precision)
     return _run_build_pipeline(

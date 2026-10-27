@@ -20,10 +20,7 @@ import lucid.linalg as LA
 
 
 def _to_ref_dtype(ref: ModuleType, dt: lucid.dtype) -> object:
-    return {
-        lucid.float32: ref.float32,
-        lucid.float64: ref.float64,
-    }[dt]
+    return {lucid.float32: ref.float32, lucid.float64: ref.float64}[dt]
 
 
 def test_matrix_rank_signature_exposes_tol_hermitian_atol_rtol() -> None:
@@ -57,10 +54,7 @@ def test_batched_matrix_rank_reduces_per_matrix_not_globally(ref: ModuleType, de
 @pytest.mark.parametrize("batch_shape", [(3,), (2, 4), (2, 1, 3)])
 @pytest.mark.parametrize("mat_shape", [(3, 3), (4, 2), (2, 5)])
 def test_higher_rank_batches_match_reference(
-    ref: ModuleType,
-    device: str,
-    batch_shape: tuple[int, ...],
-    mat_shape: tuple[int, ...],
+    ref: ModuleType, device: str, batch_shape: tuple[int, ...], mat_shape: tuple[int, ...]
 ) -> None:
     rng = np.random.default_rng(42)
     m, n = mat_shape
@@ -102,10 +96,7 @@ def test_float64_default_tolerance_uses_float64_eps(ref: ModuleType) -> None:
     "rtol", [None, -1.0, 0.0, 1e-10, 1e-5, 0.05, 0.5, float("inf"), float("-inf")]
 )
 def test_scalar_atol_rtol_grid_matches_reference(
-    ref: ModuleType,
-    dtype: lucid.dtype,
-    atol: float | None,
-    rtol: float | None,
+    ref: ModuleType, dtype: lucid.dtype, atol: float | None, rtol: float | None
 ) -> None:
     arr = np.array(
         [
@@ -127,13 +118,7 @@ def test_scalar_atol_rtol_grid_matches_reference(
 def test_tol_positional_and_keyword_matches_reference(
     ref: ModuleType, device: str, tol: float
 ) -> None:
-    arr = np.array(
-        [
-            [[1.0, 0.0], [0.0, 1e-8]],
-            [[1e10, 0.0], [0.0, 1.0]],
-        ],
-        dtype=np.float32,
-    )
+    arr = np.array([[[1.0, 0.0], [0.0, 1e-8]], [[1e10, 0.0], [0.0, 1.0]]], dtype=np.float32)
     a_l = lucid.tensor(arr, dtype=lucid.float32, device=device)
     a_r = ref.tensor(arr, dtype=ref.float32)
     got_pos = LA.matrix_rank(a_l, tol)
@@ -282,9 +267,7 @@ def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(ref: ModuleType, de
     assert np.allclose(b2_l.grad.numpy(), b2_r.grad.numpy(), atol=1e-5)
 
     x_ex_l, info_l = LA.solve_ex(
-        lucid.tensor(a_np, device=device),
-        lucid.tensor(b2_np, device=device),
-        left=False,
+        lucid.tensor(a_np, device=device), lucid.tensor(b2_np, device=device), left=False
     )
     x_ex_r, info_r = ref.linalg.solve_ex(ref.tensor(a_np), ref.tensor(b2_np), left=False)
     assert np.allclose(x_ex_l.numpy(), x_ex_r.numpy(), atol=1e-5)
@@ -292,9 +275,7 @@ def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(ref: ModuleType, de
 
     with pytest.raises(RuntimeError):
         LA.solve(
-            lucid.tensor(a_np[0], device=device),
-            lucid.tensor(b1_np, device=device),
-            left=False,
+            lucid.tensor(a_np[0], device=device), lucid.tensor(b1_np, device=device), left=False
         )
     with pytest.raises(RuntimeError):
         ref.linalg.solve(ref.tensor(a_np[0]), ref.tensor(b1_np), left=False)
@@ -302,11 +283,7 @@ def test_solve_and_solve_ex_left_false_and_matrix_norm_dtype(ref: ModuleType, de
     # Batched vector B (shape == A.shape[:-1]) is also refused under left=False,
     # whereas 2-D B against higher-rank A broadcasts across the batch.
     with pytest.raises(RuntimeError):
-        LA.solve(
-            lucid.tensor(a_np, device=device),
-            lucid.zeros(2, 3, device=device),
-            left=False,
-        )
+        LA.solve(lucid.tensor(a_np, device=device), lucid.zeros(2, 3, device=device), left=False)
     a4_l = lucid.tensor(a_np[:, None], device=device)
     b_unbatched_l = lucid.tensor(b2_np[0], device=device)
     x4_l = LA.solve(a4_l, b_unbatched_l, left=False)

@@ -105,11 +105,7 @@ def test_a_scorer_with_extra_arguments_still_takes_them(validate: bool) -> None:
     base = dist.log_prob(_t(0.5)).item()
     assert dist.log_prob(_t(0.5), weight=2.0).item() == pytest.approx(2 * base)
     assert dist.log_prob(_t(0.5), 3.0).item() == pytest.approx(3 * base)
-    assert list(inspect.signature(_Weighted.log_prob).parameters) == [
-        "self",
-        "value",
-        "weight",
-    ]
+    assert list(inspect.signature(_Weighted.log_prob).parameters) == ["self", "value", "weight"]
 
 
 def test_init_subclass_forwards_class_keywords() -> None:

@@ -21,11 +21,7 @@ import lucid.nn as nn
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
-from lucid.models._output import (
-    DiffusionModelOutput,
-    GenerationOutput,
-    ModelOutput,
-)
+from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._utils._generative import (
     make_beta_schedule,
@@ -42,11 +38,7 @@ from lucid.models.generative._common._transformers import (
 )
 from lucid.models.generative.dit._config import DiTConfig
 
-__all__ = [
-    "DiTModel",
-    "DiTForImageGeneration",
-    "DiTOutput",
-]
+__all__ = ["DiTModel", "DiTForImageGeneration", "DiTOutput"]
 
 
 def _beta_schedule(config: DiTConfig) -> Tensor:
@@ -276,9 +268,7 @@ class DiTModel(PretrainedModel):
             stride=config.patch_size,
         )
         self.register_buffer(
-            "pos_embed",
-            sincos_position_embedding(config.hidden_size, self.grid),
-            persistent=False,
+            "pos_embed", sincos_position_embedding(config.hidden_size, self.grid), persistent=False
         )
 
         # ADM's way of admitting a timestep: sinusoid, then a two-layer
@@ -334,9 +324,7 @@ class DiTModel(PretrainedModel):
         and the caller combines.
         """
         emb = timestep_embedding(
-            timesteps,
-            self.config.frequency_embedding_size,
-            dtype=self.patch_embed.weight.dtype,
+            timesteps, self.config.frequency_embedding_size, dtype=self.patch_embed.weight.dtype
         )
         time = self.time_mlp(emb)
         if labels is None:
@@ -350,10 +338,7 @@ class DiTModel(PretrainedModel):
 
     @override
     def forward(
-        self,
-        latent: Tensor,
-        timesteps: Tensor,
-        labels: Tensor | None = None,
+        self, latent: Tensor, timesteps: Tensor, labels: Tensor | None = None
     ) -> DiffusionModelOutput:
         r"""Predict the noise (and covariance) in a noised latent.
 
@@ -375,11 +360,7 @@ class DiTModel(PretrainedModel):
             :class:`DiTForImageGeneration`.
         """
         check_latent_size(
-            int(latent.shape[-2]),
-            int(latent.shape[-1]),
-            self.grid,
-            self.config.patch_size,
-            "DiT",
+            int(latent.shape[-2]), int(latent.shape[-1]), self.grid, self.config.patch_size, "DiT"
         )
         tokens = self.patch_embed(latent)
         tokens = tokens.reshape(tokens.shape[0], tokens.shape[1], -1).permute(0, 2, 1)
@@ -407,10 +388,7 @@ class DiTModel(PretrainedModel):
                 tokens = cast(DiTBlock, block)(tokens, cond)
 
         image = unpatchify(
-            self.final(tokens, cond),
-            self.grid,
-            self.config.patch_size,
-            self.config.out_channels,
+            self.final(tokens, cond), self.grid, self.config.patch_size, self.config.out_channels
         )
         return DiffusionModelOutput(sample=image)
 
@@ -524,12 +502,7 @@ class DiTForImageGeneration(ImageGenerationModel):
             drop = lucid.rand((batch,), device=device) < config.class_dropout
             labels = lucid.where(
                 drop,
-                lucid.full(
-                    (batch,),
-                    float(config.num_classes),
-                    dtype=labels.dtype,
-                    device=device,
-                ),
+                lucid.full((batch,), float(config.num_classes), dtype=labels.dtype, device=device),
                 labels,
             )
 

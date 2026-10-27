@@ -28,8 +28,7 @@ DEVICES = ["cpu", "metal"]
 
 def _t(*shape, device="cpu", seed=0):
     return lucid.tensor(
-        np.random.default_rng(seed).standard_normal(shape).astype(np.float32),
-        device=device,
+        np.random.default_rng(seed).standard_normal(shape).astype(np.float32), device=device
     )
 
 

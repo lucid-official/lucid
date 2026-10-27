@@ -19,24 +19,7 @@ import lucid
 import lucid.nn.functional as F
 from lucid.autograd import Function
 
-_VALUES = [
-    -1.5,
-    0.5,
-    2.0,
-    7.0,
-    -0.3,
-    3.2,
-    1.1,
-    -2.4,
-    0.7,
-    5.5,
-    -4.1,
-    2.9,
-    0.2,
-    -0.9,
-    6.3,
-    1.7,
-]
+_VALUES = [-1.5, 0.5, 2.0, 7.0, -0.3, 3.2, 1.1, -2.4, 0.7, 5.5, -4.1, 2.9, 0.2, -0.9, 6.3, 1.7]
 
 
 def _values(out):
@@ -201,10 +184,7 @@ _CASES = {
     "dropout2d_eval": lambda e, x: e.F.dropout2d(x.reshape(1, 4, 2, 2), 0.5, training=False),
     "alpha_dropout_eval": lambda e, x: e.F.alpha_dropout(x, 0.5, training=False),
     "batch_norm_eval": lambda e, x: e.F.batch_norm(
-        x.reshape(4, 4),
-        e.t([0.5, -1.0, 0.0, 2.0]),
-        e.t([1.0, 0.5, 2.0, 4.0]),
-        training=False,
+        x.reshape(4, 4), e.t([0.5, -1.0, 0.0, 2.0]), e.t([1.0, 0.5, 2.0, 4.0]), training=False
     ),
     "batch_norm_eval_affine": lambda e, x: e.F.batch_norm(
         x.reshape(2, 4, 2),
@@ -216,10 +196,7 @@ _CASES = {
     ),
     "batch_norm_eval_squared": lambda e, x: (
         e.F.batch_norm(
-            x.reshape(4, 4),
-            e.t([0.5, -1.0, 0.0, 2.0]),
-            e.t([1.0, 0.5, 2.0, 4.0]),
-            training=False,
+            x.reshape(4, 4), e.t([0.5, -1.0, 0.0, 2.0]), e.t([1.0, 0.5, 2.0, 4.0]), training=False
         )
         ** 2
     ),
@@ -327,20 +304,13 @@ def test_hessian_strict_matches_reference(ref, device, kind, fn):
 
 @pytest.mark.parametrize(
     "kind,fn",
-    [
-        ("linear", lambda a: a * 2),
-        ("affine", lambda a: a * 3 + 1),
-        ("quadratic", lambda a: a * a),
-    ],
+    [("linear", lambda a: a * 2), ("affine", lambda a: a * 3 + 1), ("quadratic", lambda a: a * a)],
     ids=["linear", "affine", "quadratic"],
 )
 def test_jacobian_strict_create_graph_matches_reference(ref, device, kind, fn):
     def run(lib, x):
         try:
-            return (
-                _functional(lib).jacobian(fn, x, create_graph=True, strict=True),
-                None,
-            )
+            return (_functional(lib).jacobian(fn, x, create_graph=True, strict=True), None)
         except RuntimeError as err:
             return None, err
 

@@ -11,13 +11,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d, PaddingMode
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
-from lucid.nn.modules._conv_common import (
-    _single,
-    _conv_parameters,
-    _LazyConvMixin,
-    _pair,
-    _triple,
-)
+from lucid.nn.modules._conv_common import _single, _conv_parameters, _LazyConvMixin, _pair, _triple
 from lucid.nn.modules.conv_transpose import (  # importable from here, as before
     ConvTranspose1d as ConvTranspose1d,
     ConvTranspose2d as ConvTranspose2d,
@@ -459,11 +453,7 @@ class Conv2d(_ConvNd):
             (0, 0) if isinstance(padding, str) else _pair(padding, "padding")
         )
         self.weight, self.bias = _conv_parameters(
-            (out_channels, in_channels // groups, kh, kw),
-            out_channels,
-            bias,
-            device,
-            dtype,
+            (out_channels, in_channels // groups, kh, kw), out_channels, bias, device, dtype
         )
 
 
@@ -614,11 +604,7 @@ class Conv3d(_ConvNd):
             (0, 0, 0) if isinstance(padding, str) else _triple(padding, "padding")
         )
         self.weight, self.bias = _conv_parameters(
-            (out_channels, in_channels // groups, kd, kh, kw),
-            out_channels,
-            bias,
-            device,
-            dtype,
+            (out_channels, in_channels // groups, kd, kh, kw), out_channels, bias, device, dtype
         )
 
 

@@ -91,9 +91,7 @@ def _mark_isolation[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
 # ── internal helpers ──────────────────────────────────────────────────────────
 
 
-def _normalise_argnums(
-    argnums: int | tuple[int, ...],
-) -> tuple[bool, tuple[int, ...]]:
+def _normalise_argnums(argnums: int | tuple[int, ...]) -> tuple[bool, tuple[int, ...]]:
     if isinstance(argnums, int):
         return True, (argnums,)
     return False, tuple(argnums)
@@ -199,10 +197,7 @@ def _replay_draws() -> Callable[[], None]:
     return rewind
 
 
-def _normalise_in_dims(
-    in_dims: int | tuple[int | None, ...],
-    n_args: int,
-) -> list[int | None]:
+def _normalise_in_dims(in_dims: int | tuple[int | None, ...], n_args: int) -> list[int | None]:
     if isinstance(in_dims, int):
         return [in_dims] * n_args
     dims: list[int | None] = list(in_dims[:n_args])
@@ -241,11 +236,7 @@ def _combine_outputs(
         n_o = len(first)
         ods: list[int] = [out_dims] * n_o if isinstance(out_dims, int) else list(out_dims)
         return tuple(
-            combine(
-                [r[i] for r in items if isinstance(r, tuple)],
-                ods[i],
-            )
-            for i in range(n_o)
+            combine([r[i] for r in items if isinstance(r, tuple)], ods[i]) for i in range(n_o)
         )
     od_i: int = out_dims if isinstance(out_dims, int) else out_dims[0]
     return combine([t for t in items if isinstance(t, _T)], od_i)
@@ -375,10 +366,7 @@ def vmap(
             f"vmap: strategy must be 'auto', 'isolated', or 'vectorized'; " f"got {strategy!r}"
         )
 
-    def vectorized(
-        *args: Tensor,
-        **kwargs: object,
-    ) -> Tensor | tuple[Tensor, ...]:
+    def vectorized(*args: Tensor, **kwargs: object) -> Tensor | tuple[Tensor, ...]:
         """Run ``func`` across the batched axis of each input.
 
         Inputs whose ``in_dims`` entry is not ``None`` must share the
@@ -643,9 +631,7 @@ def grad_and_value[**P](
 
 
 def vjp(
-    func: Callable[..., Tensor | tuple[object, ...]],
-    *primals: Tensor,
-    has_aux: bool = False,
+    func: Callable[..., Tensor | tuple[object, ...]], *primals: Tensor, has_aux: bool = False
 ) -> tuple[
     Tensor | tuple[Tensor, ...] | tuple[Tensor | tuple[Tensor, ...], object],
     Callable[..., tuple[Tensor | None, ...]],
@@ -900,10 +886,7 @@ def jvp(
         )
     fn, idx = _on_tensors(func, primals_t)
     return _jvp_attached(
-        fn,
-        tuple(primals_t[i] for i in idx),
-        tuple(tangents_t[i] for i in idx),
-        strict,
+        fn, tuple(primals_t[i] for i in idx), tuple(tangents_t[i] for i in idx), strict
     )
 
 
@@ -911,8 +894,7 @@ def jvp(
 
 
 def linearize(
-    func: Callable[..., Tensor | tuple[Tensor, ...]],
-    *primals: Tensor,
+    func: Callable[..., Tensor | tuple[Tensor, ...]], *primals: Tensor
 ) -> tuple[Tensor | tuple[Tensor, ...], Callable[..., Tensor | tuple[Tensor, ...]]]:
     r"""Linearise ``func`` around ``primals`` for reuse across many tangents.
 
@@ -967,9 +949,7 @@ def linearize(
     primals_out = _output_tensors(func(*primals), "linearize")
     attached, primal_attached = _attachment(primals_sel, primals_out)
 
-    def linear_fn(
-        *tangents: Tensor,
-    ) -> Tensor | tuple[Tensor, ...]:
+    def linear_fn(*tangents: Tensor) -> Tensor | tuple[Tensor, ...]:
         """Closure that applies the linear approximation."""
         if len(tangents) != len(primals):
             raise RuntimeError(
@@ -1030,12 +1010,7 @@ def _jacfwd_block(
             for k, p in enumerate(primals)
         )
         _, jvp_col = _tangent_pass(
-            wrapped_fn,
-            primals,
-            tans,
-            attach=attach,
-            required=required,
-            strict=False,
+            wrapped_fn, primals, tans, attach=attach, required=required, strict=False
         )
         jc = jvp_col[0] if isinstance(jvp_col, tuple) else jvp_col
         cols.append(jc.reshape(-1))
@@ -1110,9 +1085,7 @@ def jacrev[**P](
 
         def _wrapped(*sel: Tensor) -> Tensor | tuple[Tensor, ...]:
             out, aux = _split_aux(
-                call(*_splice(args, _argnums, sel), **kwargs),
-                has_aux=has_aux,
-                name="jacrev",
+                call(*_splice(args, _argnums, sel), **kwargs), has_aux=has_aux, name="jacrev"
             )
             aux_holder.append(aux)
             return _output_tensors(out, "jacrev")
@@ -1196,21 +1169,12 @@ def jacfwd[**P](
 
             def _wrapped(*sel: Tensor) -> Tensor | tuple[Tensor, ...]:
                 out, _ = _split_aux(
-                    call(*_splice(args, _argnums, sel), **kwargs),
-                    has_aux=has_aux,
-                    name="jacfwd",
+                    call(*_splice(args, _argnums, sel), **kwargs), has_aux=has_aux, name="jacfwd"
                 )
                 return _output_tensors(out, "jacfwd")
 
             results = tuple(
-                _jacfwd_block(
-                    _wrapped,
-                    primals,
-                    k,
-                    out_shape,
-                    attach=attach,
-                    required=required,
-                )
+                _jacfwd_block(_wrapped, primals, k, out_shape, attach=attach, required=required)
                 for k in range(len(_argnums))
             )
 
@@ -1224,8 +1188,7 @@ def jacfwd[**P](
 
 
 def hessian[**P](
-    func: Callable[P, Tensor],
-    argnums: int | tuple[int, ...] = 0,
+    func: Callable[P, Tensor], argnums: int | tuple[int, ...] = 0
 ) -> Callable[P, Tensor | tuple[tuple[Tensor, ...], ...]]:
     r"""Build a function returning the Hessian of a scalar-valued ``func``.
 
@@ -1286,9 +1249,7 @@ def hessian[**P](
 
 
 def _splice(
-    args: tuple[object, ...],
-    argnums: tuple[int, ...],
-    selected: tuple[object, ...],
+    args: tuple[object, ...], argnums: tuple[int, ...], selected: tuple[object, ...]
 ) -> tuple[object, ...]:
     """Replace args at argnums positions with selected values."""
     lst = list(args)

@@ -207,11 +207,7 @@ class CompressionAware(Module):
     step is not better — it moves the target the model is chasing.
     """
 
-    def __init__(
-        self,
-        model: Module,
-        weights: WeightPrecision | Palettize | Sparsify,
-    ) -> None:
+    def __init__(self, model: Module, weights: WeightPrecision | Palettize | Sparsify) -> None:
         super().__init__()
         if weights == WeightPrecision.FLOAT:
             raise ValueError(

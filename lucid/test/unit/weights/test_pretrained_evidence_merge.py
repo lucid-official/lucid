@@ -17,9 +17,7 @@ def _pass(name: str) -> dict[str, object]:
     return {"model": name, "max_diff": 1e-6, "top1_agrees": True}
 
 
-def test_partial_reports_can_cover_disjoint_factories_with_provenance(
-    tmp_path: Path,
-) -> None:
+def test_partial_reports_can_cover_disjoint_factories_with_provenance(tmp_path: Path) -> None:
     first = _report(tmp_path / "first.json", [_pass("a")])
     second = _report(tmp_path / "second.json", [_pass("b")])
     result = merge([first, second], {"a", "b"})
@@ -70,9 +68,7 @@ def test_duplicate_observations_in_one_report_are_rejected(tmp_path: Path) -> No
         merge([report], {"a"})
 
 
-def test_successful_recheck_keeps_original_report_failure_diagnostics(
-    tmp_path: Path,
-) -> None:
+def test_successful_recheck_keeps_original_report_failure_diagnostics(tmp_path: Path) -> None:
     failed = tmp_path / "failed.json"
     failed.write_text(
         json.dumps(

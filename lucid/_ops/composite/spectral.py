@@ -487,10 +487,7 @@ def stft(
 
 
 def _stft_output(
-    input: Tensor,
-    window: Tensor | None,
-    return_complex: bool | None,
-    onesided: bool | None,
+    input: Tensor, window: Tensor | None, return_complex: bool | None, onesided: bool | None
 ) -> tuple[bool, bool]:
     """``return_complex`` and ``onesided`` resolved against the frames' dtype."""
     complex_frames = input.is_complex() or (window is not None and window.is_complex())
@@ -525,10 +522,7 @@ def _overlap_add(frames: Tensor, hop: int) -> Tensor:
     batch, n_frames, n_fft = (int(s) for s in frames.shape)
     length = n_fft + hop * (n_frames - 1)
     folded = fold(
-        frames.transpose(1, 2),
-        output_size=(1, length),
-        kernel_size=(1, n_fft),
-        stride=(1, hop),
+        frames.transpose(1, 2), output_size=(1, length), kernel_size=(1, n_fft), stride=(1, hop)
     )
     return folded.reshape(batch, length)
 

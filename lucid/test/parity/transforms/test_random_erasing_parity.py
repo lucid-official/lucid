@@ -112,14 +112,7 @@ class TestRandomErasingApplyParity:
 
         assert_close(lucid_out, ref_out, atol=1e-6, rtol=0.0)
 
-    @pytest.mark.parametrize(
-        "i, j, h, w",
-        [
-            (5, 10, 20, 30),
-            (0, 0, 16, 16),
-            (32, 32, 30, 30),
-        ],
-    )
+    @pytest.mark.parametrize("i, j, h, w", [(5, 10, 20, 30), (0, 0, 16, 16), (32, 32, 30, 30)])
     def test_per_channel_tuple_fill(self, i: int, j: int, h: int, w: int) -> None:
         """Per-channel ImageNet-mean fill — matches reference channel-by-channel."""
         lucid_img, ref_img = _matched_image(seed=1)

@@ -173,18 +173,12 @@ class TestHueSaturationValue:
     def test_fixed_hue_shift_ballpark(self) -> None:
         chw, hwc = _image(0)
         tf = T.HueSaturationValue(
-            hue_shift_limit=(10, 10),
-            sat_shift_limit=(0, 0),
-            val_shift_limit=(0, 0),
-            p=1.0,
+            hue_shift_limit=(10, 10), sat_shift_limit=(0, 0), val_shift_limit=(0, 0), p=1.0
         )
         got = _run_lucid(tf, chw)
         ref = _run_albu(
             A.HueSaturationValue(
-                hue_shift_limit=(10, 10),
-                sat_shift_limit=(0, 0),
-                val_shift_limit=(0, 0),
-                p=1.0,
+                hue_shift_limit=(10, 10), sat_shift_limit=(0, 0), val_shift_limit=(0, 0), p=1.0
             ),
             hwc,
         )
@@ -194,10 +188,7 @@ class TestHueSaturationValue:
     def test_zero_shifts_identity(self) -> None:
         chw, _ = _image(1)
         tf = T.HueSaturationValue(
-            hue_shift_limit=(0, 0),
-            sat_shift_limit=(0, 0),
-            val_shift_limit=(0, 0),
-            p=1.0,
+            hue_shift_limit=(0, 0), sat_shift_limit=(0, 0), val_shift_limit=(0, 0), p=1.0
         )
         got = _run_lucid(tf, chw)
         ref = np.transpose(chw.numpy(), (1, 2, 0))
@@ -216,12 +207,7 @@ class TestRGBShift:
 
     def test_fixed_r_shift_matches_lucid_formula(self) -> None:
         chw, _ = _image(0)
-        tf = T.RGBShift(
-            r_shift_limit=(20, 20),
-            g_shift_limit=(0, 0),
-            b_shift_limit=(0, 0),
-            p=1.0,
-        )
+        tf = T.RGBShift(r_shift_limit=(20, 20), g_shift_limit=(0, 0), b_shift_limit=(0, 0), p=1.0)
         got = _run_lucid(tf, chw)
         ref_chw = chw.numpy().copy()
         ref_chw[0] = np.clip(ref_chw[0] + 20.0 / 255.0, 0.0, 1.0)
@@ -233,12 +219,7 @@ class TestRGBShift:
 
     def test_zero_shifts_identity(self) -> None:
         chw, _ = _image(1)
-        tf = T.RGBShift(
-            r_shift_limit=(0, 0),
-            g_shift_limit=(0, 0),
-            b_shift_limit=(0, 0),
-            p=1.0,
-        )
+        tf = T.RGBShift(r_shift_limit=(0, 0), g_shift_limit=(0, 0), b_shift_limit=(0, 0), p=1.0)
         got = _run_lucid(tf, chw)
         ref = np.transpose(chw.numpy(), (1, 2, 0))
         np.testing.assert_allclose(got, ref, atol=1e-6)
@@ -246,21 +227,11 @@ class TestRGBShift:
     def test_albu_smoke_uint8_ballpark(self) -> None:
         chw, hwc = _image(2)
         got = _run_lucid(
-            T.RGBShift(
-                r_shift_limit=(20, 20),
-                g_shift_limit=(0, 0),
-                b_shift_limit=(0, 0),
-                p=1.0,
-            ),
+            T.RGBShift(r_shift_limit=(20, 20), g_shift_limit=(0, 0), b_shift_limit=(0, 0), p=1.0),
             chw,
         )
         ref = _run_albu(
-            A.RGBShift(
-                r_shift_limit=(20, 20),
-                g_shift_limit=(0, 0),
-                b_shift_limit=(0, 0),
-                p=1.0,
-            ),
+            A.RGBShift(r_shift_limit=(20, 20), g_shift_limit=(0, 0), b_shift_limit=(0, 0), p=1.0),
             hwc,
         )
         assert got.shape == ref.shape

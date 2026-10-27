@@ -136,10 +136,7 @@ def run() -> DoctestResult:
             # The count is the finding; ``--json`` carries the detail.
             with contextlib.redirect_stdout(buffer):
                 outcome = doctest.testmod(
-                    module,
-                    verbose=False,
-                    optionflags=_OPTIONS,
-                    extraglobs={"lucid": lucid},
+                    module, verbose=False, optionflags=_OPTIONS, extraglobs={"lucid": lucid}
                 )
         except Exception:  # noqa: BLE001 - surveying, not asserting
             continue
@@ -192,10 +189,4 @@ def regressions(result: DoctestResult, floor: dict[str, int]) -> list[tuple[str,
     return out
 
 
-__all__ = [
-    "DoctestResult",
-    "load_floor",
-    "regressions",
-    "run",
-    "save_floor",
-]
+__all__ = ["DoctestResult", "load_floor", "regressions", "run", "save_floor"]

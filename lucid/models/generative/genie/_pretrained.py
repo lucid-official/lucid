@@ -25,12 +25,7 @@ from lucid.models._utils._common import apply_overrides, reject_unavailable_pret
 from lucid.models.generative.genie._config import GenieConfig
 from lucid.models.generative.genie._model import GenieForWorldModeling, GenieModel
 
-__all__ = [
-    "genie",
-    "genie_world_model",
-    "genie_coinrun",
-    "genie_coinrun_world_model",
-]
+__all__ = ["genie", "genie_world_model", "genie_coinrun", "genie_coinrun_world_model"]
 
 
 _CFG_PLATFORMERS = GenieConfig()

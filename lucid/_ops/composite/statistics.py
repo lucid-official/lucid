@@ -65,8 +65,7 @@ def _quantile_sorted(
                 sorted_x[round(idx_f)]
                 if dim is None
                 else sorted_x.index_select(
-                    dim,
-                    lucid.tensor([round(idx_f)], dtype=lucid.int64, device=sorted_x.device),
+                    dim, lucid.tensor([round(idx_f)], dtype=lucid.int64, device=sorted_x.device)
                 ).squeeze(dim)
             )
         else:
@@ -223,11 +222,7 @@ def quantile(
 
 
 def _pack_quantile_results(
-    results: list[Tensor],
-    scalar_q: bool,
-    ndim: int,
-    dim: int | None,
-    keepdim: bool,
+    results: list[Tensor], scalar_q: bool, ndim: int, dim: int | None, keepdim: bool
 ) -> Tensor:
     """Stack quantile slices and restore ``(1,) * ndim`` when ``dim=None, keepdim=True``."""
     if dim is None and keepdim and ndim > 0:
@@ -547,11 +542,7 @@ def cdist(
 # ── bincount ──────────────────────────────────────────────────────────────────
 
 
-def bincount(
-    input: Tensor,
-    weights: Tensor | None = None,
-    minlength: int = 0,
-) -> Tensor:
+def bincount(input: Tensor, weights: Tensor | None = None, minlength: int = 0) -> Tensor:
     """Count occurrences of each integer value in ``input``.
 
     One ``scatter_add`` into a zero tensor of the output's length.  That
@@ -739,11 +730,7 @@ def multinomial(
         cdf = rows.cumsum(dim=-1)
         cdf = cdf / cdf[:, -1:]
         u = lucid.rand(
-            batch,
-            num_samples,
-            dtype=rows.dtype,
-            device=rows.device,
-            generator=generator,
+            batch, num_samples, dtype=rows.dtype, device=rows.device, generator=generator
         )
         # The comparison is (batch, samples, k); chunking the samples keeps it
         # bounded however many draws are asked for.
@@ -766,10 +753,7 @@ def multinomial(
     return idx.reshape(num_samples) if input.ndim == 1 else idx
 
 
-def poisson(
-    input: Tensor,
-    generator: _C_engine.Generator | None = None,
-) -> Tensor:
+def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tensor:
     r"""Sample element-wise from :math:`\mathrm{Poisson}(\text{rate} = \text{input}[i])`.
 
     Parameters
@@ -910,15 +894,7 @@ def histogram2d(
         lo_b, hi_b = float(lo_b), float(hi_b)
 
     counts_impl, edges_impl = _C_engine.histogram2d(
-        _unwrap(x),
-        _unwrap(y),
-        int(nbins_a),
-        int(nbins_b),
-        lo_a,
-        hi_a,
-        lo_b,
-        hi_b,
-        density,
+        _unwrap(x), _unwrap(y), int(nbins_a), int(nbins_b), lo_a, hi_a, lo_b, hi_b, density
     )
     # Engine packs both edge arrays into a single (a+b+2,)-length tensor;
     # split it back into the ``(bins_a + 1, bins_b + 1)`` pair the user
@@ -931,11 +907,7 @@ def histogram2d(
 
 
 def _histogramdd_weighted(
-    input: Tensor,
-    weight: Tensor,
-    bins_seq: list[int],
-    edges_list: list[Tensor],
-    density: bool,
+    input: Tensor, weight: Tensor, bins_seq: list[int], edges_list: list[Tensor], density: bool
 ) -> Tensor:
     """Compute weighted N-D histogram counts over ``edges_list``."""
     n_samples, d_axes = int(input.shape[0]), int(input.shape[1])
@@ -1147,9 +1119,7 @@ def histogram(
 
 
 def _histogram_bins(
-    values: Tensor,
-    bins: int | Sequence[float] | Tensor,
-    range: tuple[float, float] | None,
+    values: Tensor, bins: int | Sequence[float] | Tensor, range: tuple[float, float] | None
 ) -> tuple[Tensor, Tensor, Tensor | None]:
     """The edges, each value's bin, and — when the range was read from the
     values — whether that range is finite."""
@@ -1191,10 +1161,7 @@ def _histogram_range(
         return 0.0, 1.0
     low, high = values.min(), values.max()
     flat = low == high
-    return (
-        lucid.where(flat, low - 0.5, low),
-        lucid.where(flat, high + 0.5, high),
-    )
+    return (lucid.where(flat, low - 0.5, low), lucid.where(flat, high + 0.5, high))
 
 
 def _uniform_edges(lo: float | Tensor, hi: float | Tensor, bins: int, like: Tensor) -> Tensor:

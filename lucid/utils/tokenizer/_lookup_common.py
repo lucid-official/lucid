@@ -15,11 +15,7 @@ import os
 from typing import TYPE_CHECKING, Self, override
 
 from lucid._C import engine as _C_engine
-from lucid.utils.tokenizer._base import (
-    _CANONICAL_SPECIAL_SLOTS,
-    SpecialTokens,
-    Tokenizer,
-)
+from lucid.utils.tokenizer._base import _CANONICAL_SPECIAL_SLOTS, SpecialTokens, Tokenizer
 from lucid.utils.tokenizer._bpe import _special_tokens_from_map
 
 
@@ -54,9 +50,7 @@ def _load_vocab_txt(path: str) -> dict[str, int]:
     return out
 
 
-def _load_special_tokens_map(
-    directory: str,
-) -> SpecialTokens | None:
+def _load_special_tokens_map(directory: str) -> SpecialTokens | None:
     """Read ``special_tokens_map.json`` from ``directory`` if present."""
     sp_path = os.path.join(directory, "special_tokens_map.json")
     if not os.path.isfile(sp_path):
@@ -67,9 +61,7 @@ def _load_special_tokens_map(
 
 
 def _load_vocab_txt_and_specials(
-    directory: str,
-    special_tokens: SpecialTokens | None,
-    caller: str,
+    directory: str, special_tokens: SpecialTokens | None, caller: str
 ) -> tuple[dict[str, int], SpecialTokens | None]:
     """Load ``vocab.txt`` + optional ``special_tokens_map.json`` from ``directory``."""
     vocab_path = os.path.join(directory, "vocab.txt")
@@ -81,9 +73,7 @@ def _load_vocab_txt_and_specials(
 
 
 def _build_insertion_vocab(
-    corpus: Iterable[str],
-    split_fn: Callable[[str], Iterable[str]],
-    vocab_size: int,
+    corpus: Iterable[str], split_fn: Callable[[str], Iterable[str]], vocab_size: int
 ) -> dict[str, int]:
     """Collect unique chunks in encounter order up to ``vocab_size``."""
     vocab: dict[str, int] = {}
@@ -122,10 +112,7 @@ class _VocabTokenizer(Tokenizer):
         self._id_to_token = {v: k for k, v in self._vocab.items()}
 
     def _init_vocab_tokenizer(
-        self,
-        vocab: dict[str, int] | None = None,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        self, vocab: dict[str, int] | None = None, *, special_tokens: SpecialTokens | None = None
     ) -> None:
         self._set_vocab(vocab)
         super().__init__(special_tokens=special_tokens)
@@ -153,10 +140,7 @@ class _VocabTokenizer(Tokenizer):
         return self._id_to_token.get(token_id)
 
     def _train_insertion_vocab(
-        self,
-        corpus: Iterable[str],
-        split_fn: Callable[[str], Iterable[str]],
-        vocab_size: int,
+        self, corpus: Iterable[str], split_fn: Callable[[str], Iterable[str]], vocab_size: int
     ) -> None:
         self._set_vocab(_build_insertion_vocab(corpus, split_fn, vocab_size))
         self._refresh_special_ids()
@@ -174,12 +158,7 @@ class _VocabTokenizer(Tokenizer):
         return {"model": {"type": self._model_type, "vocab": self._vocab}}
 
     @classmethod
-    def from_file(
-        cls,
-        directory: str,
-        *,
-        special_tokens: SpecialTokens | None = None,
-    ) -> Self:
+    def from_file(cls, directory: str, *, special_tokens: SpecialTokens | None = None) -> Self:
         """Load from a directory containing ``vocab.txt``."""
         vocab, st = _load_vocab_txt_and_specials(directory, special_tokens, cls.__name__)
         return cls(vocab=vocab, special_tokens=st)

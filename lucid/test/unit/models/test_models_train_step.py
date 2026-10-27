@@ -121,12 +121,7 @@ CASES: list[Any] = [
         {"dims": (16, 32, 64), "depths": (1, 1, 1), "num_heads": (1, 2, 4)},
         _images(64),
     ),
-    (
-        "densenet",
-        "densenet_121_cls",
-        {"growth_rate": 8, "block_config": (1, 1, 1, 1)},
-        _images(64),
-    ),
+    ("densenet", "densenet_121_cls", {"growth_rate": 8, "block_config": (1, 1, 1, 1)}, _images(64)),
     (
         "efficientformer",
         "efficientformer_l1_cls",
@@ -139,12 +134,7 @@ CASES: list[Any] = [
         },
         _images(64),
     ),
-    (
-        "efficientnet",
-        "efficientnet_b0_cls",
-        {"width_mult": 0.25, "depth_mult": 0.25},
-        _images(64),
-    ),
+    ("efficientnet", "efficientnet_b0_cls", {"width_mult": 0.25, "depth_mult": 0.25}, _images(64)),
     # Auxiliary classifiers on, as the paper trains it: the loss has to
     # reach them or their parameters get no gradient.
     ("googlenet", "googlenet_cls", {}, _images(224)),
@@ -178,27 +168,14 @@ CASES: list[Any] = [
     (
         "pvt",
         "pvt_v2_b0_cls",
-        {
-            "embed_dims": (16, 32, 64, 128),
-            "depths": (1, 1, 1, 1),
-            "num_heads": (1, 2, 4, 8),
-        },
+        {"embed_dims": (16, 32, 64, 128), "depths": (1, 1, 1, 1), "num_heads": (1, 2, 4, 8)},
         _images(64),
     ),
-    (
-        "resnest",
-        "resnest_14_cls",
-        {"bottleneck_width": 16, "stem_width": 16},
-        _images(64),
-    ),
+    ("resnest", "resnest_14_cls", {"bottleneck_width": 16, "stem_width": 16}, _images(64)),
     (
         "resnet",
         "resnet_18_cls",
-        {
-            "layers": (1, 1, 1, 1),
-            "stem_channels": 16,
-            "hidden_sizes": (16, 32, 64, 128),
-        },
+        {"layers": (1, 1, 1, 1), "stem_channels": 16, "hidden_sizes": (16, 32, 64, 128)},
         _images(64),
     ),
     (
@@ -208,12 +185,7 @@ CASES: list[Any] = [
         _images(64),
     ),
     ("senet", "se_resnet_18_cls", {"layers": (1, 1, 1, 1)}, _images(64)),
-    (
-        "sknet",
-        "sk_resnet_18_cls",
-        {"layers": (1, 1, 1, 1), "base_width": 16},
-        _images(64),
-    ),
+    ("sknet", "sk_resnet_18_cls", {"layers": (1, 1, 1, 1), "base_width": 16}, _images(64)),
     (
         "swin",
         "swin_tiny_cls",
@@ -248,22 +220,12 @@ CASES: list[Any] = [
     ("gpt", "gpt_lm", _TEXT, _tokens(64)),
     ("gpt2", "gpt2_small_lm", _TEXT, _tokens(64)),
     ("roformer", "roformer_mlm", {**_TEXT, "embedding_size": 16}, _tokens(64)),
-    (
-        "transformer",
-        "transformer_base_seq2seq",
-        {**_TEXT, "num_decoder_layers": 1},
-        _seq2seq(64),
-    ),
+    ("transformer", "transformer_base_seq2seq", {**_TEXT, "num_decoder_layers": 1}, _seq2seq(64)),
     # T5's attention width is heads x head_dim, not hidden_size; the
     # relative-position tables of both stacks must reach the loss too.  The
     # labels alone, as T5 trains: it shifts them right into its decoder
     # inputs.  20 tokens reach both stacks' log-spaced distance buckets.
-    (
-        "t5",
-        "t5_small_seq2seq",
-        {**_TEXT, "num_decoder_layers": 1, "head_dim": 8},
-        _tokens(64, 20),
-    ),
+    ("t5", "t5_small_seq2seq", {**_TEXT, "num_decoder_layers": 1, "head_dim": 8}, _tokens(64, 20)),
     # -- generative: ``model(x)`` answers ``.loss`` --
     (
         "neural_ode",
@@ -271,25 +233,14 @@ CASES: list[Any] = [
         {"sample_size": 4, "hidden_dim": 8, "num_blocks": 1, "solver": "euler"},
         _pixels(4),
     ),
-    (
-        "vae",
-        "vae_gen",
-        {"latent_dim": 8, "down_block_channels": (8, 16, 32)},
-        _pixels(32),
-    ),
+    ("vae", "vae_gen", {"latent_dim": 8, "down_block_channels": (8, 16, 32)}, _pixels(32)),
     # Class-conditional, ``model(x, labels=...)``.  The loss back-propagates
     # through a Jacobian-vector product, so every parameter has to be
     # reached through it as well as through the plain forward.
     (
         "tvm",
         "tvm_imagenet256_gen",
-        {
-            "sample_size": 8,
-            "hidden_size": 32,
-            "depth": 1,
-            "num_heads": 4,
-            "num_classes": _CLASSES,
-        },
+        {"sample_size": 8, "hidden_size": 32, "depth": 1, "num_heads": 4, "num_classes": _CLASSES},
         _images(8, channels=4),
     ),
 ]
@@ -337,12 +288,7 @@ def _mask_map(side: int) -> Callable[[], Inputs]:
 
 
 CASES += [
-    (
-        "yolo",
-        "yolo_v3_tiny",
-        {"num_classes": _CLASSES},
-        _boxes(64, normalised=False),
-    ),
+    ("yolo", "yolo_v3_tiny", {"num_classes": _CLASSES}, _boxes(64, normalised=False)),
     (
         "detr",
         "detr_resnet50",
@@ -378,11 +324,7 @@ CASES += [
     (
         "fcn",
         "fcn_resnet50",
-        {
-            "num_classes": _CLASSES,
-            "classifier_hidden_channels": 16,
-            "aux_hidden_channels": 16,
-        },
+        {"num_classes": _CLASSES, "classifier_hidden_channels": 16, "aux_hidden_channels": 16},
         _class_map(64),
     ),
     (
@@ -411,22 +353,14 @@ def _family_of(case: Any) -> str:
 #: always builds the pooler, and masked-LM never calls it.  The reference's
 #: MLM model does not build one; dropping it here would change the names
 #: checkpoints load against, so it stays and is named instead.
-_UNUSED: dict[str, tuple[str, ...]] = {
-    "bert": ("bert.pooler.",),
-    "roformer": ("roformer.pooler.",),
-}
+_UNUSED: dict[str, tuple[str, ...]] = {"bert": ("bert.pooler.",), "roformer": ("roformer.pooler.",)}
 
 
 @pytest.mark.parametrize(
-    ("family", "factory", "overrides", "make_inputs"),
-    CASES,
-    ids=[_family_of(c) for c in CASES],
+    ("family", "factory", "overrides", "make_inputs"), CASES, ids=[_family_of(c) for c in CASES]
 )
 def test_a_family_takes_a_training_step(
-    family: str,
-    factory: str,
-    overrides: dict[str, Any],
-    make_inputs: Callable[[], Inputs],
+    family: str, factory: str, overrides: dict[str, Any], make_inputs: Callable[[], Inputs]
 ) -> None:
     assert (
         _REGISTRY[factory].family == family

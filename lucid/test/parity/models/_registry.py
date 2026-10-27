@@ -192,10 +192,7 @@ def _legacy_seresnet_key_transform(k: str) -> str:
 
 # Legacy SE-ResNet classifier head: lucid ``fc`` → timm ``last_linear``
 # (not covered by the auto head-remap, which only knows ``fc``/``head``/...).
-_LEGACY_SERESNET_HEAD = {
-    "fc.weight": "last_linear.weight",
-    "fc.bias": "last_linear.bias",
-}
+_LEGACY_SERESNET_HEAD = {"fc.weight": "last_linear.weight", "fc.bias": "last_linear.bias"}
 
 
 # ── Spec type ─────────────────────────────────────────────────────────────────
@@ -367,36 +364,19 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.resnet_152_cls, "resnet152", tier="slow", use_positional_fallback=True),
     ParitySpec(M.resnet_200_cls, None, tier="slow", use_positional_fallback=True),
     ParitySpec(M.resnet_269_cls, None, tier="slow", use_positional_fallback=True),
+    ParitySpec(M.wide_resnet_50_cls, "wide_resnet50_2", tier="slow", use_positional_fallback=True),
     ParitySpec(
-        M.wide_resnet_50_cls,
-        "wide_resnet50_2",
-        tier="slow",
-        use_positional_fallback=True,
-    ),
-    ParitySpec(
-        M.wide_resnet_101_cls,
-        "wide_resnet101_2",
-        tier="slow",
-        use_positional_fallback=True,
+        M.wide_resnet_101_cls, "wide_resnet101_2", tier="slow", use_positional_fallback=True
     ),
     # ── ResNeXt ───────────────────────────────────────────────────────────────
     ParitySpec(
-        M.resnext_50_32x4d_cls,
-        "resnext50_32x4d",
-        tier="slow",
-        use_positional_fallback=True,
+        M.resnext_50_32x4d_cls, "resnext50_32x4d", tier="slow", use_positional_fallback=True
     ),
     ParitySpec(
-        M.resnext_101_32x4d_cls,
-        "resnext101_32x4d",
-        tier="slow",
-        use_positional_fallback=True,
+        M.resnext_101_32x4d_cls, "resnext101_32x4d", tier="slow", use_positional_fallback=True
     ),
     ParitySpec(
-        M.resnext_101_32x8d_cls,
-        "resnext101_32x8d",
-        tier="slow",
-        use_positional_fallback=True,
+        M.resnext_101_32x8d_cls, "resnext101_32x8d", tier="slow", use_positional_fallback=True
     ),
     # ── SE-ResNet ─────────────────────────────────────────────────────────────
     # 18/34/101/152 use the legacy stem-pool (converted from timm
@@ -451,10 +431,7 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.sk_resnet_50_cls, None, tier="slow"),
     ParitySpec(M.sk_resnet_101_cls, None, tier="slow"),
     ParitySpec(
-        M.sk_resnext_50_32x4d_cls,
-        "skresnext50_32x4d",
-        tier="slow",
-        use_positional_fallback=True,
+        M.sk_resnext_50_32x4d_cls, "skresnext50_32x4d", tier="slow", use_positional_fallback=True
     ),
     # ── ResNeSt ───────────────────────────────────────────────────────────────
     ParitySpec(M.resnest_14_cls, None),
@@ -488,19 +465,11 @@ SPECS: list[ParitySpec] = [
         prepare=_norm_gains(0.4, 0.7),
     ),
     ParitySpec(
-        M.inception_resnet_v2_cls,
-        "inception_resnet_v2",
-        input_shape=(1, 3, 299, 299),
-        tier="slow",
+        M.inception_resnet_v2_cls, "inception_resnet_v2", input_shape=(1, 3, 299, 299), tier="slow"
     ),
     # Inception-v4 mirrors timm's ``features.N`` / ``last_linear`` layout
     # key-for-key (896 tensors), so the named transfer is complete.
-    ParitySpec(
-        M.inception_v4_cls,
-        "inception_v4",
-        input_shape=(1, 3, 299, 299),
-        tier="slow",
-    ),
+    ParitySpec(M.inception_v4_cls, "inception_v4", input_shape=(1, 3, 299, 299), tier="slow"),
     # ── Xception ──────────────────────────────────────────────────────────────
     ParitySpec(
         M.xception_cls,
@@ -527,16 +496,8 @@ SPECS: list[ParitySpec] = [
     # matched nothing and the positional fallback was doing all the work
     # anyway.  An inert entry is worse than none: it reads as though the head
     # were explicitly aligned.
-    ParitySpec(
-        M.mobilenet_v3_large_cls,
-        "mobilenetv3_large_100",
-        use_positional_fallback=True,
-    ),
-    ParitySpec(
-        M.mobilenet_v3_small_cls,
-        "mobilenetv3_small_100",
-        use_positional_fallback=True,
-    ),
+    ParitySpec(M.mobilenet_v3_large_cls, "mobilenetv3_large_100", use_positional_fallback=True),
+    ParitySpec(M.mobilenet_v3_small_cls, "mobilenetv3_small_100", use_positional_fallback=True),
     # ── MobileNet v4 ──────────────────────────────────────────────────────────
     # The module tree mirrors timm's ``mobilenetv4_*`` key-for-key (conv_stem,
     # blocks.S.B.{dw_start,pw_exp,dw_mid,pw_proj,attn,...}, conv_head,
@@ -544,9 +505,7 @@ SPECS: list[ParitySpec] = [
     # positional fallback is allowed to paper over a mismatch.
     # ``prepare`` — see ``_mobilenet_v4_branch_gains``.
     ParitySpec(
-        M.mobilenet_v4_conv_small_cls,
-        "mobilenetv4_conv_small",
-        prepare=_mobilenet_v4_branch_gains,
+        M.mobilenet_v4_conv_small_cls, "mobilenetv4_conv_small", prepare=_mobilenet_v4_branch_gains
     ),
     ParitySpec(
         M.mobilenet_v4_conv_medium_cls,
@@ -578,30 +537,10 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.efficientnet_b1_cls, "efficientnet_b1", use_positional_fallback=True),
     ParitySpec(M.efficientnet_b2_cls, "efficientnet_b2", use_positional_fallback=True),
     ParitySpec(M.efficientnet_b3_cls, "efficientnet_b3", use_positional_fallback=True),
-    ParitySpec(
-        M.efficientnet_b4_cls,
-        "efficientnet_b4",
-        tier="slow",
-        use_positional_fallback=True,
-    ),
-    ParitySpec(
-        M.efficientnet_b5_cls,
-        "efficientnet_b5",
-        tier="slow",
-        use_positional_fallback=True,
-    ),
-    ParitySpec(
-        M.efficientnet_b6_cls,
-        "efficientnet_b6",
-        tier="slow",
-        use_positional_fallback=True,
-    ),
-    ParitySpec(
-        M.efficientnet_b7_cls,
-        "efficientnet_b7",
-        tier="slow",
-        use_positional_fallback=True,
-    ),
+    ParitySpec(M.efficientnet_b4_cls, "efficientnet_b4", tier="slow", use_positional_fallback=True),
+    ParitySpec(M.efficientnet_b5_cls, "efficientnet_b5", tier="slow", use_positional_fallback=True),
+    ParitySpec(M.efficientnet_b6_cls, "efficientnet_b6", tier="slow", use_positional_fallback=True),
+    ParitySpec(M.efficientnet_b7_cls, "efficientnet_b7", tier="slow", use_positional_fallback=True),
     # ── ViT ───────────────────────────────────────────────────────────────────
     # head: head.weight (auto-remapped)
     # Transformer accumulation → slightly looser tolerance
@@ -645,22 +584,13 @@ SPECS: list[ParitySpec] = [
     # timm:  stem.N      / stem.1    / stages.X.blocks.Y
     ParitySpec(M.convnext_tiny_cls, "convnext_tiny", key_transform=_convnext_key_transform),
     ParitySpec(
-        M.convnext_small_cls,
-        "convnext_small",
-        tier="slow",
-        key_transform=_convnext_key_transform,
+        M.convnext_small_cls, "convnext_small", tier="slow", key_transform=_convnext_key_transform
     ),
     ParitySpec(
-        M.convnext_base_cls,
-        "convnext_base",
-        tier="slow",
-        key_transform=_convnext_key_transform,
+        M.convnext_base_cls, "convnext_base", tier="slow", key_transform=_convnext_key_transform
     ),
     ParitySpec(
-        M.convnext_large_cls,
-        "convnext_large",
-        tier="heavy",
-        key_transform=_convnext_key_transform,
+        M.convnext_large_cls, "convnext_large", tier="heavy", key_transform=_convnext_key_transform
     ),
     ParitySpec(
         M.convnext_xlarge_cls,
@@ -676,10 +606,7 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.cspresnet_50_cls, "cspresnet50", key_transform=_cspnet_key_transform),
     ParitySpec(M.cspresnext_50_cls, "cspresnext50", key_transform=_cspnet_key_transform),
     ParitySpec(
-        M.cspdarknet_53_cls,
-        "cspdarknet53",
-        key_transform=_cspnet_key_transform,
-        tier="slow",
+        M.cspdarknet_53_cls, "cspdarknet53", key_transform=_cspnet_key_transform, tier="slow"
     ),
     # ── PVT v2 ───────────────────────────────────────────────────────────────
     # head: head.weight (auto-remapped)

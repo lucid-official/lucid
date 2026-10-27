@@ -121,10 +121,7 @@ def _graph(*ops: SimpleNamespace) -> SimpleNamespace:
 
 def _op(name: str, inputs: list[int], out: int, **attrs: object) -> SimpleNamespace:
     return SimpleNamespace(
-        name=name,
-        inputs=inputs,
-        outputs=[SimpleNamespace(id=out, shape=(8, 5))],
-        attrs=attrs,
+        name=name, inputs=inputs, outputs=[SimpleNamespace(id=out, shape=(8, 5))], attrs=attrs
     )
 
 

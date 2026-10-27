@@ -146,10 +146,7 @@ class _DETREncoderLayer(nn.Module):
 
     @override
     def forward(
-        self,
-        src: Tensor,
-        pos: Tensor | None,
-        key_padding_mask: Tensor | None = None,
+        self, src: Tensor, pos: Tensor | None, key_padding_mask: Tensor | None = None
     ) -> Tensor:
         q = _with_pos(src, pos)
         k = q
@@ -223,10 +220,7 @@ class _DETREncoder(nn.Module):
 
     @override
     def forward(
-        self,
-        src: Tensor,
-        pos: Tensor | None,
-        key_padding_mask: Tensor | None = None,
+        self, src: Tensor, pos: Tensor | None, key_padding_mask: Tensor | None = None
     ) -> Tensor:
         output = src
         for layer in self.layers:
@@ -590,10 +584,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
         # Prediction heads
         self.class_embed = nn.Linear(d, config.num_classes + 1)
         self.bbox_embed = _MLP(
-            in_dim=d,
-            hidden_dim=config.bbox_hidden_dim,
-            out_dim=4,
-            n_layers=config.num_bbox_layers,
+            in_dim=d, hidden_dim=config.bbox_hidden_dim, out_dim=4, n_layers=config.num_bbox_layers
         )
 
     @override
@@ -659,11 +650,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
         # only requested when it will actually be used.
         want_aux = targets is not None and self._cfg.aux_loss
         hs_out = self.transformer(
-            feat,
-            pos_embed,
-            queries,
-            key_padding_mask=kpm,
-            return_intermediate=want_aux,
+            feat, pos_embed, queries, key_padding_mask=kpm, return_intermediate=want_aux
         )  # (B, N, d), or (L, B, N, d) when want_aux
 
         # 4. Prediction heads.  The heads are shared across decoder layers, as
@@ -687,21 +674,14 @@ class DETRForObjectDetection(ObjectDetectionModel):
                     aux_boxes = F.sigmoid(self.bbox_embed(h_l))
                     loss = loss + self._set_loss(aux_logits, aux_boxes, targets)
 
-        return ObjectDetectionOutput(
-            logits=logits,
-            pred_boxes=pred_boxes,
-            loss=loss,
-        )
+        return ObjectDetectionOutput(logits=logits, pred_boxes=pred_boxes, loss=loss)
 
     # ------------------------------------------------------------------
     # Set-prediction loss
     # ------------------------------------------------------------------
 
     def _set_loss(
-        self,
-        logits: Tensor,
-        pred_boxes: Tensor,
-        targets: list[dict[str, Tensor]],
+        self, logits: Tensor, pred_boxes: Tensor, targets: list[dict[str, Tensor]]
     ) -> Tensor:
         """Hungarian-matched set loss across the batch.
 
@@ -748,8 +728,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
                 # in any image that *does* contain objects.
                 log_sm_e = F.log_softmax(lg_b, dim=-1)
                 ce_e = lucid.cat(
-                    [(-log_sm_e[n, bg_index] * bg_weight).reshape(1) for n in range(N)],
-                    dim=0,
+                    [(-log_sm_e[n, bg_index] * bg_weight).reshape(1) for n in range(N)], dim=0
                 )
                 cls_num += float(N) * bg_weight
                 cls_losses.append(ce_e.sum())
@@ -757,13 +736,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
 
             # Hungarian matching
             pred_idx, gt_idx = _hungarian_match(
-                lg_b,
-                pb_b,
-                gt_labels,
-                gt_boxes_cxcywh,
-                cost_cls=1.0,
-                cost_l1=5.0,
-                cost_giou=2.0,
+                lg_b, pb_b, gt_labels, gt_boxes_cxcywh, cost_cls=1.0, cost_l1=5.0, cost_giou=2.0
             )
 
             # Build per-query target labels (unmatched → no-object, the LAST
@@ -847,9 +820,7 @@ class DETRForObjectDetection(ObjectDetectionModel):
     # ------------------------------------------------------------------
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_sizes: list[tuple[int, int]],
+        self, output: ObjectDetectionOutput, image_sizes: list[tuple[int, int]]
     ) -> list[dict[str, Tensor]]:
         """Filter queries by score threshold and convert to pixel coordinates.
 

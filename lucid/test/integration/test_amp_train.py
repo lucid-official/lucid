@@ -15,14 +15,8 @@ import lucid.optim as optim
 class TestAMPTraining:
     def test_autocast_loss_shrinks(self, device: str) -> None:
         rng = np.random.default_rng(0)
-        x = lucid.tensor(
-            rng.uniform(-1.0, 1.0, size=(32, 4)).astype(np.float32),
-            device=device,
-        )
-        y = lucid.tensor(
-            rng.uniform(-1.0, 1.0, size=(32, 1)).astype(np.float32),
-            device=device,
-        )
+        x = lucid.tensor(rng.uniform(-1.0, 1.0, size=(32, 4)).astype(np.float32), device=device)
+        y = lucid.tensor(rng.uniform(-1.0, 1.0, size=(32, 1)).astype(np.float32), device=device)
 
         model = nn.Sequential(nn.Linear(4, 16), nn.ReLU(), nn.Linear(16, 1)).to(device=device)
         opt = optim.Adam(model.parameters(), lr=0.05)

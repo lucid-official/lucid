@@ -150,24 +150,14 @@ class RandomErasing(PhotometricTransform[_ErasingParams]):
         inner = lucid.zeros(1, params.h, params.w, dtype=img.dtype, device=img.device)
         keep_1c = F.pad(
             inner,
-            (
-                params.left,
-                w - params.left - params.w,
-                params.top,
-                h - params.top - params.h,
-            ),
+            (params.left, w - params.left - params.w, params.top, h - params.top - params.h),
             value=1.0,
         )
         keep_c = F._cat([keep_1c] * c, 0)
         # Fill expanded to (C, H, W) — zero outside, fill inside the rect.
         fill_padded = F.pad(
             params.fill,
-            (
-                params.left,
-                w - params.left - params.w,
-                params.top,
-                h - params.top - params.h,
-            ),
+            (params.left, w - params.left - params.w, params.top, h - params.top - params.h),
             value=0.0,
         )
         if img.ndim == 4:

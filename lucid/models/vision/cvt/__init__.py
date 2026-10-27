@@ -10,11 +10,7 @@ from lucid.models.vision.cvt._pretrained import (
     cvt_w24,
     cvt_w24_cls,
 )
-from lucid.models.vision.cvt._weights import (
-    CvT13Weights,
-    CvT21Weights,
-    CvTW24Weights,
-)
+from lucid.models.vision.cvt._weights import CvT13Weights, CvT21Weights, CvTW24Weights
 
 __all__ = [
     "CvTConfig",

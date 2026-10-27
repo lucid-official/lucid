@@ -20,9 +20,7 @@ DEVICES = ["cpu", "metal"]
 @pytest.mark.parametrize("device", DEVICES)
 def test_nan_to_num_passes_the_gradient_where_the_input_is_finite(device):
     x = lucid.tensor(
-        [1.0, float("nan"), float("inf"), -float("inf"), -2.0],
-        requires_grad=True,
-        device=device,
+        [1.0, float("nan"), float("inf"), -float("inf"), -2.0], requires_grad=True, device=device
     )
     weights = lucid.tensor([1.0, 2.0, 3.0, 4.0, 5.0], device=device)
     (lucid.nan_to_num(x, nan=0.0, posinf=5.0, neginf=-5.0) * weights).sum().backward()

@@ -26,23 +26,9 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._tensor.tensor import Tensor
-from lucid.diffeq import (
-    _adaptive,
-    _event,
-    _fixed,
-    _flatten,
-    _fused,
-    _implicit,
-    _multistep,
-)
+from lucid.diffeq import _adaptive, _event, _fixed, _flatten, _fused, _implicit, _multistep
 from lucid.diffeq._tableau import RK4, ButcherTableau, _DEFAULT_METHOD, _METHODS
-from lucid.diffeq._typing import (
-    EventFunction,
-    RightHandSide,
-    ScalarFactory,
-    StageCheck,
-    State,
-)
+from lucid.diffeq._typing import EventFunction, RightHandSide, ScalarFactory, StageCheck, State
 
 # The fixed-grid loop and the tests both reach for this; it is the fused
 # stage combination that every explicit method reduces to.
@@ -195,15 +181,8 @@ def _resolve_grid(t: Tensor | Sequence[float]) -> list[float]:
 
 
 def _pack_state(
-    func: Callable[..., object],
-    y0: State,
-    event_fn: Callable[..., Tensor] | None,
-) -> tuple[
-    RightHandSide,
-    Tensor,
-    EventFunction | None,
-    list[tuple[int, ...]] | None,
-]:
+    func: Callable[..., object], y0: State, event_fn: Callable[..., Tensor] | None
+) -> tuple[RightHandSide, Tensor, EventFunction | None, list[tuple[int, ...]] | None]:
     """Reduce a possibly-tuple state to the flat one the solvers integrate.
 
     Parameters
@@ -223,12 +202,7 @@ def _pack_state(
         to hand results back unchanged.
     """
     if isinstance(y0, Tensor):
-        return (
-            cast(RightHandSide, func),
-            y0,
-            cast(EventFunction | None, event_fn),
-            None,
-        )
+        return (cast(RightHandSide, func), y0, cast(EventFunction | None, event_fn), None)
 
     parts = _flatten.check_state(y0)
     shapes = _flatten.shapes_of(parts)
@@ -264,9 +238,7 @@ def _unpack(stacked: Tensor, shapes: list[tuple[int, ...]] | None) -> State:
     return tuple(_flatten.unflatten_rows(stacked, shapes))
 
 
-def _make_callbacks(
-    y0: Tensor,
-) -> tuple[ScalarFactory, StageCheck]:
+def _make_callbacks(y0: Tensor) -> tuple[ScalarFactory, StageCheck]:
     """Build the time-tensor factory and right-hand-side validator for a solve.
 
     Parameters
@@ -729,16 +701,7 @@ def odeint_dense(
         )
     elif tableau.is_adaptive:
         segments = _adaptive.integrate_dense(
-            func,
-            y0,
-            t0,
-            t1,
-            tableau,
-            scalar,
-            check,
-            rtol=rtol,
-            atol=atol,
-            options=options,
+            func, y0, t0, t1, tableau, scalar, check, rtol=rtol, atol=atol, options=options
         )
     else:
         segments = _fixed.integrate_dense(func, y0, t0, t1, tableau, scalar, check, options=options)

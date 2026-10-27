@@ -264,9 +264,7 @@ def quadratic_shrink(coarse: float, fine: float, ratio: float = 10.0) -> bool:
 
 
 def finite_difference(
-    evaluate: Callable[[np.ndarray], float],
-    base: np.ndarray,
-    step: float,
+    evaluate: Callable[[np.ndarray], float], base: np.ndarray, step: float
 ) -> np.ndarray:
     """Central differences of a scalar functional, one entry at a time."""
     flat = base.reshape(-1)

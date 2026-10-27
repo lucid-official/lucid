@@ -36,11 +36,7 @@ def _qkv(device: str, lq: int = 4, lk: int = 4, d: int = 8) -> list[lucid.Tensor
 
 
 def _explicit(
-    q: lucid.Tensor,
-    k: lucid.Tensor,
-    v: lucid.Tensor,
-    mask: lucid.Tensor | None,
-    causal: bool,
+    q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor, mask: lucid.Tensor | None, causal: bool
 ) -> lucid.Tensor:
     """Attention in elementary ops, causal triangle aligned top-left."""
     scores = lucid.matmul(q, k.mT) * (1.0 / math.sqrt(q.shape[-1]))
@@ -82,8 +78,7 @@ def test_second_derivative_matches_the_explicit_form(device: str, case: str) -> 
     causal = case == "causal"
 
     got = _second_order(
-        F.scaled_dot_product_attention(q, k, v, attn_mask=fused_mask, is_causal=causal),
-        wrt,
+        F.scaled_dot_product_attention(q, k, v, attn_mask=fused_mask, is_causal=causal), wrt
     )
     want = _second_order(_explicit(q, k, v, explicit_mask, causal), wrt)
     for name, g, w in zip("qkvm", got, want):

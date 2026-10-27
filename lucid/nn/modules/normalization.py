@@ -549,11 +549,7 @@ class _NormBase(Module):
         """
         if not self.track_running_stats:
             return
-        for name, value in (
-            ("running_mean", 0),
-            ("running_var", 1),
-            ("num_batches_tracked", 0),
-        ):
+        for name, value in (("running_mean", 0), ("running_var", 1), ("num_batches_tracked", 0)):
             buffer = self._buffers.get(name)
             if buffer is not None:
                 buffer.fill_(value)
@@ -720,14 +716,7 @@ class _BatchNormBase(_NormBase):
     ) -> None:
         """Initialise the _BatchNormBase module. See the class docstring for parameter semantics."""
         super().__init__(
-            num_features,
-            eps,
-            momentum,
-            affine,
-            track_running_stats,
-            device,
-            dtype,
-            bias=bias,
+            num_features, eps, momentum, affine, track_running_stats, device, dtype, bias=bias
         )
 
     @override
@@ -1161,14 +1150,7 @@ class _InstanceNormBase(_NormBase):
     ) -> None:
         """Initialise the _InstanceNormBase module. See the class docstring for parameter semantics."""
         super().__init__(
-            num_features,
-            eps,
-            momentum,
-            affine,
-            track_running_stats,
-            device,
-            dtype,
-            bias=bias,
+            num_features, eps, momentum, affine, track_running_stats, device, dtype, bias=bias
         )
 
     def _check_input_dim(self, x: Tensor) -> None:
@@ -1549,13 +1531,7 @@ class LocalResponseNorm(Module):
     (4, 32, 64)
     """
 
-    def __init__(
-        self,
-        size: int,
-        alpha: float = 1e-4,
-        beta: float = 0.75,
-        k: float = 1.0,
-    ) -> None:
+    def __init__(self, size: int, alpha: float = 1e-4, beta: float = 0.75, k: float = 1.0) -> None:
         """Initialise the LocalResponseNorm module. See the class docstring for parameter semantics."""
         super().__init__()
         self.size = size

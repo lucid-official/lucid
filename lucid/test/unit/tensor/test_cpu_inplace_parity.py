@@ -90,10 +90,7 @@ def _augmented(x: lucid.Tensor) -> None:
 _GRAD_WRITES: dict[str, tuple[Callable[[lucid.Tensor], object], list[float]]] = {
     "mul_": (lambda x: x.grad.mul_(10.0), [20.0, 40.0, 60.0]),
     "div_": (lambda x: x.grad.div_(2.0), [1.0, 2.0, 3.0]),
-    "sub_ tensor": (
-        lambda x: x.grad.sub_(lucid.ones(3).to(x.device)),
-        [1.0, 3.0, 5.0],
-    ),
+    "sub_ tensor": (lambda x: x.grad.sub_(lucid.ones(3).to(x.device)), [1.0, 3.0, 5.0]),
     "neg_": (lambda x: x.grad.neg_(), [-2.0, -4.0, -6.0]),
     "clamp_": (lambda x: x.grad.clamp_(3.0, 5.0), [3.0, 4.0, 5.0]),
     "augmented": (_augmented, [3.0, 5.0, 7.0]),
@@ -146,9 +143,7 @@ def test_backward_accumulates_into_the_written_gradient(device: str) -> None:
     assert x.grad.tolist() == [3.0, 6.0, 9.0]
 
 
-def test_clipping_by_hand_then_stepping_moves_by_the_clipped_gradient(
-    device: str,
-) -> None:
+def test_clipping_by_hand_then_stepping_moves_by_the_clipped_gradient(device: str) -> None:
     lucid.manual_seed(0)
     layer = nn.Linear(4, 3).to(device)
     x = lucid.randn(8, 4).to(device)

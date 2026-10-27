@@ -31,18 +31,12 @@ def _calls(m: ModuleType) -> list[tuple[str, Callable[[object], object]]]:
     out: list[tuple[str, Callable[[object], object]]] = []
     out += [(f"vector_norm-{o}", lambda x, o=o: m.linalg.vector_norm(x, o)) for o in _VECTOR_ORDS]
     out += [
-        (
-            f"vector_norm-dtype-{o}",
-            lambda x, o=o: m.linalg.vector_norm(x, o, dtype=m.float32),
-        )
+        (f"vector_norm-dtype-{o}", lambda x, o=o: m.linalg.vector_norm(x, o, dtype=m.float32))
         for o in (2, 1)
     ]
     out += [(f"matrix_norm-{o}", lambda x, o=o: m.linalg.matrix_norm(x, o)) for o in _MATRIX_ORDS]
     out += [(f"norm-{o}", lambda x, o=o: m.linalg.norm(x, o)) for o in (None, "fro", 2, 1)]
-    out += [
-        ("cdist", lambda x: m.cdist(x, x)),
-        ("normalize", lambda x: functional.normalize(x)),
-    ]
+    out += [("cdist", lambda x: m.cdist(x, x)), ("normalize", lambda x: functional.normalize(x))]
     return out
 
 

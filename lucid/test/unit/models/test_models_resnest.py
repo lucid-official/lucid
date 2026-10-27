@@ -41,10 +41,7 @@ class TestResNeStConfig(unittest.TestCase):
 class TestResNeStParamCounts(unittest.TestCase):
 
     def test_101_more_params_than_50(self) -> None:
-        self.assertGreater(
-            resnest_101().num_parameters(),
-            resnest_50().num_parameters(),
-        )
+        self.assertGreater(resnest_101().num_parameters(), resnest_50().num_parameters())
 
 
 class TestResNeStBackbone(unittest.TestCase):
@@ -127,42 +124,10 @@ class TestResNeStRegistry(unittest.TestCase):
 
 # (factory, slug, timm-source, num_params, crop, resize, interpolation)
 _SHIPPED = (
-    (
-        "resnest_50_cls",
-        "resnest-50",
-        "resnest50d.in1k",
-        27_483_240,
-        224,
-        256,
-        "bilinear",
-    ),
-    (
-        "resnest_101_cls",
-        "resnest-101",
-        "resnest101e.in1k",
-        48_275_016,
-        256,
-        292,
-        "bilinear",
-    ),
-    (
-        "resnest_200_cls",
-        "resnest-200",
-        "resnest200e.in1k",
-        70_201_544,
-        320,
-        352,
-        "bicubic",
-    ),
-    (
-        "resnest_269_cls",
-        "resnest-269",
-        "resnest269e.in1k",
-        110_929_480,
-        416,
-        448,
-        "bicubic",
-    ),
+    ("resnest_50_cls", "resnest-50", "resnest50d.in1k", 27_483_240, 224, 256, "bilinear"),
+    ("resnest_101_cls", "resnest-101", "resnest101e.in1k", 48_275_016, 256, 292, "bilinear"),
+    ("resnest_200_cls", "resnest-200", "resnest200e.in1k", 70_201_544, 320, 352, "bicubic"),
+    ("resnest_269_cls", "resnest-269", "resnest269e.in1k", 110_929_480, 416, 448, "bicubic"),
 )
 
 
@@ -177,12 +142,7 @@ class TestResNeStWeightsEnums(unittest.TestCase):
             ResNeSt269Weights,
         )
 
-        return (
-            ResNeSt50Weights,
-            ResNeSt101Weights,
-            ResNeSt200Weights,
-            ResNeSt269Weights,
-        )
+        return (ResNeSt50Weights, ResNeSt101Weights, ResNeSt200Weights, ResNeSt269Weights)
 
     def test_default_aliases_in1k(self) -> None:
         for cls in self._enums():

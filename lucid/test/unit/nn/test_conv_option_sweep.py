@@ -96,13 +96,9 @@ def test_conv_transpose_output_shape(rank, stride, output_padding):
     ``output_padding`` at the stride or above is refused, asserted by
     the test below.
     """
-    layer = {
-        1: nn.ConvTranspose1d,
-        2: nn.ConvTranspose2d,
-        3: nn.ConvTranspose3d,
-    }[
-        rank
-    ](3, 4, kernel_size=3, stride=stride, padding=1, output_padding=output_padding)
+    layer = {1: nn.ConvTranspose1d, 2: nn.ConvTranspose2d, 3: nn.ConvTranspose3d}[rank](
+        3, 4, kernel_size=3, stride=stride, padding=1, output_padding=output_padding
+    )
     out = layer(_input(rank))
     expected = (8 - 1) * stride - 2 * 1 + 3 + output_padding
     assert tuple(out.shape) == (2, 4) + (expected,) * rank

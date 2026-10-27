@@ -31,11 +31,7 @@ from lucid.models.vision.vjepa import (
     vjepa_large_16,
     vjepa_large_16_cls,
 )
-from lucid.models.vision.vjepa._model import (
-    _sample_collection,
-    _sincos_3d,
-    _tube_indices,
-)
+from lucid.models.vision.vjepa._model import _sample_collection, _sincos_3d, _tube_indices
 
 
 def _tiny(**overrides: object) -> VJEPAConfig:
@@ -60,11 +56,7 @@ def _tiny(**overrides: object) -> VJEPAConfig:
 def _clips(batch: int = 2, config: VJEPAConfig | None = None) -> lucid.Tensor:
     config = _tiny() if config is None else config
     return lucid.rand(
-        batch,
-        config.num_frames,
-        config.in_channels,
-        config.image_size,
-        config.image_size,
+        batch, config.num_frames, config.in_channels, config.image_size, config.image_size
     )
 
 
@@ -95,21 +87,14 @@ class TestPaperConfigurations:
     def test_a_clip_is_sixteen_frames_of_tubelets_two_deep(self) -> None:
         config = AutoConfig.from_pretrained("vjepa_large_16")
         assert isinstance(config, VJEPAConfig)
-        assert (config.num_frames, config.tubelet_size, config.sampling_rate) == (
-            16,
-            2,
-            4,
-        )
+        assert (config.num_frames, config.tubelet_size, config.sampling_rate) == (16, 2, 4)
         assert config.token_grid == (8, 14, 14)
         assert config.num_tokens == 1568
 
     def test_the_masks_are_the_paper_s_two_collections(self) -> None:
         config = AutoConfig.from_pretrained("vjepa_huge_16")
         assert isinstance(config, VJEPAConfig)
-        assert (config.short_range_blocks, config.short_range_scale) == (
-            8,
-            (0.15, 0.15),
-        )
+        assert (config.short_range_blocks, config.short_range_scale) == (8, (0.15, 0.15))
         assert (config.long_range_blocks, config.long_range_scale) == (2, (0.7, 0.7))
         assert config.aspect_ratio == (0.75, 1.5)
 

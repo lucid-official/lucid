@@ -104,11 +104,7 @@ def test_a_leaf_input_gets_the_eager_gradient(kind: str, device: str) -> None:
 
 
 def _train_once(
-    trunk: nn.Module,
-    head: nn.Module,
-    loss_of: _LossFn,
-    inp: lucid.Tensor,
-    t: lucid.Tensor,
+    trunk: nn.Module, head: nn.Module, loss_of: _LossFn, inp: lucid.Tensor, t: lucid.Tensor
 ) -> float:
     opt = optim.SGD([*trunk.parameters(), *head.parameters()], lr=0.5)
     opt.zero_grad()
@@ -417,9 +413,7 @@ def test_a_step_adds_into_the_gradient_already_there(kind: str, device: str) -> 
         assert _close(h, pe.grad), "the held gradient did not take the sum"
 
 
-def test_auto_segments_time_their_candidates_off_the_callers_graph(
-    device: str,
-) -> None:
+def test_auto_segments_time_their_candidates_off_the_callers_graph(device: str) -> None:
     """The timing runs neither reach the trunk nor survive on the head."""
     inp, _, t = _data(device)
     trunk_e, head_e = _trunk(device), _head(device)

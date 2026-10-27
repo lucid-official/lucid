@@ -472,20 +472,8 @@ class TestVmapJacrevParity:
         rng = _rng(52)
         x_np = rng.standard_normal((3, 4)).astype(np.float32)
 
-        f_l = lambda x: lucid.stack(
-            [
-                x[0] * x[1],
-                x[1] ** 2 + x[2],
-                x[3] - x[0],
-            ]
-        )
-        f_r = lambda x: ref.stack(
-            [
-                x[0] * x[1],
-                x[1] ** 2 + x[2],
-                x[3] - x[0],
-            ]
-        )
+        f_l = lambda x: lucid.stack([x[0] * x[1], x[1] ** 2 + x[2], x[3] - x[0]])
+        f_r = lambda x: ref.stack([x[0] * x[1], x[1] ** 2 + x[2], x[3] - x[0]])
 
         J_l = func.vmap(func.jacrev(f_l))(lucid.tensor(x_np.copy()))
         J_r = ref.func.vmap(ref.func.jacrev(f_r))(ref.tensor(x_np.copy()))

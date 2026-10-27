@@ -56,11 +56,7 @@ from lucid.models._meta import model_family_meta
 from lucid.models._output import ObjectDetectionOutput
 from lucid.models._registry import register_model
 from lucid.models._tasks import ObjectDetectionModel
-from lucid.models._utils._detection import (
-    batched_nms,
-    clip_boxes_to_image,
-    box_iou,
-)
+from lucid.models._utils._detection import batched_nms, clip_boxes_to_image, box_iou
 from lucid.models._utils._detection_results import (
     check_per_image,
     detection_result,
@@ -275,12 +271,7 @@ class _ConvBnLeaky(nn.Module):
     """Conv2d(bias=False) → BatchNorm2d → LeakyReLU(0.1)."""
 
     def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel: int,
-        stride: int = 1,
-        padding: int = -1,
+        self, in_ch: int, out_ch: int, kernel: int, stride: int = 1, padding: int = -1
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
@@ -505,9 +496,7 @@ def _make_tiny_detection_head(
 
 
 def _decode_predictions(
-    raw: Tensor,
-    anchors_wh: list[tuple[float, float]],
-    stride: int,
+    raw: Tensor, anchors_wh: list[tuple[float, float]], stride: int
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Decode a single-scale raw detection tensor.
 
@@ -615,9 +604,7 @@ def _ignore_mask(pred_boxes: Tensor, gt_boxes: Tensor, thresh: float) -> Tensor:
     return (box_iou(pred_boxes, gt).max(dim=1).values > thresh).to(pred_boxes.dtype)
 
 
-def _gt_rows(
-    target: dict[str, Tensor],
-) -> list[tuple[tuple[float, float, float, float], int]]:
+def _gt_rows(target: dict[str, Tensor]) -> list[tuple[tuple[float, float, float, float], int]]:
     """One image's GT ``(x1, y1, x2, y2)`` boxes and labels, read in one go.
 
     Target assignment indexes Python-side arrays, so the values are needed
@@ -641,9 +628,7 @@ def _gt_rows(
 
 
 def _yolov3_loss(
-    raw_preds: list[Tensor],
-    targets: list[dict[str, Tensor]],
-    config: YOLOV3Config,
+    raw_preds: list[Tensor], targets: list[dict[str, Tensor]], config: YOLOV3Config
 ) -> Tensor:
     """Compute YOLOv3 multi-scale detection loss.
 
@@ -840,9 +825,7 @@ def _yolov3_loss(
 
 
 def _yolov3_output(
-    raw_preds: list[Tensor],
-    targets: list[dict[str, Tensor]] | None,
-    config: YOLOV3Config,
+    raw_preds: list[Tensor], targets: list[dict[str, Tensor]] | None, config: YOLOV3Config
 ) -> ObjectDetectionOutput:
     """Decode every scale's raw head output, and score it when given targets.
 
@@ -1054,9 +1037,7 @@ class YOLOV3ForObjectDetection(ObjectDetectionModel):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: list[dict[str, Tensor]] | None = None,
+        self, x: Tensor, targets: list[dict[str, Tensor]] | None = None
     ) -> ObjectDetectionOutput:
         """Run YOLOv3.
 
@@ -1103,9 +1084,7 @@ class YOLOV3ForObjectDetection(ObjectDetectionModel):
         return _yolov3_output(raw_preds, targets, cfg)
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_sizes: list[tuple[int, int]],
+        self, output: ObjectDetectionOutput, image_sizes: list[tuple[int, int]]
     ) -> list[dict[str, Tensor]]:
         """Filter by score, clip boxes, apply per-class NMS.
 
@@ -1212,9 +1191,7 @@ class YOLOV3TinyForObjectDetection(ObjectDetectionModel):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: list[dict[str, Tensor]] | None = None,
+        self, x: Tensor, targets: list[dict[str, Tensor]] | None = None
     ) -> ObjectDetectionOutput:
         check_per_image(type(self).__name__, int(x.shape[0]), targets=targets)
         p4_raw, p5 = self.backbone(x)
@@ -1235,9 +1212,7 @@ class YOLOV3TinyForObjectDetection(ObjectDetectionModel):
         return _yolov3_output([p5_raw_pred, p4_raw_pred], targets, self._cfg)
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_sizes: list[tuple[int, int]],
+        self, output: ObjectDetectionOutput, image_sizes: list[tuple[int, int]]
     ) -> list[dict[str, Tensor]]:
         """Filter by score, clip boxes, apply per-class NMS.
 
@@ -1260,9 +1235,7 @@ class YOLOV3TinyForObjectDetection(ObjectDetectionModel):
 
 _CFG_V3 = YOLOV3Config()
 _CFG_V3_TINY = YOLOV3Config(
-    anchors=_TINY_ANCHORS,
-    strides=_TINY_STRIDES,
-    anchor_masks=_TINY_ANCHOR_MASKS,
+    anchors=_TINY_ANCHORS, strides=_TINY_STRIDES, anchor_masks=_TINY_ANCHOR_MASKS
 )
 
 
@@ -1275,10 +1248,7 @@ _CFG_V3_TINY = YOLOV3Config(
     params=61949149,
 )
 def yolo_v3(
-    pretrained: bool | str = False,
-    *,
-    weights: YOLOV3Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: YOLOV3Weights | None = None, **overrides: object
 ) -> YOLOV3ForObjectDetection:
     r"""YOLOv3 with Darknet-53 backbone, 3-scale detection (Redmon & Farhadi, 2018).
 
@@ -1341,10 +1311,7 @@ def yolo_v3(
     params=8852366,
 )
 def yolo_v3_tiny(
-    pretrained: bool | str = False,
-    *,
-    weights: YOLOV3TinyWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: YOLOV3TinyWeights | None = None, **overrides: object
 ) -> YOLOV3TinyForObjectDetection:
     r"""YOLOv3-Tiny — 2-scale lightweight variant (Redmon & Farhadi, 2018).
 

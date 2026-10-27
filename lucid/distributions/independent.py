@@ -136,11 +136,7 @@ class Independent(Distribution):
         e = tuple(base_distribution.event_shape)
         new_batch = b[: len(b) - self.reinterpreted_batch_ndims]
         new_event = b[len(b) - self.reinterpreted_batch_ndims :] + e
-        super().__init__(
-            batch_shape=new_batch,
-            event_shape=new_event,
-            validate_args=validate_args,
-        )
+        super().__init__(batch_shape=new_batch, event_shape=new_event, validate_args=validate_args)
 
     @override
     @property
@@ -304,11 +300,7 @@ class Independent(Distribution):
         return self.base_dist.enumerate_support(expand=expand)
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Independent` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(Independent, _instance)
         batch_shape = tuple(batch_shape)
@@ -316,9 +308,7 @@ class Independent(Distribution):
         new.base_dist = self.base_dist.expand(base_batch)
         new.reinterpreted_batch_ndims = self.reinterpreted_batch_ndims
         super(Independent, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new

@@ -72,12 +72,7 @@ class _BasicConv2d(nn.Module):
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
         )
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
 
@@ -550,11 +545,7 @@ class GoogLeNetForImageClassification(ImageClassificationModel, ClassificationHe
         _init_reference_weights(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> GoogLeNetOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> GoogLeNetOutput:
         cfg = self.config
         assert isinstance(cfg, GoogLeNetConfig)
         use_aux = cfg.aux_logits and self.training

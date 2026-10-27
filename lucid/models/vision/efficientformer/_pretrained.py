@@ -40,17 +40,11 @@ _CFG_L1 = EfficientFormerConfig(
 # So Table 6 is internally inconsistent with Table 1, and the reference
 # implements the arrangement Table 1 was measured from.
 _CFG_L3 = EfficientFormerConfig(
-    depths=(4, 4, 12, 6),
-    embed_dims=(64, 128, 320, 512),
-    mlp_ratios=(4.0, 4.0, 4.0, 4.0),
-    num_vit=4,
+    depths=(4, 4, 12, 6), embed_dims=(64, 128, 320, 512), mlp_ratios=(4.0, 4.0, 4.0, 4.0), num_vit=4
 )
 
 _CFG_L7 = EfficientFormerConfig(
-    depths=(6, 6, 18, 8),
-    embed_dims=(96, 192, 384, 768),
-    mlp_ratios=(4.0, 4.0, 4.0, 4.0),
-    num_vit=8,
+    depths=(6, 6, 18, 8), embed_dims=(96, 192, 384, 768), mlp_ratios=(4.0, 4.0, 4.0, 4.0), num_vit=8
 )
 
 

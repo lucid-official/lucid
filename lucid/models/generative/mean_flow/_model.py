@@ -30,11 +30,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
-from lucid.models._output import (
-    DiffusionModelOutput,
-    GenerationOutput,
-    ModelOutput,
-)
+from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._utils._generative import resolve_generation_device, start_noise
 from lucid.models.generative._common._config import patch_grid_side
@@ -48,11 +44,7 @@ from lucid.models.generative._common._transformers import (
 )
 from lucid.models.generative.mean_flow._config import MeanFlowConfig
 
-__all__ = [
-    "MeanFlowModel",
-    "MeanFlowForImageGeneration",
-    "MeanFlowOutput",
-]
+__all__ = ["MeanFlowModel", "MeanFlowForImageGeneration", "MeanFlowOutput"]
 
 
 class _TimeMLP(nn.Module):
@@ -188,9 +180,7 @@ class MeanFlowModel(PretrainedModel):
         # it is derived from the config and carries nothing a checkpoint
         # needs — the same choice Swin makes for its position index.
         self.register_buffer(
-            "pos_embed",
-            sincos_position_embedding(config.hidden_size, self.grid),
-            persistent=False,
+            "pos_embed", sincos_position_embedding(config.hidden_size, self.grid), persistent=False
         )
 
         # One MLP per embedded time variable.  ``t_r_interval`` embeds
@@ -218,12 +208,9 @@ class MeanFlowModel(PretrainedModel):
 
     def _num_time_inputs(self) -> int:
         """How many scalars the configured conditioning embeds."""
-        return {
-            "t_interval": 2,
-            "t_r": 2,
-            "t_r_interval": 3,
-            "interval": 1,
-        }[self.config.time_conditioning]
+        return {"t_interval": 2, "t_r": 2, "t_r_interval": 3, "interval": 1}[
+            self.config.time_conditioning
+        ]
 
     def _time_inputs(self, r: Tensor, t: Tensor) -> list[Tensor]:
         """The scalars to embed, per :attr:`MeanFlowConfig.time_conditioning`."""
@@ -249,11 +236,7 @@ class MeanFlowModel(PretrainedModel):
 
     @override
     def forward(
-        self,
-        z: Tensor,
-        r: Tensor,
-        t: Tensor,
-        labels: Tensor | None = None,
+        self, z: Tensor, r: Tensor, t: Tensor, labels: Tensor | None = None
     ) -> DiffusionModelOutput:
         r"""Evaluate the average-velocity field.
 
@@ -277,11 +260,7 @@ class MeanFlowModel(PretrainedModel):
             objective lives in :class:`MeanFlowForImageGeneration`.
         """
         check_latent_size(
-            int(z.shape[-2]),
-            int(z.shape[-1]),
-            self.grid,
-            self.config.patch_size,
-            "MeanFlow",
+            int(z.shape[-2]), int(z.shape[-1]), self.grid, self.config.patch_size, "MeanFlow"
         )
         tokens = self.patch_embed(z)
         tokens = tokens.reshape(tokens.shape[0], tokens.shape[1], -1).permute(0, 2, 1)
@@ -303,10 +282,7 @@ class MeanFlowModel(PretrainedModel):
         for block in self.blocks:
             tokens = block(tokens, cond)
         image = unpatchify(
-            self.final(tokens, cond),
-            self.grid,
-            self.config.patch_size,
-            self.config.out_channels,
+            self.final(tokens, cond), self.grid, self.config.patch_size, self.config.out_channels
         )
         return DiffusionModelOutput(sample=image)
 
@@ -445,12 +421,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
             drop = lucid.rand((batch,), device=device) < config.class_dropout
             labels = lucid.where(
                 drop,
-                lucid.full(
-                    (batch,),
-                    float(config.num_classes),
-                    dtype=labels.dtype,
-                    device=device,
-                ),
+                lucid.full((batch,), float(config.num_classes), dtype=labels.dtype, device=device),
                 labels,
             )
 
@@ -461,11 +432,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
         def field(z_: Tensor, r_: Tensor, t_: Tensor) -> Tensor:
             return self.mean_flow(z_, r_, t_, labels).sample
 
-        u, dudt = lucid.func.jvp(
-            field,
-            (z, r, t),
-            (v, lucid.zeros_like(r), lucid.ones_like(t)),
-        )
+        u, dudt = lucid.func.jvp(field, (z, r, t), (v, lucid.zeros_like(r), lucid.ones_like(t)))
         u = cast(Tensor, u)
         dudt = cast(Tensor, dudt)
 

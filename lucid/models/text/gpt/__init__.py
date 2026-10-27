@@ -9,15 +9,8 @@ from lucid.models.text.gpt._model import (
     GPTModel,
 )
 from lucid.models.text.gpt._tokenizer import GPTTokenizer, GPTTokenizerFast
-from lucid.models.text.gpt._pretrained import (
-    gpt,
-    gpt_cls,
-    gpt_lm,
-)
-from lucid.models.text.gpt._weights import (
-    GPTLMWeights,
-    GPTWeights,
-)
+from lucid.models.text.gpt._pretrained import gpt, gpt_cls, gpt_lm
+from lucid.models.text.gpt._weights import GPTLMWeights, GPTWeights
 
 __all__ = [
     "GPTLMWeights",

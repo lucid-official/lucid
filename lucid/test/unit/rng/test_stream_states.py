@@ -11,11 +11,7 @@ returns them there.
 import gc
 
 import lucid
-from lucid._factories._generator import (
-    _LIVE,
-    _restore_stream_states,
-    _stream_states,
-)
+from lucid._factories._generator import _LIVE, _restore_stream_states, _stream_states
 
 
 def test_restoring_returns_every_stream_to_its_start(device: str) -> None:

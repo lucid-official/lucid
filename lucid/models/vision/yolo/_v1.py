@@ -238,10 +238,7 @@ def _conv_block(in_ch: int, out_ch: int, kernel: int, stride: int, padding: int)
     )
 
 
-def _build_darknet(
-    in_channels: int,
-    arch: list[object],
-) -> tuple[nn.Sequential, int]:
+def _build_darknet(in_channels: int, arch: list[object]) -> tuple[nn.Sequential, int]:
     """Build the Darknet convolutional backbone from an architecture spec.
 
     Returns:
@@ -431,9 +428,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         return lucid.stack([cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0], dim=-1)
 
     def _decode_predictions(
-        self,
-        raw: Tensor,
-        image_size: tuple[int, int],
+        self, raw: Tensor, image_size: tuple[int, int]
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Decode raw grid output to flat predictions.
 
@@ -486,10 +481,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         return logits, pred_boxes, conf
 
     def _compute_loss(
-        self,
-        raw: Tensor,
-        targets: list[dict[str, Tensor]],
-        image_size: tuple[int, int],
+        self, raw: Tensor, targets: list[dict[str, Tensor]], image_size: tuple[int, int]
     ) -> Tensor:
         """Compute the YOLOv1 multi-part MSE loss.
 
@@ -519,11 +511,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         return lucid.cat(loss_parts).mean()
 
     def _image_loss(
-        self,
-        raw: Tensor,
-        boxes: Tensor,
-        target: dict[str, Tensor],
-        image_size: tuple[int, int],
+        self, raw: Tensor, boxes: Tensor, target: dict[str, Tensor], image_size: tuple[int, int]
     ) -> Tensor:
         """One image's loss over every predictor at once.
 
@@ -562,8 +550,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
         cell = (row * float(S) + col).long()  # (M,)
         cell_boxes = boxes.reshape(S * S, B_boxes, 4)[cell]  # (M, B, 4)
         ious = lucid.stack(
-            [box_iou(cell_boxes[:, b], gt_xyxy).diagonal() for b in range(B_boxes)],
-            dim=1,
+            [box_iou(cell_boxes[:, b], gt_xyxy).diagonal() for b in range(B_boxes)], dim=1
         )  # (M, B)
         best_iou, best_b = ious.max(dim=1)
         idx = cell * B_boxes + best_b  # (M,) predictor index
@@ -651,16 +638,11 @@ class YOLOForObjectDetection(ObjectDetectionModel):
             loss = self._compute_loss(raw, targets, image_size)
 
         return ObjectDetectionOutput(
-            logits=logits,
-            pred_boxes=pred_boxes,
-            loss=loss,
-            objectness=objectness,
+            logits=logits, pred_boxes=pred_boxes, loss=loss, objectness=objectness
         )
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_size: tuple[int, int] = (448, 448),
+        self, output: ObjectDetectionOutput, image_size: tuple[int, int] = (448, 448)
     ) -> list[dict[str, Tensor]]:
         """Per-class NMS on raw predictions.
 
@@ -709,10 +691,7 @@ class YOLOForObjectDetection(ObjectDetectionModel):
                 sc_sel = sc_b[:, c][mask_t]
                 bx_sel = bx_b[mask_t]
                 keep = batched_nms(
-                    bx_sel,
-                    sc_sel,
-                    lucid.zeros(len(mask), device=dev),
-                    cfg.nms_thresh,
+                    bx_sel, sc_sel, lucid.zeros(len(mask), device=dev), cfg.nms_thresh
                 )
                 keep_boxes.append(bx_sel[keep])
                 keep_scores.append(sc_sel[keep])
@@ -770,10 +749,7 @@ _CFG_V1_TINY = YOLOConfig(
     model_class=YOLOForObjectDetection,
     default_config=_CFG_V1,
 )
-def yolo(
-    pretrained: bool = False,
-    **overrides: object,
-) -> YOLOForObjectDetection:
+def yolo(pretrained: bool = False, **overrides: object) -> YOLOForObjectDetection:
     r"""YOLOv1 with full Darknet backbone (Redmon et al., CVPR 2016).
 
     Builds the paper-cited full YOLOv1 detector: 24-layer Darknet
@@ -826,10 +802,7 @@ def yolo(
     model_class=YOLOForObjectDetection,
     default_config=_CFG_V1_TINY,
 )
-def yolo_tiny(
-    pretrained: bool = False,
-    **overrides: object,
-) -> YOLOForObjectDetection:
+def yolo_tiny(pretrained: bool = False, **overrides: object) -> YOLOForObjectDetection:
     r"""YOLOv1-Tiny with reduced Darknet backbone (Redmon et al., CVPR 2016).
 
     Builds the lightweight variant described in the YOLOv1 paper alongside

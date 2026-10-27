@@ -212,17 +212,11 @@ _REFUSED = {"second_pass": True}
 # Without the reference installed, what the reference answers.
 _EXPECTED: dict[str, tuple[Scenario, dict[str, object]]] = {
     "shared-unreached-input": (_shared_unreached_input, {"value": [None]}),
-    "shared-beside-a-fresh-branch": (
-        _shared_beside_a_fresh_branch,
-        {"value": [[2.0, 2.0]]},
-    ),
+    "shared-beside-a-fresh-branch": (_shared_beside_a_fresh_branch, {"value": [[2.0, 2.0]]}),
     "shared-input": (_shared_input, _REFUSED),
     "shared-own-input": (_shared_own_input, _REFUSED),
     "shared-interior-below": (_shared_interior_below, _REFUSED),
-    "shared-interior-frontier": (
-        _shared_interior_frontier,
-        {"value": [[1.0, 1.0], [1.0, 1.0]]},
-    ),
+    "shared-interior-frontier": (_shared_interior_frontier, {"value": [[1.0, 1.0], [1.0, 1.0]]}),
     "shared-frontier-and-below": (_shared_frontier_and_below, _REFUSED),
     "shared-one-marker-of-two": (_shared_one_marker_of_two, _REFUSED),
     "chain-last": (_chain_last, {"value": [[1.0, 1.0]]}),
@@ -232,10 +226,7 @@ _EXPECTED: dict[str, tuple[Scenario, dict[str, object]]] = {
         _chain_new_loss_at_a_spent_tensor,
         {"value": [[2.0, 2.0]]},
     ),
-    "chain-new-loss-past-a-spent-tensor": (
-        _chain_new_loss_past_a_spent_tensor,
-        _REFUSED,
-    ),
+    "chain-new-loss-past-a-spent-tensor": (_chain_new_loss_past_a_spent_tensor, _REFUSED),
     "recut-first": (_recut_first, {"value": [[2.718, 54.598]]}),
     "recut-again": (_recut_again, _REFUSED),
     "recut-leaf": (_recut_leaf, _REFUSED),
@@ -348,12 +339,7 @@ def _backward_seconds(
 @pytest.mark.parametrize("retain", [False, True], ids=["default", "retain-graph"])
 @pytest.mark.parametrize(
     ("build", "size"),
-    [
-        (_chain_loss, 5000),
-        (_chain_grad_loss, 5000),
-        (_affine_chain_loss, 4000),
-        (_gru_loss, 300),
-    ],
+    [(_chain_loss, 5000), (_chain_grad_loss, 5000), (_affine_chain_loss, 4000), (_gru_loss, 300)],
     ids=["mul-chain", "grad-mul-chain", "affine-f64-chain", "gru-cell-bptt"],
 )
 def test_a_backward_is_linear_in_the_graph(

@@ -6,12 +6,7 @@ from lucid.models.vision.unet._model import UNetForSemanticSegmentation
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 _CFG_BASE = UNetConfig(
-    num_classes=2,
-    in_channels=1,
-    base_channels=64,
-    depth=4,
-    bilinear=False,
-    dropout=0.0,
+    num_classes=2, in_channels=1, base_channels=64, depth=4, bilinear=False, dropout=0.0
 )
 
 # Residual variants (ResUNet)
@@ -59,10 +54,7 @@ _CFG_RES_3D = UNetConfig(
     model_class=UNetForSemanticSegmentation,
     default_config=_CFG_BASE,
 )
-def unet(
-    pretrained: bool = False,
-    **overrides: object,
-) -> UNetForSemanticSegmentation:
+def unet(pretrained: bool = False, **overrides: object) -> UNetForSemanticSegmentation:
     r"""U-Net (Ronneberger et al., MICCAI 2015).
 
     Builds the canonical 2-D U-Net: 4-level encoder / decoder with
@@ -117,10 +109,7 @@ def unet(
     model_class=UNetForSemanticSegmentation,
     default_config=_CFG_RES_2D,
 )
-def res_unet_2d(
-    pretrained: bool = False,
-    **overrides: object,
-) -> UNetForSemanticSegmentation:
+def res_unet_2d(pretrained: bool = False, **overrides: object) -> UNetForSemanticSegmentation:
     r"""ResUNet — U-Net with residual DoubleConv blocks, 2-D.
 
     Builds a 2-D U-Net with the standard channel / depth schedule but
@@ -188,10 +177,7 @@ def res_unet_2d(
     model_class=UNetForSemanticSegmentation,
     default_config=_CFG_3D,
 )
-def unet_3d(
-    pretrained: bool = False,
-    **overrides: object,
-) -> UNetForSemanticSegmentation:
+def unet_3d(pretrained: bool = False, **overrides: object) -> UNetForSemanticSegmentation:
     r"""3-D U-Net for volumetric segmentation (Cicek et al., MICCAI 2016).
 
     Builds the volumetric U-Net variant: all Conv2d / BatchNorm2d /
@@ -243,10 +229,7 @@ def unet_3d(
     model_class=UNetForSemanticSegmentation,
     default_config=_CFG_RES_3D,
 )
-def res_unet_3d(
-    pretrained: bool = False,
-    **overrides: object,
-) -> UNetForSemanticSegmentation:
+def res_unet_3d(pretrained: bool = False, **overrides: object) -> UNetForSemanticSegmentation:
     r"""3-D ResUNet — volumetric residual U-Net.
 
     H11 marker: **not a paper variant.**  No single paper defines a 3-D

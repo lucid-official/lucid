@@ -7,7 +7,4 @@ in :mod:`lucid.nn` — text families just import them from there.
 
 from lucid.models.text._common._config import LanguageModelConfig, TextActivation
 
-__all__ = [
-    "LanguageModelConfig",
-    "TextActivation",
-]
+__all__ = ["LanguageModelConfig", "TextActivation"]

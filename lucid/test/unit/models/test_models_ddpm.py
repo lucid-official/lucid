@@ -168,10 +168,7 @@ class TestDDPMModel:
     def test_returns_diffusion_output(self) -> None:
         cfg = _tiny_cfg()
         m = DDPMModel(cfg).eval()
-        out = m(
-            lucid.randn((1, 3, 16, 16)),
-            lucid.tensor([0]).long(),
-        )
+        out = m(lucid.randn((1, 3, 16, 16)), lucid.tensor([0]).long())
         assert isinstance(out, DiffusionModelOutput)
         assert tuple(out.sample.shape) == (1, 3, 16, 16)
         assert out.loss is None
@@ -191,10 +188,7 @@ class TestDDPMForImageGeneration:
     def test_no_loss_without_target(self) -> None:
         cfg = _tiny_cfg()
         m = DDPMForImageGeneration(cfg).eval()
-        out = m(
-            lucid.randn((1, 3, 16, 16)),
-            lucid.tensor([0]).long(),
-        )
+        out = m(lucid.randn((1, 3, 16, 16)), lucid.tensor([0]).long())
         assert out.loss is None
 
 
@@ -230,12 +224,7 @@ class TestDDPMHybridObjective:
         mean, logvar = diffusion_posterior(x_start=x0, x_t=x_t, t=t, posterior=post)
         logvar = logvar + lucid.zeros_like(x0)
         at_optimum = diffusion_vlb_term(
-            x_start=x0,
-            x_t=x_t,
-            t=t,
-            model_mean=mean,
-            model_log_variance=logvar,
-            posterior=post,
+            x_start=x0, x_t=x_t, t=t, model_mean=mean, model_log_variance=logvar, posterior=post
         )
         assert float(at_optimum.abs().max().item()) < 1e-6
 
@@ -278,10 +267,7 @@ class TestDDPMHybridObjective:
         post = diffusion_posterior_constants(betas)
         x0 = lucid.randn((2, 3, 8, 8))
         mean, _ = diffusion_posterior(
-            x_start=x0,
-            x_t=lucid.randn((2, 3, 8, 8)),
-            t=lucid.zeros(2).long(),
-            posterior=post,
+            x_start=x0, x_t=lucid.randn((2, 3, 8, 8)), t=lucid.zeros(2).long(), posterior=post
         )
         assert float((mean - x0).abs().max().item()) == 0.0
 
@@ -313,9 +299,7 @@ class TestDDPMHybridObjective:
         _, model = self._fixture()
         model.eval()
         out = model.generate(
-            DDPMScheduler(num_train_timesteps=20),
-            n_samples=1,
-            num_inference_steps=4,
+            DDPMScheduler(num_train_timesteps=20), n_samples=1, num_inference_steps=4
         )
         assert tuple(out.samples.shape) == (1, 3, 16, 16)
 
@@ -391,10 +375,7 @@ class TestDDPMRegistry:
             num_train_timesteps=20,
         )
         assert isinstance(m, DDPMModel)
-        out = m.eval()(
-            lucid.randn((1, 3, 16, 16)),
-            lucid.tensor([0]).long(),
-        )
+        out = m.eval()(lucid.randn((1, 3, 16, 16)), lucid.tensor([0]).long())
         assert tuple(out.sample.shape) == (1, 3, 16, 16)
 
     def test_auto_image_generation_dispatch(self) -> None:

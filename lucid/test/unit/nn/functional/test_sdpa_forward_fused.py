@@ -186,11 +186,7 @@ def test_padded_head_dim_matches_cpu(dims: tuple[int, int], lk: int, mode: str) 
     def out(device: str) -> np.ndarray:
         m = mask.to(device) if mask is not None else None
         return F.scaled_dot_product_attention(
-            q.to(device),
-            k.to(device),
-            v.to(device),
-            attn_mask=m,
-            is_causal=mode == "causal",
+            q.to(device), k.to(device), v.to(device), attn_mask=m, is_causal=mode == "causal"
         ).numpy()
 
     np.testing.assert_allclose(out("metal"), out("cpu"), atol=1e-5, rtol=1e-4)

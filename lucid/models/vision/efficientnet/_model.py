@@ -346,9 +346,7 @@ class EfficientNet(PretrainedModel, BackboneMixin):
             cumulative *= stride
             fi.append(
                 FeatureInfo(
-                    stage=i + 1,
-                    num_channels=_round_channels(base_out, w),
-                    reduction=cumulative,
+                    stage=i + 1, num_channels=_round_channels(base_out, w), reduction=cumulative
                 )
             )
         self._feature_info = fi
@@ -453,11 +451,7 @@ class EfficientNetForImageClassification(ImageClassificationModel, Classificatio
         self._build_classifier(num_features, config.num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         x = self.avgpool(x)
         x = self.drop(x.flatten(1))

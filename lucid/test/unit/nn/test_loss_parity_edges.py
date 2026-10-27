@@ -251,39 +251,19 @@ def _kd_case(device: str) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
     """A K-d classification case with an ignored position: log-probs
     ``(2, 3, 2, 2)``, targets ``(2, 2, 2)`` and a class weight."""
     logits = [
-        [
-            [[0.1, -0.4], [1.2, 0.3]],
-            [[0.5, 0.9], [-1.0, 0.2]],
-            [[2.0, -0.3], [0.0, 0.7]],
-        ],
-        [
-            [[-0.6, 0.4], [0.8, 1.1]],
-            [[0.3, -0.2], [0.6, -0.9]],
-            [[1.4, 0.5], [-0.1, 0.0]],
-        ],
+        [[[0.1, -0.4], [1.2, 0.3]], [[0.5, 0.9], [-1.0, 0.2]], [[2.0, -0.3], [0.0, 0.7]]],
+        [[[-0.6, 0.4], [0.8, 1.1]], [[0.3, -0.2], [0.6, -0.9]], [[1.4, 0.5], [-0.1, 0.0]]],
     ]
     target = [[[0, 2], [-100, 1]], [[2, 1], [0, 2]]]
     x = F.log_softmax(lucid.tensor(logits, device=device), dim=1)
-    return (
-        x,
-        lucid.tensor(target, device=device),
-        lucid.tensor([1.0, 2.0, 0.5], device=device),
-    )
+    return (x, lucid.tensor(target, device=device), lucid.tensor([1.0, 2.0, 0.5], device=device))
 
 
 def _kd_expected(reduction: str) -> object:
     """The K-d case written out: ``-w[t] * log_p[t]`` per kept position."""
     logits = [
-        [
-            [[0.1, -0.4], [1.2, 0.3]],
-            [[0.5, 0.9], [-1.0, 0.2]],
-            [[2.0, -0.3], [0.0, 0.7]],
-        ],
-        [
-            [[-0.6, 0.4], [0.8, 1.1]],
-            [[0.3, -0.2], [0.6, -0.9]],
-            [[1.4, 0.5], [-0.1, 0.0]],
-        ],
+        [[[0.1, -0.4], [1.2, 0.3]], [[0.5, 0.9], [-1.0, 0.2]], [[2.0, -0.3], [0.0, 0.7]]],
+        [[[-0.6, 0.4], [0.8, 1.1]], [[0.3, -0.2], [0.6, -0.9]], [[1.4, 0.5], [-0.1, 0.0]]],
     ]
     target = [[[0, 2], [-100, 1]], [[2, 1], [0, 2]]]
     w = [1.0, 2.0, 0.5]
@@ -387,10 +367,7 @@ class TestClassTargetsAreNeverGatheredRaw:
         for p in (1, 2):
             lx = lucid.tensor(mm, requires_grad=True, device=device)
             lo = F.multi_margin_loss(
-                lx,
-                lucid.tensor(mt, device=device),
-                p=p,
-                weight=lucid.tensor(mw, device=device),
+                lx, lucid.tensor(mt, device=device), p=p, weight=lucid.tensor(mw, device=device)
             )
             lo.backward()
             rxx = R.tensor(mm, requires_grad=True)  # type: ignore[attr-defined]
@@ -417,8 +394,7 @@ class TestABatchWithEveryTargetIgnored:
     def test_the_value_is_nan_and_the_gradient_zero(self, device: str) -> None:
         lin = nn.Linear(4, 3).to(device)
         loss = nn.CrossEntropyLoss()(
-            lin(lucid.randn(2, 4, device=device)),
-            lucid.tensor([-100, -100], device=device),
+            lin(lucid.randn(2, 4, device=device)), lucid.tensor([-100, -100], device=device)
         )
         loss.backward()
         assert math.isnan(loss.item())
@@ -877,9 +853,7 @@ class TestUnbatchedInputs:
         xs = [1.0, 2.0, 3.0]
         for reduction in ("none", "mean", "sum"):
             lo = F.cross_entropy(
-                lucid.tensor(xs, device=device),
-                lucid.tensor(1, device=device),
-                reduction=reduction,
+                lucid.tensor(xs, device=device), lucid.tensor(1, device=device), reduction=reduction
             )
             ro = rf.cross_entropy(R.tensor(xs), R.tensor(1), reduction=reduction)  # type: ignore[attr-defined]
             assert lo.shape == tuple(ro.shape) and _close(lo.item(), ro.item())
@@ -927,10 +901,7 @@ def _weighted_modules() -> dict[str, tuple[nn.Module, list[str]]]:
             ["weight", "pos_weight"],
         ),
         "MultiMarginLoss": (nn.MultiMarginLoss(weight=w3), ["weight"]),
-        "MultiLabelSoftMarginLoss": (
-            nn.MultiLabelSoftMarginLoss(weight=w3),
-            ["weight"],
-        ),
+        "MultiLabelSoftMarginLoss": (nn.MultiLabelSoftMarginLoss(weight=w3), ["weight"]),
     }
 
 
@@ -1012,11 +983,7 @@ class TestLossWeightsAreBuffers:
                 self.criterion = nn.CrossEntropyLoss(weight=lucid.tensor([1.0, 2.0, 3.0]))
 
         model = Head()
-        assert sorted(model.state_dict()) == [
-            "criterion.weight",
-            "fc.bias",
-            "fc.weight",
-        ]
+        assert sorted(model.state_dict()) == ["criterion.weight", "fc.bias", "fc.weight"]
         model.half()
         assert model.criterion.weight.dtype == lucid.float16
 
@@ -1110,8 +1077,7 @@ def test_kl_div_honours_deprecated_size_average(device: str) -> None:
     log_q = F.log_softmax(lucid.tensor([[2.0, 0.5, 0.1]], device=device), dim=1)
     p = lucid.tensor([[0.8, 0.15, 0.05]], device=device)
     assert _close(
-        F.kl_div(log_q, p, size_average=False).item(),
-        F.kl_div(log_q, p, reduction="sum").item(),
+        F.kl_div(log_q, p, size_average=False).item(), F.kl_div(log_q, p, reduction="sum").item()
     )
     assert _close(
         F.kl_div(log_q, p, size_average=True, reduction="sum").item(),

@@ -179,10 +179,7 @@ class Normalize(_NoParams, PhotometricTransform[Empty]):
 
 
 def _jitter_range(
-    value: float | tuple[float, float],
-    *,
-    center: float,
-    floor: float | None = None,
+    value: float | tuple[float, float], *, center: float, floor: float | None = None
 ) -> tuple[float, float] | None:
     """Normalize a ColorJitter arg to a ``(min, max)`` range, or ``None``."""
     if isinstance(value, (int, float)):
@@ -218,12 +215,7 @@ class ColorJitter(PhotometricTransform[ColorJitterParams]):
     (3, 32, 32)
     """
 
-    _ADJUST = (
-        F.adjust_brightness,
-        F.adjust_contrast,
-        F.adjust_saturation,
-        F.adjust_hue,
-    )
+    _ADJUST = (F.adjust_brightness, F.adjust_contrast, F.adjust_saturation, F.adjust_hue)
 
     def __init__(
         self,

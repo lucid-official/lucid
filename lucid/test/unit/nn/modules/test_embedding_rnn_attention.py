@@ -42,11 +42,7 @@ class TestEmbedding:
 
 class TestSequential:
     def test_chain(self) -> None:
-        net = nn.Sequential(
-            nn.Linear(4, 8),
-            nn.ReLU(),
-            nn.Linear(8, 2),
-        )
+        net = nn.Sequential(nn.Linear(4, 8), nn.ReLU(), nn.Linear(8, 2))
         out = net(lucid.zeros(3, 4))
         assert out.shape == (3, 2)
 
@@ -79,13 +75,7 @@ class TestRNNFamily:
         assert out.shape == (2, 5, 8)
 
     def test_rnn_shape(self) -> None:
-        m = nn.RNN(
-            input_size=4,
-            hidden_size=8,
-            num_layers=1,
-            batch_first=True,
-            nonlinearity="tanh",
-        )
+        m = nn.RNN(input_size=4, hidden_size=8, num_layers=1, batch_first=True, nonlinearity="tanh")
         x = lucid.zeros(2, 5, 4)
         out, _ = m(x)
         assert out.shape == (2, 5, 8)
@@ -140,15 +130,7 @@ class TestGroupedQueryAttention:
         gqa = nn.MultiheadAttention(64, 8, num_kv_heads=2, batch_first=True)
         cache = DynamicCache()
         x = lucid.randn(2, 1, 64)
-        gqa(
-            x,
-            x,
-            x,
-            use_cache=True,
-            past_key_value=cache,
-            layer_idx=0,
-            need_weights=False,
-        )
+        gqa(x, x, x, use_cache=True, past_key_value=cache, layer_idx=0, need_weights=False)
         # (B, num_kv_heads=2, T, head_dim=8) — NOT (B, 8, ...)
         assert tuple(cache.key_cache[0].shape) == (2, 2, 1, 8)
 

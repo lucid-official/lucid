@@ -33,12 +33,7 @@ def _to_numpy(x: Any) -> np.ndarray:
 
 
 def assert_close(
-    actual: Any,
-    expected: Any,
-    *,
-    atol: float = 1e-5,
-    rtol: float = 1e-4,
-    msg: str = "",
+    actual: Any, expected: Any, *, atol: float = 1e-5, rtol: float = 1e-4, msg: str = ""
 ) -> None:
     """Element-wise close comparison with framework-agnostic operands."""
     a = _to_numpy(actual)

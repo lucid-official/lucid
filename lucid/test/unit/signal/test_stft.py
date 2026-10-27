@@ -82,10 +82,7 @@ def test_the_factories_forward_to_signal_windows() -> None:
             ),
             (lucid.blackman_window(9, periodic), windows.blackman(9, sym=not periodic)),
             (lucid.bartlett_window(9, periodic), windows.bartlett(9, sym=not periodic)),
-            (
-                lucid.kaiser_window(9, periodic, 5.0),
-                windows.kaiser(9, 5.0, sym=not periodic),
-            ),
+            (lucid.kaiser_window(9, periodic, 5.0), windows.kaiser(9, 5.0, sym=not periodic)),
         ]
         for top, owner in pairs:
             np.testing.assert_array_equal(top.numpy(), owner.numpy())
@@ -155,13 +152,7 @@ _DEFINITION_CASES = [
     ids=[f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-o{c[4]:d}-z{c[5]:d}" for c in _DEFINITION_CASES],
 )
 def test_stft_is_the_dft_of_each_windowed_frame(
-    n_fft: int,
-    hop: int,
-    win: int,
-    center: bool,
-    onesided: bool,
-    normalized: bool,
-    device: str,
+    n_fft: int, hop: int, win: int, center: bool, onesided: bool, normalized: bool, device: str
 ) -> None:
     x = _signal((61,))
     window = lucid.hann_window(win, device=device)
@@ -217,13 +208,7 @@ _ROUND_TRIPS = [
     ids=[f"n{c[0]}-h{c[1]}-w{c[2]}-c{c[3]:d}-z{c[4]:d}-b{c[5]:d}" for c in _ROUND_TRIPS],
 )
 def test_istft_of_stft_is_the_signal(
-    n_fft: int,
-    hop: int,
-    win: int | None,
-    center: bool,
-    normalized: bool,
-    batch: bool,
-    device: str,
+    n_fft: int, hop: int, win: int | None, center: bool, normalized: bool, batch: bool, device: str
 ) -> None:
     x = lucid.tensor(_signal((2, 100) if batch else (100,)), device=device)
     w = lucid.hann_window(win or n_fft, device=device)
@@ -264,11 +249,7 @@ def test_the_nola_check_leaves_a_trace_supported(device: str) -> None:
     # recording unsupported and send every compiled istft back to eager.
     w = lucid.hann_window(16, device=device)
     spec = lucid.stft(
-        lucid.tensor(_signal((64,)), device=device),
-        16,
-        4,
-        window=w,
-        return_complex=True,
+        lucid.tensor(_signal((64,)), device=device), 16, 4, window=w, return_complex=True
     )
     with lucid.no_grad(), lucid.compile._tracing(watch=[spec]) as tracer:
         lucid.istft(spec, 16, 4, window=w, length=64)
@@ -326,21 +307,13 @@ _REFUSALS: list[tuple[str, Callable[[], object], type[Exception]]] = [
     ),
     ("n_fft zero", lambda: lucid.stft(_x(), 0, return_complex=True), _Invalid),
     ("hop zero", lambda: lucid.stft(_x(), 8, 0, return_complex=True), _Invalid),
-    (
-        "win over n_fft",
-        lambda: lucid.stft(_x(), 8, 2, 9, return_complex=True),
-        _Invalid,
-    ),
+    ("win over n_fft", lambda: lucid.stft(_x(), 8, 2, 9, return_complex=True), _Invalid),
     (
         "window length",
         lambda: lucid.stft(_x(), 8, window=lucid.ones(7), return_complex=True),
         _Shape,
     ),
-    (
-        "3-D signal",
-        lambda: lucid.stft(lucid.zeros(2, 2, 40), 8, return_complex=True),
-        _Shape,
-    ),
+    ("3-D signal", lambda: lucid.stft(lucid.zeros(2, 2, 40), 8, return_complex=True), _Shape),
     (
         "integer signal",
         lambda: lucid.stft(lucid.zeros(40, dtype=lucid.int32), 8, return_complex=True),
@@ -365,11 +338,7 @@ _REFUSALS: list[tuple[str, Callable[[], object], type[Exception]]] = [
     ("istft 1-D", lambda: lucid.istft(lucid.complex(_x(), _x()), 8), _Shape),
     ("istft bin count", lambda: lucid.istft(_spec(), 16), _Shape),
     ("istft hop over win", lambda: lucid.istft(_spec(), 8, 9), _Invalid),
-    (
-        "istft one-sided complex",
-        lambda: lucid.istft(_spec(), 8, return_complex=True),
-        _Invalid,
-    ),
+    ("istft one-sided complex", lambda: lucid.istft(_spec(), 8, return_complex=True), _Invalid),
     ("istft NOLA", lambda: lucid.istft(_spec(), 8, window=lucid.zeros(8)), _Invalid),
     ("istft empty", lambda: lucid.istft(_spec(), 8, length=0), _Invalid),
 ]
@@ -538,9 +507,7 @@ def test_a_window_matches_the_reference(
 @pytest.mark.parity
 def test_the_window_parameters_match_the_reference(ref: Any) -> None:
     assert_close(
-        lucid.hamming_window(9, False, 0.6, 0.3),
-        ref.hamming_window(9, False, 0.6, 0.3),
-        atol=1e-6,
+        lucid.hamming_window(9, False, 0.6, 0.3), ref.hamming_window(9, False, 0.6, 0.3), atol=1e-6
     )
     assert_close(lucid.kaiser_window(9, True, 5.0), ref.kaiser_window(9, True, 5.0), atol=1e-6)
     expected64 = ref.hann_window(9, dtype=ref.float64)
@@ -568,10 +535,7 @@ def test_a_complex_signal_or_window_matches_the_reference(device: str, ref: Any)
     for return_complex in (True, False):
         expected = ref.istft(spec, 8, window=ref.tensor(w), return_complex=return_complex)
         got = lucid.istft(
-            ours,
-            8,
-            window=lucid.tensor(w, device=device),
-            return_complex=return_complex,
+            ours, 8, window=lucid.tensor(w, device=device), return_complex=return_complex
         )
         assert_close(got, expected.numpy(), atol=1e-4)
 

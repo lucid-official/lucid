@@ -98,10 +98,7 @@ def _grads(lib: ModuleType, case: tuple[str, bool, bool], device: str) -> tuple:
     y, out = _function(lib, kind, marked).apply(x, m)
     loss = y.sum() + out.sum() if out.requires_grad else y.sum()
     loss.backward()
-    return (
-        x.grad.tolist(),
-        None if m.grad is None else m.grad.tolist(),
-    )
+    return (x.grad.tolist(), None if m.grad is None else m.grad.tolist())
 
 
 @pytest.mark.parametrize("case", _CASES, ids=_case_id)
@@ -151,11 +148,7 @@ _REFERENCE_NO_GRAD_VIEW = ("view of the input", True, True)
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "case",
-    [c for c in _CASES if c != _REFERENCE_NO_GRAD_VIEW],
-    ids=_case_id,
-)
+@pytest.mark.parametrize("case", [c for c in _CASES if c != _REFERENCE_NO_GRAD_VIEW], ids=_case_id)
 def test_the_outputs_match_the_reference(
     ref: ModuleType, case: tuple[str, bool, bool], device: str
 ) -> None:
@@ -357,10 +350,7 @@ def _write_to_the_input(lib: ModuleType, write: str, device: str):
 
 
 #: What the custom ``backward`` gives, through ``h = w * 1`` and ``w * 2``.
-_CUSTOM_GRADIENT = {
-    "add_ after a triple": [3.0] * 3,
-    "relu_ after a gradient reversal": [-2.0] * 3,
-}
+_CUSTOM_GRADIENT = {"add_ after a triple": [3.0] * 3, "relu_ after a gradient reversal": [-2.0] * 3}
 
 
 @pytest.mark.parametrize("write", sorted(_CUSTOM_GRADIENT))
@@ -440,9 +430,7 @@ def test_a_non_leaf_input_keeps_its_grad_fn(device: str) -> None:
     assert h.grad_fn is producer and out is not h
 
 
-def test_a_non_leaf_input_returned_as_is_gets_the_custom_gradient(
-    device: str,
-) -> None:
+def test_a_non_leaf_input_returned_as_is_gets_the_custom_gradient(device: str) -> None:
     x = lucid.ones(3, requires_grad=True, device=device)
     _passthrough(lucid, 3.0).apply(x * 1).sum().backward()
     assert x.grad.tolist() == [3.0] * 3

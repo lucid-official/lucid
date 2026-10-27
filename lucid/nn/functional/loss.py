@@ -74,11 +74,7 @@ _KERNEL_REDUCTION: dict[str, int] = {"none": 0, "mean": 1, "sum": 2}
 
 
 def _reduce(
-    t: Tensor,
-    reduction: str,
-    out_dtype: _dtype | None = None,
-    *,
-    weight: Tensor | None = None,
+    t: Tensor, reduction: str, out_dtype: _dtype | None = None, *, weight: Tensor | None = None
 ) -> Tensor:
     """Apply ``reduction`` to the per-element losses ``t`` — the one place a
     loss reduces.
@@ -671,11 +667,7 @@ def cross_entropy(
 
 
 def _soft_target_nll(
-    log_p: Tensor,
-    target: Tensor,
-    weight: Tensor | None,
-    reduction: str,
-    label_smoothing: float,
+    log_p: Tensor, target: Tensor, weight: Tensor | None, reduction: str, label_smoothing: float
 ) -> Tensor:
     """Cross-entropy against per-class probabilities ``target`` of the
     shape of ``log_p``: ``-sum_c w_c y_c log p_c`` per sample, and a
@@ -1893,12 +1885,7 @@ def ctc_loss(
 
 
 def _multi_margin_per_sample(
-    x: Tensor,
-    target: Tensor,
-    p: int,
-    margin: float,
-    weight: Tensor | None,
-    op: str,
+    x: Tensor, target: Tensor, p: int, margin: float, weight: Tensor | None, op: str
 ) -> Tensor:
     _check_dtypes(op, target, input=x)
     # Any other power was computed as written; the reference defines these

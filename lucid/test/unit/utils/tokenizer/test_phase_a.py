@@ -338,10 +338,7 @@ class TestCallTensorIntegration:
         rectangular lucid.Tensor outputs."""
         tok = ByteTokenizer(special_tokens=SpecialTokens(pad=chr(0)))
         out = tok(
-            ["hi", "hello world"],
-            padding=True,
-            return_tensors="lucid",
-            add_special_tokens=False,
+            ["hi", "hello world"], padding=True, return_tensors="lucid", add_special_tokens=False
         )
         assert isinstance(out["input_ids"], lucid.Tensor)
         assert out["input_ids"].dtype == lucid.int32
@@ -354,12 +351,7 @@ class TestCallTensorIntegration:
         v = tok.get_vocab()
         v["<pad>"] = max(v.values()) + 1
         tok = CharTokenizer(vocab=v, special_tokens=SpecialTokens(pad="<pad>"))
-        out = tok(
-            ["hi", "hello"],
-            padding=True,
-            return_tensors="lucid",
-            add_special_tokens=False,
-        )
+        out = tok(["hi", "hello"], padding=True, return_tensors="lucid", add_special_tokens=False)
         assert isinstance(out["input_ids"], lucid.Tensor)
         assert out["input_ids"].dtype == lucid.int32
 
@@ -378,10 +370,7 @@ class TestCallTensorIntegration:
         v = tok.get_vocab()
         # Add [PAD] to vocab + register.
         v["[PAD]"] = max(v.values()) + 1
-        tok = WordPieceTokenizer(
-            vocab=v,
-            special_tokens=SpecialTokens(pad="[PAD]", unk="[UNK]"),
-        )
+        tok = WordPieceTokenizer(vocab=v, special_tokens=SpecialTokens(pad="[PAD]", unk="[UNK]"))
         out = tok(
             ["the dog", "the quick brown fox"],
             padding=True,

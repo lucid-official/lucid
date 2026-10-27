@@ -16,10 +16,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.generative.ddpm._config import DDPMConfig
 from lucid.models.generative.ddpm._model import DDPMForImageGeneration, DDPMModel
-from lucid.models.generative.ddpm._weights import (
-    DDPMChurchWeights,
-    DDPMCifarWeights,
-)
+from lucid.models.generative.ddpm._weights import DDPMChurchWeights, DDPMCifarWeights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 # Ho 2020 Table 9 — CIFAR-10.
@@ -90,10 +87,7 @@ _CFG_IMAGENET64 = DDPMConfig(
     params=35746307,
 )
 def ddpm_cifar(
-    pretrained: bool | str = False,
-    *,
-    weights: DDPMCifarWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DDPMCifarWeights | None = None, **overrides: object
 ) -> DDPMModel:
     r"""Construct a DDPM U-Net trunk for the CIFAR-10 setup.
 
@@ -157,10 +151,7 @@ def ddpm_cifar(
     params=113673219,
 )
 def ddpm_lsun(
-    pretrained: bool | str = False,
-    *,
-    weights: DDPMChurchWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DDPMChurchWeights | None = None, **overrides: object
 ) -> DDPMModel:
     r"""Construct a DDPM U-Net trunk for the LSUN / CelebA-HQ 256x256 setup.
 
@@ -280,10 +271,7 @@ def ddpm_imagenet64(pretrained: bool = False, **overrides: object) -> DDPMModel:
     params=35746307,
 )
 def ddpm_cifar_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DDPMCifarWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DDPMCifarWeights | None = None, **overrides: object
 ) -> DDPMForImageGeneration:
     r"""Construct a DDPM CIFAR-10 model with training loss and ``.generate()``.
 
@@ -342,10 +330,7 @@ def ddpm_cifar_gen(
     params=113673219,
 )
 def ddpm_lsun_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DDPMChurchWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DDPMChurchWeights | None = None, **overrides: object
 ) -> DDPMForImageGeneration:
     r"""Construct a DDPM LSUN / CelebA-HQ model with training loss and ``.generate()``.
 

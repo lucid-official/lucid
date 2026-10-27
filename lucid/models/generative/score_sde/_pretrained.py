@@ -13,10 +13,7 @@ the paper's figures would attribute someone else's architecture to it.
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.generative.score_sde._config import ScoreSDEConfig
-from lucid.models.generative.score_sde._model import (
-    ScoreSDEForImageGeneration,
-    ScoreSDEModel,
-)
+from lucid.models.generative.score_sde._model import ScoreSDEForImageGeneration, ScoreSDEModel
 
 _CFG_VP = ScoreSDEConfig(sde_type="vp")
 _CFG_VE = ScoreSDEConfig(sde_type="ve")

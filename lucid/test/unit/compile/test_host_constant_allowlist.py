@@ -58,10 +58,7 @@ PRODUCERS = [
     ("zeros", lambda t: t + lucid.zeros(2, 4, device=_device_of(t))),
     ("ones", lambda t: t * lucid.ones(2, 4, device=_device_of(t))),
     ("full", lambda t: t + lucid.full((2, 4), 3.0, device=_device_of(t))),
-    (
-        "arange",
-        lambda t: t + lucid.arange(4, dtype=lucid.float32, device=_device_of(t)),
-    ),
+    ("arange", lambda t: t + lucid.arange(4, dtype=lucid.float32, device=_device_of(t))),
     ("eye", lambda t: t[:, :2] + lucid.eye(2, device=_device_of(t))),
     ("linspace", lambda t: t + lucid.linspace(0, 1, 4, device=_device_of(t))),
     ("logspace", lambda t: t + lucid.logspace(0, 1, 4, device=_device_of(t))),

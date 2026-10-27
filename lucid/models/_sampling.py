@@ -78,10 +78,7 @@ def _next_token(next_logits: Tensor, out_tokens: list[Tensor], params: _Sampling
 
 
 def _select_next_ondevice(
-    next_logits: Tensor,
-    out_tokens: list[Tensor],
-    finished: Tensor,
-    params: _SamplingParams,
+    next_logits: Tensor, out_tokens: list[Tensor], finished: Tensor, params: _SamplingParams
 ) -> Tensor:
     r"""On-device next-token selection — append the row, return updated finished.
 
@@ -157,10 +154,7 @@ def _apply_repetition_penalty(logits: Tensor, prefix: Tensor, penalty: float) ->
     dev = logits.device.type
     # (B, vocab) indicator of tokens already present in the prefix.
     seen = lucid.scatter(
-        lucid.zeros((B, vocab), device=dev),
-        -1,
-        prefix,
-        lucid.ones_like(prefix).float(),
+        lucid.zeros((B, vocab), device=dev), -1, prefix, lucid.ones_like(prefix).float()
     )
     penalized = lucid.where(logits > 0, logits / penalty, logits * penalty)
     return lucid.where(seen > 0, penalized, logits)

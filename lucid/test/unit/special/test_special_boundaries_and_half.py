@@ -30,10 +30,7 @@ UnaryFn = Callable[[lucid.Tensor], lucid.Tensor]
 
 _DEVICES: list[Any] = [
     "cpu",
-    pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 
 _ALL_DTYPES: list[str] = ["float16", "bfloat16", "float32", "float64"]
@@ -132,11 +129,7 @@ def test_ndtri_boundaries_and_interior_match_reference(device: str, dtype: str, 
     rx = ref.tensor(_NDTRI_POINTS, dtype=r_dt)
     ref_in = rx.float() if dtype in ("float16", "bfloat16") else rx
     ref_out = ref.special.ndtri(ref_in).to(r_dt)
-    _assert_matches(
-        out.to("cpu").to(lucid.float64).tolist(),
-        ref_out.double().tolist(),
-        dtype,
-    )
+    _assert_matches(out.to("cpu").to(lucid.float64).tolist(), ref_out.double().tolist(), dtype)
 
 
 @pytest.mark.parametrize("device", _DEVICES)

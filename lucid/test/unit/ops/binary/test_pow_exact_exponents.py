@@ -63,18 +63,8 @@ _TINY = {
     lucid.bfloat16: _F32_TINY,
     lucid.float64: 2.0**-1022,
 }
-_BIG = {
-    lucid.float32: 1e30,
-    lucid.float16: 6e4,
-    lucid.bfloat16: 1e30,
-    lucid.float64: 1e300,
-}
-_SPAN = {
-    lucid.float32: 40.0,
-    lucid.float16: 9.0,
-    lucid.bfloat16: 40.0,
-    lucid.float64: 300.0,
-}
+_BIG = {lucid.float32: 1e30, lucid.float16: 6e4, lucid.bfloat16: 1e30, lucid.float64: 1e300}
+_SPAN = {lucid.float32: 40.0, lucid.float16: 9.0, lucid.bfloat16: 40.0, lucid.float64: 300.0}
 
 
 # ── values and oracles ───────────────────────────────────────────────────────
@@ -170,12 +160,7 @@ def _ordered(v: np.ndarray, dtype: lucid.dtype) -> np.ndarray:
 
 
 def _assert_within(
-    got: np.ndarray,
-    want: np.ndarray,
-    x: np.ndarray,
-    dtype: lucid.dtype,
-    max_ulp: int,
-    what: str,
+    got: np.ndarray, want: np.ndarray, x: np.ndarray, dtype: lucid.dtype, max_ulp: int, what: str
 ) -> None:
     both_nan = np.isnan(got) & np.isnan(want)
     finite = np.isfinite(want) & np.isfinite(got)
@@ -252,11 +237,7 @@ def test_scalar_exponent_matches_the_reference(
     x = _bases(dtype)
     t = _on(x, dtype, device)
     er = _rounded_exponent(e, dtype)
-    for name, out in (
-        ("**", t**e),
-        ("lucid.pow", lucid.pow(t, e)),
-        ("Tensor.pow", t.pow(e)),
-    ):
+    for name, out in (("**", t**e), ("lucid.pow", lucid.pow(t, e)), ("Tensor.pow", t.pow(e))):
         assert out.dtype == dtype
         _assert_power(ref, _values(out), x, er, dtype, device, f"x {name} {e}")
 
@@ -592,10 +573,7 @@ def test_gradient_of_the_zeroth_power_at_zero_is_zero(ref: ModuleType, device: s
 
         probe = _PowZeroprobe()
         step = make_step(probe, lambda out, tgt: (out - tgt).sum())
-        step(
-            lucid.zeros((3,), device="metal"),
-            lucid.zeros((3,), device="metal"),
-        ).backward()
+        step(lucid.zeros((3,), device="metal"), lucid.zeros((3,), device="metal")).backward()
         assert probe.a.grad is not None and probe.b.grad is not None
         assert probe.a.grad.tolist() == [0.0, 0.0, 0.0]
         assert probe.b.grad.tolist()[:2] == [0.0, 0.0]
@@ -650,9 +628,7 @@ def test_compiled_scalar_and_tensor_special_exponents_match_eager_bitwise(
     ex = lucid.full_like(t, e)
     fn_tensor = lucid.compile(lambda x, y: x**y)
     np.testing.assert_array_equal(
-        _values(fn_tensor(t, ex)),
-        _values(t**ex),
-        err_msg=f"compiled x ** tensor({e}) ({dtype})",
+        _values(fn_tensor(t, ex)), _values(t**ex), err_msg=f"compiled x ** tensor({e}) ({dtype})"
     )
 
 
@@ -665,9 +641,7 @@ def test_compiled_rpow_special_exponents_match_eager_bitwise(
     exps = _on(np.array(_EXACT + _FORMULA, dtype=np.float64), dtype, "metal")
     fn_rpow = lucid.compile(lambda t: base**t)
     np.testing.assert_array_equal(
-        _values(fn_rpow(exps)),
-        _values(base**exps),
-        err_msg=f"compiled {base} ** t ({dtype})",
+        _values(fn_rpow(exps)), _values(base**exps), err_msg=f"compiled {base} ** t ({dtype})"
     )
     fn_engine_rpow = lucid.compile(
         lambda t: lucid._dispatch._wrap(lucid._C.engine.rpow_scalar(base, t._impl))

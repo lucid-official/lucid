@@ -104,11 +104,7 @@ class TestMatcher:
 
         gt = lucid.tensor([[0.0, 0.0, 10.0, 10.0]])
         anchors = lucid.tensor(
-            [
-                [0.0, 0.0, 9.0, 9.0],
-                [0.0, 0.0, 7.0, 7.0],
-                [50.0, 50.0, 60.0, 60.0],
-            ]
+            [[0.0, 0.0, 9.0, 9.0], [0.0, 0.0, 7.0, 7.0], [50.0, 50.0, 60.0, 60.0]]
         )
         iou = box_iou(gt, anchors)
         assert Matcher(0.90, 0.85)(iou).tolist() == [-1, -1, -1]
@@ -120,11 +116,7 @@ class TestMatcher:
 
         gt = lucid.tensor([[0.0, 0.0, 10.0, 10.0]])
         tied = lucid.tensor(
-            [
-                [0.0, 0.0, 9.0, 9.0],
-                [1.0, 1.0, 10.0, 10.0],
-                [50.0, 50.0, 60.0, 60.0],
-            ]
+            [[0.0, 0.0, 9.0, 9.0], [1.0, 1.0, 10.0, 10.0], [50.0, 50.0, 60.0, 60.0]]
         )
         m = Matcher(0.90, 0.85, allow_low_quality_matches=True)
         assert m(box_iou(gt, tied)).tolist() == [0, 0, -1]
@@ -216,10 +208,7 @@ class TestRCNN:
         assert isinstance(m, RCNNForObjectDetection)
 
         proposals = [
-            lucid.tensor(
-                [[5.0, 5.0, 40.0, 40.0], [10.0, 10.0, 50.0, 50.0]],
-                device=device,
-            )
+            lucid.tensor([[5.0, 5.0, 40.0, 40.0], [10.0, 10.0, 50.0, 50.0]], device=device)
         ]
         x = _img(device)
         out = m(x, proposals)
@@ -242,19 +231,13 @@ class TestRCNN:
 
 class TestFastRCNN:
     def test_factory_and_forward(self, device: str) -> None:
-        from lucid.models.vision.fast_rcnn import (
-            fast_rcnn,
-            FastRCNNForObjectDetection,
-        )
+        from lucid.models.vision.fast_rcnn import fast_rcnn, FastRCNNForObjectDetection
 
         m = _build(fast_rcnn, device)
         assert isinstance(m, FastRCNNForObjectDetection)
 
         proposals = [
-            lucid.tensor(
-                [[5.0, 5.0, 40.0, 40.0], [10.0, 10.0, 50.0, 50.0]],
-                device=device,
-            )
+            lucid.tensor([[5.0, 5.0, 40.0, 40.0], [10.0, 10.0, 50.0, 50.0]], device=device)
         ]
         x = _img(device)
         out = m(x, proposals)
@@ -528,10 +511,7 @@ class TestFasterRCNNTraining:
         from lucid.models.vision.faster_rcnn._config import FasterRCNNConfig
 
         anchors = lucid.tensor(
-            [
-                [0.0, 0.0, 50.0, 50.0],  # inside
-                [-20.0, 0.0, 50.0, 50.0],  # crosses the left edge
-            ]
+            [[0.0, 0.0, 50.0, 50.0], [-20.0, 0.0, 50.0, 50.0]]  # inside  # crosses the left edge
         )
         gt = lucid.tensor([[0.0, 0.0, 50.0, 50.0]])
         matcher = Matcher(0.7, 0.3, allow_low_quality_matches=True)
@@ -541,9 +521,7 @@ class TestFasterRCNNTraining:
         )
         on = FasterRCNNForObjectDetection(
             FasterRCNNConfig(
-                num_classes=2,
-                backbone_layers=(1, 1, 1, 1),
-                rpn_ignore_cross_boundary=True,
+                num_classes=2, backbone_layers=(1, 1, 1, 1), rpn_ignore_cross_boundary=True
             )
         )
         lab_off, _ = off._assign_anchors(  # type: ignore[attr-defined]
@@ -578,10 +556,7 @@ class TestFasterRCNNTraining:
         opt = optim.SGD(m.parameters(), lr=0.005, momentum=0.9)
         x = lucid.randn(1, 3, 128, 128)
         targets = [
-            {
-                "boxes": lucid.tensor([[16.0, 16.0, 64.0, 64.0]]),
-                "labels": lucid.tensor([1]).long(),
-            }
+            {"boxes": lucid.tensor([[16.0, 16.0, 64.0, 64.0]]), "labels": lucid.tensor([1]).long()}
         ]
         losses: list[float] = []
         for _ in range(20):
@@ -599,16 +574,10 @@ class TestFasterRCNNTraining:
 
 class TestMaskRCNN:
     def test_factory_and_forward(self, device: str) -> None:
-        from lucid.models.vision.mask_rcnn import (
-            mask_rcnn,
-            MaskRCNNForObjectDetection,
-        )
+        from lucid.models.vision.mask_rcnn import mask_rcnn, MaskRCNNForObjectDetection
 
         # Aggressively shrink RPN proposals to keep python-NMS tractable
-        m = _build(
-            lambda: mask_rcnn(rpn_pre_nms_top_n=100, rpn_post_nms_top_n=50),
-            device,
-        )
+        m = _build(lambda: mask_rcnn(rpn_pre_nms_top_n=100, rpn_post_nms_top_n=50), device)
         assert isinstance(m, MaskRCNNForObjectDetection)
 
         x = _img(device)
@@ -1035,11 +1004,7 @@ class TestDETR:
 
         # Slim transformer for test speed (paper default: 6/6 layers, d=256)
         m = _build(
-            lambda: detr_resnet50(
-                num_encoder_layers=2,
-                num_decoder_layers=2,
-                num_queries=20,
-            ),
+            lambda: detr_resnet50(num_encoder_layers=2, num_decoder_layers=2, num_queries=20),
             device,
         )
         assert isinstance(m, DETRForObjectDetection)
@@ -1065,11 +1030,7 @@ class TestDETRResNet101:
         from lucid.models.vision.detr import detr_resnet101
 
         m = _build(
-            lambda: detr_resnet101(
-                num_encoder_layers=2,
-                num_decoder_layers=2,
-                num_queries=20,
-            ),
+            lambda: detr_resnet101(num_encoder_layers=2, num_decoder_layers=2, num_queries=20),
             device,
         )
         x = _img(device)
@@ -1086,10 +1047,7 @@ class TestDETRResNet101:
 
 class TestEfficientDetD0:
     def test_factory_and_forward(self, device: str) -> None:
-        from lucid.models.vision.efficientdet import (
-            efficientdet_d0,
-            EfficientDetForObjectDetection,
-        )
+        from lucid.models.vision.efficientdet import efficientdet_d0, EfficientDetForObjectDetection
 
         m = _build(efficientdet_d0, device)
         assert isinstance(m, EfficientDetForObjectDetection)
@@ -1125,11 +1083,7 @@ class TestEfficientDetD0:
             fpn_repeats=1,
             head_repeats=1,
         ).eval()
-        refused = (
-            (288, ("256x256", "384x384")),
-            (248, ("256x256",)),
-            (8, ("128x128",)),
-        )
+        refused = ((288, ("256x256", "384x384")), (248, ("256x256",)), (8, ("128x128",)))
         for side, named in refused:
             with pytest.raises(ValueError) as caught:
                 m(lucid.randn(1, 3, side, side))
@@ -1699,8 +1653,7 @@ class TestHardNegativeMining:
         pos, neg = self._pool()
         w_mined, b_mined, _ = mine_hard_negatives(pos, neg, rounds=4, keep_per_round=50)
         w_plain, b_plain = fit_linear_svm(
-            lucid.cat([pos, neg[:50]], dim=0),
-            lucid.tensor([1.0] * 20 + [-1.0] * 50),
+            lucid.cat([pos, neg[:50]], dim=0), lucid.tensor([1.0] * 20 + [-1.0] * 50)
         )
         hard = neg[360:]
         mined_worst = max(((hard @ w_mined.reshape(-1, 1)).reshape(-1) + b_mined).tolist())
@@ -1787,14 +1740,8 @@ class TestYOLOV2MultiScale:
         model = YOLOV2ForObjectDetection(YOLOV2Config(num_classes=4))
         base = lucid.randn(2, 3, 416, 416)
         targets = [
-            {
-                "boxes": lucid.tensor([[0.2, 0.2, 0.6, 0.7]]),
-                "labels": lucid.tensor([1]).long(),
-            },
-            {
-                "boxes": lucid.tensor([[0.1, 0.3, 0.4, 0.9]]),
-                "labels": lucid.tensor([2]).long(),
-            },
+            {"boxes": lucid.tensor([[0.2, 0.2, 0.6, 0.7]]), "labels": lucid.tensor([1]).long()},
+            {"boxes": lucid.tensor([[0.1, 0.3, 0.4, 0.9]]), "labels": lucid.tensor([2]).long()},
         ]
 
         per_cell = []
@@ -1817,16 +1764,10 @@ class TestYOLOV2MultiScale:
 
         model = YOLOV2ForObjectDetection(YOLOV2Config(num_classes=4))
         targets = [
-            {
-                "boxes": lucid.tensor([[0.2, 0.2, 0.6, 0.7]]),
-                "labels": lucid.tensor([1]).long(),
-            }
+            {"boxes": lucid.tensor([[0.2, 0.2, 0.6, 0.7]]), "labels": lucid.tensor([1]).long()}
         ]
         x = F.interpolate(
-            lucid.randn(1, 3, 416, 416),
-            size=(320, 320),
-            mode="bilinear",
-            align_corners=False,
+            lucid.randn(1, 3, 416, 416), size=(320, 320), mode="bilinear", align_corners=False
         )
         out = model(x, targets=targets)
         assert out.loss is not None

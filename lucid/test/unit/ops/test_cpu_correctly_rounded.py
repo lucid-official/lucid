@@ -77,11 +77,7 @@ _EDGES = {np.float64: _F64_EDGES, np.float32: _F32_EDGES}
 Op = Callable[[lucid.Tensor], lucid.Tensor]
 Ref = Callable[[np.ndarray], np.ndarray]
 
-_LUCID = {
-    np.float64: lucid.float64,
-    np.float32: lucid.float32,
-    np.float16: lucid.float16,
-}
+_LUCID = {np.float64: lucid.float64, np.float32: lucid.float32, np.float16: lucid.float16}
 
 
 def _assert_bits(got: np.ndarray, ref: np.ndarray) -> None:
@@ -307,6 +303,5 @@ def test_metal_rsqrt_matches_reference_and_neg_half_power() -> None:
     with np.errstate(all="ignore"):
         want_f16 = _ref_rsqrt(xf16.astype(np.float32)).astype(np.float16)
     _assert_bits(
-        lucid.rsqrt(lucid.tensor(xf16, dtype=lucid.float16, device="metal")).cpu().numpy(),
-        want_f16,
+        lucid.rsqrt(lucid.tensor(xf16, dtype=lucid.float16, device="metal")).cpu().numpy(), want_f16
     )

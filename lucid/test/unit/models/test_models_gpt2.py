@@ -145,11 +145,7 @@ class TestGPT2Generate:
     def test_sampling(self) -> None:
         m = GPT2LMHeadModel(_tiny_config()).eval()
         out = m.generate(
-            lucid.tensor([[1, 2, 3]]).long(),
-            max_length=7,
-            do_sample=True,
-            temperature=0.7,
-            top_k=8,
+            lucid.tensor([[1, 2, 3]]).long(), max_length=7, do_sample=True, temperature=0.7, top_k=8
         )
         assert tuple(out.shape) == (1, 7)
 

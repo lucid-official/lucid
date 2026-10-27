@@ -9,10 +9,7 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 import lucid.nn.functional as F
-from lucid.test.unit.stability.test_grid_sample_far_coordinates import (
-    _kinds,
-    _stand_in,
-)
+from lucid.test.unit.stability.test_grid_sample_far_coordinates import _kinds, _stand_in
 
 NAN = float("nan")
 INF = float("inf")
@@ -33,10 +30,7 @@ _EMPTY_PERMUTES = [
 
 @pytest.mark.parametrize("shape,perm", _EMPTY_PERMUTES)
 def test_empty_permuted_view_inplace_ops_succeed(
-    ref: ModuleType,
-    device: str,
-    shape: tuple[int, ...],
-    perm: tuple[int, ...],
+    ref: ModuleType, device: str, shape: tuple[int, ...], perm: tuple[int, ...]
 ) -> None:
     x = lucid.zeros(*shape, device=device).permute(*perm)
     rx = ref.zeros(*shape).permute(*perm)
@@ -50,10 +44,7 @@ def test_empty_permuted_view_inplace_ops_succeed(
 
 @pytest.mark.parametrize("shape,perm", _EMPTY_PERMUTES)
 def test_empty_permuted_view_keeps_its_strides_through_a_write(
-    ref: ModuleType,
-    device: str,
-    shape: tuple[int, ...],
-    perm: tuple[int, ...],
+    ref: ModuleType, device: str, shape: tuple[int, ...], perm: tuple[int, ...]
 ) -> None:
     x = lucid.zeros(*shape, device=device).permute(*perm)
     rx = ref.zeros(*shape).permute(*perm)
@@ -62,9 +53,7 @@ def test_empty_permuted_view_keeps_its_strides_through_a_write(
     assert x.stride() == rx.stride()
 
 
-def test_dropped_base_view_keeps_its_strides_through_a_write(
-    ref: ModuleType,
-) -> None:
+def test_dropped_base_view_keeps_its_strides_through_a_write(ref: ModuleType) -> None:
     y = lucid.arange(6.0).reshape(2, 3).t()
     ry = ref.arange(6.0).reshape(2, 3).t()
     y.mul_(2.0).add_(1.0)
@@ -91,21 +80,9 @@ def test_dropped_base_view_keeps_its_strides_through_a_write(
     )
 
 
-@pytest.mark.parametrize(
-    "shape",
-    [
-        (0,),
-        (3, 0),
-        (0, 3),
-        (3, 0, 2),
-        (2, 0, 3, 4),
-        (2, 3, 0, 1, 4),
-    ],
-)
+@pytest.mark.parametrize("shape", [(0,), (3, 0), (0, 3), (3, 0, 2), (2, 0, 3, 4), (2, 3, 0, 1, 4)])
 def test_dense_empty_tensor_strides_match_reference(
-    ref: ModuleType,
-    device: str,
-    shape: tuple[int, ...],
+    ref: ModuleType, device: str, shape: tuple[int, ...]
 ) -> None:
     x = lucid.zeros(*shape, device=device)
     rx = ref.zeros(*shape)
@@ -122,9 +99,7 @@ def test_dense_empty_tensor_strides_match_reference(
 
 @pytest.mark.parametrize("dtype_name", ["float32", "float64", "float16", "bfloat16"])
 def test_frexp_matches_reference_across_full_range(
-    ref: ModuleType,
-    device: str,
-    dtype_name: str,
+    ref: ModuleType, device: str, dtype_name: str
 ) -> None:
     if device == "metal" and dtype_name == "float64":
         pytest.skip("Metal does not support float64")
@@ -214,10 +189,7 @@ def test_frexp_matches_reference_across_full_range(
     ],
 )
 def test_ldexp_extreme_exponents_and_gradients(
-    ref: ModuleType,
-    device: str,
-    m_vals: list[float],
-    e_vals: list[int],
+    ref: ModuleType, device: str, m_vals: list[float], e_vals: list[int]
 ) -> None:
     lm = lucid.tensor(m_vals, dtype=lucid.float32, device=device)
     le = lucid.tensor(e_vals, dtype=lucid.int32, device=device)
@@ -239,10 +211,7 @@ def test_ldexp_extreme_exponents_and_gradients(
     np.testing.assert_allclose(gx.numpy(), np.array([2.0**-4.0, 1.0], dtype=np.float32), rtol=1e-6)
     np.testing.assert_allclose(
         gk.numpy(),
-        np.array(
-            [0.75 * (2.0**-4.0) * math.log(2.0), -1.25 * math.log(2.0)],
-            dtype=np.float32,
-        ),
+        np.array([0.75 * (2.0**-4.0) * math.log(2.0), -1.25 * math.log(2.0)], dtype=np.float32),
         rtol=1e-6,
     )
     np.testing.assert_allclose(
@@ -265,15 +234,7 @@ def test_ldexp_extreme_exponents_and_gradients(
 @pytest.mark.parametrize("padding_mode", ["zeros", "border", "reflection"])
 @pytest.mark.parametrize("align_corners", [False, True])
 @pytest.mark.parametrize(
-    "point",
-    [
-        [2e38, 0.25],
-        [-2e38, 0.25],
-        [0.25, 2e38],
-        [1e10, INF],
-        [INF, 1e10],
-        [-1e10, -INF],
-    ],
+    "point", [[2e38, 0.25], [-2e38, 0.25], [0.25, 2e38], [1e10, INF], [INF, 1e10], [-1e10, -INF]]
 )
 def test_grid_sample_near_float_max_and_mixed_infinite_coords(
     ref: ModuleType,
@@ -331,9 +292,7 @@ def test_grid_sample_near_float_max_and_mixed_infinite_coords(
 
 @pytest.mark.parametrize("bad_mode,bad_pad", [(2, 0), (-1, 0), (0, 2), (0, -1)])
 def test_engine_grid_sample_refuses_unlowered_mode_or_padding(
-    device: str,
-    bad_mode: int,
-    bad_pad: int,
+    device: str, bad_mode: int, bad_pad: int
 ) -> None:
     x = lucid.zeros(1, 1, 4, 4, device=device)._impl
     g = lucid.zeros(1, 2, 2, 2, device=device)._impl
@@ -348,22 +307,10 @@ def test_engine_grid_sample_refuses_unlowered_mode_or_padding(
 
 @pytest.mark.parametrize(
     "dtype_name",
-    [
-        "bool",
-        "int8",
-        "int16",
-        "int32",
-        "int64",
-        "float16",
-        "bfloat16",
-        "float32",
-        "float64",
-    ],
+    ["bool", "int8", "int16", "int32", "int64", "float16", "bfloat16", "float32", "float64"],
 )
 def test_engine_unique_supports_all_real_and_bool_dtypes(
-    ref: ModuleType,
-    device: str,
-    dtype_name: str,
+    ref: ModuleType, device: str, dtype_name: str
 ) -> None:
     if device == "metal" and dtype_name == "float64":
         pytest.skip("Metal does not support float64")
@@ -392,10 +339,7 @@ def test_engine_unique_supports_all_real_and_bool_dtypes(
     ],
 )
 def test_engine_unique_orders_nans_last_and_preserves_first_zero_sign(
-    ref: ModuleType,
-    device: str,
-    dtype_name: str,
-    vals: list[float],
+    ref: ModuleType, device: str, dtype_name: str, vals: list[float]
 ) -> None:
     if device == "metal" and dtype_name == "float64":
         pytest.skip("Metal does not support float64")

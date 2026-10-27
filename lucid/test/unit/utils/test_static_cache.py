@@ -36,9 +36,7 @@ class TestStaticCache:
     def test_explicit_cache_position(self) -> None:
         cache = StaticCache(max_cache_len=8)
         cache.update(
-            *_ones(1, 5.0),
-            layer_idx=0,
-            cache_kwargs={"cache_position": lucid.tensor([4]).long()},
+            *_ones(1, 5.0), layer_idx=0, cache_kwargs={"cache_position": lucid.tensor([4]).long()}
         )
         assert float(cache.key_cache[0][:, :, 4, :].sum().item()) == 5 * 2 * 4
 

@@ -104,32 +104,27 @@ class TestConvBiasFalse:
 
     def test_conv1d_no_bias(self) -> None:
         self._check_bias_false_matches_zero_bias(
-            lambda bias: nn.Conv1d(3, 4, kernel_size=3, padding=1, bias=bias),
-            (2, 3, 8),
+            lambda bias: nn.Conv1d(3, 4, kernel_size=3, padding=1, bias=bias), (2, 3, 8)
         )
 
     def test_conv2d_no_bias(self) -> None:
         self._check_bias_false_matches_zero_bias(
-            lambda bias: nn.Conv2d(3, 4, kernel_size=3, padding=1, bias=bias),
-            (2, 3, 6, 6),
+            lambda bias: nn.Conv2d(3, 4, kernel_size=3, padding=1, bias=bias), (2, 3, 6, 6)
         )
 
     def test_conv3d_no_bias(self) -> None:
         self._check_bias_false_matches_zero_bias(
-            lambda bias: nn.Conv3d(3, 4, kernel_size=3, padding=1, bias=bias),
-            (2, 3, 4, 4, 4),
+            lambda bias: nn.Conv3d(3, 4, kernel_size=3, padding=1, bias=bias), (2, 3, 4, 4, 4)
         )
 
     def test_conv_transpose1d_no_bias(self) -> None:
         self._check_bias_false_matches_zero_bias(
-            lambda bias: nn.ConvTranspose1d(3, 4, kernel_size=3, padding=1, bias=bias),
-            (2, 3, 6),
+            lambda bias: nn.ConvTranspose1d(3, 4, kernel_size=3, padding=1, bias=bias), (2, 3, 6)
         )
 
     def test_conv_transpose2d_no_bias(self) -> None:
         self._check_bias_false_matches_zero_bias(
-            lambda bias: nn.ConvTranspose2d(3, 4, kernel_size=3, padding=1, bias=bias),
-            (2, 3, 6, 6),
+            lambda bias: nn.ConvTranspose2d(3, 4, kernel_size=3, padding=1, bias=bias), (2, 3, 6, 6)
         )
 
     def test_conv_transpose3d_no_bias(self) -> None:

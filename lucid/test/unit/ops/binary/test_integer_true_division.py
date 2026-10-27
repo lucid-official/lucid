@@ -21,10 +21,7 @@ def test_an_integer_tensor_over_a_number_is_floating() -> None:
 
 
 def test_integer_tensors_divide_truly() -> None:
-    assert (_ints(7, 8, dtype=lucid.int32) / _ints(2, 4, dtype=lucid.int32)).tolist() == [
-        3.5,
-        2.0,
-    ]
+    assert (_ints(7, 8, dtype=lucid.int32) / _ints(2, 4, dtype=lucid.int32)).tolist() == [3.5, 2.0]
 
 
 def test_a_number_over_an_integer_tensor() -> None:

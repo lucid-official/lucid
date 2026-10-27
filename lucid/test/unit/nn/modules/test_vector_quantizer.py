@@ -128,10 +128,7 @@ class TestVectorQuantizerConstruction:
         [
             ({"num_embeddings": 0, "embedding_dim": 4}, "num_embeddings"),
             ({"num_embeddings": 4, "embedding_dim": 0}, "embedding_dim"),
-            (
-                {"num_embeddings": 4, "embedding_dim": 4, "commitment_cost": -1.0},
-                "commitment_cost",
-            ),
+            ({"num_embeddings": 4, "embedding_dim": 4, "commitment_cost": -1.0}, "commitment_cost"),
         ],
     )
     def test_rejects_invalid_arguments(self, kwargs: dict[str, object], match: str) -> None:

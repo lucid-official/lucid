@@ -39,12 +39,7 @@ from lucid.models._utils._generative import model_dtype
 from lucid.models.generative._common._returns import lambda_return
 from lucid.models.generative.diamond._config import DIAMONDConfig
 
-__all__ = [
-    "DIAMONDModel",
-    "DIAMONDForWorldModeling",
-    "DIAMONDOutput",
-    "DIAMONDBehaviorOutput",
-]
+__all__ = ["DIAMONDModel", "DIAMONDForWorldModeling", "DIAMONDOutput", "DIAMONDBehaviorOutput"]
 
 
 def _groups(channels: int) -> int:
@@ -473,13 +468,7 @@ class _UNet(nn.Module):
                 cursor -= 1
                 target = shallower if index == count - 1 else out_ch
                 blocks.append(
-                    _ResBlock(
-                        width + pushes[cursor],
-                        target,
-                        cond_dim,
-                        bool(attn[stage]),
-                        head_dim,
-                    )
+                    _ResBlock(width + pushes[cursor], target, cond_dim, bool(attn[stage]), head_dim)
                 )
                 width = target
             self.u_blocks.append(_ResBlocks(blocks))
@@ -820,10 +809,7 @@ class _RewardEndModel(nn.Module):
 
     @override
     def forward(
-        self,
-        frames: Tensor,
-        action: Tensor,
-        state: tuple[Tensor, Tensor] | None = None,
+        self, frames: Tensor, action: Tensor, state: tuple[Tensor, Tensor] | None = None
     ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor]]:
         """Advance one step.
 
@@ -1679,12 +1665,7 @@ class DIAMONDModel(PretrainedModel):
 
     @override
     def forward(
-        self,
-        frames: Tensor,
-        actions: Tensor,
-        next_frame: Tensor,
-        *,
-        sigma: Tensor | None = None,
+        self, frames: Tensor, actions: Tensor, next_frame: Tensor, *, sigma: Tensor | None = None
     ) -> DIAMONDOutput:
         r"""Train the denoiser on one transition.
 
@@ -1945,10 +1926,7 @@ class DIAMONDForWorldModeling(WorldModelingModel):
         for step in range(int(frames.shape[1])):
             if step + 1 < int(frames.shape[1]):
                 _r, _d, reward_state = self.diamond.step_reward_end(
-                    frames[:, step],
-                    frames[:, step + 1],
-                    actions[:, step],
-                    reward_state,
+                    frames[:, step], frames[:, step + 1], actions[:, step], reward_state
                 )
             _l, _v, actor_state = self.diamond.step_actor_critic(frames[:, step], actor_state)
 
@@ -1988,11 +1966,7 @@ class DIAMONDForWorldModeling(WorldModelingModel):
             continues.append(keep)
 
             history = lucid.cat(
-                [
-                    history[:, 1:],
-                    frame.reshape(int(frame.shape[0]), 1, *frame.shape[1:]),
-                ],
-                dim=1,
+                [history[:, 1:], frame.reshape(int(frame.shape[0]), 1, *frame.shape[1:])], dim=1
             )
             history_actions = lucid.cat([history_actions[:, 1:], action.reshape(-1, 1)], dim=1)
 

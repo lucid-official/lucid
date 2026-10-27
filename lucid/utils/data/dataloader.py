@@ -26,12 +26,7 @@ from lucid import stack
 from lucid.utils.data.dataset import Dataset, IterableDataset
 from lucid.utils.data._rng import _as_generator, _draw_seed
 from lucid.utils.data._worker import WorkerInfo, _set_worker_info, get_worker_info
-from lucid.utils.data.sampler import (
-    Sampler,
-    SequentialSampler,
-    RandomSampler,
-    BatchSampler,
-)
+from lucid.utils.data.sampler import Sampler, SequentialSampler, RandomSampler, BatchSampler
 
 # Sentinel pushed to index queues to signal workers to shut down.
 _SHUTDOWN = None
@@ -130,9 +125,7 @@ def default_convert(data: object) -> object:
 
 
 def collate(
-    batch: list[object],
-    *,
-    collate_fn_map: dict[type, Callable[..., object]] | None = None,
+    batch: list[object], *, collate_fn_map: dict[type, Callable[..., object]] | None = None
 ) -> Tensor | list[object] | dict[str, object] | tuple[object, ...]:
     r"""Composable collate dispatcher with user-overridable type handlers.
 
@@ -500,12 +493,7 @@ def _init_worker(
     except ImportError:
         pass
     _set_worker_info(
-        WorkerInfo(
-            id=worker_id,
-            num_workers=num_workers,
-            seed=seed,
-            dataset=cast(Dataset, dataset),
-        )
+        WorkerInfo(id=worker_id, num_workers=num_workers, seed=seed, dataset=cast(Dataset, dataset))
     )
     try:
         if worker_init_fn is not None:
@@ -1048,10 +1036,7 @@ class DataLoader:
             raise TypeError(f"timeout must be a number of seconds, got {type(timeout).__name__}")
         if not timeout >= 0:  # NaN included
             raise ValueError(f"timeout must be >= 0, got {timeout}")
-        for name, fn in (
-            ("collate_fn", collate_fn),
-            ("worker_init_fn", worker_init_fn),
-        ):
+        for name, fn in (("collate_fn", collate_fn), ("worker_init_fn", worker_init_fn)):
             if fn is not None and not callable(fn):
                 raise TypeError(f"{name} must be callable, got {type(fn).__name__}")
         if num_workers == 0:

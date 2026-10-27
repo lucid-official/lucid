@@ -21,12 +21,7 @@ import pytest
 import lucid
 import lucid.nn as nn
 import lucid.optim as optim
-from lucid.test.unit.optim._scheduler_runs import (
-    LATE_LR,
-    LR,
-    Build,
-    assert_as_the_reference,
-)
+from lucid.test.unit.optim._scheduler_runs import LATE_LR, LR, Build, assert_as_the_reference
 
 _MILESTONE = 4
 # Never, before the first step, before the milestone, after it.

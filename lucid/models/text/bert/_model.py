@@ -733,11 +733,7 @@ class BERTForMaskedLM(LanguageModelingModel, MaskedLMMixin):
         token_type_ids: Tensor | None = None,
         labels: Tensor | None = None,
     ) -> MaskedLMOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         prediction_scores = self.cls(outputs.last_hidden_state)
 
         loss: Tensor | None = None
@@ -821,11 +817,7 @@ class BERTForSequenceClassification(SequenceClassificationModel):
         token_type_ids: Tensor | None = None,
         labels: Tensor | None = None,
     ) -> SequenceClassificationOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         pooled = self.dropout(outputs.pooler_output)
         logits = self.classifier(pooled)
 
@@ -918,11 +910,7 @@ class BERTForTokenClassification(TokenClassificationModel, MaskedLMMixin):
         token_type_ids: Tensor | None = None,
         labels: Tensor | None = None,
     ) -> TokenClassificationOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         seq = self.dropout(outputs.last_hidden_state)
         logits = self.classifier(seq)
 
@@ -1005,11 +993,7 @@ class BERTForQuestionAnswering(SequenceClassificationModel):
         start_positions: Tensor | None = None,
         end_positions: Tensor | None = None,
     ) -> QuestionAnsweringOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         logits = self.qa_outputs(outputs.last_hidden_state)
         # ``logits`` is (B, T, 2); split along the last dim into start / end
         # and return them as named fields rather than making every caller
@@ -1211,11 +1195,7 @@ class BERTForPreTraining(SequenceClassificationModel, MaskedLMMixin):
         labels: Tensor | None = None,
         next_sentence_label: Tensor | None = None,
     ) -> BERTForPreTrainingOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         prediction_scores, seq_relationship_score = self.cls(
             outputs.last_hidden_state, outputs.pooler_output
         )
@@ -1314,11 +1294,7 @@ class BERTForNextSentencePrediction(SequenceClassificationModel):
         token_type_ids: Tensor | None = None,
         labels: Tensor | None = None,
     ) -> SequenceClassificationOutput:
-        outputs = self.bert(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )
+        outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         seq_relationship_score = self.cls(outputs.pooler_output)
 
         loss: Tensor | None = None
@@ -1409,11 +1385,7 @@ class BERTForCausalLM(LanguageModelingModel):
         self.cls.predictions.tie_to(self.bert.embeddings.word_embeddings.weight)
 
     def _causal_attention_mask(
-        self,
-        attention_mask: Tensor | None,
-        B: int,
-        T: int,
-        device: str,
+        self, attention_mask: Tensor | None, B: int, T: int, device: str
     ) -> Tensor:
         """Combine a ``(B, T)`` padding mask with a lower-triangular causal
         mask, returning the additive ``(B, 1, T, T)`` form.

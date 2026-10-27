@@ -94,11 +94,7 @@ def _trim(window: Tensor, M: int, sym: bool) -> Tensor:
 
 
 def bartlett(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
+    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
 ) -> Tensor:
     r"""Bartlett (triangular) window.
 
@@ -157,11 +153,7 @@ def bartlett(
 
 
 def cosine(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
+    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
 ) -> Tensor:
     r"""Cosine (half-sine) window.
 
@@ -214,13 +206,7 @@ def cosine(
     return _trim(w, M, sym)
 
 
-def hann(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
-) -> Tensor:
+def hann(M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None) -> Tensor:
     r"""Hann (raised-cosine) window.
 
     The Hann window is a single full cycle of a raised cosine.  Its
@@ -271,11 +257,7 @@ def hann(
 
 
 def hamming(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
+    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
 ) -> Tensor:
     r"""Hamming window.
 
@@ -461,11 +443,7 @@ def general_cosine(
 
 
 def blackman(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
+    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
 ) -> Tensor:
     r"""Blackman window.
 
@@ -518,11 +496,7 @@ def blackman(
 
 
 def nuttall(
-    M: int,
-    *,
-    sym: bool = True,
-    dtype: DTypeLike = None,
-    device: DeviceLike = None,
+    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
 ) -> Tensor:
     r"""Nuttall four-term window.
 
@@ -569,11 +543,7 @@ def nuttall(
     tensor([0.0003628, 0.227, 1., 0.227, 0.0003628])
     """
     return general_cosine(
-        M,
-        [0.3635819, 0.4891775, 0.1365995, 0.0106411],
-        sym=sym,
-        dtype=dtype,
-        device=device,
+        M, [0.3635819, 0.4891775, 0.1365995, 0.0106411], sym=sym, dtype=dtype, device=device
     )
 
 

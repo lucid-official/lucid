@@ -110,8 +110,7 @@ def test_erf_is_odd_bit_for_bit() -> None:
 def test_erf_keeps_the_special_values(copies: int) -> None:
     # One copy runs the scalar tail, thirteen mostly the vector body.
     special = np.array(
-        [np.inf, -np.inf, np.nan, -0.0, 0.0, 3.95, -3.95, 1e30, -1e30, 3e38],
-        np.float32,
+        [np.inf, -np.inf, np.nan, -0.0, 0.0, 3.95, -3.95, 1e30, -1e30, 3e38], np.float32
     )
     got = lucid.erf(lucid.tensor(np.tile(special, copies))).numpy().reshape(copies, -1)
     assert (got[:, 0] == 1.0).all() and (got[:, 1] == -1.0).all()
@@ -220,8 +219,7 @@ def test_exact_gelu_gradient_keeps_the_special_values(copies: int) -> None:
     # density is clamped past |x| = 14.5, where it has rounded to zero, so a
     # huge input gives the step it tends to and +-inf give inf * 0 = nan.
     special = np.array(
-        [np.inf, -np.inf, np.nan, 0.0, -0.0, 1e20, -1e20, 3e38, -3e38, 14.5, -14.5],
-        np.float32,
+        [np.inf, -np.inf, np.nan, 0.0, -0.0, 1e20, -1e20, 3e38, -3e38, 14.5, -14.5], np.float32
     )
     got = _gelu_grad(np.tile(special, copies)).reshape(copies, -1)
     assert np.isnan(got[:, :3]).all()

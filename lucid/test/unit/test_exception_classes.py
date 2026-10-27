@@ -50,11 +50,7 @@ def test_every_engine_class_is_a_lucid_error_and_its_builtin(name: str) -> None:
 
 
 _REFUSALS: dict[str, tuple[Callable[[], object], str, type[Exception]]] = {
-    "broadcast": (
-        lambda: lucid.ones(2, 3) + lucid.ones(4, 5),
-        "ShapeMismatch",
-        ValueError,
-    ),
+    "broadcast": (lambda: lucid.ones(2, 3) + lucid.ones(4, 5), "ShapeMismatch", ValueError),
     "dtype pair": (
         lambda: _C_engine.where(
             (lucid.ones(2) > 0)._impl, lucid.ones(2).int()._impl, lucid.ones(2)._impl
@@ -69,41 +65,21 @@ _REFUSALS: dict[str, tuple[Callable[[], object], str, type[Exception]]] = {
         "InvalidArgument",
         ValueError,
     ),
-    "histc bins": (
-        lambda: lucid.histc(lucid.ones(3), bins=0),
-        "InvalidArgument",
-        ValueError,
-    ),
+    "histc bins": (lambda: lucid.histc(lucid.ones(3), bins=0), "InvalidArgument", ValueError),
     "conv groups": (
         lambda: F.conv2d(lucid.ones(1, 2, 4, 4), lucid.ones(2, 2, 3, 3), groups=0),
         "InvalidArgument",
         ValueError,
     ),
-    "unfold step": (
-        lambda: lucid.ones(5).unfold(0, 2, 0),
-        "InvalidArgument",
-        ValueError,
-    ),
-    "cumsum axis": (
-        lambda: lucid.cumsum(lucid.ones(2, 3), 5),
-        "IndexError",
-        IndexError,
-    ),
-    "normalize axis": (
-        lambda: F.normalize(lucid.ones(2, 3), dim=5),
-        "IndexError",
-        IndexError,
-    ),
+    "unfold step": (lambda: lucid.ones(5).unfold(0, 2, 0), "InvalidArgument", ValueError),
+    "cumsum axis": (lambda: lucid.cumsum(lucid.ones(2, 3), 5), "IndexError", IndexError),
+    "normalize axis": (lambda: F.normalize(lucid.ones(2, 3), dim=5), "IndexError", IndexError),
     "tensordot axis": (
         lambda: lucid.tensordot(lucid.ones(2, 3), lucid.ones(3, 2), dims=([5], [0])),
         "IndexError",
         IndexError,
     ),
-    "fftn empty": (
-        lambda: lucid.fft.fftn(lucid.zeros(0)),
-        "InvalidArgument",
-        ValueError,
-    ),
+    "fftn empty": (lambda: lucid.fft.fftn(lucid.zeros(0)), "InvalidArgument", ValueError),
 }
 
 
@@ -125,9 +101,7 @@ def test_a_device_mismatch_is_a_value_error() -> None:
 
 _MLX_INVALID_ARGUMENT_REPROS: dict[str, Callable[[], object]] = {
     "broadcast_shapes": lambda: lucid.gather(
-        lucid.zeros(2, 3, device="metal"),
-        0,
-        lucid.zeros(2, 4, dtype=lucid.int64, device="metal"),
+        lucid.zeros(2, 3, device="metal"), 0, lucid.zeros(2, 4, dtype=lucid.int64, device="metal")
     ),
     "reshape": lambda: _C_engine.nn.rotary_pos_embedding(
         _unwrap(lucid.zeros(2, 4, 8, device="metal")),
@@ -147,9 +121,7 @@ _MLX_INVALID_ARGUMENT_REPROS: dict[str, Callable[[], object]] = {
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
 @pytest.mark.parametrize("prefix", list(_MLX_INVALID_ARGUMENT_REPROS))
-def test_mlx_invalid_argument_is_translated_to_lucid_invalid_argument(
-    prefix: str,
-) -> None:
+def test_mlx_invalid_argument_is_translated_to_lucid_invalid_argument(prefix: str) -> None:
     fn = _MLX_INVALID_ARGUMENT_REPROS[prefix]
     with pytest.raises(_C_engine.InvalidArgument, match=rf"(?:^|: )\[{prefix}\]") as exc_info:
         fn()

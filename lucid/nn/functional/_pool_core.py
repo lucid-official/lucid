@@ -575,10 +575,7 @@ def _fractional_max_pool(
 
 
 def _scatter_unpool(
-    x: Tensor,
-    checked: tuple[Tensor, int],
-    output_spatial: tuple[int, ...],
-    n_spatial: int,
+    x: Tensor, checked: tuple[Tensor, int], output_spatial: tuple[int, ...], n_spatial: int
 ) -> Tensor:
     """Shared body of ``max_unpool{1,2,3}d``."""
     with _pool_autocast(f"max_unpool{n_spatial}d", x) as x:

@@ -74,11 +74,7 @@ class ModelFactory(Protocol):
 
     __name__: str  # every Python function has __name__; Protocol must declare it
 
-    def __call__(
-        self,
-        pretrained: bool = False,
-        **overrides: Any,
-    ) -> PretrainedModel: ...
+    def __call__(self, pretrained: bool = False, **overrides: Any) -> PretrainedModel: ...
 
 
 @final
@@ -504,10 +500,7 @@ def _unknown_model_message(name: str, candidates: list[str]) -> str:
     output.
     """
     norm = _normalize(name)
-    nearby = sorted(
-        ((_edit_distance(c, norm), c) for c in candidates),
-        key=lambda t: t[0],
-    )
+    nearby = sorted(((_edit_distance(c, norm), c) for c in candidates), key=lambda t: t[0])
     suggestions = [c for d, c in nearby[:3] if d <= 3]
     hint = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
     return f"Unknown model {name!r}.{hint}"

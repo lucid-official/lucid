@@ -29,13 +29,7 @@ def test_a_backward_pass_and_its_nodes_are_events(device: str) -> None:
     with lucid.profiler.profile() as prof:
         y.backward()
     names = _names(prof)
-    for node in (
-        "backward",
-        "SumBackward",
-        "AddBackward",
-        "MulBackward",
-        "SinBackward",
-    ):
+    for node in ("backward", "SumBackward", "AddBackward", "MulBackward", "SinBackward"):
         assert node in names, names
     assert "AccumulateGrad" in names
     # The pass encloses its nodes: it ends, and is recorded, last.
@@ -65,9 +59,7 @@ def test_autograd_grad_records_its_nodes(device: str) -> None:
     assert "AccumulateGrad" not in names
 
 
-def test_a_create_graph_pass_records_its_nodes_and_the_ops_they_dispatch(
-    device: str,
-) -> None:
+def test_a_create_graph_pass_records_its_nodes_and_the_ops_they_dispatch(device: str) -> None:
     x = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True, device=device)
     y = (x * x).sum()
     with lucid.profiler.profile() as prof:

@@ -522,9 +522,7 @@ class TestCheckpointNonReentrant:
         with pytest.raises(RuntimeError, match="does not require grad"):
             self._run(True)
 
-    def test_it_matches_the_reentrant_result_when_inputs_do_require_grad(
-        self,
-    ) -> None:
+    def test_it_matches_the_reentrant_result_when_inputs_do_require_grad(self) -> None:
         from lucid.autograd import checkpoint
 
         def block(t):

@@ -152,9 +152,7 @@ class TestSessionCacheIdRemap:
         )
         assert np.allclose(got_f2.to("cpu").numpy(), want_f2.to("cpu").numpy(), atol=1e-5)
 
-    def test_non_commutative_op_preserves_operand_order_across_id_inversion(
-        self,
-    ) -> None:
+    def test_non_commutative_op_preserves_operand_order_across_id_inversion(self) -> None:
         """``t - randn`` vs ``t - c`` vs ``randn - t`` must bind LHS and RHS to the right slots.
 
         In ``t - randn(...)``, ``randn`` draws raw ID 1 (RHS, canonical 1) while
@@ -237,9 +235,7 @@ class TestNoSilentEagerOnlyTransitions:
         assert np.allclose(out.to("cpu").numpy(), x.to("cpu").numpy())
         assert len(fn.cache_info()["eager_only"]) == 1
 
-    def test_training_batchnorm_forward_only_emits_compile_fallback_warning(
-        self,
-    ) -> None:
+    def test_training_batchnorm_forward_only_emits_compile_fallback_warning(self) -> None:
         """Forward-only ``lucid.compile`` on a training-mode BatchNorm warns on fallback."""
         bn = nn.BatchNorm1d(4).to(COMPILE_DEVICE).train()
         compiled_bn = lucid.compile.compile(bn)

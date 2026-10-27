@@ -168,8 +168,7 @@ def wrap_rhs(
 
 
 def wrap_event(
-    event_fn: Callable[[Tensor, tuple[Tensor, ...]], Tensor],
-    shapes: Sequence[tuple[int, ...]],
+    event_fn: Callable[[Tensor, tuple[Tensor, ...]], Tensor], shapes: Sequence[tuple[int, ...]]
 ) -> EventFunction:
     """Adapt a tuple-valued event function to the flat state.
 

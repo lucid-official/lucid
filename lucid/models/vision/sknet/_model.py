@@ -22,10 +22,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models._utils._common import (
-    init_cnn_fan_out,
-    make_divisible as _make_divisible,
-)
+from lucid.models._utils._common import init_cnn_fan_out, make_divisible as _make_divisible
 from lucid.models.vision.sknet._config import SKNetConfig
 
 # ---------------------------------------------------------------------------
@@ -43,12 +40,7 @@ class _SelectiveKernelAttn(nn.Module):
     ``(B, num_paths, C, 1, 1)``.
     """
 
-    def __init__(
-        self,
-        channels: int,
-        num_paths: int = 2,
-        attn_channels: int = 32,
-    ) -> None:
+    def __init__(self, channels: int, num_paths: int = 2, attn_channels: int = 32) -> None:
         super().__init__()
         self.num_paths = num_paths
         # Conv2d 1×1 — same param count as Linear but keeps (B, C, 1, 1) layout
@@ -207,8 +199,7 @@ class _SelectiveKernel(nn.Module):
         # variants that ship checkpoints were trained without it --
         # see SKNetConfig.min_attn_channels.
         attn_channels = max(
-            _make_divisible(out_channels * rd_ratio, divisor=rd_divisor),
-            min_attn_channels,
+            _make_divisible(out_channels * rd_ratio, divisor=rd_divisor), min_attn_channels
         )
         self.attn = _SelectiveKernelAttn(out_channels, self.num_paths, attn_channels)
 
@@ -281,12 +272,7 @@ class _SelectiveKernelBasic(nn.Module):
             min_attn_channels=min_attn_channels,
         )
         self.conv2 = _ConvBnAct(
-            width,
-            planes * self.expansion,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            apply_act=False,
+            width, planes * self.expansion, kernel_size=3, stride=1, padding=1, apply_act=False
         )
         self.act = nn.ReLU(inplace=True)
         self.downsample = downsample
@@ -417,13 +403,7 @@ def _make_stage(
         )
     ]
     for _ in range(1, num_blocks):
-        blocks.append(
-            block_cls(
-                outplanes,
-                planes,
-                **block_kwargs,  # type: ignore[arg-type]
-            )
-        )
+        blocks.append(block_cls(outplanes, planes, **block_kwargs))  # type: ignore[arg-type]
 
     return nn.Sequential(*blocks), outplanes
 
@@ -467,11 +447,7 @@ def _build_body(
 
     for stage_idx, (planes, stride) in enumerate(zip(planes_per_stage, strides, strict=True)):
         layer, cur = _make_stage(
-            cur,
-            planes,
-            config.layers[stage_idx],
-            stride,
-            **kw,  # type: ignore[arg-type]
+            cur, planes, config.layers[stage_idx], stride, **kw  # type: ignore[arg-type]
         )
         layers.append(layer)
         feature_info.append(
@@ -685,11 +661,7 @@ class SKNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         init_cnn_fan_out(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)

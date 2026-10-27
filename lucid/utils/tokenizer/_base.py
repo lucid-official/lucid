@@ -317,12 +317,7 @@ class Tokenizer(ABC):
 
     # ── Universal encode/decode ─────────────────────────────────────
 
-    def encode(
-        self,
-        text: str,
-        *,
-        add_special_tokens: bool = True,
-    ) -> list[int]:
+    def encode(self, text: str, *, add_special_tokens: bool = True) -> list[int]:
         """Encode a single string to a list of token ids.
 
         When ``add_special_tokens=True`` the sequence is framed by the
@@ -356,12 +351,7 @@ class Tokenizer(ABC):
             ids = self._build_inputs_with_special_tokens(ids)
         return ids
 
-    def decode(
-        self,
-        ids: Iterable[int] | list[int],
-        *,
-        skip_special_tokens: bool = True,
-    ) -> str:
+    def decode(self, ids: Iterable[int] | list[int], *, skip_special_tokens: bool = True) -> str:
         """Decode a sequence of ids back to text.
 
         When ``skip_special_tokens=True`` every id in
@@ -392,10 +382,7 @@ class Tokenizer(ABC):
         return self._decode_one(ids_list)
 
     def encode_batch(
-        self,
-        texts: Iterable[str] | list[str],
-        *,
-        add_special_tokens: bool = True,
+        self, texts: Iterable[str] | list[str], *, add_special_tokens: bool = True
     ) -> list[list[int]]:
         """Vectorised :meth:`encode` over a list of strings.
 
@@ -684,10 +671,7 @@ class Tokenizer(ABC):
         specials = set(self.all_special_ids)
         sp_masks = [[1 if i in specials else 0 for i in ids] for ids in encoded]
 
-        out: dict[str, object] = {
-            "input_ids": encoded,
-            "special_tokens_mask": sp_masks,
-        }
+        out: dict[str, object] = {"input_ids": encoded, "special_tokens_mask": sp_masks}
         if attention_masks is not None and return_attention_mask:
             out["attention_mask"] = attention_masks
 
@@ -724,10 +708,7 @@ class Tokenizer(ABC):
         os.makedirs(directory, exist_ok=True)
         # Universal tokenizer.json with algo + vocab + algorithm-
         # specific extras delegated to subclass via ``_save_extras``.
-        unified: dict[str, object] = {
-            "algo": self.algo,
-            "vocab": self.get_vocab(),
-        }
+        unified: dict[str, object] = {"algo": self.algo, "vocab": self.get_vocab()}
         extras = self._save_extras()
         if extras:
             unified.update(extras)

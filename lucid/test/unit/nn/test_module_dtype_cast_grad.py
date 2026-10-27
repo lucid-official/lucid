@@ -20,10 +20,7 @@ import lucid
 import lucid.nn as nn
 from lucid._dispatch import _unwrap
 
-DTYPES = [
-    ("float32", lucid.float32, np.float32),
-    ("float64", lucid.float64, np.float64),
-]
+DTYPES = [("float32", lucid.float32, np.float32), ("float64", lucid.float64, np.float64)]
 
 
 def test_complex128_module_cast_preserves_integer_buffers_and_parameter_identity():
@@ -165,9 +162,7 @@ def test_dtype_cast_preserves_and_converts_existing_grad(ref, cast_fn, expected_
         assert p.grad.dtype == expected_dtype
         assert p.grad.is_leaf
         np.testing.assert_allclose(
-            p.grad.to(lucid.float32).numpy(),
-            rp.grad.to(ref.float32).numpy(),
-            atol=1e-3,
+            p.grad.to(lucid.float32).numpy(), rp.grad.to(ref.float32).numpy(), atol=1e-3
         )
 
 

@@ -194,24 +194,17 @@ def test_gcd_and_lcm_answer_the_references_values_at_every_width(
     xs = [x for x in values for _ in values]
     ys = [y for _ in values for y in values]
     theirs = getattr(ref, name)(
-        ref.tensor(xs, dtype=getattr(ref, dtype)),
-        ref.tensor(ys, dtype=getattr(ref, dtype)),
+        ref.tensor(xs, dtype=getattr(ref, dtype)), ref.tensor(ys, dtype=getattr(ref, dtype))
     )
     ours = getattr(lucid, name)(
-        lucid.tensor(xs, dtype=getattr(lucid, dtype)),
-        lucid.tensor(ys, dtype=getattr(lucid, dtype)),
+        lucid.tensor(xs, dtype=getattr(lucid, dtype)), lucid.tensor(ys, dtype=getattr(lucid, dtype))
     )
     assert ours.tolist() == theirs.tolist()
 
 
 @pytest.mark.parametrize("name,a,b,dtype,want", _PROMOTED_AND_WRAPPED)
 def test_gcd_and_lcm_promote_and_wrap(
-    name: str,
-    a: list[object],
-    b: list[object],
-    dtype: str,
-    want: list[int],
-    device: str,
+    name: str, a: list[object], b: list[object], dtype: str, want: list[int], device: str
 ) -> None:
     x = lucid.tensor(a, dtype=getattr(lucid, dtype), device=device)
     y_dtype = lucid.bool_ if isinstance(b[0], bool) else getattr(lucid, dtype)
@@ -224,12 +217,7 @@ def test_gcd_and_lcm_promote_and_wrap(
 @pytest.mark.parity
 @pytest.mark.parametrize("name,a,b,dtype,want", _PROMOTED_AND_WRAPPED)
 def test_the_reference_promotes_and_wraps_the_same(
-    ref: ModuleType,
-    name: str,
-    a: list[object],
-    b: list[object],
-    dtype: str,
-    want: list[int],
+    ref: ModuleType, name: str, a: list[object], b: list[object], dtype: str, want: list[int]
 ) -> None:
     x = ref.tensor(a, dtype=getattr(ref, dtype))
     y_dtype = ref.bool if isinstance(b[0], bool) else getattr(ref, dtype)

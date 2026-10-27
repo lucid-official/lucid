@@ -85,11 +85,7 @@ class StateAxis(Axis):
         # once the setter stopped rejecting its own getter's "unset"
         # sentinel, so the pair is answerable now.
         ("get_num_interop_threads", "set_num_interop_threads", (1, 2)),
-        (
-            "are_deterministic_algorithms_enabled",
-            "use_deterministic_algorithms",
-            (True, False),
-        ),
+        ("are_deterministic_algorithms_enabled", "use_deterministic_algorithms", (True, False)),
         ("is_grad_enabled", "set_grad_enabled", (False, True)),
     )
 
@@ -173,9 +169,7 @@ class StateAxis(Axis):
                 got = get()
                 if got != value and str(got) != str(value):
                     return self._finding(
-                        symbol,
-                        Status.FAIL,
-                        f"{writer}({value!r}) then {reader}() reported {got!r}",
+                        symbol, Status.FAIL, f"{writer}({value!r}) then {reader}() reported {got!r}"
                     )
                 seen.append(f"{value!r}")
         finally:
@@ -280,9 +274,7 @@ class StateAxis(Axis):
             return self._finding(symbol, Status.SKIP, "no draw to compare")
         if not np.array_equal(first, second):
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "restoring the captured state did not reproduce the draw",
+                symbol, Status.FAIL, "restoring the captured state did not reproduce the draw"
             )
         return self._finding(symbol, Status.PASS, "the captured state replays the draw")
 
@@ -328,9 +320,7 @@ class StateAxis(Axis):
             )
         if inside is not wanted:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"inside {name}() a product reports requires_grad={inside}",
+                symbol, Status.FAIL, f"inside {name}() a product reports requires_grad={inside}"
             )
         if not outside:
             return self._finding(symbol, Status.FAIL, f"{name}() did not restore grad mode on exit")
@@ -790,9 +780,7 @@ class FunctionalTransformAxis(Axis):
             return self._finding(symbol, Status.SKIP, "produced nothing measurable")
         if measured.shape != expected.shape:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"shape {measured.shape}, expected {expected.shape}",
+                symbol, Status.FAIL, f"shape {measured.shape}, expected {expected.shape}"
             )
         if not np.allclose(measured.astype(float), expected, rtol=1e-8, atol=1e-10):
             return self._finding(
@@ -864,11 +852,7 @@ class NnUtilsAxis(Axis):
         try:
             if name in ("weight_norm", "spectral_norm", "register_parametrization"):
                 return self._parametrise(symbol, fn, name, probe)
-            if name in (
-                "remove_weight_norm",
-                "remove_spectral_norm",
-                "remove_parametrizations",
-            ):
+            if name in ("remove_weight_norm", "remove_spectral_norm", "remove_parametrizations"):
                 return self._unparametrise(symbol, fn, name, probe)
             if name in ("identity", "l1_unstructured", "random_unstructured", "remove"):
                 return self._prune(symbol, fn, name, probe)
@@ -906,9 +890,7 @@ class NnUtilsAxis(Axis):
             return self._finding(symbol, Status.SKIP, "no output to compare")
         if before is not None and before.shape != after.shape:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"output shape changed from {before.shape} to {after.shape}",
+                symbol, Status.FAIL, f"output shape changed from {before.shape} to {after.shape}"
             )
         # The reparametrised weight has to still be trainable — a
         # parametrisation that detaches its own weight silently stops the
@@ -917,9 +899,7 @@ class NnUtilsAxis(Axis):
         module(probe).sum().backward()
         if not any(p.grad is not None for p in module.parameters()):
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "after parametrisation no parameter receives a gradient",
+                symbol, Status.FAIL, "after parametrisation no parameter receives a gradient"
             )
         return self._finding(symbol, Status.PASS, "forward keeps its shape and stays trainable")
 
@@ -928,9 +908,7 @@ class NnUtilsAxis(Axis):
             return self._unparametrise_spectral(symbol, fn, probe)
 
         module = self._linear()
-        apply = {
-            "remove_weight_norm": lucid.nn.utils.weight_norm,
-        }.get(name)
+        apply = {"remove_weight_norm": lucid.nn.utils.weight_norm}.get(name)
         if apply is not None:
             apply(module)
         else:
@@ -1065,10 +1043,7 @@ class NnUtilsAxis(Axis):
         wide = lucid.nn.Linear(64, 64)
         size = int(_probe.to_numpy(wide.weight).size)
 
-        for amount, want, what in (
-            (0.0, 0, "keep everything"),
-            (1.0, size, "drop all"),
-        ):
+        for amount, want, what in ((0.0, 0, "keep everything"), (1.0, size, "drop all")):
             module = lucid.nn.Linear(64, 64)
             base = _probe.to_numpy(module.weight)
             already = int((base == 0.0).sum())
@@ -1142,9 +1117,7 @@ class NnUtilsAxis(Axis):
             total = sum(int(np.prod(tuple(p.shape))) for p in module.parameters())
             if int(flat.shape[0]) != total:
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"flattened to {flat.shape[0]}, expected {total}",
+                    symbol, Status.FAIL, f"flattened to {flat.shape[0]}, expected {total}"
                 )
             return self._finding(symbol, Status.PASS, f"{total} values, one vector")
         target = self._linear()
@@ -1181,9 +1154,7 @@ class NnUtilsAxis(Axis):
         # Only the valid timesteps survive packing, by design.
         if not np.allclose(a[0, :4], b[0, :4]) or not np.allclose(a[1, :2], b[1, :2]):
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "the valid timesteps did not survive the round trip",
+                symbol, Status.FAIL, "the valid timesteps did not survive the round trip"
             )
         return self._finding(symbol, Status.PASS, "packs and unpacks the valid timesteps")
 

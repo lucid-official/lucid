@@ -23,10 +23,7 @@ def _spd2() -> lucid.Tensor:
 
 def _spd3() -> lucid.Tensor:
     """3×3 symmetric positive-definite matrix."""
-    return lucid.tensor(
-        [[5.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]],
-        requires_grad=True,
-    )
+    return lucid.tensor([[5.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 2.0]], requires_grad=True)
 
 
 def _sym(A: lucid.Tensor) -> lucid.Tensor:
@@ -70,10 +67,7 @@ class TestCholeskyBackward:
 
     def test_upper(self) -> None:
         ok = gradcheck(
-            lambda A: LA.cholesky(_sym(A), upper=True).sum(),
-            [_spd2()],
-            eps=1e-5,
-            atol=2e-3,
+            lambda A: LA.cholesky(_sym(A), upper=True).sum(), [_spd2()], eps=1e-5, atol=2e-3
         )
         assert ok
 
@@ -204,10 +198,5 @@ class TestExistingBackwards:
 
     def test_cholesky_ex(self) -> None:
         # cholesky_ex wraps cholesky → backward flows through.
-        ok = gradcheck(
-            lambda A: LA.cholesky_ex(_sym(A))[0].sum(),
-            [_spd2()],
-            eps=1e-5,
-            atol=2e-3,
-        )
+        ok = gradcheck(lambda A: LA.cholesky_ex(_sym(A))[0].sum(), [_spd2()], eps=1e-5, atol=2e-3)
         assert ok

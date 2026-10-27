@@ -25,12 +25,7 @@ from lucid.models import (
 )
 from lucid.models.generative.planet import PlaNetOutput
 from lucid.models._utils._generative import generative_activation
-from lucid.models.generative._common._rssm import (
-    RSSM,
-    _gumbel_argmax,
-    categorical_kl,
-    rssm_kl,
-)
+from lucid.models.generative._common._rssm import RSSM, _gumbel_argmax, categorical_kl, rssm_kl
 
 
 def _tiny_cfg(**overrides: object) -> PlaNetConfig:
@@ -47,11 +42,7 @@ def _tiny_cfg(**overrides: object) -> PlaNetConfig:
 
 
 def _batch(b: int = 2, t: int = 3, action_dim: int = 2) -> tuple[lucid.Tensor, ...]:
-    return (
-        lucid.randn((b, t, 3, 64, 64)),
-        lucid.randn((b, t, action_dim)),
-        lucid.randn((b, t)),
-    )
+    return (lucid.randn((b, t, 3, 64, 64)), lucid.randn((b, t, action_dim)), lucid.randn((b, t)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -375,12 +366,7 @@ class TestRSSMCategorical:
 
     def _rssm(self, discrete: int) -> RSSM:
         return RSSM(
-            stoch_size=4,
-            deter_size=8,
-            hidden_size=8,
-            action_dim=2,
-            embed_size=6,
-            discrete=discrete,
+            stoch_size=4, deter_size=8, hidden_size=8, action_dim=2, embed_size=6, discrete=discrete
         )
 
     def test_gaussian_is_unchanged(self) -> None:
@@ -557,12 +543,7 @@ class TestUnimix:
     def test_default_is_off(self) -> None:
         """The earlier families must be untouched by this."""
         model = RSSM(
-            stoch_size=2,
-            deter_size=8,
-            hidden_size=8,
-            action_dim=2,
-            embed_size=4,
-            discrete=4,
+            stoch_size=2, deter_size=8, hidden_size=8, action_dim=2, embed_size=4, discrete=4
         )
         assert model.unimix == 0.0
 
@@ -609,12 +590,7 @@ class TestGumbelArgmax:
 
     def test_the_latent_stays_one_hot(self) -> None:
         model = RSSM(
-            stoch_size=3,
-            deter_size=8,
-            hidden_size=8,
-            action_dim=2,
-            embed_size=6,
-            discrete=4,
+            stoch_size=3, deter_size=8, hidden_size=8, action_dim=2, embed_size=6, discrete=4
         ).eval()
         _, posterior = model.observe(lucid.randn((4, 3, 6)), lucid.randn((4, 3, 2)))
         grid = posterior.stoch.reshape(4, 3, 3, 4)
@@ -623,12 +599,7 @@ class TestGumbelArgmax:
     def test_every_class_gets_used(self) -> None:
         """A draw collapsed onto one class is still a valid one-hot."""
         model = RSSM(
-            stoch_size=1,
-            deter_size=8,
-            hidden_size=8,
-            action_dim=2,
-            embed_size=4,
-            discrete=4,
+            stoch_size=1, deter_size=8, hidden_size=8, action_dim=2, embed_size=4, discrete=4
         ).eval()
         _, posterior = model.observe(lucid.randn((800, 1, 4)), lucid.randn((800, 1, 2)))
         chosen = {int(v) for v in posterior.stoch.reshape(800, 4).argmax(dim=-1)}
@@ -810,11 +781,7 @@ class TestPlanner:
     def test_returns_one_action_per_batch_item(self) -> None:
         model = PlaNetForWorldModeling(_tiny_cfg()).eval()
         action = model.plan(
-            model.planet.rssm.initial(3),
-            horizon=3,
-            iterations=2,
-            candidates=8,
-            elites=2,
+            model.planet.rssm.initial(3), horizon=3, iterations=2, candidates=8, elites=2
         )
         assert action.shape == (3, 2)
 
@@ -841,12 +808,7 @@ class TestPlanner:
     )
     def test_rejects_invalid_arguments(self, kwargs: dict[str, object], match: str) -> None:
         model = PlaNetForWorldModeling(_tiny_cfg()).eval()
-        base: dict[str, object] = {
-            "horizon": 3,
-            "iterations": 2,
-            "candidates": 8,
-            "elites": 2,
-        }
+        base: dict[str, object] = {"horizon": 3, "iterations": 2, "candidates": 8, "elites": 2}
         base.update(kwargs)
         with pytest.raises(ValueError, match=match):
             model.plan(model.planet.rssm.initial(1), **base)  # type: ignore[arg-type]
@@ -873,10 +835,6 @@ class TestPlanner:
         model.eval()
 
         chosen = model.plan(
-            model.planet.rssm.initial(1),
-            horizon=4,
-            iterations=6,
-            candidates=128,
-            elites=16,
+            model.planet.rssm.initial(1), horizon=4, iterations=6, candidates=128, elites=16
         )
         assert float(chosen[0, 0].item()) > 0.5

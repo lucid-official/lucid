@@ -132,11 +132,7 @@ def run(verbose: bool = True) -> dict[str, object]:
                 )
             )
             rows_gpu_cpu.append(
-                (
-                    label,
-                    f"{r['gpu_to_cpu_mean_us']:.1f}",
-                    f"{r['gpu_to_cpu_gbps']:.1f}",
-                )
+                (label, f"{r['gpu_to_cpu_mean_us']:.1f}", f"{r['gpu_to_cpu_gbps']:.1f}")
             )
 
     if verbose:

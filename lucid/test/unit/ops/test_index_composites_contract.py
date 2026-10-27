@@ -119,9 +119,7 @@ def test_a_source_of_another_dtype_is_refused(
     write = _SOURCED[name]
     with pytest.raises(RuntimeError):
         write(
-            ref,
-            ref.zeros(2, dtype=getattr(ref, self_dt)),
-            ref.ones(1, dtype=getattr(ref, src_dt)),
+            ref, ref.zeros(2, dtype=getattr(ref, self_dt)), ref.ones(1, dtype=getattr(ref, src_dt))
         )
     x = lucid.zeros(2, dtype=getattr(lucid, self_dt), device=device)
     s = lucid.ones(1, dtype=getattr(lucid, src_dt), device=device)
@@ -317,9 +315,7 @@ def test_masked_scatter_never_returns_its_input(device: str) -> None:
     assert x.tolist() == [0.0, 0.0]
 
 
-def test_masked_scatter_refuses_a_short_source_and_a_non_bool_mask(
-    device: str,
-) -> None:
+def test_masked_scatter_refuses_a_short_source_and_a_non_bool_mask(device: str) -> None:
     x = lucid.zeros(3, device=device)
     with pytest.raises(_C_engine.ShapeMismatch, match="selects 2"):
         lucid.masked_scatter(x, lucid.tensor([True, True, False], device=device), _one(device))
@@ -361,12 +357,7 @@ def test_scatter_reduce_takes_bool_and_complex(
         pytest.skip("Metal's scatter kernels hold no complex dtype")
     reduce, base, index, src = _ODD_DTYPES[name]
     want = ref.scatter_reduce(
-        ref.tensor(base),
-        0,
-        ref.tensor(index),
-        ref.tensor(src),
-        reduce,
-        include_self=include_self,
+        ref.tensor(base), 0, ref.tensor(index), ref.tensor(src), reduce, include_self=include_self
     )
     got = lucid.scatter_reduce(
         lucid.tensor(base, device=device),

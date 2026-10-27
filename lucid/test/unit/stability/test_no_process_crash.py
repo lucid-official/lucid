@@ -93,22 +93,14 @@ _REPORTED = [
     ),
     # CHA-140 — singular / NaN through MLX's CPU-stream linalg.
     ("inv_singular", "singular(lambda: L.inv(SING))", OK),
-    (
-        "inv_ex_singular",
-        "inv, info = L.inv_ex(SING)\nN(inv)\nassert int(info.item()) != 0",
-        OK,
-    ),
+    ("inv_ex_singular", "inv, info = L.inv_ex(SING)\nN(inv)\nassert int(info.item()) != 0", OK),
     ("solve_singular", "singular(lambda: L.solve(SING, A([[1.0], [2.0]])))", OK),
     (
         "solve_ex_singular",
         "x, info = L.solve_ex(SING, A([[1.0], [2.0]]))\nN(x)\nassert int(info.item()) != 0",
         OK,
     ),
-    (
-        "matrix_power_negative_singular",
-        "singular(lambda: L.matrix_power(SING, -1))",
-        OK,
-    ),
+    ("matrix_power_negative_singular", "singular(lambda: L.matrix_power(SING, -1))", OK),
     ("cond_p1_singular", "N(raises_or_value(lambda: L.cond(SING, 1)))", SURVIVE),
     (
         "det_backward_singular",
@@ -183,11 +175,7 @@ _STILL_RIGHT = [
         "close(L.matrix_power(a, -2), np.linalg.matrix_power(np.linalg.inv(N(a)), 2))",
         OK,
     ),
-    (
-        "inv_nan_propagates",
-        "assert np.isnan(N(L.inv(A([[NAN, 1.0], [1.0, 1.0]])))).all()",
-        OK,
-    ),
+    ("inv_nan_propagates", "assert np.isnan(N(L.inv(A([[NAN, 1.0], [1.0, 1.0]])))).all()", OK),
     (
         "svdvals_values",
         "a = R(3, 5)\nclose(L.svdvals(a), np.linalg.svd(N(a).astype(np.float64), compute_uv=False), 1e-4)",
@@ -220,42 +208,26 @@ _GEMM = [
     ("bmm_K0", "zeros(lucid.bmm(R(2, 3, 0), R(2, 0, 4)), (2, 3, 4))", OK),
     ("mv_K0", "zeros(lucid.mv(R(3, 0), R(0)), (3,))", OK),
     ("tensordot_K0", "zeros(lucid.tensordot(R(3, 0), R(0, 4), dims=1), (3, 4))", OK),
-    (
-        "einsum_K0",
-        "zeros(lucid.einops.einsum('ik,kj->ij', R(3, 0), R(0, 4)), (3, 4))",
-        OK,
-    ),
+    ("einsum_K0", "zeros(lucid.einops.einsum('ik,kj->ij', R(3, 0), R(0, 4)), (3, 4))", OK),
     ("kron_empty", "shape(lucid.kron(R(0, 2), R(3, 3)), (0, 6))", OK),
     # The fused-add forms over an empty contraction leave ``beta * input``.
     # ``beta == 0`` over a NaN input only has to survive here: the reference
     # gives zeros, Lucid's composite still gives ``0 * NaN``.  (The BLAS
     # wrappers themselves overwrite with zeros — test_blas_empty_extents.cpp.)
-    (
-        "addmm_K0_beta1",
-        "full(lucid.addmm(C(1.0, 3, 4), R(3, 0), R(0, 4)), (3, 4), 1.0)",
-        OK,
-    ),
+    ("addmm_K0_beta1", "full(lucid.addmm(C(1.0, 3, 4), R(3, 0), R(0, 4)), (3, 4), 1.0)", OK),
     (
         "addmm_K0_beta2",
         "full(lucid.addmm(C(1.0, 3, 4), R(3, 0), R(0, 4), beta=2.0), (3, 4), 2.0)",
         OK,
     ),
-    (
-        "addmm_K0_beta0_nan",
-        "N(lucid.addmm(C(NAN, 3, 4), R(3, 0), R(0, 4), beta=0.0))",
-        SURVIVE,
-    ),
+    ("addmm_K0_beta0_nan", "N(lucid.addmm(C(NAN, 3, 4), R(3, 0), R(0, 4), beta=0.0))", SURVIVE),
     ("addmv_K0", "full(lucid.addmv(C(1.0, 3), R(3, 0), R(0)), (3,), 1.0)", OK),
     (
         "baddbmm_K0",
         "full(lucid.baddbmm(C(1.0, 2, 3, 4), R(2, 3, 0), R(2, 0, 4)), (2, 3, 4), 1.0)",
         OK,
     ),
-    (
-        "addbmm_K0",
-        "full(lucid.addbmm(C(1.0, 3, 4), R(2, 3, 0), R(2, 0, 4)), (3, 4), 1.0)",
-        OK,
-    ),
+    ("addbmm_K0", "full(lucid.addbmm(C(1.0, 3, 4), R(2, 3, 0), R(2, 0, 4)), (3, 4), 1.0)", OK),
     (
         "matmul_K0_backward",
         "a, b = R(3, 0, grad=True), R(0, 4, grad=True)\nlucid.matmul(a, b).sum().backward()\n"
@@ -286,11 +258,7 @@ _GEMM = [
     ("bilinear_batch0", "shape(F.bilinear(R(0, 3), R(0, 2), R(4, 3, 2)), (0, 4))", OK),
     ("bilinear_in0", "N(F.bilinear(R(2, 0), R(2, 2), R(4, 0, 2)))", SURVIVE),
     ("matrix_power_batch0", "shape(L.matrix_power(R(0, 3, 3), 3), (0, 3, 3))", OK),
-    (
-        "matrix_power_batch0_negative",
-        "shape(L.matrix_power(R(0, 3, 3), -2), (0, 3, 3))",
-        OK,
-    ),
+    ("matrix_power_batch0_negative", "shape(L.matrix_power(R(0, 3, 3), -2), (0, 3, 3))", OK),
     ("multi_dot_K0", "zeros(L.multi_dot([R(3, 0), R(0, 4), R(4, 2)]), (3, 2))", OK),
 ]
 
@@ -417,11 +385,7 @@ for _d in (1, 2, 3):
             f"full(F.conv{_d}d(R(2, 0, {_sp}), R(6, 0, {_k}), C(1.0, 6)), (2, 6, {_o}), 1.0)",
             SURVIVE,
         ),
-        (
-            f"conv{_d}d_out_channels0",
-            f"N(F.conv{_d}d(R(2, 4, {_sp}), R(0, 4, {_k})))",
-            SURVIVE,
-        ),
+        (f"conv{_d}d_out_channels0", f"N(F.conv{_d}d(R(2, 4, {_sp}), R(0, 4, {_k})))", SURVIVE),
         (
             f"conv{_d}d_batch0_grouped",
             f"shape(F.conv{_d}d(R(0, 4, {_sp}), R(6, 2, {_k}), groups=2), (0, 6, {_o}))",
@@ -553,11 +517,7 @@ _LINALG_EMPTY += [
     ("lstsq_batch0", "N(L.lstsq(R(0, 3, 3), R(0, 3, 2))[0])", SURVIVE),
     ("lstsq_no_rhs", "N(L.lstsq(R(3, 3), R(3, 0))[0])", SURVIVE),
     ("lstsq_0x3", "N(L.lstsq(R(0, 3), R(0, 2))[0])", SURVIVE),
-    (
-        "solve_triangular_no_rhs",
-        "shape(L.solve_triangular(EYE3, R(3, 0), upper=True), (3, 0))",
-        OK,
-    ),
+    ("solve_triangular_no_rhs", "shape(L.solve_triangular(EYE3, R(3, 0), upper=True), (3, 0))", OK),
     (
         "solve_triangular_batch0",
         "shape(L.solve_triangular(R(0, 3, 3), R(0, 3, 2), upper=True), (0, 3, 2))",

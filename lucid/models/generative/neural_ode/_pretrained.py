@@ -24,21 +24,14 @@ which is two-dimensional, and therefore keeps the exact trace.
 
 from lucid.models._registry import register_model
 from lucid.models.generative.neural_ode._config import NeuralODEConfig
-from lucid.models.generative.neural_ode._model import (
-    NeuralODEForImageGeneration,
-    NeuralODEModel,
-)
+from lucid.models.generative.neural_ode._model import NeuralODEForImageGeneration, NeuralODEModel
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 # Paper §4: the vector field is a gated sum of M = 64 functions.  Two
 # blocks is the shallowest stack that lets the gates act on a hidden
 # representation rather than directly on the data.
 _CFG_DEFAULT = NeuralODEConfig(
-    sample_size=32,
-    in_channels=3,
-    out_channels=3,
-    hidden_dim=64,
-    num_blocks=2,
+    sample_size=32, in_channels=3, out_channels=3, hidden_dim=64, num_blocks=2
 )
 
 

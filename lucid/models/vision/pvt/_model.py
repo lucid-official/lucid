@@ -61,13 +61,7 @@ class _OverlapPatchEmbed(nn.Module):
     implicitly encoding position so explicit positional embeddings are unnecessary.
     """
 
-    def __init__(
-        self,
-        in_ch: int,
-        embed_dim: int,
-        patch_size: int,
-        stride: int,
-    ) -> None:
+    def __init__(self, in_ch: int, embed_dim: int, patch_size: int, stride: int) -> None:
         super().__init__()
         padding = patch_size // 2
         self.proj = nn.Conv2d(in_ch, embed_dim, patch_size, stride=stride, padding=padding)
@@ -129,12 +123,7 @@ class _SRAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        sr_ratio: int,
-        linear: bool = False,
-        pool_size: int = 7,
+        self, dim: int, num_heads: int, sr_ratio: int, linear: bool = False, pool_size: int = 7
     ) -> None:
         super().__init__()
         self.num_heads = num_heads
@@ -341,14 +330,7 @@ def _build_pvt(
     reduction *= 4
 
     for i, (dim, depth, heads, sr, mlp_r) in enumerate(
-        zip(
-            cfg.embed_dims,
-            cfg.depths,
-            cfg.num_heads,
-            cfg.sr_ratios,
-            cfg.mlp_ratios,
-            strict=True,
-        )
+        zip(cfg.embed_dims, cfg.depths, cfg.num_heads, cfg.sr_ratios, cfg.mlp_ratios, strict=True)
     ):
         is_first = i == 0
         # patch_size/stride used by downsample in stages 1-3
@@ -562,11 +544,7 @@ class PVTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         init_transformer_trunc_normal(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         # Stage 0: use top-level patch_embed then stage blocks
         tokens, H, W = self.patch_embed(x)
         x_spatial, H, W = self.stages[0].forward_tokens(tokens, H, W)

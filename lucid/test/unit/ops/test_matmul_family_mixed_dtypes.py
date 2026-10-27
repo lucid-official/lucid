@@ -13,18 +13,12 @@ import lucid.nn.functional as F
 _DEVICES = [
     "cpu",
     pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
+        "metal", marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device")
     ),
 ]
 
 
-def _make(
-    lib: Any,
-    shape: tuple[int, ...],
-    dtype_name: str,
-    device: str = "cpu",
-) -> Any:
+def _make(lib: Any, shape: tuple[int, ...], dtype_name: str, device: str = "cpu") -> Any:
     dt = getattr(lib, dtype_name)
     if lib is lucid:
         return lucid.ones(shape, dtype=dt, device=device)
@@ -39,24 +33,14 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
     ("bmm", [(2, 2, 3), (2, 3, 2)], lambda lib, fn, a, b: lib.bmm(a, b), True),
     ("mv", [(2, 3), (3,)], lambda lib, fn, a, b: lib.mv(a, b), True),
     ("vdot", [(3,), (3,)], lambda lib, fn, a, b: lib.vdot(a, b), True),
-    (
-        "addmm",
-        [(2, 2), (2, 3), (3, 2)],
-        lambda lib, fn, c, a, b: lib.addmm(c, a, b),
-        True,
-    ),
+    ("addmm", [(2, 2), (2, 3), (3, 2)], lambda lib, fn, c, a, b: lib.addmm(c, a, b), True),
     (
         "baddbmm",
         [(2, 2, 2), (2, 2, 3), (2, 3, 2)],
         lambda lib, fn, c, a, b: lib.baddbmm(c, a, b),
         True,
     ),
-    (
-        "addbmm",
-        [(2, 2), (2, 2, 3), (2, 3, 2)],
-        lambda lib, fn, c, a, b: lib.addbmm(c, a, b),
-        True,
-    ),
+    ("addbmm", [(2, 2), (2, 2, 3), (2, 3, 2)], lambda lib, fn, c, a, b: lib.addbmm(c, a, b), True),
     ("addmv", [(2,), (2, 3), (3,)], lambda lib, fn, c, a, b: lib.addmv(c, a, b), True),
     ("addr", [(2, 3), (2,), (3,)], lambda lib, fn, c, a, b: lib.addr(c, a, b), False),
     ("outer", [(2,), (3,)], lambda lib, fn, a, b: a.outer(b), False),
@@ -76,19 +60,9 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
         ),
         False,
     ),
-    (
-        "tensordot",
-        [(2, 3), (3, 2)],
-        lambda lib, fn, a, b: lib.tensordot(a, b, dims=1),
-        True,
-    ),
+    ("tensordot", [(2, 3), (3, 2)], lambda lib, fn, a, b: lib.tensordot(a, b, dims=1), True),
     ("linear", [(2, 3), (4, 3)], lambda lib, fn, x, w: fn.linear(x, w), True),
-    (
-        "linear_bias",
-        [(2, 3), (4, 3), (4,)],
-        lambda lib, fn, x, w, b: fn.linear(x, w, b),
-        True,
-    ),
+    ("linear_bias", [(2, 3), (4, 3), (4,)], lambda lib, fn, x, w, b: fn.linear(x, w, b), True),
     (
         "bilinear",
         [(2, 3), (2, 4), (5, 3, 4)],
@@ -96,18 +70,8 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
         True,
     ),
     ("conv1d", [(1, 2, 4), (3, 2, 2)], lambda lib, fn, x, w: fn.conv1d(x, w), True),
-    (
-        "conv2d",
-        [(1, 2, 4, 4), (3, 2, 2, 2)],
-        lambda lib, fn, x, w: fn.conv2d(x, w),
-        True,
-    ),
-    (
-        "conv3d",
-        [(1, 2, 4, 4, 4), (3, 2, 2, 2, 2)],
-        lambda lib, fn, x, w: fn.conv3d(x, w),
-        True,
-    ),
+    ("conv2d", [(1, 2, 4, 4), (3, 2, 2, 2)], lambda lib, fn, x, w: fn.conv2d(x, w), True),
+    ("conv3d", [(1, 2, 4, 4, 4), (3, 2, 2, 2, 2)], lambda lib, fn, x, w: fn.conv3d(x, w), True),
     (
         "conv_transpose1d",
         [(1, 2, 4), (2, 3, 2)],
@@ -131,9 +95,7 @@ _TABLE: list[tuple[str, list[tuple[int, ...]], Callable[..., Any], bool]] = [
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize(
-    ("name", "shapes", "call", "refuses"),
-    _TABLE,
-    ids=[row[0] for row in _TABLE],
+    ("name", "shapes", "call", "refuses"), _TABLE, ids=[row[0] for row in _TABLE]
 )
 @pytest.mark.parametrize(
     ("first_dt", "rest_dt"),
@@ -160,16 +122,10 @@ def test_mixed_float_dtypes_outside_autocast(
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    ("name", "shapes", "call", "refuses"),
-    _TABLE,
-    ids=[row[0] for row in _TABLE],
+    ("name", "shapes", "call", "refuses"), _TABLE, ids=[row[0] for row in _TABLE]
 )
 def test_mixed_float_dtypes_match_reference_outside_and_inside_autocast(
-    ref: Any,
-    name: str,
-    shapes: list[tuple[int, ...]],
-    call: Callable[..., Any],
-    refuses: bool,
+    ref: Any, name: str, shapes: list[tuple[int, ...]], call: Callable[..., Any], refuses: bool
 ) -> None:
     dtypes = ["float16"] + ["float32"] * (len(shapes) - 1)
     l_args = [_make(lucid, s, dt, "cpu") for s, dt in zip(shapes, dtypes, strict=True)]
@@ -211,10 +167,7 @@ def test_mixed_float_dtypes_match_reference_outside_and_inside_autocast(
     ids=[row[0] for row in _TABLE if row[0] != "vdot"],
 )
 def test_mixed_float_dtypes_succeed_under_metal_autocast(
-    name: str,
-    shapes: list[tuple[int, ...]],
-    call: Callable[..., Any],
-    refuses: bool,
+    name: str, shapes: list[tuple[int, ...]], call: Callable[..., Any], refuses: bool
 ) -> None:
     dtypes = ["float16"] + ["float32"] * (len(shapes) - 1)
     args = [_make(lucid, s, dt, "metal") for s, dt in zip(shapes, dtypes, strict=True)]

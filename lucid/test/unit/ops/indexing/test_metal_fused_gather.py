@@ -94,9 +94,7 @@ def test_gather_3d_axes_and_64bit_bounds(axis: int) -> None:
 
 
 @pytest.mark.parametrize("src_dtype", [*_FLOAT_DTYPES, lucid.complex64])
-def test_embedding_take_dtypes_and_strict_negative_bounds(
-    src_dtype: lucid.dtype,
-) -> None:
+def test_embedding_take_dtypes_and_strict_negative_bounds(src_dtype: lucid.dtype) -> None:
     weight = lucid.arange(12, dtype=lucid.float32, device="metal").reshape(4, 3).to(src_dtype)
     idx = lucid.tensor([[2, -1], [4, 2**40]], dtype=lucid.int64, device="metal")
     out = _wrap(_C_engine.nn.embedding(_unwrap(weight), _unwrap(idx), -1))

@@ -14,11 +14,7 @@ from lucid.test.parity.models._utils import (
 )
 
 _FACTORIES = frozenset(
-    {
-        M.efficientformer_l1_cls,
-        M.efficientformer_l3_cls,
-        M.efficientformer_l7_cls,
-    }
+    {M.efficientformer_l1_cls, M.efficientformer_l3_cls, M.efficientformer_l7_cls}
 )
 _SPECS = [s for s in SPECS if s.lucid_factory in _FACTORIES]
 _TIMM = [s for s in _SPECS if s.timm_name is not None]

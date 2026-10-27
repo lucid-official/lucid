@@ -179,10 +179,7 @@ def _single_element(out: object, where: str) -> Tensor:
 
 
 def _seeds(
-    v: Tensor | Sequence[Tensor] | None,
-    like: tuple[Tensor, ...],
-    subject: str,
-    where: str,
+    v: Tensor | Sequence[Tensor] | None, like: tuple[Tensor, ...], subject: str, where: str
 ) -> list[Tensor]:
     """``v`` as a list, or ones for a ``like`` that is one single-element tensor.
 
@@ -201,11 +198,7 @@ def _seeds(
 
 
 def _jacobian_blocks(
-    output: Tensor,
-    xs: Sequence[Tensor],
-    create_graph: bool,
-    strict: bool,
-    index: int,
+    output: Tensor, xs: Sequence[Tensor], create_graph: bool, strict: bool, index: int
 ) -> list[Tensor]:
     """``d output / d x`` for each ``x`` in ``xs``, flattened to
     ``(output.numel(), x.numel())``.
@@ -366,10 +359,7 @@ def jacobian(
         )
         _require_tracked(outputs, "outputs", strict)
         per_output = [
-            _pack(
-                _shaped(_jacobian_blocks(o, xs, create_graph, strict, i), o, xs),
-                one_input,
-            )
+            _pack(_shaped(_jacobian_blocks(o, xs, create_graph, strict, i), o, xs), one_input)
             for i, o in enumerate(outputs)
         ]
     return per_output[0] if one_output else tuple(per_output)
@@ -834,11 +824,7 @@ def _hessian_product(
             stage = "double_back_trick"
         else:
             products = _grad(
-                firsts,
-                xs,
-                grad_outputs=v_t,
-                create_graph=create_graph,
-                allow_unused=True,
+                firsts, xs, grad_outputs=v_t, create_graph=create_graph, allow_unused=True
             )
             stage = "double_back"
     result = _filled(products, inputs_t, stage, strict, create_graph)

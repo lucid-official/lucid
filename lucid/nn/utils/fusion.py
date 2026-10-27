@@ -127,9 +127,7 @@ def fuse_conv_bn_eval(conv: object, bn: object) -> object:
         new_bias = new_bias + beta
 
     # Write back as parameters on the fused module.
-    from lucid.nn.parameter import (
-        Parameter,
-    )
+    from lucid.nn.parameter import Parameter
 
     fused.weight = Parameter(new_weight)
     if fused.bias is None:

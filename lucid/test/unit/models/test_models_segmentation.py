@@ -101,10 +101,7 @@ class TestResUNet2d:
     def test_factory_and_forward(self, device: str) -> None:
         from lucid.models.vision.unet import res_unet_2d
 
-        m = _build(
-            lambda: res_unet_2d(num_classes=4, base_channels=8, depth=2),
-            device,
-        )
+        m = _build(lambda: res_unet_2d(num_classes=4, base_channels=8, depth=2), device)
         out = m(_img(device, ch=1))
         assert isinstance(out, SemanticSegmentationOutput)
         assert tuple(out.logits.shape) == (_B, 4, _H, _W)
@@ -115,10 +112,7 @@ class TestUNet3d:
         from lucid.models.vision.unet import unet_3d
         import lucid
 
-        m = _build(
-            lambda: unet_3d(num_classes=3, base_channels=8, depth=2),
-            device,
-        )
+        m = _build(lambda: unet_3d(num_classes=3, base_channels=8, depth=2), device)
         lucid.manual_seed(0)
         x = lucid.randn((_B, 1, 16, 16, 16), device=device)
         out = m(x)
@@ -132,10 +126,7 @@ class TestResUNet3d:
         from lucid.models.vision.unet import res_unet_3d
         import lucid
 
-        m = _build(
-            lambda: res_unet_3d(num_classes=3, base_channels=8, depth=2),
-            device,
-        )
+        m = _build(lambda: res_unet_3d(num_classes=3, base_channels=8, depth=2), device)
         lucid.manual_seed(0)
         x = lucid.randn((_B, 1, 16, 16, 16), device=device)
         out = m(x)
@@ -182,13 +173,7 @@ class TestMaskFormer:
         )
 
         # Slim transformer + queries for test speed
-        m = _build(
-            lambda: maskformer_resnet50(
-                num_queries=20,
-                num_decoder_layers=2,
-            ),
-            device,
-        )
+        m = _build(lambda: maskformer_resnet50(num_queries=20, num_decoder_layers=2), device)
         assert isinstance(m, MaskFormerForSemanticSegmentation)
 
         x = _img(device)
@@ -220,13 +205,7 @@ class TestMask2FormerSwinTiny:
             Mask2FormerForSemanticSegmentation,
         )
 
-        m = _build(
-            lambda: mask2former_swin_tiny(
-                num_queries=20,
-                num_decoder_layers=3,
-            ),
-            device,
-        )
+        m = _build(lambda: mask2former_swin_tiny(num_queries=20, num_decoder_layers=3), device)
         assert isinstance(m, Mask2FormerForSemanticSegmentation)
 
         x = _img(device)
@@ -364,10 +343,7 @@ _MASKFORMER_SHIPPED = (
 
 
 def _maskformer_enums() -> tuple[type, ...]:
-    from lucid.models.vision.maskformer import (
-        MaskFormerResNet50Weights,
-        MaskFormerResNet101Weights,
-    )
+    from lucid.models.vision.maskformer import MaskFormerResNet50Weights, MaskFormerResNet101Weights
 
     return (MaskFormerResNet50Weights, MaskFormerResNet101Weights)
 
@@ -568,9 +544,7 @@ def _m2f_targets(side: int = 64) -> list[dict[str, object]]:
 
 class TestMask2FormerTraining:
     def test_loss_is_finite_and_inference_unchanged(self) -> None:
-        from lucid.models.vision.mask2former._model import (
-            Mask2FormerForSemanticSegmentation,
-        )
+        from lucid.models.vision.mask2former._model import Mask2FormerForSemanticSegmentation
 
         lucid.manual_seed(0)
         m = Mask2FormerForSemanticSegmentation(_m2f_tiny_config())
@@ -609,12 +583,7 @@ class TestMask2FormerTraining:
         wrong = [[-20.0 if c < 4 else 20.0 for c in range(side)] for _ in range(side)]
         mask_logits = lucid.tensor([wrong, wrong, right, wrong])
         class_logits = lucid.tensor(
-            [
-                [8.0, 0.0, 0.0, 0.0],
-                [8.0, 0.0, 0.0, 0.0],
-                [0.0, 8.0, 0.0, 0.0],
-                [0.0, 0.0, 8.0, 0.0],
-            ]
+            [[8.0, 0.0, 0.0, 0.0], [8.0, 0.0, 0.0, 0.0], [0.0, 8.0, 0.0, 0.0], [0.0, 0.0, 8.0, 0.0]]
         )
         coords = sample_point_coords(cfg.train_num_points)
         pred, gt = _m2f_match(class_logits, mask_logits, gt_labels, gt_masks, coords, cfg)
@@ -623,9 +592,7 @@ class TestMask2FormerTraining:
     def test_deep_supervision_adds_the_auxiliary_layers(self) -> None:
         from dataclasses import replace
 
-        from lucid.models.vision.mask2former._model import (
-            Mask2FormerForSemanticSegmentation,
-        )
+        from lucid.models.vision.mask2former._model import Mask2FormerForSemanticSegmentation
 
         lucid.manual_seed(0)
         cfg = _m2f_tiny_config()
@@ -643,10 +610,7 @@ class TestMask2FormerTraining:
 
     def test_importance_sampler_targets_the_boundary(self) -> None:
         """The point budget is only worth spending near the decision contour."""
-        from lucid.models._utils._segmentation import (
-            point_sample,
-            uncertain_point_coords,
-        )
+        from lucid.models._utils._segmentation import point_sample, uncertain_point_coords
 
         lucid.manual_seed(0)
         side = 32
@@ -660,9 +624,7 @@ class TestMask2FormerTraining:
     def test_overfits_a_single_example(self) -> None:
         import lucid.optim as optim
 
-        from lucid.models.vision.mask2former._model import (
-            Mask2FormerForSemanticSegmentation,
-        )
+        from lucid.models.vision.mask2former._model import Mask2FormerForSemanticSegmentation
 
         lucid.manual_seed(0)
         m = Mask2FormerForSemanticSegmentation(_m2f_tiny_config(num_decoder_layers=2))
@@ -690,9 +652,7 @@ class TestAttentionUNetRank:
     @staticmethod
     def _model(dims: int):
         from lucid.models.vision.attention_unet._config import AttentionUNetConfig
-        from lucid.models.vision.attention_unet._model import (
-            AttentionUNetForSemanticSegmentation,
-        )
+        from lucid.models.vision.attention_unet._model import AttentionUNetForSemanticSegmentation
 
         return AttentionUNetForSemanticSegmentation(
             AttentionUNetConfig(num_classes=3, base_channels=8, depth=2, spatial_dims=dims)
@@ -743,9 +703,7 @@ class TestAttentionUNetDeepSupervision:
     @staticmethod
     def _model(*, deep_supervision: bool, dims: int = 2):
         from lucid.models.vision.attention_unet._config import AttentionUNetConfig
-        from lucid.models.vision.attention_unet._model import (
-            AttentionUNetForSemanticSegmentation,
-        )
+        from lucid.models.vision.attention_unet._model import AttentionUNetForSemanticSegmentation
 
         return AttentionUNetForSemanticSegmentation(
             AttentionUNetConfig(

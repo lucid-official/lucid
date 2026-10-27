@@ -192,12 +192,7 @@ def _regions(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     box = [8.0, 8.0, 40.0, 40.0]
     proposals = [
         lucid.tensor(
-            [
-                box,
-                [10.0, 10.0, 42.0, 42.0],
-                [44.0, 44.0, 63.0, 63.0],
-                [0.0, 40.0, 20.0, 63.0],
-            ]
+            [box, [10.0, 10.0, 42.0, 42.0], [44.0, 44.0, 63.0, 63.0], [0.0, 40.0, 20.0, 63.0]]
         ).to(DEV)
         for _ in range(BATCH)
     ]
@@ -823,17 +818,9 @@ EXPECTED: dict[tuple[str, str], tuple[str, str, str]] = {
     ("rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
     ("fast_rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
     # The loss is built from a JVP, which is a backward pass.
-    ("mean_flow", "image-generation"): (
-        "fallback",
-        "fallback",
-        "backward pass ran inside",
-    ),
+    ("mean_flow", "image-generation"): ("fallback", "fallback", "backward pass ran inside"),
     # So is TVM's, and its gradient then runs back through that JVP.
-    ("tvm", "image-generation"): (
-        "fallback",
-        "fallback",
-        "backward pass ran inside",
-    ),
+    ("tvm", "image-generation"): ("fallback", "fallback", "backward pass ran inside"),
     # The adjoint solver is a custom autograd.Function (_AdjointSolve).
     ("neural_ode", "image-generation"): (
         "fallback",

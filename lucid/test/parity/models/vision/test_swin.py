@@ -14,14 +14,7 @@ from lucid.test.parity.models._utils import (
     _spec_param,
 )
 
-_FACTORIES = frozenset(
-    {
-        M.swin_tiny_cls,
-        M.swin_small_cls,
-        M.swin_base_cls,
-        M.swin_large_cls,
-    }
-)
+_FACTORIES = frozenset({M.swin_tiny_cls, M.swin_small_cls, M.swin_base_cls, M.swin_large_cls})
 _SPECS = [s for s in SPECS if s.lucid_factory in _FACTORIES]
 _TIMM = [s for s in _SPECS if s.timm_name is not None]
 _SC = [s for s in _SPECS if s.timm_name is None]

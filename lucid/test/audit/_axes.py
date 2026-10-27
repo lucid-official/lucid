@@ -45,11 +45,7 @@ class Context:
     """Run-wide switches an axis may consult."""
 
     def __init__(
-        self,
-        quick: bool = False,
-        metal: bool = True,
-        step: float = 1e-5,
-        tolerance: float = 2e-5,
+        self, quick: bool = False, metal: bool = True, step: float = 1e-5, tolerance: float = 2e-5
     ) -> None:
         self.quick = quick
         self.metal = metal
@@ -796,9 +792,7 @@ class GradientAxis(_DifferenceAxis):
         # defect in nineteen ops that were computing correctly.
         if not np.isfinite(coarse).all():
             return self._finding(
-                symbol,
-                Status.SKIP,
-                f"{domain}: the finite difference left the op's domain",
+                symbol, Status.SKIP, f"{domain}: the finite difference left the op's domain"
             )
 
         rel = _probe.relative(analytic, coarse.reshape(analytic.shape))
@@ -1071,9 +1065,7 @@ class SecondGradientAxis(_DifferenceAxis):
 
         if np.abs(analytic).max(initial=0.0) == 0.0 and np.abs(fd).max(initial=0.0) == 0.0:
             return self._finding(
-                symbol,
-                Status.PASS,
-                f"{domain}: second derivative is zero (op is linear)",
+                symbol, Status.PASS, f"{domain}: second derivative is zero (op is linear)"
             )
         # Zero, but not to the bit: both sides are rounding residue of a
         # derivative that vanishes, and their ratio is noise against noise.
@@ -1097,9 +1089,7 @@ class SecondGradientAxis(_DifferenceAxis):
         # nineteen ops that were computing correctly.
         if not np.isfinite(fd).all() or not np.isfinite(analytic).all():
             return self._finding(
-                symbol,
-                Status.SKIP,
-                f"{domain}: the second difference left the op's domain",
+                symbol, Status.SKIP, f"{domain}: the second difference left the op's domain"
             )
 
         rel = _probe.relative(analytic, fd.reshape(analytic.shape))
@@ -1135,9 +1125,7 @@ class SecondGradientAxis(_DifferenceAxis):
             rel_fine = rel
         if _probe.quadratic_shrink(rel, rel_fine):
             return self._finding(
-                symbol,
-                Status.TRUNCATION,
-                f"{domain}: rel {rel:.2e} -> {rel_fine:.2e} at h/10",
+                symbol, Status.TRUNCATION, f"{domain}: rel {rel:.2e} -> {rel_fine:.2e} at h/10"
             )
         if self._too_coarse_for_a_difference(call) and fine is not None:
             # Rounding, not truncation: a float32 first derivative carries
@@ -1541,9 +1529,7 @@ class DeviceAxis(Axis):
             return self._finding(symbol, Status.SKIP, "returned no tensor")
         if "metal" not in str(device):
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"asked for device='metal' and built the result on {device}",
+                symbol, Status.FAIL, f"asked for device='metal' and built the result on {device}"
             )
         return self._finding(symbol, Status.PASS, "honours its device argument")
 
@@ -1867,10 +1853,7 @@ class NonFiniteAxis(Axis):
         # input and see whether the answer moves.
         try:
             other = _probe.to_numpy(
-                fn(
-                    *call.with_primary(np.full(shape, 0.5, dtype=np.float64)).args,
-                    **call.kwargs,
-                )
+                fn(*call.with_primary(np.full(shape, 0.5, dtype=np.float64)).args, **call.kwargs)
             )
         except Exception:  # noqa: BLE001
             other = None
@@ -1897,17 +1880,13 @@ class NonFiniteAxis(Axis):
             )
         ):
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                "output does not depend on the input's values",
+                symbol, Status.NOT_APPLICABLE, "output does not depend on the input's values"
             )
         if out is None or out.size == 0:
             return self._finding(symbol, Status.SKIP, "no comparable output")
         if out.dtype.kind not in "fc":
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                f"output dtype {out.dtype} cannot carry NaN",
+                symbol, Status.NOT_APPLICABLE, f"output dtype {out.dtype} cannot carry NaN"
             )
         if not np.isnan(out).any():
             return self._finding(
@@ -1961,9 +1940,7 @@ class BroadcastAxis(Axis):
             return self._finding(symbol, Status.NOT_APPLICABLE, "not a two-tensor op")
         if np.array_equal(with_b, with_c, equal_nan=True):
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                "second argument does not affect the result",
+                symbol, Status.NOT_APPLICABLE, "second argument does not affect the result"
             )
         # ...and taking two operands is not the same as being elementwise.
         # ``kron`` returns (3, 16), ``mv`` contracts, ``masked_select``
@@ -2142,11 +2119,7 @@ class DtypeAxis(Axis):
             if got is None:
                 continue
             if str(got) != str(dtype):
-                return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"asked for {dtype} and got {got}",
-                )
+                return self._finding(symbol, Status.FAIL, f"asked for {dtype} and got {got}")
             honoured.append(name)
         if not honoured:
             return None
@@ -2233,9 +2206,7 @@ class DtypeAxis(Axis):
                     metal=sorted(support["metal"]),
                 )
         return self._finding(
-            symbol,
-            Status.PASS,
-            f"{len(support[devices[0]])}/{len(_probe.DTYPES)} dtypes",
+            symbol, Status.PASS, f"{len(support[devices[0]])}/{len(_probe.DTYPES)} dtypes"
         )
 
 
@@ -2382,9 +2353,7 @@ class ModuleAxis(Axis):
             why is not None and "NotImplementedError" in why
         ):
             return self._finding(
-                symbol,
-                Status.NOT_APPLICABLE,
-                "a container: it holds layers and defines no forward",
+                symbol, Status.NOT_APPLICABLE, "a container: it holds layers and defines no forward"
             )
 
         # A lazy layer registers placeholder parameters at construction so
@@ -2437,9 +2406,7 @@ class ModuleAxis(Axis):
                 reloaded.load_state_dict(module.state_dict())
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"state_dict does not round trip: {type(exc).__name__}: {exc}",
+                symbol, Status.FAIL, f"state_dict does not round trip: {type(exc).__name__}: {exc}"
             )
 
         if params:
@@ -2462,15 +2429,11 @@ class ModuleAxis(Axis):
                 reached = [p for p in module.parameters() if p.grad is not None]
                 if not reached:
                     return self._finding(
-                        symbol,
-                        Status.FAIL,
-                        "forward ran but no parameter received a gradient",
+                        symbol, Status.FAIL, "forward ran but no parameter received a gradient"
                     )
             except Exception as exc:  # noqa: BLE001
                 return self._finding(
-                    symbol,
-                    Status.UNSUPPORTED,
-                    f"backward: {type(exc).__name__}: {str(exc)[:60]}",
+                    symbol, Status.UNSUPPORTED, f"backward: {type(exc).__name__}: {str(exc)[:60]}"
                 )
         return self._finding(symbol, Status.PASS, f"{len(params)} params, {len(state)} state keys")
 
@@ -2539,9 +2502,7 @@ class OptimAxis(Axis):
             optimiser.load_state_dict(state)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"state_dict does not round trip: {type(exc).__name__}",
+                symbol, Status.FAIL, f"state_dict does not round trip: {type(exc).__name__}"
             )
         return self._finding(symbol, Status.PASS, f"loss {first:.4f} -> {last:.4f}")
 
@@ -2559,8 +2520,7 @@ def _produces_float64(fn: Any, call: Call) -> bool:
 
     def build(array: np.ndarray, follow: bool) -> Any:
         return _probe.tensor_of(
-            array.astype(np.float32) if follow else array,
-            dtype=lucid.float32 if follow else None,
+            array.astype(np.float32) if follow else array, dtype=lucid.float32 if follow else None
         )
 
     try:
@@ -2606,10 +2566,7 @@ def _contract_verdict(qualname: str, only_cpu: list[str], only_metal: list[str])
     # only_cpu: cpu takes it, metal does not.  only_metal: the reverse.
     # Whichever side agrees with the reference is the one to keep.
     parts = []
-    for device, mine, theirs in (
-        ("cpu", only_cpu, only_metal),
-        ("metal", only_metal, only_cpu),
-    ):
+    for device, mine, theirs in (("cpu", only_cpu, only_metal), ("metal", only_metal, only_cpu)):
         over = [d for d in mine if d not in reference]
         under = [d for d in theirs if d in reference]
         if over:
@@ -2842,7 +2799,7 @@ _CTOR_FACTORY_BY_CLASS: dict[str, dict[str, Any]] = {
     "CompressionAware": {
         "model": lambda: _default_submodule("compressible"),
         "weights": _default_compression,
-    },
+    }
 }
 
 
@@ -2970,18 +2927,12 @@ def _construct_module(cls: Any, depth: int = 0, fill_optional: bool = False) -> 
             if fill_optional and parameter.default is None:
                 with contextlib.suppress(KeyError):
                     kwargs[parameter.name] = _ctor_value(
-                        parameter.name,
-                        parameter.annotation,
-                        depth,
-                        getattr(cls, "__name__", ""),
+                        parameter.name, parameter.annotation, depth, getattr(cls, "__name__", "")
                     )
             continue  # a default the author chose is better than a guess
         try:
             kwargs[parameter.name] = _ctor_value(
-                parameter.name,
-                parameter.annotation,
-                depth,
-                getattr(cls, "__name__", ""),
+                parameter.name, parameter.annotation, depth, getattr(cls, "__name__", "")
             )
         except KeyError:
             return None
@@ -3270,11 +3221,7 @@ def _forward_companion(
                 )
                 source = cast(_probe.sample("moderate", (*shape[:-rank], *unpooled), 2))
                 _, indices = pool(
-                    source,
-                    kernel_size=kernel,
-                    stride=stride,
-                    padding=padding,
-                    return_indices=True,
+                    source, kernel_size=kernel, stride=stride, padding=padding, return_indices=True
                 )
                 if tuple(indices.shape) == tuple(shape):
                     return [indices]
@@ -3342,7 +3289,7 @@ def _ctc_arguments(cast: Any) -> list[list[Any]]:
 #: is what keeps this from becoming the hand-maintained table the rest of
 #: this module exists to avoid.
 _JOINT_FORWARDS: dict[frozenset[str], Any] = {
-    frozenset({"log_probs", "targets", "input_lengths", "target_lengths"}): _ctc_arguments,
+    frozenset({"log_probs", "targets", "input_lengths", "target_lengths"}): _ctc_arguments
 }
 
 
@@ -3456,10 +3403,7 @@ def _forward_inputs(module: Any, shape: tuple[int, ...]) -> list[list[Any]]:
         # pair above is drawn around zero, so ``BCELoss`` took none of
         # them (LCD-367).
         out.append(
-            [
-                cast(_probe.sample("small_pos", shape, 0)),
-                cast(_probe.sample("small_pos", shape, 1)),
-            ]
+            [cast(_probe.sample("small_pos", shape, 0)), cast(_probe.sample("small_pos", shape, 1))]
         )
     return out
 
@@ -3547,11 +3491,4 @@ def axis_names() -> list[str]:
     return [a.name for a in ALL_AXES]
 
 
-__all__ = [
-    "ALL_AXES",
-    "CORE_AXES",
-    "Axis",
-    "Context",
-    "axis_by_name",
-    "axis_names",
-]
+__all__ = ["ALL_AXES", "CORE_AXES", "Axis", "Context", "axis_by_name", "axis_names"]

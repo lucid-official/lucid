@@ -167,9 +167,7 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
-    def to_legacy_cache(
-        self,
-    ) -> tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...]:
+    def to_legacy_cache(self) -> tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...]:
         """Convert to the legacy per-layer ``(self_k, self_v, cross_k, cross_v)``
         tuple format."""
         legacy: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
@@ -181,8 +179,7 @@ class EncoderDecoderCache(Cache):
 
     @classmethod
     def from_legacy_cache(
-        cls,
-        past_key_values: tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...] | None = None,
+        cls, past_key_values: tuple[tuple[Tensor, Tensor, Tensor, Tensor], ...] | None = None
     ) -> Self:
         """Build an :class:`EncoderDecoderCache` from the legacy 4-tuple format."""
         self_cache = DynamicCache()

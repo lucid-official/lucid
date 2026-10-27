@@ -51,12 +51,7 @@ from lucid._dispatch import (
     _swap_data,
     _wrap,
 )
-from lucid._factories.creation import (
-    zeros as _zeros,
-    ones as _ones,
-    empty as _empty,
-    full as _full,
-)
+from lucid._factories.creation import zeros as _zeros, ones as _ones, empty as _empty, full as _full
 from lucid._factories.converters import tensor as _tensor_fn, _to_impl
 
 if TYPE_CHECKING:
@@ -1393,11 +1388,7 @@ class Tensor:
         self._impl.detach_inplace()
         return self
 
-    def clamp_(
-        self,
-        min: Tensor | float | None = None,
-        max: Tensor | float | None = None,
-    ) -> Self:
+    def clamp_(self, min: Tensor | float | None = None, max: Tensor | float | None = None) -> Self:
         r"""Clamp all elements of this tensor to ``[min, max]``, in-place.
 
         Each element :math:`x_i` is replaced by:
@@ -2172,12 +2163,7 @@ class Tensor:
         """
         _dtype = dtype or self.dtype
         _device = device or self.device
-        return _empty(
-            *size,
-            dtype=_dtype,
-            device=_device,
-            requires_grad=requires_grad,
-        )
+        return _empty(*size, dtype=_dtype, device=_device, requires_grad=requires_grad)
 
     def new_zeros(
         self,
@@ -2224,12 +2210,7 @@ class Tensor:
         """
         _dtype = dtype or self.dtype
         _device = device or self.device
-        return _zeros(
-            *size,
-            dtype=_dtype,
-            device=_device,
-            requires_grad=requires_grad,
-        )
+        return _zeros(*size, dtype=_dtype, device=_device, requires_grad=requires_grad)
 
     def new_ones(
         self,
@@ -2274,12 +2255,7 @@ class Tensor:
         """
         _dtype = dtype or self.dtype
         _device = device or self.device
-        return _ones(
-            *size,
-            dtype=_dtype,
-            device=_device,
-            requires_grad=requires_grad,
-        )
+        return _ones(*size, dtype=_dtype, device=_device, requires_grad=requires_grad)
 
     def new_full(
         self,
@@ -2330,13 +2306,7 @@ class Tensor:
         """
         _dtype = dtype or self.dtype
         _device = device or self.device
-        return _full(
-            size,
-            fill_value,
-            dtype=_dtype,
-            device=_device,
-            requires_grad=requires_grad,
-        )
+        return _full(size, fill_value, dtype=_dtype, device=_device, requires_grad=requires_grad)
 
     def new_tensor(
         self,
@@ -2385,12 +2355,7 @@ class Tensor:
         """
         _dtype = dtype or self.dtype
         _device = device or self.device
-        return _tensor_fn(
-            data,
-            dtype=_dtype,
-            device=_device,
-            requires_grad=requires_grad,
-        )
+        return _tensor_fn(data, dtype=_dtype, device=_device, requires_grad=requires_grad)
 
     # ── size / element info ───────────────────────────────────────────────────
 
@@ -2623,9 +2588,7 @@ class Tensor:
         return self.mT
 
     def type(
-        self,
-        dtype: _dtype_cls | _C_engine.Dtype | str | None = None,
-        non_blocking: bool = False,
+        self, dtype: _dtype_cls | _C_engine.Dtype | str | None = None, non_blocking: bool = False
     ) -> str | Tensor:
         """Return the legacy type name, or cast to a dtype or legacy type.
 
@@ -3299,10 +3262,7 @@ class Tensor:
         from lucid._ops.composite.indexing import _write_inplace, index_copy
 
         return _write_inplace(
-            self,
-            "index_copy_",
-            lambda base: index_copy(base, dim, index, source),
-            source,
+            self, "index_copy_", lambda base: index_copy(base, dim, index, source), source
         )
 
     def index_fill(self, dim: int, index: Tensor, value: float) -> Tensor:
@@ -3397,10 +3357,7 @@ class Tensor:
         return _write_inplace(self, "index_fill_", lambda base: index_fill(base, dim, index, value))
 
     def index_put(
-        self,
-        indices: tuple[Tensor, ...] | list[Tensor],
-        values: Tensor,
-        accumulate: bool = False,
+        self, indices: tuple[Tensor, ...] | list[Tensor], values: Tensor, accumulate: bool = False
     ) -> Tensor:
         r"""Return a copy of ``self`` with ``values`` written at ``indices``.
 
@@ -3451,10 +3408,7 @@ class Tensor:
         return _index_put(self, indices, values, accumulate=accumulate)
 
     def index_put_(
-        self,
-        indices: tuple[Tensor, ...] | list[Tensor],
-        values: Tensor,
-        accumulate: bool = False,
+        self, indices: tuple[Tensor, ...] | list[Tensor], values: Tensor, accumulate: bool = False
     ) -> Self:
         r"""Write ``values`` into ``self`` at ``indices``, in place.
 
@@ -3726,11 +3680,7 @@ class Tensor:
         return Tensor.__new_from_impl__(_where_adapter(condition, self, other))
 
     def diff(
-        self,
-        n: int = 1,
-        dim: int = -1,
-        prepend: Tensor | None = None,
-        append: Tensor | None = None,
+        self, n: int = 1, dim: int = -1, prepend: Tensor | None = None, append: Tensor | None = None
     ) -> Tensor:
         r"""Compute the ``n``-th order discrete difference along ``dim``.
 
@@ -3932,11 +3882,7 @@ class Tensor:
 
 
 def _tensor_unpickle(
-    raw_bytes: bytes,
-    shape: list[int],
-    dtype_name: str,
-    device: object,
-    requires_grad: bool,
+    raw_bytes: bytes, shape: list[int], dtype_name: str, device: object, requires_grad: bool
 ) -> Tensor:
     """Top-level helper so multiprocessing (spawn) can pickle/unpickle Tensor."""
     from lucid._dtype import _resolve_dtype_name, to_engine_dtype
@@ -3957,9 +3903,7 @@ from lucid._tensor._to import _inject_to, _legacy_type_name, _type_target
 # has nothing to resolve it against, so ``inspect.signature`` on that one
 # method raised NameError.  Bound here rather than at the top: by this
 # point the class exists and the import cannot cycle back through it.
-from lucid.autograd._hooks import (
-    RemovableHandle as _RemovableHandle,
-)
+from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
 
 _inject_dunders(Tensor)
 _inject_methods(Tensor)

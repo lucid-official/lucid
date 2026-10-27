@@ -35,8 +35,7 @@ from lucid._dispatch import _unwrap
 from lucid.coreml import _build
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 #: Every palette width the operation takes.  Three and six do not divide
@@ -196,10 +195,7 @@ class TestThePackageComputesWhatItStores:
 class TestWhatIsLeftAlone:
     @pytest.mark.parametrize(
         ("name", "weights"),
-        [
-            ("palettize", cml.Palettize(bits=4)),
-            ("sparsify", cml.Sparsify(ratio=0.5)),
-        ],
+        [("palettize", cml.Palettize(bits=4)), ("sparsify", cml.Sparsify(ratio=0.5))],
     )
     def test_a_value_with_no_channel_axis_is_stored_whole(self, name: str, weights: object) -> None:
         """Biases and norm parameters are not weights to approximate.

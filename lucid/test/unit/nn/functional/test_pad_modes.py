@@ -46,11 +46,7 @@ def _values(shape: tuple[int, ...]) -> np.ndarray:
 @pytest.mark.parametrize(("shape", "padding"), _CASES, ids=str)
 @pytest.mark.parametrize("mode", _MODES)
 def test_every_mode_matches_the_reference(
-    ref: ModuleType,
-    device: str,
-    mode: str,
-    shape: tuple[int, ...],
-    padding: tuple[int, ...],
+    ref: ModuleType, device: str, mode: str, shape: tuple[int, ...], padding: tuple[int, ...]
 ) -> None:
     values = _values(shape)
     x = lucid.tensor(values, device=device, requires_grad=True)
@@ -127,8 +123,7 @@ def test_non_constant_mode_refuses_value(ref: ModuleType, device: str, mode: str
 
 
 @pytest.mark.parametrize(
-    "widths",
-    [[(0, 0), (0, 0), (-1, 1)], [(0, 0), (0, 0), (1, -1)], [(-1, 0), (0, 0), (0, 0)]],
+    "widths", [[(0, 0), (0, 0), (-1, 1)], [(0, 0), (0, 0), (1, -1)], [(-1, 0), (0, 0), (0, 0)]]
 )
 def test_engine_pad_refuses_negative_widths(device: str, widths: list[tuple[int, int]]) -> None:
     """LCD-507: ``_C_engine.pad`` refuses negative widths instead of reading across rows."""

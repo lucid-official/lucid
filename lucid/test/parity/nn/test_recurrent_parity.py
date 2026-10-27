@@ -84,9 +84,7 @@ def test_the_plain_rnn_honours_its_nonlinearity(nonlinearity, ref):
     theirs = ref.nn.RNN(4, 6, batch_first=True, nonlinearity=nonlinearity)
     _mirror(mine, theirs, ref)
     assert np.allclose(
-        _v(_first(mine(_t(X)))),
-        _first(theirs(ref.tensor(X))).detach().numpy(),
-        atol=1e-4,
+        _v(_first(mine(_t(X)))), _first(theirs(ref.tensor(X))).detach().numpy(), atol=1e-4
     )
 
 

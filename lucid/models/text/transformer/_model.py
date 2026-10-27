@@ -247,8 +247,7 @@ class TransformerModel(PretrainedModel):
 
         # Sinusoidal positional encoding from :mod:`lucid.nn`.
         self.positional_encoding = nn.SinusoidalEmbedding(
-            num_positions=config.max_position_embeddings,
-            embedding_dim=config.hidden_size,
+            num_positions=config.max_position_embeddings, embedding_dim=config.hidden_size
         )
         self.dropout = nn.Dropout(p=config.hidden_dropout)
 
@@ -317,11 +316,7 @@ class TransformerModel(PretrainedModel):
         emb = emb + pe.unsqueeze(0)  # broadcast over batch
         return self.dropout(emb)
 
-    def encode(
-        self,
-        src_ids: Tensor,
-        src_attention_mask: Tensor | None = None,
-    ) -> Tensor:
+    def encode(self, src_ids: Tensor, src_attention_mask: Tensor | None = None) -> Tensor:
         """Run only the encoder; returns memory ``(B, S, d_model)``."""
         src_emb = self._embed(src_ids, self.src_tok_emb)
         kpm = _key_padding_to_kpm(src_attention_mask)
@@ -419,10 +414,7 @@ class TransformerModel(PretrainedModel):
             tgt_attention_mask=decoder_attention_mask,
             memory_attention_mask=attention_mask,
         )
-        return TransformerModelOutput(
-            last_hidden_state=decoded,
-            encoder_last_hidden_state=memory,
-        )
+        return TransformerModelOutput(last_hidden_state=decoded, encoder_last_hidden_state=memory)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -541,9 +533,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
             )
 
         return Seq2SeqLMOutput(
-            logits=logits,
-            loss=loss,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            logits=logits, loss=loss, encoder_last_hidden_state=outputs.encoder_last_hidden_state
         )
 
     @lucid.no_grad()
@@ -707,10 +697,7 @@ class TransformerForSequenceClassification(SequenceClassificationModel):
 
     @override
     def forward(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor | None = None,
-        labels: Tensor | None = None,
+        self, input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None
     ) -> SequenceClassificationOutput:
         memory = self.transformer.encode(input_ids, attention_mask)  # (B, S, d)
         pooled = memory[:, 0]  # (B, d)
@@ -795,10 +782,7 @@ class TransformerForTokenClassification(TokenClassificationModel, MaskedLMMixin)
 
     @override
     def forward(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor | None = None,
-        labels: Tensor | None = None,
+        self, input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None
     ) -> TokenClassificationOutput:
         memory = self.transformer.encode(input_ids, attention_mask)  # (B, S, d)
         seq = self.dropout(memory)

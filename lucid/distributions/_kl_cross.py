@@ -11,12 +11,7 @@ from lucid.distributions.continuous_extra import HalfCauchy, Pareto, Weibull
 from lucid.distributions.discrete import Binomial, Poisson
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 from lucid.distributions.exponential import Exponential, Laplace
-from lucid.distributions.extra import (
-    ContinuousBernoulli,
-    Gumbel,
-    InverseGamma,
-    Kumaraswamy,
-)
+from lucid.distributions.extra import ContinuousBernoulli, Gumbel, InverseGamma, Kumaraswamy
 from lucid.distributions.gamma import Beta, Gamma
 from lucid.distributions.independent import Independent
 from lucid.distributions.kl import (
@@ -33,10 +28,7 @@ from lucid.distributions.multivariate import (
     _batch_lowrank_mahalanobis,
 )
 from lucid.distributions.normal import LogNormal, Normal
-from lucid.distributions.transformed_distribution import (
-    Transform,
-    TransformedDistribution,
-)
+from lucid.distributions.transformed_distribution import Transform, TransformedDistribution
 from lucid.distributions.transforms import ExpTransform
 from lucid.distributions.uniform import Uniform
 from lucid.special import multigammaln, xlog1py
@@ -75,21 +67,9 @@ def _register_inf_pairs() -> None:
         (ContinuousBernoulli, (Pareto,), "probs"),
         (Exponential, (Beta, ContinuousBernoulli, Pareto, Uniform), "rate"),
         (Gamma, (Beta, ContinuousBernoulli, Pareto, Uniform), "concentration"),
-        (
-            Gumbel,
-            (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform),
-            "loc",
-        ),
-        (
-            Laplace,
-            (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform),
-            "loc",
-        ),
-        (
-            Normal,
-            (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform),
-            "loc",
-        ),
+        (Gumbel, (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform), "loc"),
+        (Laplace, (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform), "loc"),
+        (Normal, (Beta, ContinuousBernoulli, Exponential, Gamma, Pareto, Uniform), "loc"),
         (Pareto, (Beta, ContinuousBernoulli, Uniform), "scale"),
         (Poisson, (Bernoulli, Binomial), "rate"),
     )
@@ -533,10 +513,7 @@ def _kl_lowrank_lowrank(p: LowRankMultivariateNormal, q: LowRankMultivariateNorm
         q._unbroadcasted_cov_diag, q._capacitance_tril
     ) - _batch_lowrank_logdet(p._unbroadcasted_cov_diag, p._capacitance_tril)
     term3 = _batch_lowrank_mahalanobis(
-        q._unbroadcasted_cov_factor,
-        q._unbroadcasted_cov_diag,
-        q.loc - p.loc,
-        q._capacitance_tril,
+        q._unbroadcasted_cov_factor, q._unbroadcasted_cov_diag, q.loc - p.loc, q._capacitance_tril
     )
     A = _lowrank_whitened_factor(q)
     term21 = (p._unbroadcasted_cov_diag / q._unbroadcasted_cov_diag).sum(dim=-1)
@@ -560,9 +537,7 @@ def _kl_lowrank_mvn(p: LowRankMultivariateNormal, q: MultivariateNormal) -> Tens
     z = lucid.linalg.solve_triangular(q.scale_tril, diff, upper=False)
     term3 = (z * z).sum(dim=(-2, -1))
     L1 = lucid.linalg.solve_triangular(
-        q.scale_tril,
-        lucid.diag_embed(p._unbroadcasted_cov_diag.sqrt()),
-        upper=False,
+        q.scale_tril, lucid.diag_embed(p._unbroadcasted_cov_diag.sqrt()), upper=False
     )
     L2 = lucid.linalg.solve_triangular(q.scale_tril, p._unbroadcasted_cov_factor, upper=False)
     term2 = (L1 * L1).sum(dim=(-2, -1)) + (L2 * L2).sum(dim=(-2, -1))
@@ -576,10 +551,7 @@ def _kl_mvn_lowrank(p: MultivariateNormal, q: LowRankMultivariateNormal) -> Tens
         q._unbroadcasted_cov_diag, q._capacitance_tril
     ) - 2.0 * p.scale_tril.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
     term3 = _batch_lowrank_mahalanobis(
-        q._unbroadcasted_cov_factor,
-        q._unbroadcasted_cov_diag,
-        q.loc - p.loc,
-        q._capacitance_tril,
+        q._unbroadcasted_cov_factor, q._unbroadcasted_cov_diag, q.loc - p.loc, q._capacitance_tril
     )
     A = _lowrank_whitened_factor(q)
     S1 = p.scale_tril / q._unbroadcasted_cov_diag.sqrt().unsqueeze(-1)

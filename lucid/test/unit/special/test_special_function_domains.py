@@ -218,7 +218,7 @@ _ZETA_GRADIENT_DEVIATIONS: dict[tuple[float, float, str], str] = {
     (10.0, -1.5, "float64"): (
         "-10 zeta(11, -1.5) = -4.30526886555e-4 sums terms of size 2^11 that "
         "cancel; the reference's direct sum is 5e-9 off, Lucid's is exact"
-    ),
+    )
 }
 
 
@@ -280,8 +280,7 @@ def test_zeta_negative_q_reduces_to_the_direct_sum() -> None:
     q = -20.5
     head = math.fsum((q + k) ** -3 for k in range(30))
     tail = lucid.special.zeta(
-        lucid.tensor([3.0], dtype=lucid.float64),
-        lucid.tensor([q + 30], dtype=lucid.float64),
+        lucid.tensor([3.0], dtype=lucid.float64), lucid.tensor([q + 30], dtype=lucid.float64)
     ).item()
     got = lucid.special.zeta(
         lucid.tensor([3.0], dtype=lucid.float64), lucid.tensor([q], dtype=lucid.float64)

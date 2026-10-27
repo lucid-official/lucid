@@ -13,13 +13,7 @@ from lucid._types import _OptimizerClosure
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.nn.parameter import Parameter
-from lucid.optim.optimizer import (
-    Optimizer,
-    _follow,
-    _from_host,
-    _group_params,
-    _host_copy,
-)
+from lucid.optim.optimizer import Optimizer, _follow, _from_host, _group_params, _host_copy
 
 
 class RMSprop(Optimizer):
@@ -212,13 +206,7 @@ class Adagrad(Optimizer):
     >>> optimizer.step()
     """
 
-    _HYPERPARAMS = (
-        "lr",
-        "lr_decay",
-        "weight_decay",
-        "initial_accumulator_value",
-        "eps",
-    )
+    _HYPERPARAMS = ("lr", "lr_decay", "weight_decay", "initial_accumulator_value", "eps")
     _ENGINE_RULES = _C_engine.Adagrad
 
     def __init__(
@@ -443,9 +431,7 @@ class Adamax(Optimizer):
     ) -> None:
         """Initialise the Adamax.  See the class docstring for parameter semantics."""
         self._init_adam_family(
-            params,
-            (lr, betas, eps, weight_decay),
-            (foreach, maximize, capturable, differentiable),
+            params, (lr, betas, eps, weight_decay), (foreach, maximize, capturable, differentiable)
         )
 
     @override
@@ -932,10 +918,7 @@ class Rprop(Optimizer):
     """
 
     _HYPERPARAMS = ("lr", "eta_minus", "eta_plus", "step_min", "step_max")
-    _PAIR_KEYS = {
-        "etas": ("eta_minus", "eta_plus"),
-        "step_sizes": ("step_min", "step_max"),
-    }
+    _PAIR_KEYS = {"etas": ("eta_minus", "eta_plus"), "step_sizes": ("step_min", "step_max")}
     _ENGINE_RULES = _C_engine.Rprop
 
     def __init__(

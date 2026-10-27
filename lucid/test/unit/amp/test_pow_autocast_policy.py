@@ -60,19 +60,11 @@ def _amp_dtype(device: str) -> lucid.dtype:
 
 def _assert_matches(got: lucid.Tensor, want: object) -> None:
     assert str(got.dtype).split(".")[-1] == str(want.dtype).split(".")[-1]
-    np.testing.assert_allclose(
-        got.float().numpy(),
-        want.float().cpu().numpy(),
-        rtol=2e-6,
-        atol=0.0,
-    )
+    np.testing.assert_allclose(got.float().numpy(), want.float().cpu().numpy(), rtol=2e-6, atol=0.0)
 
 
 def _run_both(
-    ref: ModuleType,
-    device: str,
-    dtype: lucid.dtype,
-    spell: Spelling,
+    ref: ModuleType, device: str, dtype: lucid.dtype, spell: Spelling
 ) -> tuple[lucid.Tensor, object]:
     rdev = _ref_device(ref, device)
     a = lucid.tensor(_BASES, dtype=dtype, device=device)

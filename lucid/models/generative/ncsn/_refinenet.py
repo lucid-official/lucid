@@ -105,13 +105,7 @@ class _CondResBlock(nn.Module):
     full resolution.
     """
 
-    def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        num_classes: int,
-        dilation: int = 1,
-    ) -> None:
+    def __init__(self, in_ch: int, out_ch: int, num_classes: int, dilation: int = 1) -> None:
         super().__init__()
         self.norm1 = CondInstanceNormPlusPlus(in_ch, num_classes)
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False)

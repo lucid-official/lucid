@@ -41,11 +41,7 @@ _PAIRS = [
     ("selu", F.selu, F.selu_),
     ("leaky_relu", F.leaky_relu, F.leaky_relu_),
     ("hardtanh", F.hardtanh, F.hardtanh_),
-    (
-        "threshold",
-        lambda t: F.threshold(t, 0.0, 0.0),
-        lambda t: F.threshold_(t, 0.0, 0.0),
-    ),
+    ("threshold", lambda t: F.threshold(t, 0.0, 0.0), lambda t: F.threshold_(t, 0.0, 0.0)),
 ]
 
 

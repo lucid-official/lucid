@@ -15,12 +15,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _as_tensor
 from lucid.distributions._util import _broadcast_pair
 from lucid.distributions._util import _image_cdf, _image_icdf
-from lucid.distributions.constraints import (
-    Constraint,
-    greater_than_eq,
-    nonnegative,
-    positive,
-)
+from lucid.distributions.constraints import Constraint, greater_than_eq, nonnegative, positive
 from lucid.distributions.distribution import Distribution
 
 
@@ -95,10 +90,7 @@ class Pareto(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        scale: Tensor | float,
-        alpha: Tensor | float,
-        validate_args: bool | None = None,
+        self, scale: Tensor | float, alpha: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Initialise a Pareto distribution.
 
@@ -121,9 +113,7 @@ class Pareto(Distribution):
         # X = scale * exp(E) with E ~ Exponential(alpha): what cdf/icdf read.
         self._base = Exponential(self.alpha, validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.scale.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.scale.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -394,9 +384,7 @@ class Weibull(Distribution):
         # X = scale * E^(1/k) with E ~ Exponential(1): what cdf/icdf read.
         self._base = Exponential(lucid.ones_like(self.scale), validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.scale.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.scale.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -646,11 +634,7 @@ class HalfNormal(Distribution):
     support: Constraint | None = nonnegative
     has_rsample = True
 
-    def __init__(
-        self,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, scale: Tensor | float, validate_args: bool | None = None) -> None:
         r"""Initialise a HalfNormal distribution.
 
         Parameters
@@ -666,9 +650,7 @@ class HalfNormal(Distribution):
         self.scale = _as_tensor(scale)
         self._base = Normal(lucid.zeros_like(self.scale), self.scale, validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.scale.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.scale.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -866,11 +848,7 @@ class HalfCauchy(Distribution):
     support: Constraint | None = nonnegative
     has_rsample = True
 
-    def __init__(
-        self,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, scale: Tensor | float, validate_args: bool | None = None) -> None:
         r"""Initialise a HalfCauchy distribution.
 
         Parameters
@@ -886,9 +864,7 @@ class HalfCauchy(Distribution):
         self.scale = _as_tensor(scale)
         self._base = Cauchy(lucid.zeros_like(self.scale), self.scale, validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.scale.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.scale.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -1113,10 +1089,7 @@ class FisherSnedecor(Distribution):
     has_rsample = True
 
     def __init__(
-        self,
-        df1: Tensor | float,
-        df2: Tensor | float,
-        validate_args: bool | None = None,
+        self, df1: Tensor | float, df2: Tensor | float, validate_args: bool | None = None
     ) -> None:
         """Initialise a Fisher-Snedecor F-distribution.
 
@@ -1137,9 +1110,7 @@ class FisherSnedecor(Distribution):
         self._chi1 = Chi2(self.df1, validate_args=False)
         self._chi2 = Chi2(self.df2, validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.df1.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.df1.shape), event_shape=(), validate_args=validate_args
         )
 
     @override

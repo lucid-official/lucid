@@ -108,12 +108,7 @@ _STRAGGLERS = {
 
 @pytest.mark.parametrize(
     ("op", "dim"),
-    [
-        ("Tensor.diff", 1),
-        ("Tensor.diff", -2),
-        ("linalg.cross", 2),
-        ("linalg.cross", -3),
-    ],
+    [("Tensor.diff", 1), ("Tensor.diff", -2), ("linalg.cross", 2), ("linalg.cross", -3)],
 )
 def test_a_straggler_refuses_an_axis_past_the_last(ref, op, dim):
     call = _STRAGGLERS[op]
@@ -269,9 +264,7 @@ def test_cross_refuses_0d_and_non_3_axes(ref, device, dim):
             ref.linalg.cross(ref.ones(2, 2), ref.ones(2, 2), dim=dim)
         with pytest.raises(RuntimeError, match="must have length 3"):
             lucid.linalg.cross(
-                lucid.ones(2, 2, device=device),
-                lucid.ones(2, 2, device=device),
-                dim=dim,
+                lucid.ones(2, 2, device=device), lucid.ones(2, 2, device=device), dim=dim
             )
 
 
@@ -322,12 +315,7 @@ def test_quantile_refuses_an_empty_tensor(ref, device, op, shape, dim):
 @pytest.mark.parametrize("dim", [None, 0, -1], ids=str)
 @pytest.mark.parametrize("op", ["quantile", "nanquantile"])
 def test_quantile_on_a_0d_tensor(ref, device, op, dim, keepdim):
-    _compare(
-        ref,
-        device,
-        (),
-        lambda lib, F, t: getattr(lib, op)(t, 0.5, dim=dim, keepdim=keepdim),
-    )
+    _compare(ref, device, (), lambda lib, F, t: getattr(lib, op)(t, 0.5, dim=dim, keepdim=keepdim))
     nan_got = getattr(lucid, op)(
         lucid.tensor(float("nan"), device=device), 0.5, dim=dim, keepdim=keepdim
     )
@@ -337,18 +325,8 @@ def test_quantile_on_a_0d_tensor(ref, device, op, dim, keepdim):
 @pytest.mark.parametrize("descending", [False, True])
 @pytest.mark.parametrize("dim", [0, -1])
 def test_sort_and_argsort_on_a_0d_tensor(ref, device, dim, descending):
-    _compare(
-        ref,
-        device,
-        (),
-        lambda lib, F, t: lib.sort(t, dim=dim, descending=descending)[0],
-    )
-    _compare(
-        ref,
-        device,
-        (),
-        lambda lib, F, t: t.sort(dim=dim, descending=descending)[0],
-    )
+    _compare(ref, device, (), lambda lib, F, t: lib.sort(t, dim=dim, descending=descending)[0])
+    _compare(ref, device, (), lambda lib, F, t: t.sort(dim=dim, descending=descending)[0])
     x = lucid.tensor(1.5, device=device)
     sort_res = lucid.sort(x, dim=dim, descending=descending)
     assert sort_res.indices.shape == () and sort_res.indices.dtype == lucid.int64

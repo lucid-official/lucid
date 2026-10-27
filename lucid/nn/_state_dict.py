@@ -22,10 +22,7 @@ from typing import final
 from lucid._tensor.tensor import Tensor
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _impl_with_grad, _wrap
-from lucid.nn.hooks import (
-    _GLOBAL_LOAD_STATE_DICT_POST_HOOKS,
-    _GLOBAL_LOAD_STATE_DICT_PRE_HOOKS,
-)
+from lucid.nn.hooks import _GLOBAL_LOAD_STATE_DICT_POST_HOOKS, _GLOBAL_LOAD_STATE_DICT_PRE_HOOKS
 from lucid.nn.module import Module, _tensors_replaced
 from lucid._types import StateDict
 
@@ -78,10 +75,7 @@ def _build_metadata(module: Module, prefix: str = "") -> dict[str, dict[str, obj
 
 
 def _save_to_state_dict(
-    module: Module,
-    destination: dict[str, Tensor],
-    prefix: str = "",
-    keep_vars: bool = False,
+    module: Module, destination: dict[str, Tensor], prefix: str = "", keep_vars: bool = False
 ) -> None:
     """Recursive walker — let each module write its own state, then recurse."""
     module._save_to_state_dict(destination, prefix, keep_vars)
@@ -266,13 +260,7 @@ def _walk_load(
         )
 
     module._load_from_state_dict(
-        state_dict,
-        prefix,
-        local_meta,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
+        state_dict, prefix, local_meta, strict, missing_keys, unexpected_keys, error_msgs
     )
     if assign:
         # New tensor objects now stand where the old ones did; a copy writes
@@ -300,10 +288,7 @@ def _walk_load(
 
 
 def _load_state_dict(
-    module: Module,
-    state_dict: StateDict,
-    strict: bool = True,
-    assign: bool = False,
+    module: Module, state_dict: StateDict, strict: bool = True, assign: bool = False
 ) -> _IncompatibleKeys:
     """Driver for ``Module.load_state_dict``.
 
@@ -391,8 +376,7 @@ def _load_state_dict(
     if strict:
         if missing_keys:
             error_msgs.insert(
-                0,
-                f"Missing key(s) in state_dict: {', '.join(repr(k) for k in missing_keys)}.",
+                0, f"Missing key(s) in state_dict: {', '.join(repr(k) for k in missing_keys)}."
             )
         if unexpected_keys:
             error_msgs.insert(

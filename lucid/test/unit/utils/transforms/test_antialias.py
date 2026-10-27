@@ -20,9 +20,7 @@ def _checkerboard(h: int, w: int) -> lucid.Tensor:
 
 
 @pytest.mark.parametrize("mode", ["bilinear", "bicubic"])
-def test_shrinking_a_fine_pattern_averages_it_instead_of_sampling_it(
-    mode: str,
-) -> None:
+def test_shrinking_a_fine_pattern_averages_it_instead_of_sampling_it(mode: str) -> None:
     # A one-pixel checkerboard has nothing a smaller image can show:
     # filtered it is flat grey, sampled it is whatever pixels the grid hit.
     # 64 -> 20 rather than 64 -> 16, because at an exact 4x every sample
@@ -52,9 +50,7 @@ def test_growing_an_image_is_unchanged_by_the_flag() -> None:
 
 
 @pytest.mark.parametrize("antialias", [True, False])
-def test_an_integer_image_keeps_its_dtype_and_clamps_overshoot(
-    antialias: bool,
-) -> None:
+def test_an_integer_image_keeps_its_dtype_and_clamps_overshoot(antialias: bool) -> None:
     # Bicubic rings past a hard edge; brought back to int8 the ringing must
     # clamp at 127 rather than wrap round to a negative value.
     rows = [[-128.0] * 6 + [127.0] * 6 for _ in range(12)]

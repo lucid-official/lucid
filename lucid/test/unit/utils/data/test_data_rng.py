@@ -185,10 +185,7 @@ _SEEDED = {"Random", "seed"}
 def _global_rng_calls(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in (
-            "random",
-            "numpy.random",
-        ):
+        if isinstance(node, ast.ImportFrom) and node.module in ("random", "numpy.random"):
             yield node.lineno, f"from {node.module} import ..."
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
             continue

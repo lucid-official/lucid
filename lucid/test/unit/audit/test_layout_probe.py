@@ -13,8 +13,7 @@ from lucid.test._fixtures.devices import metal_available
 
 @pytest.mark.parametrize("dtype", [lucid.int64, lucid.float16, lucid.complex64, lucid.complex128])
 def test_layout_probe_preserves_values_dtype_and_uses_an_offset_view(
-    monkeypatch: pytest.MonkeyPatch,
-    dtype: lucid.dtype,
+    monkeypatch: pytest.MonkeyPatch, dtype: lucid.dtype
 ) -> None:
     values = np.array([[1, 2, 3], [4, 5, 6]])
     if dtype in (lucid.complex64, lucid.complex128):
@@ -37,9 +36,7 @@ def test_layout_probe_preserves_values_dtype_and_uses_an_offset_view(
     assert seen_views and all(offset > 0 for offset in seen_views)
 
 
-def test_layout_probe_detects_an_imaginary_only_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_layout_probe_detects_an_imaginary_only_error(monkeypatch: pytest.MonkeyPatch) -> None:
     call = _specs.Call([lucid.tensor([1.0, 2.0, 3.0], dtype=lucid.complex64)])
 
     def corrupt_imaginary(x: lucid.Tensor) -> lucid.Tensor:
@@ -56,9 +53,7 @@ def test_layout_probe_detects_an_imaginary_only_error(
 
 
 @pytest.mark.skipif(not metal_available(), reason="metal unavailable")
-def test_a_metal_layout_probe_hands_the_op_a_strided_view(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_metal_layout_probe_hands_the_op_a_strided_view(monkeypatch: pytest.MonkeyPatch) -> None:
     # Metal slices are strided members of their base's view family
     # (730ef06c5), so the layout half has a strided operand there too and
     # its verdict is not the vacuous one.
@@ -99,8 +94,7 @@ def test_a_metal_layout_probe_catches_an_op_that_misreads_a_strided_view(
 
 
 def test_a_slice_that_comes_back_packed_makes_the_layout_half_vacuous(
-    monkeypatch: pytest.MonkeyPatch,
-    device: str,
+    monkeypatch: pytest.MonkeyPatch, device: str
 ) -> None:
     # No device copies a positive-step slice any more; the guard stays for
     # the day one does, so the axis never claims a layout check it did not
@@ -109,9 +103,7 @@ def test_a_slice_that_comes_back_packed_makes_the_layout_half_vacuous(
     call = _specs.Call([original])
     getitem = lucid.Tensor.__getitem__
     monkeypatch.setattr(
-        lucid.Tensor,
-        "__getitem__",
-        lambda self, key: getitem(self, key).contiguous(),
+        lucid.Tensor, "__getitem__", lambda self, key: getitem(self, key).contiguous()
     )
     axis = ContiguityAxis()
     monkeypatch.setattr(axis, "_working_call", lambda *args: (call, "moderate", None))

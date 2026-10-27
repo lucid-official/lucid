@@ -307,11 +307,7 @@ class Unfold(Module):
     """
 
     def __init__(
-        self,
-        kernel_size: _Size2d,
-        dilation: _Size2d = 1,
-        padding: _Size2d = 0,
-        stride: _Size2d = 1,
+        self, kernel_size: _Size2d, dilation: _Size2d = 1, padding: _Size2d = 0, stride: _Size2d = 1
     ) -> None:
         """Initialise the Unfold module. See the class docstring for parameter semantics."""
         super().__init__()
@@ -498,12 +494,7 @@ class Fold(Module):
         pH, pW = self.padding
         sH, sW = self.stride
         return _fold(
-            input,
-            (oH, oW),
-            (kH, kW),
-            dilation=(dH, dW),
-            padding=(pH, pW),
-            stride=(sH, sW),
+            input, (oH, oW), (kH, kW), dilation=(dH, dW), padding=(pH, pW), stride=(sH, sW)
         )
 
     @override

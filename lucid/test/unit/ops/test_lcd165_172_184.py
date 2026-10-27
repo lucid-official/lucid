@@ -86,11 +86,7 @@ def test_addmv_baddbmm_addbmm_addr_beta_zero_ignore_nonfinite_input(
     mat_np = np.array([[1.0, 2.0, 3.0], [4.0, -1.0, 0.5]], dtype=np.float32)
     vec_np = np.array([2.0, -0.5, 1.5], dtype=np.float32)
     want_mv = ref.addmv(
-        ref.full((2,), fill),
-        ref.tensor(mat_np),
-        ref.tensor(vec_np),
-        beta=0,
-        alpha=1.5,
+        ref.full((2,), fill), ref.tensor(mat_np), ref.tensor(vec_np), beta=0, alpha=1.5
     )
     got_mv = lucid.addmv(
         lucid.full((2,), fill, device=device),
@@ -105,11 +101,7 @@ def test_addmv_baddbmm_addbmm_addr_beta_zero_ignore_nonfinite_input(
     b1_np = np.arange(12, dtype=np.float32).reshape(2, 2, 3) * 0.25
     b2_np = np.arange(12, dtype=np.float32).reshape(2, 3, 2) * 0.5
     want_badd = ref.baddbmm(
-        ref.full((2, 2, 2), fill),
-        ref.tensor(b1_np),
-        ref.tensor(b2_np),
-        beta=0.0,
-        alpha=2.0,
+        ref.full((2, 2, 2), fill), ref.tensor(b1_np), ref.tensor(b2_np), beta=0.0, alpha=2.0
     )
     got_badd = lucid.baddbmm(
         lucid.full((2, 2, 2), fill, device=device),
@@ -121,11 +113,7 @@ def test_addmv_baddbmm_addbmm_addr_beta_zero_ignore_nonfinite_input(
     assert_close(got_badd, want_badd.numpy(), rtol=1e-5, atol=1e-6)
 
     want_addb = ref.addbmm(
-        ref.full((2, 2), fill),
-        ref.tensor(b1_np),
-        ref.tensor(b2_np),
-        beta=0.0,
-        alpha=2.0,
+        ref.full((2, 2), fill), ref.tensor(b1_np), ref.tensor(b2_np), beta=0.0, alpha=2.0
     )
     got_addb = lucid.addbmm(
         lucid.full((2, 2), fill, device=device),
@@ -140,11 +128,7 @@ def test_addmv_baddbmm_addbmm_addr_beta_zero_ignore_nonfinite_input(
     v1_np = np.array([1.5, -2.0], dtype=np.float32)
     v2_np = np.array([3.0, 0.5, -1.0], dtype=np.float32)
     want_addr = ref.addr(
-        ref.full((2, 3), fill),
-        ref.tensor(v1_np),
-        ref.tensor(v2_np),
-        beta=0.0,
-        alpha=0.5,
+        ref.full((2, 3), fill), ref.tensor(v1_np), ref.tensor(v2_np), beta=0.0, alpha=0.5
     )
     got_addr = lucid.addr(
         lucid.full((2, 3), fill, device=device),

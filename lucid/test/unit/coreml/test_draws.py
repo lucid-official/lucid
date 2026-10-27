@@ -37,8 +37,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -86,9 +85,7 @@ class TestTheDefaultStillRefuses:
         lucid.manual_seed(0)
         with pytest.raises(cml.UnsupportedOp, match="fixed sample"):
             cml.export(
-                _Reparameterised().eval(),
-                lucid.randn(1, 8),
-                f"{tmp_path}/refused.mlpackage",
+                _Reparameterised().eval(), lucid.randn(1, 8), f"{tmp_path}/refused.mlpackage"
             )
 
 
@@ -274,10 +271,7 @@ class TestTheFamiliesThisUnblocks:
         model = M.create_model(factory).eval()
         inputs = make_inputs()
         exported = cml.export(
-            model,
-            inputs,
-            f"{tmp_path}/{factory}.mlpackage",
-            draws=cml.Draws.AS_INPUT,
+            model, inputs, f"{tmp_path}/{factory}.mlpackage", draws=cml.Draws.AS_INPUT
         )
         try:
             assert len(exported.noise_inputs) == draws

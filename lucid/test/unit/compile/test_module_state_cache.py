@@ -87,27 +87,18 @@ CHANGES: dict[str, _Change] = {
     "ModuleDict.update": (_none, lambda m: m.mdict.update({"z": nn.Dropout(0.4)})),
     "ModuleDict.pop": (_none, lambda m: m.mdict.pop("a")),
     "ModuleDict.clear": (_none, lambda m: m.mdict.clear()),
-    "_modules write": (
-        _none,
-        lambda m: m.seq._modules.__setitem__("x", nn.Dropout(0.9)),
-    ),
+    "_modules write": (_none, lambda m: m.seq._modules.__setitem__("x", nn.Dropout(0.9))),
     "_modules popitem": (_none, lambda m: m.mdict._modules.popitem()),
     "_modules move_to_end": (_none, lambda m: m._modules.move_to_end("seq")),
     "forward hook": (_none, lambda m: m.seq[0].register_forward_hook(_hook)),
     "forward pre hook": (_none, lambda m: m.head.register_forward_pre_hook(_hook)),
     "backward hook": (_none, lambda m: m.mlist[1].register_full_backward_hook(_hook)),
-    "backward pre hook": (
-        _none,
-        lambda m: m.mdict["b"].register_full_backward_pre_hook(_hook),
-    ),
+    "backward pre hook": (_none, lambda m: m.mdict["b"].register_full_backward_pre_hook(_hook)),
     "hook handle remove": (
         lambda m: m.seq[0].register_forward_hook(_hook),
         lambda m: m._handle.remove(),  # type: ignore[union-attr]
     ),
-    "hook registry clear": (
-        lambda m: m.seq[0].register_forward_hook(_hook),
-        _clear_hooks,
-    ),
+    "hook registry clear": (lambda m: m.seq[0].register_forward_hook(_hook), _clear_hooks),
     "parametrization": (
         _none,
         lambda m: parametrize.register_parametrization(m.head, "weight", _Double()),

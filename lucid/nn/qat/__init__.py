@@ -6,14 +6,7 @@ inference.  Produced by :func:`lucid.quantization.prepare_qat`; turned into
 real quantized inference layers by :func:`lucid.quantization.convert`.
 """
 
-from lucid.nn.qat.conv import (
-    Conv1d,
-    Conv2d,
-    Conv3d,
-    ConvReLU1d,
-    ConvReLU2d,
-    ConvReLU3d,
-)
+from lucid.nn.qat.conv import Conv1d, Conv2d, Conv3d, ConvReLU1d, ConvReLU2d, ConvReLU3d
 from lucid.nn.qat.linear import Linear, LinearReLU
 from lucid.nn.qat.sparse import Embedding
 

@@ -26,10 +26,7 @@ def test_cpu_indices_read_a_metal_tensor() -> None:
     x = _grid()
     assert x[lucid.tensor([0, 2])].tolist() == [[0, 1, 2, 3], [8, 9, 10, 11]]
     assert x[:, lucid.tensor([1, 3])].tolist() == [[1, 3], [5, 7], [9, 11]]
-    assert x[lucid.tensor([True, False, True])].tolist() == [
-        [0, 1, 2, 3],
-        [8, 9, 10, 11],
-    ]
+    assert x[lucid.tensor([True, False, True])].tolist() == [[0, 1, 2, 3], [8, 9, 10, 11]]
     assert x[lucid.tensor([0, 1]), lucid.tensor([2, 3])].tolist() == [2.0, 7.0]
 
 

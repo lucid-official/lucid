@@ -80,13 +80,7 @@ class _DisplacementTransform(GeometricTransform[DispParams]):
         xy = to_xyxy(boxes)
         x1, y1, x2, y2 = xy[:, 0:1], xy[:, 1:2], xy[:, 2:3], xy[:, 3:4]
         corners = F._cat(
-            [
-                F._cat([x1, y1], 1),
-                F._cat([x2, y1], 1),
-                F._cat([x2, y2], 1),
-                F._cat([x1, y2], 1),
-            ],
-            0,
+            [F._cat([x1, y1], 1), F._cat([x2, y1], 1), F._cat([x2, y2], 1), F._cat([x1, y2], 1)], 0
         )
         moved = _displace_points(corners, params)
         n = int(xy.shape[0])

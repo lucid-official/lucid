@@ -99,16 +99,8 @@ class TestPaperConfigurations:
             config.tokenizer_decoder_dim,
             config.tokenizer_decoder_heads,
         ) == (12, 512, 8, 20, 1024, 16)
-        assert (config.num_codes, config.code_dim, config.tokenizer_patch_size) == (
-            1024,
-            32,
-            4,
-        )
-        assert (
-            config.num_latent_actions,
-            config.action_dim,
-            config.action_patch_size,
-        ) == (
+        assert (config.num_codes, config.code_dim, config.tokenizer_patch_size) == (1024, 32, 4)
+        assert (config.num_latent_actions, config.action_dim, config.action_patch_size) == (
             8,
             32,
             16,
@@ -124,35 +116,16 @@ class TestPaperConfigurations:
     def test_coinrun_is_appendix_f(self) -> None:
         config = AutoConfig.from_pretrained("genie_coinrun")
         assert isinstance(config, GenieConfig)
-        for stack in (
-            "tokenizer_encoder",
-            "tokenizer_decoder",
-            "action_encoder",
-            "action_decoder",
-        ):
+        for stack in ("tokenizer_encoder", "tokenizer_decoder", "action_encoder", "action_decoder"):
             assert (
                 getattr(config, f"{stack}_layers"),
                 getattr(config, f"{stack}_dim"),
                 getattr(config, f"{stack}_heads"),
             ) == (8, 512, 8), stack
-        assert (config.dynamics_layers, config.dynamics_dim, config.dynamics_heads) == (
-            12,
-            512,
-            8,
-        )
-        assert (
-            config.num_latent_actions,
-            config.temperature,
-            config.maskgit_steps,
-        ) == (
-            6,
-            1.0,
-            25,
-        )
+        assert (config.dynamics_layers, config.dynamics_dim, config.dynamics_heads) == (12, 512, 8)
+        assert (config.num_latent_actions, config.temperature, config.maskgit_steps) == (6, 1.0, 25)
 
-    def test_the_attention_is_narrower_than_the_model_where_the_table_says(
-        self,
-    ) -> None:
+    def test_the_attention_is_narrower_than_the_model_where_the_table_says(self) -> None:
         # 36 heads of 128: tying the inner width to d_model would build a
         # different network from the one Table 12 describes.
         config = GenieConfig()
@@ -196,12 +169,7 @@ class TestPaperConfigurations:
         assert abs(needed["tokenizer"] - needed["dynamics"]) > 0.05
 
     def test_no_weights_were_released(self) -> None:
-        for factory in (
-            genie,
-            genie_world_model,
-            genie_coinrun,
-            genie_coinrun_world_model,
-        ):
+        for factory in (genie, genie_world_model, genie_coinrun, genie_coinrun_world_model):
             with pytest.raises(NotImplementedError):
                 factory(pretrained=True)
 
@@ -572,8 +540,7 @@ class TestDynamicsModel:
         # what an implementation that forgot the mask would report.
         later = float(
             F.cross_entropy(
-                logits[:, 1:].reshape(-1, config.num_codes),
-                tokens[:, 1:].reshape(-1),
+                logits[:, 1:].reshape(-1, config.num_codes), tokens[:, 1:].reshape(-1)
             ).item()
         )
         assert abs(float(loss.item()) - later) > 1e-3
@@ -584,8 +551,7 @@ class TestDynamicsModel:
         config = _tiny(mask_ratio_min=0.5, mask_ratio_max=0.5)
         model = GenieModel(config)
         _, _, mask = model._dynamics_objective(
-            lucid.randint(0, config.num_codes, (2, 4, 4)),
-            lucid.randn(2, 3, config.action_dim),
+            lucid.randint(0, config.num_codes, (2, 4, 4)), lucid.randn(2, 3, config.action_dim)
         )
         assert float(mask[:, 0].sum().item()) == 0.0
         assert float(mask[:, 1:].sum().item()) > 0.0
@@ -798,9 +764,7 @@ class TestPlaying:
         with pytest.raises(ValueError):
             model(lucid.rand(1, 1, 3, 8, 8), actions)
 
-    def test_an_action_per_transition_is_refused_where_one_per_frame_is_meant(
-        self,
-    ) -> None:
+    def test_an_action_per_transition_is_refused_where_one_per_frame_is_meant(self) -> None:
         # Every other action API here takes one per transition.  Truncation
         # would make this silent once the window is full, so it is refused.
         config = _tiny()

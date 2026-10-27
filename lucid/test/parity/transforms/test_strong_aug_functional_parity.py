@@ -34,10 +34,7 @@ TF = require_ref_vision(module_level=True).transforms.functional
 
 
 def _make_float_image(
-    seed: int = 0,
-    c: int = 3,
-    h: int = 24,
-    w: int = 32,
+    seed: int = 0, c: int = 3, h: int = 24, w: int = 32
 ) -> tuple[lucid.Tensor, Any]:
     """Build a matched (lucid (C,H,W), reference (C,H,W)) float pair in [0,1]."""
     rng = np.random.default_rng(seed)
@@ -46,11 +43,7 @@ def _make_float_image(
 
 
 def _make_float_batch(
-    seed: int = 0,
-    b: int = 2,
-    c: int = 3,
-    h: int = 24,
-    w: int = 32,
+    seed: int = 0, b: int = 2, c: int = 3, h: int = 24, w: int = 32
 ) -> tuple[lucid.Tensor, Any]:
     """Build a matched (lucid (B,C,H,W), reference (B,C,H,W)) float pair in [0,1]."""
     rng = np.random.default_rng(seed)

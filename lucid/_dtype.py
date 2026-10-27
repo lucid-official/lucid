@@ -39,12 +39,7 @@ class dtype:
     True
     """
 
-    def __init__(
-        self,
-        name: str,
-        engine_dtype: _C_engine.Dtype,
-        itemsize: int,
-    ) -> None:
+    def __init__(self, name: str, engine_dtype: _C_engine.Dtype, itemsize: int) -> None:
         """Initialize a dtype singleton.
 
         Parameters
@@ -168,9 +163,7 @@ _NAME_TO_DTYPE: dict[str, dtype] = {
 }
 
 
-def to_engine_dtype(
-    d: dtype | type[dtype] | _C_engine.Dtype | str | None,
-) -> _C_engine.Dtype:
+def to_engine_dtype(d: dtype | type[dtype] | _C_engine.Dtype | str | None) -> _C_engine.Dtype:
     """Coerce any accepted dtype-spec to the C++ engine's ``Dtype`` enum.
 
     Front door for every Python → engine call site that needs to pass
@@ -231,9 +224,7 @@ import dataclasses as _dc
 _DtypeCls = dtype
 
 
-def _resolve_dtype_name(
-    d: _DtypeCls | type[_DtypeCls] | _C_engine.Dtype | str,
-) -> str:
+def _resolve_dtype_name(d: _DtypeCls | type[_DtypeCls] | _C_engine.Dtype | str) -> str:
     """Map any dtype-like input to its canonical lucid dtype name.
 
     Used by ``finfo`` / ``iinfo`` to discriminate ``float16`` from
@@ -308,23 +299,9 @@ class finfo:
                 2.2250738585072014e-308,
                 1e-15,
             ),
-            "float32": (
-                32,
-                1.1920929e-7,
-                3.4028235e38,
-                -3.4028235e38,
-                1.1754944e-38,
-                1e-6,
-            ),
+            "float32": (32, 1.1920929e-7, 3.4028235e38, -3.4028235e38, 1.1754944e-38, 1e-6),
             "float16": (16, 9.7656e-4, 65504.0, -65504.0, 6.1035e-5, 1e-3),
-            "bfloat16": (
-                16,
-                7.8125e-3,
-                3.3895314e38,
-                -3.3895314e38,
-                1.1754944e-38,
-                1e-2,
-            ),
+            "bfloat16": (16, 7.8125e-3, 3.3895314e38, -3.3895314e38, 1.1754944e-38, 1e-2),
         }
         if name not in table:
             raise TypeError(f"finfo expects a floating dtype, got {dt!r}")

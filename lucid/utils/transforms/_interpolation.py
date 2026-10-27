@@ -39,12 +39,7 @@ class Interpolation(str, enum.Enum):
 
 # Modes for which ``interpolate`` accepts an ``align_corners`` flag.
 _ALIGN_CORNERS_MODES = frozenset(
-    {
-        Interpolation.LINEAR,
-        Interpolation.BILINEAR,
-        Interpolation.BICUBIC,
-        Interpolation.TRILINEAR,
-    }
+    {Interpolation.LINEAR, Interpolation.BILINEAR, Interpolation.BICUBIC, Interpolation.TRILINEAR}
 )
 
 

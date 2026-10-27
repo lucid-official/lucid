@@ -97,13 +97,7 @@ class MixupCollator:
     ``cross_entropy`` accepts that natively.
     """
 
-    def __init__(
-        self,
-        alpha: float = 0.2,
-        *,
-        num_classes: int,
-        p: float = 1.0,
-    ) -> None:
+    def __init__(self, alpha: float = 0.2, *, num_classes: int, p: float = 1.0) -> None:
         _validate_init(alpha, num_classes, p)
         self.alpha = alpha
         self.num_classes = num_classes
@@ -163,13 +157,7 @@ class CutMixCollator:
     differentiable, no in-place writes.
     """
 
-    def __init__(
-        self,
-        alpha: float = 1.0,
-        *,
-        num_classes: int,
-        p: float = 1.0,
-    ) -> None:
+    def __init__(self, alpha: float = 1.0, *, num_classes: int, p: float = 1.0) -> None:
         _validate_init(alpha, num_classes, p)
         self.alpha = alpha
         self.num_classes = num_classes

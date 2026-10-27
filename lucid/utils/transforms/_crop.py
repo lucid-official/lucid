@@ -81,12 +81,7 @@ class Crop(_NoParams, GeometricTransform[Empty]):
     """
 
     def __init__(
-        self,
-        x_min: int = 0,
-        y_min: int = 0,
-        x_max: int = 1024,
-        y_max: int = 1024,
-        p: float = 1.0,
+        self, x_min: int = 0, y_min: int = 0, x_max: int = 1024, y_max: int = 1024, p: float = 1.0
     ) -> None:
         super().__init__(p=p)
         self.x_min, self.y_min, self.x_max, self.y_max = x_min, y_min, x_max, y_max

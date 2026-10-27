@@ -72,11 +72,7 @@ def load_thresholds(area_dir: Path) -> dict[str, float]:
 
 
 def assert_no_regression(
-    name: str,
-    elapsed_s: float,
-    thresholds: dict[str, float],
-    *,
-    tolerance: float = 0.25,
+    name: str, elapsed_s: float, thresholds: dict[str, float], *, tolerance: float = 0.25
 ) -> None:
     """Fail when ``elapsed_s`` exceeds ``thresholds[name] * (1 + tolerance)``.
 

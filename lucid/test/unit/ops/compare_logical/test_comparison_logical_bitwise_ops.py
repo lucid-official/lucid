@@ -131,8 +131,7 @@ class TestShifts:
     def test_shift_rejects_float(self, device: str) -> None:
         with pytest.raises(Exception):
             lucid.bitwise_left_shift(
-                lucid.tensor([1.0], device=device),
-                lucid.tensor([1.0], device=device),
+                lucid.tensor([1.0], device=device), lucid.tensor([1.0], device=device)
             )
 
 

@@ -38,8 +38,7 @@ def test_sorting_is_stable_in_both_directions(device: str, n: int, dtype) -> Non
             lucid.argsort(x, dim=dim).numpy(), np.argsort(a, dim, kind="stable")
         )
         np.testing.assert_array_equal(
-            lucid.argsort(x, dim=dim, descending=True).numpy(),
-            np.argsort(-a, dim, kind="stable"),
+            lucid.argsort(x, dim=dim, descending=True).numpy(), np.argsort(-a, dim, kind="stable")
         )
         np.testing.assert_array_equal(
             lucid.sort(x, dim=dim, descending=True).values.numpy(), -np.sort(-a, dim)
@@ -52,8 +51,7 @@ def test_sorting_is_stable_in_both_directions(device: str, n: int, dtype) -> Non
             x.sort(dim=dim, descending=True).values.numpy(), -np.sort(-a, dim)
         )
         np.testing.assert_array_equal(
-            x.sort(dim=dim, descending=True).indices.numpy(),
-            np.argsort(-a, dim, kind="stable"),
+            x.sort(dim=dim, descending=True).indices.numpy(), np.argsort(-a, dim, kind="stable")
         )
 
 

@@ -37,10 +37,7 @@ from dataclasses import replace
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.generative.dreamer._config import DreamerConfig
-from lucid.models.generative.dreamer._model import (
-    DreamerForWorldModeling,
-    DreamerModel,
-)
+from lucid.models.generative.dreamer._model import DreamerForWorldModeling, DreamerModel
 
 # The paper's DeepMind Control Suite setup: PlaNet's world model unchanged,
 # with 300-unit ELU heads, a 15-step imagination horizon and TD(0.95)
@@ -182,11 +179,7 @@ def dreamer_world_model(pretrained: bool = False, **overrides: object) -> Dreame
 # a box, and the sample is drawn straight-through so the actor's gradient
 # still arrives through it.
 _CFG_DISCRETE = replace(
-    _CFG_DREAMER,
-    action_space="discrete",
-    horizon=10,
-    kl_weight=0.1,
-    pcont=True,
+    _CFG_DREAMER, action_space="discrete", horizon=10, kl_weight=0.1, pcont=True
 )
 
 

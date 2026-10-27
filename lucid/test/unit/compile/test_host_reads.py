@@ -268,8 +268,7 @@ class _Linear(nn.Module):
 
 
 def _step_twice(
-    move: Callable[[lucid.Tensor], lucid.Tensor],
-    loss_fn: Callable[[lucid.Tensor], lucid.Tensor],
+    move: Callable[[lucid.Tensor], lucid.Tensor], loss_fn: Callable[[lucid.Tensor], lucid.Tensor]
 ) -> bool:
     """A compiled training step against eager, on two inputs.
 

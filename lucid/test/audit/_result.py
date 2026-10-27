@@ -68,13 +68,7 @@ class Status(enum.Enum):
     @property
     def is_coverage(self) -> bool:
         """bool: Whether this outcome counts as the symbol having been checked."""
-        return self in (
-            Status.PASS,
-            Status.FAIL,
-            Status.TRUNCATION,
-            Status.GAUGE,
-            Status.KNOWN,
-        )
+        return self in (Status.PASS, Status.FAIL, Status.TRUNCATION, Status.GAUGE, Status.KNOWN)
 
 
 #: Rendering order and colour for each status.

@@ -246,10 +246,7 @@ SAVES: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
     "var": ((2, 3), lambda lib, x: x.var()),
     "cumprod": ((2, 3), lambda lib, x: x.cumprod(1)),
     "pow": ((2, 3), lambda lib, x: x**2),
-    "linear input": (
-        (2, 3),
-        lambda lib, x: _fn(lib, "linear")(x, _param(lib, x, 4, 3)),
-    ),
+    "linear input": ((2, 3), lambda lib, x: _fn(lib, "linear")(x, _param(lib, x, 4, 3))),
     "conv2d input": (
         (1, 1, 4, 4),
         lambda lib, x: _fn(lib, "conv2d")(x, _param(lib, x, 2, 1, 3, 3)),
@@ -303,18 +300,9 @@ def test_a_write_into_a_tensor_the_backward_reads_is_refused(
 # name -> (shape of ``x``, loss from ``x`` and a constant): no gradient that is
 # needed reads ``x``, so neither the reference nor Lucid saves or guards it.
 CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] = {
-    "mul": (
-        (2, 3),
-        lambda lib, x: x * _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
-    ),
-    "rmul": (
-        (2, 3),
-        lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * x,
-    ),
-    "div": (
-        (2, 3),
-        lambda lib, x: x / _const(lib, x, [[1.0, 2.0, 4.0], [8.0, 2.0, 1.0]]),
-    ),
+    "mul": ((2, 3), lambda lib, x: x * _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])),
+    "rmul": ((2, 3), lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * x),
+    "div": ((2, 3), lambda lib, x: x / _const(lib, x, [[1.0, 2.0, 4.0], [8.0, 2.0, 1.0]])),
     "fmod": (
         (2, 3),
         lambda lib, x: lib.fmod(x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])),
@@ -323,18 +311,9 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
         (2, 3),
         lambda lib, x: lib.remainder(x, _const(lib, x, [[1.5, 2.0, 4.0], [8.0, 2.5, 1.5]])),
     ),
-    "matmul": (
-        (2, 3),
-        lambda lib, x: x @ _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
-    ),
-    "rmatmul": (
-        (3, 2),
-        lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) @ x,
-    ),
-    "mm": (
-        (2, 3),
-        lambda lib, x: lib.mm(x, _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])),
-    ),
+    "matmul": ((2, 3), lambda lib, x: x @ _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])),
+    "rmatmul": ((3, 2), lambda lib, x: _const(lib, x, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) @ x),
+    "mm": ((2, 3), lambda lib, x: lib.mm(x, _const(lib, x, [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]))),
     "bmm": (
         (2, 2, 3),
         lambda lib, x: lib.bmm(
@@ -342,25 +321,13 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
             _const(
                 lib,
                 x,
-                [
-                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
-                    [[-1.0, 0.5], [2.0, 1.0], [0.5, -2.0]],
-                ],
+                [[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], [[-1.0, 0.5], [2.0, 1.0], [0.5, -2.0]]],
             ),
         ),
     ),
-    "mv": (
-        (2, 3),
-        lambda lib, x: lib.mv(x, _const(lib, x, [1.0, 2.0, 3.0])),
-    ),
-    "dot": (
-        (3,),
-        lambda lib, x: x.dot(_const(lib, x, [1.0, 2.0, 3.0])),
-    ),
-    "outer": (
-        (3,),
-        lambda lib, x: x.outer(_const(lib, x, [1.0, 2.0])),
-    ),
+    "mv": ((2, 3), lambda lib, x: lib.mv(x, _const(lib, x, [1.0, 2.0, 3.0]))),
+    "dot": ((3,), lambda lib, x: x.dot(_const(lib, x, [1.0, 2.0, 3.0]))),
+    "outer": ((3,), lambda lib, x: x.outer(_const(lib, x, [1.0, 2.0]))),
     "linear": (
         (2, 3),
         lambda lib, x: _fn(lib, "linear")(x, _const(lib, x, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]])),
@@ -388,8 +355,7 @@ CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any]]] =
     "ldexp": (
         (2, 3),
         lambda lib, x: lib.ldexp(
-            x,
-            lib.tensor([[1, 2, 0], [0, 3, 1]], dtype=lib.int32, device=x.device),
+            x, lib.tensor([[1, 2, 0], [0, 3, 1]], dtype=lib.int32, device=x.device)
         ),
     ),
 }
@@ -409,8 +375,7 @@ CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any
     "conv2d weight": (
         (1, 1, 2, 2),
         lambda lib, w: _fn(lib, "conv2d")(
-            _const(lib, w, [[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]]]),
-            w,
+            _const(lib, w, [[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]]]), w
         ),
     ),
     "conv_transpose2d": (

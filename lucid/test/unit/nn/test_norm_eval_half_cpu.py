@@ -63,12 +63,7 @@ def _grn_inputs(dtype: str) -> list[np.ndarray]:
     """x, gamma, beta, upstream gradient.  x is large enough that a float16
     sum of squares would pass 65504."""
     shape = (2, 4, 3, 5)
-    arrays = [
-        _normal(0, shape, 40.0),
-        _normal(1, (4,)),
-        _normal(2, (4,)),
-        _normal(3, shape),
-    ]
+    arrays = [_normal(0, shape, 40.0), _normal(1, (4,)), _normal(2, (4,)), _normal(3, shape)]
     return [_on_grid(a, dtype) for a in arrays]
 
 
@@ -124,11 +119,7 @@ def test_the_half_kernel_is_the_float32_kernel_rounded_once(
     for i, (g, w) in enumerate(zip(got[1:], want[1:], strict=True), start=1):
         scale = max(1.0, float(np.abs(w).max()))
         np.testing.assert_allclose(
-            g,
-            w,
-            rtol=2.5 * _U[dtype],
-            atol=4 * _U[dtype] * scale,
-            err_msg=f"gradient {i}",
+            g, w, rtol=2.5 * _U[dtype], atol=4 * _U[dtype] * scale, err_msg=f"gradient {i}"
         )
 
 

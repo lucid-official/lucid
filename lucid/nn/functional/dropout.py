@@ -213,11 +213,7 @@ def _channel_dropout(x: Tensor, p: float, training: bool, inplace: bool, name: s
     """Whole-channel dropout — the one body of dropout1d / 2d / 3d."""
     if inplace:
         return _dropout_in_place(
-            x,
-            name,
-            p,
-            training,
-            lambda t: _channel_dropout(t, p, training, False, name),
+            x, name, p, training, lambda t: _channel_dropout(t, p, training, False, name)
         )
     dropped = _drop_everything(x, p, training)
     if dropped is not None:

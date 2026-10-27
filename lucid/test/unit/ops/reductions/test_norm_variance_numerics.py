@@ -142,9 +142,7 @@ def test_vector_norm_value_and_gradient_match(
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "ord_, dim",
-    [(None, None), ("fro", None), (2, 1), (3, 1), (None, (0, 1)), (1, None)],
-    ids=str,
+    "ord_, dim", [(None, None), ("fro", None), (2, 1), (3, 1), (None, (0, 1)), (1, None)], ids=str
 )
 @pytest.mark.parametrize("name", list(_INPUTS))
 def test_norm_value_and_gradient_match(
@@ -233,15 +231,7 @@ def test_the_pair_honours_correction_and_keepdim_over_every_axis(device: str, fn
 @pytest.mark.parity
 @pytest.mark.parametrize("dtype", ["float16", "bfloat16"])
 @pytest.mark.parametrize(
-    "fn",
-    [
-        "vector_norm-2",
-        "vector_norm-3",
-        "vector_norm-1.5",
-        "norm",
-        "var",
-        "std",
-    ],
+    "fn", ["vector_norm-2", "vector_norm-3", "vector_norm-1.5", "norm", "var", "std"]
 )
 def test_half_precision_does_not_overflow(
     ref: ModuleType, device: str, dtype: str, fn: str
@@ -386,10 +376,7 @@ _SPELLINGS: list[tuple[tuple[object, ...], dict[str, object]]] = [
 def _callers(fn: str, x: lucid.Tensor) -> list[Callable[..., object]]:
     free = getattr(lucid, fn)
     if fn in ("var", "std"):
-        return [
-            lambda *a, **k: free(x, *a, **k),
-            lambda *a, **k: getattr(x, fn)(*a, **k),
-        ]
+        return [lambda *a, **k: free(x, *a, **k), lambda *a, **k: getattr(x, fn)(*a, **k)]
     return [lambda *a, **k: free(x, *a, **k)]
 
 
@@ -397,11 +384,7 @@ def _callers(fn: str, x: lucid.Tensor) -> list[Callable[..., object]]:
 @pytest.mark.parametrize("args, kwargs", _SPELLINGS, ids=[f"{a}-{k}" for a, k in _SPELLINGS])
 @pytest.mark.parametrize("fn", _VARIANCE_FNS)
 def test_every_spelling_matches_the_reference(
-    ref: ModuleType,
-    device: str,
-    fn: str,
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
+    ref: ModuleType, device: str, fn: str, args: tuple[object, ...], kwargs: dict[str, object]
 ) -> None:
     x = lucid.tensor(_X, device=device)
     # ``var(x, dim, b)`` reads ``b`` as ``unbiased``, as the reference does;
@@ -480,11 +463,7 @@ def test_dim_none_honours_keepdim(device: str, fn: str) -> None:
 @pytest.mark.parametrize("shape", [(0, 3), (3, 0), (0, 0), (2, 0, 3)], ids=str)
 @pytest.mark.parametrize("keepdim", [False, True])
 def test_matrix_norm_empty_axes_return_zero(
-    ref: ModuleType,
-    device: str,
-    ord: str | int | float,
-    shape: tuple[int, ...],
-    keepdim: bool,
+    ref: ModuleType, device: str, ord: str | int | float, shape: tuple[int, ...], keepdim: bool
 ) -> None:
     x = lucid.zeros(*shape, device=device)
     rx = ref.zeros(*shape)

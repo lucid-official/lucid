@@ -65,10 +65,7 @@ def test_metal_convolution_matches_cpu(rank, cin, cout, stride, transposed):
 
 @pytest.mark.parametrize(
     "xshape,wshape,fn",
-    [
-        ((64, 8, 32, 32), (8, 8, 3, 3), F.conv2d),
-        ((4, 3, 8, 16, 16), (24, 3, 3, 3, 3), F.conv3d),
-    ],
+    [((64, 8, 32, 32), (8, 8, 3, 3), F.conv2d), ((4, 3, 8, 16, 16), (24, 3, 3, 3, 3), F.conv3d)],
     ids=["conv2d-8-8", "conv3d-3-24"],
 )
 def test_convolution_survives_scalars_written_while_it_is_queued(xshape, wshape, fn):

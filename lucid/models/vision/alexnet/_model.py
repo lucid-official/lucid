@@ -323,11 +323,7 @@ class AlexNetForImageClassification(ImageClassificationModel, ClassificationHead
         _init_paper_weights(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         x = self.avgpool(x)
         x = x.flatten(1)

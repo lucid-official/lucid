@@ -8,10 +8,7 @@ from lucid.nn.utils.clip_grad import (
     clip_grad_value_,
     get_total_norm,
 )
-from lucid.nn.utils.convert_parameters import (
-    parameters_to_vector,
-    vector_to_parameters,
-)
+from lucid.nn.utils.convert_parameters import parameters_to_vector, vector_to_parameters
 from lucid.nn.utils.weight_norm import remove_weight_norm, weight_norm
 from lucid.nn.utils.spectral_norm import remove_spectral_norm, spectral_norm
 from lucid.nn.utils.rnn import (

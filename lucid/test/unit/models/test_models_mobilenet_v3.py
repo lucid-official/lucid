@@ -35,8 +35,7 @@ class TestMobileNetV3Backbone(unittest.TestCase):
 
     def test_small_has_fewer_params(self) -> None:
         self.assertGreater(
-            mobilenet_v3_large().num_parameters(),
-            mobilenet_v3_small().num_parameters(),
+            mobilenet_v3_large().num_parameters(), mobilenet_v3_small().num_parameters()
         )
 
 

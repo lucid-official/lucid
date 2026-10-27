@@ -255,8 +255,7 @@ def test_equal_bounds_move_the_stream_as_any_bounds_do(device: str, dtype: str, 
 
 
 @pytest.mark.parametrize(
-    "name,args",
-    [("uniform_", (-2.0, 3.0)), ("uniform_", (1.0, 1.0)), ("normal_", (1.0, 0.5))],
+    "name,args", [("uniform_", (-2.0, 3.0)), ("uniform_", (1.0, 1.0)), ("normal_", (1.0, 0.5))]
 )
 @pytest.mark.parametrize("dtype", ["float32", "complex64"])
 def test_nn_init_draws_what_the_method_draws(

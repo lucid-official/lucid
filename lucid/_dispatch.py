@@ -71,12 +71,7 @@ def _unwrap(t: _C_engine.TensorImpl | Tensor) -> _C_engine.TensorImpl:
 
 # Dtypes ``pow_scalar`` computes in: the real floating ones.
 _REAL_FLOATS: frozenset[_C_engine.Dtype] = frozenset(
-    {
-        _C_engine.Dtype.F16,
-        _C_engine.Dtype.BF16,
-        _C_engine.Dtype.F32,
-        _C_engine.Dtype.F64,
-    }
+    {_C_engine.Dtype.F16, _C_engine.Dtype.BF16, _C_engine.Dtype.F32, _C_engine.Dtype.F64}
 )
 
 
@@ -152,9 +147,7 @@ def _integer_impl(x: int, dt: _C_engine.Dtype, device: _C_engine.Device) -> _C_e
 
 
 def _scalar_impl(
-    x: bool | int | float | complex,
-    dt: _C_engine.Dtype,
-    device: _C_engine.Device,
+    x: bool | int | float | complex, dt: _C_engine.Dtype, device: _C_engine.Device
 ) -> _C_engine.TensorImpl:
     """``x`` as a 0-d impl of ``dt`` on ``device`` — where a scalar crosses.
 
@@ -165,8 +158,7 @@ def _scalar_impl(
     if isinstance(x, complex):
         part = _C_engine.Dtype.F64 if dt == _C_engine.Dtype.C128 else _C_engine.Dtype.F32
         out = _C_engine.complex(
-            _C_engine.full([], x.real, part, device),
-            _C_engine.full([], x.imag, part, device),
+            _C_engine.full([], x.real, part, device), _C_engine.full([], x.imag, part, device)
         )
         return out if out.dtype == dt else _C_engine.astype(out, dt)
     if not isinstance(x, bool) and isinstance(x, int) and _promotion.is_integer(dt):
@@ -175,8 +167,7 @@ def _scalar_impl(
 
 
 def _unwrap_or_scalar(
-    x: object,
-    ref_impl: _C_engine.TensorImpl | None = None,
+    x: object, ref_impl: _C_engine.TensorImpl | None = None
 ) -> _C_engine.TensorImpl:
     """Return the TensorImpl for a Tensor, or build one from a Python scalar.
 
@@ -355,10 +346,7 @@ def _tensor_pair(
     if inplace and not _promotion.can_cast(dt, da):
         raise _cannot_cast_inplace(dt, da)
     wide = opmath and _promotion.is_half(dt)
-    return (
-        _cast(ai, da, dt, wide, bi.device),
-        _cast(bi, db, dt, wide, ai.device),
-    )
+    return (_cast(ai, da, dt, wide, bi.device), _cast(bi, db, dt, wide, ai.device))
 
 
 def _number_pair(
@@ -376,12 +364,7 @@ def _number_pair(
 
 
 def _binary_operands(
-    a: object,
-    b: object,
-    *,
-    true_div: bool = False,
-    opmath: bool = False,
-    inplace: bool = False,
+    a: object, b: object, *, true_div: bool = False, opmath: bool = False, inplace: bool = False
 ) -> tuple[_C_engine.TensorImpl, _C_engine.TensorImpl]:
     """``a`` and ``b`` as engine operands at the dtype their op computes in.
 
@@ -444,9 +427,7 @@ def _binary_operands(
     return _number_pair(a, b, true_div)
 
 
-def _promote_impls(
-    impls: Sequence[_C_engine.TensorImpl],
-) -> list[_C_engine.TensorImpl]:
+def _promote_impls(impls: Sequence[_C_engine.TensorImpl]) -> list[_C_engine.TensorImpl]:
     """Cast ``impls`` to the one dtype they promote to together.
 
     The n-ary form of :func:`_binary_operands`, for the ops whose engine

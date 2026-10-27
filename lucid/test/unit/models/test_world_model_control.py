@@ -41,13 +41,7 @@ import lucid.optim as optim
 from lucid.models.generative._common._actor import Actor
 from lucid.test._fixtures.classic_control import Pendulum
 from lucid.test._fixtures.point_mass import PointMass
-from lucid.utils.rollout import (
-    LatentPolicy,
-    RandomPolicy,
-    SequenceReplay,
-    StepResult,
-    rollout,
-)
+from lucid.utils.rollout import LatentPolicy, RandomPolicy, SequenceReplay, StepResult, rollout
 
 pytestmark = pytest.mark.slow
 
@@ -89,11 +83,7 @@ BATCH, LENGTH = 8, 15
 
 def _policy(model: object, noise: float = 0.0) -> LatentPolicy:
     return LatentPolicy(
-        model.encode,
-        model.rssm,
-        lambda state: model.act(state, sample=False),
-        2,
-        noise=noise,
+        model.encode, model.rssm, lambda state: model.act(state, sample=False), 2, noise=noise
     )
 
 
@@ -334,11 +324,7 @@ _TINY_V2 = dict(
 
 def _v2_policy(model: object, noise: float = 0.0) -> LatentPolicy:
     return LatentPolicy(
-        model.encode,
-        model.rssm,
-        lambda state: model.act(state, sample=False),
-        2,
-        noise=noise,
+        model.encode, model.rssm, lambda state: model.act(state, sample=False), 2, noise=noise
     )
 
 
@@ -619,11 +605,7 @@ class TestDreamerV3EndToEnd:
         before = replay.steps
         inner = model.dreamer_v3
         collector = LatentPolicy(
-            inner.encode,
-            inner.rssm,
-            lambda state: inner.act(state, sample=False),
-            2,
-            noise=0.3,
+            inner.encode, inner.rssm, lambda state: inner.act(state, sample=False), 2, noise=0.3
         )
         replay.add(rollout(env, collector)[0])
         assert replay.steps > before
@@ -668,12 +650,7 @@ class TestDreamerV3EndToEnd:
 
 
 _TINY_PLANET = dict(
-    action_dim=2,
-    cnn_depth=4,
-    stoch_size=8,
-    deter_size=32,
-    hidden_size=32,
-    reward_hidden=32,
+    action_dim=2, cnn_depth=4, stoch_size=8, deter_size=32, hidden_size=32, reward_hidden=32
 )
 
 # Far below the paper's 12/10/1000/100. The planner is the policy, so it
@@ -709,10 +686,7 @@ def _train_planet(steps: int = 60, train: bool = True) -> tuple:
 
 def _planner(model: object) -> LatentPolicy:
     return LatentPolicy(
-        model.planet.encode,
-        model.planet.rssm,
-        lambda state: model.plan(state, **_PLAN),
-        2,
+        model.planet.encode, model.planet.rssm, lambda state: model.plan(state, **_PLAN), 2
     )
 
 
@@ -803,12 +777,7 @@ class TestTheDynamicsGradientCanLearn:
     def _actor(action_dim: int = 1) -> Actor:
         lucid.manual_seed(0)
         return Actor(
-            latent_size=4,
-            hidden=32,
-            layers=2,
-            action_dim=action_dim,
-            act_fn="silu",
-            min_std=0.1,
+            latent_size=4, hidden=32, layers=2, action_dim=action_dim, act_fn="silu", min_std=0.1
         )
 
     @staticmethod
@@ -965,14 +934,7 @@ class TestTheActorObjectiveCanLearn:
         mode must not arrive at the paid one.
         """
         lucid.manual_seed(0)
-        actor = Actor(
-            latent_size=4,
-            hidden=32,
-            layers=2,
-            action_dim=1,
-            act_fn="silu",
-            min_std=0.1,
-        )
+        actor = Actor(latent_size=4, hidden=32, layers=2, action_dim=1, act_fn="silu", min_std=0.1)
         opt = optim.Adam(actor.parameters(), lr=3e-3)
         feature = lucid.ones((64, 1, 4))
         for _ in range(150):

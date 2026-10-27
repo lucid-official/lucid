@@ -131,11 +131,7 @@ class GridDropout(PhotometricTransform[HoleParams]):
     """
 
     def __init__(
-        self,
-        ratio: float = 0.5,
-        unit_size: int = 32,
-        fill_value: float = 0.0,
-        p: float = 0.5,
+        self, ratio: float = 0.5, unit_size: int = 32, fill_value: float = 0.0, p: float = 0.5
     ) -> None:
         super().__init__(p=p)
         self.ratio = ratio

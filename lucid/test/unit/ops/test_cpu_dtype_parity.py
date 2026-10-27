@@ -851,9 +851,7 @@ def test_pooling_takes_integers_on_both_devices(name: str, dtype_name: str) -> N
     for device in _DEVICES:
         got = call(
             lucid.tensor(
-                np.ascontiguousarray(values),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
             )
         )
         got = got[0] if isinstance(got, tuple) else got
@@ -874,8 +872,7 @@ def test_integer_avg_pool_truncates_toward_zero() -> None:
     for device in _DEVICES:
         for values, expected in ((positive, 4), (negative, -4)):
             got = F.avg_pool2d(
-                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device),
-                2,
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device), 2
             )
             assert int(np.asarray(got.numpy()).ravel()[0]) == expected, device
 
@@ -1070,9 +1067,7 @@ def test_local_response_norm_promotes_rather_than_degenerating() -> None:
         # how this assertion first failed.
         as_float = F.local_response_norm(
             lucid.tensor(
-                np.ascontiguousarray(values.astype(np.float32)),
-                dtype=lucid.float32,
-                device=device,
+                np.ascontiguousarray(values.astype(np.float32)), dtype=lucid.float32, device=device
             ),
             2,
         )
@@ -1213,9 +1208,7 @@ def test_cube_keeps_its_integer_width(dtype_name: str) -> None:
     outs = []
     for device in _DEVICES:
         x = lucid.tensor(
-            np.ascontiguousarray(values),
-            dtype=getattr(lucid, dtype_name),
-            device=device,
+            np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
         )
         x.cube_()
         assert str(x.dtype).endswith(dtype_name), device
@@ -1247,8 +1240,7 @@ def test_dropout_refuses_integers_on_both_devices() -> None:
     for device in _DEVICES:
         with pytest.raises(Exception):  # noqa: B017 - the two backends raise differently
             F.dropout(
-                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device),
-                p=0.5,
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device), p=0.5
             )
 
 
@@ -1259,9 +1251,7 @@ def test_dropout_still_takes_every_float(dtype_name: str) -> None:
     for device in _DEVICES:
         got = F.dropout(
             lucid.tensor(
-                np.ascontiguousarray(values),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
             ),
             p=0.5,
         )
@@ -1366,14 +1356,10 @@ def test_grid_sample_promotes_both_of_its_operands(dtype_name: str) -> None:
     for device in _DEVICES:
         got = F.grid_sample(
             lucid.tensor(
-                np.ascontiguousarray(image),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(image), dtype=getattr(lucid, dtype_name), device=device
             ),
             lucid.tensor(
-                np.ascontiguousarray(grid),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(grid), dtype=getattr(lucid, dtype_name), device=device
             ),
         )
         assert lucid.is_floating_point(got), device
@@ -1403,19 +1389,12 @@ def test_batch_norm_updates_its_statistics_in_a_float(buffer_dtype: str) -> None
 
         def make(array, d=dt, dev=device):
             return lucid.tensor(
-                np.ascontiguousarray(np.asarray(array).astype(buffer_dtype)),
-                dtype=d,
-                device=dev,
+                np.ascontiguousarray(np.asarray(array).astype(buffer_dtype)), dtype=d, device=dev
             )
 
         running_mean, running_var = make(np.zeros(3)), make(np.ones(3))
         got = F.batch_norm(
-            make(values),
-            running_mean,
-            running_var,
-            make(np.ones(3)),
-            make(np.zeros(3)),
-            True,
+            make(values), running_mean, running_var, make(np.ones(3)), make(np.zeros(3)), True
         )
         assert lucid.is_floating_point(got), (buffer_dtype, device)
         assert str(running_mean.dtype).endswith(buffer_dtype), "buffer changed dtype"
@@ -1465,9 +1444,7 @@ def test_embedding_bag_promotes_an_integer_table(dtype_name: str) -> None:
         got = F.embedding_bag(
             lucid.tensor(index, dtype=lucid.int64, device=device),
             lucid.tensor(
-                np.ascontiguousarray(weight),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(weight), dtype=getattr(lucid, dtype_name), device=device
             ),
             lucid.tensor(offsets, dtype=lucid.int64, device=device),
             mode="sum",
@@ -1491,9 +1468,7 @@ def test_fold_keeps_its_dtype_on_both_devices(dtype_name: str) -> None:
     for device in _DEVICES:
         got = F.fold(
             lucid.tensor(
-                np.ascontiguousarray(values),
-                dtype=getattr(lucid, dtype_name),
-                device=device,
+                np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
             ),
             (2, 2),
             2,
@@ -1573,10 +1548,7 @@ def test_fill_and_zero_end_the_graph() -> None:
     the gradient ``y`` had before the fill, for a tensor whose value no
     longer depends on ``x`` at all.
     """
-    for name, call in (
-        ("fill_", lambda y: y.fill_(2.0)),
-        ("zero_", lambda y: y.zero_()),
-    ):
+    for name, call in (("fill_", lambda y: y.fill_(2.0)), ("zero_", lambda y: y.zero_())):
         x = lucid.tensor(np.array([1.0, 2.0]), requires_grad=True)
         y = x * 1.0
         call(y)

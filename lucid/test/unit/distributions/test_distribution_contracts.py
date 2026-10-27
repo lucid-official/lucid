@@ -99,11 +99,7 @@ def test_enumerate_support_contract(device: str) -> None:
         (D.Bernoulli(probs=t([[0.2, 0.7], [0.4, 0.9]])), (2, 2, 2), (2, 1, 1)),
         (D.Binomial(5, probs=t([0.3, 0.6])), (6, 2), (6, 1)),
         (D.Categorical(probs=t([[0.2, 0.3, 0.5], [0.1, 0.4, 0.5]])), (3, 2), (3, 1)),
-        (
-            D.OneHotCategorical(probs=t([[0.2, 0.3, 0.5], [0.1, 0.4, 0.5]])),
-            (3, 2, 3),
-            (3, 1, 3),
-        ),
+        (D.OneHotCategorical(probs=t([[0.2, 0.3, 0.5], [0.1, 0.4, 0.5]])), (3, 2, 3), (3, 1, 3)),
         (D.Independent(D.Bernoulli(probs=t([0.3, 0.7])), 0), (2, 2), (2, 1)),
     ]
     for dist, expanded_shape, unexpanded_shape in enumerable:

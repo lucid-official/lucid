@@ -16,8 +16,7 @@ from lucid.models._utils._common import apply_overrides, reject_unavailable_pret
     summary="auto",
 )
 def efficientdet_d0(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D0 (:math:`\varphi = 0`).
 
@@ -72,8 +71,7 @@ def efficientdet_d0(
     summary="auto",
 )
 def efficientdet_d1(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D1 (:math:`\varphi = 1`).
 
@@ -123,8 +121,7 @@ def efficientdet_d1(
     summary="auto",
 )
 def efficientdet_d2(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D2 (:math:`\varphi = 2`).
 
@@ -174,8 +171,7 @@ def efficientdet_d2(
     summary="auto",
 )
 def efficientdet_d3(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D3 (:math:`\varphi = 3`).
 
@@ -225,8 +221,7 @@ def efficientdet_d3(
     summary="auto",
 )
 def efficientdet_d4(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D4 (:math:`\varphi = 4`).
 
@@ -276,8 +271,7 @@ def efficientdet_d4(
     summary="auto",
 )
 def efficientdet_d5(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D5 (:math:`\varphi = 5`).
 
@@ -327,8 +321,7 @@ def efficientdet_d5(
     summary="auto",
 )
 def efficientdet_d6(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D6 (:math:`\varphi = 6`).
 
@@ -378,8 +371,7 @@ def efficientdet_d6(
     summary="auto",
 )
 def efficientdet_d7(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> EfficientDetForObjectDetection:
     r"""EfficientDet-D7 (:math:`\varphi = 7`).
 

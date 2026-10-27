@@ -18,11 +18,7 @@ from lucid._tensor.tensor import Tensor
 
 
 def _flat_jacobian_finite_diff(
-    fn: Callable[..., Tensor],
-    inputs: Sequence[Tensor],
-    *,
-    eps: float,
-    output_idx: int,
+    fn: Callable[..., Tensor], inputs: Sequence[Tensor], *, eps: float, output_idx: int
 ) -> np.ndarray:
     """Numeric Jacobian of ``fn``'s ``output_idx``-th output w.r.t.
     ``inputs[0]`` via central differences.
@@ -46,14 +42,10 @@ def _flat_jacobian_finite_diff(
         minus[j] -= eps
 
         in_plus = lucid.tensor(
-            plus.reshape(in_t.shape).astype(np.float32),
-            dtype=in_t.dtype,
-            device=in_t.device,
+            plus.reshape(in_t.shape).astype(np.float32), dtype=in_t.dtype, device=in_t.device
         )
         in_minus = lucid.tensor(
-            minus.reshape(in_t.shape).astype(np.float32),
-            dtype=in_t.dtype,
-            device=in_t.device,
+            minus.reshape(in_t.shape).astype(np.float32), dtype=in_t.dtype, device=in_t.device
         )
         rest = list(inputs[1:])
         out_plus = fn(in_plus, *rest)
@@ -69,10 +61,7 @@ def _flat_jacobian_finite_diff(
 
 
 def _flat_jacobian_autograd(
-    fn: Callable[..., Tensor],
-    inputs: Sequence[Tensor],
-    *,
-    output_idx: int,
+    fn: Callable[..., Tensor], inputs: Sequence[Tensor], *, output_idx: int
 ) -> np.ndarray:
     """Analytic Jacobian via autograd: reverse-mode VJP applied to each
     output basis vector."""
@@ -91,10 +80,7 @@ def _flat_jacobian_autograd(
         fresh = [
             (
                 lucid.tensor(
-                    x.numpy().copy(),
-                    dtype=x.dtype,
-                    device=x.device,
-                    requires_grad=x.requires_grad,
+                    x.numpy().copy(), dtype=x.dtype, device=x.device, requires_grad=x.requires_grad
                 )
                 if isinstance(x, Tensor)
                 else x

@@ -43,14 +43,8 @@ _ROWS = {
 
 _OPS = {
     "softmax": (lambda x, d: F.softmax(x, d), lambda r, x, d: r.softmax(x, d)),
-    "log_softmax": (
-        lambda x, d: F.log_softmax(x, d),
-        lambda r, x, d: r.log_softmax(x, d),
-    ),
-    "logsumexp": (
-        lambda x, d: lucid.logsumexp(x, d),
-        lambda r, x, d: r.logsumexp(x, d),
-    ),
+    "log_softmax": (lambda x, d: F.log_softmax(x, d), lambda r, x, d: r.log_softmax(x, d)),
+    "logsumexp": (lambda x, d: lucid.logsumexp(x, d), lambda r, x, d: r.logsumexp(x, d)),
 }
 
 _DTYPES = {"float32": 1e-6, "float64": 1e-12, "float16": 2e-3, "bfloat16": 2e-2}
@@ -90,14 +84,8 @@ def _check(got, want, dtype):
     tol = _DTYPES[dtype]
     assert got.shape == want.shape
     assert np.array_equal(np.isnan(got), np.isnan(want)), (got, want)
-    assert np.array_equal(np.isinf(got) & (got > 0), np.isinf(want) & (want > 0)), (
-        got,
-        want,
-    )
-    assert np.array_equal(np.isinf(got) & (got < 0), np.isinf(want) & (want < 0)), (
-        got,
-        want,
-    )
+    assert np.array_equal(np.isinf(got) & (got > 0), np.isinf(want) & (want > 0)), (got, want)
+    assert np.array_equal(np.isinf(got) & (got < 0), np.isinf(want) & (want < 0)), (got, want)
     finite = np.isfinite(want)
     np.testing.assert_allclose(got[finite], want[finite], rtol=tol, atol=tol)
 
@@ -130,12 +118,7 @@ def test_gradient_matches_reference(ref, device, dtype, op, row, layout):
 def test_cross_entropy_nonfinite_and_parallel_layer_norm_determinism(ref) -> None:
     """Guard for LCD-154: cross_entropy on non-finite rows and bitwise-deterministic
     multi-chunk CPU layer_norm / rms_norm backward."""
-    logits = [
-        [_INF, 1.0, 2.0],
-        [-_INF, -_INF, -_INF],
-        [-_INF, 1.0, 2.0],
-        [1.0, 2.0, 3.0],
-    ]
+    logits = [[_INF, 1.0, 2.0], [-_INF, -_INF, -_INF], [-_INF, 1.0, 2.0], [1.0, 2.0, 3.0]]
     target = [1, 0, 2, 1]
     x = lucid.tensor(logits, dtype=lucid.float32, requires_grad=True)
     t = lucid.tensor(target, dtype=lucid.int64)

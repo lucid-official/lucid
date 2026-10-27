@@ -144,12 +144,7 @@ def _run(name, shape, kwargs, complex_in, device, ref=None):
 @pytest.mark.parity
 @pytest.mark.parametrize("name,shape,kwargs,complex_in", _params())
 def test_the_hessian_vector_product_matches_the_reference(
-    name: str,
-    shape: tuple[int, ...],
-    kwargs: dict[str, object],
-    complex_in: bool,
-    device: str,
-    ref,
+    name: str, shape: tuple[int, ...], kwargs: dict[str, object], complex_in: bool, device: str, ref
 ) -> None:
     _, got, want = _run(name, shape, kwargs, complex_in, device, ref)
     assert got.shape == want.shape, (got.shape, want.shape)
@@ -160,11 +155,7 @@ def test_the_hessian_vector_product_matches_the_reference(
 
 @pytest.mark.parametrize("name,shape,kwargs,complex_in", _params())
 def test_no_transform_hands_back_a_zero_derivative(
-    name: str,
-    shape: tuple[int, ...],
-    kwargs: dict[str, object],
-    complex_in: bool,
-    device: str,
+    name: str, shape: tuple[int, ...], kwargs: dict[str, object], complex_in: bool, device: str
 ) -> None:
     """The first gradient is recorded, not a stand-in with a zero derivative.
 
@@ -187,10 +178,7 @@ def test_the_reported_case() -> None:
     (g,) = grad((lucid.real(y) ** 2 + lucid.imag(y) ** 2).sum(), [x], create_graph=True)
     (gg,) = grad((g * g).sum(), [x])
     np.testing.assert_allclose(
-        np.asarray(gg.numpy()),
-        [86.4, -345.6, 230.4, 576.0, -144.0, 316.8],
-        rtol=1e-5,
-        atol=1e-3,
+        np.asarray(gg.numpy()), [86.4, -345.6, 230.4, 576.0, -144.0, 316.8], rtol=1e-5, atol=1e-3
     )
 
 

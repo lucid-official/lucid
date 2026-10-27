@@ -12,36 +12,14 @@ Also holds the boundary markers ``QuantStub`` / ``DeQuantStub`` placed in a
 float model and their runtime forms ``Quantize`` / ``DeQuantize``.
 """
 
-from lucid.nn.quantized.activation import (
-    ELU,
-    Hardsigmoid,
-    Hardswish,
-    LeakyReLU,
-    Sigmoid,
-    Tanh,
-)
+from lucid.nn.quantized.activation import ELU, Hardsigmoid, Hardswish, LeakyReLU, Sigmoid, Tanh
 from lucid.nn.quantized.conv import Conv1d, Conv2d, Conv3d
-from lucid.nn.quantized.conv_transpose import (
-    ConvTranspose1d,
-    ConvTranspose2d,
-    ConvTranspose3d,
-)
+from lucid.nn.quantized.conv_transpose import ConvTranspose1d, ConvTranspose2d, ConvTranspose3d
 from lucid.nn.quantized.functional_module import FloatFunctional, QFunctional
-from lucid.nn.quantized.intrinsic import (
-    ConvReLU1d,
-    ConvReLU2d,
-    ConvReLU3d,
-    LinearReLU,
-)
+from lucid.nn.quantized.intrinsic import ConvReLU1d, ConvReLU2d, ConvReLU3d, LinearReLU
 from lucid.nn.quantized.linear import Linear
 from lucid.nn.quantized.mlx_linear import QuantizedLinearMLX
-from lucid.nn.quantized.modules import (
-    DeQuantize,
-    DeQuantStub,
-    Quantize,
-    QuantStub,
-    QuantWrapper,
-)
+from lucid.nn.quantized.modules import DeQuantize, DeQuantStub, Quantize, QuantStub, QuantWrapper
 from lucid.nn.quantized.sparse import Embedding, EmbeddingBag
 
 __all__ = [

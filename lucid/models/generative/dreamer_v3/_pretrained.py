@@ -39,14 +39,8 @@ from dataclasses import replace
 
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
-from lucid.models.generative.dreamer_v3._config import (
-    DREAMER_V3_SIZES,
-    DreamerV3Config,
-)
-from lucid.models.generative.dreamer_v3._model import (
-    DreamerV3ForWorldModeling,
-    DreamerV3Model,
-)
+from lucid.models.generative.dreamer_v3._config import DREAMER_V3_SIZES, DreamerV3Config
+from lucid.models.generative.dreamer_v3._model import DreamerV3ForWorldModeling, DreamerV3Model
 
 
 def _rung(name: str) -> DreamerV3Config:

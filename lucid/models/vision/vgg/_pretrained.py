@@ -451,10 +451,7 @@ def vgg_19_bn(pretrained: bool = False, **overrides: object) -> VGG:
     params=132863336,
 )
 def vgg_11_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG11Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG11Weights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-11 image classifier (config A, no BatchNorm).
 
@@ -517,10 +514,7 @@ def vgg_11_cls(
     params=133047848,
 )
 def vgg_13_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG13Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG13Weights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-13 image classifier (config B, no BatchNorm).
 
@@ -581,10 +575,7 @@ def vgg_13_cls(
     params=138357544,
 )
 def vgg_16_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG16Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG16Weights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-16 image classifier (config D, no BatchNorm).
 
@@ -645,10 +636,7 @@ def vgg_16_cls(
     params=143667240,
 )
 def vgg_19_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG19Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG19Weights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-19 image classifier (config E, no BatchNorm).
 
@@ -709,10 +697,7 @@ def vgg_19_cls(
     params=132868840,
 )
 def vgg_11_bn_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG11BNWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG11BNWeights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-11 with BatchNorm — image classifier.
 
@@ -776,10 +761,7 @@ def vgg_11_bn_cls(
     params=133053736,
 )
 def vgg_13_bn_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG13BNWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG13BNWeights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-13 with BatchNorm — image classifier.
 
@@ -840,10 +822,7 @@ def vgg_13_bn_cls(
     params=138365992,
 )
 def vgg_16_bn_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG16BNWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG16BNWeights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-16 with BatchNorm — image classifier.
 
@@ -905,10 +884,7 @@ def vgg_16_bn_cls(
     params=143678248,
 )
 def vgg_19_bn_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: VGG19BNWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VGG19BNWeights | None = None, **overrides: object
 ) -> VGGForImageClassification:
     r"""VGG-19 with BatchNorm — image classifier.
 

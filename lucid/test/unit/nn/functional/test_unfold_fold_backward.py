@@ -35,8 +35,7 @@ def _numpy_unfold(t, dim, size, step):
     """Reference im2col along a single axis: (..., L, ..., size)."""
     length = (t.shape[dim] - size) // step + 1
     stacked = np.stack(
-        [np.take(t, range(i * step, i * step + size), axis=dim) for i in range(length)],
-        axis=dim,
+        [np.take(t, range(i * step, i * step + size), axis=dim) for i in range(length)], axis=dim
     )
     return np.moveaxis(stacked, dim + 1, -1)
 
@@ -172,11 +171,7 @@ FOLD_SPECS = [
 @pytest.mark.parametrize("cols,out_hw,k,s,p,d", FOLD_SPECS)
 @pytest.mark.parametrize("device", DEVICES)
 def test_fold_backward(cols, out_hw, k, s, p, d, device):
-    _check_grad(
-        cols,
-        lambda t: F.fold(t, out_hw, k, stride=s, padding=p, dilation=d),
-        device,
-    )
+    _check_grad(cols, lambda t: F.fold(t, out_hw, k, stride=s, padding=p, dilation=d), device)
 
 
 @pytest.mark.parametrize("device", DEVICES)
@@ -195,9 +190,7 @@ def test_fold_is_adjoint_of_unfold(cols, out_hw, k, s, p, d, device):
     x = lucid.tensor(rng.standard_normal(cols).astype(npdt), device=device, dtype=dt)
     channels = cols[1] // (k * k)
     y = lucid.tensor(
-        rng.standard_normal((cols[0], channels) + out_hw).astype(npdt),
-        device=device,
-        dtype=dt,
+        rng.standard_normal((cols[0], channels) + out_hw).astype(npdt), device=device, dtype=dt
     )
     lhs = float((F.fold(x, out_hw, k, stride=s, padding=p, dilation=d) * y).sum().item())
     rhs = float((x * F.unfold(y, k, stride=s, padding=p, dilation=d)).sum().item())

@@ -78,9 +78,7 @@ _FLOAT_DTYPES = (lucid.float16, lucid.bfloat16, lucid.float32, lucid.float64)
 
 @pytest.mark.parametrize("name,op", _BINARY_SPECS, ids=[s[0] for s in _BINARY_SPECS])
 @pytest.mark.parametrize(
-    "dt_a,dt_b",
-    _TENSOR_DTYPE_PAIRS,
-    ids=[f"{a}-{b}" for a, b in _TENSOR_DTYPE_PAIRS],
+    "dt_a,dt_b", _TENSOR_DTYPE_PAIRS, ids=[f"{a}-{b}" for a, b in _TENSOR_DTYPE_PAIRS]
 )
 @pytest.mark.parametrize(
     "shape_a,shape_b",
@@ -149,15 +147,7 @@ _SCALAR_BINARY_SPECS: list[tuple[str, Callable[[Tensor, int | float], Tensor]]] 
 
 @pytest.mark.parametrize("name,op", _SCALAR_BINARY_SPECS, ids=[s[0] for s in _SCALAR_BINARY_SPECS])
 @pytest.mark.parametrize(
-    "dt",
-    [
-        lucid.int8,
-        lucid.int32,
-        lucid.int64,
-        lucid.float16,
-        lucid.bfloat16,
-        lucid.float32,
-    ],
+    "dt", [lucid.int8, lucid.int32, lucid.int64, lucid.float16, lucid.bfloat16, lucid.float32]
 )
 @pytest.mark.parametrize("scalar", [2, 0.5], ids=["int_scalar", "float_scalar"])
 @pytest.mark.parametrize("shape", [(3, 4), (4,), ()], ids=["2d", "1d", "0d"])
@@ -203,9 +193,7 @@ _MATMUL_CALLERS: list[tuple[str, Callable[[Tensor, Tensor], Tensor]]] = [
 
 @pytest.mark.parametrize("caller_name,caller", _MATMUL_CALLERS, ids=[c[0] for c in _MATMUL_CALLERS])
 @pytest.mark.parametrize(
-    "shape_a,shape_b",
-    _MATMUL_SHAPES,
-    ids=[f"{sa}@{sb}" for sa, sb in _MATMUL_SHAPES],
+    "shape_a,shape_b", _MATMUL_SHAPES, ids=[f"{sa}@{sb}" for sa, sb in _MATMUL_SHAPES]
 )
 @pytest.mark.parametrize(
     "dt_a,dt_b",

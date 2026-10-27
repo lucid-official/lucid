@@ -147,10 +147,7 @@ class ByteTokenizer(Tokenizer):
 
     @classmethod
     def from_file(
-        cls,
-        directory: str,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        cls, directory: str, *, special_tokens: SpecialTokens | None = None
     ) -> ByteTokenizer:
         """Load from a directory containing ``special_tokens_map.json``.
 
@@ -176,9 +173,7 @@ class ByteTokenizer(Tokenizer):
             if os.path.isfile(sp_path):
                 with open(sp_path, encoding="utf-8") as f:
                     sp = json.load(f)
-                from lucid.utils.tokenizer._bpe import (
-                    _special_tokens_from_map,
-                )
+                from lucid.utils.tokenizer._bpe import _special_tokens_from_map
 
                 st = _special_tokens_from_map(sp)
         return cls(special_tokens=st)
@@ -290,10 +285,7 @@ class ByteTokenizerFast(Tokenizer):
 
     @classmethod
     def from_file(
-        cls,
-        directory: str,
-        *,
-        special_tokens: SpecialTokens | None = None,
+        cls, directory: str, *, special_tokens: SpecialTokens | None = None
     ) -> ByteTokenizerFast:
         """Load from ``directory`` (only the special-token map is read).
 
@@ -315,9 +307,7 @@ class ByteTokenizerFast(Tokenizer):
             if os.path.isfile(sp_path):
                 with open(sp_path, encoding="utf-8") as f:
                     sp = json.load(f)
-                from lucid.utils.tokenizer._bpe import (
-                    _special_tokens_from_map,
-                )
+                from lucid.utils.tokenizer._bpe import _special_tokens_from_map
 
                 st = _special_tokens_from_map(sp)
         return cls(special_tokens=st)

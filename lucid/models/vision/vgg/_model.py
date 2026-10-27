@@ -227,11 +227,7 @@ class VGGForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         init_cnn_fan_out(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         feat = self.avgpool(self.features(x)).flatten(1)
         h = self.drop6(F.relu(self.fc6(feat)))
         h = self.drop7(F.relu(self.fc7(h)))

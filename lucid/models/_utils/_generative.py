@@ -286,9 +286,7 @@ def discretized_gaussian_log_likelihood(x: Tensor, *, means: Tensor, log_scales:
     # The two edge bins are open-ended — everything below -0.999 falls in the
     # first bin, everything above 0.999 in the last.
     return lucid.where(
-        x < -0.999,
-        log_cdf_plus,
-        lucid.where(x > 0.999, log_one_minus_cdf_min, log_cdf_delta),
+        x < -0.999, log_cdf_plus, lucid.where(x > 0.999, log_one_minus_cdf_min, log_cdf_delta)
     )
 
 
@@ -407,11 +405,7 @@ def diffusion_posterior_constants(betas: Tensor, *, device: str = "cpu") -> Diff
 
 
 def diffusion_posterior(
-    *,
-    x_start: Tensor,
-    x_t: Tensor,
-    t: Tensor,
-    posterior: DiffusionPosterior,
+    *, x_start: Tensor, x_t: Tensor, t: Tensor, posterior: DiffusionPosterior
 ) -> tuple[Tensor, Tensor]:
     r"""Mean and log-variance of :math:`q(x_{t-1} \mid x_t, x_0)` at ``t``.
 
@@ -528,12 +522,7 @@ def diffusion_vlb_term(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def gaussian_kl_divergence(
-    mu: Tensor,
-    logvar: Tensor,
-    *,
-    reduction: Reduction = "mean",
-) -> Tensor:
+def gaussian_kl_divergence(mu: Tensor, logvar: Tensor, *, reduction: Reduction = "mean") -> Tensor:
     """KL divergence ``KL(N(μ, σ²) ‖ N(0, I))`` of a diagonal Gaussian.
 
     Closed form: ``½ Σ (μ² + σ² - log σ² - 1)``.
@@ -669,11 +658,7 @@ def flow_prior_log_prob(name: str, h: Tensor) -> Tensor:
 
 
 def flow_prior_sample(
-    name: str,
-    shape: tuple[int, ...],
-    *,
-    device: str = "cpu",
-    dtype: lucid.dtype | None = None,
+    name: str, shape: tuple[int, ...], *, device: str = "cpu", dtype: lucid.dtype | None = None
 ) -> Tensor:
     r"""Draw i.i.d. samples from a flow's factorised prior :math:`p_H`.
 
@@ -773,11 +758,7 @@ def generative_activation(name: str, x: Tensor) -> Tensor:
 
 
 def make_sigma_schedule(
-    num_noise_levels: int,
-    *,
-    sigma_max: float,
-    sigma_min: float,
-    device: str = "cpu",
+    num_noise_levels: int, *, sigma_max: float, sigma_min: float, device: str = "cpu"
 ) -> Tensor:
     """Geometric noise schedule for score-based models (Song & Ermon, 2019).
 
@@ -933,11 +914,7 @@ def hutchinson_divergence(
     to make: the exact answer needs one pass per dimension.
     """
     (row,) = lucid.autograd.grad(
-        velocity,
-        [state],
-        grad_outputs=[probe],
-        create_graph=create_graph,
-        retain_graph=True,
+        velocity, [state], grad_outputs=[probe], create_graph=create_graph, retain_graph=True
     )
     if row is None:
         raise RuntimeError(
@@ -948,11 +925,7 @@ def hutchinson_divergence(
 
 
 def exact_divergence(
-    velocity: Tensor,
-    state: Tensor,
-    seeds: list[Tensor],
-    *,
-    create_graph: bool = True,
+    velocity: Tensor, state: Tensor, seeds: list[Tensor], *, create_graph: bool = True
 ) -> Tensor:
     r"""Exact :math:`\operatorname{tr}(\partial v / \partial x)`, one VJP per dimension.
 
@@ -997,11 +970,7 @@ def exact_divergence(
     total: Tensor | None = None
     for index, seed in enumerate(seeds):
         (row,) = lucid.autograd.grad(
-            velocity,
-            [state],
-            grad_outputs=[seed],
-            create_graph=create_graph,
-            retain_graph=True,
+            velocity, [state], grad_outputs=[seed], create_graph=create_graph, retain_graph=True
         )
         if row is None:
             raise RuntimeError(
@@ -1071,11 +1040,7 @@ def model_dtype(model: nn.Module) -> lucid.dtype:
 
 
 def start_noise(
-    model: nn.Module,
-    shape: tuple[int, ...],
-    device: str | None,
-    *,
-    prior: str = "gaussian",
+    model: nn.Module, shape: tuple[int, ...], device: str | None, *, prior: str = "gaussian"
 ) -> Tensor:
     """The draw a sampler starts from, on ``model``'s device and in its dtype.
 

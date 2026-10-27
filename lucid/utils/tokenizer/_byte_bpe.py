@@ -98,11 +98,7 @@ def _load_byte_bpe_from_file[T](
     )
     resolved_prefix = bool(model_data.get("add_prefix_space", add_prefix_space))
     return cls(
-        vocab,
-        merges,
-        add_prefix_space=resolved_prefix,
-        normalizer=normalizer,
-        special_tokens=st,
+        vocab, merges, add_prefix_space=resolved_prefix, normalizer=normalizer, special_tokens=st
     )
 
 
@@ -216,12 +212,7 @@ class ByteLevelBPETokenizer(_ByteLevelDecodeMixin, BPETokenizer):
         )
 
     @override
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 50_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 50_000) -> None:
         """Re-train this tokenizer from scratch on ``corpus``.
 
         Delegates to the parent :meth:`BPETokenizer.train`.  The
@@ -335,12 +326,7 @@ class ByteLevelBPETokenizerFast(_ByteLevelDecodeMixin, BPETokenizerFast):
         )
 
     @override
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 50_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 50_000) -> None:
         """Re-train in C++ via the parent
         :meth:`BPETokenizerFast.train`.
 

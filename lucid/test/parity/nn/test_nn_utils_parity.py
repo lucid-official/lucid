@@ -16,13 +16,7 @@ class TestFuseConvBnEvalParity:
     """fuse_conv_bn_eval must produce the same output as the fused reference pair."""
 
     def _make_pair(
-        self,
-        ref: Any,
-        *,
-        cin: int = 4,
-        cout: int = 8,
-        k: int = 3,
-        bias: bool = True,
+        self, ref: Any, *, cin: int = 4, cout: int = 8, k: int = 3, bias: bool = True
     ) -> tuple[Any, Any, Any, Any]:
         np.random.seed(42)
         w = np.random.standard_normal((cout, cin, k, k)).astype(np.float32)

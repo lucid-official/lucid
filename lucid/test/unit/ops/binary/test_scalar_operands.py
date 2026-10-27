@@ -36,13 +36,7 @@ _FLOAT_OPS = [
     "fmod",
     "remainder",
 ]
-_INT_OPS = [
-    "bitwise_and",
-    "bitwise_or",
-    "bitwise_xor",
-    "bitwise_left_shift",
-    "bitwise_right_shift",
-]
+_INT_OPS = ["bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_left_shift", "bitwise_right_shift"]
 # Arithmetic ops that also have an in-place form.
 _INPLACE_OPS = ["add_", "sub_", "mul_", "div_", "pow_", "maximum_", "minimum_"]
 
@@ -176,11 +170,7 @@ class TestScalarPromotion:
         # The engine kept the tensor's dtype: one bound raised
         # DtypeMismatch, and two truncated 0.5 and 2.5 to whole numbers.
         t = lucid.tensor([0, 2, 3], dtype=lucid.int32, device=device)
-        for out in (
-            lucid.clamp(t, **bounds),
-            t.clamp(**bounds),
-            lucid.clip(t, **bounds),
-        ):
+        for out in (lucid.clamp(t, **bounds), t.clamp(**bounds), lucid.clip(t, **bounds)):
             assert out.dtype == lucid.float32
             assert out.tolist() == expected
 

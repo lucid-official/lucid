@@ -79,9 +79,7 @@ class _TruncatedBody(io.BytesIO):
         self.close()
 
 
-def test_a_truncated_download_names_the_offline_remedy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_truncated_download_names_the_offline_remedy(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fetch_mlx.urllib.request, "urlopen", lambda url, timeout: _TruncatedBody())
     with pytest.raises(fetch_mlx.FetchError, match="LUCID_MLX_DIST_DIR") as info:
         fetch_mlx._download("https://example.invalid/w.whl", io.BytesIO())

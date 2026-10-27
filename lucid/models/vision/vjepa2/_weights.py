@@ -28,13 +28,7 @@ _PRESET_256 = VideoClassification(crop_size=256)
 _PRESET_384 = VideoClassification(crop_size=384)
 
 
-def _requires(
-    *,
-    image_size: int,
-    dim: int,
-    depth: int,
-    num_heads: int,
-) -> dict[str, object]:
+def _requires(*, image_size: int, dim: int, depth: int, num_heads: int) -> dict[str, object]:
     """Return the architecture fields that must match a checkpoint."""
     return {
         "image_size": image_size,

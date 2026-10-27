@@ -79,9 +79,7 @@ class TestRecurrenceParity:
 
         ours = _np(
             rssm._recurrent(
-                lucid.tensor(stoch.copy()),
-                lucid.tensor(action.copy()),
-                lucid.tensor(deter.copy()),
+                lucid.tensor(stoch.copy()), lucid.tensor(action.copy()), lucid.tensor(deter.copy())
             )
         )
 

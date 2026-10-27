@@ -47,15 +47,9 @@ from lucid.distributions.independent import Independent
 from lucid.distributions.kl import kl_divergence, register_kl
 from lucid.distributions.matrix import LKJCholesky, Wishart
 from lucid.distributions.mixture import MixtureSameFamily
-from lucid.distributions.multivariate import (
-    LowRankMultivariateNormal,
-    MultivariateNormal,
-)
+from lucid.distributions.multivariate import LowRankMultivariateNormal, MultivariateNormal
 from lucid.distributions.normal import LogNormal, Normal
-from lucid.distributions.relaxed import (
-    RelaxedBernoulli,
-    RelaxedOneHotCategorical,
-)
+from lucid.distributions.relaxed import RelaxedBernoulli, RelaxedOneHotCategorical
 from lucid.distributions.student import StudentT
 from lucid.distributions.transformed_distribution import TransformedDistribution
 from lucid.distributions.transforms import (
@@ -78,11 +72,7 @@ from lucid.distributions.transforms import (
     Transform,
 )
 from lucid.distributions.uniform import Uniform
-from lucid.distributions.von_mises import (
-    GeneralizedPareto,
-    LogisticNormal,
-    VonMises,
-)
+from lucid.distributions.von_mises import GeneralizedPareto, LogisticNormal, VonMises
 
 __all__ = [
     # base

@@ -23,11 +23,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_compile_parity,
-    metal_tensor,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_compile_parity, metal_tensor
 
 
 def _dropout_model(p: float) -> nn.Module:

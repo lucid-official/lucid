@@ -113,11 +113,7 @@ def _assert_matches(name: str, dtype: str, got: object, want: object) -> None:
             ), f"out[{i}] not bit-exact: {gn.ravel()[:6]} vs {w.ravel()[:6]}"
         elif np.issubdtype(w.dtype, np.floating) or np.issubdtype(gn.dtype, np.floating):
             assert np.allclose(
-                gn.astype(np.float64),
-                w.astype(np.float64),
-                rtol=2e-4,
-                atol=2e-5,
-                equal_nan=True,
+                gn.astype(np.float64), w.astype(np.float64), rtol=2e-4, atol=2e-5, equal_nan=True
             ), (
                 f"out[{i}] max|diff| "
                 f"{np.nanmax(np.abs(gn.astype(np.float64) - w.astype(np.float64))):.3g}: "

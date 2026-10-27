@@ -96,12 +96,7 @@ def test_the_storage_is_shared_with_the_value_and_not_with_old_views(device):
 
 @pytest.mark.parametrize(
     "take",
-    [
-        lambda y: y[0],
-        lambda y: y[:, 0],
-        lambda y: y.view(-1),
-        lambda y: y.T,
-    ],
+    [lambda y: y[0], lambda y: y[:, 0], lambda y: y.view(-1), lambda y: y.T],
     ids=["row", "col", "flat", "transpose"],
 )
 def test_setting_data_on_a_view_detaches_it_from_its_old_base(device, take):
@@ -159,9 +154,7 @@ def test_module_apply_and_load_state_dict_on_a_view_parameter(device):
 
 
 @pytest.mark.parametrize(
-    "take",
-    [lambda y: y[0], lambda y: y[:, 0], lambda y: y.view(-1)],
-    ids=["row", "col", "flat"],
+    "take", [lambda y: y[0], lambda y: y[:, 0], lambda y: y.view(-1)], ids=["row", "col", "flat"]
 )
 def test_detach_in_place_on_a_view_matches_cpu_and_metal(device, take):
     # A detached view shares storage with its base, and writes through it are

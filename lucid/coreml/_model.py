@@ -966,8 +966,7 @@ class CoreMLModel:
         # The model this handle opened, rather than the package compiled
         # again; a closed handle no longer holds it, and compiles afresh.
         placements = _C_engine.coreml.compute_plan(
-            self._lease.path if self._lease.held else self.path,
-            _UNITS[self.compute_units],
+            self._lease.path if self._lease.held else self.path, _UNITS[self.compute_units]
         )
         return PlacementSummary(
             [(op, device) for op, device in placements],

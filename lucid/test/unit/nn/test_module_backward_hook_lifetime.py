@@ -194,9 +194,7 @@ def test_a_module_holding_its_hooked_output_across_a_deeper_graph_is_freed(
 
 
 @_JOINTLY_OWNED_LEAK
-def test_a_module_holding_multiple_tensors_from_the_same_hooked_graph_is_freed(
-    device: str,
-) -> None:
+def test_a_module_holding_multiple_tensors_from_the_same_hooked_graph_is_freed(device: str) -> None:
     module = nn.Linear(3, 3, device=device)
     module.register_full_backward_hook(_full_hook)
     module.register_full_backward_pre_hook(_pre_hook)
@@ -238,11 +236,7 @@ def test_a_live_downstream_branch_keeps_a_cyclic_hooked_module_alive_until_dropp
 
 
 @pytest.mark.parametrize(
-    "run_backward",
-    [
-        pytest.param(False, id="no-backward"),
-        pytest.param(True, id="backward"),
-    ],
+    "run_backward", [pytest.param(False, id="no-backward"), pytest.param(True, id="backward")]
 )
 def test_custom_function_cycle_through_ctx_or_module_is_freed(
     run_backward: bool, device: str

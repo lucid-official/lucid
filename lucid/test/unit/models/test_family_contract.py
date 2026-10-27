@@ -43,18 +43,10 @@ from lucid.models import (
     TokenClassificationOutput,
     create_model,
 )
-from lucid.models._protocols import (
-    ModelConfigProtocol,
-    PretrainedModelProtocol,
-)
+from lucid.models._protocols import ModelConfigProtocol, PretrainedModelProtocol
 from lucid.models.multimodal.clip import CLIPZeroShotOutput
 from lucid.models.text.bert import BERTForPreTrainingOutput
-from lucid.models._registry import (
-    _REGISTRY,
-    is_model,
-    list_models,
-    model_entrypoint,
-)
+from lucid.models._registry import _REGISTRY, is_model, list_models, model_entrypoint
 from lucid.models._utils._common import reject_unavailable_pretrained
 from lucid.nn._shadow import shadow_alloc
 from lucid.weights import weights_for
@@ -545,8 +537,7 @@ def _registered_classes() -> list[tuple[str, type]]:
 
 
 @pytest.mark.parametrize(
-    "task,model_class",
-    [pytest.param(t, c, id=c.__name__) for t, c in _registered_classes()],
+    "task,model_class", [pytest.param(t, c, id=c.__name__) for t, c in _registered_classes()]
 )
 def test_forward_returns_the_task_output(task: str, model_class: type) -> None:
     violation = _output_violation(task, model_class)

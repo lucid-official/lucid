@@ -96,16 +96,7 @@ class TestCatStack:
 
     @pytest.mark.parametrize(
         "join",
-        [
-            "cat",
-            "concat",
-            "stack",
-            "hstack",
-            "vstack",
-            "dstack",
-            "column_stack",
-            "row_stack",
-        ],
+        ["cat", "concat", "stack", "hstack", "vstack", "dstack", "column_stack", "row_stack"],
     )
     def test_mixed_dtypes_join_at_the_common_dtype(self, device: str, join: str) -> None:
         # The engine joins one dtype only, so an int64 beside a float32

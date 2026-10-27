@@ -624,10 +624,7 @@ class Perspective(_WarpTransform):
         frac = _random.uniform(self.scale[0], self.scale[1])
         src = [[0.0, 0.0], [w - 1.0, 0.0], [w - 1.0, h - 1.0], [0.0, h - 1.0]]
         dst = [
-            [
-                _random.uniform(-frac, frac) * w + sx,
-                _random.uniform(-frac, frac) * h + sy,
-            ]
+            [_random.uniform(-frac, frac) * w + sx, _random.uniform(-frac, frac) * h + sy]
             for sx, sy in src
         ]
         # Homography mapping the perturbed corners back to the canvas.

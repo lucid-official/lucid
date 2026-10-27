@@ -230,9 +230,7 @@ def test_solve_ex_check_errors_raises(device: str) -> None:
     a = _batch(np.eye(2), _SINGULAR)
     with pytest.raises(RuntimeError, match="Batch element 1"):
         LA.solve_ex(
-            lucid.tensor(a, device=device),
-            lucid.ones(2, 2, 1, device=device),
-            check_errors=True,
+            lucid.tensor(a, device=device), lucid.ones(2, 2, 1, device=device), check_errors=True
         )
 
 
@@ -495,9 +493,7 @@ def test_wide_qr_differentiates_twice(output: int) -> None:
 # ── CHA-146: matrix_power at 0 and 1 ─────────────────────────────────────────
 
 
-def test_matrix_power_zero_is_a_fresh_identity_on_the_input_device(
-    device: str,
-) -> None:
+def test_matrix_power_zero_is_a_fresh_identity_on_the_input_device(device: str) -> None:
     x = lucid.rand(2, 3, 3, device=device, requires_grad=True)
     y = LA.matrix_power(x, 0)
     assert y.device == x.device

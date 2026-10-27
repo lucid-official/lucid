@@ -255,12 +255,7 @@ def test_bool_subtraction_refused_for_any_bool_operand(device: str, ref: ModuleT
     rf = ref.tensor([2.0])
     rb = ref.tensor([True])
 
-    for call_r in [
-        lambda: rf - True,
-        lambda: True - rf,
-        lambda: rf - rb,
-        lambda: rb - rf,
-    ]:
+    for call_r in [lambda: rf - True, lambda: True - rf, lambda: rf - rb, lambda: rb - rf]:
         with pytest.raises(RuntimeError, match="bool"):
             call_r()
 

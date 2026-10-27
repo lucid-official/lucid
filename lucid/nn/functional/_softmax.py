@@ -10,11 +10,7 @@ import warnings
 
 import lucid as _l
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._reduce import (
-    _log_softmax_adapter,
-    _softmax_adapter,
-    _softmin_adapter,
-)
+from lucid._ops._reduce import _log_softmax_adapter, _softmax_adapter, _softmin_adapter
 from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike
 
@@ -32,10 +28,7 @@ def _get_softmax_dim(name: str, ndim: int, dim: int | None, stacklevel: int) -> 
 
 
 def softmax(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
+    input: Tensor, dim: int | None = None, _stacklevel: int = 3, dtype: DTypeLike | None = None
 ) -> Tensor:
     r"""Apply the softmax function along a dimension.
 
@@ -77,18 +70,13 @@ def softmax(
     """
     return _wrap(
         _softmax_adapter(
-            _unwrap(input),
-            _get_softmax_dim("softmax", input.ndim, dim, _stacklevel),
-            dtype,
+            _unwrap(input), _get_softmax_dim("softmax", input.ndim, dim, _stacklevel), dtype
         )
     )
 
 
 def log_softmax(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
+    input: Tensor, dim: int | None = None, _stacklevel: int = 3, dtype: DTypeLike | None = None
 ) -> Tensor:
     r"""Numerically stable log-softmax along a dimension.
 
@@ -128,18 +116,13 @@ def log_softmax(
     """
     return _wrap(
         _log_softmax_adapter(
-            _unwrap(input),
-            _get_softmax_dim("log_softmax", input.ndim, dim, _stacklevel),
-            dtype,
+            _unwrap(input), _get_softmax_dim("log_softmax", input.ndim, dim, _stacklevel), dtype
         )
     )
 
 
 def softmin(
-    input: Tensor,
-    dim: int | None = None,
-    _stacklevel: int = 3,
-    dtype: DTypeLike | None = None,
+    input: Tensor, dim: int | None = None, _stacklevel: int = 3, dtype: DTypeLike | None = None
 ) -> Tensor:
     r"""Softmin — softmax applied to the negation of the input.
 
@@ -240,11 +223,7 @@ def straight_through(hard: Tensor, soft: Tensor) -> Tensor:
 
 
 def gumbel_softmax(
-    logits: Tensor,
-    tau: float = 1.0,
-    hard: bool = False,
-    eps: float = 1e-10,
-    dim: int = -1,
+    logits: Tensor, tau: float = 1.0, hard: bool = False, eps: float = 1e-10, dim: int = -1
 ) -> Tensor:
     r"""Gumbel-Softmax — differentiable relaxation of categorical sampling.
 

@@ -14,21 +14,9 @@ from lucid.models.vision.inception_next._weights import (
 )
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
-_CFG_T = InceptionNeXtConfig(
-    depths=(3, 3, 9, 3),
-    dims=(96, 192, 384, 768),
-    band_kernel=11,
-)
-_CFG_S = InceptionNeXtConfig(
-    depths=(3, 3, 27, 3),
-    dims=(96, 192, 384, 768),
-    band_kernel=11,
-)
-_CFG_B = InceptionNeXtConfig(
-    depths=(3, 3, 27, 3),
-    dims=(128, 256, 512, 1024),
-    band_kernel=11,
-)
+_CFG_T = InceptionNeXtConfig(depths=(3, 3, 9, 3), dims=(96, 192, 384, 768), band_kernel=11)
+_CFG_S = InceptionNeXtConfig(depths=(3, 3, 27, 3), dims=(96, 192, 384, 768), band_kernel=11)
+_CFG_B = InceptionNeXtConfig(depths=(3, 3, 27, 3), dims=(128, 256, 512, 1024), band_kernel=11)
 
 
 # ── Backbones ─────────────────────────────────────────────────────────────────

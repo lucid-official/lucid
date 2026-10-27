@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.swin._config import SwinConfig
-from lucid.models.vision.swin._model import (
-    SwinTransformer,
-    SwinTransformerForImageClassification,
-)
+from lucid.models.vision.swin._model import SwinTransformer, SwinTransformerForImageClassification
 from lucid.models.vision.swin._weights import (
     SwinBaseWeights,
     SwinLargeWeights,
@@ -241,10 +238,7 @@ def swin_large(pretrained: bool = False, **overrides: object) -> SwinTransformer
     default_config=_CFG_T,
 )
 def swin_tiny_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SwinTinyWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SwinTinyWeights | None = None, **overrides: object
 ) -> SwinTransformerForImageClassification:
     r"""Swin-Tiny image classifier (Liu et al., 2021).
 
@@ -306,10 +300,7 @@ def swin_tiny_cls(
     default_config=_CFG_S,
 )
 def swin_small_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SwinSmallWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SwinSmallWeights | None = None, **overrides: object
 ) -> SwinTransformerForImageClassification:
     r"""Swin-Small image classifier (Liu et al., 2021).
 
@@ -366,10 +357,7 @@ def swin_small_cls(
     default_config=_CFG_B,
 )
 def swin_base_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SwinBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SwinBaseWeights | None = None, **overrides: object
 ) -> SwinTransformerForImageClassification:
     r"""Swin-Base image classifier (Liu et al., 2021).
 
@@ -428,10 +416,7 @@ def swin_base_cls(
     default_config=_CFG_L,
 )
 def swin_large_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SwinLargeWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SwinLargeWeights | None = None, **overrides: object
 ) -> SwinTransformerForImageClassification:
     r"""Swin-Large image classifier (Liu et al., 2021).
 

@@ -189,10 +189,7 @@ def test_flow_matching_matches_across_devices():
         "conditional_target",
     )
     _agree(
-        cpu.sample(noise=x0, steps=8),
-        metal.sample(noise=g0, steps=8),
-        1e-4,
-        "flow_matching sample",
+        cpu.sample(noise=x0, steps=8), metal.sample(noise=g0, steps=8), 1e-4, "flow_matching sample"
     )
 
 
@@ -247,12 +244,7 @@ def test_rectified_flow_matches_across_devices():
     g1, g0, gt = x1.to("metal"), x0.to("metal"), t.to("metal")
 
     _agree(cpu.path_sample(x1, x0, t), metal.path_sample(g1, g0, gt), 1e-6, "path")
-    _agree(
-        cpu.conditional_target(x1, x0, t),
-        metal.conditional_target(g1, g0, gt),
-        1e-6,
-        "target",
-    )
+    _agree(cpu.conditional_target(x1, x0, t), metal.conditional_target(g1, g0, gt), 1e-6, "target")
     _agree(cpu.sample(noise=x0, steps=8), metal.sample(noise=g0, steps=8), 1e-4, "sample")
     _agree(cpu.one_step(x0), metal.one_step(g0), 1e-4, "one_step")
 
@@ -339,10 +331,7 @@ def test_rectified_flow_high_resolution_path_matches_across_devices():
     x = lucid.randn((2, 3, 16, 16))
     t = lucid.tensor(0.4)
     _agree(
-        cpu(x, t).sample,
-        metal(x.to("metal"), t.to("metal")).sample,
-        1e-3,
-        "fir + pyramid field",
+        cpu(x, t).sample, metal(x.to("metal"), t.to("metal")).sample, 1e-3, "fir + pyramid field"
     )
 
 
@@ -405,12 +394,7 @@ def test_vqvae_matches_across_devices():
 
     q_cpu, q_metal = cpu.quantize(z_cpu), metal.quantize(z_metal)
     _agree(q_cpu.quantized, q_metal.quantized, 1e-4, "vqvae quantized")
-    _agree(
-        cpu.decode(q_cpu.quantized),
-        metal.decode(q_metal.quantized),
-        1e-4,
-        "vqvae decode",
-    )
+    _agree(cpu.decode(q_cpu.quantized), metal.decode(q_metal.quantized), 1e-4, "vqvae decode")
 
 
 def test_vqvae_codebook_indices_match_across_devices():
@@ -548,12 +532,7 @@ def test_planet_decoder_and_reward_match_across_devices():
     gpu_state = state.map(lambda t: t.to("metal"))
 
     _agree(cpu.decode(state), metal.decode(gpu_state), 1e-4, "planet decode")
-    _agree(
-        cpu.predict_reward(state),
-        metal.predict_reward(gpu_state),
-        1e-4,
-        "planet reward",
-    )
+    _agree(cpu.predict_reward(state), metal.predict_reward(gpu_state), 1e-4, "planet reward")
 
 
 @pytest.mark.parametrize("device", DEVICES)
@@ -628,12 +607,7 @@ def test_dreamer_value_and_actor_heads_match_across_devices():
     )
     gpu_state = state.map(lambda t: t.to("metal"))
 
-    _agree(
-        cpu.predict_value(state),
-        metal.predict_value(gpu_state),
-        1e-4,
-        "dreamer value",
-    )
+    _agree(cpu.predict_value(state), metal.predict_value(gpu_state), 1e-4, "dreamer value")
     # The actor's mean is deterministic even though its sample is not.
     _agree(
         cpu.actor.distribution(state.feature)[0],
@@ -642,10 +616,7 @@ def test_dreamer_value_and_actor_heads_match_across_devices():
         "dreamer actor mean",
     )
     _agree(
-        cpu.act(state, sample=False),
-        metal.act(gpu_state, sample=False),
-        1e-4,
-        "dreamer act(mean)",
+        cpu.act(state, sample=False), metal.act(gpu_state, sample=False), 1e-4, "dreamer act(mean)"
     )
 
 
@@ -785,8 +756,7 @@ def test_dreamer_v2_categorical_latent_is_one_hot_on_device():
     lucid.manual_seed(0)
     model = M.create_model("dreamer_v2", **_DREAMER_V2_SMALL).to("metal").eval()
     _, posteriors = model.observe(
-        lucid.rand((2, 3, 3, 64, 64), device="metal"),
-        lucid.rand((2, 3, 2), device="metal"),
+        lucid.rand((2, 3, 3, 64, 64), device="metal"), lucid.rand((2, 3, 2), device="metal")
     )
     assert str(posteriors.stoch.device) == "device('metal')"
     assert str(posteriors.logits.device) == "device('metal')"
@@ -1069,12 +1039,7 @@ def test_score_sde_score_matches_across_devices():
     cpu, metal = _paired("score_sde_vp", **_SCORE_SDE_SMALL)
     x = lucid.rand((2, 3, 8, 8))
     t = lucid.ones((2,)) * 0.5
-    _agree(
-        cpu.score(x, t),
-        metal.score(x.to("metal"), t.to("metal")),
-        1e-4,
-        "score_sde score",
-    )
+    _agree(cpu.score(x, t), metal.score(x.to("metal"), t.to("metal")), 1e-4, "score_sde score")
 
 
 @pytest.mark.parametrize("kind", ["vp", "ve", "subvp"])
@@ -1168,10 +1133,7 @@ def _set_targets(family, device):
         ]
         labels = [[1, 3], [0, 2]]
         return [
-            {
-                "boxes": lucid.tensor(b).to(device),
-                "labels": lucid.tensor(lb).long().to(device),
-            }
+            {"boxes": lucid.tensor(b).to(device), "labels": lucid.tensor(lb).long().to(device)}
             for b, lb in zip(boxes, labels)
         ]
     masks = np.random.default_rng(3).integers(0, 4, (2, 64, 64))

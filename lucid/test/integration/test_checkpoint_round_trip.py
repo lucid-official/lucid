@@ -34,13 +34,7 @@ class TestCheckpointRoundTrip:
         loss_before = float(F.mse_loss(model(x), y).item())
 
         ckpt = tmp_path / "ckpt.lcd"
-        lucid.save(
-            {
-                "model": model.state_dict(),
-                "opt": opt.state_dict(),
-            },
-            str(ckpt),
-        )
+        lucid.save({"model": model.state_dict(), "opt": opt.state_dict()}, str(ckpt))
 
         # Build fresh, load.
         model2, opt2, _, _ = _build()
@@ -111,9 +105,7 @@ def test_checkpoint_resume_reproduces_next_updates(tmp_path: Path, kind: str) ->
 
     for _ in range(4):
         assert step(restored, restored_optimizer, restored_scheduler) == pytest.approx(
-            step(model, optimizer, scheduler),
-            abs=1e-7,
-            rel=1e-6,
+            step(model, optimizer, scheduler), abs=1e-7, rel=1e-6
         )
         assert restored_optimizer.param_groups[0]["lr"] == optimizer.param_groups[0]["lr"]
         for original, resumed in zip(model.parameters(), restored.parameters(), strict=True):

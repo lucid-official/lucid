@@ -74,8 +74,7 @@ def test_linear_layer_trains(dtype: lucid.dtype) -> None:
 _DEVICES = [
     "cpu",
     pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
+        "metal", marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device")
     ),
 ]
 

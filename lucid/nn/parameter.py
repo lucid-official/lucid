@@ -71,9 +71,7 @@ class Parameter(Tensor):
     _is_parameter: bool = True
 
     def __new__(
-        cls,
-        data: Tensor | list[object] | None = None,
-        requires_grad: bool = True,
+        cls, data: Tensor | list[object] | None = None, requires_grad: bool = True
     ) -> Parameter:
         """Allocate a new :class:`Parameter` instance.
 
@@ -106,9 +104,7 @@ class Parameter(Tensor):
         return obj
 
     def __init__(
-        self,
-        data: Tensor | list[object] | None = None,
-        requires_grad: bool = True,
+        self, data: Tensor | list[object] | None = None, requires_grad: bool = True
     ) -> None:
         """Initialise the instance.  See the class docstring for parameter semantics."""
         pass

@@ -34,9 +34,7 @@ def _close(a: lucid.Tensor, b: lucid.Tensor, tol: float = 1e-4) -> bool:
     ids=["tall", "wide"],
 )
 def test_the_default_is_the_full_factorisation(
-    data: list[list[float]],
-    full: list[tuple[int, ...]],
-    reduced: list[tuple[int, ...]],
+    data: list[list[float]], full: list[tuple[int, ...]], reduced: list[tuple[int, ...]]
 ) -> None:
     a = lucid.tensor(data)
     assert _shapes(lucid.linalg.svd(a)) == full
@@ -46,9 +44,7 @@ def test_the_default_is_the_full_factorisation(
 
 
 @pytest.mark.parametrize("data", [_TALL, _WIDE], ids=["tall", "wide"])
-def test_the_full_bases_are_orthonormal_and_reconstruct(
-    data: list[list[float]],
-) -> None:
+def test_the_full_bases_are_orthonormal_and_reconstruct(data: list[list[float]]) -> None:
     a = lucid.tensor(data)
     u, s, vh = lucid.linalg.svd(a)
     m, n = a.shape

@@ -145,9 +145,7 @@ boundary_int_pools: st.SearchStrategy[tuple[int, ...]] = st.lists(
 
 
 @st.composite
-def broadcast_shape_pairs(
-    draw: st.DrawFn,
-) -> tuple[tuple[int, ...], tuple[int, ...]]:
+def broadcast_shape_pairs(draw: st.DrawFn) -> tuple[tuple[int, ...], tuple[int, ...]]:
     s1 = draw(boundary_shapes)
     if draw(st.booleans()):
         rank2 = draw(st.integers(min_value=0, max_value=3))
@@ -163,10 +161,7 @@ def broadcast_shape_pairs(
 
 
 def _element_values(
-    numel: int,
-    dtype_name: str,
-    float_pool: Sequence[float],
-    int_pool: Sequence[int],
+    numel: int, dtype_name: str, float_pool: Sequence[float], int_pool: Sequence[int]
 ) -> list[bool] | list[int] | list[float]:
     if dtype_name == "bool_":
         return [(int_pool[i % len(int_pool)] % 2) != 0 for i in range(numel)]
@@ -417,8 +412,7 @@ def _is_permitted_lucid_success_when_ref_raises(
     if entry.name == "complex" and len(r_args) == 2:
         try:
             want = ref.complex(
-                getattr(r_args[0], "to")(ref.float32),
-                getattr(r_args[1], "to")(ref.float32),
+                getattr(r_args[0], "to")(ref.float32), getattr(r_args[1], "to")(ref.float32)
             )
         except Exception:
             return True
@@ -428,10 +422,7 @@ def _is_permitted_lucid_success_when_ref_raises(
     if entry.name == "isclose" and len(r_args) == 2:
         common = ref.promote_types(getattr(r_args[0], "dtype"), getattr(r_args[1], "dtype"))
         try:
-            want = ref.isclose(
-                getattr(r_args[0], "to")(common),
-                getattr(r_args[1], "to")(common),
-            )
+            want = ref.isclose(getattr(r_args[0], "to")(common), getattr(r_args[1], "to")(common))
         except Exception:
             return True
         _assert_matches_ref(entry.name, got, want, device)
@@ -535,12 +526,7 @@ _SPECIAL_UNARY_KWARGS: dict[
     str,
     Callable[
         [lucid.Tensor, ModuleType | None, object],
-        tuple[
-            tuple[object, ...],
-            dict[str, object],
-            tuple[object, ...],
-            dict[str, object],
-        ],
+        tuple[tuple[object, ...], dict[str, object], tuple[object, ...], dict[str, object]],
     ],
 ] = {
     "reshape": lambda _x, _r, _rx: (((-1,),), {}, ((-1,),), {}),
@@ -557,12 +543,7 @@ _SPECIAL_UNARY_KWARGS: dict[
     ),
     "transpose": lambda _x, _r, _rx: ((0, -1), {}, (0, -1), {}),
     "swapaxes": lambda _x, _r, _rx: ((0, -1), {}, (0, -1), {}),
-    "broadcast_to": lambda x, _r, _rx: (
-        ((2, *x.shape),),
-        {},
-        ((2, *x.shape),),
-        {},
-    ),
+    "broadcast_to": lambda x, _r, _rx: (((2, *x.shape),), {}, ((2, *x.shape),), {}),
     "expand": lambda x, _r, _rx: (((2, *x.shape),), {}, ((2, *x.shape),), {}),
     "as_strided": lambda _x, _r, _rx: (((0,), (1,)), {}, ((0,), (1,)), {}),
     "expand_dims": lambda _x, _r, _rx: ((0,), {}, (0,), {}),
@@ -627,15 +608,7 @@ _SPECIAL_UNARY_KWARGS: dict[
 }
 
 _INDEXED_NAMES: frozenset[str] = frozenset(
-    {
-        "gather",
-        "scatter",
-        "scatter_add",
-        "take",
-        "index_select",
-        "searchsorted",
-        "bucketize",
-    }
+    {"gather", "scatter", "scatter_add", "take", "index_select", "searchsorted", "bucketize"}
 )
 
 _VARIADIC_ZERO_NAMES: frozenset[str] = frozenset({"where", "meshgrid", "cartesian_prod"})
@@ -734,14 +707,7 @@ def test_shape_and_parameterized_unary_registry_ops_at_boundary_inputs(
     for entry in _UNARY_SPECIAL_ENTRIES:
         l_extra, l_kw, r_extra, r_kw = _SPECIAL_UNARY_KWARGS[entry.name](x, ref, rx)
         _verify_against_ref(
-            ref,
-            entry,
-            (x, *l_extra),
-            (rx, *r_extra),
-            l_kw,
-            r_kw,
-            (dtype_name,),
-            device,
+            ref, entry, (x, *l_extra), (rx, *r_extra), l_kw, r_kw, (dtype_name,), device
         )
 
 
@@ -817,14 +783,7 @@ def test_join_and_variadic_registry_ops_at_boundary_inputs(
         rcond = ref.zeros(x.shape, dtype=ref.bool) if ref is not None else None
         where_entry = next(e for e in _VARIADIC_ZERO_ENTRIES if e.name == "where")
         _verify_against_ref(
-            ref,
-            where_entry,
-            (cond, x, x),
-            (rcond, rx, rx),
-            {},
-            {},
-            (dtype_name,),
-            device,
+            ref, where_entry, (cond, x, x), (rcond, rx, rx), {}, {}, (dtype_name,), device
         )
         mesh_entry = next(e for e in _VARIADIC_ZERO_ENTRIES if e.name == "meshgrid")
         _verify_against_ref(
@@ -839,14 +798,7 @@ def test_join_and_variadic_registry_ops_at_boundary_inputs(
         )
         prod_entry = next(e for e in _VARIADIC_ZERO_ENTRIES if e.name == "cartesian_prod")
         _verify_against_ref(
-            ref,
-            prod_entry,
-            tuple(tensors),
-            tuple(ref_tensors),
-            {},
-            {},
-            (dtype_name,),
-            device,
+            ref, prod_entry, tuple(tensors), tuple(ref_tensors), {}, {}, (dtype_name,), device
         )
 
 
@@ -940,8 +892,7 @@ def test_boundary_regressions_uncovered_by_registry_properties(device: str) -> N
     e_a = lucid.zeros((2, 0), dtype=lucid.int32, device=device)
     assert lucid._ops.inner(e_a, e_a).shape == (2, 2)
     c_a = lucid.complex(
-        lucid.tensor([1.0, 2.0], device=device),
-        lucid.tensor([3.0, 4.0], device=device),
+        lucid.tensor([1.0, 2.0], device=device), lucid.tensor([3.0, 4.0], device=device)
     )
     got_inner = lucid._ops.inner(c_a, c_a)
     assert complex(got_inner.to("cpu").item()) == pytest.approx(complex(-20.0, 22.0))
@@ -967,10 +918,7 @@ def test_boundary_regressions_uncovered_by_registry_properties(device: str) -> N
     if ref is not None:
         rtd_i = ref.tensor([[1, 2], [3, 4]], dtype=ref.int32)
         _assert_single_tensor_matches(
-            "tensordot",
-            got_td,
-            ref.tensordot(rtd_i, rtd_i, dims=2),
-            device,
+            "tensordot", got_td, ref.tensordot(rtd_i, rtd_i, dims=2), device
         )
 
     # 6. cartesian_prod(1 tensor) -> 1-D; meshgrid(0-D) -> (1,); hstack/vstack(0-D).

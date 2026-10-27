@@ -4,10 +4,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.fcn._config import FCNConfig
 from lucid.models.vision.fcn._model import FCNForSemanticSegmentation
-from lucid.models.vision.fcn._weights import (
-    FCNResNet50Weights,
-    FCNResNet101Weights,
-)
+from lucid.models.vision.fcn._weights import FCNResNet50Weights, FCNResNet101Weights
 from lucid.models._utils._common import apply_overrides
 
 _CFG_RESNET50 = FCNConfig(

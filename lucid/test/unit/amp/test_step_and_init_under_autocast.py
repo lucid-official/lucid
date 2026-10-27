@@ -61,10 +61,7 @@ _OPTIMIZERS: dict[str, tuple[str, dict[str, Any]]] = {
     "Adamax": ("Adamax", {"lr": 0.1, "weight_decay": 0.01}),
     "RAdam": ("RAdam", {"lr": 0.1, "weight_decay": 0.01}),
     "NAdam": ("NAdam", {"lr": 0.1}),
-    "NAdam-decoupled": (
-        "NAdam",
-        {"lr": 0.1, "weight_decay": 0.1, "decoupled_weight_decay": True},
-    ),
+    "NAdam-decoupled": ("NAdam", {"lr": 0.1, "weight_decay": 0.1, "decoupled_weight_decay": True}),
     "ASGD": ("ASGD", {"lr": 0.1, "t0": 1.0}),
     "Rprop": ("Rprop", {"lr": 0.1}),
 }

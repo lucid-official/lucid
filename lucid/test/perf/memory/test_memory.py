@@ -15,10 +15,7 @@ import pytest
 
 import lucid
 
-_PY_PEAK_THRESHOLDS_BYTES = {
-    "tensor_alloc_2048_f32": 200_000,
-    "matmul_alloc_64x64_f32": 400_000,
-}
+_PY_PEAK_THRESHOLDS_BYTES = {"tensor_alloc_2048_f32": 200_000, "matmul_alloc_64x64_f32": 400_000}
 
 
 @pytest.mark.perf

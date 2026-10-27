@@ -195,13 +195,7 @@ def _render(results: dict[str, list[dict[str, float]]], out_dir: str) -> None:
         xs = list(range(len(widths)))
         bar = 0.36
         left.bar([v - bar / 2 for v in xs], ours, bar, label="Lucid", color=accent)
-        left.bar(
-            [v + bar / 2 for v in xs],
-            theirs,
-            bar,
-            label=ref_label,
-            color=colour["ref"],
-        )
+        left.bar([v + bar / 2 for v in xs], theirs, bar, label=ref_label, color=colour["ref"])
         for i, (a, b) in enumerate(zip(ours, theirs)):
             left.text(
                 i,
@@ -225,13 +219,7 @@ def _render(results: dict[str, list[dict[str, float]]], out_dir: str) -> None:
         theirs2 = [r["ref"] for r in results["infer"]]
         xs2 = list(range(len(batches)))
         right.plot(
-            xs2,
-            theirs2,
-            "-o",
-            color=colour["ref"],
-            linewidth=2,
-            markersize=6,
-            label=ref_label,
+            xs2, theirs2, "-o", color=colour["ref"], linewidth=2, markersize=6, label=ref_label
         )
         right.plot(xs2, ours2, "-o", color=accent, linewidth=2.4, markersize=6, label="Lucid")
         right.fill_between(xs2, ours2, theirs2, color=accent, alpha=0.13)

@@ -37,11 +37,7 @@ from lucid.test._fixtures.devices import (  # noqa: F401
     cross_device_pair,
     pytest_generate_tests,
 )
-from lucid.test._fixtures.dtypes import (  # noqa: F401
-    float_dtype,
-    float_dtype_extended,
-    int_dtype,
-)
+from lucid.test._fixtures.dtypes import float_dtype, float_dtype_extended, int_dtype  # noqa: F401
 from lucid.test._fixtures.ref_framework import ref  # noqa: F401
 from lucid.test._fixtures.tensors import tensor_factory  # noqa: F401
 from lucid.test._fixtures.perf import bench  # noqa: F401

@@ -15,11 +15,7 @@ import pytest
 import lucid
 import lucid.optim as optim
 from lucid.models import create_model, list_models
-from lucid.models.generative.vjepa2_ac import (
-    VJEPA2ACConfig,
-    VJEPA2ACModel,
-    VJEPA2ACWeights,
-)
+from lucid.models.generative.vjepa2_ac import VJEPA2ACConfig, VJEPA2ACModel, VJEPA2ACWeights
 from lucid.models.vision.vjepa2 import (
     VJEPA2Config,
     VJEPA2ForVideoClassification,
@@ -534,11 +530,7 @@ class TestActionConditioned:
         config = _ac_config(use_extrinsics=False)
         model = VJEPA2ACModel(config).eval()
         with lucid.no_grad():
-            output = model(
-                lucid.randn(1, 4, 3, 16, 16),
-                lucid.randn(1, 3, 3),
-                lucid.randn(1, 3, 3),
-            )
+            output = model(lucid.randn(1, 4, 3, 16, 16), lucid.randn(1, 3, 3), lucid.randn(1, 3, 3))
         assert output.target is not None
         for side in (output.prediction, output.target):
             assert float(side.mean(dim=-1).abs().max().item()) < 1e-4

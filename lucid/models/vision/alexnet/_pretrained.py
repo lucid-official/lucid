@@ -85,10 +85,7 @@ def alexnet(pretrained: bool = False, **overrides: object) -> AlexNet:
     params=61_100_840,  # full classifier (Krizhevsky 2014, single-stream OWT)
 )
 def alexnet_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: AlexNetWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: AlexNetWeights | None = None, **overrides: object
 ) -> AlexNetForImageClassification:
     r"""AlexNet image classifier (backbone + FC6 + FC7 + linear head).
 

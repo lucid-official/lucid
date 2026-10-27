@@ -427,11 +427,7 @@ class ConvNeXtForImageClassification(ImageClassificationModel, ClassificationHea
         init_transformer_trunc_normal(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         for i, stage in enumerate(self.stages):
             x = stage(x)

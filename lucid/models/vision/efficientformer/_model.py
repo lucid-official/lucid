@@ -147,10 +147,7 @@ class _Pooling(nn.Module):
     def __init__(self, pool_size: int) -> None:
         super().__init__()
         self.pool = nn.AvgPool2d(
-            kernel_size=pool_size,
-            stride=1,
-            padding=pool_size // 2,
-            count_include_pad=True,
+            kernel_size=pool_size, stride=1, padding=pool_size // 2, count_include_pad=True
         )
 
     @override
@@ -185,12 +182,7 @@ class _Attention(nn.Module):
     attention_bias_idxs: Tensor
 
     def __init__(
-        self,
-        dim: int,
-        key_dim: int,
-        num_heads: int,
-        attn_ratio: float,
-        resolution: int,
+        self, dim: int, key_dim: int, num_heads: int, attn_ratio: float, resolution: int
     ) -> None:
         super().__init__()
         self.num_heads = num_heads
@@ -404,11 +396,7 @@ class _Stage(nn.Module):
             else:
                 blocks.append(
                     _MetaBlock2d(
-                        dim,
-                        cfg.pool_size,
-                        mlp_ratio,
-                        dp_rates[block_idx],
-                        cfg.layer_scale_init,
+                        dim, cfg.pool_size, mlp_ratio, dp_rates[block_idx], cfg.layer_scale_init
                     )
                 )
                 if num_vit and num_vit == remain_idx:
@@ -431,13 +419,7 @@ class _Stage(nn.Module):
 
 def _build_efficientformer(
     cfg: EfficientFormerConfig,
-) -> tuple[
-    _Stem,
-    nn.ModuleList[_Stage],
-    nn.LayerNorm,
-    list[FeatureInfo],
-    int,
-]:
+) -> tuple[_Stem, nn.ModuleList[_Stage], nn.LayerNorm, list[FeatureInfo], int]:
     stem = _Stem(cfg.in_channels, cfg.embed_dims[0])
 
     num_stages = len(cfg.depths)
@@ -480,10 +462,7 @@ def _build_efficientformer(
 
 
 def _forward_trunk(
-    stem: _Stem,
-    stages: nn.ModuleList[_Stage],
-    head_norm: nn.LayerNorm,
-    x: Tensor,
+    stem: _Stem, stages: nn.ModuleList[_Stage], head_norm: nn.LayerNorm, x: Tensor
 ) -> Tensor:
     """Run stem + stages, ending in channel-last (B, N, C), then LayerNorm."""
     x = stem(x)
@@ -741,11 +720,7 @@ class EfficientFormerForImageClassification(ImageClassificationModel, Classifica
         self.head_dist = nn.Linear(in_features, num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> EfficientFormerOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> EfficientFormerOutput:
         seq = _forward_trunk(self.stem, self.stages, self.norm, x)  # (B, N, C)
         feat = seq.mean(dim=1)
         head_logits = self.head(feat)
@@ -763,8 +738,5 @@ class EfficientFormerForImageClassification(ImageClassificationModel, Classifica
             ) / 2.0
 
         return EfficientFormerOutput(
-            logits=logits,
-            loss=loss,
-            head_logits=head_logits,
-            head_dist_logits=head_dist_logits,
+            logits=logits, loss=loss, head_logits=head_logits, head_dist_logits=head_dist_logits
         )

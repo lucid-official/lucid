@@ -38,10 +38,7 @@ _CFG_ALEXNET = RCNNConfig(
     model_class=RCNNForObjectDetection,
     default_config=_CFG_ALEXNET,
 )
-def rcnn(
-    pretrained: bool = False,
-    **overrides: object,
-) -> RCNNForObjectDetection:
+def rcnn(pretrained: bool = False, **overrides: object) -> RCNNForObjectDetection:
     r"""R-CNN with AlexNet backbone (Girshick et al., CVPR 2014).
 
     Builds a :class:`RCNNForObjectDetection` with the paper-cited AlexNet

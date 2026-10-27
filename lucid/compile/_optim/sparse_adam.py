@@ -11,13 +11,7 @@ from typing import final, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.compile._optim.compiler import (
-    _CompiledStepBase,
-    _Flags,
-    _ScalarFn,
-    _State,
-    _Update,
-)
+from lucid.compile._optim.compiler import _CompiledStepBase, _Flags, _ScalarFn, _State, _Update
 from lucid.compile._optim.spec import _hp
 
 
@@ -41,13 +35,7 @@ class _CompiledSparseAdam(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         # Eager's arithmetic order (``m += (1 - beta1)(g - m)``) so the two
         # paths agree to the bit; untouched rows keep moments and values.

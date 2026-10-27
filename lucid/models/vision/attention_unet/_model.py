@@ -113,11 +113,7 @@ class _AttentionGate(nn.Module):
     """
 
     def __init__(
-        self,
-        x_channels: int,
-        g_channels: int,
-        inter_channels: int,
-        dims: int = 2,
+        self, x_channels: int, g_channels: int, inter_channels: int, dims: int = 2
     ) -> None:
         super().__init__()
         # Section 3.2: "input feature-maps are downsampled to the resolution
@@ -363,12 +359,7 @@ class AttentionUNetForSemanticSegmentation(SemanticSegmentationModel):
             skip_ch = enc_channels[i]
             dec_out = enc_channels[i]
             dec_block = _DecoderBlock(
-                dec_in,
-                skip_ch,
-                dec_out,
-                bilinear=config.bilinear,
-                gated=i > 0,
-                dims=dims,
+                dec_in, skip_ch, dec_out, bilinear=config.bilinear, gated=i > 0, dims=dims
             )
             self.add_module(f"decoder_{i}", dec_block)
             self.decoders.append(dec_block)
@@ -396,11 +387,7 @@ class AttentionUNetForSemanticSegmentation(SemanticSegmentationModel):
             self.fuse = _conv_nd(dims)(config.num_classes * depth, config.num_classes, 1)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        targets: Tensor | None = None,
-    ) -> SemanticSegmentationOutput:
+    def forward(self, x: Tensor, targets: Tensor | None = None) -> SemanticSegmentationOutput:
         """Run Attention U-Net.
 
         Args:
@@ -447,10 +434,7 @@ class AttentionUNetForSemanticSegmentation(SemanticSegmentationModel):
             if tuple(int(v) for v in t.shape[2:]) == spatial:
                 return t
             return F.interpolate(
-                t,
-                size=spatial,
-                mode=_interp_mode(len(spatial)),
-                align_corners=False,
+                t, size=spatial, mode=_interp_mode(len(spatial)), align_corners=False
             )
 
         if deep:

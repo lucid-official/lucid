@@ -236,12 +236,7 @@ class Console:
             return cell + " " * pad
 
         bar = "─"
-        emit(
-            self.paint(
-                "  ┌" + "┬".join(bar * (w + 2) for w in widths) + "┐",
-                "grey",
-            )
-        )
+        emit(self.paint("  ┌" + "┬".join(bar * (w + 2) for w in widths) + "┐", "grey"))
         emit(
             self.paint("  │ ", "grey")
             + self.paint(" │ ", "grey").join(
@@ -249,12 +244,7 @@ class Console:
             )
             + self.paint(" │", "grey")
         )
-        emit(
-            self.paint(
-                "  ├" + "┼".join(bar * (w + 2) for w in widths) + "┤",
-                "grey",
-            )
-        )
+        emit(self.paint("  ├" + "┼".join(bar * (w + 2) for w in widths) + "┤", "grey"))
         for row in rows:
             cells = [fit(str(c), i) for i, c in enumerate(row[:cols])]
             emit(
@@ -262,12 +252,7 @@ class Console:
                 + self.paint(" │ ", "grey").join(cells)
                 + self.paint(" │", "grey")
             )
-        emit(
-            self.paint(
-                "  └" + "┴".join(bar * (w + 2) for w in widths) + "┘",
-                "grey",
-            )
-        )
+        emit(self.paint("  └" + "┴".join(bar * (w + 2) for w in widths) + "┘", "grey"))
 
     # ── progress ─────────────────────────────────────────────────────────────
 
@@ -448,11 +433,4 @@ class Suppress:
             self._saved_fds = None
 
 
-__all__ = [
-    "Console",
-    "Suppress",
-    "Timer",
-    "fmt_duration",
-    "iter_ticks",
-    "supports_colour",
-]
+__all__ = ["Console", "Suppress", "Timer", "fmt_duration", "iter_ticks", "supports_colour"]

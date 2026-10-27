@@ -93,14 +93,7 @@ def _held_model(
     return model, held
 
 
-_WHICH = [
-    "parameter",
-    "parameter-contiguous",
-    "buffer",
-    "attribute",
-    "closure",
-    "global",
-]
+_WHICH = ["parameter", "parameter-contiguous", "buffer", "attribute", "closure", "global"]
 
 
 @pytest.mark.usefixtures("inference")
@@ -203,8 +196,7 @@ def test_compiled_step_answers_a_parameter_input_as_eager(fresh_grad: bool) -> N
         return compiled_step(model, x, lambda y: F.mse_loss(y, target))
 
     _assert_same(
-        _train(model, run, fresh_grad, device),
-        _train(ref, _eager(ref), fresh_grad, device),
+        _train(model, run, fresh_grad, device), _train(ref, _eager(ref), fresh_grad, device)
     )
 
 
@@ -219,8 +211,7 @@ class _Shifted(nn.Module):
 
 
 def _fused_run(
-    calls: Callable[[_Shifted], list[tuple[lucid.Tensor, lucid.Tensor]]],
-    compiled: bool,
+    calls: Callable[[_Shifted], list[tuple[lucid.Tensor, lucid.Tensor]]], compiled: bool
 ) -> tuple[list[float], list[np.ndarray], object]:
     lucid.manual_seed(0)
     model = _Shifted().to("metal")

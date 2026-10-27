@@ -110,20 +110,11 @@ def test_real_engine_tree_passes() -> None:
             "cpu::lapack_inv_f32",
         ),
         # 6. Rule H13: goto statements
-        (
-            "ops/ufunc/BadGoto.cpp",
-            "void f() { goto cleanup; cleanup: return; }\n",
-            "goto",
-            "goto",
-        ),
+        ("ops/ufunc/BadGoto.cpp", "void f() { goto cleanup; cleanup: return; }\n", "goto", "goto"),
     ],
 )
 def test_injected_violation_is_reported(
-    tmp_path: Path,
-    rel_path: str,
-    snippet: str,
-    expected_rule: str,
-    expected_target: str,
+    tmp_path: Path, rel_path: str, snippet: str, expected_rule: str, expected_target: str
 ) -> None:
     engine = tmp_path / "lucid" / "_C"
     _write(engine, rel_path, snippet)
@@ -138,9 +129,7 @@ def test_injected_violation_is_reported(
     assert check_cpp_layers.check(engine, allowlist={}) == 1
 
 
-def test_canonical_owner_files_and_downward_includes_are_allowed(
-    tmp_path: Path,
-) -> None:
+def test_canonical_owner_files_and_downward_includes_are_allowed(tmp_path: Path) -> None:
     engine = tmp_path / "lucid" / "_C"
     _write(engine, "api.h", "#pragma once\n")
     _write(engine, "core/TensorImpl.h", '#include "../api.h"\n')
@@ -171,16 +160,8 @@ def test_canonical_owner_files_and_downward_includes_are_allowed(
         'const char* doc = "cblas_sgemm sgetrf_ goto cpu::lapack_inv_f32";\n'
         "TensorImplPtr add_op(const TensorImplPtr& a, const TensorImplPtr& b);\n",
     )
-    _write(
-        engine,
-        "nn/Linear.cpp",
-        '#include "../ops/bfunc/Add.h"\n',
-    )
-    _write(
-        engine,
-        "bindings/bind_ops.cpp",
-        '#include "../nn/Linear.cpp"\n',
-    )
+    _write(engine, "nn/Linear.cpp", '#include "../ops/bfunc/Add.h"\n')
+    _write(engine, "bindings/bind_ops.cpp", '#include "../nn/Linear.cpp"\n')
 
     new_violations, stale, _ = check_cpp_layers.scan_engine(engine, allowlist={})
     assert new_violations == []
@@ -197,10 +178,7 @@ def test_allowlist_ratchet_detects_stale_and_duplicate_entries(tmp_path: Path) -
     )
     allowlist = {
         ("autograd/Engine.cpp", "extern-op", "add_op"): ("2026-10-14", "AE-7"),
-        ("autograd/Engine.cpp", "upward-include", "../ops/gfunc/Gfunc.h"): (
-            "2026-10-14",
-            "AE-7",
-        ),
+        ("autograd/Engine.cpp", "upward-include", "../ops/gfunc/Gfunc.h"): ("2026-10-14", "AE-7"),
     }
 
     # The upward-include entry is no longer present -> stale allow-list failure.

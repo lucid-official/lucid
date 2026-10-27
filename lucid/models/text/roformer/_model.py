@@ -77,12 +77,7 @@ class _RoFormerRotaryEmbedding(Module):
     cos_cached: Tensor
     sin_cached: Tensor
 
-    def __init__(
-        self,
-        head_dim: int,
-        max_position_embeddings: int,
-        base: float = 10_000.0,
-    ) -> None:
+    def __init__(self, head_dim: int, max_position_embeddings: int, base: float = 10_000.0) -> None:
         super().__init__()
         if head_dim % 2 != 0:
             raise ValueError(f"_RoFormerRotaryEmbedding requires an even head_dim, got {head_dim}")
@@ -133,11 +128,7 @@ class _RoFormerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(p=config.hidden_dropout)
 
     @override
-    def forward(
-        self,
-        input_ids: Tensor,
-        token_type_ids: Tensor | None = None,
-    ) -> Tensor:
+    def forward(self, input_ids: Tensor, token_type_ids: Tensor | None = None) -> Tensor:
         B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
         dev = input_ids.device.type
 
@@ -176,11 +167,7 @@ class _RoFormerSelfAttention(nn.Module):
 
     @override
     def forward(
-        self,
-        hidden: Tensor,
-        cos: Tensor,
-        sin: Tensor,
-        attention_mask: Tensor | None = None,
+        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
     ) -> Tensor:
         B, T, _ = hidden.shape
         q = self._shape(self.query(hidden), B, T)
@@ -234,11 +221,7 @@ class _RoFormerAttention(nn.Module):
 
     @override
     def forward(
-        self,
-        hidden: Tensor,
-        cos: Tensor,
-        sin: Tensor,
-        attention_mask: Tensor | None = None,
+        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
     ) -> Tensor:
         attn_out = self.self(hidden, cos, sin, attention_mask=attention_mask)
         return self.output(attn_out, hidden)
@@ -280,11 +263,7 @@ class _RoFormerLayer(nn.Module):
 
     @override
     def forward(
-        self,
-        hidden: Tensor,
-        cos: Tensor,
-        sin: Tensor,
-        attention_mask: Tensor | None = None,
+        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
     ) -> Tensor:
         attn_out = self.attention(hidden, cos, sin, attention_mask=attention_mask)
         inter = self.intermediate(attn_out)
@@ -301,11 +280,7 @@ class _RoFormerEncoder(nn.Module):
 
     @override
     def forward(
-        self,
-        hidden: Tensor,
-        cos: Tensor,
-        sin: Tensor,
-        attention_mask: Tensor | None = None,
+        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
     ) -> Tensor:
         for layer in self.layer:
             hidden = layer(hidden, cos, sin, attention_mask=attention_mask)
@@ -611,9 +586,7 @@ class RoFormerForMaskedLM(_RoFormerInitMixin, LanguageModelingModel, MaskedLMMix
         labels: Tensor | None = None,
     ) -> MaskedLMOutput:
         outputs = self.roformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         prediction_scores = self.cls(outputs.last_hidden_state)
 
@@ -712,9 +685,7 @@ class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificati
         labels: Tensor | None = None,
     ) -> SequenceClassificationOutput:
         outputs = self.roformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         cls_state: Tensor = outputs.last_hidden_state[:, 0, :]
         h = self.dropout(cls_state)
@@ -810,9 +781,7 @@ class RoFormerForTokenClassification(_RoFormerInitMixin, TokenClassificationMode
         labels: Tensor | None = None,
     ) -> TokenClassificationOutput:
         outputs = self.roformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         seq = self.dropout(outputs.last_hidden_state)
         logits = self.classifier(seq)
@@ -918,11 +887,7 @@ class RoFormerForMultipleChoice(_RoFormerInitMixin, SequenceClassificationModel)
         flat_ids = input_ids.reshape(N * C, L)
         flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
         flat_tt = token_type_ids.reshape(N * C, L) if token_type_ids is not None else None
-        outputs = self.roformer(
-            flat_ids,
-            attention_mask=flat_mask,
-            token_type_ids=flat_tt,
-        )
+        outputs = self.roformer(flat_ids, attention_mask=flat_mask, token_type_ids=flat_tt)
         # The reference multiple-choice head reads the *last* token's hidden
         # state directly, with no pooler projection — pooling the CLS token
         # through the tanh pooler puts a trained-elsewhere projection between
@@ -1019,9 +984,7 @@ class RoFormerForQuestionAnswering(_RoFormerInitMixin, SequenceClassificationMod
         end_positions: Tensor | None = None,
     ) -> QuestionAnsweringOutput:
         outputs = self.roformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         logits = self.qa_outputs(outputs.last_hidden_state)  # (B, T, 2)
         start_logits = logits[..., 0]  # (B, T)

@@ -68,10 +68,7 @@ class StateGuard:
         # short — which is the argument for deriving the list rather than
         # writing it, and the reason the pairs are asked of ``lucid``
         # by name rather than hard-coded to five.
-        (
-            "are_deterministic_algorithms_enabled",
-            "use_deterministic_algorithms",
-        ),
+        ("are_deterministic_algorithms_enabled", "use_deterministic_algorithms"),
         # Anomaly detection, the fourth switch found leaking one at a
         # time.  Enumerated below rather than only listed here — a table
         # of process state that a human maintains is a table that is one
@@ -311,9 +308,7 @@ class _NullGuard:
         return None
 
 
-def _smoke_arguments(
-    symbol: Symbol,
-) -> list[tuple[tuple[Any, ...], dict[str, Any], str]]:
+def _smoke_arguments(symbol: Symbol) -> list[tuple[tuple[Any, ...], dict[str, Any], str]]:
     """Plausible calls for a symbol with no numeric spec.
 
     Stateful setters are handed back the value their own getter reports,
@@ -455,9 +450,7 @@ class DistributionAxis(Axis):
             forward = transform(source)
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.UNSUPPORTED,
-                f"forward: {type(exc).__name__}: {str(exc)[:50]}",
+                symbol, Status.UNSUPPORTED, f"forward: {type(exc).__name__}: {str(exc)[:50]}"
             )
         mapped = _probe.to_numpy(forward)
         if mapped is None:
@@ -476,10 +469,7 @@ class DistributionAxis(Axis):
                 if not np.isfinite(back).all():
                     problems.append("inv is not finite on the forward map's own output")
                 elif back.shape == np.shape(_probe.to_numpy(source)) and not np.allclose(
-                    back.astype(float),
-                    _probe.to_numpy(source).astype(float),
-                    rtol=1e-6,
-                    atol=1e-8,
+                    back.astype(float), _probe.to_numpy(source).astype(float), rtol=1e-6, atol=1e-8
                 ):
                     # ``AbsTransform`` is deliberately not injective, and
                     # says so; a transform that claims a bijection and is
@@ -521,8 +511,7 @@ class DistributionAxis(Axis):
         for args, kwargs in () if dist is not None else self._PARAMS:
             try:
                 dist = symbol.obj(
-                    *(_probe.as_f64(a) if isinstance(a, float) else a for a in args),
-                    **kwargs,
+                    *(_probe.as_f64(a) if isinstance(a, float) else a for a in args), **kwargs
                 )
                 break
             except Exception:  # noqa: BLE001
@@ -751,15 +740,11 @@ class DistributionAxis(Axis):
             return self._finding(symbol, Status.SKIP, "no comparable output")
         if abs(float(np.asarray(same).reshape(-1)[0])) > 1e-9:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"KL(p, p) = {float(np.asarray(same).reshape(-1)[0])}, not 0",
+                symbol, Status.FAIL, f"KL(p, p) = {float(np.asarray(same).reshape(-1)[0])}, not 0"
             )
         if float(np.asarray(apart).reshape(-1)[0]) < -1e-9:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"KL is negative: {float(np.asarray(apart).reshape(-1)[0])}",
+                symbol, Status.FAIL, f"KL is negative: {float(np.asarray(apart).reshape(-1)[0])}"
             )
         return self._finding(symbol, Status.PASS, "KL(p,p) = 0 and KL >= 0")
 
@@ -836,9 +821,7 @@ class DiffeqAxis(Axis):
         want = exact if symbol.short == "odeint_dense" else 1.0
         if abs(value - want) > 1e-5:
             return self._finding(
-                symbol,
-                Status.FAIL,
-                f"gave {value:.9g}, the exact answer is {want:.9g}",
+                symbol, Status.FAIL, f"gave {value:.9g}, the exact answer is {want:.9g}"
             )
         return self._finding(symbol, Status.PASS, f"agrees to {abs(value - want):.2e}")
 
@@ -952,11 +935,7 @@ def _as_tableau(obj: Any) -> tuple[Any, Any, Any] | None:
 
 def _float_model() -> Any:
     """A small float module the quantisation flows can be run over."""
-    return lucid.nn.Sequential(
-        lucid.nn.Linear(8, 8),
-        lucid.nn.ReLU(),
-        lucid.nn.Linear(8, 4),
-    )
+    return lucid.nn.Sequential(lucid.nn.Linear(8, 8), lucid.nn.ReLU(), lucid.nn.Linear(8, 4))
 
 
 def _calibration() -> Any:
@@ -1053,9 +1032,7 @@ class QuantizationAxis(Axis):
             error = np.abs(dq.astype(float) - _probe.to_numpy(x).astype(float)).max()  # type: ignore[union-attr]
             if error > 0.02:
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"round trip is off by {error:.4f}, more than one step",
+                    symbol, Status.FAIL, f"round trip is off by {error:.4f}, more than one step"
                 )
             return self._finding(symbol, Status.PASS, f"round trip within {error:.4f}")
         return self._finding(symbol, Status.SKIP, "no argument shape worked")
@@ -1085,9 +1062,7 @@ class QuantizationAxis(Axis):
             )
         except Exception as exc:  # noqa: BLE001
             return self._finding(
-                symbol,
-                Status.UNSUPPORTED,
-                f"qparams: {type(exc).__name__}: {str(exc)[:50]}",
+                symbol, Status.UNSUPPORTED, f"qparams: {type(exc).__name__}: {str(exc)[:50]}"
             )
 
         step = float(np.asarray(_probe.to_numpy(scale)).reshape(-1)[0])
@@ -1215,9 +1190,7 @@ class QuantizationAxis(Axis):
             )
         del observer
         return self._finding(
-            symbol,
-            Status.PASS,
-            f"scale tracks the range: {scales[0]:.3g} -> {scales[1]:.3g}",
+            symbol, Status.PASS, f"scale tracks the range: {scales[0]:.3g} -> {scales[1]:.3g}"
         )
 
     def _flow(self, symbol: Symbol, obj: Any, name: str) -> Finding:
@@ -1263,9 +1236,7 @@ class QuantizationAxis(Axis):
                 return self._finding(symbol, Status.SKIP, "no output to compare")
             if got.shape != want.shape:
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"output shape {got.shape}, float model gives {want.shape}",
+                    symbol, Status.FAIL, f"output shape {got.shape}, float model gives {want.shape}"
                 )
             error = float(np.abs(got.astype(float) - want.astype(float)).max())
             scale = max(float(np.abs(want).max()), 1e-9)
@@ -1280,9 +1251,7 @@ class QuantizationAxis(Axis):
                     f"{error:.3e}, {100 * error / scale:.0f}% of the signal",
                 )
             return self._finding(
-                symbol,
-                Status.PASS,
-                f"within {100 * error / scale:.1f}% of the float model",
+                symbol, Status.PASS, f"within {100 * error / scale:.1f}% of the float model"
             )
         return self._finding(symbol, Status.UNSUPPORTED, last)
 
@@ -1348,9 +1317,7 @@ class SerializationAxis(Axis):
                     )
                 if set(restored) != set(original):
                     return self._finding(
-                        symbol,
-                        Status.FAIL,
-                        f"keys {sorted(original)} became {sorted(restored)}",
+                        symbol, Status.FAIL, f"keys {sorted(original)} became {sorted(restored)}"
                     )
                 original, restored = tensor, restored["probe"]
             a, b = _probe.to_numpy(original), _probe.to_numpy(restored)
@@ -1366,9 +1333,7 @@ class SerializationAxis(Axis):
                 )
             if str(original.dtype) != str(restored.dtype):
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"dtype {original.dtype} became {restored.dtype}",
+                    symbol, Status.FAIL, f"dtype {original.dtype} became {restored.dtype}"
                 )
         return self._finding(symbol, Status.PASS, "exact round trip")
 
@@ -1423,12 +1388,7 @@ class CompiledAxis(Axis):
                 return self._artefact(symbol, x)
             if name == "diagnose":
                 return self._diagnose(symbol, obj, x)
-            if name in (
-                "compile_optimizer",
-                "compiled_step",
-                "make_step",
-                "fused_step",
-            ):
+            if name in ("compile_optimizer", "compiled_step", "make_step", "fused_step"):
                 return self._step(symbol, obj, name)
         except Exception as exc:  # noqa: BLE001 - surveying, not asserting
             return self._finding(
@@ -1503,9 +1463,7 @@ class CompiledAxis(Axis):
             return self._finding(symbol, Status.SKIP, "no comparable output")
         if not np.allclose(got.astype(float), want.astype(float), rtol=1e-5, atol=1e-7):
             return self._finding(
-                symbol,
-                Status.FAIL,
-                "the reloaded artefact computes something else",
+                symbol, Status.FAIL, "the reloaded artefact computes something else"
             )
         return self._parameterised_artefact(symbol)
 
@@ -1534,9 +1492,7 @@ class CompiledAxis(Axis):
             path = str(Path(folder) / "module.lcc")
             if not lucid.compile.save_compiled(compiled, path):
                 return self._finding(
-                    symbol,
-                    Status.UNSUPPORTED,
-                    "a module's artefact declined to be saved",
+                    symbol, Status.UNSUPPORTED, "a module's artefact declined to be saved"
                 )
             try:
                 restored = lucid.compile.load_compiled(path)
@@ -1544,9 +1500,7 @@ class CompiledAxis(Axis):
                 # Refused rather than mis-bound — the honest outcome while
                 # the feed order of a reloaded package is unrecoverable.
                 return self._finding(
-                    symbol,
-                    Status.PASS,
-                    "round trip for a function, refusal for a module",
+                    symbol, Status.PASS, "round trip for a function, refusal for a module"
                 )
             if restored is None:
                 return self._finding(
@@ -1556,9 +1510,7 @@ class CompiledAxis(Axis):
                 got = _probe.to_numpy(restored(x, *model.parameters()))
             except (RuntimeError, ValueError):
                 return self._finding(
-                    symbol,
-                    Status.PASS,
-                    "round trip for a function, refusal for a module",
+                    symbol, Status.PASS, "round trip for a function, refusal for a module"
                 )
         if got is None or want is None:
             return self._finding(symbol, Status.SKIP, "no comparable output")
@@ -1668,9 +1620,7 @@ class CompiledAxis(Axis):
                     continue
             else:
                 return self._finding(
-                    symbol,
-                    Status.UNSUPPORTED,
-                    "no calling convention for the step worked",
+                    symbol, Status.UNSUPPORTED, "no calling convention for the step worked"
                 )
 
         got = [_probe.to_numpy(p) for p in model.parameters()]
@@ -1781,9 +1731,7 @@ class ConstantAxis(Axis):
         if tensor is not None:
             if str(tensor.dtype) != str(value):
                 return self._finding(
-                    symbol,
-                    Status.FAIL,
-                    f"a tensor built with {value} reports dtype {tensor.dtype}",
+                    symbol, Status.FAIL, f"a tensor built with {value} reports dtype {tensor.dtype}"
                 )
             return self._finding(symbol, Status.PASS, f"builds a tensor of {tensor.dtype}")
 

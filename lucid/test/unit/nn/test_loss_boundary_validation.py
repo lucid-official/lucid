@@ -69,11 +69,7 @@ LOSSES: list[str] = sorted(set(losses_with("reduction")) | set(losses_with("weig
 #: A new weighted loss has to be put in one of the three.
 CLASS_WEIGHT = frozenset({"cross_entropy", "nll_loss", "multi_margin_loss"})
 ELEMENT_WEIGHT = frozenset(
-    {
-        "binary_cross_entropy",
-        "binary_cross_entropy_with_logits",
-        "multilabel_soft_margin_loss",
-    }
+    {"binary_cross_entropy", "binary_cross_entropy_with_logits", "multilabel_soft_margin_loss"}
 )
 SAME_WEIGHT = frozenset({"huber_loss", "l1_loss", "mse_loss"})
 
@@ -100,15 +96,8 @@ def _inputs(device: str) -> dict[str, lucid.Tensor]:
 #: :func:`_inputs`.
 VALID: dict[str, Callable[[dict[str, lucid.Tensor]], Kwargs]] = {
     "binary_cross_entropy": lambda t: {"input": t["prob"], "target": t["binary"]},
-    "binary_cross_entropy_with_logits": lambda t: {
-        "input": t["x"],
-        "target": t["binary"],
-    },
-    "cosine_embedding_loss": lambda t: {
-        "input1": t["x"],
-        "input2": t["y"],
-        "target": t["sign"],
-    },
+    "binary_cross_entropy_with_logits": lambda t: {"input": t["x"], "target": t["binary"]},
+    "cosine_embedding_loss": lambda t: {"input1": t["x"], "input2": t["y"], "target": t["sign"]},
     "cross_entropy": lambda t: {"input": t["x"], "target": t["index"]},
     "ctc_loss": lambda t: {
         "log_probs": t["log_probs"],
@@ -116,23 +105,12 @@ VALID: dict[str, Callable[[dict[str, lucid.Tensor]], Kwargs]] = {
         "input_lengths": [5, 5],
         "target_lengths": [2, 2],
     },
-    "gaussian_nll_loss": lambda t: {
-        "input": t["x"],
-        "target": t["y"],
-        "var": t["prob"],
-    },
+    "gaussian_nll_loss": lambda t: {"input": t["x"], "target": t["y"], "var": t["prob"]},
     "hinge_embedding_loss": lambda t: {"input": t["s1"], "target": t["sign"]},
     "huber_loss": lambda t: {"input": t["x"], "target": t["y"]},
-    "kl_div": lambda t: {
-        "input": F.log_softmax(t["x"], dim=1),
-        "target": F.softmax(t["y"], dim=1),
-    },
+    "kl_div": lambda t: {"input": F.log_softmax(t["x"], dim=1), "target": F.softmax(t["y"], dim=1)},
     "l1_loss": lambda t: {"input": t["x"], "target": t["y"]},
-    "margin_ranking_loss": lambda t: {
-        "input1": t["s1"],
-        "input2": t["s2"],
-        "target": t["sign"],
-    },
+    "margin_ranking_loss": lambda t: {"input1": t["s1"], "input2": t["s2"], "target": t["sign"]},
     "mse_loss": lambda t: {"input": t["x"], "target": t["y"]},
     "multi_margin_loss": lambda t: {"input": t["x"], "target": t["index"]},
     "multilabel_margin_loss": lambda t: {"input": t["x"], "target": t["labels"]},
@@ -141,11 +119,7 @@ VALID: dict[str, Callable[[dict[str, lucid.Tensor]], Kwargs]] = {
     "poisson_nll_loss": lambda t: {"input": t["x"], "target": t["y"].abs()},
     "smooth_l1_loss": lambda t: {"input": t["x"], "target": t["y"]},
     "soft_margin_loss": lambda t: {"input": t["x"], "target": t["binary"] * 2.0 - 1.0},
-    "triplet_margin_loss": lambda t: {
-        "anchor": t["x"],
-        "positive": t["y"],
-        "negative": t["z"],
-    },
+    "triplet_margin_loss": lambda t: {"anchor": t["x"], "positive": t["y"], "negative": t["z"]},
     "triplet_margin_with_distance_loss": lambda t: {
         "anchor": t["x"],
         "positive": t["y"],
@@ -269,27 +243,20 @@ _SPECIFIC: list[Bad] = [
     Bad(
         "cross_entropy",
         "input-0d",
-        _set(
-            input=lambda d: lucid.tensor(1.0, device=d),
-            target=lambda d: _class_target(d),
-        ),
+        _set(input=lambda d: lucid.tensor(1.0, device=d), target=lambda d: _class_target(d)),
         match="input",
     ),
     Bad(
         "nll_loss",
         "input-0d",
-        _set(
-            input=lambda d: lucid.tensor(-1.0, device=d),
-            target=lambda d: _class_target(d),
-        ),
+        _set(input=lambda d: lucid.tensor(-1.0, device=d), target=lambda d: _class_target(d)),
         match="input",
     ),
     Bad(
         "nll_loss",
         "target-spatial-mismatch",
         _set(
-            input=lambda d: lucid.randn(N, C, 2, device=d),
-            target=lambda d: _class_target(d, N, 3),
+            input=lambda d: lucid.randn(N, C, 2, device=d), target=lambda d: _class_target(d, N, 3)
         ),
         match="target",
     ),
@@ -319,10 +286,7 @@ _SPECIFIC: list[Bad] = [
         Bad(
             name,
             "input-0d",
-            _set(
-                input=lambda d: lucid.tensor(0.5, device=d),
-                target=lambda d: _class_target(d),
-            ),
+            _set(input=lambda d: lucid.tensor(0.5, device=d), target=lambda d: _class_target(d)),
             match="input",
             stricter="the reference takes a 0-d input: one class, a loss of 0",
         )
@@ -363,12 +327,7 @@ _SPECIFIC: list[Bad] = [
         _set(target=lambda d: lucid.tensor(1.0, device=d)),
         match="target",
     ),
-    Bad(
-        "cosine_embedding_loss",
-        "target-longer",
-        _set(target=_ones(N + 1)),
-        match="target",
-    ),
+    Bad("cosine_embedding_loss", "target-longer", _set(target=_ones(N + 1)), match="target"),
     Bad(
         "cosine_embedding_loss",
         "inputs-mismatch",
@@ -409,12 +368,7 @@ _SPECIFIC: list[Bad] = [
         Bad("huber_loss", f"delta-{tag}", _set(delta=value), match="delta")
         for tag, value in (("zero", 0.0), ("negative", -1.0))
     ),
-    Bad(
-        "gaussian_nll_loss",
-        "var-shape",
-        _set(var=_ones(N + 1, C)),
-        match="var",
-    ),
+    Bad("gaussian_nll_loss", "var-shape", _set(var=_ones(N + 1, C)), match="var"),
 ]
 
 
@@ -459,21 +413,11 @@ def _target_rows() -> list[Bad]:
     rows = []
     for name, rule in sorted(_TARGET_SHAPE.items()):
         rows.append(
-            Bad(
-                name,
-                "target-not-broadcast",
-                _target_shaped(name, _not_broadcast),
-                match="target",
-            )
+            Bad(name, "target-not-broadcast", _target_shaped(name, _not_broadcast), match="target")
         )
         if rule == "same":
             rows.append(
-                Bad(
-                    name,
-                    "target-broadcastable",
-                    _target_shaped(name, _one),
-                    match="target size",
-                )
+                Bad(name, "target-broadcastable", _target_shaped(name, _one), match="target size")
             )
         if rule == "within":
             rows.append(
@@ -530,12 +474,7 @@ def test_every_loss_has_one_target_rule() -> None:
     elementwise = set(_TARGET_SHAPE)
     assert elementwise | CLASS_INDEX | PAIRED | {"ctc_loss"} == set(LOSSES)
     assert not elementwise & (CLASS_INDEX | PAIRED)
-    assert set(_TARGET_SHAPE.values()) <= {
-        "same",
-        "within",
-        "broadcast",
-        "broadcast-warn",
-    }
+    assert set(_TARGET_SHAPE.values()) <= {"same", "within", "broadcast", "broadcast-warn"}
 
 
 def test_every_table_row_names_a_loss() -> None:
@@ -610,12 +549,7 @@ def test_bce_refuses_a_value_outside_0_1_on_the_cpu(which: str, value: float) ->
 def test_bce_takes_the_ends_of_the_interval() -> None:
     p = lucid.tensor([0.0, 1.0, 0.0, 1.0])
     y = lucid.tensor([1.0, 0.0, 0.0, 1.0])
-    assert F.binary_cross_entropy(p, y, reduction="none").tolist() == [
-        100.0,
-        100.0,
-        0.0,
-        0.0,
-    ]
+    assert F.binary_cross_entropy(p, y, reduction="none").tolist() == [100.0, 100.0, 0.0, 0.0]
 
 
 @_needs_metal
@@ -673,9 +607,7 @@ def test_cosine_embedding_takes_one_unbatched_pair(label: float, device: str) ->
     assert abs(one.item() - batched.tolist()[0]) < 1e-6
 
 
-def test_cosine_embedding_broadcasts_a_batch_of_one_against_its_labels(
-    device: str,
-) -> None:
+def test_cosine_embedding_broadcasts_a_batch_of_one_against_its_labels(device: str) -> None:
     # One pair against four labels is four losses, as on main and in the
     # reference; only shapes that do not broadcast at all are refused.
     a = lucid.randn(1, 3, device=device)
@@ -792,14 +724,8 @@ def test_a_reduced_loss_under_autocast_is_float32(name: str) -> None:
             lambda: nn.CrossEntropyLoss(weight=lucid.ones(C + 2)),
             lambda: (lucid.randn(N, C), lucid.tensor([0, 1, 2, 0])),
         ),
-        (
-            lambda: nn.MultiMarginLoss(p=3),
-            lambda: (lucid.randn(N, C), lucid.tensor([0, 1, 2, 0])),
-        ),
-        (
-            lambda: nn.BCEWithLogitsLoss(),
-            lambda: (lucid.randn(N, C), lucid.ones(C)),
-        ),
+        (lambda: nn.MultiMarginLoss(p=3), lambda: (lucid.randn(N, C), lucid.tensor([0, 1, 2, 0]))),
+        (lambda: nn.BCEWithLogitsLoss(), lambda: (lucid.randn(N, C), lucid.ones(C))),
         (
             lambda: nn.KLDivLoss(reduction="avg"),  # type: ignore[arg-type]
             lambda: (lucid.randn(N, C), lucid.rand(N, C)),
@@ -907,12 +833,7 @@ def test_one_helper_applies_every_reduction() -> None:
         for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
         if isinstance(target, ast.Name)
     }
-    retired = {
-        "_REDUCTION_MAP",
-        "_apply_reduction",
-        "_reduce_in",
-        "_validate_reduction",
-    }
+    retired = {"_REDUCTION_MAP", "_apply_reduction", "_reduce_in", "_validate_reduction"}
     assert not defined & retired
 
 
@@ -1025,9 +946,7 @@ def test_the_accepted_cases_match_the_reference(ref: object, device: str) -> Non
             )
             assert abs(lo.item() - ro.item()) < 1e-5
     lo = F.kl_div(
-        lucid.tensor(-1.0, device=device),
-        lucid.tensor(0.5, device=device),
-        reduction="batchmean",
+        lucid.tensor(-1.0, device=device), lucid.tensor(0.5, device=device), reduction="batchmean"
     )
     ro = rf.kl_div(R.tensor(-1.0), R.tensor(0.5), reduction="batchmean")  # type: ignore[attr-defined]
     assert abs(lo.item() - ro.item()) < 1e-6

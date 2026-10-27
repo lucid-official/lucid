@@ -24,62 +24,34 @@ sample_size=..., num_scales=..., residual_blocks=..., base_dim=...)``.
 
 from lucid.models._registry import register_model
 from lucid.models.generative.realnvp._config import RealNVPConfig
-from lucid.models.generative.realnvp._model import (
-    RealNVPForImageGeneration,
-    RealNVPModel,
-)
+from lucid.models.generative.realnvp._model import RealNVPForImageGeneration, RealNVPModel
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 # Paper §4.1 — CIFAR-10: 8 residual blocks, 64 feature maps, one downscale.
 _CFG_CIFAR = RealNVPConfig(
-    sample_size=32,
-    in_channels=3,
-    out_channels=3,
-    num_scales=2,
-    residual_blocks=8,
-    base_dim=64,
+    sample_size=32, in_channels=3, out_channels=3, num_scales=2, residual_blocks=8, base_dim=64
 )
 
 # Paper §4.1 — Imagenet 32x32: 4 residual blocks, 32 feature maps, recursion
 # down to a 4x4 final scale.
 _CFG_IMAGENET32 = RealNVPConfig(
-    sample_size=32,
-    in_channels=3,
-    out_channels=3,
-    num_scales=4,
-    residual_blocks=4,
-    base_dim=32,
+    sample_size=32, in_channels=3, out_channels=3, num_scales=4, residual_blocks=4, base_dim=32
 )
 
 # Paper §4.1 — Imagenet 64x64: 2 residual blocks; one more scale than the
 # 32x32 setup so the recursion still ends at 4x4.
 _CFG_IMAGENET64 = RealNVPConfig(
-    sample_size=64,
-    in_channels=3,
-    out_channels=3,
-    num_scales=5,
-    residual_blocks=2,
-    base_dim=32,
+    sample_size=64, in_channels=3, out_channels=3, num_scales=5, residual_blocks=2, base_dim=32
 )
 
 # Paper §4.1 — LSUN 64x64 crops (bedroom / tower / church outdoor).
 _CFG_LSUN = RealNVPConfig(
-    sample_size=64,
-    in_channels=3,
-    out_channels=3,
-    num_scales=5,
-    residual_blocks=2,
-    base_dim=32,
+    sample_size=64, in_channels=3, out_channels=3, num_scales=5, residual_blocks=2, base_dim=32
 )
 
 # Paper §4.1 — CelebA, centre-cropped and resized to 64x64.
 _CFG_CELEBA = RealNVPConfig(
-    sample_size=64,
-    in_channels=3,
-    out_channels=3,
-    num_scales=5,
-    residual_blocks=2,
-    base_dim=32,
+    sample_size=64, in_channels=3, out_channels=3, num_scales=5, residual_blocks=2, base_dim=32
 )
 
 

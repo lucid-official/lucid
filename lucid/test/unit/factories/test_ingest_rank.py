@@ -58,8 +58,7 @@ def test_rank_matches_reference(ref, entry, source, device, dtype):
     got = getattr(lucid, entry)(_SOURCES[source](), **_kwargs(lucid, device, dtype))
     assert tuple(got.shape) == tuple(want.shape)
     np.testing.assert_allclose(
-        got.to("cpu").numpy().astype(np.float64),
-        want.numpy().astype(np.float64),
+        got.to("cpu").numpy().astype(np.float64), want.numpy().astype(np.float64)
     )
 
 

@@ -61,11 +61,7 @@ class _InceptionDWConv2d(nn.Module):
     """
 
     def __init__(
-        self,
-        dim: int,
-        band_kernel: int = 11,
-        branch_ratio: float = 0.125,
-        square_kernel: int = 3,
+        self, dim: int, band_kernel: int = 11, branch_ratio: float = 0.125, square_kernel: int = 3
     ) -> None:
         super().__init__()
         gc = int(dim * branch_ratio)
@@ -187,8 +183,7 @@ class _Stage(nn.Module):
         if downsample:
             # timm: Sequential(BN2d(in_dim), Conv2d(in_dim→out_dim, 2, stride=2))
             self.downsample: nn.Sequential | nn.Identity = nn.Sequential(
-                nn.BatchNorm2d(in_dim),
-                nn.Conv2d(in_dim, out_dim, 2, stride=2),
+                nn.BatchNorm2d(in_dim), nn.Conv2d(in_dim, out_dim, 2, stride=2)
             )
         else:
             self.downsample = nn.Identity()
@@ -223,11 +218,7 @@ class _MlpClassifierHead(nn.Module):
     """timm MlpClassifierHead: GlobalAvgPool → fc1 → GELU → norm → fc2."""
 
     def __init__(
-        self,
-        in_features: int,
-        num_classes: int,
-        mlp_ratio: int = 3,
-        drop_rate: float = 0.0,
+        self, in_features: int, num_classes: int, mlp_ratio: int = 3, drop_rate: float = 0.0
     ) -> None:
         super().__init__()
         hidden = in_features * mlp_ratio
@@ -257,16 +248,10 @@ class _MlpClassifierHead(nn.Module):
 
 def _build_inception_next(
     cfg: InceptionNeXtConfig,
-) -> tuple[
-    nn.Sequential,
-    nn.ModuleList[_Stage],
-    list[FeatureInfo],
-    int,
-]:
+) -> tuple[nn.Sequential, nn.ModuleList[_Stage], list[FeatureInfo], int]:
     # stem.0 = Conv2d, stem.1 = BN2d
     stem = nn.Sequential(
-        nn.Conv2d(cfg.in_channels, cfg.dims[0], 4, stride=4),
-        nn.BatchNorm2d(cfg.dims[0]),
+        nn.Conv2d(cfg.in_channels, cfg.dims[0], 4, stride=4), nn.BatchNorm2d(cfg.dims[0])
     )
 
     stages: list[_Stage] = []
@@ -478,11 +463,7 @@ class InceptionNeXtForImageClassification(ImageClassificationModel):
         init_transformer_trunc_normal(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)

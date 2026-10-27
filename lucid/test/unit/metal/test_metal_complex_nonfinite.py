@@ -95,10 +95,7 @@ def test_nan_to_num_replaces_each_part() -> None:
 
 def test_nan_to_num_explicit_values() -> None:
     got = lucid.nan_to_num(_metal(_VALUES[:3]), nan=0.5, posinf=7.0, neginf=-7.0)
-    assert _same(
-        got.to("cpu").tolist(),
-        [complex(0.5, 1.0), complex(1.0, 7.0), complex(-7.0, 0.5)],
-    )
+    assert _same(got.to("cpu").tolist(), [complex(0.5, 1.0), complex(1.0, 7.0), complex(-7.0, 0.5)])
 
 
 def test_nan_to_num_keeps_shape_and_finite_values() -> None:

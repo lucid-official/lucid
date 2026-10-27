@@ -1,10 +1,7 @@
 """RealNVP family — Dinh, Sohl-Dickstein & Bengio, 2016 (affine-coupling flow)."""
 
 from lucid.models.generative.realnvp._config import RealNVPConfig
-from lucid.models.generative.realnvp._model import (
-    RealNVPForImageGeneration,
-    RealNVPModel,
-)
+from lucid.models.generative.realnvp._model import RealNVPForImageGeneration, RealNVPModel
 from lucid.models.generative.realnvp._pretrained import (
     realnvp_celeba,
     realnvp_celeba_gen,

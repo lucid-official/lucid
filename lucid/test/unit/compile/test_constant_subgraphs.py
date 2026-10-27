@@ -232,9 +232,7 @@ class _PlainAttribute(nn.Module):
 
 
 @pytest.mark.usefixtures("inference")
-def test_a_module_attribute_that_is_not_state_is_followed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_module_attribute_that_is_not_state_is_followed(monkeypatch: pytest.MonkeyPatch) -> None:
     lucid.manual_seed(0)
     model = _PlainAttribute().to(COMPILE_DEVICE)
     assert "scale" not in dict(model.named_buffers())

@@ -28,13 +28,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._utils._generative import generative_activation
 from lucid.models.generative._common._config import WORLD_MODEL_IMAGE_SIZE
 
-__all__ = [
-    "PixelEncoder",
-    "PixelDecoder",
-    "DenseHead",
-    "pixel_embed_size",
-    "PIXEL_IMAGE_SIZE",
-]
+__all__ = ["PixelEncoder", "PixelDecoder", "DenseHead", "pixel_embed_size", "PIXEL_IMAGE_SIZE"]
 
 #: The only frame size the kernel schedule above produces.  Owned by
 #: :mod:`._config` so the configs can validate against it without

@@ -52,11 +52,7 @@ class TestTransformerDecoder:
 class TestTransformerFull:
     def test_full_shape(self) -> None:
         model = nn.Transformer(
-            d_model=16,
-            nhead=4,
-            num_encoder_layers=2,
-            num_decoder_layers=2,
-            batch_first=True,
+            d_model=16, nhead=4, num_encoder_layers=2, num_decoder_layers=2, batch_first=True
         )
         out = model(lucid.randn(2, 5, 16), lucid.randn(2, 6, 16))
         assert out.shape == (2, 6, 16)

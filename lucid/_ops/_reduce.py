@@ -111,14 +111,7 @@ def _zero_safe_root(s: _Impl, p: float) -> _Impl:
 _HALF = frozenset({_C_engine.F16, _C_engine.BF16})
 
 #: The dtypes a real-valued distance or similarity is defined on.
-_FLOATING = frozenset(
-    {
-        _C_engine.F16,
-        _C_engine.BF16,
-        _C_engine.F32,
-        _C_engine.F64,
-    }
-)
+_FLOATING = frozenset({_C_engine.F16, _C_engine.BF16, _C_engine.F32, _C_engine.F64})
 
 #: The dtypes a norm is defined on.
 _NORMABLE = _FLOATING | frozenset({_C_engine.C64, _C_engine.C128})
@@ -160,11 +153,7 @@ def _require_normable(impl: _Impl, op: str) -> _Impl:
 
 
 #: The orders that reduce the magnitudes directly, with no power or root.
-_ABS_REDUCTIONS = {
-    math.inf: _C_engine.max,
-    -math.inf: _C_engine.min,
-    1.0: _C_engine.sum,
-}
+_ABS_REDUCTIONS = {math.inf: _C_engine.max, -math.inf: _C_engine.min, 1.0: _C_engine.sum}
 
 
 def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
@@ -206,11 +195,7 @@ def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
 
 
 def _bessel_correct(
-    result_impl: _Impl,
-    x_impl: _Impl,
-    axes_list: Sequence[int],
-    correction: float,
-    name: str,
+    result_impl: _Impl, x_impl: _Impl, axes_list: Sequence[int], correction: float, name: str
 ) -> _Impl:
     """Turn the engine's ``sum / N`` variance into ``sum / max(N - correction, 0)``.
 
@@ -273,9 +258,7 @@ def _as_correction(name: str, value: object) -> float:
 
 
 def _variance_operands(
-    name: str,
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
+    name: str, args: tuple[object, ...], kwargs: dict[str, object]
 ) -> tuple[object, float, bool]:
     """``(dim, correction, keepdim)`` from any spelling of a variance call.
 
@@ -487,8 +470,7 @@ def _cumext_adapter(
         n = shape[d]
         pos_shape = [n if i == d else 1 for i in range(ndim)]
         pos = _C_engine.reshape(
-            _C_engine.arange(0.0, float(n), 1.0, _C_engine.I64, x_impl.device),
-            pos_shape,
+            _C_engine.arange(0.0, float(n), 1.0, _C_engine.I64, x_impl.device), pos_shape
         )
         zero = _C_engine.zeros([], _C_engine.I64, x_impl.device)
     indices = _C_engine.cummax(_C_engine.where(hit, pos, zero), d)
@@ -509,11 +491,7 @@ def _softmax_adapter(x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None = Non
     """softmax(x, dim=-1, dtype=None)."""
     axis = operator.index(dim)
     return _run_with_dtype(
-        x_impl,
-        dtype,
-        lambda xi: _C_engine.softmax(xi, axis),
-        op="softmax",
-        floating_only=True,
+        x_impl, dtype, lambda xi: _C_engine.softmax(xi, axis), op="softmax", floating_only=True
     )
 
 
@@ -560,28 +538,21 @@ def _extreme_adapter(
 
 
 def _max_adapter(
-    x_impl: _Impl,
-    dim: int | Sequence[int] | None = None,
-    keepdim: bool = False,
+    x_impl: _Impl, dim: int | Sequence[int] | None = None, keepdim: bool = False
 ) -> _Impl | _ValuesIndices[_Impl]:
     """max(x, dim=None, keepdim=False)."""
     return _extreme_adapter("max", _C_engine.max, _C_engine.argmax, x_impl, dim, keepdim)
 
 
 def _min_adapter(
-    x_impl: _Impl,
-    dim: int | Sequence[int] | None = None,
-    keepdim: bool = False,
+    x_impl: _Impl, dim: int | Sequence[int] | None = None, keepdim: bool = False
 ) -> _Impl | _ValuesIndices[_Impl]:
     """min(x, dim=None, keepdim=False)."""
     return _extreme_adapter("min", _C_engine.min, _C_engine.argmin, x_impl, dim, keepdim)
 
 
 def _flat_arg_reduce(
-    engine_fn: Callable[[_Impl, int, bool], _Impl],
-    name: str,
-    x_impl: _Impl,
-    keepdim: bool,
+    engine_fn: Callable[[_Impl, int, bool], _Impl], name: str, x_impl: _Impl, keepdim: bool
 ) -> _Impl:
     """``dim=None``: the index into the flattened tensor, as documented."""
     shape = list(x_impl.shape)
@@ -593,22 +564,14 @@ def _flat_arg_reduce(
     return _C_engine.reshape(out, [1] * len(shape)) if keepdim else out
 
 
-def _argmax_adapter(
-    x_impl: _Impl,
-    dim: int | None = None,
-    keepdim: bool = False,
-) -> _Impl:
+def _argmax_adapter(x_impl: _Impl, dim: int | None = None, keepdim: bool = False) -> _Impl:
     """argmax(x, dim=None, keepdim=False)."""
     if dim is None:
         return _flat_arg_reduce(_C_engine.argmax, "argmax", x_impl, bool(keepdim))
     return _C_engine.argmax(x_impl, int(dim), bool(keepdim))
 
 
-def _argmin_adapter(
-    x_impl: _Impl,
-    dim: int | None = None,
-    keepdim: bool = False,
-) -> _Impl:
+def _argmin_adapter(x_impl: _Impl, dim: int | None = None, keepdim: bool = False) -> _Impl:
     """argmin(x, dim=None, keepdim=False)."""
     if dim is None:
         return _flat_arg_reduce(_C_engine.argmin, "argmin", x_impl, bool(keepdim))
@@ -656,9 +619,7 @@ def _all_adapter(
 
 
 def _logsumexp_adapter(
-    a_impl: _Impl,
-    dim: int | Sequence[int] | None = None,
-    keepdim: bool = False,
+    a_impl: _Impl, dim: int | Sequence[int] | None = None, keepdim: bool = False
 ) -> _Impl:
     """logsumexp(a, dim=None, keepdim=False) — accept axis/None like sum/mean."""
     axes = _reduction_axes(a_impl, dim, "logsumexp")

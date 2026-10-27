@@ -41,10 +41,7 @@ class _MaskedMLP(nn.Module):
         self.fc = nn.Linear(8, 8)
 
     def forward(
-        self,
-        x: lucid.Tensor,
-        mask: lucid.Tensor | None = None,
-        scale: float = 1.0,
+        self, x: lucid.Tensor, mask: lucid.Tensor | None = None, scale: float = 1.0
     ) -> lucid.Tensor:
         y = self.fc(x) * scale
         if mask is not None:

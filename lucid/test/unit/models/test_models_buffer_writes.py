@@ -27,16 +27,7 @@ from lucid.compile import fused_step, make_step
 
 _REGISTRIES = frozenset({"_buffers", "_parameters", "_modules", "_non_persistent_buffers"})
 _MUTATORS = frozenset(
-    {
-        "__setitem__",
-        "__delitem__",
-        "clear",
-        "move_to_end",
-        "pop",
-        "popitem",
-        "setdefault",
-        "update",
-    }
+    {"__setitem__", "__delitem__", "clear", "move_to_end", "pop", "popitem", "setdefault", "update"}
 )
 
 
@@ -114,19 +105,14 @@ def _fused(model: lucid.nn.Module) -> _Entry:
 
 #: The compile entries a training loop would reach for, and whether each is
 #: expected to have compiled the step rather than run it eagerly.
-_ENTRIES = [
-    pytest.param(_make, id="make_step"),
-    pytest.param(_fused, id="fused_step"),
-]
+_ENTRIES = [pytest.param(_make, id="make_step"), pytest.param(_fused, id="fused_step")]
 
 
 @pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
 @pytest.mark.parametrize("entry", _ENTRIES)
 @pytest.mark.parametrize("running_in_training", [False, True], ids=["batch", "running"])
 def test_a_compiled_realnvp_step_keeps_the_running_statistics(
-    device_gpu_only: str,
-    running_in_training: bool,
-    entry: Callable[[lucid.nn.Module], _Entry],
+    device_gpu_only: str, running_in_training: bool, entry: Callable[[lucid.nn.Module], _Entry]
 ) -> None:
     def build() -> lucid.nn.Module:
         return (

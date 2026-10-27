@@ -1,11 +1,4 @@
-from lucid.nn.modules.linear import (
-    Linear,
-    Identity,
-    Bilinear,
-    LazyLinear,
-    FusedLinear,
-    NoisyLinear,
-)
+from lucid.nn.modules.linear import Linear, Identity, Bilinear, LazyLinear, FusedLinear, NoisyLinear
 from lucid.nn.modules.conv import (
     Conv1d,
     Conv2d,
@@ -100,12 +93,7 @@ from lucid.nn.modules.dropout import (
     AlphaDropout,
     FeatureAlphaDropout,
 )
-from lucid.nn.modules.sparse import (
-    Embedding,
-    EmbeddingBag,
-    VectorQuantizer,
-    VectorQuantizerOutput,
-)
+from lucid.nn.modules.sparse import Embedding, EmbeddingBag, VectorQuantizer, VectorQuantizerOutput
 from lucid.nn.modules.positional import (
     RotaryEmbedding,
     SinusoidalEmbedding,

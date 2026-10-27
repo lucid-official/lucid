@@ -154,13 +154,7 @@ def error_ratio(
         operands = tuple(t.to(lucid.float32) for t in operands)
     base, end, *stages = operands
     return _C_engine.diffeq.rk_error_norm(
-        _unwrap(base),
-        _unwrap(end),
-        [_unwrap(s) for s in stages],
-        list(coeffs),
-        dt,
-        rtol,
-        atol,
+        _unwrap(base), _unwrap(end), [_unwrap(s) for s in stages], list(coeffs), dt, rtol, atol
     )
 
 

@@ -91,11 +91,7 @@ class QParams:
 
 
 def calculate_qparams(
-    min_val: _RangeLike,
-    max_val: _RangeLike,
-    qscheme: QScheme,
-    qdtype: QDtype,
-    eps: float = 1e-8,
+    min_val: _RangeLike, max_val: _RangeLike, qscheme: QScheme, qdtype: QDtype, eps: float = 1e-8
 ) -> tuple[Tensor, Tensor]:
     r"""Derive ``(scale, zero_point)`` from an observed value range.
 

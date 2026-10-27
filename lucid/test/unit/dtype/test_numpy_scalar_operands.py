@@ -40,14 +40,7 @@ _ARITHMETIC = [
     operator.mod,
     operator.pow,
 ]
-_COMPARISON = [
-    operator.eq,
-    operator.ne,
-    operator.lt,
-    operator.le,
-    operator.gt,
-    operator.ge,
-]
+_COMPARISON = [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
 _BITWISE = [operator.and_, operator.or_, operator.xor, operator.lshift]
 
 # The other spellings of one op: the method, the free function, in place.
@@ -146,13 +139,9 @@ def test_result_type_and_variance_and_nn_helpers_take_numpy_scalars(
     _same(lambda s: lucid.aminmax(t, dim=s)[0], scalar)
     _same(lambda s: lucid.split(t, s)[0], scalar)
     _same(lambda s: lucid.tensor_split(t, s)[0], scalar)
+    _same(lambda s: lucid.nn.functional.huber_loss(t, t, delta=s), scalar)  # type: ignore[arg-type]
     _same(
-        lambda s: lucid.nn.functional.huber_loss(t, t, delta=s),  # type: ignore[arg-type]
-        scalar,
-    )
-    _same(
-        lambda s: lucid.nn.functional.smooth_l1_loss(t, t, beta=s),  # type: ignore[arg-type]
-        scalar,
+        lambda s: lucid.nn.functional.smooth_l1_loss(t, t, beta=s), scalar  # type: ignore[arg-type]
     )
 
 

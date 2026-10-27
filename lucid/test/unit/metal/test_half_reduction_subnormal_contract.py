@@ -129,10 +129,7 @@ class _Select(nn.Module):
         return lucid.where(x == x, x, self.w.to(x.dtype))
 
 
-@pytest.mark.parametrize(
-    ("dtype", "op", "plan", "sign"),
-    _cells(_PLANS),
-)
+@pytest.mark.parametrize(("dtype", "op", "plan", "sign"), _cells(_PLANS))
 def test_compiled_module_matches_eager_bits(
     dtype: lucid.dtype, op: str, plan: _Plan, sign: float
 ) -> None:
@@ -149,10 +146,7 @@ def test_compiled_module_matches_eager_bits(
     assert _bits(got) == _bits(reduce(x))
 
 
-@pytest.mark.parametrize(
-    ("dtype", "op", "plan", "sign"),
-    _cells(_SCALAR_PLANS),
-)
+@pytest.mark.parametrize(("dtype", "op", "plan", "sign"), _cells(_SCALAR_PLANS))
 def test_make_step_loss_matches_eager_bits(
     dtype: lucid.dtype, op: str, plan: _Plan, sign: float
 ) -> None:
@@ -171,10 +165,7 @@ def test_make_step_loss_matches_eager_bits(
     assert _bits(got) == want
 
 
-@pytest.mark.parametrize(
-    ("dtype", "op", "plan", "sign"),
-    _cells(_PLANS),
-)
+@pytest.mark.parametrize(("dtype", "op", "plan", "sign"), _cells(_PLANS))
 def test_eager_follows_the_flush_rule(
     dtype: lucid.dtype, op: str, plan: _Plan, sign: float
 ) -> None:

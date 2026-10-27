@@ -72,11 +72,7 @@ def _cells(device: str) -> Iterator[tuple[str, Operand, Operand]]:
         for db in dtypes:
             for ta, za in tiers:
                 for tb, zb in tiers:
-                    yield (
-                        f"{da}[{ta}] , {db}[{tb}]",
-                        _make(da, za, device),
-                        _make(db, zb, device),
-                    )
+                    yield (f"{da}[{ta}] , {db}[{tb}]", _make(da, za, device), _make(db, zb, device))
         for ta, za in tiers:
             for s in _SCALARS:
                 yield f"{da}[{ta}] , {s!r}", _make(da, za, device), s
@@ -364,8 +360,7 @@ def test_promote_types_and_can_cast_read_the_same_lattice(ref: ModuleType) -> No
             assert p == lucid.promote_types(db, da)
             assert p == lucid.result_type(_make(da, False, "cpu"), _make(db, False, "cpu"))
             assert lucid.can_cast(da, db) == ref.can_cast(
-                getattr(ref, _lucid_dtype_name(da)),
-                getattr(ref, _lucid_dtype_name(db)),
+                getattr(ref, _lucid_dtype_name(da)), getattr(ref, _lucid_dtype_name(db))
             )
 
 
@@ -376,8 +371,7 @@ _KEY_CATEGORY = {
     **dict.fromkeys(["Bool", "bool_"], "bool"),
     **dict.fromkeys(["I8", "I16", "I32", "I64", "int8", "int16", "int32", "int64"], "int"),
     **dict.fromkeys(
-        ["F16", "BF16", "F32", "F64", "float16", "bfloat16", "float32", "float64"],
-        "float",
+        ["F16", "BF16", "F32", "F64", "float16", "bfloat16", "float32", "float64"], "float"
     ),
     **dict.fromkeys(["C64", "C128", "complex64", "complex128"], "complex"),
 }
@@ -459,9 +453,7 @@ def test_bool_beside_python_bool_skips_astype_copy(device: str) -> None:
     assert (t + True).tolist() == [True, True]
 
 
-def test_mixed_device_zero_dim_opmath_raises_device_mismatch(
-    device_gpu_only: str,
-) -> None:
+def test_mixed_device_zero_dim_opmath_raises_device_mismatch(device_gpu_only: str) -> None:
     from lucid._C import engine as _C_engine
 
     for half_dt in (lucid.float16, lucid.bfloat16):

@@ -87,10 +87,7 @@ class Linear(nn.Module):
         x_scale, x_zp = calculate_qparams(x.min(), x.max(), per_tensor_affine, self.act_qdtype)
         x_q = fake_quantize(x, x_scale, x_zp, self.act_qdtype.quant_min, self.act_qdtype.quant_max)
         weight = dequantize(
-            self.weight_int8,
-            self.weight_scale,
-            self.weight_zero_point,
-            ch_axis=self.weight_ch_axis,
+            self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=self.weight_ch_axis
         )
         return F.linear(x_q, weight, self.bias)
 

@@ -44,11 +44,7 @@ _DEFAULT_MAX_ITERS = 4
 # Method names, mapped to whether they carry an implicit corrector.  Both
 # ``implicit_adams`` and ``fixed_adams`` name the predictor-corrector scheme,
 # matching the reference library's two aliases for one solver.
-METHODS: dict[str, bool] = {
-    "explicit_adams": False,
-    "implicit_adams": True,
-    "fixed_adams": True,
-}
+METHODS: dict[str, bool] = {"explicit_adams": False, "implicit_adams": True, "fixed_adams": True}
 
 
 @dataclass(frozen=True)
@@ -279,19 +275,7 @@ def integrate(
             y_next = _fused.combine(y, history[:order], predictor, dt)
             if implicit:
                 y_next = _correct(
-                    func,
-                    y,
-                    y_next,
-                    history,
-                    t1,
-                    dt,
-                    order,
-                    opts,
-                    scalar,
-                    check,
-                    index,
-                    rtol,
-                    atol,
+                    func, y, y_next, history, t1, dt, order, opts, scalar, check, index, rtol, atol
                 )
 
         if direct:

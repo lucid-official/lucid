@@ -53,10 +53,7 @@ def _run_op_suite(n_elements: int = 10_000_000) -> list[dict[str, object]]:
         mx.eval(mlx_a, mlx_b, mlx_mat_a, mlx_mat_b)
 
     def _make_entry(
-        name: str,
-        cpu_ns: list[int],
-        gpu_ns: list[int] | None,
-        mlx_ns: list[int] | None,
+        name: str, cpu_ns: list[int], gpu_ns: list[int] | None, mlx_ns: list[int] | None
     ) -> dict[str, object]:
         r: dict[str, object] = {"name": name}
         cpu_r = BenchResult(f"{name}_cpu", cpu_ns)
@@ -152,10 +149,7 @@ def _print_table(results: list[dict[str, object]]) -> None:
 
     rows: list[tuple[str, ...]] = [tuple(header)]
     for r in results:
-        row: list[str] = [
-            str(r["name"]),
-            f"{r['cpu_mean_us']:.1f}",
-        ]
+        row: list[str] = [str(r["name"]), f"{r['cpu_mean_us']:.1f}"]
         if has_gpu:
             row += [
                 f"{r.get('gpu_mean_us', '-'):.1f}" if "gpu_mean_us" in r else "-",

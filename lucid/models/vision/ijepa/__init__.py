@@ -7,11 +7,7 @@ reconstructed in pixel space, which is the point.
 """
 
 from lucid.models.vision.ijepa._config import IJEPAConfig, IJEPAObjective
-from lucid.models.vision.ijepa._model import (
-    IJEPAForImageClassification,
-    IJEPAModel,
-    IJEPAOutput,
-)
+from lucid.models.vision.ijepa._model import IJEPAForImageClassification, IJEPAModel, IJEPAOutput
 from lucid.models.vision.ijepa._pretrained import (
     ijepa_base_16,
     ijepa_base_16_cls,

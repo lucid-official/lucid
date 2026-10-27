@@ -112,17 +112,10 @@ class _DoubleConv(nn.Module):
         # the level doubles its channel count right before the pool.
         mid = out_ch if mid_ch is None else mid_ch
 
-        layers: list[nn.Module] = [
-            _conv(dim, in_ch, mid),
-            _bn(dim, mid),
-            nn.ReLU(inplace=True),
-        ]
+        layers: list[nn.Module] = [_conv(dim, in_ch, mid), _bn(dim, mid), nn.ReLU(inplace=True)]
         if dropout > 0.0:
             layers.append(nn.Dropout(p=dropout))
-        layers += [
-            _conv(dim, mid, out_ch),
-            _bn(dim, out_ch),
-        ]
+        layers += [_conv(dim, mid, out_ch), _bn(dim, out_ch)]
         # Final ReLU is applied AFTER the residual add (or directly if no shortcut).
         self.body = nn.Sequential(*layers)
         if dropout > 0.0:
@@ -138,8 +131,7 @@ class _DoubleConv(nn.Module):
             # different scale from the body, which the following ReLU then
             # bakes in.  Lucid's own ResNet builds the same Sequential.
             self.shortcut = nn.Sequential(
-                _conv(dim, in_ch, out_ch, k=1, padding=0, bias=False),
-                _bn(dim, out_ch),
+                _conv(dim, in_ch, out_ch, k=1, padding=0, bias=False), _bn(dim, out_ch)
             )
         else:
             self.shortcut = None
@@ -401,11 +393,7 @@ class UNetForSemanticSegmentation(SemanticSegmentationModel):
         self.head = _conv(dim, enc_channels[0], config.num_classes, k=1, padding=0, bias=True)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        targets: Tensor | None = None,
-    ) -> SemanticSegmentationOutput:
+    def forward(self, x: Tensor, targets: Tensor | None = None) -> SemanticSegmentationOutput:
         """Run U-Net forward pass."""
         dim = self._cfg.dim
         in_spatial = tuple(int(s) for s in x.shape[2:])
@@ -428,10 +416,7 @@ class UNetForSemanticSegmentation(SemanticSegmentationModel):
         out_spatial = tuple(int(s) for s in logits.shape[2:])
         if out_spatial != in_spatial:
             logits = F.interpolate(
-                logits,
-                size=in_spatial,
-                mode=_interp_mode(dim),
-                align_corners=False,
+                logits, size=in_spatial, mode=_interp_mode(dim), align_corners=False
             )
 
         loss: Tensor | None = None

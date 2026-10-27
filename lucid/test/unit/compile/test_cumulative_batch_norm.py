@@ -135,11 +135,7 @@ def test_the_step_matches_eager_and_only_a_cumulative_batch_norm_runs_eager(
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 @pytest.mark.parametrize(
-    "norm, match",
-    [
-        ("batch-none", "momentum=None"),
-        ("instance-0.1", "wrote in place"),
-    ],
+    "norm, match", [("batch-none", "momentum=None"), ("instance-0.1", "wrote in place")]
 )
 def test_compiled_step_refuses_unlowerable_running_stats(
     device: str, norm: str, match: str

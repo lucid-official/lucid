@@ -42,8 +42,7 @@ def test_a_batched_H_solves_every_matrix_in_the_batch() -> None:
         np.testing.assert_allclose(q[i].numpy(), qi.numpy(), rtol=1e-12, atol=1e-12)
     with pytest.raises(ValueError, match="batch dimensions"):
         LA.householder_product(
-            lucid.randn(3, 4, 3, dtype=lucid.float64),
-            lucid.randn(2, 3, dtype=lucid.float64),
+            lucid.randn(3, 4, 3, dtype=lucid.float64), lucid.randn(2, 3, dtype=lucid.float64)
         )
 
 
@@ -79,8 +78,7 @@ def test_a_well_formed_call_still_works(m: int, n: int) -> None:
     lucid.manual_seed(0)
     k = min(m, n)
     q = LA.householder_product(
-        lucid.randn(m, n, dtype=lucid.float64),
-        lucid.randn(k, dtype=lucid.float64) * 0.1,
+        lucid.randn(m, n, dtype=lucid.float64), lucid.randn(k, dtype=lucid.float64) * 0.1
     )
     assert tuple(q.shape) == (m, k)
     assert np.isfinite(q.numpy()).all()
@@ -90,8 +88,7 @@ def test_a_longer_tau_is_accepted() -> None:
     """Only *too few* reflectors are an error; extras are ignored by LAPACK."""
     lucid.manual_seed(0)
     q = LA.householder_product(
-        lucid.randn(4, 3, dtype=lucid.float64),
-        lucid.randn(3, dtype=lucid.float64) * 0.1,
+        lucid.randn(4, 3, dtype=lucid.float64), lucid.randn(3, dtype=lucid.float64) * 0.1
     )
     assert tuple(q.shape) == (4, 3)
 
@@ -126,10 +123,7 @@ def test_lstsq_refuses_a_B_with_too_few_rows() -> None:
     mapped memory, which is the worse half of the bug.
     """
     with pytest.raises(ValueError, match="one row per row of A"):
-        LA.lstsq(
-            lucid.randn(6, 3, dtype=lucid.float64),
-            lucid.randn(2, 2, dtype=lucid.float64),
-        )
+        LA.lstsq(lucid.randn(6, 3, dtype=lucid.float64), lucid.randn(2, 2, dtype=lucid.float64))
 
 
 @pytest.mark.parametrize("b_shape", [(3,), (3, 1), (3, 4)])
@@ -215,16 +209,10 @@ def test_vander_supports_batched_inputs() -> None:
     assert tuple(v_inc.shape) == (2, 3, 4)
     for i in range(2):
         np.testing.assert_allclose(
-            v_def[i].numpy(),
-            np.vander(x_np[i], increasing=True),
-            rtol=1e-12,
-            atol=1e-12,
+            v_def[i].numpy(), np.vander(x_np[i], increasing=True), rtol=1e-12, atol=1e-12
         )
         np.testing.assert_allclose(
-            v_inc[i].numpy(),
-            np.vander(x_np[i], N=4, increasing=True),
-            rtol=1e-12,
-            atol=1e-12,
+            v_inc[i].numpy(), np.vander(x_np[i], N=4, increasing=True), rtol=1e-12, atol=1e-12
         )
     assert tuple(LA.vander(x, N=0).shape) == (2, 3, 0)
     # A 0-d input is a vector of one, as the reference reads it.

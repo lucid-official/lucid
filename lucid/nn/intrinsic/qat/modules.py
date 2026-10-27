@@ -38,13 +38,7 @@ class _ConvBnNd(nn.Module):
     weight_fake_quant: FakeQuantize
     activation_post_process: FakeQuantize
 
-    def __init__(
-        self,
-        conv: nn.Module,
-        bn: nn.Module,
-        relu: bool,
-        qconfig: QConfig | None,
-    ) -> None:
+    def __init__(self, conv: nn.Module, bn: nn.Module, relu: bool, qconfig: QConfig | None) -> None:
         super().__init__()
         if qconfig is None:
             raise ValueError(f"{type(self).__name__} requires a qconfig")
@@ -614,11 +608,7 @@ class ConvBnReLU1d(_ConvBnNd):
     """
 
     def __init__(
-        self,
-        conv: nn.Module,
-        bn: nn.Module,
-        relu: bool = True,
-        qconfig: QConfig | None = None,
+        self, conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None
     ) -> None:
         super().__init__(conv, bn, relu, qconfig)
 
@@ -731,11 +721,7 @@ class ConvBnReLU2d(_ConvBnNd):
     """
 
     def __init__(
-        self,
-        conv: nn.Module,
-        bn: nn.Module,
-        relu: bool = True,
-        qconfig: QConfig | None = None,
+        self, conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None
     ) -> None:
         super().__init__(conv, bn, relu, qconfig)
 
@@ -848,11 +834,7 @@ class ConvBnReLU3d(_ConvBnNd):
     """
 
     def __init__(
-        self,
-        conv: nn.Module,
-        bn: nn.Module,
-        relu: bool = True,
-        qconfig: QConfig | None = None,
+        self, conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None
     ) -> None:
         super().__init__(conv, bn, relu, qconfig)
 

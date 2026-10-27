@@ -85,12 +85,7 @@ _C64_C, _C128_C = _D.C64.value, _D.C128.value
 _HALF_C = frozenset(d.value for d in HALF)
 _F16_MAX = 65504.0
 _BF16_MAX = float.fromhex("0x1.fep+127")
-_NUMBER_KIND: dict[type, int] = {
-    bool: BOOL,
-    int: INTEGER,
-    float: FLOATING,
-    complex: COMPLEX,
-}
+_NUMBER_KIND: dict[type, int] = {bool: BOOL, int: INTEGER, float: FLOATING, complex: COMPLEX}
 _CPU = _C_engine.Device.CPU
 
 
@@ -380,10 +375,7 @@ def beside_number(
 
 
 def tensor_pair_type(
-    a: _C_engine.TensorImpl,
-    da: _C_engine.Dtype,
-    b: _C_engine.TensorImpl,
-    db: _C_engine.Dtype,
+    a: _C_engine.TensorImpl, da: _C_engine.Dtype, b: _C_engine.TensorImpl, db: _C_engine.Dtype
 ) -> _C_engine.Dtype:
     """``result_type(a, b)`` for two tensors whose dtypes the caller has read.
 

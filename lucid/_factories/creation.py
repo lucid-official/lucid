@@ -6,12 +6,7 @@ import struct
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, SupportsFloat
 from lucid._C import engine as _C_engine
-from lucid._dispatch import (
-    _default_dtype_enum_cached,
-    normalize_factory_kwargs,
-    _unwrap,
-    _wrap,
-)
+from lucid._dispatch import _default_dtype_enum_cached, normalize_factory_kwargs, _unwrap, _wrap
 from lucid._factories._build import _fill, _leaf, _python_scalar, _scalar_dtype
 from lucid._types import DeviceLike, DTypeLike
 

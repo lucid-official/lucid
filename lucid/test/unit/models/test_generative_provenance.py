@@ -83,10 +83,7 @@ PLANET: dict[str, tuple[Any, str]] = {
         200,
         'paper: Appendix A, "a GRU with 200 units as deterministic path in ' 'the dynamics model"',
     ),
-    "hidden_size": (
-        200,
-        'paper: Appendix A, "two fully connected layers of size 200"',
-    ),
+    "hidden_size": (200, 'paper: Appendix A, "two fully connected layers of size 200"'),
     "cnn_depth": (
         32,
         'paper: Appendix A, "the convolutional and deconvolutional networks '
@@ -137,10 +134,7 @@ DREAMER: dict[str, tuple[Any, str]] = {
     "out_channels": (3, _RGB),
     "action_dim": (1, _ACTION_DIM),
     "mean_only": (False, _MEAN_ONLY),
-    "act_fn": (
-        "elu",
-        'paper: Appendix A, "three dense layers of size 300 with ELU activations"',
-    ),
+    "act_fn": ("elu", 'paper: Appendix A, "three dense layers of size 300 with ELU activations"'),
     "cnn_act": (
         "relu",
         "code: dreamer.py cnn_act = 'relu', which the released config keeps "
@@ -172,14 +166,8 @@ DREAMER: dict[str, tuple[Any, str]] = {
         "code: models.py, std = tf.nn.softplus(std) + 0.1 in both the "
         "prior and the posterior head",
     ),
-    "free_nats": (
-        3.0,
-        'paper: Appendix A, "clip them below 3 free nats as in PlaNet"',
-    ),
-    "kl_weight": (
-        1.0,
-        'paper: Appendix A, "We do not scale the KL regularizers (beta = 1)"',
-    ),
+    "free_nats": (3.0, 'paper: Appendix A, "clip them below 3 free nats as in PlaNet"'),
+    "kl_weight": (1.0, 'paper: Appendix A, "We do not scale the KL regularizers (beta = 1)"'),
     "horizon": (15, 'paper: Appendix A, "The imagination horizon is H = 15"'),
     "discount": (
         0.99,
@@ -222,10 +210,7 @@ DREAMER: dict[str, tuple[Any, str]] = {
         "introduced for discrete control, and DMC episodes do not terminate",
     ),
     "pcont_scale": (10.0, "code: dreamer.py pcont_scale = 10.0"),
-    "pcont_layers": (
-        3,
-        "code: dreamer.py DenseDecoder((), 3, num_units, 'binary')",
-    ),
+    "pcont_layers": (3, "code: dreamer.py DenseDecoder((), 3, num_units, 'binary')"),
     "action_space": (
         "continuous",
         "paper: Appendix A gives two settings.  The main paragraph is the "
@@ -244,14 +229,8 @@ DREAMER_V2: dict[str, tuple[Any, str]] = {
     "action_dim": (1, _ACTION_DIM),
     "mean_only": (False, _MEAN_ONLY),
     "act_fn": ("elu", "code: configs.yaml rssm.act: elu"),
-    "stoch_size": (
-        32,
-        "paper: Table D.1, Discrete latent dimensions 32; code: rssm.stoch 32",
-    ),
-    "discrete": (
-        32,
-        "paper: Table D.1, Discrete latent classes 32; code: rssm.discrete 32",
-    ),
+    "stoch_size": (32, "paper: Table D.1, Discrete latent dimensions 32; code: rssm.stoch 32"),
+    "discrete": (32, "paper: Table D.1, Discrete latent classes 32; code: rssm.discrete 32"),
     "deter_size": (
         1024,
         "code: configs.yaml defaults rssm.deter 1024.  Table D.1's 600 is the "
@@ -297,10 +276,7 @@ DREAMER_V2: dict[str, tuple[Any, str]] = {
         "code: configs.yaml actor_ent 2e-3.  Table D.1's 1e-3 is the Atari column",
     ),
     "actor_min_std": (0.1, "code: configs.yaml actor.min_std 0.1"),
-    "slow_target_update": (
-        100,
-        "paper: Table D.1, Slow critic update interval 100",
-    ),
+    "slow_target_update": (100, "paper: Table D.1, Slow critic update interval 100"),
     "slow_target_fraction": (
         1.0,
         "code: configs.yaml slow_target_fraction 1 — a hard copy, not a blend",
@@ -355,10 +331,7 @@ DREAMER_V3: dict[str, tuple[Any, str]] = {
         "code: configs.yaml rewhead.bins and value.bins 255.  The paper gives "
         "the grid's range but not its resolution",
     ),
-    "bin_range": (
-        20.0,
-        "paper: equation (10), B = symexp(-20 ... +20)",
-    ),
+    "bin_range": (20.0, "paper: equation (10), B = symexp(-20 ... +20)"),
     "reward_hidden": (512, "paper: Table 3, the MLPs are d wide"),
     "reward_layers": (
         1,
@@ -370,10 +343,7 @@ DREAMER_V3: dict[str, tuple[Any, str]] = {
     "value_hidden": (512, "paper: Table 3, the MLPs are d wide"),
     "value_layers": (3, "code: configs.yaml value.layers 3"),
     "horizon": (15, "paper: Table 4, Imagination horizon H = 15"),
-    "discount": (
-        0.997,
-        "paper: Table 4, Discount horizon 1/(1-gamma) = 333, so gamma = 1 - 1/333",
-    ),
+    "discount": (0.997, "paper: Table 4, Discount horizon 1/(1-gamma) = 333, so gamma = 1 - 1/333"),
     "lambda_": (0.95, "paper: Table 4, Return lambda 0.95"),
     "actor_entropy": (3e-4, "paper: Table 4, Actor entropy regularizer 3e-4"),
     "actor_min_std": (0.1, "code: configs.yaml policy.minstd 0.1"),
@@ -386,15 +356,9 @@ DREAMER_V3: dict[str, tuple[Any, str]] = {
         "1 - 0.98; code: slowvalue.rate 0.02",
     ),
     "critic_slowreg": (1.0, "paper: Table 4, Critic EMA regularizer 1"),
-    "replay_value_scale": (
-        0.3,
-        "paper: Table 4, Critic replay loss scale beta_repval = 0.3",
-    ),
+    "replay_value_scale": (0.3, "paper: Table 4, Critic replay loss scale beta_repval = 0.3"),
     "pcont": (True, "code: configs.yaml contdisc True"),
-    "pcont_scale": (
-        1.0,
-        "code: configs.yaml loss_scales.con 1.0, the beta_pred family",
-    ),
+    "pcont_scale": (1.0, "code: configs.yaml loss_scales.con 1.0, the beta_pred family"),
     "pcont_layers": (1, "code: configs.yaml conhead.layers 1"),
 }
 
@@ -447,22 +411,10 @@ SCORE_SDE: dict[str, tuple[Any, str]] = {
         "code: configs.py n_steps_each = 1 — one Langevin step per "
         "predictor step, the reference default",
     ),
-    "base_channels": (
-        128,
-        "code: DDPMConfig.base_channels 128 — the backbone this family reuses",
-    ),
-    "channel_mult": (
-        (1, 2, 2, 2),
-        "code: DDPMConfig.channel_mult, the CIFAR-10 multipliers",
-    ),
-    "num_res_blocks": (
-        2,
-        "paper: DDPM Appendix B, two residual blocks per resolution",
-    ),
-    "attention_resolutions": (
-        (16,),
-        "code: DDPMConfig.attention_resolutions — attention at 16x16",
-    ),
+    "base_channels": (128, "code: DDPMConfig.base_channels 128 — the backbone this family reuses"),
+    "channel_mult": ((1, 2, 2, 2), "code: DDPMConfig.channel_mult, the CIFAR-10 multipliers"),
+    "num_res_blocks": (2, "paper: DDPM Appendix B, two residual blocks per resolution"),
+    "attention_resolutions": ((16,), "code: DDPMConfig.attention_resolutions — attention at 16x16"),
     "num_heads": (4, "code: DDPMConfig.num_heads 4"),
     "dropout": (0.1, "code: DDPMConfig.dropout 0.1, the CIFAR-10 value"),
     "resnet_groups": (32, "code: DDPMConfig.resnet_groups 32"),
@@ -552,10 +504,7 @@ GENIE: dict[str, tuple[Any, str]] = {
         25,
         'paper: Section 3, "we perform 25 MaskGIT steps for the sampling of each frame"',
     ),
-    "temperature": (
-        2.0,
-        'paper: Section 3, "with a temperature of 2 using random sampling"',
-    ),
+    "temperature": (2.0, 'paper: Section 3, "with a temperature of 2 using random sampling"'),
 }
 
 
@@ -568,16 +517,7 @@ _FAMILIES = [
     ("genie", GenieConfig, GENIE),
 ]
 _KINDS = ("paper:", "code:", "lucid:")
-_LOCATORS = (
-    "Table",
-    "Appendix",
-    "equation",
-    "Figure",
-    "section",
-    ".yaml",
-    ".py",
-    "configs",
-)
+_LOCATORS = ("Table", "Appendix", "equation", "Figure", "section", ".yaml", ".py", "configs")
 
 
 @pytest.mark.parametrize("name,config_class,table", _FAMILIES)

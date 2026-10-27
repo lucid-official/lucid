@@ -159,9 +159,7 @@ class autocast:
         """
         self._guards().append(
             _C_engine.AutocastGuard(
-                to_engine_dtype(self._dtype),
-                self._engine_device,
-                self._enabled,
+                to_engine_dtype(self._dtype), self._engine_device, self._enabled
             )
         )
         return self

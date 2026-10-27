@@ -131,8 +131,7 @@ def test_broadcast_tensors_forward_and_backward_match_reference(
         start=lucid.zeros((), device=device),
     ).sum()
     r_loss = sum(
-        (rt * ref.tensor(w) for rt, w in zip(r_out, weights, strict=True)),
-        start=ref.zeros(()),
+        (rt * ref.tensor(w) for rt, w in zip(r_out, weights, strict=True)), start=ref.zeros(())
     ).sum()
     l_loss.backward()
     r_loss.backward()

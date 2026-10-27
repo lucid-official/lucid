@@ -166,10 +166,7 @@ class TestAttentiveProbeParity:
             x = ref.tensor(tokens.copy())
             norm_keys = ref.nn.LayerNorm(config.dim, eps=config.layer_norm_eps)
             norm_out = ref.nn.LayerNorm(config.dim, eps=config.layer_norm_eps)
-            for source, target in (
-                (pooler.norm_keys, norm_keys),
-                (pooler.norm_out, norm_out),
-            ):
+            for source, target in ((pooler.norm_keys, norm_keys), (pooler.norm_out, norm_out)):
                 for name, parameter in source.named_parameters():
                     getattr(target, name).copy_(ref.tensor(parameter.numpy()))
 

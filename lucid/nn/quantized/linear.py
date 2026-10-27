@@ -206,18 +206,11 @@ class Linear(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         """Dequantize the weight, run linear, fake-quantize the output."""
         weight = dequantize(
-            self.weight_int8,
-            self.weight_scale,
-            self.weight_zero_point,
-            ch_axis=self.weight_ch_axis,
+            self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=self.weight_ch_axis
         )
         y = self._activation(F.linear(x, weight, self.bias))
         return fake_quantize(
-            y,
-            self.scale,
-            self.zero_point,
-            self.out_qdtype.quant_min,
-            self.out_qdtype.quant_max,
+            y, self.scale, self.zero_point, self.out_qdtype.quant_min, self.out_qdtype.quant_max
         )
 
     @classmethod

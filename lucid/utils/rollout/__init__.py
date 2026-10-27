@@ -9,12 +9,7 @@ transitions, and the two collection hyperparameters the world-model
 papers state: action repeat and exploration noise.
 """
 
-from lucid.utils.rollout._driver import (
-    LatentPolicy,
-    Policy,
-    RandomPolicy,
-    rollout,
-)
+from lucid.utils.rollout._driver import LatentPolicy, Policy, RandomPolicy, rollout
 from lucid.utils.rollout._env import Environment, Episode, StepResult
 from lucid.utils.rollout._replay import (
     PrioritizedBatch,

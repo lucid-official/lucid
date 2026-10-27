@@ -24,11 +24,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._utils._common import update_averages
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
-from lucid.models.generative._common._pixel_nets import (
-    DenseHead,
-    PixelDecoder,
-    PixelEncoder,
-)
+from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
 from lucid.models.generative._common._returns import lambda_return
 from lucid.models.generative._common._rssm import RSSM, RSSMState, categorical_kl
 from lucid.models.generative.dreamer_v2._config import DreamerV2Config
@@ -695,12 +691,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             when there is one.
         """
         model = self.dreamer_v2
-        modules: list[nn.Module] = [
-            model.encoder,
-            model.rssm,
-            model.decoder,
-            model.reward_head,
-        ]
+        modules: list[nn.Module] = [model.encoder, model.rssm, model.decoder, model.reward_head]
         if model.pcont_head is not None:
             modules.append(model.pcont_head)
         return [p for module in modules for p in module.parameters()]
@@ -740,8 +731,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
         if self._updates % self._slow_update == 0:
             mix = 1.0 if self._updates == 0 else self._slow_fraction
             update_averages(
-                self.dreamer_v2.value_head,
-                [(self.dreamer_v2.target_value_head, 1.0 - mix)],
+                self.dreamer_v2.value_head, [(self.dreamer_v2.target_value_head, 1.0 - mix)]
             )
         self._updates += 1
 

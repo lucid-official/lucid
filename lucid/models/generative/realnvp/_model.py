@@ -27,11 +27,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
-from lucid.models._utils._generative import (
-    flow_prior_log_prob,
-    generative_activation,
-    start_noise,
-)
+from lucid.models._utils._generative import flow_prior_log_prob, generative_activation, start_noise
 from lucid.models.generative.realnvp._config import RealNVPConfig
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -638,11 +634,7 @@ class RealNVPModel(PretrainedModel):
     def forward(self, x: Tensor) -> NormalizingFlowOutput:
         z, log_det = self.encode(x)
         log_prob = flow_prior_log_prob(self._prior, z).sum(dim=-1) + log_det
-        return NormalizingFlowOutput(
-            latent=z,
-            log_det_jacobian=log_det,
-            log_prob=log_prob,
-        )
+        return NormalizingFlowOutput(latent=z, log_det_jacobian=log_det, log_prob=log_prob)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -721,11 +713,7 @@ class RealNVPForImageGeneration(ImageGenerationModel):
 
     @lucid.no_grad()
     def generate(
-        self,
-        n_samples: int = 1,
-        *,
-        temperature: float = 1.0,
-        device: str | None = None,
+        self, n_samples: int = 1, *, temperature: float = 1.0, device: str | None = None
     ) -> GenerationOutput:
         """Sample images by inverting a prior draw.
 

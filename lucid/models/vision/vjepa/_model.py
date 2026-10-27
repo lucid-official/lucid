@@ -38,11 +38,7 @@ from lucid.models.vision._common._transformers import (
 )
 from lucid.models.vision.vjepa._config import VJEPAConfig
 
-__all__ = [
-    "VJEPAModel",
-    "VJEPAForVideoClassification",
-    "VJEPAOutput",
-]
+__all__ = ["VJEPAModel", "VJEPAForVideoClassification", "VJEPAOutput"]
 
 
 # ── positions ────────────────────────────────────────────────────────────────
@@ -124,8 +120,7 @@ class _Encoder(nn.Module):
             config.in_channels, config.tubelet_size, config.patch_size, config.dim
         )
         self.register_buffer(
-            "pos_embed",
-            _sincos_3d(config.dim, config.token_grid, config.uniform_power),
+            "pos_embed", _sincos_3d(config.dim, config.token_grid, config.uniform_power)
         )
         blocks = [
             _Block(config.dim, config.num_heads, hidden, config.layer_norm_eps)
@@ -178,8 +173,7 @@ class _Predictor(nn.Module):
             [nn.Parameter(lucid.zeros(1, 1, width)) for _ in range(num_mask_tokens)]
         )
         self.register_buffer(
-            "predictor_pos_embed",
-            _sincos_3d(width, config.token_grid, config.uniform_power),
+            "predictor_pos_embed", _sincos_3d(width, config.token_grid, config.uniform_power)
         )
         blocks = [
             _Block(width, heads, hidden, config.layer_norm_eps)
@@ -198,11 +192,7 @@ class _Predictor(nn.Module):
 
     @override
     def forward(
-        self,
-        context: Tensor,
-        context_indices: Tensor,
-        target_indices: Tensor,
-        mask_index: int = 0,
+        self, context: Tensor, context_indices: Tensor, target_indices: Tensor, mask_index: int = 0
     ) -> Tensor:
         """Predict the target encoder's output at ``target_indices``."""
         if not 0 <= mask_index < self.num_mask_tokens:
@@ -340,11 +330,7 @@ def _tube_indices(
 
 
 def _sample_collection(
-    config: VJEPAConfig,
-    batch: int,
-    blocks: int,
-    scale: tuple[float, float],
-    device: DeviceLike,
+    config: VJEPAConfig, batch: int, blocks: int, scale: tuple[float, float], device: DeviceLike
 ) -> tuple[Tensor, Tensor]:
     """Context and target indices for one mask collection.
 
@@ -603,12 +589,7 @@ class VJEPAModel(PretrainedModel, BackboneMixin):
 
     def _check_clip(self, x: Tensor) -> None:
         config = self.config
-        expected = (
-            config.num_frames,
-            config.in_channels,
-            config.image_size,
-            config.image_size,
-        )
+        expected = (config.num_frames, config.in_channels, config.image_size, config.image_size)
         if x.ndim != 5 or tuple(int(s) for s in x.shape[1:]) != expected:
             raise ValueError(
                 f"clips must be (B, {expected[0]}, {expected[1]}, {expected[2]}, "

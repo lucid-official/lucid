@@ -13,11 +13,7 @@ from typing import Literal, override
 from lucid._tensor import Tensor
 from lucid.utils.transforms import _random
 from lucid.utils.transforms import functional as F
-from lucid.utils.transforms._base import (
-    Empty,
-    GeometricTransform,
-    _NoParams,
-)
+from lucid.utils.transforms._base import Empty, GeometricTransform, _NoParams
 from lucid.utils.transforms._datatypes import (
     BoundingBoxes,
     Keypoints,
@@ -78,11 +74,7 @@ class Resize(_NoParams, GeometricTransform[Empty]):
     """
 
     def __init__(
-        self,
-        height: int,
-        width: int,
-        interpolation: int | str | Interpolation = 1,
-        p: float = 1.0,
+        self, height: int, width: int, interpolation: int | str | Interpolation = 1, p: float = 1.0
     ) -> None:
         super().__init__(p=p)
         self.height = height
@@ -92,10 +84,7 @@ class Resize(_NoParams, GeometricTransform[Empty]):
     @override
     def _apply_image(self, img: Tensor, params: Empty) -> Tensor:
         return F.resize(
-            img,
-            (self.height, self.width),
-            interpolation=self.interpolation,
-            antialias=False,
+            img, (self.height, self.width), interpolation=self.interpolation, antialias=False
         )
 
     @override
@@ -119,10 +108,7 @@ class _MaxSizeResize(_NoParams, GeometricTransform[Empty]):
     """Shared base for SmallestMaxSize / LongestMaxSize."""
 
     def __init__(
-        self,
-        max_size: int,
-        interpolation: int | str | Interpolation = 1,
-        p: float = 1.0,
+        self, max_size: int, interpolation: int | str | Interpolation = 1, p: float = 1.0
     ) -> None:
         super().__init__(p=p)
         self.max_size = max_size
@@ -327,11 +313,7 @@ class CenterCrop(_NoParams, GeometricTransform[Empty]):
     """
 
     def __init__(
-        self,
-        height: int,
-        width: int,
-        offset: Literal["round", "floor"] = "round",
-        p: float = 1.0,
+        self, height: int, width: int, offset: Literal["round", "floor"] = "round", p: float = 1.0
     ) -> None:
         super().__init__(p=p)
         self.height = height
@@ -437,8 +419,7 @@ class RandomCrop(GeometricTransform[Offset]):
         """
         h, w = F._spatial_hw(img)
         return Offset(
-            top=_random.randint(0, h - self.height + 1),
-            left=_random.randint(0, w - self.width + 1),
+            top=_random.randint(0, h - self.height + 1), left=_random.randint(0, w - self.width + 1)
         )
 
     @override

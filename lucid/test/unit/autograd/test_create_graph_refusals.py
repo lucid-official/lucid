@@ -69,11 +69,7 @@ _NODE_BASES = {
 }
 # Reductions inherit a graph-mode backward from their kernel.
 _GRAPH_BY_BASE = {"ReduceOp", "ReduceKernel"}
-_GRAPH_MEMBERS = (
-    "apply_for_graph",
-    "grad_formula_impl",
-    "accumulate_barrier_grad_for_graph",
-)
+_GRAPH_MEMBERS = ("apply_for_graph", "grad_formula_impl", "accumulate_barrier_grad_for_graph")
 _DECL = re.compile(
     r"\b(?:class|struct)\s+(?:LUCID_API\s+|LUCID_INTERNAL\s+)?(\w+)\s*(?:final\s*)?"
     r":\s*public\s+([\w:]+)"
@@ -181,24 +177,7 @@ def test_the_scan_sees_the_nodes_it_should():
 
 # ── the nodes this ledger lost, held to their second derivatives ────────────
 
-_X = [
-    0.5,
-    -1.0,
-    2.0,
-    0.25,
-    -3.0,
-    1.5,
-    0.75,
-    -0.5,
-    1.25,
-    0.1,
-    -2.0,
-    0.3,
-    0.6,
-    -0.7,
-    0.9,
-    1.1,
-]
+_X = [0.5, -1.0, 2.0, 0.25, -3.0, 1.5, 0.75, -0.5, 1.25, 0.1, -2.0, 0.3, 0.6, -0.7, 0.9, 1.1]
 
 # name -> (Lucid call, reference call) on a 16-element x.  Engine-only ops
 # are reached through the binding and held to the reference's composite.
@@ -208,10 +187,7 @@ _ENGINE_OPS = {
         lambda x: _wrap(_C_engine.cube_root(_unwrap(x.abs() + 0.5))),
         lambda x: (x.abs() + 0.5) ** (1.0 / 3.0),
     ),
-    "rpow_scalar": (
-        lambda x: _wrap(_C_engine.rpow_scalar(2.0, _unwrap(x))),
-        lambda x: 2.0**x,
-    ),
+    "rpow_scalar": (lambda x: _wrap(_C_engine.rpow_scalar(2.0, _unwrap(x))), lambda x: 2.0**x),
     "norm_2": (
         lambda x: _wrap(_C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 2.0, [1], False)),
         lambda x: x.reshape(4, 4).norm(2, 1),
@@ -220,10 +196,7 @@ _ENGINE_OPS = {
         lambda x: _wrap(_C_engine.linalg.norm(_unwrap(x.reshape(4, 4)), 1.0, [1], False)),
         lambda x: x.reshape(4, 4).norm(1, 1),
     ),
-    "complex_abs": (
-        lambda x: lucid.abs(lucid.complex(x, x * x)),
-        lambda x: (x + 1j * x * x).abs(),
-    ),
+    "complex_abs": (lambda x: lucid.abs(lucid.complex(x, x * x)), lambda x: (x + 1j * x * x).abs()),
 }
 
 

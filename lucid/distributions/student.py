@@ -14,11 +14,7 @@ import lucid.autograd
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _as_tensor
 from lucid.distributions._util import _broadcast_pair
-from lucid.distributions.constraints import (
-    Constraint,
-    positive,
-    real,
-)
+from lucid.distributions.constraints import Constraint, positive, real
 from lucid.distributions.distribution import Distribution
 
 
@@ -159,9 +155,7 @@ class StudentT(Distribution):
         self.df, self.scale = _broadcast_pair(self.df, self.scale)
         self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
         super().__init__(
-            batch_shape=tuple(self.df.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.df.shape), event_shape=(), validate_args=validate_args
         )
 
     @override

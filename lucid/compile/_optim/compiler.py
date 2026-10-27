@@ -993,10 +993,7 @@ class _CompiledStepBase:
         return {dt: _wrap(_pack_impl([0.0] * n, dt, layout.device)) for dt in layout.dtypes}
 
     def _scalar_vectors(
-        self,
-        layout: _ScalarLayout,
-        flags: tuple[_Flags, ...],
-        active: set[int] | None,
+        self, layout: _ScalarLayout, flags: tuple[_Flags, ...], active: set[int] | None
     ) -> list[_C_engine.TensorImpl]:
         """This step's packed scalar vectors, one per dtype of ``layout``."""
         groups = self._opt.param_groups
@@ -1151,13 +1148,7 @@ class _CompiledStepBase:
         del i, name
 
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         """Emit one parameter's update; returns the new parameter and state."""
         raise NotImplementedError
@@ -1276,13 +1267,7 @@ class _CompiledSGD(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 
@@ -1384,13 +1369,7 @@ class _CompiledAdam(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 
@@ -1499,13 +1478,7 @@ class _CompiledRMSprop(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         wd_on, mom_on, centered, small_w = flags
         if wd_on:
@@ -1589,13 +1562,7 @@ class _CompiledAdagrad(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         if flags[0]:
             g = g + gs("weight_decay") * p
@@ -1649,13 +1616,7 @@ class _CompiledAdadelta(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         if flags[0]:
             g = g + gs("weight_decay") * p
@@ -1723,13 +1684,7 @@ class _CompiledAdamax(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 
@@ -1811,16 +1766,11 @@ class _CompiledNAdam(_CompiledStepBase):
         return beta1 * (1.0 - 0.5 * float(0.96 ** (float(step) * momentum_decay)))
 
     def _next_mu_product(
-        self,
-        i: int,
-        step: int,
-        beta1: float,
-        momentum_decay: float = _MOMENTUM_DECAY,
+        self, i: int, step: int, beta1: float, momentum_decay: float = _MOMENTUM_DECAY
     ) -> float:
         prod = self._pstate[i].get("mu_product", 1.0)
         return _round_state_scalar(
-            prod * self._mu(beta1, step, momentum_decay),
-            self._params[i]._impl.dtype,
+            prod * self._mu(beta1, step, momentum_decay), self._params[i]._impl.dtype
         )
 
     @override
@@ -1853,13 +1803,7 @@ class _CompiledNAdam(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         wd_on, decoupled = flags
         base = p
@@ -1959,13 +1903,7 @@ class _CompiledRAdam(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 
@@ -2051,10 +1989,7 @@ class _CompiledASGD(_CompiledStepBase):
     @override
     def _init_pstate(self, i: int, group: dict[str, object]) -> None:
         lr = _hp(group, "lr", 1e-2)
-        self._pstate[i] = {
-            "eta": _round_state_scalar(lr, self._params[i]._impl.dtype),
-            "mu": 1.0,
-        }
+        self._pstate[i] = {"eta": _round_state_scalar(lr, self._params[i]._impl.dtype), "mu": 1.0}
 
     @override
     def _advance(self, i: int, step: int, gv: dict[str, float]) -> None:
@@ -2068,13 +2003,7 @@ class _CompiledASGD(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         if flags[0]:
             g = g + gs("weight_decay") * p
@@ -2128,13 +2057,7 @@ class _CompiledRprop(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 
@@ -2211,13 +2134,7 @@ class _CompiledLBFGS(_CompiledStepBase):
 
     @override
     def _update(
-        self,
-        p: Tensor,
-        g: Tensor,
-        state: _State,
-        flags: _Flags,
-        gs: _ScalarFn,
-        ps: _ScalarFn,
+        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
     ) -> _Update:
         import lucid as _lucid
 

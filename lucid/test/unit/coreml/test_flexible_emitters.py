@@ -27,8 +27,7 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 _BATCH = 3
@@ -149,10 +148,7 @@ def _agrees(got: lucid.Tensor, reference: lucid.Tensor) -> None:
 
 @pytest.mark.parametrize(("make", "shape", "exact"), _CASES)
 def test_a_batch_range_is_exact_or_refused(
-    make: Callable[[], nn.Module],
-    shape: tuple[int, ...],
-    exact: bool,
-    tmp_path: object,
+    make: Callable[[], nn.Module], shape: tuple[int, ...], exact: bool, tmp_path: object
 ) -> None:
     lucid.manual_seed(0)
     model = make().eval()
@@ -229,9 +225,7 @@ _PLANES = [
     ],
 )
 def test_several_ranged_axes_are_told_apart(
-    make: Callable[[], nn.Module],
-    ranges: dict[int, tuple[int, int]],
-    tmp_path: object,
+    make: Callable[[], nn.Module], ranges: dict[int, tuple[int, int]], tmp_path: object
 ) -> None:
     """Ranged axes that moved together at every probe made a stride-32
     height look like the batch, and the package answered ``(1, 1, 8, 1, 1)``
@@ -308,11 +302,7 @@ def test_a_first_call_cache_is_named_in_the_refusal() -> None:
         )
 
     with pytest.raises(cml.ShapeNotFlexible, match="cache the model fills"):
-        compare(
-            [record(["add"], False), record(["add", "mul"], True)],
-            [(1,), (2,)],
-            frozenset(),
-        )
+        compare([record(["add"], False), record(["add", "mul"], True)], [(1,), (2,)], frozenset())
 
 
 def test_enumerated_shapes_follow_the_batch_too(tmp_path: object) -> None:

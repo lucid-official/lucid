@@ -265,8 +265,7 @@ def _fingerprint() -> str:
             return "unknown"
 
     coreml = read(
-        "/System/Library/Frameworks/CoreML.framework/Resources/version.plist",
-        "CFBundleVersion",
+        "/System/Library/Frameworks/CoreML.framework/Resources/version.plist", "CFBundleVersion"
     )
     system = read("/System/Library/CoreServices/SystemVersion.plist", "ProductBuildVersion")
     return f"lucid-coreml-cache/{_FORMAT};coreml={coreml};os={system}"

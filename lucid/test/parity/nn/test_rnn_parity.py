@@ -52,13 +52,7 @@ def _copy_weights_positional(src_module: Any, dst_module: nn.Module) -> None:
 @pytest.mark.parity
 class TestLSTMParity:
     def _run(
-        self,
-        ref: Any,
-        hidden: int,
-        inp: int,
-        seq: int,
-        batch: int,
-        **kwargs: Any,
+        self, ref: Any, hidden: int, inp: int, seq: int, batch: int, **kwargs: Any
     ) -> tuple[Any, Any, Any, Any]:
         """Return (lucid_out, ref_out, lucid_h, ref_h)."""
         ref_lstm = ref.nn.LSTM(inp, hidden, **kwargs)

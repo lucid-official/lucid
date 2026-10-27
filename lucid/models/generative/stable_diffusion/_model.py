@@ -47,17 +47,10 @@ from lucid.models._output import GenerationOutput, ModelOutput
 from lucid.models._utils._generative import model_dtype
 from lucid.models.generative.stable_diffusion._autoencoder import AutoencoderKL
 from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
-from lucid.models.generative.stable_diffusion._scheduler import (
-    DDIMScheduler,
-    PNDMScheduler,
-)
+from lucid.models.generative.stable_diffusion._scheduler import DDIMScheduler, PNDMScheduler
 from lucid.models.generative.stable_diffusion._unet import UNet2DConditionModel
 
-__all__ = [
-    "StableDiffusionModel",
-    "StableDiffusionForImageGeneration",
-    "StableDiffusionOutput",
-]
+__all__ = ["StableDiffusionModel", "StableDiffusionForImageGeneration", "StableDiffusionOutput"]
 
 # The released first stage's scaling constant.  Not a tuned value: it is
 # 1/std of the latents the published autoencoder produces.
@@ -488,10 +481,7 @@ class StableDiffusionForImageGeneration(ImageGenerationModel):
 
     @override
     def forward(
-        self,
-        images: Tensor,
-        context: Tensor,
-        timestep: Tensor | None = None,
+        self, images: Tensor, context: Tensor, timestep: Tensor | None = None
     ) -> StableDiffusionOutput:
         r"""One training step of the denoising objective.
 

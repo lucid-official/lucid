@@ -93,10 +93,7 @@ def _fill_from_impl(tensor: Tensor, src_impl: _C_engine.TensorImpl) -> Tensor:
 
 @_skippable
 def uniform_(
-    tensor: Tensor,
-    a: float = 0.0,
-    b: float = 1.0,
-    generator: _C_engine.Generator | None = None,
+    tensor: Tensor, a: float = 0.0, b: float = 1.0, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Initialise ``tensor`` in-place with samples from a uniform distribution.
 
@@ -252,8 +249,7 @@ def constant_(tensor: Tensor, val: float) -> Tensor:
     True
     """
     return _fill_from_impl(
-        tensor,
-        _C_engine.full(list(tensor.shape), val, tensor._impl.dtype, tensor._impl.device),
+        tensor, _C_engine.full(list(tensor.shape), val, tensor._impl.dtype, tensor._impl.device)
     )
 
 
@@ -290,8 +286,7 @@ def ones_(tensor: Tensor) -> Tensor:
     64.0
     """
     return _fill_from_impl(
-        tensor,
-        _C_engine.ones(list(tensor.shape), tensor._impl.dtype, tensor._impl.device),
+        tensor, _C_engine.ones(list(tensor.shape), tensor._impl.dtype, tensor._impl.device)
     )
 
 
@@ -329,8 +324,7 @@ def zeros_(tensor: Tensor) -> Tensor:
     True
     """
     return _fill_from_impl(
-        tensor,
-        _C_engine.zeros(list(tensor.shape), tensor._impl.dtype, tensor._impl.device),
+        tensor, _C_engine.zeros(list(tensor.shape), tensor._impl.dtype, tensor._impl.device)
     )
 
 
@@ -384,9 +378,7 @@ def eye_(tensor: Tensor) -> Tensor:
 
 @_skippable
 def xavier_uniform_(
-    tensor: Tensor,
-    gain: float = 1.0,
-    generator: _C_engine.Generator | None = None,
+    tensor: Tensor, gain: float = 1.0, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Initialise ``tensor`` in-place with Xavier (Glorot) uniform initialisation.
 
@@ -455,9 +447,7 @@ def xavier_uniform_(
 
 @_skippable
 def xavier_normal_(
-    tensor: Tensor,
-    gain: float = 1.0,
-    generator: _C_engine.Generator | None = None,
+    tensor: Tensor, gain: float = 1.0, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Initialise ``tensor`` in-place with Xavier (Glorot) normal initialisation.
 
@@ -764,9 +754,7 @@ def trunc_normal_(
 
 @_skippable
 def orthogonal_(
-    tensor: Tensor,
-    gain: float = 1.0,
-    generator: _C_engine.Generator | None = None,
+    tensor: Tensor, gain: float = 1.0, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Initialise ``tensor`` in-place with a (semi-)orthogonal matrix.
 
@@ -843,10 +831,7 @@ def orthogonal_(
 
 @_skippable
 def sparse_(
-    tensor: Tensor,
-    sparsity: float,
-    std: float = 0.01,
-    generator: _C_engine.Generator | None = None,
+    tensor: Tensor, sparsity: float, std: float = 0.01, generator: _C_engine.Generator | None = None
 ) -> Tensor:
     r"""Initialise a 2-D ``tensor`` in-place with a sparse random matrix.
 
@@ -1008,11 +993,7 @@ def dirac_(tensor: Tensor, groups: int = 1) -> Tensor:
         ]
         for c in spatial_centres:
             idx_tensors.append(_lucid.tensor([c] * n_writes, dtype=_lucid.int64, device=dev))
-        src = _lucid.index_put(
-            src,
-            tuple(idx_tensors),
-            _lucid.ones(n_writes, device=dev),
-        )
+        src = _lucid.index_put(src, tuple(idx_tensors), _lucid.ones(n_writes, device=dev))
     src_t: Tensor = _lucid.tensor(src, dtype=tensor._impl.dtype, device=dev)
     return _fill_from_impl(tensor, src_t._impl)
 

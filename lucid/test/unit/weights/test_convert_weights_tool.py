@@ -379,11 +379,7 @@ def test_a_release_built_differently_is_refused(
     message: str,
 ) -> None:
     net, _ = _release(
-        ref,
-        hook,
-        num_heads=num_heads,
-        do_mod_norm=do_mod_norm,
-        do_scale_param=do_scale_param,
+        ref, hook, num_heads=num_heads, do_mod_norm=do_mod_norm, do_scale_param=do_scale_param
     )
     arch = _arch_reading(_dump(tmp_path, net), monkeypatch)
     with pytest.raises(RuntimeError, match=message):
@@ -443,12 +439,7 @@ def test_an_old_framework_reads_no_storage(
 
 @pytest.mark.parametrize(
     ("version", "release"),
-    [
-        ("2.5.1", (2, 5)),
-        ("2.6.0+cpu", (2, 6)),
-        ("2.10.0a0+git1234", (2, 10)),
-        ("2.13.0", (2, 13)),
-    ],
+    [("2.5.1", (2, 5)), ("2.6.0+cpu", (2, 6)), ("2.10.0a0+git1234", (2, 10)), ("2.13.0", (2, 13))],
 )
 def test_a_release_is_compared_as_numbers(version: str, release: tuple[int, int]) -> None:
     assert convert_tvm._release_of(version) == release

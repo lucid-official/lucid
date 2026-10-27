@@ -17,10 +17,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models._utils._common import (
-    init_cnn_fan_out,
-    make_divisible as _make_divisible,
-)
+from lucid.models._utils._common import init_cnn_fan_out, make_divisible as _make_divisible
 from lucid.models.vision.mobilenet_v3._config import MobileNetV3Config
 
 # MobileNet v3 overrides the default batch-norm hyperparameters: the NAS
@@ -87,13 +84,7 @@ class _InvertedResidual(nn.Module):
         act2: nn.Module = nn.Hardswish() if use_hs else nn.ReLU(inplace=True)
         layers += [
             nn.Conv2d(
-                exp_ch,
-                exp_ch,
-                kernel_size,
-                stride=stride,
-                padding=pad,
-                groups=exp_ch,
-                bias=False,
+                exp_ch, exp_ch, kernel_size, stride=stride, padding=pad, groups=exp_ch, bias=False
             ),
             nn.BatchNorm2d(exp_ch, eps=_BN_EPS, momentum=_BN_MOMENTUM),
             act2,
@@ -156,8 +147,7 @@ _SMALL_SPECS: list[tuple[int, int, int, int, bool, bool, int]] = [
 
 
 def _apply_width(
-    specs: list[tuple[int, int, int, int, bool, bool, int]],
-    w: float,
+    specs: list[tuple[int, int, int, int, bool, bool, int]], w: float
 ) -> list[tuple[int, int, int, int, bool, bool, int]]:
     """Scale channel counts by width_mult."""
     out: list[tuple[int, int, int, int, bool, bool, int]] = []
@@ -224,10 +214,7 @@ def _build_features(cfg: MobileNetV3Config) -> tuple[nn.Sequential, int, int]:
 
 
 def _build_classifier_head(
-    penultimate_ch: int,
-    head_ch: int,
-    num_classes: int,
-    dropout: float,
+    penultimate_ch: int, head_ch: int, num_classes: int, dropout: float
 ) -> nn.Sequential:
     return nn.Sequential(
         nn.AdaptiveAvgPool2d(1),
@@ -463,11 +450,7 @@ class MobileNetV3ForImageClassification(ImageClassificationModel, Classification
         init_cnn_fan_out(self, linear_std=0.01)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         logits = self.classifier(x)
 

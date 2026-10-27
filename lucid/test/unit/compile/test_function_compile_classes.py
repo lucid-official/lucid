@@ -22,19 +22,10 @@ import ast
 from pathlib import Path
 
 TRACE_FORM: frozenset[str] = frozenset(
-    {
-        "_Snapshot",
-        "_Overwritten",
-        "_TruncQuotient",
-        "_RoundDecimals",
-    }
+    {"_Snapshot", "_Overwritten", "_TruncQuotient", "_RoundDecimals"}
 )
 
-EXACT: frozenset[str] = frozenset(
-    {
-        "_CheckpointFn",
-    }
-)
+EXACT: frozenset[str] = frozenset({"_CheckpointFn"})
 
 CUSTOM: frozenset[str] = frozenset(
     {
@@ -63,19 +54,9 @@ CUSTOM: frozenset[str] = frozenset(
     }
 )
 
-UNTRACED: frozenset[str] = frozenset(
-    {
-        "_Ldexp",
-        "_MetalFrexp",
-    }
-)
+UNTRACED: frozenset[str] = frozenset({"_Ldexp", "_MetalFrexp"})
 
-COMPILE_INTERNAL: frozenset[str] = frozenset(
-    {
-        "_CompiledStepFunction",
-        "_SegmentFunction",
-    }
-)
+COMPILE_INTERNAL: frozenset[str] = frozenset({"_CompiledStepFunction", "_SegmentFunction"})
 
 ALL_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("TRACE_FORM", TRACE_FORM),

@@ -15,8 +15,7 @@ import lucid
 _DEVICES = [
     "cpu",
     pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
+        "metal", marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device")
     ),
 ]
 _A = [1 + 2j, 3 - 1j]

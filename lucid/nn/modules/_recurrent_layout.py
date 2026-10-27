@@ -184,12 +184,7 @@ def _packed_to_padded(packed: PackedSequence) -> tuple[Tensor, list[int]]:
     for bs in batch_sizes:
         step = packed.data[offset : offset + bs]
         if bs < B:
-            pad = zeros(
-                B - bs,
-                *feat,
-                device=packed.data.device,
-                dtype=packed.data.dtype,
-            )
+            pad = zeros(B - bs, *feat, device=packed.data.device, dtype=packed.data.dtype)
             step = _lucid.cat([step, pad], 0)
         rows.append(step)
         offset += bs
@@ -208,10 +203,7 @@ def _padded_to_packed(
     """
     rows = [padded[t, :bs] for t, bs in enumerate(batch_sizes)]
     return PackedSequence(
-        _lucid.cat(rows, 0),
-        src.batch_sizes,
-        src.sorted_indices,
-        src.unsorted_indices,
+        _lucid.cat(rows, 0), src.batch_sizes, src.sorted_indices, src.unsorted_indices
     )
 
 

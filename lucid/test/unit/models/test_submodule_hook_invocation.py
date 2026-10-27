@@ -16,17 +16,11 @@ import lucid.nn as nn
 from lucid.models import BERTConfig, BERTForCausalLM, BERTModel
 from lucid.models.generative.diamond import DIAMONDConfig, DIAMONDModel
 from lucid.models.generative.dit import DiTConfig, DiTForImageGeneration
-from lucid.models.generative.mean_flow import (
-    MeanFlowConfig,
-    MeanFlowForImageGeneration,
-)
+from lucid.models.generative.mean_flow import MeanFlowConfig, MeanFlowForImageGeneration
 
 _MODELS_ROOT = Path(__file__).resolve().parents[3] / "models"
 _DEFERRED_DETECTION_FILES = frozenset(
-    {
-        "vision/faster_rcnn/_model.py",
-        "vision/mask_rcnn/_model.py",
-    }
+    {"vision/faster_rcnn/_model.py", "vision/mask_rcnn/_model.py"}
 )
 
 
@@ -121,11 +115,7 @@ class TestMeanFlowSubmoduleHooks:
 
     def test_mean_flow_forward_and_cfg_target_fire_backbone_hook(self) -> None:
         model = MeanFlowForImageGeneration(
-            self._tiny_config(
-                guidance_scale=2.0,
-                guidance_mix=0.5,
-                guidance_interval=(0.0, 1.0),
-            )
+            self._tiny_config(guidance_scale=2.0, guidance_mix=0.5, guidance_interval=(0.0, 1.0))
         ).eval()
         calls: list[int] = []
         handle = model.mean_flow.register_forward_hook(lambda *_args: calls.append(1))
@@ -145,11 +135,7 @@ class TestMeanFlowSubmoduleHooks:
         handle = model.mean_flow.register_forward_hook(lambda *_args: calls.append(1))
         try:
             labels = lucid.tensor([1, 2], dtype=lucid.int64)
-            gen = model.generate(
-                n_samples=2,
-                steps=2,
-                labels=labels,
-            )
+            gen = model.generate(n_samples=2, steps=2, labels=labels)
         finally:
             handle.remove()
 
@@ -181,11 +167,7 @@ class TestDiTSubmoduleHooks:
             assert len(calls) == 1
 
             calls.clear()
-            gen = model.generate(
-                n_samples=2,
-                steps=2,
-                labels=labels,
-            )
+            gen = model.generate(n_samples=2, steps=2, labels=labels)
             assert gen.samples.shape == (2, 4, 8, 8)
             assert len(calls) == 2
         finally:
@@ -267,9 +249,7 @@ class TestNoDirectSubmoduleForwardCallsAST:
             "changes on main during LCD-312 and were out of scope"
         ),
     )
-    def test_no_direct_submodule_forward_calls_in_deferred_detection_models(
-        self,
-    ) -> None:
+    def test_no_direct_submodule_forward_calls_in_deferred_detection_models(self) -> None:
         violations: list[str] = []
         for rel in sorted(_DEFERRED_DETECTION_FILES):
             violations.extend(_find_direct_forward_calls(_MODELS_ROOT / rel))

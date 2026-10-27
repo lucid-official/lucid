@@ -349,9 +349,7 @@ class _VelocityField(nn.Module):
                 ch = out_ch
                 self.down_attn.append(
                     _AttentionBlock(
-                        ch,
-                        head_channels=config.num_head_channels,
-                        groups=config.resnet_groups,
+                        ch, head_channels=config.num_head_channels, groups=config.resnet_groups
                     )
                     if spatial in config.attention_resolutions
                     else nn.Identity()
@@ -404,9 +402,7 @@ class _VelocityField(nn.Module):
                 ch = out_ch
                 self.up_attn.append(
                     _AttentionBlock(
-                        ch,
-                        head_channels=config.num_head_channels,
-                        groups=config.resnet_groups,
+                        ch, head_channels=config.num_head_channels, groups=config.resnet_groups
                     )
                     if spatial in config.attention_resolutions
                     else nn.Identity()
@@ -703,11 +699,7 @@ class FlowMatchingModel(PretrainedModel):
 
     def _check_image(self, x: Tensor) -> None:
         channels, height, width = self._image_shape
-        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (
-            channels,
-            height,
-            width,
-        ):
+        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
             raise ValueError(
                 f"Flow Matching expects (B, {channels}, {height}, {width}) samples, "
                 f"got shape {tuple(x.shape)}"
@@ -870,11 +862,7 @@ class FlowMatchingModel(PretrainedModel):
         return loss, prediction, target
 
     def _integrate(
-        self,
-        func: Callable[..., object],
-        state: _State,
-        t0: float,
-        t1: float,
+        self, func: Callable[..., object], state: _State, t0: float, t1: float
     ) -> _State:
         """One solve, endpoint only."""
         return cast(
@@ -1037,8 +1025,7 @@ class FlowMatchingModel(PretrainedModel):
         self.dynamics.reset(eps)
 
         x0, delta0 = cast(
-            tuple[Tensor, Tensor],
-            self._integrate(self.dynamics, (flat, delta), 1.0, 0.0),
+            tuple[Tensor, Tensor], self._integrate(self.dynamics, (flat, delta), 1.0, 0.0)
         )
         # log p_0 of a standard normal, summed over the flattened sample.
         prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(2.0 * math.pi)

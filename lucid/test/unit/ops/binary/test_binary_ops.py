@@ -64,11 +64,7 @@ _BCAST_PAIRS = [
 
 
 @pytest.mark.parametrize("shape_a,shape_b", _BCAST_PAIRS)
-def test_add_broadcasts(
-    shape_a: tuple[int, ...],
-    shape_b: tuple[int, ...],
-    device: str,
-) -> None:
+def test_add_broadcasts(shape_a: tuple[int, ...], shape_b: tuple[int, ...], device: str) -> None:
     np.random.seed(0)
     a = np.random.uniform(-1.0, 1.0, size=shape_a).astype(np.float32)
     b = np.random.uniform(-1.0, 1.0, size=shape_b).astype(np.float32)

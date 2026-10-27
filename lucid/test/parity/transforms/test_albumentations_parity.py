@@ -134,10 +134,7 @@ class TestBallpark:
         got = np.transpose(F.adjust_hsv(chw, 20.0, 30.0, 10.0).numpy(), (1, 2, 0))
         ref = _run_albu(
             A.HueSaturationValue(
-                hue_shift_limit=(20, 20),
-                sat_shift_limit=(30, 30),
-                val_shift_limit=(10, 10),
-                p=1.0,
+                hue_shift_limit=(20, 20), sat_shift_limit=(30, 30), val_shift_limit=(10, 10), p=1.0
             ),
             hwc,
         )
@@ -206,8 +203,7 @@ class TestStatisticalParity:
 
     def test_resize_bilinear_aggregate(self) -> None:
         self._aggregate(
-            lambda: T.Resize(12, 16, p=1.0),
-            lambda: A.Resize(12, 16, interpolation=1, p=1.0),
+            lambda: T.Resize(12, 16, p=1.0), lambda: A.Resize(12, 16, interpolation=1, p=1.0)
         )
 
     def test_resize_nearest_aggregate(self) -> None:
@@ -219,16 +215,12 @@ class TestStatisticalParity:
 
     def test_center_crop_aggregate(self) -> None:
         self._aggregate(
-            lambda: T.CenterCrop(16, 20, p=1.0),
-            lambda: A.CenterCrop(16, 20, p=1.0),
-            atol=0.0,
+            lambda: T.CenterCrop(16, 20, p=1.0), lambda: A.CenterCrop(16, 20, p=1.0), atol=0.0
         )
 
     def test_crop_aggregate(self) -> None:
         self._aggregate(
-            lambda: T.Crop(2, 3, 18, 23, p=1.0),
-            lambda: A.Crop(2, 3, 18, 23, p=1.0),
-            atol=0.0,
+            lambda: T.Crop(2, 3, 18, 23, p=1.0), lambda: A.Crop(2, 3, 18, 23, p=1.0), atol=0.0
         )
 
     @pytest.mark.parametrize("num_bits", [3, 5])

@@ -40,26 +40,11 @@ OK = "ok"
 
 _BATCH_NORM = [
     ("bn2d_rank3", "E.nn.batch_norm(R(2, 3, 7), O(3), Z(3))", SHAPE, "must be 4-D"),
-    (
-        "bn2d_rank5",
-        "E.nn.batch_norm(R(2, 3, 4, 4, 4), O(3), Z(3))",
-        SHAPE,
-        "must be 4-D",
-    ),
+    ("bn2d_rank5", "E.nn.batch_norm(R(2, 3, 4, 4, 4), O(3), Z(3))", SHAPE, "must be 4-D"),
     ("bn2d_rank2", "E.nn.batch_norm(R(2, 3), O(3), Z(3))", SHAPE, "must be 4-D"),
     ("bn1d_rank2", "E.nn.batch_norm1d(R(2, 3), O(3), Z(3))", SHAPE, "must be 3-D"),
-    (
-        "bn1d_rank4",
-        "E.nn.batch_norm1d(R(2, 3, 4, 4), O(3), Z(3))",
-        SHAPE,
-        "must be 3-D",
-    ),
-    (
-        "bn3d_rank4",
-        "E.nn.batch_norm3d(R(2, 3, 4, 4), O(3), Z(3))",
-        SHAPE,
-        "must be 5-D",
-    ),
+    ("bn1d_rank4", "E.nn.batch_norm1d(R(2, 3, 4, 4), O(3), Z(3))", SHAPE, "must be 3-D"),
+    ("bn3d_rank4", "E.nn.batch_norm3d(R(2, 3, 4, 4), O(3), Z(3))", SHAPE, "must be 5-D"),
     ("bn2d_weight_len", "E.nn.batch_norm(R(2, 3, 4, 4), O(5), Z(3))", SHAPE, "weight"),
     ("bn2d_bias_len", "E.nn.batch_norm(R(2, 3, 4, 4), O(3), Z(5))", SHAPE, "bias"),
     (
@@ -86,18 +71,8 @@ _BATCH_NORM = [
         ARG,
         "together",
     ),
-    (
-        "bn_backward_rank3",
-        "BW(E.nn.batch_norm(G(2, 3, 7), O(3), Z(3)))",
-        SHAPE,
-        "must be 4-D",
-    ),
-    (
-        "bn_eval_rank1",
-        "E.nn.batch_norm_eval(R(3), Z(3), O(3), O(3), Z(3))",
-        SHAPE,
-        "at least 2-D",
-    ),
+    ("bn_backward_rank3", "BW(E.nn.batch_norm(G(2, 3, 7), O(3), Z(3)))", SHAPE, "must be 4-D"),
+    ("bn_eval_rank1", "E.nn.batch_norm_eval(R(3), Z(3), O(3), O(3), Z(3))", SHAPE, "at least 2-D"),
     (
         "bn_eval_var_len",
         "E.nn.batch_norm_eval(R(2, 3, 4), Z(3), O(5), O(3), Z(3))",
@@ -148,25 +123,10 @@ _OTHER_NORMS = [
     ("gn_bias_len", "E.nn.group_norm(R(2, 6, 4), O(6), Z(3), 3)", SHAPE, "bias"),
     ("gn_indivisible", "E.nn.group_norm(R(2, 6, 4), O(6), Z(6), 4)", ARG, "divisible"),
     ("gn_groups_zero", "E.nn.group_norm(R(2, 6, 4), O(6), Z(6), 0)", ARG, "num_groups"),
-    (
-        "gn_groups_negative",
-        "E.nn.group_norm(R(2, 6, 4), O(6), Z(6), -2)",
-        ARG,
-        "num_groups",
-    ),
-    (
-        "ln_weight_trailing",
-        "E.nn.layer_norm(R(2, 3, 4), O(5), Z(5))",
-        SHAPE,
-        "layer_norm",
-    ),
+    ("gn_groups_negative", "E.nn.group_norm(R(2, 6, 4), O(6), Z(6), -2)", ARG, "num_groups"),
+    ("ln_weight_trailing", "E.nn.layer_norm(R(2, 3, 4), O(5), Z(5))", SHAPE, "layer_norm"),
     ("ln_bias_shape", "E.nn.layer_norm(R(2, 3, 4), O(4), Z(3))", SHAPE, "same shape"),
-    (
-        "ln_bias_backward",
-        "BW(E.nn.layer_norm(G(2, 3, 4), O(4), Z(3)))",
-        SHAPE,
-        "same shape",
-    ),
+    ("ln_bias_backward", "BW(E.nn.layer_norm(G(2, 3, 4), O(4), Z(3)))", SHAPE, "same shape"),
     ("rms_weight_trailing", "E.nn.rms_norm(R(2, 3, 4), O(5))", SHAPE, "rms_norm"),
     (
         "grn_rank3",
@@ -178,82 +138,22 @@ _OTHER_NORMS = [
 
 _CONV = [
     ("conv1d_x_rank2", "E.nn.conv1d(R(3, 8), R(4, 3, 3), None)", SHAPE, "must be 3-D"),
-    (
-        "conv1d_weight_rank2",
-        "E.nn.conv1d(R(2, 3, 8), R(4, 3), None)",
-        SHAPE,
-        "must be 3-D",
-    ),
+    ("conv1d_weight_rank2", "E.nn.conv1d(R(2, 3, 8), R(4, 3), None)", SHAPE, "must be 3-D"),
     ("conv1d_weight_rank0", "E.nn.conv1d(R(2, 3, 8), R(), None)", SHAPE, "weight"),
     ("conv1d_in_channels", "E.nn.conv1d(R(2, 3, 8), R(4, 5, 3), None)", SHAPE, "C_in"),
     ("conv1d_bias_len", "E.nn.conv1d(R(2, 3, 8), R(4, 3, 3), R(7))", SHAPE, "bias"),
     ("conv1d_stride0", "E.nn.conv1d(R(2, 3, 8), R(4, 3, 3), None, 0)", ARG, "stride"),
-    (
-        "conv1d_pad_negative",
-        "E.nn.conv1d(R(2, 3, 8), R(4, 3, 3), None, 1, -1)",
-        ARG,
-        "padding",
-    ),
-    (
-        "conv2d_x_rank3",
-        "E.nn.conv2d(R(3, 8, 8), R(4, 3, 3, 3), None)",
-        SHAPE,
-        "must be 4-D",
-    ),
-    (
-        "conv2d_x_rank5",
-        "E.nn.conv2d(R(2, 3, 8, 8, 8), R(4, 3, 3, 3), None)",
-        SHAPE,
-        "4-D",
-    ),
-    (
-        "conv2d_in_channels",
-        "E.nn.conv2d(R(2, 3, 8, 8), R(4, 5, 3, 3), None)",
-        SHAPE,
-        "C_in",
-    ),
-    (
-        "conv2d_stride0",
-        "E.nn.conv2d(R(2, 3, 8, 8), R(4, 3, 3, 3), None, 0, 0)",
-        ARG,
-        "stride",
-    ),
-    (
-        "conv3d_x_rank4",
-        "E.nn.conv3d(R(3, 4, 4, 4), R(4, 3, 3, 3, 3), None)",
-        SHAPE,
-        "5-D",
-    ),
-    (
-        "conv3d_in_channels",
-        "E.nn.conv3d(R(2, 3, 4, 4, 4), R(4, 5, 3, 3, 3), None)",
-        SHAPE,
-        "C_in",
-    ),
-    (
-        "convT1d_x_rank2",
-        "E.nn.conv_transpose1d(R(3, 8), R(3, 4, 3), None)",
-        SHAPE,
-        "3-D",
-    ),
-    (
-        "convT1d_in_channels",
-        "E.nn.conv_transpose1d(R(2, 3, 8), R(5, 4, 3), None)",
-        SHAPE,
-        "C_in",
-    ),
-    (
-        "convT1d_weight_rank1",
-        "E.nn.conv_transpose1d(R(2, 3, 8), R(3), None)",
-        SHAPE,
-        "weight",
-    ),
-    (
-        "convT1d_stride0",
-        "E.nn.conv_transpose1d(R(2, 3, 8), R(3, 4, 3), None, 0)",
-        ARG,
-        "stride",
-    ),
+    ("conv1d_pad_negative", "E.nn.conv1d(R(2, 3, 8), R(4, 3, 3), None, 1, -1)", ARG, "padding"),
+    ("conv2d_x_rank3", "E.nn.conv2d(R(3, 8, 8), R(4, 3, 3, 3), None)", SHAPE, "must be 4-D"),
+    ("conv2d_x_rank5", "E.nn.conv2d(R(2, 3, 8, 8, 8), R(4, 3, 3, 3), None)", SHAPE, "4-D"),
+    ("conv2d_in_channels", "E.nn.conv2d(R(2, 3, 8, 8), R(4, 5, 3, 3), None)", SHAPE, "C_in"),
+    ("conv2d_stride0", "E.nn.conv2d(R(2, 3, 8, 8), R(4, 3, 3, 3), None, 0, 0)", ARG, "stride"),
+    ("conv3d_x_rank4", "E.nn.conv3d(R(3, 4, 4, 4), R(4, 3, 3, 3, 3), None)", SHAPE, "5-D"),
+    ("conv3d_in_channels", "E.nn.conv3d(R(2, 3, 4, 4, 4), R(4, 5, 3, 3, 3), None)", SHAPE, "C_in"),
+    ("convT1d_x_rank2", "E.nn.conv_transpose1d(R(3, 8), R(3, 4, 3), None)", SHAPE, "3-D"),
+    ("convT1d_in_channels", "E.nn.conv_transpose1d(R(2, 3, 8), R(5, 4, 3), None)", SHAPE, "C_in"),
+    ("convT1d_weight_rank1", "E.nn.conv_transpose1d(R(2, 3, 8), R(3), None)", SHAPE, "weight"),
+    ("convT1d_stride0", "E.nn.conv_transpose1d(R(2, 3, 8), R(3, 4, 3), None, 0)", ARG, "stride"),
     (
         "convT1d_output_padding",
         "E.nn.conv_transpose1d(R(2, 3, 8), R(3, 4, 3), None, 1, 0, 3)",
@@ -266,12 +166,7 @@ _CONV = [
         ARG,
         "groups",
     ),
-    (
-        "convT2d_x_rank3",
-        "E.nn.conv_transpose2d(R(3, 8, 8), R(3, 4, 3, 3), None)",
-        SHAPE,
-        "4-D",
-    ),
+    ("convT2d_x_rank3", "E.nn.conv_transpose2d(R(3, 8, 8), R(3, 4, 3, 3), None)", SHAPE, "4-D"),
     (
         "convT2d_bias_len",
         "E.nn.conv_transpose2d(R(2, 3, 8, 8), R(3, 4, 3, 3), R(7))",
@@ -284,30 +179,10 @@ _CONV = [
         SHAPE,
         "C_in",
     ),
-    (
-        "unfold_rank2",
-        "E.nn.unfold(R(8, 8), [2, 2], [1, 1], [0, 0], [1, 1])",
-        SHAPE,
-        "4-D",
-    ),
-    (
-        "unfold_kernel0",
-        "E.nn.unfold(R(1, 3, 8, 8), [0, 0], [1, 1], [0, 0], [1, 1])",
-        ARG,
-        "kernel",
-    ),
-    (
-        "unfold_stride0",
-        "E.nn.unfold(R(1, 3, 8, 8), [2, 2], [0, 0], [0, 0], [1, 1])",
-        ARG,
-        "stride",
-    ),
-    (
-        "fold_rank2",
-        "E.nn.fold(R(12, 9), [4, 4], [2, 2], [1, 1], [0, 0], [1, 1])",
-        SHAPE,
-        "3-D",
-    ),
+    ("unfold_rank2", "E.nn.unfold(R(8, 8), [2, 2], [1, 1], [0, 0], [1, 1])", SHAPE, "4-D"),
+    ("unfold_kernel0", "E.nn.unfold(R(1, 3, 8, 8), [0, 0], [1, 1], [0, 0], [1, 1])", ARG, "kernel"),
+    ("unfold_stride0", "E.nn.unfold(R(1, 3, 8, 8), [2, 2], [0, 0], [0, 0], [1, 1])", ARG, "stride"),
+    ("fold_rank2", "E.nn.fold(R(12, 9), [4, 4], [2, 2], [1, 1], [0, 0], [1, 1])", SHAPE, "3-D"),
     (
         "fold_channels",
         "E.nn.fold(R(1, 7, 9), [4, 4], [2, 2], [1, 1], [0, 0], [1, 1])",
@@ -325,69 +200,24 @@ _CONV = [
 _POOL = [
     ("max_pool1d_rank2", "E.nn.max_pool1d(R(3, 8), 2)", SHAPE, "must be 3-D"),
     ("max_pool2d_rank3", "E.nn.max_pool2d(R(3, 8, 8), 2, 2)", SHAPE, "must be 4-D"),
-    (
-        "max_pool2d_rank5",
-        "E.nn.max_pool2d(R(2, 3, 8, 8, 8), 2, 2)",
-        SHAPE,
-        "must be 4-D",
-    ),
-    (
-        "max_pool3d_rank4",
-        "E.nn.max_pool3d(R(3, 4, 4, 4), 2, 2, 2)",
-        SHAPE,
-        "must be 5-D",
-    ),
+    ("max_pool2d_rank5", "E.nn.max_pool2d(R(2, 3, 8, 8, 8), 2, 2)", SHAPE, "must be 4-D"),
+    ("max_pool3d_rank4", "E.nn.max_pool3d(R(3, 4, 4, 4), 2, 2, 2)", SHAPE, "must be 5-D"),
     ("avg_pool1d_rank2", "E.nn.avg_pool1d(R(3, 8), 2)", SHAPE, "must be 3-D"),
     ("avg_pool2d_rank3", "E.nn.avg_pool2d(R(3, 8, 8), 2, 2)", SHAPE, "must be 4-D"),
-    (
-        "avg_pool3d_rank4",
-        "E.nn.avg_pool3d(R(3, 4, 4, 4), 2, 2, 2)",
-        SHAPE,
-        "must be 5-D",
-    ),
+    ("avg_pool3d_rank4", "E.nn.avg_pool3d(R(3, 4, 4, 4), 2, 2, 2)", SHAPE, "must be 5-D"),
     ("max_pool1d_kernel0", "E.nn.max_pool1d(R(2, 3, 8), 0)", ARG, "kernel_size"),
     ("max_pool2d_kernel0", "E.nn.max_pool2d(R(2, 3, 8, 8), 0, 0)", ARG, "kernel_size"),
-    (
-        "avg_pool3d_kernel0",
-        "E.nn.avg_pool3d(R(2, 3, 4, 4, 4), 0, 0, 0)",
-        ARG,
-        "kernel_size",
-    ),
-    (
-        "max_pool1d_pad_negative",
-        "E.nn.max_pool1d(R(2, 3, 8), 2, 2, -1)",
-        ARG,
-        "padding",
-    ),
+    ("avg_pool3d_kernel0", "E.nn.avg_pool3d(R(2, 3, 4, 4, 4), 0, 0, 0)", ARG, "kernel_size"),
+    ("max_pool1d_pad_negative", "E.nn.max_pool1d(R(2, 3, 8), 2, 2, -1)", ARG, "padding"),
     ("avg_pool1d_stride_negative", "E.nn.avg_pool1d(R(2, 3, 8), 2, -1)", ARG, "stride"),
     ("adaptive_max_pool1d_rank2", "E.nn.adaptive_max_pool1d(R(3, 8), 4)", SHAPE, "3-D"),
-    (
-        "adaptive_max_pool2d_rank3",
-        "E.nn.adaptive_max_pool2d(R(3, 8, 8), 4, 4)",
-        SHAPE,
-        "4-D",
-    ),
-    (
-        "adaptive_avg_pool2d_rank5",
-        "E.nn.adaptive_avg_pool2d(R(2, 3, 8, 8, 8), 4, 4)",
-        SHAPE,
-        "4-D",
-    ),
-    (
-        "adaptive_avg_pool3d_rank4",
-        "E.nn.adaptive_avg_pool3d(R(3, 4, 4, 4), 2, 2, 2)",
-        SHAPE,
-        "5-D",
-    ),
+    ("adaptive_max_pool2d_rank3", "E.nn.adaptive_max_pool2d(R(3, 8, 8), 4, 4)", SHAPE, "4-D"),
+    ("adaptive_avg_pool2d_rank5", "E.nn.adaptive_avg_pool2d(R(2, 3, 8, 8, 8), 4, 4)", SHAPE, "4-D"),
+    ("adaptive_avg_pool3d_rank4", "E.nn.adaptive_avg_pool3d(R(3, 4, 4, 4), 2, 2, 2)", SHAPE, "5-D"),
 ]
 
 _RESAMPLE_AND_DROPOUT = [
-    (
-        "interp_bilinear_rank3",
-        "E.nn.interpolate_bilinear(R(3, 8, 8), 4, 4)",
-        SHAPE,
-        "4-D",
-    ),
+    ("interp_bilinear_rank3", "E.nn.interpolate_bilinear(R(3, 8, 8), 4, 4)", SHAPE, "4-D"),
     (
         "interp_nearest2d_negative",
         "E.nn.interpolate_nearest_2d(R(2, 3, 8, 8), -2, 4)",
@@ -406,12 +236,7 @@ _RESAMPLE_AND_DROPOUT = [
         ARG,
         "output",
     ),
-    (
-        "interp_nearest3d_rank4",
-        "E.nn.interpolate_nearest_3d(R(3, 4, 4, 4), 2, 2, 2)",
-        SHAPE,
-        "5-D",
-    ),
+    ("interp_nearest3d_rank4", "E.nn.interpolate_nearest_3d(R(3, 4, 4, 4), 2, 2, 2)", SHAPE, "5-D"),
     (
         "grid_sample_rank3",
         "E.nn.grid_sample(R(3, 8, 8), R(1, 4, 4, 2))",
@@ -430,12 +255,7 @@ _RESAMPLE_AND_DROPOUT = [
         ARG,
         "padding_mode",
     ),
-    (
-        "affine_grid_negative",
-        "E.nn.affine_grid(R(1, 2, 3), 1, -4, 4)",
-        ARG,
-        "affine_grid",
-    ),
+    ("affine_grid_negative", "E.nn.affine_grid(R(1, 2, 3), 1, -4, 4)", ARG, "affine_grid"),
     ("dropoutnd_rank1", "E.nn.dropoutnd(R(8), 0.5)", SHAPE, "at least 2-D"),
     ("drop_block_rank3", "E.nn.drop_block(R(3, 8, 8), 3, 0.5)", SHAPE, "4-D"),
 ]
@@ -563,11 +383,7 @@ def _run_cases(device: str) -> dict[str, list[object]]:
                     name, ["crash", f"{_describe_exit(done.returncode)}: {tail}", False]
                 )
             break
-        results[current] = [
-            "crash",
-            f"{_describe_exit(done.returncode)}: {tail}",
-            False,
-        ]
+        results[current] = ["crash", f"{_describe_exit(done.returncode)}: {tail}", False]
         pending = [(n, c) for n, c in pending if n not in results]
     return results
 
@@ -582,9 +398,7 @@ def _result(device: str, name: str) -> list[object]:
 
 
 @pytest.mark.parametrize(
-    "name,expect,needle",
-    [(n, e, s) for n, _, e, s in CASES],
-    ids=[n for n, _, _, _ in CASES],
+    "name,expect,needle", [(n, e, s) for n, _, e, s in CASES], ids=[n for n, _, _, _ in CASES]
 )
 def test_engine_door_refuses_unhandled_operand(
     device: str, name: str, expect: str, needle: str

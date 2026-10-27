@@ -220,10 +220,7 @@ def _trace_segment_fn(
     """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph."""
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
     from lucid.compile._core.buffer_writes import refuse
-    from lucid.compile._core.trace_context import (
-        notice_if_tensor_hook_error,
-        recording,
-    )
+    from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
         with recording(watch=watch) as tracer:
@@ -256,10 +253,7 @@ def _lower_segment_forward(
     tracer: Tracer, y_id: int, grad_target_ids: list[int]
 ) -> CompiledExecutable | None:
     """A segment's forward executable, or ``None`` when it cannot be compiled."""
-    from lucid.compile._core.custom_backward import (
-        CustomBackwardInTrace,
-        refuse_custom_backward,
-    )
+    from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
 
     try:
@@ -279,10 +273,7 @@ def _lower_segment_backward(
     tracer: Tracer, loss_id: int, grad_target_ids: list[int]
 ) -> CompiledExecutable | None:
     """A segment's backward executable, or ``None`` when it cannot be compiled."""
-    from lucid.compile._core.custom_backward import (
-        CustomBackwardInTrace,
-        refuse_custom_backward,
-    )
+    from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
 
     try:
@@ -436,12 +427,7 @@ class _SegmentFunction(Function):
     # make_step._CompiledStepFunction's.
     @override
     @staticmethod
-    def forward(
-        ctx: FunctionCtx,
-        holder: list[object],
-        x: Tensor,
-        *params: Tensor,
-    ) -> Tensor:
+    def forward(ctx: FunctionCtx, holder: list[object], x: Tensor, *params: Tensor) -> Tensor:
         """Run the segment's forward executable; stash state for backward."""
         from lucid._dispatch import _unwrap, _wrap
 
@@ -530,11 +516,7 @@ def _segments_of(model: Sequential, segments: int) -> list[_Segment]:
 
 
 def make_segmented_step(
-    model: Module,
-    loss_fn: Callable[..., Tensor],
-    *,
-    segments: int,
-    dynamic: bool = False,
+    model: Module, loss_fn: Callable[..., Tensor], *, segments: int, dynamic: bool = False
 ) -> Callable[..., Tensor]:
     """Return a segmented compiled training step (executable splitting).
 

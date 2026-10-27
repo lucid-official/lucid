@@ -28,11 +28,7 @@ if TYPE_CHECKING:
 
 
 def sinusoidal_embedding(
-    num_positions: int,
-    embedding_dim: int,
-    *,
-    base: float = 10_000.0,
-    device: str = "cpu",
+    num_positions: int, embedding_dim: int, *, base: float = 10_000.0, device: str = "cpu"
 ) -> Tensor:
     r"""Build the 1-D sinusoidal positional encoding table from "Attention Is All You Need".
 
@@ -113,12 +109,7 @@ def sinusoidal_embedding(
 
 
 def sinusoidal_embedding_2d(
-    height: int,
-    width: int,
-    embedding_dim: int,
-    *,
-    base: float = 10_000.0,
-    device: str = "cpu",
+    height: int, width: int, embedding_dim: int, *, base: float = 10_000.0, device: str = "cpu"
 ) -> Tensor:
     r"""Build the 2-D sinusoidal positional encoding from DETR (Carion et al., 2020).
 

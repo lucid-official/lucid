@@ -31,10 +31,7 @@ ATOL = 4 * float(np.finfo(np.float32).eps)
 
 
 def _derivatives(
-    autograd: ModuleType,
-    buf: object,
-    v: object,
-    write: Callable[[object, object], object],
+    autograd: ModuleType, buf: object, v: object, write: Callable[[object, object], object]
 ) -> tuple[np.ndarray, np.ndarray]:
     """``d(sum buf)/dv`` after ``write(buf, v)``, and its own derivative —
     zero when the first carries no dependence on ``v``."""
@@ -67,10 +64,7 @@ def test_a_destination_without_grad(write: str, device: str, ref: ModuleType) ->
         WRITES[write],
     )
     want = _derivatives(
-        ref.autograd,
-        ref.tensor(B),
-        ref.tensor(V, requires_grad=True),
-        WRITES[write],
+        ref.autograd, ref.tensor(B), ref.tensor(V, requires_grad=True), WRITES[write]
     )
     for g, w in zip(got, want, strict=True):
         np.testing.assert_allclose(g, w, rtol=1e-5, atol=ATOL)
@@ -93,9 +87,7 @@ def test_a_write_into_a_gradient(op: str, device: str, ref: ModuleType) -> None:
         lucid.tensor(V, requires_grad=True, device=device),
     )
     want = run(
-        ref,
-        ref.tensor([1.0, 2.0, 3.0], requires_grad=True),
-        ref.tensor(V, requires_grad=True),
+        ref, ref.tensor([1.0, 2.0, 3.0], requires_grad=True), ref.tensor(V, requires_grad=True)
     )
     np.testing.assert_allclose(got[0], want[0], rtol=1e-6)
     np.testing.assert_allclose(got[1], want[1], rtol=1e-6)
@@ -115,9 +107,7 @@ def test_the_operand_is_the_destination(device: str, ref: ModuleType) -> None:
         return np.asarray(g.detach().tolist()), np.asarray(h.tolist())
 
     got = run(
-        lucid,
-        lucid.tensor([1.0, 2.0], requires_grad=True, device=device),
-        lambda y: y.mul_(y),
+        lucid, lucid.tensor([1.0, 2.0], requires_grad=True, device=device), lambda y: y.mul_(y)
     )
     want = run(ref, ref.tensor([1.0, 2.0], requires_grad=True), lambda y: y * y)
     for g, w in zip(got, want):

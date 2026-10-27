@@ -34,15 +34,9 @@ from typing import TYPE_CHECKING, Iterable, Self, override
 from lucid._C import engine as _C_engine
 
 from lucid.utils.tokenizer._base import SpecialTokens, Tokenizer
-from lucid.utils.tokenizer._lookup_common import (
-    _load_vocab_txt_and_specials,
-    _save_vocab_txt,
-)
+from lucid.utils.tokenizer._lookup_common import _load_vocab_txt_and_specials, _save_vocab_txt
 from lucid.utils.tokenizer._normalizers import BERTNormalizer, Normalizer
-from lucid.utils.tokenizer._pre_tokenizers import (
-    PreTokenizer,
-    WhitespacePunctuationSplit,
-)
+from lucid.utils.tokenizer._pre_tokenizers import PreTokenizer, WhitespacePunctuationSplit
 
 
 class _WordPieceCommonMixin(Tokenizer):
@@ -342,12 +336,7 @@ class WordPieceTokenizer(_WordPieceCommonMixin, Tokenizer):
             out.extend(self._encode_word(word))
         return out
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train this tokenizer from scratch on ``corpus``.
 
         Greedy frequency-based WordPiece training (matches Hugging
@@ -513,10 +502,7 @@ class WordPieceTokenizerFast(_WordPieceCommonMixin, Tokenizer):
         self._continuing_prefix = continuing_prefix
         self._max_chars_per_word = max_chars_per_word
         self._cpp = _C_engine.utils.tokenizer.WordPiece(
-            self._vocab,
-            unk_token,
-            continuing_prefix,
-            max_chars_per_word,
+            self._vocab, unk_token, continuing_prefix, max_chars_per_word
         )
         self._normalizer = normalizer if normalizer is not None else BERTNormalizer()
         self._pre_tokenizer = (
@@ -546,12 +532,7 @@ class WordPieceTokenizerFast(_WordPieceCommonMixin, Tokenizer):
             out.extend(self._cpp.encode(word))
         return out
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train in C++ via :meth:`WordPiece.train`.
 
         Pre-encodes the corpus through the configured normalizer +

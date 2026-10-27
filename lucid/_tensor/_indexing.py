@@ -432,9 +432,7 @@ def _fancy_select(
 
 
 def _coordinate_select(
-    impl: _C_engine.TensorImpl,
-    int_indices: list[_C_engine.TensorImpl],
-    unchecked: bool,
+    impl: _C_engine.TensorImpl, int_indices: list[_C_engine.TensorImpl], unchecked: bool
 ) -> _C_engine.TensorImpl:
     """
     Pure coordinate selection: result[*i] = impl[int_indices[0][*i], int_indices[1][*i], ...]

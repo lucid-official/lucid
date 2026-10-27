@@ -528,11 +528,7 @@ def _function(device: str) -> Tensor:
 def _snapshot(device: str) -> Tensor:
     w = lucid.ones(4, device=device, requires_grad=True)
     y = w * 1
-    y.index_add_(
-        0,
-        lucid.zeros(1, dtype=lucid.int64, device=device),
-        lucid.ones(1, device=device),
-    )
+    y.index_add_(0, lucid.zeros(1, dtype=lucid.int64, device=device), lucid.ones(1, device=device))
     y.sum().backward()
     return w
 
@@ -593,10 +589,7 @@ def test_a_phantom_view_has_the_eager_strides(view, device):
     with phantom():
         ghost = _VIEWS[view](device)
     assert ghost._impl.is_phantom
-    assert (ghost.stride(), ghost.is_contiguous()) == (
-        eager.stride(),
-        eager.is_contiguous(),
-    )
+    assert (ghost.stride(), ghost.is_contiguous()) == (eager.stride(), eager.is_contiguous())
 
 
 def test_a_view_refused_eagerly_is_refused_as_a_phantom(device):

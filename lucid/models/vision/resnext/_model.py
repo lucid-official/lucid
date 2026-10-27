@@ -48,13 +48,7 @@ class _ResNeXtBottleneck(nn.Module):
         self.conv1 = nn.Conv2d(in_channels, width, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(width)
         self.conv2 = nn.Conv2d(
-            width,
-            width,
-            3,
-            stride=stride,
-            padding=1,
-            groups=cardinality,
-            bias=False,
+            width, width, 3, stride=stride, padding=1, groups=cardinality, bias=False
         )
         self.bn2 = nn.BatchNorm2d(width)
         self.conv3 = nn.Conv2d(width, out_channels * self.expansion, 1, bias=False)
@@ -154,36 +148,16 @@ def _build_body(
 
     cur = stem_channels
     layer1, cur = _make_layer(
-        cur,
-        hidden_sizes[0],
-        config.layers[0],
-        1,
-        config.cardinality,
-        config.width_per_group,
+        cur, hidden_sizes[0], config.layers[0], 1, config.cardinality, config.width_per_group
     )
     layer2, cur = _make_layer(
-        cur,
-        hidden_sizes[1],
-        config.layers[1],
-        2,
-        config.cardinality,
-        config.width_per_group,
+        cur, hidden_sizes[1], config.layers[1], 2, config.cardinality, config.width_per_group
     )
     layer3, cur = _make_layer(
-        cur,
-        hidden_sizes[2],
-        config.layers[2],
-        2,
-        config.cardinality,
-        config.width_per_group,
+        cur, hidden_sizes[2], config.layers[2], 2, config.cardinality, config.width_per_group
     )
     layer4, cur = _make_layer(
-        cur,
-        hidden_sizes[3],
-        config.layers[3],
-        2,
-        config.cardinality,
-        config.width_per_group,
+        cur, hidden_sizes[3], config.layers[3], 2, config.cardinality, config.width_per_group
     )
 
     exp = _ResNeXtBottleneck.expansion
@@ -400,11 +374,7 @@ class ResNeXtForImageClassification(ImageClassificationModel, ClassificationHead
             _zero_init_residual(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)

@@ -31,11 +31,7 @@ def _write(path: str, tensors: dict[str, tuple[str, list[int], bytes]]) -> None:
     offset = 0
     blobs = []
     for name, (code, shape, raw) in tensors.items():
-        header[name] = {
-            "dtype": code,
-            "shape": shape,
-            "data_offsets": [offset, offset + len(raw)],
-        }
+        header[name] = {"dtype": code, "shape": shape, "data_offsets": [offset, offset + len(raw)]}
         blobs.append(raw)
         offset += len(raw)
     encoded = json.dumps(header).encode()
@@ -133,8 +129,7 @@ def test_a_reference_writer_file_loads(tmp_path) -> None:  # type: ignore[no-unt
     path = str(tmp_path / "np.safetensors")
     safetensors_numpy.save_file({"a": np.arange(6, dtype=np.float32).reshape(2, 3)}, path)
     np.testing.assert_array_equal(
-        load_safetensors(path)["a"].numpy(),
-        np.arange(6, dtype=np.float32).reshape(2, 3),
+        load_safetensors(path)["a"].numpy(), np.arange(6, dtype=np.float32).reshape(2, 3)
     )
     # And a Lucid-written bfloat16 file reads back through the reference reader's header.
     save_safetensors({"w": lucid.ones(2).to(lucid.bfloat16)}, str(tmp_path / "l.safetensors"))

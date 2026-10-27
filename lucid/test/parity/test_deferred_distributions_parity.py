@@ -94,15 +94,10 @@ class TestCumulativeDistributionTransformParity:
 @pytest.mark.parity
 class TestKLNormalLaplaceParity:
     def test_analytical_vs_ref(self, ref: Any) -> None:
-        for mu, sigma, m, b in [
-            (0.0, 1.0, 0.0, 1.0),
-            (1.0, 0.5, 0.5, 2.0),
-            (-1.0, 2.0, 0.0, 0.5),
-        ]:
+        for mu, sigma, m, b in [(0.0, 1.0, 0.0, 1.0), (1.0, 0.5, 0.5, 2.0), (-1.0, 2.0, 0.0, 0.5)]:
             kl_l = D.kl_divergence(D.Normal(mu, sigma), D.Laplace(m, b))
             kl_r = ref.distributions.kl_divergence(
-                ref.distributions.Normal(mu, sigma),
-                ref.distributions.Laplace(m, b),
+                ref.distributions.Normal(mu, sigma), ref.distributions.Laplace(m, b)
             )
             assert_close(kl_l, kl_r, atol=1e-5, rtol=1e-4)
 
@@ -156,11 +151,7 @@ class TestCatTransformParity:
         data = np.random.randn(6).astype("float32")
         x_l = lucid.tensor(data.tolist())
         x_r = ref.tensor(data)
-        lt = D.CatTransform(
-            [D.ExpTransform(), D.AffineTransform(1.0, 2.0)],
-            dim=-1,
-            lengths=[2, 4],
-        )
+        lt = D.CatTransform([D.ExpTransform(), D.AffineTransform(1.0, 2.0)], dim=-1, lengths=[2, 4])
         rt = ref.distributions.transforms.CatTransform(
             [
                 ref.distributions.transforms.ExpTransform(),

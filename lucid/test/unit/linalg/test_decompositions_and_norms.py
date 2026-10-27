@@ -72,9 +72,7 @@ def test_cond_is_the_ratio_of_the_extreme_singular_values():
 @pytest.mark.parametrize("power", [0, 1, 2, 3, -1, -2])
 def test_matrix_power_matches_repeated_multiplication(power):
     assert np.allclose(
-        _v(linalg.matrix_power(_t(A), power)),
-        np.linalg.matrix_power(A, power),
-        atol=1e-7,
+        _v(linalg.matrix_power(_t(A), power)), np.linalg.matrix_power(A, power), atol=1e-7
     )
 
 
@@ -185,9 +183,7 @@ def test_the_determinant_is_the_product_of_the_eigenvalues():
 @pytest.mark.parametrize("order", [1, 2, np.inf, -np.inf, "fro", "nuc"], ids=str)
 def test_matrix_norm_matches_numpy(order):
     assert np.isclose(
-        _v(linalg.matrix_norm(_t(A), ord=order)),
-        np.linalg.norm(A, ord=order),
-        rtol=1e-7,
+        _v(linalg.matrix_norm(_t(A), ord=order)), np.linalg.norm(A, ord=order), rtol=1e-7
     )
 
 
@@ -207,17 +203,13 @@ def test_matrix_norm_refuses_an_order_it_has_no_meaning_for():
 @pytest.mark.parametrize("order", [1, 2, 3, np.inf, -np.inf, 0], ids=str)
 def test_vector_norm_matches_numpy(order):
     assert np.isclose(
-        _v(linalg.vector_norm(_t(VEC), ord=order)),
-        np.linalg.norm(VEC, ord=order),
-        rtol=1e-9,
+        _v(linalg.vector_norm(_t(VEC), ord=order)), np.linalg.norm(VEC, ord=order), rtol=1e-9
     )
 
 
 def test_the_nuclear_norm_is_the_sum_of_the_singular_values():
     assert np.isclose(
-        _v(linalg.matrix_norm(_t(A), ord="nuc")),
-        _v(linalg.svd(_t(A))[1]).sum(),
-        rtol=1e-7,
+        _v(linalg.matrix_norm(_t(A), ord="nuc")), _v(linalg.svd(_t(A))[1]).sum(), rtol=1e-7
     )
 
 

@@ -37,11 +37,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
-from lucid.models.generative._common._pixel_nets import (
-    DenseHead,
-    PixelDecoder,
-    PixelEncoder,
-)
+from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
 from lucid.models.generative._common._rssm import RSSM, RSSMState, rssm_kl
 from lucid.models.generative.planet._config import PlaNetConfig
 
@@ -537,10 +533,7 @@ class PlaNetForWorldModeling(WorldModelingModel):
 
     @override
     def forward(
-        self,
-        observations: Tensor,
-        actions: Tensor,
-        rewards: Tensor | None = None,
+        self, observations: Tensor, actions: Tensor, rewards: Tensor | None = None
     ) -> PlaNetOutput:
         priors, posteriors = self.planet.observe(observations, actions)
         reconstruction = self.planet.decode(posteriors)

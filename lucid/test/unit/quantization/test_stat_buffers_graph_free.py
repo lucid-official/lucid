@@ -134,11 +134,7 @@ def _ref_cases(ref: Any) -> dict[str, tuple[Callable[[], nn.Module], Any]]:
     obs = ref.ao.quantization.observer
     fq = ref.ao.quantization.FakeQuantize
     per_tensor = {"dtype": ref.quint8, "qscheme": ref.per_tensor_affine}
-    per_channel = {
-        "ch_axis": 1,
-        "dtype": ref.qint8,
-        "qscheme": ref.per_channel_symmetric,
-    }
+    per_channel = {"ch_axis": 1, "dtype": ref.qint8, "qscheme": ref.per_channel_symmetric}
     return {
         "MinMaxObserver": (Q.MinMaxObserver, lambda: obs.MinMaxObserver(**per_tensor)),
         "MovingAverageMinMaxObserver": (
@@ -158,19 +154,13 @@ def _ref_cases(ref: Any) -> dict[str, tuple[Callable[[], nn.Module], Any]]:
         "FakeQuantize[MovingAverage]": (
             Q.FakeQuantize,
             lambda: fq(
-                observer=obs.MovingAverageMinMaxObserver,
-                quant_min=0,
-                quant_max=255,
-                **per_tensor,
+                observer=obs.MovingAverageMinMaxObserver, quant_min=0, quant_max=255, **per_tensor
             ),
         ),
         "FakeQuantize[PerChannel]": (
             _fq(Q.PerChannelMinMaxObserver, **_PER_CHANNEL),
             lambda: fq(
-                observer=obs.PerChannelMinMaxObserver,
-                quant_min=-128,
-                quant_max=127,
-                **per_channel,
+                observer=obs.PerChannelMinMaxObserver, quant_min=-128, quant_max=127, **per_channel
             ),
         ),
         "FakeQuantize[MovingAveragePerChannel]": (

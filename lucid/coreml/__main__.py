@@ -30,9 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("model", help="Registered factory name, e.g. 'resnet_18_cls'.")
     parser.add_argument("--out", required=True, help="Destination .mlpackage path.")
     parser.add_argument(
-        "--shape",
-        default="1,3,224,224",
-        help="Comma-separated input shape (default: 1,3,224,224).",
+        "--shape", default="1,3,224,224", help="Comma-separated input shape (default: 1,3,224,224)."
     )
     parser.add_argument(
         "--num-classes", type=int, default=None, help="Override the head's class count."

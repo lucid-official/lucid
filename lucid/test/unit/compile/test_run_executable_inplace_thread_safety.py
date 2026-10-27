@@ -25,11 +25,7 @@ from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 def _compile_increment_exe(
     sample: lucid.Tensor,
-) -> tuple[
-    _C_engine.compile.CompiledExecutable,
-    list[_C_engine.TensorImpl],
-    _C_engine.TensorImpl,
-]:
+) -> tuple[_C_engine.compile.CompiledExecutable, list[_C_engine.TensorImpl], _C_engine.TensorImpl]:
     step = lucid.ones_like(sample)
     with lucid.no_grad(), _tracing() as tracer:
         out = sample + step

@@ -9,11 +9,7 @@ report about what is hidden.  The image version is
 """
 
 from lucid.models.vision.vjepa._config import VJEPAConfig, VJEPAObjective
-from lucid.models.vision.vjepa._model import (
-    VJEPAForVideoClassification,
-    VJEPAModel,
-    VJEPAOutput,
-)
+from lucid.models.vision.vjepa._model import VJEPAForVideoClassification, VJEPAModel, VJEPAOutput
 from lucid.models.vision.vjepa._pretrained import (
     vjepa_huge_16,
     vjepa_huge_16_384,

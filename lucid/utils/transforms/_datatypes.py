@@ -669,13 +669,7 @@ def affine_boxes(boxes: BoundingBoxes, matrix: Tensor, out_hw: tuple[int, int]) 
     x1, y1, x2, y2 = xy[:, 0:1], xy[:, 1:2], xy[:, 2:3], xy[:, 3:4]
     # Four corners stacked as (4N, 2).
     corners = _cat(
-        [
-            _cat([x1, y1], 1),
-            _cat([x2, y1], 1),
-            _cat([x2, y2], 1),
-            _cat([x1, y2], 1),
-        ],
-        dim=0,
+        [_cat([x1, y1], 1), _cat([x2, y1], 1), _cat([x2, y2], 1), _cat([x1, y2], 1)], dim=0
     )
     warped = _F.affine_points(corners, matrix)  # (4N, 2)
     n = int(xy.shape[0])

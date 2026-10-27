@@ -380,11 +380,7 @@ class TestNICERegistry:
 
     def test_factory_with_override(self) -> None:
         m = create_model(
-            "nice_mnist",
-            input_dim=16,
-            num_coupling_layers=2,
-            num_hidden_layers=1,
-            hidden_dim=8,
+            "nice_mnist", input_dim=16, num_coupling_layers=2, num_hidden_layers=1, hidden_dim=8
         )
         assert isinstance(m, NICEModel)
         out = m.eval()(lucid.rand((1, 16)))

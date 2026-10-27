@@ -15,8 +15,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -37,10 +36,7 @@ def test_the_trace_records_the_fused_kernels() -> None:
     x = lucid.randn(2, 5, 8)
     with lucid.no_grad(), lucid.compile._tracing(watch=[x]) as tracer:
         model(x)
-    assert [op.name for op in tracer.graph.ops] == [
-        "_fused_linear_gelu",
-        "_fused_linear_relu",
-    ]
+    assert [op.name for op in tracer.graph.ops] == ["_fused_linear_gelu", "_fused_linear_relu"]
 
 
 def test_a_fused_linear_block_predicts_as_eager(tmp_path: object) -> None:

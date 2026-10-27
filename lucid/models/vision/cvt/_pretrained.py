@@ -4,11 +4,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.cvt._config import CvTConfig
 from lucid.models.vision.cvt._model import CvT, CvTForImageClassification
-from lucid.models.vision.cvt._weights import (
-    CvT13Weights,
-    CvT21Weights,
-    CvTW24Weights,
-)
+from lucid.models.vision.cvt._weights import CvT13Weights, CvT21Weights, CvTW24Weights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 # ---------------------------------------------------------------------------
@@ -48,11 +44,7 @@ _CFG_W24 = CvTConfig(
 
 
 @register_model(
-    task="base",
-    family="cvt",
-    model_type="cvt",
-    model_class=CvT,
-    default_config=_CFG_13,
+    task="base", family="cvt", model_type="cvt", model_class=CvT, default_config=_CFG_13
 )
 def cvt_13(pretrained: bool = False, **overrides: object) -> CvT:
     r"""CvT-13 backbone (Wu et al., 2021).
@@ -102,11 +94,7 @@ def cvt_13(pretrained: bool = False, **overrides: object) -> CvT:
 
 
 @register_model(
-    task="base",
-    family="cvt",
-    model_type="cvt",
-    model_class=CvT,
-    default_config=_CFG_21,
+    task="base", family="cvt", model_type="cvt", model_class=CvT, default_config=_CFG_21
 )
 def cvt_21(pretrained: bool = False, **overrides: object) -> CvT:
     r"""CvT-21 backbone (Wu et al., 2021).
@@ -152,11 +140,7 @@ def cvt_21(pretrained: bool = False, **overrides: object) -> CvT:
 
 
 @register_model(
-    task="base",
-    family="cvt",
-    model_type="cvt",
-    model_class=CvT,
-    default_config=_CFG_W24,
+    task="base", family="cvt", model_type="cvt", model_class=CvT, default_config=_CFG_W24
 )
 def cvt_w24(pretrained: bool = False, **overrides: object) -> CvT:
     r"""CvT-W24 wide backbone (Wu et al., 2021).
@@ -216,10 +200,7 @@ def cvt_w24(pretrained: bool = False, **overrides: object) -> CvT:
     default_config=_CFG_13,
 )
 def cvt_13_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CvT13Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CvT13Weights | None = None, **overrides: object
 ) -> CvTForImageClassification:
     r"""CvT-13 image classifier (Wu et al., 2021).
 
@@ -273,10 +254,7 @@ def cvt_13_cls(
     default_config=_CFG_21,
 )
 def cvt_21_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CvT21Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CvT21Weights | None = None, **overrides: object
 ) -> CvTForImageClassification:
     r"""CvT-21 image classifier (Wu et al., 2021).
 
@@ -329,10 +307,7 @@ def cvt_21_cls(
     default_config=_CFG_W24,
 )
 def cvt_w24_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: CvTW24Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: CvTW24Weights | None = None, **overrides: object
 ) -> CvTForImageClassification:
     r"""CvT-W24 wide image classifier (Wu et al., 2021).
 

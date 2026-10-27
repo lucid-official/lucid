@@ -190,11 +190,7 @@ def _plain(name: str, nominal: dict[str, Any], values: list[Any] | None = None) 
 
 
 def _dual(
-    name: str,
-    nominal: Any,
-    extra: dict[str, Any],
-    params: dict[str, list[Any]],
-    values: list[Any],
+    name: str, nominal: Any, extra: dict[str, Any], params: dict[str, list[Any]], values: list[Any]
 ) -> _Case:
     """A distribution taking ``probs`` or ``logits``, plus other parameters."""
 
@@ -266,9 +262,7 @@ def _transformed(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> 
 
 def _mixture(M: Any, t: Callable[[Any], Any], va: bool | None, **o: Any) -> Any:
     return M.MixtureSameFamily(
-        M.Categorical(probs=t([0.3, 0.7])),
-        M.Normal(t([0.0, 1.0]), t([1.0, 2.0])),
-        validate_args=va,
+        M.Categorical(probs=t([0.3, 0.7])), M.Normal(t([0.0, 1.0]), t([1.0, 2.0])), validate_args=va
     )
 
 
@@ -337,9 +331,7 @@ CASES: dict[str, _Case] = {
     "RelaxedOneHotCategorical": _categorical("RelaxedOneHotCategorical", {"temperature": 0.5}),
     "Multinomial": _categorical("Multinomial", {"total_count": 5}),
     "MultivariateNormal": _Case(
-        _mvn,
-        {"loc": [[0.0, 0.0], [_INF, 0.0], [_NAN, 0.0]]} | _MATRIX_PARAMS,
-        [[0.0, 1.0]],
+        _mvn, {"loc": [[0.0, 0.0], [_INF, 0.0], [_NAN, 0.0]]} | _MATRIX_PARAMS, [[0.0, 1.0]]
     ),
     "LowRankMultivariateNormal": _Case(
         _low_rank_mvn,
@@ -448,15 +440,7 @@ def test_every_exception_names_a_case() -> None:
     for name, aspect in _EXCEPTIONS:
         assert name in CASES, name
         kind, _, param = aspect.partition(":")
-        assert kind in (
-            "param",
-            "support",
-            "table",
-            "validates",
-            "values",
-            "mode",
-            "grad",
-        ), aspect
+        assert kind in ("param", "support", "table", "validates", "values", "mode", "grad"), aspect
         if kind == "param":
             assert param in CASES[name].params, aspect
         if kind == "validates":
@@ -870,10 +854,7 @@ def test_method_gradients(name: str, method: str, param: str, device: str, ref: 
         pytest.skip(f"{name} offers no interior support point")
     leaf = {param: _Leaf(case.nominal[param])}
     ours = _grad_outcome(
-        lambda t: case.build(D, t, False, **leaf),
-        _lucid_at(device, dtype),
-        method,
-        points,
+        lambda t: case.build(D, t, False, **leaf), _lucid_at(device, dtype), method, points
     )
     theirs = _grad_outcome(
         lambda t: case.build(ref.distributions, t, False, **leaf),
@@ -923,41 +904,23 @@ def test_enumerate_support(name: str, place: Any, expand: bool, ref: Any) -> Non
 _ENUM_BATCH_BUILDERS: list[tuple[str, Callable[[Any, Callable[[Any], Any]], Any]]] = [
     ("Bernoulli.probs.scalar", lambda M, t: M.Bernoulli(probs=t(0.3))),
     ("Bernoulli.logits.1d", lambda M, t: M.Bernoulli(logits=t([-1.0, 0.0, 2.0]))),
-    (
-        "Bernoulli.probs.2d",
-        lambda M, t: M.Bernoulli(probs=t([[0.1, 0.5, 0.9], [0.2, 0.4, 0.8]])),
-    ),
+    ("Bernoulli.probs.2d", lambda M, t: M.Bernoulli(probs=t([[0.1, 0.5, 0.9], [0.2, 0.4, 0.8]]))),
     ("Binomial.0.scalar", lambda M, t: M.Binomial(0, probs=t(0.3))),
     ("Binomial.probs.1d", lambda M, t: M.Binomial(4, probs=t([0.1, 0.5, 0.9]))),
-    (
-        "Binomial.logits.2d",
-        lambda M, t: M.Binomial(3, logits=t([[-1.0, 0.0], [1.0, 2.0]])),
-    ),
-    (
-        "Binomial.inhomogeneous",
-        lambda M, t: M.Binomial(t([2.0, 5.0]), probs=t([0.3, 0.7])),
-    ),
+    ("Binomial.logits.2d", lambda M, t: M.Binomial(3, logits=t([[-1.0, 0.0], [1.0, 2.0]]))),
+    ("Binomial.inhomogeneous", lambda M, t: M.Binomial(t([2.0, 5.0]), probs=t([0.3, 0.7]))),
     ("Categorical.probs.1d", lambda M, t: M.Categorical(probs=t([0.2, 0.3, 0.5]))),
     (
         "Categorical.logits.2d",
         lambda M, t: M.Categorical(logits=t([[[0.0, 1.0, 2.0, -1.0], [1.0, 0.0, -1.0, 2.0]]])),
     ),
-    (
-        "OneHotCategorical.probs.1d",
-        lambda M, t: M.OneHotCategorical(probs=t([0.2, 0.3, 0.5])),
-    ),
+    ("OneHotCategorical.probs.1d", lambda M, t: M.OneHotCategorical(probs=t([0.2, 0.3, 0.5]))),
     (
         "OneHotCategorical.logits.2d",
         lambda M, t: M.OneHotCategorical(logits=t([[0.0, 1.0, 2.0], [-1.0, 0.0, 1.0]])),
     ),
-    (
-        "Independent.Bernoulli.0",
-        lambda M, t: M.Independent(M.Bernoulli(probs=t([0.2, 0.8])), 0),
-    ),
-    (
-        "Independent.Bernoulli.1",
-        lambda M, t: M.Independent(M.Bernoulli(probs=t([0.2, 0.8])), 1),
-    ),
+    ("Independent.Bernoulli.0", lambda M, t: M.Independent(M.Bernoulli(probs=t([0.2, 0.8])), 0)),
+    ("Independent.Bernoulli.1", lambda M, t: M.Independent(M.Bernoulli(probs=t([0.2, 0.8])), 1)),
 ]
 
 

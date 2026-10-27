@@ -96,11 +96,7 @@ _CFG_B5 = PVTConfig(
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B0,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B0
 )
 def pvt_v2_b0(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B0 backbone (Wang et al., 2022).
@@ -147,11 +143,7 @@ def pvt_v2_b0(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B1,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B1
 )
 def pvt_v2_b1(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B1 backbone (Wang et al., 2022).
@@ -197,11 +189,7 @@ def pvt_v2_b1(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B2,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B2
 )
 def pvt_v2_b2(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B2 backbone (Wang et al., 2022).
@@ -245,11 +233,7 @@ def pvt_v2_b2(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B2_LI,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B2_LI
 )
 def pvt_v2_b2_li(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B2-Li backbone — B2 with *linear* SRA (Wang et al., 2022).
@@ -292,11 +276,7 @@ def pvt_v2_b2_li(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B3,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B3
 )
 def pvt_v2_b3(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B3 backbone (Wang et al., 2022).
@@ -341,11 +321,7 @@ def pvt_v2_b3(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B4,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B4
 )
 def pvt_v2_b4(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B4 backbone (Wang et al., 2022).
@@ -389,11 +365,7 @@ def pvt_v2_b4(pretrained: bool = False, **overrides: object) -> PVT:
 
 
 @register_model(
-    task="base",
-    family="pvt",
-    model_type="pvt",
-    model_class=PVT,
-    default_config=_CFG_B5,
+    task="base", family="pvt", model_type="pvt", model_class=PVT, default_config=_CFG_B5
 )
 def pvt_v2_b5(pretrained: bool = False, **overrides: object) -> PVT:
     r"""PVT v2-B5 backbone (Wang et al., 2022).
@@ -447,10 +419,7 @@ def pvt_v2_b5(pretrained: bool = False, **overrides: object) -> PVT:
     default_config=_CFG_B0,
 )
 def pvt_v2_b0_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B0Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B0Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B0 image classifier (Wang et al., 2022).
 
@@ -507,10 +476,7 @@ def pvt_v2_b0_cls(
     default_config=_CFG_B1,
 )
 def pvt_v2_b1_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B1Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B1Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B1 image classifier (Wang et al., 2022).
 
@@ -565,10 +531,7 @@ def pvt_v2_b1_cls(
     default_config=_CFG_B2,
 )
 def pvt_v2_b2_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B2Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B2Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B2 image classifier (Wang et al., 2022).
 
@@ -623,10 +586,7 @@ def pvt_v2_b2_cls(
     default_config=_CFG_B3,
 )
 def pvt_v2_b3_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B3Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B3Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B3 image classifier (Wang et al., 2022).
 
@@ -681,10 +641,7 @@ def pvt_v2_b3_cls(
     default_config=_CFG_B4,
 )
 def pvt_v2_b4_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B4Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B4Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B4 image classifier (Wang et al., 2022).
 
@@ -739,10 +696,7 @@ def pvt_v2_b4_cls(
     default_config=_CFG_B5,
 )
 def pvt_v2_b5_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: PVTv2B5Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: PVTv2B5Weights | None = None, **overrides: object
 ) -> PVTForImageClassification:
     r"""PVT v2-B5 image classifier (Wang et al., 2022).
 

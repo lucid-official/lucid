@@ -128,10 +128,7 @@ def download(url: str, sha256: str, *, name: str) -> Path:
     tmp_path = Path(tmp_name)
 
     try:
-        with (
-            urllib.request.urlopen(url, timeout=60) as resp,
-            open(tmp_path, "wb") as out,
-        ):
+        with urllib.request.urlopen(url, timeout=60) as resp, open(tmp_path, "wb") as out:
             shutil.copyfileobj(resp, out)
         _verify_sha256(tmp_path, sha256)
         tmp_path.replace(final)

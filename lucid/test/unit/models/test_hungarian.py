@@ -39,29 +39,17 @@ class TestHungarianCorrectness(unittest.TestCase):
     """Compare custom Hungarian against scipy on random + handcrafted cases."""
 
     def test_trivial_3x3(self) -> None:
-        cost = [
-            [1.0, 2.0, 3.0],
-            [2.0, 1.0, 3.0],
-            [3.0, 2.0, 1.0],
-        ]
+        cost = [[1.0, 2.0, 3.0], [2.0, 1.0, 3.0], [3.0, 2.0, 1.0]]
         ours = _our_assignment(cost)
         # Optimal: rows 0/1/2 → cols 0/1/2, total = 3.0
         self.assertAlmostEqual(_total_cost(cost, ours), 3.0, places=5)
 
     def test_rectangular_3x5(self) -> None:
         """3 rows × 5 cols — assign each row to a distinct col."""
-        cost = [
-            [10.0, 1.0, 9.0, 8.0, 7.0],
-            [5.0, 6.0, 2.0, 8.0, 9.0],
-            [4.0, 5.0, 6.0, 7.0, 1.0],
-        ]
+        cost = [[10.0, 1.0, 9.0, 8.0, 7.0], [5.0, 6.0, 2.0, 8.0, 9.0], [4.0, 5.0, 6.0, 7.0, 1.0]]
         ours = _our_assignment(cost)
         ref = _ref_assignment(cost)
-        self.assertAlmostEqual(
-            _total_cost(cost, ours),
-            _total_cost(cost, ref),
-            places=5,
-        )
+        self.assertAlmostEqual(_total_cost(cost, ours), _total_cost(cost, ref), places=5)
 
     def test_obvious_match_5x3(self) -> None:
         """5 queries × 3 GTs — rows 0/1/2 should match cols 0/1/2 (diagonal cheap)."""
@@ -77,18 +65,10 @@ class TestHungarianCorrectness(unittest.TestCase):
 
     def test_negative_costs(self) -> None:
         """DETR uses negative costs (since cost = -log_prob - GIoU)."""
-        cost = [
-            [-5.0, -1.0, -3.0],
-            [-2.0, -8.0, -4.0],
-            [-3.0, -2.0, -7.0],
-        ]
+        cost = [[-5.0, -1.0, -3.0], [-2.0, -8.0, -4.0], [-3.0, -2.0, -7.0]]
         ours = _our_assignment(cost)
         ref = _ref_assignment(cost)
-        self.assertAlmostEqual(
-            _total_cost(cost, ours),
-            _total_cost(cost, ref),
-            places=5,
-        )
+        self.assertAlmostEqual(_total_cost(cost, ours), _total_cost(cost, ref), places=5)
 
     def test_random_rectangular(self) -> None:
         """100 randomised M×N matrices (M ≤ N) vs scipy."""
@@ -115,11 +95,7 @@ class TestHungarianCorrectness(unittest.TestCase):
         cost = [[rng.uniform(-2.0, 2.0) for _ in range(N)] for _ in range(M)]
         ours = _our_assignment(cost)
         ref = _ref_assignment(cost)
-        self.assertAlmostEqual(
-            _total_cost(cost, ours),
-            _total_cost(cost, ref),
-            places=4,
-        )
+        self.assertAlmostEqual(_total_cost(cost, ours), _total_cost(cost, ref), places=4)
 
 
 class TestDETRMatcher(unittest.TestCase):
@@ -172,10 +148,7 @@ class TestDETRMatcher(unittest.TestCase):
     def test_no_ground_truth_matches_nothing(self) -> None:
         pred_logits, pred_boxes, _, _ = self._case()
         pred_idx, gt_idx = _hungarian_match(
-            pred_logits,
-            pred_boxes,
-            lucid.tensor([]).long(),
-            lucid.zeros(0, 4),
+            pred_logits, pred_boxes, lucid.tensor([]).long(), lucid.zeros(0, 4)
         )
         self.assertEqual((pred_idx, gt_idx), ([], []))
 
@@ -204,13 +177,7 @@ class TestDETRMatcher(unittest.TestCase):
         self.assertEqual((pred_idx, gt_idx), ([2], [0]))
 
         flipped_pred, flipped_gt = _hungarian_match(
-            pred_logits,
-            pred_boxes,
-            gt_labels,
-            gt_boxes,
-            cost_cls=100.0,
-            cost_l1=1.0,
-            cost_giou=0.0,
+            pred_logits, pred_boxes, gt_labels, gt_boxes, cost_cls=100.0, cost_l1=1.0, cost_giou=0.0
         )
         self.assertEqual((flipped_pred, flipped_gt), ([1], [0]))
 

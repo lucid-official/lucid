@@ -43,10 +43,7 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
         lambda M, t: M.Cauchy(t([0.0, 1.0]), t([1.0, 2.0])),
         lambda M, t: M.Cauchy(t([0.5, -0.5]), t([1.5, 1.0])),
     ),
-    "Chi2": (
-        lambda M, t: M.Chi2(t([3.0, 5.0])),
-        lambda M, t: M.Chi2(t([4.0, 2.0])),
-    ),
+    "Chi2": (lambda M, t: M.Chi2(t([3.0, 5.0])), lambda M, t: M.Chi2(t([4.0, 2.0]))),
     "ContinuousBernoulli": (
         lambda M, t: M.ContinuousBernoulli(probs=t([0.25, 0.75])),
         lambda M, t: M.ContinuousBernoulli(probs=t([0.6, 0.4])),
@@ -95,10 +92,7 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
         lambda M, t: M.Kumaraswamy(t(2.0), t(3.0)),
         lambda M, t: M.Kumaraswamy(t(1.5), t(2.5)),
     ),
-    "LKJCholesky": (
-        lambda M, t: M.LKJCholesky(2, t(1.5)),
-        lambda M, t: M.LKJCholesky(2, t(2.5)),
-    ),
+    "LKJCholesky": (lambda M, t: M.LKJCholesky(2, t(1.5)), lambda M, t: M.LKJCholesky(2, t(2.5))),
     "Laplace": (
         lambda M, t: M.Laplace(t([0.5, -0.5]), t([1.2, 1.8])),
         lambda M, t: M.Laplace(t([0.0, 1.0]), t([1.5, 1.0])),
@@ -113,12 +107,10 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
     ),
     "MixtureSameFamily": (
         lambda M, t: M.MixtureSameFamily(
-            M.Categorical(probs=t([0.3, 0.7])),
-            M.Normal(t([0.0, 1.0]), t([1.0, 2.0])),
+            M.Categorical(probs=t([0.3, 0.7])), M.Normal(t([0.0, 1.0]), t([1.0, 2.0]))
         ),
         lambda M, t: M.MixtureSameFamily(
-            M.Categorical(probs=t([0.6, 0.4])),
-            M.Normal(t([0.5, -0.5]), t([1.5, 1.0])),
+            M.Categorical(probs=t([0.6, 0.4])), M.Normal(t([0.5, -0.5]), t([1.5, 1.0]))
         ),
     ),
     "Multinomial": (
@@ -149,10 +141,7 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
         lambda M, t: M.Pareto(t([1.5, 2.0]), t([2.5, 3.5])),
         lambda M, t: M.Pareto(t([1.0, 1.5]), t([2.0, 3.0])),
     ),
-    "Poisson": (
-        lambda M, t: M.Poisson(t([1.5, 3.0])),
-        lambda M, t: M.Poisson(t([2.5, 1.2])),
-    ),
+    "Poisson": (lambda M, t: M.Poisson(t([1.5, 3.0])), lambda M, t: M.Poisson(t([2.5, 1.2]))),
     "RelaxedBernoulli": (
         lambda M, t: M.RelaxedBernoulli(t(0.5), probs=t(0.3)),
         lambda M, t: M.RelaxedBernoulli(t(0.5), probs=t(0.7)),
@@ -177,10 +166,7 @@ _DIST_PAIRS: dict[str, tuple[_Builder, _Builder]] = {
         lambda M, t: M.Uniform(t([0.2, 1.2]), t([0.8, 2.5])),
         lambda M, t: M.Uniform(t([0.0, 1.0]), t([1.0, 3.0])),
     ),
-    "Weibull": (
-        lambda M, t: M.Weibull(t(1.0), t(1.5)),
-        lambda M, t: M.Weibull(t(2.0), t(2.5)),
-    ),
+    "Weibull": (lambda M, t: M.Weibull(t(1.0), t(1.5)), lambda M, t: M.Weibull(t(2.0), t(2.5))),
     "Wishart": (
         lambda M, t: M.Wishart(t(5.0), covariance_matrix=t([[2.0, 0.3], [0.3, 1.0]])),
         lambda M, t: M.Wishart(t(7.0), covariance_matrix=t([[1.5, -0.2], [-0.2, 2.0]])),
@@ -268,10 +254,7 @@ def test_piecewise_support_boundaries_match_reference(place: Any, ref: Any) -> N
         ),
         (
             "Pareto.Exponential.alpha_le_1",
-            lambda M, t: (
-                M.Pareto(t([1.0, 1.0]), t([0.8, 2.0])),
-                M.Exponential(t([1.5, 1.5])),
-            ),
+            lambda M, t: (M.Pareto(t([1.0, 1.0]), t([0.8, 2.0])), M.Exponential(t([1.5, 1.5]))),
         ),
         (
             "Pareto.Gamma.alpha_le_1",
@@ -317,10 +300,7 @@ def test_piecewise_support_boundaries_match_reference(place: Any, ref: Any) -> N
         ),
         (
             "Uniform.Exponential.mask",
-            lambda M, t: (
-                M.Uniform(t([0.1, -0.5]), t([1.0, 1.0])),
-                M.Exponential(t([1.5, 1.5])),
-            ),
+            lambda M, t: (M.Uniform(t([0.1, -0.5]), t([1.0, 1.0])), M.Exponential(t([1.5, 1.5]))),
         ),
         (
             "Uniform.Gamma.mask",
@@ -342,8 +322,7 @@ def test_piecewise_support_boundaries_match_reference(place: Any, ref: Any) -> N
         p_r, q_r = build(ref.distributions, rt)
         ours = np.asarray(kl_divergence(p_l, q_l).detach().numpy(), dtype=np.float64)
         theirs = np.asarray(
-            ref.distributions.kl_divergence(p_r, q_r).detach().numpy(),
-            dtype=np.float64,
+            ref.distributions.kl_divergence(p_r, q_r).detach().numpy(), dtype=np.float64
         )
         assert np.allclose(
             ours, theirs, rtol=1e-4, atol=1e-5, equal_nan=True
@@ -351,10 +330,7 @@ def test_piecewise_support_boundaries_match_reference(place: Any, ref: Any) -> N
 
     # Binomial with p.total_count < q.total_count raises NotImplementedError.
     with pytest.raises(NotImplementedError):
-        kl_divergence(
-            D.Binomial(3, probs=lt(0.4)),
-            D.Binomial(5, probs=lt(0.4)),
-        )
+        kl_divergence(D.Binomial(3, probs=lt(0.4)), D.Binomial(5, probs=lt(0.4)))
 
 
 def test_dispatch_specificity_and_ambiguity_warning() -> None:
@@ -401,11 +377,7 @@ def test_dispatch_specificity_and_ambiguity_warning() -> None:
         assert (_DerivedP, _DerivedQ) not in _KL_MEMOIZE
         assert float(kl_divergence(_DerivedP(), _DerivedQ()).item()) == 2.0
     finally:
-        for pair in [
-            (_BaseP, _DerivedQ),
-            (_DerivedP, _BaseQ),
-            (_DerivedP, _DerivedQ),
-        ]:
+        for pair in [(_BaseP, _DerivedQ), (_DerivedP, _BaseQ), (_DerivedP, _DerivedQ)]:
             _KL_REGISTRY.pop(pair, None)
         _KL_MEMOIZE.clear()
 
@@ -452,9 +424,7 @@ def test_expfamily_bregman_kl(ref: Any) -> None:
 
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
-def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(
-    device: str,
-) -> None:
+def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(device: str) -> None:
     """LCD-482: batched KL for Wishart and every registered ExponentialFamily pair
     (including mixed-event-rank natural parameters) agrees element-by-element with
     its unbatched scalar oracle."""
@@ -473,8 +443,7 @@ def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(
         mat_p = t(cov_p).expand(*batch_shape, 2, 2).contiguous()
         mat_q = t(cov_q).expand(*batch_shape, 2, 2).contiguous()
         got = kl_divergence(
-            D.Wishart(df_p, covariance_matrix=mat_p),
-            D.Wishart(df_q, covariance_matrix=mat_q),
+            D.Wishart(df_p, covariance_matrix=mat_p), D.Wishart(df_q, covariance_matrix=mat_q)
         )
         assert got.device.type == device
         assert tuple(got.shape) == batch_shape
@@ -507,12 +476,10 @@ def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(
     m_q0 = _MixedRankExpFamily(t(cov_q), t(5.0))
     scalar_mixed = float(kl_divergence(m_p0, m_q0).to("cpu").item())
     m_pb = _MixedRankExpFamily(
-        t(cov_p).expand(3, 2, 2).contiguous(),
-        lucid.full((3,), 4.0, device=device),
+        t(cov_p).expand(3, 2, 2).contiguous(), lucid.full((3,), 4.0, device=device)
     )
     m_qb = _MixedRankExpFamily(
-        t(cov_q).expand(3, 2, 2).contiguous(),
-        lucid.full((3,), 5.0, device=device),
+        t(cov_q).expand(3, 2, 2).contiguous(), lucid.full((3,), 5.0, device=device)
     )
     got_mixed = kl_divergence(m_pb, m_qb)
     assert tuple(got_mixed.shape) == (3,)
@@ -579,16 +546,12 @@ def test_batched_kl_matches_unbatched_across_expfamily_and_wishart(
         (
             D.Poisson(t([1.5, 3.0])),
             D.Poisson(t([2.5, 1.2])),
-            [
-                (D.Poisson(t(1.5)), D.Poisson(t(2.5))),
-                (D.Poisson(t(3.0)), D.Poisson(t(1.2))),
-            ],
+            [(D.Poisson(t(1.5)), D.Poisson(t(2.5))), (D.Poisson(t(3.0)), D.Poisson(t(1.2)))],
         ),
     ]
     for p_batched, q_batched, slices in exp_cases:
         got_b = kl_divergence(p_batched, q_batched).to("cpu").numpy()
         want_b = np.array(
-            [float(kl_divergence(ps, qs).to("cpu").item()) for ps, qs in slices],
-            dtype=np.float32,
+            [float(kl_divergence(ps, qs).to("cpu").item()) for ps, qs in slices], dtype=np.float32
         )
         np.testing.assert_allclose(got_b, want_b, rtol=1e-5, atol=1e-6)

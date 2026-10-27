@@ -18,11 +18,7 @@ from typing import Any
 import pytest
 
 import lucid
-from lucid.test.unit.tensor.test_view_geometry_contract import (
-    GRID,
-    _DEVICES,
-    _moving,
-)
+from lucid.test.unit.tensor.test_view_geometry_contract import GRID, _DEVICES, _moving
 
 pytestmark = pytest.mark.parity
 
@@ -83,12 +79,7 @@ def _window_parity_params() -> list[object]:
         for offset_kind in ("zero", "own", "last"):
             for device in _DEVICES:
                 params.append(
-                    pytest.param(
-                        name,
-                        offset_kind,
-                        device,
-                        id=f"{name}-{offset_kind}-{device}",
-                    )
+                    pytest.param(name, offset_kind, device, id=f"{name}-{offset_kind}-{device}")
                 )
     return params
 

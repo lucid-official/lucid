@@ -26,10 +26,7 @@ Two flavours, bit-identical encode output:
 """
 
 from lucid.utils.tokenizer._base import SpecialTokens
-from lucid.utils.tokenizer._byte_bpe import (
-    ByteLevelBPETokenizer,
-    ByteLevelBPETokenizerFast,
-)
+from lucid.utils.tokenizer._byte_bpe import ByteLevelBPETokenizer, ByteLevelBPETokenizerFast
 from lucid.utils.tokenizer._normalizers import Normalizer
 
 # Canonical GPT-2 end-of-text marker.  Shared across bos / eos / unk

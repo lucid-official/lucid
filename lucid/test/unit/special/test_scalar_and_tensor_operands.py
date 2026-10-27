@@ -66,10 +66,7 @@ def test_zeta_is_differentiable_through_the_tensor_operand() -> None:
 
 @pytest.mark.parametrize(
     "call",
-    [
-        lambda: lucid.special.zeta(2.0, 1.0),
-        lambda: lucid.special.zeta(lucid.tensor([2.0]), 1j),
-    ],
+    [lambda: lucid.special.zeta(2.0, 1.0), lambda: lucid.special.zeta(lucid.tensor([2.0]), 1j)],
     ids=["two-numbers", "complex-number"],
 )
 def test_zeta_refuses_what_the_reference_refuses(call: Callable[[], object]) -> None:
@@ -130,9 +127,7 @@ def test_x_may_be_a_python_number(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", _POLYNOMIALS)
-def test_a_degree_truncates_toward_zero_and_a_negative_one_is_zero(
-    name: str,
-) -> None:
+def test_a_degree_truncates_toward_zero_and_a_negative_one_is_zero(name: str) -> None:
     fn = getattr(lucid.special, name)
     x = lucid.tensor([0.5, 0.2])
     assert fn(x, 2.9).tolist() == fn(x, 2).tolist()
@@ -187,15 +182,7 @@ def test_the_per_element_path_is_differentiable_in_x() -> None:
         lambda m: (m.tensor([1, 2]), m.tensor([2, 3])),
         lambda m: (m.tensor([0.5]), m.tensor([[1], [2], [3]])),
     ],
-    ids=[
-        "tensors",
-        "float-degrees",
-        "number-x",
-        "float-n",
-        "negative-n",
-        "ints",
-        "bcast",
-    ],
+    ids=["tensors", "float-degrees", "number-x", "float-n", "negative-n", "ints", "bcast"],
 )
 def test_the_polynomials_match_the_reference(
     ref: ModuleType, name: str, make: Callable[[ModuleType], tuple[object, object]]

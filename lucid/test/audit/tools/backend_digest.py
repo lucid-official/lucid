@@ -33,23 +33,8 @@ from lucid.test.audit import _probe, _specs, _surface
 from lucid.test.audit._axes import Context
 
 DIGEST_DTYPES: dict[str, tuple[str, ...]] = {
-    "cpu": (
-        "float32",
-        "float64",
-        "float16",
-        "bfloat16",
-        "int32",
-        "int64",
-        "bool",
-    ),
-    "metal": (
-        "float32",
-        "float16",
-        "bfloat16",
-        "int32",
-        "int64",
-        "bool",
-    ),
+    "cpu": ("float32", "float64", "float16", "bfloat16", "int32", "int64", "bool"),
+    "metal": ("float32", "float16", "bfloat16", "int32", "int64", "bool"),
 }
 
 FLOAT_DTYPES: frozenset[str] = frozenset({"float16", "bfloat16", "float32", "float64"})
@@ -63,12 +48,7 @@ def _tensor_digest(t: lucid.Tensor) -> dict[str, Any]:
     else:
         arr = np.ascontiguousarray(t.to("cpu").numpy())
     digest = hashlib.sha256(arr.tobytes()).hexdigest()
-    return {
-        "kind": "tensor",
-        "dtype": dt_str,
-        "shape": shape,
-        "sha256": digest,
-    }
+    return {"kind": "tensor", "dtype": dt_str, "shape": shape, "sha256": digest}
 
 
 def _value_digest(val: Any) -> dict[str, Any]:
@@ -83,16 +63,9 @@ def _value_digest(val: Any) -> dict[str, Any]:
             "sha256": hashlib.sha256(arr.tobytes()).hexdigest(),
         }
     if isinstance(val, (tuple, list)):
-        return {
-            "kind": "seq",
-            "items": [_value_digest(v) for v in val],
-        }
+        return {"kind": "seq", "items": [_value_digest(v) for v in val]}
     if isinstance(val, (bool, int, float, complex, str)) or val is None:
-        return {
-            "kind": "scalar",
-            "type": type(val).__name__,
-            "repr": repr(val),
-        }
+        return {"kind": "scalar", "type": type(val).__name__, "repr": repr(val)}
     arr_opt = _probe.to_numpy(val)
     if arr_opt is not None:
         arr = np.ascontiguousarray(arr_opt)
@@ -141,11 +114,7 @@ def _build_at(array: Any, follow: bool, dtype_name: str, device: str) -> Any:
 
 
 def _run_one_cell(
-    qualname: str,
-    fn: Any,
-    call: Any,
-    device: str,
-    dtype_name: str,
+    qualname: str, fn: Any, call: Any, device: str, dtype_name: str
 ) -> dict[str, Any]:
     lucid.manual_seed(1337)
 
@@ -162,16 +131,9 @@ def _run_one_cell(
             else:
                 fwd = _value_digest(out)
         except Exception as exc:  # noqa: BLE001
-            return {
-                "status": "exc",
-                "exc_type": type(exc).__name__,
-                "exc_msg": str(exc),
-            }
+            return {"status": "exc", "exc_type": type(exc).__name__, "exc_msg": str(exc)}
 
-        result: dict[str, Any] = {
-            "status": "ok",
-            "fwd": fwd,
-        }
+        result: dict[str, Any] = {"status": "ok", "fwd": fwd}
 
         if dtype_name in FLOAT_DTYPES and 0 <= call.primary < len(args):
             try:
@@ -254,10 +216,7 @@ def generate_digest(
         if fn is None:
             continue
         call, p_entry = _select_call(
-            symbol,
-            fn,
-            ctx.domains,
-            plan.get(symbol.qualname) if plan else None,
+            symbol, fn, ctx.domains, plan.get(symbol.qualname) if plan else None
         )
         if call is None or p_entry is None:
             continue
@@ -282,11 +241,7 @@ def generate_digest(
         if limit and surveyed >= limit:
             break
 
-    return {
-        "plan": chosen_plan,
-        "unstable": sorted(unstable),
-        "cells": cells,
-    }
+    return {"plan": chosen_plan, "unstable": sorted(unstable), "cells": cells}
 
 
 def compare_digests(before: dict[str, Any], after: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -315,9 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     ap.add_argument("--out", type=Path, help="Write digest JSON to this path")
     ap.add_argument(
-        "--plan",
-        type=Path,
-        help="Reuse invocation choices from an existing digest JSON",
+        "--plan", type=Path, help="Reuse invocation choices from an existing digest JSON"
     )
     ap.add_argument(
         "--compare",
@@ -326,10 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar=("BEFORE", "AFTER"),
         help="Compare two digest JSON files",
     )
-    ap.add_argument(
-        "--symbols",
-        help="Comma-separated symbol names (short or qualname) to run",
-    )
+    ap.add_argument("--symbols", help="Comma-separated symbol names (short or qualname) to run")
     ap.add_argument("--limit", type=int, default=0, help="Stop after N symbols")
     ap.add_argument(
         "--repeat",
@@ -365,10 +315,7 @@ def main(argv: list[str] | None = None) -> int:
 
     t0 = time.time()
     payload = generate_digest(
-        symbols_filter=sym_filter,
-        limit=args.limit,
-        repeat=max(1, args.repeat),
-        plan=plan_data,
+        symbols_filter=sym_filter, limit=args.limit, repeat=max(1, args.repeat), plan=plan_data
     )
     elapsed = time.time() - t0
     args.out.parent.mkdir(parents=True, exist_ok=True)

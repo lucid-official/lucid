@@ -10,11 +10,7 @@ that needs a small variant should override config fields via
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.text.gpt._config import GPTConfig
-from lucid.models.text.gpt._model import (
-    GPTForSequenceClassification,
-    GPTLMHeadModel,
-    GPTModel,
-)
+from lucid.models.text.gpt._model import GPTForSequenceClassification, GPTLMHeadModel, GPTModel
 from lucid.models.text.gpt._weights import GPTLMWeights, GPTWeights
 from lucid.models._utils._common import apply_overrides
 
@@ -25,17 +21,10 @@ _CFG_BASE = GPTConfig()  # Radford et al. defaults — the paper's only size
 
 
 @register_model(
-    task="base",
-    family="gpt",
-    model_type="gpt",
-    model_class=GPTModel,
-    default_config=_CFG_BASE,
+    task="base", family="gpt", model_type="gpt", model_class=GPTModel, default_config=_CFG_BASE
 )
 def gpt(
-    pretrained: bool | str = False,
-    *,
-    weights: GPTWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPTWeights | None = None, **overrides: object
 ) -> GPTModel:
     r"""Construct a GPT-1 decoder-only Transformer trunk.
 
@@ -108,10 +97,7 @@ def gpt(
     default_config=_CFG_BASE,
 )
 def gpt_lm(
-    pretrained: bool | str = False,
-    *,
-    weights: GPTLMWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPTLMWeights | None = None, **overrides: object
 ) -> GPTLMHeadModel:
     r"""Construct a GPT-1 model with the tied causal-LM head.
 
@@ -181,10 +167,7 @@ def gpt_lm(
     default_config=_CFG_BASE,
 )
 def gpt_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: GPTWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPTWeights | None = None, **overrides: object
 ) -> GPTForSequenceClassification:
     r"""Construct a GPT-1 model with a last-token sequence-classification head.
 

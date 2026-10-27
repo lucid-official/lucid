@@ -83,11 +83,7 @@ class TestRefusedByName:
 
     def test_unknown_padding(self) -> None:
         with pytest.raises(ValueError, match="'circular'"):
-            F.grid_sample(
-                lucid.randn(1, 1, 2, 2),
-                lucid.zeros(1, 1, 1, 2),
-                padding_mode="circular",
-            )
+            F.grid_sample(lucid.randn(1, 1, 2, 2), lucid.zeros(1, 1, 1, 2), padding_mode="circular")
 
     def test_bicubic_volumetric(self) -> None:
         with pytest.raises(ValueError, match="bicubic"):
@@ -108,8 +104,7 @@ class TestRefusedByName:
     def test_dtype_mismatch(self) -> None:
         with pytest.raises(TypeError, match="dtype"):
             F.grid_sample(
-                lucid.randn(1, 1, 2, 2, 2, dtype=lucid.float64),
-                lucid.zeros(1, 1, 1, 1, 3),
+                lucid.randn(1, 1, 2, 2, 2, dtype=lucid.float64), lucid.zeros(1, 1, 1, 1, 3)
             )
 
 

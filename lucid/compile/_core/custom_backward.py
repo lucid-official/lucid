@@ -37,12 +37,7 @@ from lucid.autograd.function import Function, _is_exact_derivative
 if TYPE_CHECKING:
     from lucid._C.engine.compile import TraceGraph, Tracer
 
-__all__ = [
-    "GRADIENT_DTYPES",
-    "CustomBackwardInTrace",
-    "refuse_custom_backward",
-    "note_applied",
-]
+__all__ = ["GRADIENT_DTYPES", "CustomBackwardInTrace", "refuse_custom_backward", "note_applied"]
 
 #: The dtypes a gradient can flow through — eager never tracks an integer or
 #: bool value.  The backward walker's ``carries_gradient`` is the same rule.

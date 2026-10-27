@@ -135,11 +135,7 @@ def _on_axis(b: Builder, rank: int, axis: int, value: str, other: int) -> str:
         return value
     return b.emit(
         "concat",
-        [
-            ("values", pieces),
-            ("axis", b.const_int(0)),
-            ("interleave", b.const_bool(False)),
-        ],
+        [("values", pieces), ("axis", b.const_int(0)), ("interleave", b.const_bool(False))],
         [rank],
         dtype=_MIL_INT32,
     )
@@ -197,16 +193,10 @@ def _nearest_to_size(b: Builder, op: TracedOp, x: str) -> EmitResult:
         size = out[axis]
         extent = b.run_time_dim(x, axis) if src[axis] < 0 else b.const_ints([src[axis]])
         scaled = b.emit(
-            "mul",
-            [("x", b.const_ints(list(range(size)))), ("y", extent)],
-            [size],
-            dtype=_MIL_INT32,
+            "mul", [("x", b.const_ints(list(range(size)))), ("y", extent)], [size], dtype=_MIL_INT32
         )
         picked = b.emit(
-            "floor_div",
-            [("x", scaled), ("y", b.const_ints([size]))],
-            [size],
-            dtype=_MIL_INT32,
+            "floor_div", [("x", scaled), ("y", b.const_ints([size]))], [size], dtype=_MIL_INT32
         )
         return [
             ("x", value),

@@ -44,11 +44,7 @@ _CFG_HVAE = VAEConfig(
 
 
 @register_model(
-    task="base",
-    family="vae",
-    model_type="vae",
-    model_class=VAEModel,
-    default_config=_CFG_VAE,
+    task="base", family="vae", model_type="vae", model_class=VAEModel, default_config=_CFG_VAE
 )
 def vae(pretrained: bool = False, **overrides: object) -> VAEModel:
     r"""Construct a convolutional VAE with a single bottleneck latent.
@@ -109,11 +105,7 @@ def vae(pretrained: bool = False, **overrides: object) -> VAEModel:
 
 
 @register_model(
-    task="base",
-    family="vae",
-    model_type="vae",
-    model_class=VAEModel,
-    default_config=_CFG_HVAE,
+    task="base", family="vae", model_type="vae", model_class=VAEModel, default_config=_CFG_HVAE
 )
 def hvae(pretrained: bool = False, **overrides: object) -> VAEModel:
     r"""Construct a hierarchical (Ladder-style) VAE with one latent per stage.

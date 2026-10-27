@@ -31,12 +31,7 @@ def make_array(
     callers get independent streams without colliding.
     """
     rng = np.random.default_rng(seed=hash((seed, tuple(shape))) & 0xFFFF_FFFF)
-    if dtype is None or dtype in (
-        lucid.float32,
-        lucid.float64,
-        lucid.float16,
-        lucid.bfloat16,
-    ):
+    if dtype is None or dtype in (lucid.float32, lucid.float64, lucid.float16, lucid.bfloat16):
         arr = rng.uniform(low=low, high=high, size=shape)
         # bfloat16 / float16 not directly representable in numpy across
         # versions — keep f32 here and let the lucid factory cast.

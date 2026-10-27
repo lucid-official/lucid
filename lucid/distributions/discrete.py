@@ -14,10 +14,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _as_tensor
 from lucid.distributions._util import _broadcast_pair
 from lucid.distributions._util import _clamp_probs, _lazy_param
-from lucid.distributions.bernoulli import (
-    _logits_to_probs,
-    _probs_to_logits,
-)
+from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
     half_open_interval,
@@ -92,11 +89,7 @@ class Poisson(ExponentialFamily):
     arg_constraints = {"rate": nonnegative}
     support: Constraint | None = nonnegative_integer
 
-    def __init__(
-        self,
-        rate: Tensor | float,
-        validate_args: bool | None = None,
-    ) -> None:
+    def __init__(self, rate: Tensor | float, validate_args: bool | None = None) -> None:
         r"""Initialise a Poisson distribution.
 
         Parameters
@@ -109,9 +102,7 @@ class Poisson(ExponentialFamily):
         """
         self.rate = _as_tensor(rate)
         super().__init__(
-            batch_shape=tuple(self.rate.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.rate.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -179,9 +170,7 @@ class Poisson(ExponentialFamily):
         # using the Lucid Philox PRNG, so ``manual_seed`` controls the
         # stream end-to-end.
         rate_b: Tensor = self.rate + lucid.zeros(
-            self._extended_shape(sample_shape),
-            dtype=self.rate.dtype,
-            device=self.rate.device,
+            self._extended_shape(sample_shape), dtype=self.rate.dtype, device=self.rate.device
         )
         return lucid.poisson(rate_b)
 
@@ -236,11 +225,7 @@ class Poisson(ExponentialFamily):
         return x.exp()
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Poisson` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(Poisson, _instance)
         batch_shape = tuple(batch_shape)
@@ -323,11 +308,7 @@ class Binomial(Distribution):
     tensor(0.2668)
     """
 
-    arg_constraints = {
-        "total_count": nonnegative_integer,
-        "probs": unit_interval,
-        "logits": real,
-    }
+    arg_constraints = {"total_count": nonnegative_integer, "probs": unit_interval, "logits": real}
     has_enumerate_support = True
 
     _SMALL_N_CUTOFF: int = 25
@@ -377,9 +358,7 @@ class Binomial(Distribution):
         else:
             self.probs = param
         super().__init__(
-            batch_shape=tuple(param.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(param.shape), event_shape=(), validate_args=validate_args
         )
 
     @_lazy_param
@@ -634,11 +613,7 @@ class Binomial(Distribution):
         return self._expand_support(values, expand)
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Binomial` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(Binomial, _instance)
         batch_shape = tuple(batch_shape)
@@ -785,9 +760,7 @@ class NegativeBinomial(Distribution):
         else:
             self.probs = param
         super().__init__(
-            batch_shape=tuple(param.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(param.shape), event_shape=(), validate_args=validate_args
         )
 
     @_lazy_param
@@ -965,11 +938,7 @@ class NegativeBinomial(Distribution):
         )
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`NegativeBinomial` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(NegativeBinomial, _instance)
         batch_shape = tuple(batch_shape)

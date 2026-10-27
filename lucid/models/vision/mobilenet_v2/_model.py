@@ -17,10 +17,7 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models._utils._common import (
-    init_cnn_fan_out,
-    make_divisible as _make_divisible,
-)
+from lucid.models._utils._common import init_cnn_fan_out, make_divisible as _make_divisible
 from lucid.models.vision.mobilenet_v2._config import MobileNetV2Config
 
 # ---------------------------------------------------------------------------
@@ -31,13 +28,7 @@ from lucid.models.vision.mobilenet_v2._config import MobileNetV2Config
 class _InvertedResidual(nn.Module):
     """MobileNet v2 Inverted Residual (linear bottleneck) block."""
 
-    def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        stride: int,
-        expand_ratio: int,
-    ) -> None:
+    def __init__(self, in_ch: int, out_ch: int, stride: int, expand_ratio: int) -> None:
         super().__init__()
         self._use_residual = stride == 1 and in_ch == out_ch
         hidden = in_ch * expand_ratio
@@ -336,11 +327,7 @@ class MobileNetV2ForImageClassification(ImageClassificationModel, Classification
         init_cnn_fan_out(self, linear_std=0.01)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         x = self.avgpool(x)
         x = self.drop(x.flatten(1))

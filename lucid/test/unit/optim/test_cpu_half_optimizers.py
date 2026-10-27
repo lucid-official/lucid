@@ -14,46 +14,13 @@ _CASES: list[tuple[str, dict[str, Any]]] = [
     ("SGD", {"lr": 0.1}),
     ("SGD", {"lr": 0.1, "momentum": 0.9, "dampening": 0.2, "weight_decay": 0.1}),
     ("SGD", {"lr": 0.1, "momentum": 0.9, "weight_decay": 0.1, "nesterov": True}),
-    (
-        "Adam",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": False,
-        },
-    ),
-    (
-        "Adam",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": True,
-        },
-    ),
+    ("Adam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": False}),
+    ("Adam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": True}),
     (
         "AdamW",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": False,
-        },
+        {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": False},
     ),
-    (
-        "AdamW",
-        {
-            "lr": 0.05,
-            "betas": (0.7, 0.8),
-            "eps": 1e-3,
-            "weight_decay": 0.1,
-            "amsgrad": True,
-        },
-    ),
+    ("AdamW", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1, "amsgrad": True}),
     ("Adamax", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
     ("NAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
     ("RAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "weight_decay": 0.1}),
@@ -81,10 +48,7 @@ _CASES: list[tuple[str, dict[str, Any]]] = [
         },
     ),
     ("Rprop", {"lr": 0.05, "etas": (0.4, 1.5), "step_sizes": (1e-2, 0.2)}),
-    (
-        "ASGD",
-        {"lr": 0.05, "lambd": 0.1, "alpha": 0.5, "t0": 2.0, "weight_decay": 0.1},
-    ),
+    ("ASGD", {"lr": 0.05, "lambd": 0.1, "alpha": 0.5, "t0": 2.0, "weight_decay": 0.1}),
     ("SparseAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3}),
     ("SparseAdam", {"lr": 0.05, "betas": (0.7, 0.8), "eps": 1e-3, "maximize": True}),
 ]
@@ -122,11 +86,7 @@ def test_sgd_cpu_half_repro(dtype: lucid.dtype, rtol: float, atol: float) -> Non
 @pytest.mark.parametrize("case", _CASE_PARAMS)
 @pytest.mark.parametrize("dtype, rtol, atol", _HALF_DTYPES)
 def test_cpu_half_optimizers_match_ref_and_metal(
-    case: tuple[str, dict[str, Any]],
-    dtype: lucid.dtype,
-    rtol: float,
-    atol: float,
-    ref: Any,
+    case: tuple[str, dict[str, Any]], dtype: lucid.dtype, rtol: float, atol: float, ref: Any
 ) -> None:
     name, kw = case
     ref_dt = ref.float16 if dtype == lucid.float16 else ref.bfloat16
@@ -182,10 +142,7 @@ def test_cpu_half_optimizers_match_ref_and_metal(
 @pytest.mark.parametrize("case", _CASE_PARAMS)
 @pytest.mark.parametrize("dtype, _rtol, _atol", _HALF_DTYPES)
 def test_cpu_half_optimizer_state_dict_roundtrip(
-    case: tuple[str, dict[str, Any]],
-    dtype: lucid.dtype,
-    _rtol: float,
-    _atol: float,
+    case: tuple[str, dict[str, Any]], dtype: lucid.dtype, _rtol: float, _atol: float
 ) -> None:
     name, kw = case
     rng = np.random.default_rng(7)

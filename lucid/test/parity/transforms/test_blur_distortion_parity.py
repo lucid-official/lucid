@@ -97,9 +97,7 @@ class TestBlurKernel:
         # Interior matches to a tight bound: identical mean-kernel math
         # under different padding only differs at the border strip.
         np.testing.assert_allclose(
-            _strip_border(got, margin=2),
-            _strip_border(ref, margin=2),
-            atol=5e-2,
+            _strip_border(got, margin=2), _strip_border(ref, margin=2), atol=5e-2
         )
 
     def test_median_blur_fixed_kernel(self) -> None:
@@ -115,9 +113,7 @@ class TestBlurKernel:
         # padding mode (the kernel only touches the centre + 8 neighbours
         # which are all interior pixels here).
         np.testing.assert_allclose(
-            _strip_border(got, margin=2),
-            _strip_border(ref, margin=2),
-            atol=5e-2,
+            _strip_border(got, margin=2), _strip_border(ref, margin=2), atol=5e-2
         )
 
     def test_motion_blur_fixed_kernel(self) -> None:
@@ -147,16 +143,11 @@ class TestBlurKernel:
         lucid_tf = _blur.GaussianBlur(blur_limit=(5, 5), sigma_limit=(1.5, 1.5), p=1.0)
         lucid.manual_seed(0)
         got = _run_lucid(lucid_tf, chw)
-        ref = _run_albu(
-            A.GaussianBlur(blur_limit=(5, 5), sigma_limit=(1.5, 1.5), p=1.0),
-            hwc,
-        )
+        ref = _run_albu(A.GaussianBlur(blur_limit=(5, 5), sigma_limit=(1.5, 1.5), p=1.0), hwc)
         assert got.shape == ref.shape
         # Strip a wider border — Gaussian tail at k=5 reaches 2 pixels in.
         np.testing.assert_allclose(
-            _strip_border(got, margin=3),
-            _strip_border(ref, margin=3),
-            atol=5e-2,
+            _strip_border(got, margin=3), _strip_border(ref, margin=3), atol=5e-2
         )
 
 
@@ -183,11 +174,7 @@ class TestNoiseStatistical:
             lucid.manual_seed(seed)
             got = _run_lucid(_blur.GaussNoise(var_limit=(50.0, 50.0), mean=0.0, p=1.0), chw)
             ref = _run_albu(
-                A.GaussNoise(
-                    std_range=(np.sqrt(50.0) / 255.0,) * 2,
-                    mean_range=(0.0, 0.0),
-                    p=1.0,
-                ),
+                A.GaussNoise(std_range=(np.sqrt(50.0) / 255.0,) * 2, mean_range=(0.0, 0.0), p=1.0),
                 hwc,
             )
             assert got.shape == ref.shape == hwc.shape
@@ -222,13 +209,9 @@ class TestNoiseStatistical:
             chw, hwc = _image(seed, h=32, w=40)
             lucid.manual_seed(seed)
             got = _run_lucid(
-                _blur.ISONoise(color_shift=(0.02, 0.02), intensity=(0.2, 0.2), p=1.0),
-                chw,
+                _blur.ISONoise(color_shift=(0.02, 0.02), intensity=(0.2, 0.2), p=1.0), chw
             )
-            ref = _run_albu(
-                A.ISONoise(color_shift=(0.02, 0.02), intensity=(0.2, 0.2), p=1.0),
-                hwc,
-            )
+            ref = _run_albu(A.ISONoise(color_shift=(0.02, 0.02), intensity=(0.2, 0.2), p=1.0), hwc)
             assert got.shape == ref.shape == hwc.shape
             assert 0.0 <= got.min() and got.max() <= 1.0
             # Both add a small perturbation around the input.
@@ -317,9 +300,7 @@ class TestDistortion:
         # identity on the interior; allow a tight tolerance for the
         # sampling normalisation arithmetic.
         np.testing.assert_allclose(
-            _strip_border(got, margin=1),
-            _strip_border(hwc, margin=1),
-            atol=1e-4,
+            _strip_border(got, margin=1), _strip_border(hwc, margin=1), atol=1e-4
         )
 
     def test_grid_distortion_identity_params(self) -> None:
@@ -331,9 +312,7 @@ class TestDistortion:
         got = _run_lucid(lucid_tf, chw)
         assert got.shape == hwc.shape
         np.testing.assert_allclose(
-            _strip_border(got, margin=1),
-            _strip_border(hwc, margin=1),
-            atol=1e-4,
+            _strip_border(got, margin=1), _strip_border(hwc, margin=1), atol=1e-4
         )
 
     def test_optical_distortion_identity_params(self) -> None:
@@ -345,9 +324,7 @@ class TestDistortion:
         got = _run_lucid(lucid_tf, chw)
         assert got.shape == hwc.shape
         np.testing.assert_allclose(
-            _strip_border(got, margin=1),
-            _strip_border(hwc, margin=1),
-            atol=1e-4,
+            _strip_border(got, margin=1), _strip_border(hwc, margin=1), atol=1e-4
         )
 
     def test_grid_elastic_deform_runs(self) -> None:
@@ -355,10 +332,7 @@ class TestDistortion:
         # only.  Shape + range + bounded mean drift.
         chw, hwc = _image(10, h=32, w=40)
         lucid.manual_seed(0)
-        got = _run_lucid(
-            _distortion.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0),
-            chw,
-        )
+        got = _run_lucid(_distortion.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0), chw)
         ref = _run_albu(A.GridElasticDeform(num_grid_xy=(4, 4), magnitude=5, p=1.0), hwc)
         assert got.shape == ref.shape == hwc.shape
         assert 0.0 <= got.min() and got.max() <= 1.0
@@ -392,9 +366,7 @@ class TestDistortionDeterministic:
         # bit-exact on the interior; reflection padding only affects
         # the 1-pixel border.
         np.testing.assert_allclose(
-            _strip_border(out_hwc, margin=1),
-            _strip_border(hwc, margin=1),
-            atol=1e-5,
+            _strip_border(out_hwc, margin=1), _strip_border(hwc, margin=1), atol=1e-5
         )
 
     def test_constant_shift_matches_numpy_roll(self) -> None:

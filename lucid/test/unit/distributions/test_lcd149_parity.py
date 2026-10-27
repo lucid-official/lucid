@@ -61,10 +61,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     ("Gumbel", lambda t: D.Gumbel(t(0.5), t(1.2))),
     ("HalfCauchy", lambda t: D.HalfCauchy(t(1.5))),
     ("HalfNormal", lambda t: D.HalfNormal(t(1.5))),
-    (
-        "Independent",
-        lambda t: D.Independent(D.Normal(t([0.0, 1.0]), t([1.0, 2.0])), 1),
-    ),
+    ("Independent", lambda t: D.Independent(D.Normal(t([0.0, 1.0]), t([1.0, 2.0])), 1)),
     ("InverseGamma", lambda t: D.InverseGamma(t(3.5), t(2.0))),
     ("Kumaraswamy", lambda t: D.Kumaraswamy(t(2.0), t(3.0))),
     ("LKJCholesky", lambda t: D.LKJCholesky(3, t(2.0))),
@@ -78,8 +75,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     (
         "MixtureSameFamily",
         lambda t: D.MixtureSameFamily(
-            D.Categorical(probs=t([0.4, 0.6])),
-            D.Normal(t([-1.0, 1.0]), t([0.5, 1.5])),
+            D.Categorical(probs=t([0.4, 0.6])), D.Normal(t([-1.0, 1.0]), t([0.5, 1.5]))
         ),
     ),
     ("Multinomial", lambda t: D.Multinomial(4, probs=t([0.2, 0.3, 0.5]))),
@@ -109,10 +105,7 @@ _EXPAND_BUILDERS: list[tuple[str, Callable[[Callable[[Any], Any]], Any]]] = [
     ("Uniform", lambda t: D.Uniform(t(-1.0), t(2.0))),
     ("VonMises", lambda t: D.VonMises(t(0.3), t(2.5))),
     ("Weibull", lambda t: D.Weibull(t(1.5), t(2.0))),
-    (
-        "Wishart",
-        lambda t: D.Wishart(t(5.0), scale_tril=t([[1.0, 0.0], [0.2, 1.1]])),
-    ),
+    ("Wishart", lambda t: D.Wishart(t(5.0), scale_tril=t([[1.0, 0.0], [0.2, 1.1]]))),
 ]
 
 
@@ -290,23 +283,14 @@ def test_low_rank_multivariate_normal_parity(device: str, ref: Any) -> None:
     d_r = ref.distributions.LowRankMultivariateNormal(
         _rt(ref, loc), _rt(ref, cov_factor), _rt(ref, cov_diag)
     )
-    for attr in (
-        "mean",
-        "mode",
-        "variance",
-        "scale_tril",
-        "covariance_matrix",
-        "precision_matrix",
-    ):
+    for attr in ("mean", "mode", "variance", "scale_tril", "covariance_matrix", "precision_matrix"):
         np.testing.assert_allclose(
             _np(getattr(d_l, attr)), _np(getattr(d_r, attr)), rtol=1e-5, atol=1e-5
         )
     np.testing.assert_allclose(_np(d_l.entropy()), _np(d_r.entropy()), rtol=1e-5)
     probe = [0.2, -0.4, 0.7]
     np.testing.assert_allclose(
-        _np(d_l.log_prob(_lt(probe, device))),
-        _np(d_r.log_prob(_rt(ref, probe))),
-        rtol=1e-5,
+        _np(d_l.log_prob(_lt(probe, device))), _np(d_r.log_prob(_rt(ref, probe))), rtol=1e-5
     )
     draws = d_l.rsample((8,))
     assert draws.shape == (8, 3)
@@ -325,11 +309,7 @@ def test_low_rank_multivariate_normal_kl_divergence(ref: Any) -> None:
     m_r = ref.distributions.MultivariateNormal(
         _rt(ref, [0.1, 0.2]), scale_tril=_rt(ref, [[1.1, 0.0], [0.25, 0.9]])
     )
-    for a_l, b_l, a_r, b_r in [
-        (p_l, q_l, p_r, q_r),
-        (p_l, m_l, p_r, m_r),
-        (m_l, p_l, m_r, p_r),
-    ]:
+    for a_l, b_l, a_r, b_r in [(p_l, q_l, p_r, q_r), (p_l, m_l, p_r, m_r), (m_l, p_l, m_r, p_r)]:
         np.testing.assert_allclose(
             _np(D.kl_divergence(a_l, b_l)),
             _np(ref.distributions.kl_divergence(a_r, b_r)),
@@ -358,17 +338,11 @@ def test_logistic_normal_generalized_pareto_and_von_mises(device: str, ref: Any)
             (gp_l.log_prob(_lt(x, device)), gp_r.log_prob(_rt(ref, x))),
             (gp_l.cdf(_lt(x, device)), gp_r.cdf(_rt(ref, x))),
             (gp_l.log_cdf(_lt(x, device)), gp_r.log_cdf(_rt(ref, x))),
-            (
-                gp_l.log_survival_function(_lt(x, device)),
-                gp_r.log_survival_function(_rt(ref, x)),
-            ),
+            (gp_l.log_survival_function(_lt(x, device)), gp_r.log_survival_function(_rt(ref, x))),
         ):
             np.testing.assert_allclose(_np(actual), _np(expected), rtol=1e-4, atol=1e-5)
         np.testing.assert_allclose(
-            _np(gp_l.icdf(_lt(0.4, device))),
-            _np(gp_r.icdf(_rt(ref, 0.4))),
-            rtol=1e-4,
-            atol=1e-5,
+            _np(gp_l.icdf(_lt(0.4, device))), _np(gp_r.icdf(_rt(ref, 0.4))), rtol=1e-4, atol=1e-5
         )
         np.testing.assert_allclose(_np(gp_l.entropy()), _np(gp_r.entropy()), rtol=1e-5)
 
@@ -405,9 +379,7 @@ def test_new_transforms_and_constraint_registry(device: str, ref: Any) -> None:
     np.testing.assert_allclose(_np(y_l), _np(y_r), rtol=1e-5)
     np.testing.assert_allclose(_np(af_l.inv(y_l)), _np(x), rtol=1e-5)
     np.testing.assert_allclose(
-        _np(af_l.log_abs_det_jacobian(x, y_l)),
-        _np(af_r.log_abs_det_jacobian(xr, y_r)),
-        rtol=1e-5,
+        _np(af_l.log_abs_det_jacobian(x, y_l)), _np(af_r.log_abs_det_jacobian(xr, y_r)), rtol=1e-5
     )
 
     # SoftplusTransform
@@ -417,9 +389,7 @@ def test_new_transforms_and_constraint_registry(device: str, ref: Any) -> None:
     np.testing.assert_allclose(_np(sy_l), _np(sy_r), rtol=1e-5)
     np.testing.assert_allclose(_np(sp_l.inv(sy_l)), _np(x), rtol=1e-5, atol=1e-5)
     np.testing.assert_allclose(
-        _np(sp_l.log_abs_det_jacobian(x, sy_l)),
-        _np(sp_r.log_abs_det_jacobian(xr, sy_r)),
-        rtol=1e-5,
+        _np(sp_l.log_abs_det_jacobian(x, sy_l)), _np(sp_r.log_abs_det_jacobian(xr, sy_r)), rtol=1e-5
     )
 
     # CorrCholeskyTransform() no-arg constructor (free vector of length D*(D-1)/2)
@@ -453,9 +423,7 @@ def test_new_transforms_and_constraint_registry(device: str, ref: Any) -> None:
         + 2.0 * math.log(2.0)
     )
     np.testing.assert_allclose(
-        _np(pd_l.log_abs_det_jacobian(m_l, P_l)),
-        _np(expected_ladj),
-        rtol=1e-5,
+        _np(pd_l.log_abs_det_jacobian(m_l, P_l)), _np(expected_ladj), rtol=1e-5
     )
 
 

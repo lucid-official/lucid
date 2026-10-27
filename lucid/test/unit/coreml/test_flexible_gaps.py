@@ -27,8 +27,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -50,17 +49,10 @@ def _agrees(got: lucid.Tensor, want: lucid.Tensor) -> None:
 
 
 def _export(
-    model: nn.Module,
-    example: lucid.Tensor,
-    path: str,
-    ranges: dict[int, tuple[int, int]],
+    model: nn.Module, example: lucid.Tensor, path: str, ranges: dict[int, tuple[int, int]]
 ) -> cml.CoreMLModel:
     return cml.export(
-        model,
-        example,
-        path,
-        shape_range=ranges,
-        compute_units=cml.ComputeUnits.CPU_ONLY,
+        model, example, path, shape_range=ranges, compute_units=cml.ComputeUnits.CPU_ONLY
     )
 
 
@@ -84,10 +76,7 @@ def test_a_text_model_takes_a_sequence_range(name: str, tmp_path: object) -> Non
     lucid.manual_seed(0)
     model = M.create_model(name, **_TEXT).eval()
     exported = _export(
-        model,
-        lucid.randint(0, 100, (1, 16)),
-        str(tmp_path / "text.mlpackage"),
-        {1: (4, 128)},
+        model, lucid.randint(0, 100, (1, 16)), str(tmp_path / "text.mlpackage"), {1: (4, 128)}
     )
     try:
         for length in _LENGTHS:
@@ -137,10 +126,7 @@ class _UnknownCut(nn.Module):
 def test_a_cut_no_input_axis_explains_is_refused(tmp_path: object) -> None:
     with pytest.raises(cml.ShapeNotFlexible):
         _export(
-            _UnknownCut().eval(),
-            lucid.randn(1, 8, 8),
-            str(tmp_path / "u.mlpackage"),
-            {1: (4, 16)},
+            _UnknownCut().eval(), lucid.randn(1, 8, 8), str(tmp_path / "u.mlpackage"), {1: (4, 16)}
         )
 
 
@@ -162,10 +148,7 @@ def test_a_resample_takes_a_plane_range(case: str, tmp_path: object) -> None:
     lucid.manual_seed(0)
     model = RESAMPLES[case]().eval()
     exported = _export(
-        model,
-        lucid.randn(1, 3, 4, 4),
-        str(tmp_path / "up.mlpackage"),
-        {2: (2, 16), 3: (2, 16)},
+        model, lucid.randn(1, 3, 4, 4), str(tmp_path / "up.mlpackage"), {2: (2, 16), 3: (2, 16)}
     )
     try:
         for h, w in _PLANES:

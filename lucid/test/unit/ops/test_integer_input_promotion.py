@@ -18,8 +18,7 @@ from lucid._C import engine as _C_engine
 _DEVICES = [
     "cpu",
     pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device"),
+        "metal", marks=pytest.mark.skipif(not lucid.metal.is_available(), reason="no Metal device")
     ),
 ]
 
@@ -56,9 +55,7 @@ def test_matmul_refuses_an_integer_with_a_float_operand(device: str) -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_in_place_float_op_on_integers_is_refused_and_reads_back_unchanged(
-    device: str,
-) -> None:
+def test_in_place_float_op_on_integers_is_refused_and_reads_back_unchanged(device: str) -> None:
     x = _ints(1, 2, 3, 4, 5, device=device)
     with pytest.raises(RuntimeError, match="can't be cast to the desired output type"):
         x.exp_()

@@ -19,12 +19,6 @@ shared module with one consumer is an abstraction guessed rather than
 observed.
 """
 
-from lucid.models.multimodal._common._config import (
-    MultimodalActivation,
-    MultimodalModelConfig,
-)
+from lucid.models.multimodal._common._config import MultimodalActivation, MultimodalModelConfig
 
-__all__ = [
-    "MultimodalActivation",
-    "MultimodalModelConfig",
-]
+__all__ = ["MultimodalActivation", "MultimodalModelConfig"]

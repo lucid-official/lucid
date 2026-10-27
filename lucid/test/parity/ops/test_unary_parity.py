@@ -95,12 +95,7 @@ _BACKWARD_OPS: list[tuple[str, Callable, str, tuple[float, float], float]] = [
     "name,lucid_fn,ref_attr,rng,atol", _UNARY_OPS, ids=[op[0] for op in _UNARY_OPS]
 )
 def test_unary_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_attr: str,
-    rng: tuple[float, float],
-    atol: float,
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_attr: str, rng: tuple[float, float], atol: float, ref: Any
 ) -> None:
     np.random.seed(0)
     x = np.random.uniform(rng[0], rng[1], size=(4, 5)).astype(np.float32)
@@ -114,11 +109,7 @@ def test_unary_parity(
 @pytest.mark.parity
 @pytest.mark.parametrize("name,lucid_fn,ref_attr,rng", _PRED_OPS, ids=[op[0] for op in _PRED_OPS])
 def test_unary_predicate_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_attr: str,
-    rng: tuple[float, float],
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_attr: str, rng: tuple[float, float], ref: Any
 ) -> None:
     np.random.seed(0)
     x = np.random.uniform(rng[0], rng[1], size=(4, 5)).astype(np.float32)
@@ -131,17 +122,10 @@ def test_unary_predicate_parity(
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "name,lucid_fn,ref_attr,rng,atol",
-    _BACKWARD_OPS,
-    ids=[op[0] for op in _BACKWARD_OPS],
+    "name,lucid_fn,ref_attr,rng,atol", _BACKWARD_OPS, ids=[op[0] for op in _BACKWARD_OPS]
 )
 def test_unary_backward_parity(
-    name: str,
-    lucid_fn: Callable,
-    ref_attr: str,
-    rng: tuple[float, float],
-    atol: float,
-    ref: Any,
+    name: str, lucid_fn: Callable, ref_attr: str, rng: tuple[float, float], atol: float, ref: Any
 ) -> None:
     np.random.seed(1)
     x = np.random.uniform(rng[0], rng[1], size=(3, 4)).astype(np.float32)

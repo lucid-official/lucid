@@ -13,12 +13,7 @@ from lucid.test.parity.models._utils import (
 )
 
 _FACTORIES = frozenset(
-    {
-        M.mobilenet_cls,
-        M.mobilenet_075_cls,
-        M.mobilenet_050_cls,
-        M.mobilenet_025_cls,
-    }
+    {M.mobilenet_cls, M.mobilenet_075_cls, M.mobilenet_050_cls, M.mobilenet_025_cls}
 )
 _SPECS = [s for s in SPECS if s.lucid_factory in _FACTORIES]
 _TIMM = [s for s in _SPECS if s.timm_name is not None]

@@ -26,8 +26,7 @@ DEVICES = ["cpu", "metal"]
 # Values chosen to hit the interesting binary16 paths: zero, signed zero,
 # normals, the largest finite half, a subnormal-in-half value, and infinities.
 _VALUES = np.array(
-    [0.0, -0.0, 1.0, -2.5, 65504.0, 1e-8, 3.14159, np.inf, -np.inf],
-    dtype=np.float32,
+    [0.0, -0.0, 1.0, -2.5, 65504.0, 1e-8, 3.14159, np.inf, -np.inf], dtype=np.float32
 )
 
 

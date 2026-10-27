@@ -23,13 +23,7 @@ Naming conventions
 """
 
 from types import EllipsisType
-from typing import (
-    Callable,
-    Literal,
-    Protocol,
-    TYPE_CHECKING,
-    runtime_checkable,
-)
+from typing import Callable, Literal, Protocol, TYPE_CHECKING, runtime_checkable
 
 from lucid._dtype import dtype as _DType
 from lucid._device import device as _Device

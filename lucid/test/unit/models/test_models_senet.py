@@ -43,18 +43,9 @@ class TestSENetConfig(unittest.TestCase):
 class TestSENetParamCounts(unittest.TestCase):
 
     def test_larger_has_more_params(self) -> None:
-        self.assertGreater(
-            se_resnet_50().num_parameters(),
-            se_resnet_18().num_parameters(),
-        )
-        self.assertGreater(
-            se_resnet_101().num_parameters(),
-            se_resnet_50().num_parameters(),
-        )
-        self.assertGreater(
-            se_resnet_152().num_parameters(),
-            se_resnet_101().num_parameters(),
-        )
+        self.assertGreater(se_resnet_50().num_parameters(), se_resnet_18().num_parameters())
+        self.assertGreater(se_resnet_101().num_parameters(), se_resnet_50().num_parameters())
+        self.assertGreater(se_resnet_152().num_parameters(), se_resnet_101().num_parameters())
 
 
 class TestSENetBackbone(unittest.TestCase):

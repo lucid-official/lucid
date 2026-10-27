@@ -118,13 +118,7 @@ def _pool2d(x: np.ndarray, k: int, op: Callable[..., np.ndarray]) -> np.ndarray:
 
 
 def _pool(
-    x: np.ndarray,
-    k: int,
-    s: int,
-    p: int,
-    is_max: bool,
-    count_pad: bool = True,
-    ceil: bool = False,
+    x: np.ndarray, k: int, s: int, p: int, is_max: bool, count_pad: bool = True, ceil: bool = False
 ) -> np.ndarray:
     """Pool the trailing axes of (N, C, *spatial), the reference's way.
 
@@ -373,10 +367,7 @@ REFS: dict[str, Ref] = {
     "nansum": lambda x, c: np.nansum(x),
     "trace": lambda x, c: np.trace(x),
     # ── sort family (values and stable indices)
-    "sort": lambda x, c: (
-        np.sort(x, axis=-1),
-        np.argsort(x, axis=-1, kind="stable"),
-    ),
+    "sort": lambda x, c: (np.sort(x, axis=-1), np.argsort(x, axis=-1, kind="stable")),
     "topk_values": lambda x, c: np.sort(x, axis=-1)[:, ::-1][:, :2],
     "topk": lambda x, c: (
         np.sort(x, axis=-1)[:, ::-1][:, :2],
@@ -414,16 +405,10 @@ REFS: dict[str, Ref] = {
     "index_select": lambda x, c: np.take(x, c.idx(3, 0, 0, 2), axis=0),
     "fancy_index": lambda x, c: x[c.idx(2, 0, 3)],
     "scatter_add": lambda x, c: _scatter(
-        np.zeros_like(x),
-        np.broadcast_to(c.idx(0, 1, 0, 2, 5, 5).reshape(1, 6), (4, 6)),
-        x,
-        True,
+        np.zeros_like(x), np.broadcast_to(c.idx(0, 1, 0, 2, 5, 5).reshape(1, 6), (4, 6)), x, True
     ),
     "scatter": lambda x, c: _scatter(
-        np.zeros_like(x),
-        np.broadcast_to(c.idx(5, 4, 3, 2, 1, 0).reshape(1, 6), (4, 6)),
-        x,
-        False,
+        np.zeros_like(x), np.broadcast_to(c.idx(5, 4, 3, 2, 1, 0).reshape(1, 6), (4, 6)), x, False
     ),
     "unfold_dim": lambda x, c: _unfold(x, 1, 3, 2) * 1,
     "one_hot": lambda x, c: np.eye(5, dtype=np.int64)[np.minimum(np.abs(x).astype(np.int64), 4)],
@@ -486,18 +471,10 @@ REFS: dict[str, Ref] = {
     "avg_pool2d_t": lambda x, c: _pool2d(x, 2, np.mean).swapaxes(-1, -2),
     "max_pool2d_t": lambda x, c: _pool2d(x, 2, np.max).swapaxes(-1, -2),
     "pad_max_pool2d": lambda x, c: _pool(
-        np.pad(_f(x), ((0, 0), (0, 0), (0, 1), (0, 1)), constant_values=-1e4),
-        2,
-        1,
-        0,
-        True,
+        np.pad(_f(x), ((0, 0), (0, 0), (0, 1), (0, 1)), constant_values=-1e4), 2, 1, 0, True
     ),
     "pad_max_pool3d": lambda x, c: _pool(
-        np.pad(_f(x), ((0, 0), (0, 0), (1, 0), (0, 1), (1, 0)), constant_values=-1e4),
-        2,
-        1,
-        0,
-        True,
+        np.pad(_f(x), ((0, 0), (0, 0), (1, 0), (0, 1), (1, 0)), constant_values=-1e4), 2, 1, 0, True
     ),
     "max_pool1d": lambda x, c: _pool(x, 3, 2, 1, True),
     "avg_pool1d": lambda x, c: _pool(x, 3, 2, 1, False),

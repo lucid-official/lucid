@@ -8,10 +8,7 @@ action-conditioned predictor beside it.
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.generative.vjepa2_ac._config import VJEPA2ACConfig
-from lucid.models.generative.vjepa2_ac._model import (
-    VJEPA2ACForWorldModeling,
-    VJEPA2ACModel,
-)
+from lucid.models.generative.vjepa2_ac._model import VJEPA2ACForWorldModeling, VJEPA2ACModel
 from lucid.models.generative.vjepa2_ac._weights import VJEPA2ACWeights
 from lucid.models._utils._common import apply_overrides
 
@@ -30,10 +27,7 @@ _CFG_GIANT = VJEPA2ACConfig()
     summary="auto",
 )
 def vjepa2_ac_vit_giant(
-    pretrained: bool | str = False,
-    *,
-    weights: VJEPA2ACWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VJEPA2ACWeights | None = None, **overrides: object
 ) -> VJEPA2ACModel:
     r"""Construct the official V-JEPA 2-AC ViT-g action model.
 
@@ -89,10 +83,7 @@ def vjepa2_ac_vit_giant(
     summary="auto",
 )
 def vjepa2_ac_vit_giant_world_model(
-    pretrained: bool | str = False,
-    *,
-    weights: VJEPA2ACWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: VJEPA2ACWeights | None = None, **overrides: object
 ) -> VJEPA2ACForWorldModeling:
     r"""V-JEPA 2-AC under Lucid's world-model task wrapper.
 

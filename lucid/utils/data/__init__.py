@@ -22,17 +22,8 @@ from lucid.utils.data.sampler import (
     DistributedSampler,
     RASampler,
 )
-from lucid.utils.data.dataloader import (
-    DataLoader,
-    collate,
-    default_collate,
-    default_convert,
-)
-from lucid.utils.data._mix import (
-    CutMixCollator,
-    MixupCollator,
-    RandomMixupCutMixCollator,
-)
+from lucid.utils.data.dataloader import DataLoader, collate, default_collate, default_convert
+from lucid.utils.data._mix import CutMixCollator, MixupCollator, RandomMixupCutMixCollator
 from lucid.utils.data._worker import get_worker_info, WorkerInfo
 
 __all__ = [

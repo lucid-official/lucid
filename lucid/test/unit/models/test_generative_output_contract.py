@@ -100,10 +100,7 @@ def _dit_step(model: lucid.nn.Module, device: str) -> M.ModelOutput:
 
 
 def _sd_step(model: lucid.nn.Module, device: str) -> M.ModelOutput:
-    return model(
-        lucid.randn((2, 3, 32, 32), device=device),
-        lucid.randn((2, 8, 16), device=device),
-    )
+    return model(lucid.randn((2, 3, 32, 32), device=device), lucid.randn((2, 8, 16), device=device))
 
 
 _TRAIN: dict[str, Callable[[lucid.nn.Module, str], M.ModelOutput]] = {
@@ -238,9 +235,7 @@ def test_tvm_averages_pair_by_name_after_the_live_order_changes(device: str) -> 
 
 
 @pytest.mark.parametrize("through", ["network", "model"])
-def test_tvm_averages_restart_from_weights_loaded_into_the_network(
-    through: str,
-) -> None:
+def test_tvm_averages_restart_from_weights_loaded_into_the_network(through: str) -> None:
     """LCD-552: loading weights into the live network — on ``model.tvm`` or
     on the model — restarts both averages from them.  They used to stay at
     whatever the network held before, so a fine-tune from a checkpoint read

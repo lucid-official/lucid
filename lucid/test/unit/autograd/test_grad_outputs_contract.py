@@ -183,9 +183,7 @@ def test_backward_with_a_seed_runs_under_no_grad(device: str) -> None:
     assert x.grad is not None and x.grad.tolist() == [2.0, 2.0]
 
 
-def test_backward_does_not_accumulate_into_a_seed_that_requires_grad(
-    device: str,
-) -> None:
+def test_backward_does_not_accumulate_into_a_seed_that_requires_grad(device: str) -> None:
     x = lucid.ones(2, device=device, requires_grad=True)
     seed = lucid.ones(2, device=device, requires_grad=True)
     (x * 2).backward(seed, create_graph=True)

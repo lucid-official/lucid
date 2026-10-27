@@ -9,11 +9,7 @@ heads ship WebText pretrained weights through :mod:`lucid.weights` (per-factory
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.text.gpt2._config import GPT2Config
-from lucid.models.text.gpt2._model import (
-    GPT2ForSequenceClassification,
-    GPT2LMHeadModel,
-    GPT2Model,
-)
+from lucid.models.text.gpt2._model import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from lucid.models.text.gpt2._weights import (
     GPT2LargeLMWeights,
     GPT2LargeWeights,
@@ -30,22 +26,13 @@ from lucid.models._utils._common import apply_overrides
 # GPT-2 sizes are small / medium / large / XL).
 _CFG_SMALL = GPT2Config()  # 124M — the default
 _CFG_MEDIUM = GPT2Config(
-    hidden_size=1024,
-    num_hidden_layers=24,
-    num_attention_heads=16,
-    intermediate_size=4096,
+    hidden_size=1024, num_hidden_layers=24, num_attention_heads=16, intermediate_size=4096
 )
 _CFG_LARGE = GPT2Config(
-    hidden_size=1280,
-    num_hidden_layers=36,
-    num_attention_heads=20,
-    intermediate_size=5120,
+    hidden_size=1280, num_hidden_layers=36, num_attention_heads=20, intermediate_size=5120
 )
 _CFG_XLARGE = GPT2Config(
-    hidden_size=1600,
-    num_hidden_layers=48,
-    num_attention_heads=25,
-    intermediate_size=6400,
+    hidden_size=1600, num_hidden_layers=48, num_attention_heads=25, intermediate_size=6400
 )
 
 
@@ -53,17 +40,10 @@ _CFG_XLARGE = GPT2Config(
 
 
 @register_model(
-    task="base",
-    family="gpt2",
-    model_type="gpt2",
-    model_class=GPT2Model,
-    default_config=_CFG_SMALL,
+    task="base", family="gpt2", model_type="gpt2", model_class=GPT2Model, default_config=_CFG_SMALL
 )
 def gpt2_small(
-    pretrained: bool | str = False,
-    *,
-    weights: GPT2SmallWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPT2SmallWeights | None = None, **overrides: object
 ) -> GPT2Model:
     r"""Construct a GPT-2 small (124M) decoder trunk.
 
@@ -116,17 +96,10 @@ def gpt2_small(
 
 
 @register_model(
-    task="base",
-    family="gpt2",
-    model_type="gpt2",
-    model_class=GPT2Model,
-    default_config=_CFG_MEDIUM,
+    task="base", family="gpt2", model_type="gpt2", model_class=GPT2Model, default_config=_CFG_MEDIUM
 )
 def gpt2_medium(
-    pretrained: bool | str = False,
-    *,
-    weights: GPT2MediumWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPT2MediumWeights | None = None, **overrides: object
 ) -> GPT2Model:
     r"""Construct a GPT-2 medium (355M) decoder trunk.
 
@@ -178,17 +151,10 @@ def gpt2_medium(
 
 
 @register_model(
-    task="base",
-    family="gpt2",
-    model_type="gpt2",
-    model_class=GPT2Model,
-    default_config=_CFG_LARGE,
+    task="base", family="gpt2", model_type="gpt2", model_class=GPT2Model, default_config=_CFG_LARGE
 )
 def gpt2_large(
-    pretrained: bool | str = False,
-    *,
-    weights: GPT2LargeWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPT2LargeWeights | None = None, **overrides: object
 ) -> GPT2Model:
     r"""Construct a GPT-2 large (774M) decoder trunk.
 
@@ -239,17 +205,10 @@ def gpt2_large(
 
 
 @register_model(
-    task="base",
-    family="gpt2",
-    model_type="gpt2",
-    model_class=GPT2Model,
-    default_config=_CFG_XLARGE,
+    task="base", family="gpt2", model_type="gpt2", model_class=GPT2Model, default_config=_CFG_XLARGE
 )
 def gpt2_xlarge(
-    pretrained: bool | str = False,
-    *,
-    weights: GPT2XLargeWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPT2XLargeWeights | None = None, **overrides: object
 ) -> GPT2Model:
     r"""Construct a GPT-2 XL (1.5B) decoder trunk.
 
@@ -541,10 +500,7 @@ def gpt2_xlarge_lm(
     default_config=_CFG_SMALL,
 )
 def gpt2_small_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: GPT2SmallWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GPT2SmallWeights | None = None, **overrides: object
 ) -> GPT2ForSequenceClassification:
     r"""Construct a GPT-2 small (124M) model with a sequence-classification head.
 

@@ -173,18 +173,9 @@ class TestGatherOrder:
             (lambda x, i: lucid.gather(x, 1), "required positional argument: 'index'"),
             (lambda x, i: lucid.gather(x, 1.5, i), "dim must be an int"),
             (lambda x, i: lucid.gather(x, 1, [0, 1]), "index must be a Tensor"),
-            (
-                lambda x, i: lucid.gather(x, 1, i, axis=1),
-                "unexpected keyword argument 'axis'",
-            ),
-            (
-                lambda x, i: lucid.gather(x, 1, dim=1, index=i),
-                "multiple values for argument 'dim'",
-            ),
-            (
-                lambda x, i: lucid.gather(x, i, index=i),
-                "0-d integer tensor",
-            ),
+            (lambda x, i: lucid.gather(x, 1, i, axis=1), "unexpected keyword argument 'axis'"),
+            (lambda x, i: lucid.gather(x, 1, dim=1, index=i), "multiple values for argument 'dim'"),
+            (lambda x, i: lucid.gather(x, i, index=i), "0-d integer tensor"),
             (lambda x, i: x.gather(1, i, 0), "takes 3 positional arguments"),
             (lambda x, i: lucid.gather(x, lucid.tensor(1.0), i), "0-d integer tensor"),
             (lambda x, i: lucid.gather(x, lucid.tensor(True), i), "0-d integer tensor"),
@@ -289,10 +280,7 @@ class TestOutOfPlace:
         src = _source(shape, dim, len(index))
         x = lucid.tensor(a, device=device)
         out = x.index_add(
-            dim,
-            lucid.tensor(index, device=device),
-            lucid.tensor(src, device=device),
-            alpha=1.5,
+            dim, lucid.tensor(index, device=device), lucid.tensor(src, device=device), alpha=1.5
         )
         assert_close(out, _ref_index_add(a, dim, index, src, 1.5))
         assert_close(x, a)  # untouched
@@ -403,12 +391,7 @@ class TestInPlace:
 
     def test_index_add_takes_alpha_by_keyword(self, device: str) -> None:
         x = lucid.zeros(3, device=device)
-        x.index_add_(
-            0,
-            lucid.tensor([1], device=device),
-            lucid.ones(1, device=device),
-            alpha=-2.0,
-        )
+        x.index_add_(0, lucid.tensor([1], device=device), lucid.ones(1, device=device), alpha=-2.0)
         assert_close(x, np.array([0.0, -2.0, 0.0], dtype=np.float32))
 
     @pytest.mark.parametrize("accumulate", [False, True])
@@ -432,11 +415,7 @@ class TestInPlace:
         ]:
             base = lucid.zeros(2, 4)
             getattr(base[1], method)(*args)
-            assert_close(
-                base,
-                np.array([[0, 0, 0, 0], [1, 0, 1, 0]], dtype=np.float32),
-                msg=method,
-            )
+            assert_close(base, np.array([[0, 0, 0, 0], [1, 0, 1, 0]], dtype=np.float32), msg=method)
 
     def test_a_view_sees_a_write_to_its_base(self) -> None:
         base = lucid.zeros(2, 3)
@@ -480,27 +459,17 @@ class TestInPlaceAutograd:
             if method != "index_fill_":
                 scale = 0.5 if method == "index_add_" else 1.0
                 want = np.stack(
-                    [scale * 2 * final[_along(dim, a.ndim, j)] for j in use],
-                    axis=dim % a.ndim,
+                    [scale * 2 * final[_along(dim, a.ndim, j)] for j in use], axis=dim % a.ndim
                 )
                 assert src.grad is not None
                 assert_close(src.grad, want, msg=method)
 
     def test_a_leaf_that_requires_grad_is_refused(self, device: str) -> None:
         for method, args in [
-            (
-                "index_add_",
-                (0, lucid.tensor([0], device=device), lucid.ones(1, device=device)),
-            ),
-            (
-                "index_copy_",
-                (0, lucid.tensor([0], device=device), lucid.ones(1, device=device)),
-            ),
+            ("index_add_", (0, lucid.tensor([0], device=device), lucid.ones(1, device=device))),
+            ("index_copy_", (0, lucid.tensor([0], device=device), lucid.ones(1, device=device))),
             ("index_fill_", (0, lucid.tensor([0], device=device), 1.0)),
-            (
-                "index_put_",
-                ((lucid.tensor([0], device=device),), lucid.ones(1, device=device)),
-            ),
+            ("index_put_", ((lucid.tensor([0], device=device),), lucid.ones(1, device=device))),
         ]:
             p = lucid.zeros(3, device=device, requires_grad=True)
             with pytest.raises(RuntimeError, match="leaf tensor that requires grad"):

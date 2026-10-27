@@ -307,7 +307,9 @@ class _ViTBlock(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-def _build_trunk(cfg: ViTConfig) -> tuple[
+def _build_trunk(
+    cfg: ViTConfig,
+) -> tuple[
     _PatchEmbed,
     Tensor,  # cls_token parameter
     Tensor,  # pos_embed parameter
@@ -454,7 +456,7 @@ class ViT(PretrainedModel, BackboneMixin):
         self.norm = norm
         self._classifier = config.classifier
         self._feature_info = [
-            FeatureInfo(stage=1, num_channels=config.dim, reduction=config.patch_size),
+            FeatureInfo(stage=1, num_channels=config.dim, reduction=config.patch_size)
         ]
 
         # Reference initialisation: trunc_normal_(0.02) on Linear / patch-embed
@@ -631,11 +633,7 @@ class ViTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         self.head = nn.Linear(self.head.in_features, num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         B = x.shape[0]
         x = self.patch_embed(x)
         cls = self.cls_token.expand(B, -1, -1)

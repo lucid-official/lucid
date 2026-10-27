@@ -200,12 +200,7 @@ class TestMaxViTWeightsEnums(unittest.TestCase):
             MaxViTLargeWeights,
         )
 
-        return (
-            MaxViTTinyWeights,
-            MaxViTSmallWeights,
-            MaxViTBaseWeights,
-            MaxViTLargeWeights,
-        )
+        return (MaxViTTinyWeights, MaxViTSmallWeights, MaxViTBaseWeights, MaxViTLargeWeights)
 
     def test_default_aliases_in1k(self) -> None:
         for cls in self._enums():

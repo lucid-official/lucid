@@ -28,10 +28,7 @@ _MODELS = Path(lucid.__file__).parent / "models"
 
 _DETECTORS = {
     "mask_rcnn_resnet50_fpn": dict(
-        roi_representation=64,
-        mask_hidden_channels=16,
-        mask_num_convs=1,
-        mask_predictor_hidden=16,
+        roi_representation=64, mask_hidden_channels=16, mask_num_convs=1, mask_predictor_hidden=16
     ),
     "faster_rcnn_resnet50_fpn": dict(roi_representation_size=64),
 }
@@ -81,9 +78,7 @@ def _generate_reads(host_reads: HostReads, steps: int) -> int:
     )
 
 
-def test_diffusion_generate_reads_do_not_grow_with_steps(
-    host_reads: HostReads,
-) -> None:
+def test_diffusion_generate_reads_do_not_grow_with_steps(host_reads: HostReads) -> None:
     """Schedulers keep their timesteps on device (LCD-383), so a read per
     step is a sync per step."""
     assert _generate_reads(host_reads, 2) == _generate_reads(host_reads, 6) <= 1

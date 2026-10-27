@@ -181,9 +181,7 @@ def _make_observer_hook(obs: nn.Module) -> _Hook:
     """Forward hook that feeds a module's output to its activation observer."""
 
     def hook(
-        _module: object,
-        _args: tuple[Tensor, ...],
-        output: Tensor | tuple[Tensor, ...],
+        _module: object, _args: tuple[Tensor, ...], output: Tensor | tuple[Tensor, ...]
     ) -> None:
         obs(cast("Tensor", output))
 
@@ -200,9 +198,7 @@ def _as_mapping(qconfig: QConfig | QConfigMapping | None) -> QConfigMapping:
 
 
 def prepare(
-    model: nn.Module,
-    qconfig: QConfig | QConfigMapping | None = None,
-    inplace: bool = False,
+    model: nn.Module, qconfig: QConfig | QConfigMapping | None = None, inplace: bool = False
 ) -> nn.Module:
     r"""Attach activation observers to a float model ahead of calibration.
 
@@ -573,10 +569,7 @@ def _warn_left_float(model: nn.Module, types: set[type], mapped: set[type]) -> N
 
 
 def _swap_dynamic(
-    module: nn.Module,
-    mapping: dict[type, _DynFromFloat],
-    types: set[type],
-    dtype: QDtype,
+    module: nn.Module, mapping: dict[type, _DynFromFloat], types: set[type], dtype: QDtype
 ) -> None:
     """Depth-first swap of each targeted module for its dynamic-quant form."""
     for name, child in list(module.named_children()):
@@ -609,9 +602,7 @@ def _qat_mapping() -> dict[type, _FromFloat]:
 
 
 def prepare_qat(
-    model: nn.Module,
-    qconfig: QConfig | QConfigMapping | None = None,
-    inplace: bool = False,
+    model: nn.Module, qconfig: QConfig | QConfigMapping | None = None, inplace: bool = False
 ) -> nn.Module:
     r"""Insert fake-quant modules for quantization-aware training.
 
@@ -695,10 +686,7 @@ def prepare_qat(
 
 
 def _prepare_qat_recursive(
-    module: nn.Module,
-    qconfig_mapping: QConfigMapping,
-    qat_map: dict[type, _FromFloat],
-    prefix: str,
+    module: nn.Module, qconfig_mapping: QConfigMapping, qat_map: dict[type, _FromFloat], prefix: str
 ) -> None:
     """Depth-first swap of weighted layers to QAT + fake-quant on ``QuantStub``."""
     import lucid.nn.quantized as nnq

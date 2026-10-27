@@ -487,10 +487,7 @@ def dit_large_8(pretrained: bool = False, **overrides: object) -> DiTModel:
     summary="auto",
 )
 def dit_xlarge_2(
-    pretrained: bool | str = False,
-    *,
-    weights: DiTXLarge2Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DiTXLarge2Weights | None = None, **overrides: object
 ) -> DiTModel:
     """DiT-XL/2 — the XL backbone at patch 2.
 
@@ -969,10 +966,7 @@ def dit_large_8_gen(pretrained: bool = False, **overrides: object) -> DiTForImag
     summary="auto",
 )
 def dit_xlarge_2_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DiTXLarge2Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: DiTXLarge2Weights | None = None, **overrides: object
 ) -> DiTForImageGeneration:
     """:func:`dit_xlarge_2` posed as a diffusion sampler.
 

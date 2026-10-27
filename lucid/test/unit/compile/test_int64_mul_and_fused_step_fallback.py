@@ -202,12 +202,7 @@ def test_fused_step_falls_back_on_cumulative_bn_and_grad_scaler() -> None:
     comp_scaler = GradScaler(init_scale=128.0)
     eager_scaler = GradScaler(init_scale=128.0)
 
-    step = fused_step(
-        comp_model,
-        F.mse_loss,
-        comp_opt,
-        grad_scaler=comp_scaler,
-    )
+    step = fused_step(comp_model, F.mse_loss, comp_opt, grad_scaler=comp_scaler)
 
     _NOTICED.discard("cumulative-bn")
     with pytest.warns(CompileFallbackWarning, match="momentum=None"):

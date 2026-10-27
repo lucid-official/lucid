@@ -211,10 +211,7 @@ METHODS: dict[str, tuple[Callable[[ModuleType], object], Callable[[ModuleType], 
     "acosh_": (lambda lib: _floats(lib, [1.2, 1.5, 2.0, 3.0]), lambda lib: ()),
     "arccosh_": (lambda lib: _floats(lib, [1.2, 1.5, 2.0, 3.0]), lambda lib: ()),
     **{
-        name: (
-            lambda lib: _floats(lib, [0.2, 0.4, 0.6, 0.8]),
-            lambda lib: (),
-        )
+        name: (lambda lib: _floats(lib, [0.2, 0.4, 0.6, 0.8]), lambda lib: ())
         for name in (
             "absolute_",
             "acos_",
@@ -272,26 +269,14 @@ METHODS: dict[str, tuple[Callable[[ModuleType], object], Callable[[ModuleType], 
             "xlogy_",
         )
     },
-    "gcd_": (
-        lambda lib: lib.tensor([12, 18, 20, 15]),
-        lambda lib: (lib.tensor([8, 12, 15, 25]),),
-    ),
-    "lcm_": (
-        lambda lib: lib.tensor([4, 6, 5, 3]),
-        lambda lib: (lib.tensor([6, 8, 10, 7]),),
-    ),
+    "gcd_": (lambda lib: lib.tensor([12, 18, 20, 15]), lambda lib: (lib.tensor([8, 12, 15, 25]),)),
+    "lcm_": (lambda lib: lib.tensor([4, 6, 5, 3]), lambda lib: (lib.tensor([6, 8, 10, 7]),)),
     "ldexp_": (
         lambda lib: _floats(lib, [1.5, 2.5, 0.5, 3.0]),
         lambda lib: (lib.tensor([1, 2, -1, 3], dtype=lib.int32),),
     ),
-    "logit_": (
-        lambda lib: _floats(lib, [0.2, 0.4, 0.6, 0.8]),
-        lambda lib: (),
-    ),
-    "nan_to_num_": (
-        lambda lib: _floats(lib, [1.0, float("nan"), 2.0, -3.0]),
-        lambda lib: (0.0,),
-    ),
+    "logit_": (lambda lib: _floats(lib, [0.2, 0.4, 0.6, 0.8]), lambda lib: ()),
+    "nan_to_num_": (lambda lib: _floats(lib, [1.0, float("nan"), 2.0, -3.0]), lambda lib: (0.0,)),
 }
 
 #: In-place twins whose calculation spans a dimension or matrix axes rather
@@ -303,10 +288,7 @@ NON_ELEMENTWISE_METHODS: dict[
     "cumprod_": (lambda lib: _floats(lib, [1, 2, 3, 4]), lambda lib: (0,)),
     "tril_": (lambda lib: _floats(lib, [[1, 2], [3, 4]]), lambda lib: ()),
     "triu_": (lambda lib: _floats(lib, [[1, 2], [3, 4]]), lambda lib: ()),
-    "renorm_": (
-        lambda lib: _floats(lib, [[3.0, 4.0], [0.3, 0.4]]),
-        lambda lib: (2.0, 0, 1.0),
-    ),
+    "renorm_": (lambda lib: _floats(lib, [[3.0, 4.0], [0.3, 0.4]]), lambda lib: (2.0, 0, 1.0)),
     "addmm_": (
         lambda lib: _floats(lib, [[1, 2], [3, 4]]),
         lambda lib: (_floats(lib, [[1, 0], [0, 1]]), _floats(lib, [[2, 3], [4, 5]])),
@@ -374,10 +356,7 @@ KIND_DOWN: dict[str, Callable[[ModuleType], tuple]] = {
     "clip_": lambda lib: (0.5, 1.5),
     "clamp_min_": lambda lib: (0.5,),
     "clamp_max_": lambda lib: (1.5,),
-    "clamp_ tensor bounds": lambda lib: (
-        _floats(lib, [0, 0, 0, 0]),
-        _floats(lib, [1, 1, 1, 1]),
-    ),
+    "clamp_ tensor bounds": lambda lib: (_floats(lib, [0, 0, 0, 0]), _floats(lib, [1, 1, 1, 1])),
     "copysign_": lambda lib: (2.5,),
     "divide_": lambda lib: (2,),
     "true_divide_": lambda lib: (2,),
@@ -630,14 +609,7 @@ def test_the_gradient_through_the_write_is_the_references(
 
 @pytest.mark.parametrize(
     "bounds",
-    [
-        (0.5, 2.5),
-        (1, 2),
-        ("tensor", "tensor"),
-        ("0-d", "0-d"),
-        (None, 2),
-        (1, None),
-    ],
+    [(0.5, 2.5), (1, 2), ("tensor", "tensor"), ("0-d", "0-d"), (None, 2), (1, None)],
     ids=str,
 )
 @pytest.mark.parametrize("dtype", ["float32", "float16", "int64", "int32"])

@@ -527,9 +527,7 @@ class GPT2LMHeadModel(LanguageModelingModel, CausalLMMixin):
             loss = F.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
 
         return CausalLMOutput(
-            logits=logits,
-            loss=loss,
-            past_key_values=past_key_values if use_cache else None,
+            logits=logits, loss=loss, past_key_values=past_key_values if use_cache else None
         )
 
 
@@ -610,10 +608,7 @@ class GPT2ForSequenceClassification(SequenceClassificationModel):
 
     @override
     def forward(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor | None = None,
-        labels: Tensor | None = None,
+        self, input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None
     ) -> SequenceClassificationOutput:
         outputs = self.transformer(input_ids, attention_mask=attention_mask)
         pooled = last_kept_token(outputs.last_hidden_state, attention_mask)

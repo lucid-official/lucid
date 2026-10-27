@@ -104,8 +104,7 @@ class _StepEntry:
 
 
 def _match_param_ids(
-    params: list[Parameter],
-    ext: dict[int, object],
+    params: list[Parameter], ext: dict[int, object]
 ) -> tuple[list[int], list[bool]]:
     """Match each parameter's ``TensorImpl`` identity against ``ext``."""
     from lucid._dispatch import _unwrap
@@ -125,9 +124,7 @@ def _match_param_ids(
 
 
 def _input_grad_targets(
-    x_args: tuple[Tensor, ...],
-    ext: dict[int, object],
-    taken: list[int],
+    x_args: tuple[Tensor, ...], ext: dict[int, object], taken: list[int]
 ) -> tuple[list[int], list[int]]:
     """The feeds of the call's tensors that require grad, and their positions.
 
@@ -171,9 +168,7 @@ def _grad_slots(
 
 
 def _build_input_source(
-    exe: _ExecutableLike,
-    ext: dict[int, object],
-    x_args: tuple[Tensor, ...],
+    exe: _ExecutableLike, ext: dict[int, object], x_args: tuple[Tensor, ...]
 ) -> tuple[int | None, ...] | None:
     """Build the positional-feed plan for ``exe.input_ids``."""
     from lucid._dispatch import _unwrap
@@ -202,21 +197,13 @@ def _lower_step_executable(
     use_dynamic: bool = False,
 ) -> _ExecutableLike | None:
     """Lower ``tracer``'s recording with backward into an executable, or ``None``."""
-    from lucid.compile._core.custom_backward import (
-        CustomBackwardInTrace,
-        refuse_custom_backward,
-    )
+    from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
 
     try:
         refuse_custom_backward(tracer, loss_id, param_ids)
         exe = _C_engine.compile.compile_trace_with_backward(
-            tracer.graph,
-            ext,
-            loss_id,
-            param_ids,
-            use_dynamic,
-            extra_output_ids=extra_output_ids,
+            tracer.graph, ext, loss_id, param_ids, use_dynamic, extra_output_ids=extra_output_ids
         )
     except CustomBackwardInTrace as why:
         _fallback_notice("custom-backward", str(why))
@@ -316,9 +303,7 @@ _Grads = list[_C_engine.TensorImpl | None]
 
 
 def _run_step_entry(
-    entry: _StepEntry,
-    params: list[Parameter],
-    x_args: tuple[Tensor, ...],
+    entry: _StepEntry, params: list[Parameter], x_args: tuple[Tensor, ...]
 ) -> tuple[_C_engine.TensorImpl, _Grads, _Grads]:
     """Execute one cached step entry.
 
@@ -368,11 +353,7 @@ def _run_step_entry(
     if not entry.observed:
         return loss_impl, reached, input_grads
     it = iter(reached)
-    return (
-        loss_impl,
-        [next(it) if seen else None for seen in entry.observed],
-        input_grads,
-    )
+    return (loss_impl, [next(it) if seen else None for seen in entry.observed], input_grads)
 
 
 @final
@@ -384,9 +365,7 @@ class _CompiledStepFunction(Function):
     @override
     @staticmethod
     def forward(
-        ctx: FunctionCtx,
-        entry_holder: tuple[_StepEntry, list[Parameter]],
-        *step_args: Tensor,
+        ctx: FunctionCtx, entry_holder: tuple[_StepEntry, list[Parameter]], *step_args: Tensor
     ) -> Tensor:
         """Run the cached executable; save grads for backward."""
         from lucid._dispatch import _wrap
@@ -408,10 +387,7 @@ class _CompiledStepFunction(Function):
         return tuple(None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls)
 
 
-def _make_monolithic_step(
-    model: Module,
-    loss_fn: Callable[..., Tensor],
-) -> Callable[..., Tensor]:
+def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Callable[..., Tensor]:
     """Build the monolithic (single-segment) compiled step callable."""
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.fallback import EagerFallbackSet
@@ -482,11 +458,7 @@ def _make_monolithic_step(
 
 
 def make_step(
-    model: Module,
-    loss_fn: Callable[..., Tensor],
-    *,
-    dynamic: bool = False,
-    segments: int | str = 1,
+    model: Module, loss_fn: Callable[..., Tensor], *, dynamic: bool = False, segments: int | str = 1
 ) -> Callable[..., Tensor]:
     """Return a callable that runs one compiled training step.
 
@@ -581,15 +553,10 @@ def make_step(
 
 
 def _trace_step(
-    model: Module,
-    loss_fn: Callable[..., Tensor],
-    x_args: tuple[Tensor, ...],
+    model: Module, loss_fn: Callable[..., Tensor], x_args: tuple[Tensor, ...]
 ) -> tuple[Tracer, Tensor] | None:
     """Trace ``model`` + ``loss_fn`` in the caller's grad mode, declining on tensor hooks."""
-    from lucid.compile._core.trace_context import (
-        notice_if_tensor_hook_error,
-        recording,
-    )
+    from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
         with recording(watch=x_args, module=model) as tracer:

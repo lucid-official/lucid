@@ -63,9 +63,7 @@ class TestEinsum:
         a = np.random.randn(*sa).astype(np.float32)
         b = np.random.randn(*sb).astype(np.float32)
         out = lucid.einops.einsum(
-            eq,
-            lucid.tensor(a.copy(), device=device),
-            lucid.tensor(b.copy(), device=device),
+            eq, lucid.tensor(a.copy(), device=device), lucid.tensor(b.copy(), device=device)
         )
         ref = np.einsum(eq, a, b)
         assert out.shape == ref.shape

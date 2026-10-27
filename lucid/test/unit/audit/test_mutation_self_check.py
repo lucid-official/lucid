@@ -13,9 +13,7 @@ def test_every_axis_has_a_negative_control() -> None:
 
 @pytest.mark.parametrize(("exit_code", "caught"), [(73, True), (0, False), (1, False)])
 def test_only_the_deliberate_child_exit_proves_smoke(
-    monkeypatch: pytest.MonkeyPatch,
-    exit_code: int,
-    caught: bool,
+    monkeypatch: pytest.MonkeyPatch, exit_code: int, caught: bool
 ) -> None:
     mutant = next(m for m in _mutants.MUTANTS if m.isolated_exit is not None)
     monkeypatch.setattr(_mutants, "MUTANTS", (mutant,))

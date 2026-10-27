@@ -68,11 +68,7 @@ _CFG_CELEBA = NCSNConfig(
 
 
 @register_model(
-    task="base",
-    family="ncsn",
-    model_type="ncsn",
-    model_class=NCSNModel,
-    default_config=_CFG_CIFAR,
+    task="base", family="ncsn", model_type="ncsn", model_class=NCSNModel, default_config=_CFG_CIFAR
 )
 def ncsn_cifar(pretrained: bool = False, **overrides: object) -> NCSNModel:
     r"""Construct an NCSN score network for the CIFAR-10 setup.
@@ -123,11 +119,7 @@ def ncsn_cifar(pretrained: bool = False, **overrides: object) -> NCSNModel:
 
 
 @register_model(
-    task="base",
-    family="ncsn",
-    model_type="ncsn",
-    model_class=NCSNModel,
-    default_config=_CFG_CELEBA,
+    task="base", family="ncsn", model_type="ncsn", model_class=NCSNModel, default_config=_CFG_CELEBA
 )
 def ncsn_celeba(pretrained: bool = False, **overrides: object) -> NCSNModel:
     r"""Construct an NCSN score network for the CelebA 64x64 setup.

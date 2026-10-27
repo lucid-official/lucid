@@ -214,11 +214,7 @@ class ObserverBase(nn.Module):
     """
 
     def __init__(
-        self,
-        qscheme: QScheme,
-        qdtype: QDtype,
-        ch_axis: int | None = None,
-        eps: float = 1e-8,
+        self, qscheme: QScheme, qdtype: QDtype, ch_axis: int | None = None, eps: float = 1e-8
     ) -> None:
         super().__init__()
         self.qscheme = qscheme
@@ -274,13 +270,7 @@ class ObserverBase(nn.Module):
             if tuple(saved.shape) != tuple(current.shape):
                 self.register_buffer(name, saved.to(current.device))
         super()._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
     def calculate_qparams(self) -> tuple[Tensor, Tensor]:
@@ -402,10 +392,7 @@ class MinMaxObserver(ObserverBase):
     max_val: Tensor
 
     def __init__(
-        self,
-        qscheme: QScheme = per_tensor_affine,
-        qdtype: QDtype = quint8,
-        eps: float = 1e-8,
+        self, qscheme: QScheme = per_tensor_affine, qdtype: QDtype = quint8, eps: float = 1e-8
     ) -> None:
         super().__init__(qscheme, qdtype, None, eps)
         self.register_buffer("min_val", lucid.tensor(float("inf")))
@@ -830,12 +817,7 @@ class HistogramObserver(ObserverBase):
         self.register_buffer("histogram", lucid.zeros(bins))
 
     def _rebin(
-        self,
-        hist: Tensor,
-        old_min: float,
-        old_max: float,
-        new_min: float,
-        new_max: float,
+        self, hist: Tensor, old_min: float, old_max: float, new_min: float, new_max: float
     ) -> Tensor:
         """Redistribute an existing histogram onto a wider ``[new_min,new_max]``."""
         bins = self.bins
@@ -1254,10 +1236,7 @@ class PlaceholderObserver(ObserverBase):
     """
 
     def __init__(
-        self,
-        qscheme: QScheme = per_tensor_affine,
-        qdtype: QDtype = quint8,
-        eps: float = 1e-8,
+        self, qscheme: QScheme = per_tensor_affine, qdtype: QDtype = quint8, eps: float = 1e-8
     ) -> None:
         super().__init__(qscheme, qdtype, None, eps)
 

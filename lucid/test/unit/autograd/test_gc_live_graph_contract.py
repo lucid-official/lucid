@@ -59,9 +59,7 @@ def test_a_stranded_tensor_wrapper_leaves_its_saved_graph_intact(
     assert _second_derivative(z, x) == expected
 
 
-def test_the_second_derivative_after_a_collection_matches_the_reference(
-    ref: ModuleType,
-) -> None:
+def test_the_second_derivative_after_a_collection_matches_the_reference(ref: ModuleType) -> None:
     x = lucid.tensor([1.0, 2.0, 3.0], requires_grad=True)
     y = x * 2
     z = (y * y).sum() + (x * x).sum()

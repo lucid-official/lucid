@@ -55,10 +55,7 @@ class TestSKNetBackbone(unittest.TestCase):
         self.assertEqual(feat.shape[0], 1)
 
     def test_101_more_params_than_50(self) -> None:
-        self.assertGreater(
-            sk_resnet_101().num_parameters(),
-            sk_resnet_50().num_parameters(),
-        )
+        self.assertGreater(sk_resnet_101().num_parameters(), sk_resnet_50().num_parameters())
 
 
 class TestSKNetClassifier(unittest.TestCase):

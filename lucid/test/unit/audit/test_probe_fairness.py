@@ -77,13 +77,7 @@ def _context() -> Context:
 
 @pytest.mark.parametrize(
     "qualname",
-    [
-        "Tensor.floor_divide",
-        "Tensor.fmod",
-        "Tensor.remainder",
-        "lucid.fmod",
-        "lucid.remainder",
-    ],
+    ["Tensor.floor_divide", "Tensor.fmod", "Tensor.remainder", "lucid.fmod", "lucid.remainder"],
 )
 def test_a_zero_divisor_refusal_is_not_missing_dtype_support(qualname: str) -> None:
     finding = DtypeAxis().run(_symbol(qualname), _context())
@@ -116,10 +110,7 @@ def test_clamp_is_not_probed_on_its_corner(qualname: str) -> None:
 
 
 def test_ops_that_only_share_a_name_are_not_compared() -> None:
-    for qualname, labels in (
-        ("Tensor.unfold", {"method"}),
-        ("F.unfold", {"functional"}),
-    ):
+    for qualname, labels in (("Tensor.unfold", {"method"}), ("F.unfold", {"functional"})):
         got = {label for label, _ in _surface.counterparts(_symbol(qualname))}
         assert got == labels, (qualname, got)
 
@@ -150,16 +141,13 @@ def test_the_icdf_round_trip_compares_only_points_it_did_not_clip() -> None:
         "lucid.distributions.register_kl",
     ],
 )
-def test_signature_derived_calls_use_the_values_the_annotation_names(
-    qualname: str,
-) -> None:
+def test_signature_derived_calls_use_the_values_the_annotation_names(qualname: str) -> None:
     finding = SmokeAxis().run(_symbol(qualname), _context())
     assert finding.status == Status.PASS, finding.detail
 
 
 @pytest.mark.parametrize(
-    "helper",
-    ["reflect_grid", "check_options", "composite_grid_sample", "affine_grid_3d"],
+    "helper", ["reflect_grid", "check_options", "composite_grid_sample", "affine_grid_3d"]
 )
 def test_private_grid_helpers_are_not_audited_as_api(helper: str) -> None:
     assert f"F.{helper}" not in _symbols()

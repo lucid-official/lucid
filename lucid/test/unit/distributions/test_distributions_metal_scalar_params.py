@@ -111,13 +111,7 @@ SPECS: dict[str, _Spec] = {
     "RelaxedOneHotCategorical": _Spec({"temperature": 0.5}, _PROBS, {"probs": _PROBS}),
     "MultivariateNormal": _Spec({}, [0.3, -0.2], {"loc": [0.0, 0.0], "covariance_matrix": _COV}),
     "LowRankMultivariateNormal": _Spec(
-        {},
-        [0.3, -0.2],
-        {
-            "loc": [0.0, 1.0],
-            "cov_factor": [[1.0], [0.5]],
-            "cov_diag": [1.0, 2.0],
-        },
+        {}, [0.3, -0.2], {"loc": [0.0, 1.0], "cov_factor": [[1.0], [0.5]], "cov_diag": [1.0, 2.0]}
     ),
     "Wishart": _Spec({"df": 3.0}, [[2.0, 0.3], [0.3, 1.0]], {"covariance_matrix": _COV}),
     "LKJCholesky": _Spec(

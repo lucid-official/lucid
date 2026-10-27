@@ -38,9 +38,7 @@ def test_original_flat_index_reorg_and_backward(shape: tuple[int, ...]) -> None:
     np.testing.assert_array_equal(x.grad.numpy(), expected_grad.reshape(shape))
 
 
-def test_published_factory_selects_reorg_without_changing_legacy_config(
-    monkeypatch,
-) -> None:
+def test_published_factory_selects_reorg_without_changing_legacy_config(monkeypatch) -> None:
     monkeypatch.setattr(_v2.weights_mod, "load_weight_entry", lambda *a, **k: None)
     with shadow_alloc():
         published = _v2.yolo_v2(pretrained=True)

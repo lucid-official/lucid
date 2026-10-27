@@ -52,12 +52,7 @@ def _sign(value: float) -> float:
     return 0.0
 
 
-def _evaluate(
-    event_fn: EventFunction,
-    scalar: ScalarFactory,
-    t: float,
-    y: Tensor,
-) -> float:
+def _evaluate(event_fn: EventFunction, scalar: ScalarFactory, t: float, y: Tensor) -> float:
     """Evaluate the event function and bring its scalar value to the host.
 
     Parameters
@@ -309,10 +304,7 @@ def integrate_until_event(
                     coeffs = _fixed._interp_fit_linear(y, y_next)
 
                 def interp_fixed(
-                    t: float,
-                    _c: list[Tensor] = coeffs,
-                    _a: float = t_cur,
-                    _b: float = t_next,
+                    t: float, _c: list[Tensor] = coeffs, _a: float = t_cur, _b: float = t_next
                 ) -> Tensor:
                     return _fused.poly_eval(_c, _a, _b, t)
 
@@ -433,10 +425,7 @@ class _EventTimeGradient(Function):
 
 
 def differentiable_event_time(
-    event_t: Tensor,
-    state_t: Tensor,
-    func: RightHandSide,
-    event_fn: EventFunction,
+    event_t: Tensor, state_t: Tensor, func: RightHandSide, event_fn: EventFunction
 ) -> tuple[Tensor, Tensor]:
     """Attach derivatives to an event time and to the state that shares it.
 
@@ -475,8 +464,7 @@ def differentiable_event_time(
         return event_t, state_t
 
     time = cast(
-        Tensor,
-        _EventTimeGradient.apply(state_t, event_t=event_t, func=func, event_fn=event_fn),
+        Tensor, _EventTimeGradient.apply(state_t, event_t=event_t, func=func, event_fn=event_fn)
     )
     with lucid.no_grad():
         slope = func(event_t, state_t)

@@ -67,12 +67,7 @@ from lucid.quantization.qconfig import (
     get_default_qconfig,
     get_default_qconfig_mapping,
 )
-from lucid.quantization._quantize import (
-    convert,
-    prepare,
-    prepare_qat,
-    quantize_dynamic,
-)
+from lucid.quantization._quantize import convert, prepare, prepare_qat, quantize_dynamic
 from lucid.quantization._quantize_fx import convert_fx, prepare_fx
 from lucid.quantization.fuse_modules import fuse_modules, fuse_modules_qat
 

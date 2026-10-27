@@ -82,10 +82,7 @@ BUILDERS: dict[str, Builder] = {
 @pytest.mark.parametrize("write_side", ["metal", "cpu"])
 @pytest.mark.parametrize("target", ["base", "view", "reshape"])
 def test_shared_buffer_copy_is_disjoint_from_later_writes(
-    kind: str,
-    evaluated_before_write: bool,
-    write_side: str,
-    target: str,
+    kind: str, evaluated_before_write: bool, write_side: str, target: str
 ) -> None:
     s = _buffer()
     g = s.to("metal")
@@ -103,8 +100,7 @@ def test_shared_buffer_copy_is_disjoint_from_later_writes(
 @pytest.mark.parametrize("evaluated_before_write", [False, True])
 @pytest.mark.parametrize("write_side", ["metal", "cpu"])
 def test_clone_of_shared_buffer_view_and_reshape_stay_disjoint(
-    evaluated_before_write: bool,
-    write_side: str,
+    evaluated_before_write: bool, write_side: str
 ) -> None:
     s = _buffer()
     g = s.to("metal")

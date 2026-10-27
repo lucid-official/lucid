@@ -306,10 +306,7 @@ def run_parity(
     _ref = require_ref()
 
     timm_model = timm.create_model(
-        timm_name,
-        pretrained=False,
-        num_classes=num_classes,
-        in_chans=in_chans,
+        timm_name, pretrained=False, num_classes=num_classes, in_chans=in_chans
     )
     timm_model.eval()
     lucid_model.eval()
@@ -332,10 +329,7 @@ def run_parity(
 
 
 def run_self_consistency(
-    lucid_model: nn.Module,
-    *,
-    input_shape: tuple[int, ...] = (1, 3, 224, 224),
-    seed: int = 42,
+    lucid_model: nn.Module, *, input_shape: tuple[int, ...] = (1, 3, 224, 224), seed: int = 42
 ) -> None:
     """Assert deterministic forward pass (legacy API)."""
     lucid_model.eval()

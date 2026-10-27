@@ -315,11 +315,7 @@ class MixtureSameFamily(Distribution):
         return (cdf_k * self.mixture_distribution._probs).sum(dim=-1)
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`MixtureSameFamily` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(MixtureSameFamily, _instance)
         batch_shape = tuple(batch_shape)
@@ -327,9 +323,7 @@ class MixtureSameFamily(Distribution):
         new.mixture_distribution = self.mixture_distribution.expand(batch_shape)
         new.component_distribution = self.component_distribution.expand(comp_batch)
         super(MixtureSameFamily, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=self.event_shape,
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=self.event_shape, validate_args=False
         )
         new._validate_args = self._validate_args
         return new

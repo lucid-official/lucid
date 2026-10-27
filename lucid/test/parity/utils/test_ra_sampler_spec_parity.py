@@ -34,20 +34,11 @@ class TestTimmComparison:
     RepeatAugSampler bit-for-bit at seed=0, epoch=0."""
 
     def test_matches_timm_ra_sampler_seed_zero(self) -> None:
-        from timm.data.distributed_sampler import (
-            RepeatAugSampler,
-        )
+        from timm.data.distributed_sampler import RepeatAugSampler
 
         N = 20
         ds = _ToyDataset(N)
-        lucid_s = D.RASampler(
-            ds,
-            num_replicas=1,
-            rank=0,
-            num_repeats=3,
-            shuffle=True,
-            seed=0,
-        )
+        lucid_s = D.RASampler(ds, num_replicas=1, rank=0, num_repeats=3, shuffle=True, seed=0)
         lucid_s.set_epoch(0)
         # timm rounds the per-epoch selection down to a multiple of
         # ``selected_round`` (256 by default), which leaves a 20-element
@@ -60,22 +51,11 @@ class TestTimmComparison:
         # fall back to without (the epoch counter still drives shuffling).
         try:
             timm_s = RepeatAugSampler(
-                ds,
-                num_replicas=1,
-                rank=0,
-                num_repeats=3,
-                shuffle=True,
-                selected_round=0,
-                seed=0,
+                ds, num_replicas=1, rank=0, num_repeats=3, shuffle=True, selected_round=0, seed=0
             )
         except TypeError:
             timm_s = RepeatAugSampler(
-                ds,
-                num_replicas=1,
-                rank=0,
-                num_repeats=3,
-                shuffle=True,
-                selected_round=0,
+                ds, num_replicas=1, rank=0, num_repeats=3, shuffle=True, selected_round=0
             )
         timm_s.set_epoch(0)
         # The RNG is platform-specific (timm uses the reference's Generator,

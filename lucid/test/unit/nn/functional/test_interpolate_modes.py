@@ -131,10 +131,7 @@ class TestEngineStandIn:
 
     @pytest.mark.parametrize(
         ("shape", "kw"),
-        [
-            ((1, 1, 1, 2155), {"scale_factor": (1.0, 2.5)}),
-            ((1, 1, 1, 2111), {"size": (1, 5277)}),
-        ],
+        [((1, 1, 1, 2155), {"scale_factor": (1.0, 2.5)}), ((1, 1, 1, 2111), {"size": (1, 5277)})],
         ids=["scale-step", "size-step"],
     )
     def test_each_device_reads_what_the_mapping_says(
@@ -198,12 +195,7 @@ class TestRefusals:
             ),
             (
                 (1, 1, 4, 4),
-                {
-                    "size": 2,
-                    "mode": "lanczos",
-                    "antialias": True,
-                    "align_corners": True,
-                },
+                {"size": 2, "mode": "lanczos", "antialias": True, "align_corners": True},
                 ValueError,
                 "Lanczos mode does not support align_corners=True",
             ),
@@ -216,11 +208,7 @@ class TestRefusals:
         ],
     )
     def test_refused_with(
-        self,
-        shape: tuple[int, ...],
-        kw: dict[str, Any],
-        error: type[Exception],
-        match: str,
+        self, shape: tuple[int, ...], kw: dict[str, Any], error: type[Exception], match: str
     ) -> None:
         with pytest.raises(error, match=match):
             F.interpolate(lucid.zeros(*shape), **kw)
@@ -248,11 +236,7 @@ class TestRefusals:
     ],
 )
 def test_the_composite_differentiates_twice(
-    monkeypatch: pytest.MonkeyPatch,
-    mode: str,
-    scale: float,
-    antialias: bool,
-    path: str | None,
+    monkeypatch: pytest.MonkeyPatch, mode: str, scale: float, antialias: bool, path: str | None
 ) -> None:
     # A fractional scale runs the composite rather than a kernel — as a
     # matrix product or as gathers, depending on the axis length, so each

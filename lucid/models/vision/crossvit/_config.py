@@ -122,11 +122,7 @@ class CrossViTConfig(ModelConfig):
     crop_scale: bool = False
     patch_sizes: tuple[int, int] = (12, 16)
     embed_dims: tuple[int, int] = (96, 192)
-    depths: tuple[tuple[int, int, int], ...] = (
-        (1, 4, 0),
-        (1, 4, 0),
-        (1, 4, 0),
-    )
+    depths: tuple[tuple[int, int, int], ...] = ((1, 4, 0), (1, 4, 0), (1, 4, 0))
     num_heads: tuple[int, int] = (3, 3)
     mlp_ratio: tuple[float, float, float] = (4.0, 4.0, 1.0)
     qkv_bias: bool = True

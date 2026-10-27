@@ -82,9 +82,7 @@ def _fuse_run(mods: Sequence[nn.Module]) -> list[nn.Module]:
 
 
 def fuse_modules(
-    model: nn.Module,
-    modules_to_fuse: Sequence[Sequence[str]],
-    inplace: bool = False,
+    model: nn.Module, modules_to_fuse: Sequence[Sequence[str]], inplace: bool = False
 ) -> nn.Module:
     r"""Collapse Conv/BN/ReLU (or Linear/ReLU) runs into single fused modules.
 

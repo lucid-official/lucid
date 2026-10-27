@@ -9,13 +9,7 @@ from typing import Self, override
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _as_tensor, _broadcast_pair
-from lucid.distributions.constraints import (
-    Constraint,
-    interval,
-    positive,
-    real,
-    simplex,
-)
+from lucid.distributions.constraints import Constraint, interval, positive, real, simplex
 from lucid.distributions.distribution import Distribution
 from lucid.distributions.independent import Independent
 from lucid.distributions.normal import Normal
@@ -52,27 +46,16 @@ class LogisticNormal(TransformedDistribution):
     has_rsample = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         """Initialise a :class:`LogisticNormal` distribution."""
         base_dist = Normal(loc, scale, validate_args=validate_args)
         if not base_dist.batch_shape:
             base_dist = base_dist.expand([1])
-        super().__init__(
-            base_dist,
-            StickBreakingTransform(),
-            validate_args=validate_args,
-        )
+        super().__init__(base_dist, StickBreakingTransform(), validate_args=validate_args)
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`LogisticNormal` instance expanded to ``batch_shape``."""
         new = self._get_checked_instance(LogisticNormal, _instance)
         return super().expand(batch_shape, _instance=new)
@@ -130,11 +113,7 @@ class GeneralizedPareto(Distribution):
         If ``True``, validate parameter constraints at construction time.
     """
 
-    arg_constraints = {
-        "loc": real,
-        "scale": positive,
-        "concentration": real,
-    }
+    arg_constraints = {"loc": real, "scale": positive, "concentration": real}
     has_rsample = True
 
     def __init__(
@@ -152,17 +131,11 @@ class GeneralizedPareto(Distribution):
         self.loc, self.concentration = _broadcast_pair(self.loc, self.concentration)
         self.scale, self.concentration = _broadcast_pair(self.scale, self.concentration)
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`GeneralizedPareto` instance expanded to ``batch_shape``."""
         new = self._get_checked_instance(GeneralizedPareto, _instance)
         batch_shape = tuple(batch_shape)
@@ -170,9 +143,7 @@ class GeneralizedPareto(Distribution):
         new.scale = self.scale.expand(batch_shape)
         new.concentration = self.concentration.expand(batch_shape)
         super(GeneralizedPareto, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=(),
-            validate_args=False,
+            batch_shape=batch_shape, event_shape=(), validate_args=False
         )
         new._validate_args = self._validate_args
         return new
@@ -192,9 +163,7 @@ class GeneralizedPareto(Distribution):
         valid = self.concentration < 0.5
         safe_conc = lucid.where(valid, self.concentration, 0.25)
         return lucid.where(
-            valid,
-            self.scale**2 / ((1.0 - safe_conc) ** 2 * (1.0 - 2.0 * safe_conc)),
-            math.nan,
+            valid, self.scale**2 / ((1.0 - safe_conc) ** 2 * (1.0 - 2.0 * safe_conc)), math.nan
         )
 
     @override
@@ -401,17 +370,12 @@ class VonMises(Distribution):
     has_rsample = False
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        concentration: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, concentration: Tensor | float, validate_args: bool | None = None
     ) -> None:
         """Initialise a :class:`VonMises` distribution."""
         self.loc, self.concentration = _broadcast_pair(_as_tensor(loc), _as_tensor(concentration))
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @override
@@ -432,21 +396,13 @@ class VonMises(Distribution):
         return _sample_von_mises(loc, conc).detach()
 
     @override
-    def expand(
-        self,
-        batch_shape: Sequence[int],
-        _instance: Self | None = None,
-    ) -> Self:
+    def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`VonMises` instance expanded to ``batch_shape``."""
         new = self._get_checked_instance(VonMises, _instance)
         batch_shape = tuple(batch_shape)
         new.loc = self.loc.expand(batch_shape)
         new.concentration = self.concentration.expand(batch_shape)
-        super(VonMises, new).__init__(
-            batch_shape=batch_shape,
-            event_shape=(),
-            validate_args=False,
-        )
+        super(VonMises, new).__init__(batch_shape=batch_shape, event_shape=(), validate_args=False)
         new._validate_args = self._validate_args
         return new
 

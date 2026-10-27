@@ -124,12 +124,7 @@ def parse_options(options: dict[str, object] | None) -> FixedOptions:
     )
 
 
-def build_grid(
-    opts: FixedOptions,
-    func: RightHandSide,
-    y0: Tensor,
-    t: list[float],
-) -> list[float]:
+def build_grid(opts: FixedOptions, func: RightHandSide, y0: Tensor, t: list[float]) -> list[float]:
     """Return the grid the solver actually steps on.
 
     Parameters

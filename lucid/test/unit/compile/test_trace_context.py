@@ -92,9 +92,7 @@ def test_compile_attempt_restores_default_and_generator_streams_lifo() -> None:
     np.testing.assert_array_equal(gen.get_state().numpy(), g0)
 
 
-def test_attention_probe_leaves_rng_streams_untouched(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_attention_probe_leaves_rng_streams_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(attention_probe, "_probed", False)
     lucid.manual_seed(2026)
     gen = lucid.Generator(99)

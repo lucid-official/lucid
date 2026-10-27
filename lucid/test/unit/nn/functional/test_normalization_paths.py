@@ -65,12 +65,7 @@ def test_batch_norm_functional_allows_single_batch_with_spatial_values() -> None
 
 def test_batch_norm_functional_allows_single_value_per_channel_in_eval() -> None:
     x = lucid.tensor(np.array([[1.0, 2.0, 3.0]], dtype=np.float32))
-    out = F.batch_norm(
-        x,
-        lucid.zeros(3),
-        lucid.ones(3),
-        training=False,
-    )
+    out = F.batch_norm(x, lucid.zeros(3), lucid.ones(3), training=False)
     assert out.shape == x.shape
 
 
@@ -151,10 +146,7 @@ def test_instance_norm_can_use_running_stats_instead_of_the_batch() -> None:
     running_var = lucid.ones(3)
 
     out = F.instance_norm(
-        x,
-        running_mean=running_mean,
-        running_var=running_var,
-        use_input_stats=False,
+        x, running_mean=running_mean, running_var=running_var, use_input_stats=False
     ).numpy()
 
     # mean 0 / var 1 buffers make this the identity, so the +5 offset has

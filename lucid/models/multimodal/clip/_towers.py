@@ -117,9 +117,7 @@ class ResidualAttentionBlock(nn.Module):
         self.attn = nn.MultiheadAttention(width, heads, batch_first=True)
         self.ln_2 = nn.LayerNorm(width)
         self.mlp = nn.Sequential(
-            nn.Linear(width, width * 4),
-            QuickGELU(),
-            nn.Linear(width * 4, width),
+            nn.Linear(width, width * 4), QuickGELU(), nn.Linear(width * 4, width)
         )
 
     @override

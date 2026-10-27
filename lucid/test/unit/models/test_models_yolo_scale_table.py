@@ -100,10 +100,7 @@ def test_tiny_table_is_the_reference_cfg() -> None:
     assert cfg.strides == (16, 32)
     assert cfg.anchor_masks == ((0, 1, 2), (3, 4, 5))
     # Coarse to fine, the order the heads emit.
-    assert [(m, s) for m, _, s in _scale_priors(*_table(cfg))] == [
-        ((3, 4, 5), 32),
-        ((0, 1, 2), 16),
-    ]
+    assert [(m, s) for m, _, s in _scale_priors(*_table(cfg))] == [((3, 4, 5), 32), ((0, 1, 2), 16)]
 
 
 def _table(cfg: YOLOV3Config) -> tuple[Any, Any, Any]:
@@ -150,9 +147,7 @@ class TestTableMismatchIsRefused:
     def test_mask_past_the_anchors(self) -> None:
         with pytest.raises(ValueError, match=r"indexes outside the 6 anchors"):
             YOLOV3Config(
-                anchors=((10.0, 14.0),) * 6,
-                strides=(16, 32),
-                anchor_masks=((0, 1, 2), (3, 4, 6)),
+                anchors=((10.0, 14.0),) * 6, strides=(16, 32), anchor_masks=((0, 1, 2), (3, 4, 6))
             )
 
     def test_empty_mask(self) -> None:

@@ -97,35 +97,20 @@ def _call(name: str, make: Make, x: str, t: str, idx: str, aux: str) -> Call:
         "multi_margin_loss": lambda: ([make(_X, x), make(_CLASS, idx)], {}),
         "multilabel_margin_loss": lambda: ([make(_X, x), make(_LABELS, idx)], {}),
         "binary_cross_entropy": lambda: ([make(_PROB, x), make(_BIN, t)], {}),
-        "binary_cross_entropy_with_logits": lambda: (
-            [make(_X, x), make(_BIN, t)],
-            {},
-        ),
-        "kl_div": lambda: (
-            [make(_LOGP, x), make(_PROB, t)],
-            {"reduction": "batchmean"},
-        ),
+        "binary_cross_entropy_with_logits": lambda: ([make(_X, x), make(_BIN, t)], {}),
+        "kl_div": lambda: ([make(_LOGP, x), make(_PROB, t)], {"reduction": "batchmean"}),
         "hinge_embedding_loss": lambda: ([make(_X, x), make(_SIGNS, t)], {}),
         "soft_margin_loss": lambda: ([make(_X, x), make(_SIGNS, t)], {}),
         "multilabel_soft_margin_loss": lambda: ([make(_X, x), make(_BIN, t)], {}),
         "poisson_nll_loss": lambda: ([make(_POS, x), make(_POS, t)], {}),
-        "gaussian_nll_loss": lambda: (
-            [make(_X, x), make(_Y, t), make(_POS, aux)],
-            {},
-        ),
+        "gaussian_nll_loss": lambda: ([make(_X, x), make(_Y, t), make(_POS, aux)], {}),
         "margin_ranking_loss": lambda: (
             [make(_X[0][:3], x), make(_Y[0][:3], x), make(_SIGN, t)],
             {},
         ),
-        "cosine_embedding_loss": lambda: (
-            [make(_X, x), make(_Y, x), make(_SIGN, t)],
-            {},
-        ),
+        "cosine_embedding_loss": lambda: ([make(_X, x), make(_Y, x), make(_SIGN, t)], {}),
         "triplet_margin_loss": lambda: ([make(_X, x), make(_Y, x), make(_Z, x)], {}),
-        "triplet_margin_with_distance_loss": lambda: (
-            [make(_X, x), make(_Y, x), make(_Z, x)],
-            {},
-        ),
+        "triplet_margin_with_distance_loss": lambda: ([make(_X, x), make(_Y, x), make(_Z, x)], {}),
         "ctc_loss": lambda: (
             [
                 make(_CTC, x),
@@ -261,12 +246,7 @@ _LENIENT: dict[tuple[str, str, str], str] = {
         (name, "target", width): (
             "Lucid takes class indices of any integer width; the reference " "only int64"
         )
-        for name in (
-            "cross_entropy",
-            "nll_loss",
-            "multi_margin_loss",
-            "multilabel_margin_loss",
-        )
+        for name in ("cross_entropy", "nll_loss", "multi_margin_loss", "multilabel_margin_loss")
         for width in ("int8", "int32")
     },
     **{
@@ -283,7 +263,7 @@ _STRICTER: dict[tuple[str, str, str], str] = {
     ("poisson_nll_loss", "mixed", "bool"): (
         "a bool rate is refused whatever the target's dtype; the reference "
         "refuses it only beside a bool target"
-    ),
+    )
 }
 
 
@@ -292,7 +272,7 @@ _OTHER_DTYPE: dict[tuple[str, str, str], str] = {
     ("binary_cross_entropy_with_logits", "target", "float16"): (
         "the reference rounds the float32 loss to the target's float16; Lucid "
         "keeps the float32 the two promote to"
-    ),
+    )
 }
 
 

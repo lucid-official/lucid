@@ -25,11 +25,7 @@ def _masks() -> tuple[lucid.Tensor, lucid.Tensor]:
 
 @pytest.mark.parametrize(
     "cfg",
-    [
-        {"add_bias_kv": True},
-        {"add_zero_attn": True},
-        {"add_bias_kv": True, "add_zero_attn": True},
-    ],
+    [{"add_bias_kv": True}, {"add_zero_attn": True}, {"add_bias_kv": True, "add_zero_attn": True}],
     ids=["bias_kv", "zero_attn", "both"],
 )
 def test_appended_keys_widen_the_masks(cfg: dict[str, Any]) -> None:
@@ -47,13 +43,7 @@ def test_separate_projections_need_all_three_weights() -> None:
     x = lucid.randn(L, N, E)
     with pytest.raises(ValueError, match="q_proj_weight"):
         F.multi_head_attention_forward(
-            x,
-            x,
-            x,
-            E,
-            H,
-            use_separate_proj_weight=True,
-            q_proj_weight=lucid.randn(E, E),
+            x, x, x, E, H, use_separate_proj_weight=True, q_proj_weight=lucid.randn(E, E)
         )
 
 

@@ -49,13 +49,7 @@ class _Head(lucid.nn.Module):
 
 
 @pytest.mark.parametrize(
-    "entry, device",
-    [
-        ("make", "cpu"),
-        ("make", "metal"),
-        ("fused", "metal"),
-        ("direct", "metal"),
-    ],
+    "entry, device", [("make", "cpu"), ("make", "metal"), ("fused", "metal"), ("direct", "metal")]
 )
 def test_the_counter_advances_in_the_tensor_a_holder_already_has(entry: str, device: str) -> None:
     # The compiled step rebound the buffer to ``counter + count``: the live

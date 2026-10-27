@@ -401,11 +401,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("PretrainedModel", "lucid.models._base", "PretrainedModel"),
     ),
     "lucid.models._mixins": (
-        (
-            "DiffusionScheduler",
-            "lucid.models.generative._common._schedulers",
-            "DiffusionScheduler",
-        ),
+        ("DiffusionScheduler", "lucid.models.generative._common._schedulers", "DiffusionScheduler"),
         ("GenerationOutput", "lucid.models._output", "GenerationOutput"),
     ),
     "lucid.models._output": (

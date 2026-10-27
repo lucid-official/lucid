@@ -9,9 +9,7 @@ from tools import _bench_timing as timing
 from tools import bench_compile
 
 
-def test_cold_timer_materializes_before_final_sync(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_cold_timer_materializes_before_final_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     events = []
     monkeypatch.setattr(timing.lucid.metal, "synchronize", lambda: events.append("sync"))
     monkeypatch.setattr(timing, "materialize", lambda value: events.append(("value", value)))
@@ -21,9 +19,7 @@ def test_cold_timer_materializes_before_final_sync(
     assert events == ["sync", ("value", 42), "sync"]
 
 
-def test_each_warmup_and_sample_observes_output(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_each_warmup_and_sample_observes_output(monkeypatch: pytest.MonkeyPatch) -> None:
     observed = []
     monkeypatch.setattr(timing, "materialize", observed.append)
     timing.warm_ms(lambda: 42, 2, 3)
@@ -39,10 +35,7 @@ def test_unknown_output_cannot_earn_a_timing() -> None:
 
 def test_compile_benchmark_calls_the_public_module_entrypoint() -> None:
     result = bench_compile._bench_case(
-        "small-linear",
-        lambda: lucid.nn.Linear(4, 2),
-        lambda: lucid.ones(2, 4),
-        2,
+        "small-linear", lambda: lucid.nn.Linear(4, 2), lambda: lucid.ones(2, 4), 2
     )
     assert result["note"] == "ok"
     assert result["eager_ms"] > 0
@@ -57,10 +50,7 @@ def test_training_benchmark_rejects_a_step_that_never_updates(
 
     monkeypatch.setattr(bench_compile, "fused_step", broken_fused_step)
     result = bench_compile._bench_training_case(
-        "broken",
-        lambda: lucid.nn.Linear(4, 2),
-        lambda: (lucid.ones(2, 4), lucid.zeros(2, 2)),
-        2,
+        "broken", lambda: lucid.nn.Linear(4, 2), lambda: (lucid.ones(2, 4), lucid.zeros(2, 2)), 2
     )
     assert result["note"] == "parity-diverged"
 

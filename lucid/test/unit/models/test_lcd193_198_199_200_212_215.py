@@ -33,10 +33,7 @@ from lucid.models.vision.inception_next import (
 from lucid.models.vision.maxvit import MaxViTConfig, MaxViTForImageClassification
 from lucid.models.vision.pvt import PVTConfig, PVTForImageClassification
 from lucid.models.vision.resnet import ResNetConfig, ResNetForImageClassification
-from lucid.models.vision.swin import (
-    SwinConfig,
-    SwinTransformerForImageClassification,
-)
+from lucid.models.vision.swin import SwinConfig, SwinTransformerForImageClassification
 from lucid.models.vision.vgg import VGGConfig, VGGForImageClassification
 from lucid.utils.transforms import Image, Mask, MaskDropout, functional as F_tx
 
@@ -180,12 +177,7 @@ def test_lcd198_model_config_json_roundtrip_preserves_tuples(tmp_path: Path) -> 
             )
         ),
         lambda: CvTForImageClassification(
-            CvTConfig(
-                dims=(16, 32, 64),
-                num_heads=(1, 2, 4),
-                depths=(1, 1, 1),
-                num_classes=5,
-            )
+            CvTConfig(dims=(16, 32, 64), num_heads=(1, 2, 4), depths=(1, 1, 1), num_classes=5)
         ),
         lambda: CrossViTForImageClassification(
             CrossViTConfig(
@@ -209,24 +201,15 @@ def test_lcd198_model_config_json_roundtrip_preserves_tuples(tmp_path: Path) -> 
         ),
         lambda: EfficientFormerForImageClassification(
             EfficientFormerConfig(
-                depths=(1, 1, 1, 1),
-                embed_dims=(16, 32, 64, 128),
-                num_vit=1,
-                num_classes=5,
+                depths=(1, 1, 1, 1), embed_dims=(16, 32, 64, 128), num_vit=1, num_classes=5
             )
         ),
         lambda: InceptionNeXtForImageClassification(
-            InceptionNeXtConfig(
-                depths=(1, 1, 1, 1),
-                dims=(16, 32, 64, 128),
-                num_classes=5,
-            )
+            InceptionNeXtConfig(depths=(1, 1, 1, 1), dims=(16, 32, 64, 128), num_classes=5)
         ),
     ],
 )
-def test_lcd199_vision_transformer_for_image_classification_inits_weights(
-    cls_fn,
-) -> None:
+def test_lcd199_vision_transformer_for_image_classification_inits_weights(cls_fn) -> None:
     """All 8 transformer/hybrid *ForImageClassification wrappers run init_transformer_trunc_normal."""
     model = cls_fn()
     linear_biases = [
@@ -338,15 +321,7 @@ def test_lcd212_sparse_adam_state_dict_roundtrip() -> None:
 
 
 @pytest.mark.parametrize(
-    "opt_cls",
-    [
-        optim.Adam,
-        optim.AdamW,
-        optim.Adamax,
-        optim.NAdam,
-        optim.RAdam,
-        optim.SparseAdam,
-    ],
+    "opt_cls", [optim.Adam, optim.AdamW, optim.Adamax, optim.NAdam, optim.RAdam, optim.SparseAdam]
 )
 def test_lcd215_adam_family_betas_in_param_groups_and_mutable(opt_cls) -> None:
     """Adam-family optimizers store 'betas' in param_groups and honor mid-run edits."""
@@ -398,25 +373,13 @@ def test_lcd215_nadam_momentum_decay_and_decoupled_weight_decay() -> None:
     p_fast_md = nn.Parameter(lucid.tensor([1.5, -2.5]))
 
     opt_coupled = optim.NAdam(
-        [p_coupled],
-        lr=1e-2,
-        weight_decay=0.1,
-        momentum_decay=4e-3,
-        decoupled_weight_decay=False,
+        [p_coupled], lr=1e-2, weight_decay=0.1, momentum_decay=4e-3, decoupled_weight_decay=False
     )
     opt_decoupled = optim.NAdam(
-        [p_decoupled],
-        lr=1e-2,
-        weight_decay=0.1,
-        momentum_decay=4e-3,
-        decoupled_weight_decay=True,
+        [p_decoupled], lr=1e-2, weight_decay=0.1, momentum_decay=4e-3, decoupled_weight_decay=True
     )
     opt_fast_md = optim.NAdam(
-        [p_fast_md],
-        lr=1e-2,
-        weight_decay=0.1,
-        momentum_decay=0.2,
-        decoupled_weight_decay=False,
+        [p_fast_md], lr=1e-2, weight_decay=0.1, momentum_decay=0.2, decoupled_weight_decay=False
     )
 
     assert opt_decoupled.param_groups[0]["momentum_decay"] == 4e-3

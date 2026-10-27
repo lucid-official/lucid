@@ -51,11 +51,7 @@ class _DenseLayer(nn.Module):
     """Single dense layer: BN-ReLU-Conv1×1-BN-ReLU-Conv3×3."""
 
     def __init__(
-        self,
-        num_input_features: int,
-        growth_rate: int,
-        bn_size: int,
-        dropout_rate: float,
+        self, num_input_features: int, growth_rate: int, bn_size: int, dropout_rate: float
     ) -> None:
         super().__init__()
         inter_features = bn_size * growth_rate
@@ -107,10 +103,7 @@ class _DenseBlock(nn.Module):
         self._layers: list[_DenseLayer] = []
         for i in range(num_layers):
             layer = _DenseLayer(
-                num_input_features + i * growth_rate,
-                growth_rate,
-                bn_size,
-                dropout_rate,
+                num_input_features + i * growth_rate, growth_rate, bn_size, dropout_rate
             )
             self.add_module(f"denselayer{i + 1}", layer)
             self._layers.append(layer)
@@ -165,10 +158,7 @@ class _Transition(nn.Module):
 class _Features(nn.Module):
     """Flat-attribute container whose state-dict key prefix is ``features``."""
 
-    def __init__(
-        self,
-        cfg: DenseNetConfig,
-    ) -> None:
+    def __init__(self, cfg: DenseNetConfig) -> None:
         super().__init__()
         # --- stem ---
         self.conv0 = nn.Conv2d(
@@ -443,11 +433,7 @@ class DenseNetForImageClassification(ImageClassificationModel, ClassificationHea
         _init_reference(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = F.relu(self.features(x))
         x = self.avgpool(x)
         x = x.flatten(1)

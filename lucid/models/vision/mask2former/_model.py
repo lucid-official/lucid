@@ -38,10 +38,7 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._tasks import SemanticSegmentationModel
 from lucid.models._output import SemanticSegmentationOutput
-from lucid.models._utils._detection import (
-    multi_scale_deformable_attention,
-    solve_assignment,
-)
+from lucid.models._utils._detection import multi_scale_deformable_attention, solve_assignment
 from lucid.models._utils._detection_results import check_per_image
 from lucid.models._utils._segmentation import (
     dice_loss,
@@ -159,9 +156,7 @@ class _SwinRelativePositionBias(nn.Module):
         )
         index = _build_relative_position_index(window_size)
         self.register_buffer(
-            "relative_position_index",
-            lucid.tensor(index, dtype=lucid.int64),
-            persistent=False,
+            "relative_position_index", lucid.tensor(index, dtype=lucid.int64), persistent=False
         )
 
     @override
@@ -314,12 +309,7 @@ class _SwinLayer(nn.Module):
     """One Swin block: (S)W-MSA + MLP with pre-LayerNorms."""
 
     def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        window_size: int,
-        shift_size: int,
-        mlp_ratio: float,
+        self, dim: int, num_heads: int, window_size: int, shift_size: int, mlp_ratio: float
     ) -> None:
         super().__init__()
         self.window_size = window_size
@@ -652,11 +642,7 @@ class _PixelDecoderEncoderLayer(nn.Module):
     ) -> Tensor:
         residual = hidden_states
         hidden_states = self.self_attn(
-            hidden_states,
-            hidden_states,
-            position_embeddings,
-            reference_points,
-            spatial_shapes,
+            hidden_states, hidden_states, position_embeddings, reference_points, spatial_shapes
         )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -713,10 +699,7 @@ class _PixelDecoderEncoder(nn.Module):
         for layer in self.layers:
             enc_layer = layer
             hidden_states = enc_layer(
-                hidden_states,
-                position_embeddings,
-                reference_points,
-                spatial_shapes,
+                hidden_states, position_embeddings, reference_points, spatial_shapes
             )
         return hidden_states
 
@@ -747,8 +730,7 @@ class _PixelDecoder(nn.Module):
         for in_ch in transformer_in_channels[::-1]:
             projections.append(
                 nn.Sequential(
-                    nn.Conv2d(in_ch, feature_dim, kernel_size=1),
-                    nn.GroupNorm(32, feature_dim),
+                    nn.Conv2d(in_ch, feature_dim, kernel_size=1), nn.GroupNorm(32, feature_dim)
                 )
             )
         self.input_projections = nn.ModuleList(projections)
@@ -1172,12 +1154,7 @@ class _TransformerModule(nn.Module):
         q_feat = q_feat.repeat(1, b, 1)
 
         return self.decoder(
-            q_feat,
-            multi_stage_pos,
-            mask_features,
-            multi_stage_features,
-            q_pos,
-            size_list,
+            q_feat, multi_stage_pos, mask_features, multi_stage_features, q_pos, size_list
         )
 
 
@@ -1379,9 +1356,7 @@ class Mask2FormerForSemanticSegmentation(SemanticSegmentationModel):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: list[dict[str, Tensor]] | None = None,
+        self, x: Tensor, targets: list[dict[str, Tensor]] | None = None
     ) -> SemanticSegmentationOutput:
         """Run Mask2Former for semantic segmentation.
 

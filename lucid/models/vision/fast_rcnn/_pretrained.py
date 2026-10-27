@@ -26,10 +26,7 @@ _CFG_VGG16 = FastRCNNConfig(
     model_class=FastRCNNForObjectDetection,
     default_config=_CFG_VGG16,
 )
-def fast_rcnn(
-    pretrained: bool = False,
-    **overrides: object,
-) -> FastRCNNForObjectDetection:
+def fast_rcnn(pretrained: bool = False, **overrides: object) -> FastRCNNForObjectDetection:
     r"""Fast R-CNN with VGG16 backbone (Girshick, ICCV 2015).
 
     Builds a :class:`FastRCNNForObjectDetection` with the paper-cited

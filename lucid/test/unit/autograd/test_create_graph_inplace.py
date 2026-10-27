@@ -99,9 +99,7 @@ def test_graph_mode_agrees_with_eager_backward(op: str, device: str) -> None:
     np.testing.assert_allclose(_np(g), _np(v.grad), rtol=1e-5)
 
 
-def test_backward_with_create_graph_reads_the_destination_as_it_was(
-    device: str,
-) -> None:
+def test_backward_with_create_graph_reads_the_destination_as_it_was(device: str) -> None:
     # The other graph-mode entry point: ``backward`` rather than ``grad``.
     buf, v = _written("mul_", device)
     buf.sum().backward(create_graph=True)
@@ -333,9 +331,7 @@ def test_a_saved_tensor_with_grad_written_by_a_recorded_op(device: str) -> None:
         z.backward()
 
 
-def test_a_waived_check_reads_the_values_from_before_the_write(
-    device_gpu_only: str,
-) -> None:
+def test_a_waived_check_reads_the_values_from_before_the_write(device_gpu_only: str) -> None:
     # ``allow_mutation_on_saved_tensors`` promises the values from before
     # the write; graph mode rebuilds them from what the node saved.
     dev = device_gpu_only

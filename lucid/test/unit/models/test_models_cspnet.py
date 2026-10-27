@@ -9,12 +9,7 @@ import unittest
 
 import lucid
 import lucid.models as models
-from lucid.models.vision.cspnet import (
-    CSPNetConfig,
-    CSPNet,
-    cspresnet_50,
-    cspresnet_50_cls,
-)
+from lucid.models.vision.cspnet import CSPNetConfig, CSPNet, cspresnet_50, cspresnet_50_cls
 
 
 class TestCSPNetConfig(unittest.TestCase):

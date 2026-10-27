@@ -48,11 +48,7 @@ COMPATIBLE = [
     (["a:x", "k:keepdim="], ["a:x", "k:keepdim=", "k:out="], "a new optional keyword"),
     (["p:x"], ["p:input"], "a positional-only rename"),
     (["a:x", "a:dim"], ["a:x", "a:dim="], "a parameter given a default"),
-    (
-        ["a:x", "k:flag="],
-        ["a:x", "a:flag="],
-        "a keyword-only parameter opened to position",
-    ),
+    (["a:x", "k:flag="], ["a:x", "a:flag="], "a keyword-only parameter opened to position"),
     (["a:x"], ["v:args", "w:kwargs"], "a catch-all"),
     (None, ["a:x"], "a builtin that became readable"),
 ]

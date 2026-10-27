@@ -7,27 +7,11 @@ from pathlib import Path
 from lucid.test.audit.tools import backend_digest
 
 
-def test_subset_digest_is_reproducible_and_detects_bit_change(
-    tmp_path: Path,
-) -> None:
-    symbols = {
-        "lucid.add",
-        "lucid.sub",
-        "lucid.mul",
-        "F.relu",
-        "lucid.sum",
-        "F.layer_norm",
-    }
-    first = backend_digest.generate_digest(
-        symbols_filter=symbols,
-        repeat=2,
-        devices=("cpu",),
-    )
+def test_subset_digest_is_reproducible_and_detects_bit_change(tmp_path: Path) -> None:
+    symbols = {"lucid.add", "lucid.sub", "lucid.mul", "F.relu", "lucid.sum", "F.layer_norm"}
+    first = backend_digest.generate_digest(symbols_filter=symbols, repeat=2, devices=("cpu",))
     second = backend_digest.generate_digest(
-        symbols_filter=symbols,
-        repeat=1,
-        plan=first["plan"],
-        devices=("cpu",),
+        symbols_filter=symbols, repeat=1, plan=first["plan"], devices=("cpu",)
     )
     diffs, _ = backend_digest.compare_digests(first, second)
     assert diffs == []

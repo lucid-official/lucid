@@ -49,10 +49,7 @@ def test_1d_offsets_matches_oracle(mode: str, idx_dtype: type) -> None:
     idx = np.array([1, 2, 4, 5, 4, 3, 2, 0], dtype=idx_dtype)
     off = np.array([0, 3, 5], dtype=idx_dtype)
     got = embedding_bag(
-        lucid.from_numpy(idx),
-        lucid.from_numpy(W),
-        offsets=lucid.from_numpy(off),
-        mode=mode,
+        lucid.from_numpy(idx), lucid.from_numpy(W), offsets=lucid.from_numpy(off), mode=mode
     ).numpy()
     want = _oracle(idx, off, W, mode)
     assert np.allclose(got, want, atol=1e-5)
@@ -74,10 +71,7 @@ def test_max_all_negative_bag() -> None:
     idx = np.array([0, 1, 2], dtype=np.int64)
     off = np.array([0], dtype=np.int64)
     got = embedding_bag(
-        lucid.from_numpy(idx),
-        lucid.from_numpy(W),
-        offsets=lucid.from_numpy(off),
-        mode="max",
+        lucid.from_numpy(idx), lucid.from_numpy(W), offsets=lucid.from_numpy(off), mode="max"
     ).numpy()
     want = _oracle(idx, off, W, "max")
     assert (want < 0).all()

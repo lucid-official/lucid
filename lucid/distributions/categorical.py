@@ -16,12 +16,7 @@ from lucid.distributions.constraints import (
 from lucid.distributions.distribution import Distribution
 
 
-from lucid.distributions._util import (
-    _as_tensor,
-    _broadcast_shapes,
-    _clamp_probs,
-    _lazy_param,
-)
+from lucid.distributions._util import _as_tensor, _broadcast_shapes, _clamp_probs, _lazy_param
 
 
 def _normalize_probs(probs: Tensor) -> Tensor:
@@ -163,11 +158,7 @@ class Categorical(Distribution):
             self._is_logits = True
             shape = tuple(self.logits.shape)
         self._num_events = shape[-1]
-        super().__init__(
-            batch_shape=shape[:-1],
-            event_shape=(),
-            validate_args=validate_args,
-        )
+        super().__init__(batch_shape=shape[:-1], event_shape=(), validate_args=validate_args)
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
@@ -259,10 +250,7 @@ class Categorical(Distribution):
         # mean of Categorical isn't well-defined (no metric on labels)
         # but reference framework returns NaN with the right shape.
         return lucid.full(
-            self._batch_shape,
-            float("nan"),
-            device=self._probs.device,
-            dtype=self._probs.dtype,
+            self._batch_shape, float("nan"), device=self._probs.device, dtype=self._probs.dtype
         )
 
     @override
@@ -295,10 +283,7 @@ class Categorical(Distribution):
             Tensor of ``float('nan')`` with shape ``batch_shape``.
         """
         return lucid.full(
-            self._batch_shape,
-            float("nan"),
-            device=self._probs.device,
-            dtype=self._probs.dtype,
+            self._batch_shape, float("nan"), device=self._probs.device, dtype=self._probs.dtype
         )
 
     @override

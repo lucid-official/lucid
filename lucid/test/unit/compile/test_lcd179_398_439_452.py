@@ -50,9 +50,7 @@ class TestFusedStepAutocastScalerAndBatchChange:
     model's initialisers and ``lucid.randn`` drew from one stream (LCD-583):
     the batches now follow the init's draws, and 42's batch change skipped."""
 
-    def test_grad_scaler_overflowing_init_scale_autocast_f16_and_batch_change(
-        self,
-    ) -> None:
+    def test_grad_scaler_overflowing_init_scale_autocast_f16_and_batch_change(self) -> None:
         lucid.manual_seed(12)
         eager_model = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 4)).to(
             COMPILE_DEVICE
@@ -104,8 +102,7 @@ class TestCoreMLGridSampleValidation:
     @pytest.mark.parametrize("bad_mode", [-1, 2, 3])
     def test_invalid_mode_raises(self, bad_mode: int) -> None:
         op = _StubOp(
-            name="grid_sample",
-            attrs={"mode": bad_mode, "padding_mode": 0, "align_corners": False},
+            name="grid_sample", attrs={"mode": bad_mode, "padding_mode": 0, "align_corners": False}
         )
         with pytest.raises(ValueError, match="mode"):
             _grid_sample(cast("Builder", object()), op, ["x", "grid"])
@@ -113,8 +110,7 @@ class TestCoreMLGridSampleValidation:
     @pytest.mark.parametrize("bad_pad", [-1, 2, 3])
     def test_invalid_padding_mode_raises(self, bad_pad: int) -> None:
         op = _StubOp(
-            name="grid_sample",
-            attrs={"mode": 0, "padding_mode": bad_pad, "align_corners": False},
+            name="grid_sample", attrs={"mode": 0, "padding_mode": bad_pad, "align_corners": False}
         )
         with pytest.raises(ValueError, match="padding_mode"):
             _grid_sample(cast("Builder", object()), op, ["x", "grid"])
@@ -149,10 +145,7 @@ class TestCompiledSubnormalIdentityFlush:
     )
     @pytest.mark.parametrize("name", list(_SUBNORMAL_OPS))
     def test_subnormal_identity_matches_eager_bits(
-        self,
-        dtype: lucid.dtype,
-        vals: list[float],
-        name: str,
+        self, dtype: lucid.dtype, vals: list[float], name: str
     ) -> None:
         fn = _SUBNORMAL_OPS[name]
         x = lucid.tensor(vals, dtype=dtype, device=COMPILE_DEVICE)

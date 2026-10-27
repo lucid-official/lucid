@@ -145,19 +145,11 @@ class TestZeroElementTensors:
     @pytest.mark.parametrize("device", DEVICES)
     @pytest.mark.parametrize(
         "fn",
-        [
-            init.kaiming_uniform_,
-            init.kaiming_normal_,
-            init.xavier_uniform_,
-            init.xavier_normal_,
-        ],
+        [init.kaiming_uniform_, init.kaiming_normal_, init.xavier_uniform_, init.xavier_normal_],
     )
     @pytest.mark.parametrize("shape", [(0, 4), (4, 0), (0, 0), (2, 2, 0)])
     def test_fan_initializers_zero_numel_warn_and_noop(
-        self,
-        device: str,
-        fn: Callable[[lucid.Tensor], lucid.Tensor],
-        shape: tuple[int, ...],
+        self, device: str, fn: Callable[[lucid.Tensor], lucid.Tensor], shape: tuple[int, ...]
     ) -> None:
         t = lucid.zeros(*shape, device=device)
         with pytest.warns(UserWarning, match="Initializing zero-element tensors is a no-op"):
@@ -234,9 +226,7 @@ class TestGeneratorAndGainAndSparse:
         ],
     )
     def test_generator_reproducibility(
-        self,
-        device: str,
-        call: Callable[[lucid.Tensor, lucid.Generator], lucid.Tensor],
+        self, device: str, call: Callable[[lucid.Tensor, lucid.Generator], lucid.Tensor]
     ) -> None:
         a = lucid.empty(8, 8, device=device)
         b = lucid.empty(8, 8, device=device)

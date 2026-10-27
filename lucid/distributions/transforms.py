@@ -288,12 +288,7 @@ class AffineTransform(Transform):
     tensor(7.)
     """
 
-    def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        event_dim: int = 0,
-    ) -> None:
+    def __init__(self, loc: Tensor | float, scale: Tensor | float, event_dim: int = 0) -> None:
         """Store the affine offset ``loc``, multiplier ``scale``, and ``event_dim``.
 
         The caller is responsible for ensuring ``scale > 0``; ``sign`` is
@@ -952,11 +947,7 @@ class IndependentTransform(Transform):
     tensor([1., 2.718, 7.389])
     """
 
-    def __init__(
-        self,
-        transform: Transform,
-        reinterpreted_batch_ndims: int,
-    ) -> None:
+    def __init__(self, transform: Transform, reinterpreted_batch_ndims: int) -> None:
         """Wrap ``transform`` and promote ``reinterpreted_batch_ndims`` batch dims to event dims."""
         super().__init__()
         self.transform = transform
@@ -1054,11 +1045,7 @@ class ReshapeTransform(Transform):
     (6,)
     """
 
-    def __init__(
-        self,
-        in_shape: tuple[int, ...],
-        out_shape: tuple[int, ...],
-    ) -> None:
+    def __init__(self, in_shape: tuple[int, ...], out_shape: tuple[int, ...]) -> None:
         """Validate that ``in_shape`` and ``out_shape`` have the same total size and store them.
 
         Raises
@@ -1254,12 +1241,7 @@ class CorrCholeskyTransform(Transform):
         return self._build_chol(z, batch, d, x.dtype, x.device)
 
     def _build_chol(
-        self,
-        z: Tensor,
-        batch: list[int],
-        d: int,
-        dtype: DTypeLike,
-        device: DeviceLike,
+        self, z: Tensor, batch: list[int], d: int, dtype: DTypeLike, device: DeviceLike
     ) -> Tensor:
         """Build the Cholesky factor row by row from ``z`` (tanh-ed free params)."""
         row_tensors: list[Tensor] = []
@@ -1273,8 +1255,7 @@ class CorrCholeskyTransform(Transform):
                 # set r[..., 0] = 1
                 ones_val = lucid.ones(*batch, 1, dtype=dtype, device=device)
                 r = lucid.cat(
-                    [ones_val, lucid.zeros(*batch, d - 1, dtype=dtype, device=device)],
-                    dim=-1,
+                    [ones_val, lucid.zeros(*batch, d - 1, dtype=dtype, device=device)], dim=-1
                 )
                 row_tensors.append(r.unsqueeze(-2))
                 cumsum_sq.append(lucid.ones(*batch, 1, dtype=dtype, device=device))
@@ -1299,11 +1280,7 @@ class CorrCholeskyTransform(Transform):
                     for j in range(n_free):
                         scale = (1.0 - cum_sq).sqrt()
                         # Clamp to avoid sqrt of negative from fp noise.
-                        scale = lucid.where(
-                            scale < 0.0,
-                            lucid.zeros_like(scale),
-                            scale,
-                        )
+                        scale = lucid.where(scale < 0.0, lucid.zeros_like(scale), scale)
                         elem = zr[..., j] * scale
                         elems.append(elem.unsqueeze(-1))
                         cum_sq = cum_sq + elem * elem
@@ -1312,9 +1289,7 @@ class CorrCholeskyTransform(Transform):
                     # diagonal element: sqrt(1 - ||off||²)
                     raw_diag_sq = 1.0 - (off * off).sum(dim=-1)
                     diag_sq = lucid.where(
-                        raw_diag_sq < 0.0,
-                        lucid.zeros_like(raw_diag_sq),
-                        raw_diag_sq,
+                        raw_diag_sq < 0.0, lucid.zeros_like(raw_diag_sq), raw_diag_sq
                     )
                     diag = diag_sq.sqrt()  # (...,)
                     # pad to length d: [off | diag | zeros]
@@ -1343,20 +1318,12 @@ class CorrCholeskyTransform(Transform):
             cum_sq = lucid.zeros(*batch, dtype=y.dtype, device=y.device)
             for j in range(row):
                 raw_scale = (1.0 - cum_sq).sqrt()
-                scale = lucid.where(
-                    raw_scale < 1e-8,
-                    lucid.full_like(raw_scale, 1e-8),
-                    raw_scale,
-                )
+                scale = lucid.where(raw_scale < 1e-8, lucid.full_like(raw_scale, 1e-8), raw_scale)
                 z_raw = off[..., j] / scale
                 z_j = lucid.where(
                     z_raw < -1.0 + 1e-6,
                     lucid.full_like(z_raw, -1.0 + 1e-6),
-                    lucid.where(
-                        z_raw > 1.0 - 1e-6,
-                        lucid.full_like(z_raw, 1.0 - 1e-6),
-                        z_raw,
-                    ),
+                    lucid.where(z_raw > 1.0 - 1e-6, lucid.full_like(z_raw, 1.0 - 1e-6), z_raw),
                 )
                 elems.append(z_j.unsqueeze(-1))
                 cum_sq = cum_sq + (off[..., j]) ** 2
@@ -1365,11 +1332,7 @@ class CorrCholeskyTransform(Transform):
 
         z = lucid.cat(free, dim=-1)  # (..., d*(d-1)/2)
         # inverse tanh: arctanh(z) = 0.5 * log((1+z)/(1-z))
-        denom = lucid.where(
-            (1.0 - z) < 1e-8,
-            lucid.full_like(z, 1e-8),
-            1.0 - z,
-        )
+        denom = lucid.where((1.0 - z) < 1e-8, lucid.full_like(z, 1e-8), 1.0 - z)
         return 0.5 * ((1.0 + z) / denom).log()
 
     @override

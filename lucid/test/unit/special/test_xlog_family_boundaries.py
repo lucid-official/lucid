@@ -270,10 +270,7 @@ def test_no_second_copy_of_the_convention() -> None:
     definitions is a second source of truth.
     """
     root = Path(lucid.__file__).parent
-    allowed = {
-        ("_ops/composite/elementwise.py", "xlogy"),
-        ("special/__init__.py", "xlog1py"),
-    }
+    allowed = {("_ops/composite/elementwise.py", "xlogy"), ("special/__init__.py", "xlog1py")}
     found: list[tuple[str, str]] = []
     for path in root.rglob("*.py"):
         rel = path.relative_to(root).as_posix()
@@ -281,9 +278,6 @@ def test_no_second_copy_of_the_convention() -> None:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name.lstrip("_") in (
-                "xlogy",
-                "xlog1py",
-            ):
+            if isinstance(node, ast.FunctionDef) and node.name.lstrip("_") in ("xlogy", "xlog1py"):
                 found.append((rel, node.name))
     assert sorted(set(found) - allowed) == [], found

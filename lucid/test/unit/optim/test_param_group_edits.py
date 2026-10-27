@@ -71,11 +71,7 @@ _CASES: list[Case] = [
     ("RMSprop", {"lr": 0.01}, [{"lr": 0.05, "alpha": 0.9}, {"eps": 1e-3}]),
     ("RMSprop", {"lr": 0.01}, [{"weight_decay": 0.1}]),
     ("RMSprop", {"lr": 0.01, "momentum": 0.9}, [{"momentum": 0.5}, {"momentum": 0.0}]),
-    (
-        "RMSprop",
-        {"lr": 0.01, "centered": True},
-        [{"centered": False}, {"centered": True}],
-    ),
+    ("RMSprop", {"lr": 0.01, "centered": True}, [{"centered": False}, {"centered": True}]),
     ("Rprop", {"lr": 0.01}, [{"eta_minus": 0.3, "eta_plus": 1.5}]),
     ("Rprop", {"lr": 0.01}, [{"step_min": 5e-3, "step_max": 0.02}]),
     # lr only seeds a parameter's step size, here as there.
@@ -216,10 +212,7 @@ def _run_ref(case: Case, ref: Any) -> list[list[np.ndarray]]:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "case",
-    [pytest.param(c, id=_case_id(c)) for c in _CASES],
-)
+@pytest.mark.parametrize("case", [pytest.param(c, id=_case_id(c)) for c in _CASES])
 def test_an_edit_takes_effect_as_in_the_reference(case: Case, device: str, ref: Any) -> None:
     ours = _run_lucid(case, device)
     theirs = _run_ref(case, ref)
@@ -257,8 +250,7 @@ def _transfer_state(src: optim.Optimizer, dst: optim.Optimizer) -> None:
 
 
 @pytest.mark.parametrize(
-    "case",
-    [pytest.param(c, id=_case_id(c)) for c in [*_CASES, *_SWITCH_ON_CASES]],
+    "case", [pytest.param(c, id=_case_id(c)) for c in [*_CASES, *_SWITCH_ON_CASES]]
 )
 def test_an_edit_equals_a_fresh_optimizer_on_the_same_state(case: Case, device: str) -> None:
     name, kw, edits = case
@@ -445,17 +437,10 @@ _KEPT: list[tuple[str, dict[str, Any], str, object, object, str]] = [
 
 
 @pytest.mark.parametrize(
-    "name, kw, key, off, on, kept",
-    [pytest.param(*c, id=f"{c[0]}-{c[2]}") for c in _KEPT],
+    "name, kw, key, off, on, kept", [pytest.param(*c, id=f"{c[0]}-{c[2]}") for c in _KEPT]
 )
 def test_a_switched_off_buffer_survives_a_checkpoint_and_resumes(
-    name: str,
-    kw: dict[str, Any],
-    key: str,
-    off: object,
-    on: object,
-    kept: str,
-    device: str,
+    name: str, kw: dict[str, Any], key: str, off: object, on: object, kept: str, device: str
 ) -> None:
     params = _params(_arrays(0, _SHAPES), device)
     opt = getattr(optim, name)(params, **kw)
@@ -491,17 +476,10 @@ def test_a_switched_off_buffer_survives_a_checkpoint_and_resumes(
 
 @pytest.mark.parity
 @pytest.mark.parametrize(
-    "name, kw, key, off, on, kept",
-    [pytest.param(*c, id=f"{c[0]}-{c[2]}") for c in _KEPT],
+    "name, kw, key, off, on, kept", [pytest.param(*c, id=f"{c[0]}-{c[2]}") for c in _KEPT]
 )
 def test_a_switched_off_buffer_is_in_the_state_as_in_the_reference(
-    name: str,
-    kw: dict[str, Any],
-    key: str,
-    off: object,
-    on: object,
-    kept: str,
-    ref: Any,
+    name: str, kw: dict[str, Any], key: str, off: object, on: object, kept: str, ref: Any
 ) -> None:
     init = _arrays(0, _SHAPES)
     params = _params(init, "cpu")
@@ -627,13 +605,7 @@ _ADAM_FAMILY_RULES = [
 #  edit, message)
 _RULES: list[tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]] = [
     ("SGD", {"lr": 0.1}, {"lr": -1.0}, {"lr": -1.0}, "lr must be >= 0"),
-    (
-        "SGD",
-        {"lr": 0.1},
-        {"momentum": -1.0},
-        {"momentum": -1.0},
-        "momentum must be >= 0",
-    ),
+    ("SGD", {"lr": 0.1}, {"momentum": -1.0}, {"momentum": -1.0}, "momentum must be >= 0"),
     (
         "SGD",
         {"lr": 0.1},
@@ -662,13 +634,7 @@ _RULES: list[tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]] = 
     *[("Adamax", {}, c, e, m) for c, e, m in _ADAM_FAMILY_RULES],
     ("Adagrad", {}, {"lr": -1.0}, {"lr": -1.0}, "lr must be >= 0"),
     ("Adagrad", {}, {"lr_decay": -1.0}, {"lr_decay": -1.0}, "lr_decay must be >= 0"),
-    (
-        "Adagrad",
-        {},
-        {"weight_decay": -1.0},
-        {"weight_decay": -1.0},
-        "weight_decay must be >= 0",
-    ),
+    ("Adagrad", {}, {"weight_decay": -1.0}, {"weight_decay": -1.0}, "weight_decay must be >= 0"),
     (
         "Adagrad",
         {},
@@ -681,23 +647,11 @@ _RULES: list[tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]] = 
     ("Adadelta", {}, {"rho": 1.5}, {"rho": 1.5}, "rho must be in [0, 1]"),
     ("Adadelta", {}, {"rho": -0.5}, {"rho": -0.5}, "rho must be in [0, 1]"),
     ("Adadelta", {}, {"eps": -1.0}, {"eps": -1.0}, "eps must be >= 0"),
-    (
-        "Adadelta",
-        {},
-        {"weight_decay": -1.0},
-        {"weight_decay": -1.0},
-        "weight_decay must be >= 0",
-    ),
+    ("Adadelta", {}, {"weight_decay": -1.0}, {"weight_decay": -1.0}, "weight_decay must be >= 0"),
     ("RMSprop", {}, {"lr": -1.0}, {"lr": -1.0}, "lr must be >= 0"),
     ("RMSprop", {}, {"alpha": -1.0}, {"alpha": -1.0}, "alpha must be >= 0"),
     ("RMSprop", {}, {"eps": -1.0}, {"eps": -1.0}, "eps must be >= 0"),
-    (
-        "RMSprop",
-        {},
-        {"weight_decay": -1.0},
-        {"weight_decay": -1.0},
-        "weight_decay must be >= 0",
-    ),
+    ("RMSprop", {}, {"weight_decay": -1.0}, {"weight_decay": -1.0}, "weight_decay must be >= 0"),
     ("RMSprop", {}, {"momentum": -1.0}, {"momentum": -1.0}, "momentum must be >= 0"),
     ("Rprop", {}, {"lr": -1.0}, {"lr": -1.0}, "lr must be >= 0"),
     (
@@ -722,13 +676,7 @@ _RULES: list[tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]] = 
         "etas must satisfy 0 < eta_minus < 1 < eta_plus",
     ),
     ("ASGD", {}, {"lr": -1.0}, {"lr": -1.0}, "lr must be >= 0"),
-    (
-        "ASGD",
-        {},
-        {"weight_decay": -1.0},
-        {"weight_decay": -1.0},
-        "weight_decay must be >= 0",
-    ),
+    ("ASGD", {}, {"weight_decay": -1.0}, {"weight_decay": -1.0}, "weight_decay must be >= 0"),
     ("SparseAdam", {}, {"lr": 0.0}, {"lr": 0.0}, "lr must be > 0"),
     ("SparseAdam", {}, {"eps": 0.0}, {"eps": 0.0}, "eps must be > 0"),
     (
@@ -749,9 +697,7 @@ _RULES: list[tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]] = 
 ]
 
 
-def _rule_id(
-    rule: tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str],
-) -> str:
+def _rule_id(rule: tuple[str, dict[str, Any], dict[str, Any], dict[str, Any], str]) -> str:
     name, base, bad, _, _ = rule
     return name + "".join(f"-{k}={v}" for k, v in {**base, **bad}.items())
 

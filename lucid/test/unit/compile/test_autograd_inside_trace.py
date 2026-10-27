@@ -46,11 +46,7 @@ class _Penalised(nn.Module):
 def _setup() -> tuple[nn.Module, lucid.Tensor, lucid.Tensor]:
     lucid.manual_seed(0)
     model = _Penalised().to(COMPILE_DEVICE)
-    return (
-        model,
-        lucid.randn(3, 4).to(COMPILE_DEVICE),
-        lucid.randn(3, 4).to(COMPILE_DEVICE),
-    )
+    return (model, lucid.randn(3, 4).to(COMPILE_DEVICE), lucid.randn(3, 4).to(COMPILE_DEVICE))
 
 
 @pytest.mark.usefixtures("inference")

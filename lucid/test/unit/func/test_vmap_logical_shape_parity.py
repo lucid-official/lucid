@@ -25,20 +25,12 @@ import lucid.func as func
 import lucid.nn.functional as F
 from lucid.test._helpers.compare import assert_close
 
-_LOSS_NAMES = (
-    "cross_entropy",
-    "nll_loss",
-    "mse_loss",
-    "binary_cross_entropy",
-    "kl_div",
-)
+_LOSS_NAMES = ("cross_entropy", "nll_loss", "mse_loss", "binary_cross_entropy", "kl_div")
 _REDUCTIONS = ("mean", "sum", "none")
 
 
 def _make_loss_pair(
-    loss_name: str,
-    reduction: str,
-    ref: ModuleType,
+    loss_name: str, reduction: str, ref: ModuleType
 ) -> tuple[
     Callable[[lucid.Tensor, lucid.Tensor, lucid.Tensor], lucid.Tensor],
     Callable[[object, object, object], object],
@@ -106,10 +98,7 @@ def _make_loss_pair(
 @pytest.mark.parametrize("loss_name", _LOSS_NAMES)
 @pytest.mark.parametrize("reduction", _REDUCTIONS)
 def test_vmap_grad_per_sample_losses_parity(
-    ref: ModuleType,
-    device: str,
-    loss_name: str,
-    reduction: str,
+    ref: ModuleType, device: str, loss_name: str, reduction: str
 ) -> None:
     """Per-sample ``vmap(grad(...))`` matches ``strategy='isolated'`` and ``ref``."""
     rng = np.random.default_rng(42)
@@ -148,13 +137,9 @@ def test_vmap_grad_per_sample_losses_parity(
 
 
 def _make_forward_loss_pair(
-    loss_name: str,
-    reduction: str,
-    ref: ModuleType,
+    loss_name: str, reduction: str, ref: ModuleType
 ) -> tuple[
-    Callable[[lucid.Tensor, lucid.Tensor], lucid.Tensor],
-    Callable[[object, object], object],
-    bool,
+    Callable[[lucid.Tensor, lucid.Tensor], lucid.Tensor], Callable[[object, object], object], bool
 ]:
     rf = ref.nn.functional
     if loss_name == "cross_entropy":
@@ -192,10 +177,7 @@ def _make_forward_loss_pair(
 @pytest.mark.parametrize("loss_name", _LOSS_NAMES)
 @pytest.mark.parametrize("reduction", _REDUCTIONS)
 def test_vmap_forward_losses_parity(
-    ref: ModuleType,
-    device: str,
-    loss_name: str,
-    reduction: str,
+    ref: ModuleType, device: str, loss_name: str, reduction: str
 ) -> None:
     """Forward ``vmap(loss_fn)`` reduces per sample, not across the batch axis."""
     rng = np.random.default_rng(7)
@@ -227,9 +209,7 @@ def test_vmap_forward_losses_parity(
 @pytest.mark.parity
 @pytest.mark.parametrize("reduction", ["mean", "sum"])
 def test_vmap_grad_cross_entropy_with_unsqueeze0(
-    ref: ModuleType,
-    device: str,
-    reduction: str,
+    ref: ModuleType, device: str, reduction: str
 ) -> None:
     """LCD-254 repro: ``unsqueeze(0)`` inside ``vmap(grad(...))`` sees 1-D per-sample inputs."""
     rng = np.random.default_rng(11)
@@ -266,9 +246,7 @@ def test_vmap_grad_cross_entropy_with_unsqueeze0(
 @pytest.mark.parity
 @pytest.mark.parametrize("reduction", _REDUCTIONS)
 def test_vmap_mixed_in_dims_unbatched_target_bce(
-    ref: ModuleType,
-    device: str,
-    reduction: str,
+    ref: ModuleType, device: str, reduction: str
 ) -> None:
     """LCD-254 repro: ``in_dims=(0, None)`` presents matching per-sample target shapes to BCE."""
     rng = np.random.default_rng(19)
@@ -282,8 +260,7 @@ def test_vmap_mixed_in_dims_unbatched_target_bce(
     y_r = ref.tensor(y_np)
 
     out_l = func.vmap(
-        lambda p, t: F.binary_cross_entropy(p, t, reduction=reduction),
-        in_dims=(0, None),
+        lambda p, t: F.binary_cross_entropy(p, t, reduction=reduction), in_dims=(0, None)
     )(p_l, y_l)
     out_r = ref.func.vmap(
         lambda p, t: ref.nn.functional.binary_cross_entropy(p, t, reduction=reduction),
@@ -303,10 +280,7 @@ def test_vmap_mixed_in_dims_unbatched_target_bce(
 
 
 @pytest.mark.parity
-def test_vmap_shape_observing_and_unqualified_reductions(
-    ref: ModuleType,
-    device: str,
-) -> None:
+def test_vmap_shape_observing_and_unqualified_reductions(ref: ModuleType, device: str) -> None:
     """Inside ``vmap``, ``x.shape``, ``x.ndim``, ``x.numel()``, ``x.mean()``, ``x.sum()`` see logical shapes."""
     rng = np.random.default_rng(23)
     x_np = rng.standard_normal((4, 3, 2)).astype(np.float32)
@@ -334,10 +308,7 @@ def test_vmap_shape_observing_and_unqualified_reductions(
 
 
 @pytest.mark.parity
-def test_vmap_composes_with_grad_and_value_vjp_jvp(
-    ref: ModuleType,
-    device: str,
-) -> None:
+def test_vmap_composes_with_grad_and_value_vjp_jvp(ref: ModuleType, device: str) -> None:
     """``vmap`` over ``grad_and_value``, ``vjp``, and ``jvp`` operates on logical per-sample shapes."""
     rng = np.random.default_rng(31)
     x_np = rng.standard_normal((4, 3)).astype(np.float32)

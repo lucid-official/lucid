@@ -9,11 +9,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_suspended
 from lucid._unsupported import unsupported_if
-from lucid.nn.functional._index_checks import (
-    _check_indices,
-    _check_table,
-    _padding_index,
-)
+from lucid.nn.functional._index_checks import _check_indices, _check_table, _padding_index
 from lucid.nn.functional.activations import straight_through
 
 if TYPE_CHECKING:
@@ -409,13 +405,7 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
                 "pass num_classes explicitly"
             )
         num_classes = int(input.max().item()) + 1
-    _check_indices(
-        input,
-        num_classes,
-        "one_hot",
-        what="class",
-        axis=f"num_classes={num_classes}",
-    )
+    _check_indices(input, num_classes, "one_hot", what="class", axis=f"num_classes={num_classes}")
     out = _C_engine.nn.one_hot(_unwrap(input), num_classes)
     # int64, the dtype the reference framework answers in and the one class
     # indices are carried in everywhere else; the engine builds int8.

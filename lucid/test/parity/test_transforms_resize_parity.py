@@ -25,11 +25,7 @@ def test_resize_matches_the_reference(ref: Any, mode: str, size: tuple[int, int]
     x = np.random.default_rng(0).random((1, 3, 480, 640), dtype=np.float32)
     got = TF.resize(lucid.from_numpy(x.copy()), size, interpolation=mode).numpy()
     want = ref.nn.functional.interpolate(
-        ref.from_numpy(x.copy()),
-        size=size,
-        mode=mode,
-        align_corners=False,
-        antialias=True,
+        ref.from_numpy(x.copy()), size=size, mode=mode, align_corners=False, antialias=True
     ).numpy()
     np.testing.assert_allclose(got, want, rtol=0, atol=1e-4)
 
@@ -43,12 +39,7 @@ _INT_DTYPES = {"int16": (lucid.int16, np.int16), "int32": (lucid.int32, np.int32
 @pytest.mark.parametrize("size", [(20, 25), (80, 100)], ids=["down", "up"])
 @pytest.mark.parametrize("antialias", [True, False], ids=["aa", "no-aa"])
 def test_an_integer_image_resizes_like_the_reference(
-    ref: Any,
-    device: str,
-    dtype: str,
-    mode: str,
-    size: tuple[int, int],
-    antialias: bool,
+    ref: Any, device: str, dtype: str, mode: str, size: tuple[int, int], antialias: bool
 ) -> None:
     # Filtered in float32, then rounded and cast back to the image's dtype.
     lucid_dtype, np_dtype = _INT_DTYPES[dtype]

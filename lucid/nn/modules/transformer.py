@@ -30,9 +30,7 @@ from lucid.utils.cache import Cache
 _FFN_ACTIVATIONS: dict[str, Callable[[Tensor], Tensor]] = {"relu": relu, "gelu": gelu}
 
 
-def _resolve_activation(
-    activation: str | Callable[[Tensor], Tensor],
-) -> Callable[[Tensor], Tensor]:
+def _resolve_activation(activation: str | Callable[[Tensor], Tensor]) -> Callable[[Tensor], Tensor]:
     """The feed-forward non-linearity of an encoder or decoder layer.
 
     Raises:
@@ -243,13 +241,7 @@ class TransformerEncoderLayer(Module):
         attn_p = dropout if attention_dropout is None else attention_dropout
         self.attention_dropout_val = attn_p
         self.self_attn = MultiheadAttention(
-            d_model,
-            nhead,
-            attn_p,
-            bias,
-            batch_first=batch_first,
-            device=device,
-            dtype=dtype,
+            d_model, nhead, attn_p, bias, batch_first=batch_first, device=device, dtype=dtype
         )
         self.linear1 = Linear(d_model, dim_feedforward, bias, device, dtype)
         self.linear2 = Linear(dim_feedforward, d_model, bias, device, dtype)
@@ -593,10 +585,7 @@ class TransformerEncoder(Module):
         causal = bool(is_causal)
         for layer in self.layers:
             output = layer(
-                output,
-                src_mask=mask,
-                src_key_padding_mask=src_key_padding_mask,
-                is_causal=causal,
+                output, src_mask=mask, src_key_padding_mask=src_key_padding_mask, is_causal=causal
             )
         if self.norm is not None:
             output = cast(Tensor, self.norm(output))
@@ -802,22 +791,10 @@ class TransformerDecoderLayer(Module):
         attn_p = dropout if attention_dropout is None else attention_dropout
         self.attention_dropout_val = attn_p
         self.self_attn = MultiheadAttention(
-            d_model,
-            nhead,
-            attn_p,
-            bias,
-            batch_first=batch_first,
-            device=device,
-            dtype=dtype,
+            d_model, nhead, attn_p, bias, batch_first=batch_first, device=device, dtype=dtype
         )
         self.multihead_attn = MultiheadAttention(
-            d_model,
-            nhead,
-            attn_p,
-            bias,
-            batch_first=batch_first,
-            device=device,
-            dtype=dtype,
+            d_model, nhead, attn_p, bias, batch_first=batch_first, device=device, dtype=dtype
         )
         self.linear1 = Linear(d_model, dim_feedforward, bias, device, dtype)
         self.linear2 = Linear(dim_feedforward, d_model, bias, device, dtype)
@@ -1070,10 +1047,7 @@ class TransformerDecoder(Module):
     """
 
     def __init__(
-        self,
-        decoder_layer: TransformerDecoderLayer,
-        num_layers: int,
-        norm: Module | None = None,
+        self, decoder_layer: TransformerDecoderLayer, num_layers: int, norm: Module | None = None
     ) -> None:
         """Initialise the TransformerDecoder module. See the class docstring for parameter semantics."""
         super().__init__()
@@ -1415,10 +1389,7 @@ class Transformer(Module):
         if src.shape[-1] != self.d_model or tgt.shape[-1] != self.d_model:
             raise RuntimeError("the feature number of src and tgt must be equal to d_model")
         memory = self.encoder(
-            src,
-            mask=src_mask,
-            src_key_padding_mask=src_key_padding_mask,
-            is_causal=src_is_causal,
+            src, mask=src_mask, src_key_padding_mask=src_key_padding_mask, is_causal=src_is_causal
         )
         return self.decoder(
             tgt,
@@ -1433,16 +1404,13 @@ class Transformer(Module):
 
     @staticmethod
     def generate_square_subsequent_mask(
-        sz: int,
-        device: DeviceLike = None,
-        dtype: DTypeLike = None,
+        sz: int, device: DeviceLike = None, dtype: DTypeLike = None
     ) -> Tensor:
         """Generate a square causal mask of shape ``(sz, sz)``."""
         if sz < 0:
             raise ValueError(f"generate_square_subsequent_mask: sz must be >= 0, got {sz}")
         return _lucid.triu(
-            _lucid.full((sz, sz), float("-inf"), dtype=dtype, device=device),
-            diagonal=1,
+            _lucid.full((sz, sz), float("-inf"), dtype=dtype, device=device), diagonal=1
         )
 
     @override

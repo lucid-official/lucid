@@ -48,8 +48,7 @@ from lucid._C import engine as _C_engine
 from lucid.coreml import _build
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -178,10 +177,7 @@ class TestTheExportWritesWhatWasTrained:
         probe = lucid.randn(1, 3, 16, 16)
 
         exported = cml.export(
-            settled,
-            probe,
-            f"{tmp_path}/aware_{bits}.mlpackage",
-            weights=cml.Palettize(bits=bits),
+            settled, probe, f"{tmp_path}/aware_{bits}.mlpackage", weights=cml.Palettize(bits=bits)
         )
         try:
             # Exact rather than merely close: the weights are already on
@@ -226,10 +222,7 @@ class TestTheExportWritesWhatWasTrained:
         probe = lucid.randn(1, 3, 16, 16)
 
         exported = cml.export(
-            settled,
-            probe,
-            f"{tmp_path}/sparse.mlpackage",
-            weights=cml.Sparsify(ratio=0.5),
+            settled, probe, f"{tmp_path}/sparse.mlpackage", weights=cml.Sparsify(ratio=0.5)
         )
         try:
             assert exported.verify(settled, probe, relative=True) < 1e-5
@@ -257,10 +250,7 @@ class TestTheExportWritesWhatWasTrained:
         probe = lucid.randn(1, 3, 16, 16)
 
         exported = cml.export(
-            settled,
-            probe,
-            f"{tmp_path}/int8.mlpackage",
-            weights=cml.WeightPrecision.INT8,
+            settled, probe, f"{tmp_path}/int8.mlpackage", weights=cml.WeightPrecision.INT8
         )
         try:
             assert exported.verify(settled, probe, relative=True) < 1e-5
@@ -345,10 +335,6 @@ class TestItActuallyHelps:
         tuned_acc, tuned_loss = measure(tuned)
         cost = snapped_loss - control_loss
         assert cost > 0.25 * control_loss, "two bits has to cost something to recover"
-        assert snapped_loss - tuned_loss > cost / 3, (
-            control_loss,
-            snapped_loss,
-            tuned_loss,
-        )
+        assert snapped_loss - tuned_loss > cost / 3, (control_loss, snapped_loss, tuned_loss)
         # Six images of 360: the settled model classifies like the control.
         assert tuned_acc >= control_acc - 1 / 60, (control_acc, tuned_acc)

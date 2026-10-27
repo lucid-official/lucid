@@ -152,9 +152,7 @@ def crop(img: Tensor, top: int, left: int, height: int, width: int) -> Tensor:
 
 
 def center_crop(
-    img: Tensor,
-    size: int | tuple[int, int],
-    offset: Literal["round", "floor"] = "round",
+    img: Tensor, size: int | tuple[int, int], offset: Literal["round", "floor"] = "round"
 ) -> Tensor:
     r"""Crop a centered window of ``size`` (square if ``size`` is an int).
 
@@ -253,11 +251,7 @@ def pad(
     return F.pad(img, pad_spec, mode=mode, value=value if mode == "constant" else None)
 
 
-def normalize(
-    img: Tensor,
-    mean: tuple[float, ...],
-    std: tuple[float, ...],
-) -> Tensor:
+def normalize(img: Tensor, mean: tuple[float, ...], std: tuple[float, ...]) -> Tensor:
     r"""Normalize per channel: ``(img - mean) / std``.
 
     ``mean`` / ``std`` are broadcast over the channel axis (length ``1`` or ``C``).
@@ -339,10 +333,7 @@ def resized_crop(
         Cropped-then-resized image.
     """
     return resize(
-        crop(img, top, left, height, width),
-        size,
-        interpolation=interpolation,
-        antialias=antialias,
+        crop(img, top, left, height, width), size, interpolation=interpolation, antialias=antialias
     )
 
 
@@ -665,11 +656,7 @@ def _norm_to_pixel(h: int, w: int, device: DeviceLike = None) -> Tensor:
     standardises on ``align_corners=True``.)
     """
     return lucid.tensor(
-        [
-            [(w - 1) / 2.0, 0.0, (w - 1) / 2.0],
-            [0.0, (h - 1) / 2.0, (h - 1) / 2.0],
-            [0.0, 0.0, 1.0],
-        ],
+        [[(w - 1) / 2.0, 0.0, (w - 1) / 2.0], [0.0, (h - 1) / 2.0, (h - 1) / 2.0], [0.0, 0.0, 1.0]],
         device=device,
     )
 
@@ -778,11 +765,7 @@ def affine_points(pts: Tensor, matrix: Tensor) -> Tensor:
 
 
 def rotation_matrix(
-    angle_deg: float,
-    cx: float,
-    cy: float,
-    scale: float = 1.0,
-    device: DeviceLike = None,
+    angle_deg: float, cx: float, cy: float, scale: float = 1.0, device: DeviceLike = None
 ) -> Tensor:
     """OpenCV ``getRotationMatrix2D`` forward matrix (CCW degrees) about ``(cx, cy)``.
 
@@ -914,8 +897,7 @@ def perspective_matrix(
     h = lucid.matmul(lucid.linalg.inv(a), b).reshape(-1)
     hl = h.tolist()
     return lucid.tensor(
-        [[hl[0], hl[1], hl[2]], [hl[3], hl[4], hl[5]], [hl[6], hl[7], 1.0]],
-        device=device,
+        [[hl[0], hl[1], hl[2]], [hl[3], hl[4], hl[5]], [hl[6], hl[7], 1.0]], device=device
     )
 
 
@@ -1348,11 +1330,7 @@ def adjust_sharpness(img: Tensor, factor: float) -> Tensor:
     if factor == 1.0:
         return img
     inv13 = 1.0 / 13.0
-    kernel = [
-        [inv13, inv13, inv13],
-        [inv13, 5.0 * inv13, inv13],
-        [inv13, inv13, inv13],
-    ]
+    kernel = [[inv13, inv13, inv13], [inv13, 5.0 * inv13, inv13], [inv13, inv13, inv13]]
     blurred = depthwise_conv2d(img, kernel)
     h, w = _spatial_hw(img)
     if h <= 2 or w <= 2:

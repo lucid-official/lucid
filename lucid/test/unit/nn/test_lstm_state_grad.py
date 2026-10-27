@@ -300,9 +300,7 @@ def _numpy(t: object) -> np.ndarray:
 # ── dtypes ────────────────────────────────────────────────────────────────────
 
 
-def test_float64_matches_the_reference_forward_to_double_precision(
-    ref: ModuleType,
-) -> None:
+def test_float64_matches_the_reference_forward_to_double_precision(ref: ModuleType) -> None:
     ours, theirs = _make_pair(ref, lucid.float64, "cpu")
     data = _inputs(lucid.float64)
     out, (h, c) = ours(lucid.tensor(data["x"]))

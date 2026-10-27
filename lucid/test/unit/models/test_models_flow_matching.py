@@ -15,10 +15,7 @@ from lucid.models import (
     create_model,
     is_model,
 )
-from lucid.models.generative.flow_matching._model import (
-    _path_coefficients,
-    _VelocityField,
-)
+from lucid.models.generative.flow_matching._model import _path_coefficients, _VelocityField
 
 _PATHS = ("ot", "diffusion")
 
@@ -245,12 +242,7 @@ class TestProbabilityPaths:
                 return ((sigma_dot / sigma) * (image - a * x1) + a_dot * x1).reshape(8, -1)
 
             lucid.diffeq.odeint(
-                field,
-                x0.reshape(8, -1),
-                [0.0, 0.9],
-                rtol=1e-5,
-                atol=1e-5,
-                return_trajectory=False,
+                field, x0.reshape(8, -1), [0.0, 0.9], rtol=1e-5, atol=1e-5, return_trajectory=False
             )
             counts[path] = calls
 
@@ -283,12 +275,7 @@ class TestProbabilityPaths:
             return ((sigma_dot / sigma) * (image - a * x1) + a_dot * x1).reshape(4, -1)
 
         arrived = lucid.diffeq.odeint(
-            field,
-            x0.reshape(4, -1),
-            [0.0, 1.0],
-            rtol=1e-9,
-            atol=1e-11,
-            return_trajectory=False,
+            field, x0.reshape(4, -1), [0.0, 1.0], rtol=1e-9, atol=1e-11, return_trajectory=False
         )
         a1, s1, _, _ = model.coefficients(lucid.tensor(1.0))
         expected = (a1 * x1 + s1 * x0).reshape(4, -1)

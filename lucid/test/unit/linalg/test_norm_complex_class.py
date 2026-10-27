@@ -35,17 +35,7 @@ import lucid.linalg as LA
 _INF = float("inf")
 
 _VECTOR_ORDS: tuple[float | None, ...] = (None, 0, 1, 2, 3, 0.5, _INF, -_INF, -1, -2)
-_MATRIX_ORDS: tuple[int | float | str | None, ...] = (
-    None,
-    "fro",
-    "nuc",
-    1,
-    -1,
-    2,
-    -2,
-    _INF,
-    -_INF,
-)
+_MATRIX_ORDS: tuple[int | float | str | None, ...] = (None, "fro", "nuc", 1, -1, 2, -2, _INF, -_INF)
 #: Matrix orders that are read off the singular values.
 _SPECTRAL: tuple[int | str, ...] = ("nuc", 2, -2)
 
@@ -84,12 +74,7 @@ def _cases() -> list[_Case]:
             continue
         refused = svd_refusal if o in _SPECTRAL else None
         add("matrix_norm", (2, 3, 4), {"ord": o}, refused)
-        add(
-            "matrix_norm",
-            (3, 2, 4),
-            {"ord": o, "dim": (0, 2), "keepdim": True},
-            refused,
-        )
+        add("matrix_norm", (3, 2, 4), {"ord": o, "dim": (0, 2), "keepdim": True}, refused)
 
     # ``norm`` with a matrix order: without ``dim`` on a matrix, and with an
     # explicit pair of axes on a batch.  ``ord=None`` is the flat 2-norm in
@@ -162,12 +147,7 @@ def _lucid_call(fn: str, a: np.ndarray, kw: dict[str, Any], device: str) -> Any:
 @pytest.mark.parity
 @pytest.mark.parametrize(("fn", "shape", "kw", "kind"), _PARITY)
 def test_norm_is_real_and_matches_the_reference(
-    fn: str,
-    shape: tuple[int, ...],
-    kw: dict[str, Any],
-    kind: str,
-    device: str,
-    ref: Any,
+    fn: str, shape: tuple[int, ...], kw: dict[str, Any], kind: str, device: str, ref: Any
 ) -> None:
     a = _data(shape, kind == "complex", fn)
     got = _lucid_call(fn, a, kw, device)
@@ -236,11 +216,7 @@ def test_the_issue_repro(device: str) -> None:
     """The numbers from CHA-231."""
     x = lucid.tensor([[1 + 1j, 2], [1j, 3 - 1j]], device=device)
     want = float(np.sqrt(17.0))
-    for out in (
-        LA.matrix_norm(x, "fro"),
-        LA.norm(x, "fro"),
-        LA.norm(x, dim=(0, 1)),
-    ):
+    for out in (LA.matrix_norm(x, "fro"), LA.norm(x, "fro"), LA.norm(x, dim=(0, 1))):
         assert not out.is_complex()
         assert float(out.item()) == pytest.approx(want, rel=1e-6)
 

@@ -113,19 +113,13 @@ def resident_mb() -> float:
         info = _MachTaskBasicInfo()
         count = ctypes.c_uint(_INFO_COUNT)
         rc = _libc.task_info(
-            _task_self,
-            ctypes.c_int(_MACH_TASK_BASIC_INFO),
-            ctypes.byref(info),
-            ctypes.byref(count),
+            _task_self, ctypes.c_int(_MACH_TASK_BASIC_INFO), ctypes.byref(info), ctypes.byref(count)
         )
         if rc == 0:
             return info.resident_size / _MIB
     try:
         out = subprocess.run(
-            ["ps", "-o", "rss=", "-p", str(os.getpid())],
-            capture_output=True,
-            text=True,
-            timeout=5,
+            ["ps", "-o", "rss=", "-p", str(os.getpid())], capture_output=True, text=True, timeout=5
         )
         return int(out.stdout.strip() or 0) / 1024
     except (OSError, ValueError, subprocess.SubprocessError):

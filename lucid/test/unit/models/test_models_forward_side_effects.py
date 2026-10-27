@@ -38,10 +38,7 @@ import pytest
 import lucid
 import lucid.models as models
 from lucid._C import engine as _C_engine
-from lucid.test.unit.models.test_models_eval_determinism import (
-    _tensors_of,
-    _values_of,
-)
+from lucid.test.unit.models.test_models_eval_determinism import _tensors_of, _values_of
 from lucid.test.unit.models.test_models_train_step import CASES
 
 #: How much larger the second call is.  32 keeps every stride-32 pyramid
@@ -138,18 +135,10 @@ def _two(value: float) -> lucid.Tensor:
 _FIXED_GRID = [
     pytest.param("dit_small_2", _GRID, (4, 8), lambda m, x: m(x, _two(10.0)), id="dit"),
     pytest.param(
-        "mean_flow_base_2",
-        _GRID,
-        (4, 8),
-        lambda m, x: m(x, _two(0.2), _two(0.7)),
-        id="mean_flow",
+        "mean_flow_base_2", _GRID, (4, 8), lambda m, x: m(x, _two(0.2), _two(0.7)), id="mean_flow"
     ),
     pytest.param(
-        "tvm_imagenet256",
-        _GRID,
-        (4, 8),
-        lambda m, x: m(x, _two(0.7), _two(0.2)),
-        id="tvm",
+        "tvm_imagenet256", _GRID, (4, 8), lambda m, x: m(x, _two(0.7), _two(0.2)), id="tvm"
     ),
     pytest.param(
         "vae",
@@ -163,10 +152,7 @@ _FIXED_GRID = [
 
 @pytest.mark.parametrize(("factory", "overrides", "built", "call"), _FIXED_GRID)
 def test_a_side_one_pixel_off_the_built_grid_is_refused_by_name(
-    factory: str,
-    overrides: dict[str, Any],
-    built: tuple[int, int],
-    call: Any,
+    factory: str, overrides: dict[str, Any], built: tuple[int, int], call: Any
 ) -> None:
     lucid.manual_seed(0)
     model = models.create_model(factory, **overrides).eval()

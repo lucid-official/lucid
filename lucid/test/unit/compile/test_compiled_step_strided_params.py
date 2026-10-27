@@ -82,9 +82,7 @@ def _flat(t: lucid.Tensor) -> np.ndarray:
     return np.asarray(t.detach().numpy(), dtype=np.float64)
 
 
-def _covered(
-    layout: Sequence[tuple[tuple[int, ...], tuple[int, ...], int]],
-) -> np.ndarray:
+def _covered(layout: Sequence[tuple[tuple[int, ...], tuple[int, ...], int]]) -> np.ndarray:
     """Which elements of the base the layout's parameters read."""
     mask = np.zeros(int(np.prod(_BASE_SHAPE)), dtype=bool)
     for shape, stride, offset in layout:
@@ -179,9 +177,7 @@ def test_a_compiled_step_writes_only_the_parameters_elements(
 # ── run_executable_inplace itself ───────────────────────────────────────────
 
 
-def _increment_exe(
-    samples: Sequence[lucid.Tensor],
-) -> tuple[object, list[_C_engine.TensorImpl]]:
+def _increment_exe(samples: Sequence[lucid.Tensor]) -> tuple[object, list[_C_engine.TensorImpl]]:
     """An executable giving ``s + k + 1`` for the ``k``-th sample, and its feeds."""
     with lucid.no_grad(), _tracing() as tracer:
         outs = [s + float(k + 1) for k, s in enumerate(samples)]

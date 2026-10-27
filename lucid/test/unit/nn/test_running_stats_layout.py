@@ -302,12 +302,7 @@ def _make(framework_nn: Any, path: str) -> Any:
 def _cases(*made_by: str) -> list[Any]:
     """Each path on each device for each way of making the view."""
     return [
-        pytest.param(
-            path,
-            dev,
-            kind,
-            id=f"{path}-{dev}-{kind}",
-        )
+        pytest.param(path, dev, kind, id=f"{path}-{dev}-{kind}")
         for path in _PATHS
         for dev in devices_supporting(lucid.float32)
         for kind in made_by
@@ -328,11 +323,7 @@ def test_a_running_stat_whose_elements_overlap_is_refused_and_neither_moves(
     one = lucid.ones(1, device=dev)
     other = "running_var" if expanded == "running_mean" else "running_mean"
     setattr(m, other, _view(base, *_LAYOUTS["column"]))
-    setattr(
-        m,
-        expanded,
-        _view(one, (_C,), (0,), 0) if made_by == "engine_view" else one.expand(_C),
-    )
+    setattr(m, expanded, _view(one, (_C,), (0,), 0) if made_by == "engine_view" else one.expand(_C))
     with pytest.raises(RuntimeError, match="overlap"):
         m(lucid.tensor(_input(0, _PATHS[path][2])).to(dev))
     np.testing.assert_array_equal(_flat(base), init)

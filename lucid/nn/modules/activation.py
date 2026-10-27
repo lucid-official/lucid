@@ -1126,10 +1126,7 @@ class RReLU(Module):
     """
 
     def __init__(
-        self,
-        lower: float = 1.0 / 8.0,
-        upper: float = 1.0 / 3.0,
-        inplace: bool = False,
+        self, lower: float = 1.0 / 8.0, upper: float = 1.0 / 3.0, inplace: bool = False
     ) -> None:
         """Initialise the RReLU module. See the class docstring for parameter semantics."""
         super().__init__()
@@ -1609,8 +1606,7 @@ class Softsign(Module):
         """
         impl = _unwrap(input)
         denom = _C_engine.add(
-            _C_engine.full(impl.shape, 1.0, impl.dtype, impl.device),
-            _C_engine.abs(impl),
+            _C_engine.full(impl.shape, 1.0, impl.dtype, impl.device), _C_engine.abs(impl)
         )
         return _wrap(_C_engine.div(impl, denom))
 
@@ -2182,12 +2178,7 @@ class PairwiseDistance(Module):
     (64,)
     """
 
-    def __init__(
-        self,
-        p: float = 2.0,
-        eps: float = 1e-6,
-        keepdim: bool = False,
-    ) -> None:
+    def __init__(self, p: float = 2.0, eps: float = 1e-6, keepdim: bool = False) -> None:
         """Initialise the PairwiseDistance module. See the class docstring for parameter semantics."""
         super().__init__()
         self.p = p

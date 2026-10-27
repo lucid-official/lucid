@@ -38,8 +38,7 @@ _ACTIVATIONS: dict[str, tuple[object, Callable[[ModuleType], object]]] = {
 
 def _layer(fw: ModuleType, which: str, activation: object) -> object:
     cls = getattr(
-        fw.nn,
-        "TransformerEncoderLayer" if which == "encoder" else "TransformerDecoderLayer",
+        fw.nn, "TransformerEncoderLayer" if which == "encoder" else "TransformerDecoderLayer"
     )
     return cls(_D, _NHEAD, _FF, dropout=0.0, activation=activation, batch_first=True)
 

@@ -69,9 +69,7 @@ def mypy_report(tmp_path_factory: pytest.TempPathFactory) -> tuple[str, int]:
     return stdout, status
 
 
-def test_a_list_of_schedulers_in_a_variable_is_accepted(
-    mypy_report: tuple[str, int],
-) -> None:
+def test_a_list_of_schedulers_in_a_variable_is_accepted(mypy_report: tuple[str, int]) -> None:
     stdout, _ = mypy_report
     unexpected = [
         e for e in stdout.splitlines() if e.strip() and f"client.py:{_BAD_LINE}:" not in e
@@ -79,9 +77,7 @@ def test_a_list_of_schedulers_in_a_variable_is_accepted(
     assert unexpected == [], "\n".join(unexpected)
 
 
-def test_a_child_that_steps_on_a_metric_is_still_a_type_error(
-    mypy_report: tuple[str, int],
-) -> None:
+def test_a_child_that_steps_on_a_metric_is_still_a_type_error(mypy_report: tuple[str, int]) -> None:
     stdout, status = mypy_report
     assert status == 1
     assert f"client.py:{_BAD_LINE}:" in stdout, stdout

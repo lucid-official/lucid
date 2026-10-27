@@ -24,10 +24,7 @@ from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 # no crop.  Shortest-edge + centre-crop framed the image differently from
 # how the checkpoint was evaluated.
 _PRESET = Segmentation(
-    resize_size=384,
-    mean=(0.485, 0.456, 0.406),
-    std=(0.229, 0.224, 0.225),
-    stretch=True,
+    resize_size=384, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), stretch=True
 )
 
 

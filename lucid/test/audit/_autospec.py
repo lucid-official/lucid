@@ -202,8 +202,7 @@ def _packed_sequence(domain: str) -> Any:
     """A real ``PackedSequence`` — the only thing ``pad_packed_sequence`` takes."""
     try:
         return lucid.nn.utils.rnn.pack_sequence(
-            [_tensor((3, _COUT), domain), _tensor((2, _COUT), domain)],
-            enforce_sorted=True,
+            [_tensor((3, _COUT), domain), _tensor((2, _COUT), domain)], enforce_sorted=True
         )
     except Exception:  # noqa: BLE001 - surveying, not asserting
         return None
@@ -673,11 +672,7 @@ def _value_for(
     # ambiguous`` on all eleven axes.  A name is evidence; an annotation
     # that admits exactly one type is proof.
     if re.fullmatch(r"bool|int|float|str", text.strip()) and name not in _BY_NAME:
-        return (
-            True,
-            {"bool": True, "int": 2, "float": 0.5, "str": "mean"}[text.strip()],
-            False,
-        )
+        return (True, {"bool": True, "int": 2, "float": 0.5, "str": "mean"}[text.strip()], False)
 
     if name in _RELATED:
         found, value = _related_value(name, text, reference, op_name, domain)
@@ -809,11 +804,7 @@ def _value_for(
         # report "an input has no gradient after backward()", which is
         # the check working correctly on a function that ignores half
         # its arguments.
-        return (
-            True,
-            (lambda *operands: sum((x * x).sum() for x in operands)),
-            False,
-        )
+        return (True, (lambda *operands: sum((x * x).sum() for x in operands)), False)
     if name in ("LU", "LD") and len(shape) == 2:
         pair = _factorization(name, shape[-1])
         if pair is not None:

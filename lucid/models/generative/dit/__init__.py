@@ -6,11 +6,7 @@ FID tracks the backbone's Gflops rather than its parameter count.
 """
 
 from lucid.models.generative.dit._config import DiTConfig, DiTConditioning
-from lucid.models.generative.dit._model import (
-    DiTForImageGeneration,
-    DiTModel,
-    DiTOutput,
-)
+from lucid.models.generative.dit._model import DiTForImageGeneration, DiTModel, DiTOutput
 from lucid.models.generative.dit._weights import DiTXLarge2Weights
 from lucid.models.generative.dit._pretrained import (
     dit_base_2,

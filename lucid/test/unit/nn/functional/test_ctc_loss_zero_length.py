@@ -46,12 +46,7 @@ def _assert_matches(got: np.ndarray, want: np.ndarray) -> None:
 @pytest.mark.parametrize("zero_infinity", [False, True])
 @pytest.mark.parametrize("reduction", _REDUCTIONS)
 def test_ctc_loss_zero_and_short_lengths_match_reference(
-    ref: ModuleType,
-    device: str,
-    t_b: int,
-    s_b: int,
-    zero_infinity: bool,
-    reduction: Reduction,
+    ref: ModuleType, device: str, t_b: int, s_b: int, zero_infinity: bool, reduction: Reduction
 ) -> None:
     lp_np = _log_probs_np(time_steps=3, batch=1, classes=4)
     tgt_np = np.array([[1, 2]], dtype=np.int64)[:, :s_b]
@@ -69,13 +64,7 @@ def test_ctc_loss_zero_and_short_lengths_match_reference(
     ref_il = ref.tensor([t_b], dtype=ref.int64)
     ref_tl = ref.tensor([s_b], dtype=ref.int64)
     ref_out = ref.nn.functional.ctc_loss(
-        ref_lp,
-        ref_tgt,
-        ref_il,
-        ref_tl,
-        blank=0,
-        reduction=reduction,
-        zero_infinity=zero_infinity,
+        ref_lp, ref_tgt, ref_il, ref_tl, blank=0, reduction=reduction, zero_infinity=zero_infinity
     )
     (ref_out.sum() if reduction == "none" else ref_out).backward()
 
@@ -88,11 +77,7 @@ def test_ctc_loss_zero_and_short_lengths_match_reference(
 @pytest.mark.parametrize("reduction", _REDUCTIONS)
 @pytest.mark.parametrize("concatenated", [False, True])
 def test_ctc_loss_mixed_zero_and_nonzero_batch_advances_target_offset(
-    ref: ModuleType,
-    device: str,
-    zero_infinity: bool,
-    reduction: Reduction,
-    concatenated: bool,
+    ref: ModuleType, device: str, zero_infinity: bool, reduction: Reduction, concatenated: bool
 ) -> None:
     lp_np = _log_probs_np(time_steps=4, batch=3, classes=5)
     padded_np = np.array([[1, 2], [3, 4], [2, 1]], dtype=np.int64)
@@ -103,13 +88,7 @@ def test_ctc_loss_mixed_zero_and_nonzero_batch_advances_target_offset(
     lp = lucid.tensor(lp_np, dtype=lucid.float32, device=device, requires_grad=True)
     targets = lucid.tensor(tgt_np, dtype=lucid.int64, device=device)
     out = F.ctc_loss(
-        lp,
-        targets,
-        il_list,
-        tl_list,
-        blank=0,
-        reduction=reduction,
-        zero_infinity=zero_infinity,
+        lp, targets, il_list, tl_list, blank=0, reduction=reduction, zero_infinity=zero_infinity
     )
     (out.sum() if reduction == "none" else out).backward()
     assert lp.grad is not None
@@ -117,13 +96,7 @@ def test_ctc_loss_mixed_zero_and_nonzero_batch_advances_target_offset(
     ref_lp = ref.tensor(lp_np, dtype=ref.float32, requires_grad=True)
     ref_tgt = ref.tensor(tgt_np, dtype=ref.int64)
     ref_out = ref.nn.functional.ctc_loss(
-        ref_lp,
-        ref_tgt,
-        il_list,
-        tl_list,
-        blank=0,
-        reduction=reduction,
-        zero_infinity=zero_infinity,
+        ref_lp, ref_tgt, il_list, tl_list, blank=0, reduction=reduction, zero_infinity=zero_infinity
     )
     (ref_out.sum() if reduction == "none" else ref_out).backward()
 

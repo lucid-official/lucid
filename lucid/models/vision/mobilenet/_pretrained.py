@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.mobilenet._config import MobileNetConfig
-from lucid.models.vision.mobilenet._model import (
-    MobileNet,
-    MobileNetForImageClassification,
-)
+from lucid.models.vision.mobilenet._model import MobileNet, MobileNetForImageClassification
 from lucid.models.vision.mobilenet._weights import MobileNetWeights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
@@ -248,10 +245,7 @@ def mobilenet_025(pretrained: bool = False, **overrides: object) -> MobileNet:
     params=4_231_976,
 )
 def mobilenet_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: MobileNetWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: MobileNetWeights | None = None, **overrides: object
 ) -> MobileNetForImageClassification:
     r"""MobileNet-v1 image classifier at width multiplier :math:`\alpha = 1.0`.
 

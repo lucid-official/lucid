@@ -31,12 +31,7 @@ def _out(arr: np.ndarray, device: str = "cpu") -> np.ndarray:
 
 
 @pytest.mark.parametrize(
-    "row",
-    [
-        [np.nan, np.inf, -np.inf, -1.0],
-        [np.nan, 1.0, 2.0, 3.0],
-        [1.0, 2.0, np.nan, 4.0],
-    ],
+    "row", [[np.nan, np.inf, -np.inf, -1.0], [np.nan, 1.0, 2.0, 3.0], [1.0, 2.0, np.nan, 4.0]]
 )
 def test_a_nan_anywhere_makes_every_output_nan(row) -> None:
     got = _out(np.array([row], dtype=np.float32))

@@ -27,10 +27,7 @@ TABLE = np.random.default_rng(0).standard_normal((10, 3))
 
 
 def _oracle(
-    off: list[int],
-    mode: str,
-    weights: np.ndarray | None = None,
-    padding_idx: int | None = None,
+    off: list[int], mode: str, weights: np.ndarray | None = None, padding_idx: int | None = None
 ) -> np.ndarray:
     """Bag b is ``INDICES[off[b]:off[b + 1]]``; the last offset only ends a bag."""
     rows = []
@@ -148,10 +145,7 @@ def test_per_sample_weights_on_a_two_dimensional_input() -> None:
     x = INDICES.reshape(2, 4)
     psw = np.random.default_rng(3).standard_normal(x.shape)
     out = F.embedding_bag(
-        lucid.tensor(x),
-        lucid.tensor(TABLE),
-        mode="sum",
-        per_sample_weights=lucid.tensor(psw),
+        lucid.tensor(x), lucid.tensor(TABLE), mode="sum", per_sample_weights=lucid.tensor(psw)
     )
     np.testing.assert_allclose(out.numpy(), (TABLE[x] * psw[..., None]).sum(1), rtol=1e-12)
 

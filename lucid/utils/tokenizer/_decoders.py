@@ -107,10 +107,7 @@ class Metaspace(Decoder):
     """
 
     def __init__(
-        self,
-        replacement: str = "▁",
-        prepend_scheme: str = "always",
-        split: bool = True,
+        self, replacement: str = "▁", prepend_scheme: str = "always", split: bool = True
     ) -> None:
         r"""Record the marker and the scheme.
 
@@ -312,12 +309,7 @@ class Strip(Decoder):
         dict of str to object
             The Hugging Face schema for this decoder.
         """
-        return {
-            "type": "Strip",
-            "content": self._content,
-            "start": self._start,
-            "stop": self._stop,
-        }
+        return {"type": "Strip", "content": self._content, "start": self._start, "stop": self._stop}
 
 
 class Fuse(Decoder):

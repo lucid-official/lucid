@@ -75,9 +75,7 @@ def text_activation(name: str, x: Tensor) -> Tensor:
 
 
 def extended_attention_mask(
-    attention_mask: Tensor | None,
-    input_shape: tuple[int, ...],
-    key_length: int | None = None,
+    attention_mask: Tensor | None, input_shape: tuple[int, ...], key_length: int | None = None
 ) -> Tensor | None:
     """Normalise a padding mask to the additive ``(B, 1, 1, T)`` form.
 
@@ -205,10 +203,7 @@ def last_kept_token(hidden: Tensor, attention_mask: Tensor | None) -> Tensor:
 
 
 def init_text_module_weights(
-    module: nn.Module,
-    std: float,
-    *,
-    reset_layer_norm: bool = False,
+    module: nn.Module, std: float, *, reset_layer_norm: bool = False
 ) -> None:
     """Initialise a single Linear, Embedding, or LayerNorm module in place.
 
@@ -228,8 +223,7 @@ def init_text_module_weights(
         if module.padding_idx is not None:
             with lucid.no_grad():
                 module.weight[module.padding_idx] = lucid.zeros(
-                    (int(module.weight.shape[1]),),
-                    device=module.weight.device.type,
+                    (int(module.weight.shape[1]),), device=module.weight.device.type
                 )
     elif reset_layer_norm and isinstance(module, nn.LayerNorm):
         if module.weight is not None:

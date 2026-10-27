@@ -699,10 +699,7 @@ class _Cat(Constraint):
     """Apply a sequence of constraints to slices along ``dim`` of sizes ``lengths``."""
 
     def __init__(
-        self,
-        cseq: list[Constraint],
-        dim: int = 0,
-        lengths: list[int] | None = None,
+        self, cseq: list[Constraint], dim: int = 0, lengths: list[int] | None = None
     ) -> None:
         """Store the per-slice constraints, concatenation axis, and slice lengths."""
         self.cseq = list(cseq)
@@ -759,16 +756,11 @@ class _Stack(Constraint):
                 f"{len(self.cseq)} constraints"
             )
         return lucid.stack(
-            [constr.check(v) for v, constr in zip(vs, self.cseq, strict=True)],
-            dim=self.dim,
+            [constr.check(v) for v, constr in zip(vs, self.cseq, strict=True)], dim=self.dim
         )
 
 
-def cat(
-    cseq: list[Constraint],
-    dim: int = 0,
-    lengths: list[int] | None = None,
-) -> Constraint:
+def cat(cseq: list[Constraint], dim: int = 0, lengths: list[int] | None = None) -> Constraint:
     """Apply a sequence of constraints to contiguous slices along ``dim``.
 
     Parameters

@@ -555,10 +555,7 @@ class _SVD(_AutogradFunction):
     @override
     @staticmethod
     def backward(
-        ctx: FunctionCtx,
-        G_U: Tensor | None,
-        G_S: Tensor | None,
-        G_Vh: Tensor | None,
+        ctx: FunctionCtx, G_U: Tensor | None, G_S: Tensor | None, G_Vh: Tensor | None
     ) -> Tensor:
         U, S, Vh = ctx.saved_tensors
         dA: Tensor | None = None
@@ -1244,8 +1241,7 @@ def _complex_matmul(a: Tensor, b: Tensor) -> Tensor:
     ar, ai = lucid.real(a), lucid.imag(a)
     br, bi = lucid.real(b), lucid.imag(b)
     return lucid.complex(
-        lucid.matmul(ar, br) - lucid.matmul(ai, bi),
-        lucid.matmul(ar, bi) + lucid.matmul(ai, br),
+        lucid.matmul(ar, br) - lucid.matmul(ai, bi), lucid.matmul(ar, bi) + lucid.matmul(ai, br)
     )
 
 
@@ -1897,12 +1893,7 @@ def multi_dot(tensors: list[Tensor]) -> Tensor:
 
 
 def solve_triangular(
-    input: Tensor,
-    B: Tensor,
-    *,
-    upper: bool,
-    left: bool = True,
-    unitriangular: bool = False,
+    input: Tensor, B: Tensor, *, upper: bool, left: bool = True, unitriangular: bool = False
 ) -> Tensor:
     r"""Solve a triangular linear system by back/forward substitution.
 
@@ -2520,11 +2511,7 @@ def matrix_norm(
 
 
 def lstsq(
-    input: Tensor,
-    b: Tensor,
-    rcond: float | None = None,
-    *,
-    driver: str | None = None,
+    input: Tensor, b: Tensor, rcond: float | None = None, *, driver: str | None = None
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     r"""Solve a least-squares linear system.
 
@@ -2592,12 +2579,7 @@ def lstsq(
 
 
 def lu_solve(
-    LU: Tensor,
-    pivots: Tensor,
-    B: Tensor,
-    *,
-    left: bool = True,
-    adjoint: bool = False,
+    LU: Tensor, pivots: Tensor, B: Tensor, *, left: bool = True, adjoint: bool = False
 ) -> Tensor:
     r"""Solve a linear system from a precomputed LU factorization.
 
@@ -3036,8 +3018,7 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
         )
     try:
         batch = _broadcast_batch(
-            tuple(int(s) for s in LD.shape[:-2]),
-            tuple(int(s) for s in rhs.shape[:-2]),
+            tuple(int(s) for s in LD.shape[:-2]), tuple(int(s) for s in rhs.shape[:-2])
         )
     except ValueError:
         raise ValueError(
@@ -3052,8 +3033,7 @@ def ldl_solve(LD: Tensor, pivots: Tensor, B: Tensor, *, hermitian: bool = False)
     LD = lucid.broadcast_to(lucid.tril(LD), (*batch, n, n))
     rhs = lucid.broadcast_to(rhs, (*batch, n, k))
     piv_rows = cast(
-        list[list[int]],
-        lucid.broadcast_to(pivots, (*batch, n)).reshape(-1, n).tolist(),
+        list[list[int]], lucid.broadcast_to(pivots, (*batch, n)).reshape(-1, n).tolist()
     )
 
     # Replay every matrix's interchanges on host indices, O(n) each:
@@ -3256,13 +3236,7 @@ def matrix_exp(input: Tensor) -> Tensor:
     return R
 
 
-def diagonal(
-    A: Tensor,
-    *,
-    offset: int = 0,
-    dim1: int = -2,
-    dim2: int = -1,
-) -> Tensor:
+def diagonal(A: Tensor, *, offset: int = 0, dim1: int = -2, dim2: int = -1) -> Tensor:
     r"""Extract a (off-)diagonal from each matrix in a batched input.
 
     Returns the elements of :math:`A` lying on the diagonal selected by

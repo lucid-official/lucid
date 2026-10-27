@@ -112,10 +112,7 @@ def test_synthetic_move_and_verify_covers_all_cpp_constructs(tmp_path: Path) -> 
     base_dir, work_dir = _write_synthetic_tree(tmp_path)
 
     counts = backend_split.move_families(
-        backend="cpu",
-        families=["all"],
-        root=work_dir,
-        format_files=False,
+        backend="cpu", families=["all"], root=work_dir, format_files=False
     )
     assert counts == {
         "Factory": 1,
@@ -128,9 +125,7 @@ def test_synthetic_move_and_verify_covers_all_cpp_constructs(tmp_path: Path) -> 
     }
 
     moved, errors, keep_only = backend_split.verify_backend(
-        backend="cpu",
-        base=str(base_dir),
-        root=work_dir,
+        backend="cpu", base=str(base_dir), root=work_dir
     )
     assert errors == []
     assert moved == 8
@@ -154,15 +149,10 @@ def test_synthetic_move_and_verify_covers_all_cpp_constructs(tmp_path: Path) -> 
     assert "bool upper = false) override;" in hdr_after
 
 
-def test_verify_rejects_mutated_token_comment_and_extra_definition(
-    tmp_path: Path,
-) -> None:
+def test_verify_rejects_mutated_token_comment_and_extra_definition(tmp_path: Path) -> None:
     base_dir, work_dir = _write_synthetic_tree(tmp_path)
     backend_split.move_families(
-        backend="cpu",
-        families=["Binary"],
-        root=work_dir,
-        format_files=False,
+        backend="cpu", families=["Binary"], root=work_dir, format_files=False
     )
 
     binary_path = work_dir / "lucid/_C/backend/cpu/methods/Binary.cpp"
@@ -175,8 +165,7 @@ def test_verify_rejects_mutated_token_comment_and_extra_definition(
 
     # 2. Mutate an interior comment in the moved body
     binary_path.write_text(
-        orig_binary.replace("Inside add comment", "Altered comment"),
-        encoding="utf-8",
+        orig_binary.replace("Inside add comment", "Altered comment"), encoding="utf-8"
     )
     _, errors, _ = backend_split.verify_backend("cpu", str(base_dir), root=work_dir)
     assert any("body comments changed" in e for e in errors)
@@ -207,8 +196,7 @@ def test_parse_header_rejects_class_scope_ifdef_and_raw_string() -> None:
         backend_split.parse_header(with_class_ifdef, "CpuBackend")
 
     with_raw_str = _SYNTHETIC_CPU_HEADER.replace(
-        "return a;",
-        'const char* s = R"(raw)"; (void)s; return a;',
+        "return a;", 'const char* s = R"(raw)"; (void)s; return a;'
     )
     with pytest.raises(ValueError, match="Raw string literal"):
         backend_split.parse_header(with_raw_str, "CpuBackend")

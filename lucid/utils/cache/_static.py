@@ -91,22 +91,12 @@ class StaticCache(Cache):
         while len(self.key_cache) <= layer_idx:
             self.key_cache.append(
                 lucid.zeros(
-                    int(b),
-                    int(h),
-                    self.max_cache_len,
-                    int(d),
-                    dtype=key_states.dtype,
-                    device=dev,
+                    int(b), int(h), self.max_cache_len, int(d), dtype=key_states.dtype, device=dev
                 )
             )
             self.value_cache.append(
                 lucid.zeros(
-                    int(b),
-                    int(h),
-                    self.max_cache_len,
-                    int(d),
-                    dtype=key_states.dtype,
-                    device=dev,
+                    int(b), int(h), self.max_cache_len, int(d), dtype=key_states.dtype, device=dev
                 )
             )
             self._cumulative_length.append(0)

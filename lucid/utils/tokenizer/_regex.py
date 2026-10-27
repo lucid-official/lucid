@@ -91,22 +91,11 @@ class _RegexPersistenceMixin(_VocabTokenizer):
     @override
     def _save_extras(self) -> dict[str, object]:
         """Add ``model`` block (type / pattern / vocab) to ``tokenizer.json``."""
-        return {
-            "model": {
-                "type": "Regex",
-                "pattern": self._pattern_str,
-                "vocab": self._vocab,
-            }
-        }
+        return {"model": {"type": "Regex", "pattern": self._pattern_str, "vocab": self._vocab}}
 
     @classmethod
     @override
-    def from_file(
-        cls,
-        directory: str,
-        *,
-        special_tokens: SpecialTokens | None = None,
-    ) -> Self:
+    def from_file(cls, directory: str, *, special_tokens: SpecialTokens | None = None) -> Self:
         """Load from a directory previously written by :meth:`save`."""
         pat_path = os.path.join(directory, "regex_pattern.txt")
         if not os.path.isfile(pat_path):
@@ -212,12 +201,7 @@ class RegexTokenizer(_RegexPersistenceMixin, _VocabTokenizer):
         """Algorithm-specific decode: join known ids with a single space."""
         return " ".join(self._id_to_token[i] for i in ids if i in self._id_to_token)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Build the vocab in insertion order from corpus matches.
 
         Iterates over ``corpus``, applies the regex to each document,
@@ -235,9 +219,7 @@ class RegexTokenizer(_RegexPersistenceMixin, _VocabTokenizer):
             Hard cap on the number of distinct tokens kept.
         """
         self._train_insertion_vocab(
-            corpus,
-            lambda doc: (m.group(0) for m in self._pattern.finditer(doc)),
-            vocab_size,
+            corpus, lambda doc: (m.group(0) for m in self._pattern.finditer(doc)), vocab_size
         )
 
 
@@ -311,12 +293,7 @@ class RegexTokenizerFast(_RegexPersistenceMixin, _FastVocabTokenizer):
         cpp = _C_engine.utils.tokenizer.RegexTokenizer(pattern, v)
         self._init_fast_vocab_tokenizer(cpp, v, special_tokens=special_tokens)
 
-    def train(
-        self,
-        corpus: Iterable[str],
-        *,
-        vocab_size: int = 30_000,
-    ) -> None:
+    def train(self, corpus: Iterable[str], *, vocab_size: int = 30_000) -> None:
         """Re-train in C++; refresh Python-side caches afterwards.
 
         Parameters

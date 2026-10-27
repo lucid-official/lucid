@@ -57,20 +57,7 @@ def _specials(dtype: lucid.dtype) -> list[float]:
     subnormals, both extremes, NaN of either sign, both infinities."""
     top, tiny = _LIMITS[dtype]
     nan = float("nan")
-    return [
-        0.0,
-        -0.0,
-        1.0,
-        -2.5,
-        tiny,
-        -tiny,
-        top,
-        -top,
-        nan,
-        -nan,
-        math.inf,
-        -math.inf,
-    ]
+    return [0.0, -0.0, 1.0, -2.5, tiny, -tiny, top, -top, nan, -nan, math.inf, -math.inf]
 
 
 def _make(values: list[float], dtype: lucid.dtype, device: str) -> lucid.Tensor:
@@ -228,8 +215,7 @@ def test_non_contiguous_input(device: str, dtype: lucid.dtype) -> None:
     assert lucid.isfinite(grid).to("cpu").tolist() == np.isfinite(flat).tolist()
     top = _LIMITS[dtype][0]
     _assert_bits_equal(
-        _widened(lucid.nan_to_num(grid)),
-        np.nan_to_num(flat, nan=0.0, posinf=top, neginf=-top),
+        _widened(lucid.nan_to_num(grid)), np.nan_to_num(flat, nan=0.0, posinf=top, neginf=-top)
     )
 
 
@@ -399,12 +385,7 @@ def test_explicit_replacements_round_like_reference(
 @pytest.mark.parametrize("op", [*_PROBES, "nan_to_num"])
 def test_complex_matches_reference_cpu(ref: object, op: str, dtype: lucid.dtype) -> None:
     nan, inf = float("nan"), math.inf
-    values = [
-        complex(nan, 1.0),
-        complex(1.0, inf),
-        complex(-inf, nan),
-        complex(1.0, 2.0),
-    ]
+    values = [complex(nan, 1.0), complex(1.0, inf), complex(-inf, nan), complex(1.0, 2.0)]
     got = getattr(lucid, op)(lucid.tensor(values, dtype=dtype)).tolist()
     want = getattr(ref, op)(ref.tensor(values, dtype=_ref_dtype(ref, dtype))).tolist()  # type: ignore[attr-defined]
     assert got == want

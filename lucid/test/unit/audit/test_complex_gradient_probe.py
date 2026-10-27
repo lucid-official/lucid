@@ -20,8 +20,7 @@ def test_complex_contraction_is_real_and_uses_both_lanes() -> None:
 
 @pytest.mark.parametrize("corrupt", [False, True])
 def test_creategraph_observes_imaginary_gradient_errors(
-    monkeypatch: pytest.MonkeyPatch,
-    corrupt: bool,
+    monkeypatch: pytest.MonkeyPatch, corrupt: bool
 ) -> None:
     original = lucid.tensor([1 + 2j, 3 - 4j], dtype=lucid.complex128)
     call = _specs.Call([original])

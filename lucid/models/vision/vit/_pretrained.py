@@ -23,11 +23,7 @@ _CFG_H14 = ViTConfig(patch_size=14, dim=1280, depth=32, num_heads=16)
 
 
 @register_model(
-    task="base",
-    family="vit",
-    model_type="vit",
-    model_class=ViT,
-    default_config=_CFG_B16,
+    task="base", family="vit", model_type="vit", model_class=ViT, default_config=_CFG_B16
 )
 def vit_base_16(pretrained: bool = False, **overrides: object) -> ViT:
     r"""ViT-Base/16 backbone (Dosovitskiy et al., 2020).
@@ -79,11 +75,7 @@ def vit_base_16(pretrained: bool = False, **overrides: object) -> ViT:
 
 
 @register_model(
-    task="base",
-    family="vit",
-    model_type="vit",
-    model_class=ViT,
-    default_config=_CFG_B32,
+    task="base", family="vit", model_type="vit", model_class=ViT, default_config=_CFG_B32
 )
 def vit_base_32(pretrained: bool = False, **overrides: object) -> ViT:
     r"""ViT-Base/32 backbone (Dosovitskiy et al., 2020).
@@ -128,11 +120,7 @@ def vit_base_32(pretrained: bool = False, **overrides: object) -> ViT:
 
 
 @register_model(
-    task="base",
-    family="vit",
-    model_type="vit",
-    model_class=ViT,
-    default_config=_CFG_L16,
+    task="base", family="vit", model_type="vit", model_class=ViT, default_config=_CFG_L16
 )
 def vit_large_16(pretrained: bool = False, **overrides: object) -> ViT:
     r"""ViT-Large/16 backbone (Dosovitskiy et al., 2020).
@@ -178,11 +166,7 @@ def vit_large_16(pretrained: bool = False, **overrides: object) -> ViT:
 
 
 @register_model(
-    task="base",
-    family="vit",
-    model_type="vit",
-    model_class=ViT,
-    default_config=_CFG_L32,
+    task="base", family="vit", model_type="vit", model_class=ViT, default_config=_CFG_L32
 )
 def vit_large_32(pretrained: bool = False, **overrides: object) -> ViT:
     r"""ViT-Large/32 backbone (Dosovitskiy et al., 2020).
@@ -226,11 +210,7 @@ def vit_large_32(pretrained: bool = False, **overrides: object) -> ViT:
 
 
 @register_model(
-    task="base",
-    family="vit",
-    model_type="vit",
-    model_class=ViT,
-    default_config=_CFG_H14,
+    task="base", family="vit", model_type="vit", model_class=ViT, default_config=_CFG_H14
 )
 def vit_huge_14(pretrained: bool = False, **overrides: object) -> ViT:
     r"""ViT-Huge/14 backbone (Dosovitskiy et al., 2020).
@@ -289,10 +269,7 @@ def vit_huge_14(pretrained: bool = False, **overrides: object) -> ViT:
     default_config=_CFG_B16,
 )
 def vit_base_16_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ViTBase16Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ViTBase16Weights | None = None, **overrides: object
 ) -> ViTForImageClassification:
     r"""ViT-Base/16 image classifier (Dosovitskiy et al., 2020).
 
@@ -357,10 +334,7 @@ def vit_base_16_cls(
     default_config=_CFG_B32,
 )
 def vit_base_32_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ViTBase32Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ViTBase32Weights | None = None, **overrides: object
 ) -> ViTForImageClassification:
     r"""ViT-Base/32 image classifier (Dosovitskiy et al., 2020).
 
@@ -417,10 +391,7 @@ def vit_base_32_cls(
     default_config=_CFG_L16,
 )
 def vit_large_16_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ViTLarge16Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ViTLarge16Weights | None = None, **overrides: object
 ) -> ViTForImageClassification:
     r"""ViT-Large/16 image classifier (Dosovitskiy et al., 2020).
 
@@ -478,10 +449,7 @@ def vit_large_16_cls(
     default_config=_CFG_L32,
 )
 def vit_large_32_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: ViTLarge32Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: ViTLarge32Weights | None = None, **overrides: object
 ) -> ViTForImageClassification:
     r"""ViT-Large/32 image classifier (Dosovitskiy et al., 2020).
 

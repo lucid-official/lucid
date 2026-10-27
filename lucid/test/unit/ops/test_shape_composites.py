@@ -138,13 +138,7 @@ def test_atleast_leaves_a_higher_rank_alone():
 
 
 @pytest.mark.parametrize(
-    "name,arr,parts",
-    [
-        ("vsplit", M, 3),
-        ("hsplit", M, 2),
-        ("dsplit", C, 2),
-        ("vsplit", C, 2),
-    ],
+    "name,arr,parts", [("vsplit", M, 3), ("hsplit", M, 2), ("dsplit", C, 2), ("vsplit", C, 2)]
 )
 def test_the_split_family_matches_numpy(name, arr, parts):
     got = getattr(lucid, name)(_t(arr), parts)

@@ -29,8 +29,7 @@ from lucid.coreml._build import UnsupportedOp
 from lucid.test.unit.compile import _op_matrix as M
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 # Cases not run at all (currently empty; ``x @ (x @ x)`` is de-aliased in
@@ -149,9 +148,7 @@ def test_every_cpu_result_is_recorded_by_the_tracer(dtype: str) -> None:
     assert not unseen, f"results the CPU tracer never recorded: {unseen}"
 
 
-def test_right_associated_self_matmul_loads_and_matches_eager(
-    tmp_path: object,
-) -> None:
+def test_right_associated_self_matmul_loads_and_matches_eager(tmp_path: object) -> None:
     """LCD-20: ``x @ (x @ x)`` and right-associated variants load without hanging."""
     with M.on_device("cpu"):
         x2d = M.make_input("std", "f32", (4, 4), 1).to("cpu")
@@ -176,12 +173,7 @@ def test_right_associated_self_matmul_loads_and_matches_eager(
         asked3d = M.make_input("std", "f32", (3, 4, 4), 4).to("cpu")
         batched = _Apply(lambda x: x @ (x @ x)).eval()
         want3d = batched(asked3d)
-        pkg3d = cml.export(
-            batched,
-            x3d,
-            f"{tmp_path}/batched.mlpackage",
-            shape_range={0: (1, 4)},
-        )
+        pkg3d = cml.export(batched, x3d, f"{tmp_path}/batched.mlpackage", shape_range={0: (1, 4)})
         try:
             got3d = pkg3d.predict(asked3d)
         finally:

@@ -16,10 +16,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _align_device, _as_tensor
 from lucid.distributions._util import _broadcast_pair
 from lucid.distributions._util import _clamp_probs, _lazy_param
-from lucid.distributions.bernoulli import (
-    _logits_to_probs,
-    _probs_to_logits,
-)
+from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
     multinomial,
@@ -116,10 +113,7 @@ class Gumbel(Distribution):
     has_rsample: bool = True
 
     def __init__(
-        self,
-        loc: Tensor | float,
-        scale: Tensor | float,
-        validate_args: bool | None = None,
+        self, loc: Tensor | float, scale: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Initialise a Gumbel distribution.
 
@@ -135,9 +129,7 @@ class Gumbel(Distribution):
         """
         self.loc, self.scale = _broadcast_pair(_as_tensor(loc), _as_tensor(scale))
         super().__init__(
-            batch_shape=tuple(self.loc.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
 
     @property
@@ -319,10 +311,7 @@ class InverseGamma(Distribution):
     has_rsample: bool = True
 
     def __init__(
-        self,
-        concentration: Tensor | float,
-        rate: Tensor | float,
-        validate_args: bool | None = None,
+        self, concentration: Tensor | float, rate: Tensor | float, validate_args: bool | None = None
     ) -> None:
         r"""Initialise an Inverse-Gamma distribution.
 
@@ -343,9 +332,7 @@ class InverseGamma(Distribution):
 
         self._gamma = _Gamma(self.concentration, self.rate, validate_args=False)
         super().__init__(
-            batch_shape=tuple(self.concentration.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self.concentration.shape), event_shape=(), validate_args=validate_args
         )
 
     @property
@@ -610,9 +597,7 @@ class Kumaraswamy(Distribution):
         ``x = (1 − (1 − U)^(1/b))^(1/a)``."""
         shape = self._extended_shape(sample_shape)
         u: Tensor = lucid.rand(
-            *shape,
-            dtype=self.concentration1.dtype,
-            device=self.concentration1.device,
+            *shape, dtype=self.concentration1.dtype, device=self.concentration1.device
         )
         u = lucid.clamp(u, min=1e-6, max=1.0 - 1e-6)
         a, b = self.concentration1, self.concentration0
@@ -781,11 +766,7 @@ class Multinomial(Distribution):
     # ``total_count`` is in the table although the reference's is not: the
     # reference takes only a Python ``int`` and refuses a negative one through
     # the ``Binomial`` it builds, while this one also takes a tensor.
-    arg_constraints = {
-        "total_count": nonnegative_integer,
-        "probs": simplex,
-        "logits": real_vector,
-    }
+    arg_constraints = {"total_count": nonnegative_integer, "probs": simplex, "logits": real_vector}
     has_rsample: bool = False
 
     def __init__(
@@ -1124,9 +1105,7 @@ class ContinuousBernoulli(Distribution):
             self.logits = _as_tensor(logits)  # type: ignore[arg-type]
             self._is_logits = True
         super().__init__(
-            batch_shape=tuple(self._param.shape),
-            event_shape=(),
-            validate_args=validate_args,
+            batch_shape=tuple(self._param.shape), event_shape=(), validate_args=validate_args
         )
 
     @override

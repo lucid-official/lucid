@@ -13,12 +13,7 @@ if TYPE_CHECKING:
 
 
 def _scaled_add(
-    input: Tensor,
-    beta: float,
-    prod: Tensor,
-    alpha: float,
-    *,
-    op: str | None = None,
+    input: Tensor, beta: float, prod: Tensor, alpha: float, *, op: str | None = None
 ) -> Tensor:
     """``beta * input + alpha * prod``, skipping ``input``'s values when ``beta == 0``."""
     if op is not None and input.dtype != prod.dtype:
@@ -37,12 +32,7 @@ def _scaled_add(
 
 @_amp_op("addmm")
 def addmm(
-    input: Tensor,
-    mat1: Tensor,
-    mat2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    input: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     r"""General matrix multiply with a scaled accumulator (GEMM).
 
@@ -95,12 +85,7 @@ def addmm(
 
 @_amp_op("addbmm")
 def addbmm(
-    input: Tensor,
-    batch1: Tensor,
-    batch2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     r"""Batched matmul with reduction over the batch axis.
 
@@ -154,12 +139,7 @@ def addbmm(
 
 @_amp_op("baddbmm")
 def baddbmm(
-    input: Tensor,
-    batch1: Tensor,
-    batch2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     r"""Batched GEMM with a batched accumulator.
 
@@ -212,12 +192,7 @@ def baddbmm(
 
 @_amp_op("addmv")
 def addmv(
-    input: Tensor,
-    mat: Tensor,
-    vec: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     r"""Matrix-vector multiply with a scaled accumulator (BLAS-2 gemv).
 
@@ -270,12 +245,7 @@ def addmv(
 
 @_amp_op("addr")
 def addr(
-    input: Tensor,
-    vec1: Tensor,
-    vec2: Tensor,
-    *,
-    beta: float = 1.0,
-    alpha: float = 1.0,
+    input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
 ) -> Tensor:
     r"""Rank-1 update of a matrix by an outer product (BLAS-2 ger).
 
@@ -376,22 +346,13 @@ def _lerp(input: Tensor, end: Tensor, weight: float | Tensor) -> Tensor:
         scaled = _wrap(_C_engine.mul(_unwrap(weight), _unwrap(diff)))
     else:
         w_impl = _C_engine.full(
-            list(_unwrap(diff).shape),
-            float(weight),
-            _unwrap(diff).dtype,
-            _unwrap(diff).device,
+            list(_unwrap(diff).shape), float(weight), _unwrap(diff).dtype, _unwrap(diff).device
         )
         scaled = _wrap(_C_engine.mul(w_impl, _unwrap(diff)))
     return _wrap(_C_engine.add(_unwrap(input), _unwrap(scaled)))
 
 
-def addcmul(
-    input: Tensor,
-    tensor1: Tensor,
-    tensor2: Tensor,
-    *,
-    value: float = 1,
-) -> Tensor:
+def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     r"""Element-wise fused multiply-add with a scalar weight.
 
     Computes :math:`\text{input} + \text{value} \cdot (t_1 \odot t_2)`
@@ -452,13 +413,7 @@ def addcmul(
         return input + (tensor1 * tensor2) * value
 
 
-def addcdiv(
-    input: Tensor,
-    tensor1: Tensor,
-    tensor2: Tensor,
-    *,
-    value: float = 1,
-) -> Tensor:
+def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
     r"""Element-wise fused divide-add.
 
     Computes :math:`\text{input} + \text{value} \cdot (t_1 / t_2)` in

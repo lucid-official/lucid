@@ -20,18 +20,12 @@ def _x(lib):
 
 
 _CASES = {
-    "integer index": (
-        lambda x, i: (x.gather(0, i) ** 3).sum(),
-        lambda lib: lib.tensor([0, 2]),
-    ),
+    "integer index": (lambda x, i: (x.gather(0, i) ** 3).sum(), lambda lib: lib.tensor([0, 2])),
     "float constant": (
         lambda x, w: (x * x * w).sum(),
         lambda lib: lib.tensor([2.0, -1.0, 0.5], dtype=lib.float64),
     ),
-    "bool mask": (
-        lambda x, m: (x * x * m).sum(),
-        lambda lib: lib.tensor([True, False, True]),
-    ),
+    "bool mask": (lambda x, m: (x * x * m).sum(), lambda lib: lib.tensor([True, False, True])),
 }
 
 
@@ -70,8 +64,7 @@ def test_a_wrong_gradient_of_a_constant_is_not_checked():
     assert gradcheck(lambda x, y: _WrongSecondGradient.apply(x, y).sum(), [_x(lucid), y])
     with pytest.raises(AssertionError, match="input 1"):
         gradcheck(
-            lambda x, y: _WrongSecondGradient.apply(x, y).sum(),
-            [_x(lucid), y.requires_grad_()],
+            lambda x, y: _WrongSecondGradient.apply(x, y).sum(), [_x(lucid), y.requires_grad_()]
         )
 
 

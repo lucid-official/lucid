@@ -141,10 +141,7 @@ class TestIndexPut:
         with lucid.no_grad():
             lucid.index_put_(
                 p,
-                (
-                    lucid.tensor([0], dtype=lucid.int64),
-                    lucid.tensor([1], dtype=lucid.int64),
-                ),
+                (lucid.tensor([0], dtype=lucid.int64), lucid.tensor([1], dtype=lucid.int64)),
                 lucid.tensor([5.0]),
             )
         assert p.requires_grad and p.is_leaf

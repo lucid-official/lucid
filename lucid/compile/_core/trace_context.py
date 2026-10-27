@@ -166,10 +166,7 @@ def recording(
     else:
         mode_ctx = no_grad()
 
-    with (
-        mode_ctx,
-        _tracing(watch=watch, module=module, fold_constants=fold_constants) as tracer,
-    ):
+    with mode_ctx, _tracing(watch=watch, module=module, fold_constants=fold_constants) as tracer:
         yield tracer
         _scan_retained_values(tracer)
 

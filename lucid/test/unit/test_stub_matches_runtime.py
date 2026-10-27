@@ -64,9 +64,7 @@ def _stub_params(fn: ast.FunctionDef, method: bool) -> list[_Param]:
     first_default = len(positional) - len(a.defaults)
     out = [
         _Param(
-            arg.arg,
-            "positional-only" if i < len(a.posonlyargs) else "either",
-            i >= first_default,
+            arg.arg, "positional-only" if i < len(a.posonlyargs) else "either", i >= first_default
         )
         for i, arg in enumerate(positional)
     ]

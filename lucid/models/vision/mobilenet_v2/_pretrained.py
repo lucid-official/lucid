@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.mobilenet_v2._config import MobileNetV2Config
-from lucid.models.vision.mobilenet_v2._model import (
-    MobileNetV2,
-    MobileNetV2ForImageClassification,
-)
+from lucid.models.vision.mobilenet_v2._model import MobileNetV2, MobileNetV2ForImageClassification
 from lucid.models.vision.mobilenet_v2._weights import MobileNetV2Weights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 

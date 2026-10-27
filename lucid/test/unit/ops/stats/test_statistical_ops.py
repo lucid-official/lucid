@@ -38,8 +38,7 @@ class TestCov:
     def test_basic(self, device: str) -> None:
         # Two-row matrix: (3, 4) — covariance is a 3×3 matrix.
         x = lucid.tensor(
-            [[1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0], [0.0, 1.0, 0.0, 1.0]],
-            device=device,
+            [[1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0], [0.0, 1.0, 0.0, 1.0]], device=device
         )
         out = lucid.cov(x).numpy()
         # Variances on the diagonal must be non-negative.
@@ -49,10 +48,7 @@ class TestCov:
 class TestCorrcoef:
     def test_perfect_positive(self, device: str) -> None:
         # Two perfectly-correlated rows.
-        x = lucid.tensor(
-            [[1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0]],
-            device=device,
-        )
+        x = lucid.tensor([[1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0]], device=device)
         out = lucid.corrcoef(x).numpy()
         assert abs(out[0, 1] - 1.0) < 1e-3
 

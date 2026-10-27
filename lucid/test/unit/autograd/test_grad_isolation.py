@@ -85,9 +85,7 @@ class TestGradStillCorrect:
     def test_multiple_outputs_sum(self) -> None:
         a = lucid.tensor([2.0], dtype=lucid.float64, requires_grad=True)
         (g,) = lucid.autograd.grad(
-            [a * a, a * 3],
-            [a],
-            grad_outputs=[lucid.tensor([1.0]), lucid.tensor([1.0])],
+            [a * a, a * 3], [a], grad_outputs=[lucid.tensor([1.0]), lucid.tensor([1.0])]
         )
         assert g.tolist() == pytest.approx([7.0])
 

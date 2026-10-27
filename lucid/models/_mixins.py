@@ -215,11 +215,7 @@ class ClassificationHeadMixin:
     classifier: nn.Linear | nn.Sequential
 
     def _build_classifier(
-        self,
-        in_features: int,
-        num_classes: int,
-        *,
-        dropout: float = 0.0,
+        self, in_features: int, num_classes: int, *, dropout: float = 0.0
     ) -> None:
         r"""Install the classification head on ``self.classifier``.
 
@@ -243,8 +239,7 @@ class ClassificationHeadMixin:
         """
         if dropout > 0.0:
             self.classifier = nn.Sequential(
-                nn.Dropout(dropout),
-                nn.Linear(in_features, num_classes),
+                nn.Dropout(dropout), nn.Linear(in_features, num_classes)
             )
         else:
             self.classifier = nn.Linear(in_features, num_classes)
@@ -335,12 +330,7 @@ class MaskedLMMixin:
     """
 
     @staticmethod
-    def compute_lm_loss(
-        logits: Tensor,
-        labels: Tensor,
-        *,
-        ignore_index: int = -100,
-    ) -> Tensor:
+    def compute_lm_loss(logits: Tensor, labels: Tensor, *, ignore_index: int = -100) -> Tensor:
         r"""Compute per-token cross-entropy loss for an LM head.
 
         Parameters
@@ -377,9 +367,7 @@ class MaskedLMMixin:
         """
         B, T, V = logits.shape
         return F.cross_entropy(
-            logits.reshape(B * T, V),
-            labels.reshape(B * T).long(),
-            ignore_index=ignore_index,
+            logits.reshape(B * T, V), labels.reshape(B * T).long(), ignore_index=ignore_index
         )
 
 
@@ -793,8 +781,7 @@ class DiffusionMixin:
                 intermediates.append(sample)
 
         return GenerationOutput(
-            samples=sample,
-            intermediates=tuple(intermediates) if return_intermediates else None,
+            samples=sample, intermediates=tuple(intermediates) if return_intermediates else None
         )
 
 

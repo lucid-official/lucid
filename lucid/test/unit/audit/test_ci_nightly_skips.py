@@ -80,20 +80,11 @@ def test_a_designed_skip_passes_and_is_reported() -> None:
             "unexpected skip (1): no oracle",
         ),
         # More than designed: something new stopped running.
-        (
-            [(33, "Metal has no float64"), (3, "too big 1")],
-            "3 skips match",
-        ),
+        ([(33, "Metal has no float64"), (3, "too big 1")], "3 skips match"),
         # Fewer: the count is stale.
-        (
-            [(33, "Metal has no float64"), (1, "too big 1")],
-            "1 skips match",
-        ),
+        ([(33, "Metal has no float64"), (1, "too big 1")], "1 skips match"),
         # None at all: the entry is stale.
-        (
-            [(2, "too big 1")],
-            "designed skip no longer happens",
-        ),
+        ([(2, "too big 1")], "designed skip no longer happens"),
     ],
 )
 def test_the_list_is_held_both_ways(skips: list[tuple[int, str]], problem: str) -> None:

@@ -110,9 +110,7 @@ def test_the_reported_case(device: str) -> None:
     assert x.grad.tolist() == [3.0, 3.0, 3.0]
 
 
-def test_single_requires_grad_operand_and_shared_gradient_isolation(
-    device: str,
-) -> None:
+def test_single_requires_grad_operand_and_shared_gradient_isolation(device: str) -> None:
     x = lucid.tensor([2.0, -3.0, 4.0], requires_grad=True, device=device)
     c = lucid.tensor(5.0, device=device)
     g = lucid.tensor([1.0, 2.0, -1.0], device=device)

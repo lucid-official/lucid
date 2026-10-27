@@ -313,8 +313,7 @@ def test_literal_inference_matches_reference(ref: ModuleType, row: list[object])
 
 
 @pytest.mark.parametrize(
-    "case",
-    ["int64-2^60+1", "int64-2^53+1", "complex64", "complex128", "bf16-leaf"],
+    "case", ["int64-2^60+1", "int64-2^53+1", "complex64", "complex128", "bf16-leaf"]
 )
 def test_exact_rows_match_reference(ref: ModuleType, case: str) -> None:
     r = ref

@@ -292,10 +292,7 @@ def test_a_window_past_a_view_nothing_holds_writes_its_base() -> None:
 def test_the_free_function_reads_the_window_the_method_does() -> None:
     y = _grid(lucid, "metal")
     assert lucid.as_strided(y.t(), (2,), (1,)).tolist() == [0.0, 1.0]
-    assert lucid.as_strided(y.t(), size=(2,), stride=(6,), storage_offset=1).tolist() == [
-        1.0,
-        7.0,
-    ]
+    assert lucid.as_strided(y.t(), size=(2,), stride=(6,), storage_offset=1).tolist() == [1.0, 7.0]
 
 
 def test_a_write_through_a_window_reaches_the_view_it_was_taken_from() -> None:
@@ -398,12 +395,7 @@ def test_a_window_of_a_view_whose_base_is_gone() -> None:
     assert tail.storage_offset() == 2
     assert tail.as_strided((3,), (2,)).tolist() == [2.0, 4.0, 6.0]
     every_other = lucid.arange(10.0, device="metal")[::2]
-    assert _sliding(every_other, 2).tolist() == [
-        [0.0, 2.0],
-        [2.0, 4.0],
-        [4.0, 6.0],
-        [6.0, 8.0],
-    ]
+    assert _sliding(every_other, 2).tolist() == [[0.0, 2.0], [2.0, 4.0], [4.0, 6.0], [6.0, 8.0]]
     assert tail.as_strided((3,), (1,), 0).tolist() == [0.0, 1.0, 2.0]
 
 
@@ -479,9 +471,7 @@ def _base(device: str, requires_grad: bool = False) -> lucid.Tensor:
     return x.requires_grad_() if requires_grad else x
 
 
-def _leaf_after(
-    around: Callable[[lucid.Tensor, str], object],
-) -> Callable[[str], object]:
+def _leaf_after(around: Callable[[lucid.Tensor, str], object]) -> Callable[[str], object]:
     def run(device: str) -> object:
         r = _base(device).t().reshape(-1).requires_grad_()
         loss = (r * 3.0).sum()
@@ -548,10 +538,7 @@ OVERLAPPED: dict[str, tuple[_View, _View]] = {
     "unfold-window": (lambda y: y[0].unfold(0, 3, 1), lambda u: u[1]),
     "unfold-row-windows": (lambda y: y.unfold(1, 2, 1), lambda u: u[1, 2]),
     "expand-row": (lambda y: y[:1].expand(3, 6), lambda e: e[1]),
-    "expand-window": (
-        lambda y: y[:1].expand(3, 6),
-        lambda e: e.as_strided((2,), (1,)),
-    ),
+    "expand-window": (lambda y: y[:1].expand(3, 6), lambda e: e.as_strided((2,), (1,))),
     "expand-part-of-a-row": (lambda y: y[1:2].expand(3, 6), lambda e: e[2, 1:4]),
 }
 

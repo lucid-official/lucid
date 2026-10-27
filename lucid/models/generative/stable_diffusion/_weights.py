@@ -52,10 +52,7 @@ __all__ = ["StableDiffusionWeights"]
 # it is an autoencoder, not a classifier, and has no notion of a mean
 # image to subtract.
 _PRESET_512 = ImageClassification(
-    crop_size=512,
-    resize_size=512,
-    mean=(0.5, 0.5, 0.5),
-    std=(0.5, 0.5, 0.5),
+    crop_size=512, resize_size=512, mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)
 )
 
 

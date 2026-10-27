@@ -15,11 +15,7 @@ import tempfile
 
 import pytest
 
-from lucid.utils.tokenizer import (
-    SpecialTokens,
-    UnigramTokenizer,
-    UnigramTokenizerFast,
-)
+from lucid.utils.tokenizer import SpecialTokens, UnigramTokenizer, UnigramTokenizerFast
 from lucid.utils.tokenizer._unigram import SentencePiecePreTokenizer
 
 CORPUS = [
@@ -150,8 +146,7 @@ class TestUnigramSave:
 class TestUnigramSpecialTokens:
     def test_custom_special_tokens(self) -> None:
         tok = UnigramTokenizer(
-            pieces=[],
-            special_tokens=SpecialTokens(unk="<unk>", bos="<s>", eos="</s>"),
+            pieces=[], special_tokens=SpecialTokens(unk="<unk>", bos="<s>", eos="</s>")
         )
         tok.train(CORPUS, vocab_size=40)
         # bos/eos aren't necessarily in the vocab (no auto-injection).

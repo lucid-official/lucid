@@ -166,11 +166,7 @@ class ExponentialLR(_LRScheduler):
     """
 
     def __init__(
-        self,
-        optimizer: Optimizer,
-        gamma: float,
-        last_epoch: int = -1,
-        verbose: bool = False,
+        self, optimizer: Optimizer, gamma: float, last_epoch: int = -1, verbose: bool = False
     ) -> None:
         """Initialise the ExponentialLR.  See the class docstring for parameter semantics."""
         self.gamma = gamma
@@ -1718,10 +1714,7 @@ class ChainedScheduler(_CompositeSchedulerMixin):
         """Initialise the ChainedScheduler.  See the class docstring for parameter semantics."""
         # Nothing to write: each child took its step 0 on the last one's rate.
         self.optimizer = _check_schedulers(
-            "ChainedScheduler",
-            schedulers,
-            optimizer,
-            (_LRScheduler, _CompositeSchedulerMixin),
+            "ChainedScheduler", schedulers, optimizer, (_LRScheduler, _CompositeSchedulerMixin)
         )
         self.schedulers = list(schedulers)
 

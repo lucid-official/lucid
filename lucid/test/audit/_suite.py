@@ -253,8 +253,7 @@ def run_suite(
             with_coverage = False
             console.always(
                 console.paint(
-                    "  coverage is not installed — running without the line floor",
-                    "grey",
+                    "  coverage is not installed — running without the line floor", "grey"
                 )
             )
 
@@ -289,8 +288,7 @@ def run_suite(
     scope = path + ("".join(f"  (without {sub})" for sub in (ignore or ())))
     console.always(
         console.paint(
-            f"  running {scope} in {len(chunks)} chunk(s) — this is the long stage",
-            "grey",
+            f"  running {scope} in {len(chunks)} chunk(s) — this is the long stage", "grey"
         )
     )
 
@@ -360,11 +358,7 @@ def _afford(chunk: str, console: Console) -> str | None:
 
 
 def _run_chunk(
-    argv: list[str],
-    root: Path,
-    chunk: str,
-    result: SuiteResult,
-    console: Console,
+    argv: list[str], root: Path, chunk: str, result: SuiteResult, console: Console
 ) -> None:
     """Run one chunk and fold what it reported into ``result``.
 
@@ -373,12 +367,7 @@ def _run_chunk(
     report the final chunk's handful of tests as the whole suite.
     """
     proc = subprocess.Popen(
-        argv,
-        cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+        argv, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
     assert proc.stdout is not None
     counts: dict[str, int] = {}
@@ -426,11 +415,7 @@ def _run_chunk(
 
 
 def _read_coverage(
-    result: SuiteResult,
-    root: Path,
-    folder: Path,
-    data_files: Sequence[Path],
-    console: Console,
+    result: SuiteResult, root: Path, folder: Path, data_files: Sequence[Path], console: Console
 ) -> None:
     """Combine the per-chunk data and turn it into covered/total counts.
 
@@ -563,8 +548,7 @@ def report_line_coverage_diff(
     if not lost and now >= was - _TOTAL_TOLERANCE:
         console.always(
             console.paint(
-                f"  line coverage {now:.2f}% — at or above the recorded " f"{was:.2f}%",
-                "green",
+                f"  line coverage {now:.2f}% — at or above the recorded " f"{was:.2f}%", "green"
             )
         )
         if now > was + _TOTAL_TOLERANCE:
@@ -656,8 +640,7 @@ def report_suite(result: SuiteResult, console: Console) -> None:
         console.always(
             console.paint("  line coverage".ljust(22), "grey")
             + console.paint(
-                f"{result.percent:.2f}%  " f"({result.line_covered}/{result.line_total})",
-                "cyan",
+                f"{result.percent:.2f}%  " f"({result.line_covered}/{result.line_total})", "cyan"
             )
         )
 

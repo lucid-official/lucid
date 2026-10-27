@@ -409,9 +409,7 @@ class Subset(Dataset):
 
 
 def random_split(
-    dataset: Dataset,
-    lengths: list[int] | list[float],
-    generator: Generator | int | None = None,
+    dataset: Dataset, lengths: list[int] | list[float], generator: Generator | int | None = None
 ) -> list[Subset]:
     r"""Randomly split a dataset into non-overlapping :class:`Subset` views.
 

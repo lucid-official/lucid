@@ -77,12 +77,7 @@ def _seed(values: Any, scale: float) -> Any:
 
 
 def _call(
-    m: ModuleType,
-    name: str,
-    packing: str,
-    outputs: str,
-    create_graph: bool,
-    strict: bool,
+    m: ModuleType, name: str, packing: str, outputs: str, create_graph: bool, strict: bool
 ) -> Any:
     ns = _namespace(m)
     inputs = _inputs(m, packing, requires_grad=create_graph)
@@ -144,12 +139,7 @@ def _cases() -> list[Any]:
 @pytest.mark.parametrize("create_graph", [False, True], ids=["plain", "create_graph"])
 @pytest.mark.parametrize(("name", "packing", "outputs"), _cases())
 def test_matches_the_reference(
-    ref: ModuleType,
-    name: str,
-    packing: str,
-    outputs: str,
-    create_graph: bool,
-    strict: bool,
+    ref: ModuleType, name: str, packing: str, outputs: str, create_graph: bool, strict: bool
 ) -> None:
     kind, got = _outcome(lambda: _call(lucid, name, packing, outputs, create_graph, strict))
     want_kind, want = _outcome(lambda: _call(ref, name, packing, outputs, create_graph, strict))
@@ -215,10 +205,7 @@ def test_without_strict_an_ignored_input_gets_zeros(name: str, device: str) -> N
 def test_hessian_products_run_on_every_device(name: str, device: str) -> None:
     x = lucid.tensor([1.0, 2.0], device=device, requires_grad=True)
     out, product = getattr(AG, name)(
-        lambda a: (a**3).sum(),
-        x,
-        lucid.tensor([1.0, -1.0], device=device),
-        create_graph=True,
+        lambda a: (a**3).sum(), x, lucid.tensor([1.0, -1.0], device=device), create_graph=True
     )
     assert product.device == x.device
     assert product.tolist() == [6.0, -12.0]

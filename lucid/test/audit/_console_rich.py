@@ -163,10 +163,7 @@ class RichReporter:
         for name, total in self._totals.items():
             self._counts[name] = {"pass": 0, "fail": 0, "other": 0}
             self._tasks[name] = self._per_subsystem.add_task(
-                name.ljust(width),
-                total=total,
-                tally=Text(""),
-                visible=name in self._shown,
+                name.ljust(width), total=total, tally=Text(""), visible=name in self._shown
             )
         # Pinned to the real stdout and refreshed by hand.  The runner
         # wraps every probe in ``Suppress``, which swaps ``sys.stdout``
@@ -181,12 +178,7 @@ class RichReporter:
         # behind is the one frame nobody can scroll back through cleanly,
         # and it was also stranding its footer — the last symbol probed —
         # above the summary as though that symbol meant something.
-        self._live = Live(
-            self._render(),
-            console=self._console,
-            transient=True,
-            auto_refresh=False,
-        )
+        self._live = Live(self._render(), console=self._console, transient=True, auto_refresh=False)
         self._since_refresh = 0
         self._last_drawn = 0.0
 

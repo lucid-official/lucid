@@ -95,9 +95,7 @@ class TestLayerNormParity:
         lucid_ln = nn.LayerNorm(10, elementwise_affine=False)
 
         assert_close(
-            lucid_ln(lucid.tensor(x_np.copy())),
-            ref_ln(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_ln(lucid.tensor(x_np.copy())), ref_ln(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_3d_input(self, ref: Any) -> None:
@@ -109,9 +107,7 @@ class TestLayerNormParity:
         _copy_weights_positional(ref_ln, lucid_ln)
 
         assert_close(
-            lucid_ln(lucid.tensor(x_np.copy())),
-            ref_ln(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_ln(lucid.tensor(x_np.copy())), ref_ln(ref.tensor(x_np.copy())), atol=1e-5
         )
 
 
@@ -131,9 +127,7 @@ class TestRMSNormParity:
         _copy_weights_positional(ref_rms, lucid_rms)
 
         assert_close(
-            lucid_rms(lucid.tensor(x_np.copy())),
-            ref_rms(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_rms(lucid.tensor(x_np.copy())), ref_rms(ref.tensor(x_np.copy())), atol=1e-5
         )
 
 
@@ -151,9 +145,7 @@ class TestGroupNormParity:
         _copy_weights_positional(ref_gn, lucid_gn)
 
         assert_close(
-            lucid_gn(lucid.tensor(x_np.copy())),
-            ref_gn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_gn(lucid.tensor(x_np.copy())), ref_gn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_no_affine(self, ref: Any) -> None:
@@ -164,9 +156,7 @@ class TestGroupNormParity:
         lucid_gn = nn.GroupNorm(3, 6, affine=False)
 
         assert_close(
-            lucid_gn(lucid.tensor(x_np.copy())),
-            ref_gn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_gn(lucid.tensor(x_np.copy())), ref_gn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
 
@@ -186,9 +176,7 @@ class TestBatchNormParity:
         _copy_weights_positional(ref_bn, lucid_bn)
 
         assert_close(
-            lucid_bn(lucid.tensor(x_np.copy())),
-            ref_bn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_bn(lucid.tensor(x_np.copy())), ref_bn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_bn2d_eval(self, ref: Any) -> None:
@@ -202,9 +190,7 @@ class TestBatchNormParity:
         _copy_weights_positional(ref_bn, lucid_bn)
 
         assert_close(
-            lucid_bn(lucid.tensor(x_np.copy())),
-            ref_bn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_bn(lucid.tensor(x_np.copy())), ref_bn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_bn2d_train_running_stats(self, ref: Any) -> None:
@@ -233,9 +219,7 @@ class TestInstanceNormParity:
         lucid_in = nn.InstanceNorm2d(4)
 
         assert_close(
-            lucid_in(lucid.tensor(x_np.copy())),
-            ref_in(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_in(lucid.tensor(x_np.copy())), ref_in(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_in1d_with_affine(self, ref: Any) -> None:
@@ -247,9 +231,7 @@ class TestInstanceNormParity:
         _copy_weights_positional(ref_in, lucid_in)
 
         assert_close(
-            lucid_in(lucid.tensor(x_np.copy())),
-            ref_in(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_in(lucid.tensor(x_np.copy())), ref_in(ref.tensor(x_np.copy())), atol=1e-5
         )
 
 
@@ -268,9 +250,7 @@ class TestLocalResponseNormParity:
         # A 2e-3 tolerance once hid a missing ``/ size`` (LCD-440); the
         # float32 rounding of a five-channel window is far below 1e-5.
         assert_close(
-            lucid_lrn(lucid.tensor(x_np.copy())),
-            ref_lrn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_lrn(lucid.tensor(x_np.copy())), ref_lrn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
     def test_custom_params(self, ref: Any) -> None:
@@ -281,9 +261,7 @@ class TestLocalResponseNormParity:
         lucid_lrn = nn.LocalResponseNorm(3, alpha=1e-3, beta=0.75, k=2.0)
 
         assert_close(
-            lucid_lrn(lucid.tensor(x_np.copy())),
-            ref_lrn(ref.tensor(x_np.copy())),
-            atol=1e-5,
+            lucid_lrn(lucid.tensor(x_np.copy())), ref_lrn(ref.tensor(x_np.copy())), atol=1e-5
         )
 
 
@@ -339,9 +317,7 @@ class TestMultiheadAttentionParity:
             ref.tensor(q_np.copy()), ref.tensor(kv_np.copy()), ref.tensor(kv_np.copy())
         )
         lucid_out, _ = lucid_mha(
-            lucid.tensor(q_np.copy()),
-            lucid.tensor(kv_np.copy()),
-            lucid.tensor(kv_np.copy()),
+            lucid.tensor(q_np.copy()), lucid.tensor(kv_np.copy()), lucid.tensor(kv_np.copy())
         )
 
         assert_close(lucid_out, ref_out, atol=1e-4)
@@ -378,10 +354,7 @@ class TestMultiheadAttentionParity:
 
         try:
             ref_out = ref_sdpa(
-                ref.tensor(q.copy()),
-                ref.tensor(k.copy()),
-                ref.tensor(v.copy()),
-                enable_gqa=True,
+                ref.tensor(q.copy()), ref.tensor(k.copy()), ref.tensor(v.copy()), enable_gqa=True
             )
         except (TypeError, RuntimeError):  # fmt: skip
             pytest.skip("reference SDPA has no enable_gqa")

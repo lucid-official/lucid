@@ -59,8 +59,7 @@ class TestQuantizedEngine:
             quantized.engine = prev
 
     @pytest.mark.skipif(
-        not lucid.backends.quantized.available,
-        reason="engine lacks the MLX quantized ops",
+        not lucid.backends.quantized.available, reason="engine lacks the MLX quantized ops"
     )
     def test_auto_routes_a_cpu_model_to_the_mlx_layer(self) -> None:
         import lucid.nn as nn

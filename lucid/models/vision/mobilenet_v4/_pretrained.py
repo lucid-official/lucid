@@ -15,10 +15,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.vision.mobilenet_v4._config import MobileNetV4Config
-from lucid.models.vision.mobilenet_v4._model import (
-    MobileNetV4,
-    MobileNetV4ForImageClassification,
-)
+from lucid.models.vision.mobilenet_v4._model import MobileNetV4, MobileNetV4ForImageClassification
 from lucid.models.vision.mobilenet_v4._weights import (
     MobileNetV4ConvLargeWeights,
     MobileNetV4ConvMediumWeights,

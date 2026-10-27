@@ -219,12 +219,7 @@ class _ConvBnLeaky(nn.Module):
     """
 
     def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel: int,
-        stride: int = 1,
-        padding: int = -1,
+        self, in_ch: int, out_ch: int, kernel: int, stride: int = 1, padding: int = -1
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
@@ -245,12 +240,7 @@ class _ConvBnMish(nn.Module):
     """
 
     def __init__(
-        self,
-        in_ch: int,
-        out_ch: int,
-        kernel: int,
-        stride: int = 1,
-        padding: int = -1,
+        self, in_ch: int, out_ch: int, kernel: int, stride: int = 1, padding: int = -1
     ) -> None:
         super().__init__()
         pad = padding if padding >= 0 else (kernel - 1) // 2
@@ -316,11 +306,7 @@ class _CSPBlock(nn.Module):
     """
 
     def __init__(
-        self,
-        in_ch: int,
-        n_repeats: int,
-        act: str = "mish",
-        first_stage: bool = False,
+        self, in_ch: int, n_repeats: int, act: str = "mish", first_stage: bool = False
     ) -> None:
         super().__init__()
         # Stage 1 of yolov4.cfg keeps both routes at the *full* 64 channels
@@ -426,9 +412,7 @@ class _SPP(nn.Module):
         # Pre-SPP compress: in_ch → in_ch//2
         half = in_ch // 2
         self.pre = nn.Sequential(
-            _ConvBnLeaky(in_ch, half, 1),
-            _ConvBnLeaky(half, in_ch, 3),
-            _ConvBnLeaky(in_ch, half, 1),
+            _ConvBnLeaky(in_ch, half, 1), _ConvBnLeaky(half, in_ch, 3), _ConvBnLeaky(in_ch, half, 1)
         )
         # MaxPool at 3 kernel sizes (same-padding to preserve spatial dims)
         self.pool5 = nn.MaxPool2d(5, stride=1, padding=2)
@@ -521,12 +505,7 @@ class _PANetNeck(nn.Module):
         self.p5_bu = _five_conv(1024, 512)  # cfg layer 158, 512ch out
 
     @override
-    def forward(
-        self,
-        p3: Tensor,
-        p4: Tensor,
-        p5: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    def forward(self, p3: Tensor, p4: Tensor, p5: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """Run PANet.
 
         Args:
@@ -584,9 +563,7 @@ _SCALE_X_Y: dict[int, float] = {8: 1.2, 16: 1.1, 32: 1.05}
 
 
 def _decode_predictions(
-    raw: Tensor,
-    anchors_wh: list[tuple[float, float]],
-    stride: int,
+    raw: Tensor, anchors_wh: list[tuple[float, float]], stride: int
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Decode a single-scale raw detection tensor.
 
@@ -734,9 +711,7 @@ def _v4_scales(
 
 
 def _yolov4_loss(
-    raw_preds: list[Tensor],
-    targets: list[dict[str, Tensor]],
-    config: YOLOV4Config,
+    raw_preds: list[Tensor], targets: list[dict[str, Tensor]], config: YOLOV4Config
 ) -> Tensor:
     """YOLOv4 multi-scale detection loss with CIoU box regression.
 
@@ -861,13 +836,7 @@ def _yolov4_loss(
                 p_h = lucid.exp(th) * anc_h
 
                 p_boxes = lucid.stack(
-                    [
-                        pcx - p_w / 2.0,
-                        pcy - p_h / 2.0,
-                        pcx + p_w / 2.0,
-                        pcy + p_h / 2.0,
-                    ],
-                    dim=1,
+                    [pcx - p_w / 2.0, pcy - p_h / 2.0, pcx + p_w / 2.0, pcy + p_h / 2.0], dim=1
                 )  # (P, 4)
                 g_boxes = lucid.tensor(pos_gt_boxes, dtype=dt, device=dev)  # (P, 4)
                 ciou_l = _ciou_loss(p_boxes, g_boxes)
@@ -983,23 +952,18 @@ class YOLOV4ForObjectDetection(ObjectDetectionModel):
         # ``conv 1x1`` predictor.
         #   P3'' = 128ch, P4'' = 256ch, P5'' = 512ch
         self.p3_head = nn.Sequential(
-            _ConvBnLeaky(128, 256, 3),
-            nn.Conv2d(256, nA * (5 + C), 1, bias=True),
+            _ConvBnLeaky(128, 256, 3), nn.Conv2d(256, nA * (5 + C), 1, bias=True)
         )
         self.p4_head = nn.Sequential(
-            _ConvBnLeaky(256, 512, 3),
-            nn.Conv2d(512, nA * (5 + C), 1, bias=True),
+            _ConvBnLeaky(256, 512, 3), nn.Conv2d(512, nA * (5 + C), 1, bias=True)
         )
         self.p5_head = nn.Sequential(
-            _ConvBnLeaky(512, 1024, 3),
-            nn.Conv2d(1024, nA * (5 + C), 1, bias=True),
+            _ConvBnLeaky(512, 1024, 3), nn.Conv2d(1024, nA * (5 + C), 1, bias=True)
         )
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: list[dict[str, Tensor]] | None = None,
+        self, x: Tensor, targets: list[dict[str, Tensor]] | None = None
     ) -> ObjectDetectionOutput:
         """Run YOLOv4.
 
@@ -1049,16 +1013,11 @@ class YOLOV4ForObjectDetection(ObjectDetectionModel):
             loss = _yolov4_loss(raw_preds, targets, cfg)
 
         return ObjectDetectionOutput(
-            logits=logits,
-            pred_boxes=pred_boxes,
-            loss=loss,
-            objectness=objectness,
+            logits=logits, pred_boxes=pred_boxes, loss=loss, objectness=objectness
         )
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_sizes: list[tuple[int, int]],
+        self, output: ObjectDetectionOutput, image_sizes: list[tuple[int, int]]
     ) -> list[dict[str, Tensor]]:
         """Filter by score, clip boxes, apply per-class NMS.
 
@@ -1097,10 +1056,7 @@ _CFG_V4 = YOLOV4Config()
     params=64363101,
 )
 def yolo_v4(
-    pretrained: bool | str = False,
-    *,
-    weights: YOLOV4Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: YOLOV4Weights | None = None, **overrides: object
 ) -> YOLOV4ForObjectDetection:
     r"""YOLOv4 — CSPDarknet-53 + SPP + PANet (Bochkovskiy et al., 2020).
 

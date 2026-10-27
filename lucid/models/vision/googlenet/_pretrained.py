@@ -6,10 +6,7 @@ import lucid.weights as weights_mod
 import lucid.nn as nn
 from lucid.models._registry import register_model
 from lucid.models.vision.googlenet._config import GoogLeNetConfig
-from lucid.models.vision.googlenet._model import (
-    GoogLeNet,
-    GoogLeNetForImageClassification,
-)
+from lucid.models.vision.googlenet._model import GoogLeNet, GoogLeNetForImageClassification
 from lucid.models.vision.googlenet._weights import GoogLeNetWeights
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
@@ -87,10 +84,7 @@ def googlenet(pretrained: bool = False, **overrides: object) -> GoogLeNet:
     default_config=_CFG,
 )
 def googlenet_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: GoogLeNetWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: GoogLeNetWeights | None = None, **overrides: object
 ) -> GoogLeNetForImageClassification:
     r"""GoogLeNet (Inception v1) image classifier with auxiliary heads.
 

@@ -177,9 +177,7 @@ def test_zero_grad_and_device_moves_reach_the_original(device: str) -> None:
 
 
 @pytest.mark.parametrize("make", [_Symmetric, _Sum], ids=["one", "two originals"])
-def test_a_checkpoint_round_trips_into_a_fresh_parametrized_module(
-    make: type[nn.Module],
-) -> None:
+def test_a_checkpoint_round_trips_into_a_fresh_parametrized_module(make: type[nn.Module]) -> None:
     src = nn.Linear(4, 4)
     parametrize.register_parametrization(src, "weight", make())
     dst = nn.Linear(4, 4)
@@ -227,10 +225,7 @@ def test_removing_one_of_two_keeps_the_other() -> None:
     parametrize.remove_parametrizations(m, "weight")
     assert parametrize.is_parametrized(m, "bias")
     assert parametrize.type_before_parametrizations(m) is nn.Linear
-    assert [n for n, _ in m.named_parameters()] == [
-        "weight",
-        "parametrizations.bias.original",
-    ]
+    assert [n for n, _ in m.named_parameters()] == ["weight", "parametrizations.bias.original"]
 
 
 def test_two_originals_cannot_be_left_unparametrized() -> None:

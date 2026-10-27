@@ -36,24 +36,11 @@ def _top_level(name, pick=None):
 _OPS = {
     **{
         name: (_top_level(name), True)
-        for name in (
-            "sum",
-            "mean",
-            "amax",
-            "amin",
-            "var",
-            "std",
-            "logsumexp",
-            "nansum",
-            "nanmean",
-        )
+        for name in ("sum", "mean", "amax", "amin", "var", "std", "logsumexp", "nansum", "nanmean")
     },
     "var_mean": (_top_level("var_mean", pick=0), True),
     "std_mean": (_top_level("std_mean", pick=0), True),
-    "vector_norm": (
-        lambda lib, t, d, k: lib.linalg.vector_norm(t, dim=d, keepdim=k),
-        True,
-    ),
+    "vector_norm": (lambda lib, t, d, k: lib.linalg.vector_norm(t, dim=d, keepdim=k), True),
     # No keepdim in either signature.
     "count_nonzero": (lambda lib, t, d, k: lib.count_nonzero(t, dim=d), False),
 }

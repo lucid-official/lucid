@@ -27,8 +27,7 @@ import lucid.models as M
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 
@@ -49,10 +48,7 @@ CASES = [
     ("zeros-added", lambda t: t + lucid.zeros(*t.shape)),
     ("eye-scaled", lambda t: t[:, :3] * lucid.eye(3)),
     ("triangle-masked", lambda t: lucid.tril(t, 0)),
-    (
-        "index-gathered",
-        lambda t: lucid.gather(t, 1, lucid.argmax(t, dim=1, keepdim=True)),
-    ),
+    ("index-gathered", lambda t: lucid.gather(t, 1, lucid.argmax(t, dim=1, keepdim=True))),
     ("reshaped-and-back", lambda t: t.reshape(-1).reshape(*t.shape) * 2.0),
     ("relu-control", lambda t: t.relu()),
 ]

@@ -215,21 +215,13 @@ class TestKernelBounded:
         # Force Albu to the ``"kernel"`` method (not the newer Gaussian
         # path), matching Lucid's 3x3 Laplacian-style kernel.
         ref = _run_albu(
-            A.Sharpen(
-                alpha=(0.5, 0.5),
-                lightness=(1.0, 1.0),
-                method="kernel",
-                p=1.0,
-            ),
-            hwc,
+            A.Sharpen(alpha=(0.5, 0.5), lightness=(1.0, 1.0), method="kernel", p=1.0), hwc
         )
         assert got.shape == ref.shape
         # Interior agrees to a kernel-shape-dependent bound (~5e-2);
         # border zero-pad vs reflect-pad delta is dropped.
         np.testing.assert_allclose(
-            _strip_border(got, margin=2),
-            _strip_border(ref, margin=2),
-            atol=5e-2,
+            _strip_border(got, margin=2), _strip_border(ref, margin=2), atol=5e-2
         )
 
     def test_emboss_interior(self) -> None:
@@ -240,9 +232,7 @@ class TestKernelBounded:
         ref = _run_albu(A.Emboss(alpha=(0.5, 0.5), strength=(0.5, 0.5), p=1.0), hwc)
         assert got.shape == ref.shape
         np.testing.assert_allclose(
-            _strip_border(got, margin=2),
-            _strip_border(ref, margin=2),
-            atol=5e-2,
+            _strip_border(got, margin=2), _strip_border(ref, margin=2), atol=5e-2
         )
 
     def test_unsharp_mask_interior(self) -> None:
@@ -255,21 +245,13 @@ class TestKernelBounded:
         lucid.manual_seed(0)
         got = _run_lucid(
             T.UnsharpMask(
-                blur_limit=(3, 3),
-                sigma_limit=(1.0, 1.0),
-                alpha=(0.5, 0.5),
-                threshold=10.0,
-                p=1.0,
+                blur_limit=(3, 3), sigma_limit=(1.0, 1.0), alpha=(0.5, 0.5), threshold=10.0, p=1.0
             ),
             chw,
         )
         ref = _run_albu(
             A.UnsharpMask(
-                blur_limit=(3, 3),
-                sigma_limit=(1.0, 1.0),
-                alpha=(0.5, 0.5),
-                threshold=10,
-                p=1.0,
+                blur_limit=(3, 3), sigma_limit=(1.0, 1.0), alpha=(0.5, 0.5), threshold=10, p=1.0
             ),
             hwc,
         )
@@ -279,9 +261,7 @@ class TestKernelBounded:
         # gates the sharpening on low-contrast regions — bound is
         # loose to absorb that.
         np.testing.assert_allclose(
-            _strip_border(got, margin=2),
-            _strip_border(ref, margin=2),
-            atol=1e-1,
+            _strip_border(got, margin=2), _strip_border(ref, margin=2), atol=1e-1
         )
 
     def test_ringing_overshoot_runs(self) -> None:
@@ -353,12 +333,10 @@ class TestStructural:
         prob = 0.1
         lucid.manual_seed(0)
         got = _run_lucid(
-            T.PixelDropout(dropout_prob=prob, per_channel=False, drop_value=0.0, p=1.0),
-            chw,
+            T.PixelDropout(dropout_prob=prob, per_channel=False, drop_value=0.0, p=1.0), chw
         )
         ref = _run_albu(
-            A.PixelDropout(dropout_prob=prob, per_channel=False, drop_value=0.0, p=1.0),
-            hwc,
+            A.PixelDropout(dropout_prob=prob, per_channel=False, drop_value=0.0, p=1.0), hwc
         )
         assert got.shape == ref.shape == hwc.shape
         assert 0.0 <= got.min() and got.max() <= 1.0
@@ -395,12 +373,7 @@ class TestStructural:
         )
         ref = _run_albu(
             A.XYMasking(
-                num_masks_x=2,
-                num_masks_y=2,
-                mask_x_length=8,
-                mask_y_length=8,
-                fill=0.0,
-                p=1.0,
+                num_masks_x=2, num_masks_y=2, mask_x_length=8, mask_y_length=8, fill=0.0, p=1.0
             ),
             hwc,
         )

@@ -130,10 +130,7 @@ from lucid.models.vision.efficientnet._weights import (
 )
 
 # 2019 — SKNet (Li et al.)
-from lucid.models.vision.sknet._weights import (
-    SKResNet18Weights,
-    SKResNet34Weights,
-)
+from lucid.models.vision.sknet._weights import SKResNet18Weights, SKResNet34Weights
 
 # 2019 — CSPNet (Wang et al.)
 from lucid.models.vision.cspnet._weights import (
@@ -153,11 +150,7 @@ from lucid.models.vision.crossvit._weights import (
 )
 
 # 2021 — CvT (Wu et al.)
-from lucid.models.vision.cvt._weights import (
-    CvT13Weights,
-    CvT21Weights,
-    CvTW24Weights,
-)
+from lucid.models.vision.cvt._weights import CvT13Weights, CvT21Weights, CvTW24Weights
 
 # 2022 — ConvNeXt (Liu et al.)
 from lucid.models.vision.convnext._weights import (
@@ -182,16 +175,10 @@ from lucid.models.vision.pvt._weights import (
 from lucid.models.vision.googlenet._weights import GoogLeNetWeights
 
 # 2020 — DETR object detection (Carion et al.) — COCO
-from lucid.models.vision.detr._weights import (
-    DETRResNet50Weights,
-    DETRResNet101Weights,
-)
+from lucid.models.vision.detr._weights import DETRResNet50Weights, DETRResNet101Weights
 
 # 2015 — FCN semantic segmentation (Long et al.) — COCO-with-VOC
-from lucid.models.vision.fcn._weights import (
-    FCNResNet50Weights,
-    FCNResNet101Weights,
-)
+from lucid.models.vision.fcn._weights import FCNResNet50Weights, FCNResNet101Weights
 
 # 2017 — Faster R-CNN object detection (Ren et al.) — COCO
 from lucid.models.vision.faster_rcnn._weights import FasterRCNNResNet50FPNWeights
@@ -289,10 +276,7 @@ from lucid.models.text.gpt2._weights import (
 )
 
 # 2020 — DDPM (Ho et al.) — denoising diffusion (generative)
-from lucid.models.generative.ddpm._weights import (
-    DDPMCifarWeights,
-    DDPMChurchWeights,
-)
+from lucid.models.generative.ddpm._weights import DDPMCifarWeights, DDPMChurchWeights
 
 __all__ = [
     # ── Vision (2012) AlexNet ─────────────────────────────────────────

@@ -77,12 +77,7 @@ def _bucket_table(
 ) -> tuple[int, ...]:
     """Buckets of the relative positions ``lowest, …, highest`` in order."""
     return tuple(
-        _bucket(
-            r,
-            bidirectional=bidirectional,
-            num_buckets=num_buckets,
-            max_distance=max_distance,
-        )
+        _bucket(r, bidirectional=bidirectional, num_buckets=num_buckets, max_distance=max_distance)
         for r in range(lowest, highest + 1)
     )
 
@@ -163,12 +158,7 @@ class _T5Attention(nn.Module):
             k, v = self._memory_heads(memory, cache, layer_idx)
         # scale=1: the 1/sqrt(d_kv) lives in the query projection's init.
         out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=bias,
-            dropout_p=self.dropout_p if self.training else 0.0,
-            scale=1.0,
+            q, k, v, attn_mask=bias, dropout_p=self.dropout_p if self.training else 0.0, scale=1.0
         )
         batch, heads, length, width = (int(d) for d in out.shape)
         return self.o(out.permute(0, 2, 1, 3).reshape(batch, length, heads * width))
@@ -271,11 +261,7 @@ class _T5Stack(nn.Module):
         device = self.relative_attention_bias.weight.device.type
         lowest = -(past_length + query_length - 1)
         table = _bucket_table(
-            lowest,
-            key_length - 1,
-            not self.is_decoder,
-            self.num_buckets,
-            self.max_distance,
+            lowest, key_length - 1, not self.is_decoder, self.num_buckets, self.max_distance
         )
         buckets = lucid.tensor(list(table), dtype=lucid.int64, device=device)
         queries = lucid.arange(query_length, device=device).long() + past_length
@@ -315,12 +301,7 @@ class _T5Stack(nn.Module):
         hidden = self.dropout(embeddings)
         for layer_idx, block in enumerate(self.blocks):
             hidden = block(
-                hidden,
-                bias,
-                memory=memory,
-                cross_bias=cross_bias,
-                cache=cache,
-                layer_idx=layer_idx,
+                hidden, bias, memory=memory, cross_bias=cross_bias, cache=cache, layer_idx=layer_idx
             )
         return self.dropout(self.final_layer_norm(hidden))
 
@@ -723,9 +704,7 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
                 ignore_index=-100,
             )
         return Seq2SeqLMOutput(
-            logits=logits,
-            loss=loss,
-            encoder_last_hidden_state=out.encoder_last_hidden_state,
+            logits=logits, loss=loss, encoder_last_hidden_state=out.encoder_last_hidden_state
         )
 
     @lucid.no_grad()

@@ -21,8 +21,7 @@ from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 TINY = {

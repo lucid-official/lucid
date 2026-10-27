@@ -35,11 +35,7 @@ _DATA: dict[str, list[list[float]]] = {
     "no_nan": [[3, 7, 1, 9], [4, 0, 6, 2], [11, 5, 8, 10]],
     "some_nan": [[3, _NAN, 1, 9], [4, 0, _NAN, _NAN], [_NAN, 5, 8, 10]],
     # Row 0 and column 2 are all NaN; the other slices hold 1 to 3 numbers.
-    "all_nan_slice": [
-        [_NAN, _NAN, _NAN, _NAN],
-        [4, _NAN, _NAN, 2],
-        [_NAN, 5, _NAN, 10],
-    ],
+    "all_nan_slice": [[_NAN, _NAN, _NAN, _NAN], [4, _NAN, _NAN, 2], [_NAN, 5, _NAN, 10]],
     # Both even and odd counts per slice, so the lower median is exercised.
     "uneven_counts": [[1, _NAN, _NAN, _NAN], [1, 2, 3, _NAN], [6, 4, 2, 0]],
 }

@@ -54,10 +54,7 @@ _KINDS = {
         True,
     ),
     "submodule": _Kind(
-        "_modules",
-        lambda d: nn.Linear(2, 2, device=d),
-        lambda m, n, v: m.add_module(n, v),
-        False,
+        "_modules", lambda d: nn.Linear(2, 2, device=d), lambda m, n, v: m.add_module(n, v), False
     ),
 }
 
@@ -293,17 +290,11 @@ def _outcome(lib: ModuleType, start: str, steps: list[tuple[str, str]]) -> objec
 _TRANSITIONS = {
     "parameter <- parameter": ("parameters", [("set", "parameter")]),
     "parameter <- None": ("parameters", [("set", "none")]),
-    "parameter <- None <- parameter": (
-        "parameters",
-        [("set", "none"), ("set", "parameter")],
-    ),
+    "parameter <- None <- parameter": ("parameters", [("set", "none"), ("set", "parameter")]),
     "parameter <- tensor": ("parameters", [("set", "tensor")]),
     "parameter <- int": ("parameters", [("set", "int")]),
     "parameter <- module": ("parameters", [("set", "module")]),
-    "parameter deleted <- parameter": (
-        "parameters",
-        [("del", ""), ("set", "parameter")],
-    ),
+    "parameter deleted <- parameter": ("parameters", [("del", ""), ("set", "parameter")]),
     "buffer <- tensor": ("buffers", [("set", "tensor")]),
     "buffer <- None": ("buffers", [("set", "none")]),
     "buffer <- int": ("buffers", [("set", "int")]),
@@ -328,31 +319,16 @@ _TRANSITIONS = {
     "plain tensor <- tensor": ("plain", [("set", "tensor")]),
     "plain tensor <- parameter": ("plain", [("set", "parameter")]),
     "plain tensor <- module": ("plain", [("set", "module")]),
-    "register_parameter over a parameter": (
-        "parameters",
-        [("register_parameter", "parameter")],
-    ),
-    "register_parameter None over a parameter": (
-        "parameters",
-        [("register_parameter", "none")],
-    ),
+    "register_parameter over a parameter": ("parameters", [("register_parameter", "parameter")]),
+    "register_parameter None over a parameter": ("parameters", [("register_parameter", "none")]),
     "register_buffer over a buffer": ("buffers", [("register_buffer", "tensor")]),
-    "register_buffer non-persistent over a buffer": (
-        "buffers",
-        [("register_buffer_np", "tensor")],
-    ),
+    "register_buffer non-persistent over a buffer": ("buffers", [("register_buffer_np", "tensor")]),
     "add_module over a submodule": ("submodules", [("add_module", "module")]),
     "add_module None over a submodule": ("submodules", [("add_module", "none")]),
-    "register_parameter over a buffer": (
-        "buffers",
-        [("register_parameter", "parameter")],
-    ),
+    "register_parameter over a buffer": ("buffers", [("register_parameter", "parameter")]),
     "register_buffer over a parameter": ("parameters", [("register_buffer", "tensor")]),
     "add_module over a parameter": ("parameters", [("add_module", "module")]),
-    "register_parameter over a plain attribute": (
-        "plain",
-        [("register_parameter", "parameter")],
-    ),
+    "register_parameter over a plain attribute": ("plain", [("register_parameter", "parameter")]),
 }
 
 

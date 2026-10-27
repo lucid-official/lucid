@@ -27,12 +27,7 @@ CPP_OPTIMIZER_SPECS: list[tuple[str, OptimizerFactory, list[str], list[str]]] = 
         ["step", "eta", "mu"],
         ["ax"],
     ),
-    (
-        "Adam",
-        lambda params: optim.Adam(params, lr=0.01),
-        ["step"],
-        ["exp_avg", "exp_avg_sq"],
-    ),
+    ("Adam", lambda params: optim.Adam(params, lr=0.01), ["step"], ["exp_avg", "exp_avg_sq"]),
     (
         "Adam_amsgrad",
         lambda params: optim.Adam(params, lr=0.01, amsgrad=True),
@@ -51,24 +46,9 @@ CPP_OPTIMIZER_SPECS: list[tuple[str, OptimizerFactory, list[str], list[str]]] = 
         ["step", "mu_product"],
         ["exp_avg", "exp_avg_sq"],
     ),
-    (
-        "RAdam",
-        lambda params: optim.RAdam(params, lr=0.01),
-        ["step"],
-        ["exp_avg", "exp_avg_sq"],
-    ),
-    (
-        "Adamax",
-        lambda params: optim.Adamax(params, lr=0.01),
-        ["step"],
-        ["exp_avg", "exp_inf"],
-    ),
-    (
-        "Adagrad",
-        lambda params: optim.Adagrad(params, lr=0.01),
-        ["step"],
-        ["sum"],
-    ),
+    ("RAdam", lambda params: optim.RAdam(params, lr=0.01), ["step"], ["exp_avg", "exp_avg_sq"]),
+    ("Adamax", lambda params: optim.Adamax(params, lr=0.01), ["step"], ["exp_avg", "exp_inf"]),
+    ("Adagrad", lambda params: optim.Adagrad(params, lr=0.01), ["step"], ["sum"]),
     (
         "Adadelta",
         lambda params: optim.Adadelta(params, lr=0.5),
@@ -81,19 +61,13 @@ CPP_OPTIMIZER_SPECS: list[tuple[str, OptimizerFactory, list[str], list[str]]] = 
         ["step"],
         ["square_avg", "momentum_buffer", "grad_avg"],
     ),
-    (
-        "Rprop",
-        lambda params: optim.Rprop(params, lr=0.01),
-        ["step"],
-        ["prev", "step_size"],
-    ),
+    ("Rprop", lambda params: optim.Rprop(params, lr=0.01), ["step"], ["prev", "step_size"]),
 ]
 
 
 def _make_params() -> list[Tensor]:
     p0 = Tensor(
-        np.array([[1.25, -0.5, 0.75], [0.25, -1.5, 2.0]], dtype=np.float32),
-        requires_grad=True,
+        np.array([[1.25, -0.5, 0.75], [0.25, -1.5, 2.0]], dtype=np.float32), requires_grad=True
     )
     p1 = Tensor(np.array([-0.8, 0.4, 1.1, -0.3], dtype=np.float32), requires_grad=True)
     return [p0, p1]
@@ -147,11 +121,7 @@ def _PerturbedStateDict(sd: dict) -> dict:
 )
 class TestOptimizerDeclarativeAtomicState:
     def test_state_dict_roundtrip_and_trajectory_parity(
-        self,
-        name: str,
-        factory: OptimizerFactory,
-        scalar_keys: list[str],
-        buffer_keys: list[str],
+        self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
         params_a = _make_params()
         opt_a = factory(params_a)
@@ -179,11 +149,7 @@ class TestOptimizerDeclarativeAtomicState:
         _assert_state_dict_equal(opt_b.state_dict(), opt_a.state_dict())
 
     def test_corrupted_later_buffer_shape_leaves_earlier_slots_and_params_untouched(
-        self,
-        name: str,
-        factory: OptimizerFactory,
-        scalar_keys: list[str],
-        buffer_keys: list[str],
+        self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
         params = _make_params()
         opt = factory(params)
@@ -211,11 +177,7 @@ class TestOptimizerDeclarativeAtomicState:
             np.testing.assert_array_equal(p.numpy(), rp.numpy())
 
     def test_corrupted_later_buffer_dtype_leaves_earlier_slots_and_params_untouched(
-        self,
-        name: str,
-        factory: OptimizerFactory,
-        scalar_keys: list[str],
-        buffer_keys: list[str],
+        self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
         params = _make_params()
         opt = factory(params)
@@ -233,11 +195,7 @@ class TestOptimizerDeclarativeAtomicState:
         _assert_state_dict_equal(opt.state_dict(), before)
 
     def test_corrupted_scalar_slot_leaves_all_state_untouched(
-        self,
-        name: str,
-        factory: OptimizerFactory,
-        scalar_keys: list[str],
-        buffer_keys: list[str],
+        self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
         if not scalar_keys:
             pytest.skip(f"{name} has no scalar state slots")
@@ -258,11 +216,7 @@ class TestOptimizerDeclarativeAtomicState:
         _assert_state_dict_equal(opt.state_dict(), before)
 
     def test_failed_load_on_unstepped_optimizer_does_not_initialize_slots(
-        self,
-        name: str,
-        factory: OptimizerFactory,
-        scalar_keys: list[str],
-        buffer_keys: list[str],
+        self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
         src_params = _make_params()
         src_opt = factory(src_params)
@@ -286,10 +240,7 @@ class TestOptimizerDeclarativeAtomicState:
     ids=[spec[0] for spec in CPP_OPTIMIZER_SPECS],
 )
 def test_cpp_engine_load_state_buffers_device_mismatch_is_atomic(
-    name: str,
-    factory: OptimizerFactory,
-    scalar_keys: list[str],
-    buffer_keys: list[str],
+    name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
 ) -> None:
     params = _make_params()
     opt = factory(params)

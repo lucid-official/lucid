@@ -139,12 +139,7 @@ def _pins_shortcuts(mode: str, sizes: Sequence[int]) -> bool:
 
 
 def _nearest_indices(
-    in_size: int,
-    out_size: int,
-    scale: float | None,
-    exact: bool,
-    pins: bool,
-    wide: bool,
+    in_size: int, out_size: int, scale: float | None, exact: bool, pins: bool, wide: bool
 ) -> list[int]:
     """Input index each output sample copies, for ``nearest[-exact]``.
 
@@ -239,11 +234,7 @@ _ANTIALIAS_KERNELS: dict[str, tuple[int, Callable[[float], float]]] = {
 
 
 def _antialias_taps(
-    in_size: int,
-    out_size: int,
-    align_corners: bool,
-    scale: float | None,
-    mode: str,
+    in_size: int, out_size: int, align_corners: bool, scale: float | None, mode: str
 ) -> _Taps:
     """Taps of the filter stretched over the input samples one output covers.
 

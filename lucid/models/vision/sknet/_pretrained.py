@@ -362,10 +362,7 @@ def sk_resnext_50_32x4d(pretrained: bool = False, **overrides: object) -> SKNet:
     params=11976616,
 )
 def sk_resnet_18_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SKResNet18Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SKResNet18Weights | None = None, **overrides: object
 ) -> SKNetForImageClassification:
     r"""SK-ResNet-18 image classifier (backbone + GAP + linear head).
 
@@ -438,10 +435,7 @@ def sk_resnet_18_cls(
     params=22316392,
 )
 def sk_resnet_34_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: SKResNet34Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: SKResNet34Weights | None = None, **overrides: object
 ) -> SKNetForImageClassification:
     r"""SK-ResNet-34 image classifier (backbone + GAP + linear head).
 

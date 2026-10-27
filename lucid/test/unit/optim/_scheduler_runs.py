@@ -44,10 +44,7 @@ def run(
 
 
 def assert_as_the_reference(
-    build: Build,
-    add_at: int | None,
-    ref: Any,
-    late_keys: dict[str, float] | None = None,
+    build: Build, add_at: int | None, ref: Any, late_keys: dict[str, float] | None = None
 ) -> None:
     """Lucid's rates equal the reference's, and a refusal comes at the same step."""
     keys = late_keys or {}

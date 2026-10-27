@@ -281,8 +281,7 @@ def _write_slices(
     positions: _C_engine.TensorImpl,
     source: Tensor,
     write: Callable[
-        [_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl],
-        _C_engine.TensorImpl,
+        [_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl], _C_engine.TensorImpl
     ],
 ) -> Tensor:
     """``source``'s slices along ``dim`` written into ``input``'s at ``positions``.
@@ -427,12 +426,7 @@ def _write_inplace[T: Tensor](
 # ── public API ─────────────────────────────────────────────────────────────
 
 
-def index_fill(
-    input: Tensor,
-    dim: int,
-    index: Tensor,
-    value: float,
-) -> Tensor:
+def index_fill(input: Tensor, dim: int, index: Tensor, value: float) -> Tensor:
     """Return a copy of ``input`` with positions ``index`` along ``dim`` set to ``value``.
 
     Autograd flows through the *unmasked* positions; filled positions
@@ -497,12 +491,7 @@ def index_fill(
 
 
 def index_add(
-    input: Tensor,
-    dim: int,
-    index: Tensor,
-    source: Tensor,
-    *,
-    alpha: float = 1.0,
+    input: Tensor, dim: int, index: Tensor, source: Tensor, *, alpha: float = 1.0
 ) -> Tensor:
     """Return ``input`` with ``alpha * source`` accumulated at ``index`` positions along ``dim``.
 
@@ -573,12 +562,7 @@ def index_add(
     )
 
 
-def index_copy(
-    input: Tensor,
-    dim: int,
-    index: Tensor,
-    source: Tensor,
-) -> Tensor:
+def index_copy(input: Tensor, dim: int, index: Tensor, source: Tensor) -> Tensor:
     """Return a copy of ``input`` with slices at ``index`` replaced by ``source``.
 
     Single set-scatter: the 1-D ``index`` is broadcast along ``dim`` to
@@ -632,10 +616,7 @@ def index_copy(
     >>> lucid.index_copy(lucid.zeros(4), 0, lucid.tensor([3, 0]), lucid.tensor([1.0, 2.0]))
     tensor([2., 0., 0., 1.])
     """
-    with _autocast_entry("index_copy", _unwrap(input), _unwrap(source)) as (
-        in_impl,
-        src_impl,
-    ):
+    with _autocast_entry("index_copy", _unwrap(input), _unwrap(source)) as (in_impl, src_impl):
         input, source = _wrap(in_impl), _wrap(src_impl)
         _require_input_dtype("index_copy", input, source, "source")
         dim, positions = _positions("index_copy", input, dim, index)
@@ -661,8 +642,7 @@ def _scatter_into(base: Tensor, dim: int, index: Tensor, src: Tensor, reduce: st
         "prod": _C_engine.scatter_prod,
     }[reduce]
     return _call_engine(
-        "scatter_reduce",
-        lambda: _wrap(_fn(_unwrap(base), _unwrap(index), _unwrap(src), dim)),
+        "scatter_reduce", lambda: _wrap(_fn(_unwrap(base), _unwrap(index), _unwrap(src), dim))
     )
 
 
@@ -938,11 +918,7 @@ def index_put(
 
 
 def _index_put(
-    input: Tensor,
-    indices: object,
-    values: Tensor,
-    accumulate: bool,
-    name: str,
+    input: Tensor, indices: object, values: Tensor, accumulate: bool, name: str
 ) -> Tensor:
     """:func:`index_put`, its refusals under ``name`` — ``index_put_`` runs it too.
 
@@ -952,10 +928,7 @@ def _index_put(
     """
     if not isinstance(indices, (list, tuple)) or len(indices) == 0:
         raise ValueError(f"{name}: `indices` must be a non-empty sequence of Tensors")
-    with _autocast_entry("index_put", _unwrap(input), _unwrap(values)) as (
-        impl,
-        val_impl,
-    ):
+    with _autocast_entry("index_put", _unwrap(input), _unwrap(values)) as (impl, val_impl):
         input, values = _wrap(impl), _wrap(val_impl)
         _require_input_dtype(name, input, values, "values")
         shape = list(impl.shape)
@@ -987,12 +960,7 @@ def _put_flat(
     return _wrap(_C_engine.reshape(out, shape))
 
 
-def put(
-    input: Tensor,
-    index: Tensor,
-    source: Tensor,
-    accumulate: bool = False,
-) -> Tensor:
+def put(input: Tensor, index: Tensor, source: Tensor, accumulate: bool = False) -> Tensor:
     """Write ``source`` into ``input`` at the *flat* positions in ``index``.
 
     Mirrors the reference framework's ``Tensor.put`` semantics: indices

@@ -24,10 +24,7 @@ from lucid.test._fixtures.devices import metal_available
 
 _DEVICES = [
     "cpu",
-    pytest.param(
-        "metal",
-        marks=pytest.mark.skipif(not metal_available(), reason="needs Metal"),
-    ),
+    pytest.param("metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")),
 ]
 _HALF_DTYPES = [lucid.float16, lucid.bfloat16]
 
@@ -46,12 +43,7 @@ def test_thousand_duplicate_index_add_and_scatter_add(device: str, dtype: lucid.
 
     out_scatter_add = base.scatter_add(0, idx, src)
     assert out_scatter_add.dtype == dtype
-    assert out_scatter_add.to("cpu").to(lucid.float32).tolist() == [
-        1000.0,
-        0.0,
-        0.0,
-        0.0,
-    ]
+    assert out_scatter_add.to("cpu").to(lucid.float32).tolist() == [1000.0, 0.0, 0.0, 0.0]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -69,12 +61,7 @@ def test_thousand_duplicate_scatter_reduce_sum_and_mean(device: str, dtype: luci
 
     out_sum_no_self = lucid.scatter_reduce(base_one, 0, idx, src, reduce="sum", include_self=False)
     assert out_sum_no_self.dtype == dtype
-    assert out_sum_no_self.to("cpu").to(lucid.float32).tolist() == [
-        1000.0,
-        1.0,
-        1.0,
-        1.0,
-    ]
+    assert out_sum_no_self.to("cpu").to(lucid.float32).tolist() == [1000.0, 1.0, 1.0, 1.0]
 
     out_mean_no_self = lucid.scatter_reduce(
         base_zero, 0, idx, src, reduce="mean", include_self=False
@@ -86,12 +73,7 @@ def test_thousand_duplicate_scatter_reduce_sum_and_mean(device: str, dtype: luci
         base_one, 0, idx, src, reduce="mean", include_self=True
     )
     assert out_mean_with_self.dtype == dtype
-    assert out_mean_with_self.to("cpu").to(lucid.float32).tolist() == [
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-    ]
+    assert out_mean_with_self.to("cpu").to(lucid.float32).tolist() == [1.0, 1.0, 1.0, 1.0]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -116,18 +98,10 @@ def test_thousand_duplicate_embedding_backward(device: str, dtype: lucid.dtype) 
 @pytest.mark.parametrize("dtype", _HALF_DTYPES)
 @pytest.mark.parametrize(
     ("mode", "expected_fwd", "expected_grad"),
-    [
-        ("sum", 1000.0, 1000.0),
-        ("mean", 1.0, 1.0),
-        ("max", 1.0, 1.0),
-    ],
+    [("sum", 1000.0, 1000.0), ("mean", 1.0, 1.0), ("max", 1.0, 1.0)],
 )
 def test_thousand_duplicate_embedding_bag_forward_and_backward(
-    device: str,
-    dtype: lucid.dtype,
-    mode: str,
-    expected_fwd: float,
-    expected_grad: float,
+    device: str, dtype: lucid.dtype, mode: str, expected_fwd: float, expected_grad: float
 ) -> None:
     idx = lucid.zeros(1000, dtype=lucid.int64, device=device)
     offsets = lucid.tensor([0], dtype=lucid.int64, device=device)
@@ -154,10 +128,7 @@ def test_float16_past_2048_and_overflow_in_embedding_bag_mean(device: str) -> No
     idx_3k = lucid.zeros(3000, dtype=lucid.int64, device=device)
     src_3k = lucid.ones(3000, dtype=lucid.float16, device=device)
     base = lucid.zeros(2, dtype=lucid.float16, device=device)
-    assert base.scatter_add(0, idx_3k, src_3k).to("cpu").to(lucid.float32).tolist() == [
-        3000.0,
-        0.0,
-    ]
+    assert base.scatter_add(0, idx_3k, src_3k).to("cpu").to(lucid.float32).tolist() == [3000.0, 0.0]
 
     # 1000 duplicates of 100.0 sum to 100,000 > 65504 (float16 max), which
     # overflowed to inf before dividing by 1000 in mode="mean".
@@ -209,16 +180,11 @@ def test_scatter_prod_and_float32_bit_identity() -> None:
     base_prod = lucid.ones(2, dtype=lucid.bfloat16)
     cpu_prod = lucid.scatter_reduce(base_prod, 0, idx_prod, src_prod, "prod")
     gpu_prod = lucid.scatter_reduce(
-        base_prod.to("metal"),
-        0,
-        idx_prod.to("metal"),
-        src_prod.to("metal"),
-        "prod",
+        base_prod.to("metal"), 0, idx_prod.to("metal"), src_prod.to("metal"), "prod"
     )
     assert gpu_prod.dtype == lucid.bfloat16
     assert np.array_equal(
-        cpu_prod.to(lucid.float32).numpy(),
-        gpu_prod.to("cpu").to(lucid.float32).numpy(),
+        cpu_prod.to(lucid.float32).numpy(), gpu_prod.to("cpu").to(lucid.float32).numpy()
     )
 
     # float32 paths remain bit-identical across CPU and Metal.
@@ -243,9 +209,7 @@ def test_scatter_prod_and_float32_bit_identity() -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_bfloat16_scatter_reduce_amax_ties_and_grid_sample_backward(
-    device: str,
-) -> None:
+def test_bfloat16_scatter_reduce_amax_ties_and_grid_sample_backward(device: str) -> None:
     # 1000 tied entries for amax split a gradient of 1000.0 into 1.0 each;
     # previously the tie-count scatter_add stalled at 256.0 in bfloat16.
     idx = lucid.zeros(1000, dtype=lucid.int64, device=device)

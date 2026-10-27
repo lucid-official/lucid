@@ -19,11 +19,7 @@ from lucid._tensor.tensor import Tensor as _T
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, _resolve_dtype_name, to_engine_dtype
-from lucid.serialization._storage_plan import (
-    _StoragePlan,
-    _build_storage_plan,
-    _contiguous_stride,
-)
+from lucid.serialization._storage_plan import _StoragePlan, _build_storage_plan, _contiguous_stride
 
 # ── Allowed types for weights_only=True ──────────────────────────────────────
 
@@ -149,10 +145,7 @@ def _restore_tensor(shape: list[int], dtype_name: str, device_str: str, raw_byte
     return _wrap(impl)
 
 
-def _resolve_target_device(
-    device_str: str,
-    map_location: object,
-) -> str:
+def _resolve_target_device(device_str: str, map_location: object) -> str:
     from lucid._device import device as _device_cls
 
     if isinstance(map_location, (str, _device_cls)):
@@ -198,18 +191,11 @@ def _load_v3_11tuple(
                 f"count that is not a multiple of {dtype_name}'s {itemsize}"
             )
         base_impl = _C_engine.TensorImpl.from_bytes(
-            bytes(raw_bytes),
-            [len(raw_bytes) // itemsize],
-            eng_dtype,
-            eng_device,
-            False,
+            bytes(raw_bytes), [len(raw_bytes) // itemsize], eng_dtype, eng_device, False
         )
         storages[int(sid)] = base_impl
     view_impl = _C_engine.TensorImpl._make_view(
-        base_impl,
-        [int(d) for d in shape],
-        [int(s) for s in stride_elems],
-        int(offset_elems),
+        base_impl, [int(d) for d in shape], [int(s) for s in stride_elems], int(offset_elems)
     )
     tensor = _wrap_loaded_impl(view_impl, bool(is_param), bool(requires_grad))
     tensors[int(tid)] = tensor
@@ -218,11 +204,7 @@ def _load_v3_11tuple(
 
 class _LucidUnpickler(pickle.Unpickler):
     def __init__(
-        self,
-        file: io.BytesIO,
-        *,
-        map_location: object = None,
-        **pickle_load_args: Any,
+        self, file: io.BytesIO, *, map_location: object = None, **pickle_load_args: Any
     ) -> None:
         super().__init__(file, **pickle_load_args)
         self._map_location = map_location
@@ -666,10 +648,7 @@ def save_sharded(
     if not isinstance(obj, dict):
         fname = "shard-00000-of-00001.lucid"
         save(obj, os.path.join(path_str, fname), pickle_protocol=pickle_protocol)
-        index: dict[str, object] = {
-            "_lucid_sharded": 1,
-            "shards": [{"file": fname, "keys": None}],
-        }
+        index: dict[str, object] = {"_lucid_sharded": 1, "shards": [{"file": fname, "keys": None}]}
         with open(os.path.join(path_str, "index.json"), "w", encoding="utf-8") as fp:
             json.dump(index, fp, indent=2)
         return
@@ -784,18 +763,14 @@ def load_sharded(
     if len(shards_meta) == 1 and shards_meta[0].get("keys") is None:
         fname = str(shards_meta[0]["file"])
         return load(
-            os.path.join(path_str, fname),
-            map_location=map_location,
-            weights_only=weights_only,
+            os.path.join(path_str, fname), map_location=map_location, weights_only=weights_only
         )
 
     result: OrderedDict[str, object] = OrderedDict()
     for shard_meta in shards_meta:
         fname = str(shard_meta["file"])
         shard = load(
-            os.path.join(path_str, fname),
-            map_location=map_location,
-            weights_only=weights_only,
+            os.path.join(path_str, fname), map_location=map_location, weights_only=weights_only
         )
         if isinstance(shard, dict):
             result.update(shard)
@@ -846,10 +821,7 @@ _ST_UNSIGNED: dict[str, tuple[str, str]] = {
 
 
 def save_safetensors(
-    state_dict: Mapping[str, object],
-    path: str,
-    *,
-    metadata: dict[str, str] | None = None,
+    state_dict: Mapping[str, object], path: str, *, metadata: dict[str, str] | None = None
 ) -> None:
     r"""Save a flat state dict as a SafeTensors file.
 
@@ -916,11 +888,7 @@ def save_safetensors(
             shape = [1]
             scalar_keys.append(name)
         blob = bytes(_host_bytes(value))
-        header[name] = {
-            "dtype": code,
-            "shape": shape,
-            "data_offsets": [offset, offset + len(blob)],
-        }
+        header[name] = {"dtype": code, "shape": shape, "data_offsets": [offset, offset + len(blob)]}
         blobs.append(blob)
         offset += len(blob)
 
@@ -946,11 +914,7 @@ def _host_bytes(value: _T) -> bytes:
     return bytes(_unwrap(value).to_bytes())
 
 
-def load_safetensors(
-    path: str,
-    *,
-    device: str = "cpu",
-) -> dict[str, object]:
+def load_safetensors(path: str, *, device: str = "cpu") -> dict[str, object]:
     r"""Load a SafeTensors file into a flat state dict.
 
     Reads the header and each tensor's bytes directly, builds a Lucid
@@ -1056,11 +1020,4 @@ def _tensor_from_safetensors(name: str, code: str, shape: list[int], raw: bytes)
     return _from_numpy(arr.astype(target))
 
 
-__all__ = [
-    "save",
-    "load",
-    "save_sharded",
-    "load_sharded",
-    "save_safetensors",
-    "load_safetensors",
-]
+__all__ = ["save", "load", "save_sharded", "load_sharded", "save_safetensors", "load_safetensors"]

@@ -21,12 +21,7 @@ _FLOAT_DTYPES_EXTENDED: Sequence[lucid.dtype] = (
     lucid.float32,
     lucid.float64,
 )
-_INT_DTYPES: Sequence[lucid.dtype] = (
-    lucid.int8,
-    lucid.int16,
-    lucid.int32,
-    lucid.int64,
-)
+_INT_DTYPES: Sequence[lucid.dtype] = (lucid.int8, lucid.int16, lucid.int32, lucid.int64)
 
 
 @pytest.fixture(params=_FLOAT_DTYPES, ids=[str(d) for d in _FLOAT_DTYPES])
@@ -34,10 +29,7 @@ def float_dtype(request: pytest.FixtureRequest) -> lucid.dtype:
     return request.param  # type: ignore[no-any-return]
 
 
-@pytest.fixture(
-    params=_FLOAT_DTYPES_EXTENDED,
-    ids=[str(d) for d in _FLOAT_DTYPES_EXTENDED],
-)
+@pytest.fixture(params=_FLOAT_DTYPES_EXTENDED, ids=[str(d) for d in _FLOAT_DTYPES_EXTENDED])
 def float_dtype_extended(request: pytest.FixtureRequest) -> lucid.dtype:
     return request.param  # type: ignore[no-any-return]
 

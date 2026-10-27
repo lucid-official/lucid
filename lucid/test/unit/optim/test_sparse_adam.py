@@ -119,9 +119,7 @@ def test_rows_outside_a_batch_keep_their_value_and_moments(device: str) -> None:
     assert [int(o["step"]) for o in out] == [1, 2, 3]
 
 
-def test_a_vector_and_a_scalar_parameter_update_their_nonzero_entries(
-    device: str,
-) -> None:
+def test_a_vector_and_a_scalar_parameter_update_their_nonzero_entries(device: str) -> None:
     vec = nn.Parameter(lucid.tensor([1.0, 2.0, 3.0]).to(device))
     scalar = nn.Parameter(lucid.tensor(4.0).to(device))
     opt = optim.SparseAdam([vec, scalar], lr=_LR)
@@ -135,9 +133,7 @@ def test_a_vector_and_a_scalar_parameter_update_their_nonzero_entries(
     assert opt.state[1]["exp_avg"].shape == ()
 
 
-def test_a_missing_gradient_skips_and_a_zero_gradient_only_counts(
-    device: str,
-) -> None:
+def test_a_missing_gradient_skips_and_a_zero_gradient_only_counts(device: str) -> None:
     a = nn.Parameter(lucid.tensor([[1.0, 2.0]]).to(device))
     b = nn.Parameter(lucid.tensor([[3.0, 4.0]]).to(device))
     opt = optim.SparseAdam([a, b], lr=_LR)

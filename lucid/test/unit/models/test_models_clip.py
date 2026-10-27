@@ -44,10 +44,7 @@ from lucid.models.multimodal.clip import (
 )
 from lucid.models.multimodal.clip._tokenizer import _PATTERN
 from lucid.models.multimodal.clip._towers import QuickGELU
-from lucid.models.multimodal.clip._model import (
-    _contrastive_loss,
-    _TextTransformer,
-)
+from lucid.models.multimodal.clip._model import _contrastive_loss, _TextTransformer
 
 _TINY = dict(
     embed_dim=16,
@@ -166,10 +163,7 @@ class TestEmbeddingsAreNormalised:
         lucid.manual_seed(0)
         model = CLIPModel(_tiny()).eval()
         out = model(lucid.randn((3, 3, 32, 32)), _captions([2, 3, 1]))
-        for name, embeds in (
-            ("image", out.image_embeds),
-            ("text", out.text_embeds),
-        ):
+        for name, embeds in (("image", out.image_embeds), ("text", out.text_embeds)):
             norms = (embeds**2).sum(dim=-1) ** 0.5
             assert float((norms - 1.0).abs().max().item()) < 1e-5, name
 
@@ -403,14 +397,7 @@ class TestTokenizer:
 
     @staticmethod
     def _tok() -> CLIPTokenizer:
-        vocab = {
-            "a": 0,
-            "b</w>": 1,
-            "ab</w>": 2,
-            CLIP_SOS: 3,
-            CLIP_EOS: 4,
-            "c</w>": 5,
-        }
+        vocab = {"a": 0, "b</w>": 1, "ab</w>": 2, CLIP_SOS: 3, CLIP_EOS: 4, "c</w>": 5}
         return CLIPTokenizer(vocab=vocab, merges=[("a", "b</w>")])
 
     def test_it_merges_across_the_word_marker(self) -> None:
@@ -455,16 +442,7 @@ class TestTokenizer:
         runs or ate contractions would still tokenise every caption
         without complaint.
         """
-        assert _PATTERN.findall("a dog's paw, 42!") == [
-            "a",
-            "dog",
-            "'s",
-            "paw",
-            ",",
-            "4",
-            "2",
-            "!",
-        ]
+        assert _PATTERN.findall("a dog's paw, 42!") == ["a", "dog", "'s", "paw", ",", "4", "2", "!"]
 
     def test_digits_are_not_grouped(self) -> None:
         """Guards the test above — ``\\d+`` would read identically here
@@ -506,10 +484,7 @@ class TestItRunsOnBothDevices:
         lucid.manual_seed(0)
         model = CLIPForZeroShotImageClassification(_tiny())
         model = model.metal() if device == "metal" else model
-        out = model(
-            lucid.randn((2, 3, 32, 32), device=device),
-            _captions([1, 2, 3, 4]).to(device),
-        )
+        out = model(lucid.randn((2, 3, 32, 32), device=device), _captions([1, 2, 3, 4]).to(device))
         assert out.logits.shape == (2, 4)
         assert str(out.logits.device) == f"device('{device}')"
 
@@ -549,8 +524,7 @@ class TestItLearnsToMatch:
             [lucid.full((3, 32, 32), (i + 1) / pairs) for i in range(pairs)], dim=0
         )
         captions = lucid.tensor(
-            [[1, 2 + i, 31, 0, 0, 0, 0, 0] for i in range(pairs)],
-            dtype=lucid.int64,
+            [[1, 2 + i, 31, 0, 0, 0, 0, 0] for i in range(pairs)], dtype=lucid.int64
         )
         if device == "metal":
             images, captions = images.metal(), captions.metal()
@@ -739,7 +713,4 @@ class TestTheFastTokenizerAgrees:
     def test_a_non_byte_level_vocab_is_refused(self) -> None:
         """Folding must not collapse two entries onto one key."""
         with pytest.raises(ValueError, match="byte-level"):
-            CLIPTokenizerFast(
-                vocab={"": 0, "\x00</w>": 1, CLIP_SOS: 2, CLIP_EOS: 3},
-                merges=[],
-            )
+            CLIPTokenizerFast(vocab={"": 0, "\x00</w>": 1, CLIP_SOS: 2, CLIP_EOS: 3}, merges=[])

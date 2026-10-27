@@ -77,13 +77,7 @@ def _assert_roll_parity(
 @pytest.mark.parametrize("shape", [(4,), (2, 3), (2, 3, 4)], ids=str)
 @pytest.mark.parametrize(
     ("shifts", "dims"),
-    [
-        (1, 0),
-        (-1, -1),
-        (2, 0),
-        ((1,), (0,)),
-        ([2], [-1]),
-    ],
+    [(1, 0), (-1, -1), (2, 0), ((1,), (0,)), ([2], [-1])],
     ids=["int-pos", "int-neg", "int-wrap", "tuple-1", "list-1"],
 )
 def test_roll_int_and_single_axis_parity(
@@ -100,10 +94,7 @@ def test_roll_int_and_single_axis_parity(
 @pytest.mark.parametrize("shape", [(), (4,), (2, 3), (2, 3, 4)], ids=str)
 @pytest.mark.parametrize("shifts", [0, 1, -2, 7, (1,), [-2]], ids=str)
 def test_roll_dims_none_flattens_and_restores_shape(
-    ref: ModuleType,
-    device: str,
-    shape: tuple[int, ...],
-    shifts: int | Sequence[int],
+    ref: ModuleType, device: str, shape: tuple[int, ...], shifts: int | Sequence[int]
 ) -> None:
     _assert_roll_parity(ref, device, shape, shifts, None, pass_dims=False)
     _assert_roll_parity(ref, device, shape, shifts, None, pass_dims=True)
@@ -113,20 +104,11 @@ def test_roll_dims_none_flattens_and_restores_shape(
 @pytest.mark.parametrize("shape", [(2, 3), (2, 3, 4)], ids=str)
 @pytest.mark.parametrize(
     ("shifts", "dims"),
-    [
-        ((1, -1), (0, 1)),
-        ([2, -1], [0, -1]),
-        ((1, 2), (0, 0)),
-        ((1, -1), (0, -2)),
-    ],
+    [((1, -1), (0, 1)), ([2, -1], [0, -1]), ((1, 2), (0, 0)), ((1, -1), (0, -2))],
     ids=["tuple-2d", "list-neg-dim", "repeated-dim", "aliased-neg-dim"],
 )
 def test_roll_multi_axis_sequence_parity(
-    ref: ModuleType,
-    device: str,
-    shape: tuple[int, ...],
-    shifts: Sequence[int],
-    dims: Sequence[int],
+    ref: ModuleType, device: str, shape: tuple[int, ...], shifts: Sequence[int], dims: Sequence[int]
 ) -> None:
     _assert_roll_parity(ref, device, shape, shifts, dims, pass_dims=True)
 
@@ -150,13 +132,7 @@ def test_roll_keyword_arguments_parity(ref: ModuleType, device: str) -> None:
 @pytest.mark.parity
 @pytest.mark.parametrize(
     ("shifts", "dims"),
-    [
-        (1, (0, 1)),
-        ((1, 2), 0),
-        ((1, 2), (0,)),
-        ((1, 2), None),
-        ((), (0,)),
-    ],
+    [(1, (0, 1)), ((1, 2), 0), ((1, 2), (0,)), ((1, 2), None), ((), (0,))],
     ids=[
         "int-shift-seq-dims",
         "seq-shifts-int-dim",
@@ -166,10 +142,7 @@ def test_roll_keyword_arguments_parity(ref: ModuleType, device: str) -> None:
     ],
 )
 def test_roll_mismatched_shifts_and_dims_refused(
-    ref: ModuleType,
-    device: str,
-    shifts: int | Sequence[int],
-    dims: int | Sequence[int] | None,
+    ref: ModuleType, device: str, shifts: int | Sequence[int], dims: int | Sequence[int] | None
 ) -> None:
     x = lucid.zeros(2, 3, device=device)
     r = ref.zeros(2, 3)
@@ -185,11 +158,7 @@ def test_roll_mismatched_shifts_and_dims_refused(
 @pytest.mark.parametrize(
     ("_label", "call_ref", "call_lucid"),
     [
-        (
-            "flip-int",
-            lambda r, t: t.flip(0).numpy(),
-            lambda x: (lucid.flip(x, 0), x.flip(0)),
-        ),
+        ("flip-int", lambda r, t: t.flip(0).numpy(), lambda x: (lucid.flip(x, 0), x.flip(0))),
         (
             "flip-np-int",
             lambda r, t: t.flip(int(np.int64(-1))).numpy(),
@@ -200,11 +169,7 @@ def test_roll_mismatched_shifts_and_dims_refused(
             lambda r, t: t.flip(0, 1).numpy(),
             lambda x: (lucid.flip(x, (0, 1)), x.flip(0, 1)),
         ),
-        (
-            "tile-int",
-            lambda r, t: t.tile(2).numpy(),
-            lambda x: (lucid.tile(x, 2), x.tile(2)),
-        ),
+        ("tile-int", lambda r, t: t.tile(2).numpy(), lambda x: (lucid.tile(x, 2), x.tile(2))),
         (
             "tile-np-int",
             lambda r, t: t.tile(int(np.int64(2))).numpy(),
@@ -223,10 +188,7 @@ def test_roll_mismatched_shifts_and_dims_refused(
         (
             "repeat-np-int",
             lambda r, t: t.repeat(2, 3).numpy(),
-            lambda x: (
-                x.repeat((np.int64(2), np.int64(3))),
-                x.repeat(np.int64(2), np.int64(3)),
-            ),
+            lambda x: (x.repeat((np.int64(2), np.int64(3))), x.repeat(np.int64(2), np.int64(3))),
         ),
         (
             "permute-varargs",
@@ -292,8 +254,7 @@ def _call_untyped(fn: object, *args: object) -> object:
     ],
 )
 def test_bool_and_none_refused_in_shape_sequence_ops(
-    device: str,
-    bad_call: Callable[[lucid.Tensor], object],
+    device: str, bad_call: Callable[[lucid.Tensor], object]
 ) -> None:
     x = lucid.arange(6.0, device=device).reshape(2, 3)
     with pytest.raises(TypeError):

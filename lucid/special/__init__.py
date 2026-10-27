@@ -533,12 +533,7 @@ _NDTRI_C = (
     4.374664141464968,
     2.938163982698783,
 )
-_NDTRI_D = (
-    7.784695709041462e-3,
-    3.224671290700398e-1,
-    2.445134137142996,
-    3.754408661907416,
-)
+_NDTRI_D = (7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416)
 
 
 def ndtri(input: Tensor) -> Tensor:
@@ -1426,11 +1421,7 @@ def modified_bessel_k0(input: Tensor) -> Tensor:
     if input.dtype == lucid.float64:
         return _bessel._k0(input)
     return _half_line_split(
-        _real(input),
-        2.0,
-        _modified_bessel_k0_small,
-        _modified_bessel_k0_large,
-        math.inf,
+        _real(input), 2.0, _modified_bessel_k0_small, _modified_bessel_k0_large, math.inf
     )
 
 
@@ -1538,11 +1529,7 @@ def modified_bessel_k1(input: Tensor) -> Tensor:
     if input.dtype == lucid.float64:
         return _bessel._k1(input)
     return _half_line_split(
-        _real(input),
-        2.0,
-        _modified_bessel_k1_small,
-        _modified_bessel_k1_large,
-        math.inf,
+        _real(input), 2.0, _modified_bessel_k1_small, _modified_bessel_k1_large, math.inf
     )
 
 

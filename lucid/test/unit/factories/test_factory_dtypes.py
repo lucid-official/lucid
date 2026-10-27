@@ -89,14 +89,7 @@ def test_randn_gives_each_complex_part_half_the_variance(device: str) -> None:
         lambda d: lucid.randn(2, dtype=lucid.int64, device=d),
         lambda d: lucid.rand(2, dtype=lucid.bool_, device=d),
     ],
-    ids=[
-        "arange-bool",
-        "arange-complex",
-        "linspace-bool",
-        "rand-i32",
-        "randn-i64",
-        "rand-bool",
-    ],
+    ids=["arange-bool", "arange-complex", "linspace-bool", "rand-i32", "randn-i64", "rand-bool"],
 )
 def test_what_the_reference_refuses_is_refused_in_lucids_words(device: str, make: object) -> None:
     with pytest.raises(NotImplementedError, match="not implemented for"):

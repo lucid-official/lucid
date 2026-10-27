@@ -27,10 +27,7 @@ from lucid.distributions.constraints import (
     _Simplex,
     _Stack,
 )
-from lucid.distributions.transformed_distribution import (
-    ComposeTransform,
-    Transform,
-)
+from lucid.distributions.transformed_distribution import ComposeTransform, Transform
 from lucid.distributions.transforms import (
     AffineTransform,
     CorrCholeskyTransform,
@@ -187,8 +184,7 @@ class StackTransform(Transform):
         """Unbind ``y`` along ``dim`` and apply each transform's inverse per slice."""
         slices = self._slices(y)
         return lucid.stack(
-            [t._inverse(s) for t, s in zip(self.transforms, slices, strict=True)],
-            dim=self.dim,
+            [t._inverse(s) for t, s in zip(self.transforms, slices, strict=True)], dim=self.dim
         )
 
     @override
@@ -221,10 +217,7 @@ class CatTransform(Transform):
     """
 
     def __init__(
-        self,
-        transforms: list[Transform],
-        dim: int = 0,
-        lengths: list[int] | None = None,
+        self, transforms: list[Transform], dim: int = 0, lengths: list[int] | None = None
     ) -> None:
         """Store the per-partition transforms, concat axis, and partition lengths."""
         super().__init__()
@@ -259,8 +252,7 @@ class CatTransform(Transform):
     def _call(self, x: Tensor) -> Tensor:
         """Split ``x`` along ``dim``, apply each transform, and concatenate."""
         return lucid.cat(
-            [t(p) for t, p in zip(self.transforms, self._split(x), strict=True)],
-            dim=self.dim,
+            [t(p) for t, p in zip(self.transforms, self._split(x), strict=True)], dim=self.dim
         )
 
     @override
@@ -384,9 +376,7 @@ def _transform_to_real(_constraint: _Real) -> Transform:
 
 
 @_register(biject_to, transform_to, _GreaterThan, _GreaterThanEq)
-def _transform_to_greater_than(
-    constraint: _GreaterThan | _GreaterThanEq,
-) -> Transform:
+def _transform_to_greater_than(constraint: _GreaterThan | _GreaterThanEq) -> Transform:
     if _is_scalar_number(constraint.lower_bound, 0.0):
         return ExpTransform()
     return ComposeTransform([ExpTransform(), AffineTransform(constraint.lower_bound, 1.0)])
@@ -436,34 +426,26 @@ def _transform_to_corr_cholesky(_constraint: _CorrCholesky) -> Transform:
 @_register(biject_to, _IndependentConstraint)
 def _biject_to_independent(constraint: _IndependentConstraint) -> Transform:
     return IndependentTransform(
-        biject_to(constraint.base_constraint),
-        constraint.reinterpreted_batch_ndims,
+        biject_to(constraint.base_constraint), constraint.reinterpreted_batch_ndims
     )
 
 
 @_register(transform_to, _IndependentConstraint)
 def _transform_to_independent(constraint: _IndependentConstraint) -> Transform:
     return IndependentTransform(
-        transform_to(constraint.base_constraint),
-        constraint.reinterpreted_batch_ndims,
+        transform_to(constraint.base_constraint), constraint.reinterpreted_batch_ndims
     )
 
 
 @_register(biject_to, _Cat)
 def _biject_to_cat(constraint: _Cat) -> Transform:
-    return CatTransform(
-        [biject_to(c) for c in constraint.cseq],
-        constraint.dim,
-        constraint.lengths,
-    )
+    return CatTransform([biject_to(c) for c in constraint.cseq], constraint.dim, constraint.lengths)
 
 
 @_register(transform_to, _Cat)
 def _transform_to_cat(constraint: _Cat) -> Transform:
     return CatTransform(
-        [transform_to(c) for c in constraint.cseq],
-        constraint.dim,
-        constraint.lengths,
+        [transform_to(c) for c in constraint.cseq], constraint.dim, constraint.lengths
     )
 
 

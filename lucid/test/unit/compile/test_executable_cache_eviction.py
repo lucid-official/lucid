@@ -43,11 +43,7 @@ _SCRIPT = textwrap.dedent("""
 def test_an_evicted_executable_still_runs_for_the_module_that_holds_it() -> None:
     env = dict(os.environ, LUCID_COMPILE_MAX_CACHE="2")
     done = subprocess.run(
-        [sys.executable, "-c", _SCRIPT],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=300,
+        [sys.executable, "-c", _SCRIPT], env=env, capture_output=True, text=True, timeout=300
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert done.stdout.strip().endswith("ok")

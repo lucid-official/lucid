@@ -92,14 +92,7 @@ class TestRandintWideRangesAndDtypes:
             (-(1 << 40), 1 << 40),
             (-(1 << 62), 1 << 62),
         ],
-        ids=[
-            "0..2^31",
-            "0..2^32",
-            "0..2^40",
-            "shifted-above-2^40",
-            "-2^40..2^40",
-            "-2^62..2^62",
-        ],
+        ids=["0..2^31", "0..2^32", "0..2^40", "shifted-above-2^40", "-2^40..2^40", "-2^62..2^62"],
     )
     def test_wide_ranges_are_in_bounds_and_unquantized(
         self, device: str, low: int, high: int

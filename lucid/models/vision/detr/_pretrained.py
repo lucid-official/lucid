@@ -4,10 +4,7 @@ import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.detr._config import DETRConfig
 from lucid.models.vision.detr._model import DETRForObjectDetection
-from lucid.models.vision.detr._weights import (
-    DETRResNet50Weights,
-    DETRResNet101Weights,
-)
+from lucid.models.vision.detr._weights import DETRResNet50Weights, DETRResNet101Weights
 from lucid.models._utils._common import apply_overrides
 
 # COCO 2017 configs — the pretrained checkpoints use num_classes=91

@@ -9,10 +9,7 @@ COCO-pretrained checkpoint.
 
 from lucid.models.vision.faster_rcnn._config import FasterRCNNConfig
 from lucid.models.vision.faster_rcnn._model import FasterRCNNForObjectDetection
-from lucid.models.vision.faster_rcnn._pretrained import (
-    faster_rcnn,
-    faster_rcnn_resnet50_fpn,
-)
+from lucid.models.vision.faster_rcnn._pretrained import faster_rcnn, faster_rcnn_resnet50_fpn
 from lucid.models.vision.faster_rcnn._weights import FasterRCNNResNet50FPNWeights
 
 __all__ = [

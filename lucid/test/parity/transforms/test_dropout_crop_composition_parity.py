@@ -82,12 +82,7 @@ class TestCropDeterministic:
 
     @pytest.mark.parametrize(
         "x_min, y_min, x_max, y_max",
-        [
-            (0, 0, 20, 20),
-            (2, 3, 18, 22),
-            (5, 5, 35, 30),
-            (0, 0, 40, 40),  # full-image (identity)
-        ],
+        [(0, 0, 20, 20), (2, 3, 18, 22), (5, 5, 35, 30), (0, 0, 40, 40)],  # full-image (identity)
     )
     def test_crop_exact(self, x_min: int, y_min: int, x_max: int, y_max: int) -> None:
         """``Crop`` returns exactly ``image[y_min:y_max, x_min:x_max]``."""
@@ -121,12 +116,7 @@ class TestCropDeterministic:
         )
         ref = _run_albu(
             A.PadIfNeeded(
-                min_height=min_h,
-                min_width=min_w,
-                border_mode=0,
-                fill=0.0,
-                position="center",
-                p=1.0,
+                min_height=min_h, min_width=min_w, border_mode=0, fill=0.0, position="center", p=1.0
             ),
             hwc,
         )
@@ -145,14 +135,7 @@ class TestCropDeterministic:
         chw, hwc = _image(seed=4, h=16, w=20)
         got = _run_lucid_img(T.CropAndPad(px=px, value=0.0, p=1.0), chw)
         ref = _run_albu(
-            A.CropAndPad(
-                px=px,
-                fill=0.0,
-                sample_independently=False,
-                keep_size=False,
-                p=1.0,
-            ),
-            hwc,
+            A.CropAndPad(px=px, fill=0.0, sample_independently=False, keep_size=False, p=1.0), hwc
         )
         assert got.shape == ref.shape
         np.testing.assert_allclose(got, ref, atol=0.0, rtol=0.0)
@@ -163,13 +146,7 @@ class TestCropDeterministic:
         chw, hwc = _image(seed=5, h=20, w=24)
         got = _run_lucid_img(T.CropAndPad(px=px, p=1.0), chw)
         ref = _run_albu(
-            A.CropAndPad(
-                px=px,
-                sample_independently=False,
-                keep_size=False,
-                p=1.0,
-            ),
-            hwc,
+            A.CropAndPad(px=px, sample_independently=False, keep_size=False, p=1.0), hwc
         )
         assert got.shape == ref.shape
         np.testing.assert_allclose(got, ref, atol=0.0, rtol=0.0)
@@ -215,11 +192,7 @@ class TestCropStochasticShape:
     def test_bbox_safe_crop_preserves_boxes(self) -> None:
         """``BBoxSafeRandomCrop`` returns a crop fully containing every box."""
         img = lucid.full((3, 100, 100), 0.5, dtype=lucid.float32)
-        boxes = T.BoundingBoxes(
-            lucid.tensor([[20.0, 30.0, 60.0, 80.0]]),
-            "xyxy",
-            (100, 100),
-        )
+        boxes = T.BoundingBoxes(lucid.tensor([[20.0, 30.0, 60.0, 80.0]]), "xyxy", (100, 100))
         sample = {"image": T.Image(img), "boxes": boxes}
         tf = T.BBoxSafeRandomCrop(erosion_rate=0.0, p=1.0)
         for seed in range(20):
@@ -239,11 +212,7 @@ class TestCropStochasticShape:
     def test_random_sized_bbox_safe_crop_output_size(self) -> None:
         """``RandomSizedBBoxSafeCrop`` always returns ``(C, height, width)``."""
         img = lucid.full((3, 100, 100), 0.5, dtype=lucid.float32)
-        boxes = T.BoundingBoxes(
-            lucid.tensor([[20.0, 30.0, 60.0, 80.0]]),
-            "xyxy",
-            (100, 100),
-        )
+        boxes = T.BoundingBoxes(lucid.tensor([[20.0, 30.0, 60.0, 80.0]]), "xyxy", (100, 100))
         sample = {"image": T.Image(img), "boxes": boxes}
         tf = T.RandomSizedBBoxSafeCrop(height=24, width=32, p=1.0)
         for seed in range(10):
@@ -257,11 +226,7 @@ class TestCropStochasticShape:
         """``RandomCropNearBBox`` returns a crop staying inside the source image."""
         h, w = 100, 100
         img = lucid.full((3, h, w), 0.5, dtype=lucid.float32)
-        boxes = T.BoundingBoxes(
-            lucid.tensor([[30.0, 30.0, 70.0, 70.0]]),
-            "xyxy",
-            (h, w),
-        )
+        boxes = T.BoundingBoxes(lucid.tensor([[30.0, 30.0, 70.0, 70.0]]), "xyxy", (h, w))
         sample = {"image": T.Image(img), "boxes": boxes}
         tf = T.RandomCropNearBBox(max_part_shift=0.3, p=1.0)
         for seed in range(20):
@@ -481,10 +446,7 @@ class TestComposition:
         """When every child is deterministic, Lucid ``Compose`` matches Albu."""
         chw, hwc = _image(seed=31, h=32, w=32)
         lucid_pipe = T.Compose([T.Crop(2, 3, 26, 22, p=1.0), T.HorizontalFlip(p=1.0)])
-        albu_pipe = A.Compose(
-            [A.Crop(2, 3, 26, 22, p=1.0), A.HorizontalFlip(p=1.0)],
-            p=1.0,
-        )
+        albu_pipe = A.Compose([A.Crop(2, 3, 26, 22, p=1.0), A.HorizontalFlip(p=1.0)], p=1.0)
         got = lucid_pipe(T.Image(chw)).data.numpy()
         ref = albu_pipe(image=hwc)["image"]
         # Lucid CHW vs Albu HWC.
@@ -566,10 +528,7 @@ class TestComposition:
         chw, _ = _image(seed=36, h=16, w=16)
         # Two unambiguous multiplications: deterministic, easy to verify.
         seq = T.Sequential(
-            [
-                T.Lambda(image=lambda x: x * 2.0, p=1.0),
-                T.Lambda(image=lambda x: x + 1.0, p=1.0),
-            ],
+            [T.Lambda(image=lambda x: x * 2.0, p=1.0), T.Lambda(image=lambda x: x + 1.0, p=1.0)],
             p=1.0,
         )
         got = seq(T.Image(chw)).data.numpy()
@@ -579,12 +538,7 @@ class TestComposition:
     def test_sequential_gate_blocks_all(self) -> None:
         """``Sequential(p=0.0)`` skips every child (identity)."""
         chw, _ = _image(seed=37, h=12, w=12)
-        seq = T.Sequential(
-            [
-                T.Lambda(image=lambda x: x * 0.0, p=1.0),  # would zero out
-            ],
-            p=0.0,
-        )
+        seq = T.Sequential([T.Lambda(image=lambda x: x * 0.0, p=1.0)], p=0.0)  # would zero out
         for seed in range(5):
             lucid.manual_seed(seed)
             out = seq(T.Image(chw)).data
@@ -674,11 +628,7 @@ class TestComposition:
         """``replay_data`` records one entry per child after a call."""
         chw, _ = _image(seed=42, h=16, w=16)
         rc = T.ReplayCompose(
-            [
-                T.HorizontalFlip(p=1.0),
-                T.VerticalFlip(p=1.0),
-                T.Crop(0, 0, 10, 10, p=1.0),
-            ]
+            [T.HorizontalFlip(p=1.0), T.VerticalFlip(p=1.0), T.Crop(0, 0, 10, 10, p=1.0)]
         )
         lucid.manual_seed(0)
         rc(T.Image(chw))

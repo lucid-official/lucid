@@ -241,14 +241,10 @@ class _Darknet19(nn.Module):
         super().__init__()
         # Stage 1: 3→32, pool
         self.stage1 = nn.Sequential(
-            _conv_bn_lrelu(in_channels, 32, 3, padding=1),
-            nn.MaxPool2d(2, stride=2),
+            _conv_bn_lrelu(in_channels, 32, 3, padding=1), nn.MaxPool2d(2, stride=2)
         )
         # Stage 2: 32→64, pool
-        self.stage2 = nn.Sequential(
-            _conv_bn_lrelu(32, 64, 3, padding=1),
-            nn.MaxPool2d(2, stride=2),
-        )
+        self.stage2 = nn.Sequential(_conv_bn_lrelu(32, 64, 3, padding=1), nn.MaxPool2d(2, stride=2))
         # Stage 3: 64→128→64→128, pool
         self.stage3 = nn.Sequential(
             _conv_bn_lrelu(64, 128, 3, padding=1),
@@ -524,9 +520,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         return lucid.stack([bx - bw / 2.0, by - bh / 2.0, bx + bw / 2.0, by + bh / 2.0], dim=-1)
 
     def _decode_predictions(
-        self,
-        raw: Tensor,
-        image_size: tuple[int, int],
+        self, raw: Tensor, image_size: tuple[int, int]
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Decode raw anchor predictions to flat predictions.
 
@@ -577,10 +571,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
         return logits, pred_boxes, conf
 
     def _compute_loss(
-        self,
-        raw: Tensor,
-        targets: list[dict[str, Tensor]],
-        image_size: tuple[int, int],
+        self, raw: Tensor, targets: list[dict[str, Tensor]], image_size: tuple[int, int]
     ) -> Tensor:
         """Compute YOLOv2 multi-part MSE/CE loss.
 
@@ -777,16 +768,11 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
             loss = self._compute_loss(raw, targets, image_size)
 
         return ObjectDetectionOutput(
-            logits=logits,
-            pred_boxes=pred_boxes,
-            loss=loss,
-            objectness=objectness,
+            logits=logits, pred_boxes=pred_boxes, loss=loss, objectness=objectness
         )
 
     def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-        image_size: tuple[int, int] = (416, 416),
+        self, output: ObjectDetectionOutput, image_size: tuple[int, int] = (416, 416)
     ) -> list[dict[str, Tensor]]:
         """Per-class NMS on raw predictions.
 
@@ -830,10 +816,7 @@ class YOLOV2ForObjectDetection(ObjectDetectionModel):
                 sc_sel = sc_b[:, c][mask_t]
                 bx_sel = bx_b[mask_t]
                 keep = batched_nms(
-                    bx_sel,
-                    sc_sel,
-                    lucid.zeros(len(mask), device=dev),
-                    cfg.nms_thresh,
+                    bx_sel, sc_sel, lucid.zeros(len(mask), device=dev), cfg.nms_thresh
                 )
                 keep_boxes.append(bx_sel[keep])
                 keep_scores.append(sc_sel[keep])
@@ -880,10 +863,7 @@ _CFG_V2 = YOLOV2Config(
     params=50962889,
 )
 def yolo_v2(
-    pretrained: bool | str = False,
-    *,
-    weights: YOLOV2Weights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: YOLOV2Weights | None = None, **overrides: object
 ) -> YOLOV2ForObjectDetection:
     r"""YOLOv2 / YOLO9000 with Darknet-19 backbone (Redmon & Farhadi, CVPR 2017).
 

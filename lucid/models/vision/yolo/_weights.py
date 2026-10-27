@@ -27,18 +27,10 @@ from lucid.weights import HUB_BASE, WeightEntry, WeightsEnum, register_weights
 # size as ``image_sizes``, then ``transforms().to_image_boxes`` maps them back
 # onto the image, undoing the letterbox offset and the resize.
 _PRESET_416 = Detection(
-    max_size=416,
-    pad_position="center",
-    pad_value=0.5,
-    mean=(0.0, 0.0, 0.0),
-    std=(1.0, 1.0, 1.0),
+    max_size=416, pad_position="center", pad_value=0.5, mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0)
 )
 _PRESET_608 = Detection(
-    max_size=608,
-    pad_position="center",
-    pad_value=0.5,
-    mean=(0.0, 0.0, 0.0),
-    std=(1.0, 1.0, 1.0),
+    max_size=608, pad_position="center", pad_value=0.5, mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0)
 )
 
 

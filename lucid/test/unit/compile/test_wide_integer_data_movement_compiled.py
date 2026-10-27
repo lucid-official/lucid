@@ -182,16 +182,7 @@ def test_bool_sort_values() -> None:
 def test_int64_sum_carries_across_half_words() -> None:
     """Every carry the half-word sum makes: 0xFFFF in both low half-words of
     many updates landing on one slot, and high words that wrap int32."""
-    vals = [
-        2**32 - 1,
-        2**48 - 1,
-        -1,
-        2**63 - 1,
-        -(2**63),
-        0xFFFF_FFFF_FFFF,
-        2**62 + 5,
-        -7,
-    ] * 8
+    vals = [2**32 - 1, 2**48 - 1, -1, 2**63 - 1, -(2**63), 0xFFFF_FFFF_FFFF, 2**62 + 5, -7] * 8
     x = lucid.tensor(vals, dtype=lucid.int64).to(COMPILE_DEVICE)
     idx = _index([i % 3 for i in range(len(vals))])
     _same(lambda t: lucid.zeros_like(t[:3]).scatter_add(0, idx, t) + 0, x)

@@ -24,11 +24,7 @@ from lucid._C import engine as _C_engine
 
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
-DTYPES = {
-    "f32": lucid.float32,
-    "f16": lucid.float16,
-    "bf16": lucid.bfloat16,
-}
+DTYPES = {"f32": lucid.float32, "f16": lucid.float16, "bf16": lucid.bfloat16}
 # Backward: a sum over the outputs that read one sample, in any order.
 GRAD_RTOL = {"f32": 1e-5, "f16": 2e-3, "bf16": 1.6e-2}
 # bicubic's composite arithmetic runs through the generic elementwise
@@ -44,10 +40,7 @@ CASES_2D = [
     ((2, 3, 40, 50), (68, 85)),
     ((2, 3, 68, 85), (40, 50)),
 ]
-CASES_3D = [
-    ((1, 2, 7, 9, 11), (13, 5, 17)),
-    ((1, 1, 3, 4, 997), (5, 2, 2477)),
-]
+CASES_3D = [((1, 2, 7, 9, 11), (13, 5, 17)), ((1, 1, 3, 4, 997), (5, 2, 2477))]
 MODES_2D = [
     ("nearest", None),
     ("bilinear", False),
@@ -59,8 +52,7 @@ MODES_3D = [("nearest", None), ("trilinear", False), ("trilinear", True)]
 
 
 def _matrix(
-    cases: list[tuple[tuple[int, ...], tuple[int, ...]]],
-    modes: list[tuple[str, bool | None]],
+    cases: list[tuple[tuple[int, ...], tuple[int, ...]]], modes: list[tuple[str, bool | None]]
 ) -> list[object]:
     out = []
     for shape, size in cases:
@@ -92,11 +84,7 @@ def _gap(got: lucid.Tensor, want: lucid.Tensor) -> float:
 @pytest.mark.parametrize("dtype", list(DTYPES))
 @pytest.mark.parametrize(("shape", "size", "mode", "align"), MATRIX)
 def test_forward_matches_eager(
-    shape: tuple[int, ...],
-    size: tuple[int, ...],
-    mode: str,
-    align: bool | None,
-    dtype: str,
+    shape: tuple[int, ...], size: tuple[int, ...], mode: str, align: bool | None, dtype: str
 ) -> None:
     fn = lambda t: _resize(t, size, mode, align) * 1  # noqa: E731
     _C_engine.compile.session_cache_clear()
@@ -141,11 +129,7 @@ class _Probe(nn.Module):
 @pytest.mark.parametrize("dtype", list(DTYPES))
 @pytest.mark.parametrize(("shape", "size", "mode", "align"), MATRIX)
 def test_backward_matches_eager(
-    shape: tuple[int, ...],
-    size: tuple[int, ...],
-    mode: str,
-    align: bool | None,
-    dtype: str,
+    shape: tuple[int, ...], size: tuple[int, ...], mode: str, align: bool | None, dtype: str
 ) -> None:
     dt = DTYPES[dtype]
     model = _Probe(shape, size, mode, align, dt)

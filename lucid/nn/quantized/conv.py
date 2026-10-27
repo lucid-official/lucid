@@ -126,18 +126,11 @@ class _QuantizedConvNd(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         """Dequantize the kernel, convolve, fake-quantize the output."""
         weight = dequantize(
-            self.weight_int8,
-            self.weight_scale,
-            self.weight_zero_point,
-            ch_axis=self.weight_ch_axis,
+            self.weight_int8, self.weight_scale, self.weight_zero_point, ch_axis=self.weight_ch_axis
         )
         y = self._activation(self._conv_forward(input, weight))
         return fake_quantize(
-            y,
-            self.scale,
-            self.zero_point,
-            self.out_qdtype.quant_min,
-            self.out_qdtype.quant_max,
+            y, self.scale, self.zero_point, self.out_qdtype.quant_min, self.out_qdtype.quant_max
         )
 
     @classmethod

@@ -174,8 +174,7 @@ class TestMultiTarget:
     def test_pose_image_and_keypoints(self) -> None:
         img = lucid.rand(3, 400, 600)
         kps = T.Keypoints(
-            lucid.tensor([[100.0, 50.0, 1.0], [300.0, 200.0, 1.0]]),
-            canvas_size=(400, 600),
+            lucid.tensor([[100.0, 50.0, 1.0], [300.0, 200.0, 1.0]]), canvas_size=(400, 600)
         )
         sample = {"image": T.Image(img), "kps": kps}
         out = T.Pose(crop_size=224, resize_size=256)(sample)
@@ -219,10 +218,7 @@ class TestImageClassificationAugmentStrong:
         # With random_erasing=1.0 the erase fires every call.
         lucid.manual_seed(0)
         preset = T.ImageClassificationAugment(
-            crop_size=64,
-            random_erasing=1.0,
-            color_jitter=0.0,
-            hflip_prob=0.0,
+            crop_size=64, random_erasing=1.0, color_jitter=0.0, hflip_prob=0.0
         )
         y = preset(lucid.ones(3, 64, 64))
         # Some pixels should be replaced (the erase region != input).
@@ -239,9 +235,7 @@ class TestImageClassificationAugmentStrong:
     def test_round_trip_with_strong_aug(self) -> None:
         # to_dict / from_dict must preserve the new kwargs.
         preset = T.ImageClassificationAugment(
-            crop_size=224,
-            auto_augment="ra-m9-n2",
-            random_erasing=0.25,
+            crop_size=224, auto_augment="ra-m9-n2", random_erasing=0.25
         )
         cfg = preset.to_dict()
         assert cfg["init_kwargs"]["auto_augment"] == "ra-m9-n2"
@@ -368,9 +362,7 @@ def test_the_padding_reaches_the_model_at_pad_value() -> None:
 
 
 @pytest.mark.parametrize(
-    ("mean", "std"),
-    [((0.5, 0.5), None), ((0.5, 0.5, 0.5), (0.25, 0.25))],
-    ids=["2-3", "3-2"],
+    ("mean", "std"), [((0.5, 0.5), None), ((0.5, 0.5, 0.5), (0.25, 0.25))], ids=["2-3", "3-2"]
 )
 def test_a_pad_value_with_unpaired_mean_and_std_names_both(
     mean: tuple[float, ...], std: tuple[float, ...] | None

@@ -111,8 +111,7 @@ class TestSortMicrobench:
     def test_argsort_16384x64_int64(self, bench, device: str) -> None:
         rng = np.random.default_rng(0)
         a = lucid.tensor(
-            rng.integers(-10_000, 10_000, size=(16_384, 64), dtype=np.int64),
-            device=device,
+            rng.integers(-10_000, 10_000, size=(16_384, 64), dtype=np.int64), device=device
         )
         bench(lambda: lucid.argsort(a, dim=-1))
         if hasattr(bench, "last_elapsed"):

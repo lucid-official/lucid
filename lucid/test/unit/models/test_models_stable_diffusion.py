@@ -92,9 +92,7 @@ class TestConfig:
         error of 0.36 against the reference — which is how this was
         found, and why the count is asserted here rather than trusted.
         """
-        from lucid.models.generative.stable_diffusion._unet import (
-            _SpatialTransformer,
-        )
+        from lucid.models.generative.stable_diffusion._unet import _SpatialTransformer
 
         config = StableDiffusionConfig()
         assert config.attention_head_dim == 8
@@ -201,11 +199,7 @@ class TestCrossAttentionHasADirection:
         model that reshaped instead of attending would fail here."""
         unet = UNet2DConditionModel(_tiny()).eval()
         for length in (1, 4, 13):
-            out = unet(
-                lucid.randn((1, 4, 8, 8)),
-                lucid.tensor([1.0]),
-                lucid.randn((1, length, 16)),
-            )
+            out = unet(lucid.randn((1, 4, 8, 8)), lucid.tensor([1.0]), lucid.randn((1, length, 16)))
             assert out.shape == (1, 4, 8, 8)
 
 
@@ -553,10 +547,7 @@ class TestVariants:
         configuration could not be read from the primary source — so one
         architecture is registered rather than five or two."""
         names = M.list_models(family="stable_diffusion")
-        assert sorted(names) == [
-            "stable_diffusion",
-            "stable_diffusion_gen",
-        ]
+        assert sorted(names) == ["stable_diffusion", "stable_diffusion_gen"]
 
     def test_v1_declares_weights(self) -> None:
         """The registry entry, checked offline against the model it loads
@@ -605,9 +596,7 @@ class TestTimestepEmbedding:
         pinned here rather than left to whichever the transformer paper
         used.
         """
-        from lucid.models.generative._common._transformers import (
-            timestep_embedding,
-        )
+        from lucid.models.generative._common._transformers import timestep_embedding
 
         emb = timestep_embedding(lucid.tensor([0.0]), 8)
         # At t = 0 every argument is 0, so cos gives 1 and sin gives 0.
@@ -616,21 +605,15 @@ class TestTimestepEmbedding:
 
     def test_an_odd_width_is_refused(self) -> None:
         """The first U-Net width is the embedding's, split into two halves."""
-        from lucid.models.generative.stable_diffusion._config import (
-            StableDiffusionConfig,
-        )
+        from lucid.models.generative.stable_diffusion._config import StableDiffusionConfig
 
         with pytest.raises(ValueError, match="even"):
             StableDiffusionConfig(
-                unet_block_out_channels=(7, 14),
-                norm_num_groups=1,
-                attention_head_dim=7,
+                unet_block_out_channels=(7, 14), norm_num_groups=1, attention_head_dim=7
             )
 
     def test_distinct_timesteps_get_distinct_embeddings(self) -> None:
-        from lucid.models.generative._common._transformers import (
-            timestep_embedding,
-        )
+        from lucid.models.generative._common._transformers import timestep_embedding
 
         emb = timestep_embedding(lucid.tensor([0.0, 1.0, 500.0]), 16)
         assert float((emb[0] - emb[1]).abs().max().item()) > 1e-6
@@ -727,10 +710,7 @@ class TestTheNormalisationEpsilonIsTheReleasedOne:
         assert self._epsilons(vae) == {1e-6}
 
     def test_the_unet_transformer_norm_is_tighter_than_its_resnets(self) -> None:
-        from lucid.models.generative.stable_diffusion._unet import (
-            _ResBlock,
-            _SpatialTransformer,
-        )
+        from lucid.models.generative.stable_diffusion._unet import _ResBlock, _SpatialTransformer
 
         assert self._epsilons(_SpatialTransformer(32, 4, 16, 32)) == {1e-6}
         assert self._epsilons(_ResBlock(32, 32, 16, 32)) == {1e-5}
@@ -897,11 +877,7 @@ class TestPNDMIsWhatTheReleaseShips:
             context, num_inference_steps=3, guidance_scale=1.0, latent=latent
         ).samples
         pndm = model.generate(
-            context,
-            num_inference_steps=3,
-            guidance_scale=1.0,
-            latent=latent,
-            sampler="pndm",
+            context, num_inference_steps=3, guidance_scale=1.0, latent=latent, sampler="pndm"
         ).samples
         assert float((default - pndm).abs().max().item()) == 0.0
 
@@ -911,18 +887,10 @@ class TestPNDMIsWhatTheReleaseShips:
 
         latent = lucid.randn((1, 4, 8, 8))
         pndm = model.generate(
-            context,
-            num_inference_steps=3,
-            guidance_scale=1.0,
-            latent=latent,
-            sampler="pndm",
+            context, num_inference_steps=3, guidance_scale=1.0, latent=latent, sampler="pndm"
         ).samples
         ddim = model.generate(
-            context,
-            num_inference_steps=3,
-            guidance_scale=1.0,
-            latent=latent,
-            sampler="ddim",
+            context, num_inference_steps=3, guidance_scale=1.0, latent=latent, sampler="ddim"
         ).samples
         assert pndm.shape == ddim.shape
         assert float((pndm - ddim).abs().max().item()) > 0.0

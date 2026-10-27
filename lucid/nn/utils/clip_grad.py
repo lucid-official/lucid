@@ -78,9 +78,7 @@ def _total_norm(
 
 
 def _scale_clipped_grads(
-    params_with_grad: list[Parameter],
-    grads: list[_C_engine.TensorImpl],
-    clip_coef: float,
+    params_with_grad: list[Parameter], grads: list[_C_engine.TensorImpl], clip_coef: float
 ) -> None:
     amp_active = _C_engine.amp_is_active()
     coefs: dict[tuple[_C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl] = {}
@@ -202,10 +200,7 @@ def clip_grad_norm_(
     return _wrap(_C_engine.full([], total_norm, dt, dev))
 
 
-def clip_grad_value_(
-    parameters: Iterable[Parameter],
-    clip_value: float,
-) -> None:
+def clip_grad_value_(parameters: Iterable[Parameter], clip_value: float) -> None:
     r"""Clamp every gradient element to :math:`[-\text{clip\_value}, \text{clip\_value}]` in place.
 
     Unlike :func:`clip_grad_norm_`, which preserves the direction of the

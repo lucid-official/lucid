@@ -31,25 +31,19 @@ class TestSpecialAliasesParity:
     def test_gammaln(self, ref: Any) -> None:
         x = np.array([1.0, 2.0, 3.0, 0.5], dtype=np.float32)
         assert_close(
-            S.gammaln(lucid.tensor(x.copy())),
-            ref.special.gammaln(ref.tensor(x.copy())),
-            atol=1e-5,
+            S.gammaln(lucid.tensor(x.copy())), ref.special.gammaln(ref.tensor(x.copy())), atol=1e-5
         )
 
     def test_psi(self, ref: Any) -> None:
         x = np.array([1.0, 2.0, 5.0], dtype=np.float32)
         assert_close(
-            S.psi(lucid.tensor(x.copy())),
-            ref.special.psi(ref.tensor(x.copy())),
-            atol=1e-4,
+            S.psi(lucid.tensor(x.copy())), ref.special.psi(ref.tensor(x.copy())), atol=1e-4
         )
 
     def test_expit(self, ref: Any) -> None:
         x = np.array([-2.0, 0.0, 1.0, 3.0], dtype=np.float32)
         assert_close(
-            S.expit(lucid.tensor(x.copy())),
-            ref.special.expit(ref.tensor(x.copy())),
-            atol=1e-5,
+            S.expit(lucid.tensor(x.copy())), ref.special.expit(ref.tensor(x.copy())), atol=1e-5
         )
 
     def test_modified_bessel_i0(self, ref: Any) -> None:
@@ -232,26 +226,20 @@ class TestTier2CompositesParity:
         M = np.random.standard_normal((4, 4)).astype(np.float32)
         A = (M @ M.T + 4 * np.eye(4)).astype(np.float32)
         assert_close(
-            lucid.logdet(lucid.tensor(A.copy())),
-            ref.logdet(ref.tensor(A.copy())),
-            atol=1e-3,
+            lucid.logdet(lucid.tensor(A.copy())), ref.logdet(ref.tensor(A.copy())), atol=1e-3
         )
 
     def test_diag_embed_1d(self, ref: Any) -> None:
         x = np.array([1.0, 2.0, 3.0], dtype=np.float32)
         assert_close(
-            lucid.diag_embed(lucid.tensor(x.copy())),
-            ref.diag_embed(ref.tensor(x.copy())),
-            atol=0.0,
+            lucid.diag_embed(lucid.tensor(x.copy())), ref.diag_embed(ref.tensor(x.copy())), atol=0.0
         )
 
     def test_diag_embed_batch(self, ref: Any) -> None:
         np.random.seed(5)
         x = np.random.standard_normal((3, 4)).astype(np.float32)
         assert_close(
-            lucid.diag_embed(lucid.tensor(x.copy())),
-            ref.diag_embed(ref.tensor(x.copy())),
-            atol=0.0,
+            lucid.diag_embed(lucid.tensor(x.copy())), ref.diag_embed(ref.tensor(x.copy())), atol=0.0
         )
 
     def test_diag_embed_offset(self, ref: Any) -> None:

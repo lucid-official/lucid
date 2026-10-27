@@ -34,9 +34,7 @@ def test_max_pool2d_backward_metal_matches_cpu(hw: tuple) -> None:
     fn = lambda t: F.max_pool2d(t, kernel_size=2, stride=2)
     seed = hw[0] * 31 + hw[1]
     np.testing.assert_allclose(
-        _grad(fn, (2, 3, *hw), "metal", seed),
-        _grad(fn, (2, 3, *hw), "cpu", seed),
-        atol=1e-5,
+        _grad(fn, (2, 3, *hw), "metal", seed), _grad(fn, (2, 3, *hw), "cpu", seed), atol=1e-5
     )
 
 
@@ -49,9 +47,7 @@ def test_max_pool2d_variants_metal_matches_cpu(k: int, s: int, hw: tuple) -> Non
         pytest.skip("metal backend unavailable")
     fn = lambda t: F.max_pool2d(t, kernel_size=k, stride=s)
     np.testing.assert_allclose(
-        _grad(fn, (2, 3, *hw), "metal", 7),
-        _grad(fn, (2, 3, *hw), "cpu", 7),
-        atol=1e-5,
+        _grad(fn, (2, 3, *hw), "metal", 7), _grad(fn, (2, 3, *hw), "cpu", 7), atol=1e-5
     )
 
 
@@ -77,14 +73,7 @@ def _expected_out(size: int, k: int, stride: int, pad: int, ceil: bool) -> int:
 
 @pytest.mark.parametrize(
     "size,k,stride,pad",
-    [
-        (5, 2, 2, 0),
-        (7, 2, 2, 0),
-        (110, 3, 2, 0),
-        (26, 3, 2, 0),
-        (9, 3, 2, 1),
-        (8, 2, 2, 0),
-    ],
+    [(5, 2, 2, 0), (7, 2, 2, 0), (110, 3, 2, 0), (26, 3, 2, 0), (9, 3, 2, 1), (8, 2, 2, 0)],
 )
 @pytest.mark.parametrize("ceil", [False, True])
 def test_max_pool2d_honours_ceil_mode(size, k, stride, pad, ceil):

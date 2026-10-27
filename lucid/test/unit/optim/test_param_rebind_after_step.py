@@ -263,9 +263,7 @@ def test_every_engine_carries_its_state_across_a_move(
 
 
 @pytest.mark.parametrize(
-    ("name", "kwargs"),
-    [("SGD", {"lr": 0.05}), *_OPTIMIZERS],
-    ids=["SGD-plain", *_OPT_IDS],
+    ("name", "kwargs"), [("SGD", {"lr": 0.05}), *_OPTIMIZERS], ids=["SGD-plain", *_OPT_IDS]
 )
 def test_rebuild_with_nothing_to_carry_does_not_warn(name: str, kwargs: dict[str, Any]) -> None:
     """No state yet — a step() before any backward — is nothing lost."""
@@ -371,9 +369,7 @@ def _ref_trajectory(
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 @pytest.mark.parametrize("path", _FLAG_PATHS, ids=_FLAG_PATHS)
 @pytest.mark.parametrize(
-    ("name", "kwargs"),
-    [*_OPTIMIZERS, ("RMSprop", {"lr": 0.05})],
-    ids=[*_OPT_IDS, "RMSprop"],
+    ("name", "kwargs"), [*_OPTIMIZERS, ("RMSprop", {"lr": 0.05})], ids=[*_OPT_IDS, "RMSprop"]
 )
 def test_flag_changes_follow_the_reference(
     name: str, kwargs: dict[str, Any], path: str, device: str, ref: Any

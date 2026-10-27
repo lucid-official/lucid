@@ -225,10 +225,7 @@ ROWS: list[Row] = [
     Row(
         id="cross_entropy-kd-target",
         consumer="cross_entropy",
-        call=lambda d: {
-            "input": _scores(d).reshape(N, C, 1),
-            "target": _ids([[1], [7]], d),
-        },
+        call=lambda d: {"input": _scores(d).reshape(N, C, 1), "target": _ids([[1], [7]], d)},
         match="cross_entropy: Target 7 is out of bounds",
         metal=POISON,
         kernels=frozenset({"log_softmax", "gather"}),
@@ -237,10 +234,7 @@ ROWS: list[Row] = [
     Row(
         id="multilabel_margin_loss-listed",
         consumer="multilabel_margin_loss",
-        call=lambda d: {
-            "input": _scores(d),
-            "target": _ids([[1, 0, -1, 0], [2, 9, -1, 7]], d),
-        },
+        call=lambda d: {"input": _scores(d), "target": _ids([[1, 0, -1, 0], [2, 9, -1, 7]], d)},
         match="multilabel_margin_loss: Target 9 is out of bounds",
         metal=POISON,
         kernels=frozenset({"scatter_add", "relu"}),
@@ -276,12 +270,7 @@ ROWS: list[Row] = [
             id=f"embedding_bag-{form}-index{bad}",
             consumer="embedding_bag",
             call=(
-                (
-                    lambda d, b=bad: {
-                        "input": _ids([[0, 1], [0, b]], d),
-                        "weight": _table(d),
-                    }
-                )
+                (lambda d, b=bad: {"input": _ids([[0, 1], [0, b]], d), "weight": _table(d)})
                 if form == "rows"
                 else (
                     lambda d, b=bad: {
@@ -541,10 +530,7 @@ def test_the_ends_of_every_axis_are_taken(device: str) -> None:
         assert math.isfinite(float(fn(x, _ids([0, C - 1], device)).item()))
     assert F.one_hot(_ids([0, 2], device), 3).tolist() == [[1, 0, 0], [0, 0, 1]]
     assert F.embedding(_ids([0, C - 1], device), _table(device)).shape == (2, 3)
-    assert F.embedding_bag(_ids([[0, C - 1]], device), _table(device)).shape == (
-        1,
-        3,
-    )
+    assert F.embedding_bag(_ids([[0, C - 1]], device), _table(device)).shape == (1, 3)
     for n in (1, 2, 3):
         shape = (1, 1) + (2,) * n
         count, extent = 2**n, 4**n
@@ -553,11 +539,7 @@ def test_the_ends_of_every_axis_are_taken(device: str) -> None:
         unpooled = _flat(getattr(F, f"max_unpool{n}d")(vals, ends, 2).tolist())
         assert unpooled[0] == 1.0 and unpooled[-1] == float(count)
     full = F.ctc_loss(
-        _log_probs(device),
-        _ids([[1, C - 1], [2, 3]], device),
-        [T, T],
-        [2, 2],
-        blank=0,
+        _log_probs(device), _ids([[1, C - 1], [2, 3]], device), [T, T], [2, 2], blank=0
     )
     assert math.isfinite(float(full.item()))
     last_blank = F.ctc_loss(
@@ -629,11 +611,7 @@ def test_check_embedding_indices_is_the_same_rule(device: str) -> None:
     ids=["input-count", "target-count", "rows", "concat-sum", "rank-3"],
 )
 def test_ctc_refuses_a_shape_it_would_read_past(
-    device: str,
-    targets: object,
-    input_lengths: list[int],
-    target_lengths: list[int],
-    match: str,
+    device: str, targets: object, input_lengths: list[int], target_lengths: list[int], match: str
 ) -> None:
     with pytest.raises(ValueError, match=match):
         F.ctc_loss(_log_probs(device), _ids(targets, device), input_lengths, target_lengths)
@@ -642,11 +620,7 @@ def test_ctc_refuses_a_shape_it_would_read_past(
 def test_ctc_accepts_an_empty_input_sequence(device: str) -> None:
     losses = _flat(
         F.ctc_loss(
-            _log_probs(device),
-            _ids([[1, 2], [2, 3]], device),
-            [0, T],
-            [0, 2],
-            reduction="none",
+            _log_probs(device), _ids([[1, 2], [2, 3]], device), [0, T], [0, 2], reduction="none"
         ).tolist()
     )
     assert losses[0] == 0.0 and math.isfinite(losses[1])
@@ -763,12 +737,7 @@ def test_ctc_at_the_ends_of_its_axes_matches_the_reference(ref: ModuleType, blan
     for il, tl in (([T, T], [2, 2]), ([T, 2], [2, 0]), ([3, T], [2, 1])):
         got = F.ctc_loss(lp, _ids(targets, "cpu"), il, tl, blank=blank, reduction="none")
         want = R.nn.functional.ctc_loss(
-            R.tensor(lp.tolist()),
-            R.tensor(targets),
-            il,
-            tl,
-            blank=blank,
-            reduction="none",
+            R.tensor(lp.tolist()), R.tensor(targets), il, tl, blank=blank, reduction="none"
         )
         for g, w in zip(_flat(got.tolist()), _flat(want.tolist()), strict=True):
             assert math.isclose(g, w, rel_tol=1e-4, abs_tol=1e-5) or (
@@ -777,9 +746,7 @@ def test_ctc_at_the_ends_of_its_axes_matches_the_reference(ref: ModuleType, blan
 
 
 @pytest.mark.parity
-def test_ctc_takes_an_empty_input_sequence_as_the_reference_does(
-    ref: ModuleType,
-) -> None:
+def test_ctc_takes_an_empty_input_sequence_as_the_reference_does(ref: ModuleType) -> None:
     R = ref
     lp = _log_probs("cpu")
     for zero_infinity in (False, True):

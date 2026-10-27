@@ -9,10 +9,7 @@ from lucid.models.text.roformer._model import (
     RoFormerForTokenClassification,
     RoFormerModel,
 )
-from lucid.models.text.roformer._tokenizer import (
-    RoFormerTokenizer,
-    RoFormerTokenizerFast,
-)
+from lucid.models.text.roformer._tokenizer import RoFormerTokenizer, RoFormerTokenizerFast
 from lucid.models.text.roformer._pretrained import (
     roformer,
     roformer_cls,
@@ -21,10 +18,7 @@ from lucid.models.text.roformer._pretrained import (
     roformer_multiple_choice,
     roformer_qa,
 )
-from lucid.models.text.roformer._weights import (
-    RoFormerMLMWeights,
-    RoFormerWeights,
-)
+from lucid.models.text.roformer._weights import RoFormerMLMWeights, RoFormerWeights
 
 __all__ = [
     "RoFormerMLMWeights",

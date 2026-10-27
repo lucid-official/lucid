@@ -53,21 +53,10 @@ class _SepConvOp(nn.Module):
       self.pointwise  — pointwise Conv2d (1×1)
     """
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 1,
-    ) -> None:
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(
-            in_channels,
-            in_channels,
-            3,
-            stride=stride,
-            padding=1,
-            groups=in_channels,
-            bias=False,
+            in_channels, in_channels, 3, stride=stride, padding=1, groups=in_channels, bias=False
         )
         self.pointwise = nn.Conv2d(in_channels, out_channels, 1, bias=False)
 
@@ -84,13 +73,7 @@ class _SepConvOp(nn.Module):
 
 @final
 class _EntryBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        *,
-        activate_first: bool,
-    ) -> None:
+    def __init__(self, in_channels: int, out_channels: int, *, activate_first: bool) -> None:
         super().__init__()
         ops: list[nn.Module] = []
         if activate_first:
@@ -114,12 +97,7 @@ class _EntryBlock(nn.Module):
         return self.rep(x) + residual
 
 
-def _make_entry_block(
-    in_channels: int,
-    out_channels: int,
-    *,
-    activate_first: bool,
-) -> _EntryBlock:
+def _make_entry_block(in_channels: int, out_channels: int, *, activate_first: bool) -> _EntryBlock:
     """Return a block matching timm entry-flow key layout.
 
     timm key layout for block1 (activate_first=False):
@@ -611,11 +589,7 @@ class XceptionForImageClassification(
         init_cnn_fan_out(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> XceptionOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> XceptionOutput:
         pooled = self.avgpool(_xception_forward_features(self, x)).flatten(1)
         logits = self.classifier(pooled)
         loss = F.cross_entropy(logits, labels) if labels is not None else None

@@ -188,10 +188,7 @@ def _wolfe_zoom(
         if abs(bracket[1].t - bracket[0].t) * d_norm < _LS_TOLERANCE_CHANGE:
             break
         t, insuf_progress = _safeguard(
-            _cubic_interpolate(bracket[0], bracket[1]),
-            bracket[0].t,
-            bracket[1].t,
-            insuf_progress,
+            _cubic_interpolate(bracket[0], bracket[1]), bracket[0].t, bracket[1].t, insuf_progress
         )
         new = obj(t)
         ls_iter += 1
@@ -367,12 +364,7 @@ class _Settings(NamedTuple):
 
 
 def _should_stop(
-    cfg: _Settings,
-    st: _LBFGSState,
-    n_iter: int,
-    current_evals: int,
-    flat_grad: Tensor,
-    loss: float,
+    cfg: _Settings, st: _LBFGSState, n_iter: int, current_evals: int, flat_grad: Tensor, loss: float
 ) -> bool:
     """The reference's stopping rules, checked after each iteration's move."""
     if n_iter == cfg.max_iter or current_evals >= cfg.max_eval:

@@ -6,13 +6,7 @@ import numpy as np
 import pytest
 
 import lucid
-from lucid.utils.data import (
-    Dataset,
-    Subset,
-    random_split,
-    default_convert,
-    collate,
-)
+from lucid.utils.data import Dataset, Subset, random_split, default_convert, collate
 from lucid.test._helpers.compare import assert_close
 
 

@@ -17,11 +17,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_compiles,
-    metal_tensor,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_compiles, metal_tensor
 
 _COMPILE_DIR = Path(lucid.__file__).resolve().parent / "_C" / "compile"
 _HELPER_REL = Path("OpEmitters/_AttrHelpers.h")
@@ -70,10 +66,7 @@ class _FnModule(nn.Module):
         if probe is None:
             with lucid.no_grad():
                 probe = lucid.arange(
-                    1,
-                    y.numel() + 1,
-                    dtype=y.dtype,
-                    device=COMPILE_DEVICE,
+                    1, y.numel() + 1, dtype=y.dtype, device=COMPILE_DEVICE
                 ).reshape(y_shape)
             self._probes[y_shape] = probe
         return (y * probe).sum()
@@ -138,10 +131,7 @@ def test_pad_emitter_zero_and_nonzero_compiled_replay(
 
 
 @pytest.mark.skipif(not lucid.metal.is_available(), reason="Metal unavailable")
-@pytest.mark.parametrize(
-    ("groups", "padding"),
-    [(4, 0), (4, 1), (1, 0)],
-)
+@pytest.mark.parametrize(("groups", "padding"), [(4, 0), (4, 1), (1, 0)])
 def test_conv2d_vjp_zero_padding_compiled_replay(
     monkeypatch: pytest.MonkeyPatch, groups: int, padding: int
 ) -> None:
@@ -179,14 +169,7 @@ def test_conv2d_vjp_zero_padding_compiled_replay(
 
 
 @pytest.mark.skipif(not lucid.metal.is_available(), reason="Metal unavailable")
-@pytest.mark.parametrize(
-    "shape",
-    [
-        (4, 4),
-        (3, 5),
-        (5, 3),
-    ],
-)
+@pytest.mark.parametrize("shape", [(4, 4), (3, 5), (5, 3)])
 def test_products_diagonal_and_matmul_vjp_zero_pad_compiled_replay(
     monkeypatch: pytest.MonkeyPatch, shape: tuple[int, int]
 ) -> None:
@@ -206,10 +189,7 @@ def test_products_diagonal_and_matmul_vjp_zero_pad_compiled_replay(
     [
         (lambda t: F.max_pool1d(t, kernel_size=2, stride=2, padding=0), (2, 3, 6)),
         (lambda t: F.max_pool2d(t, kernel_size=2, stride=2, padding=0), (2, 3, 4, 4)),
-        (
-            lambda t: F.max_pool3d(t, kernel_size=2, stride=2, padding=0),
-            (1, 2, 4, 4, 4),
-        ),
+        (lambda t: F.max_pool3d(t, kernel_size=2, stride=2, padding=0), (1, 2, 4, 4, 4)),
         (lambda t: F.avg_pool2d(t, kernel_size=2, stride=2, padding=0), (2, 3, 4, 4)),
     ],
 )

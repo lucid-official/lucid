@@ -52,19 +52,12 @@ from lucid.models._utils._common import update_averages
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
 from lucid.models.generative._common._actor import Actor
-from lucid.models.generative._common._pixel_nets import (
-    DenseHead,
-    PixelDecoder,
-    PixelEncoder,
-)
+from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
 from lucid.models.generative._common._returns import lambda_return
 from lucid.models.generative._common._rssm import RSSM, RSSMState
 from lucid.models.generative.dreamer_v3._config import DreamerV3Config
 from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-from lucid.models.generative.dreamer_v3._objectives import (
-    ReturnNormaliser,
-    free_bits_kl,
-)
+from lucid.models.generative.dreamer_v3._objectives import ReturnNormaliser, free_bits_kl
 
 __all__ = [
     "DreamerV3Model",
@@ -672,9 +665,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         self._pcont_scale = config.pcont_scale
         self._updates = 0
         self.returns = ReturnNormaliser(
-            decay=config.return_ema_decay,
-            low=config.return_low,
-            high=config.return_high,
+            decay=config.return_ema_decay, low=config.return_low, high=config.return_high
         )
 
     # ── parameter groups ─────────────────────────────────────────────────
@@ -689,12 +680,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
             when there is one.
         """
         model = self.dreamer_v3
-        modules: list[nn.Module] = [
-            model.encoder,
-            model.rssm,
-            model.decoder,
-            model.reward_head,
-        ]
+        modules: list[nn.Module] = [model.encoder, model.rssm, model.decoder, model.reward_head]
         if model.pcont_head is not None:
             modules.append(model.pcont_head)
         return [p for module in modules for p in module.parameters()]
@@ -838,12 +824,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         )
 
     def _actor_objective(
-        self,
-        states: RSSMState,
-        actions: Tensor,
-        target: Tensor,
-        weight: Tensor,
-        scale: Tensor,
+        self, states: RSSMState, actions: Tensor, target: Tensor, weight: Tensor, scale: Tensor
     ) -> tuple[Tensor, Tensor]:
         r"""The policy's objective — score function, on a scale-free advantage.
 
@@ -940,11 +921,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         return (weight * (fitted + self._critic_slowreg * toward_slow)).mean()
 
     def _replay_critic_objective(
-        self,
-        posteriors: RSSMState,
-        rewards: Tensor,
-        continues: Tensor | None,
-        bootstrap: Tensor,
+        self, posteriors: RSSMState, rewards: Tensor, continues: Tensor | None, bootstrap: Tensor
     ) -> Tensor:
         """The same critic loss, over what actually happened.
 

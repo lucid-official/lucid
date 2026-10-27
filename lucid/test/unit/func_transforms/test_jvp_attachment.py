@@ -92,10 +92,7 @@ def test_jvp_attaches_where_the_reference_does(ref: ModuleType, case: str) -> No
         with _mode(m, case):
             got[m] = m.func.jvp(f, (x,), (t,))
     (y_l, dy_l), (y_r, dy_r) = got[lucid], got[ref]
-    assert (y_l.requires_grad, dy_l.requires_grad) == (
-        y_r.requires_grad,
-        dy_r.requires_grad,
-    )
+    assert (y_l.requires_grad, dy_l.requires_grad) == (y_r.requires_grad, dy_r.requires_grad)
     _assert_values(y_l, y_r)
     _assert_values(dy_l, dy_r)
 
@@ -137,10 +134,7 @@ def test_linearize_attaches_where_the_reference_does(ref: ModuleType, case: str)
         y, lin = m.func.linearize(f, x)
         got[m] = (y, lin(t))
     (y_l, z_l), (y_r, z_r) = got[lucid], got[ref]
-    assert (y_l.requires_grad, z_l.requires_grad) == (
-        y_r.requires_grad,
-        z_r.requires_grad,
-    )
+    assert (y_l.requires_grad, z_l.requires_grad) == (y_r.requires_grad, z_r.requires_grad)
     _assert_values(y_l, y_r)
     _assert_values(z_l, z_r)
 

@@ -384,10 +384,7 @@ def pad_packed_sequence(
     B = batch_sizes_list[0]
 
     out_impl = _C_engine.full(
-        [T, B] + list(data.shape[1:]),
-        padding_value,
-        data._impl.dtype,
-        data._impl.device,
+        [T, B] + list(data.shape[1:]), padding_value, data._impl.dtype, data._impl.device
     )
     out_t = _Tensor.__new_from_impl__(out_impl)
 
@@ -418,9 +415,7 @@ def pad_packed_sequence(
 
 
 def pad_sequence(
-    sequences: list[Tensor],
-    batch_first: bool = False,
-    padding_value: float = 0.0,
+    sequences: list[Tensor], batch_first: bool = False, padding_value: float = 0.0
 ) -> Tensor:
     r"""Stack a list of variable-length tensors into a padded batch.
 
@@ -498,10 +493,7 @@ def pad_sequence(
     return lucid.stack(padded_each, 1)
 
 
-def pack_sequence(
-    sequences: list[Tensor],
-    enforce_sorted: bool = True,
-) -> PackedSequence:
+def pack_sequence(sequences: list[Tensor], enforce_sorted: bool = True) -> PackedSequence:
     r"""One-shot pack-from-list — equivalent to :func:`pad_sequence` then :func:`pack_padded_sequence`.
 
     Convenience wrapper for the common case where a list of per-example

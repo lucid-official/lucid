@@ -53,11 +53,7 @@ def _tiny_cfg(**overrides: object) -> DreamerConfig:
 def _batch(
     b: int = 2, t: int = 3, action_dim: int = 2
 ) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
-    return (
-        lucid.randn((b, t, 3, 64, 64)),
-        lucid.randn((b, t, action_dim)),
-        lucid.randn((b, t)),
-    )
+    return (lucid.randn((b, t, 3, 64, 64)), lucid.randn((b, t, action_dim)), lucid.randn((b, t)))
 
 
 class TestDreamerConfig:
@@ -534,12 +530,7 @@ class TestGradientRouting:
         }
 
     def test_world_loss_reaches_only_the_world_model(self) -> None:
-        assert self._reached("world") == {
-            "encoder",
-            "rssm",
-            "decoder",
-            "reward_head",
-        }
+        assert self._reached("world") == {"encoder", "rssm", "decoder", "reward_head"}
 
     def test_actor_loss_flows_through_the_dynamics(self) -> None:
         """The paper's analytic path — not an accident, and not to the encoder."""
@@ -887,10 +878,7 @@ class TestDiscreteControl:
         lucid.manual_seed(0)
         model = DreamerForWorldModeling(self._cfg(pcont=True))
         output = model(
-            lucid.randn((2, 3, 3, 64, 64)),
-            self._actions(),
-            lucid.randn((2, 3)),
-            lucid.ones((2, 3)),
+            lucid.randn((2, 3, 3, 64, 64)), self._actions(), lucid.randn((2, 3)), lucid.ones((2, 3))
         )
         assert output.loss is not None and output.pcont_loss is not None
         model.backward(output)

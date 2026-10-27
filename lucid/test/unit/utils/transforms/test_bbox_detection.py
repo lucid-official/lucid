@@ -45,11 +45,7 @@ class TestFilter:
     def test_drop_degenerate_and_small(self) -> None:
         b = T.BoundingBoxes(
             lucid.tensor(
-                [
-                    [10.0, 10.0, 40.0, 40.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                    [10.0, 10.0, 12.0, 12.0],
-                ]
+                [[10.0, 10.0, 40.0, 40.0], [0.0, 0.0, 0.0, 0.0], [10.0, 10.0, 12.0, 12.0]]
             ),
             "xyxy",
             (100, 100),

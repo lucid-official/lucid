@@ -49,16 +49,8 @@ _CASES: dict[str, tuple[tuple[int, ...], _Select, bool]] = {
         lambda fw, x, d: fw.index_select(x, 1, _empty_index(fw, d)),
         True,
     ),
-    "gather_empty": (
-        (2, 4),
-        lambda fw, x, d: fw.gather(x, 1, _empty_index(fw, d, 2)),
-        True,
-    ),
-    "masked_select_all_false": (
-        (2, 4),
-        lambda fw, x, d: fw.masked_select(x, _all_false(x)),
-        True,
-    ),
+    "gather_empty": ((2, 4), lambda fw, x, d: fw.gather(x, 1, _empty_index(fw, d, 2)), True),
+    "masked_select_all_false": ((2, 4), lambda fw, x, d: fw.masked_select(x, _all_false(x)), True),
     "getitem_empty_index": ((2, 4), lambda fw, x, d: x[_empty_index(fw, d)], True),
     "getitem_all_false_mask": ((2, 4), lambda fw, x, d: x[_all_false(x)], True),
 }

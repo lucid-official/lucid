@@ -315,11 +315,7 @@ class MobileNetForImageClassification(ImageClassificationModel, ClassificationHe
         self._build_classifier(num_features, config.num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         x = self.avgpool(x)
         x = self.drop(x.flatten(1))

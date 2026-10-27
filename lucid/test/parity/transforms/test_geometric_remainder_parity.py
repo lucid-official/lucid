@@ -120,12 +120,7 @@ class TestRandomResizedCrop:
         chw, hwc = _image(0, h=24, w=24)
         got = _run_lucid(
             T.RandomResizedCrop(
-                24,
-                24,
-                scale=(1.0, 1.0),
-                ratio=(1.0, 1.0),
-                interpolation="bilinear",
-                p=1.0,
+                24, 24, scale=(1.0, 1.0), ratio=(1.0, 1.0), interpolation="bilinear", p=1.0
             ),
             chw,
         )
@@ -137,12 +132,7 @@ class TestRandomResizedCrop:
         chw, hwc = _image(1, h=24, w=24)
         got = _run_lucid(
             T.RandomResizedCrop(
-                12,
-                12,
-                scale=(1.0, 1.0),
-                ratio=(1.0, 1.0),
-                interpolation="bilinear",
-                p=1.0,
+                12, 12, scale=(1.0, 1.0), ratio=(1.0, 1.0), interpolation="bilinear", p=1.0
             ),
             chw,
         )

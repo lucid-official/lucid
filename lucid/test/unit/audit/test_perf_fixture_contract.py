@@ -15,9 +15,7 @@ def test_benchmark_provider_observes_output_and_exposes_elapsed(monkeypatch, pro
     events = []
     monkeypatch.setattr(_bench_timing.lucid.metal, "synchronize", lambda: events.append("sync"))
     monkeypatch.setattr(
-        _bench_timing,
-        "materialize",
-        lambda value: events.append(("materialize", value)),
+        _bench_timing, "materialize", lambda value: events.append(("materialize", value))
     )
     monkeypatch.setattr(perf, "_benchmark_available", lambda: provider != "fallback")
     plugin = Mock(side_effect=lambda fn: fn())

@@ -215,10 +215,7 @@ class DDPMScheduler(DiffusionScheduler):
         self.beta_end = beta_end
 
         self.betas = make_beta_schedule(
-            num_train_timesteps,
-            beta_schedule,
-            beta_start=beta_start,
-            beta_end=beta_end,
+            num_train_timesteps, beta_schedule, beta_start=beta_start, beta_end=beta_end
         )
         self.alphas = 1.0 - self.betas
         # ᾱ_t = ∏_{s≤t} α_s — implemented as a Python prefix product because
@@ -298,12 +295,7 @@ class DDPMScheduler(DiffusionScheduler):
         return sqrt_ab * original + sqrt_one_minus_ab * noise
 
     @override
-    def step(
-        self,
-        model_output: Tensor,
-        timestep: int,
-        sample: Tensor,
-    ) -> Tensor:
+    def step(self, model_output: Tensor, timestep: int, sample: Tensor) -> Tensor:
         """Single reverse-process step at integer ``timestep``.
 
         Args:

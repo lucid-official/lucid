@@ -128,11 +128,7 @@ class Generator(_C_engine.Generator):
 
     _device: _device_cls
 
-    def __init__(
-        self,
-        seed: int | DeviceLike = 0,
-        device: DeviceLike = None,
-    ) -> None:
+    def __init__(self, seed: int | DeviceLike = 0, device: DeviceLike = None) -> None:
         if isinstance(seed, (str, _device_cls, _C_engine.Device)):
             if device is not None:
                 raise TypeError("Generator() got multiple values for argument 'device'")

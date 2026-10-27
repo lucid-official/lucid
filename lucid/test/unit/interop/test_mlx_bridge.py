@@ -68,8 +68,7 @@ class TestLucidToMlx:
         np.testing.assert_array_equal(_host_view(a).ravel(), np.arange(6, dtype=np.float32))
 
     @pytest.mark.parametrize(
-        "dtype",
-        [lucid.float32, lucid.float16, lucid.int32, lucid.int64, lucid.bool_],
+        "dtype", [lucid.float32, lucid.float16, lucid.int32, lucid.int64, lucid.bool_]
     )
     def test_dtypes_survive(self, dtype: object) -> None:
         t = lucid.ones(2, 3, dtype=dtype).to("metal")

@@ -352,10 +352,7 @@ class TestSequenceReplay:
     def test_rejects_ragged_episodes(self) -> None:
         replay = SequenceReplay()
         bad = Episode(
-            lucid.randn((10, 3, 4, 4)),
-            lucid.randn((9, 2)),
-            lucid.randn((10,)),
-            lucid.ones((10,)),
+            lucid.randn((10, 3, 4, 4)), lucid.randn((9, 2)), lucid.randn((10,)), lucid.ones((10,))
         )
         with pytest.raises(ValueError):
             replay.add(bad)
@@ -406,11 +403,7 @@ class TestLatentPolicy:
 
     def _policy(self, model: object, noise: float = 0.0) -> LatentPolicy:
         return LatentPolicy(
-            model.encode,
-            model.rssm,
-            lambda state: model.act(state, sample=False),
-            2,
-            noise=noise,
+            model.encode, model.rssm, lambda state: model.act(state, sample=False), 2, noise=noise
         )
 
     def test_emits_a_bounded_action(self) -> None:
@@ -490,11 +483,7 @@ class TestActionBounds:
     def test_dreamer_actions_are_bounded(self, noise: float) -> None:
         model = self._dreamer()
         policy = LatentPolicy(
-            model.encode,
-            model.rssm,
-            lambda state: model.act(state, sample=False),
-            2,
-            noise=noise,
+            model.encode, model.rssm, lambda state: model.act(state, sample=False), 2, noise=noise
         )
         episode, _ = rollout(_Counter64(length=4), policy)
         assert bool((episode.actions.abs() <= 1.0).all().item())

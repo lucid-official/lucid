@@ -160,10 +160,7 @@ def test_instance_norm_running_statistics_match_the_reference(ref, momentum):
         )
     for key, value in theirs.state_dict().items():
         np.testing.assert_allclose(
-            _host(ours.state_dict()[key]),
-            value.double().numpy(),
-            rtol=1e-5,
-            err_msg=key,
+            _host(ours.state_dict()[key]), value.double().numpy(), rtol=1e-5, err_msg=key
         )
 
 
@@ -232,10 +229,7 @@ def test_lazy_instance_norm_defaults_match_reference(ref, cls_name, shape, devic
     ours = getattr(nn, cls_name)().to(device)
     theirs = getattr(ref.nn, cls_name)()
     assert (ours.affine, ours.track_running_stats) == (True, True)
-    assert (ours.affine, ours.track_running_stats) == (
-        theirs.affine,
-        theirs.track_running_stats,
-    )
+    assert (ours.affine, ours.track_running_stats) == (theirs.affine, theirs.track_running_stats)
     x_np = _input(shape)
     out = ours(lucid.tensor(x_np, device=device))
     ref_out = theirs(ref.tensor(x_np))

@@ -74,12 +74,7 @@ def nansum(
         _C_engine.isnan(input._impl), _C_engine.zeros_like(input._impl), input._impl
     )
     return _wrap(
-        _run_with_dtype(
-            safe,
-            dtype,
-            lambda xi: _C_engine.sum(xi, axes, bool(keepdim)),
-            op="nansum",
-        )
+        _run_with_dtype(safe, dtype, lambda xi: _C_engine.sum(xi, axes, bool(keepdim)), op="nansum")
     )
 
 
@@ -91,10 +86,7 @@ def _nanmean_impl(
     one = _C_engine.ones_like(x_impl)
     safe = _C_engine.where(mask, zero, x_impl)
     not_nan = _C_engine.where(mask, zero, one)
-    return _C_engine.div(
-        _C_engine.sum(safe, axes, keepdim),
-        _C_engine.sum(not_nan, axes, keepdim),
-    )
+    return _C_engine.div(_C_engine.sum(safe, axes, keepdim), _C_engine.sum(not_nan, axes, keepdim))
 
 
 def nanmean(
@@ -164,9 +156,7 @@ def nanmean(
 
 
 def median(
-    input: Tensor,
-    dim: int | None = None,
-    keepdim: bool = False,
+    input: Tensor, dim: int | None = None, keepdim: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]:
     r"""Median of a tensor along ``dim`` (or over the whole tensor when ``None``).
 
@@ -199,9 +189,7 @@ def median(
 
 
 def nanmedian(
-    input: Tensor,
-    dim: int | None = None,
-    keepdim: bool = False,
+    input: Tensor, dim: int | None = None, keepdim: bool = False
 ) -> Tensor | tuple[Tensor, Tensor]:
     r"""Median of a tensor, ignoring NaN entries.
 
@@ -342,11 +330,7 @@ def _median_all(x: Tensor, *, ignore_nan: bool, op: str) -> Tensor:
     return lucid.where(lucid.isfinite(picked), exact, spread)
 
 
-def mode(
-    input: Tensor,
-    dim: int = -1,
-    keepdim: bool = False,
-) -> tuple[Tensor, Tensor]:
+def mode(input: Tensor, dim: int = -1, keepdim: bool = False) -> tuple[Tensor, Tensor]:
     r"""Return a ``(values, indices)`` pair of the modal value of each slice along ``dim``.
 
     Parameters
@@ -423,10 +407,7 @@ def msort(input: Tensor) -> Tensor:
     return lucid.sort(input, dim=0).values
 
 
-def count_nonzero(
-    input: Tensor,
-    dim: int | Sequence[int] | None = None,
-) -> Tensor:
+def count_nonzero(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
     """Count non-zero elements along ``dim`` (or whole tensor when ``None``).
 
     Parameters
@@ -456,11 +437,7 @@ def count_nonzero(
     return lucid.sum(mask) if _dim2 is None else lucid.sum(mask, _dim2, False)
 
 
-def amax(
-    input: Tensor,
-    dim: int | Sequence[int] | None = None,
-    keepdim: bool = False,
-) -> Tensor:
+def amax(input: Tensor, dim: int | Sequence[int] | None = None, keepdim: bool = False) -> Tensor:
     """Reduce ``input`` to per-slice maxima along ``dim`` — values only.
 
     Multi-axis sibling of :func:`lucid.max` that returns *only* the
@@ -494,11 +471,7 @@ def amax(
     )
 
 
-def amin(
-    input: Tensor,
-    dim: int | Sequence[int] | None = None,
-    keepdim: bool = False,
-) -> Tensor:
+def amin(input: Tensor, dim: int | Sequence[int] | None = None, keepdim: bool = False) -> Tensor:
     """Reduce ``input`` to per-slice minima along ``dim`` — values only.
 
     Mirror image of :func:`amax`.  Accepts a tuple of axes for a fused
@@ -531,12 +504,7 @@ def amin(
     )
 
 
-def aminmax(
-    input: Tensor,
-    *,
-    dim: int | None = None,
-    keepdim: bool = False,
-) -> _MinMax[Tensor]:
+def aminmax(input: Tensor, *, dim: int | None = None, keepdim: bool = False) -> _MinMax[Tensor]:
     r"""Compute the minimum and maximum of ``input``.
 
     Parameters
@@ -681,11 +649,7 @@ def _align_trapezoid_x(name: str, yw: Tensor, x: Tensor, d: int) -> tuple[Tensor
 
 
 def _trapezoid_operands(
-    name: str,
-    y: Tensor,
-    x: Tensor | None,
-    dx: float | None,
-    dim: int,
+    name: str, y: Tensor, x: Tensor | None, dx: float | None, dim: int
 ) -> tuple[Tensor, Tensor | None, int]:
     if y.dtype == lucid.bool:
         raise RuntimeError(f"{name}: received a bool input for `y`, but bool is not supported")
@@ -711,11 +675,7 @@ def _trapezoid_operands(
 
 
 def _trapezoid_areas(
-    name: str,
-    y: Tensor,
-    x: Tensor | None,
-    dx: float | None,
-    dim: int,
+    name: str, y: Tensor, x: Tensor | None, dx: float | None, dim: int
 ) -> tuple[Tensor, int]:
     yw, xw, d = _trapezoid_operands(name, y, x, dx, dim)
     n = int(yw.shape[d])
@@ -728,11 +688,7 @@ def _trapezoid_areas(
 
 
 def trapezoid(
-    y: Tensor,
-    x: Tensor | None = None,
-    *,
-    dx: float | None = None,
-    dim: int = -1,
+    y: Tensor, x: Tensor | None = None, *, dx: float | None = None, dim: int = -1
 ) -> Tensor:
     r"""Integrate ``y`` along ``dim`` using the composite trapezoidal rule.
 
@@ -763,11 +719,7 @@ def trapezoid(
 
 
 def cumulative_trapezoid(
-    y: Tensor,
-    x: Tensor | None = None,
-    *,
-    dx: float | None = None,
-    dim: int = -1,
+    y: Tensor, x: Tensor | None = None, *, dx: float | None = None, dim: int = -1
 ) -> Tensor:
     r"""Compute the running trapezoidal integral of ``y`` along ``dim``.
 

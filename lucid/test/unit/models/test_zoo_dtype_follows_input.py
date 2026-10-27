@@ -163,11 +163,7 @@ _EVAL = [("cpu", _F64), (_HALF_DEVICE, _F16)]
 @pytest.mark.parametrize(("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL])
 @pytest.mark.parametrize(("family", "task"), _PAIRS, ids=[f for f, _ in _PAIRS])
 def test_a_forward_answers_in_the_dtype_it_is_given(
-    family: str,
-    task: str,
-    device: str,
-    dtype: lucid.dtype,
-    monkeypatch: pytest.MonkeyPatch,
+    family: str, task: str, device: str, dtype: lucid.dtype, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _need(device)
     monkeypatch.setattr(zoo, "DEV", device)
@@ -364,11 +360,7 @@ def _genie_losses(device: str, dtype: lucid.dtype) -> Callable[[], Any]:
 _COMPONENTS: dict[str, tuple[str, str, Component]] = {
     "sd-training": ("stable_diffusion", "task", _sd_training),
     "sd-generate-ddim": ("stable_diffusion", "sampler", _sd_generate_ddim),
-    "sd-generate-pndm-guided": (
-        "stable_diffusion",
-        "sampler",
-        _sd_generate_pndm_guided,
-    ),
+    "sd-generate-pndm-guided": ("stable_diffusion", "sampler", _sd_generate_pndm_guided),
     "sd-unet-integer-step": ("stable_diffusion", "part", _sd_unet_integer_step),
     "sd-vae": ("stable_diffusion", "part", _sd_vae),
     "diamond-world-rollout": ("diamond", "task", _diamond_world_rollout),
@@ -384,9 +376,7 @@ _ROLLOUT_DTYPES = [("cpu", _F64), (_HALF_DEVICE, _F16), ("metal", _BF16)]
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 @pytest.mark.parametrize("component", sorted(_COMPONENTS))
 def test_a_rollout_family_component_answers_in_its_dtype(
@@ -433,12 +423,7 @@ _GENERATE_SMALLER: dict[str, dict[str, object]] = {
         "num_noise_levels": 10,
         "langevin_steps": 1,
     },
-    "neural_ode": {
-        "sample_size": 4,
-        "hidden_dim": 8,
-        "num_blocks": 1,
-        "solver": "euler",
-    },
+    "neural_ode": {"sample_size": 4, "hidden_dim": 8, "num_blocks": 1, "solver": "euler"},
     "nice": {"hidden_dim": 32},
     "realnvp": {"sample_size": 8, "num_scales": 1, "residual_blocks": 1, "base_dim": 8},
     "score_sde": {
@@ -481,11 +466,7 @@ def _generator(family: str, device: str, dtype: lucid.dtype, **extra: Any) -> An
     overrides = _GENERATE_SMALLER.get(family, {})
     if family != "stable_diffusion":
         cfg = _REGISTRY[name].default_config
-        overrides = {
-            **zoo.shrink(cfg),
-            **zoo.SPECS.get(family, zoo.Spec()).overrides,
-            **overrides,
-        }
+        overrides = {**zoo.shrink(cfg), **zoo.SPECS.get(family, zoo.Spec()).overrides, **overrides}
     lucid.manual_seed(0)
     model = models.create_model(name, **{**overrides, **extra})
     return model.to(device).to(dtype).eval()
@@ -502,9 +483,7 @@ def _sampled_in(answer: Any, dtype: lucid.dtype, what: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 @pytest.mark.parametrize("family", zoo.families("image-generation"))
 def test_generate_answers_in_the_model_dtype(family: str, device: str, dtype: lucid.dtype) -> None:
@@ -557,9 +536,7 @@ def test_every_sde_works_its_cancelling_coefficients_out_wide(sde_type: str) -> 
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 @pytest.mark.parametrize("sde_type", _SDE_TYPES)
 def test_score_sde_log_likelihood_is_finite_at_float32_or_wider(
@@ -593,9 +570,7 @@ def test_a_half_dit_samples_where_half_rounds_alpha_bar_to_one() -> None:
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 def test_tvm_latent_whitening_keeps_the_latent_dtype(device: str, dtype: lucid.dtype) -> None:
     """Its per-channel mean and std were built at the default dtype."""
@@ -651,9 +626,7 @@ def test_every_dit_conditioning_answers_in_half(conditioning: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 def test_planet_plans_in_the_model_dtype(device: str, dtype: lucid.dtype) -> None:
     """The CEM search distribution was float32 ``zeros`` / ``ones``."""
@@ -662,12 +635,7 @@ def test_planet_plans_in_the_model_dtype(device: str, dtype: lucid.dtype) -> Non
 
     lucid.manual_seed(0)
     config = PlaNetConfig(
-        action_dim=2,
-        stoch_size=4,
-        deter_size=8,
-        hidden_size=8,
-        cnn_depth=4,
-        reward_hidden=8,
+        action_dim=2, stoch_size=4, deter_size=8, hidden_size=8, cnn_depth=4, reward_hidden=8
     )
     model = PlaNetForWorldModeling(config).to(device).to(dtype).eval()
     start = model.planet.rssm.initial(1)
@@ -683,10 +651,7 @@ def _ddpm_scheduler() -> Any:
 
 
 def _ddim_scheduler() -> Any:
-    from lucid.models.generative.stable_diffusion import (
-        DDIMScheduler,
-        StableDiffusionConfig,
-    )
+    from lucid.models.generative.stable_diffusion import DDIMScheduler, StableDiffusionConfig
 
     return DDIMScheduler(StableDiffusionConfig(num_train_timesteps=50))
 
@@ -695,9 +660,7 @@ _SCHEDULERS = {"ddpm": _ddpm_scheduler, "ddim": _ddim_scheduler}
 
 
 @pytest.mark.parametrize(
-    ("device", "dtype"),
-    _ROLLOUT_DTYPES,
-    ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES],
+    ("device", "dtype"), _ROLLOUT_DTYPES, ids=[f"{d}-{_name(t)}" for d, t in _ROLLOUT_DTYPES]
 )
 @pytest.mark.parametrize("scheduler", sorted(_SCHEDULERS))
 def test_a_scheduler_noises_a_sample_in_its_dtype(
@@ -726,15 +689,10 @@ def test_a_scheduler_noises_a_sample_in_its_dtype(
 
 
 @pytest.mark.parametrize(
-    ("family", "factory", "overrides", "make_inputs"),
-    CASES,
-    ids=[_family_of(c) for c in CASES],
+    ("family", "factory", "overrides", "make_inputs"), CASES, ids=[_family_of(c) for c in CASES]
 )
 def test_a_training_step_keeps_the_model_dtype(
-    family: str,
-    factory: str,
-    overrides: dict[str, Any],
-    make_inputs: Any,
+    family: str, factory: str, overrides: dict[str, Any], make_inputs: Any
 ) -> None:
     lucid.manual_seed(0)
     model = models.create_model(factory, **overrides).to(_F16)
@@ -773,12 +731,7 @@ def _segments(side: int) -> list[dict[str, lucid.Tensor]]:
 _LOSSES: list[tuple[str, dict[str, object], int, Callable[[], Any]]] = [
     (
         "faster_rcnn_resnet50_fpn",
-        {
-            "num_classes": 3,
-            **_DETECTOR,
-            "rpn_post_nms_top_n": 10,
-            "roi_representation_size": 64,
-        },
+        {"num_classes": 3, **_DETECTOR, "rpn_post_nms_top_n": 10, "roi_representation_size": 64},
         64,
         lambda: _boxes(64),
     ),
@@ -811,9 +764,7 @@ _LOSSES: list[tuple[str, dict[str, object], int, Callable[[], Any]]] = [
 
 @pytest.mark.parametrize("dtype", [_F64, _F16], ids=_name)
 @pytest.mark.parametrize(
-    ("factory", "overrides", "side", "targets"),
-    _LOSSES,
-    ids=[factory for factory, *_ in _LOSSES],
+    ("factory", "overrides", "side", "targets"), _LOSSES, ids=[factory for factory, *_ in _LOSSES]
 )
 def test_a_detection_loss_keeps_the_model_dtype(
     factory: str,
@@ -850,13 +801,7 @@ _SMALL = {
     },
 }
 
-_INFER = [
-    ("cpu", _F16),
-    ("cpu", _BF16),
-    ("cpu", _F64),
-    ("metal", _F16),
-    ("metal", _BF16),
-]
+_INFER = [("cpu", _F16), ("cpu", _BF16), ("cpu", _F64), ("metal", _F16), ("metal", _BF16)]
 
 #: Largest error against the float32 model, relative to its largest output.
 _TOL = {_F64: 1e-4, _F16: 5e-2, _BF16: 2e-1}

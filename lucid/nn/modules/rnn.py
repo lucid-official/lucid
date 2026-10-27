@@ -198,11 +198,7 @@ class _FlatRecurrent(Module):
         """
         dirs = 2 if self.bidirectional else 1
         layout, (h0,) = _sequence_major(
-            kind,
-            x,
-            self.batch_first,
-            (("h0", hx, self.hidden_size),),
-            self.num_layers * dirs,
+            kind, x, self.batch_first, (("h0", hx, self.hidden_size),), self.num_layers * dirs
         )
         seq, batch_sizes = layout.seq, layout.batch_sizes
         T: int = seq.shape[0]
@@ -240,9 +236,7 @@ class _FlatRecurrent(Module):
 
     @override
     def forward(
-        self,
-        input: Tensor | PackedSequence,
-        hx: Tensor | None = None,
+        self, input: Tensor | PackedSequence, hx: Tensor | None = None
     ) -> tuple[Tensor | PackedSequence, Tensor]:
         """Run the recurrent forward pass.
 
@@ -594,13 +588,7 @@ class LSTM(Module):
             c = _carry(c, c_new, bs)
 
             if bs < B:
-                pad = zeros(
-                    t1 - t0,
-                    B - bs,
-                    int(out.shape[2]),
-                    device=out.device,
-                    dtype=out.dtype,
-                )
+                pad = zeros(t1 - t0, B - bs, int(out.shape[2]), device=out.device, dtype=out.dtype)
                 out = _lucid.cat([out, pad], 1)
             blocks.append((t0, out))
 
@@ -609,12 +597,7 @@ class LSTM(Module):
         return stacked, h, c
 
     def _run_single_layer_engine(
-        self,
-        layer_input: Tensor,
-        h0_layer: Tensor,
-        c0_layer: Tensor,
-        layer: int,
-        direction: int,
+        self, layer_input: Tensor, h0_layer: Tensor, c0_layer: Tensor, layer: int, direction: int
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Run one ``lstm_forward`` engine call for a single layer / direction."""
         suffix: str = "_reverse" if direction == 1 else ""
@@ -652,9 +635,7 @@ class LSTM(Module):
 
     @override
     def forward(
-        self,
-        input: Tensor | PackedSequence,
-        hx: tuple[Tensor, Tensor] | None = None,
+        self, input: Tensor | PackedSequence, hx: tuple[Tensor, Tensor] | None = None
     ) -> tuple[Tensor | PackedSequence, tuple[Tensor, Tensor]]:
         """Multi-layer × bidirectional forward.
 
@@ -709,9 +690,7 @@ class LSTM(Module):
             )
 
         result, (h_n_final, c_n_final) = _restore_layout(
-            layout,
-            layer_input,
-            [_lucid.cat(h_n_layers, 0), _lucid.cat(c_n_layers, 0)],
+            layout, layer_input, [_lucid.cat(h_n_layers, 0), _lucid.cat(c_n_layers, 0)]
         )
         return result, (h_n_final, c_n_final)
 
@@ -1007,9 +986,7 @@ class LSTMCell(Module):
 
     @override
     def forward(
-        self,
-        input: Tensor,
-        hx: tuple[Tensor, Tensor] | None = None,
+        self, input: Tensor, hx: tuple[Tensor, Tensor] | None = None
     ) -> tuple[Tensor, Tensor]:
         """Run the recurrent forward pass.
 

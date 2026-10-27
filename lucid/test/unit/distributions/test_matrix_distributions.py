@@ -95,9 +95,7 @@ def test_entropy_grows_with_the_spread():
 def test_it_refuses_two_parameterisations_at_once():
     with pytest.raises(Exception):
         D.MultivariateNormal(
-            _t(MEAN),
-            covariance_matrix=_t(COV),
-            scale_tril=_t(np.linalg.cholesky(COV)),
+            _t(MEAN), covariance_matrix=_t(COV), scale_tril=_t(np.linalg.cholesky(COV))
         )
 
 

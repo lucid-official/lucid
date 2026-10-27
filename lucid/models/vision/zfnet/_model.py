@@ -231,11 +231,7 @@ class ZFNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         self._build_classifier(4096, config.num_classes)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
         x = self.avgpool(x)
         x = x.flatten(1)

@@ -167,9 +167,7 @@ def _captured(device: str):
     return seen[0], buf, seen[0].tmp
 
 
-def test_the_error_is_the_engines_and_worded_as_the_engine_words_it(
-    device: str,
-) -> None:
+def test_the_error_is_the_engines_and_worded_as_the_engine_words_it(device: str) -> None:
     ctx, buf, _ = _captured(device)
     buf.fill_(5.0)
     with pytest.raises(_C_engine.VersionMismatch) as custom:
@@ -381,10 +379,7 @@ def test_refuses_where_the_reference_refuses(scenario: str, device: str, ref) ->
         scenario,
     )
     want = _outcome(
-        lambda v, rg: ref.tensor(v, requires_grad=rg),
-        _ref_mul(ref).apply,
-        ref.no_grad,
-        scenario,
+        lambda v, rg: ref.tensor(v, requires_grad=rg), _ref_mul(ref).apply, ref.no_grad, scenario
     )
     if isinstance(want, str):
         assert "modified by an inplace operation" in want

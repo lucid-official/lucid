@@ -14,8 +14,7 @@ import lucid.models as M
 from lucid._C import engine as _C_engine
 
 pytestmark = pytest.mark.skipif(
-    not hasattr(_C_engine, "coreml"),
-    reason="the engine was built without the Core ML writer",
+    not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
 
 LABELS = tuple(f"class_{index}" for index in range(10))
@@ -25,10 +24,7 @@ def _classifier(tmp_path: object, name: str) -> tuple[object, object, lucid.Tens
     model = M.create_model("resnet_18_cls", num_classes=len(LABELS)).eval()
     x = lucid.randn(1, 3, 224, 224)
     exported = cml.export(
-        model,
-        x,
-        f"{tmp_path}/{name}.mlpackage",
-        classifier=cml.Classifier(labels=LABELS),
+        model, x, f"{tmp_path}/{name}.mlpackage", classifier=cml.Classifier(labels=LABELS)
     )
     return model, exported, x
 

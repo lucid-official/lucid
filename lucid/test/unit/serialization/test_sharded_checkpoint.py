@@ -26,10 +26,7 @@ import lucid.nn as nn
 def _tiny_state_dict() -> OrderedDict:
     """Two small tensors in an OrderedDict."""
     sd: OrderedDict = OrderedDict(
-        [
-            ("weight", lucid.tensor([[1.0, 2.0], [3.0, 4.0]])),
-            ("bias", lucid.tensor([0.5, -0.5])),
-        ]
+        [("weight", lucid.tensor([[1.0, 2.0], [3.0, 4.0]])), ("bias", lucid.tensor([0.5, -0.5]))]
     )
     return sd
 
@@ -133,10 +130,7 @@ class TestShardSplitting:
             assert set(loaded.keys()) == set(sd.keys())
             for k in sd:
                 np.testing.assert_allclose(
-                    loaded[k].numpy(),
-                    sd[k].numpy(),
-                    atol=1e-6,
-                    err_msg=f"mismatch at key {k!r}",
+                    loaded[k].numpy(), sd[k].numpy(), atol=1e-6, err_msg=f"mismatch at key {k!r}"
                 )
 
 

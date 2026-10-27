@@ -64,9 +64,7 @@ def test_the_devices_are_compared_on_the_same_input(qualname: str) -> None:
     assert finding.status is Status.PASS, finding.detail
 
 
-def test_each_spelling_is_called_on_operands_of_its_own(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_each_spelling_is_called_on_operands_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two spellings of one op that adds to its input in place.  Handed
     the same tensor in turn, the second spelling adds to what the first
     wrote — or, while the first answer is still read through a NumPy
@@ -82,10 +80,7 @@ def test_each_spelling_is_called_on_operands_of_its_own(
     monkeypatch.setattr(lucid, "audit_twice_", audit_twice_, raising=False)
     monkeypatch.setattr(Tensor, "audit_twice_", method, raising=False)
     symbol = _surface.Symbol(
-        "Tensor.audit_twice_",
-        "tensor",
-        "method",
-        inspect.getattr_static(Tensor, "audit_twice_"),
+        "Tensor.audit_twice_", "tensor", "method", inspect.getattr_static(Tensor, "audit_twice_")
     )
     finding = EntryPointAxis().run(symbol, Context())
     assert finding.status is Status.PASS, finding.detail

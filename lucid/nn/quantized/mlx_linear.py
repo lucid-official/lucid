@@ -221,11 +221,7 @@ class QuantizedLinearMLX(nn.Module):
 
     @classmethod
     def from_float(
-        cls,
-        mod: nn.Module,
-        bits: int = 8,
-        group_size: int = 64,
-        relu: bool = False,
+        cls, mod: nn.Module, bits: int = 8, group_size: int = 64, relu: bool = False
     ) -> QuantizedLinearMLX:
         """Quantize a float ``Linear``'s weight into MLX packed form (on Metal)."""
         lin = cast("nn.Linear", mod)

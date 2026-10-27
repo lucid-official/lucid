@@ -51,9 +51,7 @@ def test_scatter_nodes_hold_their_index(device: str) -> None:
     assert len(_owned(base.scatter(0, index, src))) == 1
 
 
-def test_scatter_reduce_holds_operands_and_index_but_not_its_result(
-    device: str,
-) -> None:
+def test_scatter_reduce_holds_operands_and_index_but_not_its_result(device: str) -> None:
     # The result owns the node through grad_fn; a strong hold back is a cycle
     # only a backward breaks (LCD-578).
     base = lucid.ones(5, requires_grad=True, device=device)

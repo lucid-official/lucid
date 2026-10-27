@@ -205,10 +205,7 @@ def _i1(x: Tensor) -> Tensor:
 
 
 def _hankel(
-    big: Tensor,
-    phase: float,
-    tables: tuple[tuple[float, ...], ...],
-    second_kind: bool,
+    big: Tensor, phase: float, tables: tuple[tuple[float, ...], ...], second_kind: bool
 ) -> Tensor:
     """The ``x >= 5`` form: ``√(2/πx) (P cos θ - (5/x) Q sin θ)`` for ``J``,
     ``√(2/πx) (P sin θ + (5/x) Q cos θ)`` for ``Y``, with ``θ = x - phase``."""
@@ -265,11 +262,7 @@ def _y1_small(s: Tensor) -> Tensor:
 def _y0(x: Tensor) -> Tensor:
     """``Y0(x)`` on ``x > 0``; ``x <= 0`` as the module says."""
     return _half_line_split(
-        x,
-        5.0,
-        _y0_small,
-        lambda big: _hankel(big, _PIO4, _J0_HANKEL, second_kind=True),
-        -math.inf,
+        x, 5.0, _y0_small, lambda big: _hankel(big, _PIO4, _J0_HANKEL, second_kind=True), -math.inf
     )
 
 
@@ -314,11 +307,7 @@ def _k0e(x: Tensor) -> Tensor:
 def _k0(x: Tensor) -> Tensor:
     """``K0(x)`` on ``x > 0``; ``x <= 0`` as the module says."""
     return _half_line_split(
-        x,
-        2.0,
-        _k0_small,
-        lambda big: _k_large_scaled(big, _K0_B) * lucid.exp(-big),
-        math.inf,
+        x, 2.0, _k0_small, lambda big: _k_large_scaled(big, _K0_B) * lucid.exp(-big), math.inf
     )
 
 
@@ -336,11 +325,7 @@ def _k1e(x: Tensor) -> Tensor:
 def _k1(x: Tensor) -> Tensor:
     """``K1(x)`` on ``x > 0``; ``x <= 0`` as the module says."""
     return _half_line_split(
-        x,
-        2.0,
-        _k1_small,
-        lambda big: _k_large_scaled(big, _K1_B) * lucid.exp(-big),
-        math.inf,
+        x, 2.0, _k1_small, lambda big: _k_large_scaled(big, _K1_B) * lucid.exp(-big), math.inf
     )
 
 

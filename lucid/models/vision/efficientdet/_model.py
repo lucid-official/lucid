@@ -54,12 +54,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
-from lucid.models._utils._common import (
-    host_floats,
-    host_ints,
-    host_rows,
-    make_divisible,
-)
+from lucid.models._utils._common import host_floats, host_ints, host_rows, make_divisible
 from lucid.models._tasks import ObjectDetectionModel
 from lucid.models._output import ObjectDetectionOutput
 from lucid.models._utils._detection import (
@@ -69,10 +64,7 @@ from lucid.models._utils._detection import (
     decode_boxes,
     encode_boxes,
 )
-from lucid.models._utils._detection_results import (
-    check_per_image,
-    merge_class_detections,
-)
+from lucid.models._utils._detection_results import check_per_image, merge_class_detections
 from lucid.models.vision.efficientdet._config import EfficientDetConfig
 
 # ---------------------------------------------------------------------------
@@ -87,12 +79,7 @@ class _SepConv(nn.Module):
     def __init__(self, channels: int, kernel_size: int = 3, padding: int = 1) -> None:
         super().__init__()
         self.dw = nn.Conv2d(
-            channels,
-            channels,
-            kernel_size,
-            padding=padding,
-            groups=channels,
-            bias=False,
+            channels, channels, kernel_size, padding=padding, groups=channels, bias=False
         )
         self.pw = nn.Conv2d(channels, channels, 1, bias=False)
         self.bn = nn.BatchNorm2d(channels)
@@ -261,8 +248,7 @@ class _MBConv(nn.Module):
             self.se = None
 
         self.project = nn.Sequential(
-            nn.Conv2d(mid_ch, out_ch, 1, bias=False),
-            nn.BatchNorm2d(out_ch),
+            nn.Conv2d(mid_ch, out_ch, 1, bias=False), nn.BatchNorm2d(out_ch)
         )
         self.use_skip = stride == 1 and in_ch == out_ch
 
@@ -296,10 +282,7 @@ class _EfficientNetBackbone(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels: int,
-        width_coeff: float = 1.0,
-        depth_coeff: float = 1.0,
+        self, in_channels: int, width_coeff: float = 1.0, depth_coeff: float = 1.0
     ) -> None:
         super().__init__()
 
@@ -371,14 +354,7 @@ class _PredictionHead(nn.Module):
         # Shared DWConv weights (one per repeat depth)
         self.dw_convs: nn.ModuleList[nn.Conv2d] = nn.ModuleList(
             [
-                nn.Conv2d(
-                    in_channels,
-                    in_channels,
-                    3,
-                    padding=1,
-                    groups=in_channels,
-                    bias=False,
-                )
+                nn.Conv2d(in_channels, in_channels, 3, padding=1, groups=in_channels, bias=False)
                 for _ in range(num_repeats)
             ]
         )
@@ -421,9 +397,7 @@ class _PredictionHead(nn.Module):
 
 
 def _init_head_priors(
-    cls_head: _PredictionHead,
-    box_head: _PredictionHead,
-    prior_prob: float = 0.01,
+    cls_head: _PredictionHead, box_head: _PredictionHead, prior_prob: float = 0.01
 ) -> None:
     """Apply the focal-loss bias prior to the class predictor.
 
@@ -691,8 +665,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
             for lvl in range(num_levels)
         )
         self._anchor_gen = AnchorGenerator(
-            sizes=all_sizes,
-            aspect_ratios=(tuple(config.anchor_ratios),) * num_levels,
+            sizes=all_sizes, aspect_ratios=(tuple(config.anchor_ratios),) * num_levels
         )
 
     # ------------------------------------------------------------------
@@ -716,9 +689,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
 
     @override
     def forward(
-        self,
-        x: Tensor,
-        targets: list[dict[str, Tensor]] | None = None,
+        self, x: Tensor, targets: list[dict[str, Tensor]] | None = None
     ) -> ObjectDetectionOutput:
         """Run EfficientDet.
 
@@ -800,11 +771,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         if targets is not None:
             loss = self._compute_loss(all_logits, all_deltas, all_anchors, targets)
 
-        return ObjectDetectionOutput(
-            logits=all_logits,
-            pred_boxes=all_boxes,
-            loss=loss,
-        )
+        return ObjectDetectionOutput(logits=all_logits, pred_boxes=all_boxes, loss=loss)
 
     # ------------------------------------------------------------------
     # Training loss
@@ -951,10 +918,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
     # Post-processing
     # ------------------------------------------------------------------
 
-    def postprocess(
-        self,
-        output: ObjectDetectionOutput,
-    ) -> list[dict[str, Tensor]]:
+    def postprocess(self, output: ObjectDetectionOutput) -> list[dict[str, Tensor]]:
         """Per-class NMS on raw sigmoid predictions.
 
         Returns list of per-image result dicts with "boxes", "scores", "labels".

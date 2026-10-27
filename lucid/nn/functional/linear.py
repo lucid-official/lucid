@@ -20,11 +20,7 @@ if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-def linear(
-    input: Tensor,
-    weight: Tensor,
-    bias: Tensor | None = None,
-) -> Tensor:
+def linear(input: Tensor, weight: Tensor, bias: Tensor | None = None) -> Tensor:
     r"""Apply an affine linear transformation :math:`y = x W^\top + b`.
 
     The canonical fully-connected layer kernel — every dense / MLP /
@@ -98,12 +94,7 @@ def linear(
     return _wrap(_C_engine.nn.linear(_unwrap(input), w_impl, b_impl))
 
 
-def bilinear(
-    input1: Tensor,
-    input2: Tensor,
-    weight: Tensor,
-    bias: Tensor | None = None,
-) -> Tensor:
+def bilinear(input1: Tensor, input2: Tensor, weight: Tensor, bias: Tensor | None = None) -> Tensor:
     r"""Bilinear transformation applied to two inputs.
 
     Computes a quadratic interaction between every pair of features from
@@ -223,10 +214,7 @@ def fused_linear_relu(x: Tensor, weight: Tensor, bias: Tensor) -> Tensor:
 
 
 def fused_linear_gelu(
-    x: Tensor,
-    weight: Tensor,
-    bias: Tensor,
-    approximate: GeluApproximate = "tanh",
+    x: Tensor, weight: Tensor, bias: Tensor, approximate: GeluApproximate = "tanh"
 ) -> Tensor:
     r"""Fused linear + GELU forward kernel.
 

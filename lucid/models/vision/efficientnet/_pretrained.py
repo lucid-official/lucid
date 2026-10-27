@@ -3,10 +3,7 @@
 import lucid.weights as weights_mod
 from lucid.models._registry import register_model
 from lucid.models.vision.efficientnet._config import EfficientNetConfig
-from lucid.models.vision.efficientnet._model import (
-    EfficientNet,
-    EfficientNetForImageClassification,
-)
+from lucid.models.vision.efficientnet._model import EfficientNet, EfficientNetForImageClassification
 from lucid.models.vision.efficientnet._weights import (
     EfficientNetB0Weights,
     EfficientNetB1Weights,

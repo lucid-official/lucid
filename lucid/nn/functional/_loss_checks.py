@@ -82,12 +82,7 @@ def _legacy_reduction(
 
 @overload
 def _legacy_reduction(
-    size_average: bool | None,
-    reduce: bool | None,
-    reduction: object,
-    op: str,
-    *,
-    batchmean: bool,
+    size_average: bool | None, reduce: bool | None, reduction: object, op: str, *, batchmean: bool
 ) -> ReductionKL: ...
 
 
@@ -488,12 +483,7 @@ def _cast(t: Tensor, d: _C_engine.Dtype) -> Tensor:
 
 
 def _operands(
-    op: str,
-    x: Tensor,
-    target: Tensor,
-    *,
-    promote: bool = True,
-    **extra: Tensor | None,
+    op: str, x: Tensor, target: Tensor, *, promote: bool = True, **extra: Tensor | None
 ) -> tuple[Tensor, Tensor]:
     """``x`` and ``target`` checked for loss ``op`` (:func:`_check_device`,
     :func:`_check_dtypes`) and cast to the dtype the loss computes in.
@@ -524,11 +514,7 @@ def _pair_operands(
 
 
 def _check_cross_entropy_target(
-    x: Tensor,
-    target: Tensor,
-    weight: Tensor | None,
-    ignore_index: int,
-    op: str,
+    x: Tensor, target: Tensor, weight: Tensor | None, ignore_index: int, op: str
 ) -> tuple[int, bool]:
     """Validate ``x``, ``target``, ``weight`` and ``ignore_index`` for
     :func:`~lucid.nn.functional.loss.cross_entropy`, returning
@@ -627,8 +613,7 @@ def _poisson_stirling(ti: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     stirling = _C_engine.add(
         _C_engine.sub(_C_engine.mul(safe, _C_engine.log(safe)), safe),
         _C_engine.mul(
-            _C_engine.full(ti.shape, 0.5, ti.dtype, ti.device),
-            _C_engine.log(two_pi_safe),
+            _C_engine.full(ti.shape, 0.5, ti.dtype, ti.device), _C_engine.log(two_pi_safe)
         ),
     )
     zero = _C_engine.zeros(ti.shape, ti.dtype, ti.device)

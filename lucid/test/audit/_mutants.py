@@ -465,10 +465,7 @@ def _observer_that_ignores_its_input() -> Iterator[None]:
 
     class _Deaf(real):  # type: ignore[misc, valid-type]
         def calculate_qparams(self) -> Any:
-            return (
-                _probe.as_f32(np.array(0.01)),
-                _probe.as_int(np.array(0)),
-            )
+            return (_probe.as_f32(np.array(0.01)), _probe.as_int(np.array(0)))
 
     with _patched(lucid.quantization, "MinMaxObserver", _Deaf):
         yield
@@ -499,17 +496,9 @@ MUTANTS: tuple[Mutant, ...] = (
         kind="value",
         qualname="lucid.__version__",
     ),
+    Mutant("nonfinite", "swallows_nan", "returns 0 where its input was NaN", lambda: _swallows_nan),
     Mutant(
-        "nonfinite",
-        "swallows_nan",
-        "returns 0 where its input was NaN",
-        lambda: _swallows_nan,
-    ),
-    Mutant(
-        "edge",
-        "invents_data",
-        "an empty input produces a non-empty output",
-        lambda: _invents_data,
+        "edge", "invents_data", "an empty input produces a non-empty output", lambda: _invents_data
     ),
     Mutant(
         "rank",
@@ -801,9 +790,7 @@ def verify(ctx: _axes.Context | None = None) -> list[Verdict]:
             )
             try:
                 child = subprocess.run(
-                    [sys.executable, "-c", code, mutant.name],
-                    capture_output=True,
-                    timeout=30,
+                    [sys.executable, "-c", code, mutant.name], capture_output=True, timeout=30
                 )
                 caught = child.returncode == mutant.isolated_exit
                 out.append(
@@ -818,14 +805,7 @@ def verify(ctx: _axes.Context | None = None) -> list[Verdict]:
                 )
             except (OSError, subprocess.TimeoutExpired) as exc:
                 out.append(
-                    Verdict(
-                        mutant.axis,
-                        mutant.name,
-                        mutant.why,
-                        False,
-                        "harness error",
-                        str(exc),
-                    )
+                    Verdict(mutant.axis, mutant.name, mutant.why, False, "harness error", str(exc))
                 )
             continue
         axis = _axes.axis_by_name(mutant.axis)
@@ -868,12 +848,7 @@ def verify(ctx: _axes.Context | None = None) -> list[Verdict]:
         caught = finding.status in (Status.FAIL, Status.ERROR, Status.VACUOUS)
         out.append(
             Verdict(
-                mutant.axis,
-                mutant.name,
-                mutant.why,
-                caught,
-                finding.status.value,
-                finding.detail,
+                mutant.axis, mutant.name, mutant.why, caught, finding.status.value, finding.detail
             )
         )
     return out
@@ -892,11 +867,4 @@ def unproven_axes() -> list[str]:
     return [axis.name for axis in _axes.ALL_AXES if axis.name not in covered]
 
 
-__all__ = [
-    "MUTANTS",
-    "Mutant",
-    "UNPROVEN_REASONS",
-    "Verdict",
-    "unproven_axes",
-    "verify",
-]
+__all__ = ["MUTANTS", "Mutant", "UNPROVEN_REASONS", "Verdict", "unproven_axes", "verify"]

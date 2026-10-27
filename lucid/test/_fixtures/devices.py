@@ -22,11 +22,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 import lucid
-from lucid.test._fixtures.dtypes import (
-    _FLOAT_DTYPES,
-    _FLOAT_DTYPES_EXTENDED,
-    _INT_DTYPES,
-)
+from lucid.test._fixtures.dtypes import _FLOAT_DTYPES, _FLOAT_DTYPES_EXTENDED, _INT_DTYPES
 
 if TYPE_CHECKING:
     from _pytest.mark import ParameterSet

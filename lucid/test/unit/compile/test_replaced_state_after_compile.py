@@ -79,11 +79,7 @@ def _data(device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
 
 def _assign_load(m: _Net, device: str) -> None:
     m.inp.load_state_dict(
-        {
-            "weight": _values((4, 4), 0.7, device),
-            "bias": _values((4,), 0.2, device),
-        },
-        assign=True,
+        {"weight": _values((4, 4), 0.7, device), "bias": _values((4,), 0.2, device)}, assign=True
     )
 
 
@@ -142,11 +138,7 @@ _WHEN: dict[str, tuple[int, Callable[[nn.Module, str], None] | None]] = {
 
 
 def _replace[M: nn.Module](
-    model: M,
-    changes: dict[str, Callable[[M, str], None]],
-    change: str,
-    when: str,
-    device: str,
+    model: M, changes: dict[str, Callable[[M, str], None]], change: str, when: str, device: str
 ) -> None:
     notice = _WHEN[when][1]
     if notice is not None:
@@ -453,9 +445,7 @@ def test_a_plain_tensor_attribute_put_in_anothers_place(entry: str) -> None:
 
 
 @pytest.mark.parametrize("device", _DEVICES)
-def test_make_step_reads_a_plain_tensor_attribute_put_in_anothers_place(
-    device: str,
-) -> None:
+def test_make_step_reads_a_plain_tensor_attribute_put_in_anothers_place(device: str) -> None:
     runs = []
     for compiled in (True, False):
         lucid.manual_seed(0)
@@ -530,9 +520,7 @@ def _traces(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     real = CompiledModule._compile_for
 
     def counted(
-        self: CompiledModule[..., object],
-        args: tuple[object, ...],
-        kwargs: dict[str, object],
+        self: CompiledModule[..., object], args: tuple[object, ...], kwargs: dict[str, object]
     ) -> object:
         seen.append(self)
         return real(self, args, kwargs)

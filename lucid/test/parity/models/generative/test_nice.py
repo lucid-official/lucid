@@ -20,11 +20,7 @@ import numpy as np
 import pytest
 
 import lucid
-from lucid.models.generative.nice import (
-    NICEConfig,
-    NICEForImageGeneration,
-    NICEModel,
-)
+from lucid.models.generative.nice import NICEConfig, NICEForImageGeneration, NICEModel
 
 pytestmark = [pytest.mark.parity]
 
@@ -200,8 +196,5 @@ def test_scaling_gradient_parity(ref: ModuleType) -> None:
 
     assert log_scale.grad is not None
     np.testing.assert_allclose(
-        grad.numpy(),
-        log_scale.grad.numpy().astype(np.float32),
-        rtol=1e-3,
-        atol=1e-3,
+        grad.numpy(), log_scale.grad.numpy().astype(np.float32), rtol=1e-3, atol=1e-3
     )

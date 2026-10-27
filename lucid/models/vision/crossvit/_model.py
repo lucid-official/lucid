@@ -97,11 +97,7 @@ class _Attention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]
         # The fused kernel runs unless attention dropout is on.
         out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            dropout_p=self.attn_drop.p if self.training else 0.0,
-            scale=self.scale,
+            q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0, scale=self.scale
         )
         x = out.swapaxes(1, 2).reshape(B, N, C)
         x = self.proj(x)
@@ -112,11 +108,7 @@ class _Mlp(nn.Module):
     """Two-layer Linear-GELU-Linear MLP with dropout."""
 
     def __init__(
-        self,
-        in_features: int,
-        hidden_features: int,
-        out_features: int,
-        drop: float = 0.0,
+        self, in_features: int, hidden_features: int, out_features: int, drop: float = 0.0
     ) -> None:
         super().__init__()
         self.fc1 = nn.Linear(in_features, hidden_features)
@@ -212,11 +204,7 @@ class _CrossAttention(nn.Module):
         v = self.wv(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         # Cross-attention: 1 query token, N keys.
         out = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            dropout_p=self.attn_drop.p if self.training else 0.0,
-            scale=self.scale,
+            q, k, v, dropout_p=self.attn_drop.p if self.training else 0.0, scale=self.scale
         )
         x = out.swapaxes(1, 2).reshape(B, 1, C)
         x = self.proj(x)
@@ -260,9 +248,7 @@ class _CrossAttentionBlock(nn.Module):
 def _make_proj(in_dim: int, out_dim: int, layer_norm_eps: float) -> nn.Sequential:
     """LN(in) → GELU → Linear(in → out) — used for both proj and revert."""
     return nn.Sequential(
-        nn.LayerNorm(in_dim, eps=layer_norm_eps),
-        nn.GELU(),
-        nn.Linear(in_dim, out_dim),
+        nn.LayerNorm(in_dim, eps=layer_norm_eps), nn.GELU(), nn.Linear(in_dim, out_dim)
     )
 
 
@@ -402,9 +388,7 @@ def _bicubic_2d(x: Tensor, oh: int, ow: int) -> Tensor:
         frac = src - idx.to(work)
         return idx, frac
 
-    def _weights(
-        frac: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def _weights(frac: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         # Distances to the four source samples are (1+t, t, 1-t, 2-t).
         d0 = 1.0 + frac
         d1 = frac
@@ -746,11 +730,7 @@ class CrossViTForImageClassification(ImageClassificationModel, ClassificationHea
         self.head = nn.ModuleList([nn.Linear(lin.in_features, num_classes) for lin in self.head])
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> ImageClassificationOutput:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         cfg = cast(CrossViTConfig, self.config)
         targets = [int(round(cfg.image_size * cfg.img_scale[d])) for d in range(2)]
         xs: list[Tensor] = [_scale_image(x, targets[d], cfg.crop_scale) for d in range(2)]

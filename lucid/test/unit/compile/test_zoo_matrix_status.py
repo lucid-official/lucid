@@ -49,9 +49,7 @@ def test_a_step_that_cannot_be_compared_says_why(
     [_GRAD, {"w": np.zeros(3), "b": np.array([1e-30], dtype=np.float32)}],
     ids=["ordinary", "one tiny gradient"],
 )
-def test_a_finite_step_that_trains_something_is_comparable(
-    grads: dict[str, np.ndarray],
-) -> None:
+def test_a_finite_step_that_trains_something_is_comparable(grads: dict[str, np.ndarray]) -> None:
     assert zoo.nonfinite(0.0, grads) is None
 
 

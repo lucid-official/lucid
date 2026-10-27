@@ -18,11 +18,7 @@ _CFG_5 = LeNetConfig()  # paper original (tanh + avg-pool)
 
 
 @register_model(
-    task="base",
-    family="lenet",
-    model_type="lenet",
-    model_class=LeNet,
-    default_config=_CFG_5,
+    task="base", family="lenet", model_type="lenet", model_class=LeNet, default_config=_CFG_5
 )
 def lenet_5(pretrained: bool = False, **overrides: object) -> LeNet:
     r"""LeNet-5 feature-extracting backbone (no classification head).

@@ -138,9 +138,7 @@ def test_the_engine_binding_refuses_none() -> None:
 
 
 @pytest.mark.parametrize(
-    "dtype",
-    [lucid.float32, lucid.float16, lucid.bfloat16],
-    ids=["f32", "f16", "bf16"],
+    "dtype", [lucid.float32, lucid.float16, lucid.bfloat16], ids=["f32", "f16", "bf16"]
 )
 def test_a_matching_gradient_is_installed(device: str, dtype: lucid.dtype) -> None:
     p = _param([1.0, 1.0, 1.0], device, dtype)
@@ -256,11 +254,7 @@ def test_the_engine_binding_is_checked_like_the_setter(device: str) -> None:
 # (param maker, grad maker) on the CPU, with what the refusal is about —
 # the word the reference's message and Lucid's both name.
 _CASES: dict[str, tuple[Callable[[object], object], Callable[[object], object], str | None]] = {
-    "dtype": (
-        lambda m: m.ones(3, dtype=m.float16),
-        lambda m: m.ones(3, dtype=m.float32),
-        "dtype",
-    ),
+    "dtype": (lambda m: m.ones(3, dtype=m.float16), lambda m: m.ones(3, dtype=m.float32), "dtype"),
     "dtype-f64": (
         lambda m: m.ones(3, dtype=m.float32),
         lambda m: m.ones(3, dtype=m.float64),
@@ -271,11 +265,7 @@ _CASES: dict[str, tuple[Callable[[object], object], Callable[[object], object], 
     "zero-d": (lambda m: m.ones(()), lambda m: m.ones(1), "size"),
     "match": (lambda m: m.ones(2, 3), lambda m: m.ones(2, 3), None),
     "transposed": (lambda m: m.ones(2, 3), lambda m: m.ones(3, 2).T, None),
-    "int": (
-        lambda m: m.ones(3, dtype=m.int32),
-        lambda m: m.ones(3, dtype=m.int32),
-        None,
-    ),
+    "int": (lambda m: m.ones(3, dtype=m.int32), lambda m: m.ones(3, dtype=m.int32), None),
 }
 
 _LUCID_WORD = {"dtype": "dtype", "size": "shape"}
@@ -328,9 +318,7 @@ def test_refuses_self_assignment_like_the_reference(ref: object) -> None:
 # ── after backward(create_graph=True) (LCD-81) ─────────────────────────────
 
 
-def test_set_grad_after_create_graph_replaces_graph_grad_with_plain_tensor(
-    device: str,
-) -> None:
+def test_set_grad_after_create_graph_replaces_graph_grad_with_plain_tensor(device: str) -> None:
     w = lucid.tensor([1.0, 2.0, 3.0], device=device, requires_grad=True)
     (w * w).sum().backward(create_graph=True)
     assert w.grad is not None and w.grad.requires_grad

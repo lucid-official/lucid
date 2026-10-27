@@ -114,11 +114,7 @@ def _linear_cases() -> list[Any]:
         ("linear", [((2, 3, 9), (31,)), ((1, 1, 2155), (5387,))]),
         (
             "bilinear",
-            [
-                ((2, 3, 40, 50), (68, 85)),
-                ((1, 2, 7, 9), (3, 31)),
-                ((1, 1, 1, 2155), (1, 5387)),
-            ],
+            [((2, 3, 40, 50), (68, 85)), ((1, 2, 7, 9), (3, 31)), ((1, 1, 1, 2155), (1, 5387))],
         ),
         ("trilinear", [((1, 2, 3, 4, 5), (5, 7, 3)), ((2, 1, 4, 3, 6), (2, 6, 13))]),
     ):
@@ -191,10 +187,7 @@ def _scaled_cases() -> list[Any]:
             tag = {None: "-", False: "edges", True: "corners"}[corners]
             cases.append(
                 pytest.param(
-                    mode,
-                    shape,
-                    {**kw, "align_corners": corners},
-                    id=f"{mode}-{shape[-1]}-{tag}",
+                    mode, shape, {**kw, "align_corners": corners}, id=f"{mode}-{shape[-1]}-{tag}"
                 )
             )
     return cases
@@ -252,12 +245,7 @@ def _heights_across(width_out: int, height_scale: float) -> list[int]:
 class TestNearestCompatibilityShortcuts:
     @pytest.mark.parametrize(("width", "width_scale", "height_scale"), _SHORTCUT_ROWS)
     def test_values_follow_the_reference_across_the_line(
-        self,
-        ref: Any,
-        device: str,
-        width: int,
-        width_scale: float,
-        height_scale: float,
+        self, ref: Any, device: str, width: int, width_scale: float, height_scale: float
     ) -> None:
         width_out = math.floor(width * width_scale)
         kw = {"scale_factor": (height_scale, width_scale), "mode": "nearest"}

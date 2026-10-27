@@ -1,10 +1,7 @@
 """MobileNet v1 family — Howard et al., 2017."""
 
 from lucid.models.vision.mobilenet._config import MobileNetConfig
-from lucid.models.vision.mobilenet._model import (
-    MobileNet,
-    MobileNetForImageClassification,
-)
+from lucid.models.vision.mobilenet._model import MobileNet, MobileNetForImageClassification
 from lucid.models.vision.mobilenet._pretrained import (
     mobilenet,
     mobilenet_cls,

@@ -39,12 +39,7 @@ from lucid.utils.transforms._base import (
     PhotometricTransform,
     Transform,
 )
-from lucid.utils.transforms._datatypes import (
-    BoundingBoxes,
-    Image,
-    Keypoints,
-    Mask,
-)
+from lucid.utils.transforms._datatypes import BoundingBoxes, Image, Keypoints, Mask
 from lucid.utils.transforms._geometric import (
     CenterCrop,
     HorizontalFlip,
@@ -68,13 +63,7 @@ from lucid.utils.transforms._blur import (
     MultiplicativeNoise,
     ZoomBlur,
 )
-from lucid.utils.transforms._composition import (
-    OneOf,
-    OneOrOther,
-    ReplayCompose,
-    Sequential,
-    SomeOf,
-)
+from lucid.utils.transforms._composition import OneOf, OneOrOther, ReplayCompose, Sequential, SomeOf
 from lucid.utils.transforms._misc import (
     BBoxSafeRandomCrop,
     Lambda,
@@ -107,32 +96,18 @@ from lucid.utils.transforms._color import (
     UnsharpMask,
     XYMasking,
 )
-from lucid.utils.transforms._crop import (
-    Crop,
-    CropAndPad,
-    PadIfNeeded,
-    RandomSizedCrop,
-)
+from lucid.utils.transforms._crop import Crop, CropAndPad, PadIfNeeded, RandomSizedCrop
 from lucid.utils.transforms._distortion import (
     ElasticTransform,
     GridDistortion,
     GridElasticDeform,
     OpticalDistortion,
 )
-from lucid.utils.transforms._autoaugment import (
-    AutoAugment,
-    RandAugment,
-    TrivialAugmentWide,
-)
+from lucid.utils.transforms._autoaugment import AutoAugment, RandAugment, TrivialAugmentWide
 from lucid.utils.transforms._dropout import CoarseDropout, GridDropout
 from lucid.utils.transforms._erasing import RandomErasing
 from lucid.utils.transforms._interpolation import Interpolation
-from lucid.utils.transforms._photometric import (
-    ColorJitter,
-    FromFloat,
-    Normalize,
-    ToFloat,
-)
+from lucid.utils.transforms._photometric import ColorJitter, FromFloat, Normalize, ToFloat
 from lucid.utils.transforms._presets import (
     AutoTransformsPreset,
     Detection,

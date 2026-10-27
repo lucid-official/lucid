@@ -378,10 +378,7 @@ class EmbeddingBag(Module):
 
     @override
     def forward(
-        self,
-        input: Tensor,
-        offsets: Tensor | None = None,
-        per_sample_weights: Tensor | None = None,
+        self, input: Tensor, offsets: Tensor | None = None, per_sample_weights: Tensor | None = None
     ) -> Tensor:
         """Look up embeddings for the given indices.
 

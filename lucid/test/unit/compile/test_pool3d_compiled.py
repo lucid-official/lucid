@@ -70,16 +70,8 @@ class TestPool3dCompiles:
                 lambda x: F.max_pool3d(x, 3, stride=2, padding=1),
                 (2, 3, 7, 7, 7),
             ),
-            (
-                "avg overlapping",
-                lambda x: F.avg_pool3d(x, 2, stride=1),
-                (1, 2, 5, 5, 5),
-            ),
-            (
-                "asymmetric volume",
-                lambda x: F.max_pool3d(x, 2),
-                (1, 2, 4, 6, 8),
-            ),
+            ("avg overlapping", lambda x: F.avg_pool3d(x, 2, stride=1), (1, 2, 5, 5, 5)),
+            ("asymmetric volume", lambda x: F.max_pool3d(x, 2), (1, 2, 4, 6, 8)),
         ],
         ids=["max", "avg", "max-strided", "avg-overlap", "asymmetric"],
     )

@@ -205,11 +205,7 @@ def test_every_dtype_shares_and_keeps_its_values(device: str, dtype: lucid.dtype
     flat = base.reshape(-1)
     # A base with its view, overlapping views with no base, and a view alone:
     # the storage is copied whole, assembled from its views, or not shared.
-    cases = [
-        {"base": base, "col": base[:, 2]},
-        {"a": flat[2:12], "b": flat[6:20]},
-        {"t": base.t()},
-    ]
+    cases = [{"base": base, "col": base[:, 2]}, {"a": flat[2:12], "b": flat[6:20]}, {"t": base.t()}]
     for case in cases:
         r = _roundtrip(case)
         assert isinstance(r, dict)
@@ -335,10 +331,7 @@ class TestOlderFiles:
             _legacy_file(
                 {
                     "_lucid_format": 2,
-                    "obj": {
-                        "base": _Pid((*base, 0, _SIX_BYTES)),
-                        "t": _Pid((*flipped, 0, None)),
-                    },
+                    "obj": {"base": _Pid((*base, 0, _SIX_BYTES)), "t": _Pid((*flipped, 0, None))},
                 }
             ),
             map_location=target,

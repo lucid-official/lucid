@@ -53,12 +53,7 @@ class _ConvBnReLU(nn.Module):
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            padding=padding,
-            bias=False,
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
         )
         self.bn = nn.BatchNorm2d(out_channels, eps=_BN_EPS)
 
@@ -700,11 +695,7 @@ class InceptionV3ForImageClassification(ImageClassificationModel, Classification
         _init_reference_weights(self)
 
     @override
-    def forward(
-        self,
-        x: Tensor,
-        labels: Tensor | None = None,
-    ) -> InceptionV3Output:
+    def forward(self, x: Tensor, labels: Tensor | None = None) -> InceptionV3Output:
         cfg = self.config
         assert isinstance(cfg, InceptionConfig)
         use_aux = cfg.aux_logits and self.training

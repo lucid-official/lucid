@@ -270,10 +270,7 @@ class TestMatrixExpParity:
 
     def test_skew_symmetric(self, ref: Any) -> None:
         """exp of a skew-symmetric matrix should be orthogonal."""
-        A = np.array(
-            [[0.0, -1.0, 2.0], [1.0, 0.0, -3.0], [-2.0, 3.0, 0.0]],
-            dtype=np.float32,
-        )
+        A = np.array([[0.0, -1.0, 2.0], [1.0, 0.0, -3.0], [-2.0, 3.0, 0.0]], dtype=np.float32)
         lucid_out = LA.matrix_exp(lucid.tensor(A.copy())).numpy()
         ref_out = ref.linalg.matrix_exp(ref.tensor(A.copy())).detach().cpu().numpy()
         np.testing.assert_allclose(lucid_out, ref_out, atol=1e-3)

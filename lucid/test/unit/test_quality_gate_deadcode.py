@@ -24,12 +24,7 @@ def _collect_single_file(tmp_path: Path, source: str) -> dict[tuple[str, str, st
     pkg.mkdir(parents=True, exist_ok=True)
     target = pkg / "sample.py"
     target.write_text(source)
-    scope = Scope(
-        root=tmp_path,
-        py=["lucid/sample.py"],
-        cpp=[],
-        workdir=tmp_path,
-    )
+    scope = Scope(root=tmp_path, py=["lucid/sample.py"], cpp=[], workdir=tmp_path)
     return VultureCollector().collect(scope)
 
 
@@ -45,8 +40,7 @@ def _collect_single_file(tmp_path: Path, source: str) -> dict[tuple[str, str, st
     ],
 )
 def test_registry_decorators_are_not_flagged_while_unused_function_is(
-    tmp_path: Path,
-    decorator: str,
+    tmp_path: Path, decorator: str
 ) -> None:
     """Functions registered via decorator callbacks must not count as dead code."""
     src = (
@@ -107,11 +101,7 @@ def test_registry_decorators_are_not_flagged_while_unused_function_is(
     ],
 )
 def test_whitelisted_indirect_symbols_are_not_flagged(
-    tmp_path: Path,
-    kind: str,
-    snippet: str,
-    dead_snippet: str,
-    expected_rule: str,
+    tmp_path: Path, kind: str, snippet: str, dead_snippet: str, expected_rule: str
 ) -> None:
     """Whitelisted public API, WeightsEnum members, and runtime hooks are ignored."""
     del kind
@@ -144,9 +134,7 @@ def test_whitelist_digest_follows_its_names_not_its_layout(tmp_path: Path) -> No
 def test_allowlist_edits_change_the_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     before = config.contract()
     monkeypatch.setattr(
-        config,
-        "VULTURE_IGNORE_DECORATORS",
-        (*config.VULTURE_IGNORE_DECORATORS, "@_hides_more"),
+        config, "VULTURE_IGNORE_DECORATORS", (*config.VULTURE_IGNORE_DECORATORS, "@_hides_more")
     )
     monkeypatch.setattr(
         config,

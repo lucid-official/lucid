@@ -16,15 +16,7 @@ import dataclasses
 from collections.abc import Iterator, Sequence
 from typing import NamedTuple, Protocol, overload, override
 
-__all__ = [
-    "Dims",
-    "Flexibility",
-    "GuardedOp",
-    "ShapeNotFlexible",
-    "compare",
-    "flex",
-    "plan_probes",
-]
+__all__ = ["Dims", "Flexibility", "GuardedOp", "ShapeNotFlexible", "compare", "flex", "plan_probes"]
 
 
 class ShapeNotFlexible(NotImplementedError):
@@ -357,10 +349,7 @@ def _bounds(
 
 
 def _walk(
-    ours: list[tuple[bool, object]],
-    theirs: list[tuple[bool, object]],
-    mine: range,
-    other: range,
+    ours: list[tuple[bool, object]], theirs: list[tuple[bool, object]], mine: range, other: range
 ) -> dict[int, int]:
     """Pair axes along one direction until the two shapes part ways."""
     pairs: dict[int, int] = {}
@@ -518,9 +507,7 @@ class GuardedOp:
         self.attrs = op.attrs
         self.outputs = [
             _Value(
-                int(out.id),
-                Dims(flex(out.shape, varying.get(int(out.id))), self.name),
-                out.dtype,
+                int(out.id), Dims(flex(out.shape, varying.get(int(out.id))), self.name), out.dtype
             )
             for out in op.outputs
         ]

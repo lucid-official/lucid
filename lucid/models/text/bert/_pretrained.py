@@ -61,16 +61,10 @@ _CFG_MEDIUM = BERTConfig(
     hidden_size=512, num_hidden_layers=8, num_attention_heads=8, intermediate_size=2048
 )
 _CFG_BASE = BERTConfig(
-    hidden_size=768,
-    num_hidden_layers=12,
-    num_attention_heads=12,
-    intermediate_size=3072,
+    hidden_size=768, num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072
 )
 _CFG_LARGE = BERTConfig(
-    hidden_size=1024,
-    num_hidden_layers=24,
-    num_attention_heads=16,
-    intermediate_size=4096,
+    hidden_size=1024, num_hidden_layers=24, num_attention_heads=16, intermediate_size=4096
 )
 
 # dslim/bert-base-NER is a *cased* BERT-Base (vocab 28 996) with a 9-way BIO
@@ -89,17 +83,10 @@ _CFG_NER_CONLL = BERTConfig(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_TINY,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_TINY
 )
 def bert_tiny(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTTinyWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTTinyWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Tiny encoder.
 
@@ -151,17 +138,10 @@ def bert_tiny(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_MINI,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_MINI
 )
 def bert_mini(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTMiniWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTMiniWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Mini encoder.
 
@@ -208,17 +188,10 @@ def bert_mini(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_SMALL,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_SMALL
 )
 def bert_small(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTSmallWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTSmallWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Small encoder.
 
@@ -265,17 +238,10 @@ def bert_small(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_MEDIUM,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_MEDIUM
 )
 def bert_medium(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTMediumWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTMediumWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Medium encoder.
 
@@ -323,17 +289,10 @@ def bert_medium(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_BASE,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_BASE
 )
 def bert_base(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Base encoder.
 
@@ -386,17 +345,10 @@ def bert_base(
 
 
 @register_model(
-    task="base",
-    family="bert",
-    model_type="bert",
-    model_class=BERTModel,
-    default_config=_CFG_LARGE,
+    task="base", family="bert", model_type="bert", model_class=BERTModel, default_config=_CFG_LARGE
 )
 def bert_large(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTLargeWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTLargeWeights | None = None, **overrides: object
 ) -> BERTModel:
     r"""Construct a BERT-Large encoder.
 
@@ -580,10 +532,7 @@ def bert_large_mlm(
     default_config=_CFG_BASE,
 )
 def bert_base_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseWeights | None = None, **overrides: object
 ) -> BERTForSequenceClassification:
     r"""Construct a BERT-Base model with a sequence-classification head.
 
@@ -648,10 +597,7 @@ def bert_base_cls(
     default_config=_CFG_LARGE,
 )
 def bert_large_cls(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTLargeWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTLargeWeights | None = None, **overrides: object
 ) -> BERTForSequenceClassification:
     r"""Construct a BERT-Large model with a sequence-classification head.
 
@@ -786,10 +732,7 @@ def bert_base_token_cls(
     default_config=_CFG_BASE,
 )
 def bert_base_qa(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseQAWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseQAWeights | None = None, **overrides: object
 ) -> BERTForQuestionAnswering:
     r"""Construct a BERT-Base extractive-QA model (SQuAD v1.1).
 
@@ -917,10 +860,7 @@ def bert_large_qa(
     default_config=_CFG_BASE,
 )
 def bert_base_causal_lm(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseWeights | None = None, **overrides: object
 ) -> BERTForCausalLM:
     r"""Construct a BERT-Base trunk with a left-to-right LM head.
 
@@ -983,10 +923,7 @@ def bert_base_causal_lm(
     default_config=_CFG_BASE,
 )
 def bert_base_nsp(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseWeights | None = None, **overrides: object
 ) -> BERTForNextSentencePrediction:
     r"""Construct BERT-Base with the next-sentence-prediction head.
 
@@ -1047,10 +984,7 @@ def bert_base_nsp(
     default_config=_CFG_BASE,
 )
 def bert_base_pretrain(
-    pretrained: bool | str = False,
-    *,
-    weights: BERTBaseWeights | None = None,
-    **overrides: object,
+    pretrained: bool | str = False, *, weights: BERTBaseWeights | None = None, **overrides: object
 ) -> BERTForPreTraining:
     r"""Construct BERT-Base with both pre-training heads attached.
 

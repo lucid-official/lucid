@@ -198,10 +198,7 @@ def quantize(
 
 
 def dequantize(
-    q: Tensor,
-    scale: _ScaleLike,
-    zero_point: _ZeroPointLike,
-    ch_axis: int | None = None,
+    q: Tensor, scale: _ScaleLike, zero_point: _ZeroPointLike, ch_axis: int | None = None
 ) -> Tensor:
     r"""Decode integer codes back to a ``float32`` approximation of the original.
 

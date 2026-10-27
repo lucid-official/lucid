@@ -249,9 +249,7 @@ class TestRegistry:
             return _DummyBackbone(_DummyConfig())
 
         @register_model(task="image-classification", family="dummy")
-        def dummy_a_for_classification(
-            pretrained: bool = False,
-        ) -> _DummyForClassification:
+        def dummy_a_for_classification(pretrained: bool = False) -> _DummyForClassification:
             return _DummyForClassification(_DummyConfig())
 
         assert "dummy_a" in list_models(task="base")
@@ -280,8 +278,7 @@ class TestAutoClasses:
 
         assert isinstance(AutoModel.from_pretrained("dummy_back"), _DummyBackbone)
         assert isinstance(
-            AutoModelForImageClassification.from_pretrained("dummy_cls"),
-            _DummyForClassification,
+            AutoModelForImageClassification.from_pretrained("dummy_cls"), _DummyForClassification
         )
 
     def test_auto_wrong_task_raises(self) -> None:
@@ -412,20 +409,14 @@ class TestAutoModelTaskCoverage:
     """
 
     def test_sequence_classification_dispatch(self) -> None:
-        from lucid.models import (
-            AutoModelForSequenceClassification,
-            BERTForSequenceClassification,
-        )
+        from lucid.models import AutoModelForSequenceClassification, BERTForSequenceClassification
         from lucid.models._registry import _registry_lookup
 
         entry = _registry_lookup("bert_base_cls", task=AutoModelForSequenceClassification._task)
         assert entry.model_class is BERTForSequenceClassification
 
     def test_token_classification_dispatch(self) -> None:
-        from lucid.models import (
-            AutoModelForTokenClassification,
-            BERTForTokenClassification,
-        )
+        from lucid.models import AutoModelForTokenClassification, BERTForTokenClassification
         from lucid.models._registry import _registry_lookup
 
         entry = _registry_lookup("bert_base_token_cls", task=AutoModelForTokenClassification._task)
@@ -438,20 +429,14 @@ class TestAutoModelTaskCoverage:
         reads a pooled representation and scores it, which is what the
         surviving task describes.  The output type stays its own.
         """
-        from lucid.models import (
-            AutoModelForSequenceClassification,
-            BERTForQuestionAnswering,
-        )
+        from lucid.models import AutoModelForSequenceClassification, BERTForQuestionAnswering
         from lucid.models._registry import _registry_lookup
 
         entry = _registry_lookup("bert_base_qa", task=AutoModelForSequenceClassification._task)
         assert entry.model_class is BERTForQuestionAnswering
 
     def test_seq2seq_lm_dispatch(self) -> None:
-        from lucid.models import (
-            AutoModelForLanguageModeling,
-            TransformerForSeq2SeqLM,
-        )
+        from lucid.models import AutoModelForLanguageModeling, TransformerForSeq2SeqLM
         from lucid.models._registry import _registry_lookup
 
         entry = _registry_lookup(

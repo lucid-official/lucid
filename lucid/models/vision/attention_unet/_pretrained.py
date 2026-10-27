@@ -4,17 +4,11 @@ from dataclasses import replace
 
 from lucid.models._registry import register_model
 from lucid.models.vision.attention_unet._config import AttentionUNetConfig
-from lucid.models.vision.attention_unet._model import (
-    AttentionUNetForSemanticSegmentation,
-)
+from lucid.models.vision.attention_unet._model import AttentionUNetForSemanticSegmentation
 from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 
 _CFG_BASE = AttentionUNetConfig(
-    num_classes=2,
-    in_channels=1,
-    base_channels=64,
-    depth=4,
-    bilinear=False,
+    num_classes=2, in_channels=1, base_channels=64, depth=4, bilinear=False
 )
 
 
@@ -29,8 +23,7 @@ _CFG_3D = replace(_CFG_BASE, spatial_dims=3)
     default_config=_CFG_BASE,
 )
 def attention_unet(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> AttentionUNetForSemanticSegmentation:
     r"""Attention U-Net (Oktay et al., MIDL 2018).
 
@@ -96,8 +89,7 @@ def attention_unet(
     params=91_866_693,
 )
 def attention_unet_3d(
-    pretrained: bool = False,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> AttentionUNetForSemanticSegmentation:
     r"""Attention U-Net, 3-D (Oktay et al., MIDL 2018).
 

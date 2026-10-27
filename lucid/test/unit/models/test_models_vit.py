@@ -63,10 +63,7 @@ class TestViTParamCounts(unittest.TestCase):
         self.assertEqual(vit_large_16_cls().num_parameters(), 304_326_632)
 
     def test_larger_variants_more_params(self) -> None:
-        self.assertGreater(
-            vit_large_16().num_parameters(),
-            vit_base_16().num_parameters(),
-        )
+        self.assertGreater(vit_large_16().num_parameters(), vit_base_16().num_parameters())
 
 
 class TestViTBackbone(unittest.TestCase):
@@ -214,13 +211,7 @@ class TestViTRegistry(unittest.TestCase):
 
     def test_all_variants_present(self) -> None:
         names = models.list_models(family="vit")
-        for v in [
-            "vit_base_16",
-            "vit_base_32",
-            "vit_large_16",
-            "vit_large_32",
-            "vit_huge_14",
-        ]:
+        for v in ["vit_base_16", "vit_base_32", "vit_large_16", "vit_large_32", "vit_huge_14"]:
             self.assertIn(v, names)
             self.assertIn(f"{v}_cls", names)
 
@@ -285,12 +276,7 @@ class TestViTWeightsEnums(unittest.TestCase):
             ViTLarge32Weights,
         )
 
-        return (
-            ViTBase16Weights,
-            ViTBase32Weights,
-            ViTLarge16Weights,
-            ViTLarge32Weights,
-        )
+        return (ViTBase16Weights, ViTBase32Weights, ViTLarge16Weights, ViTLarge32Weights)
 
     def test_default_aliases_imagenet1k_v1(self) -> None:
         for cls in self._enums():
@@ -306,8 +292,7 @@ class TestViTWeightsEnums(unittest.TestCase):
             self.assertIn(f"lucid-dl/{slug}", e.url)
             self.assertIn("/IMAGENET1K_V1/", e.url)
             self.assertEqual(
-                cls.IMAGENET1K_V1.meta["source"],
-                f"reference_vision/{src}.IMAGENET1K_V1",
+                cls.IMAGENET1K_V1.meta["source"], f"reference_vision/{src}.IMAGENET1K_V1"
             )
             self.assertEqual(cls.IMAGENET1K_V1.meta["license"], "bsd-3-clause")
             self.assertEqual(cls.IMAGENET1K_V1.meta["num_params"], nparams)

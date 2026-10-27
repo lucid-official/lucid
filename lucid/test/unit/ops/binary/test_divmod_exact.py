@@ -253,10 +253,7 @@ def _assert_same_floats(got: lucid.Tensor, want: object) -> None:
 @pytest.mark.parametrize("op", sorted(OPS))
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_FLOAT_DTYPES))
 def test_float_results_match_the_reference(
-    ref: ModuleType,
-    device: str,
-    dtype: lucid.dtype,
-    op: str,
+    ref: ModuleType, device: str, dtype: lucid.dtype, op: str
 ) -> None:
     pairs = [(a, b) for a in _FLOAT_NUMS for b in _FLOAT_DENS]
     nums, dens = [a for a, _ in pairs], [b for _, b in pairs]

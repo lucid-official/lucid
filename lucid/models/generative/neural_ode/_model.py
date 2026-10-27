@@ -425,22 +425,14 @@ class NeuralODEModel(PretrainedModel):
 
     def _check_image(self, x: Tensor) -> None:
         channels, height, width = self._image_shape
-        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (
-            channels,
-            height,
-            width,
-        ):
+        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
             raise ValueError(
                 f"Neural ODE expects (B, {channels}, {height}, {width}) samples, "
                 f"got shape {tuple(x.shape)}"
             )
 
     def _integrate(
-        self,
-        func: Callable[..., object],
-        state: _State,
-        t0: float,
-        t1: float,
+        self, func: Callable[..., object], state: _State, t0: float, t1: float
     ) -> _State:
         """Run one solve, adjoint or direct, and return the endpoint only.
 
@@ -544,8 +536,7 @@ class NeuralODEModel(PretrainedModel):
         self.dynamics.reset(eps)
 
         z1, delta1 = cast(
-            tuple[Tensor, Tensor],
-            self._integrate(self.dynamics, (z0, delta0), 0.0, 1.0),
+            tuple[Tensor, Tensor], self._integrate(self.dynamics, (z0, delta0), 0.0, 1.0)
         )
         return z1, delta1
 
@@ -600,11 +591,7 @@ class NeuralODEModel(PretrainedModel):
         """
         z, log_det = self.encode(x)
         log_prob = flow_prior_log_prob(self._prior, z).sum(dim=-1) + log_det
-        return NormalizingFlowOutput(
-            latent=z,
-            log_det_jacobian=log_det,
-            log_prob=log_prob,
-        )
+        return NormalizingFlowOutput(latent=z, log_det_jacobian=log_det, log_prob=log_prob)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -705,11 +692,7 @@ class NeuralODEForImageGeneration(ImageGenerationModel):
 
     @lucid.no_grad()
     def generate(
-        self,
-        n_samples: int = 1,
-        *,
-        temperature: float = 1.0,
-        device: str | None = None,
+        self, n_samples: int = 1, *, temperature: float = 1.0, device: str | None = None
     ) -> GenerationOutput:
         """Sample by integrating a prior draw back to ``t = 0``.
 

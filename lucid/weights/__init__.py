@@ -51,12 +51,7 @@ offline ``tools/convert_weights`` pipeline.
 from lucid.weights._base import WeightEntry, WeightsEnum
 from lucid.weights._hub import download
 from lucid.weights._loading import load_weight_entry, resolve_weights
-from lucid.weights._registry import (
-    get_weight,
-    list_pretrained,
-    register_weights,
-    weights_for,
-)
+from lucid.weights._registry import get_weight, list_pretrained, register_weights, weights_for
 
 #: Hugging Face Hub URL root for every Lucid-hosted checkpoint.  Each
 #: per-family ``_weights.py`` imports this and composes its repo URL as

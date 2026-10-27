@@ -64,22 +64,14 @@ _RAISING: dict[str, tuple[Callable[[Any, Any], Any], str]] = {
 #: reference's (a completed factorisation) or left undefined (Lucid
 #: zero-fills them, the reference leaves the partial factor).
 _EX: dict[str, tuple[Callable[[Any, Any, bool], Any], str, bool]] = {
-    "cholesky_ex": (
-        lambda M, a, c: M.cholesky_ex(a, check_errors=c),
-        "cholesky",
-        False,
-    ),
+    "cholesky_ex": (lambda M, a, c: M.cholesky_ex(a, check_errors=c), "cholesky", False),
     "cholesky_ex_upper": (
         lambda M, a, c: M.cholesky_ex(a, upper=True, check_errors=c),
         "cholesky",
         False,
     ),
     "inv_ex": (lambda M, a, c: M.inv_ex(a, check_errors=c), "lu", False),
-    "solve_ex": (
-        lambda M, a, c: M.solve_ex(a, _rhs(M, a), check_errors=c),
-        "lu",
-        False,
-    ),
+    "solve_ex": (lambda M, a, c: M.solve_ex(a, _rhs(M, a), check_errors=c), "lu", False),
     "lu_factor_ex": (lambda M, a, c: M.lu_factor_ex(a, check_errors=c), "lu", True),
     "ldl_factor_ex": (lambda M, a, c: M.ldl_factor_ex(a, check_errors=c), "ldl", True),
 }
@@ -103,10 +95,7 @@ def _operand(family: str, fails: bool, batched: bool) -> np.ndarray:
 
 
 def _both(a: np.ndarray, device: str, ref: Any) -> tuple[Any, Any]:
-    return (
-        lucid.tensor(a, dtype=lucid.float32, device=device),
-        ref.tensor(a, dtype=ref.float32),
-    )
+    return (lucid.tensor(a, dtype=lucid.float32, device=device), ref.tensor(a, dtype=ref.float32))
 
 
 def _np(x: Any) -> np.ndarray:
@@ -117,9 +106,7 @@ def _np(x: Any) -> np.ndarray:
 
 _CELLS = [
     pytest.param(
-        fails,
-        batched,
-        id=f"{'fails' if fails else 'succeeds'}-{'batch' if batched else 'one'}",
+        fails, batched, id=f"{'fails' if fails else 'succeeds'}-{'batch' if batched else 'one'}"
     )
     for fails in (False, True)
     for batched in (False, True)

@@ -406,11 +406,7 @@ def test_the_python_view_rule_is_the_engines(seed: int) -> None:
             metal_stride: tuple[int, ...] | None = tuple(a_metal.view(*target).stride())
         except RuntimeError:
             metal_stride = None
-        assert (metal_stride is None) == (cpu_stride is None), (
-            shape,
-            a_cpu.stride(),
-            target,
-        )
+        assert (metal_stride is None) == (cpu_stride is None), (shape, a_cpu.stride(), target)
         if metal_stride is not None and cpu_stride is not None:
             assert _moving(target, metal_stride) == _moving(target, cpu_stride)
         assert a_metal.squeeze().stride() == a_cpu.squeeze().stride()
