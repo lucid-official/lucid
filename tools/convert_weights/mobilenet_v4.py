@@ -139,9 +139,7 @@ class MobileNetV4Arch(Architecture):
         self._lucid_model = models.create_model(factory_name)
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

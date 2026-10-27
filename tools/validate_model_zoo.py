@@ -177,15 +177,10 @@ def _literal_str(node: ast.expr) -> str | None:
 
 def _has_split_layout(family_dir: Path) -> bool:
     """YOLO-style: ``_v1.py``, ``_v2.py``, ... instead of the standard trio."""
-    return (
-        any(family_dir.glob("_v[0-9]*.py"))
-        and not (family_dir / "_config.py").is_file()
-    )
+    return any(family_dir.glob("_v[0-9]*.py")) and not (family_dir / "_config.py").is_file()
 
 
-def _check_layout(
-    family_dir: Path, issues: list[Issue]
-) -> tuple[list[Path], list[Path]]:
+def _check_layout(family_dir: Path, issues: list[Issue]) -> tuple[list[Path], list[Path]]:
     """Verify directory layout.  Returns (config_files, model_files).
 
     Standard layout: ``_config.py``, ``_model.py``, ``_pretrained.py``.
@@ -199,9 +194,7 @@ def _check_layout(
             model_files.append(vp)
         return cfg_files, model_files
     expected = {"_config.py", "_model.py", "_pretrained.py", "__init__.py"}
-    present = {
-        p.name for p in family_dir.iterdir() if p.is_file() and p.suffix == ".py"
-    }
+    present = {p.name for p in family_dir.iterdir() if p.is_file() and p.suffix == ".py"}
     missing = expected - present
     if missing:
         issues.append(
@@ -220,9 +213,7 @@ def _check_layout(
     return cfg_files, model_files
 
 
-def _check_configs(
-    cfg_files: list[Path], family_dir: Path, issues: list[Issue]
-) -> set[str]:
+def _check_configs(cfg_files: list[Path], family_dir: Path, issues: list[Issue]) -> set[str]:
     """Check every ``<Family>Config`` class in the family.  Returns the
     set of recognised Config class names (used by model-class checks)."""
     config_names: set[str] = set()
@@ -362,10 +353,7 @@ def _check_configs(
 
 
 def _check_models(
-    model_files: list[Path],
-    family_dir: Path,
-    config_names: set[str],
-    issues: list[Issue],
+    model_files: list[Path], family_dir: Path, config_names: set[str], issues: list[Issue]
 ) -> None:
     """Check direct-model + task-wrapper + output dataclasses in _model.py
     (or each _v*.py for split families)."""
@@ -411,10 +399,7 @@ def _check_models(
             # try the ``For<CapWord>$`` regex to catch unknown task names.
             # ``Former`` substring false-positives (RoFormer / EfficientFormer)
             # are excluded by the regex's CapWord-tail anchor.
-            known_match = next(
-                (s for s in KNOWN_TASK_SUFFIXES if cls.name.endswith(s)),
-                None,
-            )
+            known_match = next((s for s in KNOWN_TASK_SUFFIXES if cls.name.endswith(s)), None)
             if known_match is not None:
                 task_wrappers_found = True
             else:
@@ -485,11 +470,7 @@ def _check_pretrained(family_dir: Path, issues: list[Issue]) -> None:
             args = fn.args
             # MZ070: first arg must be ``pretrained: bool = False`` (after self
             # if any — but module-level functions have no self).
-            first = (
-                (args.posonlyargs + args.args)[0]
-                if (args.posonlyargs or args.args)
-                else None
-            )
+            first = (args.posonlyargs + args.args)[0] if (args.posonlyargs or args.args) else None
             if first is None or first.arg != "pretrained":
                 issues.append(
                     Issue(
@@ -529,9 +510,7 @@ def _check_pretrained(family_dir: Path, issues: list[Issue]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def iter_families(
-    domain_filter: str | None, family_filter: str | None
-) -> Iterable[Path]:
+def iter_families(domain_filter: str | None, family_filter: str | None) -> Iterable[Path]:
     domains = (domain_filter,) if domain_filter else DOMAINS
     for d in domains:
         dom_dir = MODELS_DIR / d
@@ -634,9 +613,7 @@ def _check_protocols(fam: Path, issues: list[Issue]) -> None:
         )
 
 
-def validate(
-    domain: str | None, family: str | None, strict: bool, runtime: bool = False
-) -> int:
+def validate(domain: str | None, family: str | None, strict: bool, runtime: bool = False) -> int:
     issues: list[Issue] = []
     n_families = 0
     for fam in iter_families(domain, family):
@@ -655,8 +632,7 @@ def validate(
         print(i.format())
 
     print(
-        f"\n{n_families} families checked: "
-        f"{len(errors)} error(s), {len(warnings)} warning(s)"
+        f"\n{n_families} families checked: " f"{len(errors)} error(s), {len(warnings)} warning(s)"
     )
     # A filter that matches nothing checked nothing, and "0 error(s)" over
     # zero families reads as a pass — which is how ``--family vq_vae``
@@ -664,13 +640,10 @@ def validate(
     # green on a typo is worse than no gate, so this is an error.
     if n_families == 0:
         asked = ", ".join(
-            f"{k}={v!r}"
-            for k, v in (("domain", domain), ("family", family))
-            if v is not None
+            f"{k}={v!r}" for k, v in (("domain", domain), ("family", family)) if v is not None
         )
         print(
-            f"error: no family matched ({asked or 'no filter'}) — nothing was "
-            f"validated.",
+            f"error: no family matched ({asked or 'no filter'}) — nothing was " f"validated.",
             file=sys.stderr,
         )
         if family is not None:
@@ -684,15 +657,11 @@ def validate(
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(
-        description="Validate Lucid model-zoo family structures."
-    )
+    p = argparse.ArgumentParser(description="Validate Lucid model-zoo family structures.")
     p.add_argument("--domain", choices=DOMAINS, help="Limit to one domain.")
     p.add_argument("--family", help="Limit to one family directory name.")
     p.add_argument(
-        "--strict",
-        action="store_true",
-        help="Treat warnings as errors (exit 1 on any).",
+        "--strict", action="store_true", help="Treat warnings as errors (exit 1 on any)."
     )
     p.add_argument(
         "--runtime",

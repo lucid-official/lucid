@@ -109,6 +109,7 @@ def _known_unit(rel: str) -> str:
         return _GPU
     return rel
 
+
 #: Sites that predate the rule: ``(file, function, rule) -> (hits, reason)``.
 #: Each reason says why the site is not the defect today and what retires
 #: it.  Do not add an entry to get a new kernel through; give its dispatch
@@ -369,8 +370,7 @@ _NOT_FUNCTIONS = frozenset(
 )
 #: What may stand between a parameter list's ``)`` and the body's ``{``.
 _SIGNATURE_TAIL = re.compile(
-    r"(?:\s|const\b|override\b|noexcept\b|final\b|mutable\b|volatile\b|&)*"
-    r"(?:->[^;{}()]*)?"
+    r"(?:\s|const\b|override\b|noexcept\b|final\b|mutable\b|volatile\b|&)*" r"(?:->[^;{}()]*)?"
 )
 
 
@@ -430,9 +430,7 @@ def _function_at(functions: list[Function], pos: int) -> Function | None:
     """The innermost named function containing ``pos``."""
     best = None
     for f in functions:
-        if f.open < pos < f.close and (
-            best is None or f.close - f.open < best.close - best.open
-        ):
+        if f.open < pos < f.close and (best is None or f.close - f.open < best.close - best.open):
             best = f
     return best
 
@@ -503,9 +501,7 @@ def scan_text(text: str, rel: str) -> list[Hit]:
         lo, hi = chain.bodies[0]
         if refused and len(chain.conditions) == 1 and _is_refusal(s[lo:hi]):
             subject, admits = refused
-            guards.append(
-                Guard(m.start(), _function_at(functions, m.start()), subject, admits)
-            )
+            guards.append(Guard(m.start(), _function_at(functions, m.start()), subject, admits))
         # ``if (dt == F32 || dt == F64) {...} else refuse`` is a guard too.
         if len(chain.conditions) == 1 and _dtype_test(first, "=="):
             rest = chain.else_body or _fallthrough(s, chain)
@@ -533,11 +529,7 @@ def scan_text(text: str, rel: str) -> list[Hit]:
                 continue
             if _word_at(s, fall[0]) == "if":
                 nxt = _if_chain(s, fall[0])
-                cond = (
-                    s[nxt.conditions[0][0] : nxt.conditions[0][1]]
-                    if nxt.conditions
-                    else ""
-                )
+                cond = s[nxt.conditions[0][0] : nxt.conditions[0][1]] if nxt.conditions else ""
                 found = _dtype_test(cond, "==")
                 if found is not None and found[0] == subject:
                     continue  # the chain goes on; its last link is checked on its own
@@ -746,9 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         default=ROOT,
         help="checkout to check (default: the one this script is in)",
     )
-    ap.add_argument(
-        "--self-test", action="store_true", help="run the rules on their own examples"
-    )
+    ap.add_argument("--self-test", action="store_true", help="run the rules on their own examples")
     args = ap.parse_args(argv)
     if args.self_test:
         return self_test()
@@ -765,9 +755,7 @@ def main(argv: list[str] | None = None) -> int:
     for f in _files([], root):
         rel = f.relative_to(root).as_posix()
         unit_files.setdefault(_known_unit(rel), set()).add(rel)
-    checked_units = {
-        unit for unit, members in unit_files.items() if members and members <= checked
-    }
+    checked_units = {unit for unit, members in unit_files.items() if members and members <= checked}
     new: list[Hit] = []
     for key, hits in sorted(by_key.items()):
         allowed = _KNOWN.get(key, (0, ""))[0]
@@ -783,15 +771,9 @@ def main(argv: list[str] | None = None) -> int:
     ]
 
     for h in new:
-        print(
-            f"{h.path}:{h.line}: [{h.rule}] in {h.function}: {h.detail}",
-            file=sys.stderr,
-        )
+        print(f"{h.path}:{h.line}: [{h.rule}] in {h.function}: {h.detail}", file=sys.stderr)
     if stale:
-        print(
-            "[check_dtype_dispatch] stale _KNOWN entries; lower or delete them:",
-            file=sys.stderr,
-        )
+        print("[check_dtype_dispatch] stale _KNOWN entries; lower or delete them:", file=sys.stderr)
         for line in stale:
             print(line, file=sys.stderr)
     if new:

@@ -125,7 +125,6 @@ def test_merge_combines_deltas_when_one_side_carries_a_rebaseline() -> None:
     assert merged2.counts == {A: 27, B: 27}
 
 
-
 # ── end to end ──────────────────────────────────────────────────────────────
 
 
@@ -536,6 +535,7 @@ def test_rebase_over_a_rebaseline_combines_deltas_without_hand_edit(tmp_path: Pa
     root = tmp_path / "repo"
     (root / "lucid" / "pkg").mkdir(parents=True)
     (root / "tools").mkdir()
+
     def ig(n: int) -> str:
         return "".join(f"x{i} = 1  # type: ignore[misc]\n" for i in range(n))
 
@@ -564,7 +564,10 @@ def test_rebase_over_a_rebaseline_combines_deltas_without_hand_edit(tmp_path: Pa
     (root / "lucid" / "pkg" / "a.py").write_text(
         "z = 1  # type: ignore[misc]\n" + CLEAN + spacer + ig(3)
     )
-    assert gate(root, "--rebaseline", "--reason", "main rebaseline", "--collectors", FAST).returncode == 0
+    assert (
+        gate(root, "--rebaseline", "--reason", "main rebaseline", "--collectors", FAST).returncode
+        == 0
+    )
     git(root, "commit", "-qam", "main rebaseline")
 
     # Rebase side onto main: merged a.py has 3 ignores (2 + 4 - 3 = 3), b.py has 1:
@@ -638,7 +641,6 @@ def test_jscpd_measures_cpp_headers_and_cross_format_clones(tmp_path: Path) -> N
     out = gate(root, "--fast", "--collectors", "jscpd")
     assert out.returncode == 1, out.stdout + out.stderr
     assert "lucid/_C/a.h" in out.stdout and "lucid/_C/b.cpp" in out.stdout
-
 
 
 # ── unlaunder: the mypy-driven codemod ──────────────────────────────────────
@@ -865,8 +867,7 @@ def test_clang_tidy_collector_counts_seeded_cpp_regression(tmp_path: Path) -> No
 
 
 @pytest.mark.skipif(
-    shutil.which("semgrep") is None
-    and not (Path(sys.executable).parent / "semgrep").is_file(),
+    shutil.which("semgrep") is None and not (Path(sys.executable).parent / "semgrep").is_file(),
     reason="semgrep is not installed",
 )
 def test_semgrep_error_taxonomy_rules_catch_seeded_violations(tmp_path: Path) -> None:
@@ -922,5 +923,3 @@ def test_backend_methods_loc_cap_enforced_at_1500_lines(tmp_path: Path) -> None:
     assert out.returncode == 1, out.stdout + out.stderr
     assert "file-loc-over-cap" in out.stdout
     assert "lucid/_C/backend/cpu/methods/Binary.cpp" in out.stdout
-
-

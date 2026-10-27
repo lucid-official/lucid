@@ -44,7 +44,7 @@ _GOOGLENET_CITATION = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _GOOGLENET_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "googlenet": ("googlenet_cls", "lucid-dl/googlenet", "GoogLeNet"),
+    "googlenet": ("googlenet_cls", "lucid-dl/googlenet", "GoogLeNet")
 }
 
 
@@ -63,9 +63,7 @@ class GoogLeNetArch(Architecture):
         # aux_logits=True ships the real auxiliary-head weights so the
         # key-set matches Lucid; transform_input=False disables the
         # (non-learned) input re-normalisation for a clean parity test.
-        model = tvm.googlenet(
-            weights=self._tv_weights, aux_logits=True, transform_input=False
-        )
+        model = tvm.googlenet(weights=self._tv_weights, aux_logits=True, transform_input=False)
         model.eval()
         return {k: v.detach().cpu().numpy() for k, v in model.state_dict().items()}
 

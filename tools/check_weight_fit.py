@@ -156,11 +156,7 @@ def _load_intercepted() -> Iterator[list[tuple[Module, WeightEntry]]]:
     original = weights_mod.load_weight_entry
 
     def spy(
-        model: Module,
-        weights: WeightsEnum | WeightEntry,
-        *,
-        name: str,
-        strict: bool = True,
+        model: Module, weights: WeightsEnum | WeightEntry, *, name: str, strict: bool = True
     ) -> object:
         entry = weights.entry if isinstance(weights, WeightsEnum) else weights
         seen.append((model, entry))
@@ -185,13 +181,9 @@ def _target(model_name: str, tag: str, *, shadow: bool) -> dict[str, object]:
             with shadow_alloc() if shadow else nullcontext():
                 create_model(model_name, pretrained=tag)
                 if not seen:
-                    return {
-                        "error": "the factory did not load any weights for this tag"
-                    }
+                    return {"error": "the factory did not load any weights for this tag"}
                 target, entry = seen[-1]
-                wanted = {
-                    k: _normalise(v.shape) for k, v in target.state_dict().items()
-                }
+                wanted = {k: _normalise(v.shape) for k, v in target.state_dict().items()}
         except ValueError as exc:
             if not seen:
                 # A factory may share an enum with a sibling and refuse the
@@ -252,9 +244,7 @@ def _fit(built: dict[str, object], header: dict[str, object]) -> dict[str, objec
     }
     return {
         "tensors": len(stored),
-        "shape_mismatch": sorted(
-            k for k in stored if k in wanted and wanted[k] != stored[k]
-        ),
+        "shape_mismatch": sorted(k for k in stored if k in wanted and wanted[k] != stored[k]),
         "checkpoint_only": sorted(set(stored) - set(wanted)),
         "model_only": sorted(set(wanted) - set(stored)),
     }
@@ -281,8 +271,7 @@ def _describe(model_name: str, tag: str, report: dict[str, object]) -> list[str]
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument(
-        "--family",
-        help="only this family, as registered (e.g. sknet, not sk_resnet)",
+        "--family", help="only this family, as registered (e.g. sknet, not sk_resnet)"
     )
     parser.add_argument("--model", help="only this factory")
     parser.add_argument(
@@ -301,9 +290,7 @@ def main() -> int:
         # the sknet family ships sk_resnet_18_cls, which shares no
         # substring with it.
         targets = [
-            (n, e)
-            for n, e in targets
-            if getattr(_REGISTRY.get(n), "family", None) == args.family
+            (n, e) for n, e in targets if getattr(_REGISTRY.get(n), "family", None) == args.family
         ]
         if not targets:
             known = sorted(
@@ -353,13 +340,9 @@ def main() -> int:
             if built.get("real"):
                 built_for_real.append(f"{name} [{tag}]")
     if built_for_real:
-        print(
-            f"built for real, shadow mode could not follow: {', '.join(built_for_real)}"
-        )
+        print(f"built for real, shadow mode could not follow: {', '.join(built_for_real)}")
 
-    urls = sorted(
-        {e.url for *_, b in builds if isinstance(e := b.get("entry"), WeightEntry)}
-    )
+    urls = sorted({e.url for *_, b in builds if isinstance(e := b.get("entry"), WeightEntry)})
     headers = _read_headers(urls)
 
     for name, tag, built in builds:

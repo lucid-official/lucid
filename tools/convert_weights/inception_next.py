@@ -44,8 +44,7 @@ _INCEPTION_NEXT_CITATION = (
 )
 
 _INCEPTION_NEXT_PAPER_URL = (
-    "Yu et al., 2024 — *InceptionNeXt: When Inception Meets ConvNeXt* "
-    "(arXiv:2303.16900)"
+    "Yu et al., 2024 — *InceptionNeXt: When Inception Meets ConvNeXt* " "(arXiv:2303.16900)"
 )
 
 # arch -> (lucid_cls_factory, repo_id, title)
@@ -98,9 +97,7 @@ class InceptionNeXtArch(Architecture):
         self._lucid_model = models.create_model(self._lucid_factory)
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

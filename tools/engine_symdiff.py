@@ -41,9 +41,7 @@ _INSN_LINE = re.compile(r"^\s*[0-9a-fA-F]+:\s+(\S+)(?:\s+(.*))?$")
 _BRANCH_TARGET = re.compile(r"\b0x[0-9a-fA-F]+\s+<([^+>]+)(?:\+0x([0-9a-fA-F]+))?>")
 _ADRP_OPERAND = re.compile(r"^([wx]\d+),\s*0x[0-9a-fA-F]+(?:\s+<[^>]+>)?$")
 _ADD_PAGEOFF = re.compile(r"^([wx]\d+,\s*{reg}),\s*#0x[0-9a-fA-F]+(?:\s+.*)?$")
-_MEM_PAGEOFF = re.compile(
-    r"^([wxdsq]\d+,\s*\[{reg})(?:,\s*#0x[0-9a-fA-F]+)?\](?:\s+.*)?$"
-)
+_MEM_PAGEOFF = re.compile(r"^([wxdsq]\d+,\s*\[{reg})(?:,\s*#0x[0-9a-fA-F]+)?\](?:\s+.*)?$")
 
 
 def normalize_symbol_name(sym: str) -> str:
@@ -53,9 +51,7 @@ def normalize_symbol_name(sym: str) -> str:
     return s
 
 
-def normalize_disassembly(
-    lines: list[str], current_symbol: str
-) -> list[str]:
+def normalize_disassembly(lines: list[str], current_symbol: str) -> list[str]:
     """Normalize raw ``objdump -d --no-show-raw-insn`` lines for one function."""
     norm_self = normalize_symbol_name(current_symbol)
     out: list[str] = []
@@ -81,8 +77,7 @@ def normalize_disassembly(
         if adrp_reg is not None:
             if mnemonic == "add":
                 add_m = re.match(
-                    rf"^([wx]\d+,\s*{re.escape(adrp_reg)}),\s*#0x[0-9a-fA-F]+(?:\s+.*)?$",
-                    operands,
+                    rf"^([wx]\d+,\s*{re.escape(adrp_reg)}),\s*#0x[0-9a-fA-F]+(?:\s+.*)?$", operands
                 )
                 if add_m is not None:
                     out.append(f"add\t{add_m.group(1)}, PAGEOFF")
@@ -156,9 +151,7 @@ def get_exports(so_path: Path) -> set[str]:
     return exports
 
 
-def get_class_text_symbols(
-    so_path: Path, classes: tuple[str, ...]
-) -> dict[str, str]:
+def get_class_text_symbols(so_path: Path, classes: tuple[str, ...]) -> dict[str, str]:
     """Return ``{normalized_mangled: raw_mangled}`` for text symbols matching ``classes``."""
     out = subprocess.check_output(["nm", "-n", str(so_path)], text=True)
     result: dict[str, str] = {}
@@ -214,9 +207,7 @@ def disassemble_symbols(so_path: Path, mangled_syms: list[str]) -> dict[str, lis
 
 def get_text_section_size(so_path: Path) -> int:
     """Return the byte size of ``__TEXT,__text`` from ``objdump -h``."""
-    out = subprocess.check_output(
-        ["/usr/bin/objdump", "-h", str(so_path)], text=True
-    )
+    out = subprocess.check_output(["/usr/bin/objdump", "-h", str(so_path)], text=True)
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 3 and parts[1] == "__text":
@@ -241,9 +232,7 @@ class SymdiffReport:
 
 
 def compare_binaries(
-    before_so: Path,
-    after_so: Path,
-    classes: tuple[str, ...] = DEFAULT_CLASSES,
+    before_so: Path, after_so: Path, classes: tuple[str, ...] = DEFAULT_CLASSES
 ) -> SymdiffReport:
     exp_before = get_exports(before_so)
     exp_after = get_exports(after_so)
@@ -258,12 +247,8 @@ def compare_binaries(
     funcs_removed = sorted(set_before - set_after)
     common_norm = sorted(set_before & set_after)
 
-    dis_before = disassemble_symbols(
-        before_so, [syms_before[k] for k in common_norm]
-    )
-    dis_after = disassemble_symbols(
-        after_so, [syms_after[k] for k in common_norm]
-    )
+    dis_before = disassemble_symbols(before_so, [syms_before[k] for k in common_norm])
+    dis_after = disassemble_symbols(after_so, [syms_after[k] for k in common_norm])
 
     bodies_identical = 0
     bodies_changed: dict[str, tuple[int, int, str]] = {}
@@ -275,19 +260,10 @@ def compare_binaries(
         else:
             diff_lines = list(
                 difflib.unified_diff(
-                    b_insns,
-                    a_insns,
-                    fromfile="before",
-                    tofile="after",
-                    lineterm="",
-                    n=2,
+                    b_insns, a_insns, fromfile="before", tofile="after", lineterm="", n=2
                 )
             )[:20]
-            bodies_changed[norm_k] = (
-                len(b_insns),
-                len(a_insns),
-                "\n".join(diff_lines),
-            )
+            bodies_changed[norm_k] = (len(b_insns), len(a_insns), "\n".join(diff_lines))
 
     return SymdiffReport(
         exports_added=exp_added,
@@ -335,9 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     if not rep.exports_added and not rep.exports_removed:
         print(f"EXPORTS identical ({rep.exports_count})")
     else:
-        print(
-            f"EXPORTS DIFF +{len(rep.exports_added)} -{len(rep.exports_removed)}"
-        )
+        print(f"EXPORTS DIFF +{len(rep.exports_added)} -{len(rep.exports_removed)}")
         for s in rep.exports_added[:10]:
             print(f"  + {s}")
         for s in rep.exports_removed[:10]:
@@ -355,9 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         for s in rep.funcs_removed[:10]:
             print(f"  - {dem.get(s, s)}")
 
-    print(
-        f"BODIES identical {rep.bodies_identical}, changed {len(rep.bodies_changed)}"
-    )
+    print(f"BODIES identical {rep.bodies_identical}, changed {len(rep.bodies_changed)}")
     if rep.bodies_changed:
         dem = demangle_symbols(list(rep.bodies_changed.keys()))
         for sym, (n_b, n_a, diff_txt) in sorted(rep.bodies_changed.items()):

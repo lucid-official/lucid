@@ -38,9 +38,7 @@ def cold_ms(call: Callable[[], object]) -> float:
     return (time.perf_counter() - start) * 1000
 
 
-def warm_ms(
-    call: Callable[[], object], n_warmup: int, n_iter: int,
-) -> tuple[float, float, float]:
+def warm_ms(call: Callable[[], object], n_warmup: int, n_iter: int) -> tuple[float, float, float]:
     if n_warmup < 0 or n_iter < 1:
         raise ValueError("warmup must be nonnegative and iterations must be positive")
     for _ in range(n_warmup):

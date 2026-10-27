@@ -134,13 +134,7 @@ def _run_batch(exe: str, db_dir: Path, batch: list[str], cwd: Path) -> str:
         *batch,
     ]
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
     except FileNotFoundError as exc:
         raise GateError(f"{exe}: not found ({exc})") from exc
     out = (proc.stdout or "") + "\n" + (proc.stderr or "")

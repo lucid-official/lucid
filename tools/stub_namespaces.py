@@ -134,13 +134,7 @@ def _signature_params(fn: object) -> list[str] | None:
         return None
     names = []
     for p in signature.parameters.values():
-        prefix = (
-            "*"
-            if p.kind is p.VAR_POSITIONAL
-            else "**"
-            if p.kind is p.VAR_KEYWORD
-            else ""
-        )
+        prefix = "*" if p.kind is p.VAR_POSITIONAL else "**" if p.kind is p.VAR_KEYWORD else ""
         names.append(prefix + p.name)
     return names[1:]
 
@@ -158,9 +152,7 @@ def _stub_methods(cls: ast.ClassDef) -> dict[str, list[ast.FunctionDef]]:
     return methods
 
 
-def _method_drift(
-    qualname: str, defs: list[ast.FunctionDef], want: list[str]
-) -> list[str]:
+def _method_drift(qualname: str, defs: list[ast.FunctionDef], want: list[str]) -> list[str]:
     """A lone definition names exactly ``want``; each overload, a subset of it."""
     if len(defs) == 1:
         got = _stub_params(defs[0])[1:]
@@ -190,11 +182,7 @@ def class_drift(
     ``None`` from either skips the comparison, not the name.
     """
     name = runtime.__name__
-    cls = next(
-        n
-        for n in ast.parse(stub).body
-        if isinstance(n, ast.ClassDef) and n.name == name
-    )
+    cls = next(n for n in ast.parse(stub).body if isinstance(n, ast.ClassDef) and n.name == name)
     have = {n for n in dir(runtime) if not n.startswith("_")}
     stubbed = {n for n in _stub_members(cls) if not n.startswith("_")}
     problems = [f"{name}.{n}: in the stub, not at runtime" for n in sorted(stubbed - have)]
@@ -226,12 +214,9 @@ def module_all_drift(stub: str, all_names: Sequence[str], *, module: str = "luci
         elif isinstance(node, ast.Assign):
             exported.update(t.id for t in node.targets if isinstance(t, ast.Name))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            exported.update(
-                alias.asname for alias in node.names if alias.asname is not None
-            )
+            exported.update(alias.asname for alias in node.names if alias.asname is not None)
     return [
         f"{module}.{n}: in {module}.__all__, not exported in {module}/__init__.pyi"
         for n in all_names
         if n not in exported
     ]
-

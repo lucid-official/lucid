@@ -112,9 +112,7 @@ def test_summaries_only_change_moves_only_the_embedding_slugs_fingerprint() -> N
         content_after = _M._content_fingerprints()
         mtime_after = _M._per_module_fingerprints()
 
-    assert (
-        content_before["lucid.models.gamma"] != content_after["lucid.models.gamma"]
-    ), (
+    assert content_before["lucid.models.gamma"] != content_after["lucid.models.gamma"], (
         "a summaries-only change must move the content fingerprint of the "
         "slug whose factory the summary describes"
     )

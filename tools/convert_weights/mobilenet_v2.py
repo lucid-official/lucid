@@ -56,12 +56,10 @@ _MOBILENET_V2_PAPER_URL = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _MOBILENET_V2_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "mobilenet_v2": ("mobilenet_v2_cls", "lucid-dl/mobilenet-v2", "MobileNet V2"),
+    "mobilenet_v2": ("mobilenet_v2_cls", "lucid-dl/mobilenet-v2", "MobileNet V2")
 }
 
-_TV_BUILDERS = {
-    "mobilenet_v2": (tvm.mobilenet_v2, tvm.MobileNet_V2_Weights),
-}
+_TV_BUILDERS = {"mobilenet_v2": (tvm.mobilenet_v2, tvm.MobileNet_V2_Weights)}
 
 # Inner conv-slot remap, keyed by which torchvision sub-index appears.
 # expand_ratio == 6 block: conv.0.* (expand), conv.1.* (depthwise),

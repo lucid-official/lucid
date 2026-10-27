@@ -64,7 +64,7 @@ _MOBILENET_V1_VARIANTS: dict[str, tuple[str, str, str, str]] = {
         "lucid-dl/mobilenet-v1",
         "MobileNet V1",
         "mobilenetv1_100.ra4_e3600_r224_in1k",
-    ),
+    )
 }
 
 _STEM_DW_PW_BLOCKS = 13  # paper Table 1 — 13 depthwise+pointwise blocks
@@ -103,9 +103,7 @@ class MobileNetArch(Architecture):
         return {pair: 3 + idx for idx, pair in enumerate(seen)}
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         import lucid.models as models

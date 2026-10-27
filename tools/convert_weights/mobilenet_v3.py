@@ -49,9 +49,7 @@ _MOBILENET_V3_CITATION = (
     "}"
 )
 
-_MOBILENET_V3_PAPER_URL = (
-    "Howard et al., 2019 — *Searching for MobileNetV3* (arXiv:1905.02244)"
-)
+_MOBILENET_V3_PAPER_URL = "Howard et al., 2019 — *Searching for MobileNetV3* (arXiv:1905.02244)"
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _MOBILENET_V3_VARIANTS: dict[str, tuple[str, str, str]] = {
@@ -68,14 +66,8 @@ _MOBILENET_V3_VARIANTS: dict[str, tuple[str, str, str]] = {
 }
 
 _TV_BUILDERS = {
-    "mobilenet_v3_large": (
-        tvm.mobilenet_v3_large,
-        tvm.MobileNet_V3_Large_Weights,
-    ),
-    "mobilenet_v3_small": (
-        tvm.mobilenet_v3_small,
-        tvm.MobileNet_V3_Small_Weights,
-    ),
+    "mobilenet_v3_large": (tvm.mobilenet_v3_large, tvm.MobileNet_V3_Large_Weights),
+    "mobilenet_v3_small": (tvm.mobilenet_v3_small, tvm.MobileNet_V3_Small_Weights),
 }
 
 
@@ -170,10 +162,7 @@ class MobileNetV3Arch(Architecture):
                 nse = [type(c).__name__ for c in children].count("SqueezeExcitation")
                 has_expand = (len(children) - nse) == 3
                 roles = (
-                    (["expand"] if has_expand else [])
-                    + ["dw"]
-                    + (["se"] if nse else [])
-                    + ["proj"]
+                    (["expand"] if has_expand else []) + ["dw"] + (["se"] if nse else []) + ["proj"]
                 )
                 role = roles[int(parts[3])]
                 if role == "se":

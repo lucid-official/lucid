@@ -55,10 +55,7 @@ INTERNAL_ARGS_MAX = 7
 LOC_CAP_PY = 1500
 LOC_CAP_CPP = 3000
 LOC_CAP_BACKEND_METHODS = 1500
-BACKEND_METHODS_PREFIXES = (
-    "lucid/_C/backend/cpu/methods/",
-    "lucid/_C/backend/gpu/methods/",
-)
+BACKEND_METHODS_PREFIXES = ("lucid/_C/backend/cpu/methods/", "lucid/_C/backend/gpu/methods/")
 # Rules whose count is a size, not a number of findings: class totals count
 # one per file so 14954-line headers do not drown every other class.
 PER_FILE_RULES = frozenset({"file-loc-over-cap", "function-length-excess", "function-ccn-excess"})
@@ -238,7 +235,7 @@ def contract() -> dict[str, dict[str, object]]:
             "jscpd": (
                 f"{JSCPD_VERSION} lines>={JSCPD_MIN_LINES} tokens>={JSCPD_MIN_TOKENS} "
                 f"formats={JSCPD_FORMATS} cross={JSCPD_CROSS_FORMATS}"
-            ),
+            )
         },
         "mypy": {"mypy_flags": " ".join(MYPY_FLAGS)},
         "engine": {"engine_test_only_bindings": ",".join(sorted(ENGINE_TEST_ONLY_BINDINGS))},

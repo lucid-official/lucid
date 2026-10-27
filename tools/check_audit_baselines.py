@@ -124,14 +124,8 @@ Check = Callable[[dict[str, object]], list[str]]
 
 # path -> (consistency check, the command that rewrites the file correctly)
 BASELINES: dict[str, tuple[Check, str]] = {
-    "lucid/test/audit/coverage.json": (
-        _coverage,
-        "lucid-audit --audit-only --update-coverage",
-    ),
-    "lucid/test/audit/doctest.json": (
-        _doctest,
-        "lucid-audit --doctests-only --update-doctests",
-    ),
+    "lucid/test/audit/coverage.json": (_coverage, "lucid-audit --audit-only --update-coverage"),
+    "lucid/test/audit/doctest.json": (_doctest, "lucid-audit --doctests-only --update-doctests"),
     "lucid/test/audit/suite.json": (_suite, "lucid-audit --tests-only --update-suite"),
 }
 
@@ -153,12 +147,7 @@ def _git(root: Path, *args: str) -> str:
     # pre-commit hook the index being committed (a temporary one for
     # `git commit -- <path>`), and that is the content to judge.
     return subprocess.run(
-        ["git", *args],
-        cwd=root,
-        env=dict(os.environ),
-        capture_output=True,
-        text=True,
-        check=True,
+        ["git", *args], cwd=root, env=dict(os.environ), capture_output=True, text=True, check=True
     ).stdout
 
 

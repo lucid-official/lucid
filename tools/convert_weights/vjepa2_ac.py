@@ -7,10 +7,9 @@ import numpy as np
 from lucid.nn import Module
 from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
 
-
 _CITATION = (
-    "Assran et al., \"V-JEPA 2: Self-Supervised Video Models Enable "
-    "Understanding, Prediction and Planning,\" arXiv:2506.09985, 2025."
+    'Assran et al., "V-JEPA 2: Self-Supervised Video Models Enable '
+    'Understanding, Prediction and Planning," arXiv:2506.09985, 2025.'
 )
 _PAPER_URL = "https://arxiv.org/abs/2506.09985"
 _SOURCE_URL = "https://dl.fbaipublicfiles.com/vjepa2/vjepa2-ac-vitg.pt"
@@ -53,9 +52,7 @@ class VJEPA2ACArch(Architecture):
         encoder_raw = state.get("encoder")
         predictor_raw = state.get("predictor")
         if not isinstance(encoder_raw, dict) or not isinstance(predictor_raw, dict):
-            raise RuntimeError(
-                "V-JEPA 2-AC checkpoint must contain encoder and predictor mappings"
-            )
+            raise RuntimeError("V-JEPA 2-AC checkpoint must contain encoder and predictor mappings")
 
         converted: dict[str, np.ndarray] = {}
         for key, value in _clean_keys(encoder_raw).items():
@@ -98,10 +95,7 @@ class VJEPA2ACArch(Architecture):
                 "type": "video-with-actions",
                 "frames_per_clip": 64,
                 "size": 256,
-                "normalization": {
-                    "mean": [0.485, 0.456, 0.406],
-                    "std": [0.229, 0.224, 0.225],
-                },
+                "normalization": {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
                 "action_dim": 7,
                 "state_dim": 7,
             },

@@ -360,4 +360,3 @@ def baseline_raises(root: Path, current: Baseline, ref: str = "HEAD") -> dict[Ke
         for k, n in sorted(current.counts.items())
         if n > prior_counts.get(k, 0)
     }
-

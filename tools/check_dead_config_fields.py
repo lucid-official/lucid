@@ -88,12 +88,9 @@ MODELS_ROOT = REPO_ROOT / "lucid" / "models"
 #: reason.  Keep every entry answerable: an unexplained one is how a
 #: real dead field hides.
 _ALLOWED: dict[tuple[str, str], str] = {
-    ("*", "model_type"): (
-        "ClassVar the registry reads, not a family-local parameter"
-    ),
+    ("*", "model_type"): ("ClassVar the registry reads, not a family-local parameter"),
     ("vjepa", "sampling_rate"): (
-        "records the released clip's frame stride; the model is handed an "
-        "already-sampled clip"
+        "records the released clip's frame stride; the model is handed an " "already-sampled clip"
     ),
     ("diamond", "burn_in"): (
         "steps of real experience an imagination loop replays to warm the "
@@ -165,8 +162,7 @@ def _config_read(field: str) -> re.Pattern[str]:
     name = re.escape(field)
     holder = r"(?:config|cfg|_cfg|_config)"
     return re.compile(
-        rf"(?:\b{holder}\.{name}\b)"
-        rf"|(?:getattr\(\s*(?:self\.)?{holder}\s*,\s*[\"']{name}[\"'])"
+        rf"(?:\b{holder}\.{name}\b)" rf"|(?:getattr\(\s*(?:self\.)?{holder}\s*,\s*[\"']{name}[\"'])"
     )
 
 
@@ -186,9 +182,7 @@ def _allowed(family: str, field: str) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
-    parser.add_argument(
-        "--list", action="store_true", help="print every field and its verdict"
-    )
+    parser.add_argument("--list", action="store_true", help="print every field and its verdict")
     parser.add_argument("--family", help="only this family")
     args = parser.parse_args()
 
@@ -203,11 +197,7 @@ def main() -> int:
         # Every .py in the family except the config itself: a factory
         # that selects a variant reads the field and the model never
         # sees it, which is not the failure this looks for.
-        own = [
-            f.read_text()
-            for f in sorted(family_dir.rglob("*.py"))
-            if f.name != "_config.py"
-        ]
+        own = [f.read_text() for f in sorted(family_dir.rglob("*.py")) if f.name != "_config.py"]
         derived = _derived_source(family_dir / "_config.py")
         outside = {p: t for p, t in zoo.items() if family_dir not in p.parents}
 
@@ -239,8 +229,7 @@ def main() -> int:
 
     if dead:
         print(
-            f"[check_dead_config_fields] {len(dead)} field(s) declared but "
-            f"read by nothing:",
+            f"[check_dead_config_fields] {len(dead)} field(s) declared but " f"read by nothing:",
             file=sys.stderr,
         )
         for family, field in dead:

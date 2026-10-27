@@ -35,11 +35,7 @@ _INCEPTION_V4_CITATION = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _INCEPTION_V4_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "inception_v4": (
-        "inception_v4_cls",
-        "lucid-dl/inception-v4",
-        "Inception-v4",
-    ),
+    "inception_v4": ("inception_v4_cls", "lucid-dl/inception-v4", "Inception-v4")
 }
 
 
@@ -64,9 +60,7 @@ class InceptionV4Arch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

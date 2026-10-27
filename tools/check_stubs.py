@@ -120,12 +120,7 @@ def _ast_fn_params(fn: ast.FunctionDef) -> list[str]:
 
 
 def _check_callable_params(
-    qualname: str,
-    fn_name: str,
-    defs: list[ast.FunctionDef],
-    runtime_fn: object,
-    *,
-    is_method: bool,
+    qualname: str, fn_name: str, defs: list[ast.FunctionDef], runtime_fn: object, *, is_method: bool
 ) -> list[str]:
     if len(defs) != 1:
         return []
@@ -260,10 +255,7 @@ def _report_drift(label: str, items: list[str], hint: str) -> bool:
     for line in items:
         print(f"[check_stubs] {label} {line}")
     if items:
-        print(
-            f"\n[check_stubs] {len(items)} {hint}",
-            file=sys.stderr,
-        )
+        print(f"\n[check_stubs] {len(items)} {hint}", file=sys.stderr)
         return True
     return False
 

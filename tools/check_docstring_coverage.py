@@ -83,8 +83,7 @@ _NUMPY_UNDERLINE = re.compile(r"^[ \t]*-{3,}[ \t]*$", re.MULTILINE)
 # build script auto-dispatches between Parser.google and Parser.numpy
 # based on which marker appears.
 _PARAM_BLOCK = re.compile(
-    r"(Parameters\s*\n[ \t]*-{3,})|(\b(Args|Arguments|Parameters)\s*:\s*\n)",
-    re.MULTILINE,
+    r"(Parameters\s*\n[ \t]*-{3,})|(\b(Args|Arguments|Parameters)\s*:\s*\n)", re.MULTILINE
 )
 
 
@@ -119,8 +118,7 @@ def _public_param_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[st
 # false positives like ``Default: ...`` inside a description body
 # (which sits at column 4 and so won't match).
 _NUMPY_PARAM_LINE = re.compile(
-    r"^([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*:\s+\S",
-    re.MULTILINE,
+    r"^([A-Za-z_][A-Za-z0-9_]*(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)\s*:\s+\S", re.MULTILINE
 )
 
 # Google-style Args block: ``Args:`` sits at column 0 and param lines
@@ -128,8 +126,7 @@ _NUMPY_PARAM_LINE = re.compile(
 # whitespace lets us reject column-0 noise above the block while still
 # accepting the canonical ``    name: description`` shape.
 _GOOGLE_PARAM_LINE = re.compile(
-    r"^[ \t]+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s*:\s+\S",
-    re.MULTILINE,
+    r"^[ \t]+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s*:\s+\S", re.MULTILINE
 )
 
 
@@ -155,14 +152,8 @@ def _extract_documented_param_names(doc: str) -> list[str] | None:
     # then run *only* the matching extraction regex so that description
     # lines (which sit at col 4) can't masquerade as parameters of the
     # other style.
-    numpy_header = re.compile(
-        r"^[ \t]*Parameters\s*\n[ \t]*-{3,}\s*$",
-        re.MULTILINE,
-    )
-    google_header = re.compile(
-        r"^[ \t]*(Args|Arguments)\s*:\s*$",
-        re.MULTILINE,
-    )
+    numpy_header = re.compile(r"^[ \t]*Parameters\s*\n[ \t]*-{3,}\s*$", re.MULTILINE)
+    google_header = re.compile(r"^[ \t]*(Args|Arguments)\s*:\s*$", re.MULTILINE)
     style: str
     m_num = numpy_header.search(doc)
     m_goo = google_header.search(doc)
@@ -243,9 +234,7 @@ def _check_file(path: Path) -> list[str]:
         return []
 
     stem = path.stem
-    file_basename_is_symbol_carrier = not stem.startswith("_") and stem not in (
-        "__init__",
-    )
+    file_basename_is_symbol_carrier = not stem.startswith("_") and stem not in ("__init__",)
 
     errors: list[str] = []
 
@@ -369,9 +358,7 @@ def main() -> int:
         return 0
 
     limit = len(all_errors) if args.list else min(20, len(all_errors))
-    sys.stderr.write(
-        f"[check_docstring_coverage] {len(all_errors)} thin docstring(s) found:\n"
-    )
+    sys.stderr.write(f"[check_docstring_coverage] {len(all_errors)} thin docstring(s) found:\n")
     for e in all_errors[:limit]:
         sys.stderr.write(f"  {e}\n")
     if len(all_errors) > limit:

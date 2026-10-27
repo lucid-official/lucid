@@ -27,9 +27,7 @@ def main() -> int:
     args = parser.parse_args()
 
     headers = [
-        h
-        for h in HEADERS_DIR.rglob("*.h")
-        if "__pycache__" not in str(h) and "test/" not in str(h)
+        h for h in HEADERS_DIR.rglob("*.h") if "__pycache__" not in str(h) and "test/" not in str(h)
     ]
 
     documented = 0
@@ -38,8 +36,7 @@ def main() -> int:
     for h in sorted(headers):
         lines = h.read_text(encoding="utf-8", errors="replace").splitlines()[:30]
         has_doc = any(
-            line.strip().startswith("//") or line.strip().startswith("/*")
-            for line in lines
+            line.strip().startswith("//") or line.strip().startswith("/*") for line in lines
         )
         if has_doc:
             documented += 1
@@ -52,14 +49,10 @@ def main() -> int:
         return 0
 
     coverage = 100.0 * documented / total
-    print(
-        f"[check_doxygen] Documentation coverage: {documented}/{total} = {coverage:.1f}%"
-    )
+    print(f"[check_doxygen] Documentation coverage: {documented}/{total} = {coverage:.1f}%")
 
     if coverage < args.threshold:
-        print(
-            f"[check_doxygen] BELOW THRESHOLD ({args.threshold}%). Undocumented headers:"
-        )
+        print(f"[check_doxygen] BELOW THRESHOLD ({args.threshold}%). Undocumented headers:")
         for h in undocumented[:20]:
             print(f"  {h}")
         if len(undocumented) > 20:

@@ -106,11 +106,7 @@ class TorchLeNet(tnn.Module):
     def __init__(self, act: str, pool: str, num_classes: int = 10) -> None:
         super().__init__()
         A = tnn.ReLU if act == "relu" else tnn.Tanh
-        P = (
-            (lambda: tnn.MaxPool2d(2, 2))
-            if pool == "max"
-            else (lambda: tnn.AvgPool2d(2, 2))
-        )
+        P = (lambda: tnn.MaxPool2d(2, 2)) if pool == "max" else (lambda: tnn.AvgPool2d(2, 2))
         self.c1, self.a1, self.s2 = tnn.Conv2d(1, 6, 5), A(), P()
         self.c3, self.a3, self.s4 = tnn.Conv2d(6, 16, 5), A(), P()
         self.c5, self.a5 = tnn.Conv2d(16, 120, 5), A()
@@ -134,11 +130,7 @@ class LucidLeNet(lnn.Module):
             return lnn.ReLU() if act == "relu" else lnn.Tanh()
 
         def P() -> lnn.Module:
-            return (
-                lnn.MaxPool2d(2, stride=2)
-                if pool == "max"
-                else lnn.AvgPool2d(2, stride=2)
-            )
+            return lnn.MaxPool2d(2, stride=2) if pool == "max" else lnn.AvgPool2d(2, stride=2)
 
         self.c1, self.a1, self.s2 = lnn.Conv2d(1, 6, 5), A(), P()
         self.c3, self.a3, self.s4 = lnn.Conv2d(6, 16, 5), A(), P()
@@ -190,12 +182,7 @@ def load_init_lucid(model: lnn.Module, path: str, dev: str) -> None:
 
 
 def eval_torch(
-    model: tnn.Module,
-    x: np.ndarray,
-    y: np.ndarray,
-    dev: str,
-    ce_sum: tnn.Module,
-    bs: int = 256,
+    model: tnn.Module, x: np.ndarray, y: np.ndarray, dev: str, ce_sum: tnn.Module, bs: int = 256
 ) -> tuple[float, float]:
     model.eval()
     correct, loss_sum = 0, 0.0
@@ -263,9 +250,7 @@ def run_one(fw: str, args: argparse.Namespace, init_path: str) -> dict:
     if is_lucid:
         model = LucidLeNet(args.activation, args.pool).to(dev)
         load_init_lucid(model, init_path, dev)
-        opt = loptim.Adam(
-            list(model.parameters()), lr=args.lr, betas=(0.9, 0.999), eps=1e-8
-        )
+        opt = loptim.Adam(list(model.parameters()), lr=args.lr, betas=(0.9, 0.999), eps=1e-8)
         if use_compile:
             step = fused_step(model, F.cross_entropy, opt)
         else:
@@ -279,18 +264,14 @@ def run_one(fw: str, args: argparse.Namespace, init_path: str) -> dict:
 
         sync = (lambda: lucid.metal.synchronize()) if dev == "metal" else (lambda: None)
         cur_mem = (
-            (lambda: float(lucid.metal.memory_allocated()))
-            if dev == "metal"
-            else (lambda: 0.0)
+            (lambda: float(lucid.metal.memory_allocated())) if dev == "metal" else (lambda: 0.0)
         )
         if dev == "metal":
             lucid.metal.reset_peak_memory_stats()
     else:
         model = TorchLeNet(args.activation, args.pool).to(dev)
         load_init_torch(model, init_path, dev)
-        opt = torch.optim.Adam(
-            model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-8
-        )
+        opt = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-8)
         ce = tnn.CrossEntropyLoss()
 
         def step(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -302,9 +283,7 @@ def run_one(fw: str, args: argparse.Namespace, init_path: str) -> dict:
 
         sync = (lambda: torch.mps.synchronize()) if dev == "mps" else (lambda: None)
         cur_mem = (
-            (lambda: float(torch.mps.current_allocated_memory()))
-            if dev == "mps"
-            else (lambda: 0.0)
+            (lambda: float(torch.mps.current_allocated_memory())) if dev == "mps" else (lambda: 0.0)
         )
 
     ce_sum = tnn.CrossEntropyLoss(reduction="sum")  # for torch eval loss
@@ -331,9 +310,7 @@ def run_one(fw: str, args: argparse.Namespace, init_path: str) -> dict:
         perm = np.random.permutation(n)[: n_batches * bs].reshape(n_batches, bs)
         model.train()
         ep_loss = 0.0
-        bar = tqdm(
-            range(n_batches), desc=f"{fw} epoch {ep + 1}/{args.epochs}", ncols=104
-        )
+        bar = tqdm(range(n_batches), desc=f"{fw} epoch {ep + 1}/{args.epochs}", ncols=104)
         for bi in bar:
             idx = perm[bi]
             xb, yb = to_dev(tx[idx], ty[idx])
@@ -373,15 +350,9 @@ def run_one(fw: str, args: argparse.Namespace, init_path: str) -> dict:
         )
 
     peak_alloc = (
-        float(lucid.metal.max_memory_allocated())
-        if is_lucid and dev == "metal"
-        else mem_peak
+        float(lucid.metal.max_memory_allocated()) if is_lucid and dev == "metal" else mem_peak
     )
-    driver = (
-        float(torch.mps.driver_allocated_memory())
-        if (not is_lucid and dev == "mps")
-        else 0.0
-    )
+    driver = float(torch.mps.driver_allocated_memory()) if (not is_lucid and dev == "mps") else 0.0
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     cfg = {
@@ -428,14 +399,10 @@ def combined_report(rt: dict, rl: dict, plot_path: str, draw: bool) -> None:
     from two result dicts (which may come from separate processes)."""
     ep = rt["ep_list"]
     if rt.get("cfg") != rl.get("cfg"):
-        print(
-            "\n  ⚠ config mismatch between the two runs — results may not be comparable:"
-        )
+        print("\n  ⚠ config mismatch between the two runs — results may not be comparable:")
         print(f"      torch={rt.get('cfg')}")
         print(f"      lucid={rl.get('cfg')}")
-        print(
-            "    Re-run both with the same flags (e.g. delete /tmp/lvt_*.json first)."
-        )
+        print("    Re-run both with the same flags (e.g. delete /tmp/lvt_*.json first).")
     print("\n" + "=" * 74 + "\n  COMBINED SUMMARY  (torch vs lucid)\n" + "=" * 74)
     print("  ep | train-loss        | val-loss          | test-acc")
     print("     |  torch   lucid     |  torch   lucid     |  torch   lucid")
@@ -469,12 +436,8 @@ def combined_report(rt: dict, rl: dict, plot_path: str, draw: bool) -> None:
         f"                  | RSS {_mb(rl['rss']):.0f} MB"
     )
     if rl["compiled"]:
-        print(
-            "       ⚠ lucid device-alloc UNDER-reports under compile (MPSGraph buffers"
-        )
-        print(
-            "         invisible to the MLX allocator); RSS is the more honest lucid number."
-        )
+        print("       ⚠ lucid device-alloc UNDER-reports under compile (MPSGraph buffers")
+        print("         invisible to the MLX allocator); RSS is the more honest lucid number.")
     print("=" * 74)
 
     if draw:
@@ -505,9 +468,7 @@ def save_plots(path: str, rt: dict, rl: dict) -> None:
         ax[0].plot(xs[len(xs) - len(ys) :], ys, color=C[k], lw=1.6, label=f"{k} train")
         nb = res[k]["n_batches"]
         vx = [e * nb for e in res[k]["ep_list"]]
-        ax[0].plot(
-            vx, res[k]["vl_loss"], "--s", color=C[k], alpha=0.85, label=f"{k} val"
-        )
+        ax[0].plot(vx, res[k]["vl_loss"], "--s", color=C[k], alpha=0.85, label=f"{k} val")
     ax[0].set_yscale("log")
     ax[0].set(
         title="Running train / val loss (per-iter)",
@@ -565,17 +526,13 @@ def save_plots(path: str, rt: dict, rl: dict) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="LeNet-5 / MNIST: lucid (compiled) vs torch"
-    )
+    ap = argparse.ArgumentParser(description="LeNet-5 / MNIST: lucid (compiled) vs torch")
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--batch-size", type=int, default=128)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--activation", choices=["relu", "tanh"], default="relu")
     ap.add_argument("--pool", choices=["max", "avg"], default="max")
-    ap.add_argument(
-        "--limit", type=int, default=None, help="subset train size for a quick smoke"
-    )
+    ap.add_argument("--limit", type=int, default=None, help="subset train size for a quick smoke")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--data-root", default="/tmp/mnist-data")
     ap.add_argument(
@@ -584,9 +541,7 @@ def main() -> None:
         default=None,
         help="train ONLY this framework in this process (isolated); saves a JSON",
     )
-    ap.add_argument(
-        "--no-compile", action="store_true", help="run Lucid eager instead of compiled"
-    )
+    ap.add_argument("--no-compile", action="store_true", help="run Lucid eager instead of compiled")
     ap.add_argument("--no-plot", action="store_true", help="skip the final figure")
     ap.add_argument(
         "--plot-only",
@@ -614,9 +569,7 @@ def main() -> None:
     init_path = args.init_path or os.path.join(
         args.result_dir, f"lvt_init_{args.activation}_{args.pool}_s{args.seed}.npz"
     )
-    jpath = {
-        fw: os.path.join(args.result_dir, f"lvt_{fw}.json") for fw in ("torch", "lucid")
-    }
+    jpath = {fw: os.path.join(args.result_dir, f"lvt_{fw}.json") for fw in ("torch", "lucid")}
 
     def load(fw: str) -> dict | None:
         if os.path.exists(jpath[fw]):
@@ -664,18 +617,9 @@ def main() -> None:
         if args.no_compile:
             passthrough += ["--no-compile"]
         for fw in ("torch", "lucid"):
-            print(
-                f"\n{'#' * 74}\n#  isolated subprocess: training {fw} (full run)\n{'#' * 74}"
-            )
+            print(f"\n{'#' * 74}\n#  isolated subprocess: training {fw} (full run)\n{'#' * 74}")
             subprocess.run(
-                [
-                    sys.executable,
-                    os.path.abspath(__file__),
-                    "--only",
-                    fw,
-                    "--child",
-                    *passthrough,
-                ],
+                [sys.executable, os.path.abspath(__file__), "--only", fw, "--child", *passthrough],
                 check=True,
             )
         rt, rl = load("torch"), load("lucid")
@@ -704,9 +648,7 @@ def main() -> None:
         combined_report(rt, rl, args.plot_path, draw=not args.no_plot)
     else:
         have, need = (args.only, "lucid" if args.only == "torch" else "torch")
-        print(
-            f"\n  {have} done. Now run:  python scripts/lucid_vs_torch_mnist.py --only {need}"
-        )
+        print(f"\n  {have} done. Now run:  python scripts/lucid_vs_torch_mnist.py --only {need}")
         print("  (it will auto-draw the combined figure once both JSONs exist.)")
 
 

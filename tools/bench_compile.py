@@ -57,9 +57,7 @@ def _bench_once(call: Callable[[], object], n: int) -> float:
 
 
 class _LstmHead(nn.Module):
-    def __init__(
-        self, input_size: int = 64, hidden_size: int = 128, n_classes: int = 10
-    ) -> None:
+    def __init__(self, input_size: int = 64, hidden_size: int = 128, n_classes: int = 10) -> None:
         super().__init__()
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size)
         self.fc = nn.Linear(hidden_size, n_classes)
@@ -91,10 +89,7 @@ def _seq_to_cls(input_size: int = 64, hidden_size: int = 256) -> nn.Module:
 
 
 def _bench_case(
-    name: str,
-    mk_model: Callable[[], nn.Module],
-    mk_input: Callable[[], lucid.Tensor],
-    n_iter: int,
+    name: str, mk_model: Callable[[], nn.Module], mk_input: Callable[[], lucid.Tensor], n_iter: int
 ) -> dict[str, str | float]:
     model = mk_model()
     model.eval()
@@ -213,9 +208,7 @@ def _bench_training_case(
     model_fused = mk_model().to(COMPILE_DEVICE)
     # Sync params
     with lucid.no_grad():
-        for (_, p), (_, q) in zip(
-            model_eager.named_parameters(), model_fused.named_parameters()
-        ):
+        for (_, p), (_, q) in zip(model_eager.named_parameters(), model_fused.named_parameters()):
             q.copy_(p)
     args = tuple(t.to(COMPILE_DEVICE) for t in mk_inputs())
 
@@ -246,8 +239,14 @@ def _bench_training_case(
             break
         rel_diff = max(rel_diff, error / scale)
     if not math.isfinite(rel_diff) or rel_diff > 1e-3:
-        return {"name": name, "eager_ms": float("nan"), "compile_ms": float("nan"),
-                "speedup": float("nan"), "rel_diff": rel_diff, "note": "parity-diverged"}
+        return {
+            "name": name,
+            "eager_ms": float("nan"),
+            "compile_ms": float("nan"),
+            "speedup": float("nan"),
+            "rel_diff": rel_diff,
+            "note": "parity-diverged",
+        }
 
     eager_ms = _bench_once(_eager_step, n_iter)
     compile_ms = _bench_once(_fused_call, n_iter)
@@ -261,7 +260,9 @@ def _bench_training_case(
     }
 
 
-def _training_cases(quick: bool) -> list[tuple[str, Callable[[], nn.Module], Callable[[], tuple[lucid.Tensor, ...]]]]:
+def _training_cases(
+    quick: bool,
+) -> list[tuple[str, Callable[[], nn.Module], Callable[[], tuple[lucid.Tensor, ...]]]]:
     """Training-step cases.  Each tuple is (name, model factory, inputs factory).
     The inputs factory returns ``(x, target)`` for ``loss_fn(model(x), target)``.
     """
@@ -289,11 +290,7 @@ def _training_cases(quick: bool) -> list[tuple[str, Callable[[], nn.Module], Cal
         return nn.Sequential(*layers)
 
     cases: list[tuple[str, Callable[[], nn.Module], Callable[[], tuple[lucid.Tensor, ...]]]] = [
-        (
-            "mlp (64→128→10, BS=32)",
-            _mlp,
-            lambda: (lucid.randn(32, 64), lucid.randn(32, 10)),
-        ),
+        ("mlp (64→128→10, BS=32)", _mlp, lambda: (lucid.randn(32, 64), lucid.randn(32, 10))),
         (
             "deep_mlp (×4 hidden, BS=64)",
             _deeper_mlp,
@@ -313,12 +310,8 @@ def _training_cases(quick: bool) -> list[tuple[str, Callable[[], nn.Module], Cal
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--quick", action="store_true", help="small/fast subset for CI smoke"
-    )
-    ap.add_argument(
-        "--iter", type=int, default=20, help="benchmark iterations per case"
-    )
+    ap.add_argument("--quick", action="store_true", help="small/fast subset for CI smoke")
+    ap.add_argument("--iter", type=int, default=20, help="benchmark iterations per case")
     args = ap.parse_args()
     if args.iter < 1:
         ap.error("iterations must be positive")
@@ -373,8 +366,9 @@ def main() -> int:
         speed = f"{r['speedup']:.2f}×" if r["speedup"] == r["speedup"] else "—"
         print(f"| {r['name']} | {eager} | {comp} | {speed} | {r.get('note', '')} |")
     print()
-    return int(any(str(row["note"]).startswith(("error:", "parity-diverged"))
-                   for row in rows + train_rows))
+    return int(
+        any(str(row["note"]).startswith(("error:", "parity-diverged")) for row in rows + train_rows)
+    )
 
 
 if __name__ == "__main__":

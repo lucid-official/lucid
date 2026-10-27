@@ -103,9 +103,7 @@ def ref_name(root: Path = REPO_ROOT) -> str:
     for node in tree.body:
         if (
             isinstance(node, ast.Assign)
-            and any(
-                isinstance(t, ast.Name) and t.id == "_REF_NAME" for t in node.targets
-            )
+            and any(isinstance(t, ast.Name) and t.id == "_REF_NAME" for t in node.targets)
             and isinstance(node.value, ast.Constant)
             and isinstance(node.value.value, str)
         ):
@@ -141,15 +139,11 @@ class _Rules:
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "__future__":
                 if any(alias.name == "annotations" for alias in node.names):
-                    yield Violation(
-                        path, node.lineno, "future-annotations", ast.unparse(node)
-                    )
+                    yield Violation(path, node.lineno, "future-annotations", ast.unparse(node))
             if isinstance(node, ast.ExceptHandler) and isinstance(node.type, ast.Tuple):
                 segment = ast.get_source_segment(source, node.type) or ""
                 if not (segment.startswith("(") and segment.endswith(")")):
-                    yield Violation(
-                        path, node.lineno, "except-parens", f"except ({segment}):"
-                    )
+                    yield Violation(path, node.lineno, "except-parens", f"except ({segment}):")
             if (
                 full
                 and path != REF_FILE
@@ -161,9 +155,7 @@ class _Rules:
             return
         for annotation in _annotations(tree):
             for found in _string_types(annotation):
-                yield Violation(
-                    path, found.lineno, "string-annotation", repr(found.value)
-                )
+                yield Violation(path, found.lineno, "string-annotation", repr(found.value))
 
     def _imports_ref(self, node: ast.Import | ast.ImportFrom | ast.Call) -> bool:
         if isinstance(node, ast.Import):
@@ -208,13 +200,7 @@ def _annotations(tree: ast.AST) -> Iterator[ast.expr]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             args = node.args
-            for arg in [
-                *args.posonlyargs,
-                *args.args,
-                *args.kwonlyargs,
-                args.vararg,
-                args.kwarg,
-            ]:
+            for arg in [*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg]:
                 if arg is not None and arg.annotation is not None:
                     yield arg.annotation
             if node.returns is not None:
@@ -245,10 +231,7 @@ EXCUSES: tuple[Excuse, ...] = (
         "the wrong legacy name a bfloat16 tensor used to report, quoted",
         "lucid/test/unit/tensor/test_tensor_type_takes_dtypes_and_legacy_names.py",
     ),
-    Excuse(
-        r"lucid\.(?:xxx|foo|X)",
-        "a placeholder for any top-level name",
-    ),
+    Excuse(r"lucid\.(?:xxx|foo|X)", "a placeholder for any top-level name"),
 )
 
 
@@ -347,17 +330,11 @@ def _module_binds(module: str, files: list[tuple[str, str]]) -> _Binds:
             tree = ast.parse(source, filename=path)
         except SyntaxError:
             return _Binds(frozenset(), (), True)  # ``syntax`` reports it
-        package = (
-            module
-            if PurePosixPath(path).stem == "__init__"
-            else module.rpartition(".")[0]
-        )
+        package = module if PurePosixPath(path).stem == "__init__" else module.rpartition(".")[0]
         bound: set[str] = set()
         for node in _module_level(tree.body):
             bound.update(_bound_by(node))
-            if isinstance(node, ast.ImportFrom) and any(
-                a.name == "*" for a in node.names
-            ):
+            if isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names):
                 stars.append(_absolute(node, package))
         # A lazy ``__getattr__`` serves the names ``__all__`` lists (PEP 562);
         # without ``__all__`` nothing says which, nor after a ``globals()`` write.
@@ -381,12 +358,7 @@ def _blocks(node: ast.stmt) -> list[list[ast.stmt]]:
     if isinstance(node, (ast.With, ast.AsyncWith)):
         return [node.body]
     if isinstance(node, (ast.Try, ast.TryStar)):
-        return [
-            node.body,
-            node.orelse,
-            node.finalbody,
-            *(h.body for h in node.handlers),
-        ]
+        return [node.body, node.orelse, node.finalbody, *(h.body for h in node.handlers)]
     if isinstance(node, ast.Match):
         return [case.body for case in node.cases]
     return []
@@ -436,9 +408,7 @@ def _absolute(node: ast.ImportFrom, package: str) -> str:
 
 def _writes_globals(tree: ast.Module) -> bool:
     return any(
-        isinstance(n, ast.Call)
-        and isinstance(n.func, ast.Name)
-        and n.func.id == "globals"
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "globals"
         for n in ast.walk(tree)
     )
 
@@ -512,9 +482,7 @@ def _told_as_history(text: str, match: re.Match[str]) -> bool:
     return _GONE.search(_DOTTED.sub(" ", sentence)) is not None
 
 
-def excuse_for(
-    path: str, name: str, excuses: Iterable[Excuse] = EXCUSES
-) -> Excuse | None:
+def excuse_for(path: str, name: str, excuses: Iterable[Excuse] = EXCUSES) -> Excuse | None:
     """The excuse that lets ``name`` stand in ``path``'s prose, if any."""
     for excuse in excuses:
         if excuse.path in ("", path) and re.fullmatch(excuse.pattern, name):
@@ -608,9 +576,7 @@ def staged_sources(root: Path) -> Iterator[tuple[str, str]]:
             yield path, _git(root, "show", f":{path}")
 
 
-def path_sources(
-    paths: Iterable[str], root: Path = REPO_ROOT
-) -> Iterator[tuple[str, str]]:
+def path_sources(paths: Iterable[str], root: Path = REPO_ROOT) -> Iterator[tuple[str, str]]:
     """The given files, as they are on disk; a file outside ``root`` is skipped."""
     for given in paths:
         file = Path(given).resolve()

@@ -110,9 +110,7 @@ def _unwrap(out: object) -> lucid.Tensor:
 # ── Precision helper ───────────────────────────────────────────────
 
 
-def _cast_inputs(
-    inputs: tuple[lucid.Tensor, ...], dtype: object
-) -> tuple[lucid.Tensor, ...]:
+def _cast_inputs(inputs: tuple[lucid.Tensor, ...], dtype: object) -> tuple[lucid.Tensor, ...]:
     """Cast float inputs to ``dtype``.  Integer targets (CE indices) untouched."""
     out: list[lucid.Tensor] = []
     for t in inputs:
@@ -371,13 +369,7 @@ def _bench_one_row(
     try:
         if path == "eager":
             cold, med, p5, p95, _ = _bench_forward_eager(w, bs, dtype, n_iter_hint)
-            base.update(
-                cold_ms=cold,
-                warm_ms_median=med,
-                warm_ms_p5=p5,
-                warm_ms_p95=p95,
-                note="ok",
-            )
+            base.update(cold_ms=cold, warm_ms_median=med, warm_ms_p5=p5, warm_ms_p95=p95, note="ok")
         elif path == "compile":
             # First get the eager output for parity check.
             _, _, _, _, eager_out = _bench_forward_eager(w, bs, dtype, n_iter=2)
@@ -390,31 +382,15 @@ def _bench_one_row(
                 base["note"] = "parity-diverged"
             else:
                 base.update(
-                    cold_ms=cold,
-                    warm_ms_median=med,
-                    warm_ms_p5=p5,
-                    warm_ms_p95=p95,
-                    note=comp_note,
+                    cold_ms=cold, warm_ms_median=med, warm_ms_p5=p5, warm_ms_p95=p95, note=comp_note
                 )
         elif path == "fused_step":
             # Skip dropout workload at f16 (X4.3 GradScaler missing).
             cold, med, p5, p95, note = _bench_fused_step(w, bs, dtype, n_iter_hint)
-            base.update(
-                cold_ms=cold,
-                warm_ms_median=med,
-                warm_ms_p5=p5,
-                warm_ms_p95=p95,
-                note=note,
-            )
+            base.update(cold_ms=cold, warm_ms_median=med, warm_ms_p5=p5, warm_ms_p95=p95, note=note)
         elif path == "eager_train":
             cold, med, p5, p95, note = _bench_eager_train(w, bs, dtype, n_iter_hint)
-            base.update(
-                cold_ms=cold,
-                warm_ms_median=med,
-                warm_ms_p5=p5,
-                warm_ms_p95=p95,
-                note=note,
-            )
+            base.update(cold_ms=cold, warm_ms_median=med, warm_ms_p5=p5, warm_ms_p95=p95, note=note)
         else:
             base["note"] = f"unknown-path:{path}"
     except Exception as e:
@@ -471,9 +447,7 @@ _CSV_FIELDS = [
 ]
 
 
-def _emit_row(
-    writer: csv.DictWriter, row: dict[str, object], file_handle: object
-) -> None:
+def _emit_row(writer: csv.DictWriter, row: dict[str, object], file_handle: object) -> None:
     """Write one row and flush — partial CSV is still useful on crash."""
     cleaned = {
         k: ("" if (isinstance(v, float) and v != v) else v)
@@ -504,12 +478,7 @@ def main() -> int:
         help="Comma-separated subset (default: all 5).  Names from "
         "tools/_bench_workloads.WORKLOADS.",
     )
-    ap.add_argument(
-        "--batch",
-        type=str,
-        default="8,32,128",
-        help="Comma-separated batch sizes.",
-    )
+    ap.add_argument("--batch", type=str, default="8,32,128", help="Comma-separated batch sizes.")
     ap.add_argument(
         "--precision",
         type=str,
@@ -614,17 +583,26 @@ def main() -> int:
         _emit_row(writer, r, f)
     f.close()
     metadata = {
-        "version": lucid.__version__, "platform": platform.platform(),
-        "python": platform.python_version(), "arguments": vars(args),
-        "warmup_calls": 3, "timed_calls_per_row": args.iter,
+        "version": lucid.__version__,
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "arguments": vars(args),
+        "warmup_calls": 3,
+        "timed_calls_per_row": args.iter,
         "materialization": "output sum/loss item then Metal synchronize on every call",
         "timing_scope": "end-to-end host-observed latency, not isolated kernels",
         "trials": 1,
     }
     Path(args.csv + ".meta.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"\n# CSV written to {args.csv}")
-    return 1 if any(str(row["note"]).startswith(("error:", "parity-diverged", "unknown-path:"))
-                    for row in all_rows) else 0
+    return (
+        1
+        if any(
+            str(row["note"]).startswith(("error:", "parity-diverged", "unknown-path:"))
+            for row in all_rows
+        )
+        else 0
+    )
 
 
 if __name__ == "__main__":

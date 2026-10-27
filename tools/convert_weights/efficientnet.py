@@ -75,46 +75,14 @@ _EFFICIENTNET_PAPER_URL = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _EFFICIENTNET_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "efficientnet_b0": (
-        "efficientnet_b0_cls",
-        "lucid-dl/efficientnet-b0",
-        "EfficientNet-B0",
-    ),
-    "efficientnet_b1": (
-        "efficientnet_b1_cls",
-        "lucid-dl/efficientnet-b1",
-        "EfficientNet-B1",
-    ),
-    "efficientnet_b2": (
-        "efficientnet_b2_cls",
-        "lucid-dl/efficientnet-b2",
-        "EfficientNet-B2",
-    ),
-    "efficientnet_b3": (
-        "efficientnet_b3_cls",
-        "lucid-dl/efficientnet-b3",
-        "EfficientNet-B3",
-    ),
-    "efficientnet_b4": (
-        "efficientnet_b4_cls",
-        "lucid-dl/efficientnet-b4",
-        "EfficientNet-B4",
-    ),
-    "efficientnet_b5": (
-        "efficientnet_b5_cls",
-        "lucid-dl/efficientnet-b5",
-        "EfficientNet-B5",
-    ),
-    "efficientnet_b6": (
-        "efficientnet_b6_cls",
-        "lucid-dl/efficientnet-b6",
-        "EfficientNet-B6",
-    ),
-    "efficientnet_b7": (
-        "efficientnet_b7_cls",
-        "lucid-dl/efficientnet-b7",
-        "EfficientNet-B7",
-    ),
+    "efficientnet_b0": ("efficientnet_b0_cls", "lucid-dl/efficientnet-b0", "EfficientNet-B0"),
+    "efficientnet_b1": ("efficientnet_b1_cls", "lucid-dl/efficientnet-b1", "EfficientNet-B1"),
+    "efficientnet_b2": ("efficientnet_b2_cls", "lucid-dl/efficientnet-b2", "EfficientNet-B2"),
+    "efficientnet_b3": ("efficientnet_b3_cls", "lucid-dl/efficientnet-b3", "EfficientNet-B3"),
+    "efficientnet_b4": ("efficientnet_b4_cls", "lucid-dl/efficientnet-b4", "EfficientNet-B4"),
+    "efficientnet_b5": ("efficientnet_b5_cls", "lucid-dl/efficientnet-b5", "EfficientNet-B5"),
+    "efficientnet_b6": ("efficientnet_b6_cls", "lucid-dl/efficientnet-b6", "EfficientNet-B6"),
+    "efficientnet_b7": ("efficientnet_b7_cls", "lucid-dl/efficientnet-b7", "EfficientNet-B7"),
 }
 
 # torchvision builders keyed by arch.
@@ -259,9 +227,7 @@ class EfficientNetArch(Architecture):
         return mapped
 
     @staticmethod
-    def _map_block_inner(
-        flat: int, has_expand: bool, inner_idx: str, rest: str
-    ) -> str | None:
+    def _map_block_inner(flat: int, has_expand: bool, inner_idx: str, rest: str) -> str | None:
         prefix = f"features.{flat}"
         if has_expand:
             # block.0 expand conv+bn → conv.0 / conv.1
@@ -290,9 +256,7 @@ class EfficientNetArch(Architecture):
         return None
 
     @staticmethod
-    def _map_conv_bn(
-        prefix: str, seq: str, conv_idx: str, bn_idx: str, rest: str
-    ) -> str | None:
+    def _map_conv_bn(prefix: str, seq: str, conv_idx: str, bn_idx: str, rest: str) -> str | None:
         # torchvision Conv2dNormActivation: ".0.weight" (conv), ".1.*" (BN).
         sub, _, tail = rest.partition(".")
         if sub == "0":

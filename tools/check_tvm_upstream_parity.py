@@ -246,9 +246,7 @@ def _compare(
         )
         gaps.append(
             _gap(
-                "forward, unconditional",
-                host(model.tvm(lu(x), lu(t), lu(s)).sample),
-                null.numpy(),
+                "forward, unconditional", host(model.tvm(lu(x), lu(t), lu(s)).sample), null.numpy()
             )
         )
 
@@ -256,12 +254,8 @@ def _compare(
         landing_ref, dfds_ref = upstream.get_dfds(
             ref(x), ref(column(t)), ref(column(s)), ref(onehot), ref(column(1 / w))
         )
-    velocity, terminal = model._terminal_velocity(
-        lu(x), lu(t), lu(s), lucid_labels, lu(w)
-    )
-    gaps.append(
-        _gap("terminal derivative df/ds", host(terminal), dfds_ref.detach().numpy())
-    )
+    velocity, terminal = model._terminal_velocity(lu(x), lu(t), lu(s), lucid_labels, lu(w))
+    gaps.append(_gap("terminal derivative df/ds", host(terminal), dfds_ref.detach().numpy()))
     gaps.append(
         _gap(
             "landing point",
@@ -309,9 +303,7 @@ def _compare(
             float(logs["fm_loss"].mean().item()),
         )
     )
-    grads = {
-        n: host(p.grad) for n, p in model.tvm.named_parameters() if p.grad is not None
-    }
+    grads = {n: host(p.grad) for n, p in model.tvm.named_parameters() if p.grad is not None}
     compared: set[str] = set()
     for key, value in upstream.named_parameters():
         target = arch.map_key(key)
@@ -348,9 +340,9 @@ def _authors_sampler(
     with torch.no_grad():
         t_steps = torch.linspace(1, 0, steps + 1, dtype=torch.float64)
         x = latents.to(torch.float64)
-        beta = (
-            1 / torch.as_tensor(cfg_scale, dtype=torch.float64).view(-1, 1, 1, 1)
-        ).repeat(x.shape[0], 1, 1, 1)
+        beta = (1 / torch.as_tensor(cfg_scale, dtype=torch.float64).view(-1, 1, 1, 1)).repeat(
+            x.shape[0], 1, 1, 1
+        )
         out_scale = cfg_scale if getattr(net, "do_scale_param") else 1.0
         for t_cur, t_next in zip(t_steps[:-1], t_steps[1:], strict=True):
             velocity = forward(x, t_cur, t_next, class_labels=labels, beta_scale=beta)
@@ -363,9 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m tools.check_tvm_upstream_parity",
         description="Compare Lucid's TVM with the authors' implementation.",
     )
-    parser.add_argument(
-        "--upstream", type=Path, required=True, help="checkout of lumalabs/tvm"
-    )
+    parser.add_argument("--upstream", type=Path, required=True, help="checkout of lumalabs/tvm")
     parser.add_argument("--device", choices=("cpu", "metal"), default="cpu")
     parser.add_argument("--tolerance", type=float, default=_TOLERANCE)
     parser.add_argument(
@@ -393,24 +383,14 @@ def main(argv: list[str] | None = None) -> int:
         worst = max(gaps, key=lambda gap: gap.relative)
         bad = [gap for gap in gaps if gap.relative > args.tolerance]
         label = "scaled" if scaled else "unscaled"
-        print(
-            f"{label}: {len(gaps)} quantities, worst {worst.relative:.2e} at {worst.name}"
-        )
+        print(f"{label}: {len(gaps)} quantities, worst {worst.relative:.2e} at {worst.name}")
         for gap in gaps if args.release_precision else bad:
-            print(
-                f"  {gap.name:40s} max|diff| {gap.diff:.3e}  max|ref| {gap.scale:.3e}"
-            )
+            print(f"  {gap.name:40s} max|diff| {gap.diff:.3e}  max|ref| {gap.scale:.3e}")
         failed += 0 if args.release_precision else len(bad)
     if failed:
-        print(
-            f"FAIL: {failed} quantit{'y' if failed == 1 else 'ies'} beyond {args.tolerance:g}"
-        )
+        print(f"FAIL: {failed} quantit{'y' if failed == 1 else 'ies'} beyond {args.tolerance:g}")
         return 1
-    print(
-        "ok"
-        if not args.release_precision
-        else "reported (release precision, not judged)"
-    )
+    print("ok" if not args.release_precision else "reported (release precision, not judged)")
     return 0
 
 

@@ -39,13 +39,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from clang.cindex import (
-    Config,
-    Cursor,
-    CursorKind,
-    Index,
-    TranslationUnit,
-)
+from clang.cindex import Config, Cursor, CursorKind, Index, TranslationUnit
 
 # Resolve repo + libclang path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -158,11 +152,7 @@ def _split_into_sections(comment: str) -> tuple[str, dict[str, str]]:
         line = lines[i].rstrip()
         nxt = lines[i + 1].rstrip() if i + 1 < len(lines) else ""
         header_candidate = line.strip()
-        if (
-            header_candidate in _SECTION_HEADERS
-            and nxt.strip()
-            and set(nxt.strip()) == {"-"}
-        ):
+        if header_candidate in _SECTION_HEADERS and nxt.strip() and set(nxt.strip()) == {"-"}:
             current = header_candidate
             sections.setdefault(current, [])
             i += 2
@@ -208,20 +198,13 @@ def _parse_field_list(block: str) -> list[dict[str, Any]]:
                     anno = anno[: m3.start()].rstrip()
                     if default is None:
                         default = "None"
-            current = {
-                "name": name,
-                "annotation": anno,
-                "default": default,
-                "description": "",
-            }
+            current = {"name": name, "annotation": anno, "default": default, "description": ""}
         else:
             if current is None:
                 continue
             txt = raw.strip()
             current["description"] = (
-                (current["description"] + " " + txt).strip()
-                if current["description"]
-                else txt
+                (current["description"] + " " + txt).strip() if current["description"] else txt
             )
     if current is not None:
         items.append(current)
@@ -234,12 +217,7 @@ def _parse_raise_list(block: str) -> list[dict[str, Any]]:
     web renderer's :class:`DocstringRaise` schema is satisfied."""
     out: list[dict[str, Any]] = []
     for f in _parse_field_list(block):
-        out.append(
-            {
-                "annotation": f["annotation"] or f["name"],
-                "description": f["description"],
-            }
-        )
+        out.append({"annotation": f["annotation"] or f["name"], "description": f["description"]})
     return out
 
 
@@ -278,9 +256,7 @@ def _rst_inline_markup(text: str) -> str:
     if not text:
         return text
     # reST external hyperlinks: `text <url>`_ → [text](url)
-    text = re.sub(
-        r"`([^`<]+?)\s*<((?:https?|ftp|mailto):[^>]+)>`__?", r"[\1](\2)", text
-    )
+    text = re.sub(r"`([^`<]+?)\s*<((?:https?|ftp|mailto):[^>]+)>`__?", r"[\1](\2)", text)
     # double-backtick code: ``code`` → `code`
     text = re.sub(r"``([^`]+)``", r"`\1`", text)
     # remove citations, then collapse any remaining role to inline code
@@ -314,11 +290,7 @@ def _split_sections(comment: str) -> dict[str, Any]:
     returns = _parse_returns(sections.get("Returns", ""))
 
     notes_text = sections.get("Notes", "").strip()
-    notes = (
-        [p.strip() for p in re.split(r"\n\s*\n", notes_text) if p.strip()]
-        if notes_text
-        else []
-    )
+    notes = [p.strip() for p in re.split(r"\n\s*\n", notes_text) if p.strip()] if notes_text else []
 
     examples = _parse_examples(sections.get("Examples", ""))
 
@@ -436,8 +408,7 @@ def _backend_method_def_index() -> dict[tuple[str, str], tuple[str, int]]:
         for cpp_file in sorted(methods_dir.glob("*.cpp")):
             rel = cpp_file.resolve().relative_to(REPO_ROOT).as_posix()
             for lineno, line in enumerate(
-                cpp_file.read_text(encoding="utf-8", errors="replace").splitlines(),
-                start=1,
+                cpp_file.read_text(encoding="utf-8", errors="replace").splitlines(), start=1
             ):
                 if line.lstrip().startswith("//"):
                     continue
@@ -487,11 +458,7 @@ def _build_signature(c: Cursor) -> str | None:
         ret = c.result_type.spelling if c.result_type else ""
         sig = f"{ret} {c.spelling}({', '.join(params)})".strip()
         return sig
-    if c.kind in (
-        CursorKind.CLASS_DECL,
-        CursorKind.STRUCT_DECL,
-        CursorKind.CLASS_TEMPLATE,
-    ):
+    if c.kind in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL, CursorKind.CLASS_TEMPLATE):
         return c.spelling
     return None
 
@@ -536,11 +503,7 @@ def _cpp_labels(c: Cursor) -> list[str]:
         labels.append("cpp-ctor")
     elif kind == CursorKind.DESTRUCTOR:
         labels.append("cpp-dtor")
-    elif (
-        c.spelling
-        and c.spelling.startswith("operator")
-        and not c.spelling[8:9].isalnum()
-    ):
+    elif c.spelling and c.spelling.startswith("operator") and not c.spelling[8:9].isalnum():
         # ``operator+`` / ``operator()`` / ``operator[]`` / ``operator=`` —
         # NOT ``operator_overload_helper`` (alphanumeric continuation).
         labels.append("cpp-operator")
@@ -568,10 +531,7 @@ def _cpp_labels(c: Cursor) -> list[str]:
 
 
 def _serialise_function(
-    c: Cursor,
-    sha: str,
-    source_lines: list[str] | None = None,
-    subcategory: str | None = None,
+    c: Cursor, sha: str, source_lines: list[str] | None = None, subcategory: str | None = None
 ) -> dict[str, Any]:
     doc = _split_sections(_comment_for(c, source_lines))
     return {
@@ -587,10 +547,7 @@ def _serialise_function(
 
 
 def _serialise_class(
-    c: Cursor,
-    sha: str,
-    source_lines: list[str] | None = None,
-    subcategory: str | None = None,
+    c: Cursor, sha: str, source_lines: list[str] | None = None, subcategory: str | None = None
 ) -> dict[str, Any]:
     doc = _split_sections(_comment_for(c, source_lines))
     methods: list[dict[str, Any]] = []
@@ -620,11 +577,7 @@ def _serialise_class(
         "path": _qualified_name(c),
         "kind": "class",
         "class_kind": "regular",
-        "bases": [
-            b.spelling
-            for b in c.get_children()
-            if b.kind == CursorKind.CXX_BASE_SPECIFIER
-        ],
+        "bases": [b.spelling for b in c.get_children() if b.kind == CursorKind.CXX_BASE_SPECIFIER],
         "labels": [],
         "signature": _build_signature(c),
         "source": _source_link(c, sha),
@@ -639,15 +592,8 @@ def _serialise_class(
 # ---------------------------------------------------------------------------
 
 
-_FUNCTION_KINDS = (
-    CursorKind.FUNCTION_DECL,
-    CursorKind.FUNCTION_TEMPLATE,
-)
-_CLASS_KINDS = (
-    CursorKind.CLASS_DECL,
-    CursorKind.STRUCT_DECL,
-    CursorKind.CLASS_TEMPLATE,
-)
+_FUNCTION_KINDS = (CursorKind.FUNCTION_DECL, CursorKind.FUNCTION_TEMPLATE)
+_CLASS_KINDS = (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL, CursorKind.CLASS_TEMPLATE)
 
 
 def _subcategory_for_header(header: Path) -> str | None:
@@ -689,10 +635,7 @@ def _process_translation_unit(
         if not _is_public(c):
             continue
         if c.kind in _FUNCTION_KINDS:
-            if (
-                c.semantic_parent is None
-                or c.semantic_parent.kind == CursorKind.NAMESPACE
-            ):
+            if c.semantic_parent is None or c.semantic_parent.kind == CursorKind.NAMESPACE:
                 key = _qualified_name(c)
                 if key not in functions:
                     functions[key] = _serialise_function(c, sha, src_lines, sub)
@@ -706,13 +649,7 @@ def _parse_header(idx: Index, header: Path) -> TranslationUnit | None:
     try:
         return idx.parse(
             str(header),
-            args=[
-                "-x",
-                "c++",
-                "-std=c++20",
-                f"-I{HEADERS_ROOT}",
-                f"-I{HEADERS_ROOT.parent}",
-            ],
+            args=["-x", "c++", "-std=c++20", f"-I{HEADERS_ROOT}", f"-I{HEADERS_ROOT.parent}"],
             options=TranslationUnit.PARSE_SKIP_FUNCTION_BODIES,
         )
     except Exception as exc:  # noqa: BLE001
@@ -727,9 +664,7 @@ def _parse_header(idx: Index, header: Path) -> TranslationUnit | None:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument(
-        "--root", default=str(HEADERS_ROOT), help="C++ headers root (default: lucid/_C)"
-    )
+    p.add_argument("--root", default=str(HEADERS_ROOT), help="C++ headers root (default: lucid/_C)")
     p.add_argument("--debug", action="store_true")
     args = p.parse_args()
 

@@ -93,11 +93,7 @@ from lucid.nn._shadow import shadow_alloc
 from lucid.weights import WeightsEnum
 from lucid.weights._hub import _cache_dir as _lucid_weight_cache
 from lucid.weights._registry import _WEIGHTS_BY_MODEL
-from lucid.test._fixtures.ref_framework import (
-    ref_module,
-    ref_vision_module,
-    zoo_module,
-)
+from lucid.test._fixtures.ref_framework import ref_module, ref_vision_module, zoo_module
 
 #: Outputs agreeing to this are the same computation in a different order.
 _ATOL = 1e-4
@@ -119,10 +115,7 @@ _MAX_PARAMS = 500_000_000
 _HF_HEADS: dict[str, tuple[str, tuple[str, ...]]] = {
     "BERTModel": ("AutoModel", ("last_hidden_state",)),
     "BERTForMaskedLM": ("AutoModelForMaskedLM", ("logits",)),
-    "BERTForQuestionAnswering": (
-        "AutoModelForQuestionAnswering",
-        ("start_logits", "end_logits"),
-    ),
+    "BERTForQuestionAnswering": ("AutoModelForQuestionAnswering", ("start_logits", "end_logits")),
     "BERTForTokenClassification": ("AutoModelForTokenClassification", ("logits",)),
     "GPTModel": ("AutoModel", ("last_hidden_state",)),
     "GPTLMHeadModel": ("AutoModelForCausalLM", ("logits",)),
@@ -132,14 +125,14 @@ _HF_HEADS: dict[str, tuple[str, tuple[str, ...]]] = {
     "RoFormerForMaskedLM": ("AutoModelForMaskedLM", ("logits",)),
     "CvTForImageClassification": ("AutoModelForImageClassification", ("logits",)),
     "CLIPModel": ("CLIPModel", ("image_embeds", "text_embeds", "logits_per_image")),
-    "CLIPForZeroShotImageClassification": (
-        "CLIPModel", ("image_embeds", "text_embeds", "logits"),
-    ),
+    "CLIPForZeroShotImageClassification": ("CLIPModel", ("image_embeds", "text_embeds", "logits")),
     "MaskFormerForSemanticSegmentation": (
-        "MaskFormerForInstanceSegmentation", ("class_queries_logits", "masks_queries_logits"),
+        "MaskFormerForInstanceSegmentation",
+        ("class_queries_logits", "masks_queries_logits"),
     ),
     "Mask2FormerForSemanticSegmentation": (
-        "Mask2FormerForUniversalSegmentation", ("semantic_logits",),
+        "Mask2FormerForUniversalSegmentation",
+        ("semantic_logits",),
     ),
 }
 
@@ -228,9 +221,7 @@ def _build_reference(kind: str, identifier: str) -> object:
     namespaces = [vision.models]
     for extra in ("segmentation", "detection"):
         try:
-            namespaces.append(
-                importlib.import_module(f"{vision.__name__}.models.{extra}")
-            )
+            namespaces.append(importlib.import_module(f"{vision.__name__}.models.{extra}"))
         except ImportError:  # pragma: no cover - depends on the install
             continue
 
@@ -324,8 +315,14 @@ def _compare(
     # whose length depends on what it found, which is not a thing to
     # compare elementwise against another implementation's list. Say so
     # rather than reaching for a ``.numpy()`` that is not there.
-    if isinstance(reference_out, dict) and "out" in reference_out and isinstance(getattr(answer, "logits", None), lucid.Tensor):
-        pairs = [("semantic_logits", reference_out["out"].numpy(), getattr(answer, "logits").numpy())]
+    if (
+        isinstance(reference_out, dict)
+        and "out" in reference_out
+        and isinstance(getattr(answer, "logits", None), lucid.Tensor)
+    ):
+        pairs = [
+            ("semantic_logits", reference_out["out"].numpy(), getattr(answer, "logits").numpy())
+        ]
         if "aux" in reference_out:
             auxiliary = getattr(answer, "aux_logits", None)
             if not isinstance(auxiliary, lucid.Tensor):
@@ -335,8 +332,7 @@ def _compare(
     if not hasattr(reference_out, "numpy"):
         return {
             "unsupported": (
-                f"the reference answers with "
-                f"{type(reference_out).__name__}, not a tensor"
+                f"the reference answers with " f"{type(reference_out).__name__}, not a tensor"
             )
         }
 
@@ -349,7 +345,9 @@ def _compare(
     return _compare_arrays(wanted, got)
 
 
-def _compare_detection_components(ours: object, theirs: object, values: np.ndarray) -> dict[str, object]:
+def _compare_detection_components(
+    ours: object, theirs: object, values: np.ndarray
+) -> dict[str, object]:
     """Exercise trained dense stages with identical proposals, before NMS."""
     from lucid.models._utils._detection import multiscale_roi_align
 
@@ -363,49 +361,67 @@ def _compare_detection_components(ours: object, theirs: object, values: np.ndarr
         with ref.no_grad(), lucid.no_grad():
             reference_features = getattr(theirs, "backbone")(ref.from_numpy(values.copy()))
             features = getattr(ours, "backbone")(lucid.from_numpy(values.copy()))
-            for index, (wanted, got) in enumerate(zip(reference_features.values(), features, strict=True)):
+            for index, (wanted, got) in enumerate(
+                zip(reference_features.values(), features, strict=True)
+            ):
                 pairs.append((f"fpn_{index}", wanted.numpy(), got.numpy()))
             reference_rpn = getattr(theirs, "rpn").head(list(reference_features.values()))
             actual_rpn = getattr(ours, "rpn").head(features)
-            for label, want_group, got_group in zip(("rpn_objectness", "rpn_box_deltas"), reference_rpn, actual_rpn, strict=True):
+            for label, want_group, got_group in zip(
+                ("rpn_objectness", "rpn_box_deltas"), reference_rpn, actual_rpn, strict=True
+            ):
                 for index, (wanted, got) in enumerate(zip(want_group, got_group, strict=True)):
                     pairs.append((f"{label}_{index}", wanted.numpy(), got.numpy()))
             reference_heads = getattr(theirs, "roi_heads")
             heads = getattr(ours, "roi_heads")
             size = getattr(cfg, "roi_det_size", getattr(cfg, "roi_size", 7))
             actual_pool = multiscale_roi_align(
-                features[:4], [lucid.from_numpy(box.copy())], size,
-                [0.25, 0.125, 0.0625, 0.03125], cfg.roi_sampling_ratio,
-                cfg.canonical_scale, cfg.canonical_level,
+                features[:4],
+                [lucid.from_numpy(box.copy())],
+                size,
+                [0.25, 0.125, 0.0625, 0.03125],
+                cfg.roi_sampling_ratio,
+                cfg.canonical_scale,
+                cfg.canonical_level,
             )
-            reference_pool = reference_heads.box_roi_pool(reference_features, [ref.from_numpy(box.copy())], [tuple(values.shape[-2:])])
+            reference_pool = reference_heads.box_roi_pool(
+                reference_features, [ref.from_numpy(box.copy())], [tuple(values.shape[-2:])]
+            )
             actual_boxes = heads(actual_pool)
-            reference_boxes = reference_heads.box_predictor(reference_heads.box_head(reference_pool))
-            for name, wanted, got in zip(("box_class_logits", "box_deltas"), reference_boxes, actual_boxes, strict=True):
+            reference_boxes = reference_heads.box_predictor(
+                reference_heads.box_head(reference_pool)
+            )
+            for name, wanted, got in zip(
+                ("box_class_logits", "box_deltas"), reference_boxes, actual_boxes, strict=True
+            ):
                 pairs.append((name, wanted.numpy(), got.numpy()))
             if hasattr(heads, "mask_head"):
                 actual_masks = multiscale_roi_align(
-                    features[:4], [lucid.from_numpy(box.copy())], cfg.roi_mask_size,
-                    [0.25, 0.125, 0.0625, 0.03125], cfg.roi_sampling_ratio,
-                    cfg.canonical_scale, cfg.canonical_level,
+                    features[:4],
+                    [lucid.from_numpy(box.copy())],
+                    cfg.roi_mask_size,
+                    [0.25, 0.125, 0.0625, 0.03125],
+                    cfg.roi_sampling_ratio,
+                    cfg.canonical_scale,
+                    cfg.canonical_level,
                 )
-                reference_masks = reference_heads.mask_roi_pool(reference_features, [ref.from_numpy(box.copy())], [tuple(values.shape[-2:])])
+                reference_masks = reference_heads.mask_roi_pool(
+                    reference_features, [ref.from_numpy(box.copy())], [tuple(values.shape[-2:])]
+                )
                 wanted = reference_heads.mask_predictor(reference_heads.mask_head(reference_masks))
                 got = heads.predict_masks(actual_masks)
                 pairs.append(("instance_mask_scores", wanted.numpy(), got.numpy()))
         result = _compare_fields(pairs)
-        result["scope"] = "backbone/FPN, RPN, fixed-proposal RoI box/mask heads; no image transform, proposal selection, NMS or detection metric"
+        result["scope"] = (
+            "backbone/FPN, RPN, fixed-proposal RoI box/mask heads; no image transform, proposal selection, NMS or detection metric"
+        )
         return result
     except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
 
 def _compare_transformers(
-    model_name: str,
-    kind: str,
-    identifier: str,
-    params: int | None,
-    max_params: float = _MAX_PARAMS,
+    model_name: str, kind: str, identifier: str, params: int | None, max_params: float = _MAX_PARAMS
 ) -> dict[str, object]:
     """One checkpoint against the transformers model it was converted from.
 
@@ -416,9 +432,7 @@ def _compare_transformers(
     transformers = _transformers_module()
     ref = ref_module()
     if transformers is None or ref is None:
-        return {
-            "unreachable": "transformers or the reference framework is not installed"
-        }
+        return {"unreachable": "transformers or the reference framework is not installed"}
 
     model_class = _REGISTRY[model_name].model_class
     if model_class is None:
@@ -452,7 +466,8 @@ def _compare_transformers(
     ours_args: list[lucid.Tensor] = []
     theirs_kwargs: dict[str, object] = {}
     vision_only = cls_name in (
-        "CvTForImageClassification", "MaskFormerForSemanticSegmentation",
+        "CvTForImageClassification",
+        "MaskFormerForSemanticSegmentation",
         "Mask2FormerForSemanticSegmentation",
     )
     if vision_only or kind == "clip":
@@ -487,13 +502,17 @@ def _compare_transformers(
             # The published semantic postprocessor interpolates masks BEFORE
             # sigmoid and weighted query reduction, not the resulting scores.
             masks = ref.nn.functional.interpolate(
-                reference_out.masks_queries_logits, size=(side, side),
-                mode="bilinear", align_corners=False,
+                reference_out.masks_queries_logits,
+                size=(side, side),
+                mode="bilinear",
+                align_corners=False,
             ).sigmoid()
             classes = reference_out.class_queries_logits.softmax(-1)[..., :-1]
-            wanted = (classes.transpose(1, 2) @ masks.flatten(2)).reshape(
-                1, classes.shape[-1], side, side,
-            ).numpy()
+            wanted = (
+                (classes.transpose(1, 2) @ masks.flatten(2))
+                .reshape(1, classes.shape[-1], side, side)
+                .numpy()
+            )
             got = getattr(answer, "logits").numpy()
         else:
             reference_field = "logits_per_image" if kind == "clip" and field == "logits" else field
@@ -531,9 +550,7 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
     transformers = _transformers_module()
     ref = ref_module()
     if transformers is None or ref is None:
-        return {
-            "unreachable": "transformers or the reference framework is not installed"
-        }
+        return {"unreachable": "transformers or the reference framework is not installed"}
     try:
         ours = create_model(model_name, pretrained=True, num_frames=2).eval()
         theirs = getattr(transformers, "AutoModel").from_pretrained(repo).eval()
@@ -541,9 +558,7 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
 
     side = int(getattr(ours.config, "image_size"))
-    video = np.random.default_rng(0).standard_normal(
-        (1, 2, 3, side, side)
-    ).astype(np.float32)
+    video = np.random.default_rng(0).standard_normal((1, 2, 3, side, side)).astype(np.float32)
     tokens = (side // int(getattr(ours.config, "patch_size"))) ** 2
     half = tokens // 2
     context = np.arange(half, dtype=np.int64).reshape(1, -1)
@@ -560,17 +575,11 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
             # context positions taken out of it.
             indices = lucid.from_numpy(context.copy())
             gather = indices.unsqueeze(-1) + lucid.zeros(
-                1,
-                half,
-                int(encoded.shape[2]),
-                dtype=indices.dtype,
-                device=encoded.device,
+                1, half, int(encoded.shape[2]), dtype=indices.dtype, device=encoded.device
             )
             predicted = getattr(
                 ours.predictor(
-                    lucid.gather(encoded, 1, gather),
-                    indices,
-                    lucid.from_numpy(target.copy()),
+                    lucid.gather(encoded, 1, gather), indices, lucid.from_numpy(target.copy())
                 ),
                 "numpy",
             )()
@@ -579,11 +588,7 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
     return _compare_fields(
         [
             ("encoder", reference.last_hidden_state.numpy(), encoded.numpy()),
-            (
-                "predictor",
-                reference.predictor_output.last_hidden_state.numpy(),
-                predicted,
-            ),
+            ("predictor", reference.predictor_output.last_hidden_state.numpy(), predicted),
         ]
     )
 
@@ -635,9 +640,11 @@ def _compare_diffusers(model_name: str, identifier: str) -> dict[str, object]:
         theirs = diffusers.UNet2DModel.from_pretrained(identifier).eval()
         size = getattr(ours.config, "sample_size")
         height, width = (size, size) if isinstance(size, int) else size
-        values = np.random.default_rng(0).standard_normal(
-            (1, getattr(ours.config, "in_channels"), height, width),
-        ).astype(np.float32)
+        values = (
+            np.random.default_rng(0)
+            .standard_normal((1, getattr(ours.config, "in_channels"), height, width))
+            .astype(np.float32)
+        )
         with ref.no_grad(), lucid.no_grad():
             wanted = theirs(ref.from_numpy(values.copy()), 500).sample.numpy()
             answer = ours(lucid.from_numpy(values.copy()), lucid.tensor([500], dtype=lucid.int64))
@@ -664,7 +671,9 @@ def _compare_latent_diffusion(model_name: str, kind: str, identifier: str) -> di
         pairs = []
         export_comparison: dict[str, object] = {}
         if kind == "dit":
-            theirs = diffusers.Transformer2DModel.from_pretrained(identifier, subfolder="transformer").eval()
+            theirs = diffusers.Transformer2DModel.from_pretrained(
+                identifier, subfolder="transformer"
+            ).eval()
             denoiser = getattr(ours, "dit", ours)
             size = int(getattr(denoiser.config, "sample_size"))
             values = rng.standard_normal((1, 4, size, size)).astype(np.float32)
@@ -672,29 +681,43 @@ def _compare_latent_diffusion(model_name: str, kind: str, identifier: str) -> di
             labels = np.array([42], dtype=np.int64)
             with ref.no_grad(), lucid.no_grad():
                 wanted = theirs(
-                    ref.from_numpy(values.copy()), timestep=ref.from_numpy(steps),
+                    ref.from_numpy(values.copy()),
+                    timestep=ref.from_numpy(steps),
                     class_labels=ref.from_numpy(labels),
                 ).sample.numpy()
-                answer = denoiser(lucid.from_numpy(values.copy()), lucid.from_numpy(steps), lucid.from_numpy(labels))
+                answer = denoiser(
+                    lucid.from_numpy(values.copy()),
+                    lucid.from_numpy(steps),
+                    lucid.from_numpy(labels),
+                )
                 if not isinstance(answer, DiffusionModelOutput):
                     return {"error": "DiT denoiser did not return a DiffusionModelOutput"}
                 got = answer.sample.numpy()
                 export_comparison = _compare_fields([("noise_and_variance", wanted, got)])
                 _dit_original_frequencies(theirs)
                 wanted = theirs(
-                    ref.from_numpy(values.copy()), timestep=ref.from_numpy(steps),
+                    ref.from_numpy(values.copy()),
+                    timestep=ref.from_numpy(steps),
                     class_labels=ref.from_numpy(labels),
                 ).sample.numpy()
             pairs.append(("denoising_noise_and_variance_t500_class42", wanted, got))
         else:
             ours = getattr(ours, "stable_diffusion", ours)
-            theirs = diffusers.UNet2DConditionModel.from_pretrained(identifier, subfolder="unet").eval()
+            theirs = diffusers.UNet2DConditionModel.from_pretrained(
+                identifier, subfolder="unet"
+            ).eval()
             values = rng.standard_normal((1, 4, 16, 16)).astype(np.float32)
             context = rng.standard_normal((1, 77, 768)).astype(np.float32)
             with ref.no_grad(), lucid.no_grad():
-                wanted = theirs(ref.from_numpy(values.copy()), 500, encoder_hidden_states=ref.from_numpy(context.copy())).sample.numpy()
+                wanted = theirs(
+                    ref.from_numpy(values.copy()),
+                    500,
+                    encoder_hidden_states=ref.from_numpy(context.copy()),
+                ).sample.numpy()
                 got = getattr(ours, "unet")(
-                    lucid.from_numpy(values.copy()), lucid.tensor([500.0]), lucid.from_numpy(context.copy()),
+                    lucid.from_numpy(values.copy()),
+                    lucid.tensor([500.0]),
+                    lucid.from_numpy(context.copy()),
                 ).numpy()
             pairs.append(("conditional_denoising_t500_latent16", wanted, got))
             del theirs
@@ -702,21 +725,29 @@ def _compare_latent_diffusion(model_name: str, kind: str, identifier: str) -> di
             images = rng.standard_normal((1, 3, 128, 128)).astype(np.float32)
             ours_vae = getattr(ours, "vae")
             with ref.no_grad(), lucid.no_grad():
-                pairs.append((
-                    "vae_posterior_mean_image128",
-                    theirs_vae.encode(ref.from_numpy(images.copy())).latent_dist.mean.numpy(),
-                    ours_vae.encode(lucid.from_numpy(images.copy())).mean.numpy(),
-                ))
-                pairs.append((
-                    "vae_decode_latent16",
-                    theirs_vae.decode(ref.from_numpy(values.copy())).sample.numpy(),
-                    ours_vae.decode(lucid.from_numpy(values.copy())).numpy(),
-                ))
+                pairs.append(
+                    (
+                        "vae_posterior_mean_image128",
+                        theirs_vae.encode(ref.from_numpy(images.copy())).latent_dist.mean.numpy(),
+                        ours_vae.encode(lucid.from_numpy(images.copy())).mean.numpy(),
+                    )
+                )
+                pairs.append(
+                    (
+                        "vae_decode_latent16",
+                        theirs_vae.decode(ref.from_numpy(values.copy())).sample.numpy(),
+                        ours_vae.decode(lucid.from_numpy(values.copy())).numpy(),
+                    )
+                )
         result = _compare_fields(pairs)
         if kind == "dit":
             result["unadjusted_export_comparison"] = export_comparison
-            result["reference_adjustment"] = "original DiT timestep denominator half, not the exported layout's half-1"
-        result["scope"] = "deterministic component outputs; no text encoder, sampling, dataset or image-quality claim"
+            result["reference_adjustment"] = (
+                "original DiT timestep denominator half, not the exported layout's half-1"
+            )
+        result["scope"] = (
+            "deterministic component outputs; no text encoder, sampling, dataset or image-quality claim"
+        )
         return result
     except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
@@ -750,17 +781,18 @@ def _compare_detr(model_name: str, identifier: str, shape: tuple[int, ...]) -> d
     try:
         ours = create_model(model_name, pretrained=True).eval()
         theirs = ref.hub.load(
-            f"facebookresearch/detr:{revision}", identifier,
-            pretrained=True, trust_repo=True,
+            f"facebookresearch/detr:{revision}", identifier, pretrained=True, trust_repo=True
         ).eval()
         values = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
         with ref.no_grad(), lucid.no_grad():
             wanted = theirs(ref.from_numpy(values.copy()))
             got = ours(lucid.from_numpy(values.copy()))
-        result = _compare_fields([
-            ("query_logits", wanted["pred_logits"].numpy(), getattr(got, "logits").numpy()),
-            ("query_boxes", wanted["pred_boxes"].numpy(), getattr(got, "pred_boxes").numpy()),
-        ])
+        result = _compare_fields(
+            [
+                ("query_logits", wanted["pred_logits"].numpy(), getattr(got, "logits").numpy()),
+                ("query_boxes", wanted["pred_boxes"].numpy(), getattr(got, "pred_boxes").numpy()),
+            ]
+        )
         result["reference_revision"] = revision
         result["scope"] = "raw query logits and normalized boxes; no detection metric"
         return result
@@ -786,7 +818,10 @@ def _diamond_reference(revision: str) -> Iterator[ModuleType]:
                 package = ModuleType(namespace + suffix)
                 package.__path__ = [str(root)]
                 sys.modules[package.__name__] = package
-            for relative, suffix in (("blocks.py", ".blocks"), ("diffusion/inner_model.py", ".diffusion.inner_model")):
+            for relative, suffix in (
+                ("blocks.py", ".blocks"),
+                ("diffusion/inner_model.py", ".diffusion.inner_model"),
+            ):
                 url = f"https://raw.githubusercontent.com/eloialonso/diamond/{revision}/src/models/{relative}"
                 path = root / Path(relative).name
                 with urllib.request.urlopen(url, timeout=30) as response:
@@ -810,14 +845,22 @@ def _compare_diamond(model_name: str, identifier: str) -> dict[str, object]:
     if ref is None:
         return {"unreachable": "the reference framework is not installed"}
     csgo = model_name == "diamond_csgo"
-    revision = "851cefb497733d27f1b85c804104638765860fca" if csgo else "5bcd1599755b4f2fae8e5e079e02f0728e174965"
+    revision = (
+        "851cefb497733d27f1b85c804104638765860fca"
+        if csgo
+        else "5bcd1599755b4f2fae8e5e079e02f0728e174965"
+    )
     try:
         from lucid.models.generative.diamond import DIAMONDConfig
 
         hub = importlib.import_module("huggingface_hub")
         member = _factory_default(model_name)
-        filename = "csgo/model/csgo.pt" if csgo else f"atari_100k/models/{member.value.meta['game']}.pt"
-        state = ref.load(hub.hf_hub_download(identifier, filename), map_location="cpu", weights_only=True)
+        filename = (
+            "csgo/model/csgo.pt" if csgo else f"atari_100k/models/{member.value.meta['game']}.pt"
+        )
+        state = ref.load(
+            hub.hf_hub_download(identifier, filename), map_location="cpu", weights_only=True
+        )
         model = create_model(model_name, pretrained=True).eval()
         ours = getattr(model, "diamond", model)
         cfg = ours.config
@@ -847,31 +890,62 @@ def _compare_diamond(model_name: str, identifier: str) -> dict[str, object]:
                     kwargs["is_upsampler"] = upsampler
                 theirs = source.InnerModel(source.InnerModelConfig(**kwargs)).eval()
                 prefix = component + ".inner_model."
-                theirs.load_state_dict({k.removeprefix(prefix): v for k, v in state.items() if k.startswith(prefix)}, strict=True)
+                theirs.load_state_dict(
+                    {k.removeprefix(prefix): v for k, v in state.items() if k.startswith(prefix)},
+                    strict=True,
+                )
                 height, width = cfg.frame_shape
                 if upsampler:
                     height, width = height * cfg.upsampling_factor, width * cfg.upsampling_factor
                 noisy = rng.standard_normal((1, cfg.in_channels, height, width)).astype(np.float32)
-                history = rng.standard_normal((1, cfg.in_channels * (2 if upsampler else cfg.conditioning_frames), height, width)).astype(np.float32)
+                history = rng.standard_normal(
+                    (
+                        1,
+                        cfg.in_channels * (2 if upsampler else cfg.conditioning_frames),
+                        height,
+                        width,
+                    )
+                ).astype(np.float32)
                 noise = np.array([0.25], dtype=np.float32)
                 cond_noise = np.array([-0.5], dtype=np.float32)
-                actions = rng.integers(0, cfg.num_actions, size=(1, cfg.conditioning_frames), dtype=np.int64)
+                actions = rng.integers(
+                    0, cfg.num_actions, size=(1, cfg.conditioning_frames), dtype=np.int64
+                )
                 network = getattr(ours, component)
                 with ref.no_grad(), lucid.no_grad():
                     if csgo:
-                        wanted = theirs(ref.from_numpy(noisy), ref.from_numpy(noise), ref.from_numpy(cond_noise), ref.from_numpy(history), None if upsampler else ref.from_numpy(actions))
+                        wanted = theirs(
+                            ref.from_numpy(noisy),
+                            ref.from_numpy(noise),
+                            ref.from_numpy(cond_noise),
+                            ref.from_numpy(history),
+                            None if upsampler else ref.from_numpy(actions),
+                        )
                     else:
-                        wanted = theirs(ref.from_numpy(noisy), ref.from_numpy(noise), ref.from_numpy(history), ref.from_numpy(actions))
+                        wanted = theirs(
+                            ref.from_numpy(noisy),
+                            ref.from_numpy(noise),
+                            ref.from_numpy(history),
+                            ref.from_numpy(actions),
+                        )
                     if upsampler:
-                        cond = network.conditioning(lucid.from_numpy(noise), lucid.from_numpy(cond_noise))
+                        cond = network.conditioning(
+                            lucid.from_numpy(noise), lucid.from_numpy(cond_noise)
+                        )
                     else:
-                        cond = network.conditioning(lucid.from_numpy(noise), lucid.from_numpy(actions), lucid.from_numpy(cond_noise) if csgo else None)
+                        cond = network.conditioning(
+                            lucid.from_numpy(noise),
+                            lucid.from_numpy(actions),
+                            lucid.from_numpy(cond_noise) if csgo else None,
+                        )
                     got = network(lucid.from_numpy(np.concatenate((history, noisy), axis=1)), cond)
                     pairs.append((component, wanted.numpy().copy(), got.numpy().copy()))
                 del theirs, got, wanted
         result = _compare_fields(pairs)
         result["reference_revision"] = revision
-        result["scope"] = "trained raw denoiser components; no EDM preconditioning, agent heads, rollout, sampling or game-score claim"
+        result["scope"] = (
+            "trained raw denoiser components; no EDM preconditioning, agent heads, rollout, sampling or game-score claim"
+        )
         return result
     except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
@@ -891,7 +965,7 @@ def _darknet_oracle_blob(path: Path, convolutions: list[tuple[int, int, bool]]) 
     pos = 0
     for channels, weights, normalized in convolutions:
         if normalized:
-            payload[pos + 3 * channels:pos + 4 * channels] += np.float32(1e-5 - 1e-6)
+            payload[pos + 3 * channels : pos + 4 * channels] += np.float32(1e-5 - 1e-6)
         pos += channels * (4 if normalized else 1) + weights
     if pos != payload.size:
         raise ValueError("darknet oracle weight census does not consume the full payload")
@@ -909,7 +983,9 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
     except ImportError:
         return {"unreachable": "the optional OpenCV DNN oracle is not installed"}
     if not callable(getattr(cv2.dnn, "readNetFromDarknet", None)):
-        return {"unreachable": "this OpenCV build has no darknet reader; use the optional 4.x oracle"}
+        return {
+            "unreachable": "this OpenCV build has no darknet reader; use the optional 4.x oracle"
+        }
     converter = importlib.import_module("tools.convert_weights.yolo")
 
     if model_name not in converter._SOURCES:
@@ -926,7 +1002,11 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
         order = converter._darknet_order(ours, model_name)
         modules = dict(ours.named_modules())
         convolution_shapes = [
-            (int(getattr(modules[name], "weight").shape[0]), int(getattr(modules[name], "weight").numel()), norm is not None)
+            (
+                int(getattr(modules[name], "weight").shape[0]),
+                int(getattr(modules[name], "weight").numel()),
+                norm is not None,
+            )
             for name, norm in order
         ]
         oracle_blob = _darknet_oracle_blob(weights_path, convolution_shapes)
@@ -935,23 +1015,34 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
             url = f"https://raw.githubusercontent.com/{repo}/{revision}/cfg/{cfg_name}"
             with urllib.request.urlopen(url, timeout=30) as response:
                 cfg_path.write_bytes(response.read())
-            theirs = cv2.dnn.readNetFromDarknet(np.frombuffer(cfg_path.read_bytes(), dtype=np.uint8), oracle_blob)
+            theirs = cv2.dnn.readNetFromDarknet(
+                np.frombuffer(cfg_path.read_bytes(), dtype=np.uint8), oracle_blob
+            )
         del oracle_blob
         theirs.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
         theirs.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
         theirs.enableFusion(False)
-        conv_names = [name for name in theirs.getLayerNames()
-                      if theirs.getLayer(theirs.getLayerId(name)).type == "Convolution"]
+        conv_names = [
+            name
+            for name in theirs.getLayerNames()
+            if theirs.getLayer(theirs.getLayerId(name)).type == "Convolution"
+        ]
         if len(conv_names) != len(order):
             return {"error": f"convolution census mismatch: {len(conv_names)} vs {len(order)}"}
-        prediction_names = [(conv_names[i], name) for i, (name, norm) in enumerate(order) if norm is None]
+        prediction_names = [
+            (conv_names[i], name) for i, (name, norm) in enumerate(order) if norm is None
+        ]
         captured = {}
         handles = []
         for _, name in prediction_names:
-            def capture(_module: object, _args: tuple[object, ...], output: object, *, key: str = name) -> None:
+
+            def capture(
+                _module: object, _args: tuple[object, ...], output: object, *, key: str = name
+            ) -> None:
                 if not isinstance(output, lucid.Tensor):
                     raise TypeError(f"prediction head {key} did not return a Tensor")
                 captured[key] = output.numpy().copy()
+
             handles.append(modules[name].register_forward_hook(capture))
         values = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
         try:
@@ -959,17 +1050,21 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
                 ours(lucid.from_numpy(values.copy()))
             theirs.setInput(values.copy())
             wanted = theirs.forward([name for name, _ in prediction_names])
-            result = _compare_fields([
-                (name, reference, captured[name])
-                for (_, name), reference in zip(prediction_names, wanted, strict=True)
-            ])
+            result = _compare_fields(
+                [
+                    (name, reference, captured[name])
+                    for (_, name), reference in zip(prediction_names, wanted, strict=True)
+                ]
+            )
         finally:
             for handle in handles:
                 handle.remove()
         result["reference_revision"] = revision
         result["reference_runtime"] = f"OpenCV {cv2.__version__} CPU DNN, fusion disabled"
         result["reference_normalization"] = "original accelerator equation: sqrt(variance + 1e-5)"
-        result["scope"] = "raw prediction heads from original cfg/weights; no decoding, NMS or detection metric"
+        result["scope"] = (
+            "raw prediction heads from original cfg/weights; no decoding, NMS or detection metric"
+        )
         return result
     except Exception as exc:
         return {"error": f"{type(exc).__name__}: {exc}"[:200]}
@@ -1071,20 +1166,30 @@ def _isolated_run(arguments: list[str]) -> int:
             # Preserve normal client authentication when moving only download
             # caches. The client reads its token; this tool never copies it.
             environment.setdefault("HF_TOKEN_PATH", str(constants.HF_TOKEN_PATH))
-        environment.update({
-            "LUCID_HOME": str(root / "lucid"),
-            "HF_HOME": str(root / "hf"),
-            "HF_HUB_CACHE": str(root / "hf" / "hub"),
-            "HF_XET_CACHE": str(root / "hf" / "xet"),
-            "HF_ASSETS_CACHE": str(root / "hf" / "assets"),
-            "HUGGINGFACE_HUB_CACHE": str(root / "hf" / "hub"),
-            "TRANSFORMERS_CACHE": str(root / "hf" / "hub"),
-        })
+        environment.update(
+            {
+                "LUCID_HOME": str(root / "lucid"),
+                "HF_HOME": str(root / "hf"),
+                "HF_HUB_CACHE": str(root / "hf" / "hub"),
+                "HF_XET_CACHE": str(root / "hf" / "xet"),
+                "HF_ASSETS_CACHE": str(root / "hf" / "assets"),
+                "HUGGINGFACE_HUB_CACHE": str(root / "hf" / "hub"),
+                "TRANSFORMERS_CACHE": str(root / "hf" / "hub"),
+            }
+        )
         # run() waits for (or kills on interruption) this direct child before
         # TemporaryDirectory removes its cache; it does not own grandchildren.
         return subprocess.run(
-            [sys.executable, "-m", "tools.check_pretrained_parity", *arguments,
-             "--_owned-cache", str(root)], env=environment, check=False,
+            [
+                sys.executable,
+                "-m",
+                "tools.check_pretrained_parity",
+                *arguments,
+                "--_owned-cache",
+                str(root),
+            ],
+            env=environment,
+            check=False,
         ).returncode
 
 
@@ -1104,7 +1209,9 @@ def _factory_default(name: str) -> WeightsEnum:
     selected: WeightsEnum | None = None
     finished = StopIteration()
 
-    def capture(enum_cls: type[WeightsEnum], pretrained: bool | str, weights: WeightsEnum | None) -> None:
+    def capture(
+        enum_cls: type[WeightsEnum], pretrained: bool | str, weights: WeightsEnum | None
+    ) -> None:
         nonlocal selected
         selected = resolve(enum_cls, pretrained, weights)
         raise finished
@@ -1126,7 +1233,9 @@ def main() -> int:
     parser.add_argument("--source", help="only sources starting with this")
     parser.add_argument("--limit", type=int, help="stop after this many")
     parser.add_argument("--list", action="store_true", help="print what is checkable")
-    parser.add_argument("--json", type=Path, help="write per-checkpoint evidence, including unverified entries")
+    parser.add_argument(
+        "--json", type=Path, help="write per-checkpoint evidence, including unverified entries"
+    )
     parser.add_argument("--_owned-cache", type=Path, help=argparse.SUPPRESS)
     parser.add_argument(
         "--max-params",
@@ -1197,8 +1306,10 @@ def main() -> int:
         except importlib.metadata.PackageNotFoundError:
             versions[package] = None
     environment = {
-        "python": platform.python_version(), "platform": platform.platform(),
-        "packages": versions, "tool_source_sha256_at_import": _TOOL_SOURCE_SHA256,
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "packages": versions,
+        "tool_source_sha256_at_import": _TOOL_SOURCE_SHA256,
         "source_match": "tool source is identified; full working-tree identity is not inferred",
     }
 
@@ -1209,8 +1320,12 @@ def main() -> int:
         report = {
             "version": lucid.__version__,
             "environment": environment,
-            "selected": len(targets), "processed": len(evidence), "finished": finished,
-            "compared": checked, "unreachable": unreachable, "problems": bad,
+            "selected": len(targets),
+            "processed": len(evidence),
+            "finished": finished,
+            "compared": checked,
+            "unreachable": unreachable,
+            "problems": bad,
             "complete": finished and checked == len(targets) and not bad,
             "evidence": evidence,
             "scope": "one default checkpoint per factory; output parity, no dataset metric or training claim",
@@ -1220,7 +1335,9 @@ def main() -> int:
         temporary.replace(args.json)
 
     roots = _download_roots() if args.clean_downloads else []
-    if roots and any(not root.resolve().is_relative_to(args._owned_cache.resolve()) for root in roots):
+    if roots and any(
+        not root.resolve().is_relative_to(args._owned_cache.resolve()) for root in roots
+    ):
         parser.error("cleanup refused: a download cache escaped the isolated directory")
     freed = 0
     for index, (name, source, params) in enumerate(targets, 1):
@@ -1280,8 +1397,7 @@ def main() -> int:
         return 1
     if checked == 0:
         print(
-            "nothing was verified — no reference installed, or every "
-            "selection was unreachable",
+            "nothing was verified — no reference installed, or every " "selection was unreachable",
             file=sys.stderr,
         )
         return 2

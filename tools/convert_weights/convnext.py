@@ -52,17 +52,9 @@ _CONVNEXT_CITATION = (
 _CONVNEXT_VARIANTS: dict[str, tuple[str, str, str]] = {
     # arch -> (lucid_cls_factory, repo_id, title)
     "convnext_tiny": ("convnext_tiny_cls", "lucid-dl/convnext-tiny", "ConvNeXt-Tiny"),
-    "convnext_small": (
-        "convnext_small_cls",
-        "lucid-dl/convnext-small",
-        "ConvNeXt-Small",
-    ),
+    "convnext_small": ("convnext_small_cls", "lucid-dl/convnext-small", "ConvNeXt-Small"),
     "convnext_base": ("convnext_base_cls", "lucid-dl/convnext-base", "ConvNeXt-Base"),
-    "convnext_large": (
-        "convnext_large_cls",
-        "lucid-dl/convnext-large",
-        "ConvNeXt-Large",
-    ),
+    "convnext_large": ("convnext_large_cls", "lucid-dl/convnext-large", "ConvNeXt-Large"),
 }
 
 _TV_BUILDERS = {
@@ -193,8 +185,7 @@ class ConvNeXtArch(Architecture):
             preprocessing=preprocessing,
             citation=_CONVNEXT_CITATION,
             title=title,
-            paper_url="Liu et al., 2022 — *A ConvNet for the 2020s* "
-            "(arXiv:2201.03545)",
+            paper_url="Liu et al., 2022 — *A ConvNet for the 2020s* " "(arXiv:2201.03545)",
             categories=categories,
             meta=meta,
         )
@@ -271,9 +262,7 @@ class ConvNeXtTimmArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -371,8 +360,7 @@ class ConvNeXtTimmArch(Architecture):
             preprocessing=preprocessing,
             citation=_CONVNEXT_CITATION,
             title=title,
-            paper_url="Liu et al., 2022 — *A ConvNet for the 2020s* "
-            "(arXiv:2201.03545)",
+            paper_url="Liu et al., 2022 — *A ConvNet for the 2020s* " "(arXiv:2201.03545)",
             categories=[],
             datasets=_datasets_from_timm_tag(self.tag),
             meta=meta,
@@ -380,11 +368,7 @@ class ConvNeXtTimmArch(Architecture):
 
 
 _TIMM_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "convnext_xlarge": (
-        "convnext_xlarge_cls",
-        "lucid-dl/convnext-xlarge",
-        "ConvNeXt-XLarge",
-    ),
+    "convnext_xlarge": ("convnext_xlarge_cls", "lucid-dl/convnext-xlarge", "ConvNeXt-XLarge")
 }
 
 

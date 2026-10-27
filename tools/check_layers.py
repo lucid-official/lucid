@@ -83,7 +83,7 @@ def _file_module(path: Path) -> str:
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         # Optimizers legitimately need Parameter (it's a base type, not a module)
-        ("lucid.optim", "lucid.nn.parameter"),
+        ("lucid.optim", "lucid.nn.parameter")
     }
 )
 
@@ -102,9 +102,7 @@ def check_python_layers(lucid_dir: Path = LUCID) -> list[str]:
                 continue
             for imp in _get_runtime_imports(py_file):
                 for forbidden_prefix in forbidden:
-                    if not (
-                        imp == forbidden_prefix or imp.startswith(forbidden_prefix + ".")
-                    ):
+                    if not (imp == forbidden_prefix or imp.startswith(forbidden_prefix + ".")):
                         continue
                     if (src_prefix, imp) in ALLOWED_EXCEPTIONS:
                         continue

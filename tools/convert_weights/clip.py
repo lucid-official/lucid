@@ -135,10 +135,7 @@ class CLIPArch(Architecture):
             and there is exactly one release per architecture.
         """
         if model_name not in _RELEASES:
-            raise ValueError(
-                f"no CLIP release for {model_name!r}; known: "
-                f"{sorted(_RELEASES)}"
-            )
+            raise ValueError(f"no CLIP release for {model_name!r}; known: " f"{sorted(_RELEASES)}")
         self.model_name = model_name
         self.tag = tag
         self.repo, self.overrides = _RELEASES[model_name]
@@ -172,16 +169,10 @@ class CLIPArch(Architecture):
             if ".self_attn.q_proj." in key:
                 stem, suffix = key.split(".self_attn.q_proj.")
                 triple = [
-                    state[f"{stem}.self_attn.{part}_proj.{suffix}"]
-                    for part in ("q", "k", "v")
+                    state[f"{stem}.self_attn.{part}_proj.{suffix}"] for part in ("q", "k", "v")
                 ]
-                out[f"{stem}.self_attn.in_proj_{suffix}"] = np.concatenate(
-                    triple, axis=0
-                )
-                fused.update(
-                    f"{stem}.self_attn.{part}_proj.{suffix}"
-                    for part in ("q", "k", "v")
-                )
+                out[f"{stem}.self_attn.in_proj_{suffix}"] = np.concatenate(triple, axis=0)
+                fused.update(f"{stem}.self_attn.{part}_proj.{suffix}" for part in ("q", "k", "v"))
             elif ".self_attn.k_proj." in key or ".self_attn.v_proj." in key:
                 continue
             else:
@@ -312,8 +303,7 @@ class CLIPArch(Architecture):
                 "interpolation": "bicubic",
             },
             citation=_CITATION,
-            title="Learning Transferable Visual Models From Natural "
-            "Language Supervision",
+            title="Learning Transferable Visual Models From Natural " "Language Supervision",
             paper_url="https://arxiv.org/abs/2103.00020",
             categories=["multimodal", "contrastive", "zero-shot"],
             datasets=["WIT-400M"],

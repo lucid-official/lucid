@@ -64,13 +64,7 @@ _VARIANTS: dict[str, tuple[str, str, str, str, str]] = {
         "google/bert_uncased_L-8_H-512_A-8",
         "base",
     ),
-    "bert_base": (
-        "bert_base",
-        "bert-base",
-        "BERT-Base",
-        "google-bert/bert-base-uncased",
-        "base",
-    ),
+    "bert_base": ("bert_base", "bert-base", "BERT-Base", "google-bert/bert-base-uncased", "base"),
     "bert_large": (
         "bert_large",
         "bert-large",
@@ -175,15 +169,9 @@ class BERTArch(Architecture):
             self._src = BertForPreTraining.from_pretrained(hf_id).eval()
             self._model: Module = getattr(models, factory)()
         elif kind in ("qa", "token_cls"):
-            from transformers import (
-                AutoModel,
-                BertForQuestionAnswering,
-                BertForTokenClassification,
-            )
+            from transformers import AutoModel, BertForQuestionAnswering, BertForTokenClassification
 
-            head_cls = (
-                BertForQuestionAnswering if kind == "qa" else BertForTokenClassification
-            )
+            head_cls = BertForQuestionAnswering if kind == "qa" else BertForTokenClassification
             # Fine-tuned head + encoder come from the task model; the pooler
             # (dropped by add_pooling_layer=False, but present in the file) is
             # recovered via AutoModel so Lucid's BERTModel pooler slot fills.
@@ -192,9 +180,7 @@ class BERTArch(Architecture):
             if kind == "token_cls":
                 vocab = int(self._src.config.vocab_size)
                 labels = int(self._src.config.num_labels)
-                self._model = getattr(models, factory)(
-                    vocab_size=vocab, num_labels=labels
-                )
+                self._model = getattr(models, factory)(vocab_size=vocab, num_labels=labels)
             else:
                 self._model = getattr(models, factory)()
         else:

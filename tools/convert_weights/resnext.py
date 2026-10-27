@@ -49,11 +49,7 @@ _PAPER_URL = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _RESNEXT_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "resnext_50_32x4d": (
-        "resnext_50_32x4d_cls",
-        "lucid-dl/resnext-50-32x4d",
-        "ResNeXt-50 (32x4d)",
-    ),
+    "resnext_50_32x4d": ("resnext_50_32x4d_cls", "lucid-dl/resnext-50-32x4d", "ResNeXt-50 (32x4d)"),
     "resnext_101_32x8d": (
         "resnext_101_32x8d_cls",
         "lucid-dl/resnext-101-32x8d",
@@ -77,15 +73,11 @@ _TV_BUILDER_NAMES: dict[str, tuple[str, str]] = {
 }
 
 # timm canonical model name keyed by arch.
-_TIMM_NAMES: dict[str, str] = {
-    "resnext_101_32x4d": "resnext101_32x4d",
-}
+_TIMM_NAMES: dict[str, str] = {"resnext_101_32x4d": "resnext101_32x4d"}
 
 # Published acc@1 / acc@5 for the timm Gluon checkpoint (timm
 # results-imagenet.csv — ``gluon_resnext101_32x4d``).
-_TIMM_METRICS: dict[str, tuple[float, float]] = {
-    "resnext_101_32x4d": (80.342, 94.926),
-}
+_TIMM_METRICS: dict[str, tuple[float, float]] = {"resnext_101_32x4d": (80.342, 94.926)}
 
 
 class ResNeXtArch(Architecture):
@@ -125,9 +117,7 @@ class ResNeXtArch(Architecture):
             model = self._builder(weights=self._tv_weights)
             model.eval()
             return {k: v.detach().cpu().numpy() for k, v in model.state_dict().items()}
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

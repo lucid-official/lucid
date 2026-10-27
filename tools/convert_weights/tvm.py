@@ -236,8 +236,7 @@ def _load_storage(data: object) -> torch.storage.TypedStorage:
     storage = torch.load(io.BytesIO(data), map_location="cpu", weights_only=True)
     if not isinstance(storage, torch.storage.TypedStorage):
         raise pickle.UnpicklingError(
-            f"convert(tvm): a storage record decodes to "
-            f"{type(storage).__name__}, not a storage"
+            f"convert(tvm): a storage record decodes to " f"{type(storage).__name__}, not a storage"
         )
     return storage
 
@@ -341,17 +340,14 @@ def _flatten(obj: object, prefix: str, out: dict[str, npt.NDArray[np.float32]]) 
                 continue
             if not isinstance(tensor, torch.Tensor):
                 raise RuntimeError(
-                    f"convert(tvm): {prefix}{name} is a "
-                    f"{type(tensor).__name__}, not a tensor"
+                    f"convert(tvm): {prefix}{name} is a " f"{type(tensor).__name__}, not a tensor"
                 )
             out[prefix + name] = tensor.detach().to(torch.float32).cpu().numpy()
     for name, child in _children(attrs).items():
         _flatten(child, f"{prefix}{name}.", out)
 
 
-def _module_attribute(
-    attrs: dict[str, object], attr: str, prefix: str = ""
-) -> dict[str, object]:
+def _module_attribute(attrs: dict[str, object], attr: str, prefix: str = "") -> dict[str, object]:
     """``attr`` of every module in the tree that records one, by dotted path."""
     found: dict[str, object] = {}
     if attr in attrs:
@@ -378,13 +374,9 @@ def _load_ema(
     # The authors' sampler reads ``data["ema"]``; their training loop's
     # snapshots store the same evaluation EMA under ``"net"``.  Either is
     # the 0.9999 average.
-    key = next(
-        (k for k in ("ema", "net") if isinstance(data, dict) and k in data), None
-    )
+    key = next((k for k in ("ema", "net") if isinstance(data, dict) and k in data), None)
     if key is None:
-        raise RuntimeError(
-            f"convert(tvm): {path} holds neither an 'ema' nor a 'net' entry"
-        )
+        raise RuntimeError(f"convert(tvm): {path} holds neither an 'ema' nor a 'net' entry")
     wrapper = data[key]
     state: dict[str, npt.NDArray[np.float32]] = {}
     _flatten(wrapper, "", state)
@@ -429,8 +421,7 @@ class TVMArch(Architecture):
         base = AutoConfig.from_pretrained(self.model_name)
         if not isinstance(base, TVMConfig):
             raise TypeError(
-                f"{self.model_name} is registered with a {type(base).__name__}, "
-                f"not a TVMConfig"
+                f"{self.model_name} is registered with a {type(base).__name__}, " f"not a TVMConfig"
             )
         return apply_overrides(base, self.release.overrides)
 
@@ -491,9 +482,7 @@ class TVMArch(Architecture):
                 f"embedder; Lucid's TVM always conditions on 1/w"
             )
 
-    def _check_layers(
-        self, network: dict[str, object], attr: str, expected: object
-    ) -> None:
+    def _check_layers(self, network: dict[str, object], attr: str, expected: object) -> None:
         """Every layer that records ``attr`` ran with the config's value."""
         found = _module_attribute(network, attr)
         if not found:

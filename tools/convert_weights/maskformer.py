@@ -88,9 +88,7 @@ class MaskFormerArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)(num_classes=150)
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

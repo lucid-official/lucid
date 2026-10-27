@@ -118,9 +118,7 @@ def profile_lucid(step: Step, steps: int) -> dict[str, tuple[int, float]]:
     return {k: (int(v[0] / steps), v[1] / steps) for k, v in agg.items()}
 
 
-def profile_ref(
-    step: Step, ref: ModuleType, steps: int
-) -> dict[str, tuple[int, float]]:
+def profile_ref(step: Step, ref: ModuleType, steps: int) -> dict[str, tuple[int, float]]:
     totals: dict[str, float] = defaultdict(float)
     with ref.profiler.profile(activities=[ref.profiler.ProfilerActivity.CPU]) as prof:
         for _ in range(steps):
@@ -193,9 +191,7 @@ def main() -> None:
     if args.profile:
         print_profile("lucid", profile_lucid(runs[0], args.steps), args.top)
         if ref is not None:
-            print_profile(
-                REF_DISPLAY_NAME, profile_ref(runs[1], ref, args.steps), args.top
-            )
+            print_profile(REF_DISPLAY_NAME, profile_ref(runs[1], ref, args.steps), args.top)
 
 
 if __name__ == "__main__":

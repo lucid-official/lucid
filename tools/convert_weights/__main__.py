@@ -69,24 +69,13 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m tools.convert_weights",
         description="Convert upstream pretrained weights to Lucid safetensors.",
     )
+    parser.add_argument("model", help="Architecture name, e.g. 'resnet_18'.")
+    parser.add_argument("--tag", required=True, help="Weight tag, e.g. 'IMAGENET1K_V1'.")
     parser.add_argument(
-        "model",
-        help="Architecture name, e.g. 'resnet_18'.",
+        "--out", default="_converted", help="Output root directory (default: ./_converted)."
     )
     parser.add_argument(
-        "--tag",
-        required=True,
-        help="Weight tag, e.g. 'IMAGENET1K_V1'.",
-    )
-    parser.add_argument(
-        "--out",
-        default="_converted",
-        help="Output root directory (default: ./_converted).",
-    )
-    parser.add_argument(
-        "--upload",
-        action="store_true",
-        help="Upload the converted folder to the Hugging Face Hub.",
+        "--upload", action="store_true", help="Upload the converted folder to the Hugging Face Hub."
     )
     args = parser.parse_args(argv)
 

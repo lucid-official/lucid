@@ -134,9 +134,7 @@ def _load_python_modules() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _index_python_symbols(
-    modules: dict[str, dict[str, Any]],
-) -> dict[str, list[dict[str, str]]]:
+def _index_python_symbols(modules: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
     """Map ``name`` → ``[{path, module, kind}]``.  Classes and functions
     co-exist in the same index by their bare name; the consumer
     disambiguates by ``kind``."""
@@ -152,11 +150,7 @@ def _index_python_symbols(
             # (methods aren't autograd nodes).  But the class itself
             # does.
             members = [
-                {
-                    "name": data.get("name", ""),
-                    "kind": "class",
-                    "path": data.get("path", ""),
-                }
+                {"name": data.get("name", ""), "kind": "class", "path": data.get("path", "")}
             ]
         else:
             continue
@@ -164,11 +158,7 @@ def _index_python_symbols(
             name = m.get("name")
             if not name:
                 continue
-            entry = {
-                "path": f"{slug}.{name}",
-                "module": slug,
-                "kind": m.get("kind", "function"),
-            }
+            entry = {"path": f"{slug}.{name}", "module": slug, "kind": m.get("kind", "function")}
             idx.setdefault(name, []).append(entry)
     return idx
 
@@ -232,10 +222,7 @@ def _match_op_function(
 # ---------------------------------------------------------------------------
 
 
-def _build(
-    engine: dict[str, Any],
-    py_idx: dict[str, list[dict[str, str]]],
-) -> dict[str, Any]:
+def _build(engine: dict[str, Any], py_idx: dict[str, list[dict[str, str]]]) -> dict[str, Any]:
     cpp_members = engine.get("members", [])
 
     cpp_to_python: dict[str, list[dict[str, str]]] = {}
@@ -261,12 +248,7 @@ def _build(
 
         cpp_to_python[cpp_name] = matches
         for py in matches:
-            python_to_cpp.setdefault(py["path"], []).append(
-                {
-                    "name": cpp_name,
-                    "kind": link_kind,
-                }
-            )
+            python_to_cpp.setdefault(py["path"], []).append({"name": cpp_name, "kind": link_kind})
 
     return {"python_to_cpp": python_to_cpp, "cpp_to_python": cpp_to_python}
 
@@ -280,10 +262,7 @@ def _apply_overrides(table: dict[str, Any]) -> dict[str, Any]:
     try:
         ovr = json.loads(OVERRIDES.read_text())
     except json.JSONDecodeError:
-        print(
-            f"[cross-links] failed to parse {OVERRIDES} — skipping overrides",
-            file=sys.stderr,
-        )
+        print(f"[cross-links] failed to parse {OVERRIDES} — skipping overrides", file=sys.stderr)
         return table
     for section in ("python_to_cpp", "cpp_to_python"):
         for k, v in ovr.get(section, {}).items():
@@ -299,9 +278,7 @@ def _apply_overrides(table: dict[str, Any]) -> dict[str, Any]:
 def main() -> int:
     engine = _load_engine()
     if engine is None:
-        print(
-            f"[cross-links] {ENGINE_SLUG}.json missing — nothing to do", file=sys.stderr
-        )
+        print(f"[cross-links] {ENGINE_SLUG}.json missing — nothing to do", file=sys.stderr)
         return 0
     py_modules = _load_python_modules()
     py_idx = _index_python_symbols(py_modules)

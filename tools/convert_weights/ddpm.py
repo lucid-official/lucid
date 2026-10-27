@@ -124,12 +124,7 @@ class DDPMArch(Architecture):
 
         # Attention fuse: collect block prefixes, emit qkv/proj/norm.
         attn_prefixes = sorted(
-            {
-                m.group(0)
-                for k in sd
-                for m in [re.match(r".*attentions\.\d+(?=\.)", k)]
-                if m
-            }
+            {m.group(0) for k in sd for m in [re.match(r".*attentions\.\d+(?=\.)", k)] if m}
         )
 
         def emit_attention(diff_prefix: str, lucid_prefix: str) -> None:
@@ -200,10 +195,7 @@ class DDPMArch(Architecture):
             mu = re.match(r"up_blocks\.(\d+)\.resnets\.(\d+)\.(.+)", k)
             if mu:
                 i, j, field = int(mu.group(1)), int(mu.group(2)), mu.group(3)
-                emit(
-                    f"up_res.{i * (nrb + 1) + j}.{self._resnet_field_path(field)}",
-                    arr,
-                )
+                emit(f"up_res.{i * (nrb + 1) + j}.{self._resnet_field_path(field)}", arr)
                 continue
             mp = re.match(r"up_blocks\.(\d+)\.upsamplers\.0\.conv\.(\w+)", k)
             if mp:
@@ -229,9 +221,7 @@ class DDPMArch(Architecture):
     def spec(self) -> ConversionSpec:
         cfg = self._model.config
         config = {k: _jsonable(v) for k, v in dataclasses.asdict(cfg).items()}
-        size = (
-            cfg.sample_size if isinstance(cfg.sample_size, int) else cfg.sample_size[0]
-        )
+        size = cfg.sample_size if isinstance(cfg.sample_size, int) else cfg.sample_size[0]
         preprocessing = {
             "sample_size": size,
             "in_channels": cfg.in_channels,

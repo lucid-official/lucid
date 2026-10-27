@@ -23,9 +23,7 @@ def main() -> int:
     for cpp in cpp_files:
         header = cpp.with_suffix(".h")
         if not header.exists():
-            issues.append(
-                f"  MISSING HEADER: {cpp.relative_to(ROOT)} has no matching .h"
-            )
+            issues.append(f"  MISSING HEADER: {cpp.relative_to(ROOT)} has no matching .h")
 
     if issues:
         print("[check_kernel_template] Kernel template violations:")
@@ -33,9 +31,7 @@ def main() -> int:
             print(i)
         return 1
 
-    print(
-        f"[check_kernel_template] {len(cpp_files)} kernel files all have matching headers."
-    )
+    print(f"[check_kernel_template] {len(cpp_files)} kernel files all have matching headers.")
     return 0
 
 

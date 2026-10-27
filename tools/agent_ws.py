@@ -112,9 +112,7 @@ COVERAGE_OMIT_PREFIXES = ("lucid/test/", "lucid/benchmarks/")
 # Machine-local and outside the synced project tree: locks must never travel
 # to the other Mac through .sync.
 STATE_DIR = Path(
-    os.environ.get(
-        "LUCID_AGENT_STATE", str(Path.home() / "Library/Caches/lucid-agents")
-    )
+    os.environ.get("LUCID_AGENT_STATE", str(Path.home() / "Library/Caches/lucid-agents"))
 )
 HEAVY_LOCK = STATE_DIR / "heavy.lock"
 LAND_LOCK = STATE_DIR / "land.lock"
@@ -170,15 +168,11 @@ def repo_env() -> dict[str, str]:
     )
     names = set(proc.stdout.split())
     if proc.returncode != 0 or "GIT_INDEX_FILE" not in names:
-        raise WorkspaceError(
-            f"git rev-parse --local-env-vars failed:\n{proc.stderr.strip()}"
-        )
+        raise WorkspaceError(f"git rev-parse --local-env-vars failed:\n{proc.stderr.strip()}")
     return {k: v for k, v in os.environ.items() if k not in names}
 
 
-def git(
-    *args: str, cwd: Path, check: bool = True, env: dict[str, str] | None = None
-) -> str:
+def git(*args: str, cwd: Path, check: bool = True, env: dict[str, str] | None = None) -> str:
     """Run git in ``cwd``.  Without ``env`` it gets ``repo_env()``: the tree is
     found from ``cwd``, never from a GIT_DIR / GIT_INDEX_FILE a hook inherited."""
     proc = subprocess.run(
@@ -190,18 +184,13 @@ def git(
         check=False,
     )
     if check and proc.returncode != 0:
-        raise WorkspaceError(
-            f"git {' '.join(args)} failed in {cwd}:\n{proc.stderr.strip()}"
-        )
+        raise WorkspaceError(f"git {' '.join(args)} failed in {cwd}:\n{proc.stderr.strip()}")
     return proc.stdout
 
 
 def git_ok(*args: str, cwd: Path) -> bool:
     return (
-        subprocess.run(
-            ["git", *args], cwd=cwd, capture_output=True, env=repo_env()
-        ).returncode
-        == 0
+        subprocess.run(["git", *args], cwd=cwd, capture_output=True, env=repo_env()).returncode == 0
     )
 
 
@@ -369,9 +358,7 @@ def label_of(wt: Worktree) -> str:
 
 def describe_owner(wt: Worktree) -> str:
     label = label_of(wt)
-    where = (
-        "the main checkout (uncommitted)" if wt.is_main else f"worktree {wt.path.name}"
-    )
+    where = "the main checkout (uncommitted)" if wt.is_main else f"worktree {wt.path.name}"
     return f"{where} [{wt.ref}]" + (f" — {label}" if label else "")
 
 
@@ -405,13 +392,8 @@ def held_lock(path: Path, label: str, wait: bool = True) -> Iterator[None]:
         except BlockingIOError:
             holder = owner.read_text().strip() if owner.exists() else "unknown"
             if not wait:
-                raise WorkspaceError(
-                    f"{path.name} is held by {holder}", code=2
-                ) from None
-            print(
-                f"[agent_ws] waiting for {path.name} (held by {holder})",
-                file=sys.stderr,
-            )
+                raise WorkspaceError(f"{path.name} is held by {holder}", code=2) from None
+            print(f"[agent_ws] waiting for {path.name} (held by {holder})", file=sys.stderr)
             fcntl.flock(fd, fcntl.LOCK_EX)
         stamp = time.strftime("%H:%M:%S")
         owner.write_text(f"pid {os.getpid()} since {stamp}: {label}\n")
@@ -468,10 +450,7 @@ def _cpp_source_hash(root: Path) -> str:
     if not c_dir.is_dir():
         return ""
     files = sorted(
-        p
-        for pat in ("*.cpp", "*.h", "*.mm", "*.def")
-        for p in c_dir.rglob(pat)
-        if p.is_file()
+        p for pat in ("*.cpp", "*.h", "*.mm", "*.def") for p in c_dir.rglob(pat) if p.is_file()
     )
     if not files:
         return ""
@@ -592,8 +571,7 @@ def bootstrap(root: Path, main_root: Path) -> list[str]:
     main_py = main_root / ".venv/bin/python3"
     if not venv_py.exists() and main_py.exists():
         subprocess.run(
-            [str(main_py), "-m", "venv", "--without-pip", str(root / ".venv")],
-            check=True,
+            [str(main_py), "-m", "venv", "--without-pip", str(root / ".venv")], check=True
         )
         done.append("created .venv (worktree lucid + main venv packages)")
     if venv_py.exists() and main_py.exists():
@@ -665,10 +643,7 @@ def venv_site_files(root: Path, main_site: Path) -> dict[str, str]:
         "\n"
         "sys.meta_path.insert(0, WorktreeFinder)\n"
     )
-    pth = (
-        "import _lucid_worktree_finder\n"
-        f"import site; site.addsitedir({str(main_site)!r})\n"
-    )
+    pth = "import _lucid_worktree_finder\n" f"import site; site.addsitedir({str(main_site)!r})\n"
     return {"_lucid_worktree_finder.py": finder, "_lucid_worktree.pth": pth}
 
 
@@ -697,11 +672,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         ahead = behind = 0
         if not wt.is_main and wt.head:
             counts = git(
-                "rev-list",
-                "--left-right",
-                "--count",
-                f"{MAIN_BRANCH}...{wt.head}",
-                cwd=wt.path,
+                "rev-list", "--left-right", "--count", f"{MAIN_BRANCH}...{wt.head}", cwd=wt.path
             ).split()
             behind, ahead = int(counts[0]), int(counts[1])
         rows.append(
@@ -713,9 +684,7 @@ def cmd_status(args: argparse.Namespace) -> int:
                 "ahead": ahead,
                 "behind": behind,
                 "dirty": len(dirty_files(wt.path)),
-                "last_commit": git(
-                    "log", "-1", "--format=%cr", wt.head, cwd=wt.path
-                ).strip(),
+                "last_commit": git("log", "-1", "--format=%cr", wt.head, cwd=wt.path).strip(),
                 "claims": claims,
             }
         )
@@ -728,20 +697,14 @@ def cmd_status(args: argparse.Namespace) -> int:
                 overlaps.append({"a": a["name"], "b": b["name"], "files": shared})
     locks = {"heavy": lock_holder(HEAVY_LOCK), "land": lock_holder(LAND_LOCK)}
     if args.json:
-        print(
-            json.dumps(
-                {"worktrees": rows, "overlaps": overlaps, "locks": locks}, indent=2
-            )
-        )
+        print(json.dumps({"worktrees": rows, "overlaps": overlaps, "locks": locks}, indent=2))
         return 0
     print(
         f"{'worktree':<26} {'branch':<28} {'+ahead/-behind':<15} {'dirty':>5} {'claims':>6}  task"
     )
     for r in rows:
         if r.get("missing"):
-            print(
-                f"{Path(r['worktree']).name:<26} (directory missing — git worktree prune)"
-            )
+            print(f"{Path(r['worktree']).name:<26} (directory missing — git worktree prune)")
             continue
         ab = f"+{r['ahead']}/-{r['behind']}" if r["name"] != "main checkout" else "—"
         print(
@@ -796,17 +759,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     py = root / ".venv/bin/python3"
     print(f"worktree   {root}{' (main checkout)' if root == main_root else ''}")
     print(f"main       {main_root}")
-    print(
-        f"branch     {git('branch', '--show-current', cwd=root).strip() or '(detached)'}"
-    )
+    print(f"branch     {git('branch', '--show-current', cwd=root).strip() or '(detached)'}")
     wt_cfg_ok = (
-        git(
-            "config",
-            "--bool",
-            "extensions.worktreeConfig",
-            cwd=main_root,
-            check=False,
-        ).strip()
+        git("config", "--bool", "extensions.worktreeConfig", cwd=main_root, check=False).strip()
         == "true"
     )
     print(
@@ -819,8 +774,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if py.exists():
         proc = subprocess.run(
             [str(py), "-c", "import lucid; print(lucid.__file__)"],
-            cwd=root
-            / "tools",  # deliberately not the root: proves the .pth, not the cwd
+            cwd=root / "tools",  # deliberately not the root: proves the .pth, not the cwd
             capture_output=True,
             text=True,
             check=False,
@@ -829,9 +783,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else ""
         )
         ok = where.startswith(str(root))
-        print(
-            f"lucid      {where}  {'✓' if ok else '✗ resolves outside this worktree'}"
-        )
+        print(f"lucid      {where}  {'✓' if ok else '✗ resolves outside this worktree'}")
         return 0 if (wt_cfg_ok and engine_ok and ok) else 1
     return 1
 
@@ -908,12 +860,7 @@ def cmd_check_commit(args: argparse.Namespace) -> int:
     # may stage something else entirely.  Everything else asks about a tree's
     # ordinary state and runs on repo_env().
     staged = git(
-        "diff",
-        "--cached",
-        "--name-only",
-        "--no-renames",
-        cwd=root,
-        env=dict(os.environ),
+        "diff", "--cached", "--name-only", "--no-renames", cwd=root, env=dict(os.environ)
     ).split()
     blocked = [v for v in (judge(rel, me, trees) for rel in staged) if not v.clear]
     if not blocked:
@@ -951,9 +898,7 @@ def cmd_land(args: argparse.Namespace) -> int:
     if target.is_main:
         raise WorkspaceError("land takes a linked worktree, not the main checkout")
     if main.branch != MAIN_BRANCH:
-        raise WorkspaceError(
-            f"the main checkout is on {main.ref!r}, not {MAIN_BRANCH!r}"
-        )
+        raise WorkspaceError(f"the main checkout is on {main.ref!r}, not {MAIN_BRANCH!r}")
     wt = target.path
     if dirty_files(wt):
         raise WorkspaceError(
@@ -1033,11 +978,7 @@ def cmd_land(args: argparse.Namespace) -> int:
             for p in touched
         ):
             stubs = subprocess.run(
-                [py, "tools/check_stubs.py"],
-                cwd=wt,
-                capture_output=True,
-                text=True,
-                check=False,
+                [py, "tools/check_stubs.py"], cwd=wt, capture_output=True, text=True, check=False
             )
             if stubs.returncode != 0:
                 raise WorkspaceError(
@@ -1059,17 +1000,13 @@ def cmd_land(args: argparse.Namespace) -> int:
         #     point) — no measured count may rise, and the actual counts may
         #     not exceed the baseline the rebase merged.  tools/README.md.
         if judge_slop(wt, py, MAIN_BRANCH, args.allow_slop):
-            raise WorkspaceError(
-                "quality gate refused the land (SLOP DELTA above)", code=SLOP_EXIT
-            )
+            raise WorkspaceError("quality gate refused the land (SLOP DELTA above)", code=SLOP_EXIT)
 
         # 2c. Changed-line coverage ratchet (LCD-269): fail-closed on missing or
         #     stale coverage data as well as changed-line coverage below 90%.
         cov_rc = judge_coverage(wt, py, MAIN_BRANCH, touched, args.allow_slop)
         if cov_rc:
-            raise WorkspaceError(
-                "diff-cover refused the land (see above)", code=cov_rc
-            )
+            raise WorkspaceError("diff-cover refused the land (see above)", code=cov_rc)
 
         # 3. CHANGELOG: on branches the post-commit hook stands down, so the
         #    entries are folded in here — replaying the branch with an exec
@@ -1116,12 +1053,8 @@ def cmd_land(args: argparse.Namespace) -> int:
     print(f"✓ landed {wt.name} onto {MAIN_BRANCH} (not pushed):")
     print(landed.rstrip())
     if any(p.startswith("lucid/_C/") for p in touched):
-        print(
-            "⚠️  C++ changed: the main checkout's engine .so is now older than its source."
-        )
-        print(
-            "    Rebuild main before relying on it (uv pip install -e ., see CLAUDE.md)."
-        )
+        print("⚠️  C++ changed: the main checkout's engine .so is now older than its source.")
+        print("    Rebuild main before relying on it (uv pip install -e ., see CLAUDE.md).")
     if args.cleanup:
         removed = subprocess.run(
             ["git", "worktree", "remove", str(wt)],
@@ -1147,10 +1080,7 @@ def cmd_fold_changelog(args: argparse.Namespace) -> int:
             return 0
         if not user_facing(git("log", "-1", "--format=%s", cwd=root).strip()):
             return 0
-        if (
-            "CHANGELOG.md"
-            in git("show", "--name-only", "--format=", "HEAD", cwd=root).split()
-        ):
+        if "CHANGELOG.md" in git("show", "--name-only", "--format=", "HEAD", cwd=root).split():
             return 0
         venv_py = root / ".venv/bin/python3"
         py = str(venv_py) if venv_py.exists() else sys.executable
@@ -1254,9 +1184,7 @@ def _measurable_lucid_py(touched: set[str]) -> list[str]:
     return sorted(
         p
         for p in touched
-        if p.startswith("lucid/")
-        and p.endswith(".py")
-        and not p.startswith(COVERAGE_OMIT_PREFIXES)
+        if p.startswith("lucid/") and p.endswith(".py") and not p.startswith(COVERAGE_OMIT_PREFIXES)
     )
 
 
@@ -1264,21 +1192,14 @@ def _measurable_lucid_py(touched: set[str]) -> list[str]:
 PYTEST_NO_TESTS_COLLECTED = 5
 
 
-def _coverage(
-    py: str, wt: Path, *argv: str, env: dict[str, str] | None = None
-) -> tuple[int, str]:
+def _coverage(py: str, wt: Path, *argv: str, env: dict[str, str] | None = None) -> tuple[int, str]:
     """Run ``coverage <argv>`` in *wt*: ``(exit status, why)``, *why* empty on success.
 
     ``coverage run`` exits with the program's own status, so a ``run`` of
     pytest hands back pytest's.
     """
     proc = subprocess.run(
-        [py, "-m", "coverage", *argv],
-        cwd=wt,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
+        [py, "-m", "coverage", *argv], cwd=wt, env=env, capture_output=True, text=True, check=False
     )
     if proc.returncode == 0:
         return 0, ""
@@ -1307,9 +1228,7 @@ def _touched_tests(wt: Path, touched: set[str]) -> list[str]:
     )
 
 
-def _snapshot_file_mtimes(
-    wt: Path, rels: set[str]
-) -> dict[str, tuple[bytes, int, int]]:
+def _snapshot_file_mtimes(wt: Path, rels: set[str]) -> dict[str, tuple[bytes, int, int]]:
     snap: dict[str, tuple[bytes, int, int]] = {}
     for rel in rels:
         path = wt / rel
@@ -1320,9 +1239,7 @@ def _snapshot_file_mtimes(
     return snap
 
 
-def _restore_unchanged_mtimes(
-    wt: Path, snap: dict[str, tuple[bytes, int, int]]
-) -> None:
+def _restore_unchanged_mtimes(wt: Path, snap: dict[str, tuple[bytes, int, int]]) -> None:
     for rel, (digest, atime_ns, mtime_ns) in snap.items():
         path = wt / rel
         if path.is_file() and hashlib.sha256(path.read_bytes()).digest() == digest:
@@ -1344,9 +1261,7 @@ def _newest_touched_mtime_ns(wt: Path, touched: set[str]) -> tuple[int, str]:
     return newest_ns, newest_rel
 
 
-def _fresh_existing_xml(
-    wt: Path, newest_ns: int, newest_rel: str
-) -> tuple[Path | None, str]:
+def _fresh_existing_xml(wt: Path, newest_ns: int, newest_rel: str) -> tuple[Path | None, str]:
     stale = ""
     for rel in _COVERAGE_XMLS:
         cand = wt / rel
@@ -1403,9 +1318,7 @@ def _xml_from_touched_tests(
     return None, why or "the touched tests left no coverage.xml"
 
 
-def _resolve_coverage_xml(
-    wt: Path, py: str, touched: set[str]
-) -> tuple[Path | None, str]:
+def _resolve_coverage_xml(wt: Path, py: str, touched: set[str]) -> tuple[Path | None, str]:
     """Locate or generate a fresh Cobertura ``coverage.xml`` for *wt*.
 
     Returns ``(xml, "")`` on success or ``(None, why)`` naming why no fresh
@@ -1425,9 +1338,7 @@ def _resolve_coverage_xml(
     if xml is not None:
         return xml, ""
     reasons = [r for r in (stale_xml, data_why, test_why) if r]
-    why = "; ".join(reasons) or (
-        "no coverage.xml, no .coverage data, and no touched tests"
-    )
+    why = "; ".join(reasons) or ("no coverage.xml, no .coverage data, and no touched tests")
     return None, why
 
 
@@ -1446,9 +1357,7 @@ def _diff_cover_unimportable(py: str) -> str:
     return lines[-1] if lines else f"exit {proc.returncode}"
 
 
-def diff_coverage_report(
-    wt: Path, py: str, base: str, touched: set[str]
-) -> tuple[int, str]:
+def diff_coverage_report(wt: Path, py: str, base: str, touched: set[str]) -> tuple[int, str]:
     """Run ``diff-cover`` on *wt* against *base* when ``lucid/*.py`` changed (LCD-269).
 
     Exit 0 only when there are no changed ``lucid/*.py`` files under coverage,
@@ -1566,14 +1475,12 @@ def judge_slop(wt: Path, py: str, base: str, allow: str | None) -> int:
     why = "added slop" if code == 1 else "could not measure"
     print(
         f"✗ the quality gate {why} (exit {code}). The worker fixes it at the owner, or the "
-        "orchestrator lands anyway with --allow-slop \"<reason>\"."
+        'orchestrator lands anyway with --allow-slop "<reason>".'
     )
     return SLOP_EXIT
 
 
-def judge_coverage(
-    wt: Path, py: str, base: str, touched: set[str], allow: str | None
-) -> int:
+def judge_coverage(wt: Path, py: str, base: str, touched: set[str], allow: str | None) -> int:
     """Print the diff-cover report; 0 to go on, cov_rc to refuse.  ``allow`` overrides, logged."""
     cov_rc, cov_out = diff_coverage_report(wt, py, base, touched)
     if cov_out:
@@ -1595,9 +1502,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agent_ws.py", description=summary)
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("status", help="board of worktrees, claims and locks")
-    p.add_argument(
-        "--files", action="store_true", help="list each worktree's claimed files"
-    )
+    p.add_argument("--files", action="store_true", help="list each worktree's claimed files")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_status)
     p = sub.add_parser("label", help="tag the current worktree with its task")
@@ -1606,15 +1511,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("bootstrap", help="make a worktree runnable")
     p.add_argument("path", nargs="?")
     p.set_defaults(func=cmd_bootstrap)
-    sub.add_parser("doctor", help="where does `import lucid` resolve").set_defaults(
-        func=cmd_doctor
-    )
+    sub.add_parser("doctor", help="where does `import lucid` resolve").set_defaults(func=cmd_doctor)
     p = sub.add_parser("land", help="rebase a worktree onto main and fast-forward main")
     p.add_argument("worktree", help="worktree path, directory name, or branch")
     p.add_argument("--check", action="store_true", help="report only; change nothing")
-    p.add_argument(
-        "--cleanup", action="store_true", help="remove the worktree and branch after"
-    )
+    p.add_argument("--cleanup", action="store_true", help="remove the worktree and branch after")
     p.add_argument("--skip-stub-check", action="store_true")
     p.add_argument("--no-changelog", action="store_true")
     p.add_argument(
@@ -1630,16 +1531,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("build", help="build the engine in place (worktrees)").set_defaults(
         func=cmd_build
     )
-    sub.add_parser("hook", help="Claude Code PreToolUse entry").set_defaults(
-        func=cmd_hook
-    )
-    sub.add_parser("check-commit", help="git pre-commit entry").set_defaults(
-        func=cmd_check_commit
-    )
+    sub.add_parser("hook", help="Claude Code PreToolUse entry").set_defaults(func=cmd_hook)
+    sub.add_parser("check-commit", help="git pre-commit entry").set_defaults(func=cmd_check_commit)
     sub.add_parser("setup", help="idempotent git config").set_defaults(func=cmd_setup)
-    sub.add_parser("_fold-changelog").set_defaults(
-        func=cmd_fold_changelog
-    )  # land-internal
+    sub.add_parser("_fold-changelog").set_defaults(func=cmd_fold_changelog)  # land-internal
     args = parser.parse_args(argv)
     try:
         return int(args.func(args))

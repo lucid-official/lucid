@@ -39,16 +39,10 @@ _SKNET_VARIANTS: dict[str, tuple[str, str, str]] = {
 }
 
 # arch -> timm canonical model name (used to download the source weights)
-_TIMM_NAMES: dict[str, str] = {
-    "sk_resnet_18": "skresnet18",
-    "sk_resnet_34": "skresnet34",
-}
+_TIMM_NAMES: dict[str, str] = {"sk_resnet_18": "skresnet18", "sk_resnet_34": "skresnet34"}
 
 # top-1 ImageNet-1k accuracy from timm's results-imagenet.csv (ra_in1k).
-_ACC1: dict[str, float] = {
-    "sk_resnet_18": 73.020,
-    "sk_resnet_34": 76.956,
-}
+_ACC1: dict[str, float] = {"sk_resnet_18": 73.020, "sk_resnet_34": 76.956}
 
 
 class SKNetArch(Architecture):
@@ -72,9 +66,7 @@ class SKNetArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -130,8 +122,7 @@ class SKNetArch(Architecture):
             preprocessing=preprocessing,
             citation=_SKNET_CITATION,
             title=title,
-            paper_url="Li et al., 2019 — *Selective Kernel Networks* "
-            "(arXiv:1903.06586)",
+            paper_url="Li et al., 2019 — *Selective Kernel Networks* " "(arXiv:1903.06586)",
             categories=[],
             datasets=["imagenet-1k"],
             meta=meta,

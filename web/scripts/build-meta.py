@@ -69,9 +69,7 @@ def main() -> int:
     OUT.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
     sha = meta["git_sha"] or "??"
     ver = meta["lucid_version"] or "?"
-    print(
-        f"[build-meta] lucid {ver} @ {sha} ({meta['built_at']}) → {OUT.relative_to(WEB_ROOT)}"
-    )
+    print(f"[build-meta] lucid {ver} @ {sha} ({meta['built_at']}) → {OUT.relative_to(WEB_ROOT)}")
     return 0
 
 

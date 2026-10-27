@@ -80,8 +80,10 @@ def documentation(root: Path) -> dict[str, list[str]]:
 
 def stub_declarations(root: Path) -> dict[str, list[str]]:
     links: dict[str, list[str]] = {}
-    for relative, prefix in (("lucid/__init__.pyi", "lucid"),
-                             ("lucid/_tensor/tensor.pyi", "lucid._tensor.tensor")):
+    for relative, prefix in (
+        ("lucid/__init__.pyi", "lucid"),
+        ("lucid/_tensor/tensor.pyi", "lucid._tensor.tensor"),
+    ):
         path = root / relative
         if not path.exists():
             continue
@@ -107,20 +109,24 @@ def stub_declarations(root: Path) -> dict[str, list[str]]:
     return links
 
 
-def contract_links(root: Path, symbols: list[Symbol], audit_report: dict[str, Any] | None) -> list[dict[str, Any]]:
+def contract_links(
+    root: Path, symbols: list[Symbol], audit_report: dict[str, Any] | None
+) -> list[dict[str, Any]]:
     tests = test_references(root)
     docs = documentation(root)
     stubs = stub_declarations(root)
     findings: dict[str, list[dict[str, Any]]] = {}
     for finding in (audit_report or {}).get("findings", []):
-        findings.setdefault(canonical(finding["symbol"]), []).append({
-            key: finding.get(key) for key in ("axis", "status", "detail")
-        })
+        findings.setdefault(canonical(finding["symbol"]), []).append(
+            {key: finding.get(key) for key in ("axis", "status", "detail")}
+        )
     result = []
     for symbol in symbols:
         name = canonical(symbol.qualname)
         obj: Any = symbol.obj.fget if isinstance(symbol.obj, property) else symbol.obj
-        definition = canonical(f"{getattr(obj, '__module__', '')}.{getattr(obj, '__qualname__', '')}")
+        definition = canonical(
+            f"{getattr(obj, '__module__', '')}.{getattr(obj, '__qualname__', '')}"
+        )
         documented = sorted(set(docs.get(name, []) + docs.get(definition, [])))
         source = None
         try:
@@ -133,12 +139,17 @@ def contract_links(root: Path, symbols: list[Symbol], audit_report: dict[str, An
                 source = f"{path.relative_to(root)}:{inspect.getsourcelines(defined)[1]}"
         except (TypeError, OSError):
             pass
-        result.append({
-            "name": name, "audit_name": symbol.qualname, "source": source,
-            "stub_declarations": stubs.get(name, []),
-            "typing_mode": "stub" if name in stubs else "inline_or_unverified",
-            "definition_name": definition, "documentation": documented,
-            "static_test_calls": tests.get(name, []),
-            "audit_findings": findings.get(name, []),
-        })
+        result.append(
+            {
+                "name": name,
+                "audit_name": symbol.qualname,
+                "source": source,
+                "stub_declarations": stubs.get(name, []),
+                "typing_mode": "stub" if name in stubs else "inline_or_unverified",
+                "definition_name": definition,
+                "documentation": documented,
+                "static_test_calls": tests.get(name, []),
+                "audit_findings": findings.get(name, []),
+            }
+        )
     return result

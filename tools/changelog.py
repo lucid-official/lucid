@@ -97,13 +97,7 @@ def _write(text: str) -> None:
 
 def _git(*args: str) -> str:
     """Run git in the repo root and return stdout (rstripped)."""
-    result = subprocess.run(
-        ["git", *args],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         sys.exit(f"❌  git {' '.join(args)} failed:\n{result.stderr}")
     return result.stdout.rstrip()
@@ -165,9 +159,7 @@ def _ensure_unreleased(text: str) -> tuple[str, int, int]:
 
 def _add_bullet(category: str, message: str, dry_run: bool = False) -> None:
     if category not in CATEGORIES:
-        sys.exit(
-            f"❌  unknown category {category!r} (allowed: " f"{', '.join(CATEGORIES)})"
-        )
+        sys.exit(f"❌  unknown category {category!r} (allowed: " f"{', '.join(CATEGORIES)})")
     text = _read()
     text, h_idx, e_idx = _ensure_unreleased(text)
     lines = text.splitlines(keepends=True)
@@ -189,10 +181,7 @@ def _add_bullet(category: str, message: str, dry_run: bool = False) -> None:
     # the second form (no leading dash) so the placeholder isn't valid
     # markdown for a category bullet — it can't accidentally be mistaken
     # for a real entry.
-    placeholder_patterns = (
-        "- _Pending the next release._",
-        "_No changes yet._",
-    )
+    placeholder_patterns = ("- _Pending the next release._", "_No changes yet._")
 
     def _is_placeholder(stripped: str) -> bool:
         return stripped in placeholder_patterns
@@ -254,9 +243,7 @@ def _add_bullet(category: str, message: str, dry_run: bool = False) -> None:
     sep = "\n---\n\n"
     new_section = lines[h_idx] + new_body.rstrip("\n") + "\n" + sep
 
-    new_text = (
-        "".join(lines[:h_idx]) + new_section + "".join(lines[e_idx:]).lstrip("\n")
-    )
+    new_text = "".join(lines[:h_idx]) + new_section + "".join(lines[e_idx:]).lstrip("\n")
     # Ensure there is no leftover stray separator immediately after our newly
     # emitted one (can happen if the original file already had its own).
     new_text = re.sub(r"\n---\n\n(?:\n*---\n\n)+", "\n---\n\n", new_text)
@@ -346,23 +333,11 @@ def _release(version: str) -> None:
     # Replace [Unreleased] with [version] - date, prepend new empty Unreleased.
     today = date.today().isoformat()
     new_unreleased = (
-        "## [Unreleased]\n"
-        "\n"
-        "### Added\n"
-        "- _Pending the next release._\n"
-        "\n"
-        "---\n"
-        "\n"
+        "## [Unreleased]\n" "\n" "### Added\n" "- _Pending the next release._\n" "\n" "---\n" "\n"
     )
     new_release = f"## [{version}] — {today}\n\n{body}\n"
 
-    new_text = (
-        "".join(lines[:h_idx])
-        + new_unreleased
-        + new_release
-        + "\n"
-        + "".join(lines[e_idx:])
-    )
+    new_text = "".join(lines[:h_idx]) + new_unreleased + new_release + "\n" + "".join(lines[e_idx:])
 
     # Update compare links at the bottom of the file.
     new_text = _update_compare_links(new_text, version)
@@ -374,11 +349,7 @@ def _release(version: str) -> None:
 def _update_compare_links(text: str, version: str) -> str:
     """Update or insert the [Unreleased] / [version] compare URLs at the bottom."""
     # Try to find the existing [Unreleased] link to extract repo URL.
-    m = re.search(
-        r"^\[Unreleased\]:\s*(https?://[^\s/]+/[^/]+/[^/]+)/compare/",
-        text,
-        re.MULTILINE,
-    )
+    m = re.search(r"^\[Unreleased\]:\s*(https?://[^\s/]+/[^/]+/[^/]+)/compare/", text, re.MULTILINE)
     if not m:
         # Could not infer repo URL; skip silently.
         return text
@@ -430,9 +401,7 @@ def _check(strict: bool) -> None:
     # release-section line (best-effort: don't fail if tag is missing).
     have_tag = (
         subprocess.run(
-            ["git", "rev-parse", "--verify", "--quiet", tag],
-            cwd=ROOT,
-            capture_output=True,
+            ["git", "rev-parse", "--verify", "--quiet", tag], cwd=ROOT, capture_output=True
         ).returncode
         == 0
     )
@@ -448,8 +417,7 @@ def _check(strict: bool) -> None:
     if new_user_facing and not has_real_entry:
         msg = (
             f"⚠️   {len(new_user_facing)} user-facing commit(s) since "
-            f"v{last_version} but [Unreleased] is empty:\n  "
-            + "\n  ".join(new_user_facing[:10])
+            f"v{last_version} but [Unreleased] is empty:\n  " + "\n  ".join(new_user_facing[:10])
         )
         if strict:
             sys.exit("❌  " + msg)
@@ -478,9 +446,7 @@ def main() -> None:
     p_add.add_argument("category", choices=list(CATEGORIES))
     p_add.add_argument("message", nargs="+", help="bullet text (multiple words OK)")
 
-    p_prop = sub.add_parser(
-        "propose", help="propose an [Unreleased] entry from the latest commit"
-    )
+    p_prop = sub.add_parser("propose", help="propose an [Unreleased] entry from the latest commit")
     p_prop.add_argument(
         "--auto",
         action="store_true",
@@ -494,19 +460,12 @@ def main() -> None:
         "git log (used by prepare-commit-msg, which fires before HEAD updates)",
     )
 
-    p_rel = sub.add_parser(
-        "release", help="promote [Unreleased] to a dated version section"
-    )
+    p_rel = sub.add_parser("release", help="promote [Unreleased] to a dated version section")
     p_rel.add_argument("version", help="semver string, e.g. 3.0.1")
 
-    p_chk = sub.add_parser(
-        "check",
-        help="verify CHANGELOG is consistent with git history",
-    )
+    p_chk = sub.add_parser("check", help="verify CHANGELOG is consistent with git history")
     p_chk.add_argument(
-        "--strict",
-        action="store_true",
-        help="fail (exit 1) if user-facing commits are missing",
+        "--strict", action="store_true", help="fail (exit 1) if user-facing commits are missing"
     )
 
     args = p.parse_args()

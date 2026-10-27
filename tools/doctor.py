@@ -95,7 +95,9 @@ def diagnose(timeout: float = 30.0) -> list[Check]:
     release = platform.mac_ver()[0]
     record(
         "platform",
-        system == "Darwin" and machine == "arm64" and bool(release)
+        system == "Darwin"
+        and machine == "arm64"
+        and bool(release)
         and (pin is None or _version(release) >= _version(pin.macos)),
         f"{system} {release} {machine}; requires macOS {pin.macos if pin else '?'}+ arm64 "
         "(the minos of the MLX build the engine ships)",
@@ -120,7 +122,11 @@ def diagnose(timeout: float = 30.0) -> list[Check]:
 
     try:
         expected, native = source_abi(ROOT)
-        record("source_abi", expected == native, f"Python expects {expected}; C++ header declares {native}")
+        record(
+            "source_abi",
+            expected == native,
+            f"Python expects {expected}; C++ header declares {native}",
+        )
     except (OSError, SyntaxError, ValueError, StopIteration) as exc:
         record("source_abi", False, str(exc))
 
@@ -144,8 +150,7 @@ def _runtime_checks(pin: fetch_mlx.Pin | None, timeout: float) -> list[Check]:
     )
     try:
         result = subprocess.run(
-            [sys.executable, "-c", probe], cwd=ROOT,
-            capture_output=True, text=True, timeout=timeout,
+            [sys.executable, "-c", probe], cwd=ROOT, capture_output=True, text=True, timeout=timeout
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return [_check("runtime", False, f"{exc}\nRebuild: {REBUILD}")]
@@ -166,7 +171,9 @@ def _vendored_mlx_checks(pin: fetch_mlx.Pin) -> list[Check]:
     entry = fetch_mlx.pinned_entry(pin)
     staged = (entry / fetch_mlx.STAMP).is_file()
     detail = f"MLX {pin.version} at {entry}"
-    checks = [_check("mlx_cache", staged, detail if staged else f"{detail}: not staged; run {RESTAGE}")]
+    checks = [
+        _check("mlx_cache", staged, detail if staged else f"{detail}: not staged; run {RESTAGE}")
+    ]
     engine = check_engine_link.default_engine()
     if engine is None:
         return checks  # the runtime check reports the missing engine
@@ -194,7 +201,9 @@ def _interop_mlx_check() -> Check:
     try:
         version = importlib.metadata.version("mlx")
     except importlib.metadata.PackageNotFoundError:
-        return _check(name, True, f"not installed; only DLPack exchange with mlx needs it (mlx>={floor})")
+        return _check(
+            name, True, f"not installed; only DLPack exchange with mlx needs it (mlx>={floor})"
+        )
     if _version(version) < _version(floor):
         return {
             "name": name,
@@ -207,7 +216,9 @@ def _interop_mlx_check() -> Check:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit machine-readable checks")
-    parser.add_argument("--timeout", type=float, default=30.0, help="runtime probe timeout in seconds")
+    parser.add_argument(
+        "--timeout", type=float, default=30.0, help="runtime probe timeout in seconds"
+    )
     args = parser.parse_args(argv)
     if args.timeout <= 0:
         parser.error("--timeout must be positive")

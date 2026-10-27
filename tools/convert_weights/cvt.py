@@ -53,12 +53,7 @@ _CVT_VARIANTS: dict[str, tuple[str, str, str, str]] = {
     # arch -> (lucid_cls_factory, repo_id, title, hf_model_id)
     "cvt_13": ("cvt_13_cls", "lucid-dl/cvt-13", "CvT-13", "microsoft/cvt-13"),
     "cvt_21": ("cvt_21_cls", "lucid-dl/cvt-21", "CvT-21", "microsoft/cvt-21"),
-    "cvt_w24": (
-        "cvt_w24_cls",
-        "lucid-dl/cvt-w24",
-        "CvT-W24",
-        "microsoft/cvt-w24-384-22k",
-    ),
+    "cvt_w24": ("cvt_w24_cls", "lucid-dl/cvt-w24", "CvT-W24", "microsoft/cvt-w24-384-22k"),
 }
 
 
@@ -95,9 +90,7 @@ class CvTArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -117,24 +110,14 @@ class CvTArch(Architecture):
         if s.endswith(".cls_token"):
             return s
         # Embedding (stem + per-stage patch embed).
-        s = s.replace(
-            ".embedding.convolution_embeddings.projection.",
-            ".embed.proj.",
-        )
-        s = s.replace(
-            ".embedding.convolution_embeddings.normalization.",
-            ".embed.norm.",
-        )
+        s = s.replace(".embedding.convolution_embeddings.projection.", ".embed.proj.")
+        s = s.replace(".embedding.convolution_embeddings.normalization.", ".embed.norm.")
         # ``stages.S.layers.B.layernorm_before/after`` → ``stages.S.blocks.B.norm{1,2}``
         s = re.sub(
-            r"^stages\.(\d+)\.layers\.(\d+)\.layernorm_before\.",
-            r"stages.\1.blocks.\2.norm1.",
-            s,
+            r"^stages\.(\d+)\.layers\.(\d+)\.layernorm_before\.", r"stages.\1.blocks.\2.norm1.", s
         )
         s = re.sub(
-            r"^stages\.(\d+)\.layers\.(\d+)\.layernorm_after\.",
-            r"stages.\1.blocks.\2.norm2.",
-            s,
+            r"^stages\.(\d+)\.layers\.(\d+)\.layernorm_after\.", r"stages.\1.blocks.\2.norm2.", s
         )
         # Convolutional Q/K/V projections.
         s = s.replace(
@@ -174,9 +157,7 @@ class CvTArch(Architecture):
             s,
         )
         s = re.sub(
-            r"^stages\.(\d+)\.layers\.(\d+)\.output\.dense\.",
-            r"stages.\1.blocks.\2.mlp.fc2.",
-            s,
+            r"^stages\.(\d+)\.layers\.(\d+)\.output\.dense\.", r"stages.\1.blocks.\2.mlp.fc2.", s
         )
         # Catch-all: any ``stages.S.layers.B.<rest>`` left over (e.g. the
         # remapped ``.attn.*`` paths from the per-projection rewrites)
@@ -209,11 +190,7 @@ class CvTArch(Architecture):
         preprocessing = preset.to_dict()
 
         n_params = int(sum(p.numel() for p in self._model.parameters()))
-        _acc_table = {
-            "cvt_13": 81.6,
-            "cvt_21": 82.5,
-            "cvt_w24": 87.7,
-        }
+        _acc_table = {"cvt_13": 81.6, "cvt_21": 82.5, "cvt_w24": 87.7}
         meta = {
             "num_params": n_params,
             "recipe": f"HuggingFace/{self._hf_id}",

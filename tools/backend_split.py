@@ -41,14 +41,7 @@ NESTED_TYPES: dict[str, frozenset[str]] = {
 
 KEEP_INLINE: dict[str, frozenset[str]] = {
     "cpu": frozenset(
-        {
-            "register_self",
-            "device",
-            "alloc_cpu",
-            "zeros",
-            "complex_real",
-            "complex_imag",
-        }
+        {"register_self", "device", "alloc_cpu", "zeros", "complex_real", "complex_imag"}
     ),
     "gpu": frozenset(
         {
@@ -158,9 +151,7 @@ def classify_member(
         if fam not in FAMILY_NAMES and fam != "KEEP_INLINE":
             raise ValueError(f"Unknown family override {fam!r} for {name!r}")
         return fam
-    if name in KEEP_INLINE[backend] or (
-        keep_inline_extra and name in keep_inline_extra
-    ):
+    if name in KEEP_INLINE[backend] or (keep_inline_extra and name in keep_inline_extra):
         return "KEEP_INLINE"
     for fam, rx in FAMILY_RULES:
         if rx.match(name):
@@ -280,8 +271,7 @@ class ParsedHeader:
 
 
 _NON_FUNC_HEAD = re.compile(
-    r"^(?:template\s*<[^>]*>\s*)?"
-    r"(?:struct|enum|using|static\s+constexpr|inline\s+static)\b"
+    r"^(?:template\s*<[^>]*>\s*)?" r"(?:struct|enum|using|static\s+constexpr|inline\s+static)\b"
 )
 _PREPROC_AT_LINE = re.compile(r"^[ \t]*#\s*(if|ifdef|ifndef|elif|else|endif)\b", re.M)
 
@@ -358,8 +348,7 @@ def parse_header(src: str, class_name: str) -> ParsedHeader:
     """Parse ``CpuBackend.h`` or ``GpuBackend.h`` into ``ParsedHeader``."""
     s = strip_noncode(src)
     cls_m = re.search(
-        rf"\bclass\s+{re.escape(class_name)}\s+final\s*:\s*public\s+IBackend\s*\{{",
-        s,
+        rf"\bclass\s+{re.escape(class_name)}\s+final\s*:\s*public\s+IBackend\s*\{{", s
     )
     if cls_m is None:
         raise ValueError(f"Could not find class {class_name} definition")
@@ -403,9 +392,7 @@ def parse_header(src: str, class_name: str) -> ParsedHeader:
         if brace_depth == 0 and paren_depth == 0:
             if c == "(":
                 head = " ".join(s[seg_start:i].split())
-                head_clean = re.sub(
-                    r"^(?:(?:public|private|protected)\s*:\s*)+", "", head
-                )
+                head_clean = re.sub(r"^(?:(?:public|private|protected)\s*:\s*)+", "", head)
                 if not _NON_FUNC_HEAD.match(head_clean):
                     seen_params = True
                     param_open = i
@@ -476,9 +463,7 @@ def parse_header(src: str, class_name: str) -> ParsedHeader:
         pp = _PREPROC_AT_LINE.search(header_slice)
         if pp is not None:
             line = src.count("\n", 0, m.seg_start + pp.start()) + 1
-            raise ValueError(
-                f"Preprocessor directive #{pp.group(1)} at class scope (line {line})"
-            )
+            raise ValueError(f"Preprocessor directive #{pp.group(1)} at class scope (line {line})")
 
     return ParsedHeader(
         class_name=class_name,
@@ -565,10 +550,7 @@ def _build_member(
     is_template = bool(pre_param_tokens and pre_param_tokens[0] == "template")
 
     sig_tokens = tuple(tokenize_code(src[sig_start:body_open_ws]))
-    param_key = _param_type_key(
-        src[param_open : param_close + 1],
-        s[param_open : param_close + 1],
-    )
+    param_key = _param_type_key(src[param_open : param_close + 1], s[param_open : param_close + 1])
     quals_key = tuple(t for t in post_param_tokens if t != "override")
     canon_key = (name, param_key, quals_key)
 
@@ -630,9 +612,7 @@ def canonical_out_of_line_sig_tokens(
                     break
             idx += 1
 
-    rest_pre = [
-        t for t in pre_tokens[idx:] if t not in ("static", "virtual", "inline")
-    ]
+    rest_pre = [t for t in pre_tokens[idx:] if t not in ("static", "virtual", "inline")]
     if not rest_pre:
         raise ValueError(f"Malformed signature tokens for {member.name}")
     func_name = rest_pre[-1]
@@ -656,9 +636,7 @@ def canonical_out_of_line_sig_tokens(
     )
 
 
-def format_out_of_line_definition(
-    class_name: str, member: Member, src: str, s: str
-) -> str:
+def format_out_of_line_definition(class_name: str, member: Member, src: str, s: str) -> str:
     """Build the out-of-line C++ definition string for ``member``."""
     pre_src = src[member.sig_start : member.param_open]
     pre_clean = s[member.sig_start : member.param_open]
@@ -741,21 +719,14 @@ def parse_methods_cpp(
     clean_includes = [inc.split("//")[0].split("/*")[0].strip() for inc in includes]
     want_inc = f'"../{expected_header}"'
     if clean_includes != [want_inc]:
-        raise ValueError(
-            f"{rel_path}: expected single #include {want_inc}, got {clean_includes}"
-        )
+        raise ValueError(f"{rel_path}: expected single #include {want_inc}, got {clean_includes}")
 
-    ns_m = re.search(
-        r"\bnamespace\s+lucid\s*\{\s*namespace\s+backend\s*\{",
-        s,
-    )
+    ns_m = re.search(r"\bnamespace\s+lucid\s*\{\s*namespace\s+backend\s*\{", s)
     if ns_m is None:
         raise ValueError(f"{rel_path}: missing 'namespace lucid {{ namespace backend {{'")
     pre_ns_tokens = tokenize_code(src[: ns_m.start()])
     if pre_ns_tokens != ["#include", want_inc]:
-        raise ValueError(
-            f"{rel_path}: unexpected tokens before namespace: {pre_ns_tokens}"
-        )
+        raise ValueError(f"{rel_path}: unexpected tokens before namespace: {pre_ns_tokens}")
 
     # Find matching closing braces for the two namespaces
     depth = 2
@@ -824,11 +795,7 @@ def parse_methods_cpp(
                     while body_open_ws > sig_start and src[body_open_ws - 1] in " \t\r\n":
                         body_open_ws -= 1
                     pre_toks = tokenize_code(src[sig_start:param_open])
-                    if (
-                        len(pre_toks) < 3
-                        or pre_toks[-3] != class_name
-                        or pre_toks[-2] != "::"
-                    ):
+                    if len(pre_toks) < 3 or pre_toks[-3] != class_name or pre_toks[-2] != "::":
                         raise ValueError(
                             f"{rel_path}: non-{class_name} definition at line "
                             f"{src.count(chr(10), 0, sig_start) + 1}: {' '.join(pre_toks)}"
@@ -836,12 +803,9 @@ def parse_methods_cpp(
                     name = pre_toks[-1]
                     sig_tokens = tuple(tokenize_code(src[sig_start:body_open_ws]))
                     param_key = _param_type_key(
-                        src[param_open : param_close + 1],
-                        s[param_open : param_close + 1],
+                        src[param_open : param_close + 1], s[param_open : param_close + 1]
                     )
-                    quals_key = tuple(
-                        tokenize_code(src[param_close + 1 : body_open_ws])
-                    )
+                    quals_key = tuple(tokenize_code(src[param_close + 1 : body_open_ws]))
                     defs.append(
                         OutOfLineMethod(
                             path=rel_path,
@@ -934,9 +898,7 @@ def move_families(
         counts[fam] = len(moved)
         rel_cpp = f"lucid/_C/backend/{backend}/methods/{fam}.cpp"
         cpp_path = methods_dir / f"{fam}.cpp"
-        defs_text = "\n\n".join(
-            format_out_of_line_definition(class_name, m, src, s) for m in moved
-        )
+        defs_text = "\n\n".join(format_out_of_line_definition(class_name, m, src, s) for m in moved)
         content = (
             f"// {rel_cpp}\n"
             f"// Out-of-line {class_name} method definitions for the {fam} family.\n"
@@ -978,10 +940,7 @@ def _read_base_file(base: str, rel_path: str, root: Path) -> str:
 
 
 def verify_backend(
-    backend: str,
-    base: str,
-    root: Path = ROOT,
-    allow_prelude: bool = False,
+    backend: str, base: str, root: Path = ROOT, allow_prelude: bool = False
 ) -> tuple[int, list[str], bool]:
     """Verify ``backend`` against ``base``.
 
@@ -1004,9 +963,7 @@ def verify_backend(
     curr_prelude_toks = tokenize_code(curr_src[: curr_parsed.prelude_end])
     if not allow_prelude:
         if curr_prelude_toks != base_prelude_toks:
-            errors.append(
-                f"{rel_header}: prelude tokens changed without --allow-prelude"
-            )
+            errors.append(f"{rel_header}: prelude tokens changed without --allow-prelude")
     else:
         doors_path = curr_path.parent / "DtypeDoors.h"
         doors_toks = (
@@ -1023,22 +980,18 @@ def verify_backend(
             return toks
 
         base_non_inc = _strip_outer_ns(
-            tokenize_code(strip_noncode(base_src[: base_parsed.prelude_end])),
-            strip_close=False,
+            tokenize_code(strip_noncode(base_src[: base_parsed.prelude_end])), strip_close=False
         )
         comb_non_inc = _strip_outer_ns(
-            tokenize_code(strip_noncode(curr_src[: curr_parsed.prelude_end])),
-            strip_close=False,
+            tokenize_code(strip_noncode(curr_src[: curr_parsed.prelude_end])), strip_close=False
         ) + _strip_outer_ns(doors_toks, strip_close=True)
         if base_non_inc != comb_non_inc:
-            errors.append(
-                f"{rel_header}: prelude + DtypeDoors.h tokens do not match base prelude"
-            )
+            errors.append(f"{rel_header}: prelude + DtypeDoors.h tokens do not match base prelude")
 
     # 2. Check postlude (either unchanged or registrar moved to BackendInit.cpp)
     base_post_toks = tokenize_code(base_src[base_parsed.postlude_start :])
     curr_post_toks = tokenize_code(curr_src[curr_parsed.postlude_start :])
-    ns_close_toks = ["}", "}",]
+    ns_close_toks = ["}", "}"]
     if curr_post_toks not in (base_post_toks, ns_close_toks):
         errors.append(f"{rel_header}: unexpected postlude tokens: {curr_post_toks}")
     elif curr_post_toks == ns_close_toks and base_post_toks != ns_close_toks:
@@ -1062,10 +1015,7 @@ def verify_backend(
             rel_cpp = cpp_file.relative_to(root).as_posix()
             try:
                 defs = parse_methods_cpp(
-                    cpp_file.read_text(encoding="utf-8"),
-                    rel_cpp,
-                    class_name,
-                    expected_hdr,
+                    cpp_file.read_text(encoding="utf-8"), rel_cpp, class_name, expected_hdr
                 )
             except ValueError as exc:
                 errors.append(str(exc))
@@ -1092,29 +1042,19 @@ def verify_backend(
             )
             continue
         if bm.is_override != cm.is_override or bm.is_virtual != cm.is_virtual:
-            errors.append(
-                f"{rel_header}::{bm.name}: virtual/override qualifier changed"
-            )
+            errors.append(f"{rel_header}::{bm.name}: virtual/override qualifier changed")
         if cm.sig_tokens != bm.sig_tokens:
-            errors.append(
-                f"{rel_header}::{bm.name}: declaration signature tokens changed"
-            )
+            errors.append(f"{rel_header}::{bm.name}: declaration signature tokens changed")
         if cm.doc_comments != bm.doc_comments:
-            errors.append(
-                f"{rel_header}::{bm.name}: doc comment block above declaration changed"
-            )
+            errors.append(f"{rel_header}::{bm.name}: doc comment block above declaration changed")
         if not bm.is_function:
             continue
 
         if cm.has_body:
             if cm.body_tokens != bm.body_tokens:
-                errors.append(
-                    f"{rel_header}::{bm.name}: inline body tokens changed"
-                )
+                errors.append(f"{rel_header}::{bm.name}: inline body tokens changed")
             if cm.body_comments != bm.body_comments:
-                errors.append(
-                    f"{rel_header}::{bm.name}: inline body comments changed"
-                )
+                errors.append(f"{rel_header}::{bm.name}: inline body comments changed")
             if cm.name not in KEEP_INLINE[backend]:
                 non_keep_inline_bodies.append(cm.name)
         else:
@@ -1127,21 +1067,15 @@ def verify_backend(
                 continue
             ool = candidates[0]
             matched_keys.add(bm.canon_key)
-            want_sig = canonical_out_of_line_sig_tokens(
-                class_name, bm, base_src, base_s
-            )
+            want_sig = canonical_out_of_line_sig_tokens(class_name, bm, base_src, base_s)
             if ool.sig_tokens != want_sig:
                 errors.append(
                     f"{ool.path}::{bm.name}: signature tokens {ool.sig_tokens} != expected {want_sig}"
                 )
             if ool.body_tokens != bm.body_tokens:
-                errors.append(
-                    f"{ool.path}::{bm.name}: body token diff against base"
-                )
+                errors.append(f"{ool.path}::{bm.name}: body token diff against base")
             if ool.body_comments != bm.body_comments:
-                errors.append(
-                    f"{ool.path}::{bm.name}: body comments changed against base"
-                )
+                errors.append(f"{ool.path}::{bm.name}: body comments changed against base")
 
     for key, defs in ool_by_key.items():
         if key not in matched_keys:
@@ -1210,9 +1144,7 @@ def compute_ledger(base: str, backend: str, root: Path = ROOT) -> str:
         if methods_dir.is_dir():
             for p in sorted(methods_dir.glob("*.cpp")):
                 rel_p = p.relative_to(root).as_posix()
-                after_methods[rel_p] = analyze_text(
-                    rel_p, p.read_text(encoding="utf-8")
-                )
+                after_methods[rel_p] = analyze_text(rel_p, p.read_text(encoding="utf-8"))
 
         totals_after = dict.fromkeys(before_hdr, 0)
         for k in totals_after:
@@ -1262,17 +1194,10 @@ def main(argv: list[str] | None = None) -> int:
 
     p_move = sub.add_parser("move", help="Move family methods out of backend header")
     p_move.add_argument("--backend", choices=("cpu", "gpu"), required=True)
-    p_move.add_argument(
-        "--families",
-        required=True,
-        help="Comma-separated family names, or 'all'",
-    )
+    p_move.add_argument("--families", required=True, help="Comma-separated family names, or 'all'")
     p_move.add_argument("--keep-inline", action="append", default=[])
     p_move.add_argument(
-        "--family",
-        action="append",
-        default=[],
-        help="Override member family as NAME=FAMILY",
+        "--family", action="append", default=[], help="Override member family as NAME=FAMILY"
     )
     p_move.add_argument("--root", type=Path, default=ROOT)
     p_move.add_argument("--dry-run", action="store_true")

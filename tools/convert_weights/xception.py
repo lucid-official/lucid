@@ -37,13 +37,11 @@ _XCEPTION_CITATION = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _XCEPTION_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "xception": ("xception_cls", "lucid-dl/xception", "Xception"),
+    "xception": ("xception_cls", "lucid-dl/xception", "Xception")
 }
 
 # arch -> timm canonical model name (used to download the source weights)
-_TIMM_NAMES: dict[str, str] = {
-    "xception": "legacy_xception",
-}
+_TIMM_NAMES: dict[str, str] = {"xception": "legacy_xception"}
 
 
 class XceptionArch(Architecture):
@@ -67,9 +65,7 @@ class XceptionArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

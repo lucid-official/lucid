@@ -47,9 +47,7 @@ except ImportError:  # pragma: no cover - direct script execution
 ROOT = backend_split.ROOT
 MAX_INLINE_BODY_LINES = 10
 
-_STD_LIBM_RE = re.compile(
-    r"\bstd::(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|erf)\b"
-)
+_STD_LIBM_RE = re.compile(r"\bstd::(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|erf)\b")
 _METAL_NARROW_RE = re.compile(
     r"\bfits_one_launch\b|\bstatic_cast<\s*(?:std::)?int(?:32_t)?\s*>\s*\(\s*n\s*\)"
 )
@@ -58,10 +56,10 @@ _CPP_RAW_STR_RE = re.compile(r'R"([A-Za-z0-9_]*)\(.*?\)\1"', re.DOTALL)
 
 def _strip_cpp_noncode(raw: str) -> str:
     blanked = _CPP_RAW_STR_RE.sub(
-        lambda m: '""' + "".join("\n" if c == "\n" else " " for c in m.group(0)[2:]),
-        raw,
+        lambda m: '""' + "".join("\n" if c == "\n" else " " for c in m.group(0)[2:]), raw
     )
     return backend_split.strip_noncode(blanked)
+
 
 #: Strict ratchet allow-list of permitted ``std::<fn>`` sites in ``lucid/_C/backend/cpu/``:
 #: ``(rel_path, fn_name) -> (count, reason)``.
@@ -98,42 +96,15 @@ CPU_LIBM_ALLOWLIST: dict[tuple[str, str], tuple[int, str]] = {
         2,
         "int32 fallback in CpuBackend::erf (1) and erfinv Newton step (1)",
     ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "sin"): (
-        1,
-        "int32 fallback in CpuBackend::sin",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "cos"): (
-        1,
-        "int32 fallback in CpuBackend::cos",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "tan"): (
-        1,
-        "int32 fallback in CpuBackend::tan",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "asin"): (
-        1,
-        "int32 fallback in CpuBackend::asin",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "acos"): (
-        1,
-        "int32 fallback in CpuBackend::acos",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "atan"): (
-        1,
-        "int32 fallback in CpuBackend::atan",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "sinh"): (
-        1,
-        "int32 fallback in CpuBackend::sinh",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "cosh"): (
-        1,
-        "int32 fallback in CpuBackend::cosh",
-    ),
-    ("lucid/_C/backend/cpu/methods/Unary.cpp", "tanh"): (
-        1,
-        "int32 fallback in CpuBackend::tanh",
-    ),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "sin"): (1, "int32 fallback in CpuBackend::sin"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "cos"): (1, "int32 fallback in CpuBackend::cos"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "tan"): (1, "int32 fallback in CpuBackend::tan"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "asin"): (1, "int32 fallback in CpuBackend::asin"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "acos"): (1, "int32 fallback in CpuBackend::acos"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "atan"): (1, "int32 fallback in CpuBackend::atan"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "sinh"): (1, "int32 fallback in CpuBackend::sinh"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "cosh"): (1, "int32 fallback in CpuBackend::cosh"),
+    ("lucid/_C/backend/cpu/methods/Unary.cpp", "tanh"): (1, "int32 fallback in CpuBackend::tanh"),
     ("lucid/_C/backend/cpu/methods/Activation.cpp", "erf"): (
         2,
         "gelu_exact / gelu_exact_backward F64 branch (Accelerate has no double vForce erf)",
@@ -187,8 +158,7 @@ def _git_tracked_methods(root: Path, rel_dir: str) -> set[str] | None:
 
 
 def scan_backend_layout(
-    root: Path = ROOT,
-    tracked_files: set[str] | None = None,
+    root: Path = ROOT, tracked_files: set[str] | None = None
 ) -> list[LayoutViolation]:
     """Scan ``lucid/_C/backend/{cpu,gpu}`` and return any layout violations."""
     violations: list[LayoutViolation] = []
@@ -213,12 +183,8 @@ def scan_backend_layout(
             if not m.is_function or not m.has_body:
                 continue
             line = src.count("\n", 0, m.sig_start) + 1
-            body_inner = backend_split.strip_noncode(
-                src[m.body_open + 1 : m.seg_end - 1]
-            )
-            code_lines = sum(
-                1 for ln in body_inner.splitlines() if ln.strip()
-            )
+            body_inner = backend_split.strip_noncode(src[m.body_open + 1 : m.seg_end - 1])
+            code_lines = sum(1 for ln in body_inner.splitlines() if ln.strip())
             if m.name not in keep_allowed:
                 violations.append(
                     LayoutViolation(
@@ -272,15 +238,12 @@ def scan_backend_layout(
                 )
             cpp_src = cpp_file.read_text(encoding="utf-8")
             try:
-                backend_split.parse_methods_cpp(
-                    cpp_src, rel_cpp, class_name, expected_hdr
-                )
+                backend_split.parse_methods_cpp(cpp_src, rel_cpp, class_name, expected_hdr)
             except ValueError as exc:
                 msg = str(exc)
                 rule = (
                     "non-member-definition"
-                    if f"non-{class_name} definition" in msg
-                    or "unexpected top-level ';'" in msg
+                    if f"non-{class_name} definition" in msg or "unexpected top-level ';'" in msg
                     else "methods-preamble"
                 )
                 violations.append(LayoutViolation(rel_cpp, 1, rule, msg))
@@ -311,9 +274,7 @@ def scan_backend_layout(
                             f"route element-wise math through Vforce.h (LCD-608 / H3)",
                         )
                     )
-            for (allow_path, allow_fn), (allow_count, _) in sorted(
-                CPU_LIBM_ALLOWLIST.items()
-            ):
+            for (allow_path, allow_fn), (allow_count, _) in sorted(CPU_LIBM_ALLOWLIST.items()):
                 if allow_path != rel_path:
                     continue
                 actual_count = len(by_fn.get(allow_fn, []))
@@ -366,10 +327,7 @@ def check(root: Path = ROOT, quiet: bool = False) -> int:
             print("[check_backend_layout] OK — CpuBackend/GpuBackend layout clean.")
         return 0
     for v in violations:
-        print(
-            f"[check_backend_layout] {v.path}:{v.line}: [{v.rule}] {v.detail}",
-            file=sys.stderr,
-        )
+        print(f"[check_backend_layout] {v.path}:{v.line}: [{v.rule}] {v.detail}", file=sys.stderr)
     return 1
 
 

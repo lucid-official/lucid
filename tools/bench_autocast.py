@@ -94,14 +94,10 @@ class _GPT2Block(nn.Module):
         d_model = 768
         n_heads = 12
         self.ln1 = nn.LayerNorm(d_model)
-        self.attn = nn.MultiheadAttention(
-            embed_dim=d_model, num_heads=n_heads, batch_first=True
-        )
+        self.attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=n_heads, batch_first=True)
         self.ln2 = nn.LayerNorm(d_model)
         self.mlp = nn.Sequential(
-            nn.Linear(d_model, d_model * 4),
-            nn.GELU(),
-            nn.Linear(d_model * 4, d_model),
+            nn.Linear(d_model, d_model * 4), nn.GELU(), nn.Linear(d_model * 4, d_model)
         )
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
@@ -113,12 +109,7 @@ class _GPT2Block(nn.Module):
 WORKLOADS = [
     ("mlp", _MLP, lambda bs: lucid.randn(bs, 64), lambda bs: lucid.randn(bs, 10)),
     ("ln_mlp", _LNMLP, lambda bs: lucid.randn(bs, 64), lambda bs: lucid.randn(bs, 10)),
-    (
-        "bn1d_mlp",
-        _BN1DMLP,
-        lambda bs: lucid.randn(bs, 64),
-        lambda bs: lucid.randn(bs, 10),
-    ),
+    ("bn1d_mlp", _BN1DMLP, lambda bs: lucid.randn(bs, 64), lambda bs: lucid.randn(bs, 10)),
 ]
 
 
@@ -170,16 +161,16 @@ def _bench_fused_step(
             delta = float((actual - expected).abs().max().item())
             scale = float(expected.abs().max().item())
             if not math.isfinite(delta) or not math.isfinite(scale) or delta > 1e-5 + 1e-3 * scale:
-                raise RuntimeError(f"training parity diverged at {name}: delta={delta:g}, scale={scale:g}")
+                raise RuntimeError(
+                    f"training parity diverged at {name}: delta={delta:g}, scale={scale:g}"
+                )
     warm, _, p95 = warm_ms(call, 3, n_iter)
     return cold, warm, p95
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--batch", type=str, default="8,32,128", help="Comma-separated BS list"
-    )
+    ap.add_argument("--batch", type=str, default="8,32,128", help="Comma-separated BS list")
     ap.add_argument("--csv", type=str, default="out/bench_autocast.csv")
     ap.add_argument("--iter", type=int, default=10)
     args = ap.parse_args()
@@ -204,12 +195,7 @@ def main() -> int:
                 sys.stdout.flush()
                 try:
                     cold, warm, p95 = _bench_fused_step(
-                        mk_model,
-                        mk_input,
-                        mk_target,
-                        bs,
-                        autocast=autocast,
-                        n_iter=args.iter,
+                        mk_model, mk_input, mk_target, bs, autocast=autocast, n_iter=args.iter
                     )
                     sys.stdout.write(f"warm={warm:.2f}ms cold={cold:.1f}ms\n")
                     note = "ok"
@@ -238,20 +224,13 @@ def main() -> int:
             and isinstance(r["warm_ms_median"], float)
             and r["warm_ms_median"] == r["warm_ms_median"]
         ):
-            f32_lookup[(str(r["workload"]), int(r["batch"]))] = float(
-                r["warm_ms_median"]
-            )
+            f32_lookup[(str(r["workload"]), int(r["batch"]))] = float(r["warm_ms_median"])
 
     for r in rows:
         if r["precision"] == "autocast_f16":
             f32_warm = f32_lookup.get((str(r["workload"]), int(r["batch"])))
             warm = r["warm_ms_median"]
-            if (
-                f32_warm is not None
-                and isinstance(warm, float)
-                and warm == warm
-                and warm > 0
-            ):
+            if f32_warm is not None and isinstance(warm, float) and warm == warm and warm > 0:
                 r["speedup_vs_f32"] = f32_warm / warm
             else:
                 r["speedup_vs_f32"] = float("nan")
@@ -283,14 +262,21 @@ def main() -> int:
             writer.writerow(cleaned)
     print(f"\n# CSV written to {args.csv}")
     with open(args.csv + ".meta.json", "w", encoding="utf-8") as f:
-        json.dump({
-            "python": sys.version, "platform": platform.platform(),
-            "lucid": lucid.__version__, "device": COMPILE_DEVICE,
-            "warmup": 3, "iterations": args.iter,
-            "measurement": "materialize returned loss then synchronize; cold is first fused call",
-            "correctness": "first loss, parameters and buffers match same-precision eager update",
-            "rows": len(rows),
-        }, f, indent=2)
+        json.dump(
+            {
+                "python": sys.version,
+                "platform": platform.platform(),
+                "lucid": lucid.__version__,
+                "device": COMPILE_DEVICE,
+                "warmup": 3,
+                "iterations": args.iter,
+                "measurement": "materialize returned loss then synchronize; cold is first fused call",
+                "correctness": "first loss, parameters and buffers match same-precision eager update",
+                "rows": len(rows),
+            },
+            f,
+            indent=2,
+        )
     return int(any(str(row["note"]).startswith("error:") for row in rows))
 
 

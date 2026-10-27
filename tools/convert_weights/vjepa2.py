@@ -15,10 +15,9 @@ from safetensors.numpy import load_file
 from lucid.nn import Module
 from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
 
-
 _CITATION = (
-    "Assran et al., \"V-JEPA 2: Self-Supervised Video Models Enable "
-    "Understanding, Prediction and Planning,\" arXiv:2506.09985, 2025."
+    'Assran et al., "V-JEPA 2: Self-Supervised Video Models Enable '
+    'Understanding, Prediction and Planning," arXiv:2506.09985, 2025.'
 )
 _PAPER_URL = "https://arxiv.org/abs/2506.09985"
 
@@ -100,9 +99,7 @@ class VJEPA2Arch(Architecture):
     def __init__(self, arch: str, tag: str) -> None:
         if arch not in _VARIANTS:
             raise KeyError(f"VJEPA2Arch: unknown architecture {arch!r}")
-        if tag != "FPC64_256" and not (
-            arch == "vjepa2_vit_giant_384" and tag == "FPC64_384"
-        ):
+        if tag != "FPC64_256" and not (arch == "vjepa2_vit_giant_384" and tag == "FPC64_384"):
             raise KeyError(f"VJEPA2Arch: unsupported tag {tag!r} for {arch!r}")
         self.arch = arch
         self.tag = tag
@@ -136,17 +133,11 @@ class VJEPA2Arch(Architecture):
             converted[f"{target_prefix}.patch_embed.bias"] = source[
                 "encoder.embeddings.patch_embeddings.proj.bias"
             ]
-            converted[f"{target_prefix}.norm.weight"] = source[
-                "encoder.layernorm.weight"
-            ]
-            converted[f"{target_prefix}.norm.bias"] = source[
-                "encoder.layernorm.bias"
-            ]
+            converted[f"{target_prefix}.norm.weight"] = source["encoder.layernorm.weight"]
+            converted[f"{target_prefix}.norm.bias"] = source["encoder.layernorm.bias"]
             for index in range(depth):
                 source_prefix = f"encoder.layer.{index}"
-                fused_weight, fused_bias = _fused_projection(
-                    source, source_prefix, width
-                )
+                fused_weight, fused_bias = _fused_projection(source, source_prefix, width)
                 target_block = f"{target_prefix}.blocks.{index}"
                 converted[f"{target_block}.attn.qkv.weight"] = fused_weight
                 converted[f"{target_block}.attn.qkv.bias"] = fused_bias
@@ -177,9 +168,7 @@ class VJEPA2Arch(Architecture):
             converted[f"predictor.mask_tokens.{index}"] = mask_tokens[index]
         for index in range(12):
             source_prefix = f"predictor.layer.{index}"
-            fused_weight, fused_bias = _fused_projection(
-                source, source_prefix, 384
-            )
+            fused_weight, fused_bias = _fused_projection(source, source_prefix, 384)
             target_block = f"predictor.predictor_blocks.{index}"
             converted[f"{target_block}.attn.qkv.weight"] = fused_weight
             converted[f"{target_block}.attn.qkv.bias"] = fused_bias
@@ -187,9 +176,7 @@ class VJEPA2Arch(Architecture):
                 converted[f"{target_block}.{name}.weight"] = source[
                     f"{source_prefix}.{name}.weight"
                 ]
-                converted[f"{target_block}.{name}.bias"] = source[
-                    f"{source_prefix}.{name}.bias"
-                ]
+                converted[f"{target_block}.{name}.bias"] = source[f"{source_prefix}.{name}.bias"]
             for name in ("attn.proj", "mlp.fc1", "mlp.fc2"):
                 source_name = name.replace("attn.proj", "attention.proj")
                 converted[f"{target_block}.{name}.weight"] = source[
@@ -198,18 +185,10 @@ class VJEPA2Arch(Architecture):
                 converted[f"{target_block}.{name}.bias"] = source[
                     f"{source_prefix}.{source_name}.bias"
                 ]
-        converted["predictor.predictor_norm.weight"] = source[
-            "predictor.layernorm.weight"
-        ]
-        converted["predictor.predictor_norm.bias"] = source[
-            "predictor.layernorm.bias"
-        ]
-        converted["predictor.predictor_proj.weight"] = source[
-            "predictor.proj.weight"
-        ]
-        converted["predictor.predictor_proj.bias"] = source[
-            "predictor.proj.bias"
-        ]
+        converted["predictor.predictor_norm.weight"] = source["predictor.layernorm.weight"]
+        converted["predictor.predictor_norm.bias"] = source["predictor.layernorm.bias"]
+        converted["predictor.predictor_proj.weight"] = source["predictor.proj.weight"]
+        converted["predictor.predictor_proj.bias"] = source["predictor.proj.bias"]
         return converted
 
     def target_model(self) -> Module:
@@ -235,10 +214,7 @@ class VJEPA2Arch(Architecture):
                 "type": "video",
                 "frames_per_clip": 64,
                 "size": self._image_size,
-                "normalization": {
-                    "mean": [0.485, 0.456, 0.406],
-                    "std": [0.229, 0.224, 0.225],
-                },
+                "normalization": {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
             },
             citation=_CITATION,
             title=self._title,

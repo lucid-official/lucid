@@ -38,9 +38,7 @@ _SENET_CITATION = (
     "}"
 )
 
-_SENET_PAPER_URL = (
-    "Hu et al., 2018 — *Squeeze-and-Excitation Networks* " "(arXiv:1709.01507)"
-)
+_SENET_PAPER_URL = "Hu et al., 2018 — *Squeeze-and-Excitation Networks* " "(arXiv:1709.01507)"
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _SENET_VARIANTS: dict[str, tuple[str, str, str]] = {
@@ -97,9 +95,7 @@ class SENetArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

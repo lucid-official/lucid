@@ -38,8 +38,7 @@ _WIDE_RESNET_CITATION = (
 )
 
 _RESNET_PAPER_URL = (
-    "He et al., 2015 — *Deep Residual Learning for Image "
-    "Recognition* (arXiv:1512.03385)"
+    "He et al., 2015 — *Deep Residual Learning for Image " "Recognition* (arXiv:1512.03385)"
 )
 _WIDE_RESNET_PAPER_URL = (
     "Zagoruyko & Komodakis, 2016 — *Wide Residual Networks* " "(arXiv:1605.07146)"
@@ -53,16 +52,8 @@ _RESNET_VARIANTS: dict[str, tuple[str, str, str]] = {
     "resnet_50": ("resnet_50_cls", "lucid-dl/resnet-50", "ResNet-50"),
     "resnet_101": ("resnet_101_cls", "lucid-dl/resnet-101", "ResNet-101"),
     "resnet_152": ("resnet_152_cls", "lucid-dl/resnet-152", "ResNet-152"),
-    "wide_resnet_50": (
-        "wide_resnet_50_cls",
-        "lucid-dl/wide-resnet-50-2",
-        "Wide ResNet-50-2",
-    ),
-    "wide_resnet_101": (
-        "wide_resnet_101_cls",
-        "lucid-dl/wide-resnet-101-2",
-        "Wide ResNet-101-2",
-    ),
+    "wide_resnet_50": ("wide_resnet_50_cls", "lucid-dl/wide-resnet-50-2", "Wide ResNet-50-2"),
+    "wide_resnet_101": ("wide_resnet_101_cls", "lucid-dl/wide-resnet-101-2", "Wide ResNet-101-2"),
 }
 
 # torchvision builders keyed by arch.

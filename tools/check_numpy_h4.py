@@ -79,7 +79,7 @@ SANCTIONED: frozenset[str] = frozenset(
 )
 
 SANCTIONED_METHODS: dict[str, frozenset[str]] = {
-    "compile/_optim/compiler.py": frozenset({"state_dict", "_step_entry"}),
+    "compile/_optim/compiler.py": frozenset({"state_dict", "_step_entry"})
 }
 
 
@@ -140,9 +140,7 @@ def _collect_type_checking_blocks(tree: ast.AST) -> list[tuple[int, int]]:
     return blocks
 
 
-def _collect_method_blocks(
-    tree: ast.AST, method_names: frozenset[str]
-) -> list[tuple[int, int]]:
+def _collect_method_blocks(tree: ast.AST, method_names: frozenset[str]) -> list[tuple[int, int]]:
     """Line ranges of ``def <name>`` blocks whose name is in ``method_names``."""
     if not method_names:
         return []
@@ -156,9 +154,7 @@ def _collect_method_blocks(
     return blocks
 
 
-def _scan_file(
-    path: pathlib.Path, rel_path: pathlib.Path | None = None
-) -> list[Violation]:
+def _scan_file(path: pathlib.Path, rel_path: pathlib.Path | None = None) -> list[Violation]:
     """Return every unsanctioned numpy import or .numpy() call in ``path``."""
     source = path.read_text(encoding="utf-8")
     try:
@@ -189,26 +185,14 @@ def _scan_file(
                     node, type_checking_blocks
                 ):
                     violations.append(
-                        Violation(
-                            path,
-                            node.lineno,
-                            node.col_offset,
-                            f"import {alias.name}",
-                        )
+                        Violation(path, node.lineno, node.col_offset, f"import {alias.name}")
                     )
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            if _is_numpy_module(module) and not _under_type_checking(
-                node, type_checking_blocks
-            ):
+            if _is_numpy_module(module) and not _under_type_checking(node, type_checking_blocks):
                 names = ", ".join(a.name for a in node.names)
                 violations.append(
-                    Violation(
-                        path,
-                        node.lineno,
-                        node.col_offset,
-                        f"from {module} import {names}",
-                    )
+                    Violation(path, node.lineno, node.col_offset, f"from {module} import {names}")
                 )
         elif (
             isinstance(node, ast.Call)
@@ -217,14 +201,7 @@ def _scan_file(
             and not _under_type_checking(node, type_checking_blocks)
             and not _under_blocks(node, method_blocks)
         ):
-            violations.append(
-                Violation(
-                    path,
-                    node.lineno,
-                    node.col_offset,
-                    ".numpy() call",
-                )
-            )
+            violations.append(Violation(path, node.lineno, node.col_offset, ".numpy() call"))
 
     return violations
 

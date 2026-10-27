@@ -50,9 +50,7 @@ API_DATA_DIR = ROOT / "web" / "public" / "api-data"
 # (``:py:obj:``, ``:any:``, …) are silently ignored.
 _XREF_ROLES = {"func", "meth", "class", "attr", "data", "mod", "obj"}
 
-_XREF_RE = re.compile(
-    r":(" + "|".join(_XREF_ROLES) + r"):`(?:~)?([^`<>\s]+)(?:\s*<[^>]+>)?`",
-)
+_XREF_RE = re.compile(r":(" + "|".join(_XREF_ROLES) + r"):`(?:~)?([^`<>\s]+)(?:\s*<[^>]+>)?`")
 
 # Docstring fields the build emits.  ``parameters`` / ``raises`` /
 # ``attributes`` / ``returns`` carry their own embedded text, so we
@@ -389,8 +387,7 @@ def _collect_source_symbols() -> set[str]:
                                 if (
                                     isinstance(sub, ast.Call)
                                     and isinstance(sub.func, ast.Attribute)
-                                    and sub.func.attr
-                                    in ("register_buffer", "register_parameter")
+                                    and sub.func.attr in ("register_buffer", "register_parameter")
                                     and sub.args
                                     and isinstance(sub.args[0], ast.Constant)
                                     and isinstance(sub.args[0].value, str)
@@ -400,9 +397,7 @@ def _collect_source_symbols() -> set[str]:
                                     names.add(f"{node.name}.{attr_name}")
                         elif isinstance(child, (ast.Assign, ast.AnnAssign)):
                             tgts = (
-                                child.targets
-                                if isinstance(child, ast.Assign)
-                                else [child.target]
+                                child.targets if isinstance(child, ast.Assign) else [child.target]
                             )
                             for tgt in tgts:
                                 if isinstance(tgt, ast.Name):
@@ -456,10 +451,7 @@ def _iter_docstring_text(node: dict[str, object]):
 
 
 def _resolve(
-    target: str,
-    paths: set[str],
-    basename_idx: dict[str, list[str]],
-    source_names: set[str],
+    target: str, paths: set[str], basename_idx: dict[str, list[str]], source_names: set[str]
 ) -> bool:
     """``True`` when ``target`` matches at least one known symbol.
 
@@ -506,9 +498,7 @@ def _resolve(
         return True
     if target in _PY_STDLIB_NAMES:
         return True
-    suffix_hits = [
-        p for p in paths if p.endswith("." + target) or p.endswith("::" + target)
-    ]
+    suffix_hits = [p for p in paths if p.endswith("." + target) or p.endswith("::" + target)]
     if suffix_hits:
         return True
     if target in basename_idx:
@@ -525,9 +515,7 @@ def _resolve(
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     ap.add_argument(
-        "--list",
-        action="store_true",
-        help="print every unresolved reference (default: first 20)",
+        "--list", action="store_true", help="print every unresolved reference (default: first 20)"
     )
     args = ap.parse_args()
 
@@ -540,9 +528,7 @@ def main() -> int:
 
     paths = _collect_emitted_paths()
     if not paths:
-        sys.stderr.write(
-            "[check_docstring_xrefs] no emitted symbols — api-data dir is empty.\n"
-        )
+        sys.stderr.write("[check_docstring_xrefs] no emitted symbols — api-data dir is empty.\n")
         return 1
     basename_idx = _basename_index(paths)
     source_names = _collect_source_symbols()
@@ -579,9 +565,7 @@ def main() -> int:
         return 0
 
     limit = len(unresolved) if args.list else min(20, len(unresolved))
-    sys.stderr.write(
-        f"[check_docstring_xrefs] {len(unresolved)} unresolved reference(s):\n"
-    )
+    sys.stderr.write(f"[check_docstring_xrefs] {len(unresolved)} unresolved reference(s):\n")
     for rel, sym, role, target in unresolved[:limit]:
         sys.stderr.write(f"  {rel}: in `{sym}` — :{role}:`{target}` does not resolve\n")
     if len(unresolved) > limit:

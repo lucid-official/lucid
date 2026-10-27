@@ -89,9 +89,7 @@ def _check_shared_embedders(state: dict[str, Any], depth: int) -> None:
     """
     prefix = "transformer_blocks.{}.norm1.emb."
     base = {
-        k[len(prefix.format(0)) :]: v
-        for k, v in state.items()
-        if k.startswith(prefix.format(0))
+        k[len(prefix.format(0)) :]: v for k, v in state.items() if k.startswith(prefix.format(0))
     }
     for index in range(1, depth):
         for leaf, want in base.items():

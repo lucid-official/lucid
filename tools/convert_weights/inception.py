@@ -50,7 +50,7 @@ _INCEPTION_CITATION = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _INCEPTION_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "inception_v3": ("inception_v3_cls", "lucid-dl/inception-v3", "Inception v3"),
+    "inception_v3": ("inception_v3_cls", "lucid-dl/inception-v3", "Inception v3")
 }
 
 # Top-level block-name map: torchvision -> Lucid.
@@ -133,13 +133,7 @@ _E_BR = {
 }
 _E_RAW = {"branch2_b1", "branch2_b2", "branch3_c1", "branch3_c2"}
 
-_STEM_BLOCKS = {
-    "Conv2d_1a_3x3",
-    "Conv2d_2a_3x3",
-    "Conv2d_2b_3x3",
-    "Conv2d_3b_1x1",
-    "Conv2d_4a_3x3",
-}
+_STEM_BLOCKS = {"Conv2d_1a_3x3", "Conv2d_2a_3x3", "Conv2d_2b_3x3", "Conv2d_3b_1x1", "Conv2d_4a_3x3"}
 
 
 def _branch(table: dict[str, str], tv_branch: str, src_key: str) -> str:
@@ -208,9 +202,7 @@ class InceptionArch(Architecture):
         raise UnknownSourceKey(src_key)
 
     @staticmethod
-    def _map_factorised(
-        ltop: str, lbr: str, raw_set: set[str], sub: str, rest: str
-    ) -> str:
+    def _map_factorised(ltop: str, lbr: str, raw_set: set[str], sub: str, rest: str) -> str:
         """Map a branch that may be a bare conv + sibling ``_bn`` in Lucid."""
         if lbr in raw_set:
             if sub == "conv":

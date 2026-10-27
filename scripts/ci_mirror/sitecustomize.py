@@ -29,15 +29,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 #: What ``.github/workflows/ci.yml``'s phase-gate job installs besides the
 #: package and its ``test`` extra — keep the two in step.
-_CI_TOOLS = (
-    "pip",
-    "setuptools",
-    "wheel",
-    "cmake",
-    "ninja",
-    "pybind11",
-    "clang-format",
-)
+_CI_TOOLS = ("pip", "setuptools", "wheel", "cmake", "ninja", "pybind11", "clang-format")
 
 
 def _norm(name: str) -> str:

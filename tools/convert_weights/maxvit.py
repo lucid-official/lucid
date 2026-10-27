@@ -117,9 +117,7 @@ class MaxViTArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -129,14 +127,7 @@ class MaxViTArch(Architecture):
         return src_key
 
     def spec(self) -> ConversionSpec:
-        (
-            _timm_arch,
-            factory_name,
-            repo_id,
-            title,
-            acc1,
-            acc5,
-        ) = _MAXVIT_VARIANTS[self.arch]
+        _timm_arch, factory_name, repo_id, title, acc1, acc5 = _MAXVIT_VARIANTS[self.arch]
         config = {
             k: (list(v) if isinstance(v, tuple) else v)
             for k, v in dataclasses.asdict(self._lucid_model.config).items()

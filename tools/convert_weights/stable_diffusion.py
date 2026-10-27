@@ -35,10 +35,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from safetensors.numpy import load_file
 
-from lucid.models.generative.stable_diffusion import (
-    StableDiffusionConfig,
-    StableDiffusionModel,
-)
+from lucid.models.generative.stable_diffusion import StableDiffusionConfig, StableDiffusionModel
 from lucid.nn import Module
 from tools.convert_weights._base import (
     Architecture,
@@ -52,7 +49,7 @@ _CITATION = (
     "  title={High-Resolution Image Synthesis with Latent Diffusion "
     "Models},\n"
     "  author={Rombach, Robin and Blattmann, Andreas and Lorenz, "
-    "Dominik and Esser, Patrick and Ommer, Bj{\\\"o}rn},\n"
+    'Dominik and Esser, Patrick and Ommer, Bj{\\"o}rn},\n'
     "  booktitle={CVPR},\n"
     "  pages={10684--10695},\n"
     "  year={2022}\n"
@@ -60,7 +57,7 @@ _CITATION = (
 )
 
 _RELEASES: dict[str, tuple[str, dict[str, object]]] = {
-    "stable_diffusion": ("stable-diffusion-v1-5/stable-diffusion-v1-5", {}),
+    "stable_diffusion": ("stable-diffusion-v1-5/stable-diffusion-v1-5", {})
 }
 
 
@@ -98,9 +95,7 @@ class StableDiffusionArch(Architecture):
             Weight tag.
         """
         if model_name not in _RELEASES:
-            raise ValueError(
-                f"no release for {model_name!r}; known: {sorted(_RELEASES)}"
-            )
+            raise ValueError(f"no release for {model_name!r}; known: {sorted(_RELEASES)}")
         self.model_name = model_name
         self.tag = tag
         self.repo, self.overrides = _RELEASES[model_name]
@@ -119,9 +114,7 @@ class StableDiffusionArch(Architecture):
         """
         out: dict[str, object] = {}
         for prefix, folder in (("unet", "unet"), ("vae", "vae")):
-            path = hf_hub_download(
-                self.repo, f"{folder}/diffusion_pytorch_model.safetensors"
-            )
+            path = hf_hub_download(self.repo, f"{folder}/diffusion_pytorch_model.safetensors")
             for key, value in load_file(path).items():
                 out[f"{prefix}.{key}"] = value
         return _fuse_attention(out)
@@ -220,9 +213,7 @@ def _fuse_attention(state: dict[str, object]) -> dict[str, object]:
             if marker not in key or ".attn2." in key:
                 continue
             stem, suffix = key.split(marker)
-            parts = [
-                cast(np.ndarray, state[f"{stem}.{name}.{suffix}"]) for name in trio
-            ]
+            parts = [cast(np.ndarray, state[f"{stem}.{name}.{suffix}"]) for name in trio]
             # ``suffix`` is "weight" or "bias"; both fuse, into their own
             # names.  Dropping it here silently overwrote the fused
             # weight with the fused bias.
@@ -392,9 +383,7 @@ def _map_vae(key: str, config: StableDiffusionConfig) -> str | None:
         per = layers + 1
         stride = per + 2  # resnets, then Upsample and its conv
         if kind == "resnets":
-            return f"vae.up.{level * stride + int(parts[4])}." + _resnet_leaf(
-                ".".join(parts[5:])
-            )
+            return f"vae.up.{level * stride + int(parts[4])}." + _resnet_leaf(".".join(parts[5:]))
         if kind == "upsamplers":
             return f"vae.up.{level * stride + per + 1}." + parts[-1]
         return None

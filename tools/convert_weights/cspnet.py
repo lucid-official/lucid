@@ -29,21 +29,9 @@ _CSPNET_CITATION = (
 
 # arch -> (lucid_cls_factory, repo_id, title)
 _CSPNET_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "cspresnet_50": (
-        "cspresnet_50_cls",
-        "lucid-dl/cspresnet-50",
-        "CSPResNet-50",
-    ),
-    "cspresnext_50": (
-        "cspresnext_50_cls",
-        "lucid-dl/cspresnext-50",
-        "CSPResNeXt-50",
-    ),
-    "cspdarknet_53": (
-        "cspdarknet_53_cls",
-        "lucid-dl/cspdarknet-53",
-        "CSPDarknet-53",
-    ),
+    "cspresnet_50": ("cspresnet_50_cls", "lucid-dl/cspresnet-50", "CSPResNet-50"),
+    "cspresnext_50": ("cspresnext_50_cls", "lucid-dl/cspresnext-50", "CSPResNeXt-50"),
+    "cspdarknet_53": ("cspdarknet_53_cls", "lucid-dl/cspdarknet-53", "CSPDarknet-53"),
 }
 
 # arch -> timm canonical model name (used to download the source weights)
@@ -86,9 +74,7 @@ class CSPNetArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -129,11 +115,7 @@ class CSPNetArch(Architecture):
 
         n_params = int(sum(p.numel() for p in self._model.parameters()))
         # Acc@1 numbers from timm's recipe sweep on the ``ra_in1k`` tag.
-        _acc_table = {
-            "cspresnet_50": 76.74,
-            "cspresnext_50": 80.04,
-            "cspdarknet_53": 80.06,
-        }
+        _acc_table = {"cspresnet_50": 76.74, "cspresnext_50": 80.04, "cspdarknet_53": 80.06}
         meta = {
             "num_params": n_params,
             "recipe": str(cfg.get("url", "")),

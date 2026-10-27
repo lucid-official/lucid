@@ -61,9 +61,7 @@ from tools.convert_weights._base import Architecture, ConversionSpec, register_a
 # ---------------------------------------------------------------------------
 
 _PJREDDIE = "https://pjreddie.com/media/files"
-_ALEXEYAB = (
-    "https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v3_optimal"
-)
+_ALEXEYAB = "https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v3_optimal"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -387,9 +385,7 @@ class DarknetYOLOArch(Architecture):
         self.tag = tag
         self.src = _SOURCES[arch]
         if tag != self.src.tag:
-            raise KeyError(
-                f"DarknetYOLOArch: {arch!r} has tag {self.src.tag!r}, got {tag!r}"
-            )
+            raise KeyError(f"DarknetYOLOArch: {arch!r} has tag {self.src.tag!r}, got {tag!r}")
 
     def target_model(self) -> Module:
         import lucid.models as models
@@ -475,9 +471,7 @@ class DarknetYOLOArch(Architecture):
             std=(1.0, 1.0, 1.0),
         ).to_dict()
 
-        n_params = sum(
-            int(np.prod([int(s) for s in p.shape])) for p in model.parameters()
-        )
+        n_params = sum(int(np.prod([int(s) for s in p.shape])) for p in model.parameters())
         meta = {
             "num_params": n_params,
             "recipe": src.url,

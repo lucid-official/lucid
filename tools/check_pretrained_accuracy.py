@@ -61,12 +61,7 @@ import lucid
 import lucid.models  # noqa: F401 — populates the registry
 from lucid.models import create_model
 from lucid.models._registry import _REGISTRY
-from lucid.test._fixtures.ref_framework import (
-    _REF_NAME,
-    ref_module,
-    ref_vision_module,
-    zoo_module,
-)
+from lucid.test._fixtures.ref_framework import _REF_NAME, ref_module, ref_vision_module, zoo_module
 from lucid.weights._registry import _WEIGHTS_BY_MODEL
 from tools.check_pretrained_parity import _reference_for, _reference_io
 
@@ -93,9 +88,7 @@ def _images(root: Path, per_class: int) -> list[tuple[Path, int]]:
         folder = root / str(label)
         files = sorted(folder.glob("*.jpeg")) + sorted(folder.glob("*.jpg"))
         if not files:
-            raise SystemExit(
-                f"{folder} holds no images — is --data the extracted archive?"
-            )
+            raise SystemExit(f"{folder} holds no images — is --data the extracted archive?")
         chosen.extend((path, label) for path in files[:per_class])
     return chosen
 
@@ -157,9 +150,7 @@ def _source_top1(kind: str, identifier: str, images: list[object]) -> np.ndarray
     predictions = []
     with ref.inference_mode():
         for start in range(0, len(images), BATCH):
-            batch = ref.stack(
-                [transform(image) for image in images[start : start + BATCH]]
-            )
+            batch = ref.stack([transform(image) for image in images[start : start + BATCH]])
             predictions.append(model(batch.to(device)).argmax(dim=-1).cpu().numpy())
     del model
     gc.collect()
@@ -198,10 +189,7 @@ def _check(args: argparse.Namespace) -> int:
         print(f"no {DATASET} under {args.data}", file=sys.stderr)
         return 2
     if ref_module() is None:
-        print(
-            "the reference framework is not installed — nothing to compare",
-            file=sys.stderr,
-        )
+        print("the reference framework is not installed — nothing to compare", file=sys.stderr)
         return 2
     chosen = _images(root, args.per_class)
     labels = np.array([label for _, label in chosen])
@@ -214,11 +202,7 @@ def _check(args: argparse.Namespace) -> int:
     bad = 0
     for index, (name, tag, kind, identifier) in enumerate(targets, 1):
         started = time.time()
-        row: dict[str, object] = {
-            "model": name,
-            "tag": tag,
-            "source": f"{kind}/{identifier}",
-        }
+        row: dict[str, object] = {"model": name, "tag": tag, "source": f"{kind}/{identifier}"}
         try:
             ours = _lucid_top1(name, tag, images, args.device)
             with _reference_io():
@@ -226,10 +210,7 @@ def _check(args: argparse.Namespace) -> int:
         except Exception as exc:  # noqa: BLE001 — one checkpoint must not end the run
             row["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
             bad += 1
-            print(
-                f"  [{index}/{len(targets)}] {name} [{tag}]  ERROR {row['error']}",
-                flush=True,
-            )
+            print(f"  [{index}/{len(targets)}] {name} [{tag}]  ERROR {row['error']}", flush=True)
             report.append(row)
             continue
         finally:
@@ -256,9 +237,7 @@ def _check(args: argparse.Namespace) -> int:
             flush=True,
         )
     if args.json:
-        Path(args.json).write_text(
-            json.dumps({"images": len(images), "rows": report}, indent=1)
-        )
+        Path(args.json).write_text(json.dumps({"images": len(images), "rows": report}, indent=1))
     compared = sum("top1" in row for row in report)
     print(f"\n{compared} checkpoints compared, {bad} not within bounds")
     if not compared:
@@ -297,12 +276,8 @@ def _isolated(arguments: list[str]) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
-    parser.add_argument(
-        "--data", required=True, help="directory holding the extracted archive"
-    )
-    parser.add_argument(
-        "--per-class", type=int, default=2, help="images per class (max 10)"
-    )
+    parser.add_argument("--data", required=True, help="directory holding the extracted archive")
+    parser.add_argument("--per-class", type=int, default=2, help="images per class (max 10)")
     parser.add_argument("--model", help="only these factories, comma-separated")
     parser.add_argument("--source", choices=("timm", "vision"), help="only this source")
     parser.add_argument("--limit", type=int, default=0, help="stop after N checkpoints")

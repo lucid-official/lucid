@@ -75,9 +75,7 @@ class DETRArch(Architecture):
         self.tag = tag
         _, _, _, hub_entry, _ = _DETR_VARIANTS[arch]
         self._hub_entry = hub_entry
-        self._model = torch.hub.load(
-            "facebookresearch/detr:main", hub_entry, pretrained=True
-        )
+        self._model = torch.hub.load("facebookresearch/detr:main", hub_entry, pretrained=True)
         self._model.eval()
 
         import lucid.models as models
@@ -87,9 +85,7 @@ class DETRArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)(num_classes=91)
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -127,9 +123,7 @@ class DETRArch(Architecture):
         # bottom and right (the image stays top-left) without rounding the
         # canvas to a stride multiple; ImageNet normalisation (boxes ride with
         # the image).  Matches detr/_weights.py.
-        preset = Detection(
-            max_size=1333, size_divisible=1, pad_position="top_left", pad_value=0.0
-        )
+        preset = Detection(max_size=1333, size_divisible=1, pad_position="top_left", pad_value=0.0)
         preprocessing = preset.to_dict()
 
         meta = {

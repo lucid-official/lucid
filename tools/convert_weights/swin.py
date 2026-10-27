@@ -143,14 +143,9 @@ class SwinArch(Architecture):
                 luc_stage = _TV_DOWNSAMPLE_MAP[tv_idx]
                 inner = ".".join(parts[2:])
                 if inner.startswith("reduction."):
-                    return (
-                        f"stages.{luc_stage}.downsample.proj."
-                        + inner[len("reduction.") :]
-                    )
+                    return f"stages.{luc_stage}.downsample.proj." + inner[len("reduction.") :]
                 if inner.startswith("norm."):
-                    return (
-                        f"stages.{luc_stage}.downsample.norm." + inner[len("norm.") :]
-                    )
+                    return f"stages.{luc_stage}.downsample.norm." + inner[len("norm.") :]
         raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:
@@ -226,13 +221,11 @@ def _build_swin_base(tag: str) -> Architecture:
 # ---------------------------------------------------------------------------
 
 _TIMM_VARIANTS: dict[str, tuple[str, str, str]] = {
-    "swin_large": ("swin_large_cls", "lucid-dl/swin-large", "Swin-Large"),
+    "swin_large": ("swin_large_cls", "lucid-dl/swin-large", "Swin-Large")
 }
 
 # timm full model names keyed by Lucid arch.
-_TIMM_MODEL_NAMES = {
-    "swin_large": "swin_large_patch4_window7_224",
-}
+_TIMM_MODEL_NAMES = {"swin_large": "swin_large_patch4_window7_224"}
 
 
 def _datasets_from_timm_tag(tag: str) -> list[str]:
@@ -294,9 +287,7 @@ class SwinTimmArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model
@@ -341,14 +332,9 @@ class SwinTimmArch(Architecture):
                 tgt_stage = int(stage) - 1
                 inner = ".".join(parts[3:])
                 if inner.startswith("reduction."):
-                    return (
-                        f"stages.{tgt_stage}.downsample.proj."
-                        + inner[len("reduction.") :]
-                    )
+                    return f"stages.{tgt_stage}.downsample.proj." + inner[len("reduction.") :]
                 if inner.startswith("norm."):
-                    return (
-                        f"stages.{tgt_stage}.downsample.norm." + inner[len("norm.") :]
-                    )
+                    return f"stages.{tgt_stage}.downsample.norm." + inner[len("norm.") :]
         raise UnknownSourceKey(src_key)
 
     def spec(self) -> ConversionSpec:

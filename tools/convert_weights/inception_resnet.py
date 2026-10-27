@@ -40,13 +40,11 @@ _INCEPTION_RESNET_VARIANTS: dict[str, tuple[str, str, str]] = {
         "inception_resnet_v2_cls",
         "lucid-dl/inception-resnet-v2",
         "Inception-ResNet v2",
-    ),
+    )
 }
 
 # arch -> timm canonical model name (used to download the source weights)
-_TIMM_NAMES: dict[str, str] = {
-    "inception_resnet_v2": "inception_resnet_v2",
-}
+_TIMM_NAMES: dict[str, str] = {"inception_resnet_v2": "inception_resnet_v2"}
 
 
 class InceptionResNetArch(Architecture):
@@ -70,9 +68,7 @@ class InceptionResNetArch(Architecture):
         self._lucid_model = getattr(models, self._lucid_factory)()
 
     def source_state_dict(self) -> dict[str, object]:
-        return {
-            k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()
-        }
+        return {k: v.detach().cpu().numpy() for k, v in self._model.state_dict().items()}
 
     def target_model(self) -> Module:
         return self._lucid_model

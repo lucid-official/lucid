@@ -130,9 +130,7 @@ def main() -> int:
         "which never materializes regardless of param count.",
     )
     p.add_argument(
-        "--out",
-        default=str(CACHE_PATH),
-        help=f"output JSON path (default: {CACHE_PATH})",
+        "--out", default=str(CACHE_PATH), help=f"output JSON path (default: {CACHE_PATH})"
     )
     p.add_argument(
         "--force",
@@ -184,9 +182,7 @@ def main() -> int:
             # Pre-built declarative tree — pass through verbatim,
             # fingerprinted by the literal JSON form so changes to the
             # decorator dict invalidate the cache.
-            fp = hashlib.sha256(
-                json.dumps(entry.summary, sort_keys=True).encode()
-            ).hexdigest()[:16]
+            fp = hashlib.sha256(json.dumps(entry.summary, sort_keys=True).encode()).hexdigest()[:16]
             if prev_meta.get(name) == fp and name in prev_tree:
                 out[name] = prev_tree[name]
                 cache_hits += 1

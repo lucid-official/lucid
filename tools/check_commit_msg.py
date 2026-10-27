@@ -41,26 +41,14 @@ import sys
 
 # ── Convention vocabulary ─────────────────────────────────────────────────────
 # Code / user-facing types feed the CHANGELOG pipeline (tools/changelog.py).
-USER_FACING_TYPES = (
-    "feat",
-    "fix",
-    "perf",
-    "refactor",
-    "revert",
-    "remove",
-    "deprecate",
-    "security",
-)
+USER_FACING_TYPES = ("feat", "fix", "perf", "refactor", "revert", "remove", "deprecate", "security")
 # Non-code types — no CHANGELOG entry expected.
 OTHER_TYPES = ("docs", "style", "test", "build", "ci", "chore", "release")
 ALLOWED_TYPES = USER_FACING_TYPES + OTHER_TYPES
 
 # <type>(<scope>)!: <subject>
 _HEADER_RE = re.compile(
-    r"^(?P<type>[a-z]+)"
-    r"(?:\((?P<scope>[a-z0-9._,\-]+)\))?"
-    r"(?P<bang>!)?"
-    r": (?P<subject>.+)$"
+    r"^(?P<type>[a-z]+)" r"(?:\((?P<scope>[a-z0-9._,\-]+)\))?" r"(?P<bang>!)?" r": (?P<subject>.+)$"
 )
 
 # git-generated / system subjects that the convention does not govern.
@@ -106,9 +94,7 @@ def validate_subject(subject: str) -> tuple[list[str], list[str]]:
     if len(subject) > MAX_LEN:
         errors.append(f"header is {len(subject)} chars (hard limit {MAX_LEN})")
     elif len(subject) > RECOMMENDED_LEN:
-        warnings.append(
-            f"header is {len(subject)} chars (recommended ≤ {RECOMMENDED_LEN})"
-        )
+        warnings.append(f"header is {len(subject)} chars (recommended ≤ {RECOMMENDED_LEN})")
 
     return errors, warnings
 
@@ -161,8 +147,7 @@ def main(argv: list[str] | None = None) -> int:
             subjects = _subjects_from_range(args.rev_range)
         except subprocess.CalledProcessError as exc:
             print(
-                f"check_commit_msg: cannot read range {args.rev_range!r}: "
-                f"{exc.stderr.strip()}",
+                f"check_commit_msg: cannot read range {args.rev_range!r}: " f"{exc.stderr.strip()}",
                 file=sys.stderr,
             )
             return 1
@@ -171,10 +156,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
     else:
         out = subprocess.run(
-            ["git", "log", "-1", "--format=%s"],
-            capture_output=True,
-            text=True,
-            check=True,
+            ["git", "log", "-1", "--format=%s"], capture_output=True, text=True, check=True
         )
         subjects = [out.stdout.strip()]
 

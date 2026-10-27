@@ -16,10 +16,11 @@ from lucid.nn import Module
 from tools.convert_weights._base import Architecture, ConversionSpec, register_arch
 
 _CITATION = (
-    'Radford et al., "Improving Language Understanding by Generative '
-    'Pre-Training", 2018 (GPT).'
+    'Radford et al., "Improving Language Understanding by Generative ' 'Pre-Training", 2018 (GPT).'
 )
-_PAPER_URL = "https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf"
+_PAPER_URL = (
+    "https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf"
+)
 _HF_ID = "openai-community/openai-gpt"
 _TRANSPOSE_SUFFIXES = (".c_attn.weight", ".c_proj.weight", ".c_fc.weight")
 

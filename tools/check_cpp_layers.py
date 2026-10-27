@@ -81,188 +81,96 @@ LAPACK_IMPL = "backend/cpu/Lapack.cpp"
 # Note: backend/gpu/GpuBackend.h cpu::lapack_* calls were retired by AE-3 (#301).
 _ALLOWLIST: dict[tuple[str, str, str], tuple[str, str]] = {
     # Upward #includes (to be retired by AE-7 / #314):
-    (
-        "autograd/Engine.cpp",
-        "upward-include",
-        "../ops/gfunc/Gfunc.h",
-    ): (
+    ("autograd/Engine.cpp", "upward-include", "../ops/gfunc/Gfunc.h"): (
         "2026-10-14",
         "AE-7 (#314): Engine::grad includes Gfunc.h for zeros_like_op; move to autograd/GraphOps.h",
     ),
-    (
-        "compile/RngFeeds.cpp",
-        "upward-include",
-        "../random/Random.h",
-    ): (
+    ("compile/RngFeeds.cpp", "upward-include", "../random/Random.h"): (
         "2026-10-14",
         "AE-8 (#314): RngFeeds replays random factory ops; move hook/declaration to lower layer",
     ),
-    (
-        "core/Scope.h",
-        "upward-include",
-        "../compile/Tracer.h",
-    ): (
+    ("core/Scope.h", "upward-include", "../compile/Tracer.h"): (
         "2026-10-14",
         "AE-7 (#314): OpScope queries compile::current_tracer directly from core/Scope.h",
     ),
-    (
-        "core/TensorImpl.cpp",
-        "upward-include",
-        "../backend/gpu/MlxBridge.h",
-    ): (
+    ("core/TensorImpl.cpp", "upward-include", "../backend/gpu/MlxBridge.h"): (
         "2026-10-14",
         "AE-7 (#314): TensorImpl reaches into backend/gpu/MlxBridge.h for storage materialization",
     ),
-    (
-        "core/TensorImpl.cpp",
-        "upward-include",
-        "../backend/gpu/SharedBufferWrites.h",
-    ): (
+    ("core/TensorImpl.cpp", "upward-include", "../backend/gpu/SharedBufferWrites.h"): (
         "2026-10-14",
         "AE-7 (#314): TensorImpl reaches into backend/gpu/SharedBufferWrites.h for shared-buffer sync",
     ),
-    (
-        "core/TensorImpl.cpp",
-        "upward-include",
-        "../compile/Tracer.h",
-    ): (
+    ("core/TensorImpl.cpp", "upward-include", "../compile/Tracer.h"): (
         "2026-10-14",
         "AE-7 (#314): TensorImpl queries compile::current_tracer directly from core/",
     ),
     # Upward extern *_op( forward declarations (to be consolidated into autograd/GraphOps.h by AE-7 / #314):
-    (
-        "autograd/AccumulateGrad.cpp",
-        "extern-op",
-        "real_op",
-    ): (
+    ("autograd/AccumulateGrad.cpp", "extern-op", "real_op"): (
         "2026-10-14",
         "AE-7 (#314): complex-to-real gradient projection in AccumulateGrad; move to autograd/GraphOps.h",
     ),
-    (
-        "autograd/AccumulateGrad.cpp",
-        "extern-op",
-        "astype_op",
-    ): (
+    ("autograd/AccumulateGrad.cpp", "extern-op", "astype_op"): (
         "2026-10-14",
         "AE-7 (#314): dtype cast in AccumulateGrad; move to autograd/GraphOps.h",
     ),
-    (
-        "core/TensorImpl.cpp",
-        "extern-op",
-        "add_op",
-    ): (
+    ("core/TensorImpl.cpp", "extern-op", "add_op"): (
         "2026-10-14",
         "AE-7 (#314): leaf grad accumulation in TensorImpl::set_grad; move out of core/",
     ),
-    (
-        "kernel/BinaryKernel.h",
-        "extern-op",
-        "astype_op",
-    ): (
+    ("kernel/BinaryKernel.h", "extern-op", "astype_op"): (
         "2026-10-14",
         "AE-7 (#314): AMP cast forward declaration in BinaryKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/BinaryKernel.h",
-        "extern-op",
-        "to_device_op",
-    ): (
+    ("kernel/BinaryKernel.h", "extern-op", "to_device_op"): (
         "2026-10-14",
         "AE-7 (#314): 0-d CPU scalar promotion in BinaryKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/BinaryKernel.h",
-        "extern-op",
-        "sum_op",
-    ): (
+    ("kernel/BinaryKernel.h", "extern-op", "sum_op"): (
         "2026-10-14",
         "AE-7 (#314): broadcast reduction in BinaryKernel::reduce_impl_to_shape; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/BinaryKernel.h",
-        "extern-op",
-        "reshape_op",
-    ): (
+    ("kernel/BinaryKernel.h", "extern-op", "reshape_op"): (
         "2026-10-14",
         "AE-7 (#314): broadcast reshape in BinaryKernel::reduce_impl_to_shape; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/BinaryKernel.h",
-        "extern-op",
-        "broadcast_to_op",
-    ): (
+    ("kernel/BinaryKernel.h", "extern-op", "broadcast_to_op"): (
         "2026-10-14",
         "AE-7 (#314): input broadcast in BinaryKernel::apply_for_graph; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/Contig.h",
-        "extern-op",
-        "contiguous_op",
-    ): (
+    ("kernel/Contig.h", "extern-op", "contiguous_op"): (
         "2026-10-14",
         "AE-7 (#314): contiguous_op forward declaration in kernel/Contig.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/ReduceKernel.h",
-        "extern-op",
-        "broadcast_to_op",
-    ): (
+    ("kernel/ReduceKernel.h", "extern-op", "broadcast_to_op"): (
         "2026-10-14",
         "AE-7 (#314): broadcast_to_op in ReduceKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/ReduceKernel.h",
-        "extern-op",
-        "unsqueeze_op",
-    ): (
+    ("kernel/ReduceKernel.h", "extern-op", "unsqueeze_op"): (
         "2026-10-14",
         "AE-7 (#314): unsqueeze_op in ReduceKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/ReduceKernel.h",
-        "extern-op",
-        "reshape_op",
-    ): (
+    ("kernel/ReduceKernel.h", "extern-op", "reshape_op"): (
         "2026-10-14",
         "AE-7 (#314): reshape_op in ReduceKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/UnaryKernel.h",
-        "extern-op",
-        "sum_op",
-    ): (
+    ("kernel/UnaryKernel.h", "extern-op", "sum_op"): (
         "2026-10-14",
         "AE-7 (#314): sum_op in UnaryKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "kernel/UnaryKernel.h",
-        "extern-op",
-        "reshape_op",
-    ): (
+    ("kernel/UnaryKernel.h", "extern-op", "reshape_op"): (
         "2026-10-14",
         "AE-7 (#314): reshape_op in UnaryKernel.h; move to autograd/GraphOps.h",
     ),
-    (
-        "ops/bfunc/Matmul.cpp",
-        "extern-op",
-        "mT_op",
-    ): (
+    ("ops/bfunc/Matmul.cpp", "extern-op", "mT_op"): (
         "2026-10-14",
         "AE-7 (#314): local extern mT_op in Matmul.cpp; include header instead",
     ),
-    (
-        "ops/bfunc/Matmul.cpp",
-        "extern-op",
-        "sum_op",
-    ): (
+    ("ops/bfunc/Matmul.cpp", "extern-op", "sum_op"): (
         "2026-10-14",
         "AE-7 (#314): local extern sum_op in Matmul.cpp; include Reductions.h instead",
     ),
-    (
-        "ops/bfunc/Matmul.cpp",
-        "extern-op",
-        "reshape_op",
-    ): (
+    ("ops/bfunc/Matmul.cpp", "extern-op", "reshape_op"): (
         "2026-10-14",
         "AE-7 (#314): local extern reshape_op in Matmul.cpp; include View.h instead",
     ),
@@ -544,8 +452,7 @@ def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
 
 
 def scan_engine(
-    engine: Path = ENGINE,
-    allowlist: dict[tuple[str, str, str], tuple[str, str]] | None = None,
+    engine: Path = ENGINE, allowlist: dict[tuple[str, str, str], tuple[str, str]] | None = None
 ) -> tuple[list[Violation], list[tuple[str, str, str]], list[Violation]]:
     """Scan ``engine`` and partition findings into ``(new_violations, stale_allowlist, allowed_hits)``."""
     table = _ALLOWLIST if allowlist is None else allowlist
@@ -566,9 +473,7 @@ def scan_engine(
 
     checked_files = {f.resolve().relative_to(engine.resolve()).as_posix() for f in files}
     stale: list[tuple[str, str, str]] = [
-        key
-        for key in sorted(table)
-        if key[0] not in checked_files or key not in by_key
+        key for key in sorted(table) if key[0] not in checked_files or key not in by_key
     ]
     return new_violations, stale, allowed_hits
 
@@ -586,9 +491,7 @@ def check(
     if list_allowed:
         for v in allowed_hits:
             date_added, reason = table[(v.path, v.rule, v.target)]
-            print(
-                f"  allowed [{date_added}] {v.path}:{v.line} [{v.rule}] {v.target} — {reason}"
-            )
+            print(f"  allowed [{date_added}] {v.path}:{v.line} [{v.rule}] {v.target} — {reason}")
 
     if new_violations:
         print("[check_cpp_layers] C++ layer / boundary violations found:")
@@ -596,15 +499,15 @@ def check(
             print(f"  {v.path}:{v.line}: [{v.rule}] {v.detail}")
 
     if stale:
-        print(
-            "[check_cpp_layers] Stale _ALLOWLIST entries (resolved — remove from _ALLOWLIST):"
-        )
+        print("[check_cpp_layers] Stale _ALLOWLIST entries (resolved — remove from _ALLOWLIST):")
         for path, rule, target in stale:
             print(f"  {path} [{rule}] {target}")
 
     if new_violations or stale:
         total = len(new_violations) + len(stale)
-        print(f"\n[check_cpp_layers] {total} problem(s) ({len(new_violations)} new, {len(stale)} stale).")
+        print(
+            f"\n[check_cpp_layers] {total} problem(s) ({len(new_violations)} new, {len(stale)} stale)."
+        )
         return 1
 
     print(
@@ -624,11 +527,7 @@ def main(argv: list[str] | None = None) -> int:
         default=ENGINE,
         help="Path to lucid/_C directory (default: %(default)s)",
     )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        help="List existing allow-listed violations",
-    )
+    parser.add_argument("--list", action="store_true", help="List existing allow-listed violations")
     args = parser.parse_args(argv)
     return check(args.engine.resolve(), list_allowed=args.list)
 

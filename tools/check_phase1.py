@@ -12,10 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 CHECKS = [
     # (import_path, attr_list)
-    (
-        "lucid._C.engine",
-        ["TensorImpl", "Dtype", "Device", "ABI_VERSION", "engine_backward"],
-    ),
+    ("lucid._C.engine", ["TensorImpl", "Dtype", "Device", "ABI_VERSION", "engine_backward"]),
     ("lucid._dispatch", ["_unwrap", "_wrap", "_impl_with_grad"]),
     ("lucid._tensor.tensor", ["Tensor"]),
     ("lucid._ops._registry", ["_REGISTRY", "OpEntry"]),
@@ -48,9 +45,7 @@ def main() -> int:
             print(e)
         return 1
 
-    print(
-        f"[check_phase1] all {len(CHECKS)} modules importable with required attributes."
-    )
+    print(f"[check_phase1] all {len(CHECKS)} modules importable with required attributes.")
     return 0
 
 

@@ -148,9 +148,7 @@ class DIAMONDArch(Architecture):
             If ``tag`` names no released game.
         """
         if tag not in _GAMES and tag != _CSGO:
-            raise ValueError(
-                f"no released agent for {tag!r}; known: {[*_GAMES, _CSGO]}"
-            )
+            raise ValueError(f"no released agent for {tag!r}; known: {[*_GAMES, _CSGO]}")
         self.model_name = model_name
         self.tag = tag
         self._actions = 0
@@ -261,5 +259,3 @@ def _diamond_world_model(tag: str) -> DIAMONDArch:
 def games() -> tuple[str, ...]:
     """The 26 released games, for a caller converting all of them."""
     return _GAMES
-
-

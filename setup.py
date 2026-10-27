@@ -186,9 +186,7 @@ class CMakeBuildExt(build_ext):
         _maybe_enable_ccache(cmake_args)
 
         subprocess.check_call([cmake, *cmake_args])
-        subprocess.check_call(
-            [cmake, "--build", str(build_temp), "--parallel", _build_jobs()]
-        )
+        subprocess.check_call([cmake, "--build", str(build_temp), "--parallel", _build_jobs()])
         if not self._lucid_in_tree:
             for name in _MLX_RUNTIME_FILES:
                 shutil.copyfile(mlx_library_dir / name, ext_dir / name)
@@ -203,6 +201,5 @@ _enforce_apple_silicon_only()
 # (PEP 621); the legacy {{VERSION_PLACEHOLDER}} sed scheme was removed
 # alongside the publish.yml rewrite.
 setuptools.setup(
-    ext_modules=[CMakeExtension("lucid._C.engine")],
-    cmdclass={"build_ext": CMakeBuildExt},
+    ext_modules=[CMakeExtension("lucid._C.engine")], cmdclass={"build_ext": CMakeBuildExt}
 )

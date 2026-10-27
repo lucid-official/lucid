@@ -37,12 +37,10 @@ _ALEXNET_CITATION = (
 
 _ALEXNET_VARIANTS: dict[str, tuple[str, str, str]] = {
     # arch -> (lucid_cls_factory, repo_id, title)
-    "alexnet_cls": ("alexnet_cls", "lucid-dl/alexnet", "AlexNet"),
+    "alexnet_cls": ("alexnet_cls", "lucid-dl/alexnet", "AlexNet")
 }
 
-_TV_BUILDERS = {
-    "alexnet_cls": (tvm.alexnet, tvm.AlexNet_Weights),
-}
+_TV_BUILDERS = {"alexnet_cls": (tvm.alexnet, tvm.AlexNet_Weights)}
 
 
 class AlexNetArch(Architecture):

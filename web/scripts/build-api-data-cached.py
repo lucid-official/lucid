@@ -216,11 +216,7 @@ def _documented_slugs() -> list[str]:
     """
     emitted: set[str] = set()
     if OUT_DIR.is_dir():
-        emitted = {
-            jp.stem
-            for jp in OUT_DIR.glob("*.json")
-            if not jp.name.startswith(("_", "."))
-        }
+        emitted = {jp.stem for jp in OUT_DIR.glob("*.json") if not jp.name.startswith(("_", "."))}
 
     try:
         import importlib.util
@@ -359,11 +355,7 @@ def _check_drift() -> int:
         return 0
     print("[api-data] ✗ STALE — committed api-data is out of date with source:")
     for s in stale:
-        why = (
-            "source changed since last regen"
-            if s in cached
-            else "new slug, never built"
-        )
+        why = "source changed since last regen" if s in cached else "new slug, never built"
         print(f"    - {s}  ({why})")
     print("\n  Regenerate + commit:")
     print("    cd web && FORCE_API_BUILD=1 python3 scripts/build-api-data-cached.py")
@@ -394,10 +386,7 @@ def main() -> int:
         print("[api-data] SKIP_API_BUILD=1 — skipping build")
         return 0
 
-    force = (
-        os.environ.get("FORCE_API_BUILD") == "1"
-        or os.environ.get("FORCE_FULL_REBUILD") == "1"
-    )
+    force = os.environ.get("FORCE_API_BUILD") == "1" or os.environ.get("FORCE_FULL_REBUILD") == "1"
     current_key = _compute_key()
 
     if not force and _outputs_exist() and CACHE_FILE.is_file():
@@ -444,9 +433,7 @@ def main() -> int:
                 continue
             if not files:
                 continue
-            current_per_module[slug] = _hash_paths(
-                files, _model_summary_fingerprint(slug, d)
-            )
+            current_per_module[slug] = _hash_paths(files, _model_summary_fingerprint(slug, d))
 
     # ── Orphan cleanup — slugs that used to be in the cache but no
     # longer have a source directory.  Could happen on file deletes /
@@ -454,12 +441,7 @@ def main() -> int:
     # slug from the cache so subsequent builds don't try to rebuild
     # ghosts.  Synth-slug names are exempt because their source dirs
     # don't map 1:1 to file system locations.
-    SYNTH_NAMES = {
-        "lucid.ops",
-        "lucid.creation",
-        "lucid.ops.composite",
-        "lucid._C.engine",
-    }
+    SYNTH_NAMES = {"lucid.ops", "lucid.creation", "lucid.ops.composite", "lucid._C.engine"}
     orphans: list[str] = []
     for slug in list(prev_fingerprints.keys()):
         if slug in SYNTH_NAMES:
@@ -482,7 +464,7 @@ def main() -> int:
         print(
             f"[api-data] pruned {len(orphans)} orphan slug(s): "
             + ", ".join(orphans[:3])
-            + (f" + {len(orphans) - 3} more" if len(orphans) > 3 else ""),
+            + (f" + {len(orphans) - 3} more" if len(orphans) > 3 else "")
         )
 
     # Decide rebuild strategy.  If we have NO prior cache or the per-
@@ -518,14 +500,7 @@ def main() -> int:
             f"{', '.join(stale_slugs[:5])}"
             + (f" + {len(stale_slugs) - 5} more" if len(stale_slugs) > 5 else "")
         )
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(BUILD_SCRIPT),
-                "--slugs",
-                *stale_slugs,
-            ]
-        )
+        result = subprocess.run([sys.executable, str(BUILD_SCRIPT), "--slugs", *stale_slugs])
 
     if result.returncode == 0:
         OUT_DIR.mkdir(parents=True, exist_ok=True)

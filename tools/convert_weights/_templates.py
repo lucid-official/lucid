@@ -115,9 +115,7 @@ def _source_label(source: str) -> str:
     return source.split("/")[0]
 
 
-def _metrics_table(
-    spec: "ConversionSpec", tags: "list[str] | None" = None
-) -> str:
+def _metrics_table(spec: "ConversionSpec", tags: "list[str] | None" = None) -> str:
     """Build the full markdown tag-comparison table.
 
     The metric columns are taken from whatever keys the converter put in
@@ -242,8 +240,7 @@ def _usage_snippet(spec: "ConversionSpec", enum_name: str) -> str:
     # by family.  The one shape this generator can write down is the
     # action-conditioned video model's, which its preprocessing declares.
     is_action_video = (
-        spec.task == "world-modeling"
-        and spec.preprocessing.get("type") == "video-with-actions"
+        spec.task == "world-modeling" and spec.preprocessing.get("type") == "video-with-actions"
     )
     preamble = (
         ("import lucid\n" if is_video or is_action_video else "")
@@ -330,8 +327,7 @@ def _conversion_evidence(spec: "ConversionSpec") -> str:
     recorded one in ``meta['parity']``.
     """
     base = (
-        "Key set, tensor shapes and a strict load verified against a "
-        "freshly built Lucid model."
+        "Key set, tensor shapes and a strict load verified against a " "freshly built Lucid model."
     )
     parity = spec.meta.get("parity")
     if isinstance(parity, str) and parity:
@@ -347,9 +343,7 @@ def _model_index(spec: "ConversionSpec") -> str:
     dataset, vals = next(iter(metrics.items()))
     if not isinstance(vals, dict):
         return ""
-    metric_lines = "\n".join(
-        f"          - {{ type: {k}, value: {v} }}" for k, v in vals.items()
-    )
+    metric_lines = "\n".join(f"          - {{ type: {k}, value: {v} }}" for k, v in vals.items())
     ds_type = str(dataset).lower().replace(" ", "-")
     return (
         "model-index:\n"
@@ -362,9 +356,7 @@ def _model_index(spec: "ConversionSpec") -> str:
     )
 
 
-def render_model_card(
-    spec: "ConversionSpec", tags: "list[str] | None" = None
-) -> str:
+def render_model_card(spec: "ConversionSpec", tags: "list[str] | None" = None) -> str:
     """Render the repo-level ``README.md`` model card.
 
     YAML frontmatter (``library_name``, license, tags, datasets,

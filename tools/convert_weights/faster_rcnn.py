@@ -40,7 +40,7 @@ _FRCNN_VARIANTS: dict[str, tuple[str, str, str, float]] = {
         "lucid-dl/faster-rcnn-resnet-50-fpn",
         "Faster R-CNN (ResNet-50-FPN)",
         37.0,
-    ),
+    )
 }
 
 
@@ -87,11 +87,7 @@ class FasterRCNNArch(Architecture):
         # corner of a 1344 square (a multiple of 32, as the reference pads its
         # batches), ImageNet normalisation (boxes ride with the image).
         preset = Detection(
-            min_size=800,
-            max_size=1333,
-            size_divisible=32,
-            pad_position="top_left",
-            pad_value=0.0,
+            min_size=800, max_size=1333, size_divisible=32, pad_position="top_left", pad_value=0.0
         )
         preprocessing = preset.to_dict()
 

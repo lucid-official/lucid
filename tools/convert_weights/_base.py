@@ -21,11 +21,7 @@ import lucid
 import lucid.serialization as _serial
 from lucid.nn import Module
 
-from tools.convert_weights._templates import (
-    _SIBLING_LOOKUP,
-    render_config_json,
-    render_model_card,
-)
+from tools.convert_weights._templates import _SIBLING_LOOKUP, render_config_json, render_model_card
 
 
 @dataclass
@@ -173,9 +169,7 @@ def convert(arch: Architecture) -> tuple[dict[str, lucid.Tensor], ConversionSpec
         if lucid_key is None:
             continue
         if lucid_key in out:
-            raise RuntimeError(
-                f"convert: key collision — two source keys map to {lucid_key!r}"
-            )
+            raise RuntimeError(f"convert: key collision — two source keys map to {lucid_key!r}")
         out[lucid_key] = lucid.tensor(arch.transform_value(src_key, arr))
 
     if unknown:
@@ -199,9 +193,7 @@ def convert(arch: Architecture) -> tuple[dict[str, lucid.Tensor], ConversionSpec
         want = tuple(int(d) for d in target_sd[key].shape)
         have = tuple(int(d) for d in out[key].shape)
         if want != have:
-            raise RuntimeError(
-                f"convert: shape mismatch at {key!r}: target {want}, got {have}"
-            )
+            raise RuntimeError(f"convert: shape mismatch at {key!r}: target {want}, got {have}")
 
     # Real load — the ultimate correctness gate.
     model.load_state_dict(out, strict=True)
@@ -217,11 +209,7 @@ def _sha256_of(path: Path) -> str:
     return h.hexdigest()
 
 
-def write(
-    state_dict: Mapping[str, lucid.Tensor],
-    spec: ConversionSpec,
-    out_root: str,
-) -> Path:
+def write(state_dict: Mapping[str, lucid.Tensor], spec: ConversionSpec, out_root: str) -> Path:
     """Write ``model.safetensors`` + ``config.json`` + ``README.md``.
 
     Layout::
@@ -277,9 +265,7 @@ def write(
     # wrong default.  Sibling tag directories are what the repo actually
     # holds, so they are what the table lists.
     siblings = sorted(
-        d.name
-        for d in repo_dir.iterdir()
-        if d.is_dir() and (d / "config.json").is_file()
+        d.name for d in repo_dir.iterdir() if d.is_dir() and (d / "config.json").is_file()
     )
     lookup: dict[str, tuple[dict[str, object], str]] = {}
     for tag in siblings:
@@ -290,9 +276,7 @@ def write(
         lookup[tag] = (dict(weights), str(weights.get("source", "")))
     _SIBLING_LOOKUP.clear()
     _SIBLING_LOOKUP.update(lookup)
-    (repo_dir / "README.md").write_text(
-        render_model_card(spec, siblings), encoding="utf-8"
-    )
+    (repo_dir / "README.md").write_text(render_model_card(spec, siblings), encoding="utf-8")
     return tag_dir
 
 
@@ -347,9 +331,7 @@ def register_arch(
 ) -> Callable[[Callable[[str], Architecture]], Callable[[str], Architecture]]:
     """Register an ``Architecture`` builder under a model name for the CLI."""
 
-    def _decorator(
-        builder: Callable[[str], Architecture],
-    ) -> Callable[[str], Architecture]:
+    def _decorator(builder: Callable[[str], Architecture]) -> Callable[[str], Architecture]:
         _ARCH_BUILDERS[model_name] = builder
         return builder
 

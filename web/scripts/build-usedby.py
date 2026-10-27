@@ -32,9 +32,7 @@ list of emitted Lucid paths is already on disk; we union those with
 the imports map to suppress entries for non-public symbols.
 """
 
-from __future__ import (
-    annotations,
-)  # noqa: F401  — tooling script, runtime constraints don't apply
+from __future__ import annotations  # noqa: F401  — tooling script, runtime constraints don't apply
 
 import ast
 import json
@@ -54,9 +52,7 @@ SKIP_DIRS = {"test", "benchmarks"}
 
 
 # Split-file modules that belong to a single logical module group in docs.
-_MODULE_ALIASES: dict[str, str] = {
-    "lucid.nn.modules.conv_transpose": "lucid.nn.modules.conv",
-}
+_MODULE_ALIASES: dict[str, str] = {"lucid.nn.modules.conv_transpose": "lucid.nn.modules.conv"}
 
 
 def _module_path_of(p: Path) -> str:
@@ -69,11 +65,7 @@ def _module_path_of(p: Path) -> str:
     return _MODULE_ALIASES.get(raw, raw)
 
 
-def _resolve_relative(
-    importer_pkg: str,
-    level: int,
-    module: str | None,
-) -> str | None:
+def _resolve_relative(importer_pkg: str, level: int, module: str | None) -> str | None:
     """``from . import X`` / ``from ..foo import Y`` style.  Resolves the
     relative spec against the importing module's *package* path."""
     pkg_parts = importer_pkg.split(".")
@@ -106,9 +98,7 @@ def _collect_imports_per_file() -> dict[str, set[str]]:
         # Package the file belongs to — needed for relative-import
         # resolution (``__init__.py`` is its own package; everything
         # else takes the directory's path).
-        importer_pkg = (
-            importer if p.name == "__init__.py" else ".".join(importer.split(".")[:-1])
-        )
+        importer_pkg = importer if p.name == "__init__.py" else ".".join(importer.split(".")[:-1])
         imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -174,10 +164,7 @@ def _emitted_symbol_paths() -> set[str]:
     return paths
 
 
-def _invert(
-    imports: dict[str, set[str]],
-    emitted: set[str],
-) -> dict[str, list[dict[str, str]]]:
+def _invert(imports: dict[str, set[str]], emitted: set[str]) -> dict[str, list[dict[str, str]]]:
     """Flip ``importer → imported`` to ``target → [{module, kind}]``.
 
     Filters out targets that don't correspond to an emitted JSON path —
@@ -216,8 +203,7 @@ def _invert(
 def main() -> int:
     if not API_DATA.is_dir():
         print(
-            f"[build-usedby] api-data dir missing — "
-            f"run ``build-api-data.py`` first.",
+            f"[build-usedby] api-data dir missing — " f"run ``build-api-data.py`` first.",
             file=sys.stderr,
         )
         return 1

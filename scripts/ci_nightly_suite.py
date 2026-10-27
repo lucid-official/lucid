@@ -78,11 +78,7 @@ DESIGNED: dict[str, tuple[Designed, ...]] = {
         ),
     ),
     "lucid/test/parity/nn/test_interpolate_sample_positions_parity.py": (
-        Designed(
-            r"^Metal has no float64$",
-            None,
-            "every float64 case runs on the CPU only",
-        ),
+        Designed(r"^Metal has no float64$", None, "every float64 case runs on the CPU only"),
     ),
     "lucid/test/unit/models/test_models_inplace_independence.py": (
         # None, deliberately, and so held one way only: a family that loses
@@ -124,9 +120,7 @@ def skips_of(lines: list[str]) -> list[tuple[int, str]]:
 
 
 def judge_skips(
-    path: str,
-    skips: list[tuple[int, str]],
-    designed: dict[str, tuple[Designed, ...]] | None = None,
+    path: str, skips: list[tuple[int, str]], designed: dict[str, tuple[Designed, ...]] | None = None
 ) -> tuple[list[str], list[str]]:
     """``(problems, designed lines)`` for one file's skips.
 
@@ -138,9 +132,7 @@ def judge_skips(
     seen = [0] * len(entries)
     problems: list[str] = []
     for count, reason in skips:
-        hit = next(
-            (i for i, e in enumerate(entries) if re.search(e.reason, reason)), None
-        )
+        hit = next((i for i, e in enumerate(entries) if re.search(e.reason, reason)), None)
         if hit is None:
             problems.append(f"unexpected skip ({count}): {reason}")
         else:
@@ -148,9 +140,7 @@ def judge_skips(
     lines: list[str] = []
     for entry, got in zip(entries, seen, strict=True):
         if got == 0:
-            problems.append(
-                f"designed skip no longer happens — delete its entry: {entry.reason!r}"
-            )
+            problems.append(f"designed skip no longer happens — delete its entry: {entry.reason!r}")
         elif entry.count is not None and got != entry.count:
             problems.append(
                 f"{got} skips match {entry.reason!r}, {entry.count} designed — "
@@ -180,17 +170,13 @@ def _run(path: Path) -> tuple[str, list[str], float]:
     ]
     t0 = time.time()
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=_TIMEOUT, env=env
-        )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=_TIMEOUT, env=env)
     except subprocess.TimeoutExpired:
         return "timeout", [f"exceeded {_TIMEOUT}s"], time.time() - t0
     secs = time.time() - t0
     lines = proc.stdout.splitlines()
     fails = [ln for ln in lines if ln.startswith(("FAILED", "ERROR"))]
-    summary = next(
-        (m.group(1) for ln in reversed(lines) if (m := _SUMMARY.search(ln))), ""
-    )
+    summary = next((m.group(1) for ln in reversed(lines) if (m := _SUMMARY.search(ln))), "")
     if proc.returncode not in (0, 5) or fails:
         detail = fails or lines[-25:]
         return "fail", [summary, *detail], secs
@@ -230,17 +216,12 @@ def main() -> int:
                 verdict, detail, secs = "flaky", [detail2[0], *detail], secs + secs2
             else:
                 verdict, detail, secs = verdict2, detail2, secs + secs2
-        print(
-            f"{verdict:7s} {secs:7.1f}s {path} — {detail[0] if detail else ''}",
-            flush=True,
-        )
+        print(f"{verdict:7s} {secs:7.1f}s {path} — {detail[0] if detail else ''}", flush=True)
         if verdict not in ("ok", "flaky"):
             bad.append((path, verdict, detail))
         elif verdict == "ok" and len(detail) > 1:
             designed.append((path, detail[1:]))
-    print(
-        f"\n{len(files)} files in {(time.time() - started) / 60:.1f} min, {len(bad)} not clean"
-    )
+    print(f"\n{len(files)} files in {(time.time() - started) / 60:.1f} min, {len(bad)} not clean")
     for path, lines in designed:
         print(f"\nDESIGNED SKIPS: {path}")
         for line in lines:

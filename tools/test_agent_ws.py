@@ -40,21 +40,14 @@ class Scratch:
 
     def git(self, cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            env=self.env,
-            capture_output=True,
-            text=True,
-            check=False,
+            ["git", *args], cwd=cwd, env=self.env, capture_output=True, text=True, check=False
         )
 
     def edit(self, tree: Path, name: str) -> None:
         path = tree / name
         path.write_text(path.read_text() + f"{tree.name}\n")
 
-    def commit(
-        self, tree: Path, name: str, mode: str
-    ) -> subprocess.CompletedProcess[str]:
+    def commit(self, tree: Path, name: str, mode: str) -> subprocess.CompletedProcess[str]:
         """Change ``name`` in ``tree`` and commit just that file through the hook."""
         self.edit(tree, name)
         message = f"{tree.name}: {name}"
@@ -69,9 +62,7 @@ class Scratch:
 @pytest.fixture
 def scratch(tmp_path: Path) -> Scratch:
     env = {
-        k: v
-        for k, v in os.environ.items()
-        if not k.startswith("GIT_") and k != "LUCID_SKIP_CLAIMS"
+        k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "LUCID_SKIP_CLAIMS"
     }
     env.update(
         GIT_CONFIG_GLOBAL=os.devnull,
@@ -117,9 +108,7 @@ def scratch(tmp_path: Path) -> Scratch:
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_worktree_commits_a_file_nobody_else_changed(
-    scratch: Scratch, mode: str
-) -> None:
+def test_worktree_commits_a_file_nobody_else_changed(scratch: Scratch, mode: str) -> None:
     scratch.edit(scratch.b, "b.txt")  # B is busy elsewhere
     result = scratch.commit(scratch.a, "a.txt", mode)
     assert result.returncode == 0, result.stderr
@@ -245,9 +234,7 @@ def test_worktree_venv_resolves_lucid_and_tools_without_the_root_on_sys_path(
     ]
 
 
-def test_setup_sets_worktree_config_and_doctor_verifies_it(
-    scratch: Scratch,
-) -> None:
+def test_setup_sets_worktree_config_and_doctor_verifies_it(scratch: Scratch) -> None:
     """LCD-30: `setup` sets `extensions.worktreeConfig = true` and `doctor` checks it."""
     scratch.git(scratch.main, "config", "--unset", "extensions.worktreeConfig")
     setup_res = subprocess.run(
@@ -260,9 +247,7 @@ def test_setup_sets_worktree_config_and_doctor_verifies_it(
     )
     assert setup_res.returncode == 0, setup_res.stderr
     assert "git config extensions.worktreeConfig = true" in setup_res.stdout
-    val = scratch.git(
-        scratch.main, "config", "--bool", "extensions.worktreeConfig"
-    ).stdout.strip()
+    val = scratch.git(scratch.main, "config", "--bool", "extensions.worktreeConfig").stdout.strip()
     assert val == "true"
 
     # When worktreeConfig is unset/false, doctor reports the problem and exits 1.
@@ -279,9 +264,7 @@ def test_setup_sets_worktree_config_and_doctor_verifies_it(
     assert "extensions.worktreeConfig is not true" in doc_res.stdout
 
 
-def test_bootstrap_refreshes_stale_so_and_warns_when_cpp_is_newer(
-    tmp_path: Path,
-) -> None:
+def test_bootstrap_refreshes_stale_so_and_warns_when_cpp_is_newer(tmp_path: Path) -> None:
     """LCD-136: `bootstrap` re-clones a newer main `.so` and warns when C++ sources are newer."""
     spec = importlib.util.spec_from_file_location("agent_ws", AGENT_WS)
     assert spec is not None and spec.loader is not None
@@ -336,9 +319,7 @@ def test_bootstrap_links_semgrep_executables_from_the_main_venv(tmp_path: Path) 
         (root / ".venv" / "lib" / "python3.14" / "site-packages").mkdir(parents=True)
         (root / ".venv" / "bin" / "python3").write_text("#!/bin/sh\n")
     (main_root / ".venv" / "bin" / "semgrep").write_text("#!/bin/sh\necho semgrep\n")
-    (main_root / ".venv" / "bin" / "pysemgrep").write_text(
-        "#!/bin/sh\necho pysemgrep\n"
-    )
+    (main_root / ".venv" / "bin" / "pysemgrep").write_text("#!/bin/sh\necho pysemgrep\n")
 
     done = agent_ws.bootstrap(wt_root, main_root)
     assert "linked .venv/bin/semgrep" in done
@@ -353,9 +334,7 @@ def test_bootstrap_links_semgrep_executables_from_the_main_venv(tmp_path: Path) 
     assert "linked .venv/bin/jscpd" not in done2
 
 
-def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(
-    tmp_path: Path,
-) -> None:
+def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(tmp_path: Path) -> None:
     """LCD-536: a rebase or checkout that bumps C++ mtime without changing
     either the C++ source hash or ``ABI_VERSION`` does not false-positive in ``doctor``."""
     spec = importlib.util.spec_from_file_location("agent_ws", AGENT_WS)
@@ -459,9 +438,7 @@ def commit_a_measured_lucid_change(scratch: Scratch) -> Path:
     return cov_dir
 
 
-def test_land_check_reports_and_enforces_diff_cover_threshold(
-    scratch: Scratch,
-) -> None:
+def test_land_check_reports_and_enforces_diff_cover_threshold(scratch: Scratch) -> None:
     """LCD-269: ``land --check`` runs ``diff-cover`` on changed ``lucid/*.py`` files
     and requires >= 90% changed-line coverage."""
     # diff-cover is in the `quality` dependency group, not the `test` extra
@@ -504,7 +481,7 @@ def test_land_check_without_diff_cover_cannot_measure_rather_than_fail_coverage(
     venv_py.parent.mkdir(parents=True)
     venv_py.write_text(
         "#!/bin/sh\n"
-        f"PYTHONPATH={shlex.quote(str(hidden))} exec {shlex.quote(sys.executable)} \"$@\"\n"
+        f'PYTHONPATH={shlex.quote(str(hidden))} exec {shlex.quote(sys.executable)} "$@"\n'
     )
     venv_py.chmod(0o755)
 
@@ -531,9 +508,7 @@ def test_land_check_on_a_diff_cover_crash_cannot_measure_rather_than_fail_covera
     assert "below 90%" not in out
 
 
-def test_land_check_with_missing_coverage_xml_fails_closed(
-    scratch: Scratch,
-) -> None:
+def test_land_check_with_missing_coverage_xml_fails_closed(scratch: Scratch) -> None:
     """LCD-269: a branch that changes covered ``lucid/*.py`` with no coverage.xml,
     no .coverage data, and no touched tests fails closed with exit 9 rather than
     passing without measurement; a branch with no covered ``lucid/*.py`` changes
@@ -637,9 +612,7 @@ def test_land_check_rejects_stale_coverage_xml(scratch: Scratch) -> None:
     assert "stale build/coverage/coverage.xml (older than lucid/mod.py)" in stale_out
 
 
-def test_land_measures_lucid_models_and_enforces_diff_cover_at_land(
-    scratch: Scratch,
-) -> None:
+def test_land_measures_lucid_models_and_enforces_diff_cover_at_land(scratch: Scratch) -> None:
     """LCD-269: ``lucid/models/*.py`` is included in coverage and diff-cover, and
     non-``--check`` ``land`` also enforces diff-cover before fast-forwarding main."""
     pytest.importorskip("diff_cover")
@@ -651,9 +624,7 @@ def test_land_measures_lucid_models_and_enforces_diff_cover_at_land(
     assert scratch.git(scratch.main, "commit", "-q", "-m", "add model").returncode == 0
     assert scratch.git(scratch.a, "rebase", "main").returncode == 0
 
-    (scratch.a / model_rel).write_text(
-        "def forward(x: int) -> int:\n    y = x + 1\n    return y\n"
-    )
+    (scratch.a / model_rel).write_text("def forward(x: int) -> int:\n    y = x + 1\n    return y\n")
     assert scratch.git(scratch.a, "add", model_rel).returncode == 0
     assert scratch.git(scratch.a, "commit", "-q", "-m", "change model").returncode == 0
 
