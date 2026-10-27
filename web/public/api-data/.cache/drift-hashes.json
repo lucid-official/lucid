@@ -102,11 +102,11 @@
   "lucid.signal": "e3128760c6ac187881876f2c50957c65576b4bfb70033dd03e9547d8411dcec5",
   "lucid.special": "e22590e5ff9110582d35be8ee1d850229878b81910b3b629385af0536c162a0b",
   "lucid.tensor": "aea075bd25cd4dce9d192f27c6df4de5149b6deff7a777b911eacc53a08e1b01",
-  "lucid.utils": "53eacd6fc3f9e89cb295f421e1753fcaf8a782221cb1cfc2570f71b278ecdd7e",
+  "lucid.utils": "a54914a92a5780226214de7f748f13bb9e1b13b94cbfe4883ce53ada6fdd46f8",
   "lucid.utils.cache": "dc94011027b921b46b8406fb0eb9fd55de90f4ac851926ac144ab9034c650bb6",
   "lucid.utils.data": "d0fdc663d6983396f173c2a1c6d6d4287924abd20e5414e9d42ea89da3b90706",
   "lucid.utils.rollout": "1c54e90e8a060891683a6525c81094fe9c07679bd1e914d17c0aa55aef1191ec",
   "lucid.utils.tokenizer": "72b16276985c5c4b647268ef35ad42ef80729ebf089752815264e533c19b5541",
-  "lucid.utils.transforms": "7500b78a37a3fb85fc4e3630a382be5f33d0f7db9b9cdac815823a9ca23c9c5d",
+  "lucid.utils.transforms": "5e1d3c4cbe0886c40f6790d2b3072c86f930870c9ce70db03564957b3cb899bd",
   "lucid.weights": "31fbf497921ccdceb88dbf7a44adfcc1621ed212c3d8dd2ca9fa5f260ae24083"
 }

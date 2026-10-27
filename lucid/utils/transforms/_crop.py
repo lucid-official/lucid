@@ -9,9 +9,9 @@ from typing import override
 
 import lucid
 from lucid._tensor import Tensor
-from lucid.utils.transforms import _random
-from lucid.utils.transforms import functional as F
+from lucid.utils.transforms import _random, functional as F
 from lucid.utils.transforms._base import Empty, GeometricTransform, _NoParams
+from lucid.utils.transforms._interpolation import Interpolation, as_interpolation
 from lucid.utils.transforms._datatypes import (
     BoundingBoxes,
     Keypoints,
@@ -22,7 +22,6 @@ from lucid.utils.transforms._datatypes import (
     resize_boxes,
     resize_keypoints,
 )
-from lucid.utils.transforms._interpolation import Interpolation, as_interpolation
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,40 +309,38 @@ class RandomSizedCrop(GeometricTransform[CropBox]):
             width=cw,
         )
 
-    @override
-    def _apply_image(self, img: Tensor, params: CropBox) -> Tensor:
+    def _resized_crop(
+        self, x: Tensor, params: CropBox, interpolation: Interpolation, *, antialias: bool = False
+    ) -> Tensor:
         return F.resized_crop(
-            img,
+            x,
             params.top,
             params.left,
             params.height,
             params.width,
             (self.height, self.width),
-            interpolation=self.interpolation,
-            antialias=False,  # Albumentations (OpenCV) does not low-pass filter
+            interpolation=interpolation,
+            antialias=antialias,
         )
+
+    @override
+    def _apply_image(self, img: Tensor, params: CropBox) -> Tensor:
+        # Albumentations (OpenCV) does not low-pass filter on downscale.
+        return self._resized_crop(img, params, self.interpolation, antialias=False)
 
     @override
     def _apply_mask(self, mask: Tensor, params: CropBox) -> Tensor:
-        return F.resized_crop(
-            mask,
-            params.top,
-            params.left,
-            params.height,
-            params.width,
-            (self.height, self.width),
-            interpolation=Interpolation.NEAREST,
-        )
+        return self._resized_crop(mask, params, Interpolation.NEAREST)
 
     @override
     def _apply_boxes(self, boxes: BoundingBoxes, params: CropBox) -> BoundingBoxes:
-        cropped = crop_boxes(boxes, params.top, params.left, params.height, params.width)
-        return resize_boxes(cropped, self.height, self.width)
+        t, l, h, w = params.top, params.left, params.height, params.width
+        return resize_boxes(crop_boxes(boxes, t, l, h, w), self.height, self.width)
 
     @override
     def _apply_keypoints(self, kps: Keypoints, params: CropBox) -> Keypoints:
-        cropped = crop_keypoints(kps, params.top, params.left, params.height, params.width)
-        return resize_keypoints(cropped, self.height, self.width)
+        t, l, h, w = params.top, params.left, params.height, params.width
+        return resize_keypoints(crop_keypoints(kps, t, l, h, w), self.height, self.width)
 
     @override
     def __repr__(self) -> str:

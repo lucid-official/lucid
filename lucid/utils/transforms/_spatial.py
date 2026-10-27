@@ -9,10 +9,11 @@ affine-points path for boxes/keypoints, so all targets stay aligned.
 from dataclasses import dataclass
 from typing import override
 
+import lucid
 from lucid._tensor import Tensor
-from lucid.utils.transforms import _random
-from lucid.utils.transforms import functional as F
+from lucid.utils.transforms import _random, functional as F
 from lucid.utils.transforms._base import Empty, GeometricTransform, _NoParams
+from lucid.utils.transforms._interpolation import Interpolation, as_interpolation
 from lucid.utils.transforms._datatypes import (
     BoundingBoxes,
     Keypoints,
@@ -23,9 +24,6 @@ from lucid.utils.transforms._datatypes import (
     transpose_boxes,
     transpose_keypoints,
 )
-from lucid.utils.transforms._interpolation import Interpolation, as_interpolation
-
-import lucid
 
 
 def _to_range(value: float | tuple[float, float]) -> tuple[float, float]:
@@ -286,6 +284,15 @@ class _WarpTransform(GeometricTransform[WarpParams]):
 
     interpolation: Interpolation
     border_mode: int
+    value: float
+
+    def _init_warp(
+        self, interpolation: int | str | Interpolation, border_mode: int, value: float, p: float
+    ) -> None:
+        super().__init__(p=p)
+        self.interpolation = as_interpolation(interpolation)
+        self.border_mode = border_mode
+        self.value = value
 
     def _img_mode(self) -> str:
         return "nearest" if self.interpolation == Interpolation.NEAREST else "bilinear"
@@ -343,11 +350,8 @@ class Rotate(_WarpTransform):
         value: float = 0.0,
         p: float = 0.5,
     ) -> None:
-        super().__init__(p=p)
+        self._init_warp(interpolation, border_mode, value, p)
         self.limit = _to_range(limit)
-        self.interpolation = as_interpolation(interpolation)
-        self.border_mode = border_mode
-        self.value = value
 
     @override
     def make_params(self, img: Tensor) -> WarpParams:
@@ -832,7 +836,7 @@ class D4(GeometricTransform[D4Param]):
         return f"D4(p={self.p})"
 
 
-class SafeRotate(_WarpTransform):
+class SafeRotate(Rotate):
     r"""Rotate by a random angle, expanding the canvas to keep all content (Albumentations ``SafeRotate``).
 
     Like :class:`Rotate` but enlarges the output canvas so the full
@@ -875,20 +879,6 @@ class SafeRotate(_WarpTransform):
     >>> out.shape[-1] >= 32        # width expanded to fit rotated content
     True
     """
-
-    def __init__(
-        self,
-        limit: float | tuple[float, float] = 90,
-        interpolation: int | str | Interpolation = 1,
-        border_mode: int = 4,
-        value: float = 0.0,
-        p: float = 0.5,
-    ) -> None:
-        super().__init__(p=p)
-        self.limit = _to_range(limit)
-        self.interpolation = as_interpolation(interpolation)
-        self.border_mode = border_mode
-        self.value = value
 
     @override
     def make_params(self, img: Tensor) -> WarpParams:
