@@ -232,6 +232,13 @@ from lucid.models.text.gpt2 import (
     gpt2_small_lm, gpt2_medium_lm, gpt2_large_lm, gpt2_xlarge_lm,
     gpt2_small_cls,
 )
+# 2020 — T5 (Raffel et al.)
+from lucid.models.text.t5 import (
+    T5Config, T5Model, T5ForSeq2SeqLM,
+    t5_small, t5_base, t5_large, t5_3b, t5_11b,
+    t5_small_seq2seq, t5_base_seq2seq, t5_large_seq2seq,
+    t5_3b_seq2seq, t5_11b_seq2seq,
+)
 # 2021 — RoFormer (Su et al.)
 from lucid.models.text.roformer import (
     RoFormerConfig, RoFormerModel,
@@ -833,6 +840,11 @@ __all__ = [    # ── Infrastructure ─────────────�
     "gpt2_small", "gpt2_medium", "gpt2_large", "gpt2_xlarge",
     "gpt2_small_lm", "gpt2_medium_lm", "gpt2_large_lm", "gpt2_xlarge_lm",
     "gpt2_small_cls",
+    # ── Text (2020) T5 ────────────────────────────────────────────────────────
+    "T5Config", "T5Model", "T5ForSeq2SeqLM",
+    "t5_small", "t5_base", "t5_large", "t5_3b", "t5_11b",
+    "t5_small_seq2seq", "t5_base_seq2seq", "t5_large_seq2seq",
+    "t5_3b_seq2seq", "t5_11b_seq2seq",
     # ── Text (2021) RoFormer ──────────────────────────────────────────────────
     "RoFormerConfig", "RoFormerModel",
     "RoFormerForMaskedLM",

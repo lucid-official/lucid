@@ -254,6 +254,16 @@ CASES: list[Any] = [
         {**_TEXT, "num_decoder_layers": 1},
         _seq2seq(64),
     ),
+    # T5's attention width is heads x head_dim, not hidden_size; the
+    # relative-position tables of both stacks must reach the loss too.  The
+    # labels alone, as T5 trains: it shifts them right into its decoder
+    # inputs.  20 tokens reach both stacks' log-spaced distance buckets.
+    (
+        "t5",
+        "t5_small_seq2seq",
+        {**_TEXT, "num_decoder_layers": 1, "head_dim": 8},
+        _tokens(64, 20),
+    ),
     # -- generative: ``model(x)`` answers ``.loss`` --
     (
         "neural_ode",

@@ -3,16 +3,25 @@
 The core invariant: incremental decoding with a KV cache must produce
 **token-identical** output (and bit-close logits) to re-encoding the full
 prefix every step.  Verified for GPT-1, GPT-2 (decoder-only) and the
-encoder-decoder Transformer.
+encoder-decoder Transformer and T5.
 """
+
+from collections.abc import Callable
+
+import pytest
 
 import lucid
 from lucid.models.text.gpt._config import GPTConfig
 from lucid.models.text.gpt._model import GPTLMHeadModel
 from lucid.models.text.gpt2._config import GPT2Config
 from lucid.models.text.gpt2._model import GPT2LMHeadModel
+from lucid.models.text.t5._config import T5Config
+from lucid.models.text.t5._model import T5ForSeq2SeqLM, T5Model
 from lucid.models.text.transformer._config import TransformerConfig
-from lucid.models.text.transformer._model import TransformerForSeq2SeqLM
+from lucid.models.text.transformer._model import (
+    TransformerForSeq2SeqLM,
+    TransformerModel,
+)
 from lucid.test._helpers.compare import assert_close
 from lucid.utils.cache import DynamicCache
 
@@ -52,6 +61,33 @@ def _seq2seq() -> TransformerForSeq2SeqLM:
         max_position_embeddings=32,
     )
     return TransformerForSeq2SeqLM(cfg).eval()
+
+
+def _t5() -> T5ForSeq2SeqLM:
+    cfg = T5Config(
+        vocab_size=50,
+        hidden_size=32,
+        num_attention_heads=4,
+        head_dim=8,
+        num_hidden_layers=2,
+        num_decoder_layers=2,
+        intermediate_size=64,
+    )
+    return T5ForSeq2SeqLM(cfg).eval()
+
+
+type _Seq2Seq = TransformerForSeq2SeqLM | T5ForSeq2SeqLM
+
+#: The encoder-decoder families: each trunk exposes ``encode`` / ``decode``
+#: with the same signature, so one set of cache invariants covers them all.
+_SEQ2SEQ = [
+    pytest.param(_seq2seq, id="transformer"),
+    pytest.param(_t5, id="t5"),
+]
+
+
+def _trunk(model: _Seq2Seq) -> TransformerModel | T5Model:
+    return model.transformer if isinstance(model, TransformerForSeq2SeqLM) else model.t5
 
 
 def _decoder_only_incremental_equals_full(model: object) -> None:
@@ -217,23 +253,24 @@ class TestStaticCacheValidation:
             )
 
 
-class TestTransformerSeq2SeqCache:
-    def test_decode_incremental_equals_full(self) -> None:
+@pytest.mark.parametrize("build", _SEQ2SEQ)
+class TestSeq2SeqCache:
+    def test_decode_incremental_equals_full(self, build: Callable[[], _Seq2Seq]) -> None:
         lucid.manual_seed(0)
-        m = _seq2seq()
+        trunk = _trunk(build())
         src = lucid.tensor([[3, 7, 1, 9, 2]]).long()
         tgt = lucid.tensor([[1, 4, 2, 5, 6]]).long()
         T = int(tgt.shape[1])
 
-        memory = m.transformer.encode(src)
-        full = m.transformer.decode(tgt, memory)  # (B, T, d)
+        memory = trunk.encode(src)
+        full = trunk.decode(tgt, memory)  # (B, T, d)
 
         from lucid.utils.cache import EncoderDecoderCache
 
         cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
         steps = []
         for t in range(T):
-            dec = m.transformer.decode(
+            dec = trunk.decode(
                 tgt[:, t : t + 1],
                 memory,
                 past_key_value=cache,
@@ -248,33 +285,29 @@ class TestTransformerSeq2SeqCache:
         assert cache.cross_attention_cache.get_seq_length() == int(memory.shape[1])
         assert all(cache.is_updated.values())
 
-    def test_generate_cached_equals_uncached(self) -> None:
+    def test_generate_cached_equals_uncached(self, build: Callable[[], _Seq2Seq]) -> None:
         lucid.manual_seed(0)
-        m = _seq2seq()
+        m = build()
         src = lucid.tensor([[3, 7, 1, 9, 2]]).long()
         g_cache = m.generate(src, max_length=8, use_cache=True)
         g_nocache = m.generate(src, max_length=8, use_cache=False)
         assert_close(g_cache, g_nocache, atol=0.0)
 
-    def test_decoder_applies_padding_masks(self) -> None:
+    def test_decoder_applies_padding_masks(self, build: Callable[[], _Seq2Seq]) -> None:
         # Regression: TransformerDecoder.forward dropped tgt/memory key-padding
         # masks before the layers.  Correctness check: with the mask applied,
         # the decoder output must be INVARIANT to whatever tokens sit in the
         # padded source positions (encoder self-attn + cross-attn both mask).
         lucid.manual_seed(0)
-        m = _seq2seq()
+        trunk = _trunk(build())
         amask = lucid.tensor([[1.0, 1, 1, 1, 1, 0, 0]])
         dec_in = lucid.tensor([[1, 4, 2]]).long()
         src_a = lucid.tensor([[3, 7, 1, 9, 2, 0, 0]]).long()
         src_b = lucid.tensor([[3, 7, 1, 9, 2, 5, 8]]).long()  # differs only in pad cols
-        out_a = m.transformer.decode(
-            dec_in, m.transformer.encode(src_a, amask), memory_attention_mask=amask
-        )
-        out_b = m.transformer.decode(
-            dec_in, m.transformer.encode(src_b, amask), memory_attention_mask=amask
-        )
+        out_a = trunk.decode(dec_in, trunk.encode(src_a, amask), memory_attention_mask=amask)
+        out_b = trunk.decode(dec_in, trunk.encode(src_b, amask), memory_attention_mask=amask)
         assert_close(out_a, out_b, atol=1e-4)  # padded positions do not leak
         # and dropping the mask DOES let them leak (the bug's signature)
-        leak_a = m.transformer.decode(dec_in, m.transformer.encode(src_a, amask))
-        leak_b = m.transformer.decode(dec_in, m.transformer.encode(src_b, amask))
+        leak_a = trunk.decode(dec_in, trunk.encode(src_a, amask))
+        leak_b = trunk.decode(dec_in, trunk.encode(src_b, amask))
         assert float((leak_a - leak_b).abs().max().item()) > 1e-3

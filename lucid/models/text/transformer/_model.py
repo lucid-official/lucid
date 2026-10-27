@@ -42,9 +42,10 @@ from lucid.models._output import (
     SequenceClassificationOutput,
     Seq2SeqLMOutput,
 )
+from lucid.models.text._common._seq2seq import seq2seq_generate
 from lucid.models.text.transformer._config import TransformerConfig
-from lucid.models._sampling import _SamplingParams, _select_next_ondevice
-from lucid.utils.cache import DynamicCache, EncoderDecoderCache
+from lucid.models._sampling import _SamplingParams
+from lucid.utils.cache import EncoderDecoderCache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -604,58 +605,31 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         if pad is None:
             pad = 0
 
-        B = int(input_ids.shape[0])
         dev = input_ids.device.type
         memory = self.transformer.encode(input_ids, attention_mask)
 
-        finished: Tensor = lucid.zeros((B,), device=dev).bool()
-        out_tokens: list[Tensor] = [lucid.tensor([bos] * B, device=dev).long()]
-        sampling = _SamplingParams(
-            do_sample=do_sample,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            repetition_penalty=repetition_penalty,
-            eos_token_id=eos,
-            pad_token_id=pad,
-            dev=dev,
-        )
-
-        # ── eager path (DynamicCache) ───────────────────────────────────────
-        # Decoder self-attention grows each step; the cross-attention projection
-        # of ``memory`` is cached once.  Falls back to re-decoding the whole
-        # prefix when caching is disabled.
-        past: EncoderDecoderCache | None = (
-            EncoderDecoderCache(DynamicCache(), DynamicCache()) if use_cache else None
-        )
-        model_input = lucid.stack(out_tokens, dim=1)  # (B, 1) — just BOS
-
-        for _ in range(max_length - 1):
-            if past is not None:
-                decoded = self.transformer.decode(
-                    model_input,
-                    memory,
-                    memory_attention_mask=attention_mask,
-                    past_key_value=past,
-                    use_cache=True,
-                )
-            else:
-                decoded = self.transformer.decode(
-                    lucid.stack(out_tokens, dim=1),
-                    memory,
-                    memory_attention_mask=attention_mask,
-                )
-            next_logits = self.lm_head(decoded[:, -1, :])  # (B, V)
-            finished = _select_next_ondevice(
-                next_logits, out_tokens, finished, sampling
+        # Decoder self-attention grows each step; the cross-attention
+        # projection of ``memory`` is cached once.  Without a cache the
+        # whole prefix is re-decoded every step.
+        def next_logits(tokens: Tensor, cache: EncoderDecoderCache | None) -> Tensor:
+            decoded = self.transformer.decode(
+                tokens,
+                memory,
+                memory_attention_mask=attention_mask,
+                past_key_value=cache,
+                use_cache=cache is not None,
             )
-            if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
-                break
+            return self.lm_head(decoded[:, -1, :])  # (B, V)
 
-            # With a cache the next step only needs the freshly produced token.
-            model_input = out_tokens[-1].reshape(B, 1)
-
-        return lucid.stack(out_tokens, dim=1).long()
+        sampling = _SamplingParams(
+            do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p,
+            repetition_penalty=repetition_penalty, eos_token_id=eos, pad_token_id=pad,
+            dev=dev,
+        )  # fmt: skip
+        return seq2seq_generate(
+            next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=bos,
+            max_length=max_length, use_cache=use_cache, sampling=sampling,
+        )  # fmt: skip
 
 
 # ─────────────────────────────────────────────────────────────────────────────

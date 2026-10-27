@@ -167,6 +167,13 @@ def _clip(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     return (x.to(DEV), prompts.to(DEV)), {}
 
 
+def _source_target(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    lucid.manual_seed(seed)
+    source = lucid.randint(0, cfg.vocab_size, (BATCH, SEQ))
+    target = lucid.randint(0, cfg.vocab_size, (BATCH, SEQ))
+    return (source.to(DEV), target.to(DEV)), {}
+
+
 def _flat(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     lucid.manual_seed(seed)
     return (lucid.randn(BATCH, int(cfg.input_dim)).to(DEV),), {}
@@ -239,6 +246,10 @@ SPECS: dict[str, Spec] = {
     "clip": Spec(
         {"image_size": 32, "patch_size": 16, "context_length": 8}, inputs=_clip
     ),
+    # The decoder ids are optional — shifted from the labels when omitted —
+    # so the rules, which fill required parameters only, would pass the
+    # source alone.  Hand the decoder its own ids, as Transformer's get.
+    "t5": Spec(inputs=_source_target),
     # The attention stage is sized for 7×7 tokens: a 224 input.
     "efficientformer": Spec(size=224),
     # The native 299: at 96 the last stages are 1×1, and a train-mode batch

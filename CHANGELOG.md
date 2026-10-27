@@ -119,6 +119,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - gate f64 vForce trig via NEON min_magnitude (LCD-596)
 - unify half reduction subnormals and f32 var_op (LCD-121)
 
+### Added
+
+- add T5 (Raffel et al., 2020)
+
 ---
 
 ## [3.16.0] — 2026-10-25
