@@ -706,6 +706,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.autograd._grad_inplace"
+    },
+    {
+      "kind": "module",
       "module": "lucid.autograd.checkpoint"
     },
     {
@@ -14539,6 +14543,10 @@
     {
       "kind": "module",
       "module": "lucid.nn._state_dict"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.functional._loss_checks"
     },
     {
       "kind": "module",
