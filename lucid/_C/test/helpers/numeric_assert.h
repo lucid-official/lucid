@@ -46,12 +46,13 @@
 
 #include <gtest/gtest.h>
 
-#include "../../core/fwd.h"
-#include "../../core/TensorImpl.h"
+#include "../../backend/Dispatcher.h"
 #include "../../core/Dtype.h"
+#include "../../core/Half.h"
 #include "../../core/Shape.h"
 #include "../../core/Storage.h"
-#include "../../backend/Dispatcher.h"
+#include "../../core/TensorImpl.h"
+#include "../../core/fwd.h"
 
 namespace lucid::test {
 
@@ -111,7 +112,15 @@ inline std::vector<float> to_float_vec(const TensorImplPtr& t) {
     if (t->dtype() == Dtype::F64) {
         const auto* raw = reinterpret_cast<const double*>(cpu_st.ptr.get());
         std::vector<float> result(n);
-        for (std::size_t i = 0; i < n; ++i) result[i] = static_cast<float>(raw[i]);
+        for (std::size_t i = 0; i < n; ++i)
+            result[i] = static_cast<float>(raw[i]);
+        return result;
+    }
+    if (is_half_float(t->dtype())) {
+        const auto* raw = reinterpret_cast<const std::uint16_t*>(cpu_st.ptr.get());
+        std::vector<float> result(n);
+        backend::detail::half_or_bfloat16_to_float_bulk(raw, result.data(), n,
+                                                        t->dtype() == Dtype::BF16);
         return result;
     }
     const auto* raw = reinterpret_cast<const float*>(cpu_st.ptr.get());
@@ -185,13 +194,22 @@ inline bool has_grad(const TensorImplPtr& t) {
 // :func:`has_grad`, :func:`grad_numel`, :func:`to_float_vec`.
 inline std::vector<float> grad_to_float_vec(const TensorImplPtr& t) {
     const auto& g = t->grad_storage();
-    if (!g.has_value()) return {};
+    if (!g.has_value())
+        return {};
     const auto& cpu_st = std::get<CpuStorage>(*g);
     std::size_t n = cpu_st.nbytes / dtype_size(t->dtype());
     if (t->dtype() == Dtype::F64) {
         const auto* raw = reinterpret_cast<const double*>(cpu_st.ptr.get());
         std::vector<float> result(n);
-        for (std::size_t i = 0; i < n; ++i) result[i] = static_cast<float>(raw[i]);
+        for (std::size_t i = 0; i < n; ++i)
+            result[i] = static_cast<float>(raw[i]);
+        return result;
+    }
+    if (is_half_float(t->dtype())) {
+        const auto* raw = reinterpret_cast<const std::uint16_t*>(cpu_st.ptr.get());
+        std::vector<float> result(n);
+        backend::detail::half_or_bfloat16_to_float_bulk(raw, result.data(), n,
+                                                        t->dtype() == Dtype::BF16);
         return result;
     }
     const auto* raw = reinterpret_cast<const float*>(cpu_st.ptr.get());
@@ -221,7 +239,8 @@ inline std::vector<float> grad_to_float_vec(const TensorImplPtr& t) {
 // :func:`has_grad`, :func:`grad_to_float_vec`.
 inline std::size_t grad_numel(const TensorImplPtr& t) {
     const auto& g = t->grad_storage();
-    if (!g.has_value()) return 0;
+    if (!g.has_value())
+        return 0;
     const auto& cpu_st = std::get<CpuStorage>(*g);
     return cpu_st.nbytes / dtype_size(t->dtype());
 }
@@ -256,12 +275,12 @@ inline std::size_t grad_numel(const TensorImplPtr& t) {
 // EXPECT_TENSOR_SHAPE(out, (Shape{2, 3, 4}));
 // EXPECT_TENSOR_SHAPE(reduce_sum(x, 0), (Shape{3, 4}));
 // ```
-#define EXPECT_TENSOR_SHAPE(tensor_impl_ptr, expected_shape)                   \
-    do {                                                                        \
-        const auto& _t = (tensor_impl_ptr);                                    \
-        const auto& _s = _t->shape();                                          \
-        const Shape _e = (expected_shape);                                     \
-        EXPECT_EQ(_s, _e) << "Tensor shape mismatch.";                         \
+#define EXPECT_TENSOR_SHAPE(tensor_impl_ptr, expected_shape)                                       \
+    do {                                                                                           \
+        const auto& _t = (tensor_impl_ptr);                                                        \
+        const auto& _s = _t->shape();                                                              \
+        const Shape _e = (expected_shape);                                                         \
+        EXPECT_EQ(_s, _e) << "Tensor shape mismatch.";                                             \
     } while (0)
 
 // Assert that a tensor's dtype matches the expected :enum:`Dtype`.
@@ -284,9 +303,8 @@ inline std::size_t grad_numel(const TensorImplPtr& t) {
 // EXPECT_TENSOR_DTYPE(y, Dtype::F64);
 // EXPECT_TENSOR_DTYPE(astype_op(x, Dtype::F32), Dtype::F32);
 // ```
-#define EXPECT_TENSOR_DTYPE(tensor_impl_ptr, expected_dtype)                   \
-    EXPECT_EQ((tensor_impl_ptr)->dtype(), (expected_dtype))                    \
-        << "Tensor dtype mismatch."
+#define EXPECT_TENSOR_DTYPE(tensor_impl_ptr, expected_dtype)                                       \
+    EXPECT_EQ((tensor_impl_ptr)->dtype(), (expected_dtype)) << "Tensor dtype mismatch."
 
 // Assert that every element of a tensor is within ``tol`` of a scalar.
 //
@@ -319,15 +337,14 @@ inline std::size_t grad_numel(const TensorImplPtr& t) {
 // See Also
 // --------
 // :func:`EXPECT_TENSORS_NEAR` for element-wise comparison of two tensors.
-#define EXPECT_TENSOR_NEAR(tensor_impl_ptr, scalar_val, tol)                   \
-    do {                                                                        \
-        auto _vals = lucid::test::to_float_vec(tensor_impl_ptr);               \
-        float _expected = static_cast<float>(scalar_val);                      \
-        float _tol = static_cast<float>(tol);                                  \
-        for (std::size_t _i = 0; _i < _vals.size(); ++_i) {                   \
-            EXPECT_NEAR(_vals[_i], _expected, _tol)                            \
-                << "Element [" << _i << "] out of tolerance.";                 \
-        }                                                                       \
+#define EXPECT_TENSOR_NEAR(tensor_impl_ptr, scalar_val, tol)                                       \
+    do {                                                                                           \
+        auto _vals = lucid::test::to_float_vec(tensor_impl_ptr);                                   \
+        float _expected = static_cast<float>(scalar_val);                                          \
+        float _tol = static_cast<float>(tol);                                                      \
+        for (std::size_t _i = 0; _i < _vals.size(); ++_i) {                                        \
+            EXPECT_NEAR(_vals[_i], _expected, _tol) << "Element [" << _i << "] out of tolerance."; \
+        }                                                                                          \
     } while (0)
 
 // Assert that every element of a tensor is finite (no NaN, no Inf).
@@ -355,13 +372,12 @@ inline std::size_t grad_numel(const TensorImplPtr& t) {
 // ASSERT_TENSOR_FINITE(y);           // gate before further checks
 // EXPECT_TENSOR_NEAR(y, expected, 1e-5f);
 // ```
-#define ASSERT_TENSOR_FINITE(tensor_impl_ptr)                                  \
-    do {                                                                        \
-        auto _vals = lucid::test::to_float_vec(tensor_impl_ptr);               \
-        for (std::size_t _i = 0; _i < _vals.size(); ++_i) {                   \
-            ASSERT_TRUE(std::isfinite(_vals[_i]))                              \
-                << "Element [" << _i << "] is NaN or Inf.";                   \
-        }                                                                       \
+#define ASSERT_TENSOR_FINITE(tensor_impl_ptr)                                                      \
+    do {                                                                                           \
+        auto _vals = lucid::test::to_float_vec(tensor_impl_ptr);                                   \
+        for (std::size_t _i = 0; _i < _vals.size(); ++_i) {                                        \
+            ASSERT_TRUE(std::isfinite(_vals[_i])) << "Element [" << _i << "] is NaN or Inf.";      \
+        }                                                                                          \
     } while (0)
 
 // Assert that two tensors are element-wise close within ``tol``.
@@ -405,16 +421,15 @@ inline std::size_t grad_numel(const TensorImplPtr& t) {
 // See Also
 // --------
 // :func:`EXPECT_TENSOR_NEAR` for comparing a tensor against a scalar.
-#define EXPECT_TENSORS_NEAR(lhs, rhs, tol)                                     \
-    do {                                                                        \
-        auto _a = lucid::test::to_float_vec(lhs);                              \
-        auto _b = lucid::test::to_float_vec(rhs);                              \
-        ASSERT_EQ(_a.size(), _b.size()) << "Tensor size mismatch.";            \
-        float _tol = static_cast<float>(tol);                                  \
-        for (std::size_t _i = 0; _i < _a.size(); ++_i) {                      \
-            EXPECT_NEAR(_a[_i], _b[_i], _tol)                                 \
-                << "Element [" << _i << "] mismatch.";                         \
-        }                                                                       \
+#define EXPECT_TENSORS_NEAR(lhs, rhs, tol)                                                         \
+    do {                                                                                           \
+        auto _a = lucid::test::to_float_vec(lhs);                                                  \
+        auto _b = lucid::test::to_float_vec(rhs);                                                  \
+        ASSERT_EQ(_a.size(), _b.size()) << "Tensor size mismatch.";                                \
+        float _tol = static_cast<float>(tol);                                                      \
+        for (std::size_t _i = 0; _i < _a.size(); ++_i) {                                           \
+            EXPECT_NEAR(_a[_i], _b[_i], _tol) << "Element [" << _i << "] mismatch.";               \
+        }                                                                                          \
     } while (0)
 
 }  // namespace lucid::test

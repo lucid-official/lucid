@@ -278,8 +278,9 @@ SPECS: dict[str, Spec] = {
     # A density on [0, 1]: the flow opens with logit(alpha + (1 - 2 alpha) x),
     # NaN wherever that leaves (0, 1) — for 62% of a standard-normal draw.
     "realnvp": Spec(domain=(0.0, 1.0)),
-    # Proposals and their targets: the CNN sees nothing else.
+    # Proposals and their targets: the CNN/RoI head sees nothing else.
     "rcnn": Spec(inputs=_regions),
+    "fast_rcnn": Spec(inputs=_regions),
     "dreamer": Spec(inputs=_episodes),
     "dreamer_v2": Spec(inputs=_episodes),
     "dreamer_v3": Spec(inputs=_episodes),
@@ -836,10 +837,9 @@ EXPECTED: dict[tuple[str, str], tuple[str, str, str]] = {
     # Proposal sampling and NMS read scores back to the host.
     ("faster_rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
     ("mask_rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
-    # Stage 3 picks the proposals it regresses by their overlap, on the host.
+    # Stage 3 / RoI loss picks the proposals it regresses by their overlap, on the host.
     ("rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
-    # An image without proposals leaves a zero-length box tensor.
-    ("fast_rcnn", "object-detection"): ("fallback", "fallback", "zero-size tensor"),
+    ("fast_rcnn", "object-detection"): ("fallback", "fallback", "read on the host"),
     # The loss is built from a JVP, which is a backward pass.
     ("mean_flow", "image-generation"): (
         "fallback",
@@ -852,11 +852,11 @@ EXPECTED: dict[tuple[str, str], tuple[str, str, str]] = {
         "fallback",
         "backward pass ran inside",
     ),
-    # The adaptive solver differentiates the dynamics inside the forward.
+    # The adjoint solver is a custom autograd.Function (_AdjointSolve).
     ("neural_ode", "image-generation"): (
         "fallback",
         "fallback",
-        "backward pass ran inside",
+        "_AdjointSolve defines its own backward",
     ),
 }
 

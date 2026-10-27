@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Wrap `_state_tensor` and `_unpack_state` in `untraced()` so `get_rng_state` / `set_rng_state` do not record CPU ops into an active compile trace or trigger host-read fallback, widen half/bfloat16 buffers in `numeric_assert.h`, guard out-of-range sublayer indices in `tools/convert_weights/t5.py`, and update `_zoo_matrix.py` inputs/expectations for `fast_rcnn` and `neural_ode`
 - repeat the stochastic probe; classify the release's new names
 - make the backward-linearity timing guard robust to CI jitter
 - register a parametrization's originals in the module tree

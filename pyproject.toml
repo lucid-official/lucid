@@ -255,6 +255,10 @@ ignore = [
 "**/__init__.py"  = ["F401", "E402"]
 "**/__init__.pyi" = ["F401", "E402"]
 
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
 # ── coverage ───────────────────────────────────────────────────────────────
 # Kept here rather than passed on the command line so every run — local,
 # CI, and the audit gate — measures the same denominator and the numbers

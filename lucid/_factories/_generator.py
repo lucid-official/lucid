@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Self, SupportsIndex, override
 from lucid._C import engine as _C_engine
 from lucid._device import device as _device_cls
 from lucid._dtype import int64
+from lucid._engine_scope import untraced
 from lucid._factories.converters import tensor
 from lucid._types import DeviceLike
 
@@ -65,9 +66,10 @@ def _set_counter(g: _C_engine.Generator, counter: int) -> None:
 def _state_tensor(g: _C_engine.Generator) -> Tensor:
     """``[key, counter]`` as an ``int64`` tensor, each in two's complement."""
     words = [_key(g), int(g.counter)]
-    return tensor(
-        [w - _UNSIGNED_64 if w >= _SIGNED_64 else w for w in words], dtype=int64
-    )
+    with untraced():
+        return tensor(
+            [w - _UNSIGNED_64 if w >= _SIGNED_64 else w for w in words], dtype=int64
+        )
 
 
 def _unpack_state(state: Tensor, op: str) -> tuple[int, int]:
@@ -76,8 +78,9 @@ def _unpack_state(state: Tensor, op: str) -> tuple[int, int]:
         raise ValueError(
             f"{op}: expected a length-2 state tensor, got shape={tuple(state.shape)}"
         )
-    flat = state.reshape(-1)
-    return int(flat[0].item()) % _UNSIGNED_64, int(flat[1].item()) % _UNSIGNED_64
+    with untraced():
+        flat = state.reshape(-1)
+        return int(flat[0].item()) % _UNSIGNED_64, int(flat[1].item()) % _UNSIGNED_64
 
 
 class Generator(_C_engine.Generator):

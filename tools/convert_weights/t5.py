@@ -121,7 +121,10 @@ def t5_key(src_key: str) -> str | None:
     if match is None:
         raise UnknownSourceKey(src_key)
     stack, block, sublayer, module, tail = match.groups()
-    role = _SUBLAYERS[stack][int(sublayer)]
+    sublayers = _SUBLAYERS[stack]
+    if int(sublayer) >= len(sublayers):
+        raise UnknownSourceKey(src_key)
+    role = sublayers[int(sublayer)]
     if module == "layer_norm":
         return f"{stack}.blocks.{block}.{role}_norm.{tail}"
     if tail.startswith("relative_attention_bias."):
