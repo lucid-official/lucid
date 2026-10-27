@@ -918,7 +918,7 @@ def _outcome(fn: Callable[[], Any]) -> str:
     """The output dtype, or ``"raises"`` — what a mixed pair comes to."""
     try:
         return _name(fn().dtype)
-    except RuntimeError, TypeError, ValueError:
+    except (RuntimeError, TypeError, ValueError):
         return "raises"
 
 

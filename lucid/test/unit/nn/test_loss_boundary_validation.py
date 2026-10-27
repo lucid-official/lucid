@@ -52,7 +52,7 @@ def losses_with(param: str) -> list[str]:
             continue
         try:
             params = inspect.signature(fn).parameters
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         if param not in params:
             continue

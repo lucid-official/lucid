@@ -419,7 +419,7 @@ class _WorkerError:
         if self.type_bytes is not None:
             try:
                 exc_type = pickle.loads(self.type_bytes)
-            except ImportError, AttributeError, pickle.UnpicklingError:
+            except (ImportError, AttributeError, pickle.UnpicklingError):
                 exc_type = None  # its module or class is not importable here
         message: str = self.message
         if exc_type is KeyError:
@@ -807,7 +807,7 @@ class _MultiProcessDataLoaderIter:
             for index_queue in self._index_queues:
                 try:
                     index_queue.put(_SHUTDOWN)
-                except ValueError, RuntimeError:
+                except (ValueError, RuntimeError):
                     # Already closed, or at interpreter exit where its feeder
                     # thread cannot start; the stop event reaches the worker.
                     continue
@@ -860,7 +860,7 @@ class _MultiProcessDataLoaderIter:
     def __del__(self) -> None:
         try:
             self._shutdown_workers()
-        except OSError, ValueError, RuntimeError:
+        except (OSError, ValueError, RuntimeError):
             # Pipes or process handles already released, or interpreter
             # exit; anything else reaches ``sys.unraisablehook``.
             return

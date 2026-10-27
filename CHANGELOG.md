@@ -105,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add <=1-ulp float32 pow and exact f16 specials (LCD-557)
 
+- parenthesize except tuples and update lstsq docstring (LCD-648, LCD-649)
+
 ### Performance
 
 - spent-part range pruning and GELU vtanh (LCD-568, LCD-595)

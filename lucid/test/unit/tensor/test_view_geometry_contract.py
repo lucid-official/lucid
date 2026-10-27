@@ -322,7 +322,7 @@ def _chain_ops(rng: random.Random, shape: tuple[int, ...]) -> list[_View]:
 def _try_op(op: _View, t: lucid.Tensor) -> lucid.Tensor | None:
     try:
         return op(t)
-    except RuntimeError, ValueError, IndexError:
+    except (RuntimeError, ValueError, IndexError):
         return None
 
 

@@ -74,6 +74,11 @@ def test_h7_no_annotation_is_a_string() -> None:
     assert not hits, "H7 — drop the quotes (PEP 649):\n" + "\n".join(hits)
 
 
+def test_except_tuples_are_parenthesized() -> None:
+    hits = _hits("except-parens")
+    assert not hits, "Parenthesize multi-exception clauses:\n" + "\n".join(hits)
+
+
 def test_no_prose_names_a_dead_lucid_path() -> None:
     hits = [
         str(v)
@@ -112,6 +117,7 @@ _BROKEN = [
     (f"# matches {_NAME.capitalize()}'s rounding\n", "ref-name"),
     (f"x = 1  # the {_GPU.upper()} path\n", "gpu-name"),
     ("def f(x: 'Tensor') -> None: ...\n", "string-annotation"),
+    ("try:\n    pass\nexcept ValueError, TypeError:\n    pass\n", "except-parens"),
 ]
 _CLEAN = [
     "from __future__ import division\n",
@@ -119,6 +125,7 @@ _CLEAN = [
     "def f(mode: Literal['a', 'b']) -> None: ...\n",
     "x: Annotated[int, 'metadata'] = 1\n",
     "# the reference framework rounds to even\n",
+    "try:\n    pass\nexcept (ValueError, TypeError):\n    pass\n",
 ]
 
 

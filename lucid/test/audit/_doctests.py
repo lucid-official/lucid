@@ -161,7 +161,7 @@ def load_floor(path: Path) -> dict[str, int] | None:
         return None
     try:
         data = json.loads(path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return None
     floor = data.get("failing")
     return floor if isinstance(floor, dict) else None

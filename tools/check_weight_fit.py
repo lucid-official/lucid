@@ -137,7 +137,7 @@ def _header_retried(url: str) -> dict[str, object]:
             return _header(url)
         except urllib.error.HTTPError:
             raise
-        except urllib.error.URLError, OSError:
+        except (urllib.error.URLError, OSError):
             if attempt == _ATTEMPTS:
                 raise
             time.sleep(2**attempt)

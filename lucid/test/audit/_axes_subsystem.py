@@ -1593,7 +1593,7 @@ class CompiledAxis(Axis):
                 )
             try:
                 restored = lucid.compile.load_compiled(path)
-            except RuntimeError, ValueError:
+            except (RuntimeError, ValueError):
                 # Refused rather than mis-bound — the honest outcome while
                 # the feed order of a reloaded package is unrecoverable.
                 return self._finding(
@@ -1607,7 +1607,7 @@ class CompiledAxis(Axis):
                 )
             try:
                 got = _probe.to_numpy(restored(x, *model.parameters()))
-            except RuntimeError, ValueError:
+            except (RuntimeError, ValueError):
                 return self._finding(
                     symbol,
                     Status.PASS,

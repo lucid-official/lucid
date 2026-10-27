@@ -208,7 +208,7 @@ def test_a_mixed_operand_is_refused_or_read_right(
     want = _run(name, ["f64"] * len(dtypes), "cpu")
     try:
         got = _run(name, dtypes, device)
-    except TypeError, NotImplementedError:
+    except (TypeError, NotImplementedError):
         # Refused: a dtype mismatch, or a half kernel the CPU lacks.
         return
     err = (got.cpu().double() - want).abs().max().item()

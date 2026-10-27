@@ -62,7 +62,7 @@ def _params(obj: object) -> list[str] | None:
         signature = inspect.signature(
             obj, annotation_format=annotationlib.Format.FORWARDREF
         )
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         return None  # a builtin: its existence is still held
     return [
         f"{_KIND[p.kind]}:{p.name}{'' if p.default is p.empty else '='}"

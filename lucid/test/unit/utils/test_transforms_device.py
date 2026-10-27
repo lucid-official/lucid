@@ -63,7 +63,7 @@ def _all_transforms():
             params = inspect.signature(cls).parameters
             kwargs = {"p": 1.0} if "p" in params else {}
             cls(**kwargs)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         out.append(name)
     return out

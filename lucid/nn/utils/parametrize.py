@@ -230,7 +230,7 @@ class ParametrizationList(ModuleList):
         what = "Registering a parametrization"
         try:
             _check_same_shape(_check_like(self(), before, what), before, what)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             with lucid.no_grad():
                 _set_storage(original, before)
             raise

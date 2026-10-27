@@ -158,7 +158,7 @@ def test_every_public_callable_in_every_subpackage_has_a_readable_signature() ->
             inspect.signature(value)
         except NameError as exc:
             unreadable.append(f"{symbol.qualname}: {exc}")
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             pass  # a builtin or C type: not something an annotation fixes
     assert not unreadable, "\n".join(unreadable)
 

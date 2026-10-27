@@ -261,7 +261,7 @@ def _fingerprint() -> str:
         try:
             with open(path, "rb") as handle:
                 return str(plistlib.load(handle).get(key, "unknown"))
-        except OSError, ValueError:
+        except (OSError, ValueError):
             return "unknown"
 
     coreml = read(
@@ -545,7 +545,7 @@ def _entries(store: str) -> list[tuple[float, int, str]]:
             used = os.stat(note).st_mtime
             with open(note) as handle:
                 size = int(json.load(handle)["bytes"])
-        except OSError, ValueError, KeyError, TypeError:
+        except (OSError, ValueError, KeyError, TypeError):
             try:
                 used = os.stat(full).st_mtime
             except OSError:

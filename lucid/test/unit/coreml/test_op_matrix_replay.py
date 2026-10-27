@@ -98,7 +98,7 @@ def test_a_package_answers_a_new_input_as_eager_does(
         if name in EXPECTED_REFUSAL:
             try:
                 cml.export(model, traced_on, path).close()
-            except UnsupportedOp, ValueError:
+            except (UnsupportedOp, ValueError):
                 return
             pytest.fail("exports now — delete its EXPECTED_REFUSAL entry")
         package = cml.export(model, traced_on, path)

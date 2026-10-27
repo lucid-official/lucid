@@ -27,7 +27,7 @@ def under_hypervisor() -> bool:
             text=True,
             check=True,
         )
-    except OSError, subprocess.CalledProcessError:
+    except (OSError, subprocess.CalledProcessError):
         return False
     return done.stdout.strip() == "1"
 

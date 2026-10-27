@@ -52,7 +52,7 @@ def count_python(text: str) -> dict[str, int]:
                 counts["cast"] += 1
             if tok.type not in (tokenize.NL, tokenize.NEWLINE, tokenize.COMMENT):
                 prev = tok
-    except tokenize.TokenError, SyntaxError:
+    except (tokenize.TokenError, SyntaxError):
         counts["untokenizable"] += 1
     return dict(counts)
 

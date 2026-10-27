@@ -6,7 +6,11 @@ Each rule is a property of one source file, so each is checked per file:
 * **H1** (``future-annotations``) — no ``from __future__ import
   annotations``, in ``lucid/`` and ``tools/``.  Python 3.14 evaluates
   annotations lazily (PEP 649); the import turns every annotation back
-  into a string.  The rules below hold in ``lucid/`` only: ``tools/``
+  into a string.
+* ``except-parens`` — multiple exception types in an ``except`` clause are
+  parenthesized (``except (A, B):``), in ``lucid/`` and ``tools/``, so tools
+  and environments whose Python parser predates PEP 758 can still parse the
+  source (LCD-648).  The rules below hold in ``lucid/`` only: ``tools/``
   converts the reference framework's checkpoints and names it.
 * **H5** (``ref-import``, ``ref-name``) — the reference framework is
   imported, and named, only in ``lucid/test/_fixtures/ref_framework.py``.
@@ -139,6 +143,12 @@ class _Rules:
                 if any(alias.name == "annotations" for alias in node.names):
                     yield Violation(
                         path, node.lineno, "future-annotations", ast.unparse(node)
+                    )
+            if isinstance(node, ast.ExceptHandler) and isinstance(node.type, ast.Tuple):
+                segment = ast.get_source_segment(source, node.type) or ""
+                if not (segment.startswith("(") and segment.endswith(")")):
+                    yield Violation(
+                        path, node.lineno, "except-parens", f"except ({segment}):"
                     )
             if (
                 full
@@ -464,7 +474,7 @@ def _python_prose(source: str) -> list[_Prose]:
             if token.type == tokenize.COMMENT:
                 comments.append((token.start[0], token.string.lstrip("#")))
         tree = ast.parse(source)
-    except tokenize.TokenError, SyntaxError:
+    except (tokenize.TokenError, SyntaxError):
         return []  # ``syntax`` reports it
     strings = [
         _Prose(node.value.lineno, node.value.value)

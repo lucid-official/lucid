@@ -130,7 +130,7 @@ def resident_mb() -> float:
             timeout=5,
         )
         return int(out.stdout.strip() or 0) / 1024
-    except OSError, ValueError, subprocess.SubprocessError:
+    except (OSError, ValueError, subprocess.SubprocessError):
         return 0.0
 
 
@@ -197,7 +197,7 @@ def available_mb(force: bool = False) -> float:
             if tok == "free" and i + 1 < len(parts):
                 total += float(parts[i + 1].rstrip("M"))
                 break
-    except OSError, ValueError, IndexError, subprocess.SubprocessError:
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
         total = -1.0
 
     _last_sample = (now, total)

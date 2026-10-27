@@ -85,7 +85,7 @@ def _takes_no_tensor(fn: Any) -> bool:
         return False
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except TypeError, ValueError, NameError:
+    except (TypeError, ValueError, NameError):
         return False
     first = next(
         (
@@ -343,7 +343,7 @@ class Axis:
         """
         try:
             primary = call.args[call.primary]
-        except IndexError, TypeError:
+        except (IndexError, TypeError):
             return False
         return str(getattr(primary, "dtype", "")).endswith(("float32", "float16"))
 
@@ -360,7 +360,7 @@ class Axis:
         """
         try:
             primary = call.args[call.primary]
-        except IndexError, TypeError:
+        except (IndexError, TypeError):
             return False
         return hasattr(primary, "dtype") and hasattr(primary, "shape")
 
@@ -460,7 +460,7 @@ class _DifferenceAxis(Axis):
             signature = inspect.signature(
                 fn, annotation_format=annotationlib.Format.STRING
             )
-        except TypeError, ValueError, NameError:
+        except (TypeError, ValueError, NameError):
             return False
         first = next(iter(signature.parameters), "")
         return first in self._FACTORED_ARGUMENTS
@@ -1246,7 +1246,7 @@ class CreateGraphAxis(Axis):
             if values is None:
                 raise TypeError("no array-valued primary operand")
             base = np.asarray(values)
-        except TypeError, IndexError, AttributeError:
+        except (TypeError, IndexError, AttributeError):
             return self._finding(
                 symbol,
                 Status.NOT_APPLICABLE,
@@ -1392,7 +1392,7 @@ def _receiver_position(free_fn: Any, method_fn: Any) -> int:
         ]
         method_params = inspect.signature(method_fn).parameters
         method_names = set(method_params)
-    except TypeError, ValueError, NameError:
+    except (TypeError, ValueError, NameError):
         return 0
     method_names.discard("self")
 
@@ -2194,7 +2194,7 @@ class DtypeAxis(Axis):
             signature = inspect.signature(
                 fn, annotation_format=annotationlib.Format.STRING
             )
-        except TypeError, ValueError, NameError:
+        except (TypeError, ValueError, NameError):
             return None
         if "dtype" not in signature.parameters:
             return None
@@ -2669,7 +2669,7 @@ def _contract() -> dict[str, list[str]]:
     path = pathlib.Path(__file__).with_name("dtype_contract.json")
     try:
         data = json.loads(path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return {}
     symbols = data.get("symbols")
     return symbols if isinstance(symbols, dict) else {}

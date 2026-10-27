@@ -86,7 +86,7 @@ def _runtime_params(fn: object, method: bool) -> list[_Param] | None:
         signature = inspect.signature(  # type: ignore[arg-type]
             fn, annotation_format=annotationlib.Format.FORWARDREF
         )
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     return _signature_params(signature, method)
 

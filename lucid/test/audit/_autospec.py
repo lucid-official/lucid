@@ -627,7 +627,7 @@ _SHAPE_BY_FIRST_PARAM: dict[str, tuple[tuple[int, ...], ...]] = {
 def _first_parameter(fn: Any) -> str:
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except TypeError, ValueError, NameError:
+    except (TypeError, ValueError, NameError):
         return ""
     return next(iter(signature.parameters), "")
 
@@ -913,7 +913,7 @@ def _value_for(
 def _build(fn: Any, op_name: str, domain: str, shape: tuple[int, ...]) -> _Plan | None:
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except TypeError, ValueError, NameError:
+    except (TypeError, ValueError, NameError):
         return None
 
     plan = _Plan()

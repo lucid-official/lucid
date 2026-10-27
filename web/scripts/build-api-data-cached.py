@@ -125,7 +125,7 @@ def _model_factory_names_in_dir(d: Path) -> set[str]:
     for p in files:
         try:
             tree = ast.parse(p.read_text())
-        except OSError, SyntaxError, UnicodeDecodeError:
+        except (OSError, SyntaxError, UnicodeDecodeError):
             continue
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -153,7 +153,7 @@ def _load_summaries_json() -> dict[str, Any]:
         return {}
     try:
         return json.loads(cache.read_text())
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 
@@ -263,7 +263,7 @@ def _load_module_cache() -> dict[str, str]:
         return {}
     try:
         return json.loads(MODULE_CACHE.read_text())
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 
@@ -337,7 +337,7 @@ def _check_drift() -> int:
     if DRIFT_CACHE.is_file():
         try:
             cached = json.loads(DRIFT_CACHE.read_text())
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             cached = {}
     current = _content_fingerprints()
     if not current:

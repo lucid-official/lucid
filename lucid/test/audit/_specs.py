@@ -1737,7 +1737,7 @@ def _draws_only_when_training(name: str, fn: Any) -> bool:
         signature = inspect.signature(
             fn, annotation_format=annotationlib.Format.FORWARDREF
         )
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return False
     training = signature.parameters.get("training")
     return training is not None and training.default is False

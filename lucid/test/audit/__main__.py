@@ -743,7 +743,7 @@ def load_coverage(path: Path) -> dict[str, str] | None:
         return None
     try:
         data = json.loads(path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return None
     answered = data.get("answered")
     return answered if isinstance(answered, dict) else None

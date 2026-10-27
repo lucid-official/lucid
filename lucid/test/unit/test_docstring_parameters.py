@@ -111,7 +111,7 @@ def _runtime_cases() -> list[object]:
                 signature = inspect.signature(
                     target, annotation_format=annotationlib.Format.FORWARDREF
                 )
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 continue
             kinds = {p.kind for p in signature.parameters.values()}
             if inspect.Parameter.VAR_KEYWORD in kinds or not obj.__doc__:

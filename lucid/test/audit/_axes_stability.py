@@ -42,7 +42,7 @@ def _stability_contract() -> dict[str, list[str]]:
     path = pathlib.Path(__file__).with_name("stability_contract.json")
     try:
         data = json.loads(path.read_text())
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return {}
     table = data.get("finite_at")
     return table if isinstance(table, dict) else {}

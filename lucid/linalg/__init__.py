@@ -2597,28 +2597,27 @@ def lstsq(
         Cutoff for small singular values (passed to the underlying
         driver).  ``None`` selects the default driver heuristic.
     driver : str or None, keyword-only, optional
-        Solver choice (``"gels"``, ``"gelsy"``, ``"gelsd"``, ...).
-        ``None`` lets the engine pick (currently ``gels``).
+        Solver choice (``"gels"``, ``"gelsy"``, ``"gelsd"``, ``"gelss"``).
+        ``None`` selects ``"gelsy"`` on CPU and ``"gels"`` on Metal.
 
     Returns
     -------
     solution : Tensor
-        Least-squares solution of shape ``(*, n, k)``.
+        Least-squares solution of shape ``(*, n, k)`` (or ``(*, n)``).
     residuals : Tensor
-        Sum-of-squared residuals.  Currently an empty placeholder for
-        API compatibility.
+        Sum of squared residuals of shape ``(*, k)`` when :math:`m > n` and full
+        rank (or ``driver == "gels"``); empty ``(0,)`` otherwise or for ``"gelsy"``.
     rank : Tensor
-        Effective rank of :math:`A`.  Currently empty placeholder.
+        Effective rank of :math:`A` (``int64``, shape ``(*)``), or empty ``(0,)``
+        when ``driver == "gels"``.
     singular_values : Tensor
-        Singular values of :math:`A`.  Currently empty placeholder.
+        Singular values of :math:`A` of shape ``(*, min(m, n))`` for ``"gelsd"``
+        and ``"gelss"``; empty ``(0,)`` for ``"gels"`` and ``"gelsy"``.
 
     Notes
     -----
-    The solution is :math:`A^+ B`, the minimum-norm least-squares
-    solution, for every shape and rank — tall, wide or rank-deficient —
-    and it differentiates in ``input`` and ``b`` (twice).  Only ``solution``
-    is populated; the remaining outputs exist for shape compatibility
-    with the reference API.
+    The solution is :math:`A^+ B`, the minimum-norm least-squares solution for
+    every shape and rank, and differentiates in ``input`` and ``b`` (twice).
 
     Examples
     --------

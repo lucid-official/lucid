@@ -293,7 +293,7 @@ def _bare_newline(text: str) -> bool:
                 depth -= 1
             elif tok.type in (tokenize.NL, tokenize.NEWLINE) and tok.string and depth == 0:
                 return True
-    except tokenize.TokenError, SyntaxError:
+    except (tokenize.TokenError, SyntaxError):
         return True
     return False
 

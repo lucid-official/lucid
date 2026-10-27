@@ -120,7 +120,7 @@ def _parse_pybind_signature(fn: object) -> inspect.Signature | None:
                 # Try to evaluate simple defaults (numbers, [], (), etc.).
                 try:
                     default = eval(default_str, {"__builtins__": {}}, {})
-                except SyntaxError, NameError:
+                except (SyntaxError, NameError):
                     # An enum repr (``<Dtype.F32: 6>``) or a qualified name
                     # has no literal form; the wrapper forwards it anyway.
                     default = inspect.Parameter.empty

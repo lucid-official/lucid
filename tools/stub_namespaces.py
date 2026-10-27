@@ -130,7 +130,7 @@ def _signature_params(fn: object) -> list[str] | None:
         return None
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
     names = []
     for p in signature.parameters.values():

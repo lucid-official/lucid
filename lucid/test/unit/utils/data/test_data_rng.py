@@ -118,7 +118,7 @@ def test_every_generator_taking_callable_is_held_to_the_contract():
         obj = getattr(data, name)
         try:
             params = inspect.signature(obj).parameters
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             continue
         if "generator" in params:
             takers.add(name)

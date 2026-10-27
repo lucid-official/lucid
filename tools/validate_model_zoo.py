@@ -101,7 +101,7 @@ class Issue:
 def _parse(path: Path) -> ast.Module | None:
     try:
         return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except OSError, SyntaxError:
+    except (OSError, SyntaxError):
         return None
 
 
@@ -165,7 +165,7 @@ def _class_var(cls: ast.ClassDef, name: str) -> ast.expr | None:
 def _literal_str(node: ast.expr) -> str | None:
     try:
         v = ast.literal_eval(node)
-    except ValueError, SyntaxError:
+    except (ValueError, SyntaxError):
         return None
     return v if isinstance(v, str) else None
 

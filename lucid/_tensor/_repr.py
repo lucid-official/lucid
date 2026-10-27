@@ -24,7 +24,7 @@ def tensor_repr(t: Tensor) -> str:
     """
     try:
         arr_str = t._impl.to_string(_REPR_PRECISION, _REPR_THRESHOLD, _REPR_EDGEITEMS)
-    except RuntimeError, MemoryError:
+    except (RuntimeError, MemoryError):
         # The engine could not read the data back (a failed Metal download,
         # an allocation) — still show the metadata.
         arr_str = "<data unavailable>"

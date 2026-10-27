@@ -314,11 +314,11 @@ def test_the_rule_is_the_references(
     args, options = _call(name, make_ref, *dtypes)
     try:
         want = getattr(ref.nn.functional, name)(*args, **options)
-    except RuntimeError, TypeError, NotImplementedError:
+    except (RuntimeError, TypeError, NotImplementedError):
         want = None
     try:
         got = _run(name, _lucid_make("cpu"), dtypes)
-    except TypeError, NotImplementedError:
+    except (TypeError, NotImplementedError):
         got = None
 
     cell = (name, sweep, dtype)

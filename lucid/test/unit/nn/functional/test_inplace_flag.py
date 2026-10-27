@@ -141,7 +141,7 @@ def test_every_module_with_inplace_is_covered() -> None:
 def _parameters(fn: Callable[..., object]) -> set[str]:
     try:
         return set(inspect.signature(fn).parameters)
-    except TypeError, ValueError:  # a builtin without a signature takes no flag
+    except (TypeError, ValueError):  # a builtin without a signature takes no flag
         return set()
 
 

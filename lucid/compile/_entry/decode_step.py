@@ -368,7 +368,7 @@ def compiled_decode_step(
                 fingerprint.key_of((input_ids, cache_position), {}, dynamic=False),
                 grad_mode=False,
             )
-        except TypeError, AttributeError:
+        except (TypeError, AttributeError):
             key = None
 
         if key is not None and key in eager_sigs:

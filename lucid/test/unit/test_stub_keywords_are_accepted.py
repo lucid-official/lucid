@@ -42,7 +42,7 @@ def _parameters(fn: Callable[..., object]) -> list[str] | None:
     """The callee's parameter names, or None when it takes ``**kwargs``."""
     try:
         params = list(inspect.signature(fn, follow_wrapped=False).parameters.values())
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         # A pybind11 function: the first docstring line is its signature.
         first = (fn.__doc__ or "").split("\n")[0]
         m = re.match(r"\w+\((.*)\)\s*->", first)
@@ -286,7 +286,7 @@ def _reference_overloads(
         params = _params(inspect.signature(obj), drop_self=method)  # type: ignore[arg-type]
         if not _catch_all(params):
             return [params]
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         pass
     if aten is None:
         return []

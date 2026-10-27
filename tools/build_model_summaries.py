@@ -150,11 +150,11 @@ def main() -> int:
     if not args.force:
         try:
             prev_tree = json.loads(out_path.read_text())
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             pass
         try:
             prev_meta = json.loads(meta_path.read_text())
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):
             pass
 
     # When filtering to a subset (--family / --factory), SEED from the existing

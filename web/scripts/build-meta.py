@@ -36,7 +36,7 @@ def _git(*args: str) -> str | None:
         out = subprocess.check_output(
             ["git", *args], cwd=REPO_ROOT, text=True, stderr=subprocess.DEVNULL
         )
-    except subprocess.CalledProcessError, FileNotFoundError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         return None
     return out.strip() or None
 
