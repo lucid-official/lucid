@@ -146,6 +146,15 @@ MULTI_INPUT = [
             lucid.zeros(1, 16).to(lucid.int64),
         ),
     ),
+    # The same two streams; T5's position bias depends on their lengths
+    # only, so the trace fixes it along with the shapes.
+    (
+        "t5_small",
+        lambda: (
+            lucid.zeros(1, 16).to(lucid.int64),
+            lucid.zeros(1, 16).to(lucid.int64),
+        ),
+    ),
     # Pixels beside token ids, and a mixed-dtype multiply Core ML will
     # not promote — the export inserts the cast now.
     (
