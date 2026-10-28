@@ -253,7 +253,7 @@ def update_causal_kv_and_bias(
     attention_mask: Tensor | None,
     cache_ctx: tuple[Cache | None, int, Tensor | None, int],
 ) -> tuple[Tensor, Tensor, Tensor]:
-    """Update ``past_key_value`` (if any) and build the causal + padding bias."""
+    """Update ``past_key_value`` (if any) and build the combined causal and padding attention bias."""
     past_key_value, layer_idx, cache_position, T = cache_ctx
     past_len = 0
     if past_key_value is not None:
@@ -287,7 +287,7 @@ def resolve_causal_positions(
     past_key_values: Cache | None,
     cache_position: Tensor | None,
 ) -> tuple[int, Tensor, Tensor]:
-    """Validate sequence length and return ``(past_len, cache_position, pos_ids)``."""
+    """Validate total sequence length and return ``(past_len, cache_position, pos_ids)`` for decoding."""
     T = int(input_ids.shape[1])
     past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
     if past_len + T > max_pos:

@@ -437,7 +437,7 @@ def note_applied(
 
 
 def vjp_region_index(graph: TraceGraph) -> tuple[set[int], dict[int, VjpRegion]]:
-    """Return ``(in_region_op_indices, region_by_last_op_index)`` for ``graph``."""
+    """Return ``(in_region_op_indices, region_by_last_op_index)`` for traced VJP regions in ``graph``."""
     in_region: set[int] = set()
     region_at_end: dict[int, VjpRegion] = {}
     for r in graph.vjp_regions:
