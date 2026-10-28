@@ -151,8 +151,7 @@ class _DarkBlock(nn.Module):
         x = self.conv1(x)
         x = self.attn(x)
         x = self.conv2(x)
-        x = self.drop_path(x) + shortcut
-        return x
+        return self.drop_path(x) + shortcut
 
 
 # ---------------------------------------------------------------------------
@@ -413,11 +412,6 @@ class CSPNet(PretrainedModel, BackboneMixin):
         if config.zero_init_last:
             _zero_init_last(self)
 
-    @property
-    @override
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
     @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
@@ -503,9 +497,4 @@ class CSPNetForImageClassification(ImageClassificationModel, ClassificationHeadM
         for stage in self.stages:
             x = stage(x)
         x = self.avgpool(x).flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

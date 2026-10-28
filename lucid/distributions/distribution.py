@@ -411,14 +411,24 @@ class Distribution:
         return self._finish_expand(new, batch_shape_t, event_shape)
 
     def _expand_probs_or_logits(
-        self, cls: type[Distribution], batch_shape: Sequence[int], _instance: Self | None
+        self,
+        cls: type[Distribution],
+        batch_shape: Sequence[int],
+        _instance: Self | None,
+        *extra_names: str,
     ) -> Self:
         """Allocate ``new`` and expand its active ``probs`` or ``logits`` parameter."""
         new = self._get_checked_instance(cls, _instance)
         batch_shape_t = tuple(batch_shape)
-        is_logits = bool(self.__dict__.get("_is_logits", False))
-        key = "logits" if is_logits else "probs"
-        new.__dict__[key] = getattr(self, key).expand(batch_shape_t)
+        for name in extra_names:
+            setattr(new, name, getattr(self, name).expand(batch_shape_t))
+        is_logits = bool(
+            self.__dict__.get("_is_logits", False)
+            or ("logits" in self.__dict__ and "probs" not in self.__dict__)
+        )
+        for key in ("probs", "logits"):
+            if key in self.__dict__:
+                new.__dict__[key] = getattr(self, key).expand(batch_shape_t)
         new.__dict__["_is_logits"] = is_logits
         return self._finish_expand(new, batch_shape_t)
 

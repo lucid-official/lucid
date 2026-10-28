@@ -318,14 +318,13 @@ class StudentT(Distribution):
         tensor(-1.145)
         """
         z = (value - self.loc) / self.scale
-        log_density = (
+        return (
             lucid.lgamma((self.df + 1.0) * 0.5)
             - lucid.lgamma(self.df * 0.5)
             - 0.5 * (math.pi * self.df).log()
             - self.scale.log()
             - 0.5 * (self.df + 1.0) * (1.0 + z * z / self.df).log()
         )
-        return log_density
 
     @override
     def entropy(self) -> Tensor:

@@ -30,6 +30,9 @@ __all__ = [
     "init_text_weights",
     "update_causal_kv_and_bias",
     "resolve_causal_positions",
+    "flatten_multiple_choice_inputs",
+    "score_double_heads",
+    "compute_qa_loss",
 ]
 
 
@@ -302,3 +305,90 @@ def resolve_causal_positions(
         else position_ids[:, past_len : past_len + T]
     )
     return past_len, cache_position, pos_ids
+
+
+def flatten_multiple_choice_inputs(
+    model_name: str,
+    input_ids: Tensor,
+    attention_mask: Tensor | None = None,
+    token_type_ids: Tensor | None = None,
+) -> tuple[int, int, int, Tensor, Tensor | None, Tensor | None]:
+    """Validate 3-D ``(N, C, L)`` multiple-choice inputs and flatten to ``(N * C, L)``."""
+    if input_ids.ndim != 3:
+        raise ValueError(
+            f"{model_name} expects input_ids of shape (N, C, L), " f"got {tuple(input_ids.shape)}"
+        )
+    N = int(input_ids.shape[0])
+    C = int(input_ids.shape[1])
+    L = int(input_ids.shape[2])
+    flat_ids = input_ids.reshape(N * C, L)
+    flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
+    flat_tt = token_type_ids.reshape(N * C, L) if token_type_ids is not None else None
+    return N, C, L, flat_ids, flat_mask, flat_tt
+
+
+def score_double_heads(
+    transformer: nn.Module,
+    lm_head: nn.Module,
+    mc_head: nn.Module,
+    model_name: str,
+    input_ids: Tensor,
+    mc_token_ids: Tensor,
+    attention_mask: Tensor | None = None,
+    labels: Tensor | None = None,
+    mc_labels: Tensor | None = None,
+    *,
+    lm_loss_weight: float = 1.0,
+) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None, Tensor | None]:
+    """Run trunk, LM head, and MC head over 3-D ``(N, C, L)`` inputs and compute joint losses."""
+    N, C, L, flat_ids, flat_mask, _ = flatten_multiple_choice_inputs(
+        model_name, input_ids, attention_mask
+    )
+    outputs = transformer(flat_ids, attention_mask=flat_mask)
+    hidden: Tensor = outputs.last_hidden_state
+    H = int(hidden.shape[-1])
+
+    lm_logits_flat: Tensor = lm_head(hidden)
+    V = int(lm_logits_flat.shape[-1])
+    lm_logits = lm_logits_flat.reshape(N, C, L, V)
+    mc_logits: Tensor = mc_head(hidden.reshape(N, C, L, H), mc_token_ids)
+
+    lm_loss: Tensor | None = None
+    mc_loss: Tensor | None = None
+    if labels is not None:
+        shift_logits = lm_logits[:, :, :-1, :].reshape(N * C * (L - 1), V)
+        shift_labels = labels[:, :, 1:].reshape(N * C * (L - 1)).long()
+        lm_loss = F.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
+    if mc_labels is not None:
+        mc_loss = F.cross_entropy(mc_logits, mc_labels.long())
+
+    total_loss: Tensor | None = None
+    if lm_loss is not None and mc_loss is not None:
+        total_loss = (
+            mc_loss + lm_loss_weight * lm_loss if lm_loss_weight != 1.0 else lm_loss + mc_loss
+        )
+    elif lm_loss is not None:
+        total_loss = lm_loss
+    elif mc_loss is not None:
+        total_loss = mc_loss
+    return lm_logits, mc_logits, total_loss, lm_loss, mc_loss
+
+
+def compute_qa_loss(
+    start_logits: Tensor,
+    end_logits: Tensor,
+    start_positions: Tensor | None,
+    end_positions: Tensor | None,
+) -> Tensor | None:
+    """Compute averaged span-extraction cross-entropy loss with out-of-window index clamping."""
+    if start_positions is None or end_positions is None:
+        return None
+    ignored = int(start_logits.shape[1])
+    start_t = start_positions.long().clip(min=0, max=ignored)
+    end_t = end_positions.long().clip(min=0, max=ignored)
+    if float((start_t != ignored).float().sum().item()) == 0.0:
+        return (start_logits.sum() + end_logits.sum()) * 0.0
+    return (
+        F.cross_entropy(start_logits, start_t, ignore_index=ignored)
+        + F.cross_entropy(end_logits, end_t, ignore_index=ignored)
+    ) / 2.0

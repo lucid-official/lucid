@@ -352,11 +352,6 @@ class EfficientNet(PretrainedModel, BackboneMixin):
         self._feature_info = fi
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.avgpool(x)
@@ -455,10 +450,4 @@ class EfficientNetForImageClassification(ImageClassificationModel, Classificatio
         x = self.features(x)
         x = self.avgpool(x)
         x = self.drop(x.flatten(1))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

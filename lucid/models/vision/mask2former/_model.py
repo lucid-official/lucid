@@ -132,8 +132,7 @@ class _SwinPatchMerging(nn.Module):
         merged: Tensor = lucid.cat([x0, x1, x2, x3], dim=-1)
         merged = merged.reshape(b, -1, 4 * c)
         merged = self.norm(merged)
-        merged = self.reduction(merged)
-        return merged
+        return self.reduction(merged)
 
 
 @final
@@ -171,10 +170,7 @@ class _SwinRelativePositionBias(nn.Module):
 
 def _build_relative_position_index(window_size: int) -> list[list[int]]:
     """Build the (window_area, window_area) relative-position lookup index."""
-    coords: list[tuple[int, int]] = []
-    for i in range(window_size):
-        for j in range(window_size):
-            coords.append((i, j))
+    coords = [(i, j) for i in range(window_size) for j in range(window_size)]
     area = window_size * window_size
     index: list[list[int]] = []
     for a in range(area):
@@ -259,16 +255,14 @@ def _window_partition(x: Tensor, window_size: int) -> Tensor:
     w = int(x.shape[2])
     c = int(x.shape[3])
     x = x.reshape(b, h // window_size, window_size, w // window_size, window_size, c)
-    windows = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, window_size, window_size, c)
-    return windows
+    return x.permute(0, 1, 3, 2, 4, 5).reshape(-1, window_size, window_size, c)
 
 
 def _window_reverse(windows: Tensor, window_size: int, h: int, w: int) -> Tensor:
     """(num_windows*B, window_size, window_size, C) -> (B, H, W, C)."""
     c = int(windows.shape[-1])
     x = windows.reshape(-1, h // window_size, w // window_size, window_size, window_size, c)
-    x = x.permute(0, 1, 3, 2, 4, 5).reshape(-1, h, w, c)
-    return x
+    return x.permute(0, 1, 3, 2, 4, 5).reshape(-1, h, w, c)
 
 
 def _build_swin_attn_mask(
@@ -372,8 +366,7 @@ class _SwinLayer(nn.Module):
         residual = x
         x = self.layernorm_after(x)
         x = self.mlp(x)
-        x = x + residual
-        return x
+        return x + residual
 
 
 class _SwinStage(nn.Module):
@@ -651,8 +644,7 @@ class _PixelDecoderEncoderLayer(nn.Module):
         hidden_states = F.relu(self.fc1(hidden_states))
         hidden_states = self.fc2(hidden_states)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states
+        return self.final_layer_norm(hidden_states)
 
 
 @final
@@ -682,8 +674,7 @@ class _PixelDecoderEncoder(nn.Module):
             ref_list.append(ref)
         reference_points: Tensor = lucid.cat(ref_list, dim=1)  # (1, S, 2)
         # (1, S, 1, 2) -> (1, S, n_levels, 2)
-        reference_points = reference_points[:, :, None].repeat(1, 1, n_levels, 1)
-        return reference_points
+        return reference_points[:, :, None].repeat(1, 1, n_levels, 1)
 
     @override
     def forward(
@@ -726,13 +717,12 @@ class _PixelDecoder(nn.Module):
 
         # Input projections: highest-stride first (reversed last 3 channels)
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
-        projections: list[nn.Sequential] = []
-        for in_ch in transformer_in_channels[::-1]:
-            projections.append(
-                nn.Sequential(
-                    nn.Conv2d(in_ch, feature_dim, kernel_size=1), nn.GroupNorm(32, feature_dim)
-                )
+        projections = [
+            nn.Sequential(
+                nn.Conv2d(in_ch, feature_dim, kernel_size=1), nn.GroupNorm(32, feature_dim)
             )
+            for in_ch in transformer_in_channels[::-1]
+        ]
         self.input_projections = nn.ModuleList(projections)
 
         self.encoder = _PixelDecoderEncoder(feature_dim, num_heads, ffn_dim, encoder_depth)
@@ -955,8 +945,7 @@ class _MaskedAttentionDecoderLayer(nn.Module):
         ff = F.relu(self.fc1(hidden_states))
         ff = self.fc2(ff)
         hidden_states = residual + ff
-        hidden_states = self.final_layer_norm(hidden_states)
-        return hidden_states
+        return self.final_layer_norm(hidden_states)
 
 
 @final

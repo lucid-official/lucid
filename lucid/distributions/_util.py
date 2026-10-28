@@ -1,6 +1,7 @@
 """Tiny helpers shared across the distribution implementations."""
 
-from typing import Any, Callable, Protocol, Self, overload, override
+from collections.abc import Callable
+from typing import Protocol, Self, overload, override
 
 import lucid
 from lucid._dtype import finfo
@@ -177,7 +178,7 @@ def _clamp_probs(probs: Tensor) -> Tensor:
     return probs.clip(eps, 1.0 - eps)
 
 
-class _lazy_param(property):
+class _lazy_param[T](property):
     """A parameter a distribution either stores or derives from its dual.
 
     ``Bernoulli`` takes ``probs`` *or* ``logits``, and the reference
@@ -201,7 +202,7 @@ class _lazy_param(property):
         ``derive(dist)`` computes the value from the stored dual.
     """
 
-    def __init__(self, derive: Callable[[Any], Tensor]) -> None:
+    def __init__(self, derive: Callable[[T], Tensor]) -> None:
         super().__init__(derive)
         self._derive = derive
         self._name = derive.__name__
@@ -214,10 +215,10 @@ class _lazy_param(property):
     def __get__(self, instance: None, owner: type | None = None) -> Self: ...
 
     @overload
-    def __get__(self, instance: object, owner: type | None = None) -> Tensor: ...
+    def __get__(self, instance: T, owner: type | None = None) -> Tensor: ...
 
     @override
-    def __get__(self, instance: object | None, owner: type | None = None) -> Self | Tensor:
+    def __get__(self, instance: T | None, owner: type | None = None) -> Self | Tensor:
         if instance is None:
             return self
         stored: Tensor | None = vars(instance).get(self._name)
@@ -230,3 +231,27 @@ class _lazy_param(property):
     def is_stored(self, instance: object) -> bool:
         """Whether ``instance`` was given this parameter rather than its dual."""
         return self._name in vars(instance)
+
+
+def _require_probs_or_logits(
+    cls_name: str, probs: Tensor | float | int | None, logits: Tensor | float | int | None
+) -> tuple[Tensor, bool]:
+    """Return ``(param, is_logits)`` when exactly one of ``probs`` or ``logits`` is passed."""
+    if probs is not None and logits is None:
+        return _as_tensor(probs), False
+    if logits is not None and probs is None:
+        return _as_tensor(logits), True
+    raise ValueError(f"{cls_name}: pass exactly one of `probs` or `logits`.")
+
+
+def _set_probs_or_logits(
+    dist: object,
+    cls_name: str,
+    probs: Tensor | float | int | None,
+    logits: Tensor | float | int | None,
+) -> tuple[int, ...]:
+    """Validate and store ``probs`` or ``logits`` on ``dist`` and return ``batch_shape``."""
+    param, is_logits = _require_probs_or_logits(cls_name, probs, logits)
+    vars(dist)["_is_logits"] = is_logits
+    vars(dist)["logits" if is_logits else "probs"] = param
+    return tuple(param.shape)

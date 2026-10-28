@@ -12,12 +12,12 @@ from typing import ClassVar, final, override
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.vision.senet._config import SENetConfig
 from lucid.models._utils._common import init_cnn_fan_out
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models.vision.senet._config import SENetConfig
 
 # ---------------------------------------------------------------------------
 # Squeeze-Excitation block (timm-accurate)
@@ -202,9 +202,8 @@ def _zero_init_residual(model: nn.Module) -> None:
         if isinstance(m, _SEBottleneck):
             if m.bn3.weight is not None:
                 nn.init.constant_(m.bn3.weight, 0.0)
-        elif isinstance(m, _SEBasicBlock):
-            if m.bn2.weight is not None:
-                nn.init.constant_(m.bn2.weight, 0.0)
+        elif isinstance(m, _SEBasicBlock) and m.bn2.weight is not None:
+            nn.init.constant_(m.bn2.weight, 0.0)
 
 
 def _make_layer(
@@ -239,8 +238,9 @@ def _make_layer(
             **extra,
         )
     ]
-    for _ in range(1, num_blocks):
-        blocks.append(block_cls(final_channels, out_channels, reduction=reduction))
+    blocks.extend(
+        block_cls(final_channels, out_channels, reduction=reduction) for _ in range(1, num_blocks)
+    )
 
     return nn.Sequential(*blocks), final_channels
 
@@ -419,11 +419,6 @@ class SENet(PretrainedModel, BackboneMixin):
         if config.zero_init_residual:
             _zero_init_residual(self)
 
-    @property
-    @override
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
     @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = F.relu(self.bn1(self.conv1(x)))
@@ -431,8 +426,7 @@ class SENet(PretrainedModel, BackboneMixin):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        return self.layer4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:

@@ -152,8 +152,7 @@ class _Block(nn.Module):
         n1 = self.norm1(x)
         x = x + self.drop_path(self.attn(n1))
         n2 = self.norm2(x)
-        x = x + self.drop_path(self.mlp(n2))
-        return x
+        return x + self.drop_path(self.mlp(n2))
 
 
 # ---------------------------------------------------------------------------
@@ -580,11 +579,6 @@ class CrossViT(PretrainedModel, BackboneMixin):
         # class token and positional table (bare Parameters the framework
         # default never touches — they were sitting at exact zeros).
         init_transformer_trunc_normal(self)
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     def _branch_tokens(self, x: Tensor, branch: int) -> Tensor:
         """Patch-embed branch + CLS + positional embedding + dropout."""

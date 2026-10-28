@@ -155,8 +155,7 @@ class _DETREncoderLayer(nn.Module):
         )[0]
         src = self.norm1(src + self.dropout1(src2))
         src2 = self.linear2(self.dropout(F.relu(self.linear1(src))))
-        src = self.norm2(src + self.dropout2(src2))
-        return src
+        return self.norm2(src + self.dropout2(src2))
 
 
 @final
@@ -204,8 +203,7 @@ class _DETRDecoderLayer(nn.Module):
         )[0]
         tgt = self.norm2(tgt + self.dropout2(tgt2))
         tgt2 = self.linear2(self.dropout(F.relu(self.linear1(tgt))))
-        tgt = self.norm3(tgt + self.dropout3(tgt2))
-        return tgt
+        return self.norm3(tgt + self.dropout3(tgt2))
 
 
 @final

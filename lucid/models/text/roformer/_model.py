@@ -33,7 +33,9 @@ from lucid.models._output import (
     TokenClassificationOutput,
 )
 from lucid.models._utils._text import (
+    compute_qa_loss,
     extended_attention_mask,
+    flatten_multiple_choice_inputs,
     init_text_module_weights,
     last_kept_token,
     text_activation,
@@ -418,20 +420,22 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
     ) -> BaseModelOutputWithPooling:
-        B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
-        if T > self._max_pos:
-            raise ValueError(f"Sequence length {T} exceeds max_position_embeddings {self._max_pos}")
+        batch_size, seq_len = int(input_ids.shape[0]), int(input_ids.shape[1])
+        if seq_len > self._max_pos:
+            raise ValueError(
+                f"Sequence length {seq_len} exceeds max_position_embeddings {self._max_pos}"
+            )
 
         cos, sin = self.rotary()
         # Slice the precomputed tables to the current sequence length so we
         # don't carry around (max_pos, head_dim) when the prompt is short.
-        cos = cos[:T]
-        sin = sin[:T]
+        cos = cos[:seq_len]
+        sin = sin[:seq_len]
 
         hidden = self.embeddings(input_ids, token_type_ids=token_type_ids)
         if self.embeddings_project is not None:
             hidden = self.embeddings_project(hidden)
-        ext_mask = extended_attention_mask(attention_mask, (B, T))
+        ext_mask = extended_attention_mask(attention_mask, (batch_size, seq_len))
         sequence_output = self.encoder(hidden, cos, sin, attention_mask=ext_mask)
         pooled_output = self.pooler(sequence_output)
 
@@ -875,18 +879,9 @@ class RoFormerForMultipleChoice(_RoFormerInitMixin, SequenceClassificationModel)
         token_type_ids: Tensor | None = None,
         labels: Tensor | None = None,
     ) -> SequenceClassificationOutput:
-        if input_ids.ndim != 3:
-            raise ValueError(
-                f"RoFormerForMultipleChoice expects input_ids of shape (N, C, L), "
-                f"got {tuple(input_ids.shape)}"
-            )
-        N = int(input_ids.shape[0])
-        C = int(input_ids.shape[1])
-        L = int(input_ids.shape[2])
-
-        flat_ids = input_ids.reshape(N * C, L)
-        flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
-        flat_tt = token_type_ids.reshape(N * C, L) if token_type_ids is not None else None
+        N, C, _, flat_ids, flat_mask, flat_tt = flatten_multiple_choice_inputs(
+            "RoFormerForMultipleChoice", input_ids, attention_mask, token_type_ids
+        )
         outputs = self.roformer(flat_ids, attention_mask=flat_mask, token_type_ids=flat_tt)
         # The reference multiple-choice head reads the *last* token's hidden
         # state directly, with no pooler projection — pooling the CLS token
@@ -990,25 +985,6 @@ class RoFormerForQuestionAnswering(_RoFormerInitMixin, SequenceClassificationMod
         start_logits = logits[..., 0]  # (B, T)
         end_logits = logits[..., 1]  # (B, T)
 
-        loss: Tensor | None = None
-        if start_positions is not None and end_positions is not None:
-            # Same contract as BERT's QA head: SQuAD's sliding window puts
-            # some answers outside the current doc-stride span, so the
-            # reference clamps those to a sentinel at the sequence end and
-            # ignores that index.  Without it an unanswerable window trains
-            # the model towards an arbitrary in-window token.
-            ignored = int(start_logits.shape[1])
-            start_t = start_positions.long().clip(min=0, max=ignored)
-            end_t = end_positions.long().clip(min=0, max=ignored)
-            # A batch where *every* window is unanswerable leaves the mean
-            # with no terms and surfaces as NaN, poisoning the step; zero
-            # stays in the graph so ``backward()`` on it still runs.
-            if float((start_t != ignored).float().sum().item()) == 0.0:
-                loss = (start_logits.sum() + end_logits.sum()) * 0.0
-            else:
-                loss = (
-                    F.cross_entropy(start_logits, start_t, ignore_index=ignored)
-                    + F.cross_entropy(end_logits, end_t, ignore_index=ignored)
-                ) / 2.0
+        loss = compute_qa_loss(start_logits, end_logits, start_positions, end_positions)
 
         return QuestionAnsweringOutput(start_logits=start_logits, end_logits=end_logits, loss=loss)

@@ -375,11 +375,6 @@ class InceptionNeXt(PretrainedModel, BackboneMixin):
         init_transformer_trunc_normal(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         for stage in self.stages:

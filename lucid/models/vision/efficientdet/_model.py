@@ -264,9 +264,10 @@ class _MBConv(nn.Module):
 def _make_mbconv_stage(
     in_ch: int, out_ch: int, n: int, stride: int = 1, expand: int = 6, k: int = 3
 ) -> nn.Sequential:
-    blocks: list[nn.Module] = [_MBConv(in_ch, out_ch, expand, stride, k)]
-    for _ in range(1, n):
-        blocks.append(_MBConv(out_ch, out_ch, expand, 1, k))
+    blocks: list[nn.Module] = [
+        _MBConv(in_ch, out_ch, expand, stride, k),
+        *(_MBConv(out_ch, out_ch, expand, 1, k) for _ in range(1, n)),
+    ]
     return nn.Sequential(*blocks)
 
 
@@ -737,7 +738,7 @@ class EfficientDetForObjectDetection(ObjectDetectionModel):
         box_all_parts: list[Tensor] = []
         anchors_flat_parts: list[Tensor] = []
 
-        for lvl, (cm, bm, anc) in enumerate(
+        for _lvl, (cm, bm, anc) in enumerate(
             zip(cls_maps, box_maps, anchors_per_level, strict=True)
         ):
             fH = int(cm.shape[2])

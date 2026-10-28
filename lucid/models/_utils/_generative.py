@@ -17,10 +17,12 @@ All operations are stateless and side-effect free.
 """
 
 import math
-from typing import NamedTuple
+from collections.abc import Callable, Sequence
+from typing import NamedTuple, Protocol, final, overload
 
 import lucid
 import lucid.autograd
+import lucid.diffeq
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._dtype import _float32_or_wider
@@ -46,6 +48,10 @@ __all__ = [
     "trace_probe",
     "hutchinson_divergence",
     "exact_divergence",
+    "check_image_shape",
+    "odeint_endpoint",
+    "LikelihoodDynamics",
+    "cnf_gaussian_log_prob",
 ]
 
 
@@ -1074,3 +1080,161 @@ def start_noise(
     """
     device = resolve_generation_device(model, device)
     return flow_prior_sample(prior, shape, device=device, dtype=model_dtype(model))
+
+
+class _CNFConfigLike(Protocol):
+    @property
+    def data_dim(self) -> int: ...
+    @property
+    def resolved_trace_method(self) -> str: ...
+    @property
+    def trace_noise(self) -> str: ...
+    @property
+    def sample_size(self) -> int | tuple[int, int]: ...
+    @property
+    def in_channels(self) -> int: ...
+
+
+def check_image_shape(x: Tensor, image_shape: tuple[int, int, int], what: str) -> None:
+    """Verify that ``x`` is a 4-D ``(B, C, H, W)`` image batch matching ``image_shape``."""
+    channels, height, width = image_shape
+    if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
+        raise ValueError(
+            f"{what} expects (B, {channels}, {height}, {width}) samples, "
+            f"got shape {tuple(x.shape)}"
+        )
+
+
+@overload
+def odeint_endpoint(
+    func: Callable[..., object],
+    state: Tensor,
+    span: Sequence[float],
+    *,
+    rtol: float = 1e-7,
+    atol: float = 1e-9,
+    method: str | None = None,
+) -> Tensor: ...
+
+
+@overload
+def odeint_endpoint(
+    func: Callable[..., object],
+    state: tuple[Tensor, Tensor],
+    span: Sequence[float],
+    *,
+    rtol: float = 1e-7,
+    atol: float = 1e-9,
+    method: str | None = None,
+) -> tuple[Tensor, Tensor]: ...
+
+
+def odeint_endpoint(
+    func: Callable[..., object],
+    state: Tensor | tuple[Tensor, Tensor],
+    span: Sequence[float],
+    *,
+    rtol: float = 1e-7,
+    atol: float = 1e-9,
+    method: str | None = None,
+) -> Tensor | tuple[Tensor, Tensor]:
+    """Integrate ``func`` over ``span`` and return the endpoint with narrowed state type."""
+    res = lucid.diffeq.odeint(
+        func, state, span, rtol=rtol, atol=atol, method=method, return_trajectory=False
+    )
+    if isinstance(state, Tensor):
+        assert isinstance(res, Tensor)
+        return res
+    assert (
+        isinstance(res, tuple)
+        and len(res) == 2
+        and isinstance(res[0], Tensor)
+        and isinstance(res[1], Tensor)
+    )
+    return res[0], res[1]
+
+
+@final
+class LikelihoodDynamics:
+    """Augmented right-hand side ``(x, Delta)`` for continuous-flow density evaluation."""
+
+    def __init__(self, field: Callable[[Tensor, Tensor], Tensor], config: _CNFConfigLike) -> None:
+        self.field = field
+        self._dim = config.data_dim
+        self._trace_method = config.resolved_trace_method
+        self._trace_noise = config.trace_noise
+        size = config.sample_size
+        height, width = size if isinstance(size, tuple) else (size, size)
+        self._image_shape = (config.in_channels, height, width)
+        self.nfe = 0
+        self._eps: Tensor | None = None
+        self._seeds: list[Tensor] | None = None
+
+    def reset(self, eps: Tensor | None = None) -> None:
+        """Zero the evaluation counter and fix the Hutchinson probe for one solve."""
+        self.nfe = 0
+        self._eps = eps
+        self._seeds = None
+
+    def sample_noise(self, like: Tensor) -> Tensor:
+        """Draw a Hutchinson probe shaped like ``like``."""
+        return trace_probe(like, self._trace_noise)
+
+    def velocity(self, t: Tensor, x: Tensor) -> Tensor:
+        """Evaluate the flat-state velocity field at ``(t, x)``."""
+        self.nfe += 1
+        batch = int(x.shape[0])
+        image = x.reshape(batch, *self._image_shape)
+        return self.field(image, t).reshape(batch, -1)
+
+    def __call__(self, t: Tensor, state: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+        x, _ = state
+        self.nfe += 1
+        with lucid.enable_grad():
+            source = x if x.requires_grad else x.detach().requires_grad_(True)
+            batch = int(source.shape[0])
+            image = source.reshape(batch, *self._image_shape)
+            velocity = self.field(image, t).reshape(batch, -1)
+            divergence = self._divergence(velocity, source)
+        return velocity, divergence
+
+    def _divergence(self, velocity: Tensor, x: Tensor) -> Tensor:
+        if self._trace_method == "exact":
+            return exact_divergence(velocity, x, self._exact_seeds(velocity), create_graph=False)
+        eps = self._eps
+        if eps is None:
+            eps = self.sample_noise(x)
+            self._eps = eps
+        return hutchinson_divergence(velocity, x, eps, create_graph=False)
+
+    def _exact_seeds(self, velocity: Tensor) -> list[Tensor]:
+        """Identity rows broadcast over the batch, built once per solve."""
+        seeds = self._seeds
+        if seeds is None or seeds[0].shape != velocity.shape:
+            basis = lucid.eye(self._dim, dtype=velocity.dtype, device=velocity.device)
+            ones = lucid.ones_like(velocity[:, :1])
+            seeds = [basis[index].reshape(1, self._dim) * ones for index in range(self._dim)]
+            self._seeds = seeds
+        return seeds
+
+
+def cnf_gaussian_log_prob(
+    dynamics: LikelihoodDynamics,
+    x: Tensor,
+    *,
+    integrate: Callable[
+        [Callable[..., object], tuple[Tensor, Tensor], float, float], tuple[Tensor, Tensor]
+    ],
+    trace_method: str,
+    input_dim: int,
+    t0: float = 0.0,
+) -> Tensor:
+    """Integrate ``dynamics`` from ``1.0`` down to ``t0`` and score under a standard normal."""
+    batch = int(x.shape[0])
+    flat = x.reshape(batch, -1)
+    delta = lucid.zeros((batch,), dtype=flat.dtype, device=flat.device)
+    eps = None if trace_method == "exact" else dynamics.sample_noise(flat)
+    dynamics.reset(eps)
+    x0, delta0 = integrate(dynamics, (flat, delta), 1.0, t0)
+    prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * input_dim * math.log(2.0 * math.pi)
+    return prior + delta0

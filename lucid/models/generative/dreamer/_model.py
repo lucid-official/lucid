@@ -40,7 +40,7 @@ from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
 from lucid.models.generative._common._dists import OneHotCategorical
 from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
-from lucid.models.generative._common._returns import lambda_return
+from lucid.models.generative._common import _returns
 from lucid.models.generative._common._rssm import RSSM, RSSMState, rssm_kl
 from lucid.models.generative.dreamer._config import DreamerConfig
 
@@ -690,38 +690,10 @@ class DreamerModel(PretrainedModel):
         >>> model.predict_reward(states).shape
         (3, 6)
         """
-        if horizon < 1:
-            raise ValueError(f"horizon must be at least 1, got {horizon}")
-
         draw = self._sample if sample is None else sample
-        current = state
-        deters, stochs, means, stds = [state.deter], [state.stoch], [], []
-        actions: list[Tensor] = []
-        for _ in range(horizon):
-            feature = current.feature.reshape(int(current.deter.shape[0]), 1, -1)
-            if self._detach_actor_input:
-                feature = feature.detach()
-            action = self.actor(feature, sample=draw)[:, 0]
-            current = self.rssm.prior_step(current, action, sample=draw)
-            actions.append(action)
-            deters.append(current.deter)
-            stochs.append(current.stoch)
-            step_mean, step_std = current.gaussian()
-            means.append(step_mean)
-            stds.append(step_std)
-
-        # The start state has no prior Gaussian of its own — it came from a
-        # posterior — so its mean/std slots are filled with the first
-        # imagined step's, keeping every field the same length.  Nothing
-        # reads index 0 of mean/std; the KL is a world-model term and does
-        # not run inside imagination.
-        rolled = RSSMState(
-            deter=lucid.stack(deters, dim=1),
-            stoch=lucid.stack(stochs, dim=1),
-            mean=lucid.stack([means[0]] + means, dim=1),
-            std=lucid.stack([stds[0]] + stds, dim=1),
+        return self.rssm.imagine_with_actor(
+            state, self.actor, horizon, sample=draw, detach_actor_input=self._detach_actor_input
         )
-        return rolled, lucid.stack(actions, dim=1)
 
     @override
     def forward(self, observations: Tensor, actions: Tensor) -> DreamerOutput:
@@ -834,10 +806,9 @@ class DreamerForWorldModeling(WorldModelingModel):
             :meth:`actor_parameters` and :meth:`value_parameters`.
         """
         model = self.dreamer
-        modules: list[nn.Module] = [model.encoder, model.rssm, model.decoder, model.reward_head]
-        if model.pcont_head is not None:
-            modules.append(model.pcont_head)
-        return [p for module in modules for p in module.parameters()]
+        return _returns.world_model_parameters(
+            model.encoder, model.rssm, model.decoder, model.reward_head, model.pcont_head
+        )
 
     def actor_parameters(self) -> list[nn.Parameter]:
         """The actor's parameters.
@@ -907,32 +878,16 @@ class DreamerForWorldModeling(WorldModelingModel):
         ...     opt.step()
         """
         behavior = output.behavior
-        if output.loss is None or behavior is None:
-            raise ValueError(
-                "backward() needs the losses; this output came from "
-                "DreamerModel rather than DreamerForWorldModeling."
-            )
-
-        def take(params: list[nn.Parameter]) -> list[Tensor | None]:
-            return [None if p.grad is None else p.grad.clone() for p in params]
-
-        # Deepest graph first, and retain it — the actor's reaches back
-        # through every imagined step.
-        self.zero_grad()
-        behavior.actor_loss.backward(retain_graph=True)
-        actor_grads = take(self.actor_parameters())
-
-        self.zero_grad()
-        behavior.value_loss.backward(retain_graph=True)
-        value_grads = take(self.value_parameters())
-
-        self.zero_grad()
-        output.loss.backward()
-
-        for param, grad in zip(self.actor_parameters(), actor_grads, strict=True):
-            param.grad = grad
-        for param, grad in zip(self.value_parameters(), value_grads, strict=True):
-            param.grad = grad
+        _returns.isolated_world_actor_value_backward(
+            self,
+            world_loss=output.loss,
+            actor_loss=None if behavior is None else behavior.actor_loss,
+            value_loss=None if behavior is None else behavior.value_loss,
+            actor_params=self.actor_parameters(),
+            value_params=self.value_parameters(),
+            model_name="DreamerModel",
+            wrapper_name="DreamerForWorldModeling",
+        )
 
     def _behavior(self, posteriors: RSSMState) -> DreamerBehaviorOutput:
         """Imagine under the policy and score it.
@@ -952,56 +907,21 @@ class DreamerForWorldModeling(WorldModelingModel):
         DreamerBehaviorOutput
             The actor and critic terms.
         """
-        if self.dreamer.pcont_head is not None:
-            keep = int(posteriors.deter.shape[1]) - 1
-            if keep < 1:
-                raise ValueError(
-                    "pcont drops the last filtered step, so it needs a "
-                    f"sequence of at least 2, got {int(posteriors.deter.shape[1])}"
-                )
-            posteriors = posteriors.map(lambda x: x[:, :keep])
-
-        b, t = int(posteriors.deter.shape[0]), int(posteriors.deter.shape[1])
-
-        def flat(x: Tensor) -> Tensor:
-            return x.reshape(b * t, int(x.shape[2])).detach()
-
-        start_mean, start_std = posteriors.gaussian()
-        start = RSSMState(
-            deter=flat(posteriors.deter),
-            stoch=flat(posteriors.stoch),
-            mean=flat(start_mean),
-            std=flat(start_std),
+        _, start = _returns.prepare_imagination_starts(
+            posteriors, has_pcont=self.dreamer.pcont_head is not None
         )
-
         states, actions = self.dreamer.imagine(start, self._horizon)
         reward = self.dreamer.predict_reward(states)
         value = self.dreamer.predict_value(states)
 
-        # Constant gamma, or the discount the model predicts for each
-        # imagined state when the episode can end.
         pcont: Tensor | None = None
         discount: float | Tensor = self._discount
         if self.dreamer.pcont_head is not None:
             pcont = lucid.sigmoid(self.dreamer.predict_pcont(states))
             discount = pcont
 
-        returns = lambda_return(reward, value, discount, self._lambda)
-
-        # The released implementation weights both behaviour losses by the
-        # cumulative discount, so a step the agent is unlikely to still be
-        # around for counts for less.  It is a weight, never a thing to
-        # differentiate, so it is detached either way.
-        if pcont is None:
-            weight = lucid.tensor(
-                [[self._discount**i for i in range(self._horizon)]],
-                device=returns.device,
-                dtype=returns.dtype,
-            )
-        else:
-            ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
-            running = lucid.cat([ones, pcont[:, : self._horizon - 1]], dim=1)
-            weight = lucid.cumprod(running, dim=1).detach()
+        returns = _returns.lambda_return(reward, value, discount, self._lambda)
+        weight = _returns.imagination_weights(pcont, self._discount, self._horizon, like=returns)
 
         actor_loss = -(weight * returns).mean()
 
@@ -1080,21 +1000,15 @@ class DreamerForWorldModeling(WorldModelingModel):
         posterior_mean, posterior_std = posteriors.gaussian()
         prior_mean, prior_std = priors.gaussian()
 
-        pcont_loss: Tensor | None = None
-        if model.pcont_head is not None:
-            if discounts is None:
-                raise ValueError(
-                    "pcont=True needs `discounts` — 1 where the episode "
-                    "continued past a step and 0 where it ended."
-                )
-            # Bernoulli likelihood against a soft target: the released
-            # implementation regresses onto `gamma * d`, so a surviving
-            # step is taught `gamma` rather than 1 and the head's output
-            # is directly usable as the discount.
-            target = self._discount * discounts
-            pcont_loss = self._pcont_scale * F.binary_cross_entropy_with_logits(
-                model.predict_pcont(posteriors), target
-            )
+        pcont_loss = _returns.pcont_bce_loss(
+            model.pcont_head,
+            model.predict_pcont,
+            posteriors,
+            discounts,
+            discount=self._discount,
+            scale=self._pcont_scale,
+        )
+        if pcont_loss is not None:
             loss = loss + pcont_loss
 
         return DreamerOutput(

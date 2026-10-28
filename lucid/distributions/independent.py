@@ -138,9 +138,7 @@ class Independent(Distribution):
         new_event = b[len(b) - self.reinterpreted_batch_ndims :] + e
         super().__init__(batch_shape=new_batch, event_shape=new_event, validate_args=validate_args)
 
-    @override
-    @property
-    def has_rsample(self) -> bool:  # type: ignore[override]
+    def _has_rsample(self) -> bool:
         """Whether reparameterised sampling is supported.
 
         Mirrors ``base_dist.has_rsample``, so gradient flow is preserved
@@ -153,6 +151,8 @@ class Independent(Distribution):
             reparameterised sampling.
         """
         return self.base_dist.has_rsample
+
+    has_rsample = property(_has_rsample, doc=_has_rsample.__doc__)
 
     @override
     @property

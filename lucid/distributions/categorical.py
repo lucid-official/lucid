@@ -16,7 +16,12 @@ from lucid.distributions.constraints import (
 from lucid.distributions.distribution import Distribution
 
 
-from lucid.distributions._util import _as_tensor, _broadcast_shapes, _clamp_probs, _lazy_param
+from lucid.distributions._util import (
+    _broadcast_shapes,
+    _clamp_probs,
+    _lazy_param,
+    _require_probs_or_logits,
+)
 
 
 def _normalize_probs(probs: Tensor) -> Tensor:
@@ -147,16 +152,13 @@ class Categorical(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("Categorical: pass exactly one of `probs` or `logits`.")
-        if probs is not None:
-            self.probs = _normalize_probs(_as_tensor(probs))
-            self._is_logits = False
-            shape = tuple(self.probs.shape)
-        else:
-            self.logits = _normalize_logits(_as_tensor(logits))  # type: ignore[arg-type]
-            self._is_logits = True
+        raw, self._is_logits = _require_probs_or_logits("Categorical", probs, logits)
+        if self._is_logits:
+            self.logits = _normalize_logits(raw)
             shape = tuple(self.logits.shape)
+        else:
+            self.probs = _normalize_probs(raw)
+            shape = tuple(self.probs.shape)
         self._num_events = shape[-1]
         super().__init__(batch_shape=shape[:-1], event_shape=(), validate_args=validate_args)
 
@@ -505,16 +507,11 @@ class OneHotCategorical(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        self._cat = Categorical(probs=probs, logits=logits, validate_args=False)
-        if probs is not None:
-            self.probs = self._cat.probs
-        else:
-            self.logits = self._cat.logits
-        super().__init__(
-            batch_shape=tuple(self._cat._batch_shape),
-            event_shape=(self._cat._num_events,),
-            validate_args=validate_args,
-        )
+        cat = Categorical(probs=probs, logits=logits, validate_args=False)
+        self._cat = cat
+        key = "logits" if cat._is_logits else "probs"
+        self.__dict__[key] = getattr(cat, key)
+        super().__init__(tuple(cat._batch_shape), (cat._num_events,), validate_args=validate_args)
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
@@ -522,15 +519,9 @@ class OneHotCategorical(Distribution):
         new = self._get_checked_instance(OneHotCategorical, _instance)
         batch_shape_t = tuple(batch_shape)
         new._cat = self._cat.expand(batch_shape_t)
-        if not new._cat._is_logits:
-            new.probs = new._cat.probs
-        else:
-            new.logits = new._cat.logits
-        super(OneHotCategorical, new).__init__(
-            batch_shape_t, self._event_shape, validate_args=False
-        )
-        new._validate_args = self._validate_args
-        return new
+        key = "logits" if new._cat._is_logits else "probs"
+        new.__dict__[key] = getattr(new._cat, key)
+        return self._finish_expand(new, batch_shape_t, self._event_shape)
 
     @_lazy_param
     def probs(self) -> Tensor:

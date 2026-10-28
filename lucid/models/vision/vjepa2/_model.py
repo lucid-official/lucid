@@ -625,10 +625,7 @@ class _RoPEVideoPredictor(nn.Module):
             device=hidden.device,
         )
         hidden = lucid.gather(hidden, 1, inverse_gather)
-        if self.return_all_tokens:
-            selected = hidden
-        else:
-            selected = hidden[:, context_count:]
+        selected = hidden if self.return_all_tokens else hidden[:, context_count:]
         return self.predictor_proj(selected)
 
 
@@ -707,9 +704,10 @@ class _ActionConditionedPredictor(nn.Module):
         for name, tensor in (("actions", actions), ("states", states)):
             if tensor.ndim != 3 or int(tensor.shape[0]) != batch or int(tensor.shape[1]) != steps:
                 raise ValueError(f"{name} must have shape (B, {steps}, width), got {tensor.shape}")
-        if self.use_extrinsics:
-            if extrinsics is None or extrinsics.ndim != 3 or int(extrinsics.shape[1]) != steps:
-                raise ValueError(f"extrinsics must have shape (B, {steps}, width) when enabled")
+        if self.use_extrinsics and (
+            extrinsics is None or extrinsics.ndim != 3 or int(extrinsics.shape[1]) != steps
+        ):
+            raise ValueError(f"extrinsics must have shape (B, {steps}, width) when enabled")
         hidden = self.predictor_embed(x)
         hidden = hidden.reshape(batch, steps, spatial, self.predictor_dim)
         action = self.action_encoder(actions).unsqueeze(2)
@@ -1020,12 +1018,6 @@ class VJEPA2Model(PretrainedModel, BackboneMixin):
         self._feature_info = [
             FeatureInfo(stage=1, num_channels=config.dim, reduction=config.patch_size)
         ]
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        """The single tubelet-token feature stage."""
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

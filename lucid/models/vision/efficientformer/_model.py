@@ -66,8 +66,7 @@ class _Stem(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         x = self.act1(self.norm1(self.conv1(x)))
-        x = self.act2(self.norm2(self.conv2(x)))
-        return x
+        return self.act2(self.norm2(self.conv2(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +105,7 @@ class _ConvMlpWithNorm(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = self.norm1(self.fc1(x))
         x = F.gelu(x)
-        x = self.norm2(self.fc2(x))
-        return x
+        return self.norm2(self.fc2(x))
 
 
 # ---------------------------------------------------------------------------
@@ -286,8 +284,7 @@ class _MetaBlock2d(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         x = x + self.drop_path1(self.ls1(self.token_mixer(x)))
-        x = x + self.drop_path2(self.ls2(self.mlp(x)))
-        return x
+        return x + self.drop_path2(self.ls2(self.mlp(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -323,8 +320,7 @@ class _MetaBlock1d(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         x = x + self.drop_path1(self.ls1(self.token_mixer(self.norm1(x))))
-        x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
-        return x
+        return x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
 
 
 # ---------------------------------------------------------------------------
@@ -472,8 +468,7 @@ def _forward_trunk(
         if i == last and x.ndim == 4:
             # No attention block flattened the tensor (num_vit == 0): flatten now.
             x = x.flatten(2).permute(0, 2, 1)
-    x = head_norm(x)  # (B, N, C)
-    return x
+    return head_norm(x)  # (B, N, C)
 
 
 # ---------------------------------------------------------------------------
@@ -568,11 +563,6 @@ class EfficientFormer(PretrainedModel, BackboneMixin):
         # class token and positional table (bare Parameters the framework
         # default never touches — they were sitting at exact zeros).
         init_transformer_trunc_normal(self)
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

@@ -401,7 +401,7 @@ class MaskRCNNForObjectDetection(ObjectDetectionModel):
         target_parts: list[Tensor] = []
         offset = 0
         index_parts: list[int] = []
-        for props, lab, mt, tgt in zip(proposals, labels, matched, targets):
+        for props, _lab, mt, tgt in zip(proposals, labels, matched, targets, strict=False):
             n = int(props.shape[0])
             if "masks" in tgt and n > 0:
                 target_parts.append(project_masks_on_boxes(tgt["masks"], props, mt, m))

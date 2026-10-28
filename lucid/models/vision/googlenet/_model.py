@@ -41,6 +41,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._utils._common import transform_input_imagenet_to_tf
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
+from lucid.models._utils._classification import BasicConvBnReLU2d as _BasicConv2d
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models.vision.googlenet._config import GoogLeNetConfig
@@ -56,29 +57,6 @@ from lucid.models.vision.googlenet._config import GoogLeNetConfig
 # ---------------------------------------------------------------------------
 # Basic Conv → BatchNorm → ReLU block
 # ---------------------------------------------------------------------------
-
-
-@final
-class _BasicConv2d(nn.Module):
-    """Conv (no bias) → BatchNorm → ReLU, the GoogLeNet conv primitive."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        padding: int = 0,
-    ) -> None:
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
-        )
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        return F.relu(self.bn(self.conv(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -383,11 +361,6 @@ class GoogLeNet(PretrainedModel, BackboneMixin):
         _init_reference_weights(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         if getattr(self.config, "transform_input", False):
             x = transform_input_imagenet_to_tf(x)
@@ -406,13 +379,12 @@ class GoogLeNet(PretrainedModel, BackboneMixin):
         x = self.inception4e(x)
         x = self.maxpool4(x)
         x = self.inception5a(x)
-        x = self.inception5b(x)
+        return self.inception5b(x)
         # ``feature_info`` describes the pre-pool pyramid, and the mixin
         # documents this as returning the deepest stage's *feature map*.
         # Pooling here collapsed it to 1x1, so the declared reduction was
         # wrong by the input size and no consumer could reach a spatial map.
         # The classifier applies its own pooling.
-        return x
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:

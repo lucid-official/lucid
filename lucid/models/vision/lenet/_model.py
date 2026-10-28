@@ -31,13 +31,12 @@ modern ReLU/MaxPool convention without changing the topology.
 from typing import ClassVar, override
 
 import lucid.nn as nn
-import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.vision.lenet._config import LeNetConfig
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
-from lucid.models.vision.lenet._config import LeNetConfig
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -232,11 +231,6 @@ class LeNet(PretrainedModel, BackboneMixin):
         ]
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         _check_input_size(int(x.shape[-2]), int(x.shape[-1]), classifier=False)
         return self.features(x)
@@ -343,10 +337,4 @@ class LeNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         # C5 output is (B, 120, 1, 1) — flatten spatial dims
         x = x.flatten(1)
         x = self.act_f6(self.f6(x))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

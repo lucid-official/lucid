@@ -14,9 +14,8 @@ spend them correctly.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
-import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
@@ -25,7 +24,7 @@ from lucid.models._utils._common import update_averages
 from lucid.models._tasks import WorldModelingModel
 from lucid.models._output import ModelOutput
 from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder, PixelEncoder
-from lucid.models.generative._common._returns import lambda_return
+from lucid.models.generative._common import _returns
 from lucid.models.generative._common._rssm import RSSM, RSSMState, categorical_kl
 from lucid.models.generative.dreamer_v2._config import DreamerV2Config
 from lucid.models.generative._common._actor import Actor
@@ -217,8 +216,8 @@ def balanced_kl(
     if not 0.0 <= balance <= 1.0:
         raise ValueError(f"balance must be in [0, 1], got {balance}")
 
-    posterior_logits = cast(Tensor, posterior.logits)
-    prior_logits = cast(Tensor, prior.logits)
+    posterior_logits = posterior.categorical_logits()
+    prior_logits = prior.categorical_logits()
 
     def clamp(value: Tensor) -> Tensor:
         mean = value.mean()
@@ -571,32 +570,8 @@ class DreamerV2Model(PretrainedModel):
         >>> bool((states.stoch[:, 0] == start.stoch).all())
         True
         """
-        if horizon < 1:
-            raise ValueError(f"horizon must be at least 1, got {horizon}")
-
         draw = self._sample if sample is None else sample
-        current = state
-        deters, stochs, logits = [state.deter], [state.stoch], []
-        actions: list[Tensor] = []
-        for _ in range(horizon):
-            feature = current.feature.reshape(int(current.deter.shape[0]), 1, -1)
-            action = self.actor(feature.detach(), sample=draw)[:, 0]
-            current = self.rssm.prior_step(current, action, sample=draw)
-            actions.append(action)
-            deters.append(current.deter)
-            stochs.append(current.stoch)
-            logits.append(cast(Tensor, current.logits))
-
-        # The start came from a posterior and has no prior logits of its
-        # own; the first imagined step's stand in so every field is the
-        # same length.  Nothing reads index 0 — the divergence is a
-        # world-model term and does not run inside imagination.
-        rolled = RSSMState(
-            deter=lucid.stack(deters, dim=1),
-            stoch=lucid.stack(stochs, dim=1),
-            logits=lucid.stack([logits[0]] + logits, dim=1),
-        )
-        return rolled, lucid.stack(actions, dim=1)
+        return self.rssm.imagine_with_actor(state, self.actor, horizon, sample=draw)
 
     @override
     def forward(self, observations: Tensor, actions: Tensor) -> DreamerV2Output:
@@ -606,8 +581,8 @@ class DreamerV2Model(PretrainedModel):
             reward=self.predict_reward(posteriors),
             value=self.predict_value(posteriors),
             posterior_stoch=posteriors.stoch,
-            posterior_logits=cast(Tensor, posteriors.logits),
-            prior_logits=cast(Tensor, priors.logits),
+            posterior_logits=posteriors.categorical_logits(),
+            prior_logits=priors.categorical_logits(),
             deter=posteriors.deter,
         )
 
@@ -691,10 +666,9 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             when there is one.
         """
         model = self.dreamer_v2
-        modules: list[nn.Module] = [model.encoder, model.rssm, model.decoder, model.reward_head]
-        if model.pcont_head is not None:
-            modules.append(model.pcont_head)
-        return [p for module in modules for p in module.parameters()]
+        return _returns.world_model_parameters(
+            model.encoder, model.rssm, model.decoder, model.reward_head, model.pcont_head
+        )
 
     def actor_parameters(self) -> list[nn.Parameter]:
         """The actor's parameters.
@@ -752,43 +726,17 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             Actor and critic terms.
         """
         model = self.dreamer_v2
-        if model.pcont_head is not None:
-            keep = int(posteriors.deter.shape[1]) - 1
-            if keep < 1:
-                raise ValueError(
-                    "pcont drops the last filtered step, so it needs a "
-                    f"sequence of at least 2, got {int(posteriors.deter.shape[1])}"
-                )
-            posteriors = posteriors.map(lambda x: x[:, :keep])
-
-        b, t = int(posteriors.deter.shape[0]), int(posteriors.deter.shape[1])
-        start = posteriors.map(lambda x: x.reshape(b * t, *(int(v) for v in x.shape[2:])).detach())
-
+        _, start = _returns.prepare_imagination_starts(
+            posteriors, has_pcont=model.pcont_head is not None
+        )
         states, actions = model.imagine(start, self._horizon)
         reward = model.predict_reward(states)
         value = model.predict_value(states, target=True)
 
-        pcont: Tensor | None = None
-        if model.pcont_head is not None:
-            pcont = F.sigmoid(model.predict_pcont(states))
-            discount: float | Tensor = pcont
-        else:
-            discount = self._discount
-
-        target = lambda_return(reward, value, discount, self._lambda)
-
-        # Cumulative discount, detached: it weights the objectives, it is
-        # not part of them.
-        if pcont is None:
-            weight = lucid.tensor(
-                [[self._discount**i for i in range(self._horizon)]],
-                device=target.device,
-                dtype=target.dtype,
-            )
-        else:
-            ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
-            running = lucid.cat([ones, pcont[:, : self._horizon - 1]], dim=1)
-            weight = lucid.cumprod(running, dim=1).detach()
+        pcont = None if model.pcont_head is None else F.sigmoid(model.predict_pcont(states))
+        discount: float | Tensor = self._discount if pcont is None else pcont
+        target = _returns.lambda_return(reward, value, discount, self._lambda)
+        weight = _returns.imagination_weights(pcont, self._discount, self._horizon, like=target)
 
         actor_loss, entropy = self._actor_objective(states, actions, target, weight)
         value_loss = self._critic_objective(states, target, weight)
@@ -933,30 +881,16 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
         >>> model.update_slow_target()
         """
         behavior = output.behavior
-        if output.loss is None or behavior is None:
-            raise ValueError(
-                "backward() needs the losses; this output came from "
-                "DreamerV2Model rather than DreamerV2ForWorldModeling."
-            )
-
-        def take(params: list[nn.Parameter]) -> list[Tensor | None]:
-            return [None if p.grad is None else p.grad.clone() for p in params]
-
-        self.zero_grad()
-        behavior.actor_loss.backward(retain_graph=True)
-        actor_grads = take(self.actor_parameters())
-
-        self.zero_grad()
-        behavior.value_loss.backward(retain_graph=True)
-        value_grads = take(self.value_parameters())
-
-        self.zero_grad()
-        output.loss.backward()
-
-        for param, grad in zip(self.actor_parameters(), actor_grads, strict=True):
-            param.grad = grad
-        for param, grad in zip(self.value_parameters(), value_grads, strict=True):
-            param.grad = grad
+        _returns.isolated_world_actor_value_backward(
+            self,
+            world_loss=output.loss,
+            actor_loss=None if behavior is None else behavior.actor_loss,
+            value_loss=None if behavior is None else behavior.value_loss,
+            actor_params=self.actor_parameters(),
+            value_params=self.value_parameters(),
+            model_name="DreamerV2Model",
+            wrapper_name="DreamerV2ForWorldModeling",
+        )
 
     @override
     def forward(
@@ -1006,17 +940,15 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
         )
         loss = recon_loss + reward_loss + self._kl_weight * kl_loss
 
-        pcont_loss: Tensor | None = None
-        if model.pcont_head is not None:
-            if discounts is None:
-                raise ValueError(
-                    "pcont=True needs `discounts` — 1 where the episode "
-                    "continued past a step and 0 where it ended."
-                )
-            target = self._discount * discounts
-            pcont_loss = self._pcont_scale * F.binary_cross_entropy_with_logits(
-                model.predict_pcont(posteriors), target
-            )
+        pcont_loss = _returns.pcont_bce_loss(
+            model.pcont_head,
+            model.predict_pcont,
+            posteriors,
+            discounts,
+            discount=self._discount,
+            scale=self._pcont_scale,
+        )
+        if pcont_loss is not None:
             loss = loss + pcont_loss
 
         return DreamerV2Output(
@@ -1024,8 +956,8 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
             reward=predicted_reward,
             value=model.predict_value(posteriors),
             posterior_stoch=posteriors.stoch,
-            posterior_logits=cast(Tensor, posteriors.logits),
-            prior_logits=cast(Tensor, priors.logits),
+            posterior_logits=posteriors.categorical_logits(),
+            prior_logits=priors.categorical_logits(),
             deter=posteriors.deter,
             loss=loss,
             recon_loss=recon_loss,

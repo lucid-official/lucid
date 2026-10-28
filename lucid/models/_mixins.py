@@ -21,7 +21,7 @@ from lucid.utils.cache import Cache, DynamicCache, StaticCache
 from lucid.models._sampling import _SamplingParams, _select_next_ondevice
 
 if TYPE_CHECKING:
-    from lucid.models._output import GenerationOutput
+    from lucid.models._output import GenerationOutput, ImageClassificationOutput
     from lucid.models.generative._common._schedulers import DiffusionScheduler
 
 
@@ -152,11 +152,12 @@ class BackboneMixin(ABC):
         """
         ...
 
+    _feature_info: list[FeatureInfo]
+
     @property
-    @abstractmethod
     def feature_info(self) -> list[FeatureInfo]:
         r"""Return the per-stage feature pyramid specification."""
-        ...
+        return self._feature_info
 
 
 class ClassificationHeadMixin:
@@ -289,6 +290,22 @@ class ClassificationHeadMixin:
         raise NotImplementedError(
             f"reset_classifier not implemented for " f"{type(self.classifier).__name__}"
         )
+
+    def _classify(
+        self, features: Tensor, labels: Tensor | None = None, *, label_smoothing: float = 0.0
+    ) -> ImageClassificationOutput:
+        r"""Project ``features`` through ``self.classifier`` and compute optional cross-entropy loss."""
+        from lucid.models._output import ImageClassificationOutput
+
+        logits: Tensor = self.classifier(features)
+        loss: Tensor | None = None
+        if labels is not None:
+            loss = (
+                F.cross_entropy(logits, labels, label_smoothing=label_smoothing)
+                if label_smoothing != 0.0
+                else F.cross_entropy(logits, labels)
+            )
+        return ImageClassificationOutput(logits=logits, loss=loss)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -599,10 +616,7 @@ class CausalLMMixin:
         B = int(input_ids.shape[0])
         T_prompt = int(input_ids.shape[1])
 
-        if max_new_tokens is not None:
-            stop_len = T_prompt + int(max_new_tokens)
-        else:
-            stop_len = int(max_length)
+        stop_len = T_prompt + int(max_new_tokens) if max_new_tokens is not None else int(max_length)
         if stop_len <= T_prompt:
             return input_ids
 

@@ -49,6 +49,7 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
+from lucid.models._utils._classification import BasicConvBnReLU2d as _ConvBnReLU
 from lucid.models._mixins import BackboneMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models.vision.inception_resnet._config import InceptionResNetConfig
@@ -56,35 +57,6 @@ from lucid.models.vision.inception_resnet._config import InceptionResNetConfig
 # ---------------------------------------------------------------------------
 # ConvBnReLU helper — .conv and .bn sub-modules (matches timm ConvNormAct)
 # ---------------------------------------------------------------------------
-
-
-class _ConvBnReLU(nn.Module):
-    """Conv2d → BatchNorm2d → ReLU.
-
-    Named sub-modules ``.conv`` and ``.bn`` to match timm's ConvNormAct keys.
-    The BatchNorm ``eps`` is ``1e-3`` (the TensorFlow-Slim default that the
-    canonical Inception-ResNet v2 checkpoint was trained with) — not the
-    usual ``1e-5`` — so converted weights stay numerically faithful.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int | tuple[int, int],
-        *,
-        stride: int = 1,
-        padding: int | tuple[int, int] = 0,
-    ) -> None:
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
-        )
-        self.bn = nn.BatchNorm2d(out_channels, eps=1e-3)
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        return F.relu(self.bn(self.conv(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -547,11 +519,6 @@ class InceptionResNetV2(PretrainedModel, BackboneMixin):
             FeatureInfo(stage=3, num_channels=1536, reduction=32),
         ]
 
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
     def _forward_stem(self, x: Tensor) -> Tensor:
         x = self.conv2d_1a(x)
         x = self.conv2d_2a(x)
@@ -559,8 +526,7 @@ class InceptionResNetV2(PretrainedModel, BackboneMixin):
         x = self._pool1(x)
         x = self.conv2d_3b(x)
         x = self.conv2d_4a(x)
-        x = self._pool2(x)
-        return x
+        return self._pool2(x)
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:
@@ -572,13 +538,12 @@ class InceptionResNetV2(PretrainedModel, BackboneMixin):
         x = self.mixed_7a(x)
         x = self.repeat_2(x)
         x = self.block8(x)
-        x = self.conv2d_7b(x)
+        return self.conv2d_7b(x)
         # ``feature_info`` describes the pre-pool pyramid, and the mixin
         # documents this as returning the deepest stage's *feature map*.
         # Pooling here collapsed it to 1x1, so the declared reduction was
         # wrong by the input size and no consumer could reach a spatial map.
         # The classifier applies its own pooling.
-        return x
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -693,8 +658,7 @@ class InceptionResNetV2ForImageClassification(ImageClassificationModel):
         x = self._pool1(x)
         x = self.conv2d_3b(x)
         x = self.conv2d_4a(x)
-        x = self._pool2(x)
-        return x
+        return self._pool2(x)
 
     def reset_classifier(self, num_classes: int) -> None:
         """Replace the classification head with a freshly initialised one.

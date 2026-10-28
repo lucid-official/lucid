@@ -24,6 +24,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._utils._common import transform_input_imagenet_to_tf
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
+from lucid.models._utils._classification import BasicConvBnReLU2d as _ConvBnReLU
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models.vision.inception._config import InceptionConfig
@@ -37,29 +38,6 @@ _BN_EPS = 1e-3
 # ---------------------------------------------------------------------------
 # Shared Conv-BN-ReLU helper
 # ---------------------------------------------------------------------------
-
-
-class _ConvBnReLU(nn.Module):
-    """Conv2d → BatchNorm2d → ReLU."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        *,
-        stride: int = 1,
-        padding: int = 0,
-    ) -> None:
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
-        )
-        self.bn = nn.BatchNorm2d(out_channels, eps=_BN_EPS)
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        return F.relu(self.bn(self.conv(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -547,11 +525,6 @@ class InceptionV3(PretrainedModel, BackboneMixin):
         ]
 
         _init_reference_weights(self)
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

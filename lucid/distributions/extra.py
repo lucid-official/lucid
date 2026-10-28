@@ -15,7 +15,7 @@ from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _align_device, _as_tensor
 from lucid.distributions._util import _broadcast_pair
-from lucid.distributions._util import _clamp_probs, _lazy_param
+from lucid.distributions._util import _clamp_probs, _lazy_param, _set_probs_or_logits
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
@@ -1072,6 +1072,7 @@ class ContinuousBernoulli(Distribution):
     arg_constraints = {"probs": unit_interval, "logits": real}
     support: Constraint | None = unit_interval
     has_rsample: bool = True
+    _is_logits: bool
 
     def __init__(
         self,
@@ -1092,21 +1093,12 @@ class ContinuousBernoulli(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("ContinuousBernoulli: pass exactly one of `probs` or `logits`.")
         # Stored through the lazy parameters, as ``Bernoulli`` does, so the
         # one given is in ``arg_constraints``' reach: held in a private
         # ``_param`` instead, both ``probs`` and ``logits`` looked derived
         # and validation checked neither — ``probs=1.5`` and NaN constructed.
-        if probs is not None:
-            self.probs = _as_tensor(probs)
-            self._is_logits = False
-        else:
-            self.logits = _as_tensor(logits)  # type: ignore[arg-type]
-            self._is_logits = True
-        super().__init__(
-            batch_shape=tuple(self._param.shape), event_shape=(), validate_args=validate_args
-        )
+        shape = _set_probs_or_logits(self, "ContinuousBernoulli", probs, logits)
+        super().__init__(batch_shape=shape, event_shape=(), validate_args=validate_args)
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:

@@ -166,9 +166,10 @@ class _ResNetStage(nn.Module):
     def __init__(self, in_ch: int, mid_ch: int, num_blocks: int, stride: int) -> None:
         super().__init__()
         out_ch = mid_ch * _ResNetBottleneck.expansion
-        blocks: list[nn.Module] = [_ResNetBottleneck(in_ch, mid_ch, stride=stride, downsample=True)]
-        for _ in range(1, num_blocks):
-            blocks.append(_ResNetBottleneck(out_ch, mid_ch))
+        blocks: list[nn.Module] = [
+            _ResNetBottleneck(in_ch, mid_ch, stride=stride, downsample=True),
+            *(_ResNetBottleneck(out_ch, mid_ch) for _ in range(1, num_blocks)),
+        ]
         self.layers = nn.Sequential(*blocks)
         self.out_channels: int = out_ch
 
@@ -450,8 +451,7 @@ class _DecoderLayer(nn.Module):
         residual = hidden
         hidden = self.mlp(hidden)
         hidden = residual + self.dropout3(hidden)
-        hidden = self.final_layer_norm(hidden)
-        return hidden
+        return self.final_layer_norm(hidden)
 
 
 @final

@@ -343,8 +343,7 @@ class _SwinBlock(nn.Module):
             x = x[:, :H, :W, :]
 
         x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+        return x + self.drop_path(self.mlp(self.norm2(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -559,11 +558,6 @@ class SwinTransformer(PretrainedModel, BackboneMixin):
         init_transformer_trunc_normal(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.patch_embed(x)  # (B, H/p, W/p, C)
         for stage in self.stages:
@@ -572,8 +566,7 @@ class SwinTransformer(PretrainedModel, BackboneMixin):
         # Global average pool: permute to (B, C, H', W') → avgpool → flatten
         B, H, W, C = x.shape
         x = x.permute(0, 3, 1, 2)  # (B, C, H', W')
-        x = self.avgpool(x).flatten(1)  # (B, C)
-        return x
+        return self.avgpool(x).flatten(1)  # (B, C)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -670,10 +663,4 @@ class SwinTransformerForImageClassification(ImageClassificationModel, Classifica
         B, H, W, C = x.shape
         x = x.permute(0, 3, 1, 2)
         x = self.avgpool(x).flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

@@ -352,7 +352,9 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         g = self.sde.diffusion(t).reshape(count, *([1] * (x.ndim - 1)))
         drift = self.sde.drift(x, t) - g**2 * self._guided_score(x, t, guidance)
         noise = lucid.randn(x.shape, dtype=x.dtype, device=x.device)
-        return cast(Tensor, x + drift * (-dt) + g * (dt**0.5) * noise)
+        step = x + drift * (-dt) + g * (dt**0.5) * noise
+        assert isinstance(step, Tensor)
+        return step
 
     def _corrector(self, x: Tensor, t: Tensor, guidance: _Guidance | None = None) -> Tensor:
         """Langevin steps at fixed ``t`` — the 'corrector' half."""
@@ -496,7 +498,8 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         path = odeint(
             rhs, start, lucid.linspace(1.0, self.sde.t_min, steps, device=device), method="rk4"
         )
-        return cast(Tensor, path[-1]).reshape(*shape)
+        assert isinstance(path, Tensor)
+        return path[-1].reshape(*shape)
 
     def log_likelihood(self, x: Tensor, *, steps: int = 100, eps: Tensor | None = None) -> Tensor:
         r"""Exact log-likelihood of the data, in nats.

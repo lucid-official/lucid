@@ -1083,8 +1083,10 @@ class GenieForWorldModeling(WorldModelingModel):
         frames: list[Tensor] = []
         if start < window:
             frames.append(self.genie.detokenize(tokens[:, :window])[:, start:])
-        for j in range(max(start, window), total):
-            frames.append(self.genie.detokenize(tokens[:, j - window + 1 : j + 1])[:, -1:])
+        frames.extend(
+            self.genie.detokenize(tokens[:, j - window + 1 : j + 1])[:, -1:]
+            for j in range(max(start, window), total)
+        )
         return lucid.cat(frames, dim=1) if len(frames) > 1 else frames[0]
 
     @override

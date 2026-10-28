@@ -298,8 +298,7 @@ class _ViTBlock(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         x = x + self.attn(self.norm1(x))
-        x = x + self.mlp(self.norm2(x))
-        return x
+        return x + self.mlp(self.norm2(x))
 
 
 # ---------------------------------------------------------------------------
@@ -464,11 +463,6 @@ class ViT(PretrainedModel, BackboneMixin):
         # class token and positional table (bare Parameters the framework
         # default never touches — they were sitting at exact zeros).
         init_transformer_trunc_normal(self)
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

@@ -18,17 +18,17 @@ run backwards from a Gaussian draw.
 """
 
 import math
-from typing import ClassVar, cast, final, override
+from typing import ClassVar, final, override
 
 import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.generative.realnvp._config import RealNVPConfig
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
 from lucid.models._utils._generative import flow_prior_log_prob, generative_activation, start_noise
-from lucid.models.generative.realnvp._config import RealNVPConfig
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Volume-preserving reshapes and masks
@@ -82,7 +82,11 @@ def _maybe_weight_norm(conv: nn.Conv2d, enabled: bool) -> nn.Conv2d:
     networks; it reparametrises each filter as :math:`g\,v/\lVert v\rVert`
     so the direction and the magnitude are learned separately.
     """
-    return cast(nn.Conv2d, nn.utils.weight_norm(conv)) if enabled else conv
+    if not enabled:
+        return conv
+    wrapped = nn.utils.weight_norm(conv)
+    assert isinstance(wrapped, nn.Conv2d)
+    return wrapped
 
 
 @final

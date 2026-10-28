@@ -22,7 +22,7 @@ the correct one at FID 61.06 and every wrong one between 137 and 329.
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 import lucid
 import lucid.func
@@ -433,8 +433,7 @@ class MeanFlowForImageGeneration(ImageGenerationModel):
             return self.mean_flow(z_, r_, t_, labels).sample
 
         u, dudt = lucid.func.jvp(field, (z, r, t), (v, lucid.zeros_like(r), lucid.ones_like(t)))
-        u = cast(Tensor, u)
-        dudt = cast(Tensor, dudt)
+        assert isinstance(u, Tensor) and isinstance(dudt, Tensor)
 
         interval = (t - r).reshape(-1, 1, 1, 1)
         # The stop-gradient of Eq. 9.  Redundant against this backend —

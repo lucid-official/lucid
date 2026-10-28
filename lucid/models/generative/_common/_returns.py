@@ -6,10 +6,22 @@ per-step discount the first did not have.  One implementation, one place
 to check the arithmetic against the paper.
 """
 
-import lucid
-from lucid._tensor.tensor import Tensor
+from collections.abc import Callable
 
-__all__ = ["lambda_return"]
+import lucid
+import lucid.nn as nn
+import lucid.nn.functional as F
+from lucid._tensor.tensor import Tensor
+from lucid.models.generative._common._rssm import RSSMState
+
+__all__ = [
+    "lambda_return",
+    "prepare_imagination_starts",
+    "imagination_weights",
+    "pcont_bce_loss",
+    "world_model_parameters",
+    "isolated_world_actor_value_backward",
+]
 
 
 def lambda_return(
@@ -77,3 +89,108 @@ def lambda_return(
         out.append(agg)
     out.reverse()
     return lucid.stack(out, dim=1)
+
+
+def prepare_imagination_starts(
+    posteriors: RSSMState, *, has_pcont: bool
+) -> tuple[RSSMState, RSSMState]:
+    """Drop the final filtered step when ``has_pcont`` is set, then flatten and detach starts."""
+    kept = posteriors
+    if has_pcont:
+        keep = int(posteriors.deter.shape[1]) - 1
+        if keep < 1:
+            raise ValueError(
+                "pcont drops the last filtered step, so it needs a "
+                f"sequence of at least 2, got {int(posteriors.deter.shape[1])}"
+            )
+        kept = posteriors.map(lambda x: x[:, :keep])
+    batch = int(kept.deter.shape[0])
+    steps = int(kept.deter.shape[1])
+    start = kept.map(lambda x: x.reshape(batch * steps, *(int(v) for v in x.shape[2:])).detach())
+    return kept, start
+
+
+def imagination_weights(
+    pcont: Tensor | None, discount: float, horizon: int, *, like: Tensor
+) -> Tensor:
+    """Compute detached cumulative continuation weights of shape ``(1, H)`` or ``(N, H)``."""
+    if pcont is None:
+        return lucid.tensor(
+            [[discount**i for i in range(horizon)]], device=like.device, dtype=like.dtype
+        )
+    ones = lucid.ones((int(pcont.shape[0]), 1), device=pcont.device, dtype=pcont.dtype)
+    running = lucid.cat([ones, pcont[:, : horizon - 1]], dim=1)
+    return lucid.cumprod(running, dim=1).detach()
+
+
+def pcont_bce_loss(
+    pcont_head: nn.Module | None,
+    predict_pcont: Callable[[RSSMState], Tensor],
+    posteriors: RSSMState,
+    discounts: Tensor | None,
+    *,
+    discount: float,
+    scale: float,
+) -> Tensor | None:
+    """Compute the binary cross-entropy continuation loss when ``pcont_head`` is present."""
+    if pcont_head is None:
+        return None
+    if discounts is None:
+        raise ValueError(
+            "pcont=True needs `discounts` — 1 where the episode "
+            "continued past a step and 0 where it ended."
+        )
+    target = discount * discounts
+    return scale * F.binary_cross_entropy_with_logits(predict_pcont(posteriors), target)
+
+
+def world_model_parameters(
+    encoder: nn.Module,
+    rssm: nn.Module,
+    decoder: nn.Module,
+    reward_head: nn.Module,
+    pcont_head: nn.Module | None = None,
+) -> list[nn.Parameter]:
+    """Return all parameters trained by the world-model objective across backbone and heads."""
+    modules: list[nn.Module] = [encoder, rssm, decoder, reward_head]
+    if pcont_head is not None:
+        modules.append(pcont_head)
+    return [p for module in modules for p in module.parameters()]
+
+
+def isolated_world_actor_value_backward(
+    module: nn.Module,
+    *,
+    world_loss: Tensor | None,
+    actor_loss: Tensor | None,
+    value_loss: Tensor | None,
+    actor_params: list[nn.Parameter],
+    value_params: list[nn.Parameter],
+    model_name: str,
+    wrapper_name: str,
+) -> None:
+    """Backpropagate actor, critic, and world losses in isolation onto their parameter groups."""
+    if world_loss is None or actor_loss is None or value_loss is None:
+        raise ValueError(
+            "backward() needs the losses; this output came from "
+            f"{model_name} rather than {wrapper_name}."
+        )
+
+    def take(params: list[nn.Parameter]) -> list[Tensor | None]:
+        return [None if p.grad is None else p.grad.clone() for p in params]
+
+    module.zero_grad()
+    actor_loss.backward(retain_graph=True)
+    actor_grads = take(actor_params)
+
+    module.zero_grad()
+    value_loss.backward(retain_graph=True)
+    value_grads = take(value_params)
+
+    module.zero_grad()
+    world_loss.backward()
+
+    for param, grad in zip(actor_params, actor_grads, strict=True):
+        param.grad = grad
+    for param, grad in zip(value_params, value_grads, strict=True):
+        param.grad = grad

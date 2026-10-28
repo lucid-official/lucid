@@ -343,14 +343,13 @@ def _xception_forward_features(model: _XceptionBody, x: Tensor) -> Tensor:
     # Exit flow
     x = model.block12(x)
     x = F.relu(model.bn3(model.conv3(x)))
-    x = F.relu(model.bn4(model.conv4(x)))
+    return F.relu(model.bn4(model.conv4(x)))
 
     # ``feature_info`` describes the pre-pool pyramid, and the mixin
     # documents this as returning the deepest stage's *feature map*.
     # Pooling here collapsed it to 1x1, so the declared reduction was
     # wrong by the input size and no consumer could reach a spatial map.
     # The classifier applies its own pooling.
-    return x
 
 
 def _build_xception_body(ic: int) -> dict[str, nn.Module]:
@@ -495,11 +494,6 @@ class Xception(PretrainedModel, BackboneMixin, _XceptionBody):
         # different distribution *and* gain — so a from-scratch run would
         # otherwise start somewhere the paper's schedule was never tuned for.
         init_cnn_fan_out(self)
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

@@ -298,11 +298,6 @@ class ConvNeXt(PretrainedModel, BackboneMixin):
         self._stage_features: list[Tensor] = []
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         """Pooled ``(B, C)`` feature vector, post head-norm.
 
@@ -438,10 +433,4 @@ class ConvNeXtForImageClassification(ImageClassificationModel, ClassificationHea
         x = x.unsqueeze(-1).unsqueeze(-1).permute(0, 2, 3, 1)
         x = self.head_norm(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

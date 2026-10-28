@@ -32,49 +32,11 @@ from lucid.models._base import PretrainedModel
 from lucid.models._mixins import BackboneMixin, FeatureInfo
 from lucid.models._output import BaseModelOutput, ImageClassificationOutput
 from lucid.models._tasks import ImageClassificationModel
+from lucid.models._utils._classification import BasicConvBnReLU2d as _ConvBnReLU
 from lucid.models.vision.inception_v4._config import InceptionV4Config
-
-# BatchNorm epsilon used by every conv block.  TF-Slim's default is 1e-3,
-# and the released checkpoint's running statistics were accumulated under
-# it; the usual 1e-5 would shift every normalised activation slightly.
-_BN_EPS = 1e-3
 
 # Width of the trunk's final feature map (Inception-C output).
 _NUM_FEATURES = 1536
-
-# ---------------------------------------------------------------------------
-# Conv → BN → ReLU helper (``.conv`` / ``.bn`` sub-modules)
-# ---------------------------------------------------------------------------
-
-
-@final
-class _ConvBnReLU(nn.Module):
-    """Bias-free Conv2d → BatchNorm2d(eps=1e-3) → ReLU.
-
-    The sub-modules are named ``.conv`` and ``.bn`` so the parameter keys
-    match the reference zoo's ``ConvNormAct`` layout.  Padding defaults to
-    zero — the paper's "V" (valid) convolutions — and is passed explicitly
-    wherever a figure marks a convolution as same-padded.
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int | tuple[int, int],
-        *,
-        stride: int = 1,
-        padding: int | tuple[int, int] = 0,
-    ) -> None:
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
-        )
-        self.bn = nn.BatchNorm2d(out_channels, eps=_BN_EPS)
-
-    @override
-    def forward(self, x: Tensor) -> Tensor:
-        return F.relu(self.bn(self.conv(x)))
 
 
 def _avg_pool_branch(in_channels: int, out_channels: int) -> nn.Sequential:
@@ -487,11 +449,6 @@ class InceptionV4(PretrainedModel, BackboneMixin):
             FeatureInfo(stage=3, num_channels=1024, reduction=16),
             FeatureInfo(stage=4, num_channels=_NUM_FEATURES, reduction=32),
         ]
-
-    @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
 
     @override
     def forward_features(self, x: Tensor) -> Tensor:

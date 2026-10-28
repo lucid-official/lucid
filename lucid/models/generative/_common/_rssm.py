@@ -36,7 +36,7 @@ because a recurrence has to be — the same shape ``nn.GRU.forward`` takes.
 
 import math
 from collections.abc import Callable
-from typing import NamedTuple, cast, override
+from typing import NamedTuple, override
 
 import lucid
 import lucid.nn as nn
@@ -163,6 +163,12 @@ class RSSMState(NamedTuple):
                 "this state carries a categorical latent; it has no mean or " "standard deviation"
             )
         return self.mean, self.std
+
+    def categorical_logits(self) -> Tensor:
+        """Unpack ``logits`` narrowed from the optional field for categorical states."""
+        if self.logits is None:
+            raise ValueError("this state carries a Gaussian latent; it has no categorical logits")
+        return self.logits
 
     def map(self, fn: Callable[[Tensor], Tensor]) -> RSSMState:
         """Apply ``fn`` to every tensor present, leaving absent ones absent.
@@ -902,10 +908,8 @@ class RSSM(nn.Module):
         """
 
         def gather(pick: Callable[[RSSMState], Tensor | None]) -> Tensor | None:
-            first = pick(states[0])
-            if first is None:
-                return None
-            return lucid.stack([cast(Tensor, pick(s)) for s in states], dim=1)
+            items = [t for s in states if (t := pick(s)) is not None]
+            return lucid.stack(items, dim=1) if items else None
 
         return RSSMState(
             deter=lucid.stack([s.deter for s in states], dim=1),
@@ -1029,6 +1033,33 @@ class RSSM(nn.Module):
             states.append(state)
         return self._stack(states)
 
+    def imagine_with_actor(
+        self,
+        state: RSSMState,
+        actor: Callable[..., Tensor],
+        horizon: int,
+        *,
+        sample: bool = True,
+        detach_actor_input: bool = True,
+    ) -> tuple[RSSMState, Tensor]:
+        """Roll the prior forward under ``actor`` for ``horizon`` steps, keeping ``state`` first."""
+        if horizon < 1:
+            raise ValueError(f"horizon must be at least 1, got {horizon}")
+        current = state
+        steps: list[RSSMState] = []
+        actions: list[Tensor] = []
+        for _ in range(horizon):
+            feature = current.feature.reshape(int(current.deter.shape[0]), 1, -1)
+            if detach_actor_input:
+                feature = feature.detach()
+            action = actor(feature, sample=sample)[:, 0]
+            current = self.prior_step(current, action, sample=sample)
+            actions.append(action)
+            steps.append(current)
+        first = steps[0]
+        start_filled = state._replace(mean=first.mean, std=first.std, logits=first.logits)
+        return self._stack([start_filled, *steps]), lucid.stack(actions, dim=1)
+
     @override
     def forward(
         self, embed: Tensor, actions: Tensor, state: RSSMState | None = None
@@ -1110,7 +1141,7 @@ def rssm_kl(posterior: RSSMState, prior: RSSMState, *, free_nats: float = 3.0) -
         )
 
     if posterior.is_discrete:
-        per_step = categorical_kl(cast(Tensor, posterior.logits), cast(Tensor, prior.logits))
+        per_step = categorical_kl(posterior.categorical_logits(), prior.categorical_logits())
     else:
         posterior_mean, _ = posterior.gaussian()
         prior_mean, _ = prior.gaussian()

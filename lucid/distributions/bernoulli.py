@@ -21,7 +21,7 @@ from lucid.distributions.constraints import open_unit_interval  # noqa: F401
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 
-from lucid.distributions._util import _as_tensor, _clamp_probs, _lazy_param
+from lucid.distributions._util import _clamp_probs, _lazy_param, _set_probs_or_logits
 from lucid.special import xlog1py
 
 
@@ -136,6 +136,7 @@ class Bernoulli(ExponentialFamily):
     arg_constraints = {"probs": unit_interval, "logits": real}
     support: Constraint | None = boolean
     has_enumerate_support = True
+    _is_logits: bool
 
     def __init__(
         self,
@@ -175,15 +176,7 @@ class Bernoulli(ExponentialFamily):
         >>> d2.mean  # p = sigmoid(0), derived from the logits on demand
         tensor(0.5)
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("Bernoulli: pass exactly one of `probs` or `logits`.")
-        if probs is not None:
-            self.probs = _as_tensor(probs)
-            self._is_logits = False
-        else:
-            self.logits = _as_tensor(logits)  # type: ignore[arg-type]
-            self._is_logits = True
-        shape = tuple(self.probs.shape) if not self._is_logits else tuple(self.logits.shape)
+        shape = _set_probs_or_logits(self, "Bernoulli", probs, logits)
         super().__init__(batch_shape=shape, event_shape=(), validate_args=validate_args)
 
     @override
@@ -553,18 +546,11 @@ class Geometric(Distribution):
         >>> d.mean  # E[X] = (1-p)/p = 3
         tensor(3.)
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("Geometric: pass exactly one of `probs` or `logits`.")
         # Whichever was given is stored and the other derived on access.
         # Converting ``logits`` up front also validated the converted value,
         # so ``logits=20.0`` — a probability that rounds to 1 in float32 —
         # was refused as outside the open interval.
-        if probs is not None:
-            self.probs = _as_tensor(probs)
-            shape = tuple(self.probs.shape)
-        else:
-            self.logits = _as_tensor(logits)  # type: ignore[arg-type]
-            shape = tuple(self.logits.shape)
+        shape = _set_probs_or_logits(self, "Geometric", probs, logits)
         super().__init__(batch_shape=shape, event_shape=(), validate_args=validate_args)
 
     @_lazy_param
@@ -584,8 +570,7 @@ class Geometric(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Geometric` with batch dimensions expanded to ``batch_shape``."""
-        names = tuple(k for k in ("probs", "logits") if k in vars(self))
-        return self._expand_attributes(Geometric, batch_shape, _instance, *names)
+        return self._expand_probs_or_logits(Geometric, batch_shape, _instance)
 
     @override
     @property

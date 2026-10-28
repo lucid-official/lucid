@@ -8,6 +8,7 @@ from typing import override
 
 import lucid
 import lucid.nn as nn
+import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 
 
@@ -114,3 +115,27 @@ class DropPath(nn.Module):
         random_tensor = lucid.rand(shape, device=x.device.type)
         binary_mask = (random_tensor < keep_prob).float()
         return x * binary_mask / keep_prob
+
+
+class BasicConvBnReLU2d(nn.Module):
+    """Bias-free ``Conv2d -> BatchNorm2d(eps=1e-3) -> ReLU`` primitive for GoogLeNet / Inception trunks."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int | tuple[int, int],
+        stride: int = 1,
+        padding: int | tuple[int, int] = 0,
+        *,
+        eps: float = 1e-3,
+    ) -> None:
+        super().__init__()
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size, stride=stride, padding=padding, bias=False
+        )
+        self.bn = nn.BatchNorm2d(out_channels, eps=eps)
+
+    @override
+    def forward(self, x: Tensor) -> Tensor:
+        return F.relu(self.bn(self.conv(x)))

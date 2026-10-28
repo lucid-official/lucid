@@ -136,11 +136,6 @@ class VGG(PretrainedModel, BackboneMixin):
         init_cnn_fan_out(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.avgpool(x)
@@ -231,10 +226,4 @@ class VGGForImageClassification(ImageClassificationModel, ClassificationHeadMixi
         feat = self.avgpool(self.features(x)).flatten(1)
         h = self.drop6(F.relu(self.fc6(feat)))
         h = self.drop7(F.relu(self.fc7(h)))
-        logits = self.classifier(h)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(h, labels)

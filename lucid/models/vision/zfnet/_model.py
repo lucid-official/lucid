@@ -146,11 +146,6 @@ class ZFNet(PretrainedModel, BackboneMixin):
         ]
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.avgpool(x)
@@ -237,10 +232,4 @@ class ZFNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         x = x.flatten(1)
         x = self.drop6(F.relu(self.fc6(x)))
         x = self.drop7(F.relu(self.fc7(x)))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

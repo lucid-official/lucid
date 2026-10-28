@@ -217,14 +217,8 @@ class _Interval(Constraint):
 
         An open end excludes its bound, a closed end includes it.
         """
-        if self.lower_open:
-            above = value > self.lower_bound
-        else:
-            above = value >= self.lower_bound
-        if self.upper_open:
-            below = value < self.upper_bound
-        else:
-            below = value <= self.upper_bound
+        above = value > self.lower_bound if self.lower_open else value >= self.lower_bound
+        below = value < self.upper_bound if self.upper_open else value <= self.upper_bound
         return above & below
 
     @override

@@ -29,7 +29,7 @@ or generated.
 
 import math
 from collections.abc import Callable
-from typing import ClassVar, cast, final, override
+from typing import ClassVar, TypeVar, final, override
 
 import lucid
 import lucid.diffeq
@@ -41,18 +41,19 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput
 from lucid.models._utils._generative import (
-    exact_divergence,
+    LikelihoodDynamics,
+    check_image_shape,
+    cnf_gaussian_log_prob,
     generative_activation,
-    hutchinson_divergence,
+    odeint_endpoint,
     resolve_generation_device,
     start_noise,
-    trace_probe,
 )
 from lucid.models.generative.rectified_flow._config import RectifiedFlowConfig, TimeSchedule
 
 # What ``lucid.diffeq`` calls a state: one tensor, or a tuple of them when
 # more than one quantity is integrated at once.
-_State = Tensor | tuple[Tensor, ...]
+_StateT = TypeVar("_StateT", Tensor, tuple[Tensor, Tensor])
 
 # The time embedding was designed for the integer step index of a
 # discrete-time diffusion model.  The reference implementation feeds it
@@ -686,89 +687,7 @@ class _VelocityField(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@final
-class _LikelihoodDynamics:
-    r"""Augmented right-hand side :math:`(x, \Delta)` for scoring density.
-
-    Training never touches this.  It exists because a trained velocity
-    field *is* a continuous normalizing flow, so a log-likelihood is
-    available by integrating
-
-    .. math::
-
-        \frac{dx}{dt} = v(x, t), \qquad
-        \frac{d\Delta}{dt} = \operatorname{tr}
-            \!\left(\frac{\partial v}{\partial x}\right)
-
-    from :math:`t = 1` down to :math:`t = 0`, after which
-    :math:`\log p_1(x_1) = \log p_0(x_0) + \Delta(0)`.
-    """
-
-    def __init__(self, field: _VelocityField, config: RectifiedFlowConfig) -> None:
-        # A plain reference, deliberately not a registered submodule: the
-        # model already owns this field, and registering it twice would
-        # put every weight in ``state_dict`` under two names and double
-        # the size of every checkpoint.
-        self.field = field
-        self._dim = config.data_dim
-        self._trace_method = config.resolved_trace_method
-        self._trace_noise = config.trace_noise
-        size = config.sample_size
-        height, width = size if isinstance(size, tuple) else (size, size)
-        self._image_shape = (config.in_channels, height, width)
-        self.nfe = 0
-        self._eps: Tensor | None = None
-        self._seeds: list[Tensor] | None = None
-
-    def reset(self, eps: Tensor | None = None) -> None:
-        """Zero the counter and fix the probe for one solve."""
-        self.nfe = 0
-        self._eps = eps
-        self._seeds = None
-
-    def sample_noise(self, like: Tensor) -> Tensor:
-        """Draw a Hutchinson probe shaped like ``like``."""
-        return trace_probe(like, self._trace_noise)
-
-    def velocity(self, t: Tensor, x: Tensor) -> Tensor:
-        """Flat-state velocity — what sampling integrates."""
-        self.nfe += 1
-        batch = int(x.shape[0])
-        image = x.reshape(batch, *self._image_shape)
-        return self.field(image, t).reshape(batch, -1)
-
-    def __call__(self, t: Tensor, state: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
-        x, _ = state
-        self.nfe += 1
-        with lucid.enable_grad():
-            source = x if x.requires_grad else x.detach().requires_grad_(True)
-            batch = int(source.shape[0])
-            image = source.reshape(batch, *self._image_shape)
-            velocity = self.field(image, t).reshape(batch, -1)
-            divergence = self._divergence(velocity, source)
-        return velocity, divergence
-
-    def _divergence(self, velocity: Tensor, x: Tensor) -> Tensor:
-        # ``create_graph=False``: the objective is a regression that never
-        # touches the divergence, so the density is a reported quantity
-        # rather than a trained one.
-        if self._trace_method == "exact":
-            return exact_divergence(velocity, x, self._exact_seeds(velocity), create_graph=False)
-        eps = self._eps
-        if eps is None:
-            eps = self.sample_noise(x)
-            self._eps = eps
-        return hutchinson_divergence(velocity, x, eps, create_graph=False)
-
-    def _exact_seeds(self, velocity: Tensor) -> list[Tensor]:
-        """Identity rows broadcast over the batch, built once per solve."""
-        seeds = self._seeds
-        if seeds is None or seeds[0].shape != velocity.shape:
-            basis = lucid.eye(self._dim, dtype=velocity.dtype, device=velocity.device)
-            ones = lucid.ones_like(velocity[:, :1])
-            seeds = [basis[index].reshape(1, self._dim) * ones for index in range(self._dim)]
-            self._seeds = seeds
-        return seeds
+_LikelihoodDynamics = LikelihoodDynamics
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -916,12 +835,7 @@ class RectifiedFlowModel(PretrainedModel):
         return self.dynamics.nfe
 
     def _check_image(self, x: Tensor, what: str = "Rectified Flow") -> None:
-        channels, height, width = self._image_shape
-        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
-            raise ValueError(
-                f"{what} expects (B, {channels}, {height}, {width}) samples, "
-                f"got shape {tuple(x.shape)}"
-            )
+        check_image_shape(x, self._image_shape, what)
 
     def sample_times(self, batch: int, device: str | None = None) -> Tensor:
         r"""Draw the times the objective is evaluated at.
@@ -1158,20 +1072,11 @@ class RectifiedFlowModel(PretrainedModel):
         return self._t_schedule != "uniform"
 
     def _integrate(
-        self, func: Callable[..., object], state: _State, t0: float, t1: float
-    ) -> _State:
+        self, func: Callable[..., object], state: _StateT, t0: float, t1: float
+    ) -> _StateT:
         """One adaptive solve, endpoint only."""
-        return cast(
-            _State,
-            lucid.diffeq.odeint(
-                func,
-                state,
-                [t0, t1],
-                rtol=self._rtol,
-                atol=self._atol,
-                method=self._solver,
-                return_trajectory=False,
-            ),
+        return odeint_endpoint(
+            func, state, [t0, t1], rtol=self._rtol, atol=self._atol, method=self._solver
         )
 
     @lucid.no_grad()
@@ -1246,7 +1151,7 @@ class RectifiedFlowModel(PretrainedModel):
         flat = noise.reshape(batch, -1)
 
         if steps is None:
-            out = cast(Tensor, self._integrate(self.dynamics.velocity, flat, self._time_eps, 1.0))
+            out = self._integrate(self.dynamics.velocity, flat, self._time_eps, 1.0)
         else:
             if steps <= 0:
                 raise ValueError(f"steps must be positive, got {steps}")
@@ -1542,19 +1447,14 @@ class RectifiedFlowModel(PretrainedModel):
         True
         """
         self._check_image(x)
-        batch = int(x.shape[0])
-        flat = x.reshape(batch, -1)
-        delta = lucid.zeros((batch,), dtype=flat.dtype, device=flat.device)
-
-        eps = None if self._trace_method == "exact" else self.dynamics.sample_noise(flat)
-        self.dynamics.reset(eps)
-
-        x0, delta0 = cast(
-            tuple[Tensor, Tensor],
-            self._integrate(self.dynamics, (flat, delta), 1.0, self._time_eps),
+        return cnf_gaussian_log_prob(
+            self.dynamics,
+            x,
+            integrate=self._integrate,
+            trace_method=self._trace_method,
+            input_dim=self._input_dim,
+            t0=self._time_eps,
         )
-        prior = -0.5 * (x0 * x0).sum(dim=-1) - 0.5 * self._input_dim * math.log(2.0 * math.pi)
-        return prior + delta0
 
     def bits_per_dim(self, x: Tensor) -> Tensor:
         """Per-sample negative log-likelihood in bits per dimension."""
@@ -1667,10 +1567,11 @@ class RectifiedFlowForImageGeneration(ImageGenerationModel):
             ``(z0, z1)``, both ``(N, C, H, W)``.
         """
         device = resolve_generation_device(self, device)
-        return cast(
-            tuple[Tensor, Tensor],
-            self.rectified_flow.reflow_pairs(n_samples, steps=steps, device=device, noise=noise),
+        z0, z1 = self.rectified_flow.reflow_pairs(
+            n_samples, steps=steps, device=device, noise=noise
         )
+        assert isinstance(z0, Tensor) and isinstance(z1, Tensor)
+        return z0, z1
 
     @lucid.no_grad()
     def generate(

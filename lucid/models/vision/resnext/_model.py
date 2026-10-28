@@ -10,7 +10,6 @@ where base_width = 64 (the channel count at the first stage).
 from typing import ClassVar, final, override
 
 import lucid.nn as nn
-import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._common import init_cnn_fan_out
 from lucid.models._base import PretrainedModel
@@ -112,15 +111,12 @@ def _make_layer(
             width_per_group=width_per_group,
         )
     ]
-    for _ in range(1, num_blocks):
-        blocks.append(
-            _ResNeXtBottleneck(
-                final_channels,
-                out_channels,
-                cardinality=cardinality,
-                width_per_group=width_per_group,
-            )
+    blocks.extend(
+        _ResNeXtBottleneck(
+            final_channels, out_channels, cardinality=cardinality, width_per_group=width_per_group
         )
+        for _ in range(1, num_blocks)
+    )
 
     return nn.Sequential(*blocks), final_channels
 
@@ -267,19 +263,13 @@ class ResNeXt(PretrainedModel, BackboneMixin):
             _zero_init_residual(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        return self.layer4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -383,10 +373,4 @@ class ResNeXtForImageClassification(ImageClassificationModel, ClassificationHead
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

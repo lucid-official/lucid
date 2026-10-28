@@ -5,7 +5,7 @@ had to supply per domain, and each is written here rather than inline
 because each has a failure mode worth naming in one place.
 """
 
-from typing import cast, override
+from typing import override
 
 import lucid
 import lucid.nn as nn
@@ -94,8 +94,8 @@ def free_bits_kl(
     if free_nats < 0.0:
         raise ValueError(f"free_nats must be non-negative, got {free_nats}")
 
-    posterior_logits = cast(Tensor, posterior.logits)
-    prior_logits = cast(Tensor, prior.logits)
+    posterior_logits = posterior.categorical_logits()
+    prior_logits = prior.categorical_logits()
 
     toward_prior = categorical_kl(posterior_logits.detach(), prior_logits)
     toward_posterior = categorical_kl(posterior_logits, prior_logits.detach())
@@ -299,4 +299,6 @@ class ReturnNormaliser(nn.Module):
             ``returns / max(floor, spread)`` — the divisor is computed under
             ``no_grad``, so nothing differentiates through the normalisation.
         """
-        return cast(Tensor, returns / self.update(returns))
+        scaled = returns / self.update(returns)
+        assert isinstance(scaled, Tensor)
+        return scaled

@@ -146,13 +146,7 @@ class _SplitAttn(nn.Module):
 
         x_attn = self.rsoftmax(x_attn).reshape(b, -1, 1, 1)
 
-        if r > 1:
-            # x: (B, radix, C, H, W) ; x_attn: (B, radix*C, 1, 1) → (B, radix, C, 1, 1)
-            out = (x * x_attn.reshape(b, r, rc // r, 1, 1)).sum(dim=1)
-        else:
-            out = x * x_attn
-
-        return out
+        return (x * x_attn.reshape(b, r, rc // r, 1, 1)).sum(dim=1) if r > 1 else x * x_attn
 
 
 # ---------------------------------------------------------------------------
@@ -394,22 +388,22 @@ def _make_layer(
             drop_block_size=drop_block_size,
         )
     ]
-    for _ in range(1, num_blocks):
-        blocks.append(
-            _ResNeStBottleneck(
-                out_ch,
-                planes,
-                stride=1,
-                radix=radix,
-                groups=groups,
-                avd=avd,
-                avd_first=avd_first,
-                dilation=dilation,
-                bottleneck_width=bottleneck_width,
-                drop_block_rate=drop_block_rate,
-                drop_block_size=drop_block_size,
-            )
+    blocks.extend(
+        _ResNeStBottleneck(
+            out_ch,
+            planes,
+            stride=1,
+            radix=radix,
+            groups=groups,
+            avd=avd,
+            avd_first=avd_first,
+            dilation=dilation,
+            bottleneck_width=bottleneck_width,
+            drop_block_rate=drop_block_rate,
+            drop_block_size=drop_block_size,
         )
+        for _ in range(1, num_blocks)
+    )
 
     return nn.Sequential(*blocks), out_ch
 
@@ -668,11 +662,6 @@ class ResNeSt(PretrainedModel, BackboneMixin):
             zero_init_last_bn(self, (_ResNeStBottleneck,), attr="bn3")
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.conv1(x)
         x = self.act1(self.bn1(x))
@@ -680,8 +669,7 @@ class ResNeSt(PretrainedModel, BackboneMixin):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        return self.layer4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -779,10 +767,4 @@ class ResNeStForImageClassification(ImageClassificationModel, ClassificationHead
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

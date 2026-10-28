@@ -182,8 +182,7 @@ class _TwoMLPHead(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         x = x.flatten(1)
         x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
-        return x
+        return F.relu(self.fc7(x))
 
 
 @final

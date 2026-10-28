@@ -74,8 +74,7 @@ class _SelectiveKernelAttn(nn.Module):
 
         # Reshape to (B, num_paths, C, 1, 1) then softmax over path dim
         z = z.reshape(b, self.num_paths, c, 1, 1)
-        z = F.softmax(z, dim=1)
-        return z
+        return F.softmax(z, dim=1)
 
 
 # ---------------------------------------------------------------------------
@@ -370,10 +369,7 @@ def _make_stage(
 ) -> tuple[nn.Sequential, int]:
     """Build one ResNet stage of SK blocks (bottleneck or basic)."""
     block_cls: type[_SelectiveKernelBottleneck] | type[_SelectiveKernelBasic]
-    if block_type == "basic":
-        block_cls = _SelectiveKernelBasic
-    else:
-        block_cls = _SelectiveKernelBottleneck
+    block_cls = _SelectiveKernelBasic if block_type == "basic" else _SelectiveKernelBottleneck
 
     outplanes = planes * block_cls.expansion
 
@@ -402,8 +398,10 @@ def _make_stage(
             **block_kwargs,  # type: ignore[arg-type]
         )
     ]
-    for _ in range(1, num_blocks):
-        blocks.append(block_cls(outplanes, planes, **block_kwargs))  # type: ignore[arg-type]
+    blocks.extend(
+        block_cls(outplanes, planes, **block_kwargs)  # type: ignore[arg-type]
+        for _ in range(1, num_blocks)
+    )
 
     return nn.Sequential(*blocks), outplanes
 
@@ -553,19 +551,13 @@ class SKNet(PretrainedModel, BackboneMixin):
         init_cnn_fan_out(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        return self.layer4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -670,10 +662,4 @@ class SKNetForImageClassification(ImageClassificationModel, ClassificationHeadMi
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels, label_smoothing=self._label_smoothing)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels, label_smoothing=self._label_smoothing)

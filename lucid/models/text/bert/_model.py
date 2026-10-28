@@ -40,6 +40,7 @@ from lucid.models._output import (
     ModelOutput,
 )
 from lucid.models._utils._text import (
+    compute_qa_loss,
     extended_attention_mask,
     init_text_weights as _init_weights,
     text_activation,
@@ -106,10 +107,7 @@ class _BERTEmbeddings(nn.Module):
             dev = input_ids.device.type
             words = self.word_embeddings(input_ids)
 
-        if position_ids is None:
-            pos_ids = self.position_ids[:, :T]
-        else:
-            pos_ids = position_ids
+        pos_ids = self.position_ids[:, :T] if position_ids is None else position_ids
         positions = self.position_embeddings(pos_ids)
 
         if token_type_ids is None:
@@ -1001,30 +999,7 @@ class BERTForQuestionAnswering(SequenceClassificationModel):
         start_logits = logits[..., 0]  # (B, T)
         end_logits = logits[..., 1]  # (B, T)
 
-        loss: Tensor | None = None
-        if start_positions is not None and end_positions is not None:
-            # Callers are responsible for keeping span positions inside [0, T).
-            # SQuAD's sliding window (§4.2) puts some answers outside the
-            # current doc-stride span.  The reference clamps those positions
-            # to a sentinel at the sequence end and ignores that index in the
-            # loss, so an unanswerable window contributes zero rather than
-            # training the model towards an arbitrary in-window token.
-            ignored = int(start_logits.shape[1])
-            start_t = start_positions.long().clip(min=0, max=ignored)
-            end_t = end_positions.long().clip(min=0, max=ignored)
-            # A batch in which *every* window is unanswerable leaves the mean
-            # with no terms to average, which surfaces as NaN and would poison
-            # the whole step.  Zero is the honest value: nothing was asked.
-            # It stays in the graph, with a zero gradient, so the step that
-            # calls ``backward()`` on it runs like any other.
-            n_valid = float((start_t != ignored).float().sum().item())
-            if n_valid == 0.0:
-                loss = (start_logits.sum() + end_logits.sum()) * 0.0
-            else:
-                loss = (
-                    F.cross_entropy(start_logits, start_t, ignore_index=ignored)
-                    + F.cross_entropy(end_logits, end_t, ignore_index=ignored)
-                ) / 2.0
+        loss = compute_qa_loss(start_logits, end_logits, start_positions, end_positions)
 
         return QuestionAnsweringOutput(start_logits=start_logits, end_logits=end_logits, loss=loss)
 

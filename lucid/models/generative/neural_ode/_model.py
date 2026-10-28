@@ -17,7 +17,7 @@ inverse: it is the same field integrated from ``t = 1`` back to ``t = 0``.
 
 import math
 from collections.abc import Callable
-from typing import ClassVar, cast, final, override
+from typing import ClassVar, final, override, overload
 
 import lucid
 import lucid.autograd
@@ -28,19 +28,16 @@ from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageGenerationModel
 from lucid.models._output import GenerationOutput, NormalizingFlowOutput
 from lucid.models._utils._generative import (
+    check_image_shape,
     exact_divergence,
     flow_prior_log_prob,
     generative_activation,
     hutchinson_divergence,
+    odeint_endpoint,
     start_noise,
     trace_probe,
 )
 from lucid.models.generative.neural_ode._config import NeuralODEConfig
-
-# What ``lucid.diffeq`` calls a state: one tensor, or a tuple of them when
-# more than one quantity is integrated at once — here the sample and its
-# accumulated log-density.
-_State = Tensor | tuple[Tensor, ...]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Vector field — the paper's gated sum
@@ -424,23 +421,26 @@ class NeuralODEModel(PretrainedModel):
         return self._nfe_forward
 
     def _check_image(self, x: Tensor) -> None:
-        channels, height, width = self._image_shape
-        if x.ndim != 4 or tuple(int(s) for s in x.shape[1:]) != (channels, height, width):
-            raise ValueError(
-                f"Neural ODE expects (B, {channels}, {height}, {width}) samples, "
-                f"got shape {tuple(x.shape)}"
-            )
+        check_image_shape(x, self._image_shape, "Neural ODE")
+
+    @overload
+    def _integrate(
+        self, func: Callable[..., object], state: Tensor, t0: float, t1: float
+    ) -> Tensor: ...
+
+    @overload
+    def _integrate(
+        self, func: Callable[..., object], state: tuple[Tensor, Tensor], t0: float, t1: float
+    ) -> tuple[Tensor, Tensor]: ...
 
     def _integrate(
-        self, func: Callable[..., object], state: _State, t0: float, t1: float
-    ) -> _State:
-        """Run one solve, adjoint or direct, and return the endpoint only.
-
-        The adjoint buys constant memory in the backward pass, so it is
-        worth nothing when there is no backward pass to come — sampling
-        and evaluation take the plain solver and skip the flattening and
-        the custom autograd node it would otherwise set up.
-        """
+        self,
+        func: Callable[..., object],
+        state: Tensor | tuple[Tensor, Tensor],
+        t0: float,
+        t1: float,
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        """Run one solve, adjoint or direct, and return the endpoint only."""
         span = [t0, t1]
         if self._use_adjoint and lucid.is_grad_enabled():
             if self._adjoint_params is None:
@@ -454,27 +454,23 @@ class NeuralODEModel(PretrainedModel):
                 method=self._solver,
                 adjoint_params=self._adjoint_params,
             )
-            # The adjoint always reports the trajectory; the flow only ever
-            # wants where it ended up.
-            # Snapshot before any backward sweep can add to the live counter.
             self._nfe_forward = self.dynamics.nfe
-            if isinstance(out, Tensor):
+            if isinstance(state, Tensor):
+                assert isinstance(out, Tensor)
                 return out[-1]
-            return tuple(part[-1] for part in out)
-        direct = cast(
-            _State,
-            lucid.diffeq.odeint(
-                func,
-                state,
-                span,
-                rtol=self._rtol,
-                atol=self._atol,
-                method=self._solver,
-                return_trajectory=False,
-            ),
+            assert isinstance(out, tuple) and len(out) == 2
+            return out[0][-1], out[1][-1]
+        if isinstance(state, Tensor):
+            direct_t = odeint_endpoint(
+                func, state, span, rtol=self._rtol, atol=self._atol, method=self._solver
+            )
+            self._nfe_forward = self.dynamics.nfe
+            return direct_t
+        direct_pair = odeint_endpoint(
+            func, state, span, rtol=self._rtol, atol=self._atol, method=self._solver
         )
         self._nfe_forward = self.dynamics.nfe
-        return direct
+        return direct_pair
 
     def encode(self, x: Tensor) -> tuple[Tensor, Tensor]:
         r"""Map samples to the latent space, accumulating the log-determinant.
@@ -535,9 +531,7 @@ class NeuralODEModel(PretrainedModel):
         eps = None if self._trace_method == "exact" else self.dynamics.sample_noise(z0)
         self.dynamics.reset(eps)
 
-        z1, delta1 = cast(
-            tuple[Tensor, Tensor], self._integrate(self.dynamics, (z0, delta0), 0.0, 1.0)
-        )
+        z1, delta1 = self._integrate(self.dynamics, (z0, delta0), 0.0, 1.0)
         return z1, delta1
 
     def decode(self, z: Tensor) -> Tensor:
@@ -554,7 +548,7 @@ class NeuralODEModel(PretrainedModel):
             )
         batch = int(z.shape[0])
         self.dynamics.reset()
-        z0 = cast(Tensor, self._integrate(self.dynamics.velocity, z, 1.0, 0.0))
+        z0 = self._integrate(self.dynamics.velocity, z, 1.0, 0.0)
         return z0.reshape(batch, *self._image_shape)
 
     def log_prob(self, x: Tensor) -> Tensor:

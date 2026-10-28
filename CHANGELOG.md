@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Changed
+
+- complete DS-7 single-owner extractions across distributions and models
+
+---
+
 ## [3.16.1] — 2026-10-28
 
 Compiled single-token autoregressive decoding across all four generative text families (`GPTLMHeadModel`, `GPT2LMHeadModel`, `TransformerForSeq2SeqLM`, `T5ForSeq2SeqLM`) via `StaticCache` and `compiled_decode_step` (`cache_implementation="compiled"`), and traced custom-VJP compilation (`Function._traced_backward`, `VjpRegion`) covering linear-algebra decompositions (`cholesky`, `qr`, `svd`, `eigh`, `solve_triangular`, `pinv`, `slogdet`, `matrix_power`), all 10 reparameterised distributions' `rsample()`, `RoFormer`, QAT `_FakeQuantizeAffine`, and user-defined `autograd.Function` subclasses in `make_step`, `fused_step`, and `compiled_step`. Also includes the T5 model family, `register_parametrization` / `orthogonal` parametrizations, `ValuesIndices` return tuples on `sort` / `max(dim=)` / `min(dim=)` / `cummax` / `cummin`, and numerical precision and view-versioning fixes across CPU and Metal. Engine ABI 39.

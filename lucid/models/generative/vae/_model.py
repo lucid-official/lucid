@@ -227,25 +227,13 @@ class _VAEDecoder(nn.Module):
         # level ``L-1-l`` (so the deepest z_{L-1} is consumed by the
         # initial Linear above; the next block consumes z_{L-2}; …).
         if self._hier:
-            inject: list[nn.Linear] = []
-            # We use the post-upsample feature's channel count to size the
-            # injection.  For block index l in 0..L-1, post-upsample
-            # channels are ``rev_channels[l+1]`` for l < L-1 and
-            # ``rev_channels[-1]`` for l == L-1 (last block keeps channels).
             post_channels = tuple(rev_channels[1:]) + (rev_channels[-1],)
-            # Levels matched: block l consumes z_{L-2-l} for l in 0..L-2;
-            # block L-1 has no z to inject (already consumed all but z_{L-1}
-            # which feeds the initial Linear).
-            #
-            # We register one projection *per* upsample step so iteration
-            # order in forward stays simple — unused slot at the last
-            # position is None-out via a placeholder Linear of size 0?  No,
-            # cleaner: only register injections for the L-1 non-deepest
-            # latents and skip in forward.
-            for lvl in range(L - 1):
-                # post_channels[lvl] is the channel count after this block.
-                inject.append(nn.Linear(config.latent_dims[L - 2 - lvl], post_channels[lvl]))
-            self.injectors = nn.ModuleList(inject)
+            self.injectors = nn.ModuleList(
+                [
+                    nn.Linear(config.latent_dims[L - 2 - lvl], post_channels[lvl])
+                    for lvl in range(L - 1)
+                ]
+            )
         # Cache for forward dispatch.
         self._post_channels = tuple(rev_channels[1:]) + (rev_channels[-1],) if self._hier else ()
 

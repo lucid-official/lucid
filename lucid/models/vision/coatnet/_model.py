@@ -392,8 +392,7 @@ class _RelAttnBlock(nn.Module):
         shortcut = self.shortcut(identity)
         h = self._pool(self.norm1(x), grid)
         x = shortcut + self.drop_path1(self._attn(h, attn_grid))
-        x = x + self.drop_path2(self.fc2(F.gelu(self.fc1(self.norm2(x)))))
-        return x
+        return x + self.drop_path2(self.fc2(F.gelu(self.fc1(self.norm2(x)))))
 
     def _pool(self, seq: Tensor, grid: tuple[int, int]) -> Tensor:
         """Max-pool a ``(B, N, C)`` sequence on its 2-D grid, per Eqn (4)."""
@@ -539,18 +538,24 @@ def _build_body(
     # After stem: H/2 × W/2
 
     # ------------------------------------------------------------------ S1
-    s1_layers: list[nn.Module] = []
-    s1_layers.append(_MBConv(stem_ch, d[0], expand=exp, stride=2, drop_path_rate=_next_dp()))
-    for _ in range(1, n[0]):
-        s1_layers.append(_MBConv(d[0], d[0], expand=exp, stride=1, drop_path_rate=_next_dp()))
+    s1_layers: list[nn.Module] = [
+        _MBConv(stem_ch, d[0], expand=exp, stride=2, drop_path_rate=_next_dp()),
+        *(
+            _MBConv(d[0], d[0], expand=exp, stride=1, drop_path_rate=_next_dp())
+            for _ in range(1, n[0])
+        ),
+    ]
     s1 = nn.Sequential(*s1_layers)
     # After S1: H/4 × W/4
 
     # ------------------------------------------------------------------ S2
-    s2_layers: list[nn.Module] = []
-    s2_layers.append(_MBConv(d[0], d[1], expand=exp, stride=2, drop_path_rate=_next_dp()))
-    for _ in range(1, n[1]):
-        s2_layers.append(_MBConv(d[1], d[1], expand=exp, stride=1, drop_path_rate=_next_dp()))
+    s2_layers: list[nn.Module] = [
+        _MBConv(d[0], d[1], expand=exp, stride=2, drop_path_rate=_next_dp()),
+        *(
+            _MBConv(d[1], d[1], expand=exp, stride=1, drop_path_rate=_next_dp())
+            for _ in range(1, n[1])
+        ),
+    ]
     s2 = nn.Sequential(*s2_layers)
     # After S2: H/8 × W/8
 
@@ -572,12 +577,12 @@ def _build_body(
         # MBConv sub-stage: d[1] → d[2] with stride-2 in the first block,
         # then L_mb − 1 more isotropic blocks at d[2].  Mirrors S1/S2 layout.
         s3_mb_layers: list[nn.Module] = [
-            _MBConv(d[1], d[2], expand=exp, stride=2, drop_path_rate=_next_dp())
-        ]
-        for _ in range(1, L_mb):
-            s3_mb_layers.append(
+            _MBConv(d[1], d[2], expand=exp, stride=2, drop_path_rate=_next_dp()),
+            *(
                 _MBConv(d[2], d[2], expand=exp, stride=1, drop_path_rate=_next_dp())
-            )
+                for _ in range(1, L_mb)
+            ),
+        ]
         # 1×1 channel-expand transition: d[2] → D_attn (no spatial change).
         # Paper §A.2 only says "double the hidden dimension"; we realise it
         # as the standard 1×1 conv + BN + GELU used elsewhere in CoAtNet.
@@ -710,18 +715,12 @@ class CoAtNet(PretrainedModel, BackboneMixin):
         self._feature_info = fi
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         x = self.s1(x)
         x = self.s2(x)
         x = self.s3(x)
-        x = self.s4(x)
-        return x
+        return self.s4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -845,10 +844,4 @@ class CoAtNetForImageClassification(ImageClassificationModel, ClassificationHead
         x = x.flatten(1)
         x = self.norm(x)
         x = self.pre_logits(x)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

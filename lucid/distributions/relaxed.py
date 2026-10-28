@@ -15,7 +15,13 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _align_device, _as_tensor, _clamp_probs, _lazy_param
+from lucid.distributions._util import (
+    _align_device,
+    _as_tensor,
+    _clamp_probs,
+    _lazy_param,
+    _require_probs_or_logits,
+)
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
@@ -148,10 +154,8 @@ class RelaxedBernoulli(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("RelaxedBernoulli: pass exactly one of `probs` or `logits`.")
+        param, self._is_logits = _require_probs_or_logits("RelaxedBernoulli", probs, logits)
         self.temperature = _as_tensor(temperature)
-        param = _as_tensor(probs if probs is not None else logits)  # type: ignore[arg-type]
         # A temperature or a probability given as a number is a 0-dim host
         # tensor, and either may be the one that is not: whichever is the
         # host scalar follows the other to its device, so the two can meet
@@ -159,7 +163,6 @@ class RelaxedBernoulli(Distribution):
         if param.ndim == 0 and param.device.type == "cpu":
             param = _align_device(param, self.temperature)
         self.temperature = _align_device(self.temperature, param)
-        self._is_logits = probs is None
         if self._is_logits:
             self.logits = param
         else:
@@ -273,19 +276,7 @@ class RelaxedBernoulli(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`RelaxedBernoulli` instance with parameters expanded to ``batch_shape``."""
-        new = self._get_checked_instance(RelaxedBernoulli, _instance)
-        batch_shape = tuple(batch_shape)
-        new.temperature = self.temperature.expand(batch_shape)
-        new._is_logits = self._is_logits
-        if "probs" in self.__dict__:
-            new.probs = self.probs.expand(batch_shape)
-        if "logits" in self.__dict__:
-            new.logits = self.logits.expand(batch_shape)
-        super(RelaxedBernoulli, new).__init__(
-            batch_shape=batch_shape, event_shape=(), validate_args=False
-        )
-        new._validate_args = self._validate_args
-        return new
+        return self._expand_probs_or_logits(RelaxedBernoulli, batch_shape, _instance, "temperature")
 
 
 class RelaxedOneHotCategorical(Distribution):
@@ -411,17 +402,14 @@ class RelaxedOneHotCategorical(Distribution):
         """
         from lucid.distributions.categorical import _normalize_logits, _normalize_probs
 
-        if (probs is None) == (logits is None):
-            raise ValueError("RelaxedOneHotCategorical: pass exactly one of `probs` or `logits`.")
+        raw, self._is_logits = _require_probs_or_logits("RelaxedOneHotCategorical", probs, logits)
         self.temperature = _as_tensor(temperature)
-        if probs is not None:
-            self.probs = _normalize_probs(_as_tensor(probs))
-            self._is_logits = False
-            shape = tuple(self.probs.shape)
-        else:
-            self.logits = _normalize_logits(_as_tensor(logits))  # type: ignore[arg-type]
-            self._is_logits = True
+        if self._is_logits:
+            self.logits = _normalize_logits(raw)
             shape = tuple(self.logits.shape)
+        else:
+            self.probs = _normalize_probs(raw)
+            shape = tuple(self.probs.shape)
         # A temperature given as a number is a 0-dim host tensor; it follows
         # the parameters to their device so the two can meet on Metal.
         self.temperature = _align_device(

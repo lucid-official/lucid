@@ -11,7 +11,6 @@ and input channels match output channels.
 from typing import ClassVar, override
 
 import lucid.nn as nn
-import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
@@ -222,11 +221,6 @@ class MobileNetV2(PretrainedModel, BackboneMixin):
         init_cnn_fan_out(self, linear_std=0.01)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.avgpool(x)
@@ -331,10 +325,4 @@ class MobileNetV2ForImageClassification(ImageClassificationModel, Classification
         x = self.features(x)
         x = self.avgpool(x)
         x = self.drop(x.flatten(1))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

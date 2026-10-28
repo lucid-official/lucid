@@ -700,11 +700,6 @@ class MobileNetV4(PretrainedModel, BackboneMixin):
         _init_weights(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         return _chain(x, self.conv_stem, self.bn1, self.act, self.blocks)
 
@@ -817,9 +812,4 @@ class MobileNetV4ForImageClassification(ImageClassificationModel, Classification
             self.act_head,
         )
         x = self.head_drop(x.reshape(x.shape[0], -1))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

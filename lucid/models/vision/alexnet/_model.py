@@ -216,11 +216,6 @@ class AlexNet(PretrainedModel, BackboneMixin):
         _init_paper_weights(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.features(x)
         return self.avgpool(x)
@@ -335,10 +330,4 @@ class AlexNetForImageClassification(ImageClassificationModel, ClassificationHead
         # parity never caught it.
         x = F.relu(self.fc6(self.drop6(x)))
         x = F.relu(self.fc7(self.drop7(x)))
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

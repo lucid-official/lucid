@@ -202,8 +202,7 @@ class _Features(nn.Module):
         for module in self._stages:
             x = module(x)
         # final BN + ReLU (caller applies ReLU after pool)
-        x = self.norm5(x)
-        return x
+        return self.norm5(x)
 
 
 # ---------------------------------------------------------------------------
@@ -341,11 +340,6 @@ class DenseNet(PretrainedModel, BackboneMixin):
         # activations around 1e5 before BN is trained.
         _init_reference(self)
 
-    @property
-    @override
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
     @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = F.relu(self.features(x))
@@ -437,10 +431,4 @@ class DenseNetForImageClassification(ImageClassificationModel, ClassificationHea
         x = F.relu(self.features(x))
         x = self.avgpool(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

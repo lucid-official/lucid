@@ -47,7 +47,7 @@ reason, and a test pins the two apart.
 """
 
 from collections.abc import Callable
-from typing import cast, final
+from typing import final
 
 import lucid
 from lucid._engine_scope import untraced
@@ -360,7 +360,8 @@ class DDIMScheduler:
             previous = previous + sigma * lucid.randn(
                 tuple(int(s) for s in latent.shape), device=latent.device.type, dtype=latent.dtype
             )
-        return cast(Tensor, previous)
+        assert isinstance(previous, Tensor)
+        return previous
 
 
 @final

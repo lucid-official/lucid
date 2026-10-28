@@ -213,8 +213,7 @@ class _PVTBlock(nn.Module):
     @override
     def forward(self, x: Tensor, H: int, W: int) -> Tensor:
         x = x + self.drop_path(self.attn(self.norm1(x), H, W))
-        x = x + self.drop_path(self.mlp(self.norm2(x), H, W))
-        return x
+        return x + self.drop_path(self.mlp(self.norm2(x), H, W))
 
 
 # ---------------------------------------------------------------------------
@@ -452,11 +451,6 @@ class PVT(PretrainedModel, BackboneMixin):
         init_transformer_trunc_normal(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         # Stage 0: use top-level patch_embed then stage blocks
         tokens, H, W = self.patch_embed(x)
@@ -553,10 +547,4 @@ class PVTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
             x_spatial, H, W = stage(x_spatial)
         # x_spatial: (B, C, H, W) — mean pool to (B, C)
         x_vec = x_spatial.flatten(2).mean(dim=2)
-        logits = self.classifier(x_vec)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x_vec, labels)

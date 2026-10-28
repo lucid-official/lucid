@@ -407,12 +407,6 @@ class IJEPAModel(PretrainedModel, BackboneMixin):
     # ── backbone ─────────────────────────────────────────────────────────
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        """One stage: patch tokens at the encoder's width."""
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         """The average-pooled target encoder, which is :meth:`encode`.
 

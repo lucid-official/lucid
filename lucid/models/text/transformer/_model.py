@@ -23,7 +23,7 @@ local implementation.
 
 import math
 from dataclasses import dataclass, replace
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 import lucid
 import lucid.nn as nn
@@ -332,8 +332,7 @@ class TransformerModel(PretrainedModel):
         """Run only the encoder; returns memory ``(B, S, d_model)``."""
         src_emb = self._embed(src_ids, self.src_tok_emb)
         kpm = _key_padding_to_kpm(src_attention_mask)
-        memory = self.transformer.encoder(src_emb, src_key_padding_mask=kpm)
-        return memory
+        return self.transformer.encoder(src_emb, src_key_padding_mask=kpm)
 
     def _decoder(self) -> nn.TransformerDecoder:
         if isinstance(self.transformer, nn.Transformer):
@@ -564,6 +563,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
 
         loss: Tensor | None = None
         if labels is not None:
+            assert isinstance(self.config, TransformerConfig)
             B, T, V = logits.shape
             loss = F.cross_entropy(
                 logits.reshape(B * T, V),
@@ -572,7 +572,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
                 # Section 5.4 / Table 3: both the base and big rows train with
                 # eps_ls = 0.1.  It "hurts perplexity but improves accuracy and
                 # BLEU", so omitting it changes what the model optimises.
-                label_smoothing=cast(TransformerConfig, self.config).label_smoothing,
+                label_smoothing=self.config.label_smoothing,
             )
 
         return Seq2SeqLMOutput(
@@ -635,7 +635,8 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         Returns:
             ``(B, T_out)`` int Tensor of generated target tokens.
         """
-        cfg = cast(TransformerConfig, self.config)
+        assert isinstance(self.config, TransformerConfig)
+        cfg = self.config
         bos = bos_token_id if bos_token_id is not None else cfg.bos_token_id
         eos = eos_token_id if eos_token_id is not None else cfg.eos_token_id
         pad = pad_token_id if pad_token_id is not None else cfg.pad_token_id

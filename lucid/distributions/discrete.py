@@ -11,9 +11,13 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _as_tensor
-from lucid.distributions._util import _broadcast_pair
-from lucid.distributions._util import _clamp_probs, _lazy_param
+from lucid.distributions._util import (
+    _as_tensor,
+    _broadcast_pair,
+    _clamp_probs,
+    _lazy_param,
+    _require_probs_or_logits,
+)
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
@@ -233,7 +237,50 @@ class Poisson(ExponentialFamily):
         return self._finish_expand(new, batch_shape)
 
 
-class Binomial(Distribution):
+class _CountTrialDistribution(Distribution):
+    """Shared ``(total_count, probs | logits)`` parameterisation for count distributions."""
+
+    total_count: Tensor
+    _is_logits: bool
+
+    def _init_count_probs_or_logits(
+        self,
+        cls_name: str,
+        total_count: Tensor | float,
+        probs: Tensor | float | None,
+        logits: Tensor | float | None,
+        validate_args: bool | None,
+    ) -> None:
+        param, self._is_logits = _require_probs_or_logits(cls_name, probs, logits)
+        self.total_count, param = _broadcast_pair(_as_tensor(total_count), param)
+        if self._is_logits:
+            self.logits = param
+        else:
+            self.probs = param
+        super().__init__(
+            batch_shape=tuple(param.shape), event_shape=(), validate_args=validate_args
+        )
+
+    @_lazy_param
+    def probs(self) -> Tensor:
+        """Probability parameter — as given, or ``sigmoid(logits)`` on access."""
+        return _logits_to_probs(self.logits)
+
+    @_lazy_param
+    def logits(self) -> Tensor:
+        """Log-odds parameter — as given, or derived from clamped ``probs`` on access."""
+        return _probs_to_logits(_clamp_probs(self.probs))
+
+    @property
+    def _probs(self) -> Tensor:
+        return self.probs if not self._is_logits else _logits_to_probs(self.logits)
+
+    @property
+    def _logits(self) -> Tensor:
+        return self.logits if self._is_logits else _probs_to_logits(self.probs)
+
+
+class Binomial(_CountTrialDistribution):
     r"""Binomial distribution over the number of successes in n independent trials.
 
     ``Binomial(total_count=n, probs=p)`` models the count of successes when
@@ -341,41 +388,7 @@ class Binomial(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("Binomial: pass exactly one of `probs` or `logits`.")
-        self._is_logits = probs is None
-        if probs is not None:
-            param = _as_tensor(probs)
-        else:
-            param = _as_tensor(logits)  # type: ignore[arg-type]
-        # Both sides broadcast, not only the count.  The batch used to be
-        # sized from the probability alone, so ``Binomial([2, 5, 9], 0.4)``
-        # reported ``batch_shape == ()`` and ``sample`` raised a shape
-        # mismatch for a perfectly good batch of three.
-        self.total_count, param = _broadcast_pair(_as_tensor(total_count), param)
-        if self._is_logits:
-            self.logits = param
-        else:
-            self.probs = param
-        super().__init__(
-            batch_shape=tuple(param.shape), event_shape=(), validate_args=validate_args
-        )
-
-    @_lazy_param
-    def probs(self) -> Tensor:
-        """Success probability — as given, or ``sigmoid(logits)`` on access."""
-        return _logits_to_probs(self.logits)
-
-    @_lazy_param
-    def logits(self) -> Tensor:
-        r"""Log-odds :math:`\log(p/(1-p))` — as given, or derived on access.
-
-        Derived from ``probs`` clamped one epsilon inside :math:`[0, 1]`, as
-        the reference framework derives it.  :meth:`log_prob` does not use
-        this attribute: it keeps the exact, possibly infinite, log-odds that
-        its degenerate-probability guards are written around.
-        """
-        return _probs_to_logits(_clamp_probs(self.probs))
+        self._init_count_probs_or_logits("Binomial", total_count, probs, logits, validate_args)
 
     @override
     @property
@@ -390,28 +403,6 @@ class Binomial(Distribution):
             :math:`n`.
         """
         return integer_interval(0, self.total_count)
-
-    @property
-    def _probs(self) -> Tensor:
-        """Success probability :math:`p`, computed from logits if necessary.
-
-        Returns
-        -------
-        Tensor
-            Probability values in :math:`[0, 1]`, shape ``batch_shape``.
-        """
-        return self.probs if not self._is_logits else _logits_to_probs(self.logits)
-
-    @property
-    def _logits(self) -> Tensor:
-        r"""Log-odds :math:`\log(p/(1-p))`, computed from probs if necessary.
-
-        Returns
-        -------
-        Tensor
-            Log-odds values in :math:`\mathbb{R}`, shape ``batch_shape``.
-        """
-        return self.logits if self._is_logits else _probs_to_logits(self.probs)
 
     @override
     @property
@@ -615,18 +606,10 @@ class Binomial(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Binomial` instance with parameters expanded to ``batch_shape``."""
-        new = self._get_checked_instance(Binomial, _instance)
-        batch_shape = tuple(batch_shape)
-        new.total_count = self.total_count.expand(batch_shape)
-        new._is_logits = self._is_logits
-        if "probs" in self.__dict__:
-            new.probs = self.probs.expand(batch_shape)
-        if "logits" in self.__dict__:
-            new.logits = self.logits.expand(batch_shape)
-        return self._finish_expand(new, batch_shape)
+        return self._expand_probs_or_logits(Binomial, batch_shape, _instance, "total_count")
 
 
-class NegativeBinomial(Distribution):
+class NegativeBinomial(_CountTrialDistribution):
     r"""Negative Binomial distribution over the number of failures before r successes.
 
     ``NegativeBinomial(total_count=r, probs=p)`` models the count of failures
@@ -743,61 +726,9 @@ class NegativeBinomial(Distribution):
         ValueError
             If both or neither of ``probs`` and ``logits`` are provided.
         """
-        if (probs is None) == (logits is None):
-            raise ValueError("NegativeBinomial: pass exactly one of `probs` or `logits`.")
-        self._is_logits = probs is None
-        if probs is not None:
-            param = _as_tensor(probs)
-        else:
-            param = _as_tensor(logits)  # type: ignore[arg-type]
-        # Both sides broadcast, as in :class:`Binomial`: sizing the batch
-        # from the probability alone gave ``NegativeBinomial([2, 5, 9],
-        # probs=0.4)`` a ``batch_shape`` of ``()`` beside a three-element
-        # ``total_count``.
-        self.total_count, param = _broadcast_pair(_as_tensor(total_count), param)
-        if self._is_logits:
-            self.logits = param
-        else:
-            self.probs = param
-        super().__init__(
-            batch_shape=tuple(param.shape), event_shape=(), validate_args=validate_args
+        self._init_count_probs_or_logits(
+            "NegativeBinomial", total_count, probs, logits, validate_args
         )
-
-    @_lazy_param
-    def probs(self) -> Tensor:
-        """Failure probability — as given, or ``sigmoid(logits)`` on access."""
-        return _logits_to_probs(self.logits)
-
-    @_lazy_param
-    def logits(self) -> Tensor:
-        r"""Log-odds of failure — as given, or derived on access.
-
-        Derived from ``probs`` clamped one epsilon inside :math:`[0, 1]`, as
-        the reference framework derives it.
-        """
-        return _probs_to_logits(_clamp_probs(self.probs))
-
-    @property
-    def _probs(self) -> Tensor:
-        """Failure probability :math:`p`, computed from logits if necessary.
-
-        Returns
-        -------
-        Tensor
-            Failure probability values in :math:`[0, 1)`, shape ``batch_shape``.
-        """
-        return self.probs if not self._is_logits else _logits_to_probs(self.logits)
-
-    @property
-    def _logits(self) -> Tensor:
-        r"""Log-odds of failure :math:`\log(p/(1-p))`, computed from probs if necessary.
-
-        Returns
-        -------
-        Tensor
-            Log-odds values in :math:`\mathbb{R}`, shape ``batch_shape``.
-        """
-        return self.logits if self._is_logits else _probs_to_logits(self.probs)
 
     @override
     @property
@@ -940,12 +871,4 @@ class NegativeBinomial(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`NegativeBinomial` instance with parameters expanded to ``batch_shape``."""
-        new = self._get_checked_instance(NegativeBinomial, _instance)
-        batch_shape = tuple(batch_shape)
-        new.total_count = self.total_count.expand(batch_shape)
-        new._is_logits = self._is_logits
-        if "probs" in self.__dict__:
-            new.probs = self.probs.expand(batch_shape)
-        if "logits" in self.__dict__:
-            new.logits = self.logits.expand(batch_shape)
-        return self._finish_expand(new, batch_shape)
+        return self._expand_probs_or_logits(NegativeBinomial, batch_shape, _instance, "total_count")

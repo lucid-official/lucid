@@ -40,6 +40,7 @@ from lucid.models._utils._text import (
     init_text_weights as _init_weights,
     last_kept_token,
     resolve_causal_positions,
+    score_double_heads,
     text_activation,
     token_at,
     update_causal_kv_and_bias,
@@ -177,8 +178,7 @@ class _GPTBlock(nn.Module):
         )
         hidden = self.ln_1(hidden + a)
         m = self.mlp(hidden)
-        hidden = self.ln_2(hidden + m)
-        return hidden
+        return self.ln_2(hidden + m)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -682,46 +682,18 @@ class GPTDoubleHeadsModel(LanguageModelingModel):
         labels: Tensor | None = None,
         mc_labels: Tensor | None = None,
     ) -> GPTDoubleHeadsOutput:
-        if input_ids.ndim != 3:
-            raise ValueError(
-                f"GPTDoubleHeadsModel expects input_ids of shape (N, C, L), "
-                f"got {tuple(input_ids.shape)}"
-            )
-        N = int(input_ids.shape[0])
-        C = int(input_ids.shape[1])
-        L = int(input_ids.shape[2])
-
-        flat_ids = input_ids.reshape(N * C, L)
-        flat_mask = attention_mask.reshape(N * C, L) if attention_mask is not None else None
-        outputs = self.transformer(flat_ids, attention_mask=flat_mask)
-        hidden = outputs.last_hidden_state  # (N*C, L, H)
-        H = int(hidden.shape[-1])
-
-        lm_logits_flat = self.lm_head(hidden)  # (N*C, L, V)
-        V = int(lm_logits_flat.shape[-1])
-        lm_logits = lm_logits_flat.reshape(N, C, L, V)
-        mc_logits = self.mc_head(hidden.reshape(N, C, L, H), mc_token_ids)  # (N, C)
-
-        lm_loss: Tensor | None = None
-        mc_loss: Tensor | None = None
-        if labels is not None:
-            shift_logits = lm_logits[:, :, :-1, :].reshape(N * C * (L - 1), V)
-            shift_labels = labels[:, :, 1:].reshape(N * C * (L - 1)).long()
-            lm_loss = F.cross_entropy(shift_logits, shift_labels, ignore_index=-100)
-        if mc_labels is not None:
-            mc_loss = F.cross_entropy(mc_logits, mc_labels.long())
-
-        total_loss: Tensor | None = None
-        if lm_loss is not None and mc_loss is not None:
-            # Section 3.3: L_3(C) = L_2(C) + lambda * L_1(C), with lambda = 0.5
-            # in the paper's experiments.  Weighting the auxiliary LM term at
-            # 1.0 gives it the same pull as the task objective it is only
-            # meant to regularise.
-            total_loss = mc_loss + _AUX_LM_WEIGHT * lm_loss
-        elif lm_loss is not None:
-            total_loss = lm_loss
-        elif mc_loss is not None:
-            total_loss = mc_loss
+        lm_logits, mc_logits, total_loss, lm_loss, mc_loss = score_double_heads(
+            self.transformer,
+            self.lm_head,
+            self.mc_head,
+            "GPTDoubleHeadsModel",
+            input_ids,
+            mc_token_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            mc_labels=mc_labels,
+            lm_loss_weight=_AUX_LM_WEIGHT,
+        )
 
         return GPTDoubleHeadsOutput(
             lm_logits=lm_logits,

@@ -364,8 +364,7 @@ class _PartitionAttn(nn.Module):
     def forward(self, x: Tensor, key_valid: Tensor | None = None) -> Tensor:
         attended = self.attn(self.norm1(x), key_valid)
         x = x + self.drop_path1(attended)
-        x = x + self.drop_path2(self.mlp(self.norm2(x)))
-        return x
+        return x + self.drop_path2(self.mlp(self.norm2(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -490,10 +489,7 @@ class _MBConv(nn.Module):
     @override
     def forward(self, x: Tensor) -> Tensor:
         # Shortcut path
-        if hasattr(self, "shortcut"):
-            shortcut = self.shortcut(x)
-        else:
-            shortcut = x
+        shortcut = self.shortcut(x) if hasattr(self, "shortcut") else x
 
         # Main path
         out = self.pre_norm(x)
@@ -831,18 +827,12 @@ class MaxViT(PretrainedModel, BackboneMixin):
         # backbone instance.
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)
         # Global average pool → flatten
-        x = F.adaptive_avg_pool2d(x, (1, 1)).flatten(1)
-        return x
+        return F.adaptive_avg_pool2d(x, (1, 1)).flatten(1)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:

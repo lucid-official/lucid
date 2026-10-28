@@ -246,8 +246,7 @@ class _CvTBlock(nn.Module):
         n = self.norm1(x)
         attended = self.attn(n, H, W)
         x = x + self.drop_path(attended)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+        return x + self.drop_path(self.mlp(self.norm2(x)))
 
 
 # ---------------------------------------------------------------------------
@@ -467,11 +466,6 @@ class CvT(PretrainedModel, BackboneMixin):
         init_transformer_trunc_normal(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         cls: Tensor | None = None
         for stage in self.stages:
@@ -583,10 +577,4 @@ class CvTForImageClassification(ImageClassificationModel, ClassificationHeadMixi
             # and the two branches disagreed with each other.
             tokens = x.flatten(2).permute(0, 2, 1)  # (B, N, C)
             feat = self.head_norm(tokens).mean(dim=1)
-        logits = self.classifier(feat)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(feat, labels)

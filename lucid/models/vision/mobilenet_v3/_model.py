@@ -345,19 +345,13 @@ class MobileNetV3(PretrainedModel, BackboneMixin):
         init_cnn_fan_out(self, linear_std=0.01)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
-        x = self.features(x)
+        return self.features(x)
         # ``feature_info`` describes the pre-pool pyramid, and the mixin
         # documents this as returning the deepest stage's *feature map*.
         # Pooling here collapsed it to 1x1, so the declared reduction was
         # wrong by the input size and no consumer could reach a spatial map.
         # The classifier applies its own pooling.
-        return x
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -452,10 +446,4 @@ class MobileNetV3ForImageClassification(ImageClassificationModel, Classification
     @override
     def forward(self, x: Tensor, labels: Tensor | None = None) -> ImageClassificationOutput:
         x = self.features(x)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)

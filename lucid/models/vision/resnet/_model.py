@@ -3,7 +3,6 @@
 from typing import ClassVar, final, override
 
 import lucid.nn as nn
-import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._common import init_cnn_fan_out
 from lucid.models._base import PretrainedModel
@@ -232,9 +231,10 @@ def _make_layer(
             return _Bottleneck(inc, outc, stride=s, downsample=ds, width_mult=width_mult)
         return _BasicBlock(inc, outc, stride=s, downsample=ds)
 
-    layers: list[nn.Module] = [_make_block(in_channels, out_channels, stride, downsample)]
-    for _ in range(1, num_blocks):
-        layers.append(_make_block(final_channels, out_channels))
+    layers: list[nn.Module] = [
+        _make_block(in_channels, out_channels, stride, downsample),
+        *(_make_block(final_channels, out_channels) for _ in range(1, num_blocks)),
+    ]
 
     return nn.Sequential(*layers), final_channels
 
@@ -285,9 +285,8 @@ def _zero_init_residual(model: nn.Module) -> None:
         if isinstance(m, _Bottleneck):
             if m.bn3.weight is not None:
                 nn.init.constant_(m.bn3.weight, 0.0)
-        elif isinstance(m, _BasicBlock):
-            if m.bn2.weight is not None:
-                nn.init.constant_(m.bn2.weight, 0.0)
+        elif isinstance(m, _BasicBlock) and m.bn2.weight is not None:
+            nn.init.constant_(m.bn2.weight, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -409,19 +408,13 @@ class ResNet(PretrainedModel, BackboneMixin):
             _zero_init_residual(self)
 
     @override
-    @property
-    def feature_info(self) -> list[FeatureInfo]:
-        return self._feature_info
-
-    @override
     def forward_features(self, x: Tensor) -> Tensor:
         x = self.stem(x)
         x = self.maxpool(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
-        return x
+        return self.layer4(x)
 
     @override
     def forward(self, x: Tensor) -> BaseModelOutput:
@@ -547,10 +540,4 @@ class ResNetForImageClassification(ImageClassificationModel, ClassificationHeadM
         x = self.layer4(x)
         x = self.avgpool(x)
         x = x.flatten(1)
-        logits = self.classifier(x)
-
-        loss: Tensor | None = None
-        if labels is not None:
-            loss = F.cross_entropy(logits, labels)
-
-        return ImageClassificationOutput(logits=logits, loss=loss)
+        return self._classify(x, labels)
