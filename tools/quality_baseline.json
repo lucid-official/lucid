@@ -942,7 +942,6 @@
     "lucid/autograd/checkpoint.py": 3,
     "lucid/autograd/function.py": 1,
     "lucid/autograd/gradcheck.py": 2,
-    "lucid/benchmarks/bench_train.py": 4,
     "lucid/compile/__init__.py": 8,
     "lucid/compile/_core/buffer_writes.py": 2,
     "lucid/compile/_core/fallback.py": 1,
@@ -980,7 +979,6 @@
     "lucid/nn/_module_backward_state.py": 2,
     "lucid/nn/functional/_index_checks.py": 2,
     "lucid/nn/intrinsic/qat/modules.py": 9,
-    "lucid/nn/module.py": 3,
     "lucid/nn/modules/container.py": 11,
     "lucid/nn/modules/conv.py": 1,
     "lucid/nn/modules/transformer.py": 2,
@@ -1045,7 +1043,6 @@
     "lucid/amp/grad_scaler.py": 2,
     "lucid/autograd/_anomaly.py": 1,
     "lucid/autograd/function.py": 2,
-    "lucid/benchmarks/_core.py": 1,
     "lucid/linalg/__init__.py": 2,
     "lucid/metal/__init__.py": 4,
     "lucid/models/_output.py": 3,
@@ -1273,7 +1270,6 @@
     "lucid/autograd/_grad_mode.py": 1,
     "lucid/benchmarks/_core.py": 1,
     "lucid/benchmarks/bench_train.py": 1,
-    "lucid/benchmarks/run_all.py": 1,
     "lucid/compile/__init__.py": 2,
     "lucid/compile/_optim/compiler.py": 7,
     "lucid/coreml/__init__.py": 1,
@@ -1642,7 +1638,6 @@
     "lucid/_C/ops/utils/InplaceGraph.cpp": 1,
     "lucid/_C/utils/tokenizer/Unigram.cpp": 2,
     "lucid/_tensor/_indexing.py": 2,
-    "lucid/benchmarks/run_all.py": 1,
     "lucid/compile/_core/attention_cost.py": 1,
     "lucid/compile/_core/symbolic_gate.py": 1,
     "lucid/compile/_entry/module.py": 1,
@@ -1745,7 +1740,6 @@
     "lucid/_C/ops/utils/InplaceGraph.cpp": 9,
     "lucid/_C/utils/tokenizer/Unigram.cpp": 28,
     "lucid/_tensor/_indexing.py": 40,
-    "lucid/benchmarks/run_all.py": 1,
     "lucid/compile/_core/attention_cost.py": 1,
     "lucid/compile/_core/symbolic_gate.py": 13,
     "lucid/compile/_entry/module.py": 2,
@@ -2012,7 +2006,6 @@
     "lucid/utils/transforms/_autoaugment.py": 4
    },
    "internal-args": {
-    "lucid/benchmarks/bench_train.py": 1,
     "lucid/coreml/__init__.py": 1,
     "lucid/diffeq/_implicit.py": 1,
     "lucid/diffeq/_multistep.py": 2,
@@ -2035,7 +2028,6 @@
   },
   "mypy": {
    "possibly-undefined": {
-    "lucid/benchmarks/bench_ops.py": 1,
     "lucid/models/vision/ijepa/_model.py": 2,
     "lucid/models/vision/vjepa/_model.py": 2
    },
@@ -2071,9 +2063,8 @@
     "lucid/nn/module.py": 1
    },
    "C901": {
-    "lucid/_ops/__init__.py": 2,
+    "lucid/_ops/__init__.py": 1,
     "lucid/_tensor/_indexing.py": 1,
-    "lucid/benchmarks/run_all.py": 1,
     "lucid/compile/_core/symbolic_gate.py": 1,
     "lucid/compile/_entry/fused_step.py": 1,
     "lucid/compile/_entry/module.py": 1,
@@ -2163,7 +2154,6 @@
    "PLR0912": {
     "lucid/_ops/__init__.py": 1,
     "lucid/_tensor/_indexing.py": 1,
-    "lucid/benchmarks/run_all.py": 1,
     "lucid/compile/_core/symbolic_gate.py": 1,
     "lucid/compile/_entry/segmented_step.py": 1,
     "lucid/compile/_optim/compiler.py": 3,
@@ -2201,7 +2191,6 @@
    },
    "PLR0915": {
     "lucid/_tensor/_indexing.py": 1,
-    "lucid/benchmarks/bench_ops.py": 1,
     "lucid/linalg/__init__.py": 1,
     "lucid/models/_utils/_detection.py": 1,
     "lucid/models/generative/ddpm/_model.py": 1,
@@ -2353,11 +2342,6 @@
    },
    "UP047": {
     "lucid/nn/init.py": 1
-   }
-  },
-  "semgrep": {
-   "lucid-impl-unwrap": {
-    "lucid/_promotion.py": 1
    }
   }
  }

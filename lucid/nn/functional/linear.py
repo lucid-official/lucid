@@ -86,11 +86,10 @@ def linear(input: Tensor, weight: Tensor, bias: Tensor | None = None) -> Tensor:
     bilinear : two-input quadratic-interaction variant.
     """
     w_impl = _unwrap(weight)
-    out_features = w_impl.shape[0]
     if bias is not None:
         b_impl = _unwrap(bias)
     else:
-        b_impl = _C_engine.zeros([out_features], w_impl.dtype, w_impl.device)
+        b_impl = _C_engine.zeros([w_impl.shape[0]], w_impl.dtype, w_impl.device)
     return _wrap(_C_engine.nn.linear(_unwrap(input), w_impl, b_impl))
 
 

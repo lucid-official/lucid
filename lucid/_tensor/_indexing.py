@@ -103,6 +103,12 @@ def _narrow(
 
 def _select_slice(impl: _C_engine.TensorImpl, dim: int, s: slice) -> _C_engine.TensorImpl:
     """Slice along dim using a Python slice object."""
+    if (
+        s.start is None
+        and s.stop is None
+        and (s.step is None or (type(s.step) is int and s.step == 1))
+    ):
+        return impl
     length = impl.shape[dim]
     start, stop, step = s.indices(length)
 
@@ -278,8 +284,17 @@ def _on_device(index: _C_engine.TensorImpl, device: _C_engine.Device) -> _C_engi
     )
 
 
-def _mask_indices(mask: _C_engine.TensorImpl) -> list[_C_engine.TensorImpl]:
+def _mask_indices(
+    mask: _C_engine.TensorImpl, sizes: list[int] | None = None, dim: int = 0
+) -> list[_C_engine.TensorImpl]:
     """The int64 coordinates of ``mask``'s True elements, one tensor per dim."""
+    if sizes is not None:
+        covered = sizes[dim : dim + len(mask.shape)]
+        if list(mask.shape) != covered:
+            raise IndexError(
+                f"the shape of the mask {list(mask.shape)} does not match the "
+                f"shape {covered} of the dims it indexes, starting at dim {dim}"
+            )
     nz = _C_engine.nonzero(mask)  # (n_true, mask.ndim)
     k = nz.shape[1] if len(nz.shape) > 1 else 1
     if k == 1:
@@ -297,6 +312,32 @@ def _bool_scalar_index(
     if isinstance(token, bool):
         return _C_engine.zeros([1 if token else 0], _I64, device)
     return _mask_indices(_C_engine.reshape(_on_device(token, device), [1]))[0]
+
+
+def _fast_basic_key(key: object, shape: Sequence[int]) -> _Key | None:
+    """Fast path for single ``int``/``slice`` or tuples of ``int``/``slice``/``None``."""
+    tk = type(key)
+    if tk is int or tk is slice:
+        if not shape:
+            raise IndexError("too many indices for tensor of dimension 0 (1 given)")
+        fast = _Key()
+        fast.items = [key]
+        return fast
+    if not isinstance(key, tuple):
+        return None
+    used = 0
+    for p in key:
+        tp = type(p)
+        if tp is int or tp is slice:
+            used += 1
+        elif p is not None:
+            return None
+    ndim = len(shape)
+    if used > ndim:
+        raise IndexError(f"too many indices for tensor of dimension {ndim} ({used} given)")
+    fast = _Key()
+    fast.items = list(key)
+    return fast
 
 
 def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device, *, op: str) -> _Key:
@@ -331,6 +372,8 @@ def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device, 
         ``...``, more indices than ``shape`` has dims, or a mask whose
         shape does not match.
     """
+    if (fast := _fast_basic_key(key, shape)) is not None:
+        return fast
     parts = key if isinstance(key, tuple) else (key,)
     tokens = [_token(part, op) for part in parts]
     if sum(1 for token in tokens if token is Ellipsis) > 1:
@@ -360,13 +403,7 @@ def _normalize_key(key: object, shape: Sequence[int], device: _C_engine.Device, 
                 out.unchecked = True
                 dim += 1
                 continue
-            covered = sizes[dim : dim + len(index.shape)]
-            if list(index.shape) != covered:
-                raise IndexError(
-                    f"the shape of the mask {list(index.shape)} does not match the "
-                    f"shape {covered} of the dims it indexes, starting at dim {dim}"
-                )
-            out.items.extend(_mask_indices(index))
+            out.items.extend(_mask_indices(index, sizes, dim))
             dim += len(index.shape)
         else:
             out.items.append(token)
@@ -1040,7 +1077,8 @@ def _getitem(t: Tensor, idx: _IndexType) -> Tensor:
         The selected sub-tensor (a view where possible, a copy otherwise).
     """
     impl = t._impl
-    key = _normalize_key(idx, impl.shape, impl.device, op="__getitem__")
+    shape = impl.shape
+    key = _normalize_key(idx, shape, impl.device, op="__getitem__")
     source = _inserted(impl, key.unsqueeze)
     if key.advanced:
         out = _advanced_getitem(source, key.items, key.unchecked)
@@ -1053,7 +1091,7 @@ def _getitem(t: Tensor, idx: _IndexType) -> Tensor:
         # on ``x``'s flag and ``x[:].grad`` was ``x.grad``.  The reference's
         # result is a view — a tensor of its own over the same storage, in
         # ``t``'s graph when ``t`` requires grad — and so is this one.
-        out = _C_engine.view(impl, list(impl.shape))
+        out = _C_engine.view(impl, shape)
     return _wrap(out)
 
 

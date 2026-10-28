@@ -1145,12 +1145,7 @@ def odeint_endpoint(
     if isinstance(state, Tensor):
         assert isinstance(res, Tensor)
         return res
-    assert (
-        isinstance(res, tuple)
-        and len(res) == 2
-        and isinstance(res[0], Tensor)
-        and isinstance(res[1], Tensor)
-    )
+    assert isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], Tensor)
     return res[0], res[1]
 
 

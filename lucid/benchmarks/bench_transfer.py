@@ -83,7 +83,7 @@ def _bench_size(label: str, n: int, iters: int) -> dict[str, object]:
 
         def _to_cpu() -> None:
             t = gpu_tensor.to("cpu")
-            _ = t.numpy()  # force eval
+            _ = t.data_ptr()  # force host copy
 
         ns_c = bench_cpu(_to_cpu, warmup=5, iters=iters)
         br_c = BenchResult(f"gpu_to_cpu_{label}", ns_c)

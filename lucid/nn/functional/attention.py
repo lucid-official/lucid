@@ -170,7 +170,12 @@ def _attention_operands(
                 t = t.repeat_interleave(heads // kv_heads, dim=-3)
             grouped.append(t)
         key, value = grouped
-    shapes = [tuple(int(v) for v in t.shape[:-2]) for t in (query, key, value)]
+    q_lead = query._impl.shape[:-2]
+    k_lead = key._impl.shape[:-2]
+    v_lead = value._impl.shape[:-2]
+    if q_lead == k_lead == v_lead:
+        return query, key, value
+    shapes = [tuple(q_lead), tuple(k_lead), tuple(v_lead)]
     lead = _broadcast_leading(shapes)
     query, key, value = (
         t if shape == lead else t.expand(*lead, *t.shape[-2:])

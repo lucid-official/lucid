@@ -122,14 +122,17 @@ class TensorSig:
         # When ``dynamic_batch`` is set we coerce the leading dim of
         # any ≥1-D tensor to ``-1`` so different batch sizes share
         # the same cache entry (Phase 1.6 symbolic-batch opt-in).
-        shape = tuple(t.shape)
+        from lucid._dtype import _ENGINE_TO_DTYPE
+
+        impl = t._impl
+        shape = tuple(impl.shape)
         if dynamic_batch and len(shape) >= 1:
             shape = (-1, *shape[1:])
         return cls(
             shape=shape,
-            dtype=str(t.dtype),
-            device=str(t.device.type),
-            requires_grad=bool(t.requires_grad),
+            dtype=str(_ENGINE_TO_DTYPE[impl.dtype]),
+            device="metal" if impl.device == _C_engine.Device.GPU else "cpu",
+            requires_grad=impl.requires_grad,
         )
 
 

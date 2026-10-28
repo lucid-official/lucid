@@ -316,21 +316,26 @@ def _make_free_fn(name: str) -> object:
         return _fn_list
 
     leading = _leading_tensor_names(e)
+    n_tensor_args = e.n_tensor_args
+    engine_fn = e.engine_fn
+    returns_tensor = e.returns_tensor
 
     def _fn(*args: object, **kwargs: object) -> object:
         if kwargs and leading:
             args, kwargs = _bind_leading(fn_name, leading, args, kwargs)
-        proc: list[object] = []
-        for i, a in enumerate(args):
-            impl = _promotion.try_unwrap(a) if i < e.n_tensor_args else None
-            proc.append(a if impl is None else impl)
-        result = e.engine_fn(*proc, **kwargs)
-        if e.returns_tensor:
+        proc = [
+            (
+                (a if (impl := _promotion.try_unwrap(a)) is None else impl)
+                if i < n_tensor_args
+                else a
+            )
+            for i, a in enumerate(args)
+        ]
+        result = engine_fn(*proc, **kwargs)
+        if returns_tensor:
             if isinstance(result, (list, tuple)):
                 return type(result)(_wrap(r) for r in result)
-            if proc and result is proc[0]:
-                return args[0]
-            return _wrap(result)
+            return args[0] if proc and result is proc[0] else _wrap(result)
         return result
 
     _fn.__name__ = fn_name

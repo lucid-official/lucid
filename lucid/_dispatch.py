@@ -61,10 +61,15 @@ def _invalidate_default_device_cache() -> None:
     _CACHED_DEFAULT_DEVICE_ENUM = None
 
 
+_IMPL = _C_engine.TensorImpl
+_OBJ_NEW = object.__new__
+_TENSOR_CLS: type[Tensor] | None = None
+
+
 def _unwrap(t: _C_engine.TensorImpl | Tensor) -> _C_engine.TensorImpl:
     """Return the underlying TensorImpl from a Tensor or TensorImpl."""
-    impl = _promotion.try_unwrap(t)
-    if impl is not None:
+    impl: object = getattr(t, "_impl", t)
+    if type(impl) is _IMPL or isinstance(impl, _IMPL):
         return impl
     raise TypeError(f"Expected Tensor or TensorImpl, got {type(t).__name__}")
 
@@ -234,9 +239,6 @@ def _is_opmath_operand(impl: _C_engine.TensorImpl, peer_device: _C_engine.Device
     return dt == _C_engine.Dtype.F32 or (
         dt == _C_engine.Dtype.F64 and impl.device == _C_engine.Device.CPU
     )
-
-
-_IMPL = _C_engine.TensorImpl
 
 
 def _float_operand(impl: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
@@ -449,9 +451,15 @@ def _promote_impls(impls: Sequence[_C_engine.TensorImpl]) -> list[_C_engine.Tens
 
 def _wrap(impl: _C_engine.TensorImpl) -> Tensor:
     """Wrap a TensorImpl in a Tensor (zero-copy)."""
-    from lucid._tensor.tensor import Tensor
+    cls = _TENSOR_CLS
+    if cls is None:
+        from lucid._tensor.tensor import Tensor as _t_cls
 
-    return Tensor.__new_from_impl__(impl)
+        globals()["_TENSOR_CLS"] = _t_cls
+        cls = _t_cls
+    obj = _OBJ_NEW(cls)
+    obj._impl = impl
+    return obj
 
 
 def normalize_factory_kwargs(

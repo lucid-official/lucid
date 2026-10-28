@@ -271,6 +271,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.autograd._backward": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.autograd._functional": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.autograd._hooks": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.benchmarks._core": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.compile": (
         ("CompiledModule", "lucid.compile._entry.module", "CompiledModule"),
         ("DiagnosisReport", "lucid.compile._debug.diagnose", "DiagnosisReport"),

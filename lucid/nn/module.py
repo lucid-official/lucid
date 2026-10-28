@@ -6,7 +6,7 @@ import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterator, Self, cast, override
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterator, Self, override
 
 from lucid._C import engine as _C_engine
 from lucid import _promotion
@@ -376,11 +376,11 @@ class Module:
                 )
 
     def _has_backward_hooks(self) -> bool:
-        return (
-            bool(_GLOBAL_BACKWARD_PRE_HOOKS)
-            or bool(_GLOBAL_BACKWARD_HOOKS)
-            or bool(self._backward_pre_hooks)
-            or bool(self._backward_hooks)
+        return bool(
+            self._backward_hooks
+            or self._backward_pre_hooks
+            or _GLOBAL_BACKWARD_HOOKS
+            or _GLOBAL_BACKWARD_PRE_HOOKS
         )
 
     def _prepare_backward_hooks(
@@ -592,15 +592,16 @@ class Module:
 
         Reads via ``self.__dict__.get(...)`` so a registry missing before
         ``Module.__init__`` doesn't recurse back here about itself."""
-        p = self.__dict__.get("_parameters")
+        d = self.__dict__
+        p: dict[str, Tensor | Parameter | Module] | None = d.get("_parameters")
         if p is not None and name in p:
-            return cast(Tensor | Parameter | Module, p[name])
-        b = self.__dict__.get("_buffers")
-        if b is not None and name in b:
-            return cast(Tensor | Parameter | Module, b[name])
-        m = self.__dict__.get("_modules")
+            return p[name]
+        m: dict[str, Tensor | Parameter | Module] | None = d.get("_modules")
         if m is not None and name in m:
-            return cast(Tensor | Parameter | Module, m[name])
+            return m[name]
+        b: dict[str, Tensor | Parameter | Module] | None = d.get("_buffers")
+        if b is not None and name in b:
+            return b[name]
         raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
     @override

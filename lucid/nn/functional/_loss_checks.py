@@ -182,7 +182,7 @@ def _check_device(op: str, **tensors: Tensor | None) -> None:
 
 
 def _shape(t: Tensor) -> tuple[int, ...]:
-    return tuple(int(d) for d in t.shape)
+    return t.shape
 
 
 def _broadcast_shape(*shapes: tuple[int, ...]) -> tuple[int, ...] | None:
@@ -238,8 +238,10 @@ _TARGET_SHAPE: dict[str, str] = {
 def _check_target(x: Tensor, target: Tensor, op: str) -> tuple[int, ...]:
     """Check ``target``'s shape against ``x``'s by ``op``'s rule in
     ``_TARGET_SHAPE``, and return the shape of the elementwise loss."""
-    rule = _TARGET_SHAPE[op]
     x_shape, t_shape = _shape(x), _shape(target)
+    if t_shape == x_shape:
+        return x_shape
+    rule = _TARGET_SHAPE[op]
     if rule == "same":
         if t_shape != x_shape:
             raise ValueError(

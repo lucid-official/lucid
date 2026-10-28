@@ -64,6 +64,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, NamedTuple, cast, overload
 
 import lucid as _lucid
+from lucid._C import engine as _C_engine
 from lucid._dtype import dtype as _dtype
 from lucid.nn.functional._spatial_args import _spatial_extent
 
@@ -78,6 +79,8 @@ def _host_read[T](read: Callable[[], T]) -> T:
     A read inside the trace would mark it unsupported (a traced value read
     on the host) and send every step that holds a guard to eager.
     """
+    if _C_engine.compile.current_tracer() is None:
+        return read()
     # Imported here: ``lucid.compile`` imports ``lucid.nn``.
     from lucid.compile import _host_check
 

@@ -1,16 +1,18 @@
 """
-lucid/benchmarks/run_all.py — CLI orchestrator for the Lucid benchmark suite.
+benchmarks/run_all.py — benchmark suite runner and baseline regression checker.
 
 Usage:
-  python lucid/benchmarks/run_all.py                  # run + print table
-  python lucid/benchmarks/run_all.py --save           # run + save baseline.json
-  python lucid/benchmarks/run_all.py --check          # run + compare vs baseline
-  python lucid/benchmarks/run_all.py --check --threshold 5  # 5% regression limit
+    # Run all benchmarks and print summary tables:
+    python -m lucid.benchmarks.run_all
 
-Exit codes:
-  0  — all clear (or --save)
-  1  — regression(s) detected (only with --check)
-  2  — baseline.json not found (only with --check)
+    # Run a single benchmark suite (ops, transfer, train, models):
+    python -m lucid.benchmarks.run_all --suite models
+
+    # Save current results as the new baseline:
+    python -m lucid.benchmarks.run_all --save
+
+    # Compare current results against saved baseline (fail if > threshold%):
+    python -m lucid.benchmarks.run_all --check [--threshold 15]
 """
 
 import argparse
@@ -20,18 +22,13 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lucid.benchmarks import bench_ops, bench_transfer, bench_train
+from lucid.benchmarks import bench_models, bench_ops, bench_train, bench_transfer
 
-_BASELINE_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "baseline", "baseline.json"
-)
-
-_DEFAULT_THRESHOLD = 15.0  # percent regression limit
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
+_BASELINE_DIR = os.path.join(os.path.dirname(__file__), "baseline")
+_BASELINE_PATH = os.path.join(_BASELINE_DIR, "baseline.json")
+_DEFAULT_THRESHOLD = 15.0  # percent
 
 
 def _git_sha() -> str:
@@ -41,7 +38,6 @@ def _git_sha() -> str:
         )
         return out.decode().strip()
     except (subprocess.CalledProcessError, OSError):
-        # Not a repository, or no VCS binary on PATH.
         return "unknown"
 
 
@@ -49,19 +45,18 @@ def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-# ── run ───────────────────────────────────────────────────────────────────────
-
-
-def run_all(verbose: bool = True) -> dict[str, object]:
-    """Run all benchmark suites and return a flat results dict."""
+def run_all(verbose: bool = True, suite: str = "all") -> dict[str, object]:
+    """Run selected benchmark suites and return a flat results dict."""
     results: dict[str, object] = {}
-    results.update(bench_ops.run(verbose=verbose))
-    results.update(bench_transfer.run(verbose=verbose))
-    results.update(bench_train.run(verbose=verbose))
+    if suite in ("all", "ops"):
+        results.update(bench_ops.run(verbose=verbose))
+    if suite in ("all", "transfer"):
+        results.update(bench_transfer.run(verbose=verbose))
+    if suite in ("all", "train"):
+        results.update(bench_train.run(verbose=verbose))
+    if suite in ("all", "models"):
+        results.update(bench_models.run(verbose=verbose))
     return results
-
-
-# ── save ──────────────────────────────────────────────────────────────────────
 
 
 def _payload(results: dict[str, object]) -> dict[str, object]:
@@ -70,8 +65,6 @@ def _payload(results: dict[str, object]) -> dict[str, object]:
     return {
         "commit": _git_sha(),
         "date": _now_iso(),
-        # A timing is only comparable with one from the same machine, so it
-        # travels with what produced it.
         "machine": {
             "platform": platform.platform(),
             "processor": platform.processor(),
@@ -97,57 +90,50 @@ def save_baseline(results: dict[str, object]) -> None:
     print(f"\n✅ Baseline saved → {_BASELINE_PATH}  (commit {payload['commit']})")
 
 
-# ── check ─────────────────────────────────────────────────────────────────────
-
-
 def _is_latency_key(key: str) -> bool:
-    """Return True for keys where a higher value = regression (latency/time).
-
-    Prefer *_median_us keys for comparison — median is more robust to
-    measurement noise than mean or p95.  Fall back to mean if median
-    is not present.
-    """
+    """Return True for keys where a higher value = regression (latency/time)."""
     return any(key.endswith(suf) for suf in ("_median_us", "_mean_us", "_median_ms", "_mean_ms"))
 
 
 def _is_throughput_key(key: str) -> bool:
     """Return True for keys where a lower value = regression (throughput/rate)."""
-    return any(key.endswith(suf) for suf in ("_gbps", "_samples_sec"))
+    return any(key.endswith(suf) for suf in ("_gbps", "_samples_sec", "_tok_s"))
+
+
+def _regression_pct(
+    key: str, cur_val: object, base_val: object
+) -> tuple[float, float, float, str] | None:
+    """Return ``(base_f, cur_f, regression_pct, raw_pct_str)`` for comparable keys.
+
+    ``regression_pct > 0`` means slower/worse; ``regression_pct < 0`` means faster/better.
+    """
+    if not isinstance(cur_val, (int, float)) or not isinstance(base_val, (int, float)):
+        return None
+    base_f, cur_f = float(base_val), float(cur_val)
+    if base_f == 0.0:
+        return None
+    raw_pct = (cur_f - base_f) / base_f * 100.0
+    if _is_latency_key(key):
+        return base_f, cur_f, raw_pct, f"{raw_pct:+.1f}%"
+    if _is_throughput_key(key):
+        return base_f, cur_f, -raw_pct, f"{raw_pct:+.1f}%"
+    return None
 
 
 def check_regressions(
     current: dict[str, object], baseline: dict[str, object], threshold_pct: float
 ) -> list[str]:
-    """
-    Return a list of human-readable regression strings.
-    Empty list = no regressions.
-    """
+    """Return a list of human-readable regression strings (empty = no regressions)."""
     regressions: list[str] = []
     for key, cur_val in current.items():
         if key not in baseline:
             continue
-        base_val = baseline[key]
-        if not isinstance(cur_val, (int, float)) or not isinstance(base_val, (int, float)):
-            continue
-        if base_val == 0:
-            continue
-
-        if _is_latency_key(key):
-            # Higher is worse
-            pct_change = (float(cur_val) - float(base_val)) / float(base_val) * 100.0
-            if pct_change > threshold_pct:
-                regressions.append(
-                    f"  ❌  {key}: {base_val:.2f} → {cur_val:.2f} "
-                    f"(+{pct_change:.1f}%  >  {threshold_pct:.0f}% limit)"
-                )
-        elif _is_throughput_key(key):
-            # Lower is worse
-            pct_change = (float(base_val) - float(cur_val)) / float(base_val) * 100.0
-            if pct_change > threshold_pct:
-                regressions.append(
-                    f"  ❌  {key}: {base_val:.2f} → {cur_val:.2f} "
-                    f"(-{pct_change:.1f}%  >  {threshold_pct:.0f}% limit)"
-                )
+        stat = _regression_pct(key, cur_val, baseline[key])
+        if stat is not None and stat[2] > threshold_pct:
+            base_f, cur_f, _, pct_str = stat
+            regressions.append(
+                f"  ❌  {key}: {base_f:.2f} → {cur_f:.2f} ({pct_str}  >  {threshold_pct:.0f}% limit)"
+            )
     return regressions
 
 
@@ -156,24 +142,13 @@ def print_comparison(
 ) -> list[str]:
     regressions = check_regressions(current, baseline, threshold_pct)
     improvements: list[str] = []
-
     for key, cur_val in current.items():
         if key not in baseline:
             continue
-        base_val = baseline[key]
-        if not isinstance(cur_val, (int, float)) or not isinstance(base_val, (int, float)):
-            continue
-        if base_val == 0:
-            continue
-
-        if _is_latency_key(key):
-            pct = (float(cur_val) - float(base_val)) / float(base_val) * 100.0
-            if pct < -threshold_pct:
-                improvements.append(f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} ({pct:+.1f}%)")
-        elif _is_throughput_key(key):
-            pct = (float(cur_val) - float(base_val)) / float(base_val) * 100.0
-            if pct > threshold_pct:
-                improvements.append(f"  ✅  {key}: {base_val:.2f} → {cur_val:.2f} (+{pct:.1f}%)")
+        stat = _regression_pct(key, cur_val, baseline[key])
+        if stat is not None and stat[2] < -threshold_pct:
+            base_f, cur_f, _, pct_str = stat
+            improvements.append(f"  ✅  {key}: {base_f:.2f} → {cur_f:.2f} ({pct_str})")
 
     print(f"\n── Comparison vs baseline (threshold={threshold_pct:.0f}%) ────────")
     if improvements:
@@ -189,13 +164,16 @@ def print_comparison(
     return regressions
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Lucid performance benchmark suite",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--suite",
+        choices=("all", "ops", "transfer", "train", "models"),
+        default="all",
+        help="Benchmark suite to run (default: all)",
     )
     parser.add_argument(
         "--save",
@@ -224,48 +202,48 @@ def main() -> None:
         action="store_true",
         help="Suppress per-suite tables (only print comparison/summary)",
     )
-    args = parser.parse_args()
+    return parser
 
+
+def _run_check(results: dict[str, object], threshold: float) -> None:
+    if not os.path.exists(_BASELINE_PATH):
+        print(f"\n⚠️  Baseline not found: {_BASELINE_PATH}")
+        print("   Run with --save first to establish a baseline.")
+        sys.exit(2)
+    with open(_BASELINE_PATH, encoding="utf-8") as f:
+        payload = json.load(f)
+    baseline_results = payload.get("results", {})
+    baseline_commit = payload.get("commit", "unknown")
+    print(f"\n   Baseline commit: {baseline_commit}")
+    regressions = print_comparison(results, baseline_results, threshold)
+    if regressions:
+        print(f"\n💥 {len(regressions)} regression(s) detected.")
+        sys.exit(1)
+    print("\n✅ No regressions detected.")
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
     verbose = not args.quiet
 
     print(f"\n{'='*62}")
     print(f"  Lucid benchmark suite  |  commit {_git_sha()}  |  {_now_iso()}")
     print(f"{'='*62}")
 
-    results = run_all(verbose=verbose)
+    results = run_all(verbose=verbose, suite=args.suite)
     if args.json:
         save_json(results, args.json)
-
     if args.save:
         save_baseline(results)
         return
-
     if args.check:
-        if not os.path.exists(_BASELINE_PATH):
-            print(f"\n⚠️  Baseline not found: {_BASELINE_PATH}")
-            print("   Run with --save first to establish a baseline.")
-            sys.exit(2)
-        with open(_BASELINE_PATH, encoding="utf-8") as f:
-            payload = json.load(f)
-        baseline_results = payload.get("results", {})
-        baseline_commit = payload.get("commit", "unknown")
-        print(f"\n   Baseline commit: {baseline_commit}")
-        regressions = print_comparison(results, baseline_results, args.threshold)
-        if regressions:
-            print(f"\n💥 {len(regressions)} regression(s) detected.")
-            sys.exit(1)
-        else:
-            print("\n✅ No regressions detected.")
+        _run_check(results, args.threshold)
         return
 
-    # Default: just print results summary
     print(f"\n── Summary ({len(results)} metrics) ──────────────────────────────────")
     for key in sorted(results):
         val = results[key]
-        if isinstance(val, float):
-            print(f"  {key}: {val:.3f}")
-        else:
-            print(f"  {key}: {val}")
+        print(f"  {key}: {val:.3f}" if isinstance(val, float) else f"  {key}: {val}")
     print("\nRun with --save to store as baseline, --check to compare.\n")
 
 

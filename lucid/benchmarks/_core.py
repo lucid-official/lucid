@@ -2,12 +2,15 @@
 benchmarks/_core.py — shared timing primitives (stdlib only).
 
 All timer functions return raw nanosecond samples.
-Statistics (mean, median, p95) are computed by BenchResult.
+Statistics (mean, median, p95, p99) are computed by BenchResult.
 """
 
 import statistics
 import time
-from typing import Callable, override
+from typing import TYPE_CHECKING, Callable, override
+
+if TYPE_CHECKING:
+    from lucid._tensor.tensor import Tensor
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 
@@ -82,7 +85,7 @@ def bench_cpu(
 
 
 def bench_gpu_lucid(
-    fn: Callable[[], object], warmup: int = WARMUP_GPU, iters: int = ITERS_GPU
+    fn: Callable[[], Tensor], warmup: int = WARMUP_GPU, iters: int = ITERS_GPU
 ) -> list[int]:
     """Time a Lucid GPU op, forcing MLX eval after each call.
 
@@ -97,8 +100,7 @@ def bench_gpu_lucid(
 
     def _run() -> None:
         out = fn()
-        impl = getattr(out, "_impl", out)
-        _C_engine.eval_gpu(impl)  # type: ignore[arg-type]
+        _C_engine.eval_gpu(out._impl)
 
     for _ in range(warmup):
         _run()

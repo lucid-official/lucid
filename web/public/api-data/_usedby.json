@@ -348,6 +348,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.nn.functional._index_checks"
+    },
+    {
+      "kind": "module",
       "module": "lucid.nn.functional._inplace"
     },
     {
@@ -1297,6 +1301,10 @@
     {
       "kind": "module",
       "module": "lucid.diffeq._tableau"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._utils._generative"
     },
     {
       "kind": "module",
@@ -3159,6 +3167,10 @@
     {
       "kind": "module",
       "module": "lucid.models"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._mixins"
     },
     {
       "kind": "module",
@@ -12398,6 +12410,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.generative._common._returns"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative._common._rssm"
     },
     {
@@ -12860,6 +12876,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models._utils._classification"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models._utils._common"
     },
     {
@@ -12885,6 +12905,10 @@
     {
       "kind": "module",
       "module": "lucid.models.generative._common._dists"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative._common._returns"
     },
     {
       "kind": "module",
@@ -13084,10 +13108,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.models.vision.lenet._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.models.vision.mask2former._model"
     },
     {
@@ -13101,14 +13121,6 @@
     {
       "kind": "module",
       "module": "lucid.models.vision.maxvit._model"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.models.vision.mobilenet._model"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.models.vision.mobilenet_v2._model"
     },
     {
       "kind": "module",
@@ -13129,14 +13141,6 @@
     {
       "kind": "module",
       "module": "lucid.models.vision.resnest._model"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.models.vision.resnet._model"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.models.vision.resnext._model"
     },
     {
       "kind": "module",

@@ -159,13 +159,16 @@ def as_number(x: object) -> object:
 
 
 _IMPL = _C_engine.TensorImpl
+_NON_TENSOR_TYPES: frozenset[type] = frozenset(
+    {int, float, bool, complex, str, list, tuple, dict, slice, type(None)}
+)
 
 
 def try_unwrap(x: object) -> _C_engine.TensorImpl | None:
     """Return the underlying ``TensorImpl`` from a ``Tensor`` or ``TensorImpl``, or ``None``."""
-    if type(x) is _IMPL or isinstance(x, _IMPL):
-        return x
-    impl: object = getattr(x, "_impl", None)
+    if type(x) in _NON_TENSOR_TYPES:
+        return None
+    impl: object = getattr(x, "_impl", x)
     return impl if type(impl) is _IMPL or isinstance(impl, _IMPL) else None
 
 

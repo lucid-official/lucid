@@ -64,6 +64,25 @@ def _operand_names(e: OpEntry) -> tuple[str, ...]:
     return names
 
 
+def _wrap_method_result(self: Tensor, result: _Impl) -> Tensor:
+    if isinstance(result, (list, tuple)):
+        return type(result)(_wrap(r) for r in result)  # type: ignore[return-value]
+    return self if result is self._impl else _wrap(result)
+
+
+def _unary_tensor_method(e: OpEntry) -> object:
+    spreads = e.method_name in _SPREAD_INT_LIST
+    engine_fn = e.engine_fn
+
+    def method(self: Tensor, *args: object, **kwargs: object) -> Tensor:
+        if spreads and (len(args) > 1 or not (args or kwargs)):
+            args = (args,)
+        return _wrap_method_result(self, engine_fn(self._impl, *args, **kwargs))
+
+    method.__name__ = e.method_name or e.name
+    return method
+
+
 def _fixed_arity_method(e: OpEntry, tensor_cls: type) -> object:
     """The Tensor method for ``e`` when ``self`` is followed by fixed arguments.
 
@@ -71,36 +90,29 @@ def _fixed_arity_method(e: OpEntry, tensor_cls: type) -> object:
     tensor-arg count), dispatches to the engine op, and either wraps the
     result as a Tensor or returns the raw value per ``e.returns_tensor``.
     """
-    # ``self`` is the only operand of a one-tensor op: nothing to bind.
+    if e.n_tensor_args == 1 and not e.inplace and e.returns_tensor:
+        return _unary_tensor_method(e)
+
     binds = e.n_tensor_args > 1
+    n_after_self = e.n_tensor_args - 1
     spreads = e.method_name in _SPREAD_INT_LIST
+    engine_fn = e.engine_fn
 
     def method(self: Tensor, *args: object, **kwargs: object) -> Tensor:
         """Standard-arity method body for registry-driven Tensor methods."""
-        # No arguments at all is the empty list spread out: ``x.reshape(*s)``
-        # for a 0-d ``s``, which the reference refuses and Lucid's callers
-        # write for 0-d tensors.
         if spreads and (len(args) > 1 or not (args or kwargs)):
             args = (args,)
         if kwargs and binds:
-            names = _operand_names(e)
-            args, kwargs = _bind_leading(method.__name__, names, args, kwargs)
-        proc_args: list[object] = []
-        for i, a in enumerate(args):
-            if i < (e.n_tensor_args - 1) and isinstance(a, tensor_cls):
-                proc_args.append(_unwrap(a))  # type: ignore[arg-type]
-            else:
-                proc_args.append(a)
-
-        result = e.engine_fn(self._impl, *proc_args, **kwargs)
+            args, kwargs = _bind_leading(method.__name__, _operand_names(e), args, kwargs)
+        proc = [
+            _unwrap(a) if i < n_after_self and isinstance(a, tensor_cls) else a  # type: ignore[arg-type]
+            for i, a in enumerate(args)
+        ]
+        result = engine_fn(self._impl, *proc, **kwargs)
         if e.inplace:
             return _adopt_inplace(self, result, e.name)
         if e.returns_tensor:
-            if isinstance(result, (list, tuple)):
-                return type(result)(_wrap(r) for r in result)  # type: ignore[return-value]
-            if result is self._impl:
-                return self
-            return _wrap(result)
+            return _wrap_method_result(self, result)
         return cast("Tensor", result)
 
     method.__name__ = e.method_name or e.name

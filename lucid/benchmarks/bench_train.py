@@ -11,19 +11,19 @@ Runs on both CPU and GPU (if available).
 Reports ms/step and samples/sec for batch sizes [64, 256, 1024].
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import time
-from typing import cast, override
+from typing import override
+
 import lucid
 import lucid.nn as nn
+import lucid.nn.functional as F
 import lucid.optim as optim
-from lucid.benchmarks._core import BenchResult, metal_available
-
-# ── model ─────────────────────────────────────────────────────────────────────
+from lucid.benchmarks._core import BenchResult, fmt_table, metal_available
 
 
 class _MLP(nn.Module):
@@ -42,35 +42,29 @@ class _MLP(nn.Module):
         return self.fc4(x)
 
 
-# ── timing helpers ────────────────────────────────────────────────────────────
-
-
 def _sync(tensor: lucid.Tensor) -> None:
     """Force GPU synchronisation for Metal tensors; no-op for CPU."""
     if tensor.is_metal:
         from lucid._C import engine as _C_engine
 
-        _C_engine.eval_tensors([tensor._impl])
+        _C_engine.eval_gpu(tensor._impl)
 
 
 def _bench_step(
-    model: nn.Module,
+    model: _MLP,
     opt: optim.SGD,
     x: lucid.Tensor,
     y: lucid.Tensor,
-    loss_fn: nn.Module,
     *,
     warmup: int,
     iters: int,
     mode: str,
 ) -> BenchResult:
-    """
-    mode: "forward" | "forward_backward" | "full_step"
-    """
+    """mode: \"forward\" | \"forward_backward\" | \"full_step\"."""
     for _ in range(warmup):
-        out = cast(lucid.Tensor, model(x))
+        out = model.forward(x)
         if mode in ("forward_backward", "full_step"):
-            loss = cast(lucid.Tensor, loss_fn(out, y))
+            loss = F.cross_entropy(out, y)
             loss.backward()
         if mode == "full_step":
             opt.step()
@@ -80,9 +74,9 @@ def _bench_step(
     times: list[int] = []
     for _ in range(iters):
         t0 = time.perf_counter_ns()
-        out = cast(lucid.Tensor, model(x))
+        out = model.forward(x)
         if mode in ("forward_backward", "full_step"):
-            loss = cast(lucid.Tensor, loss_fn(out, y))
+            loss = F.cross_entropy(out, y)
             loss.backward()
         if mode == "full_step":
             opt.step()
@@ -92,15 +86,11 @@ def _bench_step(
     return BenchResult(mode, times)
 
 
-# ── main benchmark ────────────────────────────────────────────────────────────
-
-
 def _bench_device(device: str, batch_size: int, iters: int) -> dict[str, object]:
     model = _MLP()
     if device == "metal":
         model = model.to("metal")
     opt = optim.SGD(model.parameters(), lr=0.01)
-    loss_fn = nn.CrossEntropyLoss()
 
     x = lucid.randn(batch_size, 256)
     y = lucid.randint(0, 10, (batch_size,))
@@ -110,7 +100,7 @@ def _bench_device(device: str, batch_size: int, iters: int) -> dict[str, object]
 
     results: dict[str, object] = {}
     for mode in ("forward", "forward_backward", "full_step"):
-        br = _bench_step(model, opt, x, y, loss_fn, warmup=3, iters=iters, mode=mode)
+        br = _bench_step(model, opt, x, y, warmup=3, iters=iters, mode=mode)
         mean_ms = br.mean_us / 1_000.0
         samples_per_sec = batch_size / (br.mean_us * 1e-6)
         results[f"{mode}_mean_ms"] = round(mean_ms, 3)
@@ -151,8 +141,6 @@ def run(verbose: bool = True) -> dict[str, object]:
             )
 
     if verbose:
-        from lucid.benchmarks._core import fmt_table
-
         print(fmt_table(rows))
 
     return out

@@ -806,81 +806,68 @@ def _rst_to_text(text: str) -> str:
     return text.strip()
 
 
-def _get_ast_docstring(fn_name: str, class_name: str | None = None) -> str | None:
-    """Search implementation .py files for fn_name's docstring via AST.
+_AST_DOC_INDEX: list[tuple[str, dict[str, list[ast.ClassDef]], dict[str, list[tuple[ast.AST, str]]]]] | None = None
 
-    Fallback for .pyi stubs that declare functions with '...' body and no
-    docstring.  The actual .py implementation has the full docstring.
 
-    Uses ast.get_docstring which returns the evaluated string value, so
-    raw-string docstrings (r-prefix) have their backslashes preserved —
-    LaTeX sequences like backslash-forall arrive intact.
-
-    When ``class_name`` is given, the fallback prefers a match nested
-    inside a class of that name (or a sibling class with the same name —
-    e.g. dunders injected via ``_inject_dunders``).  This avoids
-    misattributing common dunders like ``__eq__`` to the first matching
-    definition in alphabetical file order (e.g. ``_device.py``'s
-    ``__eq__`` outrunning the Tensor's).
-    """
+def _get_ast_doc_index() -> list[tuple[str, dict[str, list[ast.ClassDef]], dict[str, list[tuple[ast.AST, str]]]]]:
+    """Build and cache the per-file AST docstring index across IMPL_DIRS once per process."""
+    global _AST_DOC_INDEX
+    if _AST_DOC_INDEX is not None:
+        return _AST_DOC_INDEX
     import ast
 
-    IMPL_DIRS = [
+    impl_dirs = [
         LUCID_SRC / "lucid" / "_factories",
         LUCID_SRC / "lucid" / "_ops",
         LUCID_SRC / "lucid" / "autograd",
         LUCID_SRC / "lucid" / "serialization",
         LUCID_SRC / "lucid",
     ]
-
-    def _matches_class(tree: ast.AST, target: ast.AST) -> bool:
-        """Return True if ``target`` lives inside a class whose name matches
-        ``class_name`` (or in an injected dunders pattern targeting it)."""
-        if class_name is None:
-            return True
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                # Direct member of the class
-                for child in ast.walk(node):
-                    if child is target:
-                        return True
-            # Injected dunders pattern: a closure-style helper named e.g.
-            # `_inject_dunders` that defines methods at function scope and
-            # attaches them to the target class via globals().  Treat any
-            # nested function whose file mentions the class name as a
-            # plausible match.
-        return False
-
-    fallback: str | None = None
-    for impl_dir in IMPL_DIRS:
-        # rglob: recurse into subpackages.  This lets the lookup find e.g.
-        # composite ops in lucid/_ops/composite/{elementwise,blas,shape,...}.py
-        # without us having to enumerate every nested directory above.
+    index: list[tuple[str, dict[str, list[ast.ClassDef]], dict[str, list[tuple[ast.AST, str]]]]] = []
+    seen: set[Path] = set()
+    for impl_dir in impl_dirs:
         for fpath in sorted(impl_dir.rglob("*.py")):
+            if fpath in seen:
+                continue
+            seen.add(fpath)
             try:
-                tree = ast.parse(fpath.read_text(encoding="utf-8"))
+                text = fpath.read_text(encoding="utf-8")
+                tree = ast.parse(text)
             except (SyntaxError, OSError):
                 continue
-            file_mentions_class = class_name is not None and class_name in fpath.read_text(encoding="utf-8", errors="ignore")
+            class_nodes: dict[str, list[ast.ClassDef]] = {}
+            by_name: dict[str, list[tuple[ast.AST, str]]] = {}
             for node in ast.walk(tree):
-                if (
-                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                    and node.name == fn_name
-                ):
+                if isinstance(node, ast.ClassDef):
+                    class_nodes.setdefault(node.name, []).append(node)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     doc = ast.get_docstring(node)
-                    if not (doc and doc.strip()):
-                        continue
-                    # Strong match: function lives inside the target class
-                    if class_name is not None and _matches_class(tree, node):
-                        return doc
-                    # Soft match: file mentions the target class name and
-                    # the function is at module scope or inside a helper
-                    # (e.g. the injected-dunders pattern in _dunders.py)
-                    if class_name is not None and file_mentions_class:
-                        return doc
-                    # No class context — first match wins as before
-                    if class_name is None:
-                        return doc
+                    if doc and doc.strip():
+                        by_name.setdefault(node.name, []).append((node, doc))
+            if by_name:
+                index.append((text, class_nodes, by_name))
+    _AST_DOC_INDEX = index
+    return index
+
+
+def _get_ast_docstring(fn_name: str, class_name: str | None = None) -> str | None:
+    """Search implementation .py files for fn_name's docstring via AST."""
+    import ast
+
+    for text, class_nodes, by_name in _get_ast_doc_index():
+        hits = by_name.get(fn_name)
+        if not hits:
+            continue
+        file_mentions_class = class_name is not None and class_name in text
+        for node, doc in hits:
+            if class_name is not None:
+                c_list = class_nodes.get(class_name, ())
+                if any(child is node for c in c_list for child in ast.walk(c)):
+                    return doc
+                if file_mentions_class:
+                    return doc
+            else:
+                return doc
     return None
 
 
@@ -2460,7 +2447,7 @@ def main() -> None:
         # Cap at 8 even on 16-core M-Max — Griffe's AST walk per worker
         # is GIL-free but spawns ``importlib`` machinery whose I/O
         # contention dominates beyond ~8 parallel readers.
-        n_workers = min(8, max(1, (_os.cpu_count() or 4)))
+        n_workers = 1  # single-process reuses warm GriffeLoader + _AST_DOC_INDEX
 
     completed: list[str] = []
     # ``failed`` tracks every slug whose worker threw — we surface
