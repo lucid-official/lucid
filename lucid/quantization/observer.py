@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, cast, override
 
 import lucid
 import lucid.nn as nn
+from lucid._engine_scope import untraced
 from lucid.quantization._qparams import calculate_qparams
 from lucid.quantization._qscheme import (
     QDtype,
@@ -233,9 +234,15 @@ class ObserverBase(nn.Module):
         ``minimum(seed_cpu, x_gpu)`` reduction ``DeviceMismatch``-es.  Re-register
         each buffer on ``ref``'s device on first sight; a no-op once aligned.
         """
-        for name, buf in list(self.named_buffers(recurse=False)):
-            if buf.device != ref.device:
-                self.register_buffer(name, buf.to(ref.device))
+        with untraced():
+            ch = ref.shape[self.ch_axis] if self.ch_axis is not None and ref.ndim > 0 else None
+            for name, buf in list(self.named_buffers(recurse=False)):
+                want_shape = (ch,) if ch is not None and buf.ndim == 0 else buf.shape
+                if buf.device != ref.device or buf.shape != want_shape:
+                    aligned = buf.to(ref.device)
+                    if aligned.shape != want_shape:
+                        aligned = aligned.expand(want_shape).contiguous()
+                    self.register_buffer(name, aligned)
 
     @override
     def _load_from_state_dict(

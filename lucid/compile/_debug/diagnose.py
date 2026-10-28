@@ -180,15 +180,21 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
     """
     # Local imports avoid the package-init cycle that ``lucid.compile``
     # carefully sidesteps via its own lazy ``__getattr__``.
+    from lucid.compile._core.custom_backward import vjp_region_index
     from lucid.compile._core.trace_context import compile_attempt, recording
 
     with compile_attempt(), recording(watch=example_inputs) as tracer:
         fn(*example_inputs)
 
+    in_region, _ = vjp_region_index(tracer.graph)
+
     op_counts: Counter[str] = Counter()
     op_samples: dict[str, tuple[tuple[int, ...], str]] = {}
-    for node in tracer.graph.ops:
+    outside_region_names: set[str] = set()
+    for idx, node in enumerate(tracer.graph.ops):
         op_counts[node.name] += 1
+        if idx not in in_region:
+            outside_region_names.add(node.name)
         if node.name not in op_samples and node.outputs:
             primary = node.outputs[0]
             op_samples[node.name] = (tuple(int(d) for d in primary.shape), primary.dtype.name)
@@ -196,40 +202,25 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
     registered: list[OpInfo] = []
     grad_sinks: list[OpInfo] = []
     uncovered: list[OpInfo] = []
-
     Reg = _C_engine.compile.VjpRegistration
     for name, count in sorted(op_counts.items()):
         sample = op_samples.get(name)
-        info = OpInfo(
-            name=name,
-            count=count,
-            sample_shape=sample[0] if sample else None,
-            sample_dtype=sample[1] if sample else None,
-        )
+        info = OpInfo(name, count, sample[0] if sample else None, sample[1] if sample else None)
         status = _C_engine.compile.vjp_registration_status(name)
-        if status == Reg.Registered:
+        if status == Reg.Registered or (status == Reg.Missing and name not in outside_region_names):
             registered.append(info)
         elif status == Reg.GradSink:
             grad_sinks.append(info)
         else:
             uncovered.append(info)
 
-    total = sum(op_counts.values())
     if not uncovered:
-        rec = "100% manual VJP coverage — no fallback expected under " "LUCID_MANUAL_VJP_REQUIRE=1."
+        rec = "100% manual VJP coverage — no fallback expected under LUCID_MANUAL_VJP_REQUIRE=1."
     else:
         names = ", ".join(f"{i.name} (x{i.count})" for i in uncovered)
         rec = (
             f"{len(uncovered)} op kind(s) will trigger autograd fallback: "
             f"{names}.  Set LUCID_MANUAL_VJP_DEBUG=1 for per-call stderr "
-            "diagnostics, or LUCID_MANUAL_VJP_REQUIRE=1 to surface as "
-            "a hard RuntimeError."
+            "diagnostics, or LUCID_MANUAL_VJP_REQUIRE=1 to surface as a hard RuntimeError."
         )
-
-    return DiagnosisReport(
-        total_ops=total,
-        registered=registered,
-        grad_sinks=grad_sinks,
-        uncovered=uncovered,
-        recommendation=rec,
-    )
+    return DiagnosisReport(sum(op_counts.values()), registered, grad_sinks, uncovered, rec)

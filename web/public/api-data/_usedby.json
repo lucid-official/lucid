@@ -284,6 +284,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions.gamma"
+    },
+    {
+      "kind": "module",
       "module": "lucid.einops"
     },
     {
@@ -903,6 +907,10 @@
     {
       "kind": "module",
       "module": "lucid.autograd.checkpoint"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.custom_backward"
     },
     {
       "kind": "module",
@@ -17365,6 +17373,10 @@
     {
       "kind": "module",
       "module": "lucid.models._output"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._utils._text"
     },
     {
       "kind": "module",

@@ -53,6 +53,7 @@ std::vector<TensorImplPtr> eigh_op(const TensorImplPtr& a_in, const std::string&
     const TensorImplPtr a = amp.cast(a_in);
     require_float(a->dtype(), "eigh");
     OpScopeFull scope{"eigh", a->device(), a->dtype(), a->shape()};
+    scope.set_attr("upper", uplo == "U");
 
     const auto& sh = a->shape();
     // Eigenvalue shape: one value per row/column, so remove the last dim.
@@ -67,8 +68,13 @@ std::vector<TensorImplPtr> eigh_op(const TensorImplPtr& a_in, const std::string&
 
     auto out = backend::Dispatcher::for_device(a->device())
                    .linalg_eigh(a->storage(), sh, wsh, vsh, a->dtype(), uplo == "U");
-    return {fresh(std::move(out.first), wsh, a->dtype(), a->device()),
-            fresh(std::move(out.second), vsh, a->dtype(), a->device())};
+    auto res_w = fresh(std::move(out.first), wsh, a->dtype(), a->device());
+    auto res_v = fresh(std::move(out.second), vsh, a->dtype(), a->device());
+    if (auto* trc = compile::current_tracer()) {
+        trc->on_op_io({a}, res_w);
+        trc->on_op_io({}, res_v);
+    }
+    return {res_w, res_v};
 }
 
 }  // namespace lucid

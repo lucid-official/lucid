@@ -282,6 +282,8 @@ class _CholeskyAutograd(_AutogradFunction):
     cholesky_op. Forward calls the engine; backward computes the input
     gradient via Murray (2016)."""
 
+    _traced_backward = True
+
     @override
     @staticmethod
     def forward(ctx: FunctionCtx, x: Tensor, upper: bool) -> Tensor:
@@ -297,17 +299,10 @@ class _CholeskyAutograd(_AutogradFunction):
         upper: bool = cast(bool, ctx.upper)
 
         # Normalise to lower-triangular form L; gradient w.r.t. that L.
-        if upper:
-            L = factor.mT
-            gL = grad_out.mT
-        else:
-            L = factor
-            gL = grad_out
+        L, gL = (factor.mT, grad_out.mT) if upper else (factor, grad_out)
 
         n: int = int(L.shape[-1])
-        eye_n = lucid.eye(n, dtype=L.dtype)
-        if L.device != "cpu":
-            eye_n = eye_n.to(L.device)
+        eye_n = lucid.eye(n, dtype=L.dtype, device=L.device)
         # Mask gL to its lower triangle — the strictly upper half doesn't
         # contribute to L (which is lower-triangular by construction).
         gL_tril = lucid.tril(gL)
@@ -543,12 +538,12 @@ class _SVD(_AutogradFunction):
     """Reduced SVD with Giles' (2008) backward across ``(U, S, Vh)``."""
 
     _materialize_grads = False
+    _traced_backward = True
 
     @override
     @staticmethod
     def forward(ctx: FunctionCtx, A: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        u_impl, s_impl, vh_impl = _la.svd(_unwrap(A))
-        U, S, Vh = _wrap(u_impl), _wrap(s_impl), _wrap(vh_impl)
+        U, S, Vh = (_wrap(t) for t in _la.svd(_unwrap(A)))
         ctx.save_for_backward(U, S, Vh)
         return U, S, Vh
 
@@ -807,12 +802,12 @@ class _QR(_AutogradFunction):
     """Reduced QR with combined ``(Q, R)`` backward."""
 
     _materialize_grads = False
+    _traced_backward = True
 
     @override
     @staticmethod
     def forward(ctx: FunctionCtx, A: Tensor) -> tuple[Tensor, Tensor]:
-        q_impl, r_impl = _la.qr(_unwrap(A))
-        Q, R = _wrap(q_impl), _wrap(r_impl)
+        Q, R = (_wrap(t) for t in _la.qr(_unwrap(A)))
         ctx.save_for_backward(A, Q, R)
         return Q, R
 
@@ -910,6 +905,8 @@ class _MatrixPowerZero(_AutogradFunction):
     Its gradient is zero — the identity does not depend on ``A`` — which
     is what this node hands back.
     """
+
+    _traced_backward = True
 
     @override
     @staticmethod
@@ -1104,10 +1101,20 @@ class _Pinv(_AutogradFunction):
     differentiates again.
     """
 
+    _traced_backward = True
+
     @override
     @staticmethod
-    def forward(ctx: FunctionCtx, A: Tensor, p_impl: _C_engine.TensorImpl | None = None) -> Tensor:
-        P = _wrap(_la.pinv(_unwrap(A)) if p_impl is None else p_impl)
+    def forward(
+        ctx: FunctionCtx,
+        A: Tensor,
+        p_impl: _C_engine.TensorImpl | Callable[[Tensor], Tensor] | None = None,
+    ) -> Tensor:
+        P = (
+            p_impl(A)
+            if callable(p_impl)
+            else _wrap(_la.pinv(_unwrap(A)) if p_impl is None else p_impl)
+        )
         ctx.save_for_backward(A, P)
         return P
 
@@ -1116,25 +1123,16 @@ class _Pinv(_AutogradFunction):
     def backward(ctx: FunctionCtx, grad_out: Tensor) -> Tensor:
         A, P = ctx.saved_tensors
         m, n = int(A.shape[-2]), int(A.shape[-1])
-        Gt = grad_out.mT
-        Pt = P.mT
+        Gt, Pt = grad_out.mT, P.mT
         if m <= n:
             K = lucid.matmul(Gt, P)
             KPt = lucid.matmul(K, Pt)
-            return (
-                -lucid.matmul(P, K).mT
-                + KPt
-                - lucid.matmul(lucid.matmul(A, P), KPt)
-                + lucid.matmul(lucid.matmul(Pt, P), Gt - lucid.matmul(K, A))
-            )
+            t1 = -lucid.matmul(P, K).mT + KPt - lucid.matmul(lucid.matmul(A, P), KPt)
+            return t1 + lucid.matmul(lucid.matmul(Pt, P), Gt - lucid.matmul(K, A))
         K = lucid.matmul(P, Gt)
         PtK = lucid.matmul(Pt, K)
-        return (
-            -lucid.matmul(K, P).mT
-            + lucid.matmul(lucid.matmul(Gt - lucid.matmul(A, K), P), Pt)
-            + PtK
-            - lucid.matmul(lucid.matmul(PtK, P), A)
-        )
+        t1 = -lucid.matmul(K, P).mT + lucid.matmul(lucid.matmul(Gt - lucid.matmul(A, K), P), Pt)
+        return t1 + PtK - lucid.matmul(lucid.matmul(PtK, P), A)
 
 
 def eig(input: Tensor) -> tuple[Tensor, Tensor]:
@@ -1322,12 +1320,12 @@ class _Eigh(_AutogradFunction):
     """Symmetric / Hermitian eigendecomposition with Loewner backward."""
 
     _materialize_grads = False
+    _traced_backward = True
 
     @override
     @staticmethod
     def forward(ctx: FunctionCtx, A: Tensor, UPLO: str) -> tuple[Tensor, Tensor]:
-        w_impl, V_impl = _la.eigh(_unwrap(A), UPLO)
-        w, V = _wrap(w_impl), _wrap(V_impl)
+        w, V = (_wrap(t) for t in _la.eigh(_unwrap(A), UPLO))
         ctx.save_for_backward(w, V)
         return w, V
 
@@ -1340,16 +1338,11 @@ class _Eigh(_AutogradFunction):
             dA = V @ lucid.diag_embed(G_w) @ V.mT
         if G_V is not None:
             k = int(w.shape[-1])
-            Wi = w.unsqueeze(-1)
-            Wj = w.unsqueeze(-2)
             # F[i, j] = 1 / (w[j] - w[i]).
-            denom = Wj - Wi
+            denom = w.unsqueeze(-2) - w.unsqueeze(-1)
             eye_k = lucid.eye(k, dtype=w.dtype, device=w.device)
-            safe_denom = denom + eye_k
-            F = (1.0 / safe_denom) * (1.0 - eye_k)
-            VtGV = V.mT @ G_V
-            inner = F * VtGV
-            dA_V = V @ inner @ V.mT
+            F = (1.0 / (denom + eye_k)) * (1.0 - eye_k)
+            dA_V = V @ (F * (V.mT @ G_V)) @ V.mT
             dA_V = (dA_V + dA_V.mT) * 0.5
             dA = dA_V if dA is None else dA + dA_V
         assert dA is not None
@@ -1664,6 +1657,8 @@ class _LogAbsDet(_AutogradFunction):
     backward the gradient is ``g · cof(A) / det(A)``: ``g · A⁻ᵀ`` for an
     invertible ``A`` and ``±inf`` along the adjugate of a singular one.
     """
+
+    _traced_backward = True
 
     @override
     @staticmethod

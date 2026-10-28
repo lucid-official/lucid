@@ -62,7 +62,10 @@ TensorImplPtr pinv_op(const TensorImplPtr& a) {
 
     Storage out =
         backend::Dispatcher::for_device(a->device()).linalg_pinv(a->storage(), sh, a->dtype());
-    return fresh(std::move(out), std::move(out_shape), a->dtype(), a->device());
+    auto res = fresh(std::move(out), std::move(out_shape), a->dtype(), a->device());
+    if (auto* trc = compile::current_tracer())
+        trc->on_op_io({a}, res);
+    return res;
 }
 
 }  // namespace lucid

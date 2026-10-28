@@ -27,6 +27,8 @@
 #include <variant>
 #include <vector>
 
+#include "../../OpEmitters/_AttrHelpers.h"
+#include "../../OpEmitters/linalg/Decompositions.h"
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
 
@@ -57,8 +59,11 @@ struct Ctx {
     std::vector<MPSGraphTensor*> in;
 };
 
-bool open(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs,
-          std::size_t arity, Ctx& c) {
+bool open(BackwardContext& bctx,
+          const OpNode& node,
+          const std::vector<void*>& grad_outs,
+          std::size_t arity,
+          Ctx& c) {
     if (node.inputs.size() < arity || grad_outs.empty() || grad_outs[0] == nullptr)
         return false;
     c.g = (__bridge MPSGraph*)bctx.graph();
@@ -86,13 +91,16 @@ void give(BackwardContext& bctx, const OpNode& node, std::size_t i, MPSGraphTens
 class DotVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "dot"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         Ctx c;
-        if (!open(bctx, node, grad_outs, 2, c) || c.in[0].shape.count != 1 || c.in[1].shape.count != 1)
+        if (!open(bctx, node, grad_outs, 2, c) || c.in[0].shape.count != 1 ||
+            c.in[1].shape.count != 1)
             return false;
-        give(bctx, node, 0, [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:c.in[1] name:nil]);
-        give(bctx, node, 1, [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:c.in[0] name:nil]);
+        give(bctx, node, 0,
+             [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:c.in[1] name:nil]);
+        give(bctx, node, 1,
+             [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:c.in[0] name:nil]);
         return true;
     }
 };
@@ -103,8 +111,8 @@ template <bool OUTER>
 class ABtVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return OUTER ? "outer" : "inner"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         Ctx c;
         if (!open(bctx, node, grad_outs, 2, c))
             return false;
@@ -133,8 +141,8 @@ public:
 class TensordotVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "tensordot"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         Ctx c;
         if (!open(bctx, node, grad_outs, 2, c) || !known(c.in[0]) || !known(c.in[1]))
             return false;
@@ -218,8 +226,8 @@ public:
 class BilinearVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "bilinear_layer"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         Ctx c;
         if (!open(bctx, node, grad_outs, 3, c))
             return false;
@@ -243,15 +251,20 @@ public:
         u = [g reshapeTensor:u withShape:@[ N, O, I ] name:nil];
         MPSGraphTensor* dx1 = [g reshapeTensor:mm(g, g3, u) withShape:@[ N, I ] name:nil];
         // dx2[n, j] = Σ_o g[n, o] Σ_i x1[n, i] W[o, i, j]
-        MPSGraphTensor* w_ioj = [g transposeTensor:w dimension:0 withDimension:1 name:nil];  // (I, O, J)
+        MPSGraphTensor* w_ioj = [g transposeTensor:w
+                                         dimension:0
+                                     withDimension:1
+                                              name:nil];  // (I, O, J)
         MPSGraphTensor* v = mm(g, x1, [g reshapeTensor:w_ioj withShape:@[ I, @(oj) ] name:nil]);
         v = [g reshapeTensor:v withShape:@[ N, O, J ] name:nil];
         MPSGraphTensor* dx2 = [g reshapeTensor:mm(g, g3, v) withShape:@[ N, J ] name:nil];
         // dW[o, i, j] = Σ_n g[n, o] x1[n, i] x2[n, j]
-        MPSGraphTensor* x1x2 = [g multiplicationWithPrimaryTensor:[g reshapeTensor:x1 withShape:@[ N, I, @1 ] name:nil]
-                                                  secondaryTensor:[g reshapeTensor:x2 withShape:@[ N, @1, J ] name:nil]
-                                                             name:nil];
-        MPSGraphTensor* dw = mm(g, tr(g, c.go), [g reshapeTensor:x1x2 withShape:@[ N, @(ij) ] name:nil]);
+        MPSGraphTensor* x1x2 =
+            [g multiplicationWithPrimaryTensor:[g reshapeTensor:x1 withShape:@[ N, I, @1 ] name:nil]
+                               secondaryTensor:[g reshapeTensor:x2 withShape:@[ N, @1, J ] name:nil]
+                                          name:nil];
+        MPSGraphTensor* dw =
+            mm(g, tr(g, c.go), [g reshapeTensor:x1x2 withShape:@[ N, @(ij) ] name:nil]);
         dw = [g reshapeTensor:dw withShape:@[ O, I, J ] name:nil];
         give(bctx, node, 0, dx1);
         give(bctx, node, 1, dx2);
@@ -265,20 +278,25 @@ public:
 class TraceVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "trace"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
-        return emit_unary_vjp(bctx, node, grad_outs,
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
+        return emit_unary_vjp(
+            bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
                 if (x.shape.count != 2 || !known(x))
                     return nil;
                 NSArray<NSNumber*>* shape = x.shape;
                 MPSGraphTensor* r = [g coordinateAlongAxis:0 withShape:shape name:nil];
                 MPSGraphTensor* col = [g coordinateAlongAxis:1 withShape:shape name:nil];
-                MPSGraphTensor* eye = [g castTensor:[g equalWithPrimaryTensor:r secondaryTensor:col name:nil]
+                MPSGraphTensor* eye = [g castTensor:[g equalWithPrimaryTensor:r
+                                                              secondaryTensor:col
+                                                                         name:nil]
                                              toType:go.dataType
                                                name:nil];
                 return [g multiplicationWithPrimaryTensor:eye
-                                          secondaryTensor:[g reshapeTensor:go withShape:@[] name:nil]
+                                          secondaryTensor:[g reshapeTensor:go
+                                                                 withShape:@[]
+                                                                      name:nil]
                                                      name:@"trace_vjp"];
             });
     }
@@ -288,8 +306,8 @@ public:
 class DiagonalVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "diagonal"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         auto get = [&](const char* key, std::int64_t def) {
             auto it = node.attrs.find(key);
             if (it == node.attrs.end())
@@ -300,7 +318,8 @@ public:
         const std::int64_t offset = get("offset", 0);
         const std::int64_t a1 = get("axis1", 0);
         const std::int64_t a2 = get("axis2", 1);
-        return emit_unary_vjp(bctx, node, grad_outs,
+        return emit_unary_vjp(
+            bctx, node, grad_outs,
             [&](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
                 if (x.shape.count != 2 || go.shape.count != 1 || !known(x) ||
                     !((a1 == 0 && a2 == 1) || (a1 == 1 && a2 == 0)))
@@ -314,24 +333,27 @@ public:
                 NSArray<NSNumber*>* rc = @[ @(rows), @(cols) ];
                 MPSGraphTensor* r = [g coordinateAlongAxis:0 withShape:rc name:nil];
                 MPSGraphTensor* col = [g coordinateAlongAxis:1 withShape:rc name:nil];
-                MPSGraphTensor* on = [g equalWithPrimaryTensor:[g additionWithPrimaryTensor:r
-                                                                             secondaryTensor:[g constantWithScalar:(double)offset
-                                                                                                          dataType:r.dataType]
-                                                                                        name:nil]
-                                               secondaryTensor:col
-                                                          name:nil];
+                MPSGraphTensor* on =
+                    [g equalWithPrimaryTensor:
+                            [g additionWithPrimaryTensor:r
+                                         secondaryTensor:[g constantWithScalar:(double)offset
+                                                                      dataType:r.dataType]
+                                                    name:nil]
+                              secondaryTensor:col
+                                         name:nil];
                 MPSGraphTensor* mask = [g castTensor:on toType:go.dataType name:nil];
                 // g[t] sits at row t (offset ≥ 0) or column t (offset < 0).
                 const bool by_row = offset >= 0;
                 const long long span = by_row ? rows : cols;
-                MPSGraphTensor* gp = pad_or_identity(g,
-                                                     go,
-                                                     @[ @0 ],
-                                                     @[ @(span > len ? span - len : 0) ],
-                                                     MPSGraphPaddingModeConstant,
-                                                     0.0);
-                gp = [g reshapeTensor:gp withShape:by_row ? @[ @(rows), @1 ] : @[ @1, @(cols) ] name:nil];
-                MPSGraphTensor* dx = [g multiplicationWithPrimaryTensor:mask secondaryTensor:gp name:nil];
+                MPSGraphTensor* gp =
+                    pad_or_identity(g, go, @[ @0 ], @[ @(span > len ? span - len : 0) ],
+                                    MPSGraphPaddingModeConstant, 0.0);
+                gp = [g reshapeTensor:gp
+                            withShape:by_row ? @[ @(rows), @1 ] : @[ @1, @(cols) ]
+                                 name:nil];
+                MPSGraphTensor* dx = [g multiplicationWithPrimaryTensor:mask
+                                                        secondaryTensor:gp
+                                                                   name:nil];
                 return swapped ? tr(g, dx) : dx;
             });
     }
@@ -340,15 +362,16 @@ public:
 class InvVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "inv"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
-        if (node.outputs.empty())
-            return false;
-        MPSGraphTensor* y = as_tensor(bctx.forward(node.outputs[0].id));
-        if (y == nil)
-            return false;
-        return emit_unary_vjp(bctx, node, grad_outs,
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
+        return emit_unary_vjp(
+            bctx, node, grad_outs,
             [&](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
+                if (node.outputs.empty())
+                    return nil;
+                MPSGraphTensor* y = as_tensor(bctx.forward(node.outputs[0].id));
+                if (y == nil)
+                    return nil;
                 MPSGraphTensor* yt = tr(g, cast_if_needed(g, y, go.dataType));
                 return [g negativeWithTensor:mm(g, mm(g, yt, go), yt) name:@"inv_vjp"];
             });
@@ -359,15 +382,18 @@ public:
 class DetVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "det"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
-        return emit_unary_vjp(bctx, node, grad_outs,
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
+        return emit_unary_vjp(
+            bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
                 if (x.shape.count != 2 || !known(x))
                     return nil;
                 const long long n = x.shape[0].longLongValue;
-                if (x.shape[1].longLongValue != n || (n != 2 && n != 3))
+                if (x.shape[1].longLongValue != n || (n != 1 && n != 2 && n != 3))
                     return nil;
+                if (n == 1)
+                    return [g reshapeTensor:go withShape:@[ @1, @1 ] name:nil];
                 auto el = [&](NSInteger r, NSInteger c) {
                     MPSGraphTensor* row = [g sliceTensor:x dimension:0 start:r length:1 name:nil];
                     return [g sliceTensor:row dimension:1 start:c length:1 name:nil];  // (1, 1)
@@ -384,8 +410,12 @@ public:
                     MPSGraphTensor* b = el(0, 1);
                     MPSGraphTensor* c = el(1, 0);
                     MPSGraphTensor* d = el(1, 1);
-                    [rows addObject:[g concatTensors:@[ d, [g negativeWithTensor:c name:nil] ] dimension:1 name:nil]];
-                    [rows addObject:[g concatTensors:@[ [g negativeWithTensor:b name:nil], a ] dimension:1 name:nil]];
+                    [rows addObject:[g concatTensors:@[ d, [g negativeWithTensor:c name:nil] ]
+                                           dimension:1
+                                                name:nil]];
+                    [rows addObject:[g concatTensors:@[ [g negativeWithTensor:b name:nil], a ]
+                                           dimension:1
+                                                name:nil]];
                 } else {
                     for (NSInteger i = 0; i < 3; ++i) {
                         NSMutableArray<MPSGraphTensor*>* row = [NSMutableArray array];
@@ -393,7 +423,8 @@ public:
                             const NSInteger r0 = (i + 1) % 3, r1 = (i + 2) % 3;
                             const NSInteger c0 = (j + 1) % 3, c1 = (j + 2) % 3;
                             // Cyclic minors carry the cofactor sign already.
-                            [row addObject:sub(mul(el(r0, c0), el(r1, c1)), mul(el(r0, c1), el(r1, c0)))];
+                            [row addObject:sub(mul(el(r0, c0), el(r1, c1)),
+                                               mul(el(r0, c1), el(r1, c0)))];
                         }
                         [rows addObject:[g concatTensors:row dimension:1 name:nil]];
                     }
@@ -401,6 +432,35 @@ public:
                 MPSGraphTensor* cof = [g concatTensors:rows dimension:0 name:nil];
                 return mul(cof, [g reshapeTensor:go withShape:@[] name:nil]);
             });
+    }
+};
+
+class SolveTriangularVjp final : public VjpEmitter {
+public:
+    std::string_view op_name() const override { return "solve_triangular"; }
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
+        if (node.outputs.empty())
+            return false;
+        MPSGraphTensor* x = as_tensor(bctx.forward(node.outputs[0].id));
+        Ctx c;
+        if (!open(bctx, node, grad_outs, 2, c) || x == nil)
+            return false;
+        const bool upper = bool_attr(node, "upper", false);
+        const bool unit = bool_attr(node, "unitriangular", false);
+        MPSGraphTensor* db = emit_solve_triangular_mps(c.g, tr(c.g, c.in[0]), c.go, !upper, unit);
+        if (db == nil)
+            return false;
+        MPSGraphTensor* x_cast = cast_if_needed(c.g, x, c.go.dataType);
+        MPSGraphTensor* da = [c.g negativeWithTensor:mm(c.g, db, tr(c.g, x_cast)) name:nil];
+        da = [c.g bandPartWithTensor:da numLower:(upper ? 0 : -1)numUpper:(upper ? -1 : 0)name:nil];
+        if (unit) {
+            MPSGraphTensor* diag = [c.g bandPartWithTensor:da numLower:0 numUpper:0 name:nil];
+            da = [c.g subtractionWithPrimaryTensor:da secondaryTensor:diag name:nil];
+        }
+        give(bctx, node, 0, da);
+        give(bctx, node, 1, db);
+        return true;
     }
 };
 
@@ -415,6 +475,7 @@ struct ProductsVjpRegistrar {
         register_vjp_emitter(std::make_unique<DiagonalVjp>());
         register_vjp_emitter(std::make_unique<InvVjp>());
         register_vjp_emitter(std::make_unique<DetVjp>());
+        register_vjp_emitter(std::make_unique<SolveTriangularVjp>());
     }
 };
 

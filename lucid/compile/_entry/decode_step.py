@@ -19,11 +19,11 @@ and recompile every step).
 Buffer write-back
 -----------------
 The ``index_copy`` write produces a NEW buffer tensor inside the executable; it
-is surfaced as an explicit output (alongside the model output) and ``copy_``'d
-back into the live ``StaticCache`` buffer after each run — the same shape as the
-BatchNorm running-stats write-back, but forward-only (generation is ``no_grad``).
-Because the live buffer is also the executable's pinned feed, the next step reads
-the rolled-forward value.
+is surfaced as an explicit output (alongside the model output) and rebound onto
+the live ``StaticCache`` buffer list after each run (a zero-copy pointer swap,
+no ``copy_`` kernel dispatch).  Because the cache buffers are fed per call from
+``static_cache.key_cache`` / ``value_cache``, the next step reads the
+rolled-forward value directly.
 
 Under grad mode a step that reads a tensor requiring grad — the model's
 parameters included — runs ``forward_fn`` eagerly, as a :func:`lucid.compile`
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.nn.module import Module
-    from lucid.utils.cache import StaticCache
+    from lucid.utils.cache import DynamicCache, EncoderDecoderCache, StaticCache
 
 __all__ = ["compiled_decode_step", "is_compiled_decode_tracing"]
 
@@ -105,6 +105,7 @@ class _DecodeEntry:
 def _needs_gradients(
     arguments: tuple[Tensor, Tensor],
     static_cache: StaticCache,
+    cross_cache: DynamicCache | StaticCache | None,
     entry: _DecodeEntry | None,
     adapter: Module,
 ) -> bool:
@@ -117,7 +118,10 @@ def _needs_gradients(
     """
     if not _C_engine.grad_enabled():
         return False
-    buffers = (*static_cache.key_cache, *static_cache.value_cache)
+    cross_bufs = (
+        (*cross_cache.key_cache, *cross_cache.value_cache) if cross_cache is not None else ()
+    )
+    buffers = (*static_cache.key_cache, *static_cache.value_cache, *cross_bufs)
     if any(t.requires_grad for t in (*arguments, *buffers)):
         return True
     if entry is not None:
@@ -310,8 +314,28 @@ def _run_decode_entry(
     return _wrap(cast(Any, outs[0]))
 
 
+def _unwrap_decode_caches(
+    static_cache: StaticCache | EncoderDecoderCache,
+) -> tuple[StaticCache, DynamicCache | StaticCache | None]:
+    """Extract ``(self_attention_cache, cross_attention_cache)`` for compiled decode."""
+    from lucid.utils.cache import EncoderDecoderCache, StaticCache
+
+    if isinstance(static_cache, EncoderDecoderCache):
+        self_cache = static_cache.self_attention_cache
+        cross_cache: DynamicCache | StaticCache | None = static_cache.cross_attention_cache
+    else:
+        self_cache = static_cache
+        cross_cache = None
+    if not isinstance(self_cache, StaticCache):
+        raise TypeError(
+            "compiled_decode_step requires a StaticCache or an EncoderDecoderCache "
+            f"whose self_attention_cache is a StaticCache, got {type(self_cache).__name__}"
+        )
+    return self_cache, cross_cache
+
+
 def compiled_decode_step(
-    forward_fn: Callable[[Tensor, Tensor], Tensor], static_cache: StaticCache
+    forward_fn: Callable[[Tensor, Tensor], Tensor], static_cache: StaticCache | EncoderDecoderCache
 ) -> Callable[[Tensor, Tensor], Tensor]:
     """Return a ``step(input_ids, cache_position)`` running one compiled decode.
 
@@ -322,9 +346,9 @@ def compiled_decode_step(
         that reads/writes ``static_cache`` internally (e.g. a model's
         single-token path).  Must return a single Tensor (the decode logits /
         hidden state).
-    static_cache : StaticCache
-        The cache whose per-layer buffers ``forward_fn`` writes via
-        :func:`lucid.index_copy`.  Its buffers are rolled forward in place.
+    static_cache : StaticCache or EncoderDecoderCache
+        The cache whose per-layer self-attention buffers ``forward_fn`` writes
+        via :func:`lucid.index_copy`.  Its buffers are rolled forward in place.
 
     Returns
     -------
@@ -340,6 +364,8 @@ def compiled_decode_step(
     from lucid.compile._core.signature import ParamFingerprint
     from lucid.compile._core.trace_context import compile_attempt
 
+    self_cache, cross_cache = _unwrap_decode_caches(static_cache)
+
     cache: dict[Any, _DecodeEntry] = {}
     eager_sigs: set[Any] = set()
     adapter = _CallableModule(forward_fn)  # names forward_fn's modules
@@ -347,7 +373,7 @@ def compiled_decode_step(
 
     def step(input_ids: Tensor, cache_position: Tensor) -> Tensor:
         """Run one compiled decode step (or eager fallback)."""
-        if len(static_cache.key_cache) == 0:
+        if len(self_cache.key_cache) == 0:
             return forward_fn(input_ids, cache_position)
 
         try:  # ``key_of`` drops what read replaced tensors
@@ -362,11 +388,11 @@ def compiled_decode_step(
 
         call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
-        if entry is None and not _needs_gradients(call, static_cache, None, adapter):
+        if entry is None and not _needs_gradients(call, self_cache, cross_cache, None, adapter):
             with compile_attempt():
                 before = fingerprint.outside_slots()
                 entry = _compile_decode_entry(
-                    forward_fn, static_cache, adapter, input_ids, cache_position
+                    forward_fn, self_cache, adapter, input_ids, cache_position
                 )
             fingerprint.settle(() if entry is None else entry.reads.fed, before)
             if key is not None:
@@ -375,9 +401,9 @@ def compiled_decode_step(
                     eager_sigs.add(key)
                 else:
                     cache[key] = entry
-        if entry is None or _needs_gradients(call, static_cache, entry, adapter):
+        if entry is None or _needs_gradients(call, self_cache, cross_cache, entry, adapter):
             return forward_fn(input_ids, cache_position)
-        return _run_decode_entry(entry, static_cache, input_ids, cache_position)
+        return _run_decode_entry(entry, self_cache, input_ids, cache_position)
 
     step.cache = cache  # type: ignore[attr-defined]
     return step

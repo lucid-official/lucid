@@ -7,6 +7,7 @@ is contracted to provide.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
@@ -371,6 +372,53 @@ class MaskedLMMixin:
         )
 
 
+def _extract_last_logits(outputs: object) -> Tensor:
+    """Return ``outputs[:, -1, :]`` (or ``outputs.logits[:, -1, :]``)."""
+    logits = cast(Tensor, outputs.logits if hasattr(outputs, "logits") else outputs)
+    return logits[:, -1, :]
+
+
+def _validate_static_cache_bounds(cfg: object, max_cache_len: int | None, stop_len: int) -> None:
+    """Verify ``stop_len`` fits inside ``max_position_embeddings`` and ``max_cache_len``."""
+    max_pos = getattr(cfg, "max_position_embeddings", None) if cfg else None
+    if max_pos is not None and stop_len > int(max_pos):
+        raise ValueError(
+            f"generate(): target length {stop_len} exceeds the model's "
+            f"max_position_embeddings {int(max_pos)}"
+        )
+    if max_cache_len is not None and int(max_cache_len) < stop_len:
+        raise ValueError(
+            f"generate(): max_cache_len={int(max_cache_len)} is smaller than "
+            f"the target length {stop_len} (prompt + generated) — the static "
+            f"buffer cannot hold every position"
+        )
+
+
+def _setup_causal_cache(
+    model: nn.Module,
+    use_cache: bool,
+    cache_implementation: str,
+    max_cache_len: int | None,
+    stop_len: int,
+) -> tuple[Cache | None, Callable[[Tensor, Tensor], Tensor] | None]:
+    """Build ``(past_key_values, compiled_step)`` for causal generation."""
+    if not use_cache:
+        return None, None
+    if cache_implementation not in ("static", "compiled"):
+        return DynamicCache(), None
+    past = StaticCache(max_cache_len=(max_cache_len if max_cache_len is not None else stop_len))
+    if cache_implementation != "compiled":
+        return past, None
+    from lucid.compile._entry.decode_step import compiled_decode_step
+
+    def _decode_fwd(tok: Tensor, cp: Tensor) -> Tensor:
+        return _extract_last_logits(
+            model(tok, use_cache=True, past_key_values=past, cache_position=cp)
+        )
+
+    return past, compiled_decode_step(_decode_fwd, past)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CausalLMMixin — autoregressive text sampling
 # ─────────────────────────────────────────────────────────────────────────────
@@ -400,10 +448,20 @@ class CausalLMMixin:
 
     Notes
     -----
-    The first implementation does **not** use the model's KV cache —
-    every step re-runs the full prefix.  This is correct but O(T²) in
-    the prefix length.  Cache support is planned once GPT-2 lands and a
-    concrete ``past_key_values`` shape is available to plumb through.
+    By default (:code:`use_cache=True`), :meth:`generate` threads a
+    key/value cache through ``forward`` so each step only encodes the newly
+    sampled token:
+
+    * ``cache_implementation="dynamic"`` (default) uses
+      :class:`~lucid.utils.cache.DynamicCache` (grows by concatenation).
+    * ``cache_implementation="static"`` uses a pre-allocated
+      :class:`~lucid.utils.cache.StaticCache` updated in place at
+      ``cache_position``.
+    * ``cache_implementation="compiled"`` pairs
+      :class:`~lucid.utils.cache.StaticCache` with
+      :func:`~lucid.compile._entry.decode_step.compiled_decode_step`,
+      compiling the single-token decode forward once into a reused
+      :class:`MPSGraphExecutable` after an eager prompt prefill.
 
     Examples
     --------
@@ -479,13 +537,16 @@ class CausalLMMixin:
             concatenation); ``"static"`` →
             :class:`~lucid.utils.cache.StaticCache` (fixed pre-allocated buffer
             written in place at ``cache_position``, attending over only the filled
-            prefix).  ``"static"`` is *faster* on compute-bound batches (in-place
-            write + filled-prefix attention beat the growing concat — ~1.4× at
-            GPT-2-base / B=16) and tied at ``B=1``; it needs ``max_cache_len``.
+            prefix); ``"compiled"`` → :class:`~lucid.utils.cache.StaticCache`
+            driven by
+            :func:`~lucid.compile._entry.decode_step.compiled_decode_step`
+            (prefills the prompt eagerly, then compiles the single-token decode
+            step once into a reused :class:`MPSGraphExecutable`).
         max_cache_len : int or None, optional, keyword-only
-            Buffer capacity for ``cache_implementation="static"``; defaults to
-            the total target length (prompt + generated).  An over-sized buffer is
-            free — attention narrows to the filled prefix regardless.
+            Buffer capacity for ``cache_implementation="static"`` or
+            ``"compiled"``; defaults to the total target length (prompt +
+            generated).  An over-sized buffer is free in eager ``"static"``
+            mode — attention narrows to the filled prefix regardless.
 
         Returns
         -------
@@ -545,41 +606,12 @@ class CausalLMMixin:
         if stop_len <= T_prompt:
             return input_ids
 
-        # StaticCache writes by absolute position into a fixed buffer.  The
-        # compiled decode path rebuilds the cache each step (resetting the
-        # per-layer length counter), so the trunk's own "past_len + T > max_pos"
-        # guard cannot fire — and an out-of-range index_copy / position lookup
-        # is a *silent* no-op / garbage read on Metal.  Validate up front (the
-        # eager static path shares the same latent overflow), matching the
-        # error the eager/dynamic paths raise mid-generation.
-        if use_cache and cache_implementation == "static":
-            max_pos = getattr(cfg, "max_position_embeddings", None) if cfg else None
-            if max_pos is not None and stop_len > int(max_pos):
-                raise ValueError(
-                    f"generate(): target length {stop_len} exceeds the model's "
-                    f"max_position_embeddings {int(max_pos)}"
-                )
-            if max_cache_len is not None and int(max_cache_len) < stop_len:
-                raise ValueError(
-                    f"generate(): max_cache_len={int(max_cache_len)} is smaller than "
-                    f"the target length {stop_len} (prompt + generated) — the static "
-                    f"buffer cannot hold every position"
-                )
+        if use_cache and cache_implementation in ("static", "compiled"):
+            _validate_static_cache_bounds(cfg, max_cache_len, stop_len)
 
         dev = input_ids.device.type
-        # Per-row "is finished" flag (on device) — once True, future tokens are
-        # pad.  Kept as a (B,) bool tensor so the per-step finish/EOS/pad update
-        # stays on the GPU (no per-row .item() drain); reduced to a host bool for
-        # early-stop only when an EOS id is set.
         finished: Tensor = lucid.zeros((B,), device=dev).bool()
-        # We grow a Python list of (B,) int rows then stack at the end so
-        # we don't repeatedly re-allocate the full prefix tensor.
         out_tokens: list[Tensor] = [input_ids[:, t] for t in range(T_prompt)]
-
-        # KV cache: encode the whole prompt once, then feed only the new token
-        # each step (O(T²) total instead of O(T³)).  ``past`` is ``None`` when
-        # caching is disabled or the host model does not accept a cache, in
-        # which case we re-encode the full prefix every step.
         model = cast(nn.Module, self)
         sampling = _SamplingParams(
             do_sample=do_sample,
@@ -592,38 +624,30 @@ class CausalLMMixin:
             dev=dev,
         )
 
-        # ── eager path (DynamicCache / StaticCache without compile) ─────────
-        past: Cache | None = None
-        if use_cache:
-            if cache_implementation == "static":
-                past = StaticCache(
-                    max_cache_len=(max_cache_len if max_cache_len is not None else stop_len)
-                )
-            else:
-                past = DynamicCache()
+        past, compiled_step = _setup_causal_cache(
+            model, use_cache, cache_implementation, max_cache_len, stop_len
+        )
         model_input = input_ids
 
         for _step in range(stop_len - T_prompt):
-            if past is not None:
+            if compiled_step is not None and _step > 0:
+                cp = lucid.tensor([T_prompt + _step - 1], device=dev).long()
+                last_logits = compiled_step(model_input, cp)
+            elif past is not None:
                 try:
                     outputs = model(model_input, use_cache=True, past_key_values=past)
                 except TypeError as exc:
-                    # An engine refusal is a TypeError too (a dtype mismatch
-                    # derives from it) and is a real error in the forward,
-                    # not a model without the keywords — let it through.
                     if isinstance(exc, _C_engine.LucidError):
                         raise
-                    # Host model has no cache support — degrade to re-encoding.
                     past = None
+                    compiled_step = None
                     outputs = model(lucid.stack(out_tokens, dim=1))
+                last_logits = _extract_last_logits(outputs)
             else:
-                outputs = model(lucid.stack(out_tokens, dim=1))
-            logits = cast(Tensor, outputs.logits if hasattr(outputs, "logits") else outputs)
-            finished = _select_next_ondevice(logits[:, -1, :], out_tokens, finished, sampling)
+                last_logits = _extract_last_logits(model(lucid.stack(out_tokens, dim=1)))
+            finished = _select_next_ondevice(last_logits, out_tokens, finished, sampling)
             if sampling.eos_token_id is not None and bool(lucid.all(finished).item()):
                 break
-
-            # With a cache the next step only needs the freshly produced token.
             model_input = out_tokens[-1].reshape(B, 1)
 
         return lucid.stack(out_tokens, dim=1).long()

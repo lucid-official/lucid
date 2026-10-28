@@ -76,6 +76,10 @@ std::vector<TensorImplPtr> qr_op(const TensorImplPtr& a_in) {
     std::vector<TensorImplPtr> result;
     result.push_back(fresh(std::move(out.first), qsh, a->dtype(), a->device()));
     result.push_back(fresh(std::move(out.second), rsh, a->dtype(), a->device()));
+    if (auto* trc = compile::current_tracer()) {
+        trc->on_op_io({a}, result[0]);
+        trc->on_op_io({}, result[1]);
+    }
     return result;
 }
 

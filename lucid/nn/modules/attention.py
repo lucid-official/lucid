@@ -23,7 +23,7 @@ from lucid.nn.functional.attention import (
     scaled_dot_product_attention,
 )
 
-from lucid.utils.cache import Cache
+from lucid.utils.cache import Cache, EncoderDecoderCache, StaticCache
 
 # ``Tensor`` and ``Cache`` are imported at runtime, not under TYPE_CHECKING,
 # so that the annotations on ``forward`` can actually be resolved.  Under
@@ -47,6 +47,62 @@ def _to_additive_mask(mask: Tensor, float_dtype: DTypeLike) -> Tensor:
     if mask.dtype == _lucid.bool_:
         return _keep_mask_to_additive(mask.logical_not(), float_dtype)
     return mask
+
+
+def _update_mha_cache(
+    kh: Tensor,
+    vh: Tensor,
+    past_key_value: Cache,
+    layer_idx: int,
+    extra: tuple[bool, int, Tensor | None],
+) -> tuple[Tensor, Tensor]:
+    """Update ``past_key_value`` for self- or cross-attention and return ``(kh, vh)``."""
+    is_cross_attention, Tq, cache_position = extra
+    if is_cross_attention and isinstance(past_key_value, EncoderDecoderCache):
+        kh, vh = past_key_value.cross_attention_cache.update(kh, vh, layer_idx)
+        past_key_value.is_updated[layer_idx] = True
+        return kh, vh
+    self_cache = (
+        past_key_value.self_attention_cache
+        if isinstance(past_key_value, EncoderDecoderCache)
+        else past_key_value
+    )
+    past_len = self_cache.get_seq_length(layer_idx)
+    cache_kwargs: dict[str, object] = {"cache_position": cache_position}
+    if isinstance(self_cache, StaticCache):
+        from lucid.compile._entry.decode_step import is_compiled_decode_tracing
+
+        if not is_compiled_decode_tracing():
+            cache_kwargs["read_len"] = past_len + Tq
+    return self_cache.update(kh, vh, layer_idx, cache_kwargs=cache_kwargs)
+
+
+def _mha_causal_mask(
+    qh: Tensor, Tq: int, Tk: int, cached: bool, extra: tuple[bool, Cache | None, Tensor | None]
+) -> Tensor:
+    """Build the ``(1, 1, Tq, Tk)`` additive causal mask for MHA."""
+    is_cross_attention, past_key_value, cache_position = extra
+    self_cache = (
+        past_key_value.self_attention_cache
+        if isinstance(past_key_value, EncoderDecoderCache)
+        else past_key_value
+    )
+    if (
+        cached
+        and not is_cross_attention
+        and isinstance(self_cache, StaticCache)
+        and cache_position is not None
+    ):
+        from lucid._engine_scope import untraced
+
+        with untraced():
+            full_causal = _causal_additive_mask(
+                self_cache.max_cache_len, Tk, 0, qh.dtype, qh.device
+            )
+        return full_causal.index_select(0, cache_position.reshape(-1)).reshape(1, 1, Tq, Tk)
+    return _causal_additive_mask(Tq, Tk, Tk - Tq if cached else 0, qh.dtype, qh.device).reshape(
+        1, 1, Tq, Tk
+    )
 
 
 class MultiheadAttention(Module):
@@ -654,8 +710,6 @@ class MultiheadAttention(Module):
         B: int = query.shape[0]
         Tq: int = query.shape[1]
 
-        from lucid.utils.cache import EncoderDecoderCache
-
         # Keys/values are laid out (B, num_heads, T, head_dim).  Cross-attention
         # that reuses an already-filled cache reads K/V straight from it, so it
         # needs ONLY the query projection — skip the (otherwise discarded) memory
@@ -714,20 +768,9 @@ class MultiheadAttention(Module):
             # Self-attention grows the cache; cross-attention fills it once from
             # the (constant) encoder memory (the reuse path is handled above).
             if use_cache and past_key_value is not None:
-                if is_cross_attention and isinstance(past_key_value, EncoderDecoderCache):
-                    kh, vh = past_key_value.cross_attention_cache.update(kh, vh, layer_idx)
-                    past_key_value.is_updated[layer_idx] = True
-                else:
-                    self_cache = (
-                        past_key_value.self_attention_cache
-                        if isinstance(past_key_value, EncoderDecoderCache)
-                        else past_key_value
-                    )
-                    # cache_position is the in-place write slot for a StaticCache
-                    # (compiled decode); a DynamicCache ignores it and appends.
-                    kh, vh = self_cache.update(
-                        kh, vh, layer_idx, cache_kwargs={"cache_position": cache_position}
-                    )
+                kh, vh = _update_mha_cache(
+                    kh, vh, past_key_value, layer_idx, (is_cross_attention, Tq, cache_position)
+                )
                 Tk = int(kh.shape[2])
 
         # GQA/MQA: the cache stores the smaller ``num_kv_heads`` K/V; repeat each
@@ -742,26 +785,13 @@ class MultiheadAttention(Module):
             attn_mask, key_padding_mask, B, Tq, Tk, qh.dtype
         )
 
-        # With a KV cache the query tokens sit at absolute positions
-        # [past_len, past_len + Tq) while keys span [0, Tk).  A plain top-left
-        # ``is_causal`` mask would be wrong (a single new query would only see
-        # key 0), so fold it into an explicit bottom-right-aligned additive
-        # mask: query ``i`` may attend to key ``j`` iff ``j <= (Tk - Tq) + i``.
-        # The weights and dropout need the explicit form, which has no
-        # triangle of its own, so the (top-left) triangle is folded for them
-        # too.  Otherwise ``is_causal`` reaches the fused path untouched.
-        #
-        # The fused, memory-efficient SDPA kernel runs whenever possible — it
-        # never materialises the (B, H, T, S) score matrix.  Both forms go
-        # through the one masked-softmax core, so a query whose keys are all
-        # masked out gets the same zero row either way.
         dropout_p: float = self.dropout if self.training else 0.0
         explicit: bool = need_weights or dropout_p > 0.0
         cached: bool = use_cache and past_key_value is not None
         if is_causal and (cached or explicit):
-            causal_add = _causal_additive_mask(
-                Tq, Tk, Tk - Tq if cached else 0, qh.dtype, qh.device
-            ).reshape(1, 1, Tq, Tk)
+            causal_add = _mha_causal_mask(
+                qh, Tq, Tk, cached, (is_cross_attention, past_key_value, cache_position)
+            )
             merged_mask = causal_add if merged_mask is None else merged_mask + causal_add
             is_causal = False
 

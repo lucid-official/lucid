@@ -178,6 +178,11 @@ public:
                 [g sliceTensor:row dimension:1 start:c length:1 name:nil];
             return [g reshapeTensor:cel withShape:@[] name:nil];
         };
+        if (N == 1) {
+            ctx.bind(node.outputs[0].id,
+                     (__bridge void*)([g reshapeTensor:x withShape:@[] name:@"det1"]));
+            return true;
+        }
         if (N == 2) {
             MPSGraphTensor* a = el(0, 0), *b = el(0, 1);
             MPSGraphTensor* c = el(1, 0), *d = el(1, 1);
@@ -234,7 +239,16 @@ public:
         NSArray<NSNumber*>* sh = x.shape;
         if (sh.count != 2) return false;
         std::int64_t N = sh[0].longLongValue;
-        if (sh[1].longLongValue != N || N != 2) return false;
+        if (sh[1].longLongValue != N) return false;
+        if (N == 1) {
+            MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:x.dataType];
+            ctx.bind(node.outputs[0].id,
+                     (__bridge void*)([g divisionWithPrimaryTensor:one
+                                                   secondaryTensor:x
+                                                              name:@"inv1"]));
+            return true;
+        }
+        if (N != 2) return false;
         auto el = [&](NSInteger r, NSInteger c) -> MPSGraphTensor* {
             MPSGraphTensor* row =
                 [g sliceTensor:x dimension:0 start:r length:1 name:nil];

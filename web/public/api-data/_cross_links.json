@@ -52,6 +52,16 @@
         "kind": "free_function"
       }
     ],
+    "lucid.ops.as_strided": [
+      {
+        "name": "AsStridedBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "as_strided_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.asin": [
       {
         "name": "AsinBackward",
@@ -153,6 +163,26 @@
       },
       {
         "name": "clip_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.complex": [
+      {
+        "name": "ComplexBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "complex_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.conj": [
+      {
+        "name": "ConjBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "conj_op",
         "kind": "free_function"
       }
     ],
@@ -346,6 +376,16 @@
         "kind": "free_function"
       }
     ],
+    "lucid.nn.functional.ctc_loss": [
+      {
+        "name": "CtcLossBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "ctc_loss_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.linalg.det": [
       {
         "name": "DetBackward",
@@ -456,6 +496,28 @@
         "kind": "free_function"
       }
     ],
+    "lucid.nn.EmbeddingBag": [
+      {
+        "name": "EmbeddingBagBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.nn.quantized.EmbeddingBag": [
+      {
+        "name": "EmbeddingBagBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.nn.functional.embedding_bag": [
+      {
+        "name": "EmbeddingBagBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "embedding_bag_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.erf": [
       {
         "name": "ErfBackward",
@@ -493,6 +555,16 @@
       },
       {
         "name": "floor_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.fmod": [
+      {
+        "name": "FmodBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "fmod_op",
         "kind": "free_function"
       }
     ],
@@ -561,6 +633,16 @@
       },
       {
         "name": "huber_loss_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.imag": [
+      {
+        "name": "ImagBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "imag_op",
         "kind": "free_function"
       }
     ],
@@ -804,6 +886,16 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.ops.nan_to_num": [
+      {
+        "name": "NanToNumBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "nan_to_num_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.neg": [
       {
         "name": "NegBackward",
@@ -811,6 +903,16 @@
       },
       {
         "name": "neg_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.nextafter": [
+      {
+        "name": "NextafterBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "nextafter_op",
         "kind": "free_function"
       }
     ],
@@ -860,6 +962,16 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.ops.real": [
+      {
+        "name": "RealBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "real_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.reciprocal": [
       {
         "name": "ReciprocalBackward",
@@ -897,6 +1009,16 @@
       },
       {
         "name": "relu_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.remainder": [
+      {
+        "name": "RemainderBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "remainder_op",
         "kind": "free_function"
       }
     ],
@@ -1074,6 +1196,16 @@
         "kind": "free_function"
       }
     ],
+    "lucid.linalg.solve_triangular": [
+      {
+        "name": "SolveTriangularBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "solve_triangular_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.sqrt": [
       {
         "name": "SqrtBackward",
@@ -1156,6 +1288,16 @@
         "kind": "free_function"
       }
     ],
+    "lucid.ops.trunc": [
+      {
+        "name": "TruncBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "trunc_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.nn.Unfold": [
       {
         "name": "UnfoldBackward",
@@ -1172,10 +1314,34 @@
         "kind": "free_function"
       }
     ],
+    "lucid.ops.composite.view_as_complex": [
+      {
+        "name": "ViewAsComplexBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "view_as_complex_op",
+        "kind": "free_function"
+      }
+    ],
+    "lucid.ops.composite.view_as_real": [
+      {
+        "name": "ViewAsRealBackward",
+        "kind": "backward_node"
+      },
+      {
+        "name": "view_as_real_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.view": [
       {
         "name": "ViewBackward",
         "kind": "backward_node"
+      },
+      {
+        "name": "view_op",
+        "kind": "free_function"
       }
     ],
     "lucid.nn.functional.adaptive_avg_pool1d": [
@@ -1352,24 +1518,6 @@
         "kind": "free_function"
       }
     ],
-    "lucid.ops.complex": [
-      {
-        "name": "complex_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.conj": [
-      {
-        "name": "conj_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.nn.functional.ctc_loss": [
-      {
-        "name": "ctc_loss_op",
-        "kind": "free_function"
-      }
-    ],
     "lucid.ops.cummax": [
       {
         "name": "cummax_op",
@@ -1436,12 +1584,6 @@
         "kind": "free_function"
       }
     ],
-    "lucid.nn.functional.embedding_bag": [
-      {
-        "name": "embedding_bag_op",
-        "kind": "free_function"
-      }
-    ],
     "lucid.creation.empty_like": [
       {
         "name": "empty_like_op",
@@ -1499,12 +1641,6 @@
     "lucid.ops.flip": [
       {
         "name": "flip_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.fmod": [
-      {
-        "name": "fmod_op",
         "kind": "free_function"
       }
     ],
@@ -1589,12 +1725,6 @@
     "lucid.fft.ifftn": [
       {
         "name": "ifftn_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.imag": [
-      {
-        "name": "imag_op",
         "kind": "free_function"
       }
     ],
@@ -1730,12 +1860,6 @@
         "kind": "free_function"
       }
     ],
-    "lucid.linalg.lstsq": [
-      {
-        "name": "lstsq_op",
-        "kind": "free_function"
-      }
-    ],
     "lucid.linalg.lu_factor": [
       {
         "name": "lu_factor_op",
@@ -1784,21 +1908,9 @@
         "kind": "free_function"
       }
     ],
-    "lucid.ops.nan_to_num": [
-      {
-        "name": "nan_to_num_op",
-        "kind": "free_function"
-      }
-    ],
     "lucid.ops.narrow": [
       {
         "name": "narrow_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.nextafter": [
-      {
-        "name": "nextafter_op",
         "kind": "free_function"
       }
     ],
@@ -1898,21 +2010,9 @@
         "kind": "free_function"
       }
     ],
-    "lucid.ops.real": [
-      {
-        "name": "real_op",
-        "kind": "free_function"
-      }
-    ],
     "lucid.nn.functional.relu_": [
       {
         "name": "relu_inplace_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.remainder": [
-      {
-        "name": "remainder_op",
         "kind": "free_function"
       }
     ],
@@ -1967,12 +2067,6 @@
     "lucid.ops.searchsorted": [
       {
         "name": "searchsorted_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.linalg.solve_triangular": [
-      {
-        "name": "solve_triangular_op",
         "kind": "free_function"
       }
     ],
@@ -2063,12 +2157,6 @@
     "lucid.ops.triu": [
       {
         "name": "triu_op",
-        "kind": "free_function"
-      }
-    ],
-    "lucid.ops.trunc": [
-      {
-        "name": "trunc_op",
         "kind": "free_function"
       }
     ],
@@ -2174,6 +2262,13 @@
         "kind": "function"
       }
     ],
+    "AsStridedBackward": [
+      {
+        "path": "lucid.ops.as_strided",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
     "AsinBackward": [
       {
         "path": "lucid.ops.asin",
@@ -2254,6 +2349,20 @@
     "ClipBackward": [
       {
         "path": "lucid.ops.clip",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "ComplexBackward": [
+      {
+        "path": "lucid.ops.complex",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "ConjBackward": [
+      {
+        "path": "lucid.ops.conj",
         "module": "lucid.ops",
         "kind": "function"
       }
@@ -2395,6 +2504,13 @@
         "kind": "function"
       }
     ],
+    "CtcLossBackward": [
+      {
+        "path": "lucid.nn.functional.ctc_loss",
+        "module": "lucid.nn.functional",
+        "kind": "function"
+      }
+    ],
     "DetBackward": [
       {
         "path": "lucid.linalg.det",
@@ -2482,6 +2598,23 @@
         "kind": "function"
       }
     ],
+    "EmbeddingBagBackward": [
+      {
+        "path": "lucid.nn.EmbeddingBag",
+        "module": "lucid.nn",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.nn.quantized.EmbeddingBag",
+        "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.nn.functional.embedding_bag",
+        "module": "lucid.nn.functional",
+        "kind": "function"
+      }
+    ],
     "ErfBackward": [
       {
         "path": "lucid.ops.erf",
@@ -2506,6 +2639,13 @@
     "FloorBackward": [
       {
         "path": "lucid.ops.floor",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "FmodBackward": [
+      {
+        "path": "lucid.ops.fmod",
         "module": "lucid.ops",
         "kind": "function"
       }
@@ -2557,6 +2697,13 @@
       {
         "path": "lucid.nn.functional.huber_loss",
         "module": "lucid.nn.functional",
+        "kind": "function"
+      }
+    ],
+    "ImagBackward": [
+      {
+        "path": "lucid.ops.imag",
+        "module": "lucid.ops",
         "kind": "function"
       }
     ],
@@ -2732,9 +2879,23 @@
         "kind": "class"
       }
     ],
+    "NanToNumBackward": [
+      {
+        "path": "lucid.ops.nan_to_num",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
     "NegBackward": [
       {
         "path": "lucid.ops.neg",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "NextafterBackward": [
+      {
+        "path": "lucid.ops.nextafter",
         "module": "lucid.ops",
         "kind": "function"
       }
@@ -2774,6 +2935,13 @@
         "kind": "class"
       }
     ],
+    "RealBackward": [
+      {
+        "path": "lucid.ops.real",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
     "ReciprocalBackward": [
       {
         "path": "lucid.ops.reciprocal",
@@ -2796,6 +2964,13 @@
       },
       {
         "path": "lucid.ops.relu",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "RemainderBackward": [
+      {
+        "path": "lucid.ops.remainder",
         "module": "lucid.ops",
         "kind": "function"
       }
@@ -2919,6 +3094,13 @@
         "kind": "function"
       }
     ],
+    "SolveTriangularBackward": [
+      {
+        "path": "lucid.linalg.solve_triangular",
+        "module": "lucid.linalg",
+        "kind": "function"
+      }
+    ],
     "SqrtBackward": [
       {
         "path": "lucid.ops.sqrt",
@@ -2976,6 +3158,13 @@
         "kind": "function"
       }
     ],
+    "TruncBackward": [
+      {
+        "path": "lucid.ops.trunc",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
     "UnfoldBackward": [
       {
         "path": "lucid.nn.Unfold",
@@ -2985,6 +3174,20 @@
       {
         "path": "lucid.nn.functional.unfold",
         "module": "lucid.nn.functional",
+        "kind": "function"
+      }
+    ],
+    "ViewAsComplexBackward": [
+      {
+        "path": "lucid.ops.composite.view_as_complex",
+        "module": "lucid.ops.composite",
+        "kind": "function"
+      }
+    ],
+    "ViewAsRealBackward": [
+      {
+        "path": "lucid.ops.composite.view_as_real",
+        "module": "lucid.ops.composite",
         "kind": "function"
       }
     ],
@@ -3124,6 +3327,13 @@
     "argsort_op": [
       {
         "path": "lucid.ops.argsort",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "as_strided_op": [
+      {
+        "path": "lucid.ops.as_strided",
         "module": "lucid.ops",
         "kind": "function"
       }
@@ -3920,13 +4130,6 @@
         "kind": "function"
       }
     ],
-    "lstsq_op": [
-      {
-        "path": "lucid.linalg.lstsq",
-        "module": "lucid.linalg",
-        "kind": "function"
-      }
-    ],
     "lu_factor_op": [
       {
         "path": "lucid.linalg.lu_factor",
@@ -4637,6 +4840,27 @@
     "var_op": [
       {
         "path": "lucid.ops.var",
+        "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "view_as_complex_op": [
+      {
+        "path": "lucid.ops.composite.view_as_complex",
+        "module": "lucid.ops.composite",
+        "kind": "function"
+      }
+    ],
+    "view_as_real_op": [
+      {
+        "path": "lucid.ops.composite.view_as_real",
+        "module": "lucid.ops.composite",
+        "kind": "function"
+      }
+    ],
+    "view_op": [
+      {
+        "path": "lucid.ops.view",
         "module": "lucid.ops",
         "kind": "function"
       }

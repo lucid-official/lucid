@@ -79,6 +79,8 @@ from lucid.compile._core.custom_backward import (
     GRADIENT_DTYPES,
     CustomBackwardInTrace,
     refuse_custom_backward,
+    step_region_ancestors,
+    vjp_region_index,
 )
 from lucid.compile._core.signature import ParamFingerprint, outside_feeds
 
@@ -311,14 +313,20 @@ def _loss_ancestors(graph: TraceGraph, loss_id: int) -> set[int]:
     loss, since the optimizer update has not been traced yet.  The walk
     stops where the backward walker (``VjpEmitter.mm``) does: at a gradient
     sink (``detach``, a comparison, a factory) and at an op with no
-    floating result (a cast to an integer).  A parameter seen only through
-    one gets no gradient, so eager leaves its ``grad`` None and the
-    optimizer skips it.
+    floating result (a cast to an integer), while stepping across any
+    traced custom VJP regions (``graph.vjp_regions``) from region outputs
+    to region inputs.  A parameter seen only through a sink gets no
+    gradient, so eager leaves its ``grad`` None and the optimizer skips it.
     """
     sink = _C_engine.compile.VjpRegistration.GradSink
     status = _C_engine.compile.vjp_registration_status
+    in_region, region_at_end = vjp_region_index(graph)
     needed = {loss_id}
-    for node in reversed(graph.ops):
+    for idx in range(len(graph.ops) - 1, -1, -1):
+        if idx in in_region:
+            step_region_ancestors(region_at_end.get(idx), needed)
+            continue
+        node = graph.ops[idx]
         if not any(int(meta.id) in needed for meta in node.outputs):
             continue
         if status(node.name) == sink or not any(

@@ -45,11 +45,13 @@ from lucid.models._utils._text import (
     extended_attention_mask,
     init_text_weights as _init_weights,
     last_kept_token,
+    resolve_causal_positions,
     text_activation,
     token_at,
+    update_causal_kv_and_bias,
 )
 from lucid.models.text.gpt2._config import GPT2Config
-from lucid.utils.cache import Cache, DynamicCache, StaticCache
+from lucid.utils.cache import Cache, DynamicCache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Multi-head causal self-attention (fused QKV) — identical shape to GPT-1
@@ -92,57 +94,9 @@ class _GPT2SelfAttention(nn.Module):
         qkv = self.c_attn(hidden)
         qkv = qkv.reshape(B, T, 3, H, D).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # each (B, H, T, D)
-
-        # KV cache: prepend the accumulated past and store the new tokens.  The
-        # query stays length T (the new tokens); keys/values span the full
-        # history so the new tokens attend over everything seen so far.
-        past_len = 0
-        if past_key_value is not None:
-            past_len = past_key_value.get_seq_length(layer_idx)
-            # cache_position is consumed by StaticCache (the in-place write
-            # location); DynamicCache ignores it and simply appends.
-            cache_kwargs: dict[str, object] = {"cache_position": cache_position}
-            if isinstance(past_key_value, StaticCache):
-                from lucid.compile._entry.decode_step import is_compiled_decode_tracing
-
-                # Eager: attend over only the filled prefix (``past_len + T``), not
-                # the full max_cache_len buffer — the latter is
-                # max_cache_len/(filled+1)× wasted q·kᵀ.  StaticCache.update
-                # narrows its returned view to it.  BUT when tracing a compiled
-                # decode the narrowed width grows each step → a new signature →
-                # recompile every token; there we take the full fixed-shape buffer
-                # (the unwritten tail is masked out below), so the decode compiles
-                # ONCE and is reused.
-                if not is_compiled_decode_tracing():
-                    cache_kwargs["read_len"] = past_len + T
-            k, v = past_key_value.update(k, v, layer_idx, cache_kwargs=cache_kwargs)
-        t_total = int(k.shape[2])  # DynamicCache: past_len+T; StaticCache: max_cache_len
-
-        if isinstance(past_key_value, StaticCache) and cache_position is not None:
-            # StaticCache returns the fixed max_len buffer, and the write
-            # position is dynamic.  Row p of the lower-triangular causal_mask is
-            # exactly the allowed-key pattern for a query at absolute position p
-            # (keys j <= p), so gather the rows named by cache_position.  This
-            # keeps the compiled graph position-agnostic and avoids ``arange``
-            # (which has no MPSGraph emitter).  Bit-identical to the eager slice.
-            causal = self.causal_mask.index_select(2, cache_position)[:, :, :, :t_total]
-        else:
-            # Causal slice for query positions [past_len, past_len+T) over keys
-            # [0, t_total); with no cache (past_len=0, t_total=T) this is the
-            # original [:, :, :T, :T] block.
-            causal = self.causal_mask[:, :, past_len : past_len + T, :t_total]
-        # Additive attention bias: ``(1 - causal) * -1e4`` blocks the upper
-        # triangle; add any padding mask on top.
-        bias: Tensor = (1.0 - causal) * -1e4
-        if attention_mask is not None:
-            pad_mask = attention_mask
-            mask_len = int(pad_mask.shape[-1])
-            if mask_len < t_total:
-                # StaticCache hands back its full max_cache_len buffer; the
-                # unwritten tail carries no real key, and ``causal`` already
-                # blocks it, so extend the padding mask with neutral zeros.
-                pad_mask = F.pad(pad_mask, (0, t_total - mask_len))
-            bias = bias + pad_mask
+        k, v, bias = update_causal_kv_and_bias(
+            k, v, self.causal_mask, attention_mask, (past_key_value, layer_idx, cache_position, T)
+        )
 
         # One masked-attention core for every path: the fused kernel at
         # inference, the materialised weights when attention dropout is on.
@@ -373,26 +327,9 @@ class GPT2Model(PretrainedModel):
         # remembered to pass the flag.
         use_cache = self._use_cache if use_cache is None else use_cache
         B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
-        past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if past_len + T > self._max_pos:
-            raise ValueError(
-                f"Sequence length {past_len + T} exceeds "
-                f"max_position_embeddings {self._max_pos}"
-            )
-
-        # Absolute write positions (past_len, past_len+1, ...).  Defaulted here so
-        # the position embedding and the cache write agree.
-        if cache_position is None:
-            cache_position = lucid.arange(
-                past_len, past_len + T, device=input_ids.device.type
-            ).long()
-        # StaticCache drives the position embedding off the runtime
-        # cache_position tensor (keeps the compiled graph position-agnostic);
-        # otherwise slice the static position-id buffer by the Python offset.
-        if isinstance(past_key_values, StaticCache):
-            pos_ids = cache_position.reshape(1, T)
-        else:
-            pos_ids = self.position_ids[:, past_len : past_len + T]
+        past_len, cache_position, pos_ids = resolve_causal_positions(
+            input_ids, self.position_ids, self._max_pos, past_key_values, cache_position
+        )
         tok_emb = self.wte(input_ids)
         pos_emb = self.wpe(pos_ids)
         hidden = self.drop(tok_emb + pos_emb)

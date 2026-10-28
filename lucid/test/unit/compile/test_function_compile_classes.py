@@ -9,6 +9,9 @@ one of five compile categories:
   recorded ``forward`` (:attr:`~lucid.autograd.Function._exact_derivative`), so
   a compiled backward may differentiate the recording when eager would also run
   ``backward``.
+* ``TRACED_BACKWARD`` — nodes whose ``backward`` is traced into a
+  ``VjpRegion`` (:attr:`~lucid.autograd.Function._traced_backward`) and lowered
+  alongside the forward graph into the compiled executable.
 * ``CUSTOM`` — nodes whose ``backward`` a compiled backward cannot run (either
   because ``backward`` is not the recorded ``forward``'s derivative, or because
   the op has no compile emitter or runs a host / nested-autograd backward).
@@ -27,27 +30,32 @@ TRACE_FORM: frozenset[str] = frozenset(
 
 EXACT: frozenset[str] = frozenset({"_CheckpointFn"})
 
+TRACED_BACKWARD: frozenset[str] = frozenset(
+    {
+        "_MatrixPowerZero",
+        "_LogAbsDet",
+        "_StandardGamma",
+        "_FakeQuantizeAffine",
+        "_CholeskyAutograd",
+        "_SVD",
+        "_QR",
+        "_Pinv",
+        "_Eigh",
+    }
+)
+
 CUSTOM: frozenset[str] = frozenset(
     {
         # FFT (no MPSGraph emitter yet)
         "_FftnAutograd",
         "_RfftnAutograd",
         "_IrfftnAutograd",
-        # Linalg (no MPSGraph emitter or custom singular/zero-power rule)
-        "_CholeskyAutograd",
-        "_SVD",
-        "_QR",
-        "_MatrixPowerZero",
-        "_Pinv",
+        # Linalg (complex / pivot-table factorizations without MPSGraph emitter)
         "_Eig",
-        "_Eigh",
         "_LUFactorGrad",
-        "_LogAbsDet",
         "_LDLFactorGrad",
-        # Special / implicit reparameterisation / STE
+        # Special (host loop in forward)
         "_RegularizedGamma",
-        "_StandardGamma",
-        "_FakeQuantizeAffine",
         # Host / nested-autograd ODE backward
         "_EventTimeGradient",
         "_AdjointSolve",
@@ -61,6 +69,7 @@ COMPILE_INTERNAL: frozenset[str] = frozenset({"_CompiledStepFunction", "_Segment
 ALL_CATEGORIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("TRACE_FORM", TRACE_FORM),
     ("EXACT", EXACT),
+    ("TRACED_BACKWARD", TRACED_BACKWARD),
     ("CUSTOM", CUSTOM),
     ("UNTRACED", UNTRACED),
     ("COMPILE_INTERNAL", COMPILE_INTERNAL),
@@ -89,13 +98,14 @@ def _class_sets_attribute(node: ast.ClassDef, attr_name: str) -> bool:
     return False
 
 
-def _scan_lucid_functions() -> tuple[set[str], set[str], set[str]]:
-    """Return ``(all_functions, trace_form_set, exact_derivative_set)`` in ``lucid/``."""
+def _scan_lucid_functions() -> tuple[set[str], set[str], set[str], set[str]]:
+    """Return ``(all_functions, trace_form_set, exact_derivative_set, traced_backward_set)``."""
     root = Path(__file__).resolve().parents[3]
     test_root = root / "test"
     found: set[str] = set()
     trace_forms: set[str] = set()
     exact_derivatives: set[str] = set()
+    traced_backwards: set[str] = set()
     for path in sorted(root.rglob("*.py")):
         if test_root in path.parents:
             continue
@@ -111,7 +121,9 @@ def _scan_lucid_functions() -> tuple[set[str], set[str], set[str]]:
                 trace_forms.add(node.name)
             if _class_sets_attribute(node, "_exact_derivative"):
                 exact_derivatives.add(node.name)
-    return found, trace_forms, exact_derivatives
+            if _class_sets_attribute(node, "_traced_backward"):
+                traced_backwards.add(node.name)
+    return found, trace_forms, exact_derivatives, traced_backwards
 
 
 def test_categories_are_mutually_disjoint() -> None:
@@ -123,7 +135,7 @@ def test_categories_are_mutually_disjoint() -> None:
 
 
 def test_every_lucid_function_is_classified_in_exactly_one_category() -> None:
-    found, trace_forms, exact_derivatives = _scan_lucid_functions()
+    found, trace_forms, exact_derivatives, traced_backwards = _scan_lucid_functions()
     classified = frozenset().union(*(members for _, members in ALL_CATEGORIES))
     unclassified = sorted(found - classified)
     stale = sorted(classified - found)
@@ -131,3 +143,4 @@ def test_every_lucid_function_is_classified_in_exactly_one_category() -> None:
     assert not stale, f"Classified names no longer in lucid/: {stale}"
     assert trace_forms == TRACE_FORM
     assert exact_derivatives == EXACT
+    assert traced_backwards == TRACED_BACKWARD

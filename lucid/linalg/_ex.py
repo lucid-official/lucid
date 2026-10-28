@@ -16,6 +16,7 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import finfo as _finfo
+from lucid._engine_scope import untraced
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _wrap_dim
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
@@ -842,7 +843,9 @@ def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResul
             "'reduced', 'complete', or 'r'"
         )
     if mode == "r":
-        return _QrResult(_wrap(_C_engine.zeros([0], A.dtype._engine, A.device._engine)), R)
+        with untraced():
+            empty_q = _wrap(_C_engine.zeros([0], A.dtype._engine, A.device._engine))
+        return _QrResult(empty_q, R)
     if mode == "complete":
         m, n = int(A.shape[-2]), int(A.shape[-1])
         if m > n:
@@ -892,29 +895,36 @@ def _sv_cutoff(
     return lucid.maximum(atol_t, max_sv * rtol_t)
 
 
+def _pinv_compute_tol(
+    A: Tensor, *, atol: float | Tensor | None, rtol: float | Tensor | None, hermitian: bool
+) -> Tensor:
+    """Compute ``pinv(A)`` under ``no_grad`` for custom tolerances or ``hermitian=True``."""
+    if hermitian:
+        w, V = eigh(A)
+        sv = w.abs()
+        cutoff = _sv_cutoff(A, sv, atol=atol, rtol=rtol, op="pinv")
+        inv_w = lucid.where(sv > cutoff, 1.0 / w, lucid.zeros_like(w))
+        return lucid.matmul(V * inv_w.unsqueeze(-2), V.mT)
+    U, sv, Vh = svd(A, full_matrices=False)
+    cutoff = _sv_cutoff(A, sv, atol=atol, rtol=rtol, op="pinv")
+    inv_s = lucid.where(sv > cutoff, 1.0 / sv, lucid.zeros_like(sv))
+    return lucid.matmul(Vh.mT * inv_s.unsqueeze(-2), U.mT)
+
+
 def _pinv_with_tol(
     A: Tensor, *, atol: float | Tensor | None, rtol: float | Tensor | None, hermitian: bool
 ) -> Tensor:
     """Compute ``pinv(A)`` under custom ``atol``/``rtol`` or ``hermitian=True``."""
     if A.ndim < 2 or (hermitian and A.shape[-1] != A.shape[-2]):
         raise ValueError(f"pinv: invalid input shape {tuple(A.shape)}")
-    with lucid.no_grad():
-        if hermitian:
-            w, V = eigh(A)
-            sv = w.abs()
-            cutoff = _sv_cutoff(A, sv, atol=atol, rtol=rtol, op="pinv")
-            inv_w = lucid.where(sv > cutoff, 1.0 / w, lucid.zeros_like(w))
-            P = lucid.matmul(V * inv_w.unsqueeze(-2), V.mT)
-        else:
-            U, sv, Vh = svd(A, full_matrices=False)
-            cutoff = _sv_cutoff(A, sv, atol=atol, rtol=rtol, op="pinv")
-            inv_s = lucid.where(sv > cutoff, 1.0 / sv, lucid.zeros_like(sv))
-            P = lucid.matmul(Vh.mT * inv_s.unsqueeze(-2), U.mT)
     if A.requires_grad and lucid.is_grad_enabled():
-        out = _Pinv.apply(A, _unwrap(P))
+        out = _Pinv.apply(
+            A, lambda x: _pinv_compute_tol(x, atol=atol, rtol=rtol, hermitian=hermitian)
+        )
         assert isinstance(out, Tensor)
         return out
-    return P
+    with lucid.no_grad():
+        return _pinv_compute_tol(A, atol=atol, rtol=rtol, hermitian=hermitian)
 
 
 def _cond_compute(A: Tensor, p: int | float | str | None, square: bool) -> Tensor:

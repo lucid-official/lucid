@@ -368,6 +368,37 @@ public:
     // Whether ``impl`` is an op's output, a feed, or an argument of the traced call.
     bool sees(const TensorImpl* impl) const;
 
+    // Number of recorded forward ops currently in ``graph_.ops``.
+    std::size_t op_count() const { return graph_.ops.size(); }
+
+    // Number of outside buffers mutated in-place so far in this trace.
+    std::size_t outside_write_count() const { return outside_originals_.size(); }
+
+    // Returns ``impl``'s existing :type:`TensorId` or mints an external-feed
+    // id for it when ``impl`` has not been seen yet.
+    TensorId ensure_id(const TensorImplPtr& impl);
+
+    // Mints a symbolic cotangent :type:`TensorId` for ``impl`` without adding
+    // ``impl`` to ``external_feeds_``.  Used while tracing a custom
+    // :class:`Function`'s ``backward`` so the dummy cotangent tensor is bound
+    // by :class:`BackwardWalker` from the upstream gradient tensor.
+    TensorId register_cotangent(const TensorImplPtr& impl);
+
+    // Drops any ops recorded at or after ``idx`` (used when tracing a custom
+    // :class:`Function`'s ``backward`` fails and falls back to eager).
+    void discard_ops_from(std::size_t idx);
+
+    // Moves ``graph_.ops[bwd_begin .. end)`` into a :class:`VjpRegion`
+    // covering forward ops ``[fwd_begin, fwd_end)`` and appends it to
+    // ``graph_.vjp_regions``.
+    void commit_vjp_region(std::size_t fwd_begin,
+                           std::size_t fwd_end,
+                           std::vector<TensorId> input_ids,
+                           std::vector<TensorMeta> output_metas,
+                           std::vector<TensorId> cotangent_ids,
+                           std::vector<TensorId> input_grad_ids,
+                           std::size_t bwd_begin);
+
 private:
     // ``on_op_io`` for an op the recording keeps.
     void record_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output);

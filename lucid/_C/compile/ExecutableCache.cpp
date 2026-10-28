@@ -81,6 +81,55 @@ inline std::vector<std::pair<std::string, AttributeValue>> sorted_node_attrs(con
     return sorted;
 }
 
+inline void append_node_to_key(CacheKey& key,
+                               TraceIdMap& local_map,
+                               const OpNode& node,
+                               Device* out_device = nullptr) {
+    key.op_names.push_back(node.name);
+    std::vector<std::int64_t> inputs;
+    inputs.reserve(node.inputs.size());
+    for (const auto& id : node.inputs)
+        inputs.push_back(intern_canonical_id(local_map, id));
+    key.op_inputs.push_back(std::move(inputs));
+    for (const auto& out : node.outputs)
+        intern_canonical_id(local_map, out.id);
+    if (!node.outputs.empty()) {
+        const auto& meta = node.outputs[0];
+        key.output_shapes.push_back(meta.shape);
+        key.output_dtypes.push_back(meta.dtype);
+        if (out_device != nullptr)
+            *out_device = meta.device;
+    } else {
+        key.output_shapes.emplace_back();
+        key.output_dtypes.push_back(Dtype::F32);
+    }
+    key.op_attrs.push_back(sorted_node_attrs(node));
+}
+
+inline void append_vjp_region_to_key(CacheKey& key, TraceIdMap& local_map, const VjpRegion& r) {
+    key.op_names.emplace_back("__vjp_region__");
+    std::vector<std::int64_t> header_ids;
+    header_ids.reserve(r.input_ids.size() + r.output_metas.size() + r.cotangent_ids.size() +
+                       r.input_grad_ids.size());
+    for (TensorId id : r.input_ids)
+        header_ids.push_back(intern_canonical_id(local_map, id));
+    for (const auto& om : r.output_metas)
+        header_ids.push_back(intern_canonical_id(local_map, om.id));
+    for (TensorId id : r.cotangent_ids)
+        header_ids.push_back(intern_canonical_id(local_map, id));
+    for (TensorId id : r.input_grad_ids)
+        header_ids.push_back(intern_canonical_id(local_map, id));
+    key.op_inputs.push_back(std::move(header_ids));
+    key.output_shapes.push_back(Shape{static_cast<std::int64_t>(r.fwd_begin),
+                                      static_cast<std::int64_t>(r.fwd_end),
+                                      static_cast<std::int64_t>(r.input_ids.size()),
+                                      static_cast<std::int64_t>(r.output_metas.size())});
+    key.output_dtypes.push_back(Dtype::I64);
+    key.op_attrs.emplace_back();
+    for (const auto& node : r.bwd_ops)
+        append_node_to_key(key, local_map, node);
+}
+
 inline std::vector<FeedSig>
 build_feed_sigs(const std::unordered_map<TensorId, std::pair<Shape, Dtype>>& feed_meta,
                 TraceIdMap& map) {
@@ -192,26 +241,10 @@ CacheKey make_cache_key(const TraceGraph& graph,
 
     TraceIdMap local_map;
     Device device = Device::CPU;
-    for (const auto& node : graph.ops) {
-        key.op_names.push_back(node.name);
-        std::vector<std::int64_t> inputs;
-        inputs.reserve(node.inputs.size());
-        for (const auto& id : node.inputs)
-            inputs.push_back(intern_canonical_id(local_map, id));
-        key.op_inputs.push_back(std::move(inputs));
-        for (const auto& out : node.outputs)
-            intern_canonical_id(local_map, out.id);
-        if (!node.outputs.empty()) {
-            const auto& meta = node.outputs[0];
-            key.output_shapes.push_back(meta.shape);
-            key.output_dtypes.push_back(meta.dtype);
-            device = meta.device;
-        } else {
-            key.output_shapes.emplace_back();
-            key.output_dtypes.push_back(Dtype::F32);
-        }
-        key.op_attrs.push_back(sorted_node_attrs(node));
-    }
+    for (const auto& node : graph.ops)
+        append_node_to_key(key, local_map, node, &device);
+    for (const auto& r : graph.vjp_regions)
+        append_vjp_region_to_key(key, local_map, r);
     key.device = device;
 
     // Requested outputs in the same numbering; an id the walk never saw

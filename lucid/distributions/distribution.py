@@ -21,6 +21,7 @@ from contextvars import ContextVar
 from typing import Self, override
 
 import lucid
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.distributions.constraints import Constraint, unit_interval
 
@@ -820,7 +821,9 @@ class Distribution:
             v = getattr(self, name)
             if not isinstance(v, lucid.Tensor):
                 continue
-            if not bool(constraint.check(v).all().item()):
+            with untraced():
+                ok = bool(constraint.check(v).all().item())
+            if not ok:
                 raise ValueError(
                     f"Expected parameter {name} of shape {tuple(v.shape)} of "
                     f"distribution {type(self).__name__} to satisfy the "
@@ -887,7 +890,9 @@ class Distribution:
         if support is None:
             return
         self._validate_value_shape(value)
-        if not bool(support.check(value).all().item()):
+        with untraced():
+            ok = bool(support.check(value).all().item())
+        if not ok:
             raise ValueError(
                 f"Expected value argument of shape {tuple(value.shape)} to be "
                 f"within the support ({support!r}) of the distribution {self!r}"
@@ -905,7 +910,9 @@ class Distribution:
             is outside :math:`[0, 1]`.
         """
         self._validate_value_shape(value)
-        if not bool(unit_interval.check(value).all().item()):
+        with untraced():
+            ok = bool(unit_interval.check(value).all().item())
+        if not ok:
             raise ValueError(
                 f"Expected the icdf argument of shape {tuple(value.shape)} of "
                 f"{self!r} to be a probability in [0, 1]"

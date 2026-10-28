@@ -51,6 +51,7 @@ std::vector<TensorImplPtr> svd_op(const TensorImplPtr& a_in, bool compute_uv) {
     const TensorImplPtr a = amp.cast(a_in);
     require_float(a->dtype(), "svd");
     OpScopeFull scope{"svd", a->device(), a->dtype(), a->shape()};
+    scope.set_attr("compute_uv", compute_uv);
 
     const auto& sh = a->shape();
     const int m = static_cast<int>(sh[sh.size() - 2]);
@@ -87,12 +88,19 @@ std::vector<TensorImplPtr> svd_op(const TensorImplPtr& a_in, bool compute_uv) {
     if (!compute_uv) {
         // Values-only mode: backend returns exactly one Storage (singular values).
         out.push_back(fresh(std::move(storages[0]), ssh, a->dtype(), a->device()));
+        if (auto* trc = compile::current_tracer())
+            trc->on_op_io({a}, out[0]);
         return out;
     }
     // Full SVD mode: backend returns [U storage, S storage, Vh storage].
     out.push_back(fresh(std::move(storages[0]), ush, a->dtype(), a->device()));  // U
     out.push_back(fresh(std::move(storages[1]), ssh, a->dtype(), a->device()));  // S
     out.push_back(fresh(std::move(storages[2]), vsh, a->dtype(), a->device()));  // Vh
+    if (auto* trc = compile::current_tracer()) {
+        trc->on_op_io({a}, out[0]);
+        trc->on_op_io({}, out[1]);
+        trc->on_op_io({}, out[2]);
+    }
     return out;
 }
 

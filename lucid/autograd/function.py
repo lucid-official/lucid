@@ -495,9 +495,8 @@ def _wrap_outputs(
     Returns
     -------
     object
-        ``output`` with each tensor entry settled: on the node when it is
-        differentiable and the call is tracked, a new detached tensor when
-        it is not differentiable.
+        ``output`` with each non-differentiable tensor entry detached and, if
+        tracked, the backward node attached to the rest.
     """
     is_tuple = isinstance(output, tuple)
     returned = list(output) if isinstance(output, tuple) else [output]
@@ -529,6 +528,35 @@ def _wrap_outputs(
         # between is refused there.
         ctx._hold_saved(klass.__name__, args, returned, slots, carrier)
     return tuple(entries) if is_tuple else entries[0]
+
+
+def _prep_traced_vjp(
+    tracer: _C_engine.compile.Tracer,
+    ctx: FunctionCtx,
+    args: tuple[object, ...],
+    output: object,
+    bounds: tuple[int, int, bool],
+) -> tuple[object, tuple[FunctionCtx, tuple[Tensor, ...], list[bool], int]]:
+    """Ensure traced custom-VJP outputs have distinct post-``id_begin`` ids."""
+    fwd_begin, id_begin, tracked = bounds
+    entries = list(output) if isinstance(output, tuple) else [output]
+    marked_impls: list[_C_engine.TensorImpl | None] = [t._impl for t in ctx._non_differentiable]
+    input_impls = [_impl_of(a) for a in args]
+    marked: list[bool] = []
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, Tensor):
+            continue
+        impl = entry._impl
+        is_marked = _position(impl, marked_impls) is not None or _promotion.is_integral(impl.dtype)
+        marked.append(is_marked)
+        tid = tracer.lookup_id(impl)
+        if tid is None or int(tid) < id_begin:
+            tracer.ensure_id(impl)
+            if not is_marked and _position(impl, input_impls) is None:
+                entries[idx] = _wrap(impl.custom_function_view(tracked))
+    raw_saved = tuple(ctx._saved_tensors)
+    updated = tuple(entries) if isinstance(output, tuple) else entries[0]
+    return updated, (ctx, raw_saved, marked, fwd_begin)
 
 
 def _lucid_defined(klass: type) -> bool:
@@ -571,6 +599,17 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
             return trace_form(*args, **kwargs)
         ctx = FunctionCtx()
         ctx.needs_input_grad = tuple(isinstance(a, Tensor) and a.requires_grad for a in args)
+        tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
+        bounds: tuple[int, int, bool] | None = None
+        if (
+            tracer is not None
+            and not tracer.fold_constants
+            and getattr(klass, "_traced_backward", False)
+        ):
+            for a in args:
+                if isinstance(a, Tensor):
+                    tracer.ensure_id(a._impl)
+            bounds = (int(tracer.op_count()), int(tracer.graph.next_id), tracked)
 
         # Under ``no_grad``, as the reference runs it: the node registered
         # below is the call's whole graph.  A graph ``forward`` built itself
@@ -578,13 +617,15 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
         # which sent a gradient to whatever tensor ``forward`` closed over.
         with _C_engine.NoGradGuard():
             output = klass.forward(ctx, *args, **kwargs)
-        tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
+        vjp_call: tuple[FunctionCtx, tuple[Tensor, ...], list[bool], int] | None = None
+        if tracer is not None and bounds is not None:
+            output, vjp_call = _prep_traced_vjp(tracer, ctx, args, output, bounds)
         settled = _wrap_outputs(output, klass, ctx, args, kwargs, tracked)
         if tracer is not None:
             # Imported here: ``lucid.compile`` imports this package.
             from lucid.compile._core.custom_backward import note_applied
 
-            note_applied(tracer, klass, args, settled)
+            note_applied(tracer, klass, args, settled, vjp_call=vjp_call)
 
         return cast(_Outputs, settled)
 
@@ -645,6 +686,13 @@ class Function(metaclass=FunctionMeta):
     apply : classmethod
         Bind ``forward`` to the autograd graph, returning the forward
         output and registering ``backward`` as the gradient closure.
+    _traced_backward : bool, default=False
+        Class attribute opting the subclass into traced custom-VJP lowering
+        under :mod:`lucid.compile`.  When ``True`` and both ``forward`` and
+        ``backward`` consist of traceable tensor operations on GPU,
+        ``make_step``, ``fused_step``, and ``compiled_step`` trace
+        ``backward`` into a ``VjpRegion`` inside the compiled executable
+        instead of falling back to eager execution.
 
     Notes
     -----
@@ -726,6 +774,13 @@ class Function(metaclass=FunctionMeta):
     #: differentiate the recording instead of calling ``backward``.  Trusted
     #: only as :attr:`_trace_form` is.
     _exact_derivative: ClassVar[bool] = False
+
+    #: Whether ``lucid.compile`` may trace :meth:`backward` into the compiled
+    #: graph as a custom VJP region when ``apply`` runs inside a recording.
+    #: Both ``forward`` and ``backward`` must be pure traceable Lucid tensor
+    #: operations with no host-side control flow or side effects on runtime
+    #: tensor values.
+    _traced_backward: ClassVar[bool] = False
 
     # The base signature is ``(ctx, *Any, **Any) -> Any`` on purpose: every
     # subclass declares its own concrete parameters and return type, and only

@@ -19,6 +19,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.utils.cache import Cache, StaticCache
 
 __all__ = [
     "text_activation",
@@ -27,6 +28,8 @@ __all__ = [
     "last_kept_token",
     "init_text_module_weights",
     "init_text_weights",
+    "update_causal_kv_and_bias",
+    "resolve_causal_positions",
 ]
 
 
@@ -241,3 +244,61 @@ def init_text_weights(model: nn.Module, std: float) -> None:
     """
     for module in model.modules():
         init_text_module_weights(module, std)
+
+
+def update_causal_kv_and_bias(
+    k: Tensor,
+    v: Tensor,
+    causal_mask: Tensor,
+    attention_mask: Tensor | None,
+    cache_ctx: tuple[Cache | None, int, Tensor | None, int],
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Update ``past_key_value`` (if any) and build the causal + padding bias."""
+    past_key_value, layer_idx, cache_position, T = cache_ctx
+    past_len = 0
+    if past_key_value is not None:
+        past_len = past_key_value.get_seq_length(layer_idx)
+        cache_kwargs: dict[str, object] = {"cache_position": cache_position}
+        if isinstance(past_key_value, StaticCache):
+            from lucid.compile._entry.decode_step import is_compiled_decode_tracing
+
+            if not is_compiled_decode_tracing():
+                cache_kwargs["read_len"] = past_len + T
+        k, v = past_key_value.update(k, v, layer_idx, cache_kwargs=cache_kwargs)
+    t_total = int(k.shape[2])
+    if isinstance(past_key_value, StaticCache) and cache_position is not None:
+        causal = causal_mask.index_select(2, cache_position)[:, :, :, :t_total]
+    else:
+        causal = causal_mask[:, :, past_len : past_len + T, :t_total]
+    bias: Tensor = (1.0 - causal) * -1e4
+    if attention_mask is not None:
+        mask_len = int(attention_mask.shape[-1])
+        pad_mask = (
+            F.pad(attention_mask, (0, t_total - mask_len)) if mask_len < t_total else attention_mask
+        )
+        bias = bias + pad_mask
+    return k, v, bias
+
+
+def resolve_causal_positions(
+    input_ids: Tensor,
+    position_ids: Tensor,
+    max_pos: int,
+    past_key_values: Cache | None,
+    cache_position: Tensor | None,
+) -> tuple[int, Tensor, Tensor]:
+    """Validate sequence length and return ``(past_len, cache_position, pos_ids)``."""
+    T = int(input_ids.shape[1])
+    past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
+    if past_len + T > max_pos:
+        raise ValueError(
+            f"Sequence length {past_len + T} exceeds max_position_embeddings {max_pos}"
+        )
+    if cache_position is None:
+        cache_position = lucid.arange(past_len, past_len + T, device=input_ids.device.type).long()
+    pos_ids = (
+        cache_position.reshape(1, T)
+        if isinstance(past_key_values, StaticCache)
+        else position_ids[:, past_len : past_len + T]
+    )
+    return past_len, cache_position, pos_ids

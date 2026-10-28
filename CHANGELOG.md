@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Added
+
+- add StaticCache compiled decode and traced custom VJPs
+
+---
+
+## [3.16.1] — 2026-10-28
+
+Compiled single-token autoregressive decoding across all four generative text families (`GPTLMHeadModel`, `GPT2LMHeadModel`, `TransformerForSeq2SeqLM`, `T5ForSeq2SeqLM`) via `StaticCache` and `compiled_decode_step` (`cache_implementation="compiled"`), and traced custom-VJP compilation (`Function._traced_backward`, `VjpRegion`) covering linear-algebra decompositions (`cholesky`, `qr`, `svd`, `eigh`, `solve_triangular`, `pinv`, `slogdet`, `matrix_power`), all 10 reparameterised distributions' `rsample()`, `RoFormer`, QAT `_FakeQuantizeAffine`, and user-defined `autograd.Function` subclasses in `make_step`, `fused_step`, and `compiled_step`. Also includes the T5 model family, `register_parametrization` / `orthogonal` parametrizations, `ValuesIndices` return tuples on `sort` / `max(dim=)` / `min(dim=)` / `cummax` / `cummin`, and numerical precision and view-versioning fixes across CPU and Metal. Engine ABI 39.
+
+### Added
+
+- `StaticCache` + `compiled_decode_step` (`cache_implementation="compiled"` and `"static"`) across `GPTLMHeadModel`, `GPT2LMHeadModel`, `TransformerForSeq2SeqLM`, and `T5ForSeq2SeqLM` for single-executable autoregressive decoding with zero-copy cache buffer rebinding
+- Traced custom-VJP compilation (`Function._traced_backward = True`, `VjpRegion`) in `make_step`, `fused_step`, `compiled_step`, and `diagnose`, along with MPSGraph emitters and VJPs for `cholesky`, `qr`, `svd`, `eigh`, `solve_triangular`, `pinv`, `slogdet`, `matrix_power`, `_StandardGamma` (`rsample()` across `Gamma`, `Beta`, `Dirichlet`, `Chi2`, `StudentT`, `FisherSnedecor`, `InverseGamma`, `MultivariateNormal`, `LowRankMultivariateNormal`, `Wishart`), `RoFormer`, and QAT `_FakeQuantizeAffine`
+- add T5 (Raffel et al., 2020)
+
 ### Changed
 
 - **Breaking:** All 17 `lucid.nn.functional.*` losses and 18 `lucid.nn.*Loss` modules (`MSELoss`, `L1Loss`, `CrossEntropyLoss`, `NLLLoss`, `BCELoss`, `BCEWithLogitsLoss`, `SmoothL1Loss`, `KLDivLoss`, `TripletMarginLoss`, `CosineEmbeddingLoss`, `MarginRankingLoss`, `HingeEmbeddingLoss`, `PoissonNLLLoss`, `MultiMarginLoss`, `MultilabelMarginLoss`, `MultiLabelMarginLoss`, `SoftMarginLoss`, `MultiLabelSoftMarginLoss`) now accept `size_average` and `reduce` in their reference positional slots without deprecation warnings, overriding `reduction` when set (`reduce=False -> "none"`, `size_average=False -> "sum"`, otherwise `"mean"`). `F.elu_(input, alpha=1.0, scale=1.0, input_scale=1.0)` also matches the reference's scale-parameterized in-place signature (`F.elu_(x, a, False)` scales by `0` rather than treating the 3rd argument as `inplace`), and `F.gumbel_softmax`, `F.pad`, and `F.threshold` / `F.threshold_` bind their reference positional parameter order (LCD-430)
@@ -119,10 +136,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - parallelize CPU sort/argsort lines and raise short-row radix threshold (LCD-360)
 - gate f64 vForce trig via NEON min_magnitude (LCD-596)
 - unify half reduction subnormals and f32 var_op (LCD-121)
-
-### Added
-
-- add T5 (Raffel et al., 2020)
 
 ---
 
@@ -6264,7 +6277,8 @@ across every public surface.
 
 ---
 
-[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.0...HEAD
+[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.1...HEAD
+[3.16.1]: https://github.com/lucid-official/lucid/releases/tag/v3.16.1
 [3.16.0]: https://github.com/lucid-official/lucid/releases/tag/v3.16.0
 [3.15.5]: https://github.com/lucid-official/lucid/releases/tag/v3.15.5
 [3.15.4]: https://github.com/ChanLumerico/lucid/releases/tag/v3.15.4

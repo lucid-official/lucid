@@ -404,4 +404,65 @@ void Tracer::keep(const TensorImplPtr& output) {
         made_.emplace(output.get(), output);
 }
 
+TensorId Tracer::ensure_id(const TensorImplPtr& impl) {
+    if (!impl)
+        return TraceId::external_feed();
+    return feed_id(impl);
+}
+
+TensorId Tracer::register_cotangent(const TensorImplPtr& impl) {
+    if (!impl)
+        return TraceId::external_feed();
+    if (held_) {
+        if (!held_->outputs.empty() && held_->outputs[0].id + 1 == graph_.next_id)
+            graph_.next_id = held_->outputs[0].id;
+        held_.reset();
+    }
+    const TensorId fresh = graph_.next_id++;
+    impl_to_id_[impl.get()] = fresh;
+    live_refs_.push_back(impl);
+    watched_.emplace(impl.get(), impl);
+    return fresh;
+}
+
+void Tracer::discard_ops_from(std::size_t idx) {
+    if (held_) {
+        if (!held_->outputs.empty() && held_->outputs[0].id + 1 == graph_.next_id)
+            graph_.next_id = held_->outputs[0].id;
+        held_.reset();
+    }
+    if (idx < graph_.ops.size()) {
+        graph_.ops.erase(graph_.ops.begin() + static_cast<std::ptrdiff_t>(idx), graph_.ops.end());
+    }
+}
+
+void Tracer::commit_vjp_region(std::size_t fwd_begin,
+                               std::size_t fwd_end,
+                               std::vector<TensorId> input_ids,
+                               std::vector<TensorMeta> output_metas,
+                               std::vector<TensorId> cotangent_ids,
+                               std::vector<TensorId> input_grad_ids,
+                               std::size_t bwd_begin) {
+    if (held_) {
+        if (!held_->outputs.empty() && held_->outputs[0].id + 1 == graph_.next_id)
+            graph_.next_id = held_->outputs[0].id;
+        held_.reset();
+    }
+    VjpRegion region;
+    region.fwd_begin = fwd_begin;
+    region.fwd_end = fwd_end;
+    region.input_ids = std::move(input_ids);
+    region.output_metas = std::move(output_metas);
+    region.cotangent_ids = std::move(cotangent_ids);
+    region.input_grad_ids = std::move(input_grad_ids);
+    if (bwd_begin < graph_.ops.size()) {
+        region.bwd_ops.assign(
+            std::make_move_iterator(graph_.ops.begin() + static_cast<std::ptrdiff_t>(bwd_begin)),
+            std::make_move_iterator(graph_.ops.end()));
+        graph_.ops.erase(graph_.ops.begin() + static_cast<std::ptrdiff_t>(bwd_begin),
+                         graph_.ops.end());
+    }
+    graph_.vjp_regions.push_back(std::move(region));
+}
+
 }  // namespace lucid::compile

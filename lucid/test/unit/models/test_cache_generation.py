@@ -264,6 +264,16 @@ class TestSeq2SeqCache:
         g_nocache = m.generate(src, max_length=8, use_cache=False)
         assert_close(g_cache, g_nocache, atol=0.0)
 
+    def test_static_cache_equals_dynamic(self, build: Callable[[], _Seq2Seq]) -> None:
+        lucid.manual_seed(0)
+        m = build()
+        src = lucid.tensor([[3, 7, 1, 9, 2]]).long()
+        g_static = m.generate(
+            src, max_length=8, use_cache=True, cache_implementation="static", max_cache_len=16
+        )
+        g_dynamic = m.generate(src, max_length=8, use_cache=True, cache_implementation="dynamic")
+        assert_close(g_static, g_dynamic, atol=0.0)
+
     def test_decoder_applies_padding_masks(self, build: Callable[[], _Seq2Seq]) -> None:
         # Regression: TransformerDecoder.forward dropped tgt/memory key-padding
         # masks before the layers.  Correctness check: with the mask applied,

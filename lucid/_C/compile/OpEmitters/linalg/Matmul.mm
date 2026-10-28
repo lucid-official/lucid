@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "../OpEmitter.h"
+#include "../_SignedZero.h"
 
 namespace lucid::compile {
 
@@ -72,6 +73,9 @@ public:
             ctx.bind(node.outputs[0].id, (__bridge void*)y);
             return true;
         }
+
+        a_t = materialize_matmul_splat(graph, a_t, is_const_splat(ctx, a_id));
+        b_t = materialize_matmul_splat(graph, b_t, is_const_splat(ctx, b_id));
 
         MPSGraphTensor* y = [graph matrixMultiplicationWithPrimaryTensor:a_t
                                                          secondaryTensor:b_t

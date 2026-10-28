@@ -88,6 +88,36 @@ Stateful layers are handled transparently:
 - **BatchNorm** running mean/variance are surfaced as extra executable outputs and written back into the live module buffers after each step, so `model.eval()` reads fresh statistics.
 - **Dropout** masks are driven by the GPU RNG inside the captured graph, so training stays stochastic across steps without falling back to a CPU round-trip.
 
+## Compiled autoregressive decoding (`StaticCache`)
+
+Standard KV caches (`DynamicCache`) grow by concatenation on every token, changing tensor shapes at each step and forcing a re-trace under static-shape compilation. `StaticCache` pre-allocates fixed `(B, num_heads, max_cache_len, head_dim)` buffers and writes each new token's K/V slice at a runtime `cache_position` tensor via `lucid.index_copy`, keeping the graph signature constant across all decode positions.
+
+Pass `cache_implementation="compiled"` to `generate()` on any generative text model (`GPTLMHeadModel`, `GPT2LMHeadModel`, `TransformerForSeq2SeqLM`, `T5ForSeq2SeqLM`) to prefill the prompt eagerly and run every subsequent single-token decode step through one cached `MPSGraphExecutable`:
+
+```python
+from lucid.models import create_model
+
+model = create_model("gpt2_small_lm").eval().to("metal")
+prompt = lucid.tensor([[15496, 995]], dtype=lucid.int64, device="metal")
+
+out = model.generate(
+    prompt,
+    max_new_tokens=64,
+    cache_implementation="compiled",
+    max_cache_len=128,
+)
+```
+
+For custom decoding loops, `lucid.compile._entry.decode_step.compiled_decode_step(forward_fn, static_cache)` wraps any `(input_ids, cache_position) -> logits` callable and rolls the `StaticCache` (or `EncoderDecoderCache`) buffers forward in place after each executable invocation.
+
+## Custom `Function`s, linalg decompositions, and `rsample()`
+
+Training steps (`make_step`, `fused_step`, `compiled_step`) compile end-to-end through:
+
+- **Linear-algebra decompositions & solvers**: `lucid.linalg.cholesky`, `qr`, `svd`, `svdvals`, `eigh`, `eigvalsh`, `solve_triangular`, `pinv`, `slogdet`, and `matrix_power` lower both their forward decomposition and their analytical backward into the compiled `MPSGraphExecutable`.
+- **Reparameterised distributions (`rsample`)**: `Gamma`, `Beta`, `Dirichlet`, `Chi2`, `StudentT`, `FisherSnedecor`, `InverseGamma`, `MultivariateNormal`, `LowRankMultivariateNormal`, and `Wishart` trace their implicit or covariance reparameterisation backward (`_StandardGamma`, Cholesky/triangular VJP) directly into the compiled training graph.
+- **User-defined `autograd.Function` subclasses**: set `_traced_backward = True` on a custom `Function` whose `forward` and `backward` are pure traceable tensor ops to trace `backward(ctx, *grad_outputs)` into a `VjpRegion` inside the compiled executable instead of falling back to eager execution.
+
 ## Coverage diagnosis
 
 Not every op has a manual vector-Jacobian product yet. `diagnose` traces your function and reports which ops are compile-backed and which would fall back:

@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import Self, override
 
 import lucid
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.distributions.constraints import (
@@ -61,7 +62,7 @@ def _sample_standard_gamma(concentration: Tensor, sample_shape: tuple[int, ...])
         new_mask = new_accept.to(alpha.dtype)
         accepted = accepted + new_mask * d * v
         has_sample = has_sample + new_mask
-        if bool((has_sample == 1).all().item()):
+        if _C_engine.compile.current_tracer() is None and bool((has_sample == 1).all().item()):
             break
 
     # Apply the α<1 transform: x_α = x_{α+1} · U^{1/α}.
@@ -177,6 +178,8 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
 
 class _StandardGamma(Function):
     """Differentiable standard Gamma sampler with implicit-reparameterisation backward."""
+
+    _traced_backward = True
 
     @staticmethod
     @override
@@ -850,8 +853,11 @@ class Beta(ExponentialFamily):
         gradients.
         """
         shape = self._extended_shape(sample_shape)
-        x = _standard_gamma(self.concentration1.expand(shape))
-        y = _standard_gamma(self.concentration0.expand(shape))
+        pair = lucid.stack(
+            [self.concentration1.expand(shape), self.concentration0.expand(shape)], dim=0
+        )
+        g = _standard_gamma(pair)
+        x, y = g[0], g[1]
         return x / (x + y)
 
     @override

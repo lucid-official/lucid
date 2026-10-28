@@ -49,12 +49,14 @@ inline constexpr const char* kPosZeroSplatSlot = "signed_zero:pos_splat";
 inline constexpr const char* kNegZeroSplatSlot = "signed_zero:neg_splat";
 inline constexpr const char* kPosOneSplatSlot = "signed_zero:pos_one_splat";
 inline constexpr const char* kNegOneSplatSlot = "signed_zero:neg_one_splat";
+inline constexpr const char* kAnyConstSplatSlot = "signed_zero:any_splat";
 
 // Record that ``out_id`` is a splat of ``fill``, if that is a floating ±0 or ±1.
 inline void mark_zero_splat(
     BuilderContext& ctx, TensorId out_id, Dtype dtype, double fill, MPSGraphTensor* splat) {
     if (!is_floating_point(dtype))
         return;
+    ctx.stash_saved(out_id, kAnyConstSplatSlot, (__bridge void*)splat);
     const char* slot = nullptr;
     if (fill == 0.0)
         slot = std::signbit(fill) ? kNegZeroSplatSlot : kPosZeroSplatSlot;
@@ -80,6 +82,23 @@ inline bool is_pos_one_splat(const BuilderContext& ctx, TensorId id) {
 
 inline bool is_neg_one_splat(const BuilderContext& ctx, TensorId id) {
     return ctx.resolve_saved(id, kNegOneSplatSlot) != nullptr;
+}
+
+inline bool is_const_splat(const BuilderContext& ctx, TensorId id) {
+    return ctx.resolve_saved(id, kAnyConstSplatSlot) != nullptr;
+}
+
+// Materialize a compile-time constant splat before feeding it to
+// ``matrixMultiplicationWithPrimaryTensor:secondaryTensor:``.  When a splat
+// constant is shared between an elementwise op and a matmul, MPSGraph passes
+// a stride-0 broadcast MPSNDArray into ``MPSNDArrayMatrixMultiplication``,
+// which asserts at ``MPSNDArrayMatrixMultiplication.mm:7162`` ("A and B index
+// not found.").  ``bandPart(-1, -1)`` keeps every diagonal while forcing
+// MPSGraph to materialize the 2-D matrix axes.
+inline MPSGraphTensor* materialize_matmul_splat(MPSGraph* g, MPSGraphTensor* t, bool is_splat) {
+    if (!is_splat || t == nil || t.shape.count < 2)
+        return t;
+    return [g bandPartWithTensor:t numLower:-1 numUpper:-1 name:nil];
 }
 
 inline MPSGraphTensor* constant_splat_like(MPSGraph* g, MPSGraphTensor* t, double value) {
@@ -140,8 +159,8 @@ inline void propagate_zero_splat(BuilderContext& ctx, const OpNode& node) {
     void* out = ctx.resolve(node.outputs[0].id);
     if (out == nullptr)
         return;
-    for (const char* slot :
-         {kPosZeroSplatSlot, kNegZeroSplatSlot, kPosOneSplatSlot, kNegOneSplatSlot})
+    for (const char* slot : {kPosZeroSplatSlot, kNegZeroSplatSlot, kPosOneSplatSlot,
+                             kNegOneSplatSlot, kAnyConstSplatSlot})
         if (ctx.resolve_saved(node.inputs[0], slot) != nullptr)
             ctx.stash_saved(node.outputs[0].id, slot, out);
 }

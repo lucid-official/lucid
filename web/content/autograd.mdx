@@ -106,7 +106,7 @@ out = Clamp.apply(x, -1.0, 1.0)
 ```
 
 <Callout variant="note">
-Return `None` for non-Tensor arguments (like the scalar bounds above) — autograd ignores `None` gradient slots.
+Return `None` for non-Tensor arguments (like the scalar bounds above) — autograd ignores `None` gradient slots. To compile a custom `Function` inside `lucid.compile.make_step`, `fused_step`, or `compiled_step` without falling back to eager mode, set `_traced_backward = True` on the subclass when both `forward` and `backward` use traceable tensor operations.
 </Callout>
 
 ## Functional transforms

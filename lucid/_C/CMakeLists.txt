@@ -448,6 +448,7 @@ set(LUCID_OP_EMITTERS
     compile/OpEmitters/linalg/Linear.mm
     compile/OpEmitters/linalg/Matmul.mm
     compile/OpEmitters/linalg/MatrixOps.mm
+    compile/OpEmitters/linalg/Decompositions.mm
     # shape/ — pure view + layout rearrangement (no data-dep indexing)
     compile/OpEmitters/shape/Concat.mm
     compile/OpEmitters/shape/Layout.mm

@@ -34,6 +34,9 @@ TensorImplPtr solve_triangular_aligned(const TensorImplPtr& a,
                                        const TensorImplPtr& b,
                                        bool upper,
                                        bool unitriangular) {
+    OpScopeFull scope{"solve_triangular", a->device(), a->dtype(), b->shape()};
+    scope.set_attr("upper", upper);
+    scope.set_attr("unitriangular", unitriangular);
     auto out_storage = backend::Dispatcher::for_device(a->device())
                            .linalg_solve_triangular(a->storage(), b->storage(), a->shape(),
                                                     b->shape(), upper, unitriangular, a->dtype());
@@ -94,7 +97,7 @@ TensorImplPtr solve_triangular_op(const TensorImplPtr& a,
         ErrorBuilder("solve_triangular").fail("A and b must be on the same device");
     const SolveRhs rhs =
         solve_rhs_contract(a->shape(), b->shape(), VectorRhs::OneD, "solve_triangular");
-    OpScopeFull scope{"solve_triangular", a->device(), a->dtype(), rhs.a_shape};
+    ErrorContextGuard ctx{"solve_triangular"};
 
     // An empty system has an empty solution; BLAS will not be the one to say
     // so — see ``empty_matrix``.

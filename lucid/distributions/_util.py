@@ -4,6 +4,7 @@ from typing import Any, Callable, Protocol, Self, overload, override
 
 import lucid
 from lucid._dtype import finfo
+from lucid._engine_scope import untraced
 from lucid._tensor._indexing import broadcast_shapes
 from lucid._tensor.tensor import Tensor
 
@@ -14,9 +15,10 @@ def _as_tensor(x: Tensor | float | int) -> Tensor:
     scalars get ``batch_shape == ()`` rather than ``(1,)``."""
     if isinstance(x, lucid.Tensor):
         return x
-    t = lucid.tensor(float(x))
-    if t.ndim == 1 and t.shape == (1,):
-        t = t.squeeze()
+    with untraced():
+        t = lucid.tensor(float(x))
+        if t.ndim == 1 and t.shape == (1,):
+            t = t.squeeze()
     return t
 
 
@@ -53,9 +55,19 @@ def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
     # than threading a device through all ~67 ``_as_tensor`` call sites.
     if a.device != b.device:
         if a.ndim == 0 and a.device.type == "cpu":
-            a = a.to(b.device.type)
+            if not a.requires_grad:
+                with untraced():
+                    val = float(a.item())
+                a = lucid.full(tuple(b.shape), val, dtype=b.dtype, device=b.device)
+            else:
+                a = a.to(b.device.type)
         elif b.ndim == 0 and b.device.type == "cpu":
-            b = b.to(a.device.type)
+            if not b.requires_grad:
+                with untraced():
+                    val = float(b.item())
+                b = lucid.full(tuple(a.shape), val, dtype=a.dtype, device=a.device)
+            else:
+                b = b.to(a.device.type)
     if tuple(a.shape) == tuple(b.shape) and a.device == b.device:
         return a, b
     z = a * 0 + b * 0
@@ -88,6 +100,10 @@ def _align_device(t: Tensor, ref: Tensor) -> Tensor:
         ``ref`` is elsewhere.
     """
     if t.ndim == 0 and t.device.type == "cpu" and t.device != ref.device:
+        if not t.requires_grad:
+            with untraced():
+                val = float(t.item())
+            return lucid.full((), val, dtype=t.dtype, device=ref.device)
         return t.to(ref.device.type)
     return t
 

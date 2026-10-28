@@ -166,15 +166,6 @@ _KNOWN: dict[tuple[str, str, str], tuple[int, str]] = {
         "its only caller runs after rk_error_norm's F32/F64 refusal. "
         "Retire: give read_scalar the refusal itself.",
     ),
-    ("lucid/_C/test/helpers/numeric_assert.h", "to_float_vec", "bare-else"): (
-        1,
-        "C++ test helper: reads anything but F64 as float. Tests call it "
-        "on F32/F64 tensors. Retire: refuse other dtypes.",
-    ),
-    ("lucid/_C/test/helpers/numeric_assert.h", "grad_to_float_vec", "bare-else"): (
-        1,
-        "as to_float_vec, for gradients.",
-    ),
 }
 
 

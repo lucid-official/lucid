@@ -1177,8 +1177,12 @@ class FisherSnedecor(Distribution):
         :math:`X \sim \chi^2(d_1)` and :math:`Y \sim \chi^2(d_2)` carry
         implicit-reparameterisation gradients.
         """
-        x = self._chi1.rsample(sample_shape)
-        y = self._chi2.rsample(sample_shape)
+        from lucid.distributions.gamma import _standard_gamma
+
+        shape = self._extended_shape(sample_shape)
+        pair = lucid.stack([self.df1.expand(shape) * 0.5, self.df2.expand(shape) * 0.5], dim=0)
+        g = _standard_gamma(pair) * 2.0
+        x, y = g[0], g[1]
         return (x / self.df1) / (y / self.df2)
 
     @override

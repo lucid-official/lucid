@@ -107,7 +107,7 @@ def _eager_grads_and_updated(
 
 
 def test_ast_exact_derivative_set_matches_table() -> None:
-    _, _, exact_derivatives = _scan_lucid_functions()
+    _, _, exact_derivatives, _ = _scan_lucid_functions()
     assert exact_derivatives == EXACT == frozenset({"_CheckpointFn"})
 
 

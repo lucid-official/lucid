@@ -166,7 +166,11 @@ class Uniform(Distribution):
             If a bound is NaN, or ``low >= high`` anywhere in the batch.
         """
         super()._validate_params()
-        if not bool((self.low < self.high).all().item()):
+        from lucid._engine_scope import untraced
+
+        with untraced():
+            ok = bool((self.low < self.high).all().item())
+        if not ok:
             raise ValueError("Uniform: `low` must be less than `high`")
 
     @override

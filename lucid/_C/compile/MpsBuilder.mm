@@ -91,6 +91,12 @@ static std::string first_empty_tensor(const TraceGraph& graph,
             for (const auto d : out.shape)
                 if (d == 0)
                     return "an output of op '" + op.name + "'";
+    for (const auto& r : graph.vjp_regions)
+        for (const auto& op : r.bwd_ops)
+            for (const auto& out : op.outputs)
+                for (const auto d : out.shape)
+                    if (d == 0)
+                        return "an output of op '" + op.name + "'";
     for (const auto& [tid, impl] : feeds)
         if (impl)
             for (const auto d : impl->shape())
@@ -99,26 +105,51 @@ static std::string first_empty_tensor(const TraceGraph& graph,
     return {};
 }
 
+static void step_loss_ancestors_region(const VjpRegion& r, std::unordered_set<TensorId>& needed) {
+    bool feeds_loss = false;
+    for (const auto& om : r.output_metas) {
+        if (needed.count(om.id) != 0) {
+            feeds_loss = true;
+            break;
+        }
+    }
+    if (!feeds_loss)
+        return;
+    for (std::size_t k = 0; k < r.input_ids.size() && k < r.input_grad_ids.size(); ++k) {
+        if (r.input_ids[k] >= 0 && r.input_grad_ids[k] >= 0)
+            needed.insert(r.input_ids[k]);
+    }
+}
+
 // Every trace id ``loss_id`` depends on, itself included — one reverse walk
 // over the recorded ops.  MPSGraph's ``gradientForPrimaryTensor:withTensors:``
 // aborts the process ("Not a predecessor of primaryTensor") when one of the
 // requested tensors does not feed the primary tensor, so no caller may ask it
 // for a parameter outside this set.
 static std::unordered_set<TensorId> loss_ancestors(const TraceGraph& graph, TensorId loss_id) {
+    std::unordered_map<std::size_t, const VjpRegion*> region_by_end;
+    for (const auto& r : graph.vjp_regions) {
+        if (r.fwd_end > r.fwd_begin)
+            region_by_end[r.fwd_end] = &r;
+    }
     std::unordered_set<TensorId> needed{loss_id};
-    for (auto it = graph.ops.rbegin(); it != graph.ops.rend(); ++it) {
-        bool feeds_loss = false;
-        for (const auto& out : it->outputs) {
+    std::size_t idx = graph.ops.size();
+    while (idx > 0) {
+        auto rit = region_by_end.find(idx);
+        if (rit != region_by_end.end()) {
+            step_loss_ancestors_region(*rit->second, needed);
+            idx = rit->second->fwd_begin;
+            continue;
+        }
+        const auto& op = graph.ops[--idx];
+        for (const auto& out : op.outputs) {
             if (needed.count(out.id) != 0) {
-                feeds_loss = true;
+                for (TensorId iid : op.inputs)
+                    if (iid >= 0)
+                        needed.insert(iid);
                 break;
             }
         }
-        if (!feeds_loss)
-            continue;
-        for (TensorId iid : it->inputs)
-            if (iid >= 0)
-                needed.insert(iid);
     }
     return needed;
 }
@@ -153,104 +184,158 @@ inline bool result_is_a_host_constant(std::string_view name) {
 // anything else fails the compile and runs eager.  ``tril`` and
 // ``broadcast_to`` are left out although their measured cases passed: an
 // off-diagonal ``tril`` and a ``broadcast_to`` of a slice did not.
+static const std::unordered_set<std::string_view> kAutodiffSafeOps{
+    "abs",
+    "add",
+    "arange",
+    "arccos",
+    "arctan",
+    "astype",
+    "avg_pool2d",
+    "batch_norm_eval",
+    "bilinear_layer",
+    "clip",
+    "concatenate",
+    "contiguous",
+    "conv1d",
+    "conv2d",
+    "conv3d",
+    "conv_transpose1d",
+    "conv_transpose2d",
+    "conv_transpose3d",
+    "cos",
+    "cosh",
+    "diagonal",
+    "div",
+    "dot",
+    "dropout",
+    "einsum",
+    "erf",
+    "exp",
+    "eye",
+    "flip",
+    "floor",
+    "full",
+    "gather",
+    "gelu",
+    "gelu_exact",
+    "group_norm",
+    "hard_sigmoid",
+    "hard_swish",
+    "inner",
+    "inv",
+    "layer_norm",
+    "linear",
+    "log",
+    "log2",
+    "log_softmax",
+    "lp_normalize",
+    "matmul",
+    "max_pool2d",
+    "maximum",
+    "mean",
+    "minimum",
+    "mish",
+    "mse_loss",
+    "mul",
+    "neg",
+    "not_equal",
+    "outer",
+    "pad",
+    "permute",
+    "pow",
+    "rand",
+    "randn",
+    "relu",
+    "relu6",
+    "reshape",
+    "rms_norm",
+    "roll",
+    "rsqrt",
+    "scaled_dot_product_attention",
+    "scatter_add",
+    "sigmoid",
+    "silu",
+    "sin",
+    "sinh",
+    "softmax",
+    "split",
+    "split_at",
+    "sqrt",
+    "square",
+    "squeeze",
+    "stack",
+    "sub",
+    "sum",
+    "tan",
+    "tanh",
+    "tensordot",
+    "trace",
+    "unbind",
+    "unfold_dim",
+    "unsqueeze",
+    "var",
+    "zeros",
+};
+
 inline std::string first_op_unsafe_for_autodiff(const TraceGraph& graph) {
-    static const std::unordered_set<std::string_view> kSafe{
-        "abs",
-        "add",
-        "arange",
-        "arccos",
-        "arctan",
-        "astype",
-        "avg_pool2d",
-        "batch_norm_eval",
-        "bilinear_layer",
-        "clip",
-        "concatenate",
-        "contiguous",
-        "conv1d",
-        "conv2d",
-        "conv3d",
-        "conv_transpose1d",
-        "conv_transpose2d",
-        "conv_transpose3d",
-        "cos",
-        "cosh",
-        "diagonal",
-        "div",
-        "dot",
-        "dropout",
-        "einsum",
-        "erf",
-        "exp",
-        "eye",
-        "flip",
-        "floor",
-        "full",
-        "gather",
-        "gelu",
-        "gelu_exact",
-        "group_norm",
-        "hard_sigmoid",
-        "hard_swish",
-        "inner",
-        "inv",
-        "layer_norm",
-        "linear",
-        "log",
-        "log2",
-        "log_softmax",
-        "lp_normalize",
-        "matmul",
-        "max_pool2d",
-        "maximum",
-        "mean",
-        "minimum",
-        "mish",
-        "mse_loss",
-        "mul",
-        "neg",
-        "not_equal",
-        "outer",
-        "pad",
-        "permute",
-        "pow",
-        "rand",
-        "randn",
-        "relu",
-        "relu6",
-        "reshape",
-        "rms_norm",
-        "roll",
-        "rsqrt",
-        "scaled_dot_product_attention",
-        "scatter_add",
-        "sigmoid",
-        "silu",
-        "sin",
-        "sinh",
-        "softmax",
-        "split",
-        "split_at",
-        "sqrt",
-        "square",
-        "squeeze",
-        "stack",
-        "sub",
-        "sum",
-        "tan",
-        "tanh",
-        "tensordot",
-        "trace",
-        "unbind",
-        "unfold_dim",
-        "unsqueeze",
-        "var",
-        "zeros",
-    };
+    if (!graph.vjp_regions.empty())
+        return "custom_vjp";
     for (const auto& node : graph.ops)
-        if (kSafe.find(node.name) == kSafe.end())
+        if (kAutodiffSafeOps.find(node.name) == kAutodiffSafeOps.end())
             return node.name;
     return {};
+}
+
+inline std::string first_invalid_graph_op(const TraceGraph& graph,
+                                          Device device,
+                                          bool allow_host_const,
+                                          bool check_vjp_regions) {
+    auto check_list = [&](const std::vector<OpNode>& ops, bool skip_empty) -> std::string {
+        for (const auto& op : ops) {
+            if (op.outputs.empty() || op.outputs[0].device != device)
+                return "mixed-device trace";
+            for (TensorId iid : op.inputs) {
+                if (iid < 0)
+                    return "op '" + op.name + "' has an unresolved input slot";
+            }
+            if (find_emitter(op.name) == nullptr) {
+                if (skip_empty && op.inputs.empty() &&
+                    (!allow_host_const || result_is_a_host_constant(op.name)))
+                    continue;
+                return "no emitter registered for op '" + op.name + "'";
+            }
+        }
+        return {};
+    };
+    if (std::string err = check_list(graph.ops, true); !err.empty())
+        return err;
+    if (check_vjp_regions) {
+        for (const auto& r : graph.vjp_regions) {
+            if (std::string err = check_list(r.bwd_ops, true); !err.empty())
+                return err;
+        }
+    }
+    return {};
+}
+
+inline void mark_vjp_regions_consumed(const TraceGraph& graph,
+                                      std::unordered_set<TensorId>& trace_consumed) {
+    for (const auto& r : graph.vjp_regions) {
+        for (const auto& om : r.output_metas)
+            if (om.id >= 0)
+                trace_consumed.insert(om.id);
+        for (TensorId cid : r.cotangent_ids)
+            if (cid >= 0)
+                trace_consumed.insert(cid);
+        for (TensorId gid : r.input_grad_ids)
+            if (gid >= 0)
+                trace_consumed.insert(gid);
+        for (const auto& n : r.bwd_ops)
+            for (TensorId iid : n.inputs)
+                if (iid >= 0)
+                    trace_consumed.insert(iid);
+    }
 }
 
 inline NSArray<NSNumber*>* shape_to_nsarray(const Shape& shape) {
@@ -293,6 +378,11 @@ bool carries_half_precision(const Graph& graph) {
         for (const auto& meta : node.outputs)
             if (meta.dtype == Dtype::F16 || meta.dtype == Dtype::BF16)
                 return true;
+    for (const auto& r : graph.vjp_regions)
+        for (const auto& node : r.bwd_ops)
+            for (const auto& meta : node.outputs)
+                if (meta.dtype == Dtype::F16 || meta.dtype == Dtype::BF16)
+                    return true;
     return false;
 }
 
@@ -313,15 +403,20 @@ inline std::unordered_set<TensorId> collect_softmax_outputs(const TraceGraph& gr
                 return true;
         return false;
     };
-    for (const auto& n : graph.ops) {
-        if (n.name == "softmax") {
-            for (const auto& meta : n.outputs)
-                derived.insert(meta.id);
-        } else if (n.name == "dropout" && input_is_derived(n)) {
-            for (const auto& meta : n.outputs)
-                derived.insert(meta.id);
+    auto scan = [&](const std::vector<OpNode>& nodes) {
+        for (const auto& n : nodes) {
+            if (n.name == "softmax") {
+                for (const auto& meta : n.outputs)
+                    derived.insert(meta.id);
+            } else if (n.name == "dropout" && input_is_derived(n)) {
+                for (const auto& meta : n.outputs)
+                    derived.insert(meta.id);
+            }
         }
-    }
+    };
+    scan(graph.ops);
+    for (const auto& r : graph.vjp_regions)
+        scan(r.bwd_ops);
     return derived;
 }
 
@@ -458,23 +553,9 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
     // ``inputs.empty()`` ops; the emit loop below mirrors the skip.
     if (const std::string empty = first_empty_tensor(graph, external_feeds); !empty.empty())
         return fail("compile_trace: zero-size tensor at " + empty + " — MPSGraph aborts on one");
-    for (const auto& op : graph.ops) {
-        if (op.outputs.empty() || op.outputs[0].device != device)
-            return fail("compile_trace: mixed-device trace (only single-device Phase 1.2)");
-        for (TensorId iid : op.inputs) {
-            if (iid < 0)
-                return fail("compile_trace: op '" + op.name +
-                            "' has an unresolved input slot (pending/eager-only)");
-        }
-        if (find_emitter(op.name) == nullptr) {
-            // Only a host constant may be skipped here; anything else
-            // with no recorded inputs would have its trace-time value
-            // frozen into the graph as a feed.
-            if (op.inputs.empty() && result_is_a_host_constant(op.name))
-                continue;  // host constant — skipped below too
-            return fail("compile_trace: no emitter registered for op '" + op.name + "'");
-        }
-    }
+    if (const std::string bad_op = first_invalid_graph_op(graph, device, true, false);
+        !bad_op.empty())
+        return fail("compile_trace: " + bad_op);
 
     @autoreleasepool {
         MPSGraph* graph_obj = [[MPSGraph alloc] init];
@@ -854,20 +935,9 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
     if (const std::string empty = first_empty_tensor(graph, external_feeds); !empty.empty())
         return fail("compile_trace_with_backward: zero-size tensor at " + empty +
                     " — MPSGraph aborts on one");
-    for (const auto& op : graph.ops) {
-        if (op.outputs.empty() || op.outputs[0].device != device)
-            return fail("compile_trace_with_backward: mixed-device trace");
-        for (TensorId iid : op.inputs) {
-            if (iid < 0)
-                return fail("compile_trace_with_backward: op '" + op.name +
-                            "' has an unresolved input slot");
-        }
-        if (find_emitter(op.name) == nullptr) {
-            if (op.inputs.empty() && result_is_a_host_constant(op.name))
-                continue;  // host constant — see compile_trace
-            return fail("compile_trace_with_backward: no emitter for op '" + op.name + "'");
-        }
-    }
+    if (const std::string bad_op = first_invalid_graph_op(graph, device, true, true);
+        !bad_op.empty())
+        return fail("compile_trace_with_backward: " + bad_op);
 
     // AMP / mixed-dtype support (X4 of compile-completeness plan).
     //
@@ -1000,6 +1070,7 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
             for (TensorId tid : extra_output_ids)
                 if (tid >= 0)
                     trace_consumed.insert(tid);
+            mark_vjp_regions_consumed(graph, trace_consumed);
             ctx.set_consumed_inputs(trace_consumed);
             ctx.set_softmax_outputs(collect_softmax_outputs(graph));
         }
@@ -1256,21 +1327,25 @@ struct SgdOutputs {
     MPSGraphTensor* new_mom;  // nil if no momentum
 };
 
+MPSGraphTensor* add_l2_decay(
+    MPSGraph* g, MPSGraphTensor* grad, MPSGraphTensor* param, double weight_decay, MPSDataType dt) {
+    if (weight_decay == 0.0)
+        return grad;
+    MPSGraphTensor* wd = scalar_const(g, weight_decay, dt);
+    return [g additionWithPrimaryTensor:grad
+                        secondaryTensor:[g multiplicationWithPrimaryTensor:wd
+                                                           secondaryTensor:param
+                                                                      name:nil]
+                                   name:nil];
+}
+
 SgdOutputs emit_sgd_update(MPSGraph* g,
                            MPSGraphTensor* param,
                            MPSGraphTensor* grad,
                            MPSGraphTensor* mom,
                            const OptimizerSpec& s,
                            MPSDataType dt) {
-    MPSGraphTensor* g_eff = grad;
-    if (s.weight_decay != 0.0) {
-        MPSGraphTensor* wd = scalar_const(g, s.weight_decay, dt);
-        g_eff = [g additionWithPrimaryTensor:g_eff
-                             secondaryTensor:[g multiplicationWithPrimaryTensor:wd
-                                                                secondaryTensor:param
-                                                                           name:nil]
-                                        name:nil];
-    }
+    MPSGraphTensor* g_eff = add_l2_decay(g, grad, param, s.weight_decay, dt);
     MPSGraphTensor* lr_c = scalar_const(g, s.lr, dt);
     if (s.momentum != 0.0) {
         MPSGraphTensor* mu = scalar_const(g, s.momentum, dt);
@@ -1328,15 +1403,7 @@ AdamOutputs emit_adam_update(MPSGraph* g,
                              const OptimizerSpec& s,
                              MPSDataType dt,
                              bool decoupled_wd) {
-    MPSGraphTensor* g_eff = grad;
-    if (!decoupled_wd && s.weight_decay != 0.0) {
-        MPSGraphTensor* wd = scalar_const(g, s.weight_decay, dt);
-        g_eff = [g additionWithPrimaryTensor:g_eff
-                             secondaryTensor:[g multiplicationWithPrimaryTensor:wd
-                                                                secondaryTensor:param
-                                                                           name:nil]
-                                        name:nil];
-    }
+    MPSGraphTensor* g_eff = decoupled_wd ? grad : add_l2_decay(g, grad, param, s.weight_decay, dt);
     MPSGraphTensor* beta1_c = scalar_const(g, s.beta1, dt);
     MPSGraphTensor* beta2_c = scalar_const(g, s.beta2, dt);
     MPSGraphTensor* one_minus_b1 = scalar_const(g, 1.0 - s.beta1, dt);
@@ -1422,16 +1489,9 @@ CompiledExecutable* MpsBuilder::compile_fused_training_step(
     if (const std::string empty = first_empty_tensor(graph, external_feeds); !empty.empty())
         return fail("compile_fused_training_step: zero-size tensor at " + empty +
                     " — MPSGraph aborts on one");
-    for (const auto& op : graph.ops) {
-        if (op.outputs.empty() || op.outputs[0].device != device)
-            return fail("compile_fused_training_step: mixed-device trace");
-        for (TensorId iid : op.inputs)
-            if (iid < 0)
-                return fail("compile_fused_training_step: op '" + op.name +
-                            "' has an unresolved input slot");
-        if (find_emitter(op.name) == nullptr && !op.inputs.empty())
-            return fail("compile_fused_training_step: no emitter for op '" + op.name + "'");
-    }
+    if (const std::string bad_op = first_invalid_graph_op(graph, device, false, true);
+        !bad_op.empty())
+        return fail("compile_fused_training_step: " + bad_op);
 
     @autoreleasepool {
         MPSGraph* graph_obj = [[MPSGraph alloc] init];
@@ -1762,16 +1822,9 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
     if (const std::string empty = first_empty_tensor(graph, external_feeds); !empty.empty())
         return fail("compile_generic_fused_step: zero-size tensor at " + empty +
                     " — MPSGraph aborts on one");
-    for (const auto& op : graph.ops) {
-        if (op.outputs.empty() || op.outputs[0].device != device)
-            return fail("compile_generic_fused_step: mixed-device trace");
-        for (TensorId iid : op.inputs)
-            if (iid < 0)
-                return fail("compile_generic_fused_step: op '" + op.name +
-                            "' has unresolved input slot");
-        if (find_emitter(op.name) == nullptr && !op.inputs.empty())
-            return fail("compile_generic_fused_step: no emitter for op '" + op.name + "'");
-    }
+    if (const std::string bad_op = first_invalid_graph_op(graph, device, false, true);
+        !bad_op.empty())
+        return fail("compile_generic_fused_step: " + bad_op);
 
     @autoreleasepool {
         MPSGraph* graph_obj = [[MPSGraph alloc] init];
@@ -1848,6 +1901,7 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
             for (TensorId tid : output_target_ids)
                 if (tid >= 0)
                     trace_consumed.insert(tid);
+            mark_vjp_regions_consumed(graph, trace_consumed);
             ctx.set_consumed_inputs(trace_consumed);
             ctx.set_softmax_outputs(collect_softmax_outputs(graph));
         }
@@ -2149,17 +2203,9 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
     if (const std::string empty = first_empty_tensor(graph, external_feeds); !empty.empty())
         return fail("compile_generic_fused_step_with_vars: zero-size tensor at " + empty +
                     " — MPSGraph aborts on one");
-    for (const auto& op : graph.ops) {
-        if (op.outputs.empty() || op.outputs[0].device != device)
-            return fail("compile_generic_fused_step_with_vars: mixed-device trace");
-        for (TensorId iid : op.inputs)
-            if (iid < 0)
-                return fail("compile_generic_fused_step_with_vars: op '" + op.name +
-                            "' has unresolved input slot");
-        if (find_emitter(op.name) == nullptr && !op.inputs.empty())
-            return fail("compile_generic_fused_step_with_vars: no emitter for op '" + op.name +
-                        "'");
-    }
+    if (const std::string bad_op = first_invalid_graph_op(graph, device, false, true);
+        !bad_op.empty())
+        return fail("compile_generic_fused_step_with_vars: " + bad_op);
 
     @autoreleasepool {
         MPSGraph* graph_obj = [[MPSGraph alloc] init];
@@ -2273,6 +2319,7 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
             for (TensorId tid : output_target_ids)
                 if (tid >= 0)
                     trace_consumed.insert(tid);
+            mark_vjp_regions_consumed(graph, trace_consumed);
             ctx.set_consumed_inputs(trace_consumed);
             ctx.set_softmax_outputs(collect_softmax_outputs(graph));
         }

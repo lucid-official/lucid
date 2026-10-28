@@ -224,3 +224,251 @@ def test_a_host_read_of_the_models_state_runs_the_step_eagerly() -> None:
     got, want = runs
     worst = max(float((g - w).abs().max().item()) for g, w in zip(got, want, strict=True))
     assert worst < 1e-4
+
+
+@lucid.no_grad()
+def test_gpt1_compiled_decode_compiles_once_and_matches_eager() -> None:
+    """GPT-1 single-token decode compiles once via compiled_decode_step and matches DynamicCache."""
+    from lucid.models.text.gpt import GPTConfig, GPTLMHeadModel
+
+    lucid.manual_seed(0)
+    cfg = GPTConfig(
+        vocab_size=64,
+        max_position_embeddings=32,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=64,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+    )
+    model = GPTLMHeadModel(cfg).to(COMPILE_DEVICE).eval()
+    prompt = lucid.tensor([[3, 7, 11]], device=COMPILE_DEVICE).long()
+    next_tokens = [
+        lucid.tensor([[15]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[19]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[23]], device=COMPILE_DEVICE).long(),
+    ]
+
+    dyn = DynamicCache()
+    eager_logits = [model(prompt, past_key_values=dyn, use_cache=True).logits[:, -1, :]]
+    for tok in next_tokens:
+        eager_logits.append(model(tok, past_key_values=dyn, use_cache=True).logits[:, -1, :])
+
+    static = StaticCache(max_cache_len=16)
+    comp_logits = [
+        model(
+            prompt,
+            past_key_values=static,
+            use_cache=True,
+            cache_position=lucid.arange(0, 3, device=COMPILE_DEVICE).long(),
+        ).logits[:, -1, :]
+    ]
+
+    def decode_fwd(tok: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+        return model(tok, past_key_values=static, use_cache=True, cache_position=cp).logits[
+            :, -1, :
+        ]
+
+    step = compiled_decode_step(decode_fwd, static)
+    for idx, tok in enumerate(next_tokens):
+        cp = lucid.tensor([3 + idx], device=COMPILE_DEVICE).long()
+        comp_logits.append(step(tok, cp))
+
+    assert len(step.cache) == 1
+    assert next(iter(step.cache.values())).n_hits == len(next_tokens)
+    for got, want in zip(comp_logits, eager_logits, strict=True):
+        assert float((got - want).abs().max().item()) < 1e-4
+
+    out_dyn = model.generate(prompt, max_new_tokens=5, cache_implementation="dynamic")
+    out_cmp = model.generate(prompt, max_new_tokens=5, cache_implementation="compiled")
+    assert bool((out_dyn == out_cmp).all().item())
+
+
+@lucid.no_grad()
+def test_transformer_seq2seq_compiled_decode_compiles_once_and_matches_eager() -> None:
+    """TransformerForSeq2SeqLM decode compiles once via EncoderDecoderCache(StaticCache) and matches eager."""
+    from lucid.models.text.transformer import TransformerConfig, TransformerForSeq2SeqLM
+    from lucid.utils.cache import EncoderDecoderCache
+
+    lucid.manual_seed(0)
+    cfg = TransformerConfig(
+        vocab_size=64,
+        max_position_embeddings=32,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_decoder_layers=2,
+        num_attention_heads=4,
+        intermediate_size=64,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+    )
+    model = TransformerForSeq2SeqLM(cfg).to(COMPILE_DEVICE).eval()
+    src = lucid.tensor([[2, 5, 9, 12]], device=COMPILE_DEVICE).long()
+    memory = model.transformer.encode(src)
+    tokens = [
+        lucid.tensor([[0]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[4]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[8]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[13]], device=COMPILE_DEVICE).long(),
+    ]
+
+    dyn_cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+    eager_logits = []
+    for tok in tokens:
+        dec = model.transformer.decode(tok, memory, past_key_value=dyn_cache, use_cache=True)
+        eager_logits.append(model.lm_head(dec[:, -1, :]))
+
+    static_cache = EncoderDecoderCache(StaticCache(max_cache_len=16), DynamicCache())
+
+    def decode_fwd(tok: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+        dec = model.transformer.decode(
+            tok, memory, past_key_value=static_cache, use_cache=True, cache_position=cp
+        )
+        return model.lm_head(dec[:, -1, :])
+
+    step = compiled_decode_step(decode_fwd, static_cache)
+    comp_logits = []
+    for pos, tok in enumerate(tokens):
+        cp = lucid.tensor([pos], device=COMPILE_DEVICE).long()
+        comp_logits.append(step(tok, cp))
+
+    assert len(step.cache) == 1
+    assert next(iter(step.cache.values())).n_hits == len(tokens) - 1
+    for got, want in zip(comp_logits, eager_logits, strict=True):
+        assert float((got - want).abs().max().item()) < 1e-4
+
+    out_dyn = model.generate(src, max_length=6, cache_implementation="dynamic")
+    out_sta = model.generate(src, max_length=6, cache_implementation="static")
+    out_cmp = model.generate(src, max_length=6, cache_implementation="compiled")
+    assert bool((out_dyn == out_sta).all().item())
+    assert bool((out_dyn == out_cmp).all().item())
+
+
+@lucid.no_grad()
+def test_t5_seq2seq_compiled_decode_compiles_once_and_matches_eager() -> None:
+    """T5ForSeq2SeqLM decode compiles once via EncoderDecoderCache(StaticCache) and matches eager."""
+    from lucid.models.text.t5 import T5Config, T5ForSeq2SeqLM
+    from lucid.utils.cache import EncoderDecoderCache
+
+    lucid.manual_seed(0)
+    cfg = T5Config(
+        vocab_size=64,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_decoder_layers=2,
+        num_attention_heads=4,
+        head_dim=8,
+        intermediate_size=64,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+    )
+    model = T5ForSeq2SeqLM(cfg).to(COMPILE_DEVICE).eval()
+    src = lucid.tensor([[2, 5, 9, 12]], device=COMPILE_DEVICE).long()
+    memory = model.t5.encode(src)
+    tokens = [
+        lucid.tensor([[0]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[4]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[8]], device=COMPILE_DEVICE).long(),
+        lucid.tensor([[13]], device=COMPILE_DEVICE).long(),
+    ]
+
+    dyn_cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+    eager_logits = []
+    for tok in tokens:
+        dec = model.t5.decode(tok, memory, past_key_value=dyn_cache, use_cache=True)
+        eager_logits.append(model._logits(dec[:, -1, :]))
+
+    static_cache = EncoderDecoderCache(StaticCache(max_cache_len=16), DynamicCache())
+
+    def decode_fwd(tok: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+        dec = model.t5.decode(
+            tok, memory, past_key_value=static_cache, use_cache=True, cache_position=cp
+        )
+        return model._logits(dec[:, -1, :])
+
+    step = compiled_decode_step(decode_fwd, static_cache)
+    comp_logits = []
+    for pos, tok in enumerate(tokens):
+        cp = lucid.tensor([pos], device=COMPILE_DEVICE).long()
+        comp_logits.append(step(tok, cp))
+
+    assert len(step.cache) == 1
+    assert next(iter(step.cache.values())).n_hits == len(tokens) - 1
+    for got, want in zip(comp_logits, eager_logits, strict=True):
+        assert float((got - want).abs().max().item()) < 1e-4
+
+    out_dyn = model.generate(src, max_length=6, cache_implementation="dynamic")
+    out_sta = model.generate(src, max_length=6, cache_implementation="static")
+    out_cmp = model.generate(src, max_length=6, cache_implementation="compiled")
+    assert bool((out_dyn == out_sta).all().item())
+    assert bool((out_dyn == out_cmp).all().item())
+
+
+@lucid.no_grad()
+def test_gpt2_batched_compiled_decode_and_static_cache_reset_reuse() -> None:
+    """Batched GPT-2 generation and StaticCache.reset() reuse a single compiled executable."""
+    from lucid.models.text.gpt2 import GPT2Config, GPT2LMHeadModel
+
+    lucid.manual_seed(0)
+    cfg = GPT2Config(
+        vocab_size=64,
+        max_position_embeddings=32,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=64,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+    )
+    model = GPT2LMHeadModel(cfg).to(COMPILE_DEVICE).eval()
+    prompts = lucid.tensor(
+        [[2, 5, 9, 12], [3, 7, 11, 14], [4, 8, 13, 17]], device=COMPILE_DEVICE
+    ).long()
+
+    out_dyn = model.generate(
+        prompts, max_new_tokens=6, repetition_penalty=1.25, cache_implementation="dynamic"
+    )
+    out_sta = model.generate(
+        prompts,
+        max_new_tokens=6,
+        repetition_penalty=1.25,
+        cache_implementation="static",
+        max_cache_len=16,
+    )
+    out_cmp = model.generate(
+        prompts,
+        max_new_tokens=6,
+        repetition_penalty=1.25,
+        cache_implementation="compiled",
+        max_cache_len=16,
+    )
+    assert bool((out_dyn == out_sta).all().item())
+    assert bool((out_dyn == out_cmp).all().item())
+
+    static = StaticCache(max_cache_len=16)
+
+    def decode_fwd(tok: lucid.Tensor, cp: lucid.Tensor) -> lucid.Tensor:
+        return model(tok, past_key_values=static, use_cache=True, cache_position=cp).logits[
+            :, -1, :
+        ]
+
+    step = compiled_decode_step(decode_fwd, static)
+    for seq_seed in (10, 20):
+        lucid.manual_seed(seq_seed)
+        static.reset()
+        dyn = DynamicCache()
+        pref = lucid.randint(2, 60, (2, 3), dtype=lucid.int64, device=COMPILE_DEVICE)
+        _ = model(pref, past_key_values=dyn, use_cache=True)
+        _ = model(
+            pref,
+            past_key_values=static,
+            use_cache=True,
+            cache_position=lucid.arange(0, 3, device=COMPILE_DEVICE).long(),
+        )
+        for idx in range(3):
+            tok = lucid.randint(2, 60, (2, 1), dtype=lucid.int64, device=COMPILE_DEVICE)
+            want = model(tok, past_key_values=dyn, use_cache=True).logits[:, -1, :]
+            got = step(tok, lucid.tensor([3 + idx], device=COMPILE_DEVICE).long())
+            assert float((got - want).abs().max().item()) < 1e-4
+    assert len(step.cache) == 1

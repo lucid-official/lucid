@@ -188,6 +188,20 @@ class FakeQuantize(nn.Module):
             # differentiate: the gradient reaches ``x`` through the
             # straight-through estimator below, never through them.
             with lucid.no_grad():
+                from lucid._engine_scope import untraced
+
+                with untraced():
+                    ch = x.shape[self.ch_axis] if self.ch_axis is not None and x.ndim > 0 else None
+                    for name in ("scale", "zero_point"):
+                        buf = self._buffers.get(name)
+                        if buf is None:
+                            continue
+                        want_shape = (ch,) if ch is not None and buf.ndim == 0 else buf.shape
+                        if buf.device != x.device or buf.shape != want_shape:
+                            aligned = buf.to(x.device)
+                            if aligned.shape != want_shape:
+                                aligned = aligned.expand(want_shape).contiguous()
+                            self.register_buffer(name, aligned)
                 self.activation_post_process(x)
                 scale, zero_point = self.activation_post_process.calculate_qparams()
                 _store_running_stat(self, "scale", scale)

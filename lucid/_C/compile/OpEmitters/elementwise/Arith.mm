@@ -224,6 +224,17 @@ public:
                     if (b_neg_one)
                         return [g negativeWithTensor:sub_pos_zero(g, a, zero_splat_like(g, b))
                                                 name:@"div_neg_one"];
+                    // Prevent MPSGraph's MLIR canonicalizer from rewriting
+                    // ``divide(a, const)`` into ``multiply(a, 1.0 / const)``
+                    // when ``b`` is a constant splat (e.g. ``amax / 127.5``),
+                    // which shifts 1 ULP away from IEEE-754 division.
+                    MPSGraphTensor* zero_unless_nan =
+                        [g minimumWithPrimaryTensor:[g absoluteWithTensor:a name:nil]
+                                    secondaryTensor:zero_splat_like(g, a)
+                                               name:nil];
+                    b = [g subtractionWithPrimaryTensor:b
+                                        secondaryTensor:[g floorWithTensor:zero_unless_nan name:nil]
+                                                   name:nil];
                 }
                 return [g divisionWithPrimaryTensor:a secondaryTensor:b name:@"div"];
             });

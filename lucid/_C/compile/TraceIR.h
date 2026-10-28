@@ -188,6 +188,26 @@ struct LUCID_API OpNode {
     std::unordered_map<std::string, AttributeValue> attrs;
 };
 
+// Custom backward subgraph captured for a :class:`lucid.autograd.Function`
+// with ``_traced_backward = True``.
+//
+// Forward ops in ``[fwd_begin, fwd_end)`` compute the forward outputs
+// ``output_metas`` from ``input_ids``.  During backward emission,
+// :class:`BackwardWalker` skips per-op VJP emission for
+// ``ops[fwd_begin .. fwd_end)`` and instead binds each output's resolved
+// upstream cotangent (or a zero tensor when unused) to ``cotangent_ids[j]``,
+// emits ``bwd_ops`` through the forward op emitters, and accumulates each
+// non-negative ``input_grad_ids[k]`` onto ``input_ids[k]``.
+struct LUCID_API VjpRegion {
+    std::size_t fwd_begin = 0;
+    std::size_t fwd_end = 0;
+    std::vector<TensorId> input_ids;
+    std::vector<TensorMeta> output_metas;
+    std::vector<TensorId> cotangent_ids;
+    std::vector<TensorId> input_grad_ids;
+    std::vector<OpNode> bwd_ops;
+};
+
 // Ordered list of :class:`OpNode` records produced by one trace.
 //
 // Attributes
@@ -214,6 +234,7 @@ struct LUCID_API TraceGraph {
     // tracer never sees, so a compiled replay would reuse them.  Every
     // compile entry point refuses such a graph, and the call runs eager.
     std::string unsupported;
+    std::vector<VjpRegion> vjp_regions;
 };
 
 }  // namespace lucid::compile

@@ -141,21 +141,12 @@ private:
     lucid::compile::SharedExecutable exe_;
 };
 
-}  // namespace
-
-// Registers the compile-time tracing surface as a sub-module of `_C.engine`.
-//
-// Mirrors :func:`register_profiler` — the Python wrapper holds the only
-// owning reference to each :class:`Tracer`; the engine retains a raw
-// pointer installed via :func:`set_current_tracer`.
-void register_compile(py::module_& m) {
+void bind_trace_nodes(py::module_& m) {
     using lucid::compile::OpNode;
     using lucid::compile::TensorMeta;
     using lucid::compile::TraceGraph;
-    using lucid::compile::Tracer;
+    using lucid::compile::VjpRegion;
 
-    // TensorMeta is a plain data record describing one tensor slot in the
-    // trace.  All fields are read-only from Python.
     py::class_<TensorMeta>(m, "TensorMeta")
         .def_readonly("id", &TensorMeta::id)
         .def_readonly("shape", &TensorMeta::shape)
@@ -164,10 +155,6 @@ void register_compile(py::module_& m) {
         .def("__repr__",
              [](const TensorMeta& t) { return "TensorMeta(id=" + std::to_string(t.id) + ")"; });
 
-    // OpNode mirrors the C++ aggregate; Python sees inputs as a list of
-    // ints, outputs as a list of TensorMeta, and attrs as a dict whose
-    // values are int / list[int] / float / bool / str (pybind11's
-    // variant caster handles the conversion).
     py::class_<OpNode>(m, "OpNode")
         .def_readonly("name", &OpNode::name)
         .def_readonly("inputs", &OpNode::inputs)
@@ -178,18 +165,46 @@ void register_compile(py::module_& m) {
                    ", attrs=" + std::to_string(n.attrs.size()) + ")";
         });
 
-    // TraceGraph exposes the recorded op list; ``next_id`` is internal
-    // book-keeping but useful for debug dumps.
+    py::class_<VjpRegion>(m, "VjpRegion")
+        .def_readonly("fwd_begin", &VjpRegion::fwd_begin)
+        .def_readonly("fwd_end", &VjpRegion::fwd_end)
+        .def_readonly("input_ids", &VjpRegion::input_ids)
+        .def_readonly("output_metas", &VjpRegion::output_metas)
+        .def_readonly("cotangent_ids", &VjpRegion::cotangent_ids)
+        .def_readonly("input_grad_ids", &VjpRegion::input_grad_ids)
+        .def_readonly("bwd_ops", &VjpRegion::bwd_ops);
+
     py::class_<TraceGraph>(m, "TraceGraph")
         .def_readonly("ops", &TraceGraph::ops)
         .def_readonly("next_id", &TraceGraph::next_id)
         .def_readonly("unsupported", &TraceGraph::unsupported)
+        .def_readonly("vjp_regions", &TraceGraph::vjp_regions)
         .def("__len__", [](const TraceGraph& g) { return g.ops.size(); });
+}
 
-    // Tracer is owned by Python; the engine keeps only a raw pointer
-    // installed via set_current_tracer.  Python must not delete the Tracer
-    // while it is the active tracer (keep-alive is the caller's job —
-    // the `_tracing()` context manager enforces this).
+void commit_tracer_vjp_region(lucid::compile::Tracer& t,
+                              std::size_t fwd_begin,
+                              std::size_t fwd_end,
+                              std::vector<lucid::compile::TensorId> input_ids,
+                              const std::vector<lucid::compile::TensorId>& output_ids,
+                              const std::vector<lucid::TensorImplPtr>& output_impls,
+                              std::vector<lucid::compile::TensorId> cotangent_ids,
+                              std::vector<lucid::compile::TensorId> input_grad_ids,
+                              std::size_t bwd_begin) {
+    std::vector<lucid::compile::TensorMeta> metas;
+    metas.reserve(output_ids.size());
+    for (std::size_t i = 0; i < output_ids.size() && i < output_impls.size(); ++i) {
+        const auto& impl = output_impls[i];
+        metas.push_back(lucid::compile::TensorMeta{output_ids[i], impl->shape(), impl->dtype(),
+                                                   impl->device()});
+    }
+    t.commit_vjp_region(fwd_begin, fwd_end, std::move(input_ids), std::move(metas),
+                        std::move(cotangent_ids), std::move(input_grad_ids), bwd_begin);
+}
+
+void bind_tracer_class(py::module_& m) {
+    using lucid::compile::Tracer;
+
     py::class_<Tracer>(m, "Tracer")
         .def(py::init<>())
         .def_property_readonly("graph", &Tracer::graph, py::return_value_policy::reference_internal)
@@ -230,7 +245,6 @@ void register_compile(py::module_& m) {
         .def_property_readonly(
             "external_feeds",
             [](const Tracer& t) {
-                // Convert id → TensorImplPtr map into a Python dict.
                 py::dict d;
                 for (const auto& [tid, impl] : t.external_feeds())
                     d[py::cast(tid)] = impl;
@@ -258,14 +272,33 @@ void register_compile(py::module_& m) {
             },
             py::arg("impl"),
             "Reverse-lookup the trace TensorId for an observed TensorImpl. "
-            "Returns None if ``impl`` is not in the trace.");
+            "Returns None if ``impl`` is not in the trace.")
+        .def("op_count", &Tracer::op_count)
+        .def("outside_write_count", &Tracer::outside_write_count)
+        .def("ensure_id", &Tracer::ensure_id, py::arg("impl"))
+        .def("register_cotangent", &Tracer::register_cotangent, py::arg("impl"))
+        .def("discard_ops_from", &Tracer::discard_ops_from, py::arg("idx"))
+        .def("commit_vjp_region", &commit_tracer_vjp_region, py::arg("fwd_begin"),
+             py::arg("fwd_end"), py::arg("input_ids"), py::arg("output_ids"),
+             py::arg("output_impls"), py::arg("cotangent_ids"), py::arg("input_grad_ids"),
+             py::arg("bwd_begin"));
 
-    // set_current_tracer accepts None to detach the active tracer.  The
-    // engine holds a raw pointer, so the Python caller must keep the
-    // Tracer alive until detached.
     m.def("set_current_tracer", &lucid::compile::set_current_tracer, py::arg("tracer").none(true));
-    // current_tracer returns a borrowed reference; Python must not delete it.
     m.def("current_tracer", &lucid::compile::current_tracer, py::return_value_policy::reference);
+}
+
+}  // namespace
+
+// Registers the compile-time tracing surface as a sub-module of `_C.engine`.
+//
+// Mirrors :func:`register_profiler` — the Python wrapper holds the only
+// owning reference to each :class:`Tracer`; the engine retains a raw
+// pointer installed via :func:`set_current_tracer`.
+void register_compile(py::module_& m) {
+    using lucid::compile::TraceGraph;
+
+    bind_trace_nodes(m);
+    bind_tracer_class(m);
 
     // ── Phase 1.2 step 1: compile / run / cache surface ──────────────────
 
@@ -890,6 +923,7 @@ void touch_emitters() {
     (void)lucid::compile::find_emitter("batch_norm3d");
     (void)lucid::compile::find_emitter("group_norm");
     (void)lucid::compile::find_emitter("full");
+    (void)lucid::compile::find_emitter("eye");
     (void)lucid::compile::find_emitter("astype");
     (void)lucid::compile::find_emitter("gather");
     (void)lucid::compile::find_emitter("equal");
@@ -981,6 +1015,12 @@ void touch_emitters() {
     (void)lucid::compile::find_emitter("matrix_power");
     (void)lucid::compile::find_emitter("det");
     (void)lucid::compile::find_emitter("inv");
+    (void)lucid::compile::find_emitter("solve_triangular");
+    (void)lucid::compile::find_emitter("cholesky");
+    (void)lucid::compile::find_emitter("qr");
+    (void)lucid::compile::find_emitter("eigh");
+    (void)lucid::compile::find_emitter("svd");
+    (void)lucid::compile::find_emitter("pinv");
     (void)lucid::compile::find_emitter("bilinear_layer");
     (void)lucid::compile::find_emitter("rotary_pos_embedding");
     (void)lucid::compile::find_emitter("tensordot");

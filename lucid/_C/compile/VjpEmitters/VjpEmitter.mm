@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "../../core/Dtype.h"
+#include "../OpEmitters/_SignedZero.h"
 #include "VjpEmitter.h"
 #include "_VjpHelpers.h"
 
@@ -43,22 +44,45 @@ VjpRegistry& vjp_registry() {
 const std::unordered_set<std::string>& no_grad_ops() {
     static const std::unordered_set<std::string> s{
         // factories — no inputs, just produce constants
-        "zeros",        "ones",       "full",       "arange",
-        "linspace",     "eye",        "empty",      "randn",
-        "rand",         "randint",    "uniform",    "normal",
+        "zeros",
+        "ones",
+        "full",
+        "arange",
+        "linspace",
+        "eye",
+        "empty",
+        "randn",
+        "rand",
+        "randint",
+        "uniform",
+        "normal",
         // shape-only / integer ops that don't need gradients
-        "cast_i8",      "cast_i16",   "cast_i32",   "cast_i64",
-        "cast_u8",      "cast_b8",
+        "cast_i8",
+        "cast_i16",
+        "cast_i32",
+        "cast_i64",
+        "cast_u8",
+        "cast_b8",
         // boolean comparison ops — produce bool tensors that are
         // never on the backward differentiation path; treat as
         // grad-sinks so the walker doesn't error out looking for a
         // VJP that wouldn't make sense anyway.
-        "equal",        "not_equal",  "less",       "less_equal",
-        "greater",      "greater_equal", "logical_and", "logical_or",
-        "logical_not",  "logical_xor", "isnan",      "isinf",
+        "equal",
+        "not_equal",
+        "less",
+        "less_equal",
+        "greater",
+        "greater_equal",
+        "logical_and",
+        "logical_or",
+        "logical_not",
+        "logical_xor",
+        "isnan",
+        "isinf",
         "isfinite",
         // argmax / argmin produce integer indices — also grad-sinks.
-        "argmax",       "argmin",
+        "argmax",
+        "argmin",
         // detach — the value, cut from its input's gradient.  A sink
         // rather than a no-op VJP so fused_step's reach test, which reads
         // this set through ``vjp_registration_status``, leaves a parameter
@@ -84,30 +108,159 @@ bool carries_gradient(const OpNode& node) {
     return false;
 }
 
-std::unordered_set<TensorId> param_dependents(const std::vector<OpNode>& ops,
+void propagate_region_dependents(const VjpRegion& region, std::unordered_set<TensorId>& depends) {
+    bool dep = false;
+    for (std::size_t k = 0; k < region.input_ids.size() && k < region.input_grad_ids.size(); ++k) {
+        if (region.input_ids[k] >= 0 && region.input_grad_ids[k] >= 0 &&
+            depends.count(region.input_ids[k]) != 0) {
+            dep = true;
+            break;
+        }
+    }
+    if (!dep)
+        return;
+    for (const auto& om : region.output_metas) {
+        if (is_floating_point(om.dtype) || is_complex(om.dtype))
+            depends.insert(om.id);
+    }
+}
+
+std::unordered_set<TensorId> param_dependents(const TraceGraph& trace,
                                               const std::vector<TensorId>& param_ids) {
+    const auto& ops = trace.ops;
     const auto& sink = no_grad_ops();
+    std::unordered_map<std::size_t, const VjpRegion*> region_by_begin;
+    for (const auto& r : trace.vjp_regions) {
+        if (r.fwd_end > r.fwd_begin)
+            region_by_begin[r.fwd_begin] = &r;
+    }
     std::unordered_set<TensorId> depends(param_ids.begin(), param_ids.end());
-    for (const auto& node : ops) {
+    std::size_t idx = 0;
+    while (idx < ops.size()) {
+        auto rit = region_by_begin.find(idx);
+        if (rit != region_by_begin.end()) {
+            propagate_region_dependents(*rit->second, depends);
+            idx = rit->second->fwd_end;
+            continue;
+        }
+        const OpNode& node = ops[idx++];
         if (sink.find(node.name) != sink.end() || !carries_gradient(node))
             continue;
-        bool dep = false;
-        for (TensorId in : node.inputs)
+        for (TensorId in : node.inputs) {
             if (in >= 0 && depends.count(in) != 0) {
-                dep = true;
+                for (const auto& om : node.outputs)
+                    depends.insert(om.id);
                 break;
             }
-        if (dep)
-            for (const auto& om : node.outputs)
-                depends.insert(om.id);
+        }
     }
     return depends;
+}
+
+bool bind_vjp_region_cotangents(MPSGraph* graph,
+                                BackwardContext& bctx,
+                                const VjpRegion& region,
+                                std::string* error_msg) {
+    BuilderContext& fctx = bctx.forward_ctx();
+    for (std::size_t j = 0; j < region.output_metas.size() && j < region.cotangent_ids.size();
+         ++j) {
+        const TensorMeta& om = region.output_metas[j];
+        const TensorId cid = region.cotangent_ids[j];
+        if (cid < 0)
+            continue;
+        auto dt_opt = mps_dtype_of(om.dtype);
+        if (!dt_opt) {
+            if (error_msg)
+                *error_msg = "manual_vjp: unsupported cotangent dtype in VjpRegion";
+            return false;
+        }
+        void* go = bctx.resolve_grad(om.id);
+        MPSGraphTensor* go_t = go != nullptr ? cast_if_needed(graph, as_tensor(go), *dt_opt)
+                                             : [graph constantWithScalar:0.0
+                                                                   shape:shape_to_ns(om.shape)
+                                                                dataType:*dt_opt];
+        fctx.bind(cid, (__bridge void*)go_t);
+        if (go == nullptr)
+            mark_zero_splat(fctx, cid, om.dtype, 0.0, go_t);
+    }
+    return true;
+}
+
+bool emit_vjp_region_ops(MPSGraph* graph,
+                         BuilderContext& fctx,
+                         const VjpRegion& region,
+                         std::string* error_msg) {
+    for (const auto& bwd_node : region.bwd_ops) {
+        OpEmitter* em = find_emitter(bwd_node.name);
+        if (em == nullptr) {
+            if (bwd_node.inputs.empty())
+                continue;
+            if (error_msg)
+                *error_msg = "manual_vjp: custom backward op '" + bwd_node.name + "' failed";
+            return false;
+        }
+        if (!em->emit(fctx, bwd_node)) {
+            if (error_msg)
+                *error_msg = "manual_vjp: custom backward op '" + bwd_node.name + "' failed";
+            return false;
+        }
+        propagate_zero_splat(fctx, bwd_node);
+        for (const auto& meta : bwd_node.outputs) {
+            void* piece = fctx.resolve(meta.id);
+            auto dt_opt = mps_dtype_of(meta.dtype);
+            if (piece == nullptr || !dt_opt)
+                continue;
+            MPSGraphTensor* pt = as_tensor(piece);
+            if (pt != nil && pt.dataType != *dt_opt) {
+                pt = cast_mps_tensor(graph, pt, *dt_opt, @"vjp_region_held_dtype");
+                fctx.bind(meta.id, (__bridge void*)pt);
+            }
+        }
+    }
+    return true;
+}
+
+bool emit_vjp_region(MPSGraph* graph,
+                     BackwardContext& bctx,
+                     const VjpRegion& region,
+                     const std::unordered_set<TensorId>& depends,
+                     std::string* error_msg) {
+    bool any_demand = false;
+    for (const auto& om : region.output_metas) {
+        if (depends.count(om.id) != 0 && bctx.resolve_grad(om.id) != nullptr) {
+            any_demand = true;
+            break;
+        }
+    }
+    if (!any_demand)
+        return true;
+    if (!bind_vjp_region_cotangents(graph, bctx, region, error_msg))
+        return false;
+    if (!emit_vjp_region_ops(graph, bctx.forward_ctx(), region, error_msg))
+        return false;
+
+    for (std::size_t k = 0; k < region.input_ids.size() && k < region.input_grad_ids.size(); ++k) {
+        const TensorId in_id = region.input_ids[k];
+        const TensorId gin_id = region.input_grad_ids[k];
+        if (in_id >= 0 && gin_id >= 0 && depends.count(in_id) != 0) {
+            void* gin = bctx.forward(gin_id);
+            if (gin == nullptr) {
+                if (error_msg)
+                    *error_msg = "manual_vjp: custom backward input grad id " +
+                                 std::to_string(gin_id) + " has no binding";
+                return false;
+            }
+            bctx.accumulate_grad(in_id, gin);
+        }
+    }
+    return true;
 }
 
 }  // namespace
 
 void register_vjp_emitter(std::unique_ptr<VjpEmitter> vjp) {
-    if (!vjp) return;
+    if (!vjp)
+        return;
     auto& r = vjp_registry();
     std::lock_guard<std::mutex> lk(r.mu);
     std::string key{vjp->op_name()};
@@ -128,8 +281,10 @@ VjpEmitter* find_vjp_emitter(std::string_view op_name) {
 namespace {
 bool env_truthy(const char* name) {
     const char* v = std::getenv(name);
-    if (v == nullptr) return false;
-    if (*v == '\0') return false;
+    if (v == nullptr)
+        return false;
+    if (*v == '\0')
+        return false;
     return !(v[0] == '0' && v[1] == '\0');
 }
 }  // namespace
@@ -144,7 +299,8 @@ bool use_manual_vjp() {
     // need bit-exact reproduction of a prior eager-autograd baseline
     // or are debugging a manual-VJP regression.
     const char* v = std::getenv("LUCID_MANUAL_VJP");
-    if (v == nullptr) return true;       // default ON
+    if (v == nullptr)
+        return true;  // default ON
     return env_truthy("LUCID_MANUAL_VJP");
 }
 
@@ -177,12 +333,14 @@ VjpRegistration vjp_registration_status(const std::string& op_name) {
 namespace {
 
 std::string format_shape(const std::vector<std::int64_t>& shape) {
-    if (shape.empty()) return "()";
+    if (shape.empty())
+        return "()";
     std::ostringstream os;
     os << '(';
     for (std::size_t i = 0; i < shape.size(); ++i) {
         os << shape[i];
-        if (i + 1 < shape.size()) os << ", ";
+        if (i + 1 < shape.size())
+            os << ", ";
     }
     os << ')';
     return os.str();
@@ -194,22 +352,25 @@ std::string format_node_signature(const TraceGraph& trace, const OpNode& node) {
     os << " inputs=[";
     for (std::size_t i = 0; i < node.inputs.size(); ++i) {
         const TensorId tid = node.inputs[i];
-        os << format_shape(shape_of_tid(trace, tid))
-           << ':' << std::string(dtype_name(dtype_of_tid(trace, tid)));
-        if (i + 1 < node.inputs.size()) os << ", ";
+        os << format_shape(shape_of_tid(trace, tid)) << ':'
+           << std::string(dtype_name(dtype_of_tid(trace, tid)));
+        if (i + 1 < node.inputs.size())
+            os << ", ";
     }
     os << "] outputs=[";
     for (std::size_t i = 0; i < node.outputs.size(); ++i) {
-        os << format_shape(node.outputs[i].shape)
-           << ':' << std::string(dtype_name(node.outputs[i].dtype));
-        if (i + 1 < node.outputs.size()) os << ", ";
+        os << format_shape(node.outputs[i].shape) << ':'
+           << std::string(dtype_name(node.outputs[i].dtype));
+        if (i + 1 < node.outputs.size())
+            os << ", ";
     }
     os << "]";
     return os.str();
 }
 
 void debug_log_failure(const std::string& reason, const std::string& signature) {
-    if (!use_manual_vjp_debug()) return;
+    if (!use_manual_vjp_debug())
+        return;
     std::cerr << "[lucid.compile manual_vjp] " << reason << '\n'
               << "[lucid.compile manual_vjp]   " << signature << '\n'
               << "[lucid.compile manual_vjp]   verdict: "
@@ -236,8 +397,7 @@ ManualVjpStatus try_manual_vjp_grads(void* graph_void,
         return ManualVjpStatus::Success;
     if (error_msg)
         *error_msg = std::move(vjp_err);
-    return use_manual_vjp_require() ? ManualVjpStatus::HardFail
-                                    : ManualVjpStatus::FellBack;
+    return use_manual_vjp_require() ? ManualVjpStatus::HardFail : ManualVjpStatus::FellBack;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -257,7 +417,8 @@ void* BackwardContext::resolve_grad(TensorId tid) const {
 }
 
 void BackwardContext::accumulate_grad(TensorId tid, void* grad) {
-    if (grad == nullptr) return;
+    if (grad == nullptr)
+        return;
     MPSGraph* g = (__bridge MPSGraph*)graph_;
     MPSGraphTensor* b = (__bridge MPSGraphTensor*)grad;
     MPSGraphTensor* fwd = (__bridge MPSGraphTensor*)forward(tid);
@@ -278,15 +439,15 @@ void BackwardContext::accumulate_grad(TensorId tid, void* grad) {
     if (a != nil && b != nil && a.dataType != b.dataType) {
         b = cast_mps_tensor(g, b, a.dataType, @"grad_accum_cast");
     }
-    MPSGraphTensor* s =
-        [g additionWithPrimaryTensor:a secondaryTensor:b name:@"grad_accum"];
+    MPSGraphTensor* s = [g additionWithPrimaryTensor:a secondaryTensor:b name:@"grad_accum"];
     it->second = (__bridge void*)s;
 }
 
 void* BackwardContext::unreduce(void* grad,
                                 const std::vector<std::int64_t>& target_shape,
                                 const std::vector<std::int64_t>& broadcast_shape) {
-    if (grad == nullptr) return nullptr;
+    if (grad == nullptr)
+        return nullptr;
     MPSGraph* g = (__bridge MPSGraph*)graph_;
     MPSGraphTensor* t = (__bridge MPSGraphTensor*)grad;
     return (__bridge void*)unreduce_impl(g, t, broadcast_shape, target_shape);
@@ -296,9 +457,61 @@ void* BackwardContext::unreduce(void* grad,
 // BackwardWalker
 // ────────────────────────────────────────────────────────────────────
 
-BackwardWalker::BackwardWalker(void* graph_void,
-                               BuilderContext& fwd,
-                               const TraceGraph& trace)
+namespace {
+
+bool emit_backward_node(MPSGraph* graph,
+                        BackwardContext& bctx,
+                        const TraceGraph& trace,
+                        const OpNode& node,
+                        const std::unordered_set<TensorId>& depends,
+                        std::string* error_msg) {
+    bool upstream_param = false;
+    for (const auto& om : node.outputs) {
+        if (depends.count(om.id) != 0) {
+            upstream_param = true;
+            break;
+        }
+    }
+    if (!upstream_param)
+        return true;
+
+    std::vector<void*> grad_outs;
+    grad_outs.reserve(node.outputs.size());
+    bool any_demand = false;
+    for (const auto& om : node.outputs) {
+        void* go = bctx.resolve_grad(om.id);
+        if (go != nullptr) {
+            any_demand = true;
+            if (auto dt = mps_dtype_of(om.dtype))
+                go = from_tensor(cast_if_needed(graph, as_tensor(go), *dt));
+        }
+        grad_outs.push_back(go);
+    }
+    const auto& sink = no_grad_ops();
+    if (!any_demand || sink.find(node.name) != sink.end() || !carries_gradient(node))
+        return true;
+
+    VjpEmitter* vjp = find_vjp_emitter(node.name);
+    if (vjp == nullptr) {
+        std::string sig = format_node_signature(trace, node);
+        debug_log_failure("no VJP emitter for op '" + node.name + "'", sig);
+        if (error_msg)
+            *error_msg = "manual_vjp: no VJP emitter for op '" + node.name + "' (" + sig + ")";
+        return false;
+    }
+    if (!vjp->emit(bctx, node, grad_outs)) {
+        std::string sig = format_node_signature(trace, node);
+        debug_log_failure("VJP for op '" + node.name + "' returned false", sig);
+        if (error_msg)
+            *error_msg = "manual_vjp: VJP for op '" + node.name + "' returned false (" + sig + ")";
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+BackwardWalker::BackwardWalker(void* graph_void, BuilderContext& fwd, const TraceGraph& trace)
     : graph_(graph_void), trace_(trace), bctx_(graph_void, fwd) {}
 
 bool BackwardWalker::compute_grads(TensorId loss_id,
@@ -307,88 +520,45 @@ bool BackwardWalker::compute_grads(TensorId loss_id,
                                    std::string* error_msg,
                                    std::vector<bool>* absent) {
     auto set_err = [&](std::string msg) {
-        if (error_msg) *error_msg = std::move(msg);
+        if (error_msg)
+            *error_msg = std::move(msg);
     };
 
-    // 1) Seed the loss gradient: ∂loss/∂loss = ones(loss_shape).
     void* loss_void = bctx_.forward(loss_id);
     if (loss_void == nullptr) {
-        set_err("manual_vjp: loss id " + std::to_string(loss_id) +
-                " has no forward binding");
+        set_err("manual_vjp: loss id " + std::to_string(loss_id) + " has no forward binding");
         return false;
     }
     auto loss_shape = shape_of_tid(trace_, loss_id);
     auto loss_dt = dtype_of_tid(trace_, loss_id);
     MPSGraph* graph = (__bridge MPSGraph*)graph_;
     MPSGraphTensor* loss_t = (__bridge MPSGraphTensor*)loss_void;
-    // Fallback when the trace doesn't carry an explicit shape (rare):
-    // use the live MPSGraph shape.
     if (loss_shape.empty())
         loss_shape = shape_of_mps(loss_t);
     MPSGraphTensor* loss_grad = ones_like_loss(graph, loss_shape, loss_dt);
     bctx_.accumulate_grad(loss_id, (__bridge void*)loss_grad);
 
-    // 2) Reverse iterate ops.  Each iteration: pull grads on the op's
-    //    outputs from bctx_, dispatch to the VJP, which writes input
-    //    grads via :func:`accumulate_grad`.
     const auto& ops = trace_.ops;
-    const auto& sink = no_grad_ops();
-    // Values that depend on a parameter, in dispatch order.
-    const std::unordered_set<TensorId> depends = param_dependents(ops, param_ids);
-    for (auto it = ops.rbegin(); it != ops.rend(); ++it) {
-        const OpNode& node = *it;
-        bool upstream_param = false;
-        for (const auto& om : node.outputs)
-            if (depends.count(om.id) != 0) {
-                upstream_param = true;
-                break;
-            }
-        if (!upstream_param)
+    std::unordered_map<std::size_t, const VjpRegion*> region_by_end;
+    for (const auto& r : trace_.vjp_regions) {
+        if (r.fwd_end > r.fwd_begin)
+            region_by_end[r.fwd_end] = &r;
+    }
+    const std::unordered_set<TensorId> depends = param_dependents(trace_, param_ids);
+    std::size_t idx = ops.size();
+    while (idx > 0) {
+        auto rit = region_by_end.find(idx);
+        if (rit != region_by_end.end()) {
+            const VjpRegion& region = *rit->second;
+            if (!emit_vjp_region(graph, bctx_, region, depends, error_msg))
+                return false;
+            idx = region.fwd_begin;
             continue;
-
-        // Collect grad demand on outputs.
-        std::vector<void*> grad_outs;
-        grad_outs.reserve(node.outputs.size());
-        bool any_demand = false;
-        for (const auto& om : node.outputs) {
-            void* go = bctx_.resolve_grad(om.id);
-            if (go != nullptr) {
-                any_demand = true;
-                if (auto dt = mps_dtype_of(om.dtype))
-                    go = from_tensor(cast_if_needed(graph, as_tensor(go), *dt));
-            }
-            grad_outs.push_back(go);
         }
-        if (!any_demand) continue;  // no path from loss touches this op
-
-        // Grad-sink ops (factories, etc.) don't propagate, and nor does an
-        // op none of whose results can hold a gradient: eager never tracks
-        // an integer or bool value, so a float cast to int32 and back
-        // reaches its input with no gradient, not a truncated one.
-        if (sink.find(node.name) != sink.end() || !carries_gradient(node))
-            continue;
-
-        VjpEmitter* vjp = find_vjp_emitter(node.name);
-        if (vjp == nullptr) {
-            std::string sig = format_node_signature(trace_, node);
-            std::string msg = "manual_vjp: no VJP emitter for op '" +
-                              node.name + "' (" + sig + ")";
-            debug_log_failure("no VJP emitter for op '" + node.name + "'", sig);
-            set_err(std::move(msg));
+        if (!emit_backward_node(graph, bctx_, trace_, ops[--idx], depends, error_msg))
             return false;
-        }
-        if (!vjp->emit(bctx_, node, grad_outs)) {
-            std::string sig = format_node_signature(trace_, node);
-            std::string msg = "manual_vjp: VJP for op '" + node.name +
-                              "' returned false (" + sig + ")";
-            debug_log_failure("VJP for op '" + node.name + "' returned false",
-                              sig);
-            set_err(std::move(msg));
-            return false;
-        }
     }
 
-    // 3) Collect output grads for the requested params.
     out_grads.clear();
     out_grads.reserve(param_ids.size());
     if (absent)
@@ -397,18 +567,16 @@ bool BackwardWalker::compute_grads(TensorId loss_id,
         const TensorId pid = param_ids[i];
         void* g = bctx_.resolve_grad(pid);
         if (g == nullptr && absent) {
-            // Traced but not on the loss path — a pooler a token classifier
-            // never reads.  Zeros hold the slot; the caller reports None.
             MPSGraphTensor* p = (__bridge MPSGraphTensor*)bctx_.forward(pid);
             if (p != nil) {
-                MPSGraph* graph = (__bridge MPSGraph*)graph_;
-                g = (__bridge void*)[graph constantWithScalar:0.0 shape:p.shape dataType:p.dataType];
+                g = (__bridge void*)[graph constantWithScalar:0.0
+                                                        shape:p.shape
+                                                     dataType:p.dataType];
                 (*absent)[i] = true;
             }
         }
         if (g == nullptr) {
-            set_err("manual_vjp: no gradient produced for param id " +
-                    std::to_string(pid) +
+            set_err("manual_vjp: no gradient produced for param id " + std::to_string(pid) +
                     " — most likely the param isn't on the loss path");
             return false;
         }

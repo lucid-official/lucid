@@ -37,7 +37,7 @@ from lucid.models._tasks import LanguageModelingModel
 from lucid.models._utils._text import extended_attention_mask, text_activation
 from lucid.models.text._common._seq2seq import seq2seq_generate
 from lucid.models.text.t5._config import T5Config
-from lucid.utils.cache import EncoderDecoderCache
+from lucid.utils.cache import EncoderDecoderCache, StaticCache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Relative position buckets
@@ -148,12 +148,20 @@ class _T5Attention(nn.Module):
         memory: Tensor | None = None,
         cache: EncoderDecoderCache | None = None,
         layer_idx: int = 0,
+        cache_position: Tensor | None = None,
     ) -> Tensor:
         q = self._heads(self.q(hidden))
         if memory is None:
             k, v = self._heads(self.k(hidden)), self._heads(self.v(hidden))
             if cache is not None:
-                k, v = cache.update(k, v, layer_idx)
+                past_len = cache.get_seq_length(layer_idx)
+                cache_kwargs: dict[str, object] = {"cache_position": cache_position}
+                if isinstance(cache.self_attention_cache, StaticCache):
+                    from lucid.compile._entry.decode_step import is_compiled_decode_tracing
+
+                    if not is_compiled_decode_tracing():
+                        cache_kwargs["read_len"] = past_len + int(hidden.shape[1])
+                k, v = cache.update(k, v, layer_idx, cache_kwargs=cache_kwargs)
         else:
             k, v = self._memory_heads(memory, cache, layer_idx)
         # scale=1: the 1/sqrt(d_kv) lives in the query projection's init.
@@ -204,9 +212,14 @@ class _T5Block(nn.Module):
         cross_bias: Tensor | None = None,
         cache: EncoderDecoderCache | None = None,
         layer_idx: int = 0,
+        cache_position: Tensor | None = None,
     ) -> Tensor:
         attended = self.self_attention(
-            self.self_attention_norm(hidden), bias, cache=cache, layer_idx=layer_idx
+            self.self_attention_norm(hidden),
+            bias,
+            cache=cache,
+            layer_idx=layer_idx,
+            cache_position=cache_position,
         )
         hidden = hidden + self.dropout(attended)
         if self.cross_attention is not None and self.cross_attention_norm is not None:
@@ -271,6 +284,32 @@ class _T5Stack(nn.Module):
         ids = buckets.index_select(0, index.reshape(-1)).reshape(query_length, key_length)
         return self.relative_attention_bias(ids).permute(2, 0, 1).unsqueeze(0)
 
+    def _static_position_and_causal_bias(
+        self, length: int, keys: int, max_len: int, cache_position: Tensor, dtype: lucid.dtype
+    ) -> Tensor:
+        """Position + causal bias gathered at runtime ``cache_position``."""
+        from lucid._engine_scope import untraced
+
+        device = self.relative_attention_bias.weight.device.type
+        lowest = -(max_len - 1)
+        table = _bucket_table(
+            lowest, keys - 1, not self.is_decoder, self.num_buckets, self.max_distance
+        )
+        with untraced():
+            buckets = lucid.tensor(list(table), dtype=lucid.int64, device=device)
+            q_all = lucid.arange(max_len, device=device).long().reshape(max_len, 1)
+            k_all = lucid.arange(keys, device=device).long().reshape(1, keys)
+            all_ids = buckets.index_select(0, (k_all - q_all - lowest).reshape(-1)).reshape(
+                max_len, keys
+            )
+            all_causal = (k_all > q_all).to(dtype) * -1e4 if self.is_decoder else None
+        pos = cache_position.reshape(-1)
+        ids = all_ids.index_select(0, pos)
+        bias = self.relative_attention_bias(ids).permute(2, 0, 1).unsqueeze(0).to(dtype)
+        if all_causal is not None:
+            bias = bias + all_causal.index_select(0, pos).reshape(1, 1, length, keys)
+        return bias
+
     @override
     def forward(
         self,
@@ -280,17 +319,35 @@ class _T5Stack(nn.Module):
         memory: Tensor | None = None,
         memory_mask: Tensor | None = None,
         cache: EncoderDecoderCache | None = None,
+        cache_position: Tensor | None = None,
     ) -> Tensor:
         batch, length = int(embeddings.shape[0]), int(embeddings.shape[1])
         past = cache.get_seq_length() if cache is not None else 0
-        keys = past + length
-        # Every bias in the activations' dtype — the padding masks come back
-        # float32 whatever the model computes in.
-        bias = self.position_bias(length, keys, past).to(embeddings.dtype)
-        if self.is_decoder:
-            bias = bias + _causal_bias(length, keys, past, bias)
+        self_cache = cache.self_attention_cache if cache is not None else None
+        if isinstance(self_cache, StaticCache):
+            from lucid.compile._entry.decode_step import is_compiled_decode_tracing
+
+            max_len = self_cache.max_cache_len
+            keys = max_len if is_compiled_decode_tracing() else past + length
+            if cache_position is None:
+                cache_position = lucid.arange(
+                    past, past + length, device=embeddings.device.type
+                ).long()
+            bias = self._static_position_and_causal_bias(
+                length, keys, max_len, cache_position, embeddings.dtype
+            )
+        else:
+            keys = past + length
+            # Every bias in the activations' dtype — the padding masks come back
+            # float32 whatever the model computes in.
+            bias = self.position_bias(length, keys, past).to(embeddings.dtype)
+            if self.is_decoder:
+                bias = bias + _causal_bias(length, keys, past, bias)
         padding = extended_attention_mask(attention_mask, (batch, length), keys)
         if padding is not None:
+            pad_len = int(padding.shape[-1])
+            if pad_len < keys:
+                padding = F.pad(padding, (0, keys - pad_len))
             bias = bias + padding.to(bias.dtype)
         cross_bias = None
         if memory is not None:
@@ -301,7 +358,13 @@ class _T5Stack(nn.Module):
         hidden = self.dropout(embeddings)
         for layer_idx, block in enumerate(self.blocks):
             hidden = block(
-                hidden, bias, memory=memory, cross_bias=cross_bias, cache=cache, layer_idx=layer_idx
+                hidden,
+                bias,
+                memory=memory,
+                cross_bias=cross_bias,
+                cache=cache,
+                layer_idx=layer_idx,
+                cache_position=cache_position,
             )
         return self.dropout(self.final_layer_norm(hidden))
 
@@ -474,6 +537,7 @@ class T5Model(PretrainedModel):
         memory_attention_mask: Tensor | None = None,
         past_key_value: EncoderDecoderCache | None = None,
         use_cache: bool = False,
+        cache_position: Tensor | None = None,
     ) -> Tensor:
         """Run the decoder against an already-computed encoder output.
 
@@ -493,6 +557,8 @@ class T5Model(PretrainedModel):
             and values; read and extended in place.
         use_cache : bool, default=False, keyword-only
             Read and write ``past_key_value``.
+        cache_position : Tensor or None, optional, keyword-only
+            Absolute write positions for a :class:`StaticCache`.
 
         Returns
         -------
@@ -506,6 +572,7 @@ class T5Model(PretrainedModel):
             memory=memory,
             memory_mask=memory_attention_mask,
             cache=cache,
+            cache_position=cache_position,
         )
 
     @override
@@ -714,15 +781,17 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         *,
         max_length: int = 20,
         attention_mask: Tensor | None = None,
-        use_cache: bool = True,
+        decoder_start_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        pad_token_id: int | None = None,
         do_sample: bool = False,
         temperature: float = 1.0,
         top_k: int | None = None,
         top_p: float | None = None,
         repetition_penalty: float = 1.0,
-        decoder_start_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        pad_token_id: int | None = None,
+        use_cache: bool = True,
+        cache_implementation: str = "dynamic",
+        max_cache_len: int | None = None,
     ) -> Tensor:
         """Decode an answer for each source — greedy unless ``do_sample``.
 
@@ -737,6 +806,14 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
             ``(B, S)`` source padding mask.
         use_cache : bool, default=True, keyword-only
             Decode one token per step against an encoder-decoder cache.
+        cache_implementation : str, default="dynamic", keyword-only
+            ``"dynamic"`` → growing :class:`DynamicCache`; ``"static"`` →
+            pre-allocated self-attention :class:`StaticCache`; ``"compiled"``
+            → :class:`StaticCache` + :func:`compiled_decode_step` for
+            single-executable autoregressive decoding.
+        max_cache_len : int or None, optional, keyword-only
+            Self-attention buffer capacity for ``"static"`` or ``"compiled"``;
+            defaults to ``max_length``.
         do_sample : bool, default=False, keyword-only
             Sample instead of taking the ``argmax``.
         temperature : float, default=1.0, keyword-only
@@ -771,15 +848,19 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         dev = input_ids.device.type
         memory = self.t5.encode(input_ids, attention_mask)
 
-        def next_logits(tokens: Tensor, cache: EncoderDecoderCache | None) -> Tensor:
-            hidden = self.t5.decode(
-                tokens,
-                memory,
-                memory_attention_mask=attention_mask,
-                past_key_value=cache,
-                use_cache=cache is not None,
+        def next_logits(
+            tokens: Tensor, cache: EncoderDecoderCache | None, cache_position: Tensor | None = None
+        ) -> Tensor:
+            return self._logits(
+                self.t5.decode(
+                    tokens,
+                    memory,
+                    memory_attention_mask=attention_mask,
+                    past_key_value=cache,
+                    use_cache=cache is not None,
+                    cache_position=cache_position,
+                )[:, -1, :]
             )
-            return self._logits(hidden[:, -1, :])
 
         sampling = _SamplingParams(
             do_sample=do_sample, temperature=temperature, top_k=top_k, top_p=top_p,
@@ -789,4 +870,5 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=start,
             max_length=max_length, use_cache=use_cache, sampling=sampling,
+            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
         )  # fmt: skip

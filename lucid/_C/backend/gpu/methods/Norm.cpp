@@ -394,7 +394,8 @@ std::vector<Storage> GpuBackend::batch_norm_eval_forward(const Storage& x,
     // Widen 16-bit floats to float32 at the door and round once on the way
     // out, matching the CPU eval kernel (LCD-487 / LCD-516).
     const auto xw = widen_gpu(x), vw = widen_gpu(var);
-    auto rstd = ::mlx::core::rsqrt(::mlx::core::add(vw, gpu::mlx_scalar(eps, xw.dtype())));
+    auto rstd = ::mlx::core::reciprocal(
+        ::mlx::core::sqrt(::mlx::core::add(vw, gpu::mlx_scalar(eps, xw.dtype()))));
     ::mlx::core::Shape b_shape(x_shape.size(), 1);
     b_shape[1] = C;
     auto m_b = ::mlx::core::reshape(widen_gpu(mean), b_shape);

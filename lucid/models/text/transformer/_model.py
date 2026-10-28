@@ -45,7 +45,7 @@ from lucid.models._output import (
 from lucid.models.text._common._seq2seq import seq2seq_generate
 from lucid.models.text.transformer._config import TransformerConfig
 from lucid.models._sampling import _SamplingParams
-from lucid.utils.cache import EncoderDecoderCache
+from lucid.utils.cache import EncoderDecoderCache, StaticCache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -298,22 +298,34 @@ class TransformerModel(PretrainedModel):
         """Target-side embedding — used to tie an LM head against."""
         return self.tgt_tok_emb
 
-    def _embed(self, ids: Tensor, table: nn.Embedding, pos_offset: int = 0) -> Tensor:
+    def _embed(
+        self,
+        ids: Tensor,
+        table: nn.Embedding,
+        pos_offset: int = 0,
+        *,
+        cache_position: Tensor | None = None,
+    ) -> Tensor:
         """Token-embed + scale-by-√d + sin/cos PE + dropout.
 
         ``pos_offset`` shifts the positional-encoding slice so cached decode
-        steps embed the new tokens at their true absolute positions.
+        steps embed the new tokens at their true absolute positions; when
+        ``cache_position`` is supplied (e.g. under a :class:`StaticCache`),
+        positions are gathered dynamically via ``index_select``.
         """
         T = int(ids.shape[1])
         emb = table(ids) * math.sqrt(self._d_model)
         full_pe = self.positional_encoding()
-        if pos_offset + T > self._max_pos:
-            raise ValueError(
-                f"Sequence length {pos_offset + T} exceeds "
-                f"max_position_embeddings {self._max_pos}"
-            )
-        pe = full_pe[pos_offset : pos_offset + T]
-        emb = emb + pe.unsqueeze(0)  # broadcast over batch
+        if cache_position is not None:
+            pe = full_pe.index_select(0, cache_position.reshape(-1)).reshape(1, T, -1)
+        else:
+            if pos_offset + T > self._max_pos:
+                raise ValueError(
+                    f"Sequence length {pos_offset + T} exceeds "
+                    f"max_position_embeddings {self._max_pos}"
+                )
+            pe = full_pe[pos_offset : pos_offset + T].unsqueeze(0)
+        emb = emb + pe  # broadcast over batch
         return self.dropout(emb)
 
     def encode(self, src_ids: Tensor, src_attention_mask: Tensor | None = None) -> Tensor:
@@ -341,6 +353,7 @@ class TransformerModel(PretrainedModel):
         *,
         past_key_value: EncoderDecoderCache | None = None,
         use_cache: bool = False,
+        cache_position: Tensor | None = None,
     ) -> Tensor:
         """Run only the decoder against precomputed encoder memory.
 
@@ -359,6 +372,8 @@ class TransformerModel(PretrainedModel):
                             cross-attention key/value.
             use_cache:      Read/write ``past_key_value`` so each step only
                             decodes the freshly appended token(s).
+            cache_position: Optional ``(T,)`` int64 tensor of absolute write
+                            positions for a :class:`StaticCache`.
 
         Returns:
             ``(B, T, d_model)`` decoder hidden states (the ``ForSeq2SeqLM``
@@ -370,10 +385,37 @@ class TransformerModel(PretrainedModel):
         past_len = (
             past_key_value.get_seq_length() if (use_cache and past_key_value is not None) else 0
         )
-        tgt_emb = self._embed(tgt_ids, self.tgt_tok_emb, pos_offset=past_len)
-        # A single new token attends over the whole cached history (no causal
-        # mask needed); the first/full pass uses the (T, T) causal mask.
-        tgt_mask = None if past_len > 0 else _causal_mask(T, device=dev)
+        self_cache = (
+            past_key_value.self_attention_cache
+            if (use_cache and past_key_value is not None)
+            else None
+        )
+        tgt_mask: Tensor | None
+        if isinstance(self_cache, StaticCache):
+            if cache_position is None:
+                if past_len + T > self._max_pos:
+                    raise ValueError(
+                        f"Sequence length {past_len + T} exceeds "
+                        f"max_position_embeddings {self._max_pos}"
+                    )
+                cache_position = lucid.arange(past_len, past_len + T, device=dev).long()
+            tgt_emb = self._embed(
+                tgt_ids, self.tgt_tok_emb, pos_offset=past_len, cache_position=cache_position
+            )
+            from lucid._engine_scope import untraced
+            from lucid.compile._entry.decode_step import is_compiled_decode_tracing
+            from lucid.nn.functional.attention import _causal_additive_mask
+
+            max_len = self_cache.max_cache_len
+            t_total = max_len if is_compiled_decode_tracing() else past_len + T
+            with untraced():
+                all_causal = _causal_additive_mask(max_len, t_total, 0, tgt_emb.dtype, dev)
+            tgt_mask = all_causal.index_select(0, cache_position.reshape(-1))
+        else:
+            tgt_emb = self._embed(tgt_ids, self.tgt_tok_emb, pos_offset=past_len)
+            # A single new token attends over the whole cached history (no causal
+            # mask needed); the first/full pass uses the (T, T) causal mask.
+            tgt_mask = None if past_len > 0 else _causal_mask(T, device=dev)
         tgt_kpm = _key_padding_to_kpm(tgt_attention_mask)
         mem_kpm = _key_padding_to_kpm(memory_attention_mask)
         return decoder(
@@ -384,6 +426,7 @@ class TransformerModel(PretrainedModel):
             memory_key_padding_mask=mem_kpm,
             past_key_value=past_key_value,
             use_cache=use_cache,
+            cache_position=cache_position,
         )
 
     @override
@@ -547,6 +590,8 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         pad_token_id: int | None = None,
         attention_mask: Tensor | None = None,
         use_cache: bool = True,
+        cache_implementation: str = "dynamic",
+        max_cache_len: int | None = None,
         do_sample: bool = False,
         temperature: float = 1.0,
         top_k: int | None = None,
@@ -573,6 +618,12 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
             attention_mask: Optional source padding mask.
             use_cache:     Use an ``EncoderDecoderCache`` so each step only
                            decodes the new token (default True).
+            cache_implementation: ``"dynamic"`` (default), ``"static"``
+                           (pre-allocated self-attention :class:`StaticCache`),
+                           or ``"compiled"`` (compiled single-token decode via
+                           :func:`compiled_decode_step`).
+            max_cache_len: Self-attention buffer capacity for ``"static"`` or
+                           ``"compiled"`` (defaults to ``max_length``).
             do_sample:     Sample from the (filtered) distribution instead of
                            greedy ``argmax`` (default False).
             temperature:   Logit temperature applied before sampling.
@@ -599,13 +650,16 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         # Decoder self-attention grows each step; the cross-attention
         # projection of ``memory`` is cached once.  Without a cache the
         # whole prefix is re-decoded every step.
-        def next_logits(tokens: Tensor, cache: EncoderDecoderCache | None) -> Tensor:
+        def next_logits(
+            tokens: Tensor, cache: EncoderDecoderCache | None, cache_position: Tensor | None = None
+        ) -> Tensor:
             decoded = self.transformer.decode(
                 tokens,
                 memory,
                 memory_attention_mask=attention_mask,
                 past_key_value=cache,
                 use_cache=cache is not None,
+                cache_position=cache_position,
             )
             return self.lm_head(decoded[:, -1, :])  # (B, V)
 
@@ -617,6 +671,7 @@ class TransformerForSeq2SeqLM(LanguageModelingModel):
         return seq2seq_generate(
             next_logits, batch=int(input_ids.shape[0]), device=dev, start_token_id=bos,
             max_length=max_length, use_cache=use_cache, sampling=sampling,
+            cache_implementation=cache_implementation, max_cache_len=max_cache_len,
         )  # fmt: skip
 
 

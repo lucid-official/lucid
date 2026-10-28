@@ -35,8 +35,8 @@ public:
               const std::vector<void*>& grad_outs) override {
         return emit_unary_vjp(bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* grad) -> MPSGraphTensor* {
+                if (x.shape == nil) return nil;
                 std::vector<std::int64_t> in_shape = shape_of_mps(x);
-                if (in_shape.empty()) return nil;
                 return [g reshapeTensor:grad
                               withShape:shape_to_ns(in_shape)
                                    name:@"reshape_vjp"];
@@ -97,11 +97,10 @@ public:
         if (x_id < 0) return false;
         MPSGraphTensor* grad = as_tensor(grad_outs[0]);
         MPSGraphTensor* x = as_tensor(bctx.forward(x_id));
-        if (grad == nil || x == nil) return false;
+        if (grad == nil || x == nil || x.shape == nil || grad.shape == nil) return false;
         std::vector<std::int64_t> in_shape = shape_of_mps(x);
         std::vector<std::int64_t> out_shape =
             node.outputs.empty() ? shape_of_mps(grad) : node.outputs[0].shape;
-        if (in_shape.empty() || out_shape.empty()) return false;
         void* dx = bctx.unreduce(from_tensor(grad), in_shape, out_shape);
         bctx.accumulate_grad(x_id, dx);
         return true;

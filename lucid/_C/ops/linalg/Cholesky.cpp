@@ -57,6 +57,7 @@ TensorImplPtr cholesky_op(const TensorImplPtr& a_in, bool upper) {
     const TensorImplPtr a = amp.cast(a_in);
     Validator::input(a, "cholesky.a").float_only();
     OpScopeFull scope{"cholesky", a->device(), a->dtype(), a->shape()};
+    scope.set_attr("upper", upper);
 
     // A degenerate matrix has a decomposition; LAPACK just will not be
     // the one to compute it.  See ``empty_matrix`` for why dispatching
@@ -66,7 +67,10 @@ TensorImplPtr cholesky_op(const TensorImplPtr& a_in, bool upper) {
 
     Storage out = backend::Dispatcher::for_device(a->device())
                       .linalg_cholesky(a->storage(), a->shape(), upper, a->dtype());
-    return linalg_detail::fresh(std::move(out), a->shape(), a->dtype(), a->device());
+    auto res = linalg_detail::fresh(std::move(out), a->shape(), a->dtype(), a->device());
+    if (auto* trc = compile::current_tracer())
+        trc->on_op_io({a}, res);
+    return res;
 }
 
 }  // namespace lucid

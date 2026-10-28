@@ -14,6 +14,7 @@ from typing import Self, override
 import lucid
 import lucid.linalg as _la
 import lucid.special as _sp
+from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _align_device, _as_tensor, _lazy_param
 from lucid.distributions.constraints import (
@@ -195,10 +196,12 @@ class Wishart(Distribution):
         # trailing concentrations reach zero and go negative, which is not a
         # Gamma at all: the sampler returns a rank-deficient matrix outside
         # the distribution's own declared support, with nothing to say so.
-        if float(self.df.min().item()) <= dim - 1:
+        with untraced():
+            min_df = float(self.df.min().item())
+        if min_df <= dim - 1:
             raise ValueError(
                 f"Wishart: df must exceed dim - 1 = {dim - 1} for a "
-                f"non-singular distribution, got {float(self.df.min().item())}."
+                f"non-singular distribution, got {min_df}."
             )
 
         batch_shape: tuple[int, ...] = tuple(given.shape[:-2])

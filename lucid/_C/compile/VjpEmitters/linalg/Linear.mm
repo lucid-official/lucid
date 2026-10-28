@@ -25,6 +25,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../../OpEmitters/_SignedZero.h"
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
 
@@ -163,6 +164,7 @@ public:
         [b_perm addObject:[NSNumber numberWithLongLong:(long long)(b_rank - 1)]];
         [b_perm addObject:[NSNumber numberWithLongLong:(long long)(b_rank - 2)]];
         MPSGraphTensor* b_T = [g transposeTensor:b permutation:b_perm name:nil];
+        b_T = materialize_matmul_splat(g, b_T, is_const_splat(bctx.forward_ctx(), b_id));
 
         NSMutableArray<NSNumber*>* a_perm =
             [NSMutableArray arrayWithCapacity:a_rank];
@@ -171,6 +173,7 @@ public:
         [a_perm addObject:[NSNumber numberWithLongLong:(long long)(a_rank - 1)]];
         [a_perm addObject:[NSNumber numberWithLongLong:(long long)(a_rank - 2)]];
         MPSGraphTensor* a_T = [g transposeTensor:a permutation:a_perm name:nil];
+        a_T = materialize_matmul_splat(g, a_T, is_const_splat(bctx.forward_ctx(), a_id));
 
         MPSGraphTensor* dA =
             [g matrixMultiplicationWithPrimaryTensor:grad

@@ -104,11 +104,11 @@ class _Block(nn.Module):
         return self.apply_fn(h)
 
 
-class _FakeQuantizedLinear(nn.Linear):
-    """A QAT-style layer: its weight is fake-quantized on every forward."""
+class _UnmarkedWeightSTE(nn.Linear):
+    """A layer whose weight passes through an unmarked STE ``Function``."""
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
-        w = Q.fake_quantize(self.weight, 0.05, 0, -128, 127)
+        w = _StraightThrough.apply(self.weight * 20.0) / 20.0
         return F.linear(x, w, self.bias)
 
 
@@ -128,7 +128,7 @@ _CASES: dict[str, tuple[str, type[nn.Linear], Callable[..., lucid.Tensor]]] = {
     "gradient reversal": ("_Reversal", nn.Linear, _Reversal.apply),
     "non-differentiable output": ("_WithMask", nn.Linear, _masked),
     "second output unused": ("_TwoOutputs", nn.Linear, _first),
-    "fake-quantized weight": ("_FakeQuantizeAffine", _FakeQuantizedLinear, lambda h: h),
+    "unmarked weight STE": ("_StraightThrough", _UnmarkedWeightSTE, lambda h: h),
 }
 
 
@@ -280,7 +280,7 @@ def test_a_forward_only_compile_is_unaffected(case: str, device_gpu_only: str) -
 
 
 def test_a_quantization_aware_model_trains_as_eager(device: str) -> None:
-    """``prepare_qat``'s own fake-quantization, through ``make_step``."""
+    """``prepare_qat``'s own fake-quantization compiles on Metal via ``_traced_backward``."""
 
     def net() -> nn.Module:
         lucid.manual_seed(0)
@@ -292,9 +292,14 @@ def test_a_quantization_aware_model_trains_as_eager(device: str) -> None:
     F.mse_loss(eager(x), t).backward()
     model = net()
     step = make_step(model, F.mse_loss)
-    with _warns_on_metal("_FakeQuantizeAffine", device):
+    with warnings.catch_warnings():
+        if device == "metal":
+            warnings.simplefilter("error", CompileFallbackWarning)
         step(x, t).backward()
     _assert_same(_grads(model), _grads(eager))
+    if device == "metal":
+        assert len(step.cache) == 1
+        assert not step.eager_only
 
 
 # ── each part of the rule, alone ──────────────────────────────────────────
