@@ -96,9 +96,7 @@ class _GPTSelfAttention(nn.Module):
 
         qkv = self.c_attn(hidden)  # (B, T, 3*hidden)
         qkv = qkv.reshape(B, T, 3, H, D).permute(2, 0, 3, 1, 4)
-        q: Tensor = qkv[0]
-        k: Tensor = qkv[1]
-        v: Tensor = qkv[2]
+        q, k, v = qkv.unbind(0)
         k, v, bias = update_causal_kv_and_bias(
             k, v, self.causal_mask, attention_mask, (past_key_value, layer_idx, cache_position, T)
         )

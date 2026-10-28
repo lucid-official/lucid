@@ -33,6 +33,8 @@ def _ntuple(value: int | Sequence[int], n: int, op: str, arg: str) -> tuple[int,
     """
     if isinstance(value, int):
         return (value,) * n
+    if isinstance(value, tuple) and len(value) == n and all(type(v) is int for v in value):
+        return value
     items = tuple(value)
     if len(items) == 1:
         items = items * n

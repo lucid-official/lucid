@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -94,6 +95,21 @@ public:
     // of feeds, so the order was never ours to choose), which is why
     // ``load_executable`` re-derives this from the placeholder names.
     std::vector<std::size_t> feed_order;
+
+    // Run-time ObjC object caches populated lazily on the first execution:
+    //   * ``cached_input_ns_shapes`` / ``cached_output_ns_shapes``: static
+    //     ``NSArray<NSNumber*>*`` per input/output slot so ``shape_to_nsarray``
+    //     does not allocate 100+ NSNumber arrays per step.
+    //   * ``cached_feed_td`` / ``cached_feed_buf`` / ``cached_feed_arr``:
+    //     per-MPS-feed-position ``MPSGraphTensorData*`` cache keyed on the live
+    //     ``mlx::core::array`` and its ``MTLBuffer`` pointer so static
+    //     parameters and constants reuse their ``MPSGraphTensorData*`` with
+    //     zero Objective-C allocations on subsequent steps.
+    NSMutableArray<NSArray<NSNumber*>*>* cached_input_ns_shapes = nil;
+    NSMutableArray<NSArray<NSNumber*>*>* cached_output_ns_shapes = nil;
+    NSMutableArray<id>* cached_feed_td = nil;
+    std::vector<const void*> cached_feed_buf;
+    std::vector<std::weak_ptr<::mlx::core::array>> cached_feed_arr;
 
     ~CompiledExecutable() {
         // Release the variable-storage-owning MPSGraph if we retained
@@ -372,6 +388,89 @@ inline id<MTLBuffer> alias_buffer(bool alias_mode, const TensorImpl& target) {
     return (__bridge id<MTLBuffer>)lucid::gpu::mps::array_to_buffer(*gs.arr).mtl_buffer;
 }
 
+// Lazily populate the per-executable ``NSArray<NSNumber*>*`` shape tables and
+// feed ``MPSGraphTensorData*`` cache slots.
+inline void ensure_runtime_caches(CompiledExecutable* exe) {
+    const std::size_t n_in = exe->input_shapes.size();
+    const std::size_t n_out = exe->output_shapes.size();
+    if (exe->cached_input_ns_shapes == nil || exe->cached_input_ns_shapes.count != n_in) {
+        NSMutableArray<NSArray<NSNumber*>*>* in_ns = [NSMutableArray arrayWithCapacity:n_in];
+        for (std::size_t i = 0; i < n_in; ++i)
+            [in_ns addObject:shape_to_nsarray(exe->input_shapes[i])];
+        exe->cached_input_ns_shapes = in_ns;
+    }
+    if (exe->cached_output_ns_shapes == nil || exe->cached_output_ns_shapes.count != n_out) {
+        NSMutableArray<NSArray<NSNumber*>*>* out_ns = [NSMutableArray arrayWithCapacity:n_out];
+        for (std::size_t j = 0; j < n_out; ++j)
+            [out_ns addObject:shape_to_nsarray(exe->output_shapes[j])];
+        exe->cached_output_ns_shapes = out_ns;
+    }
+    if (exe->cached_feed_td == nil || exe->cached_feed_td.count != n_in) {
+        NSMutableArray<id>* td_cache = [NSMutableArray arrayWithCapacity:n_in];
+        for (std::size_t k = 0; k < n_in; ++k)
+            [td_cache addObject:[NSNull null]];
+        exe->cached_feed_td = td_cache;
+        exe->cached_feed_buf.assign(n_in, nullptr);
+        exe->cached_feed_arr.assign(n_in, std::weak_ptr<::mlx::core::array>{});
+    }
+}
+
+// Build the positional ``MPSGraphTensorData*`` array for ``input_feeds``,
+// reusing cached ``MPSGraphTensorData*`` objects for static-shape feeds whose
+// underlying MLX array and ``MTLBuffer`` have not changed since the previous
+// execution.
+inline NSMutableArray<MPSGraphTensorData*>*
+build_feeds_array(CompiledExecutable* exe,
+                  const std::vector<TensorImplPtr>& input_feeds,
+                  const char* who) {
+    ensure_runtime_caches(exe);
+    const std::size_t n_in = input_feeds.size();
+    NSMutableArray<MPSGraphTensorData*>* feeds = [NSMutableArray arrayWithCapacity:n_in];
+    for (std::size_t k = 0; k < n_in; ++k) {
+        // ``feeds[k]`` is matched positionally against
+        // ``executable.feedTensors[k]``, which is not necessarily
+        // our slot k — see ``detail::derive_feed_order``.
+        const std::size_t i = exe->feed_order.empty() ? k : exe->feed_order[k];
+        const auto& impl = input_feeds[i];
+        // Dtype / shape are checked before the buffer is labelled —
+        // see :func:`detail::validate_feed` for why a mismatch may
+        // not be allowed to reach MPSGraph.  The returned shape is
+        // the trace-time one, except on a dynamic-batch slot where
+        // the call-site leading axis wins.
+        const Shape feed_shape = validate_feed(exe, i, impl, who);
+
+        const auto& gs = std::get<GpuStorage>(impl->storage());
+        if (!gs.arr)
+            throw std::runtime_error(std::string(who) + ": input feed GpuStorage has no MLX array");
+
+        lucid::gpu::mps::BufferView view = lucid::gpu::mps::array_to_buffer(*gs.arr);
+        const bool static_shape = (feed_shape == exe->input_shapes[i]);
+        if (static_shape && exe->cached_feed_buf[k] == view.mtl_buffer &&
+            !exe->cached_feed_arr[k].expired() && exe->cached_feed_arr[k].lock() == gs.arr) {
+            id cached = exe->cached_feed_td[k];
+            if (cached != [NSNull null]) {
+                [feeds addObject:(MPSGraphTensorData*)cached];
+                continue;
+            }
+        }
+
+        id<MTLBuffer> in_buf = (__bridge id<MTLBuffer>)view.mtl_buffer;
+        NSArray<NSNumber*>* ns_shape =
+            static_shape ? exe->cached_input_ns_shapes[i] : shape_to_nsarray(feed_shape);
+        MPSDataType ns_dt = mps_dtype_or_throw(exe->input_dtypes[i]);
+        MPSGraphTensorData* td = [[MPSGraphTensorData alloc] initWithMTLBuffer:in_buf
+                                                                         shape:ns_shape
+                                                                      dataType:ns_dt];
+        if (static_shape) {
+            exe->cached_feed_td[k] = td;
+            exe->cached_feed_buf[k] = view.mtl_buffer;
+            exe->cached_feed_arr[k] = gs.arr;
+        }
+        [feeds addObject:td];
+    }
+    return feeds;
+}
+
 }  // namespace detail
 
 std::vector<std::string> executable_feed_names(const CompiledExecutable* exe) {
@@ -435,33 +534,7 @@ LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
 
     @autoreleasepool {
         NSMutableArray<MPSGraphTensorData*>* feeds =
-            [NSMutableArray arrayWithCapacity:input_feeds.size()];
-        for (std::size_t k = 0; k < input_feeds.size(); ++k) {
-            // ``feeds[k]`` is matched positionally against
-            // ``executable.feedTensors[k]``, which is not necessarily
-            // our slot k — see ``detail::derive_feed_order``.
-            const std::size_t i = exe->feed_order.empty() ? k : exe->feed_order[k];
-            const auto& impl = input_feeds[i];
-            // Dtype / shape are checked before the buffer is labelled —
-            // see :func:`detail::validate_feed` for why a mismatch may
-            // not be allowed to reach MPSGraph.  The returned shape is
-            // the trace-time one, except on a dynamic-batch slot where
-            // the call-site leading axis wins.
-            const Shape feed_shape = detail::validate_feed(exe, i, impl, "run_executable");
-
-            const auto& gs = std::get<GpuStorage>(impl->storage());
-            if (!gs.arr)
-                throw std::runtime_error("run_executable: input feed GpuStorage has no MLX array");
-
-            lucid::gpu::mps::BufferView view = lucid::gpu::mps::array_to_buffer(*gs.arr);
-            id<MTLBuffer> in_buf = (__bridge id<MTLBuffer>)view.mtl_buffer;
-            NSArray<NSNumber*>* ns_shape = detail::shape_to_nsarray(feed_shape);
-            MPSDataType ns_dt = mps_dtype_or_throw(exe->input_dtypes[i]);
-            MPSGraphTensorData* td = [[MPSGraphTensorData alloc] initWithMTLBuffer:in_buf
-                                                                             shape:ns_shape
-                                                                          dataType:ns_dt];
-            [feeds addObject:td];
-        }
+            detail::build_feeds_array(exe, input_feeds, "run_executable");
 
         NSMutableArray<MPSGraphTensorData*>* results =
             [NSMutableArray arrayWithCapacity:total_outs];
@@ -507,7 +580,10 @@ LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
                 throw std::runtime_error("run_executable: MTLBuffer allocation for output failed");
             out_bufs.push_back(out_buf);
 
-            NSArray<NSNumber*>* ns_shape = detail::shape_to_nsarray(realized_output_shapes[j]);
+            NSArray<NSNumber*>* ns_shape =
+                (realized_output_shapes[j] == exe->output_shapes[j])
+                    ? exe->cached_output_ns_shapes[j]
+                    : detail::shape_to_nsarray(realized_output_shapes[j]);
             MPSDataType ns_dt = mps_dtype_or_throw(exe->output_dtypes[j]);
             MPSGraphTensorData* td = [[MPSGraphTensorData alloc] initWithMTLBuffer:out_buf
                                                                              shape:ns_shape
@@ -674,31 +750,7 @@ run_executable_inplace_outputs(CompiledExecutable* exe,
 
     @autoreleasepool {
         NSMutableArray<MPSGraphTensorData*>* feeds =
-            [NSMutableArray arrayWithCapacity:input_feeds.size()];
-        for (std::size_t k = 0; k < input_feeds.size(); ++k) {
-            const std::size_t i = exe->feed_order.empty() ? k : exe->feed_order[k];
-            const auto& impl = input_feeds[i];
-            // Phase 1.6 follow-up: ``run_executable_inplace`` only
-            // supports static-batch executables (caller must rebuild
-            // when the per-call shape changes), so any feed whose
-            // shape diverges from the trace-time shape would either
-            // produce silently-truncated results or write past the
-            // output buffer.  ``validate_feed`` rejects that — and the
-            // dtype mismatch this loop used to let through — up front.
-            const Shape feed_shape = detail::validate_feed(exe, i, impl, "run_executable_inplace");
-            const auto& gs = std::get<GpuStorage>(impl->storage());
-            if (!gs.arr)
-                throw std::runtime_error(
-                    "run_executable_inplace: input GpuStorage has no MLX array");
-            lucid::gpu::mps::BufferView view = lucid::gpu::mps::array_to_buffer(*gs.arr);
-            id<MTLBuffer> in_buf = (__bridge id<MTLBuffer>)view.mtl_buffer;
-            NSArray<NSNumber*>* ns_shape = detail::shape_to_nsarray(feed_shape);
-            MPSDataType ns_dt = mps_dtype_or_throw(exe->input_dtypes[i]);
-            MPSGraphTensorData* td = [[MPSGraphTensorData alloc] initWithMTLBuffer:in_buf
-                                                                             shape:ns_shape
-                                                                          dataType:ns_dt];
-            [feeds addObject:td];
-        }
+            detail::build_feeds_array(exe, input_feeds, "run_executable_inplace");
 
         // ``LUCID_COMPILE_ALIAS_INPLACE=1``: diagnostic — bind the
         // target's existing MTLBuffer directly as the output result.
@@ -734,7 +786,7 @@ run_executable_inplace_outputs(CompiledExecutable* exe,
             if (tgt_tensors != nil && j < tgt_tensors.count && tgt_tensors[j].shape != nil)
                 ns_shape = tgt_tensors[j].shape;
             else
-                ns_shape = detail::shape_to_nsarray(exe->output_shapes[j]);
+                ns_shape = exe->cached_output_ns_shapes[j];
             MPSDataType ns_dt = mps_dtype_or_throw(exe->output_dtypes[j]);
 
             id<MTLBuffer> out_buf = detail::alias_buffer(alias_mode, *output_targets[j]);

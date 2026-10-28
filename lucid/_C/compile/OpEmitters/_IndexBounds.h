@@ -175,6 +175,35 @@ inline MPSGraphTensor* graph_scatter_set_dropping(MPSGraph* g,
                                                   MPSGraphTensor* src,
                                                   NSInteger axis,
                                                   std::int64_t extent) {
+    if (base.dataType != src.dataType)
+        return nil;
+    // Fast path for single-slice overwrite along ``axis`` (e.g. single-token
+    // KV-cache ``index_copy`` or ``x[:, :, idx] = v``): when the update has
+    // extent 1 along ``axis``, there are no duplicate-index collisions, and
+    // ``src`` + ``ix`` broadcast directly against ``base`` along ``axis``.
+    // Emitting a coordinate comparison + elementwise ``select`` avoids
+    // allocating a ``(max_len + 1)`` padded concat buffer, running a scatter
+    // kernel, and slicing off the sink slab on every layer.
+    NSArray<NSNumber*>* src_shape = src.shape;
+    if (extent > 0 && src_shape != nil && axis >= 0 &&
+        static_cast<NSUInteger>(axis) < src_shape.count &&
+        src_shape[static_cast<NSUInteger>(axis)].longLongValue == 1 &&
+        !(base.dataType & MPSDataTypeComplexBit)) {
+        MPSGraphTensor* coord = [g coordinateAlongAxis:axis
+                                       withShapeTensor:[g shapeOfTensor:base name:nil]
+                                                  name:nil];
+        if (coord.dataType != ix.safe.dataType)
+            coord = [g castTensor:coord toType:ix.safe.dataType name:nil];
+        MPSGraphTensor* match = [g logicalANDWithPrimaryTensor:ix.in_range
+                                               secondaryTensor:[g equalWithPrimaryTensor:coord
+                                                                         secondaryTensor:ix.safe
+                                                                                    name:nil]
+                                                          name:nil];
+        return [g selectWithPredicateTensor:match
+                        truePredicateTensor:src
+                       falsePredicateTensor:base
+                                       name:@"scatter_set_single"];
+    }
     // The slab is cut off again, so what it holds does not matter: a slice
     // of ``base`` has its shape even where the batch is symbolic, which a
     // constant does not ("shape[0] (-1) should be a strictly positive value

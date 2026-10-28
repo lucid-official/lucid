@@ -473,6 +473,11 @@ public:
     // of feeds, so the order was never ours to choose), which is why
     // ``load_executable`` re-derives this from the placeholder names.
     std::vector<std::size_t> feed_order;
+    NSMutableArray<NSArray<NSNumber*>*>* cached_input_ns_shapes = nil;
+    NSMutableArray<NSArray<NSNumber*>*>* cached_output_ns_shapes = nil;
+    NSMutableArray<id>* cached_feed_td = nil;
+    std::vector<const void*> cached_feed_buf;
+    std::vector<std::weak_ptr<::mlx::core::array>> cached_feed_arr;
 
     ~CompiledExecutable() {
         // Mirror the destructor in CompiledExecutable.mm — release the

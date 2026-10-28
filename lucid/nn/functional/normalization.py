@@ -211,7 +211,9 @@ def layer_norm(
     """
     from lucid._factories.creation import ones, zeros
 
-    shape: tuple[int, ...] = tuple(normalized_shape)
+    shape: tuple[int, ...] = (
+        normalized_shape if isinstance(normalized_shape, tuple) else tuple(normalized_shape)
+    )
     w: _C_engine.TensorImpl = (
         _unwrap(weight)
         if weight is not None

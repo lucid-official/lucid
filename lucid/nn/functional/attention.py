@@ -103,7 +103,7 @@ def _masked_attention(
     if attn_mask is not None:
         if attn_mask.dtype != query.dtype:
             attn_mask = attn_mask.to(query.dtype)
-        dead = attn_mask.detach().max(dim=-1, keepdim=True).values == _NEG_INF
+        dead = attn_mask.detach().amax(dim=-1, keepdim=True) == _NEG_INF
         attn_mask = _lucid.masked_fill(attn_mask, dead, 0.0)
 
     weights: Tensor | None = None

@@ -30,7 +30,7 @@ def _check_probability(p: float) -> None:
 
 
 def _drop_everything(x: Tensor, p: float, training: bool) -> Tensor | None:
-    """Check ``p``; at ``p = 1`` return the answer without drawing a mask.
+    """Check ``p``; at ``p = 1`` or identity cases return without drawing a mask.
 
     Dropping every element leaves nothing to rescale — ``1 / (1 - p)`` is
     undefined — so the engine kernels refuse ``p = 1``.  The reference
@@ -39,9 +39,15 @@ def _drop_everything(x: Tensor, p: float, training: bool) -> Tensor | None:
     when a mask has to be drawn.
     """
     _check_probability(p)
-    if p < 1.0:
-        return None
-    return x * 0.0 if training else x
+    if p == 1.0:
+        return x * 0.0 if training else x
+    if (
+        (not training or p == 0.0)
+        and _C_engine.compile.current_tracer() is None
+        and not (x.requires_grad and _C_engine.grad_enabled())
+    ):
+        return x
+    return None
 
 
 def _alloc_philox_state(device: DeviceLike) -> Tensor:

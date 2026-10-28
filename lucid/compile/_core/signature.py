@@ -592,6 +592,10 @@ class _TreeWalk:
     # module is another tree, and a root that has died cannot be mistaken
     # for a new module at its address.
     roots: tuple[weakref.ref[Module], ...]
+    # The paths the wrapped callable followed to its modules (direct and
+    # indirect alike), so a cache hit checks them via ``_resolve_path`` in O(1)
+    # without running ``_indirect_module_paths``'s BFS on every call.
+    reached: tuple[tuple[_Path, weakref.ref[Module]], ...]
     states: tuple[object, ...]
     hooked: bool
     # Every parameter and buffer of the tree.  Their ``requires_grad`` moves
@@ -600,15 +604,15 @@ class _TreeWalk:
     # The slot each of them sits in, by ``TensorImpl`` identity.
     slot_of: Mapping[int, _Slot]
 
-    def walked_from(self, roots: Sequence[Module]) -> bool:
-        return _same_roots(self.roots, roots)
 
-
-def _same_roots(refs: Sequence[weakref.ref[Module]], roots: Sequence[Module]) -> bool:
-    """Whether ``roots`` are the modules ``refs`` were taken of, in order."""
-    return len(roots) == len(refs) and all(
-        ref() is root for ref, root in zip(refs, roots, strict=True)
-    )
+def _walk_matches_model(walk: _TreeWalk, model: object) -> bool:
+    """Whether ``model`` and its wrapped callable still reach the same root modules."""
+    if not all(ref() is not None for ref in walk.roots):
+        return False
+    if not walk.reached:
+        return True
+    fn = _wrapped_callable(model)
+    return all(_resolve_path(fn, path) is ref() for path, ref in walk.reached)
 
 
 def _registry_slots(subs: Sequence[Module]) -> Iterator[tuple[_Slot, Tensor | None]]:
@@ -646,15 +650,18 @@ def _tree_walk(model: object) -> _TreeWalk:
     from lucid.nn.module import Module
 
     version = _tree_version() + _tensor_hook_version()
-    roots = _root_modules(model)
     cached = _WALKS.get(model) if isinstance(model, Module) else None
-    if cached is not None and cached.version == version and cached.walked_from(roots):
+    if cached is not None and cached.version == version and _walk_matches_model(cached, model):
         return cached
+    roots = _root_modules(model)
     subs = _iter_modules(roots)
     slots = tuple(_registry_slots(subs))
+    fn = _wrapped_callable(model)
+    values = dict(_callable_slots(fn)) if fn is not None else {}
     walk = _TreeWalk(
         version=version,
         roots=tuple(weakref.ref(root) for root in roots),
+        reached=_reached_modules(values, fn),
         states=tuple(
             (bool(getattr(sub, "training", False)), _dict_scalar_attrs(sub)) for sub in subs
         ),

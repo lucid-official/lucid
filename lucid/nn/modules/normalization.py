@@ -162,7 +162,7 @@ class LayerNorm(Module):
         Tensor
             Normalised tensor of the same shape as ``input``.
         """
-        return layer_norm(input, list(self.normalized_shape), self.weight, self.bias, self.eps)
+        return layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps)
 
     @override
     def extra_repr(self) -> str:
@@ -286,7 +286,7 @@ class RMSNorm(Module):
         Tensor
             Normalised tensor of the same shape as ``x``.
         """
-        return rms_norm(x, list(self.normalized_shape), self.weight, self.eps)
+        return rms_norm(x, self.normalized_shape, self.weight, self.eps)
 
     @override
     def extra_repr(self) -> str:

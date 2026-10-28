@@ -100,6 +100,14 @@ class _DecodeEntry:
     # What it reads besides the call's tensors and the cache buffers: under
     # grad mode one requiring grad sends the call eager (LCD-618).
     reads: TraceReads = TraceReads()
+    # Pre-built template of feed ``TensorImpl``s with static feeds already
+    # populated, and index tables for dynamic argument / cache-buffer slots so
+    # ``_run_decode_entry`` only patches dynamic slots per step.
+    feed_template: tuple[object, ...] = ()
+    ids_feed_indices: tuple[int, ...] = ()
+    cp_feed_indices: tuple[int, ...] = ()
+    key_buf_feeds: tuple[tuple[int, int], ...] = ()
+    val_buf_feeds: tuple[tuple[int, int], ...] = ()
 
 
 def _needs_gradients(
@@ -198,6 +206,62 @@ def _collect_cache_write_ids(
     return write_ids, buf_slot
 
 
+def _build_decode_feed_plan(
+    exe: _ExecutableLike,
+    ext: dict[int, object],
+    ids_impl: int,
+    cp_impl: int,
+    buf_slot: dict[int, int],
+) -> (
+    tuple[
+        tuple[object, ...],
+        tuple[object, ...],
+        tuple[int, ...],
+        tuple[int, ...],
+        tuple[tuple[int, int], ...],
+        tuple[tuple[int, int], ...],
+    ]
+    | None
+):
+    """Build the static feed template and dynamic feed slot tables for ``exe``."""
+    input_source: list[object] = []
+    feed_template: list[object] = []
+    ids_feed_indices: list[int] = []
+    cp_feed_indices: list[int] = []
+    key_buf_feeds: list[tuple[int, int]] = []
+    val_buf_feeds: list[tuple[int, int]] = []
+    for idx, tid in enumerate(exe.input_ids):
+        impl = ext.get(tid)
+        if impl is None:
+            return None
+        iid = id(impl)
+        if iid == ids_impl:
+            input_source.append(0)
+            feed_template.append(None)
+            ids_feed_indices.append(idx)
+        elif iid == cp_impl:
+            input_source.append(1)
+            feed_template.append(None)
+            cp_feed_indices.append(idx)
+        elif iid in buf_slot:
+            slot = buf_slot[iid]
+            input_source.append(("buf", slot))
+            feed_template.append(None)
+            layer, kv = divmod(slot, 2)
+            (key_buf_feeds if kv == 0 else val_buf_feeds).append((idx, layer))
+        else:
+            input_source.append(None)
+            feed_template.append(impl)
+    return (
+        tuple(input_source),
+        tuple(feed_template),
+        tuple(ids_feed_indices),
+        tuple(cp_feed_indices),
+        tuple(key_buf_feeds),
+        tuple(val_buf_feeds),
+    )
+
+
 def _compile_decode_entry(
     forward_fn: Callable[[Tensor, Tensor], Tensor],
     static_cache: StaticCache,
@@ -241,30 +305,32 @@ def _compile_decode_entry(
     if exe is None:
         return None
 
-    ids_impl = id(_unwrap(input_ids))
-    cp_impl = id(_unwrap(cache_position))
-    input_source: list[object] = []
-    for tid in exe.input_ids:
-        impl = ext.get(tid)
-        if impl is None:
-            return None
-        iid = id(impl)
-        if iid == ids_impl:
-            input_source.append(0)
-        elif iid == cp_impl:
-            input_source.append(1)
-        elif iid in buf_slot:
-            input_source.append(("buf", buf_slot[iid]))
-        else:
-            input_source.append(None)
+    plan = _build_decode_feed_plan(
+        exe, ext, id(_unwrap(input_ids)), id(_unwrap(cache_position)), buf_slot
+    )
+    if plan is None:
+        return None
+    (
+        input_source,
+        feed_template,
+        ids_feed_indices,
+        cp_feed_indices,
+        key_buf_feeds,
+        val_buf_feeds,
+    ) = plan
 
     return _DecodeEntry(
         exe=exe,
         external_feeds=dict(ext),
-        input_source=tuple(input_source),
+        input_source=input_source,
         n_buffers=2 * n_layers,
         compile_ms=(time.perf_counter() - t0) * 1000.0,
-        reads=TraceReads.of(tracer, exe.input_ids, input_source),
+        reads=TraceReads.of(tracer, exe.input_ids, list(input_source)),
+        feed_template=feed_template,
+        ids_feed_indices=ids_feed_indices,
+        cp_feed_indices=cp_feed_indices,
+        key_buf_feeds=key_buf_feeds,
+        val_buf_feeds=val_buf_feeds,
     )
 
 
@@ -274,23 +340,21 @@ def _run_decode_entry(
     """Run one cached decode step + roll the cache forward (rebind, no copy)."""
     from lucid._dispatch import _unwrap, _wrap
 
-    exe = cast(_ExecutableLike, entry.exe)
     ids_impl, cp_impl = _unwrap(input_ids), _unwrap(cache_position)
-    feed_impls: list[object] = []
-    for tid, src in zip(exe.input_ids, entry.input_source, strict=True):
-        if src == 0:
-            feed_impls.append(ids_impl)
-        elif src == 1:
-            feed_impls.append(cp_impl)
-        elif isinstance(src, tuple):
-            layer, kv = divmod(src[1], 2)
-            buf = static_cache.key_cache[layer] if kv == 0 else static_cache.value_cache[layer]
-            feed_impls.append(_unwrap(buf))
-        else:
-            feed_impls.append(entry.external_feeds[tid])
+    key_cache = static_cache.key_cache
+    val_cache = static_cache.value_cache
+    feed_impls = list(entry.feed_template)
+    for idx in entry.ids_feed_indices:
+        feed_impls[idx] = ids_impl
+    for idx in entry.cp_feed_indices:
+        feed_impls[idx] = cp_impl
+    for idx, layer in entry.key_buf_feeds:
+        feed_impls[idx] = key_cache[layer]._impl
+    for idx, layer in entry.val_buf_feeds:
+        feed_impls[idx] = val_cache[layer]._impl
 
     t0 = time.perf_counter()
-    outs = _C_engine.compile.run_executable(entry.exe, feed_impls)
+    outs = cast(list[Any], _C_engine.compile.run_executable(entry.exe, feed_impls))
     entry.last_run_ms = (time.perf_counter() - t0) * 1000.0
     entry.n_hits += 1
 
@@ -300,18 +364,17 @@ def _run_decode_entry(
             f"compiled_decode_step: executable returned {len(outs)} outputs, "
             f"expected {n_expected} (1 output + {entry.n_buffers} cache buffers)"
         )
-    for slot in range(entry.n_buffers):
-        layer, kv = divmod(slot, 2)
-        new_buf = _wrap(cast(Any, outs[1 + slot]))
-        if kv == 0:
-            static_cache.key_cache[layer] = new_buf
-        else:
-            static_cache.value_cache[layer] = new_buf
+    n_layers = entry.n_buffers // 2
+    for layer in range(n_layers):
+        base = 1 + 2 * layer
+        key_cache[layer] = _wrap(outs[base])
+        val_cache[layer] = _wrap(outs[base + 1])
     t_new = int(input_ids.shape[1])
-    for layer in range(len(static_cache._cumulative_length)):
-        static_cache._cumulative_length[layer] += t_new
+    cum_len = static_cache._cumulative_length
+    for layer in range(len(cum_len)):
+        cum_len[layer] += t_new
     static_cache._seen_tokens += t_new
-    return _wrap(cast(Any, outs[0]))
+    return _wrap(outs[0])
 
 
 def _unwrap_decode_caches(
@@ -377,9 +440,8 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         try:  # ``key_of`` drops what read replaced tensors
-            key = replace(
-                fingerprint.key_of((input_ids, cache_position), {}, dynamic=False), grad_mode=False
-            )
+            raw_key = fingerprint.key_of((input_ids, cache_position), {}, dynamic=False)
+            key = replace(raw_key, grad_mode=False) if raw_key.grad_mode else raw_key
         except (TypeError, AttributeError):
             key = None
 

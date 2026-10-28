@@ -94,7 +94,7 @@ class _GPT2SelfAttention(nn.Module):
 
         qkv = self.c_attn(hidden)
         qkv = qkv.reshape(B, T, 3, H, D).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]  # each (B, H, T, D)
+        q, k, v = qkv.unbind(0)  # each (B, H, T, D)
         k, v, bias = update_causal_kv_and_bias(
             k, v, self.causal_mask, attention_mask, (past_key_value, layer_idx, cache_position, T)
         )

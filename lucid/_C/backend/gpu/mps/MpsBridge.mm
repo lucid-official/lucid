@@ -61,13 +61,18 @@ std::size_t metal_device_allocated_bytes() {
 }
 
 BufferView array_to_buffer(const ::mlx::core::array& arr) {
-    // Force materialisation + wait for completion.  We need the kernel that
-    // produced `arr` to finish before MPSGraph reads the buffer — MLX's
-    // command queue and ours are distinct, so Metal will not insert an
-    // implicit fence.  `wait()` is the explicit cross-queue barrier.
+    // Force materialisation + wait for completion when the array is not yet
+    // evaluated.  We need the kernel that produced `arr` to finish before
+    // MPSGraph reads the buffer — MLX's command queue and ours are distinct,
+    // so Metal will not insert an implicit fence.  `wait()` is the explicit
+    // cross-queue barrier.  Skipping `eval()` + `wait()` when `is_available()`
+    // is already true avoids 100+ redundant MLX scheduler lock round-trips per
+    // step for static parameter and constant buffers.
     auto& mutable_arr = const_cast<::mlx::core::array&>(arr);
-    mutable_arr.eval();
-    mutable_arr.wait();
+    if (!mutable_arr.is_available()) {
+        mutable_arr.eval();
+        mutable_arr.wait();
+    }
 
     // Critical: MPSGraph reads the MTLBuffer linearly assuming row-major
     // storage matching the declared `nsShape`, but MLX upstream ops
