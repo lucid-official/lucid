@@ -1,0 +1,243 @@
+---
+title: Speed Up with lucid.compile
+description: A runnable tutorial for lucid.compile — compile a module for inference, run whole training steps as one executable with make_step, fused_step and compiled_step, know what falls back to eager on the CPU, and decode GPT-2 with a StaticCache.
+category: Tutorials
+order: 3
+---
+
+`lucid.compile` captures a model, or a whole training step, into a cached Metal executable. This tutorial walks through each entry point with code that runs as written, shows what happens on the CPU (where there is nothing to compile and the call falls back to eager), and ends with compiled autoregressive decoding for GPT-2. For the concepts and the full surface, see the [Compile (JIT)](/docs/compile) guide and the [API reference](/api/lucid.compile).
+
+Every block below belongs to one script. The first block picks the device; the compile-only parts are guarded by `device == "metal"` so the script still runs, eagerly, on a machine where Metal is not available.
+
+```python
+import lucid
+import lucid.nn as nn
+import lucid.nn.functional as F
+import lucid.optim as optim
+import lucid.compile
+
+device = "metal" if lucid.metal.is_available() else "cpu"
+lucid.manual_seed(0)
+
+
+def make_mlp() -> nn.Module:
+    return nn.Sequential(nn.Linear(32, 64), nn.ReLU(), nn.Linear(64, 4)).to(device)
+
+
+x = lucid.randn(16, 32, device=device)
+y = lucid.randn(16, 4, device=device)
+```
+
+## Compile a module for inference
+
+`lucid.compile(model)` returns a wrapper with the same interface as the module. The first call for a given input signature traces the module and builds the executable; later calls with the same signature replay it.
+
+```python
+model = make_mlp().eval()
+fast = lucid.compile(model)
+
+with lucid.no_grad():
+    out = fast(x)                      # first call: trace + build
+    out = fast(x)                      # second call: cache hit
+    print("matches eager:", float((out - model(x)).abs().max().item()) < 1e-5)
+    print("cache entries:", fast.cache_info()["entries"])
+```
+
+<Callout variant="warning">
+Wrap compiled inference in `lucid.no_grad()`. A compiled forward records no autograd graph, so a call that needs gradients — grad mode on while the parameters require grad — runs eagerly and warns once. The result is still correct; it just is not compiled. To compile training, use `make_step` or `fused_step` below.
+</Callout>
+
+### Cache behaviour
+
+The cache is keyed on everything that changes the graph: input shapes and dtypes, device, whether the module is in `train()` or `eval()` mode, and the parameter dtypes. A new batch size is a new key.
+
+```python
+with lucid.no_grad():
+    fast(lucid.randn(8, 32, device=device))
+    print("after a new batch size:", fast.cache_info()["entries"])
+
+    fast.clear_cache()
+    print("after clear_cache():", fast.cache_info()["entries"])
+```
+
+When the batch size really varies from call to call, pass `dynamic=True` and the leading axis becomes symbolic, so one executable serves every batch size:
+
+```python
+dyn = lucid.compile(model, dynamic=True)
+with lucid.no_grad():
+    for batch in (16, 8, 5):
+        dyn(lucid.randn(batch, 32, device=device))
+print("dynamic cache entries:", dyn.cache_info()["entries"])
+```
+
+On the Metal device that prints `1`. A fixed-shape loop is faster without `dynamic=True`, so reach for it only when shapes change.
+
+## What falls back to eager
+
+Only the Metal device is compiled. On the CPU, `lucid.compile` runs the module eagerly and raises a one-time `UserWarning` naming the reason; the result is identical to calling the module directly.
+
+```python
+cpu_model = nn.Sequential(nn.Linear(32, 64), nn.ReLU(), nn.Linear(64, 4)).eval()
+cpu_fast = lucid.compile(cpu_model)
+cpu_x = lucid.randn(16, 32)
+
+with lucid.no_grad():
+    cpu_out = cpu_fast(cpu_x)
+
+print("matches eager:", float((cpu_out - cpu_model(cpu_x)).abs().max().item()) < 1e-5)
+print("cached executables:", cpu_fast.cache_info()["entries"])
+```
+
+The warning is raised once per kind of fallback per process (it reads `compile_trace: only Device::GPU traces are supported ...; running eagerly`), so a script that already triggered it earlier does not print it again. Nothing is cached, because nothing was compiled.
+
+Anything the compiler cannot lower falls back the same way, per call signature, and never changes the answer. Set `LUCID_COMPILE_VERBOSE=1` to log every fallback instead of only the first of each kind. Before committing to compile, `lucid.compile.diagnose` reports which ops of a function have a compiled backward:
+
+```python
+report = lucid.compile.diagnose(model, x)
+print(report)
+```
+
+<Callout variant="note">
+Three conditions send a call to eager: the device is the CPU, the call needs gradients and is not a compiled training step, or the graph holds an op the compiler cannot lower (for example a bfloat16 model, which is detected up front). `diagnose` covers the third.
+</Callout>
+
+## Compile a training step
+
+`lucid.compile` compiles inference. Training has three entry points, from lightest to heaviest. All three take a loss function that is a plain module-level function — it is part of the cache key, so a new closure on every iteration would defeat the cache.
+
+```python
+def mse(out: lucid.Tensor, target: lucid.Tensor) -> lucid.Tensor:
+    return F.mse_loss(out, target)
+```
+
+### make_step: compiled forward and backward
+
+`make_step(model, loss_fn)` compiles forward, loss and backward into one executable. The returned loss behaves like an eager one — `loss.backward()` fills `.grad`, and you keep your own optimizer. It falls back to eager on the CPU.
+
+```python
+model = make_mlp()
+optimizer = optim.SGD(model.parameters(), lr=0.05, momentum=0.9)
+step = lucid.compile.make_step(model, mse)
+
+for i in range(3):
+    optimizer.zero_grad()
+    loss = step(x, y)
+    loss.backward()
+    optimizer.step()
+    print("make_step", i, round(float(loss.item()), 4))
+```
+
+### fused_step: forward, backward and the optimizer update
+
+`fused_step(model, loss_fn, optimizer)` folds the optimizer update into the same executable, so one call is one whole training step: no `zero_grad`, no `backward`, no `optimizer.step`. Learning-rate schedulers work unchanged, because every hyper-parameter is re-read from `optimizer.param_groups` on each call, and `optimizer.state_dict()` checkpoints the state the executable updates.
+
+```python
+if device == "metal":
+    model = make_mlp()
+    optimizer = optim.AdamW(model.parameters(), lr=1e-2)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.5)
+    fused = lucid.compile.fused_step(model, mse, optimizer)
+
+    for i in range(3):
+        loss = fused(x, y)
+        scheduler.step()
+        print("fused_step", i, round(float(loss.item()), 4), "lr", optimizer.param_groups[0]["lr"])
+    print("cache entries:", fused.cache_info()["entries"])
+```
+
+A `GradScaler` plugs in through `fused_step(..., grad_scaler=scaler)` — see the [Mixed Precision tutorial](/docs/tutorials/mixed-precision).
+
+### compiled_step: one call, no cached wrapper
+
+`compiled_step(model, x, loss_fn)` is the lowest-level form: it traces and compiles on every call and adds the gradients into `.grad`, which makes it the right tool for a one-off or for a loop whose graph changes each time. For a repeated loop, prefer `make_step`, which caches.
+
+```python
+if device == "metal":
+    model = make_mlp()
+    optimizer = optim.SGD(model.parameters(), lr=0.05)
+    optimizer.zero_grad()
+    loss = lucid.compile.compiled_step(model, x, lambda out: F.mse_loss(out, y))
+    optimizer.step()
+    print("compiled_step", round(float(loss.item()), 4))
+```
+
+<Callout variant="danger">
+`fused_step` and `compiled_step` need the Metal device. On the CPU they raise a `RuntimeError` rather than falling back (only `lucid.compile` and `make_step` fall back). Guard them with a device check as above, or choose `make_step` if the same code has to run on both.
+</Callout>
+
+## Compiled decoding for GPT-2
+
+Autoregressive decoding is where compiling pays off most. A normal key/value cache grows by one slot per token, so every step has a new shape and would recompile. A `StaticCache` pre-allocates fixed `(batch, heads, max_cache_len, head_dim)` buffers and writes each new token at a runtime position, so every decode step has the same signature and a single executable serves them all.
+
+`generate` does this for you with `cache_implementation="compiled"`: it prefills the prompt eagerly, then runs each single-token step through the cached executable. A small GPT-2 built with config overrides keeps the demo quick.
+
+```python
+from lucid.models import create_model
+
+gpt = create_model(
+    "gpt2_small_lm",
+    vocab_size=512,
+    hidden_size=64,
+    num_hidden_layers=2,
+    num_attention_heads=4,
+    intermediate_size=256,
+    max_position_embeddings=128,
+).eval().to(device)
+prompt = lucid.tensor([[5, 17, 42]], dtype=lucid.int64, device=device)
+
+with lucid.no_grad():
+    eager_ids = gpt.generate(prompt, max_new_tokens=16)
+    compiled_ids = gpt.generate(
+        prompt, max_new_tokens=16, cache_implementation="compiled", max_cache_len=64
+    )
+print("same tokens:", eager_ids.tolist() == compiled_ids.tolist())
+print("generated:", compiled_ids.shape[1] - prompt.shape[1], "new tokens")
+```
+
+`max_cache_len` must cover the prompt plus the generated tokens and cannot exceed the model's `max_position_embeddings`; `generate` raises `ValueError` otherwise. `cache_implementation="static"` uses the same fixed buffers without compiling, which is the right comparison when you want to separate the cache's effect from the compiler's. The executable is cached across `generate` calls, so the second call skips the trace.
+
+### A custom decoding loop
+
+For your own sampling loop, build the cache yourself. `compiled_decode_step(forward_fn, cache)` wraps a function `(input_ids, cache_position) -> logits` and returns a `step` with the same signature that runs the compiled executable and rolls the cache buffers forward in place. `cache_position` is a fixed-shape int64 tensor of the absolute write positions, fed at run time (a Python int would be baked into the graph and recompile every step).
+
+<Callout variant="note">
+`compiled_decode_step` is not re-exported from `lucid.compile`; import it from `lucid.compile._entry.decode_step`, as `generate` itself does. `StaticCache` is public in `lucid.utils.cache`.
+</Callout>
+
+```python
+from lucid.compile._entry.decode_step import compiled_decode_step
+from lucid.utils.cache import StaticCache
+
+cache = StaticCache(max_cache_len=64)
+
+
+def decode_forward(token: lucid.Tensor, position: lucid.Tensor) -> lucid.Tensor:
+    out = gpt(token, use_cache=True, past_key_values=cache, cache_position=position)
+    return out.logits[:, -1, :]
+
+
+with lucid.no_grad():
+    # Prefill the prompt eagerly (positions 0..2), then decode token by token.
+    prompt_positions = lucid.arange(0, prompt.shape[1], device=device).long()
+    logits = decode_forward(prompt, prompt_positions)
+    step = compiled_decode_step(decode_forward, cache)
+
+    tokens = prompt
+    for pos in range(prompt.shape[1], prompt.shape[1] + 16):
+        next_token = logits.argmax(dim=-1, keepdim=True)
+        tokens = lucid.cat([tokens, next_token], dim=1)
+        logits = step(next_token, lucid.tensor([pos], dtype=lucid.int64, device=device))
+
+print("matches generate:", tokens.tolist() == compiled_ids.tolist())
+```
+
+## Summary
+
+| Goal | Entry point | CPU |
+|---|---|---|
+| Faster inference of a fixed-shape model | `lucid.compile(model)` inside `no_grad()` | falls back to eager, warns once |
+| Compiled forward + backward, your own optimizer | `make_step` | falls back to eager |
+| A whole training step as one call | `fused_step` | raises `RuntimeError` |
+| One-off compiled forward + backward | `compiled_step` | raises `RuntimeError` |
+| Fast token-by-token generation | `generate(cache_implementation="compiled")` | runs eagerly |
+| Check what would not compile | `lucid.compile.diagnose` | works on any device |
