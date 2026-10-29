@@ -92,7 +92,7 @@ models = ["safetensors>=0.4"]
 # version works: Lucid's engine never loads this package's libmlx.
 mlx = ["mlx>=0.32; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 dev = [
-    "pytest>=7",
+    "pytest>=7,<9.2",
     "ruff>=0.4",
     "mypy>=1.8",
     "numpy>=1.24",
@@ -102,7 +102,7 @@ dev = [
     "matplotlib>=3.8",
 ]
 test = [
-    "pytest>=7",
+    "pytest>=7,<9.2",
     # Oracle for the Core ML writer, never a runtime dependency: the
     # schema-drift test reads Apple's protobuf descriptors through it, the
     # same opt-in standing ``ref_framework`` has for parity tests.  Pinned
@@ -127,7 +127,7 @@ test = [
 # presentation dependency.  ``coverage`` backs the line-coverage floor of
 # the suite stage; without it that stage still runs and reports, it just
 # has no floor to compare against.
-audit = ["rich>=13", "coverage>=7", "pytest>=7"]
+audit = ["rich>=13", "coverage>=7", "pytest>=7,<9.2"]
 docs = [
     # Sphinx 9.x has a circular-import regression with Python 3.14.
     # Pin to 8.x until the upstream fix lands.
