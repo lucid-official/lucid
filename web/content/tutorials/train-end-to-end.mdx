@@ -1,0 +1,173 @@
+---
+title: Train a Model End to End
+description: A complete, runnable tutorial — data, a model from the zoo, optimizer and schedule, training and evaluation, then checkpoint, save and resume — on cpu and metal.
+category: Tutorials
+order: 1
+---
+
+This tutorial builds one small, complete training run and finishes with a checkpoint you can resume from. Every block below is part of a single script: paste them in order into `train.py` and it runs in a couple of seconds, on the CPU or on the Metal GPU, with no download.
+
+The pieces are the ones a real project uses — a `DataLoader`, a model made by [`lucid.models.create_model`](/api/lucid.models), an optimizer with a learning-rate schedule, an evaluation pass, and a checkpoint that carries the optimizer along with the weights.
+
+## Pick a device
+
+Lucid has two compute devices, `cpu` (Apple Accelerate) and `metal` (the GPU). The same code runs on both; only the device string changes.
+
+```python
+import tempfile
+from pathlib import Path
+
+import lucid
+import lucid.nn.functional as F
+import lucid.optim as optim
+from lucid.models import create_model
+from lucid.utils.data import DataLoader, TensorDataset
+
+device = "metal" if lucid.metal.is_available() else "cpu"
+lucid.manual_seed(0)
+print("training on", device)
+```
+
+<Callout variant="note">
+Keep the model and its inputs on the same device — mixing `cpu` and `metal` tensors in one op raises an error. The rule of thumb used below: the **dataset stays on the CPU**, and each batch is moved with `.to(device)` inside the loop. See [Metal Device](/docs/metal-device).
+</Callout>
+
+## Data
+
+The data is synthetic so the tutorial needs no download: 16x16 RGB images in four classes, where the class decides which quadrant is brightened, buried in Gaussian noise. `TensorDataset` pairs the inputs with their labels and `DataLoader` batches and shuffles them.
+
+```python
+def make_split(n: int) -> TensorDataset:
+    labels = lucid.randint(0, 4, (n,))
+    images = lucid.randn(n, 3, 16, 16)
+    quadrant = lucid.zeros(4, 1, 16, 16)
+    for k in range(4):
+        r, c = divmod(k, 2)
+        quadrant[k, :, r * 8 : (r + 1) * 8, c * 8 : (c + 1) * 8] = 1.0
+    return TensorDataset(images + 0.6 * quadrant[labels], labels)
+
+
+train_loader = DataLoader(make_split(512), batch_size=64, shuffle=True)
+val_loader = DataLoader(make_split(128), batch_size=64)
+```
+
+## Model
+
+`create_model(name, **overrides)` builds any registered zoo model. Keyword arguments are forwarded to the model's config, so a paper-sized network shrinks to fit a tutorial without defining anything new. `resnet_18_cls` is the ResNet-18 image classifier; here its width and class count are overridden.
+
+```python
+def build_model():
+    return create_model(
+        "resnet_18_cls",
+        num_classes=4,
+        stem_channels=8,
+        hidden_sizes=(8, 16, 32, 64),
+    ).to(device)
+
+
+model = build_model()
+print(type(model).__name__, sum(p.numel() for p in model.parameters()), "parameters")
+```
+
+<Callout variant="info">
+Registered names ending in `_cls` are the classification wrappers (their forward returns an object with a `.logits` field); the bare name, such as `resnet_18`, is the feature backbone. [`list_models()`](/docs/model-zoo) shows every name. Use the real factory with config overrides rather than looking for a "tiny" variant — the zoo only registers sizes that a paper defines.
+</Callout>
+
+## Optimizer and schedule
+
+`AdamW` with a cosine schedule that decays the learning rate over every optimizer step of the run. The scheduler is stepped once per batch, so `T_max` counts batches, not epochs.
+
+```python
+epochs = 4
+optimizer = optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-2)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, T_max=epochs * len(train_loader)
+)
+```
+
+## Train and evaluate
+
+One epoch of training puts the model in `train()` mode (batch-norm uses batch statistics) and runs the usual four calls: forward, `zero_grad`, `backward`, `step`. Evaluation switches to `eval()` and wraps the pass in `lucid.no_grad()` so no graph is recorded.
+
+```python
+def train_epoch() -> float:
+    model.train()
+    total = 0.0
+    for x, y in train_loader:
+        x, y = x.to(device), y.to(device)
+        loss = F.cross_entropy(model(x).logits, y)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+        total += float(loss.item())
+    return total / len(train_loader)
+
+
+def evaluate() -> float:
+    model.eval()
+    correct = seen = 0
+    with lucid.no_grad():
+        for x, y in val_loader:
+            pred = model(x.to(device)).logits.argmax(dim=1)
+            correct += int((pred == y.to(device)).sum().item())
+            seen += y.shape[0]
+    return correct / seen
+```
+
+## Save a checkpoint
+
+A checkpoint that can resume a run holds more than weights: the optimizer's moment estimates, the scheduler's position, and the epoch counter. Save `state_dict()`s — never the live objects — in one dictionary with [`lucid.save`](/docs/serialization). The loop below writes one after epoch 1.
+
+```python
+ckpt_path = Path(tempfile.mkdtemp()) / "run.lucid"
+
+for epoch in range(2):
+    loss = train_epoch()
+    print(f"epoch {epoch}  loss {loss:.3f}  val acc {evaluate():.3f}")
+
+lucid.save(
+    {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "epoch": epoch,
+    },
+    ckpt_path,
+)
+```
+
+## Resume
+
+Resuming is three steps: rebuild the same objects, load the saved state into each, and continue from the next epoch. `map_location` places the loaded tensors on the current device, so a checkpoint written on `metal` loads on a machine that only has `cpu` and the other way round.
+
+```python
+state = lucid.load(ckpt_path, map_location=device)
+
+model = build_model()
+model.load_state_dict(state["model"])
+optimizer = optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-2)
+optimizer.load_state_dict(state["optimizer"])
+scheduler = optim.lr_scheduler.CosineAnnealingLR(
+    optimizer, T_max=epochs * len(train_loader)
+)
+scheduler.load_state_dict(state["scheduler"])
+
+print("resumed after epoch", state["epoch"], "- val acc", f"{evaluate():.3f}")
+for epoch in range(state["epoch"] + 1, epochs):
+    loss = train_epoch()
+    print(f"epoch {epoch}  loss {loss:.3f}  val acc {evaluate():.3f}")
+```
+
+The first line printed after resuming reports the accuracy the saved weights had, so you can confirm the restore before training on.
+
+<Callout variant="warning">
+Create the optimizer from the **new** model's parameters first, and only then call `load_state_dict` on it. The optimizer's state is matched to parameters by position, so an optimizer built from the old model's parameters would keep updating tensors the new model never sees.
+</Callout>
+
+## Where to go next
+
+- Train faster in half precision: [Mixed Precision tutorial](/docs/tutorials/mixed-precision).
+- Fuse the whole step into one Metal executable: [Compile tutorial](/docs/tutorials/compile).
+- Ship the trained model in an app: [Export to Core ML](/docs/tutorials/export-coreml).
+- The concepts behind each piece: [Training Loop](/docs/training-loop), [Optimizers](/docs/optimizers), [Serialization](/docs/serialization), [Model Zoo](/docs/model-zoo).
