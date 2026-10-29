@@ -28,10 +28,11 @@ Acceptance:
   eager + records the signature as ``eager-only``.
 """
 
+import operator
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Protocol, cast, final, override
+from typing import TYPE_CHECKING, Callable, Literal, Protocol, SupportsIndex, cast, final, override
 
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
@@ -492,11 +493,11 @@ def make_step(
         fwd+bwd executable per distinct shape), it just does not share a single
         symbolic-batch executable across sizes.
     segments : int or {"auto"}, optional
-        Number of executable segments (default ``1`` — the monolithic single
-        executable described above).  When ``> 1`` and ``model`` is an
-        :class:`nn.Sequential`, the model is split into that many contiguous
-        groups of children, each compiled into its own forward + backward
-        executable and stitched with eager autograd
+        Number of executable segments, a positive integer (default ``1`` — the
+        monolithic single executable described above).  When ``> 1`` and
+        ``model`` is an :class:`nn.Sequential`, the model is split into that
+        many contiguous groups of children, each compiled into its own forward
+        + backward executable and stitched with eager autograd
         (:func:`make_segmented_step`).  ``"auto"`` probes a few candidate counts
         on the first batch and keeps the fastest (:func:`make_autoseg_step`).
 
@@ -505,6 +506,14 @@ def make_step(
     callable
         ``step(x, *extra_inputs) -> Tensor`` — the scalar loss.
         ``loss.backward()`` works the same way as the eager baseline.
+
+    Raises
+    ------
+    TypeError
+        ``segments`` is neither an integer nor a string (a float, ``None``, a
+        ``bool``).
+    ValueError
+        ``segments`` is below 1, or a string other than ``"auto"``.
 
     Notes
     -----
@@ -539,17 +548,38 @@ def make_step(
     make_segmented_step : the ``segments > 1`` implementation (executable
         splitting for memory-bounded deep training).
     """
-    if isinstance(segments, str):
-        if segments == "auto":
-            from lucid.compile._entry.segmented_step import make_autoseg_step
+    count = _segment_count(segments)
+    if count == "auto":
+        from lucid.compile._entry.segmented_step import make_autoseg_step
 
-            return make_autoseg_step(model, loss_fn, dynamic=dynamic)
-        raise ValueError(f"make_step: segments must be an int or 'auto', got {segments!r}")
-    if segments > 1:
+        return make_autoseg_step(model, loss_fn, dynamic=dynamic)
+    if count > 1:
         from lucid.compile._entry.segmented_step import make_segmented_step
 
-        return make_segmented_step(model, loss_fn, segments=segments, dynamic=dynamic)
+        return make_segmented_step(model, loss_fn, segments=count, dynamic=dynamic)
     return _make_monolithic_step(model, loss_fn)
+
+
+def _segment_count(segments: object) -> int | Literal["auto"]:
+    """``make_step``'s ``segments``, checked: a positive int, or ``"auto"``.
+
+    Below the entry nothing re-checks it — ``0`` and ``-1`` would run as the
+    monolithic step, and ``2.5`` would reach the splitter and fail as a bare
+    ``TypeError`` about ``float`` and ``int``.
+    """
+    if isinstance(segments, str):
+        if segments == "auto":
+            return "auto"
+        raise ValueError(f"make_step: segments must be a positive int or 'auto', got {segments!r}")
+    if isinstance(segments, bool) or not isinstance(segments, SupportsIndex):
+        raise TypeError(
+            "make_step: segments must be a positive int or 'auto', "
+            f"got {segments!r} ({type(segments).__name__})"
+        )
+    count = operator.index(segments)
+    if count < 1:
+        raise ValueError(f"make_step: segments must be a positive int or 'auto', got {count}")
+    return count
 
 
 def _trace_step(
