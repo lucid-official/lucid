@@ -231,3 +231,60 @@ class TestFile:
         (tmp_path / "adapter_config.json").write_text("[1, 2]")
         with pytest.raises(ValueError, match="JSON object"):
             LoraConfig.from_pretrained(tmp_path)
+
+
+#: The reference's ``peft_type`` and ``task_type`` strings, member by member —
+#: a file names its method and task with these.
+REFERENCE_PEFT_TYPES = {
+    PeftType.PROMPT_TUNING: "PROMPT_TUNING",
+    PeftType.MULTITASK_PROMPT_TUNING: "MULTITASK_PROMPT_TUNING",
+    PeftType.P_TUNING: "P_TUNING",
+    PeftType.PREFIX_TUNING: "PREFIX_TUNING",
+    PeftType.LORA: "LORA",
+    PeftType.ADALORA: "ADALORA",
+    PeftType.BOFT: "BOFT",
+    PeftType.ADAPTION_PROMPT: "ADAPTION_PROMPT",
+    PeftType.IA3: "IA3",
+    PeftType.LOHA: "LOHA",
+    PeftType.LOKR: "LOKR",
+    PeftType.OFT: "OFT",
+    PeftType.POLY: "POLY",
+    PeftType.LN_TUNING: "LN_TUNING",
+    PeftType.VERA: "VERA",
+    PeftType.FOURIERFT: "FOURIERFT",
+    PeftType.XLORA: "XLORA",
+    PeftType.HRA: "HRA",
+    PeftType.VBLORA: "VBLORA",
+    PeftType.CPT: "CPT",
+    PeftType.BONE: "BONE",
+}
+
+REFERENCE_TASK_TYPES = {
+    TaskType.SEQ_CLS: "SEQ_CLS",
+    TaskType.SEQ_2_SEQ_LM: "SEQ_2_SEQ_LM",
+    TaskType.CAUSAL_LM: "CAUSAL_LM",
+    TaskType.TOKEN_CLS: "TOKEN_CLS",
+    TaskType.QUESTION_ANS: "QUESTION_ANS",
+    TaskType.FEATURE_EXTRACTION: "FEATURE_EXTRACTION",
+}
+
+
+@pytest.mark.parametrize(
+    ("enum", "reference"), [(PeftType, REFERENCE_PEFT_TYPES), (TaskType, REFERENCE_TASK_TYPES)]
+)
+def test_enum_members_are_the_reference_strings(
+    enum: type[PeftType] | type[TaskType], reference: dict[str, str]
+) -> None:
+    assert {member: member.value for member in enum} == reference
+    assert all(str(member) == value and member == value for member, value in reference.items())
+
+
+@pytest.mark.parametrize("peft_type", [m for m in PeftType if m is not PeftType.LORA])
+def test_every_other_adapter_type_is_not_implemented(peft_type: PeftType) -> None:
+    with pytest.raises(NotImplementedError, match=str(peft_type)):
+        LoraConfig.from_dict({"peft_type": str(peft_type)})
+
+
+@pytest.mark.parametrize("task_type", list(TaskType))
+def test_every_task_type_is_accepted(task_type: TaskType) -> None:
+    assert LoraConfig(task_type=str(task_type)).task_type is task_type
