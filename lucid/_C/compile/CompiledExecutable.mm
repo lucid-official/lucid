@@ -14,6 +14,7 @@
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -423,6 +424,10 @@ inline NSMutableArray<MPSGraphTensorData*>*
 build_feeds_array(CompiledExecutable* exe,
                   const std::vector<TensorImplPtr>& input_feeds,
                   const char* who) {
+    // Every run fills and reads ``exe``'s feed caches here, with the GIL
+    // released by the bindings, so concurrent runs serialise on it (LCD-655).
+    static std::mutex feeds_mutex;
+    const std::lock_guard<std::mutex> feeds_lock(feeds_mutex);
     ensure_runtime_caches(exe);
     const std::size_t n_in = input_feeds.size();
     NSMutableArray<MPSGraphTensorData*>* feeds = [NSMutableArray arrayWithCapacity:n_in];

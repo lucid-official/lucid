@@ -156,3 +156,29 @@ def test_compiled_step_with_concurrent_parameter_sibling_reads(mode: str) -> Non
     assert alias.reshape(-1).tolist() == final_weight
     assert flat_sibling.tolist() == final_weight
     assert reshaped_sibling.reshape(-1).tolist() == final_weight
+
+
+def test_one_executable_run_from_two_threads_gives_each_its_own_answer() -> None:
+    # The executable caches its feed descriptors between runs (LCD-655).  With
+    # the GIL released, two threads running the same executable must not see
+    # each other's feeds.
+    from lucid._dispatch import _wrap
+
+    sample = lucid.zeros(64, device=COMPILE_DEVICE)
+    exe, feeds, sample_impl = _compile_increment_exe(sample)
+    barrier = threading.Barrier(2)
+
+    def run(value: float) -> list[float]:
+        mine = _unwrap(lucid.full((64,), value, device=COMPILE_DEVICE))
+        own_feeds = [mine if f is sample_impl else f for f in feeds]
+        barrier.wait()
+        seen: list[float] = []
+        for _ in range(200):
+            out = _wrap(_C_engine.compile.run_executable(exe, own_feeds)[0])
+            seen.extend(set(out.tolist()))
+        return seen
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a, b = pool.submit(run, 1.0), pool.submit(run, 10.0)
+        assert set(a.result()) == {2.0}
+        assert set(b.result()) == {11.0}

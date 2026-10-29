@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mask2Former matches ground-truth masks at the logits' dtype
 - hypot of an infinite operand is +inf even against NaN (LCD-652)
 - requires_grad_(True) clears the detached-alias mark (LCD-650)
+- serialise the feed-cache build of a CompiledExecutable (LCD-655)
 
 ---
 
