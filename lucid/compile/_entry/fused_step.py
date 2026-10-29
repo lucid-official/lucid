@@ -112,7 +112,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, TraceGraph, Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.amp.grad_scaler import GradScaler
-    from lucid.compile._optim.compiler import _Flags, _ScalarLayout
+    from lucid.compile._optim.compiler import _CompiledStepBase, _Flags, _ScalarLayout
     from lucid.nn.module import Module
     from lucid.optim.optimizer import Optimizer
 
@@ -210,6 +210,14 @@ def fused_step(
         given a tensor that requires grad — the output of an eager trunk,
         say: the step cannot return a gradient to it.  Detach it, or use
         :func:`make_step`, whose loss carries the input gradients.
+
+    Notes
+    -----
+    Parameters on the CPU leave nothing to compile (the executables run on
+    Metal only): the call runs the eager step — ``zero_grad()``, forward,
+    ``backward()``, ``optimizer.step()`` of the optimizer passed in, which keeps
+    its own state — and returns the eager loss, with a one-time
+    ``CompileFallbackWarning``.
 
     Examples
     --------
@@ -491,17 +499,22 @@ class _FusedStep:
             If ``optimizer`` exposes no trainable parameters (every
             param_group is empty).
         """
-        from lucid.compile._optim.compiler import compile_optimizer
+        from lucid.compile._core.fallback import off_gpu_detail
 
         self._model = model
         self._loss_fn = loss_fn
+        self._optimizer = optimizer
         # The compiled optimizer owns the optimizer math + state buffers
         # + per-step scalars.  Any optimizer it supports (or rejects)
-        # propagates automatically here.
-        self._copt = compile_optimizer(optimizer)
-        if not self._copt._params:
+        # propagates automatically here.  It is built when the parameters are
+        # on Metal — here, or on the first call after the model moves there —
+        # so a CPU-resident ``optimizer`` keeps its own state and steps eagerly.
+        self._compiled: _CompiledStepBase | None = None
+        self._params_seen: list[Tensor] = []
+        if not any(group["params"] for group in optimizer.param_groups):
             raise ValueError("fused_step: optimizer has no trainable parameters")
-        self._params_seen: list[Tensor] = self._copt._params
+        if off_gpu_detail(model.parameters()) is None:
+            self._compile_optimizer()
 
         # GradScaler integration (X4.3).  None ⇒ unscaled path.
         self._grad_scaler: GradScaler | None = grad_scaler
@@ -534,9 +547,11 @@ class _FusedStep:
         """The compiled optimizer this step updates — checkpoint through it.
 
         Its ``state_dict()`` / ``load_state_dict()`` carry the state the
-        fused executable reads and writes, in the eager format.
+        fused executable reads and writes, in the eager format.  Where the
+        step runs eagerly because the model is on the CPU, it is the
+        optimizer passed in, which keeps its own state.
         """
-        return self._copt
+        return self._optimizer if self._compiled is None else self._compiled
 
     def cache_info(self) -> dict[str, object]:
         """Snapshot the plan cache and eager-fallback blacklist for tests and telemetry."""
@@ -571,6 +586,7 @@ class _FusedStep:
         ``GradScaler.step`` that skips does not call ``optimizer.step``, so
         there the skipped step does not count.
         """
+        from lucid.compile._core.fallback import _fallback_notice, off_gpu_detail
         from lucid.compile._core.signature import (
             leaf_tensors,
             model_has_active_hooks,
@@ -579,6 +595,14 @@ class _FusedStep:
 
         leaves = leaf_tensors(args, {})
         _refuse_input_grads(leaves)
+        # Once the compiled optimizer owns the state there is no CPU step to
+        # fall back to (a model moved back to CPU): its own step refuses.
+        if (
+            self._compiled is None
+            and (off_gpu := off_gpu_detail(self._model.parameters())) is not None
+        ):
+            _fallback_notice("cpu", f"fused_step: {off_gpu}")
+            return self._run_eager(args)
         copt = self._copt
         copt._count_step()  # the fused update never calls ``optimizer.step``
         copt._sync_params()
@@ -639,8 +663,10 @@ class _FusedStep:
         from lucid._tensor.tensor import Tensor
         from lucid.autograd._grad_mode import enable_grad
 
-        copt = self._copt
-        copt.zero_grad()
+        # Whoever owns the optimizer state steps it: the compiled wrapper once
+        # it has the state, else the optimizer itself.
+        stepper = self._optimizer if self._compiled is None else self._compiled
+        stepper.zero_grad()
         with enable_grad():
             out = self._model(*args[:1])
             loss = self._loss_fn(out, *args[1:])
@@ -648,11 +674,11 @@ class _FusedStep:
                 scaled = self._grad_scaler.scale(loss)
                 assert isinstance(scaled, Tensor)
                 scaled.backward()
-                self._grad_scaler.step(copt._opt)
+                self._grad_scaler.step(self._optimizer)
                 self._grad_scaler.update()
             else:
                 loss.backward()
-                copt.step()
+                stepper.step()
         return loss.detach()
 
     def _refresh_scaler_scalars(self) -> None:
@@ -691,6 +717,19 @@ class _FusedStep:
         self._reachable = None
 
     # ── Internals ───────────────────────────────────────────────
+
+    @property
+    def _copt(self) -> _CompiledStepBase:
+        """The compiled optimizer, built — and handed the state — on first need."""
+        return self._compiled if self._compiled is not None else self._compile_optimizer()
+
+    def _compile_optimizer(self) -> _CompiledStepBase:
+        """Hand the optimizer's state to a compiled wrapper (once)."""
+        from lucid.compile._optim.compiler import compile_optimizer
+
+        copt = self._compiled = compile_optimizer(self._optimizer)
+        self._params_seen = copt._params
+        return copt
 
     def _key(
         self, members: tuple[int, ...], flags: tuple[_Flags, ...], args: tuple[Tensor, ...] = ()

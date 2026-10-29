@@ -79,6 +79,34 @@ def _accumulate_grads(
         backward(roots, seeds)
 
 
+def _forward_loss(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
+    """``loss_fn(model(x))`` — the one forward the traced and the eager step both run."""
+    out = model(x)
+    # Module.__call__ widens to Tensor|tuple; loss_fn expects Tensor.
+    if not isinstance(out, Tensor):
+        raise TypeError(
+            "compiled_step: model must return a Tensor for the loss_fn "
+            f"to consume, got {type(out).__name__}"
+        )
+    return loss_fn(out)
+
+
+def _eager_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor], why: str) -> Tensor:
+    """What :func:`compiled_step` does where nothing can be compiled: the eager step.
+
+    Forward, loss and ``backward()`` add the gradients into ``.grad`` as the
+    compiled step does, and the loss returned carries no graph, as its does.
+    """
+    from lucid.autograd._grad_mode import enable_grad
+    from lucid.compile._core.fallback import _fallback_notice
+
+    _fallback_notice("cpu", f"compiled_step: {why}")
+    with enable_grad():
+        loss = _forward_loss(model, x, loss_fn)
+        loss.backward()
+    return loss.detach()
+
+
 def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
     """Run one compiled training step: forward + backward + grad accumulation.
 
@@ -107,6 +135,9 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
 
     Notes
     -----
+    Parameters on the CPU have nothing to compile (Metal only): the step runs
+    eagerly, with a one-time ``CompileFallbackWarning``.
+
     The trace is captured in the caller's grad mode and fresh on every call;
     cache integration (compile-or-cached) lives in Phase 1.4's
     ``CompiledModule``.
@@ -144,22 +175,18 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         model_has_cumulative_bn,
     )
     from lucid.compile._core.buffer_writes import refuse
+    from lucid.compile._core.fallback import off_gpu_detail
     from lucid.compile._core.trace_context import compile_attempt, recording
 
     params = list(model.parameters())
     if not params:
         raise ValueError("compiled_step: model has no trainable parameters")
+    if (off_gpu := off_gpu_detail(params)) is not None:
+        return _eager_step(model, x, loss_fn, off_gpu)
 
     with compile_attempt():
         with recording(watch=(x,), module=model) as tracer:
-            out = model(x)
-            # Module.__call__ widens to Tensor|tuple; loss_fn expects Tensor.
-            if not isinstance(out, Tensor):
-                raise TypeError(
-                    "compiled_step: model must return a Tensor for the loss_fn "
-                    f"to consume, got {type(out).__name__}"
-                )
-            loss_t = loss_fn(out)
+            loss_t = _forward_loss(model, x, loss_fn)
 
         g = tracer.graph
         ext = tracer.external_feeds

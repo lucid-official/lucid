@@ -338,6 +338,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
+        ("_CompiledStepBase", "lucid.compile._optim.compiler", "_CompiledStepBase"),
         ("_Flags", "lucid.compile._optim.compiler", "_Flags"),
         ("_ScalarLayout", "lucid.compile._optim.compiler", "_ScalarLayout"),
     ),

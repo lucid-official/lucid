@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 from lucid._C import engine as _C_engine
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
+from lucid.compile._core.fallback import refuse_off_gpu
 from lucid.compile._optim.spec import _hp
 from lucid.optim._step_counter import _counts_as_step, _record_step
 
@@ -691,7 +692,7 @@ class _CompiledStepBase:
 
     @_counts_as_step  # so ``opt.step = self.step`` is no override to a scheduler
     def step(self, closure: Callable[..., Tensor] | None = None) -> Tensor | None:
-        """Run one compiled update step, in place; returns ``closure()``'s loss or ``None``.
+        """Run one compiled update step in place (Metal only); returns ``closure()``'s loss.
 
         Parameters
         ----------
@@ -703,6 +704,7 @@ class _CompiledStepBase:
         self._count_step()
         loss: Tensor | None = closure() if closure is not None else None
         self._sync_params()
+        refuse_off_gpu(self._params, "compile_optimizer")
         active = tuple(i for i, p in enumerate(self._params) if p.grad is not None)
         if not active:
             return loss
@@ -731,12 +733,8 @@ class _CompiledStepBase:
         if layout == self._group_ids:
             return
         old = {id(p): k for k, p in enumerate(self._params)}
-        params: list[Tensor] = []
-        group_of: list[int] = []
-        for gi, ps in enumerate(groups):
-            for p in ps:
-                params.append(p)
-                group_of.append(gi)
+        params = [p for ps in groups for p in ps]
+        group_of = [gi for gi, ps in enumerate(groups) for _ in ps]
 
         def carry[T](values: list[T], default: Callable[[], T]) -> list[T]:
             out: list[T] = []

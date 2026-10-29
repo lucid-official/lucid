@@ -133,7 +133,9 @@ def test_the_step_matches_eager_and_only_a_cumulative_batch_norm_runs_eager(
         assert ran_eager is expected_eager
 
 
-@pytest.mark.parametrize("device", ["cpu", "metal"])
+# Metal only: on the CPU there is no executable to refuse, and ``compiled_step``
+# runs the eager step (test_cpu_entry_points.py).
+@pytest.mark.parametrize("device", ["metal"])
 @pytest.mark.parametrize(
     "norm, match", [("batch-none", "momentum=None"), ("instance-0.1", "wrote in place")]
 )

@@ -1011,7 +1011,7 @@
    "file-loc-over-cap": {
     "lucid/_tensor/_dunders.py": 226,
     "lucid/_tensor/tensor.py": 2410,
-    "lucid/compile/_optim/compiler.py": 646,
+    "lucid/compile/_optim/compiler.py": 644,
     "lucid/coreml/_build.py": 1588,
     "lucid/coreml/_emit.py": 1024,
     "lucid/fft/__init__.py": 365,
@@ -1939,7 +1939,7 @@
     "lucid/autograd/_backward.py": 80,
     "lucid/autograd/gradcheck.py": 30,
     "lucid/compile/__init__.py": 34,
-    "lucid/compile/_entry/function.py": 51,
+    "lucid/compile/_entry/function.py": 50,
     "lucid/compile/_entry/module.py": 41,
     "lucid/compile/_entry/segmented_step.py": 11,
     "lucid/compile/_optim/compiler.py": 54,

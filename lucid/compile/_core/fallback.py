@@ -25,15 +25,17 @@ Three responsibilities:
 import os
 import sys
 import warnings
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, cast
 
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 
 if TYPE_CHECKING:
     from lucid.compile._core.signature import CacheKey
     from lucid.nn.module import Module
 
-__all__ = ["run_eager", "EagerFallbackSet"]
+__all__ = ["run_eager", "EagerFallbackSet", "off_gpu_detail", "refuse_off_gpu"]
 
 
 class CompileFallbackWarning(UserWarning):
@@ -88,6 +90,55 @@ def _fallback_notice(reason_category: str, detail: str) -> None:
         stacklevel=2,
         skip_file_prefixes=(_PACKAGE_ROOT,),
     )
+
+
+def off_gpu_detail(tensors: Iterable[Tensor]) -> str | None:
+    """Why ``tensors`` leave nothing to compile, or ``None`` when all are on Metal.
+
+    The executables run on the GPU only, so a model whose parameters live
+    on the CPU has no compiled path — every entry point that trains such a
+    model owns the decision to run eagerly, or to refuse, from this one
+    answer rather than from the engine's ``only Device::GPU`` error.
+
+    Parameters
+    ----------
+    tensors : Iterable[Tensor]
+        The parameters the step trains.
+
+    Returns
+    -------
+    str or None
+        The detail for :func:`_fallback_notice` (or an error message).
+    """
+    off = sum(1 for t in tensors if t._impl.device != _C_engine.Device.GPU)
+    if off == 0:
+        return None
+    return f"{off} parameter(s) live on the cpu, and compiled execution needs Metal"
+
+
+def refuse_off_gpu(tensors: Iterable[Tensor], owner: str) -> None:
+    """Raise the one error for an entry point that has no eager step to fall back to.
+
+    ``compile_optimizer``'s wrapper owns the optimizer's state, so a CPU step
+    would split it between two owners; it refuses, before any state moves.
+
+    Parameters
+    ----------
+    tensors : Iterable[Tensor]
+        The parameters the step would update.
+    owner : str
+        The entry point named in the message.
+
+    Raises
+    ------
+    RuntimeError
+        Some ``tensors`` live on the CPU; the message names Metal.
+    """
+    if (off_gpu := off_gpu_detail(tensors)) is not None:
+        raise RuntimeError(
+            f"{owner}: {off_gpu}. Move the model to Metal (`model.to('metal')`) "
+            "before building the optimizer, or keep the eager optimizer for CPU training."
+        )
 
 
 def _narrate(message: str) -> None:
