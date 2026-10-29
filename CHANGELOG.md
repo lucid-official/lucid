@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - erfcx takes the reference's analytic derivative (LCD-656)
 
+- AdamW's param groups carry decoupled_weight_decay=True
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
