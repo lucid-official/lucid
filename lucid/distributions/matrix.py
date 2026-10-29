@@ -16,7 +16,7 @@ import lucid.linalg as _la
 import lucid.special as _sp
 from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _align_device, _as_tensor, _lazy_param
+from lucid.distributions._util import _align_device, _as_tensor, _broadcast_shapes, _lazy_param
 from lucid.distributions.constraints import (
     Constraint,
     corr_cholesky,
@@ -26,7 +26,7 @@ from lucid.distributions.constraints import (
 )
 from lucid.distributions.distribution import Distribution
 from lucid.distributions.gamma import Beta, _sample_standard_gamma, _standard_gamma
-from lucid.distributions.multivariate import _precision_of, _scale_tril_of
+from lucid.distributions.multivariate import _precision_of, _scale_tril_of, _store_given_matrix
 
 # ── Wishart ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +138,9 @@ class Wishart(Distribution):
 
         Converts ``covariance_matrix`` or ``precision_matrix`` to a Cholesky
         factor internally.  Exactly one scale specification must be provided.
+        The batch shape is the broadcast of ``df`` with the leading axes of the
+        matrix: a vector of degrees of freedom over one scale matrix, or a stack
+        of matrices over one ``df``, is a batch.
 
         Parameters
         ----------
@@ -161,9 +164,10 @@ class Wishart(Distribution):
         ------
         ValueError
             If not exactly one scale specification is given, if
-            :math:`\nu \leq D - 1`, or — under validation — if the matrix
-            given is not positive-definite (a ``scale_tril``: not
-            lower-triangular with a positive diagonal).
+            :math:`\nu \leq D - 1`, if the matrix given is not a square
+            ``(..., D, D)`` matrix, or — under validation — if it is not
+            positive-definite (a ``scale_tril``: not lower-triangular with a
+            positive diagonal).
         lucid.linalg.LinAlgError
             With validation off, if a covariance or precision matrix has no
             Cholesky factorisation.
@@ -175,21 +179,11 @@ class Wishart(Distribution):
                 "precision_matrix, or scale_tril."
             )
 
-        # The matrix given is stored under its own name, so validation checks
-        # it before anything factorises it.
-        given = _as_tensor(
-            next(m for m in (covariance_matrix, precision_matrix, scale_tril) if m is not None)
+        given_name, given, dim = _store_given_matrix(
+            self, "Wishart", covariance_matrix, precision_matrix, scale_tril
         )
-        if scale_tril is not None:
-            self.scale_tril = given
-        elif covariance_matrix is not None:
-            self.covariance_matrix = given
-        else:
-            self.precision_matrix = given
-
-        self.df = _as_tensor(df)
-        dim: int = int(given.shape[-1])
         self._dim = dim
+        df = _as_tensor(df)
 
         # ``support`` promises positive-definite draws, and the Bartlett
         # diagonal is χ²(df − i) for i = 0, …, d − 1.  At df ≤ d − 1 the
@@ -197,22 +191,35 @@ class Wishart(Distribution):
         # Gamma at all: the sampler returns a rank-deficient matrix outside
         # the distribution's own declared support, with nothing to say so.
         with untraced():
-            min_df = float(self.df.min().item())
+            min_df = float(df.min().item())
         if min_df <= dim - 1:
             raise ValueError(
                 f"Wishart: df must exceed dim - 1 = {dim - 1} for a "
                 f"non-singular distribution, got {min_df}."
             )
 
-        batch_shape: tuple[int, ...] = tuple(given.shape[:-2])
+        # The batch is where *every* parameter broadcasts to — a vector of
+        # degrees of freedom over one scale matrix is a batch, as is a stack
+        # of scale matrices over one df.
+        batch_shape: tuple[int, ...] = _broadcast_shapes(tuple(given.shape[:-2]), tuple(df.shape))
+        matrix_shape = batch_shape + (dim, dim)
+        self.df = df.expand(batch_shape)
+        # The matrix given is stored under its own name, so validation checks
+        # it before anything factorises it.
+        setattr(self, given_name, given.expand(matrix_shape))
+
         event_shape: tuple[int, ...] = (dim, dim)
         super().__init__(
             batch_shape=batch_shape, event_shape=event_shape, validate_args=validate_args
         )
+        # Factorised before it is broadcast: one factor per distinct matrix.
+        factor = (
+            given if scale_tril is not None else _scale_tril_of(covariance_matrix, precision_matrix)
+        )
         if scale_tril is None:
-            self.scale_tril = _scale_tril_of(covariance_matrix, precision_matrix)
+            self.scale_tril = factor.expand(matrix_shape)
         # Pre-compute covariance for mean/variance.
-        self._cov = self.scale_tril @ self.scale_tril.mT
+        self._cov = (factor @ factor.mT).expand(matrix_shape)
 
     @_lazy_param
     def covariance_matrix(self) -> Tensor:

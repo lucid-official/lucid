@@ -18,6 +18,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _align_device,
     _as_tensor,
+    _broadcast_shapes,
     _clamp_probs,
     _lazy_param,
     _require_probs_or_logits,
@@ -163,11 +164,17 @@ class RelaxedBernoulli(Distribution):
         if param.ndim == 0 and param.device.type == "cpu":
             param = _align_device(param, self.temperature)
         self.temperature = _align_device(self.temperature, param)
+        # Both set the batch: a temperature per row over one probability is a
+        # batch, and its draws divide by that temperature.
+        shape = _broadcast_shapes(tuple(self.temperature.shape), tuple(param.shape))
+        if tuple(self.temperature.shape) != shape:
+            self.temperature = self.temperature.expand(shape)
+        if tuple(param.shape) != shape:
+            param = param.expand(shape)
         if self._is_logits:
             self.logits = param
         else:
             self.probs = param
-        shape = tuple(param.shape)
         super().__init__(batch_shape=shape, event_shape=(), validate_args=validate_args)
 
     @_lazy_param

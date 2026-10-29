@@ -6,7 +6,7 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _lazy_param
+from lucid.distributions._util import _broadcast_shapes, _lazy_param
 from lucid.distributions.constraints import (
     Constraint,
     independent,
@@ -55,6 +55,39 @@ def _scale_tril_of(covariance_matrix: Tensor | None, precision_matrix: Tensor | 
     if precision_matrix is None:
         raise ValueError("pass a covariance_matrix or a precision_matrix")
     return _precision_to_scale_tril(precision_matrix)
+
+
+def _store_given_matrix(
+    dist: Distribution,
+    owner: str,
+    covariance_matrix: Tensor | None,
+    precision_matrix: Tensor | None,
+    scale_tril: Tensor | None,
+) -> tuple[str, Tensor, int]:
+    """Store the one matrix parameter passed, as given; return its name, itself and ``D``.
+
+    Stored before anything reads its shape, so that the rank guard on
+    ``__setattr__`` refuses a short parameter with its usual message instead of
+    a broadcast failing further down; then required to be square.  The batch
+    part of a covariance, a precision and a ``scale_tril`` is read from the
+    same place, so this is where the three are told apart once.
+    """
+    name, matrix = next(
+        (n, m)
+        for n, m in (
+            ("scale_tril", scale_tril),
+            ("covariance_matrix", covariance_matrix),
+            ("precision_matrix", precision_matrix),
+        )
+        if m is not None
+    )
+    setattr(dist, name, matrix)
+    if matrix.shape[-1] != matrix.shape[-2]:
+        raise ValueError(
+            f"{owner}: `{name}` parameter must be a square matrix, "
+            f"got shape {tuple(matrix.shape)}."
+        )
+    return name, matrix, int(matrix.shape[-1])
 
 
 def _precision_of(scale_tril: Tensor) -> Tensor:
@@ -186,6 +219,10 @@ class MultivariateNormal(Distribution):
         internally converted to the lower-triangular Cholesky factor ``L``
         via :func:`lucid.linalg.cholesky` or triangular inversion.
 
+        The batch shape is the broadcast of ``loc``'s leading axes with the
+        matrix's: a stack of covariances over one mean, or one covariance over
+        a stack of means, is a batch, and both parameters are expanded to it.
+
         Parameters
         ----------
         loc : Tensor
@@ -204,7 +241,9 @@ class MultivariateNormal(Distribution):
         ------
         ValueError
             If not exactly one of the covariance parameterisations is given,
-            or — under validation — the one given is not positive-definite
+            if ``loc`` has no axes, if the matrix given is not a square
+            ``(..., D, D)`` matrix of the size ``loc`` has components, or —
+            under validation — the one given is not positive-definite
             (a ``scale_tril``: not lower-triangular with a positive
             diagonal).
         lucid.linalg.LinAlgError
@@ -218,22 +257,30 @@ class MultivariateNormal(Distribution):
                 "precision_matrix / scale_tril must be provided."
             )
         self.loc = loc
+        given_name, given, D = _store_given_matrix(
+            self, "MultivariateNormal", covariance_matrix, precision_matrix, scale_tril
+        )
+        if int(loc.shape[-1]) != D:
+            raise ValueError(
+                f"MultivariateNormal: loc has {int(loc.shape[-1])} components but "
+                f"`{given_name}` is {D} x {D}."
+            )
+        # The batch is where *every* parameter broadcasts to, not whatever
+        # ``loc`` alone says: a stack of covariances over one mean is a batch.
+        batch_shape = _broadcast_shapes(tuple(loc.shape[:-1]), tuple(given.shape[:-2]))
+        matrix_shape = batch_shape + (D, D)
+        self._D = D
+        self.loc = loc.expand(batch_shape + (D,))
         # The matrix given is stored under its own name, so validation checks
         # it before anything factorises it.
-        if scale_tril is not None:
-            self.scale_tril = scale_tril
-        elif covariance_matrix is not None:
-            self.covariance_matrix = covariance_matrix
-        elif precision_matrix is not None:
-            self.precision_matrix = precision_matrix
+        setattr(self, given_name, given.expand(matrix_shape))
 
-        D = int(self.loc.shape[-1])
-        self._D = D
-        super().__init__(
-            batch_shape=tuple(self.loc.shape[:-1]), event_shape=(D,), validate_args=validate_args
-        )
+        super().__init__(batch_shape=batch_shape, event_shape=(D,), validate_args=validate_args)
         if scale_tril is None:
-            self.scale_tril = _scale_tril_of(covariance_matrix, precision_matrix)
+            # Factorised before it is broadcast: one factor per distinct matrix.
+            self.scale_tril = _scale_tril_of(covariance_matrix, precision_matrix).expand(
+                matrix_shape
+            )
 
     @_lazy_param
     def covariance_matrix(self) -> Tensor:
