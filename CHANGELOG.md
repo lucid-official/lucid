@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (shipped in 3.16.1, where it was listed only under Fixed):** outside autocast, the matmul family (`@`, `mm`, `bmm`, `matmul`, `F.linear`, `einsum`) refuses operands of mixed float dtypes, as the reference does. It used to promote them silently. For example, an `f16 @ f32` or `int @ float` call now raises `DtypeMismatch`. Cast one operand, or run the call under `lucid.autocast` (69ac3b695)
+
 ### Performance
 
 - Optimize Python dispatch hot paths across `nn.Module.__getattr__`, `_dispatch._wrap` / `_unwrap`, `_promotion.try_unwrap`, `_tensor._methods._unary_tensor_method`, `_tensor._indexing._fast_basic_key` / `_select_slice`, `nn.functional.{linear,attention,_loss_checks,_index_checks}`, and `compile._core.signature.TensorSig.of` (reducing per-step Python function calls by 36% on `TransformerEncoderLayer` and 33% on `GPT2LMHeadModel`), and expand `lucid.benchmarks` with `bench_models` (`ResNet-18`, `ViT-Tiny`, `TransformerEncoderLayer`, `GPT-2`, `T5`, and `StaticCache` / `compiled_decode_step` `tok/s`) and `conv2d` / `sdpa` / small-tensor dispatch microbenchmarks
