@@ -193,7 +193,7 @@ class TestRefusals:
         assert list(model.state_dict()) == before
 
     def test_target_modules_is_required(self) -> None:
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="specify `target_modules`"):
             LoraModel(_lm(), LoraConfig())
 
     def test_a_non_linear_match_raises_before_anything_changes(self) -> None:

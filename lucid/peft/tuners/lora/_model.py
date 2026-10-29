@@ -87,6 +87,13 @@ def _linear_target(key: str, module: nn.Module) -> nn.Linear:
 
 def _not_found(config: LoraConfig) -> ValueError:
     targets = config.target_modules
+    if targets is None:
+        # The reference falls back to a table of per-architecture defaults;
+        # Lucid's zoo has none yet, so the choice is the caller's.
+        return ValueError(
+            "Please specify `target_modules` in `peft_config`: a list of module names, "
+            "a regex, or 'all-linear'"
+        )
     shown = sorted(targets) if isinstance(targets, set) else targets
     message = (
         f"Target modules {shown} not found in the base model. "
