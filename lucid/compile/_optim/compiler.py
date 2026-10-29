@@ -31,15 +31,20 @@ Nothing the user can change between steps is baked into the trace:
 All of those numbers travel as one packed 1-D vector per parameter dtype
 — a single host-to-device upload per step — that the trace splits with
 one ``unbind``.  Only *structural* choices (whether weight decay or
-momentum is on, AMSGrad, centred RMSprop, which parameters take part)
-shape the trace; when one of those changes the next step builds (or
-reuses from a small cache) another executable.
+momentum is on, AMSGrad, centred RMSprop, ``maximize``, decoupled weight
+decay, which parameters take part) shape the trace; when one of those
+changes the next step builds (or reuses from a small cache) another
+executable.
+
+Every option an eager optimizer keeps in its ``param_groups`` is read by
+the compiled step or named in the refusal table of
+``lucid/test/unit/compile/test_compiled_optimizer_options.py``, which
+walks each optimizer's keys against it.
 
 Parameters whose gradient is ``None`` are skipped exactly as the eager
 optimizers skip them: no update, no state change, no step advance.
 """
 
-import math
 import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
@@ -152,6 +157,16 @@ def compile_optimizer(opt: Optimizer) -> _CompiledStepBase:
         still lets ``loss.backward()`` run a regular eager
         optimizer step.
     """
+    # One optimizer, one state: compiling it again (a second fused_step
+    # over the same optimizer, say) hands back the wrapper that owns it.
+    existing = opt.__dict__.get(_OWNER_ATTR)
+    if isinstance(existing, _CompiledStepBase):
+        return existing
+    return _wrapper_class(opt)(opt)
+
+
+def _wrapper_class(opt: Optimizer) -> type[_CompiledStepBase]:
+    """The compiled wrapper of ``opt``'s class (a subclass is listed before its base)."""
     from lucid.optim.sgd import SGD
     from lucid.optim.adam import Adam, AdamW
     from lucid.optim.others import (
@@ -166,45 +181,30 @@ def compile_optimizer(opt: Optimizer) -> _CompiledStepBase:
         SparseAdam,
     )
     from lucid.optim.lbfgs import LBFGS
+    from lucid.compile._optim import adam_family
+    from lucid.compile._optim.sparse_adam import _CompiledSparseAdam
 
-    # One optimizer, one state: compiling it again (a second fused_step
-    # over the same optimizer, say) hands back the wrapper that owns it.
-    existing = opt.__dict__.get(_OWNER_ATTR)
-    if isinstance(existing, _CompiledStepBase):
-        return existing
-
-    if isinstance(opt, SGD):
-        return _CompiledSGD(opt)
-    if isinstance(opt, AdamW):
-        return _CompiledAdamW(opt)
-    if isinstance(opt, Adam):
-        return _CompiledAdam(opt)
-    if isinstance(opt, RMSprop):
-        return _CompiledRMSprop(opt)
-    if isinstance(opt, Adagrad):
-        return _CompiledAdagrad(opt)
-    if isinstance(opt, Adadelta):
-        return _CompiledAdadelta(opt)
-    if isinstance(opt, Adamax):
-        return _CompiledAdamax(opt)
-    if isinstance(opt, NAdam):
-        return _CompiledNAdam(opt)
-    if isinstance(opt, SparseAdam):
-        from lucid.compile._optim.sparse_adam import _CompiledSparseAdam
-
-        return _CompiledSparseAdam(opt)
-    if isinstance(opt, Rprop):
-        return _CompiledRprop(opt)
-    if isinstance(opt, ASGD):
-        return _CompiledASGD(opt)
-    if isinstance(opt, RAdam):
-        return _CompiledRAdam(opt)
-    if isinstance(opt, LBFGS):
-        # LBFGS compile path supports the closure-less single-step
-        # subset only — full closure-driven line search is genuinely
-        # incompatible with a fixed MPSGraph executable.
-        return _CompiledLBFGS(opt)
-
+    wrappers: tuple[tuple[type[Optimizer], type[_CompiledStepBase]], ...] = (
+        (SGD, _CompiledSGD),
+        (AdamW, adam_family._CompiledAdamW),
+        (Adam, adam_family._CompiledAdam),
+        (RMSprop, _CompiledRMSprop),
+        (Adagrad, _CompiledAdagrad),
+        (Adadelta, _CompiledAdadelta),
+        (Adamax, _CompiledAdamax),
+        (NAdam, adam_family._CompiledNAdam),
+        (SparseAdam, _CompiledSparseAdam),
+        (Rprop, _CompiledRprop),
+        (ASGD, _CompiledASGD),
+        (RAdam, adam_family._CompiledRAdam),
+        # LBFGS compile path supports the closure-less single-step subset
+        # only — full closure-driven line search is genuinely incompatible
+        # with a fixed MPSGraph executable.
+        (LBFGS, _CompiledLBFGS),
+    )
+    for eager, compiled in wrappers:
+        if isinstance(opt, eager):
+            return compiled
     raise TypeError(
         f"compile_optimizer: unsupported optimizer class "
         f"{type(opt).__name__!r}.  Supported: SGD, Adam, AdamW, "
@@ -223,9 +223,27 @@ _OWNER_ATTR = "_compiled_step"
 # all of them answer for the compiled wrapper once it owns the state.
 _STATE_ENTRY_POINTS: tuple[str, ...] = ("step", "state_dict", "load_state_dict")
 
-# Structural choices of one parameter group (weight decay on, momentum
-# on, AMSGrad …) — the part of the hyper-parameters that shapes the trace.
+# Structural choices of one parameter group that are the optimizer's own
+# (weight decay on, momentum on, AMSGrad …) — the part of its
+# hyper-parameters that shapes the trace.
 _Flags = tuple[object, ...]
+
+
+@final
+@dataclass(frozen=True)
+class _GroupFlags:
+    """A group's structural choices: the ones every optimizer has, and its own.
+
+    ``maximize`` is the base class's: the gradient is negated on entry, so
+    no ``_update`` ever sees the option and none can forget it.
+    """
+
+    maximize: bool
+    own: _Flags
+
+
+# Every group's flags — the key of an executable.
+_PlanFlags = tuple[_GroupFlags, ...]
 
 # One number in the packed per-step scalar vector:
 #   ("g", name, group)  — a group hyper-parameter (or a value derived
@@ -401,7 +419,9 @@ class _CompiledStepBase:
     --------------
     :meth:`_flags(group)`
         Structural choices of a group — anything that changes the
-        trace.  Values that only change numbers stay out.
+        trace.  Values that only change numbers stay out.  ``maximize``
+        is not one to handle here: :meth:`_emit` negates the gradient
+        before any ``_update`` sees it, for every optimizer.
     :meth:`_state_names(flags)`
         Ordered names of the per-parameter state buffers, under the
         reference framework's names (``exp_avg``, ``momentum_buffer`` …).
@@ -652,7 +672,7 @@ class _CompiledStepBase:
                 continue
             p = self._params[i]
             gi = self._group_of[i]
-            self._ensure_state(i, flags[gi], groups[gi])
+            self._ensure_state(i, flags[gi].own, groups[gi])
             if not self._initialized[i]:
                 self._init_pstate(i, groups[gi])
                 self._initialized[i] = True
@@ -754,7 +774,7 @@ class _CompiledStepBase:
         self._plans = {}
         self._exact_plans_built = 0
 
-    def _flags_now(self) -> tuple[_Flags, ...]:
+    def _flags_now(self) -> _PlanFlags:
         """Every group's structural flags, read from the live groups.
 
         Each step (``step`` and ``fused_step``) and each checkpoint reads the
@@ -765,7 +785,10 @@ class _CompiledStepBase:
         packed or run.
         """
         self._opt._sync_group_hyperparams()
-        return tuple(self._flags(g) for g in self._opt.param_groups)
+        return tuple(
+            _GroupFlags(bool(g.get("maximize", False)), self._flags(g))
+            for g in self._opt.param_groups
+        )
 
     def _ensure_state(self, i: int, flags: _Flags, group: dict[str, object]) -> None:
         """Allocate any state buffer parameter ``i`` needs and lacks."""
@@ -774,17 +797,17 @@ class _CompiledStepBase:
             if name not in state:
                 state[name] = self._init_state(i, name, group)
 
-    def _activate(self, i: int, flags: tuple[_Flags, ...], groups: list[dict[str, object]]) -> None:
+    def _activate(self, i: int, flags: _PlanFlags, groups: list[dict[str, object]]) -> None:
         """Make parameter ``i`` ready to step; first time = eager's slot init."""
         gi = self._group_of[i]
         group = groups[gi]
         if self._initialized[i]:
-            self._ensure_state(i, flags[gi], group)
+            self._ensure_state(i, flags[gi].own, group)
             return
         from lucid.autograd._grad_mode import no_grad
 
         state = self._state[i]
-        for name in self._state_names(flags[gi]):
+        for name in self._state_names(flags[gi].own):
             fresh = self._init_state(i, name, group)
             buf = state.get(name)
             if buf is None:
@@ -805,7 +828,7 @@ class _CompiledStepBase:
 
     # ── Plans ────────────────────────────────────────────────────
 
-    def _plan_for(self, active: tuple[int, ...], flags: tuple[_Flags, ...]) -> _Plan:
+    def _plan_for(self, active: tuple[int, ...], flags: _PlanFlags) -> _Plan:
         """The executable for this step's active set (see the class docstring)."""
         key: tuple[object, ...] = (active, False, flags, self._partition(active))
         plan = self._plans.get(key)
@@ -830,9 +853,7 @@ class _CompiledStepBase:
         while len(self._plans) > self._MAX_PLANS:
             self._plans.pop(next(iter(self._plans)))
 
-    def _build_plan(
-        self, members: tuple[int, ...], masked: bool, flags: tuple[_Flags, ...]
-    ) -> _Plan:
+    def _build_plan(self, members: tuple[int, ...], masked: bool, flags: _PlanFlags) -> _Plan:
         """Trace + compile the update of ``members``."""
         from lucid._dispatch import _unwrap
         from lucid.autograd._grad_mode import no_grad
@@ -841,7 +862,7 @@ class _CompiledStepBase:
         groups = self._opt.param_groups
         for i in members:
             # A masked plan reads every member's state, stepped or not.
-            self._ensure_state(i, flags[self._group_of[i]], groups[self._group_of[i]])
+            self._ensure_state(i, flags[self._group_of[i]].own, groups[self._group_of[i]])
         registry: dict[int, _Slot] = {}
         for i in members:
             registry[id(_unwrap(self._params[i]))] = ("param", i, "")
@@ -953,9 +974,7 @@ class _CompiledStepBase:
             out.append(seen.setdefault(key, len(seen)))
         return tuple(out)
 
-    def _new_layout(
-        self, members: Sequence[int], masked: bool, flags: tuple[_Flags, ...]
-    ) -> _ScalarLayout:
+    def _new_layout(self, members: Sequence[int], masked: bool, flags: _PlanFlags) -> _ScalarLayout:
         """Every scalar the update of ``members`` reads, in one fixed order."""
         from lucid._dispatch import _unwrap
 
@@ -971,9 +990,9 @@ class _CompiledStepBase:
             gi = self._group_of[i]
             if gi not in seen_groups:
                 seen_groups.add(gi)
-                entries.extend(("g", n, gi) for n in self._group_scalar_names(flags[gi]))
+                entries.extend(("g", n, gi) for n in self._group_scalar_names(flags[gi].own))
         for c, rep in enumerate(class_reps):
-            names = self._param_scalar_names(flags[self._group_of[rep]])
+            names = self._param_scalar_names(flags[self._group_of[rep]].own)
             entries.extend(("c", n, c) for n in names)
         if masked:
             entries.extend(("a", "", i) for i in members)
@@ -991,11 +1010,11 @@ class _CompiledStepBase:
         return {dt: _wrap(_pack_impl([0.0] * n, dt, layout.device)) for dt in layout.dtypes}
 
     def _scalar_vectors(
-        self, layout: _ScalarLayout, flags: tuple[_Flags, ...], active: set[int] | None
+        self, layout: _ScalarLayout, flags: _PlanFlags, active: set[int] | None
     ) -> list[_C_engine.TensorImpl]:
         """This step's packed scalar vectors, one per dtype of ``layout``."""
         groups = self._opt.param_groups
-        gv = [self._group_values(g, flags[k]) for k, g in enumerate(groups)]
+        gv = [self._group_values(g, flags[k].own) for k, g in enumerate(groups)]
         self._step_gv = gv
         if not layout.entries:
             return []
@@ -1007,7 +1026,7 @@ class _CompiledStepBase:
             mkey = (gi, *self._class_key(i))
             vals = memo.get(mkey)
             if vals is None:
-                vals = memo[mkey] = self._param_values(i, step, gv[gi], flags[gi])
+                vals = memo[mkey] = self._param_values(i, step, gv[gi], flags[gi].own)
             cv.append(vals)
         values: list[float] = []
         for kind, name, idx in layout.entries:
@@ -1040,7 +1059,7 @@ class _CompiledStepBase:
         grads: dict[int, Tensor],
         layout: _ScalarLayout,
         vectors: dict[_C_engine.Dtype, Tensor],
-        flags: tuple[_Flags, ...],
+        flags: _PlanFlags,
         masked: bool,
     ) -> tuple[list[Tensor], list[_Slot]]:
         """Emit the update of every member under the active tracer.
@@ -1061,7 +1080,7 @@ class _CompiledStepBase:
         for i in members:
             p = self._params[i]
             gi = self._group_of[i]
-            fl = flags[gi]
+            fl = flags[gi].own
             dt = _unwrap(p).dtype
             names = self._state_names(fl)
             st = {n: self._state[i][n] for n in names}
@@ -1072,7 +1091,9 @@ class _CompiledStepBase:
             def ps(name: str, c: int = layout.param_class[i], dt: _C_engine.Dtype = dt) -> Tensor:
                 return sc.get(("c", name, c), dt)
 
-            new_p, new_st = self._update(p, grads[i], st, fl, gs, ps)
+            # Maximising is stepping on the negated gradient, as eager does.
+            g = -grads[i] if flags[gi].maximize else grads[i]
+            new_p, new_st = self._update(p, g, st, fl, gs, ps)
             if masked:
                 on = sc.get(("a", "", i), dt) > 0.5
                 new_p = _lucid.where(on, new_p, p)
@@ -1285,125 +1306,6 @@ class _CompiledSGD(_CompiledStepBase):
         else:
             eff = g
         return p - gs("lr") * eff, new_state
-
-
-# ── Adam / AdamW ────────────────────────────────────────────────────
-
-
-class _CompiledAdam(_CompiledStepBase):
-    r"""Compiled :class:`~lucid.optim.Adam` (AMSGrad included).
-
-    Follows the eager GPU kernel's arrangement, which folds both bias
-    corrections into two per-parameter scalars:
-
-    .. math::
-
-        m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t, \quad
-        v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \\
-        \theta_t &= \theta_{t-1} - \eta_{\text{eff}} \,
-                    m_t / (\sqrt{v_t} + \varepsilon_{\text{eff}}),
-        \quad \eta_{\text{eff}} = \eta \sqrt{1-\beta_2^t} / (1-\beta_1^t),
-        \ \varepsilon_{\text{eff}} = \varepsilon \sqrt{1-\beta_2^t}
-
-    Weight decay is folded into the gradient (coupled L2).  With
-    ``amsgrad=True`` the denominator uses the running maximum of ``v``.
-
-    See Also
-    --------
-    :class:`lucid.optim.Adam` : eager counterpart.
-    :class:`_CompiledAdamW` : decoupled-weight-decay variant.
-    """
-
-    _DECOUPLED: bool = False
-    _DEFAULT_WD: float = 0.0
-    _OPTIONAL_STATE = ("max_exp_avg_sq",)
-
-    @override
-    def _flags(self, group: dict[str, object]) -> _Flags:
-        return (_wd_on(group, self._DEFAULT_WD), bool(group.get("amsgrad", False)))
-
-    @override
-    def _state_names(self, flags: _Flags) -> tuple[str, ...]:
-        if flags[1]:
-            return ("exp_avg", "exp_avg_sq", "max_exp_avg_sq")
-        return ("exp_avg", "exp_avg_sq")
-
-    @override
-    def _group_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        names = ["beta1", "one_minus_beta1", "beta2", "one_minus_beta2"]
-        if flags[0]:
-            names.append("wd_factor" if self._DECOUPLED else "weight_decay")
-        return tuple(names)
-
-    @override
-    def _param_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("lr_eff", "eps_eff")
-
-    @override
-    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
-        lr = _hp(group, "lr", 1e-3)
-        b1 = _hp(group, "beta1", 0.9)
-        b2 = _hp(group, "beta2", 0.999)
-        wd = _hp(group, "weight_decay", self._DEFAULT_WD)
-        return {
-            "lr": lr,
-            "eps": _hp(group, "eps", 1e-8),
-            "beta1": b1,
-            "one_minus_beta1": 1.0 - b1,
-            "beta2": b2,
-            "one_minus_beta2": 1.0 - b2,
-            "weight_decay": wd,
-            "wd_factor": 1.0 - lr * wd,
-        }
-
-    @override
-    def _param_values(
-        self, i: int, step: int, gv: dict[str, float], flags: _Flags
-    ) -> dict[str, float]:
-        bc1 = 1.0 - gv["beta1"] ** float(step)
-        bc2 = 1.0 - gv["beta2"] ** float(step)
-        sqrt_bc2 = math.sqrt(bc2)
-        return {"lr_eff": gv["lr"] * sqrt_bc2 / bc1, "eps_eff": gv["eps"] * sqrt_bc2}
-
-    @override
-    def _update(
-        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
-    ) -> _Update:
-        import lucid as _lucid
-
-        wd_on, amsgrad = flags
-        base = p
-        if wd_on:
-            if self._DECOUPLED:
-                base = p * gs("wd_factor")
-            else:
-                g = g + gs("weight_decay") * p
-        m = gs("beta1") * state["exp_avg"] + gs("one_minus_beta1") * g
-        v = gs("beta2") * state["exp_avg_sq"] + gs("one_minus_beta2") * (g * g)
-        new_state = {"exp_avg": m, "exp_avg_sq": v}
-        v_used = v
-        if amsgrad:
-            v_used = _lucid.maximum(state["max_exp_avg_sq"], v)
-            new_state["max_exp_avg_sq"] = v_used
-        denom = v_used.sqrt() + ps("eps_eff")
-        return base - ps("lr_eff") * (m / denom), new_state
-
-
-@final
-class _CompiledAdamW(_CompiledAdam):
-    r"""Compiled :class:`~lucid.optim.AdamW` — Adam with decoupled weight decay.
-
-    The parameter is first scaled by :math:`1 - \eta\lambda` (as the
-    eager kernel does), then takes the Adam step; the decay never enters
-    the moments.
-
-    See Also
-    --------
-    :class:`lucid.optim.AdamW` : eager counterpart.
-    """
-
-    _DECOUPLED = True
-    _DEFAULT_WD = 1e-2
 
 
 # ── RMSprop ─────────────────────────────────────────────────────────
@@ -1692,229 +1594,6 @@ class _CompiledAdamax(_CompiledStepBase):
         u = _lucid.maximum(gs("beta2") * state["exp_inf"], g.abs() + gs("eps"))
         new_p = p - ps("step_size") * (m / u)
         return new_p, {"exp_avg": m, "exp_inf": u}
-
-
-# ── NAdam ───────────────────────────────────────────────────────────
-
-
-@final
-class _CompiledNAdam(_CompiledStepBase):
-    r"""Compiled :class:`~lucid.optim.NAdam` — Adam with Nesterov lookahead.
-
-    With :math:`\mu_t = \beta_1(1 - \tfrac12 \cdot 0.96^{t\psi})`
-    (:math:`\psi = 0.004`, the engine's fixed momentum decay) and the
-    per-parameter running product :math:`\Pi_t = \prod_{k\le t}\mu_k`:
-
-    .. math::
-
-        \theta_t = \theta_{t-1}
-            - \frac{\eta(1-\mu_t)}{1-\Pi_t} \frac{g_t}{d_t}
-            - \frac{\eta\mu_{t+1}}{1-\Pi_t\mu_{t+1}} \frac{m_t}{d_t},
-        \quad d_t = \sqrt{v_t / (1-\beta_2^t)} + \varepsilon
-
-    :math:`\Pi_t` is per-parameter scalar state rounded to float32 every
-    step, as the engine keeps it (``mu_product`` in the state dict).
-
-    See Also
-    --------
-    :class:`lucid.optim.NAdam` : eager counterpart.
-    """
-
-    _MOMENTUM_DECAY: float = 0.004
-    _PSTATE_NAMES = ("mu_product",)
-
-    @override
-    def _flags(self, group: dict[str, object]) -> _Flags:
-        return (_wd_on(group), bool(group.get("decoupled_weight_decay", False)))
-
-    @override
-    def _state_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("exp_avg", "exp_avg_sq")
-
-    @override
-    def _group_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        names = ["beta1", "one_minus_beta1", "beta2", "one_minus_beta2", "eps"]
-        if flags[0]:
-            names.append("wd_factor" if flags[1] else "weight_decay")
-        return tuple(names)
-
-    @override
-    def _param_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("inv_bc2", "c1", "c2")
-
-    @override
-    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
-        lr = _hp(group, "lr", 2e-3)
-        b1 = _hp(group, "beta1", 0.9)
-        b2 = _hp(group, "beta2", 0.999)
-        wd = _hp(group, "weight_decay", 0.0)
-        return {
-            "lr": lr,
-            "beta1": b1,
-            "one_minus_beta1": 1.0 - b1,
-            "beta2": b2,
-            "one_minus_beta2": 1.0 - b2,
-            "eps": _hp(group, "eps", 1e-8),
-            "weight_decay": wd,
-            "wd_factor": 1.0 - lr * wd,
-            "momentum_decay": _hp(group, "momentum_decay", self._MOMENTUM_DECAY),
-        }
-
-    def _mu(self, beta1: float, step: int, momentum_decay: float = _MOMENTUM_DECAY) -> float:
-        return beta1 * (1.0 - 0.5 * float(0.96 ** (float(step) * momentum_decay)))
-
-    def _next_mu_product(
-        self, i: int, step: int, beta1: float, momentum_decay: float = _MOMENTUM_DECAY
-    ) -> float:
-        prod = self._pstate[i].get("mu_product", 1.0)
-        return _round_state_scalar(
-            prod * self._mu(beta1, step, momentum_decay), self._params[i]._impl.dtype
-        )
-
-    @override
-    def _param_values(
-        self, i: int, step: int, gv: dict[str, float], flags: _Flags
-    ) -> dict[str, float]:
-        b1 = gv["beta1"]
-        md = gv["momentum_decay"]
-        mu = self._mu(b1, step, md)
-        mu_next = self._mu(b1, step + 1, md)
-        mu_prod = self._next_mu_product(i, step, b1, md)
-        mu_prod_next = mu_prod * mu_next
-        bc2 = 1.0 - gv["beta2"] ** float(step)
-        lr = gv["lr"]
-        return {
-            "inv_bc2": 1.0 / bc2,
-            "c1": lr * (1.0 - mu) / (1.0 - mu_prod),
-            "c2": lr * mu_next / (1.0 - mu_prod_next),
-        }
-
-    @override
-    def _init_pstate(self, i: int, group: dict[str, object]) -> None:
-        self._pstate[i] = {"mu_product": 1.0}
-
-    @override
-    def _advance(self, i: int, step: int, gv: dict[str, float]) -> None:
-        self._pstate[i]["mu_product"] = self._next_mu_product(
-            i, step, gv["beta1"], gv["momentum_decay"]
-        )
-
-    @override
-    def _update(
-        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
-    ) -> _Update:
-        wd_on, decoupled = flags
-        base = p
-        if wd_on:
-            if decoupled:
-                base = p * gs("wd_factor")
-            else:
-                g = g + gs("weight_decay") * p
-        m = gs("beta1") * state["exp_avg"] + gs("one_minus_beta1") * g
-        v = gs("beta2") * state["exp_avg_sq"] + gs("one_minus_beta2") * (g * g)
-        denom = (ps("inv_bc2") * v).sqrt() + gs("eps")
-        new_p = (base - ps("c1") * (g / denom)) - ps("c2") * (m / denom)
-        return new_p, {"exp_avg": m, "exp_avg_sq": v}
-
-
-# ── RAdam ───────────────────────────────────────────────────────────
-
-
-@final
-class _CompiledRAdam(_CompiledStepBase):
-    r"""Compiled :class:`~lucid.optim.RAdam` — Rectified Adam.
-
-    The rectification term :math:`r_t` and the "variance tractable"
-    test :math:`\rho_t > 5` depend only on the parameter's step, so both
-    are per-parameter scalars and the branch is a ``where`` on a 0-D
-    flag:
-
-    .. math::
-
-        \hat m_t &= m_t / (1-\beta_1^t) \\
-        \theta_t &= \theta_{t-1} - \begin{cases}
-            \eta r_t \hat m_t \sqrt{1-\beta_2^t} / (\sqrt{v_t} + \varepsilon)
-                & \rho_t > 5 \\
-            \eta \hat m_t & \text{otherwise}
-        \end{cases}
-
-    See Also
-    --------
-    :class:`lucid.optim.RAdam` : eager counterpart.
-    """
-
-    @override
-    def _flags(self, group: dict[str, object]) -> _Flags:
-        return (_wd_on(group),)
-
-    @override
-    def _state_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("exp_avg", "exp_avg_sq")
-
-    @override
-    def _group_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        names = ("lr", "beta1", "one_minus_beta1", "beta2", "one_minus_beta2", "eps")
-        return names + ("weight_decay",) if flags[0] else names
-
-    @override
-    def _param_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("inv_bc1", "bc2_sqrt", "lr_rt", "use_rect")
-
-    @override
-    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
-        b1 = _hp(group, "beta1", 0.9)
-        b2 = _hp(group, "beta2", 0.999)
-        return {
-            "lr": _hp(group, "lr", 1e-3),
-            "beta1": b1,
-            "one_minus_beta1": 1.0 - b1,
-            "beta2": b2,
-            "one_minus_beta2": 1.0 - b2,
-            "eps": _hp(group, "eps", 1e-8),
-            "weight_decay": _hp(group, "weight_decay", 0.0),
-        }
-
-    @override
-    def _param_values(
-        self, i: int, step: int, gv: dict[str, float], flags: _Flags
-    ) -> dict[str, float]:
-        b1, b2 = gv["beta1"], gv["beta2"]
-        bc1 = 1.0 - b1 ** float(step)
-        bc2 = 1.0 - b2 ** float(step)
-        rho_inf = 2.0 / (1.0 - b2) - 1.0
-        rho_t = rho_inf - 2.0 * step * b2 ** float(step) / bc2
-        use_rect = rho_t > 5.0
-        r_t = 0.0
-        if use_rect:
-            r_t = math.sqrt(
-                (rho_t - 4.0)
-                * (rho_t - 2.0)
-                * rho_inf
-                / ((rho_inf - 4.0) * (rho_inf - 2.0) * rho_t)
-            )
-        return {
-            "inv_bc1": 1.0 / bc1,
-            "bc2_sqrt": math.sqrt(bc2),
-            "lr_rt": gv["lr"] * r_t,
-            "use_rect": 1.0 if use_rect else 0.0,
-        }
-
-    @override
-    def _update(
-        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
-    ) -> _Update:
-        import lucid as _lucid
-
-        if flags[0]:
-            g = g + gs("weight_decay") * p
-        m = gs("beta1") * state["exp_avg"] + gs("one_minus_beta1") * g
-        v = gs("beta2") * state["exp_avg_sq"] + gs("one_minus_beta2") * (g * g)
-        m_hat = ps("inv_bc1") * m
-        adaptive = ps("bc2_sqrt") / (v.sqrt() + gs("eps"))
-        p_rect = p - ps("lr_rt") * (m_hat * adaptive)
-        p_sgd = p - gs("lr") * m_hat
-        new_p = _lucid.where(ps("use_rect") > 0.5, p_rect, p_sgd)
-        return new_p, {"exp_avg": m, "exp_avg_sq": v}
 
 
 # ── ASGD ────────────────────────────────────────────────────────────

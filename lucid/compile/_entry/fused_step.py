@@ -112,7 +112,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, TraceGraph, Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.amp.grad_scaler import GradScaler
-    from lucid.compile._optim.compiler import _CompiledStepBase, _Flags, _ScalarLayout
+    from lucid.compile._optim.compiler import _CompiledStepBase, _PlanFlags, _ScalarLayout
     from lucid.nn.module import Module
     from lucid.optim.optimizer import Optimizer
 
@@ -624,7 +624,7 @@ class _FusedStep:
         self._refresh_scaler_scalars()
         return self._run(plan, args, flags)
 
-    def _compile_and_run_first(self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> Tensor:
+    def _compile_and_run_first(self, args: tuple[Tensor, ...], flags: _PlanFlags) -> Tensor:
         """Build a new fused plan and execute its first run, or fall back to eager."""
         from lucid.compile._core.fallback import _fallback_notice
         from lucid.compile._core.trace_context import compile_attempt
@@ -732,7 +732,7 @@ class _FusedStep:
         return copt
 
     def _key(
-        self, members: tuple[int, ...], flags: tuple[_Flags, ...], args: tuple[Tensor, ...] = ()
+        self, members: tuple[int, ...], flags: _PlanFlags, args: tuple[Tensor, ...] = ()
     ) -> tuple[object, ...]:
         """Plan key: participants, structural flags, per-parameter classes, inputs, params.
 
@@ -796,7 +796,7 @@ class _FusedStep:
         ghost_grads: dict[int, Tensor],
         layout: _ScalarLayout,
         vectors: dict[_C_engine.Dtype, Tensor],
-        flags: tuple[_Flags, ...],
+        flags: _PlanFlags,
         loss_for_bwd: Tensor,
     ) -> tuple[list[Tensor], list[tuple[str, int, str]], Tensor]:
         """Emit unscaled gradients, ``found_inf``, and ``where``-guarded optimizer updates."""
@@ -837,7 +837,7 @@ class _FusedStep:
         return final_outputs, slots, found_inf_f32
 
     def _trace_fused_graph(
-        self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...], *, scaler_enabled: bool
+        self, args: tuple[Tensor, ...], flags: _PlanFlags, *, scaler_enabled: bool
     ) -> _FusedTrace:
         """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
@@ -1075,7 +1075,7 @@ class _FusedStep:
         _verify_target_shapes(traced.graph, checked_ids, output_targets)
         return tuple(_unwrap(t) for t in output_targets)
 
-    def _build_plan(self, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> _FusedPlan:
+    def _build_plan(self, args: tuple[Tensor, ...], flags: _PlanFlags) -> _FusedPlan:
         """Trace + compile the fused step for the current participants."""
         from lucid.compile._core.attention_probe import maybe_probe_for_graph
 
@@ -1121,7 +1121,7 @@ class _FusedStep:
             scaled_loss_sink=scaled_loss_sink,
         )
 
-    def _run(self, plan: _FusedPlan, args: tuple[Tensor, ...], flags: tuple[_Flags, ...]) -> Tensor:
+    def _run(self, plan: _FusedPlan, args: tuple[Tensor, ...], flags: _PlanFlags) -> Tensor:
         """Bind feeds + targets and invoke the cached executable in-place.
 
         Packs this step's scalars (hyper-parameters read from the live

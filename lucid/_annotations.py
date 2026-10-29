@@ -344,7 +344,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
         ("_CompiledStepBase", "lucid.compile._optim.compiler", "_CompiledStepBase"),
-        ("_Flags", "lucid.compile._optim.compiler", "_Flags"),
+        ("_PlanFlags", "lucid.compile._optim.compiler", "_PlanFlags"),
         ("_ScalarLayout", "lucid.compile._optim.compiler", "_ScalarLayout"),
     ),
     "lucid.compile._entry.module": (
