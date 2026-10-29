@@ -1111,12 +1111,15 @@ class Optimizer:
             self._apply_decoupled_wd(group, params)
             optim.step()
 
-    def _refuse_phantom_step(self) -> None:
-        """Refuse an optimizer step under phantom mode or over a phantom parameter/gradient."""
+    def _refuse_phantom_mode(self) -> None:
+        """Refuse an optimizer step under phantom mode (O(1))."""
         if _C_engine.phantom_mode():
             raise _C_engine.LucidError(
                 "phantom tensor has no values: optimizer step under phantom mode"
             )
+
+    def _refuse_phantom_params(self) -> None:
+        """Refuse a step over a phantom parameter or gradient, in any group."""
         for group in self.param_groups:
             for p in _group_params(group):
                 g_impl = p._impl.grad_as_impl()
@@ -1125,14 +1128,53 @@ class Optimizer:
                         "phantom tensor has no values: optimizer step of a phantom parameter"
                     )
 
+    def _refuse_phantom_step(self) -> None:
+        """Refuse a step under phantom mode or over a phantom parameter/gradient.
+
+        For an optimizer that steps in Python, which has no engine to refuse
+        for it.
+        """
+        self._refuse_phantom_mode()
+        self._refuse_phantom_params()
+
+    def _engine_refusal_comes_first(self) -> bool:
+        """Whether the engine's own phantom refusal precedes every write of the step.
+
+        The engine refuses a phantom parameter or gradient itself, before it
+        moves any state, but one group at a time.  A step that writes before
+        the last group's refusal -- an earlier group, a Python decoupled weight
+        decay, or the gradient negation of ``maximize`` -- needs the parameters
+        checked up front, or it leaves the real ones moved.
+        """
+        groups = self.param_groups
+        if len(groups) != 1:
+            return False
+        group = groups[0]
+        return not (
+            group.get("maximize", False)
+            or (self._PYTHON_DECOUPLED_WD and group.get("decoupled_weight_decay", False))
+        )
+
+    def _refuse_phantom_engine_step(self) -> None:
+        """Refuse a phantom step of the engine optimizers.
+
+        The mode check is O(1).  The per-parameter walk runs only when the
+        engine's own refusal would come after a write
+        (:meth:`_engine_refusal_comes_first`), so an ordinary step does not
+        pay for it.
+        """
+        self._refuse_phantom_mode()
+        if not self._engine_refusal_comes_first():
+            self._refuse_phantom_params()
+
     def _step_engines(self, closure: _OptimizerClosure = None) -> Tensor | None:
         """Evaluate ``closure`` (if given) and step each group's engine optimizer."""
-        self._refuse_phantom_step()
+        self._refuse_phantom_engine_step()
         loss: Tensor | None = None
         if closure is not None:
             with _lucid.enable_grad():
                 loss = closure()
-            self._refuse_phantom_step()
+            self._refuse_phantom_engine_step()
         for group, optim in zip(self.param_groups, self._engine_optims, strict=True):
             self._step_one_group(group, optim)
         return loss

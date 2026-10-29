@@ -461,6 +461,39 @@ def test_an_optimizer_step_of_a_phantom_parameter_refuses(device):
 
 
 @pytest.mark.parametrize(
+    ("name", "kwargs", "grouped"),
+    [
+        ("SGD", {}, False),
+        ("Adam", {}, False),
+        ("RMSprop", {}, False),
+        ("SGD", {}, True),
+        ("Adam", {}, True),
+        ("SGD", {"maximize": True}, False),
+        ("RAdam", {"decoupled_weight_decay": True, "weight_decay": 0.1}, False),
+        ("NAdam", {"decoupled_weight_decay": True, "weight_decay": 0.1}, False),
+    ],
+    ids=lambda v: v if isinstance(v, str) else None,
+)
+def test_an_engine_optimizer_step_over_a_phantom_parameter_moves_no_real_one(
+    name, kwargs, grouped, device
+):
+    """The engine refuses a phantom parameter itself; a step that writes first
+    (a group before it, a decoupled decay, ``maximize``) must still refuse
+    before any real parameter moves, with the engine's own message."""
+    real = nn.Parameter(lucid.ones(3, device=device))
+    real.grad = lucid.ones(3, device=device)
+    with phantom():
+        bad = nn.Parameter(lucid.ones(3, device=device))
+        bad_grad = lucid.ones(3, device=device)
+    bad.grad = bad_grad
+    params = [{"params": [real]}, {"params": [bad]}] if grouped else [real, bad]
+    opt = getattr(optim, name)(params, lr=0.1, **kwargs)
+    with pytest.raises(_C_engine.LucidError, match="optimizer step of a phantom parameter"):
+        opt.step()
+    assert real.tolist() == [1.0, 1.0, 1.0]
+
+
+@pytest.mark.parametrize(
     "rebind",
     [
         "half",
