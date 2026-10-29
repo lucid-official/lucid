@@ -320,8 +320,7 @@ def _bag_of_each_index(
         n_rows, length = int(x.shape[0]), int(x.shape[1])
         positions = lucid.arange(n_rows * length, dtype=lucid.int64, device=device)
         return positions // max(length, 1), n_rows
-    if offsets is None:
-        raise _C_engine.InvalidArgument("embedding_bag: offsets required for 1-D input")
+    assert offsets is not None, "embedding_bag refuses a 1-D input without offsets first"
     bounds = offsets.to(lucid.int64).to(device)
     n_bags = int(bounds.shape[0]) - (1 if include_last_offset else 0)
     positions = lucid.arange(int(x.shape[0]), dtype=lucid.int64, device=device)
