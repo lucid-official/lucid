@@ -66,12 +66,33 @@ std::shared_ptr<mlx::core::array> pending_array(const lucid::TensorImpl& t) {
     return gpu_st != nullptr ? gpu_st->arr : nullptr;
 }
 
-void evaluate_without_gil(const lucid::TensorImpl& t) {
-    const std::shared_ptr<mlx::core::array> arr = pending_array(t);
-    if (!arr)
+// Only the wait goes without the GIL.  Every thread's work runs on the
+// process's shared MLX streams, which two threads must not encode onto at
+// once, and the GIL is what keeps them apart (SharedStreams.h): the encoding
+// (``async_eval``) happens with it held.  Waiting on an array detaches its
+// event, and another thread holding the GIL may be reading that event, so
+// the unlocked wait is on a token that only this call can reach: an identity
+// of a fresh scalar that ``depends`` on every array, run in the same pass.
+// The arrays' own waits follow with the GIL held and raise what a failed run
+// left in its event.
+void run_then_wait(std::vector<mlx::core::array> arrays) {
+    std::erase_if(arrays, [](const mlx::core::array& arr) { return arr.is_available(); });
+    if (arrays.empty())
         return;
-    py::gil_scoped_release release;
-    arr->eval();
+    mlx::core::array token = mlx::core::depends({mlx::core::array(0.0f)}, arrays).front();
+    arrays.push_back(token);
+    mlx::core::async_eval(arrays);
+    {
+        py::gil_scoped_release release;
+        token.wait();
+    }
+    for (auto& arr : arrays)
+        arr.wait();
+}
+
+void evaluate_without_gil(const lucid::TensorImpl& t) {
+    if (const std::shared_ptr<mlx::core::array> arr = pending_array(t))
+        run_then_wait({*arr});
 }
 
 // The arrays of ``tensors`` that have work to run, for one batched eval.
@@ -536,13 +557,9 @@ void register_tensor_impl(py::module_& m) {
             // Collect all GPU arrays, then evaluate in one batched MLX call.
             // mlx::core::eval(vector<array>) schedules them together —
             // significantly faster than calling arr->eval() individually.
-            std::vector<mlx::core::array> arrays = pending_arrays(tensors);
-            // The wait is the GPU's, not Python's: release the GIL for it so
+            // The wait is the GPU's, not Python's: it runs without the GIL so
             // other Python threads (a server, a data loader) keep running.
-            if (!arrays.empty()) {
-                py::gil_scoped_release release;
-                mlx::core::eval(arrays);
-            }
+            run_then_wait(pending_arrays(tensors));
         },
         py::arg("tensors"),
         "Batch-evaluate GPU tensors in one mlx::core::eval() call.\n"
@@ -555,7 +572,8 @@ void register_tensor_impl(py::module_& m) {
     m.def(
         "synchronize_gpu",
         [] {
-            py::gil_scoped_release release;
+            // Both calls encode onto the shared streams, so both keep the GIL
+            // (SharedStreams.h) — the wait included, for now.
             const std::size_t ran = lucid::gpu::evaluate_pending();
             mlx::core::synchronize();
             return ran;

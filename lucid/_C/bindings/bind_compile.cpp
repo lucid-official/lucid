@@ -25,6 +25,7 @@
 
 #include <sys/stat.h>
 
+#include "../backend/gpu/mps/MpsBridge.h"
 #include "../compile/CompiledExecutable.h"
 #include "../compile/ExecutableCache.h"
 #include "../compile/MpsBuilder.h"
@@ -73,14 +74,34 @@ namespace lucid::bindings {
 
 namespace {
 
+// MPSGraph reads a tensor's Metal buffer in place, so ``array_to_buffer``
+// first runs the tensor's pending MLX work and gives it a contiguous buffer
+// of its own.  That is MLX encoding onto the streams every thread shares,
+// which two threads must not do at once (SharedStreams.h).  Doing it here,
+// with the GIL held, leaves the run that follows without the GIL nothing to
+// encode: every buffer it reads is ready.  Four threads running compiled
+// models crashed in each of four runs when the run did it unlocked.  A view
+// is skipped: a run never reads a view's buffer in place.
+void ready_buffers(const std::vector<lucid::TensorImplPtr>& tensors) {
+    for (const auto& t : tensors) {
+        if (!t || t->device() != lucid::Device::GPU || t->family_key() != nullptr)
+            continue;
+        if (const auto* gs = std::get_if<lucid::GpuStorage>(&t->storage()); gs && gs->arr)
+            lucid::gpu::mps::array_to_buffer(*gs->arr);
+    }
+}
+
 // The feeds a compiled run reads once the GIL is released.  A Metal view
 // reads its value out of its family's root and caches it in the tensor, and
 // another Python thread may write the family meanwhile — replacing the root
 // and dropping that cache — so each view is resolved here, with the GIL
 // held, into a tensor that owns its value.  Traced RNG draws are redrawn
 // first so a draw whose trace also took a view of it (joining a family)
-// still matches its original TensorImpl in the RNG feed registry.
-std::vector<lucid::TensorImplPtr> resolve_feeds(const std::vector<lucid::TensorImplPtr>& inputs) {
+// still matches its original TensorImpl in the RNG feed registry.  The
+// feeds, and an in-place run's ``targets``, leave with their buffers ready.
+std::vector<lucid::TensorImplPtr>
+resolve_feeds(const std::vector<lucid::TensorImplPtr>& inputs,
+              const std::vector<lucid::TensorImplPtr>& targets = {}) {
     const auto redrawn = lucid::compile::redraw_rng_feeds(inputs);
     std::vector<lucid::TensorImplPtr> feeds;
     feeds.reserve(redrawn.size());
@@ -91,6 +112,8 @@ std::vector<lucid::TensorImplPtr> resolve_feeds(const std::vector<lucid::TensorI
         else
             feeds.push_back(t);
     }
+    ready_buffers(feeds);
+    ready_buffers(targets);
     return feeds;
 }
 
@@ -390,7 +413,7 @@ void register_compile(py::module_& m) {
            const std::vector<lucid::TensorImplPtr>& output_targets) -> void {
             if (!wrapper)
                 throw std::invalid_argument("run_executable_inplace: null wrapper");
-            const auto feeds = resolve_feeds(inputs);
+            const auto feeds = resolve_feeds(inputs, output_targets);
             std::vector<lucid::GpuStorage> fresh_outputs;
             {
                 py::gil_scoped_release release;

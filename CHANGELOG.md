@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - dot and outer backward follow the complex gradient convention
 
+- metal work built in one thread runs in any thread
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

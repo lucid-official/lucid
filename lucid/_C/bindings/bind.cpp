@@ -24,6 +24,7 @@
 #include <mlx/version.h>
 
 #include "../backend/Dispatcher.h"
+#include "../backend/gpu/SharedStreams.h"
 #include "../compile/Tracer.h"
 #include "../core/Error.h"
 #include "../core/TensorImpl.h"
@@ -97,6 +98,14 @@ void require_pinned_mlx() {
     }
 }
 
+// The pinned MLX, then the process's shared MLX streams (SharedStreams.h):
+// made here, where a failure is an ImportError, and bound to the importing
+// thread before anything builds MLX work on it.
+void start_mlx() {
+    require_pinned_mlx();
+    lucid::gpu::bind_thread_streams();
+}
+
 enum class FusedActivation { Relu, Gelu };
 
 // The ``_fused_linear_*`` inference kernels.  CpuBackend fuses the GEMM and
@@ -154,7 +163,7 @@ lucid::TensorImplPtr fused_linear_forward(const char* name,
 
 PYBIND11_MODULE(engine, m) {
     m.doc() = "Lucid C++ engine (production rebuild).";
-    require_pinned_mlx();
+    start_mlx();
 
     // Version constants are read by lucid/__init__.py to enforce ABI
     // compatibility between the Python wheel and the compiled extension.

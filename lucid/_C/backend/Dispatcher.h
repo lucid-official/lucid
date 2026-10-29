@@ -31,6 +31,7 @@
 #include "../core/Device.h"
 #include "../core/PhantomMode.h"
 #include "IBackend.h"
+#include "gpu/SharedStreams.h"
 
 namespace lucid {
 namespace backend {
@@ -90,10 +91,15 @@ public:
     // op on that thread then dispatches with the shape it already computed
     // and gets a phantom storage back.
     //
+    // Every op asks for its backend before it builds any MLX work, so this is
+    // where a thread first takes the process's shared MLX streams — work it
+    // builds can then run on any thread (SharedStreams.h).
+    //
     // See Also
     // --------
     // :func:`register_backend` — installer counterpart.
     static IBackend& for_device(Device d) noexcept {
+        gpu::bind_thread_streams();
         if (PhantomMode::is_enabled()) [[unlikely]]
             return phantom_backend(d);
         auto& self = instance();
