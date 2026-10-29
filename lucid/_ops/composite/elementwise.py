@@ -716,10 +716,13 @@ def expm1(input: Tensor) -> Tensor:
         correction = lucid.where(
             lucid.isfinite(naive), accurate - naive, lucid.zeros_like(accurate)
         )
-    # Where exp(x) rounds to 1, x itself is the answer and its gradient is
-    # exp(x) to within an ulp; taking it directly also keeps expm1(-0) = -0,
-    # which ``0 + (-0)`` would turn into +0.
-    return lucid.where(u == 1.0, input, naive + correction)
+    # Where exp(x) rounds to 1, x + 0.5 * c * (c - c.detach()) with clamped c
+    # equals x bit-for-bit (preserving expm1(-0) = -0 and keeping ±inf finite
+    # in MulBackward) while carrying both the unit slope and unit curvature of
+    # exp(x) at the origin for higher-order autograd.
+    c = lucid.clamp(input, -1.0, 1.0)
+    small_branch = input + 0.5 * c * (c - c.detach())
+    return lucid.where(u == 1.0, small_branch, naive + correction)
 
 
 def sinc(input: Tensor) -> Tensor:
@@ -766,7 +769,9 @@ def sinc(input: Tensor) -> Tensor:
     is_zero = input == 0.0
     safe_px = lucid.where(is_zero, lucid.full_like(input, 1.0), px)
     val = lucid.sin(safe_px) / safe_px
-    return lucid.where(is_zero, lucid.full_like(input, 1.0), val)
+    # Use the 2nd-order Taylor expansion 1 - (pi * x)^2 / 6 at x = 0 so
+    # both the value (1), slope (0), and curvature (-pi^2 / 3) are exact.
+    return lucid.where(is_zero, 1.0 - (px * px) / 6.0, val)
 
 
 def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
@@ -1202,25 +1207,28 @@ def erfc(input: Tensor) -> Tensor:
     input = _real(input)
     if input.dtype == lucid.float64:
         return _erfc_double(input)
-    # ``where`` rather than ``abs``: the gradient of ``abs`` at 0 is 0,
-    # which would zero erfc's slope (-2/√π) at exactly the origin.
-    z = lucid.where(input >= 0.0, input, -input)
-    t = 1.0 / (1.0 + 0.5 * z)
-    poly = lucid.full_like(t, 0.17087277)
-    for c in (
-        -0.82215223,
-        1.48851587,
-        -1.13520398,
-        0.27886807,
-        -0.18628806,
-        0.09678418,
-        0.37409196,
-        1.00002368,
-        -1.26551223,
-    ):
-        poly = c + t * poly
-    tail = t * lucid.exp(poly - z * z)
-    return lucid.where(input >= 0.0, tail, 2.0 - tail)
+    with lucid.no_grad():
+        z = lucid.where(input >= 0.0, input, -input)
+        t = 1.0 / (1.0 + 0.5 * z)
+        poly = lucid.full_like(t, 0.17087277)
+        for c in (
+            -0.82215223,
+            1.48851587,
+            -1.13520398,
+            0.27886807,
+            -0.18628806,
+            0.09678418,
+            0.37409196,
+            1.00002368,
+            -1.26551223,
+        ):
+            poly = c + t * poly
+        tail = t * lucid.exp(poly - z * z)
+        accurate = lucid.where(input >= 0.0, tail, 2.0 - tail)
+    if not input.requires_grad:
+        return accurate
+    erf_val = lucid.erf(input)
+    return accurate + (erf_val.detach() - erf_val)
 
 
 def _erfc_double(x: Tensor) -> Tensor:

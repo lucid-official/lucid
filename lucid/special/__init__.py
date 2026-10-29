@@ -215,7 +215,7 @@ def i0e(input: Tensor) -> Tensor:
 def _i0e_as_fit(x: Tensor) -> Tensor:
     ax = lucid.abs(x)
     xs = lucid.clamp(ax, max=3.75)
-    small = lucid.exp(-xs) * lucid.i0(xs)
+    small = lucid.exp(-xs) * lucid.i0(lucid.clip(x, -3.75, 3.75))
     big = lucid.clamp(ax, min=3.75)
     y = 3.75 / big
     poly = lucid.full_like(x, _bessel._AS_I0_LARGE[0])

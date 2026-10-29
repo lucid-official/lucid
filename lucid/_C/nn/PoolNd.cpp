@@ -37,10 +37,13 @@
 #include "../core/TensorImpl.h"
 #include "../core/Validate.h"
 #include "../kernel/NaryKernel.h"
+#include "../ops/bfunc/Add.h"
 #include "../ops/bfunc/Compare.h"
 #include "../ops/bfunc/Div.h"
+#include "../ops/bfunc/Floordiv.h"
 #include "../ops/bfunc/Maximum.h"
 #include "../ops/bfunc/Mul.h"
+#include "../ops/bfunc/Sub.h"
 #include "../ops/bfunc/_BinaryOp.h"
 #include "../ops/gfunc/Gfunc.h"
 #include "../ops/ufunc/Astype.h"
@@ -322,6 +325,46 @@ std::vector<TensorImplPtr> MaxPoolNdBackward<N>::apply_for_graph(const TensorImp
     // width — the gradient lands on the wrong elements and nothing raises.
     auto idx = std::make_shared<TensorImpl>(this->saved_argmax_, this->out_shape_, Dtype::I32,
                                             this->device_, false);
+    if (this->device_ == Device::GPU) {
+        // On the GPU backend, saved_argmax_ stores the within-window index
+        // k in [0, K_0 * ... * K_{N-1}) rather than the flat in-plane index.
+        // Convert k and the output window coordinate into the flat in-plane
+        // coordinate in [0, in_plane), marking out-of-bounds padded winners
+        // with -1 so the mask below drops them identically to the CPU path.
+        int K_suffix[4];
+        K_suffix[N] = 1;
+        for (int i = N - 1; i >= 0; --i)
+            K_suffix[i] = K_suffix[i + 1] * this->K_[i];
+        auto make_i32 = [&](std::int64_t v) {
+            return full_op(Shape{1}, static_cast<double>(v), Dtype::I32, this->device_);
+        };
+        auto zero_i32 = make_i32(0);
+        auto one_i32 = make_i32(1);
+        TensorImplPtr flat_idx = nullptr;
+        TensorImplPtr valid_mask = nullptr;
+        for (int i = 0; i < N; ++i) {
+            auto ki =
+                remainder_op(floordiv_op(idx, make_i32(K_suffix[i + 1])), make_i32(this->K_[i]));
+            std::vector<std::int64_t> rs(N + 2, 1);
+            rs[2 + i] = this->out_shape_[2 + i];
+            auto o_r = reshape_op(arange_op(0.0, static_cast<double>(this->out_shape_[2 + i]), 1.0,
+                                            Dtype::I32, this->device_),
+                                  rs);
+            auto coord = sub_op(add_op(mul_op(o_r, make_i32(this->stride_[i])), ki),
+                                make_i32(this->pad_[i]));
+            auto s_i = make_i32(xs[2 + i]);
+            auto in_bounds = mul_op(astype_op(greater_equal_op(coord, zero_i32), Dtype::I32),
+                                    astype_op(less_op(coord, s_i), Dtype::I32));
+            if (i == 0) {
+                flat_idx = coord;
+                valid_mask = in_bounds;
+            } else {
+                flat_idx = add_op(mul_op(flat_idx, s_i), coord);
+                valid_mask = mul_op(valid_mask, in_bounds);
+            }
+        }
+        idx = add_op(mul_op(flat_idx, valid_mask), sub_op(valid_mask, one_i32));
+    }
     idx = reshape_op(idx, flat_out);
     auto g = reshape_op(grad_out, flat_out);
 

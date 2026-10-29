@@ -100,7 +100,7 @@
   "lucid.quantization": "e8955c9f4e2ceb60907aa921e6297c4f96ed5f0c45a09d25b836365b4e13afcb",
   "lucid.serialization": "b15df0cb2bff99b2ab7dd15b0e54a5c9afb8371801d725d14058d5032c1d7c80",
   "lucid.signal": "e3128760c6ac187881876f2c50957c65576b4bfb70033dd03e9547d8411dcec5",
-  "lucid.special": "e22590e5ff9110582d35be8ee1d850229878b81910b3b629385af0536c162a0b",
+  "lucid.special": "cc1b06fc54c47d0155eec192a6fad9d20bd74fcf88b8f5e28ebae209ee38c783",
   "lucid.tensor": "8b4df8c37db37de9f026f9aacd369a5cc87179ac1b263476d6a4991a715f6dd2",
   "lucid.utils": "7b6c6cdbf988d1a94b888909504d23ae4de07f3d7c0f963b2dbf61899fd31311",
   "lucid.utils.cache": "dc94011027b921b46b8406fb0eb9fd55de90f4ac851926ac144ab9034c650bb6",
