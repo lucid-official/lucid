@@ -36,6 +36,7 @@
 #include "../api.h"
 #include "../autograd/AccumulateGrad.h"
 #include "../autograd/AutogradNode.h"
+#include "../autograd/ComplexGrad.h"
 #include "../autograd/Helpers.h"
 #include "../autograd/Node.h"
 #include "../backend/Dispatcher.h"
@@ -605,6 +606,11 @@ public:
     // Whether ``forward()`` snapshots the inputs.  See class docstring.
     static constexpr bool kSavesInputs = true;
 
+    // How ``grad_formula`` / ``grad_formula_impl`` read on a complex dtype
+    // (autograd/ComplexGrad.h).  Defaults to ``Conjugate``: they are written
+    // as the real chain rule and :meth:`apply` conjugates around them.
+    static constexpr ComplexGrad kComplexGrad = ComplexGrad::Conjugate;
+
     // Default graph-mode gradient formula — concrete ops override.
     //
     // Parameters
@@ -715,6 +721,12 @@ protected:
     // Return saved input ``i`` broadcast to ``out_shape_`` for graph-mode
     // backward when needed, or ``nullptr`` when no needed gradient reads it.
     TensorImplPtr broadcast_graph_input(std::size_t i) const;
+
+    // Whether :meth:`apply` conjugates around the formula: a complex dtype
+    // and ``kComplexGrad == Conjugate``.
+    bool conjugates_formula() const noexcept {
+        return Derived::kComplexGrad == ComplexGrad::Conjugate && is_complex(this->dtype_);
+    }
 };
 
 // Out-of-class definition of :meth:`BinaryKernel::forward`.
@@ -856,17 +868,23 @@ Storage BinaryKernel<Derived>::compute_storage(const TensorImplPtr& a_ptr,
 // Calls ``Derived::grad_formula(grad_out)`` to obtain ``(da, db)`` then
 // reduces each back to its original input shape via
 // :func:`reduce_grad_to_shape`, accounting for any broadcasting the
-// forward pass performed.
+// forward pass performed.  On a complex dtype the formula runs between two
+// conjugations (autograd/ComplexGrad.h).
 template <class Derived>
 std::vector<Storage> BinaryKernel<Derived>::apply(Storage grad_out) {
+    const bool conj = conjugates_formula();
+    if (conj)
+        grad_out = conj_if_complex(grad_out, this->out_shape_, this->dtype_, this->device_);
     auto [da, db] = static_cast<Derived*>(this)->grad_formula(grad_out);
-    auto to_input = [this](Storage g, std::size_t k) {
+    auto to_input = [this, conj](Storage g, std::size_t k) {
         if (!this->needs_input_grad(k))
             return Storage{};
         Storage reduced = (this->out_shape_ == this->input_shapes_[k])
                               ? std::move(g)
                               : reduce_grad_to_shape(g, this->out_shape_, this->input_shapes_[k],
                                                      this->dtype_, this->device_);
+        if (conj)
+            reduced = conj_if_complex(reduced, this->input_shapes_[k], this->dtype_, this->device_);
         return detail::grad_to_input_dtype(std::move(reduced), this->grad_dtypes_[k],
                                            this->input_shapes_[k], this->dtype_, this->device_);
     };
@@ -919,13 +937,16 @@ std::vector<TensorImplPtr> BinaryKernel<Derived>::apply_for_graph(const TensorIm
     TensorImplPtr a_b = broadcast_graph_input(0);
     TensorImplPtr b_b = broadcast_graph_input(1);
 
-    auto [da, db] = static_cast<Derived*>(this)->grad_formula_impl(grad_out, a_b, b_b);
-    auto to_input = [this](const TensorImplPtr& g, std::size_t k) -> TensorImplPtr {
+    // Conjugated as recorded ops, as :meth:`apply` does on storages.
+    const bool conj = conjugates_formula();
+    auto [da, db] = static_cast<Derived*>(this)->grad_formula_impl(
+        conj ? conj_if_complex(grad_out) : grad_out, a_b, b_b);
+    auto to_input = [this, conj](const TensorImplPtr& g, std::size_t k) -> TensorImplPtr {
         if (!this->needs_input_grad(k) || !g)
             return nullptr;
-        return detail::graph_grad_to_input_dtype(
-            reduce_impl_to_shape(g, this->out_shape_, this->input_shapes_[k]),
-            this->grad_dtypes_[k]);
+        TensorImplPtr reduced = reduce_impl_to_shape(g, this->out_shape_, this->input_shapes_[k]);
+        return detail::graph_grad_to_input_dtype(conj ? conj_if_complex(reduced) : reduced,
+                                                 this->grad_dtypes_[k]);
     };
     return {to_input(da, 0), to_input(db, 1)};
 }

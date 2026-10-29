@@ -34,6 +34,7 @@
 #include "../api.h"
 #include "../autograd/AccumulateGrad.h"
 #include "../autograd/AutogradNode.h"
+#include "../autograd/ComplexGrad.h"
 #include "../autograd/Helpers.h"
 #include "../autograd/Node.h"
 #include "../compile/Tracer.h"  // 3.5 Phase 1.2 step 2: trace I/O wiring at forward
@@ -168,6 +169,11 @@ public:
     // skips graph wiring entirely.
     static constexpr bool kHasGradient = true;
 
+    // How ``grad_formula`` / ``grad_formula_impl`` read on a complex dtype
+    // (autograd/ComplexGrad.h).  Defaults to ``Conjugate``: they are written
+    // as the real chain rule and :meth:`apply` conjugates around them.
+    static constexpr ComplexGrad kComplexGrad = ComplexGrad::Conjugate;
+
     // Default graph-mode gradient formula — concrete ops override.
     //
     // Parameters
@@ -292,6 +298,12 @@ protected:
     // backend's dispatch, or the Derived CPU / GPU kernel.  A phantom under
     // phantom mode, where no kernel runs.
     static Storage compute_storage(const TensorImplPtr& a_ptr, Dtype eff_dt);
+
+    // Whether :meth:`apply` conjugates around the formula: a complex dtype
+    // and ``kComplexGrad == Conjugate``.
+    bool conjugates_formula() const noexcept {
+        return Derived::kComplexGrad == ComplexGrad::Conjugate && is_complex(this->dtype_);
+    }
 };
 
 template <class Derived>
@@ -398,16 +410,22 @@ std::shared_ptr<TensorImpl> UnaryKernel<Derived>::forward(const std::shared_ptr<
 //
 // Delegates to ``Derived::grad_formula(grad_out)`` and broadcast-reduces
 // the resulting :class:`Storage` back to ``input_shapes_[0]`` via
-// :func:`reduce_grad_to_shape`.
+// :func:`reduce_grad_to_shape`.  On a complex dtype the formula runs between
+// two conjugations (autograd/ComplexGrad.h).
 template <class Derived>
 std::vector<Storage> UnaryKernel<Derived>::apply(Storage grad_out) {
     if (!this->needs_input_grad(0))
         return {Storage{}};
+    const bool conj = conjugates_formula();
+    if (conj)
+        grad_out = conj_if_complex(grad_out, this->out_shape_, this->dtype_, this->device_);
     Storage dx = static_cast<Derived*>(this)->grad_formula(grad_out);
     Storage reduced = (this->out_shape_ == this->input_shapes_[0])
                           ? std::move(dx)
                           : reduce_grad_to_shape(dx, this->out_shape_, this->input_shapes_[0],
                                                  this->dtype_, this->device_);
+    if (conj)
+        reduced = conj_if_complex(reduced, this->input_shapes_[0], this->dtype_, this->device_);
     return {detail::grad_to_input_dtype(std::move(reduced), this->grad_dtypes_[0],
                                         this->input_shapes_[0], this->dtype_, this->device_)};
 }
@@ -451,7 +469,13 @@ std::vector<TensorImplPtr> UnaryKernel<Derived>::apply_for_graph(const TensorImp
         out_impl->set_leaf(false);
         out_impl->set_requires_grad(true);
     }
-    auto dx = static_cast<Derived*>(this)->grad_formula_impl(grad_out, a, out_impl);
+    // Conjugated as recorded ops, as :meth:`apply` does on storages, so the
+    // second derivative of a complex input sees the same convention.
+    const bool conj = conjugates_formula();
+    auto dx = static_cast<Derived*>(this)->grad_formula_impl(
+        conj ? conj_if_complex(grad_out) : grad_out, a, out_impl);
+    if (conj)
+        dx = conj_if_complex(dx);
 
     // Reduce back to input shape if needed (same as apply()).
     if (dx->shape() == this->input_shapes_[0])

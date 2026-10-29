@@ -10,7 +10,6 @@
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/OpRegistry.h"
-#include "../complex/Conj.h"
 #include "_Opmath.h"
 
 namespace lucid {
@@ -28,7 +27,8 @@ const OpSchema MulBackward::schema_v1{"mul", 1, AmpPolicy::Promote, true};
 // dB = grad_out ⊙ a_broadcast
 //
 // BinaryKernel::apply will subsequently reduce both results back to the
-// original input shapes via reduce_grad_to_shape.
+// original input shapes via reduce_grad_to_shape, and conjugates around this
+// formula on a complex dtype (grad_out ⊙ conj(b)).
 std::pair<Storage, Storage> MulBackward::grad_formula(const Storage& grad_out) {
     const std::size_t n = shape_numel(out_shape_);
     const bool need_a = needs_input_grad(0);
@@ -43,11 +43,7 @@ std::pair<Storage, Storage> MulBackward::grad_formula(const Storage& grad_out) {
                 return mul_scalar_storage(grad_out, *s, n, dtype_, device_);
         }
 
-        Storage bcast = saved_input_broadcasted(k);
-        if (is_complex(dtype_))
-            bcast =
-                backend::Dispatcher::for_device(device_).complex_conj(bcast, out_shape_, dtype_);
-        return multiply_storages(grad_out, bcast, n, dtype_, device_);
+        return multiply_storages(grad_out, saved_input_broadcasted(k), n, dtype_, device_);
     };
 
     return {
@@ -60,10 +56,8 @@ std::pair<TensorImplPtr, TensorImplPtr> MulBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
     // da = grad_out * b,  db = grad_out * a.
     // a and b are already broadcast-expanded to out_shape_ by BinaryKernel.
-    TensorImplPtr da =
-        needs_input_grad(0) ? mul_op(grad_out, is_complex(dtype_) ? conj_op(b) : b) : nullptr;
-    TensorImplPtr db =
-        needs_input_grad(1) ? mul_op(grad_out, is_complex(dtype_) ? conj_op(a) : a) : nullptr;
+    TensorImplPtr da = needs_input_grad(0) ? mul_op(grad_out, b) : nullptr;
+    TensorImplPtr db = needs_input_grad(1) ? mul_op(grad_out, a) : nullptr;
     return {std::move(da), std::move(db)};
 }
 

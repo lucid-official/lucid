@@ -9,6 +9,7 @@
 #include <variant>
 
 #include "../../autograd/AccumulateGrad.h"
+#include "../../autograd/ComplexGrad.h"
 #include "../../autograd/Helpers.h"
 #include "../../autograd/Node.h"
 #include "../../backend/Dispatcher.h"
@@ -73,10 +74,13 @@ Storage broadcast_for_matmul(const Storage& storage,
 // Both saved inputs are first broadcast to the shapes that were used during the
 // forward pass (info.a_bcast_shape and info.b_bcast_shape).  After the matmuls,
 // reduce_grad_to_shape collapses any batch dimensions that were broadcast-
-// expanded, recovering tensors with the original input shapes.
+// expanded, recovering tensors with the original input shapes.  On a complex
+// dtype the products run between two conjugations (autograd/ComplexGrad.h),
+// which makes them grad_out @ B^H and A^H @ grad_out.
 std::vector<Storage> MatmulBackward::apply(Storage grad_out) {
     const auto info = plan_nd_matmul(input_shapes_[0], input_shapes_[1]);
     auto& be = backend::Dispatcher::for_device(device_);
+    grad_out = conj_if_complex(grad_out, info.out_shape, dtype_, device_);
 
     Storage dA_s;
     if (needs_input_grad(0)) {
@@ -90,6 +94,7 @@ std::vector<Storage> MatmulBackward::apply(Storage grad_out) {
         dA_opts.transB = true;
         dA_s = be.matmul(grad_out, b_use, dA_opts, dtype_);
         dA_s = reduce_grad_to_shape(dA_s, info.a_bcast_shape, input_shapes_[0], dtype_, device_);
+        dA_s = conj_if_complex(dA_s, input_shapes_[0], dtype_, device_);
     }
 
     Storage dB_s;
@@ -104,6 +109,7 @@ std::vector<Storage> MatmulBackward::apply(Storage grad_out) {
         dB_opts.transA = true;
         dB_s = be.matmul(a_use, grad_out, dB_opts, dtype_);
         dB_s = reduce_grad_to_shape(dB_s, info.b_bcast_shape, input_shapes_[1], dtype_, device_);
+        dB_s = conj_if_complex(dB_s, input_shapes_[1], dtype_, device_);
     }
 
     return {std::move(dA_s), std::move(dB_s)};
@@ -208,10 +214,14 @@ std::vector<TensorImplPtr> MatmulBackward::apply_for_graph(const TensorImplPtr& 
         return g;
     };
 
-    TensorImplPtr da =
-        needs_input_grad(0) ? reduce(matmul_op(grad_out, mT_op(b)), input_shapes_[0]) : nullptr;
-    TensorImplPtr db =
-        needs_input_grad(1) ? reduce(matmul_op(mT_op(a), grad_out), input_shapes_[1]) : nullptr;
+    // Conjugated as recorded ops, as apply() does on storages.
+    const TensorImplPtr g = conj_if_complex(grad_out);
+    TensorImplPtr da = needs_input_grad(0)
+                           ? conj_if_complex(reduce(matmul_op(g, mT_op(b)), input_shapes_[0]))
+                           : nullptr;
+    TensorImplPtr db = needs_input_grad(1)
+                           ? conj_if_complex(reduce(matmul_op(mT_op(a), g), input_shapes_[1]))
+                           : nullptr;
     return {std::move(da), std::move(db)};
 }
 

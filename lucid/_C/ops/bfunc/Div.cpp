@@ -11,7 +11,6 @@
 #include "../../core/ErrorBuilder.h"
 #include "../../core/OpRegistry.h"
 #include "../../ops/ufunc/Arith.h"
-#include "../complex/Conj.h"
 #include "Mul.h"
 #include "_Opmath.h"
 
@@ -28,7 +27,8 @@ const OpSchema DivBackward::schema_v1{"div", 1, AmpPolicy::Promote, true};
 // The computation is broken into explicit storage operations so that each
 // intermediate value can be freed individually.  Both saved inputs are first
 // expanded to out_shape_ (via saved_input_broadcasted) so that all element-wise
-// operations are shape-compatible.
+// operations are shape-compatible.  BinaryKernel::apply conjugates around this
+// formula on a complex dtype (grad_out / conj(b)).
 std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
     const std::size_t n = shape_numel(out_shape_);
     const bool need_a = needs_input_grad(0);
@@ -37,10 +37,6 @@ std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
         return {Storage{}, Storage{}};
 
     auto b_b = saved_input_broadcasted(1);
-    if (is_complex(dtype_)) {
-        auto& be = backend::Dispatcher::for_device(device_);
-        b_b = be.complex_conj(b_b, out_shape_, dtype_);
-    }
 
     // dA = grad_out / b
     Storage dx = need_a ? divide_storages(grad_out, b_b, n, dtype_, device_) : Storage{};
@@ -48,10 +44,6 @@ std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
         return {std::move(dx), Storage{}};
 
     auto a_b = saved_input_broadcasted(0);
-    if (is_complex(dtype_)) {
-        auto& be = backend::Dispatcher::for_device(device_);
-        a_b = be.complex_conj(a_b, out_shape_, dtype_);
-    }
 
     // dB = -(grad_out * a) / b²
     Storage b_sq = is_complex(dtype_) ? multiply_storages(b_b, b_b, n, dtype_, device_)
@@ -65,14 +57,12 @@ std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
 std::pair<TensorImplPtr, TensorImplPtr> DivBackward::grad_formula_impl(
     const TensorImplPtr& grad_out, const TensorImplPtr& a, const TensorImplPtr& b) {
     // da = grad_out / b
-    auto bc = is_complex(dtype_) ? conj_op(b) : b;
-    TensorImplPtr da = needs_input_grad(0) ? div_op(grad_out, bc) : nullptr;
+    TensorImplPtr da = needs_input_grad(0) ? div_op(grad_out, b) : nullptr;
     if (!needs_input_grad(1))
         return {std::move(da), nullptr};
     // db = -grad_out * a / b^2
-    auto ac = is_complex(dtype_) ? conj_op(a) : a;
-    auto b_sq = mul_op(bc, bc);
-    auto ga = mul_op(grad_out, ac);
+    auto b_sq = mul_op(b, b);
+    auto ga = mul_op(grad_out, a);
     auto db = neg_op(div_op(ga, b_sq));
     return {std::move(da), std::move(db)};
 }

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "../autograd/AccumulateGrad.h"
+#include "../autograd/ComplexGrad.h"
 #include "../autograd/Helpers.h"
 #include "../autograd/Node.h"
 #include "../backend/Dispatcher.h"
@@ -130,9 +131,15 @@ LinearBackward::forward(const TensorImplPtr& x, const TensorImplPtr& W, const Te
 
 std::vector<Storage> LinearBackward::apply(Storage grad_out) {
     // saved_inputs_[0..2] are {x, W, b}; input_shapes_[0..2] are their shapes.
-    return backend::Dispatcher::for_device(device_).linear_backward(
+    // On a complex dtype the fused real-dtype formula runs between two
+    // conjugations (autograd/ComplexGrad.h): dx = g conj(W), dW = g^H x.
+    grad_out = conj_if_complex(grad_out, out_shape_, dtype_, device_);
+    std::vector<Storage> grads = backend::Dispatcher::for_device(device_).linear_backward(
         grad_out, saved_or_zeros(0, grad_out), saved_or_zeros(1, grad_out), input_shapes_[0],
         input_shapes_[1], input_shapes_[2], dtype_);
+    for (std::size_t k = 0; k < grads.size(); ++k)
+        grads[k] = conj_if_complex(grads[k], input_shapes_[k], dtype_, device_);
+    return grads;
 }
 
 std::vector<TensorImplPtr> LinearBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -152,8 +159,9 @@ std::vector<TensorImplPtr> LinearBackward::apply_for_graph(const TensorImplPtr& 
     const std::int64_t N = input_shapes_[1][0];
 
     // Collapse the leading batch dims so all three products are plain 2-D
-    // GEMMs, exactly as the fused kernel does internally.
-    auto g_flat = reshape_op(grad_out, {M, N});
+    // GEMMs, exactly as the fused kernel does internally.  Conjugated as
+    // recorded ops, as apply() does on storages.
+    auto g_flat = reshape_op(conj_if_complex(grad_out), {M, N});
 
     // dx = g W, back to x's original shape.
     TensorImplPtr dx;
@@ -174,7 +182,7 @@ std::vector<TensorImplPtr> LinearBackward::apply_for_graph(const TensorImplPtr& 
                  : sum_op(g_flat, std::vector<int>{0}, /*keepdims=*/false);
     }
 
-    return {dx, dW, db};
+    return {conj_if_complex(dx), conj_if_complex(dW), conj_if_complex(db)};
 }
 
 TensorImplPtr linear_op(const TensorImplPtr& x, const TensorImplPtr& W, const TensorImplPtr& b) {

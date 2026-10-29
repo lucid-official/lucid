@@ -60,6 +60,10 @@ public:
     // independent of input values.
     static constexpr bool kSavesInputs = false;
 
+    // The local derivatives are +1 and -1, so the formula is its own
+    // conjugate and a complex backward skips the two conjugations around it.
+    static constexpr ComplexGrad kComplexGrad = ComplexGrad::AsWritten;
+
     // Op registration metadata.
     //
     // Attributes

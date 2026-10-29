@@ -15,4 +15,8 @@ namespace lucid {
 // ``a + b`` as a recorded op (ops/bfunc/Add.cpp).
 TensorImplPtr add_op(const TensorImplPtr& a, const TensorImplPtr& b);
 
+// ``conj(a)`` as a recorded op (ops/complex/Conj.cpp), for the complex
+// gradient convention in ComplexGrad.h.
+TensorImplPtr conj_op(const TensorImplPtr& a);
+
 }  // namespace lucid
