@@ -216,6 +216,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._core.fallback"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._core.signature"
     },
     {
@@ -726,6 +730,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._entry.function"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._entry.fused_step"
     },
     {
@@ -1011,6 +1019,20 @@
     {
       "kind": "module",
       "module": "lucid.compile"
+    }
+  ],
+  "lucid.compile._entry.decode_step.compiled_decode_step": [
+    {
+      "kind": "module",
+      "module": "lucid.compile"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models._mixins"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.text._common._seq2seq"
     }
   ],
   "lucid.compile._entry.function.compiled_step": [

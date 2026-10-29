@@ -3,7 +3,7 @@
   "name": "generative",
   "path": "lucid.models.generative",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/models/generative/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/4b6c872/lucid/models/generative/__init__.py#L1",
   "members": [],
   "summary": "Image-generative model families — Phase 5 of the model zoo.",
   "extended": "Concrete families live in sub-packages: latent-variable (`vae`),\ndiffusion / score-based (`ddpm`, `ncsn`), and exact-likelihood flows\n(`nice`).  The infrastructure exported here — base configs (one tier per\nmodel class: generative → diffusion / normalizing-flow), output\ndataclasses, noise schedulers — is what a new family builds on, so each\none only needs its own `_config.py`, `_model.py`, and\n`_pretrained.py`.\n\nPositional / timestep encoding primitives (`SinusoidalEmbedding`,\n`TimestepEmbedding`) live in `lucid.nn`; family code imports them\nfrom there rather than redefining locally.",
