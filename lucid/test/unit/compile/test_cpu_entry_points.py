@@ -249,5 +249,43 @@ def test_the_forward_wrappers_equal_eager_on_the_cpu() -> None:
 
 def test_every_public_entry_point_is_classified() -> None:
     """A new name in ``lucid.compile.__all__`` must say what it does on the CPU."""
-    classified = {"fused_step", "compiled_step", "make_step", *REFUSES, *NOT_AN_ENTRY}
+    classified = {
+        "fused_step",
+        "compiled_step",
+        "make_step",
+        "compiled_decode_step",
+        *REFUSES,
+        *NOT_AN_ENTRY,
+    }
     assert set(lc.__all__) <= classified, sorted(set(lc.__all__) - classified)
+
+
+def test_compiled_decode_step_equals_eager_decoding_on_the_cpu() -> None:
+    """``compiled_decode_step`` on a CPU model decodes exactly as the eager cache does."""
+    import lucid.models as M
+    from lucid.utils.cache import DynamicCache, StaticCache
+
+    lucid.manual_seed(3)
+    cfg = M.GPT2Config(
+        vocab_size=64,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=64,
+        max_position_embeddings=64,
+    )
+    gpt = M.GPT2LMHeadModel(cfg).eval()
+    prompt = lucid.tensor([[5, 9, 2, 7]]).long()
+    eager_cache = DynamicCache()
+    gpt(prompt, past_key_values=eager_cache, use_cache=True)
+    static = StaticCache(32)
+    gpt(prompt, past_key_values=static, use_cache=True, cache_position=lucid.arange(0, 4).long())
+
+    def forward(ids: lucid.Tensor, pos: lucid.Tensor) -> lucid.Tensor:
+        return gpt(ids, past_key_values=static, use_cache=True, cache_position=pos).logits[:, -1]
+
+    step = lc.compiled_decode_step(forward, static)
+    for i, token in enumerate([11, 3, 40]):
+        ids = lucid.tensor([[token]]).long()
+        want = gpt(ids, past_key_values=eager_cache, use_cache=True).logits[:, -1]
+        assert step(ids, lucid.tensor([4 + i]).long()).tolist() == want.tolist()

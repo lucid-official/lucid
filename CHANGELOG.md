@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
 
+### Added
+
+- export compiled_decode_step from lucid.compile
+
 ---
 
 ## [3.16.2] — 2026-10-29

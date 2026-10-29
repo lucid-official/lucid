@@ -201,11 +201,11 @@ print("generated:", compiled_ids.shape[1] - prompt.shape[1], "new tokens")
 For your own sampling loop, build the cache yourself. `compiled_decode_step(forward_fn, cache)` wraps a function `(input_ids, cache_position) -> logits` and returns a `step` with the same signature that runs the compiled executable and rolls the cache buffers forward in place. `cache_position` is a fixed-shape int64 tensor of the absolute write positions, fed at run time (a Python int would be baked into the graph and recompile every step).
 
 <Callout variant="note">
-`compiled_decode_step` is not re-exported from `lucid.compile`; import it from `lucid.compile._entry.decode_step`, as `generate` itself does. `StaticCache` is public in `lucid.utils.cache`.
+`StaticCache` is public in `lucid.utils.cache`.
 </Callout>
 
 ```python
-from lucid.compile._entry.decode_step import compiled_decode_step
+from lucid.compile import compiled_decode_step
 from lucid.utils.cache import StaticCache
 
 cache = StaticCache(max_cache_len=64)

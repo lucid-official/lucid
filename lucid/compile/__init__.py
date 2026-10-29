@@ -26,6 +26,9 @@ Surface
   ghost-grad placeholder mechanism.
 * :func:`compiled_step` — convenience wrapper combining
   :func:`compile` + :func:`make_step` for one-line training loops.
+* :func:`compiled_decode_step` — one cached executable per decode step of an
+  autoregressive model over a :class:`StaticCache`; what
+  ``generate(cache_implementation="compiled")`` uses (LCD-660).
 * :func:`_tracing` — low-level context manager that installs a
   thread-local :class:`Tracer`; used internally by every entry above.
   Public-but-underscored so external callers know they're touching
@@ -63,6 +66,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
     from lucid.compile._entry.module import CompiledModule
     from lucid.compile._debug.diagnose import DiagnosisReport, OpInfo, diagnose
+    from lucid.compile._entry.decode_step import compiled_decode_step
     from lucid.compile._entry.function import compiled_step
     from lucid.compile._entry.fused_step import fused_step
     from lucid.compile._optim.compiler import compile_optimizer
@@ -73,6 +77,7 @@ __all__ = [
     "_tracing",
     "compile",
     "compiled_step",
+    "compiled_decode_step",
     "compile_optimizer",
     "fused_step",
     "CompiledModule",
@@ -333,6 +338,10 @@ def __getattr__(name: str) -> object:
         from lucid.compile._entry.function import compiled_step
 
         return compiled_step
+    if name == "compiled_decode_step":
+        from lucid.compile._entry.decode_step import compiled_decode_step
+
+        return compiled_decode_step
     if name == "CompiledModule":
         from lucid.compile._entry.module import CompiledModule
 

@@ -279,6 +279,11 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("OpInfo", "lucid.compile._debug.diagnose", "OpInfo"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
         ("compile_optimizer", "lucid.compile._optim.compiler", "compile_optimizer"),
+        (
+            "compiled_decode_step",
+            "lucid.compile._entry.decode_step",
+            "compiled_decode_step",
+        ),
         ("compiled_step", "lucid.compile._entry.function", "compiled_step"),
         ("diagnose", "lucid.compile._debug.diagnose", "diagnose"),
         ("fused_step", "lucid.compile._entry.fused_step", "fused_step"),
