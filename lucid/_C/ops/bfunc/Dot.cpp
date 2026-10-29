@@ -9,6 +9,7 @@
 
 #include "../../autograd/AccumulateGrad.h"
 #include "../../autograd/AutogradNode.h"
+#include "../../autograd/ComplexGrad.h"
 #include "../../autograd/Helpers.h"
 #include "../../autograd/Node.h"
 #include "../../backend/Dispatcher.h"
@@ -50,16 +51,21 @@ public:
     std::size_t numel_;  // Length of both input vectors.
 
     // Broadcast the scalar grad_out to [numel_], then multiply by the other
-    // saved operand to get per-element gradients.
+    // saved operand to get per-element gradients.  On a complex dtype the
+    // products run between two conjugations (autograd/ComplexGrad.h):
+    // dA = g conj(b), dB = g conj(a).
     std::vector<Storage> apply(Storage grad_out) override {
         Shape vec_shape{static_cast<std::int64_t>(numel_)};
         auto& be = backend::Dispatcher::for_device(device_);
         // Scalar gradient (shape {}) → vector shape {numel_}.
-        Storage scaled_grad = be.broadcast(grad_out, Shape{}, vec_shape, dtype_);
-        Storage da = needs_input_grad(0) ? be.mul(saved_inputs_[1], scaled_grad, vec_shape, dtype_)
-                                         : Storage{};
-        Storage db = needs_input_grad(1) ? be.mul(saved_inputs_[0], scaled_grad, vec_shape, dtype_)
-                                         : Storage{};
+        Storage scaled_grad = be.broadcast(conj_if_complex(grad_out, Shape{}, dtype_, device_),
+                                           Shape{}, vec_shape, dtype_);
+        auto grad = [&](std::size_t other) {
+            return conj_if_complex(be.mul(saved_inputs_[other], scaled_grad, vec_shape, dtype_),
+                                   vec_shape, dtype_, device_);
+        };
+        Storage da = needs_input_grad(0) ? grad(1) : Storage{};
+        Storage db = needs_input_grad(1) ? grad(0) : Storage{};
         return {std::move(da), std::move(db)};
     }
 
@@ -71,8 +77,9 @@ public:
         const auto& b = saved_impl_inputs_[1];
         if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("dot").fail("graph-mode backward is missing its saved inputs");
-        TensorImplPtr da = needs_input_grad(0) ? mul_op(grad_out, b) : nullptr;
-        TensorImplPtr db = needs_input_grad(1) ? mul_op(grad_out, a) : nullptr;
+        const TensorImplPtr g = conj_if_complex(grad_out);
+        TensorImplPtr da = needs_input_grad(0) ? conj_if_complex(mul_op(g, b)) : nullptr;
+        TensorImplPtr db = needs_input_grad(1) ? conj_if_complex(mul_op(g, a)) : nullptr;
         return {std::move(da), std::move(db)};
     }
 };
@@ -108,11 +115,18 @@ public:
         db_opts.N = static_cast<int>(N);
         db_opts.transA = true;
 
+        // On a complex dtype the products run between two conjugations
+        // (autograd/ComplexGrad.h): dA = g @ B^H, dB = A^H @ g.
         auto& be = backend::Dispatcher::for_device(device_);
-        Storage da = needs_input_grad(0) ? be.matmul(grad_out, saved_inputs_[1], da_opts, dtype_)
-                                         : Storage{};
-        Storage db = needs_input_grad(1) ? be.matmul(saved_inputs_[0], grad_out, db_opts, dtype_)
-                                         : Storage{};
+        grad_out = conj_if_complex(grad_out, Shape{M, N}, dtype_, device_);
+        Storage da = needs_input_grad(0)
+                         ? conj_if_complex(be.matmul(grad_out, saved_inputs_[1], da_opts, dtype_),
+                                           a_shape_, dtype_, device_)
+                         : Storage{};
+        Storage db = needs_input_grad(1)
+                         ? conj_if_complex(be.matmul(saved_inputs_[0], grad_out, db_opts, dtype_),
+                                           b_shape_, dtype_, device_)
+                         : Storage{};
         return {std::move(da), std::move(db)};
     }
 
@@ -123,8 +137,11 @@ public:
         if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("dot").fail("graph-mode backward is missing a saved input");
         const std::vector<int> swap{1, 0};
-        TensorImplPtr da = needs_input_grad(0) ? matmul_op(grad_out, permute_op(b, swap)) : nullptr;
-        TensorImplPtr db = needs_input_grad(1) ? matmul_op(permute_op(a, swap), grad_out) : nullptr;
+        const TensorImplPtr g = conj_if_complex(grad_out);
+        TensorImplPtr da =
+            needs_input_grad(0) ? conj_if_complex(matmul_op(g, permute_op(b, swap))) : nullptr;
+        TensorImplPtr db =
+            needs_input_grad(1) ? conj_if_complex(matmul_op(permute_op(a, swap), g)) : nullptr;
         return {std::move(da), std::move(db)};
     }
 };

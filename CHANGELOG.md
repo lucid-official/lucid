@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - conjugate around real-dtype formulas on complex dtypes
 
+- dot and outer backward follow the complex gradient convention
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

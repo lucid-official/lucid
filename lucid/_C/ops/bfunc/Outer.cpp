@@ -10,6 +10,7 @@
 
 #include "../../autograd/AccumulateGrad.h"
 #include "../../autograd/AutogradNode.h"
+#include "../../autograd/ComplexGrad.h"
 #include "../../autograd/Helpers.h"
 #include "../../autograd/Node.h"
 #include "../../backend/Dispatcher.h"
@@ -51,9 +52,12 @@ public:
 
     std::int64_t M_, N_;  // Length of a and b respectively.
 
-    // Compute dA and dB by contracting grad_out with the saved operands.
+    // Compute dA and dB by contracting grad_out with the saved operands.  On a
+    // complex dtype the products run between two conjugations
+    // (autograd/ComplexGrad.h): dA = g conj(b), dB = g^T conj(a).
     std::vector<Storage> apply(Storage grad_out) override {
         auto& be = backend::Dispatcher::for_device(device_);
+        grad_out = conj_if_complex(grad_out, Shape{M_, N_}, dtype_, device_);
 
         Storage da;
         if (needs_input_grad(0)) {
@@ -65,7 +69,8 @@ public:
             da_opts.K = static_cast<int>(N_);
             da_opts.N = 1;
             Storage da_col = be.matmul(grad_out, b_col, da_opts, dtype_);
-            da = be.reshape(da_col, da_col_shape, Shape{M_}, dtype_);
+            da = conj_if_complex(be.reshape(da_col, da_col_shape, Shape{M_}, dtype_), Shape{M_},
+                                 dtype_, device_);
         }
 
         Storage db;
@@ -78,7 +83,8 @@ public:
             db_opts.K = static_cast<int>(M_);
             db_opts.N = static_cast<int>(N_);
             Storage db_row = be.matmul(a_row, grad_out, db_opts, dtype_);
-            db = be.reshape(db_row, db_row_shape, Shape{N_}, dtype_);
+            db = conj_if_complex(be.reshape(db_row, db_row_shape, Shape{N_}, dtype_), Shape{N_},
+                                 dtype_, device_);
         }
 
         return {std::move(da), std::move(db)};
@@ -91,12 +97,15 @@ public:
         const auto& b = saved_impl_inputs_[1];
         if ((needs_input_grad(0) && !b) || (needs_input_grad(1) && !a))
             ErrorBuilder("outer").fail("graph-mode backward is missing its saved inputs");
-        TensorImplPtr da = needs_input_grad(0)
-                               ? sum_op(mul_op(grad_out, reshape_op(b, {1, N_})), {1}, false)
-                               : nullptr;
-        TensorImplPtr db = needs_input_grad(1)
-                               ? sum_op(mul_op(grad_out, reshape_op(a, {M_, 1})), {0}, false)
-                               : nullptr;
+        const TensorImplPtr g = conj_if_complex(grad_out);
+        TensorImplPtr da =
+            needs_input_grad(0)
+                ? conj_if_complex(sum_op(mul_op(g, reshape_op(b, {1, N_})), {1}, false))
+                : nullptr;
+        TensorImplPtr db =
+            needs_input_grad(1)
+                ? conj_if_complex(sum_op(mul_op(g, reshape_op(a, {M_, 1})), {0}, false))
+                : nullptr;
         return {std::move(da), std::move(db)};
     }
 };
