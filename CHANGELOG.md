@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - arange refuses an infinite bound or an oversized count
 
+- fold refuses an output whose flat extent passes int32
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -37,9 +37,7 @@ Storage GpuBackend::nn_fold(const Storage& x,
     const int C = CKK / (kH * kW);
     const int outH = static_cast<int>(out_shape[2]);
     const int outW = static_cast<int>(out_shape[3]);
-    const int H_pad = outH + 2 * pH;
     const int W_pad = outW + 2 * pW;
-    (void)H_pad;  // outH_blocks computed below uses outW_blocks only
     // Must use the *effective* (dilated) kernel extent — the raw kernel
     // size overcounts blocks when dilation > 1 and mis-maps l → (oh, ow).
     const int effW = dW * (kW - 1) + 1;
@@ -86,9 +84,10 @@ Storage GpuBackend::nn_fold(const Storage& x,
     auto keep = mx::broadcast_to(mx::reshape(mask_mlx, mx::Shape{1, 1, M}), mx::Shape{N, C, M});
     auto x_masked = mx::where(mx::astype(keep, mx::bool_), xr, mx::zeros_like(xr));
 
-    // out_flat: (N, C, outH * outW).
-    const int OF = outH * outW;
-    auto base = mx::zeros(mx::Shape{N, C, OF}, gpu::to_mlx_dtype(dt));
+    // out_flat: (N, C, outH * outW), whose last extent MLX holds in int32.
+    // Formed in int it wrapped: a 2^20 x 2^20 output was a flat axis of 0.
+    auto base =
+        mx::zeros(gpu::to_mlx_shape(Shape{N, C, mul_extent(outH, outW)}), gpu::to_mlx_dtype(dt));
 
     // scatter_add_axis with axis=2: indices is broadcast (1, 1, M) →
     // every (n, c) pair scatters into the same flat layout.

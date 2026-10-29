@@ -200,10 +200,12 @@ _DERIVED_EXTENTS = [
         "out = F.fold(R(1, 1, 1), output_size=(2**30, 2**30), kernel_size=1, stride=2**30)",
         OVERFLOW,
     ),
+    # Metal folds through a flat ``outH * outW`` axis, which MLX holds in
+    # ``int32``; formed in ``int``, 2^40 wrapped to 0.
     (
         "fold_4tib",
         "out = F.fold(R(1, 1, 1), output_size=(2**20, 2**20), kernel_size=1, stride=2**20)",
-        OOM,
+        {"cpu": OOM, "metal": ("LucidError", "int32")},
     ),
     (
         "fold_still_answers",
