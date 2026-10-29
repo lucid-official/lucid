@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - fold refuses an output whose flat extent passes int32
 
+- arange refuses a NaN step
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

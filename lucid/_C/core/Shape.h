@@ -91,9 +91,9 @@ inline constexpr std::size_t kMaxNumel =
 [[noreturn]] void throw_extent_overflow(std::int64_t a, std::int64_t b);
 
 // ``a * b`` for an output extent made from two others — a repeated or tiled
-// axis, a Kronecker product's.  Unchecked, a product past ``int64`` wrapped
-// into a plausible extent (or a negative one, refused as a negative
-// dimension the caller never passed).
+// axis, ``reshape``'s product of the known extents.  Unchecked, a product
+// past ``int64`` wrapped into a plausible extent (or a negative one, refused
+// as a negative dimension the caller never passed).
 inline std::int64_t mul_extent(std::int64_t a, std::int64_t b) {
     std::int64_t r = 0;
     if (__builtin_mul_overflow(a, b, &r)) [[unlikely]]

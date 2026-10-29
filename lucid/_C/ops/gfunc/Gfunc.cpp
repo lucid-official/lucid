@@ -227,8 +227,8 @@ sequence_to_device(CpuStorage cpu, const Shape& shape, Dtype fill, Dtype dt, Dev
 // ``stop``.  The count is checked as a double: converting one past ``int64``
 // is undefined, and an infinite ``stop`` came out as INT64_MAX elements.
 std::int64_t arange_length(double start, double stop, double step) {
-    if (step == 0.0)
-        ErrorBuilder("arange").fail("step must be non-zero");
+    if (step == 0.0 || std::isnan(step))
+        ErrorBuilder("arange").fail("step must be non-zero and not NaN");
     const auto text = [](double v) {
         std::ostringstream os;
         os << v;

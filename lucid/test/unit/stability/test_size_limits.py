@@ -70,6 +70,11 @@ _FACTORIES = [
     ("arange_count", "out = lucid.arange(0.0, 1e30, device=D)", OVERFLOW),
     ("arange_inf", "out = lucid.arange(0.0, float('inf'), device=D)", ("InvalidArgument", "range")),
     ("arange_nan", "out = lucid.arange(0.0, float('nan'), device=D)", ("InvalidArgument", "range")),
+    (
+        "arange_nan_step",
+        "out = lucid.arange(0.0, 1.0, float('nan'), device=D)",
+        ("LucidError", "NaN"),
+    ),
     ("expand", "out = R(1).expand(2**40, 2**40)", OVERFLOW),
     # A zero extent makes the count 0, however large the others.
     (
