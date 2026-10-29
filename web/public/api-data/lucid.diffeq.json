@@ -3,7 +3,7 @@
   "name": "diffeq",
   "path": "lucid.diffeq",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/__init__.py#L1",
   "members": [
     {
       "name": "odeint_adjoint",
@@ -11,7 +11,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_adjoint(func: Callable[..., object], y0: State, t: Tensor | Sequence[float], rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None, event_fn: Callable[..., Tensor] | None = None, adjoint_rtol: float | None = None, adjoint_atol: float | None = None, adjoint_method: str | ButcherTableau | None = None, adjoint_options: dict[str, object] | None = None, adjoint_params: Sequence[Tensor] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_adjoint.py#L285",
+      "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_adjoint.py#L285",
       "subcategory": "adjoint",
       "summary": "Integrate `dy/dt = f(t, y)` and differentiate it at constant memory.",
       "extended": "Same result as `odeint`, different gradient strategy.  `odeint`\ndifferentiates the discretisation — exact for what it computed, but every\nstage of every step stays alive until backward.  This instead discards the\nforward graph and reconstructs the gradient by integrating the adjoint\nsystem backwards, so memory no longer grows with the number of steps.\n\nUse it when the solve is long or the tolerance tight enough that the\nretained stages dominate memory.  For a short solve, `odeint` is\nboth faster and more accurate.",
@@ -134,7 +134,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint(func: Callable[..., object], y0: State, t: Tensor | Sequence[float], rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None, event_fn: Callable[..., Tensor] | None = None, return_trajectory: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_solvers.py#L351",
+      "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_solvers.py#L351",
       "subcategory": "solvers",
       "summary": "Integrate `dy/dt = f(t, y)`.",
       "extended": "Four families are reachable through the same call, and which one runs\nfollows from `method`:\n\n**Adaptive** (the default, and anything carrying an embedded error\nestimate) treats `t` as *output* times.  The solver picks its own step\nsizes to hold the local error inside `rtol` / `atol` and interpolates\nto each requested time, so a coarse `t` costs nothing in accuracy.\n\n**Fixed step** (`euler` / `midpoint` / `heun2` / `heun3` / `rk4`\n/ `rk4_classic`)\ntreats `t` as the integration grid itself by default: consecutive\nentries are one step each, with no sub-stepping and no interpolation.\n`rtol` / `atol` are unused there, and accuracy is controlled by\nchoosing a finer grid — or by handing `options[\"step_size\"]`, which\ndecouples the two the same way an adaptive method does.\n\n**Adams multistep** (`explicit_adams` / `implicit_adams` /\n`fixed_adams`) is fixed-step too, but reaches high order by reusing the\nderivatives from previous steps instead of taking more of them inside one\nstep — one new evaluation per step regardless of order.  That pays off\nwhen `func` is expensive.  See `options[\"max_order\"]` for the caveat\nthat comes with it.\n\nGradient mode is left entirely to the caller.  Under grad the whole solve\nis differentiable end-to-end (discretise-then-optimise) and every stage is\nretained for backward; wrap the call in `lucid.no_grad` for sampling,\nwhere the stage graph is pure overhead.",
@@ -233,7 +233,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_dense(func: Callable[..., object], y0: State, t0: float, t1: float, rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_solvers.py#L603",
+      "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_solvers.py#L603",
       "subcategory": "solvers",
       "summary": "Solve once across an interval and return a continuous solution.",
       "extended": "Where `odeint` wants the output times up front, this integrates\n`[t0, t1]` a single time and hands back a function of `t`.  Every\nstep's interpolating polynomial is kept, so any later query costs a\nbinary search and one polynomial evaluation — no re-integration, and no\ncommitment to a grid before you know which times you need.",
@@ -326,7 +326,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_event(func: Callable[..., object], y0: State, t0: float | Tensor, event_fn: Callable[..., Tensor], reverse_time: bool = False, odeint_interface: Callable[..., object] = odeint, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_solvers.py#L732",
+      "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_solvers.py#L732",
       "subcategory": "solvers",
       "summary": "Integrate from `t0` until an event fires.",
       "extended": "The convenience form of `odeint(..., event_fn=...)` for the common case\nwhere there is no output grid at all — you have a starting time and a\ncondition, and want to know when the condition is met.",
@@ -411,7 +411,7 @@
       "bases": [],
       "labels": [],
       "signature": "ButcherTableau(a: tuple[tuple[float, ...], ...], b: tuple[float, ...], c: tuple[float, ...], order: int, name: str, b_error: tuple[float, ...] | None = None, mid: tuple[float, ...] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L62",
+      "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L62",
       "subcategory": "tableau",
       "methods": [
         {
@@ -422,7 +422,7 @@
             "property"
           ],
           "signature": "is_adaptive: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L231",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L231",
           "summary": "bool: Whether the tableau carries an embedded error estimate.",
           "extended": "Adaptive methods pair two solutions of different order; their weight\ndifference (`b_error`) estimates the local error, which is what a\nstep-size controller needs.  A tableau without it can only be stepped\non a fixed grid.",
           "parameters": [],
@@ -445,7 +445,7 @@
             "property"
           ],
           "signature": "is_implicit: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L242",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L242",
           "summary": "bool: Whether any stage depends on itself or on a later stage.",
           "extended": "An explicit method computes its stages in order, each from the ones\nbefore it.  An implicit one does not: the stage equations are coupled,\nso a step has to solve a nonlinear system instead of evaluating a\nrecipe.  That is a different solver, not a different coefficient set,\nwhich is what this flag selects.",
           "parameters": [],
@@ -468,7 +468,7 @@
             "property"
           ],
           "signature": "is_dirk: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L259",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L259",
           "summary": "bool: Whether the stage matrix is lower triangular, diagonal included.",
           "extended": "Diagonally implicit methods still couple each stage to itself, but not\nto any stage after it, so the stages can be solved one at a time.  For\na state of `n` elements that means `s` solves of size `n` rather\nthan one of size `s*n` — the difference between a dense Jacobian of\n`n**2` entries and one of `(s*n)**2`.",
           "parameters": [],
@@ -491,7 +491,7 @@
             "property"
           ],
           "signature": "is_fsal: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L278",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L278",
           "summary": "bool: Whether the last stage derivative equals `f(t + dt, y_next)`.",
           "extended": "True when the final stage row reproduces the solution weights, so the\nstage already evaluated the right-hand side at the new state.  That\nderivative can then be reused as the next step's first stage, saving\none call per accepted step — a real saving when the right-hand side is\na neural network.",
           "parameters": [],
@@ -514,7 +514,7 @@
             "property"
           ],
           "signature": "mid_order: int",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L290",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L290",
           "summary": "int: Order to which `mid` reproduces the state at the midpoint.",
           "extended": "Zero when the tableau carries no `mid` at all.\n\nThe dense output is a quartic anchored on the midpoint estimate, so\nthis bounds how accurate any interpolated value can be — and it is not\nimplied by `order`.  Several tableaux pair a genuinely derived\ninterpolant with their steps (`dopri5` and `tsit5` reach 4 here,\n`dopri8` reaches 5) while others carry only a first-order\nplaceholder: a half-step of Euler, which is what `mid` reduces to\nwhen its weights put `1/2` in a single slot.  `bosh3` takes third\norder steps and interpolates to first, and nothing about the method's\nname says so.\n\nComputed from the quadrature conditions the midpoint weights would\nhave to satisfy, the same way the collocation tableaux verify their\nown order at import:\n\n$$\n\\sum_i \\text{mid}_i\\, c_i^{\\,k-1} = \\frac{(1/2)^k}{k}\n$$",
           "parameters": [],
@@ -537,7 +537,7 @@
             "property"
           ],
           "signature": "stages: int",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L325",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L325",
           "summary": "int: Number of stage derivatives evaluated per step.",
           "extended": "Equals the number of right-hand-side calls the method makes for each\nstep, which is the dominant cost when the right-hand side is a neural\nnetwork.",
           "parameters": [],
@@ -558,7 +558,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(a: tuple[tuple[float, ...], ...], b: tuple[float, ...], c: tuple[float, ...], order: int, name: str, b_error: tuple[float, ...] | None = None, mid: tuple[float, ...] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/8ac36f125/lucid/diffeq/_tableau.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/0133691/lucid/diffeq/_tableau.py#L1",
           "subcategory": "tableau",
           "summary": null,
           "extended": null,
