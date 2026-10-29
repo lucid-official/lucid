@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Fixed
+
+- pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)
+
 ---
 
 ## [3.16.2] — 2026-10-29

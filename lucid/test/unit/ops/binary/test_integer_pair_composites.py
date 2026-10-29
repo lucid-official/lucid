@@ -235,3 +235,29 @@ def test_the_reference_refuses_the_same_operands(ref: ModuleType, name: str) -> 
         fn(ref.tensor([True]), ref.tensor([True]))
     with pytest.raises(TypeError):
         fn(ref.tensor([3]), 2)
+
+
+def test_integer_division_by_zero_raises_on_cpu_and_returns_the_dividend_remainder_on_metal() -> (
+    None
+):
+    # The contract of LCD-654. The CPU refuses with a RuntimeError naming
+    # ZeroDivisionError, as the reference does. Metal
+    # cannot refuse without reading the divisor back, so it does not raise: the
+    # remainders return the dividend (as the reference's GPU backend does) and
+    # the quotient is unspecified.
+    ops = {
+        "//": lambda x, y: x // y,
+        "%": lambda x, y: x % y,
+        "fmod": lucid.fmod,
+        "remainder": lucid.remainder,
+    }
+    for name, op in ops.items():
+        with pytest.raises(RuntimeError, match="ZeroDivisionError"):
+            op(lucid.tensor([1, 2]), lucid.tensor([0, 1]))
+    if not lucid.metal.is_available():
+        return
+    a = lucid.tensor([1, 2, -3, 7]).to("metal")
+    b = lucid.tensor([0, 1, 0, 0]).to("metal")
+    for name in ("%", "fmod", "remainder"):
+        assert ops[name](a, b).tolist() == [1, 0, -3, 7], name
+    assert (a // b).tolist()[1] == 2

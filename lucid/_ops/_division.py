@@ -6,6 +6,13 @@
 dtype, and its gradient is zero for both operands, as the reference's is.
 ``lucid.div``, ``Tensor.div`` and ``Tensor.div_`` are all made here, so the
 three cannot disagree about a mode.
+
+Integer division by zero (``//``, ``div`` with a rounding mode, ``%``,
+``fmod``, ``remainder``) raises a ``RuntimeError`` naming ``ZeroDivisionError``
+on the CPU, as the reference does.  On Metal it does not raise: refusing would mean reading every
+divisor back to the host.  The remainder ops return the dividend, and the
+quotient is unspecified.  The reference's GPU backend behaves the same way,
+and its integer quotient differs between int32 and int64.
 """
 
 import inspect
