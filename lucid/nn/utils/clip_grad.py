@@ -53,7 +53,7 @@ def _lp_term(
     if norm_type == 2.0 and dt != _D.C64:
         return _C_engine.square(work)
     if norm_type == 0.0:
-        # The "norm" of order 0 counts the non-zero entries; |x|**0 is 1 even at 0.
+        # Counts the non-zero entries of one tensor; |x|**0 is 1 even at 0.
         return _C_engine.sign(_C_engine.abs(work))
     return _C_engine.pow_scalar(_C_engine.abs(work), norm_type)
 
@@ -61,10 +61,13 @@ def _lp_term(
 def _lp_norm(impls: list[_C_engine.TensorImpl], dt: _C_engine.Dtype, norm_type: float) -> float:
     use_sq = norm_type == 2.0 and dt != _D.C64
     norms = [_C_engine.sum(_lp_term(i, dt, norm_type), [], False) for i in impls]
+    if norm_type == 0.0:
+        # The reference takes the norm of the per-tensor norms with the same
+        # order, which for order 0 counts the non-zero *tensors*.
+        counted = _C_engine.sum(_C_engine.sign(_C_engine.stack(norms, 0)), [0], False)
+        return float(_wrap(counted).item())
     acc = norms[0] if len(norms) == 1 else _C_engine.sum(_C_engine.stack(norms, 0), [0], False)
     val = float(_wrap(acc).item())
-    if norm_type == 0.0:
-        return val
     return math.sqrt(val) if use_sq else val ** (1.0 / norm_type)
 
 
@@ -125,9 +128,9 @@ def clip_grad_norm_(
         scaling factor never exceeds ``1`` — gradients smaller than
         ``max_norm`` are untouched.
     norm_type : float, optional
-        Order :math:`p` of the norm.  Default ``2.0`` (Euclidean).  Pass
-        ``math.inf`` for the max-norm (element-wise absolute maximum
-        across all gradients).
+        Order :math:`p` of the norm.  Default ``2.0`` (Euclidean);
+        ``math.inf`` is the max-norm over all gradients; ``0`` counts the
+        gradients with a non-zero entry, as the reference does.
     error_if_nonfinite : bool, optional
         If ``True``, raise :class:`RuntimeError` when the computed total
         norm is ``inf`` or ``nan`` instead of silently scaling by a
@@ -301,7 +304,9 @@ def get_total_norm(
         \|g\|_p \;=\; \left(\sum_i |g_i|^p\right)^{1/p}
 
     taken over every element of every tensor — the quantity
-    :func:`clip_grad_norm_` thresholds against ``max_norm``.
+    :func:`clip_grad_norm_` thresholds against ``max_norm``.  For
+    ``norm_type=0`` it is the reference's norm of the per-tensor norms of
+    order 0, which counts the tensors with any non-zero entry.
 
     Examples
     --------

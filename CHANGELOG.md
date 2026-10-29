@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - validate size, count and probability arguments up front
 
+- clip_grad_norm_ order 0 returns the reference's value
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

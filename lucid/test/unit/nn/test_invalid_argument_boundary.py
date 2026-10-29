@@ -960,11 +960,15 @@ def test_a_product_op_refuses_a_number_operand(call: Callable[[lucid.Tensor], ob
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize("norm_type", [1.0, 2.0, 3.0, float("inf")], ids=str)
+@pytest.mark.parametrize("norm_type", [0.0, 1.0, 2.0, 3.0, float("inf")], ids=str)
 def test_clip_grad_norm_agrees_with_the_reference_for_every_norm_type(
     ref: ModuleType, norm_type: float
 ) -> None:
-    values = [[0.0, 3.0, -4.0], [0.5, 0.0, 2.0]]
+    # Order 0 is where the two readings of "norm of the gradients" part: the
+    # reference takes the norm of the per-tensor norms with the same order,
+    # so it counts the tensors with any non-zero entry (here 2, not 4).  The
+    # all-zero tensor is what tells those apart.
+    values = [[0.0, 3.0, -4.0], [0.5, 0.0, 2.0], [0.0, 0.0, 0.0]]
 
     def total(lib: ModuleType) -> tuple[float, list[list[float]]]:
         params = [lib.nn.Parameter(lib.zeros(3)) for _ in values]
@@ -978,17 +982,6 @@ def test_clip_grad_norm_agrees_with_the_reference_for_every_norm_type(
     assert got_norm == pytest.approx(want_norm, rel=1e-5)
     for g, w in zip(got_grads, want_grads, strict=True):
         assert g == pytest.approx(w, rel=1e-4, abs=1e-6)
-
-
-def test_clip_grad_norm_of_order_zero_counts_the_non_zero_entries() -> None:
-    # The reference takes the norm of the per-tensor norms with the same
-    # order, so there it counts non-zero *tensors*.  The count of entries is
-    # the order-0 "norm" of the gradients taken jointly; it used to be a
-    # ZeroDivisionError.
-    params = [lucid.nn.Parameter(lucid.zeros(3)) for _ in range(2)]
-    for p, v in zip(params, ([0.0, 3.0, -4.0], [0.5, 0.0, 2.0]), strict=True):
-        p.grad = lucid.tensor(v)
-    assert float(lucid.nn.utils.clip_grad_norm_(params, 8.0, norm_type=0.0)) == 4.0
 
 
 @pytest.mark.parity
