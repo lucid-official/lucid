@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keypoint coords compare flat; solve_triangular has no Core ML solver
 - lstsq with no columns reports b as the residual
+- Mask2Former matches ground-truth masks at the logits' dtype
 
 ---
 

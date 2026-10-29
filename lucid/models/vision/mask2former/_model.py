@@ -1187,7 +1187,7 @@ def _m2f_match(
     cost_class = -probs.index_select(1, gt_labels.long())  # (N, M)
 
     pred_pts = point_sample(mask_logits, coords)  # (N, K)
-    gt_pts = point_sample(gt_masks.float(), coords)  # (M, K)
+    gt_pts = point_sample(gt_masks.to(mask_logits.dtype), coords)  # (M, K)
 
     cost = (
         cfg.class_weight * cost_class
