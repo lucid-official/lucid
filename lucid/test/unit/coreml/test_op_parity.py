@@ -632,6 +632,7 @@ class TestTheGapAgainstCompileIsAccountedFor:
         "det",
         "inv",
         "solve",
+        "solve_triangular",
         # One float32 unit in the last place is the whole result, and MIL
         # can neither reinterpret a float's bits nor promise the exact
         # ``exp2`` / ``log2`` an arithmetic ulp needs. A float16 package

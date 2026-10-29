@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - complete DS-7 single-owner extractions across distributions and models
 
+### Fixed
+
+- keypoint coords compare flat; solve_triangular has no Core ML solver
+
 ---
 
 ## [3.16.1] — 2026-10-28

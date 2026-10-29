@@ -32,6 +32,12 @@ def _xy(kps: T.Keypoints) -> list[tuple[float, float]]:
     return [(row[0], row[1]) for row in arr]
 
 
+def _assert_xy(kps: T.Keypoints, expected: list[tuple[float, float]]) -> None:
+    # ``pytest.approx`` refuses nested sequences, so compare the flat coordinates.
+    flat = [v for xy in _xy(kps) for v in xy]
+    assert flat == pytest.approx([v for xy in expected for v in xy], abs=1e-5)
+
+
 # ── deterministic transforms — exact coordinate checks ──────────────
 
 
@@ -44,7 +50,7 @@ class TestDeterministicCoords:
             "kps": _kps([[1.0, 2.0], [9.0, 0.0], [4.5, 7.5]], (8, 10)),
         }
         out = T.HorizontalFlip(p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx([(9.0, 2.0), (1.0, 0.0), (5.5, 7.5)], abs=1e-5)
+        _assert_xy(out["kps"], [(9.0, 2.0), (1.0, 0.0), (5.5, 7.5)])
 
     def test_vertical_flip(self) -> None:
         s = {
@@ -52,13 +58,13 @@ class TestDeterministicCoords:
             "kps": _kps([[1.0, 2.0], [9.0, 0.0], [4.5, 7.5]], (8, 10)),
         }
         out = T.VerticalFlip(p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx([(1.0, 6.0), (9.0, 8.0), (4.5, 0.5)], abs=1e-5)
+        _assert_xy(out["kps"], [(1.0, 6.0), (9.0, 8.0), (4.5, 0.5)])
 
     def test_transpose_swaps_xy(self) -> None:
         s = {"image": T.Image(lucid.rand(3, 8, 10)), "kps": _kps([[1.0, 2.0], [4.5, 6.5]], (8, 10))}
         out = T.Transpose(p=1.0)(s)
         # transpose swaps x and y; canvas becomes (W, H).
-        assert _xy(out["kps"]) == pytest.approx([(2.0, 1.0), (6.5, 4.5)], abs=1e-5)
+        _assert_xy(out["kps"], [(2.0, 1.0), (6.5, 4.5)])
         assert out["kps"].canvas_size == (10, 8)
 
     def test_crop_shifts_origin(self) -> None:
@@ -68,14 +74,14 @@ class TestDeterministicCoords:
         }
         # Crop(x_min=4, y_min=4, x_max=24, y_max=24) → shifts (-4, -4).
         out = T.Crop(4, 4, 24, 24, p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx([(1.0, 2.0), (16.0, 14.0)], abs=1e-5)
+        _assert_xy(out["kps"], [(1.0, 2.0), (16.0, 14.0)])
         assert out["kps"].canvas_size == (20, 20)
 
     def test_centercrop_shifts_origin(self) -> None:
         s = {"image": T.Image(lucid.rand(3, 32, 40)), "kps": _kps([[20.0, 16.0]], (32, 40))}
         # CenterCrop(20, 24) → offsets (h-20)//2 = 6, (w-24)//2 = 8.
         out = T.CenterCrop(20, 24, p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx([(12.0, 10.0)], abs=1e-5)
+        _assert_xy(out["kps"], [(12.0, 10.0)])
         assert out["kps"].canvas_size == (20, 24)
 
     def test_resize_scales_coords(self) -> None:
@@ -85,7 +91,7 @@ class TestDeterministicCoords:
         }
         # Resize(8, 16) → scale (8/16, 16/32) = (0.5, 0.5).
         out = T.Resize(8, 16, p=1.0)(s)
-        assert _xy(out["kps"]) == pytest.approx([(0.0, 0.0), (8.0, 4.0), (15.5, 7.5)], abs=1e-5)
+        _assert_xy(out["kps"], [(0.0, 0.0), (8.0, 4.0), (15.5, 7.5)])
 
     def test_rot90_k_equals_one(self) -> None:
         s = {
