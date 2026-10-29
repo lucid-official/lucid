@@ -370,11 +370,17 @@ def cov(
     -------
     Tensor
         Shape ``(N, N)``.  Entry :math:`(i, j)` =
-        :math:`\frac{1}{M - \text{correction}}\sum_k (x_{i,k} - \bar x_i)(x_{j,k} - \bar x_j)`.
+        :math:`\frac{1}{M - \text{correction}}\sum_k (x_{i,k} - \bar x_i)\,\overline{(x_{j,k} - \bar x_j)}`,
+        so a complex ``input`` gives a Hermitian matrix with a real diagonal.
 
     See Also
     --------
     corrcoef : normalised counterpart (Pearson correlation).
+
+    Notes
+    -----
+    A complex ``input`` runs on Metal only: the CPU stream has no complex
+    matrix product.
     """
     if input.ndim > 2:
         raise _C_engine.InvalidArgument(
@@ -395,7 +401,7 @@ def cov(
         mean = x.sum(dim=1, keepdim=True) * (1.0 / n_obs)  # (N, 1)
         xc = x - mean  # (N, M)
         denom = float(max(1, n_obs - correction))
-        return lucid.matmul(xc, xc.swapaxes(-1, -2)) * (1.0 / denom)  # (N, N)
+        return lucid.matmul(xc, xc.adjoint()) * (1.0 / denom)  # (N, N)
 
     w, aw = _cov_weights(n_obs, x.dtype, x.device, fweights, aweights)
     w_sum = w.sum()
@@ -407,7 +413,7 @@ def cov(
         denom_t = w_sum
     else:
         denom_t = w_sum - float(correction) * (w * aw).sum() / w_sum
-    return lucid.matmul(xc * w, xc.swapaxes(-1, -2)) / denom_t
+    return lucid.matmul(xc * w, xc.adjoint()) / denom_t
 
 
 def corrcoef(input: Tensor) -> Tensor:
@@ -421,7 +427,8 @@ def corrcoef(input: Tensor) -> Tensor:
         R_{ij} = \frac{C_{ij}}{\sqrt{C_{ii}} \sqrt{C_{jj}}}.
 
     Diagonal entries are ``1.0`` (up to floating-point); off-diagonal
-    entries fall in :math:`[-1, 1]`.
+    entries fall in :math:`[-1, 1]`, or inside the unit disc for a complex
+    ``input`` (whose covariance is Hermitian, see :func:`cov`).
 
     Parameters
     ----------
@@ -439,7 +446,9 @@ def corrcoef(input: Tensor) -> Tensor:
     cov : raw covariance matrix without the std-normalisation.
     """
     c = cov(input, correction=1)  # (N, N)
-    d = lucid.sqrt(lucid.diagonal(c))  # (N,) — std deviations
+    var = lucid.diagonal(c)  # (N,)
+    # A Hermitian matrix's diagonal is real; its imaginary part is rounding.
+    d = lucid.sqrt(lucid.real(var) if var.is_complex() else var)  # (N,) — std deviations
     # Outer product: d_col * d_row gives the normalisation matrix
     d_col = d.reshape(-1, 1)  # (N, 1)
     d_row = d.reshape(1, -1)  # (1, N)

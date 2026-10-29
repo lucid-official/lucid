@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ldexp keeps the imaginary part and promotes dtypes
 
+- cov and corrcoef of complex input are Hermitian
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
