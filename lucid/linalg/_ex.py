@@ -1150,8 +1150,16 @@ def _lstsq_rank_and_residuals(
     m, n, k = int(A.shape[-2]), int(A.shape[-1]), int(b_mat.shape[-1])
     full_rank = bool((rank == n).all().item()) if rank.numel() > 0 else True
     if m > n and (drv == "gels" or full_rank):
-        if m == 0 or n == 0 or k == 0 or 0 in batch:
+        if m == 0 or k == 0 or 0 in batch:
             residuals = lucid.zeros(*batch, k, dtype=A.dtype, device=A.device)
+        elif n == 0:
+            # The solution is empty, so the residual is all of ``b`` for the SVD
+            # drivers; the reference's ``gels`` reports zeros here.
+            residuals = (
+                lucid.zeros(*batch, k, dtype=A.dtype, device=A.device)
+                if drv == "gels"
+                else (b_mat.abs() ** 2).sum(dim=-2)
+            )
         else:
             diff = lucid.matmul(A, sol_mat) - b_mat
             residuals = (diff.abs() ** 2).sum(dim=-2)

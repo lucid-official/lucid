@@ -677,3 +677,13 @@ def test_vector_norm_refuses_a_dtype_the_reference_refuses(
 ) -> None:
     with pytest.raises(TypeError, match=match):
         LA.vector_norm(lucid.tensor(values), dtype=dtype)
+
+
+@pytest.mark.parametrize("driver", ["gelsd", "gelss", "gels"])
+def test_lstsq_residuals_with_no_columns_match_the_reference(ref: Any, driver: str) -> None:
+    # With n == 0 the solution is empty: the SVD drivers report all of ``b`` as
+    # the residual, while the reference's ``gels`` reports zeros.
+    b = [[[1.0, 0.5], [2.0, -1.0], [3.0, 2.0]], [[0.0, 1.0], [1.0, 1.0], [2.0, 0.0]]]
+    got = lucid.linalg.lstsq(lucid.zeros(2, 3, 0), lucid.tensor(b), driver=driver).residuals
+    want = ref.linalg.lstsq(ref.zeros(2, 3, 0), ref.tensor(b), driver=driver).residuals
+    assert got.tolist() == want.tolist()

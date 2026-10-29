@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - keypoint coords compare flat; solve_triangular has no Core ML solver
+- lstsq with no columns reports b as the residual
 
 ---
 
