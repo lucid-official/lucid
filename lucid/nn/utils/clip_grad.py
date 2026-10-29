@@ -45,22 +45,26 @@ def _inf_norm(impls: list[_C_engine.TensorImpl], dt: _C_engine.Dtype) -> float:
     return float(_wrap(joined).item())
 
 
+def _lp_term(
+    impl: _C_engine.TensorImpl, dt: _C_engine.Dtype, norm_type: float
+) -> _C_engine.TensorImpl:
+    """The entries of ``impl`` as they enter the :math:`\\ell_p` sum."""
+    work = _as_work(impl, dt)
+    if norm_type == 2.0 and dt != _D.C64:
+        return _C_engine.square(work)
+    if norm_type == 0.0:
+        # The "norm" of order 0 counts the non-zero entries; |x|**0 is 1 even at 0.
+        return _C_engine.sign(_C_engine.abs(work))
+    return _C_engine.pow_scalar(_C_engine.abs(work), norm_type)
+
+
 def _lp_norm(impls: list[_C_engine.TensorImpl], dt: _C_engine.Dtype, norm_type: float) -> float:
     use_sq = norm_type == 2.0 and dt != _D.C64
-    norms = [
-        _C_engine.sum(
-            (
-                _C_engine.square(_as_work(i, dt))
-                if use_sq
-                else _C_engine.pow_scalar(_C_engine.abs(_as_work(i, dt)), norm_type)
-            ),
-            [],
-            False,
-        )
-        for i in impls
-    ]
+    norms = [_C_engine.sum(_lp_term(i, dt, norm_type), [], False) for i in impls]
     acc = norms[0] if len(norms) == 1 else _C_engine.sum(_C_engine.stack(norms, 0), [0], False)
     val = float(_wrap(acc).item())
+    if norm_type == 0.0:
+        return val
     return math.sqrt(val) if use_sq else val ** (1.0 / norm_type)
 
 

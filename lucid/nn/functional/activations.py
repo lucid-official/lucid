@@ -5,6 +5,7 @@ The softmax family, the distance functions and the shrinkage operators are
 written in their own private modules and re-exported from here.
 """
 
+import math
 from typing import TYPE_CHECKING
 
 import lucid as _l
@@ -634,7 +635,9 @@ def softplus(input: Tensor, beta: float = 1.0, threshold: float = 20.0) -> Tenso
         threshold_t = _C_engine.full(list(xi.shape), float(threshold), xi.dtype, xi.device)
         bx = _C_engine.mul(xi, beta_t)
         # log1p(exp(bx)) / beta — composed because the engine's ``softplus`` is beta-agnostic.
-        inv_beta = _C_engine.full(list(xi.shape), 1.0 / float(beta), xi.dtype, xi.device)
+        # ``beta=0`` is the reference's ``inf`` (or ``-inf``), not a ZeroDivisionError.
+        reciprocal = 1.0 / beta if beta != 0 else math.copysign(math.inf, beta)
+        inv_beta = _C_engine.full(list(xi.shape), float(reciprocal), xi.dtype, xi.device)
         softplus_full = _C_engine.mul(_C_engine.softplus(bx), inv_beta)
         return _wrap(_C_engine.where(_C_engine.greater(bx, threshold_t), xi, softplus_full))
 
@@ -729,7 +732,7 @@ def glu(input: Tensor, dim: int = -1) -> Tensor:
     dim = _wrap_dim(dim, len(impl.shape), "glu")
     size = _dim_size(impl.shape, dim)
     if size % 2:  # unequal halves broadcast into a silently wrong product
-        raise ValueError(f"glu: dim {dim} must have an even size, got {size}")
+        raise _C_engine.InvalidArgument(f"glu: dim {dim} must have an even size, got {size}")
     first, second = _C_engine.split_at(impl, [size // 2], dim)
     return _wrap(_C_engine.mul(first, _C_engine.sigmoid(second)))
 
@@ -1110,6 +1113,11 @@ def rrelu(
     >>> rrelu(x, training=False)
     tensor([-0.2292, 0., 1.])
     """
+    if lower > upper:
+        raise _C_engine.InvalidArgument(
+            f"rrelu: lower bound must be less than or equal to the upper bound, "
+            f"got lower={lower}, upper={upper}"
+        )
     if inplace:
         return _in_place(input, "rrelu_", lambda t: rrelu(t, lower, upper, training))
     if not training:

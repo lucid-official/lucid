@@ -5,6 +5,7 @@ nn.functional attention operations.
 from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid.nn.functional.dropout import _check_probability
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -135,7 +136,7 @@ def _broadcast_leading(shapes: list[tuple[int, ...]]) -> tuple[int, ...]:
         sizes = {s[axis - rank + len(s)] for s in shapes if axis - rank + len(s) >= 0}
         sizes.discard(1)
         if len(sizes) > 1:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 "scaled_dot_product_attention: the leading dimensions of query, "
                 f"key and value do not broadcast: {shapes}; for fewer key / value "
                 "heads than query heads, pass enable_gqa=True"
@@ -145,7 +146,7 @@ def _broadcast_leading(shapes: list[tuple[int, ...]]) -> tuple[int, ...]:
 
 
 def _attention_operands(
-    query: Tensor, key: Tensor, value: Tensor, enable_gqa: bool
+    query: Tensor, key: Tensor, value: Tensor, enable_gqa: bool, dropout_p: float
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Q, K and V with one leading shape, as the reference's math reads them.
 
@@ -154,7 +155,17 @@ def _attention_operands(
     leading axes then broadcast against each other as a matmul's would —
     a key shared across the batch is a ``1`` there.  The engine kernels
     take equal leading shapes only, and refused both.
+
+    The call is checked here, before anything is read from the shapes: an
+    operand below 2-D has no sequence axis, and a ``dropout_p`` outside
+    ``[0, 1]`` is refused even when the fused path would not draw a mask.
     """
+    _check_probability(dropout_p)
+    if min(query.ndim, key.ndim, value.ndim) < 2:
+        raise _C_engine.InvalidArgument(
+            "scaled_dot_product_attention: query, key and value must each be at "
+            f"least 2-D, got {query.ndim}-D, {key.ndim}-D and {value.ndim}-D"
+        )
     if enable_gqa and min(query.ndim, key.ndim, value.ndim) >= 3:
         heads = int(query.shape[-3])
         grouped: list[Tensor] = []
@@ -278,7 +289,7 @@ def scaled_dot_product_attention(
     import math
     import lucid as _lucid
 
-    query, key, value = _attention_operands(query, key, value, enable_gqa)
+    query, key, value = _attention_operands(query, key, value, enable_gqa, dropout_p)
     if query.is_metal and query.ndim != 4 and key.ndim == value.ndim == query.ndim:
         # Metal's fused attention takes (B, H, L, D) and nothing else, and
         # raised "expected to be rank 4" on the (B, L, D) that MobileNet-v4's

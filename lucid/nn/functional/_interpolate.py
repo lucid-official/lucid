@@ -369,7 +369,7 @@ def _per_axis(name: str, value: float | Sequence[float], spatial: list[int]) -> 
     assert not isinstance(value, (int, float))
     entries = [float(v) for v in value]
     if len(entries) != len(spatial):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"interpolate: {name} {tuple(value)} has {len(entries)} entries for an "
             f"input with {len(spatial)} spatial axes {tuple(spatial)}"
         )
@@ -385,11 +385,13 @@ def _resolve(
     """Output size of each spatial axis, and the scale its mapping uses."""
     spatial = [int(s) for s in x.shape[2:]]
     if (size is None) == (scale_factor is None):
-        raise ValueError("interpolate: either size or scale_factor must be given, not both")
+        raise _C_engine.InvalidArgument(
+            "interpolate: either size or scale_factor must be given, not both"
+        )
     scales: list[float | None] = [None] * len(spatial)
     if size is not None:
         if recompute_scale_factor:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 "interpolate: recompute_scale_factor is not meaningful with an " "explicit size"
             )
         sizes = [int(n) for n in _per_axis("size", size, spatial)]
@@ -400,7 +402,7 @@ def _resolve(
         if not recompute_scale_factor:
             scales = list(factors)
     if min(sizes + spatial) <= 0:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"interpolate: input {tuple(spatial)} and output {tuple(sizes)} spatial "
             "sizes must all be positive"
         )
@@ -409,29 +411,31 @@ def _resolve(
 
 def _check_lanczos(align_corners: bool | None, antialias: bool) -> None:
     if align_corners:
-        raise ValueError("Lanczos mode does not support align_corners=True")
+        raise _C_engine.InvalidArgument("Lanczos mode does not support align_corners=True")
     if not antialias:
-        raise ValueError("Lanczos mode requires antialias=True")
+        raise _C_engine.InvalidArgument("Lanczos mode requires antialias=True")
 
 
 def _check_mode(x: Tensor, mode: str, align_corners: bool | None, antialias: bool) -> None:
     if mode not in _RANKS:
-        raise ValueError(f"interpolate: unknown mode {mode!r}; expected one of {sorted(_RANKS)}")
+        raise _C_engine.InvalidArgument(
+            f"interpolate: unknown mode {mode!r}; expected one of {sorted(_RANKS)}"
+        )
     rank = x.ndim - 2
     if rank not in _RANKS[mode]:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"interpolate: mode {mode!r} resamples {_RANKS[mode]} spatial axes, "
             f"got an input of shape {tuple(x.shape)} ({rank} spatial)"
         )
     if mode == "lanczos":
         _check_lanczos(align_corners, antialias)
     elif align_corners is not None and mode not in _INTERPOLATING:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             "interpolate: align_corners can only be set with the interpolating "
             f"modes {sorted(_INTERPOLATING)}, not {mode!r}"
         )
     if antialias and mode not in _ANTIALIASED:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"interpolate: antialias is only defined for {sorted(_ANTIALIASED)} "
             f"on 4-D input, not {mode!r}"
         )

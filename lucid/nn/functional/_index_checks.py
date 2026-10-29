@@ -167,7 +167,7 @@ def _refuse(index: Tensor, usable: Tensor, message: Callable[[object], str]) -> 
             if not ok
         )
     )
-    raise IndexError(message(first))
+    raise _C_engine.IndexError(message(first))
 
 
 # ── the class-index losses ──────────────────────────────────────────────────
@@ -298,7 +298,7 @@ def _check_table(x: Tensor, weight: Tensor, op: str) -> None:
     in the table gather (see the module docstring).
     """
     if x.dtype not in _TABLE_INDEX_DTYPES:
-        raise TypeError(
+        raise _C_engine.DtypeMismatch(
             f"{op}: indices must be an integer tensor, got {x.dtype}; "
             f"cast with .to(lucid.int64) first"
         )
@@ -338,7 +338,7 @@ def _check_unpool(
             )
         spatial_numel *= int(extent)
     if indices.dtype not in (_lucid.int8, _lucid.int16, _lucid.int32, _lucid.int64):
-        raise TypeError(
+        raise _C_engine.DtypeMismatch(
             f"{op}: indices must be an integer tensor, got {indices.dtype}; "
             f"cast with .to(lucid.int64) first"
         )
@@ -357,20 +357,23 @@ def _check_unpool(
     return idx, spatial_numel
 
 
-def _padding_index(padding_idx: int | None, weight: Tensor, op: str) -> int | None:
-    """``padding_idx`` as a row of the table ``weight``, or ``None``.
+def _padding_row(padding_idx: int | None, rows: int, op: str) -> int | None:
+    """``padding_idx`` as a row of a ``rows``-row table, or ``None``.
 
-    It must lie in ``[-num_embeddings, num_embeddings)``, as for
-    :class:`~lucid.nn.Embedding`, else ``ValueError``.  A negative one counts
-    from the end and comes back as its row; the engine reads ``-1`` as
-    "no padding row", so ``padding_idx=-1`` was taken for none.
+    It must lie in ``[-rows, rows)``, else ``ValueError``.  A negative one
+    counts from the end and comes back as its row; the engine reads ``-1``
+    as "no padding row", so ``padding_idx=-1`` was taken for none.
     """
     if padding_idx is None:
         return None
-    rows = int(weight.shape[0])
     if not -rows <= padding_idx < rows:
         raise ValueError(f"{op}: padding_idx must be within [-{rows}, {rows}); got {padding_idx}")
     return padding_idx + rows if padding_idx < 0 else padding_idx
+
+
+def _padding_index(padding_idx: int | None, weight: Tensor, op: str) -> int | None:
+    """:func:`_padding_row` for the table ``weight``."""
+    return _padding_row(padding_idx, int(weight.shape[0]), op)
 
 
 def _check_offsets(offsets: Tensor, length: int, op: str) -> None:
@@ -393,7 +396,7 @@ def _check_offsets(offsets: Tensor, length: int, op: str) -> None:
     bounds = [int(cast(int, v)) for v in _flat(_host_read(offsets.tolist))]
     for v in bounds:
         if not 0 <= v <= length:
-            raise IndexError(
+            raise _C_engine.IndexError(
                 f"{op}: offset {v} is out of range for {length} indices "
                 f"(valid range [0, {length}])"
             )
@@ -426,7 +429,7 @@ def _check_lengths(
     for v in values:
         if v < 0 or (longest is not None and v > longest):
             bound = "be non-negative" if longest is None else f"lie in [0, {longest}]"
-            raise IndexError(f"{op}: each of {name} must {bound}, got {v}")
+            raise _C_engine.IndexError(f"{op}: each of {name} must {bound}, got {v}")
     return values
 
 
@@ -466,7 +469,7 @@ def _check_ctc(
         )
     time, batch, classes = (int(d) for d in log_probs.shape)
     if not 0 <= blank < classes:
-        raise IndexError(
+        raise _C_engine.IndexError(
             f"{op}: blank {blank} is out of range for {classes} classes "
             f"(valid range [0, {classes - 1}])"
         )

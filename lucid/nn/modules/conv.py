@@ -11,7 +11,14 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d, PaddingMode
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
-from lucid.nn.modules._conv_common import _single, _conv_parameters, _LazyConvMixin, _pair, _triple
+from lucid.nn.modules._conv_common import (
+    _check_groups,
+    _single,
+    _conv_parameters,
+    _LazyConvMixin,
+    _pair,
+    _triple,
+)
 from lucid.nn.modules.conv_transpose import (  # importable from here, as before
     ConvTranspose1d as ConvTranspose1d,
     ConvTranspose2d as ConvTranspose2d,
@@ -258,6 +265,7 @@ class Conv1d(_ConvNd):
         self.kernel_size: int = _single(kernel_size, "kernel_size")
         self.stride: int = _single(stride, "stride")
         self.dilation: int = _single(dilation, "dilation")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
         self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
@@ -446,6 +454,7 @@ class Conv2d(_ConvNd):
         self.kernel_size: tuple[int, int] = _pair(kernel_size, "kernel_size")
         self.stride: tuple[int, int] = _pair(stride, "stride")
         self.dilation: tuple[int, int] = _pair(dilation, "dilation")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
         self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
@@ -597,6 +606,7 @@ class Conv3d(_ConvNd):
         self.kernel_size: tuple[int, int, int] = _triple(kernel_size, "kernel_size")
         self.stride: tuple[int, int, int] = _triple(stride, "stride")
         self.dilation: tuple[int, int, int] = _triple(dilation, "dilation")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.padding_mode = _validate_padding_mode(padding_mode)
         self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)

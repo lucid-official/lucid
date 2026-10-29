@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, override
 from lucid._tensor.tensor import Tensor
 from lucid._types import _Size2d, _Size3d
 from lucid.nn.module import Module
+from lucid.nn.functional._pool_core import _check_fractional_spec
 from lucid.nn.functional._spatial_args import _ntuple
 from lucid.nn.functional.pooling import (
     max_pool1d,
@@ -2112,8 +2113,7 @@ class FractionalMaxPool2d(Module):
         """Initialise the FractionalMaxPool2d module. See the class docstring for parameter semantics."""
         super().__init__()
         self.kernel_size = kernel_size
-        self.output_size = output_size
-        self.output_ratio = output_ratio
+        self.output_size, self.output_ratio = _check_fractional_spec(output_size, output_ratio, 2)
         self.return_indices = return_indices
 
     @override
@@ -2218,8 +2218,7 @@ class FractionalMaxPool3d(Module):
         """Initialise the FractionalMaxPool3d module. See the class docstring for parameter semantics."""
         super().__init__()
         self.kernel_size = kernel_size
-        self.output_size = output_size
-        self.output_ratio = output_ratio
+        self.output_size, self.output_ratio = _check_fractional_spec(output_size, output_ratio, 3)
         self.return_indices = return_indices
 
     @override

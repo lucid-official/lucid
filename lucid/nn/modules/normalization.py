@@ -19,7 +19,8 @@ from lucid.nn.functional.normalization import (
     rms_norm,
     group_norm,
     batch_norm,
-    _check_batch_norm_sample_count,
+    _check_batch_norm_input,
+    _check_group_norm,
     instance_norm,
     local_response_norm,
 )
@@ -397,7 +398,7 @@ class GroupNorm(Module):
     ) -> None:
         """Initialise the GroupNorm module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.num_groups = num_groups
+        self.num_groups = _check_group_norm(num_groups, num_channels)
         self.num_channels = num_channels
         self.eps = eps
         self.affine = affine
@@ -733,15 +734,14 @@ class _BatchNormBase(_NormBase):
         Tensor
             Normalised tensor of the same shape as ``input``.
         """
-        _check_batch_norm_sample_count(input, self.training)
+        _check_batch_norm_input(input, self.eps, self.training)
         # The running statistics are written by the training forward itself,
         # in the C++ kernel: it folds the batch mean and variance it
         # normalises with into the buffers, into their own elements wherever
         # they sit, both or neither (``core/ElementWrite.h``), and leaves a
         # dense buffer's version where it was, as the reference does.  Python
-        # used to rebind the buffers to new tensors on the ``momentum=None``
-        # path, so a view's base, a ``state_dict()`` taken earlier, or anything
-        # else holding the buffer never saw the update (LCD-497).
+        # used to rebind the buffers on the ``momentum=None`` path, so a
+        # view's base or an earlier ``state_dict()`` never saw it (LCD-497).
         #
         # Under a Tracer (``lucid.compile()`` / ``make_step``) the forward has
         # to stay pure: the compiled executable writes the running statistics

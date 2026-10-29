@@ -7,7 +7,14 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
-from lucid.nn.modules._conv_common import _single, _conv_parameters, _LazyConvMixin, _pair, _triple
+from lucid.nn.modules._conv_common import (
+    _check_groups,
+    _single,
+    _conv_parameters,
+    _LazyConvMixin,
+    _pair,
+    _triple,
+)
 from lucid.nn.functional.conv import _ConvArgs, _conv_transposend, _output_padding_for_size
 
 
@@ -211,6 +218,7 @@ class ConvTranspose1d(_ConvTransposeNd):
         self.stride: int = _single(stride, "stride")
         self.padding: int = _single(padding, "padding")
         self.output_padding: int = _single(output_padding, "output_padding")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation: int = _single(dilation, "dilation")
         self.weight, self.bias = _conv_parameters(
@@ -370,6 +378,7 @@ class ConvTranspose2d(_ConvTransposeNd):
         self.stride = _pair(stride, "stride")
         self.padding = _pair(padding, "padding")
         self.output_padding = _pair(output_padding, "output_padding")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation = _pair(dilation, "dilation")
         self.weight, self.bias = _conv_parameters(
@@ -516,6 +525,7 @@ class ConvTranspose3d(_ConvTransposeNd):
         self.stride = _triple(stride, "stride")
         self.padding = _triple(padding, "padding")
         self.output_padding = _triple(output_padding, "output_padding")
+        _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation = _triple(dilation, "dilation")
         self.weight, self.bias = _conv_parameters(

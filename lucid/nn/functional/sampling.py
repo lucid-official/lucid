@@ -316,12 +316,16 @@ def affine_grid(
     """
     ac = align_corners if align_corners is not None else False
     sz = [int(s) for s in size]
-    if len(sz) == 5:
-        return _affine_grid_3d(theta, sz, ac)
-    if len(sz) != 4:
-        raise ValueError(
+    if len(sz) not in (4, 5):
+        raise _C_engine.InvalidArgument(
             "affine_grid: size must be (N, C, H, W) or (N, C, D, H, W), " f"got {tuple(sz)}"
         )
+    if min(sz) <= 0:
+        raise _C_engine.InvalidArgument(
+            f"affine_grid: every entry of size must be positive, got {tuple(sz)}"
+        )
+    if len(sz) == 5:
+        return _affine_grid_3d(theta, sz, ac)
     # Engine signature: (theta, N, H, W, align_corners) — no C dimension.
     N, H, W = sz[0], sz[2], sz[3]
     return _wrap(_C_engine.nn.affine_grid(_unwrap(theta), N, H, W, ac))
@@ -581,7 +585,7 @@ def embedding_bag(
     _check_table(input, weight, op)
     if input.ndim == 1:
         if offsets is None:
-            raise ValueError("embedding_bag: offsets required for 1-D input")
+            raise _C_engine.InvalidArgument("embedding_bag: offsets required for 1-D input")
         _check_offsets(offsets, int(input.shape[0]), op)
     if max_norm is not None:
         _renorm_rows(weight, input, max_norm, norm_type)
@@ -916,11 +920,17 @@ def pixel_shuffle(input: Tensor, upscale_factor: int) -> Tensor:
     (1, 3, 16, 16)
     """
     r: int = int(upscale_factor)
+    if r <= 0:
+        raise _C_engine.InvalidArgument(
+            f"pixel_shuffle: upscale_factor must be a positive integer, got {r}"
+        )
     if len(input.shape) != 4:
-        raise ValueError(f"pixel_shuffle: expected 4-D input, got shape {tuple(input.shape)}")
+        raise _C_engine.InvalidArgument(
+            f"pixel_shuffle: expected 4-D input, got shape {tuple(input.shape)}"
+        )
     n, c_r2, h, w = input.shape
     if c_r2 % (r * r) != 0:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"pixel_shuffle: channels {c_r2} not divisible by upscale_factor² ({r * r})"
         )
     c: int = c_r2 // (r * r)
@@ -972,11 +982,19 @@ def pixel_unshuffle(input: Tensor, downscale_factor: int) -> Tensor:
     (1, 12, 8, 8)
     """
     r: int = int(downscale_factor)
+    if r <= 0:
+        raise _C_engine.InvalidArgument(
+            f"pixel_unshuffle: downscale_factor must be a positive integer, got {r}"
+        )
     if len(input.shape) != 4:
-        raise ValueError(f"pixel_unshuffle: expected 4-D input, got shape {tuple(input.shape)}")
+        raise _C_engine.InvalidArgument(
+            f"pixel_unshuffle: expected 4-D input, got shape {tuple(input.shape)}"
+        )
     n, c, h_r, w_r = input.shape
     if h_r % r != 0 or w_r % r != 0:
-        raise ValueError(f"pixel_unshuffle: spatial dims ({h_r}, {w_r}) not divisible by {r}")
+        raise _C_engine.InvalidArgument(
+            f"pixel_unshuffle: spatial dims ({h_r}, {w_r}) not divisible by {r}"
+        )
     h, w = h_r // r, w_r // r
     impl = _unwrap(input)
     t = _C_engine.reshape(impl, [n, c, h, r, w, r])
@@ -1137,7 +1155,7 @@ def multi_head_attention_forward(
     kdim = vdim = int(embed_dim_to_check)
     if use_separate_proj_weight:
         if q_proj_weight is None or k_proj_weight is None or v_proj_weight is None:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 "multi_head_attention_forward: use_separate_proj_weight=True "
                 "needs q_proj_weight, k_proj_weight and v_proj_weight"
             )
@@ -1259,14 +1277,20 @@ def channel_shuffle(input: Tensor, groups: int) -> Tensor:
     tensor([0., 8., 16., 4., 12., 20.])
     """
     if input.ndim < 2:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"channel_shuffle: expected at least 2-D input (N, C, *), got "
             f"shape {tuple(input.shape)}"
+        )
+    if int(groups) <= 0:
+        raise _C_engine.InvalidArgument(
+            f"channel_shuffle: groups must be a positive integer, got {groups}"
         )
     n = int(input.shape[0])
     c = int(input.shape[1])
     if c % int(groups) != 0:
-        raise ValueError(f"channel_shuffle: channel count {c} not divisible by groups " f"{groups}")
+        raise _C_engine.InvalidArgument(
+            f"channel_shuffle: channel count {c} not divisible by groups " f"{groups}"
+        )
     ch_per_group = c // int(groups)
     spatial = list(input.shape[2:])
 
@@ -1325,7 +1349,11 @@ def pdist(input: Tensor, p: float = 2.0) -> Tensor:
     tensor([1., 1., 1.414])
     """
     if input.ndim != 2:
-        raise ValueError(f"pdist: expected a 2-D input, got shape {tuple(input.shape)}")
+        raise _C_engine.InvalidArgument(
+            f"pdist: expected a 2-D input, got shape {tuple(input.shape)}"
+        )
+    if p < 0:
+        raise _C_engine.InvalidArgument(f"pdist: p must be non-negative, got {p}")
     _require_floating(_unwrap(input), "pdist")
     n = int(input.shape[0])
     if n < 2:

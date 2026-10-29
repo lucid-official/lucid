@@ -23,10 +23,13 @@ def _check_probability(p: float) -> None:
     """Every dropout entry point takes ``p`` in ``[0, 1]``, as the reference does.
 
     Raises:
-        ValueError: ``p`` is outside ``[0, 1]`` (or NaN).
+        InvalidArgument: ``p`` is outside ``[0, 1]`` (or NaN); a ``ValueError``
+            and a ``RuntimeError``.
     """
     if not 0.0 <= p <= 1.0:
-        raise ValueError(f"dropout probability has to be between 0 and 1, but got {p}")
+        raise _C_engine.InvalidArgument(
+            f"dropout probability has to be between 0 and 1, but got {p}"
+        )
 
 
 def _drop_everything(x: Tensor, p: float, training: bool) -> Tensor | None:

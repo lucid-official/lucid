@@ -243,14 +243,16 @@ def _max_pool(
     xb, unbatched = _add_batch_axis(x, n)
     if any(d != 1 for d in g.dilation):
         if xb.ndim != n + 2:
-            raise ValueError(f"max_pool{n}d: expected {n + 1}D or {n + 2}D input, got {x.ndim}D")
+            raise _C_engine.InvalidArgument(
+                f"max_pool{n}d: expected {n + 1}D or {n + 2}D input, got {x.ndim}D"
+            )
         spatial = tuple(int(v) for v in xb.shape[2:])
         out_spatial = tuple(
             _pooled_extent(size, *axis, ceil_mode)
             for size, axis in zip(spatial, zip(*g, strict=True), strict=True)
         )
         if min(out_spatial) < 1:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"max_pool{n}d: an input of {spatial} is too small for "
                 f"kernel_size={g.kernel} with dilation={g.dilation}"
             )
@@ -296,7 +298,7 @@ def _avg_pool(
     """
     n = len(g.kernel)
     if divisor_override is not None and int(divisor_override) == 0:
-        raise ValueError(f"avg_pool{n}d: divisor_override must not be zero")
+        raise _C_engine.InvalidArgument(f"avg_pool{n}d: divisor_override must not be zero")
     xb, unbatched = _add_batch_axis(x, n)
     cip = count_include_pad or divisor_override is not None
     out = _wrap(_AVG_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode, cip))
@@ -334,7 +336,7 @@ def _lp_pool(x: Tensor, norm_type: float, g: _PoolGeometry, ceil_mode: bool) -> 
     if p == math.inf:
         return _max_pool(_lucid.abs(x), g, ceil_mode, False)
     if not p > 0.0:
-        raise ValueError(f"lp_pool{n}d: norm_type must be > 0, got {p}")
+        raise _C_engine.InvalidArgument(f"lp_pool{n}d: norm_type must be > 0, got {p}")
     pooled = _avg_pool(x**p, g, ceil_mode, True, None)
     summed = _lucid.where(pooled != 0, pooled, _lucid.zeros_like(pooled))
     return (summed * float(math.prod(g.kernel))) ** (1.0 / p)
@@ -352,13 +354,13 @@ def _adaptive_size(
     output_size = _promotion.as_number(output_size)
     given = (output_size,) * n if isinstance(output_size, int) else tuple(output_size)
     if len(given) != n:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: expected output_size to be a single integer or {n} entries, "
             f"got {output_size!r}"
         )
     sizes = tuple(e if v is None else int(v) for v, e in zip(given, spatial, strict=True))
     if min(sizes) < 0:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: elements of output_size must be greater than or equal to 0, " f"got {sizes}"
         )
     return sizes
@@ -378,7 +380,9 @@ def _adaptive_pool(
     with _pool_autocast(op, x) as x:
         xb, unbatched = _add_batch_axis(x, n)
         if xb.ndim != n + 2:
-            raise ValueError(f"{op}: expected {n + 1}D or {n + 2}D input, got {x.ndim}D")
+            raise _C_engine.InvalidArgument(
+                f"{op}: expected {n + 1}D or {n + 2}D input, got {x.ndim}D"
+            )
         spatial = tuple(int(s) for s in xb.shape[-n:])
         sizes = _adaptive_size(output_size, spatial, op)
         if 0 in sizes:
@@ -431,6 +435,44 @@ def _frac_pool_starts(
     return [*starts, size - kernel]
 
 
+def _fractional_ratios(
+    output_size: int | Sequence[int] | None,
+    output_ratio: float | Sequence[float] | None,
+    n: int,
+    op: str,
+) -> tuple[float, ...] | None:
+    """The per-axis ``output_ratio``, or ``None`` when ``output_size`` was given.
+
+    Needs no input, so a fractional pooling module can refuse a bad pair when
+    it is built, where the reference refuses it.
+    """
+    if (output_size is None) == (output_ratio is None):
+        raise _C_engine.InvalidArgument(f"{op}: give exactly one of output_size and output_ratio")
+    if output_ratio is None:
+        return None
+    if isinstance(output_ratio := _promotion.as_number(output_ratio), (int, float)):
+        ratios = (float(output_ratio),) * n
+    else:
+        ratios = tuple(float(r) for r in output_ratio)
+    if len(ratios) != n or not all(0.0 < r < 1.0 for r in ratios):
+        raise _C_engine.InvalidArgument(
+            f"{op}: output_ratio must be {n} numbers in (0, 1), got {output_ratio!r}"
+        )
+    return ratios
+
+
+def _check_fractional_spec[S: int | Sequence[int] | None, R: float | Sequence[float] | None](
+    output_size: S, output_ratio: R, n: int
+) -> tuple[S, R]:
+    """The pair back, once it is known to name one pooled extent.
+
+    Lets an ``n``-D module refuse it when it is built, as the reference
+    does, in the statement that stores it.
+    """
+    _fractional_ratios(output_size, output_ratio, n, f"fractional_max_pool{n}d")
+    return output_size, output_ratio
+
+
 def _fractional_output_size(
     output_size: int | Sequence[int] | None,
     output_ratio: float | Sequence[float] | None,
@@ -440,24 +482,15 @@ def _fractional_output_size(
 ) -> tuple[int, ...]:
     """The pooled extent per axis, from ``output_size`` or ``output_ratio``."""
     n = len(spatial)
-    if (output_size is None) == (output_ratio is None):
-        raise ValueError(f"{op}: give exactly one of output_size and output_ratio")
-    if output_size is not None:
+    ratios = _fractional_ratios(output_size, output_ratio, n, op)
+    if ratios is None:
+        assert output_size is not None
         out = _ntuple(output_size, n, op, "output_size")
     else:
-        assert output_ratio is not None
-        if isinstance(output_ratio := _promotion.as_number(output_ratio), (int, float)):
-            ratios = (float(output_ratio),) * n
-        else:
-            ratios = tuple(float(r) for r in output_ratio)
-        if len(ratios) != n or not all(0.0 < r < 1.0 for r in ratios):
-            raise ValueError(
-                f"{op}: output_ratio must be {n} numbers in (0, 1), got {output_ratio!r}"
-            )
         out = tuple(max(1, int(s * r)) for s, r in zip(spatial, ratios, strict=True))
     for o, k, s in zip(out, kernel, spatial, strict=True):
         if o < 1 or o + k - 1 > s:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{op}: output_size {out} with kernel_size {kernel} does not fit "
                 f"an input of {spatial}"
             )
@@ -524,7 +557,7 @@ def _fractional_max_pool(
     with _pool_autocast(op, x) as x:
         xb, unbatched = _add_batch_axis(x, n)
         if xb.ndim != n + 2:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{op}: expected a {n + 2}-D or unbatched {n + 1}-D input, "
                 f"got shape {tuple(x.shape)}"
             )
@@ -536,7 +569,7 @@ def _fractional_max_pool(
         if samples is None:
             samples = _lucid.rand(batch, channels, n, dtype=xb.dtype, device=xb.device)
         if tuple(samples.shape) != (batch, channels, n):
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{op}: _random_samples must have shape {(batch, channels, n)}, "
                 f"got {tuple(samples.shape)}"
             )

@@ -209,10 +209,12 @@ def _bag_mode(mode: str, sparse: bool, scale_grad_by_freq: bool) -> int:
     """
     modes = {"sum": 0, "mean": 1, "max": 2}
     if mode not in modes:
-        raise ValueError(f"embedding_bag: mode must be one of {sorted(modes)}, got {mode!r}")
+        raise _C_engine.InvalidArgument(
+            f"embedding_bag: mode must be one of {sorted(modes)}, got {mode!r}"
+        )
     unsupported_if(sparse, "embedding_bag", "sparse", sparse, detail="Gradients are always dense.")
     if scale_grad_by_freq and mode == "max":
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             "embedding_bag: scale_grad_by_freq is not defined for mode='max' — "
             "use mode='sum' or 'mean'"
         )
@@ -277,7 +279,7 @@ def _bag_by_lookup(
                 f"mode='sum' (got mode={mode!r})"
             )
         if tuple(per_sample_weights.shape) != tuple(x.shape):
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 "embedding_bag: per_sample_weights must have the shape of the "
                 f"indices {tuple(x.shape)}, got {tuple(per_sample_weights.shape)}"
             )
@@ -319,7 +321,7 @@ def _bag_of_each_index(
         positions = lucid.arange(n_rows * length, dtype=lucid.int64, device=device)
         return positions // max(length, 1), n_rows
     if offsets is None:
-        raise ValueError("embedding_bag: offsets required for 1-D input")
+        raise _C_engine.InvalidArgument("embedding_bag: offsets required for 1-D input")
     bounds = offsets.to(lucid.int64).to(device)
     n_bags = int(bounds.shape[0]) - (1 if include_last_offset else 0)
     positions = lucid.arange(int(x.shape[0]), dtype=lucid.int64, device=device)
@@ -392,7 +394,7 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
             [1, 0]], dtype=lucid.int64)
     """
     if num_classes != -1 and num_classes <= 0:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"one_hot: num_classes must be positive, or -1 to infer it, " f"got {num_classes}"
         )
     if num_classes == -1:
@@ -400,7 +402,7 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
         # function has always advertised went straight through and was
         # refused.  Inferred here instead, as documented.
         if input.numel() == 0:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 "one_hot: cannot infer num_classes from an empty tensor; "
                 "pass num_classes explicitly"
             )
@@ -458,10 +460,10 @@ def nearest_codebook(x: Tensor, codebook: Tensor) -> Tensor:
     [1, 0]
     """
     if codebook.ndim != 2:
-        raise ValueError(f"codebook must be 2-D (K, D), got shape {codebook.shape}")
+        raise _C_engine.InvalidArgument(f"codebook must be 2-D (K, D), got shape {codebook.shape}")
     dim = int(codebook.shape[-1])
     if int(x.shape[-1]) != dim:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"x's trailing axis must match the codebook's, got " f"{int(x.shape[-1])} and {dim}"
         )
 
@@ -575,7 +577,7 @@ def two_hot(values: Tensor, bins: Tensor) -> Tensor:
     """
     count = int(bins.shape[0])
     if bins.ndim != 1 or count < 2:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"bins must be a 1-D tensor of at least two entries, got shape "
             f"{tuple(int(s) for s in bins.shape)}"
         )

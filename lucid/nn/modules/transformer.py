@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import cast, override
 
 import lucid as _lucid
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 
@@ -34,14 +35,14 @@ def _resolve_activation(activation: str | Callable[[Tensor], Tensor]) -> Callabl
     """The feed-forward non-linearity of an encoder or decoder layer.
 
     Raises:
-        ValueError: ``activation`` is a string other than ``"relu"`` or
-            ``"gelu"``.
+        InvalidArgument: ``activation`` is a string other than ``"relu"`` or
+            ``"gelu"`` (a ``ValueError`` and a ``RuntimeError``).
         TypeError: ``activation`` is neither a string nor callable.
     """
     if isinstance(activation, str):
         fn = _FFN_ACTIVATIONS.get(activation)
         if fn is None:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"activation should be one of {sorted(_FFN_ACTIVATIONS)} or a "
                 f"callable, got {activation!r}"
             )

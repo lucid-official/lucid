@@ -66,7 +66,9 @@ def _check_reduction(reduction: object, op: str, *, batchmean: bool = False) -> 
     may pass anything, so the ``str`` check is part of the contract."""
     valid = _REDUCTIONS + ("batchmean",) if batchmean else _REDUCTIONS
     if not isinstance(reduction, str) or reduction not in valid:
-        raise ValueError(f"{op}: reduction must be one of {valid}, got {reduction!r}")
+        raise _C_engine.InvalidArgument(
+            f"{op}: reduction must be one of {valid}, got {reduction!r}"
+        )
 
 
 @overload
@@ -113,14 +115,14 @@ def _legacy_reduction(
 
 def _check_same_weight(weight: Tensor | None, x: Tensor, op: str) -> None:
     if weight is not None and _shape(weight) != _shape(x):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: weight of shape {_shape(weight)} must have the same size as input {_shape(x)}"
         )
 
 
 def _check_beta(beta: float, op: str = "smooth_l1_loss") -> None:
     if isinstance(beta := _promotion.as_number(beta), bool) or not beta >= 0.0:
-        raise ValueError(f"{op}: beta must be non-negative, got {beta!r}")
+        raise _C_engine.InvalidArgument(f"{op}: beta must be non-negative, got {beta!r}")
 
 
 def _check_delta(delta: float, op: str = "huber_loss") -> None:
@@ -129,7 +131,7 @@ def _check_delta(delta: float, op: str = "huber_loss") -> None:
     ):
         raise TypeError(f"{op}: delta must be a float or int, got {type(delta).__name__}")
     if not delta > 0.0:
-        raise ValueError(f"{op}: delta must be positive, got {delta!r}")
+        raise _C_engine.InvalidArgument(f"{op}: delta must be positive, got {delta!r}")
 
 
 def _check_label_smoothing(label_smoothing: float, op: str = "cross_entropy") -> None:
@@ -137,19 +139,25 @@ def _check_label_smoothing(label_smoothing: float, op: str = "cross_entropy") ->
         isinstance(label_smoothing := _promotion.as_number(label_smoothing), bool)
         or not 0.0 <= label_smoothing <= 1.0
     ):
-        raise ValueError(f"{op}: label_smoothing must be in [0, 1], got {label_smoothing!r}")
+        raise _C_engine.InvalidArgument(
+            f"{op}: label_smoothing must be in [0, 1], got {label_smoothing!r}"
+        )
 
 
 def _check_multi_margin(p: int, weight: Tensor | None, op: str = "multi_margin_loss") -> None:
     if isinstance(p := _promotion.as_number(p), bool) or (p != 1 and p != 2):
-        raise ValueError(f"{op}: only p == 1 and p == 2 supported, got {p!r}")
+        raise _C_engine.InvalidArgument(f"{op}: only p == 1 and p == 2 supported, got {p!r}")
     if weight is not None and weight.ndim != 1:
-        raise ValueError(f"{op}: expected weight to be None or 1D tensor, got {weight.ndim}D")
+        raise _C_engine.InvalidArgument(
+            f"{op}: expected weight to be None or 1D tensor, got {weight.ndim}D"
+        )
 
 
 def _check_triplet_margin(margin: float, op: str) -> None:
     if isinstance(margin := _promotion.as_number(margin), bool) or not margin > 0.0:
-        raise ValueError(f"{op}: expected margin to be greater than 0, got {margin!r}")
+        raise _C_engine.InvalidArgument(
+            f"{op}: expected margin to be greater than 0, got {margin!r}"
+        )
 
 
 def _check_device(op: str, **tensors: Tensor | None) -> None:
@@ -197,7 +205,7 @@ def _check_broadcasts_to(t: Tensor | None, shape: tuple[int, ...], what: str, op
     """``t`` scales a loss of ``shape`` element by element: it has to
     broadcast to ``shape`` without making it any larger."""
     if t is not None and _broadcast_shape(_shape(t), shape) != shape:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: {what} of shape {_shape(t)} does not broadcast to the " f"input's shape {shape}"
         )
 
@@ -244,13 +252,13 @@ def _check_target(x: Tensor, target: Tensor, op: str) -> tuple[int, ...]:
     rule = _TARGET_SHAPE[op]
     if rule == "same":
         if t_shape != x_shape:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{op}: target size {t_shape} must be the same as input size " f"{x_shape}"
             )
         return x_shape
     shape = _broadcast_shape(x_shape, t_shape)
     if shape is None or (rule == "within" and shape != x_shape):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: target of shape {t_shape} does not broadcast "
             f"{'to' if rule == 'within' else 'with'} the input's shape {x_shape}"
         )
@@ -289,7 +297,7 @@ def _check_same_rank(op: str, *, broadcast: bool = True, **tensors: Tensor) -> N
         broadcast and _broadcast_shape(*shapes.values()) is None
     ):
         got = ", ".join(f"{name} {s}" for name, s in shapes.items())
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: the inputs are expected to have the same number of "
             f"dimensions{' and broadcastable shapes' if broadcast else ''}, "
             f"got {got}"
@@ -302,7 +310,9 @@ def _num_classes(x: Tensor, op: str, *, max_ndim: int | None = None) -> int:
     define."""
     if x.ndim == 0 or (max_ndim is not None and x.ndim > max_ndim):
         shapes = "(C,) or (N, C)" if max_ndim == 2 else "(C,), (N, C) or (N, C, *)"
-        raise ValueError(f"{op}: expected an input of shape {shapes}, got {_shape(x)}")
+        raise _C_engine.InvalidArgument(
+            f"{op}: expected an input of shape {shapes}, got {_shape(x)}"
+        )
     return int(x.shape[0] if x.ndim == 1 else x.shape[1])
 
 
@@ -323,7 +333,7 @@ def _check_class_weight(
     the classes past its end."""
     _check_device(op, input=x, target=target, weight=weight)
     if weight is not None and (weight.ndim != 1 or int(weight.shape[0]) != num_classes):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: weight tensor should be defined either for all {num_classes} "
             f"classes or no classes but got weight tensor of shape: "
             f"{list(_shape(weight))}"
@@ -337,7 +347,7 @@ def _check_class_target(x: Tensor, target: Tensor, op: str) -> None:
     want = (int(x.shape[0]),) + _shape(x)[2:] if x.ndim > 1 else ()
     got = _shape(target)
     if got != want and not (x.ndim == 1 and got == (1,)):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: expected a target of shape {want} for an input of shape "
             f"{_shape(x)}, got {got}"
         )
@@ -354,7 +364,7 @@ def _check_unit_interval(t: Tensor, what: str, op: str) -> None:
     if t.device != "cpu":
         return
     if not _host_read(lambda: bool(((t >= 0.0) & (t <= 1.0)).all().item())):
-        raise ValueError(f"{op}: all elements of {what} should be between 0 and 1")
+        raise _C_engine.InvalidArgument(f"{op}: all elements of {what} should be between 0 and 1")
 
 
 # ── operand dtypes ──────────────────────────────────────────────────────────
@@ -536,7 +546,9 @@ def _check_cross_entropy_target(
             f"and must be floating point, got {target.dtype}"
         )
     elif ignore_index >= 0:
-        raise ValueError(f"{op}: ignore_index is not supported for a target of class probabilities")
+        raise _C_engine.InvalidArgument(
+            f"{op}: ignore_index is not supported for a target of class probabilities"
+        )
     return num_classes, soft
 
 
@@ -545,17 +557,17 @@ def _check_cosine_shapes(x1: Tensor, x2: Tensor, y: Tensor, op: str) -> None:
     # A (N,) target pairs (N, D) inputs; a 0-d one pairs one unbatched (D,)
     # pair, which raised IndexError ("axis out of range") here.
     if y.ndim > 1:
-        raise ValueError(f"{op}: expected a 0-d or 1-D target, got {_shape(y)}")
+        raise _C_engine.InvalidArgument(f"{op}: expected a 0-d or 1-D target, got {_shape(y)}")
     pair = _broadcast_shape(_shape(x1), _shape(x2))
     if x1.ndim != y.ndim + 1 or x2.ndim != y.ndim + 1 or pair is None:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: a {y.ndim}-D target expects two {y.ndim + 1}-D inputs of "
             f"broadcastable shapes, got {_shape(x1)} and {_shape(x2)}"
         )
     # The target broadcasts with the pairs' batch, either way: a batch of
     # one against N labels is N losses, as in the reference.
     if _broadcast_shape(_shape(y), pair[:-1]) is None:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: target of shape {_shape(y)} does not broadcast with the "
             f"inputs' batch shape {pair[:-1]}"
         )
@@ -565,7 +577,7 @@ def _align_gaussian_var(x: Tensor, var: Tensor | float) -> Tensor:
     """Materialise and broadcast-align ``var`` to ``x`` for :func:`gaussian_nll_loss`."""
     if isinstance(var, (int, float)):
         if var < 0:
-            raise ValueError("var has negative entry/entries")
+            raise _C_engine.InvalidArgument("var has negative entry/entries")
         var = _lucid.full_like(x, float(var))
     if tuple(var.shape) != tuple(x.shape):
         if tuple(x.shape[:-1]) == tuple(var.shape):
@@ -573,9 +585,9 @@ def _align_gaussian_var(x: Tensor, var: Tensor | float) -> Tensor:
         elif x.ndim != var.ndim or (
             sum(v for d, v in zip(x.shape, var.shape, strict=True) if d != v) != 1
         ):
-            raise ValueError("var is of incorrect size")
+            raise _C_engine.InvalidArgument("var is of incorrect size")
     if var.device == "cpu" and _host_read(lambda: bool((var < 0.0).any().item())):
-        raise ValueError("var has negative entry/entries")
+        raise _C_engine.InvalidArgument("var has negative entry/entries")
     return var
 
 

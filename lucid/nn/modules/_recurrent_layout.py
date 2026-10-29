@@ -14,6 +14,7 @@ Between stacked layers every module applies its ``dropout`` through
 :func:`_check_dropout` when it is built.
 """
 
+import math
 import warnings
 from collections.abc import Sequence
 from typing import NamedTuple
@@ -334,6 +335,30 @@ def _lstm_cell_step(
             b_ih, b_hh = b or (None, None)
             return _lstm_cell_gates(x, h0, c0, w_ih, w_hh, b_ih, b_hh)
     return _lstm_cell_gates(x, h0, c0, w_ih, w_hh, b_ih, b_hh)
+
+
+def _check_sizes(input_size: int, hidden_size: int, num_layers: int) -> None:
+    """The sizes of RNN / GRU / LSTM, checked once when the module is built.
+
+    Raises:
+        ValueError: a size is not a positive integer.
+    """
+    for name, size in (
+        ("input_size", input_size),
+        ("hidden_size", hidden_size),
+        ("num_layers", num_layers),
+    ):
+        if size <= 0:
+            raise ValueError(f"{name} must be greater than zero, got {size}")
+
+
+def _init_bound(hidden_size: int) -> float:
+    """The bound ``1 / sqrt(hidden_size)`` of the uniform recurrent init.
+
+    A cell may have no hidden units (the reference builds one), so the bound
+    is 0 there rather than a division by zero.
+    """
+    return 1.0 / math.sqrt(hidden_size) if hidden_size > 0 else 0.0
 
 
 def _check_dropout(dropout: object, num_layers: int) -> float:

@@ -2,7 +2,6 @@
 Recurrent modules: LSTM, GRU, RNN.
 """
 
-import math
 from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
@@ -18,6 +17,8 @@ from lucid.nn.functional.linear import linear
 from lucid.nn.utils.rnn import PackedSequence
 from lucid.nn.modules._recurrent_layout import (
     _check_dropout,
+    _check_sizes,
+    _init_bound,
     _inter_layer_dropout,
     _cell_batch,
     _cell_unbatch,
@@ -113,7 +114,9 @@ def _gru_step(x: Tensor, h: Tensor, w: _Weights) -> Tensor:
 def _check_nonlinearity(nonlinearity: str) -> str:
     """Refuse an activation the Elman recurrence does not have."""
     if nonlinearity not in ("tanh", "relu"):
-        raise ValueError(f"Unknown nonlinearity {nonlinearity!r}. Select from 'tanh' or 'relu'.")
+        raise _C_engine.InvalidArgument(
+            f"Unknown nonlinearity {nonlinearity!r}. Select from 'tanh' or 'relu'."
+        )
     return nonlinearity
 
 
@@ -159,7 +162,7 @@ class _FlatRecurrent(Module):
         initialise them from ``U(-1/sqrt(H), 1/sqrt(H))``."""
         dirs = 2 if self.bidirectional else 1
         rows = self._gates * self.hidden_size
-        stdv = 1.0 / math.sqrt(self.hidden_size)
+        stdv = _init_bound(self.hidden_size)
         for layer in range(self.num_layers):
             width = self.input_size if layer == 0 else self.hidden_size * dirs
             for suffix in ("", "_reverse")[:dirs]:
@@ -445,6 +448,7 @@ class LSTM(Module):
     ) -> None:
         """Initialise the LSTM module. See the class docstring for parameter semantics."""
         super().__init__()
+        _check_sizes(input_size, hidden_size, num_layers)
         if proj_size < 0:
             raise ValueError(f"proj_size must be >= 0, got {proj_size}")
         if proj_size >= hidden_size and proj_size > 0:
@@ -504,7 +508,7 @@ class LSTM(Module):
 
     def _init_weights(self) -> None:
         """Internal helper for the LSTM module."""
-        stdv = 1.0 / math.sqrt(self.hidden_size)
+        stdv = _init_bound(self.hidden_size)
         for p in self.parameters():
             init.uniform_(p, -stdv, stdv)
 
@@ -827,7 +831,7 @@ class RNNCell(Module):
 
     def _init_weights(self) -> None:
         """Internal helper for the RNNCell module."""
-        stdv = 1.0 / math.sqrt(self.hidden_size)
+        stdv = _init_bound(self.hidden_size)
         for p in self.parameters():
             init.uniform_(p, -stdv, stdv)
 
@@ -980,7 +984,7 @@ class LSTMCell(Module):
 
     def _init_weights(self) -> None:
         """Internal helper for the LSTMCell module."""
-        stdv = 1.0 / math.sqrt(self.hidden_size)
+        stdv = _init_bound(self.hidden_size)
         for p in self.parameters():
             init.uniform_(p, -stdv, stdv)
 
@@ -1142,7 +1146,7 @@ class GRUCell(Module):
 
     def _init_weights(self) -> None:
         """Internal helper for the GRUCell module."""
-        stdv = 1.0 / math.sqrt(self.hidden_size)
+        stdv = _init_bound(self.hidden_size)
         for p in self.parameters():
             init.uniform_(p, -stdv, stdv)
 
@@ -1299,6 +1303,7 @@ class GRU(_FlatRecurrent):
     ) -> None:
         """Initialise the GRU module. See the class docstring for parameter semantics."""
         super().__init__()
+        _check_sizes(input_size, hidden_size, num_layers)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -1460,6 +1465,7 @@ class RNN(_FlatRecurrent):
     ) -> None:
         """Initialise the RNN module. See the class docstring for parameter semantics."""
         super().__init__()
+        _check_sizes(input_size, hidden_size, num_layers)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers

@@ -14,6 +14,7 @@ from lucid.nn.functional._spatial_args import (
     _ntuple,
     _require_non_negative,
     _require_positive,
+    _weight_kernel,
 )
 from lucid.nn.functional.sampling import pad as _pad
 
@@ -69,9 +70,7 @@ def _convnd(
     _require_positive(s, op, "stride")
     d = _ntuple(args.dilation, n, op, "dilation")
     _require_positive(d, op, "dilation")
-    # A weight of the wrong rank has no kernel to size "same" from; size it
-    # as 1 so that the engine's own rank check is what refuses it.
-    kernel = tuple(int(v) for v in weight.shape[2:]) if weight.ndim == n + 2 else (1,) * n
+    kernel = _weight_kernel(weight, n, op)
     before, after = _conv_padding(args.padding, kernel, s, d, op)
     xb, unbatched = _add_batch_axis(x, n)
     if padding_mode != "zeros" or before != after:
@@ -105,6 +104,7 @@ def _conv_transposend(
     _require_non_negative(p, op, "padding")
     out_pad = _ntuple(output_padding, n, op, "output_padding")
     _check_output_padding(op, out_pad, s, d)
+    _weight_kernel(weight, n, op)  # only to refuse an empty kernel
     xb, unbatched = _add_batch_axis(x, n)
     wi = _unwrap(weight)
     # The engine requires an explicit bias.  The transposed weight's second
@@ -137,7 +137,9 @@ def _output_padding_for_size(
     if len(sizes) in (n + 1, n + 2):
         sizes = sizes[len(sizes) - n :]
     if len(sizes) != n:
-        raise ValueError(f"{label}: output_size must have {n} or {n + 2} elements, got {sizes}")
+        raise _C_engine.InvalidArgument(
+            f"{label}: output_size must have {n} or {n + 2} elements, got {sizes}"
+        )
     if isinstance(args.padding, str):
         raise TypeError(f"{label}: padding must be integers, got {args.padding!r}")
     stride = _ntuple(args.stride, n, label, "stride")
@@ -150,7 +152,7 @@ def _output_padding_for_size(
         smallest = (spatial[axis] - 1) * stride[axis] - 2 * padding[axis]
         smallest += dilation[axis] * (kernel[axis] - 1) + 1
         if not smallest <= sizes[axis] < smallest + stride[axis]:
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{label}: requested an output size of {sizes}, but valid sizes "
                 f"on axis {axis} range from {smallest} to "
                 f"{smallest + stride[axis] - 1} (for an input of {spatial})"
@@ -172,7 +174,7 @@ def _check_output_padding(
     """
     for axis, (op, s, d) in enumerate(zip(output_padding, stride, dilation, strict=True)):
         if op < 0 or op >= max(s, d):
-            raise ValueError(
+            raise _C_engine.InvalidArgument(
                 f"{name}: output_padding {tuple(output_padding)} must be "
                 f"non-negative and smaller than stride {tuple(stride)} or "
                 f"dilation {tuple(dilation)} on every axis (axis {axis}: {op})"

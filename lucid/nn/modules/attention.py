@@ -105,6 +105,27 @@ def _mha_causal_mask(
     )
 
 
+def _kv_head_count(embed_dim: int, num_heads: int, num_kv_heads: int | None) -> int:
+    """The key/value head count, once the sizes that fix it are known to fit.
+
+    Raises:
+        ValueError: ``embed_dim`` or ``num_heads`` is not positive, ``embed_dim``
+            does not split into ``num_heads`` heads, or ``num_heads`` does not
+            split into ``num_kv_heads`` groups.
+    """
+    if embed_dim <= 0 or num_heads <= 0:
+        raise ValueError(
+            "embed_dim and num_heads must be greater than 0, "
+            f"got embed_dim={embed_dim} and num_heads={num_heads} instead"
+        )
+    if embed_dim % num_heads != 0:
+        raise ValueError(f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads})")
+    kv_heads = num_heads if num_kv_heads is None else int(num_kv_heads)
+    if kv_heads <= 0 or num_heads % kv_heads != 0:
+        raise ValueError(f"num_heads ({num_heads}) must be divisible by num_kv_heads ({kv_heads})")
+    return kv_heads
+
+
 class MultiheadAttention(Module):
     r"""Multi-head scaled dot-product attention.
 
@@ -373,22 +394,13 @@ class MultiheadAttention(Module):
     ) -> None:
         """Initialise the MultiheadAttention module. See the class docstring for parameter semantics."""
         super().__init__()
-        if embed_dim % num_heads != 0:
-            raise ValueError(
-                f"embed_dim ({embed_dim}) must be divisible by num_heads " f"({num_heads})"
-            )
         self.embed_dim: int = embed_dim
         self.num_heads: int = num_heads
         # Grouped-query / multi-query attention: project ``num_kv_heads`` <=
         # ``num_heads`` key/value heads (``None`` → standard MHA = num_heads).
         # Each K/V head is shared by ``num_heads // num_kv_heads`` query heads,
         # shrinking the K/V projection and the K/V cache.
-        self.num_kv_heads: int = num_heads if num_kv_heads is None else int(num_kv_heads)
-        if num_heads % self.num_kv_heads != 0:
-            raise ValueError(
-                f"num_heads ({num_heads}) must be divisible by num_kv_heads "
-                f"({self.num_kv_heads})"
-            )
+        self.num_kv_heads: int = _kv_head_count(embed_dim, num_heads, num_kv_heads)
         self.dropout: float = dropout
         self.batch_first: bool = batch_first
         self.head_dim: int = embed_dim // num_heads

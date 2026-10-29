@@ -11,6 +11,7 @@ from lucid.nn.parameter import Parameter
 from lucid._factories.creation import empty
 import lucid as _lucid
 import lucid.nn.init as init
+from lucid.nn.functional._index_checks import _padding_row
 from lucid.nn.functional.activations import straight_through
 from lucid.nn.functional.sparse import embedding, nearest_codebook, one_hot
 
@@ -145,19 +146,10 @@ class Embedding(Module):
     ) -> None:
         """Initialise the Embedding module. See the class docstring for parameter semantics."""
         super().__init__()
-        if padding_idx is not None and not (-num_embeddings <= padding_idx < num_embeddings):
-            raise ValueError(
-                f"padding_idx must be within [-{num_embeddings}, "
-                f"{num_embeddings}); got {padding_idx}"
-            )
         self.num_embeddings: int = num_embeddings
         self.embedding_dim: int = embedding_dim
-        # Normalise negative padding_idx for downstream comparisons.
-        self.padding_idx: int | None = (
-            padding_idx + num_embeddings
-            if padding_idx is not None and padding_idx < 0
-            else padding_idx
-        )
+        # A negative padding_idx is normalised to its row for downstream comparisons.
+        self.padding_idx: int | None = _padding_row(padding_idx, num_embeddings, "Embedding")
         self.max_norm: float | None = max_norm
         self.norm_type: float = norm_type
         self.scale_grad_by_freq: bool = scale_grad_by_freq
@@ -367,7 +359,7 @@ class EmbeddingBag(Module):
         self.mode = mode
         self.sparse = sparse
         self.include_last_offset = include_last_offset
-        self.padding_idx = padding_idx
+        self.padding_idx = _padding_row(padding_idx, num_embeddings, "EmbeddingBag")
         if _weight is None:
             self.weight = Parameter(
                 empty(num_embeddings, embedding_dim, dtype=dtype, device=device)

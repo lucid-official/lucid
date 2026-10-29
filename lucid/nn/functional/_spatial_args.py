@@ -21,6 +21,7 @@ takes, and refuses a value whose meaning the engine would silently change.
 from collections.abc import Sequence
 from typing import NamedTuple
 
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 
 
@@ -39,7 +40,7 @@ def _ntuple(value: int | Sequence[int], n: int, op: str, arg: str) -> tuple[int,
     if len(items) == 1:
         items = items * n
     if len(items) != n:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: expected {arg} to be a single integer or {n} integers, " f"got {value!r}"
         )
     return tuple(int(v) for v in items)
@@ -48,13 +49,26 @@ def _ntuple(value: int | Sequence[int], n: int, op: str, arg: str) -> tuple[int,
 def _require_positive(values: tuple[int, ...], op: str, arg: str) -> None:
     """Refuse a stride, kernel or dilation that is zero or negative."""
     if any(v <= 0 for v in values):
-        raise ValueError(f"{op}: {arg} must be greater than zero, got {values}")
+        raise _C_engine.InvalidArgument(f"{op}: {arg} must be greater than zero, got {values}")
 
 
 def _require_non_negative(values: tuple[int, ...], op: str, arg: str) -> None:
     """Refuse a negative padding."""
     if any(v < 0 for v in values):
-        raise ValueError(f"{op}: {arg} must be non-negative, got {values}")
+        raise _C_engine.InvalidArgument(f"{op}: {arg} must be non-negative, got {values}")
+
+
+def _weight_kernel(weight: Tensor, n: int, op: str) -> tuple[int, ...]:
+    """The kernel extent of an ``(O, I, *K)`` weight, each entry at least 1.
+
+    A weight of the wrong rank has no kernel to size ``"same"`` from, so it
+    is sized 1 per axis and left for the engine's own rank check to refuse.
+    """
+    if weight.ndim != n + 2:
+        return (1,) * n
+    kernel = tuple(int(v) for v in weight.shape[2:])
+    _require_positive(kernel, op, "kernel_size")
+    return kernel
 
 
 def _spatial_stride(
@@ -96,7 +110,7 @@ def _spatial_extent(x: Tensor, n: int, op: str) -> tuple[int, ...]:
     Any other rank is refused, as the reference refuses it.
     """
     if x.ndim not in (n + 1, n + 2):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: expected a {n + 1}-D or {n + 2}-D input, "
             f"got shape {tuple(int(d) for d in x.shape)}"
         )
@@ -110,9 +124,11 @@ def _check_string_padding(padding: str, stride: tuple[int, ...], op: str) -> Non
     stride of 1 can do.
     """
     if padding not in ("same", "valid"):
-        raise ValueError(f"{op}: invalid padding string {padding!r}, expected 'same' or 'valid'")
+        raise _C_engine.InvalidArgument(
+            f"{op}: invalid padding string {padding!r}, expected 'same' or 'valid'"
+        )
     if padding == "same" and any(s != 1 for s in stride):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: padding='same' is not supported for strided convolutions " f"(stride={stride})"
         )
 
@@ -175,7 +191,7 @@ def _pool_geometry(
     pads = _ntuple(padding, n, op, "padding")
     _require_non_negative(pads, op, "padding")
     if any(p > k // 2 for k, p in zip(kernel, pads, strict=True)):
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"{op}: padding should be at most half of the kernel size, got "
             f"padding={pads} and kernel_size={kernel}"
         )

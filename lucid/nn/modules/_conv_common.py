@@ -4,6 +4,7 @@ import math
 from collections.abc import Sequence
 from typing import ClassVar, override
 
+from lucid._C import engine as _C_engine
 from lucid._factories.creation import empty
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d
@@ -49,6 +50,31 @@ def _pair(v: _Size2d, name: str) -> tuple[int, int]:
 def _triple(v: _Size3d, name: str) -> tuple[int, int, int]:
     a, b, c = _ntuple(v, 3, name)
     return a, b, c
+
+
+def _check_groups(in_channels: int | None, out_channels: int, groups: int) -> None:
+    """Refuse a ``groups`` the channels cannot be split into.
+
+    ``in_channels`` is ``None`` for a lazy layer that has not seen its input
+    yet; its divisibility is checked when it is sized.
+
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        ``groups`` is not positive, or does not divide a channel count; a
+        ``ValueError`` when the layer is built, and a ``RuntimeError`` too for
+        a lazy layer, which the reference refuses only at its first forward.
+    """
+    if groups <= 0:
+        raise _C_engine.InvalidArgument(f"groups must be a positive integer, got {groups}")
+    if in_channels is not None and in_channels % groups != 0:
+        raise _C_engine.InvalidArgument(
+            f"in_channels ({in_channels}) must be divisible by groups ({groups})"
+        )
+    if out_channels % groups != 0:
+        raise _C_engine.InvalidArgument(
+            f"out_channels ({out_channels}) must be divisible by groups ({groups})"
+        )
 
 
 def _in_channels(x: Tensor, n: int) -> int:
@@ -101,6 +127,7 @@ class _LazyConvMixin(_LazyModule):
         # base declares ``in_channels: int`` / ``bias``, and an assignment
         # here would declare them a second time, differently.
         Module.__setattr__(self, "in_channels", None)
+        _check_groups(None, self.out_channels, self.groups)
         self._has_bias = bias
         self._device = device
         self._dtype = dtype
@@ -115,6 +142,7 @@ class _LazyConvMixin(_LazyModule):
 
     def _initialize(self, in_channels: int) -> None:
         """Allocate and initialise ``weight`` / ``bias`` for ``in_channels``."""
+        _check_groups(in_channels, self.out_channels, self.groups)
         Module.__setattr__(self, "in_channels", in_channels)
         if self._lazy_transposed:
             lead = (in_channels, self.out_channels // self.groups)

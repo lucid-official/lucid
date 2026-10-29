@@ -17,10 +17,18 @@ if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-def _check_batch_norm_sample_count(x: Tensor, training: bool) -> None:
-    """Reject training batches with no variance estimate per channel."""
+def _check_batch_norm_input(x: Tensor, eps: float, training: bool) -> None:
+    """Reject a training call the statistics cannot be taken from.
+
+    A batch with one value per channel has no variance estimate, and an
+    ``eps`` that is not positive cannot keep the variance away from zero.
+    """
+    if training and not eps > 0:
+        raise _C_engine.InvalidArgument(
+            f"batch_norm: eps must be positive during training, got {eps}"
+        )
     if training and x.ndim in (2, 3, 4, 5) and x.shape[1] > 0 and x.numel() == x.shape[1]:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             "batch_norm: expected more than one value per channel when training, "
             f"got input size {tuple(x.shape)}"
         )
@@ -101,7 +109,7 @@ def batch_norm(
     """
     from lucid._factories.creation import ones, zeros
 
-    _check_batch_norm_sample_count(input, training)
+    _check_batch_norm_input(input, eps, training)
 
     C = input.shape[1]
     ndim = input.ndim
@@ -144,7 +152,15 @@ def batch_norm(
     elif ndim == 5:
         return _wrap(_C_engine.nn.batch_norm3d(xi, w, b, eps, rm_impl, rv_impl, momentum))
     else:
-        raise ValueError(f"batch_norm: expected 2–5D input, got ndim={ndim}")
+        raise _C_engine.InvalidArgument(f"batch_norm: expected 2–5D input, got ndim={ndim}")
+
+
+def _normalized_shape(normalized_shape: list[int] | tuple[int, ...]) -> tuple[int, ...]:
+    """``normalized_shape`` as a tuple of at least one size."""
+    shape = normalized_shape if isinstance(normalized_shape, tuple) else tuple(normalized_shape)
+    if not shape:
+        raise _C_engine.InvalidArgument("layer_norm: normalized_shape must have at least one size")
+    return shape
 
 
 def layer_norm(
@@ -211,9 +227,7 @@ def layer_norm(
     """
     from lucid._factories.creation import ones, zeros
 
-    shape: tuple[int, ...] = (
-        normalized_shape if isinstance(normalized_shape, tuple) else tuple(normalized_shape)
-    )
+    shape = _normalized_shape(normalized_shape)
     w: _C_engine.TensorImpl = (
         _unwrap(weight)
         if weight is not None
@@ -226,6 +240,31 @@ def layer_norm(
     )
     # Engine API: layer_norm(x, gamma, beta, eps) — no normalized_shape arg
     return _wrap(_C_engine.nn.layer_norm(_unwrap(input), w, b, eps))
+
+
+def _group_norm_channels(input: Tensor) -> int:
+    """The channel count of an ``(N, C, *)`` input."""
+    if input.ndim < 2:
+        raise _C_engine.InvalidArgument(
+            f"group_norm: expected an input of shape (N, C, *), got {tuple(input.shape)}"
+        )
+    return int(input.shape[1])
+
+
+def _check_group_norm(num_groups: int, num_channels: int) -> int:
+    """``num_groups`` once it is known to split ``num_channels`` evenly.
+
+    Raises:
+        ValueError: ``num_groups`` is not positive, or does not divide
+            ``num_channels``.
+    """
+    if num_groups <= 0:
+        raise ValueError(f"num_groups must be positive, got {num_groups}")
+    if num_channels % num_groups != 0:
+        raise ValueError(
+            f"num_channels ({num_channels}) must be divisible by num_groups ({num_groups})"
+        )
+    return num_groups
 
 
 def group_norm(
@@ -291,7 +330,7 @@ def group_norm(
     """
     from lucid._factories.creation import ones, zeros
 
-    C = input.shape[1]
+    C = _group_norm_channels(input)
     w = (
         _unwrap(weight)
         if weight is not None
@@ -371,10 +410,10 @@ def rms_norm(
         eps = float(finfo(input.dtype).eps)
     norm_shape = tuple(int(d) for d in normalized_shape)
     if not norm_shape:
-        raise ValueError("rms_norm: normalized_shape must not be empty")
+        raise _C_engine.InvalidArgument("rms_norm: normalized_shape must not be empty")
     trailing = tuple(int(d) for d in input.shape[-len(norm_shape) :])
     if trailing != norm_shape:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"rms_norm: normalized_shape {norm_shape} does not match the "
             f"trailing dimensions of x {trailing}"
         )
@@ -467,13 +506,13 @@ def _check_instance_norm_input(
             "Expected running_mean and running_var to be defined when use_input_stats is false"
         )
     if x.ndim < 3:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"instance_norm: expected at least 3-D input (N, C, *spatial), " f"got ndim={x.ndim}"
         )
     if use_input_stats and math.prod(x.shape[2:]) == 1:
         # One element is its own mean with zero variance, so the output is
         # ``bias`` whatever the input; the reference refuses it too.
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             "instance_norm: expected more than 1 spatial element when training, "
             f"got input size {tuple(x.shape)}"
         )
@@ -651,7 +690,7 @@ def local_response_norm(
     """
     xi = _unwrap(input)
     if len(xi.shape) < 3:
-        raise ValueError(
+        raise _C_engine.InvalidArgument(
             f"Expected 3D or higher dimensionality input (got {len(xi.shape)} dimensions)"
         )
     if size <= 0:

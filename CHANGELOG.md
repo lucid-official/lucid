@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - clamp inverted scalar bounds, validate tensordot dims first
 
+- validate size, count and probability arguments up front
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

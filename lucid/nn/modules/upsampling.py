@@ -6,9 +6,12 @@ from typing import override
 
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
-from lucid._C import engine as _C_engine
-from lucid._dispatch import _unwrap, _wrap
-from lucid.nn.functional.sampling import channel_shuffle, interpolate
+from lucid.nn.functional.sampling import (
+    channel_shuffle,
+    interpolate,
+    pixel_shuffle,
+    pixel_unshuffle,
+)
 
 
 class Upsample(Module):
@@ -420,13 +423,7 @@ class PixelShuffle(Module):
         Tensor
             Upsampled output tensor.
         """
-        r = self.upscale_factor
-        n, c_r2, h, w = input.shape
-        c = c_r2 // (r * r)
-        impl = _unwrap(input)
-        t = _C_engine.reshape(impl, [n, c, r, r, h, w])
-        t = _C_engine.permute(t, [0, 1, 4, 2, 5, 3])
-        return _wrap(_C_engine.reshape(t, [n, c, h * r, w * r]))
+        return pixel_shuffle(input, self.upscale_factor)
 
     @override
     def extra_repr(self) -> str:
@@ -515,13 +512,7 @@ class PixelUnshuffle(Module):
         Tensor
             Upsampled output tensor.
         """
-        r = self.downscale_factor
-        n, c, h_r, w_r = input.shape
-        h, w = h_r // r, w_r // r
-        impl = _unwrap(input)
-        t = _C_engine.reshape(impl, [n, c, h, r, w, r])
-        t = _C_engine.permute(t, [0, 1, 3, 5, 2, 4])
-        return _wrap(_C_engine.reshape(t, [n, c * r * r, h, w]))
+        return pixel_unshuffle(input, self.downscale_factor)
 
     @override
     def extra_repr(self) -> str:
