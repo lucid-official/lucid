@@ -48,13 +48,11 @@ is acceptable there because the reference raises too, or because the
 answer is pinned elsewhere; ``OK`` cases assert their result in the child.
 """
 
-import json
-import os
-import signal
-import subprocess
 import sys
 
 import pytest
+
+from lucid.test.unit.stability._child_runner import run_child_cases
 
 pytestmark = pytest.mark.stability
 
@@ -654,61 +652,12 @@ for _name, _code in _cases:
     print("@@END " + _name + " " + json.dumps(_verdict), flush=True)
 """
 
-_CHILD_TIMEOUT_S = 600
+_RESULTS: dict[str, dict[str, list[object]]] = {}
 
 
-def _describe_exit(code: int) -> str:
-    if code < 0:
-        try:
-            return f"killed by {signal.Signals(-code).name}"
-        except ValueError:
-            return f"killed by signal {-code}"
-    if code == 255:
-        return "exit 255 (Accelerate's BLAS error handler exits with 255)"
-    return f"exit {code}"
-
-
-def _run_cases(device: str) -> dict[str, list[str]]:
-    """Run every case for ``device``; a dead child is restarted past its case."""
-    results: dict[str, list[str]] = {}
-    pending = [(name, code) for name, code, _ in CASES]
-    env = dict(os.environ, PYTHONWARNINGS="ignore")
-    while pending:
-        done = subprocess.run(
-            [sys.executable, "-c", _CHILD, device],
-            input=json.dumps(pending),
-            capture_output=True,
-            text=True,
-            timeout=_CHILD_TIMEOUT_S,
-            env=env,
-        )
-        current = None
-        for line in done.stdout.splitlines():
-            if line.startswith("@@BEGIN "):
-                current = line[len("@@BEGIN ") :]
-            elif line.startswith("@@END "):
-                name, _, verdict = line[len("@@END ") :].partition(" ")
-                results[name] = json.loads(verdict)
-                current = None
-        if done.returncode == 0:
-            break
-        tail = done.stderr.strip()[-600:]
-        if current is None:
-            # Died outside any case — the prelude itself.  Blame everything left.
-            for name, _ in pending:
-                results.setdefault(name, ["crash", f"{_describe_exit(done.returncode)}: {tail}"])
-            break
-        results[current] = ["crash", f"{_describe_exit(done.returncode)}: {tail}"]
-        pending = [(n, c) for n, c in pending if n not in results]
-    return results
-
-
-_RESULTS: dict[str, dict[str, list[str]]] = {}
-
-
-def _result(device: str, name: str) -> list[str]:
+def _result(device: str, name: str) -> list[object]:
     if device not in _RESULTS:
-        _RESULTS[device] = _run_cases(device)
+        _RESULTS[device] = run_child_cases(_CHILD, [(n, c) for n, c, _ in CASES], device)
     return _RESULTS[device].get(name, ["missing", "the child never reached this case"])
 
 

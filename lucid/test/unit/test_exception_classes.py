@@ -17,6 +17,7 @@ InvalidArgument        ValueError
 DtypeMismatch          TypeError
 IndexError             IndexError (and LookupError)
 NotImplementedError    NotImplementedError
+OutOfMemory            MemoryError
 =====================  ===============================
 """
 
@@ -37,6 +38,7 @@ _KINDS = {
     "DtypeMismatch": TypeError,
     "IndexError": IndexError,
     "NotImplementedError": NotImplementedError,
+    "OutOfMemory": MemoryError,
 }
 
 
