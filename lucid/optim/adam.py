@@ -190,7 +190,9 @@ class AdamW(Optimizer):
     param_groups : list of dict
         Parameter groups, each containing ``"params"``, ``"lr"``,
         ``"betas"``, ``"beta1"``, ``"beta2"``, ``"eps"``, ``"weight_decay"``,
-        and ``"amsgrad"``.
+        ``"amsgrad"``, and ``"decoupled_weight_decay"`` (always ``True``; it
+        is not a constructor argument, and editing it does not switch the
+        update rule).
     defaults : dict
         Default hyperparameter values.
 
@@ -242,6 +244,7 @@ class AdamW(Optimizer):
             (foreach, maximize, capturable, differentiable),
             amsgrad=amsgrad,
             fused=fused,
+            decoupled_weight_decay=True,
         )
 
     @override

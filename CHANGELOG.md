@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - fused_step and compiled_step run eagerly on cpu
 
+- AdamW param_groups carry decoupled_weight_decay=True
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -529,17 +529,8 @@ def test_optimizer_state_is_cast_to_the_parameters_device(device: str, opt: str)
                 assert v.device.type == device
 
 
-_ADAMW_KEYS = pytest.mark.xfail(
-    strict=True,
-    reason="AdamW's param_group lacks the reference's 'decoupled_weight_decay' key "
-    "(Adam's has it) — FOUND by TRACK-C",
-)
-
-
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    "name", [pytest.param(n, marks=_ADAMW_KEYS) if n == "AdamW" else n for n in _OPTS]
-)
+@pytest.mark.parametrize("name", _OPTS)
 def test_the_optimizer_state_dict_has_the_references_keys(ref: ModuleType, name: str) -> None:
     kwargs = {
         "SGD": dict(lr=0.05, momentum=0.9, nesterov=True, weight_decay=1e-3),

@@ -21,6 +21,7 @@ for every optimizer, at construction and at an edit alike.
 """
 
 import copy
+import inspect
 import math
 import pickle
 from collections.abc import Callable
@@ -168,13 +169,19 @@ def _apply_ref_edit(group: dict[str, Any], edit: dict[str, Any]) -> None:
         group[name] = tuple(both)
 
 
-def _ctor_kwargs(group: dict[str, Any]) -> dict[str, Any]:
-    """The constructor arguments that build ``group``'s hyper-parameters."""
-    out = {k: v for k, v in group.items() if k != "params" and k not in _PAIRS}
-    for name in ("betas", "etas", "step_sizes"):
-        keys = [k for k, (pair, _) in _PAIRS.items() if pair == name]
+def _ctor_kwargs(group: dict[str, Any], name: str) -> dict[str, Any]:
+    """The constructor arguments that build ``group``'s hyper-parameters.
+
+    A group also carries keys that are not constructor arguments — AdamW's
+    ``decoupled_weight_decay`` is fixed at ``True`` and, as in the reference,
+    only Adam takes it — so only the names ``name``'s constructor accepts pass.
+    """
+    accepted = inspect.signature(getattr(optim, name).__init__).parameters
+    out = {k: v for k, v in group.items() if k != "params" and k not in _PAIRS and k in accepted}
+    for pair_name in ("betas", "etas", "step_sizes"):
+        keys = [k for k, (pair, _) in _PAIRS.items() if pair == pair_name]
         if all(k in group for k in keys):
-            out[name] = tuple(group[k] for k in keys)
+            out[pair_name] = tuple(group[k] for k in keys)
     return out
 
 
@@ -262,7 +269,7 @@ def test_an_edit_equals_a_fresh_optimizer_on_the_same_state(case: Case, device: 
     for phase, edit in enumerate(edits, start=1):
         _apply_edit(opt.param_groups[0], edit)
         fresh_params = _params(_values(params), device)
-        fresh = getattr(optim, name)(fresh_params, **_ctor_kwargs(opt.param_groups[0]))
+        fresh = getattr(optim, name)(fresh_params, **_ctor_kwargs(opt.param_groups[0], name))
         _transfer_state(opt, fresh)
         for k in range(phase * _PHASE, (phase + 1) * _PHASE):
             grads = _grads(name, k)
