@@ -360,6 +360,15 @@ public:
     // Marks this tensor as a detached alias; see :func:`is_detached_alias`.
     void set_detached_alias(bool v) noexcept { detached_alias_ = v; }
 
+    // ``requires_grad_`` from the user.  A tensor that asks for gradients
+    // again is an ordinary leaf, not the untracked alias ``detach_`` / ``.data``
+    // left, so its views refuse in-place writes like any such leaf (LCD-650).
+    void request_grad(bool v) noexcept {
+        set_requires_grad(v);
+        if (v)
+            detached_alias_ = false;
+    }
+
     // Predicate: is this tensor a view returned as an output of a tracked
     // custom ``Function``?  In-place writes directly into such a view are
     // refused while grad mode is enabled, and in-place writes into its base or

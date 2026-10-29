@@ -472,3 +472,23 @@ def test_unscaling_still_finds_an_inf_per_device(device: str) -> None:
         scaler.unscale_(o)
     scaler.step(o)
     assert p.tolist() == [1.0, 1.0, 1.0]
+
+
+@pytest.mark.parametrize("origin", ["leaf", "non_leaf"])
+def test_a_tensor_detached_then_re_enabled_refuses_view_writes_like_a_leaf(
+    device: str, origin: str
+) -> None:
+    # detach_ marks the tensor an untracked alias; asking for gradients again
+    # makes it an ordinary leaf, whose views refuse in-place writes (LCD-650).
+    fresh = lucid.randn(4, requires_grad=True, device=device)
+    with pytest.raises(RuntimeError):
+        fresh[1:3].mul_(2.0)
+    x = lucid.randn(4, requires_grad=True, device=device)
+    if origin == "non_leaf":
+        x = x * 2.0
+    x.detach_()
+    x.requires_grad_(True)
+    before = x.detach().tolist()
+    with pytest.raises(RuntimeError):
+        x[1:3].mul_(100.0)
+    assert x.detach().tolist() == before

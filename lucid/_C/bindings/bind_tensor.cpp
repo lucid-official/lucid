@@ -469,7 +469,7 @@ void register_tensor_impl(py::module_& m) {
              "requires_grad flag.  No data is copied.")
         .def(
             "_set_requires_grad",
-            [](TensorImpl& self, bool requires_grad) { self.set_requires_grad(requires_grad); },
+            [](TensorImpl& self, bool requires_grad) { self.request_grad(requires_grad); },
             py::arg("requires_grad"), "Set this tensor's requires_grad flag in place.")
         .def("data_alias", &TensorImpl::data_alias,
              "Return the alias ``.data`` hands out: the same storage, no autograd "

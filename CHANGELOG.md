@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - lstsq with no columns reports b as the residual
 - Mask2Former matches ground-truth masks at the logits' dtype
 - hypot of an infinite operand is +inf even against NaN (LCD-652)
+- requires_grad_(True) clears the detached-alias mark (LCD-650)
 
 ---
 
