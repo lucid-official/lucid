@@ -1,0 +1,213 @@
+---
+title: Coming from the Reference Framework
+description: A migration guide for code written against the reference framework — the import map, metal instead of the discrete-GPU device, dtype and promotion differences, what Lucid refuses, moving checkpoints across, and what is not available.
+category: Migration
+order: 1
+---
+
+Lucid's Python surface is built to be familiar: the same `Tensor`, `nn.Module`, `optim` and `DataLoader` shapes, the same method names, the same state-dict keys. Most training code ports by changing imports and one device string. This guide covers that, and then the places where Lucid deliberately differs, so a port does not stall on a surprise.
+
+Throughout, **`ref`** stands for the reference framework's top-level package under whatever alias your code uses. Lucid runs on Apple Silicon only: the CPU stream is Apple Accelerate and the GPU stream is Metal.
+
+## The import map
+
+The sub-package layout mirrors the reference, so the translation is mechanical.
+
+| Reference | Lucid |
+|---|---|
+| `ref` (tensors, factories, ops) | `lucid` |
+| `ref.nn` | `lucid.nn` |
+| `ref.nn.functional` | `lucid.nn.functional` |
+| `ref.nn.init` | `lucid.nn.init` |
+| `ref.nn.utils` | `lucid.nn.utils` |
+| `ref.optim`, `ref.optim.lr_scheduler` | `lucid.optim`, `lucid.optim.lr_scheduler` |
+| `ref.utils.data` | `lucid.utils.data` |
+| `ref.autograd` | `lucid.autograd` |
+| `ref.linalg`, `ref.fft`, `ref.special`, `ref.distributions` | `lucid.linalg`, `lucid.fft`, `lucid.special`, `lucid.distributions` |
+| `ref.func` (`vmap`, `grad`, `jacrev`, …) | `lucid.func` |
+| `ref.amp.autocast`, `ref.amp.GradScaler` | `lucid.amp.autocast`, `lucid.amp.GradScaler` |
+| `ref.compile(model)` | `lucid.compile(model)` — see [Speed Up with lucid.compile](/docs/tutorials/compile) |
+| `ref.save` / `ref.load` | `lucid.save` / `lucid.load` |
+| the vision/text model packages built on top of the reference | `lucid.models` — `create_model(name, ...)`, 70+ families built in |
+
+```python
+import lucid
+import lucid.nn as nn
+import lucid.nn.functional as F
+import lucid.optim as optim
+import lucid.linalg
+import lucid.einops
+from lucid.utils.data import DataLoader, TensorDataset
+
+lucid.manual_seed(0)
+print("imports ok")
+```
+
+Method names and keyword names follow the reference: `reshape`, `view`, `permute`, `transpose`, `unsqueeze`, `.item()`, `.numpy()`, `.tolist()`, `requires_grad`, `.grad`, `dim=`/`keepdim=`, `lucid.cat`, `lucid.no_grad()`. Reductions take `dim=`, not NumPy's `axis=`.
+
+### One canonical path per operation
+
+This is the one import difference that surprises people. Operations that live in a sub-package are reachable **only** through that sub-package: there is no top-level shortcut and no `Tensor` method for them. Where the reference offers `ref.norm`, `ref.cross`, `ref.einsum` or `x.norm()`, use the canonical path:
+
+| Reference | Lucid |
+|---|---|
+| `ref.norm(x)`, `x.norm()` | `lucid.linalg.norm(x)` |
+| `ref.cross(a, b)`, `a.cross(b)` | `lucid.linalg.cross(a, b)` |
+| `ref.einsum(eq, a, b)` | `lucid.einops.einsum(eq, a, b)` |
+
+```python
+v = lucid.tensor([3.0, 4.0])
+print("norm:", lucid.linalg.norm(v).item())
+print("einsum:", lucid.einops.einsum("ij,jk->ik", lucid.ones(2, 3), lucid.ones(3, 4)).shape)
+print("shortcuts absent:", not hasattr(lucid, "norm"), not hasattr(v, "norm"), not hasattr(lucid, "einsum"))
+```
+
+The rule is the same for every sub-package, and it is why a port that fails with `AttributeError` almost always needs only a path change.
+
+## Devices: `metal`, not the discrete-GPU name
+
+Lucid has exactly two devices, `"cpu"` and `"metal"`. There is no other device string: wherever the reference code names its discrete-GPU device — in `.to(...)`, `device=`, `map_location=`, `ref.device(...)`, or a tensor/module method named after that device — write `"metal"` (or drop the call and let the `Module`/`Tensor` stay on the CPU). A device name Lucid does not know is a `ValueError` that lists the two valid ones.
+
+| Reference idiom | Lucid |
+|---|---|
+| availability check for the discrete GPU | `lucid.metal.is_available()` |
+| `x.to(device)`, `model.to(device)` | unchanged |
+| `x.<gpu>()` method | `x.metal()` or `x.to("metal")` |
+| `device=` in factories (`randn`, `zeros`, …) | unchanged, `device="metal"` |
+| `ref.<gpu>.synchronize()`, `empty_cache()`, `memory_allocated()` | `lucid.metal.synchronize()`, `empty_cache()`, `memory_allocated()` |
+| `map_location=` in `load` | unchanged, `map_location="metal"` / `"cpu"` |
+
+```python
+device = "metal" if lucid.metal.is_available() else "cpu"
+
+model = nn.Linear(3, 2).to(device)
+x = lucid.randn(4, 3).to(device)
+print("model and input on", model(x).device)
+
+try:
+    lucid.zeros(2, device="gpu")
+except ValueError as err:
+    print("unknown device name:", err)
+```
+
+Apple Silicon has one pool of memory, so there is no separate device memory to size, but the device rule is the same as everywhere else: **keep a model and its inputs on one device.** Mixing them raises `DeviceMismatch` (a `RuntimeError` and a `ValueError`) naming the op. Metal work is asynchronous; `.item()` and `.numpy()` wait for it, and `lucid.metal.synchronize()` is the explicit fence for timing.
+
+### AMP and compile
+
+`GradScaler` takes no device argument, and `autocast` takes `device_type` (`"metal"` or `"cpu"`) and a `dtype`. The defaults are `float16` on `metal` and `bfloat16` on `cpu`. On the CPU a `float16` autocast scope computes in `float32` (nothing is lowered), so use `bfloat16` there. `lucid.compile` only compiles on Metal; on the CPU it runs the module eagerly. Both are covered in [Mixed Precision Training](/docs/tutorials/mixed-precision).
+
+## dtypes and promotion
+
+Default dtypes match the reference: Python floats make `float32`, Python ints make `int64`, booleans `bool`, and mixing a tensor with a Python scalar does not widen the tensor's category more than needed. The available dtypes are `bool`, `int8`, `int16`, `int32`, `int64`, `float16`, `bfloat16`, `float32`, `float64`, `complex64` and `complex128`. Three differences matter:
+
+- **No unsigned integer dtypes.** `lucid.uint8` and its relatives do not exist. Image data that arrives as `uint8` is converted to `float32` or `int32` at load time.
+- **`float64` is CPU-only.** Metal has no `float64`; creating one there raises `NotImplementedError` saying to cast to `float32` or stay on the CPU. Complex tensors work on both devices.
+- **No `complex32`.** Combining a half-precision float with a complex Python scalar gives `complex64`, where the reference gives `complex32`. This is a documented deviation.
+
+```python
+print(lucid.tensor([1, 2, 3]).dtype, lucid.tensor([1.0]).dtype, lucid.arange(3).dtype)
+print("uint8 exists:", hasattr(lucid, "uint8"))
+print("float16 + complex scalar:", (lucid.ones(2).half() + 1j).dtype)
+
+try:
+    lucid.randn(2, 2, dtype=lucid.float64, device="metal")
+except NotImplementedError:
+    print("float64 on metal: NotImplementedError")
+```
+
+### Mixed-dtype matmul is refused
+
+Since 3.16.1, the matmul family — `@`, `mm`, `bmm`, `matmul`, `F.linear` and `einsum` — raises `DtypeMismatch` when its operands have different float dtypes, and when one is an integer and the other a float, **outside `autocast`**. This is the rule the reference framework applies; Lucid used to promote silently, so code that relied on that needs a cast. Elementwise operations still promote as usual.
+
+`DtypeMismatch` is both a `RuntimeError` and a `TypeError`, so either `except` clause catches it. A layer whose weights are `float32` fed a `float16` input is the usual way to hit it.
+
+```python
+a = lucid.randn(2, 3)
+b = lucid.randn(3, 2).half()
+
+try:
+    a @ b
+except TypeError as err:
+    print("refused:", err)
+
+print("cast, then matmul:", (a @ b.float()).dtype)
+print("elementwise still promotes:", (b + b.float()).dtype)
+```
+
+Inside `autocast` the matmul family casts its operands to the autocast dtype instead of refusing, which is what mixed-precision code wants.
+
+## Things that behave differently on purpose
+
+- **Integer division by zero.** `//` and `%` on integer tensors raise on the CPU. A GPU kernel cannot raise, so on Metal the same operation returns a value (`7 // 0` gives `-1` and `7 % 0` gives `7`) instead of an error. Do not depend on either; validate the divisor.
+- **Random numbers.** `lucid.manual_seed` makes a Lucid run reproducible, and every draw without an explicit generator reads one default stream (a `lucid.Generator` is an independent one). Lucid uses its own counter-based generator, so the same seed does not give the same numbers as the reference. Do not compare a ported run to the original number for number; compare distributions or losses.
+- **Compile falls back instead of failing.** `lucid.compile` and `make_step` run eagerly with a one-time warning when they cannot compile; `fused_step` and `compiled_step` are Metal-only.
+- **Checkpoints.** `lucid.load` uses a restricted unpickler by default (`weights_only=True`), which is enough for state dicts and refuses arbitrary objects.
+
+## Moving a checkpoint across
+
+State-dict key names match the reference for the shared layers (`weight`, `bias`, `running_mean`, `running_var`, `num_batches_tracked`, …), so a ported model usually loads weights without a key remap.
+
+Lucid's own `.lucid` checkpoint is a different file format from the reference's. The bridge is **SafeTensors**, which has no pickle and no code-execution surface: write the reference model's state dict to a `.safetensors` file with the SafeTensors library, then read it with Lucid.
+
+```python
+import tempfile
+from pathlib import Path
+
+model = nn.Sequential(nn.Linear(4, 8), nn.BatchNorm1d(8), nn.Linear(8, 2))
+path = Path(tempfile.mkdtemp()) / "weights.safetensors"
+lucid.save_safetensors(model.state_dict(), str(path))
+
+state = lucid.load_safetensors(str(path))
+fresh = nn.Sequential(nn.Linear(4, 8), nn.BatchNorm1d(8), nn.Linear(8, 2))
+fresh.load_state_dict(state)
+print("keys:", list(state)[:3], "... restored:", len(state), "tensors")
+```
+
+`lucid.load_safetensors(path, device="metal")` places the tensors straight onto a device. Every tensor comes back in the dtype it was stored in, `bfloat16` included. Dtypes Lucid does not have, such as unsigned integers, must be converted before they are written. See [Serialization](/docs/serialization) for sharded checkpoints and `map_location`.
+
+## Not available
+
+These do not exist in Lucid. Most are either tied to hardware Apple Silicon does not have, or replaced by a Lucid-native equivalent.
+
+| Reference feature | In Lucid |
+|---|---|
+| Multi-GPU: `DataParallel`, distributed training, `SyncBatchNorm` | Not available — Lucid targets one Apple Silicon device |
+| Graph scripting and tracing (`jit`), `fx`, `onnx`/`export` | `lucid.compile` for speed; [`lucid.coreml`](/docs/tutorials/export-coreml) to ship a model |
+| Sparse tensors (`lucid.sparse`) | Not available |
+| Unsigned integer dtypes (`uint8`, …) and `complex32` | Not available — see above |
+| `float64` on the GPU | CPU only |
+| `ref.autograd.functional.*` namespace | `lucid.autograd.jacobian`, `hessian`, `vjp`, `jvp`, `hvp`, `vhp` directly under `lucid.autograd`, plus `lucid.func` |
+| Top-level `ref.vmap` | `lucid.func.vmap` |
+| Hub downloads, TensorBoard writer, `optim.swa_utils`, `ref.testing` | Not available; `lucid.models.create_model(name, pretrained=True)` loads Lucid's own pretrained weights |
+| `nn.AdaptiveLogSoftmaxWithLoss` | Not available |
+
+```python
+absent = ["jit", "distributed", "sparse", "fx", "onnx", "uint8"]
+print({name: hasattr(lucid, name) for name in absent})
+```
+
+If a port needs something not on this list and not in the [API reference](/api), check `lucid.func`, `lucid.autograd` and `lucid.einops` before concluding it is missing: operations are often one sub-package away from where the reference keeps them.
+
+## A port, end to end
+
+The training loop itself ports unchanged. Only the device selection differs:
+
+```python
+device = "metal" if lucid.metal.is_available() else "cpu"
+
+net = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 3)).to(device)
+opt = optim.AdamW(net.parameters(), lr=1e-2)
+data = DataLoader(TensorDataset(lucid.randn(64, 8), lucid.randint(0, 3, (64,))), batch_size=16, shuffle=True)
+
+for epoch in range(3):
+    total = 0.0
+    for xb, yb in data:
+        loss = F.cross_entropy(net(xb.to(device)), yb.to(device))
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        total += float(loss.item())
+    print(f"epoch {epoch}  loss {total / len(data):.3f}")
+```
+
+Next: [Train a Model End to End](/docs/tutorials/train-end-to-end) builds the same loop out with a zoo model, evaluation and checkpoints.
