@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - AdamW param_groups carry decoupled_weight_decay=True
 
+- ldexp keeps the imaginary part and promotes dtypes
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

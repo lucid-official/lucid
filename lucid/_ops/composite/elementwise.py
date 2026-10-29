@@ -21,7 +21,7 @@ from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._gamma import _lgamma, _polygamma
 from lucid._ops.composite._opmath import _in_float32, _promote_pair, _real
-from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp, _signbit
+from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
 
@@ -1295,14 +1295,21 @@ def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
     Parameters
     ----------
     input : Tensor
-        Mantissa.
+        Mantissa.  A complex one is scaled in its real and imaginary parts
+        alike.
     other : Tensor or Scalar
-        Power-of-two exponent; broadcastable to the shape of ``input``.
+        Power-of-two exponent; broadcastable to the shape of ``input``.  A
+        complex one turns the product by ``cos(b ln 2) + i sin(b ln 2)`` for
+        its imaginary part ``b``.
 
     Returns
     -------
     Tensor
-        Broadcast shape of ``input`` and ``other``.
+        Broadcast shape of ``input`` and ``other``, at the dtype of
+        ``input * 2**other``: a float or complex ``other`` promotes with
+        ``input`` as in any binary op; an integral ``other`` or a Python
+        number leaves a float or complex ``input`` as it is and takes an
+        integral one to the default float.
 
     See Also
     --------
@@ -1312,12 +1319,15 @@ def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
     -----
     On Metal a subnormal gradient flushes to zero, as in every backward
     there; under ``lucid.compile`` float32 subnormal values flush too.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> z = lucid.tensor([1 + 2j, 3 - 1j])
+    >>> lucid.ldexp(z, lucid.tensor([1, 2])).tolist()
+    [(2+4j), (12-4j)]
     """
-    orig = (input := _float_input(input)).dtype
-    work_dtype = orig if orig in (lucid.float32, lucid.float64) else lucid.float32
-    work = input if orig == work_dtype else input.to(dtype=work_dtype)
-    out = _ldexp(work, other)
-    return out.to(dtype=orig) if orig != work_dtype else out
+    return _ldexp_to(input, other, _ldexp_dtype(input, other))
 
 
 def frexp(input: Tensor) -> tuple[Tensor, Tensor]:

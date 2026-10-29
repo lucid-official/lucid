@@ -303,6 +303,63 @@ def _ldexp(work: Tensor, other: Tensor | Scalar) -> Tensor:
     return _scale_pow2(work, exp_t, _limit(work))
 
 
+def _ldexp_dtype(input: Tensor, other: Tensor | Scalar) -> lucid.dtype:
+    """The dtype ``ldexp(input, other)`` answers in: that of ``input * 2**other``.
+
+    A float or complex exponent promotes with ``input`` like any operand.
+    An integral one (or a Python number) only sets the scale, so a float or
+    complex ``input`` keeps its dtype, and an integral ``input`` takes the
+    default float.
+    """
+    if _is_tensor(other) and (other.is_floating_point() or other.is_complex()):
+        return lucid.result_type(input, other)
+    if input.is_floating_point() or input.is_complex():
+        return input.dtype
+    return lucid.get_default_dtype()
+
+
+def _ldexp_complex(input: Tensor, other: Tensor | Scalar, dtype: lucid.dtype) -> Tensor:
+    """``input * 2**other`` where the answer is complex.
+
+    ``2**(a + bi) = 2**a * (cos(b ln 2) + i sin(b ln 2))``.  So each part of
+    ``input`` goes through the real :func:`_ldexp` by ``a`` and keeps its
+    exactness, then a complex exponent's phase turns the pair.  Composing
+    ``exp`` or ``pow`` on a complex tensor would instead need a kernel the
+    CPU stream does not have.
+    """
+    part = lucid.float32 if dtype == lucid.complex64 else lucid.float64
+    if input.is_complex():
+        z = input.to(dtype=dtype)
+        re, im = lucid.real(z), lucid.imag(z)
+    else:
+        re, im = input.to(dtype=part), None
+    scale: Tensor | Scalar = other
+    turn: Tensor | None = None
+    if _is_tensor(other) and other.is_complex():
+        scale, turn = lucid.real(other), lucid.imag(other).to(dtype=part) * _LN2
+    re = _ldexp(re, scale)
+    im = None if im is None else _ldexp(im, scale)
+    if turn is not None:
+        cos, sin = lucid.cos(turn), lucid.sin(turn)
+        re, im = (re * cos, re * sin) if im is None else (re * cos - im * sin, re * sin + im * cos)
+    return lucid.complex(re, lucid.zeros_like(re) if im is None else im)
+
+
+def _ldexp_to(input: Tensor, other: Tensor | Scalar, dtype: lucid.dtype) -> Tensor:
+    """``input * 2**other`` at ``dtype`` (from :func:`_ldexp_dtype`).
+
+    A 16-bit float answer is computed in float32 and rounded once, as the
+    exponent bits and the subnormal handling of :func:`_ldexp` are those of
+    float32 and float64 only.
+    """
+    if dtype in (lucid.complex64, lucid.complex128):
+        return _ldexp_complex(input, other, dtype)
+    work_dtype = dtype if dtype in (lucid.float32, lucid.float64) else lucid.float32
+    work = input if input.dtype == work_dtype else input.to(dtype=work_dtype)
+    out = _ldexp(work, other)
+    return out if work_dtype == dtype else out.to(dtype=dtype)
+
+
 def _frexp_parts(work: Tensor) -> tuple[Tensor, Tensor]:
     """``(m, e)`` with ``work = m * 2**e``, with ``e`` a float of ``work``'s dtype."""
     if not _reads_bits(work):
