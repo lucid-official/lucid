@@ -4,6 +4,25 @@ lucid.metal: Apple Metal GPU utilities.
 Includes :func:`run_kernel` — the Metal Shader Escape Hatch (Phase 18) that
 lets users execute arbitrary Metal Shading Language (MSL) compute shaders on
 the GPU from Python with Lucid tensors as inputs/outputs.
+
+Threads
+-------
+The process has one Metal stream, shared by every thread.  A Metal tensor
+or module made in one thread can be used, read back, differentiated and
+stepped by an optimizer in any other, even while its work is still pending
+and after the thread that made it has exited.  Work from several threads
+runs on that one stream in the order it is submitted.  Reads (``item``,
+``tolist``, ``numpy``, :func:`lucid.eval`) wait for the GPU without
+holding the GIL, so other Python threads keep running, and so does a
+compiled run once its inputs are ready.  Two things still hold the GIL
+while they wait: a compiled run finishing inputs that are still pending,
+and :func:`synchronize`.  Work is always encoded with the GIL held: the
+shared stream must not take work from two threads at once.
+
+Known gap: when a thread's first Metal operation is an FFT
+(:mod:`lucid.fft`) and the result is read in another thread while still
+pending, the read can hang.  Any other Metal operation first in that
+thread, or reading the result in the same thread, avoids it.
 """
 
 import time
@@ -45,8 +64,13 @@ def synchronize() -> None:
     evaluation — and returned at once: a matmul loop timed with it
     reported 219 TFLOPS.
 
+    The pending work it runs is every thread's, not only the caller's,
+    and it holds the GIL until the GPU is done, so other Python threads
+    wait too.
+
     Use sparingly: it stalls the pipeline.  To run specific tensors,
-    :func:`lucid.eval` is cheaper, since it evaluates only those.
+    :func:`lucid.eval` is cheaper, since it evaluates only those, and
+    waits without holding the GIL.
 
     See Also
     --------
@@ -178,18 +202,18 @@ def get_device_name() -> str:
 class MetalStream:
     """Metal command stream context manager.
 
-    On entry, all subsequent MLX operations are submitted to this stream.
-    On exit, the stream is synchronized before control returns — every
-    GPU command issued inside the ``with`` block is guaranteed complete
-    when the block exits.
+    Lucid has one Metal stream per process, shared by every thread (see
+    the module's *Threads* section), so every instance names that stream.
+    On exit, it is synchronized before control returns — every GPU
+    command issued inside the ``with`` block is guaranteed complete when
+    the block exits, along with work other threads submitted before it.
 
     Parameters
     ----------
     priority : int, optional
         Accepted for API parity with multi-stream frameworks but
-        currently ignored — MLX exposes a single default stream per
-        device on Apple Silicon and does not honor per-stream priority
-        hints.  Default ``0``.
+        currently ignored — there is one stream, with no priority to
+        set.  Default ``0``.
 
     Examples
     --------
