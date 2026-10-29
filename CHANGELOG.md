@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make_step checks segments where it enters
 
+- deepcopy of a Parameter clones its storage
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -2,6 +2,7 @@
 nn.Parameter: a Tensor that is automatically registered by Module.
 """
 
+import copy
 from typing import cast, override
 
 from lucid._tensor.tensor import Tensor
@@ -32,8 +33,10 @@ class Parameter(Tensor):
         Initial values.  ``None`` (default) yields a zero-sized
         placeholder F32/CPU parameter, useful when the actual shape is
         deferred until first ``forward`` (lazy modules).  A ``Tensor``
-        clones its storage so the new parameter is independent of the
-        source.  A list / nested-list is converted via :func:`_to_impl`.
+        is wrapped without a copy: the parameter shares the tensor's
+        storage, as in the reference, so an in-place write through one is
+        seen by the other (``copy.deepcopy`` is what makes an independent
+        one).  A list / nested-list is converted via :func:`_to_impl`.
     requires_grad : bool, optional
         Whether to record gradient flow through this parameter
         (default: ``True``).
@@ -76,9 +79,9 @@ class Parameter(Tensor):
         """Allocate a new :class:`Parameter` instance.
 
         Bypasses :meth:`Tensor.__init__` (which expects raw data) so a
-        Parameter can be cloned from an existing Tensor without an extra
-        copy of metadata.  Always clones the input storage so the
-        Parameter owns an independent buffer.
+        Parameter can be built over an existing Tensor without an extra
+        copy of metadata.  A ``Tensor`` input is aliased, not copied: the
+        Parameter shares its buffer.
 
         Parameters
         ----------
@@ -110,7 +113,7 @@ class Parameter(Tensor):
         pass
 
     def __deepcopy__(self, memo: dict[int, object]) -> Parameter:
-        """Deep-copy while preserving the :class:`Parameter` type.
+        """Deep-copy into an independent buffer, keeping the subclass.
 
         ``copy.deepcopy`` on a bare ``Tensor`` subclass falls back to the
         Tensor reconstruction path, which drops the ``Parameter`` marker and
@@ -119,16 +122,26 @@ class Parameter(Tensor):
         ``_parameters`` into a non-Parameter, so the next attribute rebind
         evicts it from the registry and the copy trains as a no-op.
 
-        Re-wrapping a cloned copy here keeps the subclass (and
-        ``requires_grad``); ``Parameter.__new__`` already clones the storage
-        so the copy owns an independent buffer.  ``memo`` guards shared
-        references and self-cycles exactly as the deepcopy protocol expects.
+        The data is cloned *before* it is wrapped: ``Parameter(tensor)`` binds
+        the tensor's own buffer, so wrapping ``self`` would hand back a
+        parameter sharing storage with the original, and a step on the copy
+        would move the source (LCD-686).  The copy keeps the concrete class
+        (so an :class:`UninitializedParameter` stays pending), its
+        ``requires_grad``, and its other instance attributes, each deep-copied
+        through ``memo``.  Like the reference, the accumulated ``.grad`` is
+        not carried over.  ``memo`` guards shared references and self-cycles
+        exactly as the deepcopy protocol expects: a weight tied across two
+        modules is copied once and stays tied.
         """
         existing = memo.get(id(self))
         if existing is not None:
             return cast(Parameter, existing)
-        result = Parameter(self, requires_grad=self.requires_grad)
+        result = object.__new__(type(self))
+        result._impl = _impl_with_grad(self.data.clone()._impl, self.requires_grad)
         memo[id(self)] = result
+        for name, value in self.__dict__.items():
+            if name != "_impl":
+                result.__dict__[name] = copy.deepcopy(value, memo)
         return result
 
     @override
