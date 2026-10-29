@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - erfcx takes the reference's analytic derivative (LCD-656)
 
+- save_sharded packs keys that share a storage into one shard
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

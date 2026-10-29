@@ -19,7 +19,13 @@ from lucid._tensor.tensor import Tensor as _T
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, _resolve_dtype_name, to_engine_dtype
-from lucid.serialization._storage_plan import _StoragePlan, _build_storage_plan, _contiguous_stride
+from lucid.serialization._storage_plan import (
+    _StoragePlan,
+    _build_storage_plan,
+    _collect_tensors,
+    _contiguous_stride,
+    _shard_groups,
+)
 
 # ── Allowed types for weights_only=True ──────────────────────────────────────
 
@@ -592,6 +598,32 @@ def _as_directory(path: object, name: str) -> str:
     )
 
 
+def _pack_shards(obj: dict[str, object], limit_bytes: int) -> list[dict[str, object]]:
+    """First-fit ``obj``'s key groups into shards of at most ``limit_bytes``.
+
+    Keys that share a storage (a tied weight, a view and its base) are one
+    group and land in one shard: each shard is a separate file, so a storage
+    written to two of them loads back as two unrelated tensors and is stored
+    twice.  A group over the cap gets a shard of its own.
+    """
+    shards: list[dict[str, object]] = []
+    cur: dict[str, object] = {}
+    cur_bytes = 0
+    for keys, g_sz in _shard_groups(obj):
+        # Flush the current shard if adding this group would exceed the limit
+        # (but never emit an empty shard — always include at least one entry).
+        if cur and cur_bytes + g_sz > limit_bytes:
+            shards.append(cur)
+            cur = {}
+            cur_bytes = 0
+        for k in keys:
+            cur[k] = obj[k]
+        cur_bytes += g_sz
+    if cur:
+        shards.append(cur)
+    return shards or [{}]
+
+
 def save_sharded(
     obj: object,
     path: str | bytes | os.PathLike[str],
@@ -630,8 +662,14 @@ def save_sharded(
     -----
     The packing algorithm is a first-fit pass that never splits a
     single tensor across shards — preserving the property that any
-    given key resolves to exactly one file. The index records the
-    optional ``_metadata`` attribute when present on a state dict.
+    given key resolves to exactly one file. Keys that share a storage
+    (a tied weight, a view and its base) are packed together as one
+    unit, so the storage is written once and every alias shares it
+    again after :func:`load_sharded`; such a group larger than the cap
+    gets a shard of its own. When that moves a key, the index records the
+    dict's key order (``key_order``) and :func:`load_sharded` restores it.
+    The index records the optional ``_metadata`` attribute when present
+    on a state dict.
 
     Examples
     --------
@@ -655,26 +693,7 @@ def save_sharded(
 
     limit_bytes = int(shard_size_mb * 1024 * 1024)
 
-    # Bucket (key, value) pairs into shards without splitting any single tensor.
-    shards: list[dict[str, object]] = []
-    cur: dict[str, object] = {}
-    cur_bytes: int = 0
-
-    for k, v in obj.items():
-        v_sz = (v.numel() * v.element_size()) if isinstance(v, _T) else 0
-        # Flush current shard if adding this tensor would exceed the limit
-        # (but never emit an empty shard — always include at least one entry).
-        if cur and cur_bytes + v_sz > limit_bytes:
-            shards.append(cur)
-            cur = {}
-            cur_bytes = 0
-        cur[k] = v
-        cur_bytes += v_sz
-
-    if cur:
-        shards.append(cur)
-    if not shards:
-        shards = [{}]
+    shards = _pack_shards(obj, limit_bytes)
 
     n = len(shards)
     index_shards: list[dict[str, object]] = []
@@ -684,6 +703,10 @@ def save_sharded(
         index_shards.append({"file": fname, "keys": list(shard_dict.keys())})
 
     index = {"_lucid_sharded": 1, "shards": index_shards}
+    if [k for shard_dict in shards for k in shard_dict] != list(obj):
+        # Grouping moved a tied key next to its alias; record the dict's own
+        # order so load_sharded restores it (older readers ignore the field).
+        index["key_order"] = list(obj)
     sd_meta = getattr(obj, "_metadata", None)
     if sd_meta is not None:
         try:
@@ -774,6 +797,11 @@ def load_sharded(
         )
         if isinstance(shard, dict):
             result.update(shard)
+
+    # Tied keys are packed beside their aliases; restore the saved order.
+    key_order = index.get("key_order")
+    if isinstance(key_order, list) and set(key_order) == set(result):
+        result = OrderedDict((k, result[k]) for k in key_order)
 
     sd_meta = index.get("_state_dict_metadata")
     if sd_meta is not None and isinstance(sd_meta, dict):

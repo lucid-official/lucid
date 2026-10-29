@@ -377,3 +377,106 @@ def _build_storage_plan(container: object) -> tuple[list[_T], _StoragePlan]:
         else:
             _plan_space(plan, members)
     return keep_alive, plan
+
+
+def _share_clusters(tensors: list[_T]) -> list[tuple[list[_T], int]]:
+    """Groups of ``tensors`` that may share one storage, and the bytes each spans.
+
+    The same grouping :func:`_build_storage_plan` starts from — CPU tensors by
+    the byte ranges they read, Metal tensors by engine view family — but
+    without reading any tensor's values, so a sharded save can learn which
+    keys must stay together before it has packed a single shard.  A group is
+    a superset of what the plan then writes as one storage (a member the plan
+    cannot reproduce is saved dense), never a subset.  A tensor that shares
+    with no other is in no group.
+    """
+    spaces: dict[tuple[str, str, tuple[str, int]], list[_Member]] = {}
+    for t in tensors:
+        if t.numel() == 0:
+            continue
+        key = ("metal" if t.is_metal else "cpu", t.dtype._name, _address_space(t))
+        spaces.setdefault(key, []).append(_Member(t))
+    out: list[tuple[list[_T], int]] = []
+    for members in spaces.values():
+        placed = [m for m in members if m.place()]
+        for cluster in _clusters(placed):
+            if len(cluster) < 2:
+                continue
+            lo = min(m.first for m in cluster)
+            hi = max(m.end for m in cluster)
+            out.append(([m.tensor for m in cluster], hi - lo))
+    return out
+
+
+@final
+class _KeyUnion:
+    """Union-find over hashable nodes."""
+
+    def __init__(self) -> None:
+        self._parent: dict[object, object] = {}
+
+    def find(self, x: object) -> object:
+        self._parent.setdefault(x, x)
+        while self._parent[x] != x:
+            self._parent[x] = self._parent[self._parent[x]]
+            x = self._parent[x]
+        return x
+
+    def join(self, a: object, b: object) -> None:
+        self._parent[self.find(a)] = self.find(b)
+
+
+@final
+class _ShardUnits:
+    """The storage each tensor of a state dict belongs to, and its bytes.
+
+    A *unit* is a cluster of tensors that may share a storage (see
+    :func:`_share_clusters`) or, for a tensor that shares with none, the
+    tensor itself.
+    """
+
+    def __init__(self, tensors: list[_T]) -> None:
+        self._cluster_of: dict[int, int] = {}
+        self._spans: list[int] = []
+        for ci, (members, span) in enumerate(_share_clusters(tensors)):
+            self._spans.append(span)
+            for t in members:
+                self._cluster_of[id(t)] = ci
+
+    def of(self, t: _T) -> tuple[str, int]:
+        ci = self._cluster_of.get(id(t))
+        return ("c", ci) if ci is not None else ("t", id(t))
+
+    def nbytes(self, t: _T) -> int:
+        ci = self._cluster_of.get(id(t))
+        return self._spans[ci] if ci is not None else t.numel() * t.element_size()
+
+
+def _shard_groups(obj: dict[str, object]) -> list[tuple[list[str], int]]:
+    """``obj``'s keys grouped by shared storage, each group with the bytes it takes.
+
+    Groups come in order of their first key and list their keys in dict order.
+    A key that shares nothing is a group of its own, sized as a tensor value's
+    bytes (zero for anything else); a storage is counted once however many
+    keys of the group view it, as the span of the bytes its tensors read.
+    """
+    reach: dict[str, list[_T]] = {}
+    distinct: dict[int, _T] = {}
+    for k, v in obj.items():
+        reach[k] = []
+        _collect_tensors(v, set(), reach[k])
+        distinct.update((id(t), t) for t in reach[k])
+    units = _ShardUnits(list(distinct.values()))
+    union = _KeyUnion()
+    for k, found in reach.items():
+        union.find(("k", k))
+        for t in found:
+            union.join(("k", k), units.of(t))
+    groups: dict[object, list[str]] = {}
+    for k in obj:
+        groups.setdefault(union.find(("k", k)), []).append(k)
+    out: list[tuple[list[str], int]] = []
+    for keys in groups.values():
+        top = {units.of(v): units.nbytes(v) for v in (obj[k] for k in keys) if isinstance(v, _T)}
+        out.append((keys, sum(top.values())))
+    return out

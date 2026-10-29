@@ -312,12 +312,6 @@ def test_a_tied_weight_is_saved_once_and_shared_after_load(device: str, fmt: str
     assert fresh.a.weight[0, 0].item() == 77.0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="save_sharded packs keys into shards by size alone: a tied weight whose names fall "
-    "in different shards is written once per shard and loads as unrelated tensors "
-    "(FOUND by TRACK-C; pack tensors that share a storage into one shard)",
-)
 def test_a_tied_weight_across_a_shard_boundary_is_saved_once_and_shared() -> None:
     w = nn.Parameter(lucid.randn(64, 64))  # 16 KiB
     fillers = {f"f{i}": lucid.randn(64, 64) for i in range(3)}
