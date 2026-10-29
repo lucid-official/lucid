@@ -209,7 +209,7 @@ def i0e(input: Tensor) -> Tensor:
     x = _real(input)
     if x.dtype == lucid.float64:
         return _bessel._i0e(x)
-    return _in_float32(_i0e_as_fit, x)
+    return _in_float32(lambda v: _bessel._vanish_at_inf(v, _i0e_as_fit), x)
 
 
 def _i0e_as_fit(x: Tensor) -> Tensor:
@@ -362,7 +362,7 @@ def i1e(input: Tensor) -> Tensor:
     x = _real(input)
     if x.dtype == lucid.float64:
         return _bessel._i1e(x)
-    return _in_float32(_i1e_as_fit, x)
+    return _in_float32(lambda v: _bessel._vanish_at_inf(v, _i1e_as_fit), x)
 
 
 def _i1e_as_fit(x: Tensor) -> Tensor:

@@ -52,7 +52,7 @@ from lucid._dispatch import (
     _wrap,
 )
 from lucid._factories.creation import zeros as _zeros, ones as _ones, empty as _empty, full as _full
-from lucid._factories.converters import tensor as _tensor_fn, _to_impl
+from lucid._factories.converters import tensor as _tensor_fn, _to_impl, _refuse_dlpack_of_grad
 
 if TYPE_CHECKING:
     from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
@@ -1732,9 +1732,9 @@ class Tensor:
         and version semantics. Lucid follows the v0.8 protocol revision.
 
         Bridge boundary (rule **H4**): no autograd information crosses the
-        capsule. Logically the export is the identity on values,
-        :math:`\text{dlpack}(\mathbf{x}) \equiv \mathbf{x}`, with the
-        consumer responsible for interpreting strides/dtype correctly.
+        capsule, so a tensor that requires grad raises ``BufferError``. The
+        export is otherwise the identity on values,
+        :math:`\text{dlpack}(\mathbf{x}) \equiv \mathbf{x}`.
 
         Examples
         --------
@@ -1746,14 +1746,14 @@ class Tensor:
         (2, 2)
         """
         del max_version  # DLPack protocol compatibility; emits unversioned DLManagedTensor
+        _refuse_dlpack_of_grad(self)
         wants_host = dl_device is not None and dl_device[0] != _DLPACK_METAL
         if self.is_metal and not wants_host:
             # Metal tensors export natively: the capsule points at the
             # MTLBuffer MLX is already holding, so a consumer on the same
             # unified memory reads the very pages Lucid computed into.
-            # ``stream`` has no meaning here — the exporter blocks until
-            # the producing command buffer completes before handing the
-            # handle over.
+            # ``stream`` has no meaning: the exporter blocks until the
+            # producing command buffer completes before the handle goes.
             from lucid._C import engine as _C_engine
 
             return _C_engine.to_dlpack_metal(self._impl)

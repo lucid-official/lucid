@@ -11,7 +11,8 @@ digits: good to ~1e-7, the float32 rounding level, and no further.  In
 approximations here instead:
 
 * ``I0`` / ``I1`` (and the ``e^{-|x|}``-scaled forms) — Chebyshev series on
-  ``[0, 8]`` and on ``(8, ∞)`` in ``32/x``.
+  ``[0, 8]`` and on ``(8, ∞)`` in ``32/x``; ``I0`` itself is its power series
+  in ``x²/4`` on ``[0, 8]``, which keeps the curvature at 0.
 * ``J0`` / ``J1`` / ``Y0`` / ``Y1`` — rational functions on ``[0, 5]``, with
   ``J0`` / ``J1`` written as ``(x² - r₁²)(x² - r₂²) · R(x²)`` so their first two
   zeros are exact, and the Hankel-asymptotic ``P cos - Q sin`` form beyond.
@@ -43,6 +44,9 @@ _PIO4 = math.pi / 4.0
 _THPIO4 = 3.0 * math.pi / 4.0
 _SQ2OPI = math.sqrt(2.0 / math.pi)
 _TWOOPI = 2.0 / math.pi
+# ``I0(x) = Σ (x²/4)^k / (k!)²``, highest power first; 30 terms hold ``|x| <= 8``
+# to float64's last digit (the 30th is 1e-29 of the sum).
+_I0_SERIES: tuple[float, ...] = tuple(1.0 / math.factorial(k) ** 2 for k in range(30, -1, -1))
 # Abramowitz & Stegun 9.8.1 / 9.8.2 — the float32 ``I0``: a series in
 # ``(x/3.75)²`` for ``|x| <= 3.75``, and in ``3.75/|x|`` times
 # ``exp(|x|)/√|x|`` beyond.  The large-argument series alone is the scaled
@@ -152,13 +156,41 @@ def _half_line_split(
 # ── I0 / I1 ──────────────────────────────────────────────────────────────────
 
 
+def _vanish_at_inf(x: Tensor, scaled: Callable[[Tensor], Tensor]) -> Tensor:
+    """``scaled(x)`` for a function that tends to 0 at ``±inf``, 0 there.
+
+    The function is evaluated at ``x`` clamped to the dtype's largest finite
+    value, so every slope it forms stays finite: at ``inf`` itself an
+    ``exp(-|x|)`` or a ``1 / sqrt(x)`` meets its own derivative as
+    ``0 * inf``, a NaN in the second derivative where the answer is 0.
+    The clamp has no gradient there, and the ``where`` takes the constant.
+    """
+    bound = lucid.finfo(x.dtype).max
+    value = scaled(lucid.clip(x, -bound, bound))
+    return lucid.where(lucid.isinf(x), lucid.zeros_like(x), value)
+
+
+def _i0_series(x: Tensor) -> Tensor:
+    """``I0(x)`` for ``|x| <= 8`` by its power series in ``x²/4``.
+
+    A function of ``x * x``, so its curvature at 0 is the true ``1/2``;
+    the Chebyshev series in ``|x|`` has none, as ``|x|`` has no second
+    derivative there for the chain rule to carry.
+    """
+    return _polevl(x * x * 0.25, _I0_SERIES)
+
+
 def _i0e(x: Tensor) -> Tensor:
     """``exp(-|x|) I0(x)``."""
-    ax = lucid.abs(x)
-    small = _chbevl(_below(ax, 8.0) * 0.5 - 2.0, _I0E_A)
-    big = _above(ax, 8.0)
-    large = _chbevl(32.0 / big - 2.0, _I0E_B) / lucid.sqrt(big)
-    return lucid.where(ax <= 8.0, small, large)
+
+    def scaled(v: Tensor) -> Tensor:
+        ax = lucid.abs(v)
+        small = lucid.exp(-_below(ax, 8.0)) * _i0_series(lucid.clip(v, -8.0, 8.0))
+        big = _above(ax, 8.0)
+        large = _chbevl(32.0 / big - 2.0, _I0E_B) / lucid.sqrt(big)
+        return lucid.where(ax <= 8.0, small, large)
+
+    return _vanish_at_inf(x, scaled)
 
 
 def _i0(x: Tensor) -> Tensor:
@@ -189,11 +221,15 @@ def _i1e(x: Tensor) -> Tensor:
     true ``1/2``: written ``sign(x) · g(|x|)`` it would have a zero
     derivative there, as ``sign`` and ``|x|`` both do.
     """
-    ax = lucid.abs(x)
-    small = _chbevl(_below(ax, 8.0) * 0.5 - 2.0, _I1E_A) * lucid.clip(x, -8.0, 8.0)
-    big = _above(ax, 8.0)
-    large = lucid.sign(x) * _chbevl(32.0 / big - 2.0, _I1E_B) / lucid.sqrt(big)
-    return lucid.where(ax <= 8.0, small, large)
+
+    def scaled(v: Tensor) -> Tensor:
+        ax = lucid.abs(v)
+        small = _chbevl(_below(ax, 8.0) * 0.5 - 2.0, _I1E_A) * lucid.clip(v, -8.0, 8.0)
+        big = _above(ax, 8.0)
+        large = lucid.sign(v) * _chbevl(32.0 / big - 2.0, _I1E_B) / lucid.sqrt(big)
+        return lucid.where(ax <= 8.0, small, large)
+
+    return _vanish_at_inf(x, scaled)
 
 
 def _i1(x: Tensor) -> Tensor:
@@ -333,39 +369,6 @@ def _k1(x: Tensor) -> Tensor:
 #
 # Each table is listed highest-order coefficient first, as Horner's rule and
 # Clenshaw's recurrence consume it.  A ``_p1evl`` table omits its leading 1.
-
-_I0E_A: tuple[float, ...] = (
-    -4.4153416464793395e-18,
-    3.3307945188222384e-17,
-    -2.431279846547955e-16,
-    1.715391285555133e-15,
-    -1.1685332877993451e-14,
-    7.676185498604936e-14,
-    -4.856446783111929e-13,
-    2.95505266312964e-12,
-    -1.726826291441556e-11,
-    9.675809035373237e-11,
-    -5.189795601635263e-10,
-    2.6598237246823866e-09,
-    -1.300025009986248e-08,
-    6.046995022541919e-08,
-    -2.670793853940612e-07,
-    1.1173875391201037e-06,
-    -4.4167383584587505e-06,
-    1.6448448070728896e-05,
-    -5.754195010082104e-05,
-    0.00018850288509584165,
-    -0.0005763755745385824,
-    0.0016394756169413357,
-    -0.004324309995050576,
-    0.010546460394594998,
-    -0.02373741480589947,
-    0.04930528423967071,
-    -0.09490109704804764,
-    0.17162090152220877,
-    -0.3046826723431984,
-    0.6767952744094761,
-)
 
 _I0E_B: tuple[float, ...] = (
     -7.233180487874754e-18,

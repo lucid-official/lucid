@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)
 - exp2 is exact at integer exponents on every Apple GPU (LCD-651)
 
+- dlpack grad refusal, dropout ranks, erfc/i0e edges (LCD-653)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

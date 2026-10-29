@@ -1205,30 +1205,36 @@ def erfc(input: Tensor) -> Tensor:
     True
     """
     input = _real(input)
-    if input.dtype == lucid.float64:
-        return _erfc_double(input)
     with lucid.no_grad():
-        z = lucid.where(input >= 0.0, input, -input)
-        t = 1.0 / (1.0 + 0.5 * z)
-        poly = lucid.full_like(t, 0.17087277)
-        for c in (
-            -0.82215223,
-            1.48851587,
-            -1.13520398,
-            0.27886807,
-            -0.18628806,
-            0.09678418,
-            0.37409196,
-            1.00002368,
-            -1.26551223,
-        ):
-            poly = c + t * poly
-        tail = t * lucid.exp(poly - z * z)
-        accurate = lucid.where(input >= 0.0, tail, 2.0 - tail)
+        accurate = _erfc_double(input) if input.dtype == lucid.float64 else _erfc_single(input)
+    # The value is the accurate one; the gradient is erf's, negated, which
+    # stays finite (and signed) at ±inf where differentiating either
+    # branch would multiply 0 by inf.
     if not input.requires_grad:
         return accurate
     erf_val = lucid.erf(input)
     return accurate + (erf_val.detach() - erf_val)
+
+
+def _erfc_single(input: Tensor) -> Tensor:
+    """erfc by the Numerical Recipes Chebyshev fit, good to 1.2e-7."""
+    z = lucid.where(input >= 0.0, input, -input)
+    t = 1.0 / (1.0 + 0.5 * z)
+    poly = lucid.full_like(t, 0.17087277)
+    for c in (
+        -0.82215223,
+        1.48851587,
+        -1.13520398,
+        0.27886807,
+        -0.18628806,
+        0.09678418,
+        0.37409196,
+        1.00002368,
+        -1.26551223,
+    ):
+        poly = c + t * poly
+    tail = t * lucid.exp(poly - z * z)
+    return lucid.where(input >= 0.0, tail, 2.0 - tail)
 
 
 def _erfc_double(x: Tensor) -> Tensor:

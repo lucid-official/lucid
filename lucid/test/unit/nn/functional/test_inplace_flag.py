@@ -226,7 +226,7 @@ def test_module_passes_inplace_through(name: str, inplace: bool, device: str) ->
     # deterministic only in eval.
     module.train(name != "RReLU")
     assert module.inplace is inplace
-    shape = (1, 2, 2, 2, 2) if name == "Dropout3d" else (2, 3, 2, 2)
+    shape = {"Dropout1d": (2, 3, 4), "Dropout3d": (1, 2, 2, 2, 2)}.get(name, (2, 3, 2, 2))
     want = module(_input(shape, device))
     x = _input(shape, device)
     out = module(x)

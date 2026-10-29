@@ -215,16 +215,26 @@ def _dropout_in_place(
     return _in_place(x, f"{name}(inplace=True)", drop)
 
 
-def _channel_dropout(x: Tensor, p: float, training: bool, inplace: bool, name: str) -> Tensor:
-    """Whole-channel dropout — the one body of dropout1d / 2d / 3d."""
+def _channel_dropout(
+    x: Tensor, p: float, training: bool, inplace: bool, name: str, unbatched: bool = False
+) -> Tensor:
+    """Whole-channel dropout -- the one body of dropout1d / 2d / 3d.
+
+    ``unbatched`` is an input with no batch dimension: the channel axis is
+    its first, so a batch axis of one is added for the draw and dropped
+    again, as the reference does.
+    """
+
+    def drop(t: Tensor) -> Tensor:
+        t = t.unsqueeze(0) if unbatched else t
+        out = _drop_everything(t, p, training)
+        if out is None:
+            out = _wrap(_C_engine.nn.dropoutnd(_unwrap(t), p, training))
+        return out.squeeze(0) if unbatched else out
+
     if inplace:
-        return _dropout_in_place(
-            x, name, p, training, lambda t: _channel_dropout(t, p, training, False, name)
-        )
-    dropped = _drop_everything(x, p, training)
-    if dropped is not None:
-        return dropped
-    return _wrap(_C_engine.nn.dropoutnd(_unwrap(x), p, training))
+        return _dropout_in_place(x, name, p, training, drop)
+    return drop(x)
 
 
 def dropout1d(
@@ -244,7 +254,8 @@ def dropout1d(
     Parameters
     ----------
     input : Tensor
-        Input tensor, typically of shape :math:`(N, C, L)`.
+        Input tensor of shape :math:`(N, C, L)`, or :math:`(C, L)` for one
+        sample with no batch axis.  Any other rank raises.
     p : float, optional
         Channel-drop probability in :math:`[0, 1]` (default ``0.5``).
     training : bool, optional
@@ -280,7 +291,12 @@ def dropout1d(
     >>> x = lucid.ones((2, 4, 5))
     >>> y = dropout1d(x, p=0.5, training=True)  # doctest: +SKIP
     """
-    return _channel_dropout(input, p, training, inplace, "dropout1d")
+    _check_probability(p)
+    if input.ndim not in (2, 3):
+        raise _C_engine.ShapeMismatch(
+            f"dropout1d: expected a 2-D (C, L) or 3-D (N, C, L) input, got a {input.ndim}-D one"
+        )
+    return _channel_dropout(input, p, training, inplace, "dropout1d", unbatched=input.ndim == 2)
 
 
 def dropout2d(
@@ -349,7 +365,8 @@ def dropout3d(
     Parameters
     ----------
     input : Tensor
-        Input tensor of shape :math:`(N, C, D, H, W)`.
+        Input tensor of shape :math:`(N, C, D, H, W)`.  Any other rank is
+        taken as one sample with no batch axis, its channels on axis 0.
     p : float, optional
         Channel-drop probability in :math:`[0, 1]` (default ``0.5``).
     training : bool, optional
@@ -380,7 +397,7 @@ def dropout3d(
     >>> x = lucid.ones((1, 4, 3, 4, 4))
     >>> y = dropout3d(x, p=0.5, training=True)  # doctest: +SKIP
     """
-    return _channel_dropout(input, p, training, inplace, "dropout3d")
+    return _channel_dropout(input, p, training, inplace, "dropout3d", unbatched=input.ndim != 5)
 
 
 def alpha_dropout(

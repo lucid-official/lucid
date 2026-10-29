@@ -599,6 +599,16 @@ def from_numpy(ndarray: np.ndarray, /) -> Tensor:
 _DLPACK_METAL = 8
 
 
+def _refuse_dlpack_of_grad(t: Tensor) -> None:
+    """A DLPack export carries no autograd graph, so a tensor that requires grad is refused.
+
+    Raises:
+        BufferError: ``t`` requires grad -- ``detach()`` it first.
+    """
+    if t.requires_grad:
+        raise BufferError("Can't export tensors that require gradient, use tensor.detach()")
+
+
 def _dlpack_device_kind(ext_tensor: object) -> int | None:
     dl_device = getattr(ext_tensor, "__dlpack_device__", None)
     if not callable(dl_device):
@@ -663,6 +673,7 @@ def from_dlpack(
         return _finish_dlpack_import(out, device=device, copy=copy)
 
     if isinstance(ext_tensor, Tensor):
+        _refuse_dlpack_of_grad(ext_tensor)
         ext_tensor.numpy()
         with untraced():
             alias = _wrap(ext_tensor._impl.data_alias())
@@ -690,5 +701,6 @@ def to_dlpack(tensor: Tensor) -> object:
     """
     if tensor.is_metal:
         return tensor.__dlpack__()
+    _refuse_dlpack_of_grad(tensor)
     _require_numpy("lucid.to_dlpack")
     return tensor.numpy().__dlpack__()
