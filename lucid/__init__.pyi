@@ -2875,7 +2875,7 @@ def clip(input: Tensor, min: TensorOrScalar | None = ..., max: TensorOrScalar | 
         \text{out}_i = \min(\max(\text{input}_i, \text{min}), \text{max})
     
     Gradient flows through where ``min < x < max``; at the clipped boundaries it is
-    treated as zero. If ``min > max`` the result is implementation-defined.
+    treated as zero. If ``min > max`` every element is set to ``max``.
     
     Examples
     --------
@@ -3120,7 +3120,8 @@ def clamp(input: Tensor, min: TensorOrScalar | None = ..., max: TensorOrScalar |
         \text{out}_i = \min(\max(\text{input}_i, \text{min}), \text{max})
     
     Gradient flows through where the input lies strictly inside the interval and is
-    zero at the clipped boundaries. Equivalent to :func:`clip`.
+    zero at the clipped boundaries. If ``min > max`` every element is set to ``max``.
+    Equivalent to :func:`clip`.
     
     Examples
     --------
@@ -5636,6 +5637,14 @@ def tensordot(a: Tensor, b: Tensor, dims: _int | list[list[_int]] = 2) -> Tensor
     Tensor
         Contracted result whose remaining axes are the un-contracted axes of ``a``
         followed by those of ``b``.
+    
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        If an integer ``dims`` lies outside ``[0, min(a.ndim, b.ndim)]``, checked
+        before any axis list is built.
+    lucid._C.engine.IndexError
+        If an axis in a list is outside its operand's rank.
     
     Notes
     -----

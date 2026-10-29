@@ -835,18 +835,82 @@ def _split_method_adapter(
 # ── tensordot / meshgrid / where / masked_fill ─────────────────────────────
 
 
+def _require_tensor_operands(op: str, *operands: _Impl) -> None:
+    """Refuse a Python number where ``op`` takes a tensor.
+
+    Raises
+    ------
+    TypeError
+        An operand is a number, which the product ops do not coerce.
+    """
+    for operand in operands:
+        if isinstance(_promotion.as_number(operand), _promotion.NUMBER):
+            raise TypeError(f"{op}: expected a tensor, got {type(operand).__name__}")
+
+
+def _tensordot_axis_list(axes: Sequence[int], rank: int) -> list[int]:
+    """``axes`` as ints, each a valid axis of a rank-``rank`` operand.
+
+    Raises
+    ------
+    lucid._C.engine.IndexError
+        An axis outside ``[-rank, rank)``.
+    """
+    out = [operator.index(d) for d in axes]
+    for d in out:
+        if not -rank <= d < rank:
+            raise _C_engine.IndexError(
+                f"tensordot: axis out of range: got {d}, expected "
+                f"[{-rank}, {rank - 1}] for a tensor of rank {rank}"
+            )
+    return out
+
+
+def _tensordot_axes(
+    dims: int | Sequence[Sequence[int]], ra: int, rb: int
+) -> tuple[list[int], list[int]]:
+    """The axes ``tensordot`` contracts, checked before any list is built.
+
+    An integer ``dims`` stands for the last ``dims`` axes of ``a`` against the
+    first ``dims`` of ``b``, so the lists it implies are as long as ``dims``
+    is large: it is held to ``[0, min(ra, rb)]`` first, or ``dims=2**40``
+    would allocate before the engine could refuse it.
+
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        ``dims`` outside ``[0, min(ra, rb)]``, or not a pair of axis lists.
+    lucid._C.engine.IndexError
+        An axis in a list is outside its operand's rank.
+    TypeError
+        ``dims`` is neither an int nor a pair of axis lists.
+    """
+    if isinstance(dims, int):
+        limit = min(ra, rb)
+        if not 0 <= dims <= limit:
+            raise _C_engine.InvalidArgument(
+                f"tensordot: dims must be in [0, {limit}] (the smaller operand rank), got {dims}"
+            )
+        return list(range(ra - dims, ra)), list(range(dims))
+    if not isinstance(dims, (list, tuple)):
+        raise TypeError(
+            f"tensordot: dims must be an int or a pair of axis lists, got {type(dims).__name__}"
+        )
+    if len(dims) != 2:
+        raise _C_engine.InvalidArgument(
+            f"tensordot: dims must be a pair of axis lists, got {len(dims)} entries"
+        )
+    return _tensordot_axis_list(dims[0], ra), _tensordot_axis_list(dims[1], rb)
+
+
 def _tensordot_adapter(
     a_impl: _Impl, b_impl: _Impl, dims: int | Sequence[Sequence[int]] = 2
 ) -> _Impl:
     """tensordot(a, b, dims=2) — an int, or a pair of axis lists."""
-    dims = _promotion.as_number(dims)
-    if isinstance(dims, int):
-        n, ra = int(dims), len(a_impl.shape)
-        axes_a = [ra] if n < 0 or n > ra else list(range(ra - n, ra))
-        axes_b = list(range(n))
-    else:
-        axes_a = [int(d) for d in dims[0]]
-        axes_b = [int(d) for d in dims[1]]
+    _require_tensor_operands("tensordot", a_impl, b_impl)
+    axes_a, axes_b = _tensordot_axes(
+        _promotion.as_number(dims), len(a_impl.shape), len(b_impl.shape)
+    )
     return _C_engine.tensordot(a_impl, b_impl, axes_a, axes_b)
 
 
@@ -863,9 +927,7 @@ def _outer_adapter(a_impl: _Impl, b_impl: _Impl) -> _Impl:
     A Python number is refused rather than coerced, as the bare engine op
     refused it, since an outer product with one is not an outer product.
     """
-    for operand in (a_impl, b_impl):
-        if isinstance(_promotion.as_number(operand), _promotion.NUMBER):
-            raise TypeError(f"outer: expected a tensor, got {type(operand).__name__}")
+    _require_tensor_operands("outer", a_impl, b_impl)
     a_impl, b_impl = _promote_impls([a_impl, b_impl])
     return _C_engine.outer(a_impl, b_impl)
 
@@ -875,9 +937,7 @@ _keep_engine_signature(_outer_adapter, _C_engine.outer)
 
 def _kron_adapter(a_impl: _Impl, b_impl: _Impl) -> _Impl:
     """kron(a, b) — the two tensors at their common dtype."""
-    for operand in (a_impl, b_impl):
-        if isinstance(_promotion.as_number(operand), _promotion.NUMBER):
-            raise TypeError(f"kron: expected a tensor, got {type(operand).__name__}")
+    _require_tensor_operands("kron", a_impl, b_impl)
     a_impl, b_impl = _promote_impls([a_impl, b_impl])
     return _C_engine.kron(a_impl, b_impl)
 
@@ -948,6 +1008,11 @@ def _clip_scalar_bounds(
 
     ``clip`` is the engine kernel — ``clip_`` for ``Tensor.clamp_``, so the
     in-place form takes the fast path exactly when this one does.
+
+    ``min > max`` sends every element to ``max`` — the tensor-bound rule in
+    :func:`_clip_both_impls`.  The kernels disagree on an inverted range
+    (CPU keeps whichever bound the element crossed first, Metal answers
+    ``max``), so the bounds are made consistent here, before the kernel.
     """
     min = _promotion.as_number(min)
     max = _promotion.as_number(max)
@@ -955,6 +1020,8 @@ def _clip_scalar_bounds(
         max, (int, float, type(None))
     ):
         return None
+    if min is not None and max is not None and min > max:
+        min = max
     if is_float:
         lo_f = -math.inf if min is None else float(min)
         hi_f = math.inf if max is None else float(max)
