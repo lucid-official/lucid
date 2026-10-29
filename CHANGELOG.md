@@ -15,29 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [3.16.2] — 2026-10-29
+
+A patch release. Most of it fixes defects found by the post-release audit of the 3.16.1 work. It includes one regression fix: Mask2Former's loss failed in float16 and float64 in 3.16.1. The compiled decode path is faster. ABI is unchanged (39).
+
 ### Changed
 
 - **Breaking (shipped in 3.16.1, where it was listed only under Fixed):** outside autocast, the matmul family (`@`, `mm`, `bmm`, `matmul`, `F.linear`, `einsum`) refuses operands of mixed float dtypes, as the reference does. It used to promote them silently. For example, an `f16 @ f32` or `int @ float` call now raises `DtypeMismatch`. Cast one operand, or run the call under `lucid.autocast` (69ac3b695)
+
+### Fixed
+
+- `hypot` returns `+inf` when either operand is infinite, even if the other is NaN, as C99 and the reference do (LCD-652)
+- A tensor that was `detach_()`-ed and then `requires_grad_(True)`-ed is an ordinary leaf again: in-place writes through its views are refused instead of silently changing it (LCD-650)
+- Running one compiled executable from two threads no longer races on its cached feed descriptors (LCD-655)
+- Mask2Former's matching loss works in float16 and float64 again. It broke when 3.16.1 started refusing mixed-dtype matmul
+- `linalg.lstsq` with no columns reports `‖b‖²` as the residual for the `gelsd` / `gelss` drivers. `gels` reports zeros, as in the reference
+- Second derivatives at the origin are right for `expm1`, `erfc`, `sinc` and `special.i0e`, and the Metal max-pool double backward scatters to the right pixels. The new OpInfo differential suite (`lucid/test/parity/opinfo`) found these
 
 ### Performance
 
 - Optimize Python dispatch hot paths across `nn.Module.__getattr__`, `_dispatch._wrap` / `_unwrap`, `_promotion.try_unwrap`, `_tensor._methods._unary_tensor_method`, `_tensor._indexing._fast_basic_key` / `_select_slice`, `nn.functional.{linear,attention,_loss_checks,_index_checks}`, and `compile._core.signature.TensorSig.of` (reducing per-step Python function calls by 36% on `TransformerEncoderLayer` and 33% on `GPT2LMHeadModel`), and expand `lucid.benchmarks` with `bench_models` (`ResNet-18`, `ViT-Tiny`, `TransformerEncoderLayer`, `GPT-2`, `T5`, and `StaticCache` / `compiled_decode_step` `tok/s`) and `conv2d` / `sdpa` / small-tensor dispatch microbenchmarks
 
-- optimize compiled_decode_step runtime and subsystem hot paths
-
-### Changed
-
-- complete DS-7 single-owner extractions across distributions and models
-
-### Fixed
-
-- keypoint coords compare flat; solve_triangular has no Core ML solver
-- lstsq with no columns reports b as the residual
-- Mask2Former matches ground-truth masks at the logits' dtype
-- hypot of an infinite operand is +inf even against NaN (LCD-652)
-- requires_grad_(True) clears the detached-alias mark (LCD-650)
-- serialise the feed-cache build of a CompiledExecutable (LCD-655)
-- the feed-cache lock is recursive (LCD-655)
+- `compile.compiled_decode_step` spends 3.4× less time per step outside the graph (0.200 → 0.058 ms), and Metal GPT-2 static-cache decoding runs at 2.46 ms/token (it was 2.97)
 
 ---
 
@@ -6296,7 +6297,8 @@ across every public surface.
 
 ---
 
-[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.1...HEAD
+[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.2...HEAD
+[3.16.2]: https://github.com/lucid-official/lucid/releases/tag/v3.16.2
 [3.16.1]: https://github.com/lucid-official/lucid/releases/tag/v3.16.1
 [3.16.0]: https://github.com/lucid-official/lucid/releases/tag/v3.16.0
 [3.15.5]: https://github.com/lucid-official/lucid/releases/tag/v3.15.5

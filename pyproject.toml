@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lucid-dl"
-version = "3.16.1"
+version = "3.16.2"
 description = "Apple Silicon ML framework"
 readme = "README.md"
 license = "MIT AND BSD-3-Clause AND Apache-2.0 AND BSL-1.0"
