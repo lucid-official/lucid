@@ -228,3 +228,21 @@ def test_combinations_counts_correctly(r, with_replacement):
 def test_combinations_are_the_values_not_the_indices():
     got = _v(lucid.combinations(_t(np.array([10.0, 20.0, 30.0])), r=2))
     assert sorted(map(tuple, got)) == [(10.0, 20.0), (10.0, 30.0), (20.0, 30.0)]
+
+
+@pytest.mark.parametrize("n,r", [(3, 4), (3, 5), (3, 10**6), (0, 2)])
+def test_combinations_past_the_length_are_empty(n, r):
+    # LCD-669: past ``n`` without replacement no row has a child, and the
+    # loop went on building the remaining columns one empty step at a time
+    # — ``r = 10**6`` spun for minutes.  The answer is an empty (0, r).
+    got = lucid.combinations(lucid.arange(n), r=r)
+    assert tuple(got.shape) == (0, r)
+    assert got.dtype == lucid.int64
+
+
+def test_combinations_with_replacement_past_the_length_still_counts():
+    import math
+
+    got = _v(lucid.combinations(lucid.arange(3), r=5, with_replacement=True))
+    assert got.shape == (math.comb(3 + 5 - 1, 5), 5)
+    assert (np.diff(got, axis=1) >= 0).all()
