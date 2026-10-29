@@ -315,7 +315,7 @@ jobs:
               elif rel.startswith("lucid/models/") and rel.endswith(".py"):
                   parts = Path(rel).parts
                   if len(parts) >= 4:
-                      cand = Path("lucid/test/unit/models") / parts[2] / f"test_{parts[3]}.py"
+                      cand = Path("lucid/test/unit/models") / f"test_models_{parts[3]}.py"
                       if cand.is_file():
                           tests.add(str(cand))
           print(" ".join(sorted(tests)))
