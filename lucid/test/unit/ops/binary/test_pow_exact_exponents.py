@@ -538,8 +538,14 @@ def test_gradient_of_the_zeroth_power_at_zero_is_zero(ref: ModuleType, device: s
     (a**b).sum().backward()
     (ra**rb).sum().backward()
     assert a.grad is not None and b.grad is not None
-    np.testing.assert_array_equal(_values(a.grad), ra.grad.numpy(), err_msg="pow dA at zero")
-    np.testing.assert_array_equal(_values(b.grad), rb.grad.numpy(), err_msg="pow dB at zero")
+    # The masked entries must be exact zeros (atol=0). The one live dB entry is
+    # log(1.5), whose last bit depends on the GPU (1 ulp on an M1).
+    np.testing.assert_allclose(
+        _values(a.grad), ra.grad.numpy(), rtol=2e-7, atol=0, err_msg="pow dA at zero"
+    )
+    np.testing.assert_allclose(
+        _values(b.grad), rb.grad.numpy(), rtol=2e-7, atol=0, err_msg="pow dB at zero"
+    )
 
     # Scalar-base rpow(0.0, y): dB masks y >= 0 to 0.
     y = lucid.tensor([-1.0, 0.0, 1.0, 2.0], requires_grad=True, device=device)

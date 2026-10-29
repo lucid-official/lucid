@@ -439,6 +439,71 @@ inline MPSGraphTensor* emit_pow_tensor_special_f32(MPSGraph* g,
                                    name:nil];
 }
 
+// ``2**y`` in float32 that is exact at every integer ``y``, on every GPU.
+// MPSGraph's ``power`` and ``exponentBase2`` both approximate: ``2**-126``
+// (the smallest normal) comes out 0 on an M1, and ``2**-125`` 2 ulp off.  The
+// power of two ``2**floor(y)`` is assembled from its exponent bits, split into
+// two normal factors so the full range (overflow to inf, underflow to 0)
+// survives.  Only the fractional part ``2**(y - floor(y))``, in [1, 2), goes
+// through ``exponentBase2`` (LCD-651).
+inline MPSGraphTensor* exact_exp2_f32(MPSGraph* g, MPSGraphTensor* y) {
+    auto f32 = [g](double v) { return [g constantWithScalar:v dataType:MPSDataTypeFloat32]; };
+    auto pow2_of = [g, &f32](MPSGraphTensor* k) {
+        MPSGraphTensor* biased = [g castTensor:[g additionWithPrimaryTensor:k
+                                                            secondaryTensor:f32(127.0)
+                                                                       name:nil]
+                                        toType:MPSDataTypeInt32
+                                          name:nil];
+        MPSGraphTensor* bits =
+            [g multiplicationWithPrimaryTensor:biased
+                               secondaryTensor:[g constantWithScalar:8388608.0
+                                                            dataType:MPSDataTypeInt32]
+                                          name:nil];
+        return [g reinterpretCastTensor:bits toType:MPSDataTypeFloat32 name:nil];
+    };
+    auto clamp_exp = [g, &f32](MPSGraphTensor* k) {
+        return [g minimumWithPrimaryTensor:[g maximumWithPrimaryTensor:k
+                                                       secondaryTensor:f32(-126.0)
+                                                                  name:nil]
+                           secondaryTensor:f32(127.0)
+                                      name:nil];
+    };
+    MPSGraphTensor* finite = [g isFiniteWithTensor:y name:nil];
+    MPSGraphTensor* y0 = [g selectWithPredicateTensor:finite
+                                  truePredicateTensor:y
+                                 falsePredicateTensor:f32(0.0)
+                                                 name:nil];
+    MPSGraphTensor* whole = [g floorWithTensor:y0 name:nil];
+    MPSGraphTensor* frac = [g subtractionWithPrimaryTensor:y0 secondaryTensor:whole name:nil];
+    MPSGraphTensor* k1 = clamp_exp(whole);
+    MPSGraphTensor* k2 = clamp_exp([g subtractionWithPrimaryTensor:whole
+                                                   secondaryTensor:k1
+                                                              name:nil]);
+    MPSGraphTensor* scale = [g multiplicationWithPrimaryTensor:pow2_of(k1)
+                                               secondaryTensor:pow2_of(k2)
+                                                          name:nil];
+    MPSGraphTensor* out = [g multiplicationWithPrimaryTensor:scale
+                                             secondaryTensor:[g exponentBase2WithTensor:frac
+                                                                                   name:nil]
+                                                        name:nil];
+    // Non-finite exponents: NaN stays NaN, +inf gives +inf, -inf gives 0.
+    MPSGraphTensor* nonfinite =
+        [g selectWithPredicateTensor:[g isNaNWithTensor:y name:nil]
+                 truePredicateTensor:y
+                falsePredicateTensor:
+                    [g selectWithPredicateTensor:[g greaterThanWithPrimaryTensor:y
+                                                                 secondaryTensor:f32(0.0)
+                                                                            name:nil]
+                             truePredicateTensor:y
+                            falsePredicateTensor:f32(0.0)
+                                            name:nil]
+                                name:nil];
+    return [g selectWithPredicateTensor:finite
+                    truePredicateTensor:out
+                   falsePredicateTensor:nonfinite
+                                   name:nil];
+}
+
 // Match ``gpu_pow(a, b)`` in ``lucid/_C/backend/gpu/Pow.h``: float32,
 // float16, and bfloat16 evaluate the special-exponent table element-by-element
 // in float32, while integer and complex dtypes use ``powerWithPrimaryTensor``.
@@ -463,6 +528,16 @@ inline MPSGraphTensor* emit_pow_tensor(MPSGraph* g, MPSGraphTensor* a, MPSGraphT
     MPSGraphTensor* x = [g additionWithPrimaryTensor:xf secondaryTensor:zero_ab name:nil];
     MPSGraphTensor* y = [g additionWithPrimaryTensor:yf secondaryTensor:zero_ab name:nil];
     MPSGraphTensor* native_pow = [g powerWithPrimaryTensor:xf secondaryTensor:yf name:nil];
+    // A base of exactly 2 (``exp2``): ``exact_exp2_f32`` builds ``2**floor(y)``
+    // from its bits, so integer exponents are exact on every GPU (LCD-651).
+    native_pow = [g selectWithPredicateTensor:
+                        [g equalWithPrimaryTensor:x
+                                  secondaryTensor:[g constantWithScalar:2.0
+                                                               dataType:MPSDataTypeFloat32]
+                                             name:nil]
+                          truePredicateTensor:exact_exp2_f32(g, y)
+                         falsePredicateTensor:native_pow
+                                         name:nil];
     MPSGraphTensor* res = emit_pow_tensor_special_f32(g, x, y, native_pow);
     MPSGraphTensor* res_dt = cast_from_f32_if_needed(g, res, orig_dt);
     MPSGraphTensor* a_bcast =

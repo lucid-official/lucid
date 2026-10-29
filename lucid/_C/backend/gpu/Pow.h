@@ -236,8 +236,14 @@ inline half lucid_pow_native(half a, half b) {
 }
 
 inline bfloat16_t lucid_pow_native(bfloat16_t a, bfloat16_t b) {
-    return static_cast<bfloat16_t>(
-        metal::precise::pow(static_cast<float>(a), static_cast<float>(b)));
+    float fa = static_cast<float>(a);
+    float fb = static_cast<float>(b);
+    // ``exp2``: ``metal::precise::pow(2, -126)`` is 0 on an M1, although
+    // ``2**-126`` is bfloat16's smallest normal; the float32 kernel is exact on
+    // every power of two (LCD-651).  Other bases keep ``precise::pow``.
+    if (fa == 2.0f)
+        return static_cast<bfloat16_t>(lucid_pow_native(fa, fb));
+    return static_cast<bfloat16_t>(metal::precise::pow(fa, fb));
 }
 )";
 }
