@@ -1601,3 +1601,20 @@ def test_initialisers_keep_the_parameter_they_were_given(dtype_name: str) -> Non
         assert str(p.dtype).endswith(dtype_name), f"{name} changed the dtype"
         assert p.requires_grad, f"{name} dropped requires_grad"
         assert id(p._impl) == before, f"{name} replaced the impl instead of writing"
+
+
+def test_hypot_with_an_infinite_operand_is_inf_even_against_nan(device: str) -> None:
+    # C99 and the reference: hypot(±inf, anything) is +inf, NaN included (LCD-652).
+    import math
+
+    inf, nan = float("inf"), float("nan")
+    vals = [inf, -inf, nan, 0.0, 3.0]
+    a = [x for x in vals for _ in vals]
+    b = [y for _ in vals for y in vals]
+    got = lucid.hypot(lucid.tensor(a, device=device), lucid.tensor(b, device=device)).tolist()
+    for x, y, g in zip(a, b, got, strict=True):
+        want = math.hypot(x, y)
+        if math.isnan(want) or math.isinf(want):
+            assert (math.isnan(g) and math.isnan(want)) or g == want, (x, y, g, want)
+        else:  # float32 against a float64 reference
+            assert g == pytest.approx(want, rel=1e-6), (x, y, g, want)

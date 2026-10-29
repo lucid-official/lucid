@@ -291,7 +291,15 @@ TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     auto safe_small = where_op(big_inf, full_like_op(small, 0.0), small);
     auto ratio = div_op(safe_small, safe);
     auto one = full_like_op(ratio, 1.0);
-    return mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
+    auto out = mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
+    // C99 and the reference: an infinite operand makes the result +inf even
+    // when the other is NaN, which ``maximum`` above would propagate.  Each
+    // operand is broadcast to the output shape (adding zero keeps NaN and inf)
+    // before its own infinity test.
+    auto zero = full_like_op(big, 0.0);
+    auto pos_inf = full_like_op(big, std::numeric_limits<double>::infinity());
+    out = where_op(isinf_op(add_op(abs_b, zero)), pos_inf, out);
+    return where_op(isinf_op(add_op(abs_a, zero)), pos_inf, out);
 }
 
 // Numerically-stable ``log(exp(a) + exp(b))``.  Factor out the per-pair max
