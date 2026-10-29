@@ -4,6 +4,15 @@ The reparameterised sampler for ``Gamma`` uses Marsaglia & Tsang's
 acceptance-rejection algorithm wrapped in a fixed-cap retry loop: the
 expected reject rate is well under 5 % per sample, so 8 rounds drives
 the residual probability of any unsampled cell below ``2 ** −60``.
+
+A small concentration puts most of the mass below the smallest float32, so
+the draws are made as logarithms and held in a range the dtype can hold:
+a ``Gamma`` draw at or above ``tiny``, a ``Beta`` or ``Dirichlet`` draw in
+``[tiny, 1 - eps/2]`` — the reference's ranges.  The ``sample`` of ``Beta``
+and ``Dirichlet`` normalises the logarithms directly and stays exact down
+to any concentration; their ``rsample`` normalises the clamped Gamma draws,
+so below a concentration of a few hundredths it loses the ordering of
+components that are all under ``tiny``.
 """
 
 from collections.abc import Sequence
@@ -11,6 +20,7 @@ from typing import Self, override
 
 import lucid
 from lucid._C import engine as _C_engine
+from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.distributions.constraints import (
@@ -30,16 +40,29 @@ from lucid.distributions._util import _as_tensor, _broadcast_pair
 from lucid.special import gammainc, xlog1py
 
 
-def _sample_standard_gamma(concentration: Tensor, sample_shape: tuple[int, ...]) -> Tensor:
-    """Sample ``Gamma(concentration, 1)`` via Marsaglia & Tsang.
+def _sample_standard_log_gamma(concentration: Tensor, sample_shape: tuple[int, ...]) -> Tensor:
+    r"""Sample :math:`\log X` for :math:`X \sim \text{Gamma}(\text{concentration}, 1)`.
+
+    Marsaglia & Tsang's acceptance-rejection for :math:`\alpha \ge 1`; below
+    that, the boost :math:`X = G_{\alpha+1}\,U^{1/\alpha}` — carried out on
+    the logarithm, :math:`\log G_{\alpha+1} + \log U / \alpha`.  The power
+    :math:`U^{1/\alpha}` itself falls under the smallest float32 once
+    :math:`\alpha` is a few hundredths (a third of the draws at
+    :math:`\alpha = 0.01`, nearly all at :math:`\alpha = 10^{-3}`), and a
+    draw that rounds to ``0`` is then wrong everywhere it is used: a ratio of
+    two of them is ``NaN``, ``log_prob`` is ``-inf``.  The logarithm is a
+    modest number at any :math:`\alpha`, so callers that normalise
+    (:class:`Beta`, :class:`Dirichlet`) can do it here before anything
+    underflows.
 
     Detached — the engine has no reparameterisation kernel for Gamma.
     Implemented in pure Lucid with a bounded retry loop (rejection rate
     is < 5 % so 8 rounds is overkill).
     """
     out_shape = tuple(sample_shape) + tuple(concentration.shape)
-    # Branch for α ≥ 1; α < 1 uses Gamma(α + 1) ** (1/α) trick.
     alpha = concentration
+    tiny = float(finfo(alpha.dtype).tiny)
+    # Branch for α ≥ 1; α < 1 uses the Gamma(α + 1) · U^{1/α} boost.
     boost = (alpha < 1.0).to(alpha.dtype)
     alpha_eff = alpha + boost  # Use α + 1 when α < 1.
 
@@ -65,13 +88,51 @@ def _sample_standard_gamma(concentration: Tensor, sample_shape: tuple[int, ...])
         if _C_engine.compile.current_tracer() is None and bool((has_sample == 1).all().item()):
             break
 
-    # Apply the α<1 transform: x_α = x_{α+1} · U^{1/α}.
-    boost_factor = boost * lucid.rand(*out_shape, dtype=alpha.dtype, device=alpha.device).clip(
-        1e-30, 1.0
-    ) ** (1.0 / alpha.clip(1e-30, float("inf"))) + (
-        1.0 - boost
-    )  # No-op factor when α ≥ 1.
-    return accepted * boost_factor
+    # A cell no round accepted (odds below 1e-10) takes d, near the mode of
+    # Gamma(α_eff), rather than 0: the logarithm of 0 would be -inf.
+    draw = lucid.where(has_sample > 0, accepted, d)
+    # The α<1 boost x_α = x_{α+1} · U^{1/α}, as a sum of logarithms; a no-op
+    # (boost = 0) when α ≥ 1.  α is floored so that 1/α stays finite.
+    log_u = lucid.rand(*out_shape, dtype=alpha.dtype, device=alpha.device).clip(tiny, 1.0).log()
+    alpha_floor = alpha.clip(max(tiny, 1e-30), float("inf"))
+    return draw.log() + boost * log_u / alpha_floor
+
+
+def _sample_standard_gamma(concentration: Tensor, sample_shape: tuple[int, ...]) -> Tensor:
+    """Sample ``Gamma(concentration, 1)``, never below the smallest normal float.
+
+    The draw is made in log space (:func:`_sample_standard_log_gamma`) and
+    exponentiated, then held at ``finfo(dtype).tiny`` as the reference does:
+    float32 cannot hold the mass a small ``concentration`` puts below it
+    (42 % of ``Gamma(0.01)``), and an exact ``0`` there would turn every
+    ratio, reciprocal and logarithm taken of the sample into ``NaN`` or
+    ``inf``.
+    """
+    log_x = _sample_standard_log_gamma(concentration, sample_shape)
+    return log_x.exp().clamp(min=float(finfo(concentration.dtype).tiny))
+
+
+def _hold_in_range(x: Tensor, lo: float | None = None, hi: float | None = None) -> Tensor:
+    """Clamp the *value* of ``x`` into ``[lo, hi]``, leaving its gradient alone.
+
+    A reparameterised sample is held off the boundary the way the reference
+    does it, by clamping a detached alias in place: the gradient is the one
+    of the unclamped expression.  A plain ``clamp`` would zero the gradient
+    of every clamped entry, which is most of them for a small concentration.
+    """
+    held = x.detach()
+    return x + (held.clamp(min=lo, max=hi) - held)
+
+
+def _hold_off_the_boundary(x: Tensor) -> Tensor:
+    """``x`` held in ``[tiny, 1 - eps/2]``: the reference's range for Beta and Dirichlet samples.
+
+    The upper end is the largest float below 1.  An exact ``0`` or ``1`` makes
+    ``log_prob`` of the sample ``-inf`` (or ``NaN`` where the exponent is
+    ``0``), so no sample may sit on either.
+    """
+    info = finfo(x.dtype)
+    return _hold_in_range(x, float(info.tiny), 1.0 - float(info.eps) / 2.0)
 
 
 _GAMMA_GRAD_COEF_UV: tuple[tuple[float, ...], ...] = (
@@ -120,7 +181,10 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
       3. Otherwise: bivariate rational approximation in
          :math:`u = \ln(z / \alpha)` and :math:`v = \ln \alpha`.
     """
-    x = z.clamp(min=1e-30)
+    # Floored at the smallest normal float, which is where a sample is held:
+    # a larger floor would price a sample of 1e-38 as one of 1e-30, a
+    # derivative 1e8 times too large for the ratios taken of it.
+    x = z.clamp(min=float(finfo(z.dtype).tiny))
     log_x = x.log()
 
     # 1. Small-x Taylor series (x < 0.8).
@@ -412,7 +476,8 @@ class Gamma(ExponentialFamily):
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
         r"""Draw reparameterised samples from the Gamma distribution via implicit reparameterisation."""
         shape = self._extended_shape(sample_shape)
-        return _standard_gamma(self.concentration.expand(shape)) / self.rate.expand(shape)
+        value = _standard_gamma(self.concentration.expand(shape)) / self.rate.expand(shape)
+        return _hold_in_range(value, float(finfo(value.dtype).tiny))
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -430,7 +495,8 @@ class Gamma(ExponentialFamily):
         """
         with lucid.no_grad():
             std = _sample_standard_gamma(self.concentration, sample_shape)
-            return (std / self.rate).detach()
+            value = (std / self.rate).detach()
+            return value.clamp(min=float(finfo(value.dtype).tiny))
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
@@ -857,8 +923,10 @@ class Beta(ExponentialFamily):
             [self.concentration1.expand(shape), self.concentration0.expand(shape)], dim=0
         )
         g = _standard_gamma(pair)
-        x, y = g[0], g[1]
-        return x / (x + y)
+        # g[0] / (g[0] + g[1]) as a sigmoid of the logs: both draws can sit
+        # at the float floor, and the quotient's backward then divides by a
+        # square that underflows to 0.
+        return _hold_off_the_boundary(lucid.sigmoid(g[0].log() - g[1].log()))
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -880,7 +948,10 @@ class Beta(ExponentialFamily):
         Returns
         -------
         Tensor
-            Samples in :math:`[0, 1]` of shape ``sample_shape + batch_shape``.
+            Samples of shape ``sample_shape + batch_shape``, held in
+            ``[tiny, 1 - eps/2]`` — off both ends of the unit interval, so
+            ``log_prob`` of a draw is finite — where ``tiny`` and ``eps`` are
+            the dtype's smallest normal number and machine epsilon.
 
         Examples
         --------
@@ -893,9 +964,11 @@ class Beta(ExponentialFamily):
         True
         """
         with lucid.no_grad():
-            x = _sample_standard_gamma(self.concentration1, sample_shape)
-            y = _sample_standard_gamma(self.concentration0, sample_shape)
-            return (x / (x + y)).detach()
+            # X = sigmoid(log G_a - log G_b) is the same ratio, taken before
+            # either Gamma draw can round to 0 (a/(a+b) is NaN where both do).
+            log_x = _sample_standard_log_gamma(self.concentration1, sample_shape)
+            log_y = _sample_standard_log_gamma(self.concentration0, sample_shape)
+            return _hold_off_the_boundary(lucid.sigmoid(log_x - log_y)).detach()
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
@@ -1186,8 +1259,11 @@ class Dirichlet(ExponentialFamily):
         carry implicit-reparameterisation gradients.
         """
         shape = self._extended_shape(sample_shape)
-        gammas = _standard_gamma(self.concentration.expand(shape))
-        return gammas / gammas.sum(dim=-1, keepdim=True)
+        log_g = _standard_gamma(self.concentration.expand(shape)).log()
+        # A softmax of the logs, not gammas / gammas.sum(): at the float floor
+        # the quotient's backward divides by a square that underflows to 0.
+        weights = (log_g - log_g.amax(dim=-1, keepdim=True).detach()).exp()
+        return _hold_off_the_boundary(weights / weights.sum(dim=-1, keepdim=True))
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -1203,8 +1279,11 @@ class Dirichlet(ExponentialFamily):
         True
         """
         with lucid.no_grad():
-            gammas = _sample_standard_gamma(self.concentration, sample_shape)
-            return (gammas / gammas.sum(dim=-1, keepdim=True)).detach()
+            # Normalised as a softmax of the log-draws: the Gamma draws
+            # themselves can all round to 0, and 0/0 is a NaN row.
+            log_g = _sample_standard_log_gamma(self.concentration, sample_shape)
+            weights = (log_g - log_g.amax(dim=-1, keepdim=True)).exp()
+            return _hold_off_the_boundary(weights / weights.sum(dim=-1, keepdim=True)).detach()
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:

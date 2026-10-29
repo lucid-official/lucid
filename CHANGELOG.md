@@ -68,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - deepcopy of a Parameter clones its storage
 
+- gamma samplers stay off 0, 1 and NaN
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
