@@ -24,6 +24,16 @@ const QUICK_LINKS = [
     href: "/docs/quickstart",
   },
   {
+    title: "Train a Model End to End",
+    description: "Data, a zoo model, an optimizer, evaluation and checkpoint resume.",
+    href: "/docs/tutorials/train-end-to-end",
+  },
+  {
+    title: "Coming from the Reference Framework",
+    description: "Import map, the metal device, dtype differences and what is not available.",
+    href: "/docs/migration/from-reference-framework",
+  },
+  {
     title: "Autograd",
     description: "Understand automatic differentiation in Lucid.",
     href: "/docs/autograd",

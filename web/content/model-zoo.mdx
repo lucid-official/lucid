@@ -60,14 +60,15 @@ Available task names show as coloured pill badges on the family page
 
 ## Custom config
 
-Use `create_model` when you need a non-paper variant — your config is
-validated against the family contract:
+Use `create_model` when you need a non-paper variant. Keyword arguments
+are forwarded to the family's config, which validates them against the
+family contract:
 
 ```python
-from lucid.models import create_model, ResNetConfig
+from lucid.models import create_model
 
-cfg = ResNetConfig(layers=[2, 2, 2, 2], num_classes=10)   # ResNet-18 width on CIFAR
-model = create_model("resnet_50", config=cfg)             # registers as resnet_50-flavoured
+# ResNet-18 with a 10-class head (CIFAR-10) and a narrower stem.
+model = create_model("resnet_18_cls", num_classes=10, stem_channels=32)
 ```
 
 ## Listing what's available

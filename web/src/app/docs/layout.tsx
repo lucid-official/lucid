@@ -12,6 +12,15 @@ const DOCS_SIDEBAR: SidebarItem[] = [
     ],
   },
   {
+    title: "Tutorials",
+    items: [
+      { title: "Train a Model End to End", href: "/docs/tutorials/train-end-to-end" },
+      { title: "Mixed Precision Training", href: "/docs/tutorials/mixed-precision" },
+      { title: "Speed Up with lucid.compile", href: "/docs/tutorials/compile" },
+      { title: "Export to Core ML",        href: "/docs/tutorials/export-coreml" },
+    ],
+  },
+  {
     title: "Guides",
     items: [
       { title: "Training Loop", href: "/docs/training-loop" },
@@ -52,6 +61,12 @@ const DOCS_SIDEBAR: SidebarItem[] = [
     items: [
       { title: "Einops",        href: "/docs/einops" },
       { title: "Serialization", href: "/docs/serialization" },
+    ],
+  },
+  {
+    title: "Migration",
+    items: [
+      { title: "Coming from the Reference Framework", href: "/docs/migration/from-reference-framework" },
     ],
   },
 ];

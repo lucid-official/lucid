@@ -8,6 +8,10 @@ order: 4
 This guide is a self-contained recipe.  Drop the snippets into a `train.py`
 and you have a working pipeline for any classification / regression task.
 
+<Callout variant="note">
+For a version of this loop you can run as written, with a real zoo model, evaluation and checkpoint resume, see the [Train a Model End to End](/docs/tutorials/train-end-to-end) tutorial.
+</Callout>
+
 ## Skeleton
 
 ```python
@@ -18,11 +22,11 @@ from lucid.optim import AdamW
 from lucid.optim.lr_scheduler import CosineAnnealingLR
 from lucid.utils.data import DataLoader
 
-device = lucid.metal_if_available()
+device = "metal" if lucid.metal.is_available() else "cpu"
 
 model = MyModel().to(device)
 opt = AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
-sched = CosineAnnealingLR(opt, t_max=epochs * len(train_loader))
+sched = CosineAnnealingLR(opt, T_max=epochs * len(train_loader))
 
 for epoch in range(epochs):
     train_one_epoch(model, train_loader, opt, sched, device)

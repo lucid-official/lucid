@@ -123,7 +123,7 @@ Training steps (`make_step`, `fused_step`, `compiled_step`) compile end-to-end t
 Not every op has a manual vector-Jacobian product yet. `diagnose` traces your function and reports which ops are compile-backed and which would fall back:
 
 ```python
-report = lucid.compile.diagnose(model, example_inputs=(x,))
+report = lucid.compile.diagnose(model, x)
 
 print(report.total_ops)
 for op in report.registered:
@@ -161,5 +161,5 @@ The compiled path is most effective on deep models with many small ops, where pe
 Attention is the exception the compiler handles for you. The compiled graph lowers it to matmul, softmax and matmul, which writes the whole score matrix to memory; eager Metal's fused kernel never does. When a call's attention would write more than 512 MiB of scores, it runs eagerly instead, with a one-time notice — on an M4 Max a diffusion-transformer block at 18 720 keys took 120.8 ms compiled and 87.5 ms eager, and runs at the eager speed now. Self-attention up to 4 096 tokens compiles as before. Set `LUCID_COMPILE_LONG_ATTENTION=compile` to keep such calls compiled anyway.
 
 <Callout variant="note">
-See the [API reference](/api/lucid.compile) for the full surface, and [Training Loop](/docs/training-loop) for where a fused step slots into a real loop.
+For runnable examples of each entry point, including what falls back on the CPU, see the [Speed Up with lucid.compile](/docs/tutorials/compile) tutorial. See the [API reference](/api/lucid.compile) for the full surface, and [Training Loop](/docs/training-loop) for where a fused step slots into a real loop.
 </Callout>
