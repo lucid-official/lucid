@@ -242,8 +242,6 @@ class AdamW(Optimizer):
             (foreach, maximize, capturable, differentiable),
             amsgrad=amsgrad,
             fused=fused,
-            # The reference's AdamW groups carry the flag (always True) too.
-            decoupled_weight_decay=True,
         )
 
     @override
