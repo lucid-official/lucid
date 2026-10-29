@@ -1383,6 +1383,7 @@ from lucid import profiler as profiler
 from lucid import einops as einops
 from lucid import quantization as quantization
 from lucid import coreml as coreml
+from lucid import peft as peft
 from lucid import metal as metal
 from lucid import backends as backends
 from lucid import test as test

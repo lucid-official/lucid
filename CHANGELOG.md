@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - export compiled_decode_step from lucid.compile
+- add lucid.peft — LoRA on nn.Linear, reference format
 
 ---
 
