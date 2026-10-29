@@ -298,17 +298,37 @@ GpuBackend::broadcast(const Storage& a, const Shape& src_shape, const Shape& dst
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }
 
+// MLX takes a repeat count as an ``int``.  A larger one was truncated, and
+// the result was shorter than the output shape the op records for it: the
+// tensor claimed elements its buffer did not have.  The output extent is
+// checked against MLX's ``int32`` limit instead, which bounds every count
+// over a non-empty axis; over an empty one the count makes no elements.
 Storage
-GpuBackend::repeat(const Storage& a, const Shape&, Dtype dt, std::int64_t repeats, int axis) {
+GpuBackend::repeat(const Storage& a, const Shape& shape, Dtype dt, std::int64_t repeats, int axis) {
     const auto& gs = std::get<GpuStorage>(a);
-    auto result = ::mlx::core::repeat(*gs.arr, static_cast<int>(repeats), axis);
+    const auto ax = static_cast<std::size_t>(axis);
+    Shape out_shape = shape;
+    out_shape[ax] = mul_extent(shape[ax], repeats);
+    static_cast<void>(gpu::to_mlx_shape(out_shape));
+    const int count = shape[ax] == 0 ? 0 : static_cast<int>(repeats);
+    auto result = ::mlx::core::repeat(*gs.arr, count, axis);
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }
 
-Storage
-GpuBackend::tile(const Storage& a, const Shape&, Dtype dt, const std::vector<std::int64_t>& reps) {
+Storage GpuBackend::tile(const Storage& a,
+                         const Shape& shape,
+                         Dtype dt,
+                         const std::vector<std::int64_t>& reps) {
     const auto& gs = std::get<GpuStorage>(a);
-    std::vector<int> reps_int(reps.begin(), reps.end());
+    const std::size_t lead = reps.size() - shape.size();
+    Shape out_shape(reps.size());
+    std::vector<int> reps_int(reps.size());
+    for (std::size_t d = 0; d < reps.size(); ++d) {
+        const std::int64_t extent = d < lead ? 1 : shape[d - lead];
+        out_shape[d] = mul_extent(extent, reps[d]);
+        reps_int[d] = extent == 0 ? 0 : static_cast<int>(reps[d]);
+    }
+    static_cast<void>(gpu::to_mlx_shape(out_shape));
     auto result = ::mlx::core::tile(*gs.arr, std::move(reps_int));
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }

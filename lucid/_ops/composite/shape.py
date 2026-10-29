@@ -1112,6 +1112,10 @@ def _combination_indices(n: int, r: int, with_replacement: bool) -> Tensor:
     combos = lucid.arange(n, dtype=lucid.int64, device="cpu").reshape(n, 1)
     first = 0 if with_replacement else 1
     for _ in range(r - 1):
+        # Once no row has a child none ever will: ``r`` past ``n`` used to
+        # spin out the remaining ``r`` columns one empty step at a time.
+        if combos.shape[0] == 0:
+            return lucid.empty(0, r, dtype=lucid.int64, device="cpu")
         last = combos[:, -1]
         children = (n - first) - last
         ends = lucid.cumsum(children, 0)

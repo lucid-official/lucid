@@ -1796,7 +1796,7 @@ private:
     void cast_impl(const std::byte* src, std::byte* dst, std::size_t n, Dtype src_dt, Dtype dst_dt);
 
     static CpuStorage alloc_cpu(std::size_t numel, Dtype dt) {
-        const std::size_t nb = numel * dtype_size(dt);
+        const std::size_t nb = count_nbytes(numel, dtype_size(dt));
         return CpuStorage{allocate_aligned_bytes(nb, Device::CPU), nb, dt};
     }
 

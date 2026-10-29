@@ -57,6 +57,11 @@ void check_resample(const std::string& op,
         require_at_least(in[2 + i], 1, op + ": input spatial extent");
     for (int o : out)
         require_at_least(o, 1, op + ": output extent");
+    // Each extent fits ``int``; their product with the batch and channels
+    // need not, and the backends size the output buffer by it.
+    Shape out_shape{in[0], in[1]};
+    out_shape.insert(out_shape.end(), out.begin(), out.end());
+    check_concrete_shape(out_shape);
 }
 
 }  // namespace

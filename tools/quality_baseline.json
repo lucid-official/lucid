@@ -1735,7 +1735,7 @@
     "lucid/_C/nn/LSTM.cpp": 5,
     "lucid/_C/ops/einops/Einsum.cpp": 46,
     "lucid/_C/ops/gfunc/Gfunc.cpp": 2,
-    "lucid/_C/ops/utils/Histogram.cpp": 7,
+    "lucid/_C/ops/utils/Histogram.cpp": 5,
     "lucid/_C/ops/utils/InplaceGraph.cpp": 9,
     "lucid/_C/utils/tokenizer/Unigram.cpp": 28,
     "lucid/_tensor/_indexing.py": 40,

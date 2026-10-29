@@ -162,7 +162,8 @@ TensorImplPtr repeat_op(const TensorImplPtr& a, std::int64_t repeats, int axis) 
     scope.set_attr("axis", static_cast<std::int64_t>(ax));
     scope.set_attr("repeats", static_cast<std::int64_t>(repeats));
     Shape out_shape = a->shape();
-    out_shape[ax] *= repeats;
+    out_shape[ax] = mul_extent(out_shape[ax], repeats);
+    check_concrete_shape(out_shape);
     Storage out_storage =
         backend::Dispatcher::for_device(device).repeat(a->storage(), a->shape(), dt, repeats, ax);
     auto result = fresh(std::move(out_storage), std::move(out_shape), dt, device);
@@ -200,7 +201,7 @@ TensorImplPtr tile_op(const TensorImplPtr& a, std::vector<std::int64_t> reps) {
     for (std::size_t d = 0; d < nout; ++d) {
         if (padded[d] == 0 && reps[d] < 0)
             reps[d] = 0;
-        out_shape[d] = padded[d] * reps[d];
+        out_shape[d] = mul_extent(padded[d], reps[d]);
     }
     check_concrete_shape(out_shape);
     scope.set_attr("reps", reps);

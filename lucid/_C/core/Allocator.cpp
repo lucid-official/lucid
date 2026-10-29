@@ -26,10 +26,14 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include <sys/sysctl.h>
 
 #include "Error.h"
 #include "MemoryStats.h"
@@ -116,11 +120,42 @@ struct ThreadPool {
 // destroyed (and all cached blocks freed) when the owning thread exits.
 thread_local ThreadPool t_pool;
 
+// The machine's physical memory, read once.  No single buffer can be held
+// resident past it, and macOS does not say so at allocation: it reserves
+// address space for up to 16 TiB, and the process is killed when the pages
+// are touched — ``zeros(2**40)`` (4 TiB) died zero-filling, SIGKILL instead
+// of an error.  Unknown (the sysctl failed) means no limit.
+std::size_t physical_memory_bytes() noexcept {
+    static const std::size_t bytes = [] {
+        std::uint64_t mem = 0;
+        std::size_t len = sizeof(mem);
+        if (::sysctlbyname("hw.memsize", &mem, &len, nullptr, 0) != 0 || mem == 0)
+            return std::numeric_limits<std::size_t>::max();
+        return static_cast<std::size_t>(mem);
+    }();
+    return bytes;
+}
+
+// ``why``, when given, goes in front of the counters the exception reports.
+[[noreturn]] void
+throw_out_of_memory(std::size_t nbytes, Device device, const std::string& why = {}) {
+    const auto s = MemoryTracker::get_stats(device);
+    OutOfMemory err(nbytes, s.current_bytes, s.peak_bytes, std::string(device_name(device)));
+    if (!why.empty())
+        err.prefix_message(why);
+    throw err;
+}
+
 }  // namespace
 
 std::shared_ptr<std::byte[]> allocate_aligned_bytes(std::size_t nbytes, Device device) {
     if (nbytes == 0)
         return {};
+    if (nbytes > physical_memory_bytes()) [[unlikely]]
+        throw_out_of_memory(nbytes, device,
+                            "one buffer cannot be larger than the machine's " +
+                                std::to_string(physical_memory_bytes()) +
+                                " bytes of physical memory: ");
 
     // Only CPU allocations up to kMaxClass go through the thread-local pool.
     // GPU-device allocations bypass the pool because this allocator owns only
@@ -136,11 +171,8 @@ std::shared_ptr<std::byte[]> allocate_aligned_bytes(std::size_t nbytes, Device d
         raw = t_pool.pop(cls);
         if (!raw) {
             // Pool miss: fall back to a fresh posix_memalign call.
-            if (::posix_memalign(&raw, kCpuAlignment, rounded) != 0 || !raw) {
-                const auto s = MemoryTracker::get_stats(device);
-                throw OutOfMemory(nbytes, s.current_bytes, s.peak_bytes,
-                                  std::string(device_name(device)));
-            }
+            if (::posix_memalign(&raw, kCpuAlignment, rounded) != 0 || !raw)
+                throw_out_of_memory(nbytes, device);
         }
         MemoryTracker::track_alloc(nbytes, device);
 
@@ -160,10 +192,8 @@ std::shared_ptr<std::byte[]> allocate_aligned_bytes(std::size_t nbytes, Device d
 
     // Large allocation (> 4 MB) or non-CPU device: go straight to posix_memalign.
     // The deleter always calls std::free because there is no pool for these.
-    if (::posix_memalign(&raw, kCpuAlignment, nbytes) != 0 || !raw) {
-        const auto s = MemoryTracker::get_stats(device);
-        throw OutOfMemory(nbytes, s.current_bytes, s.peak_bytes, std::string(device_name(device)));
-    }
+    if (::posix_memalign(&raw, kCpuAlignment, nbytes) != 0 || !raw)
+        throw_out_of_memory(nbytes, device);
     MemoryTracker::track_alloc(nbytes, device);
     auto deleter = [nbytes, device](std::byte* p) {
         std::free(p);

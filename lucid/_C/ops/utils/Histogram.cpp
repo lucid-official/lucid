@@ -103,6 +103,22 @@ TensorImplPtr build_edges(double lo, double hi, std::int64_t bins) {
     return fresh(Storage{std::move(cpu)}, std::move(sh), Dtype::F64, Device::CPU);
 }
 
+// The bin width along each axis of ``histogramdd``, once the counts and the
+// ranges have been checked.  A zero count left the counts tensor without a
+// buffer, and the first sample in range was added through a null pointer.
+std::vector<double> histogramdd_steps(const std::vector<std::int64_t>& bins,
+                                      const std::vector<std::pair<double, double>>& ranges) {
+    std::vector<double> step(bins.size());
+    for (std::size_t d = 0; d < bins.size(); ++d) {
+        if (bins[d] <= 0)
+            ErrorBuilder("histogramdd").invalid_argument("bins must be > 0");
+        if (ranges[d].second <= ranges[d].first)
+            ErrorBuilder("histogramdd").invalid_argument("each range hi must be > lo");
+        step[d] = (ranges[d].second - ranges[d].first) / static_cast<double>(bins[d]);
+    }
+    return step;
+}
+
 }  // namespace
 
 // Count elements of `a` into `bins` uniform bins over [lo, hi).  Delegates
@@ -262,13 +278,7 @@ std::vector<TensorImplPtr> histogramdd_op(const TensorImplPtr& a,
 
     const auto ca = to_cpu(a);
 
-    // Pre-compute the bin width for each dimension and validate range ordering.
-    std::vector<double> step(D);
-    for (std::int64_t d = 0; d < D; ++d) {
-        if (ranges[d].second <= ranges[d].first)
-            ErrorBuilder("histogramdd").invalid_argument("each range hi must be > lo");
-        step[d] = (ranges[d].second - ranges[d].first) / static_cast<double>(bins[d]);
-    }
+    const std::vector<double> step = histogramdd_steps(bins, ranges);
 
     Shape counts_shape(bins.begin(), bins.end());
     auto counts = allocate_cpu(counts_shape, Dtype::F64);

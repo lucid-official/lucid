@@ -66,6 +66,27 @@ void throw_negative_dim(const Shape& shape) {
     throw InvalidArgument(std::move(msg));
 }
 
+void throw_numel_overflow(const Shape& shape) {
+    std::string dims;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        if (i)
+            dims += ", ";
+        dims += std::to_string(shape[i]);
+    }
+    std::string msg = tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
+    msg += "Storage size calculation overflowed with sizes=[" + dims +
+           "] (a tensor holds at most " + std::to_string(kMaxNumel) +
+           " elements, and its strides are 64-bit byte offsets)";
+    throw InvalidArgument(std::move(msg));
+}
+
+void throw_extent_overflow(std::int64_t a, std::int64_t b) {
+    std::string msg = tl_stack_.empty() ? std::string{} : tl_stack_.back() + ": ";
+    msg += "Storage size calculation overflowed: an extent of " + std::to_string(a) + " * " +
+           std::to_string(b) + " does not fit in 64 bits";
+    throw InvalidArgument(std::move(msg));
+}
+
 ErrorContextGuard::ErrorContextGuard(std::string op_name) {
     ErrorContext::push(std::move(op_name));
 }

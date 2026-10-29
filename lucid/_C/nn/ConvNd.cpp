@@ -17,6 +17,8 @@
 
 #include "ConvNd.h"
 
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -61,6 +63,31 @@ namespace {
 inline int compute_out(int S, int K, int stride, int pad, int dilation) {
     const int eff = dilation * (K - 1) + 1;  // Effective (dilated) kernel size.
     return (S + 2 * pad - eff) / stride + 1;
+}
+
+// ``v`` as the ``int`` the im2col / col2im kernels and their saved geometry
+// count in.  Those sizes used to be formed in ``int`` as well, and wrapped: a
+// 2^16 x 2^16 kernel over a padded 1 x 1 input made a column matrix of 0
+// rows, which the kernel then wrote 2^32 rows into.  Each is now formed in
+// 64 bits and refused here when it does not fit.
+int sliding_int(std::int64_t v, const char* op, const char* what) {
+    if (v > std::numeric_limits<int>::max())
+        ErrorBuilder(op).not_implemented(std::string(what) + " of " + std::to_string(v) +
+                                         " is past 2^31 - 1, the most the sliding-window "
+                                         "kernels index");
+    return static_cast<int>(v);
+}
+
+// Windows along one axis of extent ``S``: ``floor((S + 2 pad - eff) / stride)
+// + 1``, 0 when the dilated kernel is longer than the padded extent.  Every
+// intermediate fits ``int``, so the backward recomputing it in ``int`` gets
+// the same count.
+int window_count(std::int64_t S, int K, int stride, int pad, int dilation, const char* op) {
+    const std::int64_t eff =
+        sliding_int(std::int64_t{dilation} * (K - 1) + 1, op, "the dilated kernel extent");
+    const std::int64_t padded =
+        sliding_int(S + 2 * std::int64_t{pad}, op, "the padded input extent");
+    return padded < eff ? 0 : static_cast<int>((padded - eff) / stride + 1);
 }
 
 }  // namespace
@@ -422,27 +449,26 @@ TensorImplPtr UnfoldBackward::forward(const TensorImplPtr& x,
     require_each_at_least(pad, 0, "unfold: padding");
     require_each_at_least(dilation, 1, "unfold: dilation");
 
-    const int B = static_cast<int>(x->shape()[0]);
-    const int C = static_cast<int>(x->shape()[1]);
+    const int B = sliding_int(x->shape()[0], "unfold", "the batch size");
+    const int C = sliding_int(x->shape()[1], "unfold", "the channel count");
     std::vector<int> S(N), O(N);
     const std::vector<int>& K = kernel;
+    std::int64_t O_total = 1;
+    std::int64_t K_total = 1;
     for (int i = 0; i < N; ++i) {
-        S[i] = static_cast<int>(x->shape()[2 + i]);
-        const int eff = dilation[i] * (K[i] - 1) + 1;
-        O[i] = (S[i] + 2 * pad[i] - eff) / stride[i] + 1;
+        S[i] = sliding_int(x->shape()[2 + i], "unfold", "an input extent");
+        O[i] = window_count(S[i], K[i], stride[i], pad[i], dilation[i], "unfold");
         if (O[i] <= 0)
             throw ShapeMismatch(x->shape(), Shape{}, "unfold: non-positive output dim");
+        O_total = mul_extent(O_total, O[i]);
+        K_total = mul_extent(K_total, K[i]);
     }
-    int O_total = 1;
-    for (int i = 0; i < N; ++i)
-        O_total *= O[i];
-    int K_total = 1;
-    for (int i = 0; i < N; ++i)
-        K_total *= K[i];
 
     // Output: (B, C * prod(K), prod(O)) — the im2col column matrix.
-    Shape out_shape{static_cast<std::int64_t>(B), static_cast<std::int64_t>(C * K_total),
-                    static_cast<std::int64_t>(O_total)};
+    Shape out_shape{B, mul_extent(C, K_total), O_total};
+    check_concrete_shape(out_shape);
+    sliding_int(out_shape[1], "unfold", "C * prod(kernel_size)");
+    sliding_int(O_total, "unfold", "the window count");
 
     OpScopeFull scope{schema_v1.name, x->device(), x->dtype(), out_shape};
     {
@@ -536,19 +562,19 @@ TensorImplPtr fold_op(const TensorImplPtr& x,
 
     const int kH = kernel_size[0], kW = kernel_size[1];
     const int outH = output_size[0], outW = output_size[1];
-    const int N = static_cast<int>(x->shape()[0]);
-    if (x->shape()[1] % (static_cast<std::int64_t>(kH) * kW) != 0)
+    const int N = sliding_int(x->shape()[0], "fold", "the batch size");
+    const std::int64_t kernel_area = mul_extent(kH, kW);
+    if (x->shape()[1] % kernel_area != 0)
         ErrorBuilder("fold").invalid_argument(
             "x.shape[1]=" + std::to_string(x->shape()[1]) +
-            " must be a multiple of kH*kW=" + std::to_string(kH * kW));
-    const int C = static_cast<int>(x->shape()[1]) / (kH * kW);
+            " must be a multiple of kH*kW=" + std::to_string(kernel_area));
+    const int C = sliding_int(x->shape()[1] / kernel_area, "fold", "the channel count");
+    sliding_int(x->shape()[1], "fold", "C * kH * kW");
 
     // The block count must match the column axis exactly; otherwise the
     // backends walk past the end of the column buffer.
-    const int effH = dilation[0] * (kH - 1) + 1;
-    const int effW = dilation[1] * (kW - 1) + 1;
-    const int blocks_h = (outH + 2 * padding[0] - effH) / stride[0] + 1;
-    const int blocks_w = (outW + 2 * padding[1] - effW) / stride[1] + 1;
+    const int blocks_h = window_count(outH, kH, stride[0], padding[0], dilation[0], "fold");
+    const int blocks_w = window_count(outW, kW, stride[1], padding[1], dilation[1], "fold");
     if (blocks_h <= 0 || blocks_w <= 0)
         ErrorBuilder("fold").fail("output_size too small for the given kernel/stride/dilation");
     if (static_cast<std::int64_t>(blocks_h) * blocks_w != x->shape()[2])
@@ -557,6 +583,7 @@ TensorImplPtr fold_op(const TensorImplPtr& x,
 
     Shape out_shape = {static_cast<std::int64_t>(N), static_cast<std::int64_t>(C),
                        static_cast<std::int64_t>(outH), static_cast<std::int64_t>(outW)};
+    check_concrete_shape(out_shape);
     OpScopeFull scope{"fold", x->device(), x->dtype(), out_shape};
     {
         std::vector<std::int64_t> Sv(output_size.begin(), output_size.end());

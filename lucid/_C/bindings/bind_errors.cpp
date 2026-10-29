@@ -85,9 +85,11 @@ void register_errors(py::module_& m) {
     // A refusal of one kind is catchable as the builtin a caller would reach
     // for, whichever layer raised it: a shape or device mismatch is a
     // ``ValueError`` (the Python layer raised that for the same refusal), a
-    // dtype mismatch a ``TypeError``.  Each stays a ``LucidError``, and so a
+    // dtype mismatch a ``TypeError``, an allocation that cannot be met a
+    // ``MemoryError``.  Each stays a ``LucidError``, and so a
     // ``RuntimeError``, as the reference framework raises them.
-    static py::object oom_cls = make_subclass(m, builtins, lucid_error_cls, "OutOfMemory");
+    static py::object oom_cls =
+        make_subclass(m, builtins, lucid_error_cls, "OutOfMemory", builtins.attr("MemoryError"));
     static py::object shape_mismatch_cls =
         make_subclass(m, builtins, lucid_error_cls, "ShapeMismatch", builtins.attr("ValueError"));
     static py::object dtype_mismatch_cls =

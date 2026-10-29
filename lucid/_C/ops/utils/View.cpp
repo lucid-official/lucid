@@ -71,7 +71,7 @@ Shape resolve_reshape_shape(const Shape& in_shape, const std::vector<std::int64_
             ErrorContextGuard ctx{"reshape"};
             throw_negative_dim(new_shape);
         } else {
-            known_product *= new_shape[i];
+            known_product = mul_extent(known_product, new_shape[i]);
             resolved.push_back(new_shape[i]);
         }
     }
@@ -434,18 +434,39 @@ void validate_as_strided_window(const Shape& size,
                                 std::int64_t capacity) {
     if (size.size() != stride.size())
         ErrorBuilder("as_strided").fail("size and stride need the same length");
+    // The furthest element, ``offset + sum((size - 1) * stride)``, is formed
+    // with overflow checks: wrapped, a huge stride made it small enough to
+    // pass, and the view read far outside the storage.
     std::int64_t last = offset;
     bool empty = false;
+    bool past = false;
     for (std::size_t d = 0; d < size.size(); ++d) {
         if (stride[d] < 0)
             ErrorBuilder("as_strided").invalid_argument("size and stride must be non-negative");
-        if (size[d] == 0)
+        if (size[d] == 0) {
             empty = true;
-        else
-            last += (size[d] - 1) * stride[d];
+            continue;
+        }
+        std::int64_t reach = 0;
+        past |= __builtin_mul_overflow(size[d] - 1, stride[d], &reach);
+        past |= __builtin_add_overflow(last, reach, &last);
     }
-    if (!empty && last >= capacity)
+    if (!empty && (past || last >= capacity))
         ErrorBuilder("as_strided").fail("the view reaches past the end of the storage");
+    // Byte strides and the byte offset are these times the element size, so
+    // they are held to the element-count limit, which keeps them in 64 bits
+    // at every dtype.  A stride over a length-1 axis moves nothing but is
+    // still stored, and an empty view's offset is checked by nothing above.
+    const auto max_elements = static_cast<std::int64_t>(kMaxNumel);
+    if (offset > max_elements)
+        ErrorBuilder("as_strided")
+            .invalid_argument("storage_offset " + std::to_string(offset) +
+                              " is past the 64-bit byte range");
+    for (const auto st : stride)
+        if (st > max_elements)
+            ErrorBuilder("as_strided")
+                .invalid_argument("stride " + std::to_string(st) +
+                                  " is past the 64-bit byte range");
 }
 
 TensorImplPtr as_strided_op(const TensorImplPtr& a,

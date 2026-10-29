@@ -89,7 +89,11 @@ constexpr std::size_t kCpuAlignment = 64;
 // Raises
 // ------
 // OutOfMemory
-//     ``posix_memalign`` failed.  The exception carries the requested
+//     ``posix_memalign`` failed, or ``nbytes`` exceeds the machine's
+//     physical memory.  The second is refused before anything is reserved:
+//     macOS hands out address space for far more than it has (a 4 TiB
+//     ``posix_memalign`` succeeds) and fails only when the pages are
+//     touched, by killing the process.  The exception carries the requested
 //     size, the current live bytes, and the historical peak for the
 //     target device so the caller can format an informative message.
 //

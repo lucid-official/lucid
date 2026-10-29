@@ -44,9 +44,11 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <mlx/allocator.h>
+#include <mlx/device.h>
 #include <mlx/ops.h>
 #include <mlx/transforms.h>
 
@@ -144,6 +146,31 @@ namespace {
 // Creates a ref-counted mlx::core::array pointer that notifies MemoryTracker
 // when the last reference is dropped.  bytes == 0 disables tracking (used for
 // empty arrays returned from shape-only operations).
+// ``MTLDevice.maxBufferLength``, read once: the largest buffer Metal hands
+// out.  MLX refuses a larger one only when the array is evaluated — at a
+// sync, perhaps many ops later — as a ``RuntimeError`` that names no op.
+std::size_t max_buffer_bytes() {
+    static const std::size_t bytes = [] {
+        const auto& info = ::mlx::core::device_info(::mlx::core::Device(::mlx::core::Device::gpu));
+        const auto it = info.find("max_buffer_length");
+        const auto* v = it == info.end() ? nullptr : std::get_if<std::size_t>(&it->second);
+        return v ? *v : std::numeric_limits<std::size_t>::max();
+    }();
+    return bytes;
+}
+
+// Refuses a GPU array no Metal buffer can hold, when the op that sized it
+// asks rather than when the graph runs.
+void refuse_past_max_buffer(std::size_t bytes) {
+    if (bytes <= max_buffer_bytes()) [[likely]]
+        return;
+    const auto s = MemoryTracker::get_stats(Device::GPU);
+    OutOfMemory err(bytes, s.current_bytes, s.peak_bytes, std::string(device_name(Device::GPU)));
+    err.prefix_message("one Metal buffer cannot be larger than the device's " +
+                       std::to_string(max_buffer_bytes()) + " bytes (maxBufferLength): ");
+    throw err;
+}
+
 std::shared_ptr<::mlx::core::array> make_tracked(::mlx::core::array* raw, std::size_t bytes) {
     if (bytes > 0) {
         MemoryTracker::track_alloc(bytes, Device::GPU);
@@ -158,6 +185,7 @@ std::shared_ptr<::mlx::core::array> make_tracked(::mlx::core::array* raw, std::s
 }  // namespace
 
 GpuStorage upload_cpu_to_gpu(const CpuStorage& cpu, const Shape& shape) {
+    refuse_past_max_buffer(cpu.nbytes);
     auto mlx_shape = to_mlx_shape(shape);
     auto mlx_dt = to_mlx_dtype(cpu.dtype);
 
@@ -309,6 +337,7 @@ GpuStorage wrap_mlx_array(::mlx::core::array&& arr, Dtype dtype) {
     GpuStorage out;
     out.dtype = dtype;
     out.nbytes = held.nbytes();
+    refuse_past_max_buffer(out.nbytes);
     out.arr = make_tracked(new ::mlx::core::array(std::move(held)), out.nbytes);
     note_pending(out.arr);
     return out;

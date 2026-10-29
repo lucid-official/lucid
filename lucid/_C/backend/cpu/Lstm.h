@@ -79,7 +79,7 @@ S* out(CpuStorage& s) {
 }
 
 inline CpuStorage alloc(std::size_t numel, Dtype dt) {
-    const std::size_t nb = numel * dtype_size(dt);
+    const std::size_t nb = count_nbytes(numel, dtype_size(dt));
     return CpuStorage{allocate_aligned_bytes(nb, Device::CPU), nb, dt};
 }
 
