@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - hypot of an infinite operand is +inf even against NaN (LCD-652)
 - requires_grad_(True) clears the detached-alias mark (LCD-650)
 - serialise the feed-cache build of a CompiledExecutable (LCD-655)
+- the feed-cache lock is recursive (LCD-655)
 
 ---
 
