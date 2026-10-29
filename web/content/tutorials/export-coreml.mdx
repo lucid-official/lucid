@@ -1,0 +1,157 @@
+---
+title: Export to Core ML
+description: A runnable tutorial for lucid.coreml — export a trained model to an .mlpackage, run it, verify it against the eager model, choose precision and compute units, read the placement report, and load it again.
+category: Tutorials
+order: 4
+---
+
+[`lucid.coreml`](/api/lucid.coreml) turns a Lucid model into a Core ML `.mlpackage`: the format an iOS or macOS app loads, and the only public route to the Neural Engine. The package is written by Lucid's own engine and executed through Apple's CoreML.framework, so there is no extra dependency to install. This tutorial exports a small zoo model, runs the package from Python, checks it against the original, and covers the settings that matter: precision, compute units and input shapes.
+
+Run the blocks in order as one script; it takes about a second.
+
+## Prepare the model
+
+An export traces the model once on an example input, so two things must hold first. The model must be in `eval()` mode — an exported graph is an inference graph — and its parameters must be on the CPU, because the package's weights are written from host memory. A model trained on Metal needs `.to("cpu")` first.
+
+The model here is a ResNet-18 from the zoo, shrunk with config overrides. In a real project this is where you would load your trained weights ([checkpoints](/docs/tutorials/train-end-to-end)).
+
+```python
+import tempfile
+from pathlib import Path
+
+import lucid
+import lucid.coreml as cml
+from lucid.models import create_model
+
+lucid.manual_seed(0)
+model = create_model(
+    "resnet_18_cls",
+    num_classes=4,
+    stem_channels=8,
+    hidden_sizes=(8, 16, 32, 64),
+)
+model = model.to("cpu").eval()
+
+example = lucid.randn(1, 3, 32, 32)
+package_dir = Path(tempfile.mkdtemp())
+```
+
+## Export
+
+`cml.export(model, example, path)` traces the model, writes the package and returns it already loaded as a `CoreMLModel`. The example supplies each input's shape and dtype; its values do not matter. The classifier's forward returns an object with a `logits` field, and `export` finds that single output on its own.
+
+```python
+package = cml.export(model, example, str(package_dir / "classifier.mlpackage"))
+
+print("inputs: ", package.input_names)
+print("outputs:", package.output_names, package.output_shapes)
+print("precision:", package.precision, " units:", package.compute_units)
+```
+
+## Run it and verify it
+
+`package.predict(x)` runs the model and returns a Lucid tensor. Inputs must be CPU tensors — Core ML reads host memory, and a Metal tensor is refused with a message asking you to move it explicitly with `.to("cpu")` rather than hiding a copy.
+
+A package that silently dropped a layer still loads and returns tensors of the right shape, so shape agreement proves nothing. `verify` runs both the package and the eager model and returns the largest absolute difference across **every** output.
+
+```python
+logits = package.predict(example)
+print("logits:", logits.shape)
+print("max |package - eager|:", package.verify(model, example))
+print("matches eager:", package.verify(model, example) < 1e-4)
+```
+
+`float32` packages agree with the eager model to round-off, around `1e-6` here.
+
+<Callout variant="note">
+Coverage is deliberately narrow and loud. Lucid maps the operations real models were measured to produce, and anything else raises `UnsupportedOp` naming the gap at export time, rather than writing a package that is quietly missing a layer.
+</Callout>
+
+## Input shapes
+
+The exported model's input shapes are fixed to the example's. A batch of two sent to a package exported for a batch of one is rejected by Core ML:
+
+```python
+try:
+    package.predict(lucid.randn(2, 3, 32, 32))
+except RuntimeError as err:
+    print("batch of 2 rejected:", type(err).__name__)
+```
+
+When the batch size has to vary, export with a range for that axis. `shape_range={0: (1, 8)}` lets axis 0 take any size from 1 to 8:
+
+```python
+flexible = cml.export(
+    model,
+    example,
+    str(package_dir / "flexible.mlpackage"),
+    shape_range={0: (1, 8)},
+)
+print("batch of 5:", flexible.predict(lucid.randn(5, 3, 32, 32)).shape)
+```
+
+A flexible-shape package may not be placeable on the Neural Engine; the placement report below says so if that happens.
+
+## Precision and compute units
+
+Two settings decide where the model runs. `precision` is the arithmetic of the program; `compute_units` is which processors Core ML may use (`ALL`, `CPU_ONLY`, `CPU_AND_GPU`, `CPU_AND_NE`).
+
+The Neural Engine only runs `float16`. A `float32` program asked to run on `CPU_AND_NE` does not warn, does not fail, and runs at CPU speed. So to reach the Neural Engine, export in half precision and expect the small error half precision costs:
+
+```python
+half = cml.export(
+    model,
+    example,
+    str(package_dir / "half.mlpackage"),
+    precision=cml.Precision.FLOAT16,
+    compute_units=cml.ComputeUnits.CPU_AND_NE,
+)
+print("precision:", half.precision)
+print("max |float16 package - eager|:", round(half.verify(model, example), 4))
+```
+
+### Where did the operations land?
+
+Whether an operation actually ran on the Neural Engine is a fact you can read rather than infer from a stopwatch. `compute_plan()` returns a `PlacementSummary`:
+
+```python
+print(package.compute_plan())
+print(half.compute_plan())
+```
+
+For the `float32` package it says no operation reached the Neural Engine because the program is `float32`. For the `float16` one it reports how many operations were scheduled on each device, or — on a machine with no Neural Engine, or for a program too small for Core ML to bother dispatching — that none was. Constants carry no device and are counted apart, so the percentage is over real computation only.
+
+### Latency
+
+`benchmark` times a prediction properly: it throws away warm-up calls (Core ML defers work to the first ones) and reports the median of the rest, together with the settings that produced it.
+
+```python
+print(package.benchmark(example, repeats=10, warmup=2))
+```
+
+Numbers depend on the machine, the model size and the units, which is why the result carries them.
+
+## Load a package again
+
+`cml.load(path)` opens any `.mlpackage` — one Lucid wrote or not. Feature names are read from the package. The compiled model is cached per package content under `~/.cache/lucid/coreml`, so loading the same package a second time skips the compile.
+
+```python
+reloaded = cml.load(str(package_dir / "classifier.mlpackage"))
+print("same output after reload:", bool((reloaded.predict(example) == logits).all().item()))
+```
+
+## Refusals worth knowing
+
+| What you did | What happens |
+|---|---|
+| Exported a model still in `train()` mode | `ValueError`: call `model.eval()` first. A training-mode dropout is refused rather than turned into an identity. |
+| Exported a model whose parameters are on Metal | `ValueError`: move it with `model.to("cpu")` first. |
+| Passed a Metal tensor to `predict` | Refused: move it with `.to("cpu")`. |
+| Used an operation Lucid does not map | `UnsupportedOp` naming it. |
+| Sent a different batch size to a fixed-shape package | `RuntimeError` from Core ML. Export with `shape_range`. |
+
+## Where to go next
+
+- Smaller packages: `weights=` takes `cml.WeightPrecision`, `cml.Palettize` or `cml.Sparsify`, and `cml.CompressionAware` makes a model robust to aggressive palettization. See the [`lucid.coreml` reference](/api/lucid.coreml).
+- Image inputs, classifier labels and package metadata: `image_input=`, `classifier=` and `metadata=` on `export`.
+- Stateful models (a KV cache in the package) via `state=`.
