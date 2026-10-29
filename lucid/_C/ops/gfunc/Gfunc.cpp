@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -222,6 +223,29 @@ sequence_to_device(CpuStorage cpu, const Shape& shape, Dtype fill, Dtype dt, Dev
     return backend::Dispatcher::for_device(device).from_cpu(std::move(cpu), shape);
 }
 
+// ``ceil((stop - start) / step)`` elements, 0 when ``step`` points away from
+// ``stop``.  The count is checked as a double: converting one past ``int64``
+// is undefined, and an infinite ``stop`` came out as INT64_MAX elements.
+std::int64_t arange_length(double start, double stop, double step) {
+    if (step == 0.0)
+        ErrorBuilder("arange").fail("step must be non-zero");
+    const auto text = [](double v) {
+        std::ostringstream os;
+        os << v;
+        return os.str();
+    };
+    if (!std::isfinite(start) || !std::isfinite(stop))
+        ErrorBuilder("arange").invalid_argument("unsupported range: " + text(start) + " -> " +
+                                                text(stop));
+    const double diff = stop - start;
+    const double count = (diff * step <= 0) ? 0.0 : std::ceil(diff / step);
+    if (!(count <= static_cast<double>(kMaxNumel)))
+        ErrorBuilder("arange").invalid_argument(
+            "Storage size calculation overflowed: the range holds " + text(count) +
+            " elements, more than the " + std::to_string(kMaxNumel) + " a tensor holds");
+    return static_cast<std::int64_t>(count);
+}
+
 // A sequence fills a host buffer before it dispatches, which phantom mode
 // does not reach: under it, the sequence's shape and no buffer at all.
 TensorImplPtr phantom_sequence(const Shape& shape, Dtype dt, Device device, bool requires_grad) {
@@ -245,12 +269,7 @@ TensorImplPtr phantom_sequence(const Shape& shape, Dtype dt, Device device, bool
 // of the outer switch simply casts the raw buffer pointer to the correct type.
 TensorImplPtr
 arange_op(double start, double stop, double step, Dtype dt, Device device, bool requires_grad) {
-    if (step == 0.0)
-        ErrorBuilder("arange").fail("step must be non-zero");
-    const double diff = stop - start;
-    // If diff and step have opposite signs the range is empty; emit 0 elements.
-    const std::int64_t n =
-        (diff * step <= 0) ? 0 : static_cast<std::int64_t>(std::ceil(diff / step));
+    const std::int64_t n = arange_length(start, stop, step);
     Shape shape{n};
     OpScopeFull scope{"arange", device, dt, shape};
     // Record the generator parameters so the compile emitter can bake the

@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse sizes that overflow before allocating
 
+- arange refuses an infinite bound or an oversized count
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
