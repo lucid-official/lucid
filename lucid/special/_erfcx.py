@@ -50,9 +50,11 @@ def _erfcx_stable(x: Tensor) -> Tensor:
 
         erfcx(x) = 1/√π · 1/(x + ½/(x + 1/(x + 3/2/(x + 2/(x + …)))))
 
-    which at 24 terms is already good to about 1e-10 at x = 2, and never
-    leaves the interval the answer lives in.  Below that the direct form
-    is used; ``exp(4)`` is an ordinary number.
+    which never leaves the interval the answer lives in.  At 24 terms it is
+    good to about 1e-10 at x = 2 and 1e-12 at x = 2.5, which is float32's
+    business; float64 takes 60, good to its last digit from x = 2 on (the
+    log-normal tails and ``ndtri`` read it there).  Below that the direct
+    form is used; ``exp(4)`` is an ordinary number.
 
     The switch used to sit at x = 4, which left ``[2, 4)`` to the direct
     form — and there ``erfc`` has lost its relative precision: its answer
@@ -71,7 +73,7 @@ def _erfcx_stable(x: Tensor) -> Tensor:
     small = lucid.exp(xs * xs) * lucid.erfc(xs)
     big = lucid.clamp(x, min=cutoff)
     frac = lucid.zeros_like(big)
-    for k in range(24, 0, -1):
+    for k in range(60 if x.dtype == lucid.float64 else 24, 0, -1):
         frac = (0.5 * k) / (big + frac)
     large = (1.0 / math.sqrt(math.pi)) / (big + frac)
     return lucid.where(x < cutoff, small, large)

@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - cov and corrcoef of complex input are Hermitian
 
+- float64 ndtri and log_ndtr hold double precision
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -43,6 +43,7 @@ from lucid._ops.composite._zeta import zeta
 from lucid._ops.composite.elementwise import _x_times_log
 from lucid._types import TensorOrScalar
 from lucid.special._erfcx import _Erfcx, _erfcx_stable
+from lucid.special._ndtri import _ndtri, _ndtri_double
 from lucid.special._polynomials import (
     chebyshev_polynomial_t,
     chebyshev_polynomial_u,
@@ -469,37 +470,11 @@ def log_ndtr(input: Tensor) -> Tensor:
     direct = lucid.log(ndtr(lucid.clip(x, -1.0, _LOG_NDTR_UPPER)))
     t = -lucid.clamp(x, max=-1.0) * _INV_SQRT2
     tail = lucid.log(0.5 * _erfcx_stable(t)) - t * t
-    u = lucid.clamp(x, min=_LOG_NDTR_UPPER) * _INV_SQRT2
-    upper = lucid.log1p(-0.5 * _erfcx_stable(u) * lucid.exp(-u * u))
+    xu = lucid.clamp(x, min=_LOG_NDTR_UPPER)
+    # exp(-x²/2) is as ill-conditioned as its argument is large: a rounded
+    # u = x/√2 squared carries ~4 times the error of x*x, ~4e-13 at x = 37.
+    upper = lucid.log1p(-0.5 * _erfcx_stable(xu * _INV_SQRT2) * lucid.exp(-0.5 * xu * xu))
     return lucid.where(x < lo, tail, lucid.where(x > hi, upper, direct))
-
-
-# Beasley-Springer-Moro coefficients for the inverse normal CDF.  Hosted as
-# module-level constants so ``ndtri`` stays a tight composite.
-_NDTRI_A = (
-    -3.969683028665376e1,
-    2.209460984245205e2,
-    -2.759285104469687e2,
-    1.383577518672690e2,
-    -3.066479806614716e1,
-    2.506628277459239,
-)
-_NDTRI_B = (
-    -5.447609879822406e1,
-    1.615858368580409e2,
-    -1.556989798598866e2,
-    6.680131188771972e1,
-    -1.328068155288572e1,
-)
-_NDTRI_C = (
-    -7.784894002430293e-3,
-    -3.223964580411365e-1,
-    -2.400758277161838,
-    -2.549732539343734,
-    4.374664141464968,
-    2.938163982698783,
-)
-_NDTRI_D = (7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416)
 
 
 def ndtri(input: Tensor) -> Tensor:
@@ -542,7 +517,12 @@ def ndtri(input: Tensor) -> Tensor:
         \end{cases}
 
     The approximation is accurate to roughly :math:`1.15 \times 10^{-9}`
-    over its supported domain.  Boundary behaviour:
+    over its supported domain, which is as much as ``float32`` holds.  A
+    ``float64`` input gets one Newton step on top of it, taken where each
+    stretch keeps its relative precision (on :math:`\Phi(x) - p` in the
+    centre, on :math:`\log\Phi(x) - \log p` in the tails), and is then
+    accurate to the last few digits across :math:`10^{-300}` to
+    :math:`1 - 10^{-16}`.  Boundary behaviour:
     :math:`\Phi^{-1}(0.5) = 0`, and the function blows up to
     :math:`\mp \infty` at the endpoints.
 
@@ -553,58 +533,10 @@ def ndtri(input: Tensor) -> Tensor:
     >>> ndtri(lucid.tensor([0.025, 0.5, 0.975]))
     tensor([-1.96, 0., 1.96])
     """
-    return _in_float32(_ndtri, _real(input))
-
-
-def _ndtri(p: Tensor) -> Tensor:
-    plow = 0.02425
-    phigh = 1.0 - plow
-    in_open = (p > 0.0) & (p < 1.0)
-    p_safe = lucid.where((p <= 0.0) | (p >= 1.0), lucid.full_like(p, 0.5), p)
-
-    q = p_safe - 0.5
-    r_central = q * q
-    num_c = (
-        (
-            ((_NDTRI_A[0] * r_central + _NDTRI_A[1]) * r_central + _NDTRI_A[2]) * r_central
-            + _NDTRI_A[3]
-        )
-        * r_central
-        + _NDTRI_A[4]
-    ) * r_central + _NDTRI_A[5]
-    den_c = (
-        (
-            ((_NDTRI_B[0] * r_central + _NDTRI_B[1]) * r_central + _NDTRI_B[2]) * r_central
-            + _NDTRI_B[3]
-        )
-        * r_central
-        + _NDTRI_B[4]
-    ) * r_central + 1.0
-    central = q * num_c / den_c
-
-    p_tail_in = lucid.where(p_safe < 0.5, p_safe, 1.0 - p_safe)
-    r_tail = lucid.sqrt(-2.0 * lucid.log(p_tail_in))
-    num_t = (
-        (((_NDTRI_C[0] * r_tail + _NDTRI_C[1]) * r_tail + _NDTRI_C[2]) * r_tail + _NDTRI_C[3])
-        * r_tail
-        + _NDTRI_C[4]
-    ) * r_tail + _NDTRI_C[5]
-    den_t = (
-        ((_NDTRI_D[0] * r_tail + _NDTRI_D[1]) * r_tail + _NDTRI_D[2]) * r_tail + _NDTRI_D[3]
-    ) * r_tail + 1.0
-    tail_low = num_t / den_t
-    tail = lucid.where(p_safe < 0.5, tail_low, -tail_low)
-
-    # Endpoints map to ±inf; anything outside [0, 1] or NaN maps to NaN.
-    # Both inner branches ran on p_safe in (0, 1), so neither leaks NaN to grad.
-    in_central = (p_safe > plow) & (p_safe < phigh)
-    inside = lucid.where(in_central, central, tail)
-    boundary = lucid.where(
-        p == 0.0,
-        lucid.full_like(p, -math.inf),
-        lucid.where(p == 1.0, lucid.full_like(p, math.inf), lucid.full_like(p, math.nan)),
-    )
-    return lucid.where(in_open, inside, boundary)
+    x = _real(input)
+    if x.dtype == lucid.float64:
+        return _ndtri_double(x)
+    return _in_float32(_ndtri, x)
 
 
 # ── x-times-log-of-something helpers ───────────────────────────────────────

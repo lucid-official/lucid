@@ -1025,7 +1025,7 @@
     "lucid/nn/modules/normalization.py": 535,
     "lucid/nn/modules/pooling.py": 738,
     "lucid/optim/lr_scheduler.py": 253,
-    "lucid/special/__init__.py": 294,
+    "lucid/special/__init__.py": 226,
     "lucid/utils/transforms/_color.py": 231
    },
    "noqa[BLE001]": {
