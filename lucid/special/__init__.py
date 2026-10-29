@@ -42,6 +42,7 @@ from lucid._ops.composite._opmath import _in_float32, _real
 from lucid._ops.composite._zeta import zeta
 from lucid._ops.composite.elementwise import _x_times_log
 from lucid._types import TensorOrScalar
+from lucid.special._erfcx import _Erfcx, _erfcx_stable
 from lucid.special._polynomials import (
     chebyshev_polynomial_t,
     chebyshev_polynomial_u,
@@ -108,7 +109,9 @@ def erfcx(input: Tensor) -> Tensor:
     >>> erfcx(lucid.tensor([0.0, 1.0, 5.0]))
     tensor([1., 0.4276, 0.1107])
     """
-    return _in_float32(_erfcx_stable, _real(input))
+    out = _Erfcx.apply(input)
+    assert isinstance(out, lucid.Tensor)
+    return out
 
 
 # Every scaled special function below had the same defect: it was written
@@ -124,43 +127,6 @@ def erfcx(input: Tensor) -> Tensor:
 # the one you reach for in a log-density.  The fix in every case is to
 # push the exponential inside, where it cancels against the branch's own
 # ``exp`` instead of meeting it as inf times zero.
-
-
-def _erfcx_stable(x: Tensor) -> Tensor:
-    """``exp(x²) erfc(x)``, without ever forming ``exp(x²)``.
-
-    From x = 2 on the product is evaluated through the continued fraction
-
-        erfcx(x) = 1/√π · 1/(x + ½/(x + 1/(x + 3/2/(x + 2/(x + …)))))
-
-    which at 24 terms is already good to about 1e-10 at x = 2, and never
-    leaves the interval the answer lives in.  Below that the direct form
-    is used; ``exp(4)`` is an ordinary number.
-
-    The switch used to sit at x = 4, which left ``[2, 4)`` to the direct
-    form — and there ``erfc`` has lost its relative precision: its answer
-    is a small multiple of float32's spacing below 1 (``erfc(3.9)`` comes
-    back as 6.0e-8, where the true value is 3.5e-8), so ``erfcx(3.9)``
-    was 0.240 instead of 0.140.  At x = 2 the direct form still holds to
-    about 5e-6.
-
-    Both branches are evaluated — ``where`` selects, it does not
-    short-circuit — so each is clamped onto its own domain first.  An inf
-    or a NaN in the branch that loses is still a NaN in the *gradient*,
-    which is how a where-guarded formula usually goes wrong.
-    """
-    cutoff = 2.0
-    xs = lucid.clamp(x, max=cutoff)
-    small = lucid.exp(xs * xs) * lucid.erfc(xs)
-    big = lucid.clamp(x, min=cutoff)
-    frac = lucid.zeros_like(big)
-    for k in range(24, 0, -1):
-        frac = (0.5 * k) / (big + frac)
-    large = (1.0 / math.sqrt(math.pi)) / (big + frac)
-    return lucid.where(x < cutoff, small, large)
-
-
-# ── Modified Bessel I₀ / I₁ family ─────────────────────────────────────────
 
 
 def i0e(input: Tensor) -> Tensor:

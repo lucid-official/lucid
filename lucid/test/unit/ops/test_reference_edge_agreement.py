@@ -95,7 +95,7 @@ def test_channel_dropout_takes_the_references_ranks_and_masks_its_channels(
     assert _varying_axes(ref, expected, ndim) == _varying_axes(lucid, actual, ndim)
 
 
-# ── erfc / i0e / i1e at ±inf and 0 ────────────────────────────────────────────
+# ── erfc / i0e / i1e / erfcx at ±inf and 0 ────────────────────────────────────────────
 
 
 def _derivatives(
@@ -112,6 +112,7 @@ _SCALED: list[tuple[str, Callable[[object], object], str]] = [
     ("erfc", lucid.erfc, "erfc"),
     ("i0e", S.i0e, "special.i0e"),
     ("i1e", S.i1e, "special.i1e"),
+    ("erfcx", S.erfcx, "special.erfcx"),
 ]
 
 

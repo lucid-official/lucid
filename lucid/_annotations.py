@@ -544,6 +544,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.quantization.observer": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.signal.windows": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.special": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.special._erfcx": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.cache._base": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.cache._dynamic": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.utils.cache._encoder_decoder": (

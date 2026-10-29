@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - dlpack grad refusal, dropout ranks, erfc/i0e edges (LCD-653)
 
+- erfcx takes the reference's analytic derivative (LCD-656)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
