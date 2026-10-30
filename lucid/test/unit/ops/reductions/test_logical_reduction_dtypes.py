@@ -27,11 +27,7 @@ _COMPLEX = [lucid.complex64, lucid.complex128]
 _DTYPES = [lucid.bool, *_INT_BITS, *_FLOATS, *_COMPLEX]
 
 #: The smallest positive subnormal of each float format that has a Metal type.
-_TINY = {
-    lucid.float16: 2.0**-24,
-    lucid.bfloat16: 2.0**-133,
-    lucid.float32: 2.0**-149,
-}
+_TINY = {lucid.float16: 2.0**-24, lucid.bfloat16: 2.0**-133, lucid.float32: 2.0**-149}
 
 
 def _name(dtype: lucid.dtype) -> str:
