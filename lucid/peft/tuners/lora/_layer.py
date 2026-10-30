@@ -1,8 +1,8 @@
-"""The LoRA layer: a frozen ``nn.Linear`` with a low-rank update beside it."""
+"""The LoRA layers: a frozen base module with a low-rank update beside it."""
 
 import math
 import warnings
-from typing import override
+from typing import ClassVar, Final, override
 
 import lucid
 import lucid.nn as nn
@@ -10,19 +10,12 @@ import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import _check_dropout, _check_init, _check_number, _check_rank
+from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name
 
-_HALF = (lucid.float16, lucid.bfloat16)
-
-
-def _check_adapter_name(adapter_name: object) -> str:
-    if not isinstance(adapter_name, str):
-        raise TypeError(f"adapter_name must be a str, got {adapter_name!r}")
-    if not adapter_name or "." in adapter_name:
-        raise ValueError(f"adapter_name must be a non-empty name without '.', got {adapter_name!r}")
-    return adapter_name
+_HALF: Final = (lucid.float16, lucid.bfloat16)
 
 
-class LoraLayer(nn.Module):
+class LoraLayer(_BaseTunerLayer):
     r"""Adapter bookkeeping shared by the LoRA layers.
 
     Holds the wrapped layer as ``base_layer`` — the very module, so its
@@ -32,7 +25,9 @@ class LoraLayer(nn.Module):
     ``lora_alpha``, ``scaling`` and the ``lora_A`` / ``lora_B`` /
     ``lora_dropout`` modules in ``ModuleDict``\ s, so a state dict reads
     ``....lora_A.default.weight`` as the reference's does.  v1 holds one
-    adapter per layer.
+    adapter per layer.  Merging folds the update into the base weight in
+    place; each LoRA layer type supplies the update (``get_delta_weight``)
+    and the forward pass.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain public attributes, not
@@ -47,20 +42,32 @@ class LoraLayer(nn.Module):
     ----------
     base_layer : nn.Linear
         The layer to adapt.
+    adapter_name : str
+        Name of the adapter created at once (``update_layer``).
+    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+        The adapter's hyper-parameters, as ``update_layer`` takes them.
 
     Raises
     ------
     TypeError
-        ``base_layer`` is not an ``nn.Linear``.
+        ``base_layer`` is not the module type the layer class adapts.
     """
 
-    def __init__(self, base_layer: nn.Linear) -> None:
-        if not isinstance(base_layer, nn.Linear):
-            raise TypeError(
-                f"LoRA adapts nn.Linear in lucid.peft v1, got {type(base_layer).__name__}"
-            )
-        super().__init__()
-        self.base_layer = base_layer
+    adapter_layer_names: ClassVar[tuple[str, ...]] = ("lora_A", "lora_B")
+    base_layer: nn.Linear
+
+    def __init__(
+        self,
+        base_layer: nn.Linear,
+        adapter_name: str,
+        r: int = 0,
+        lora_alpha: float = 1,
+        lora_dropout: float = 0.0,
+        init_lora_weights: bool | str = True,
+        use_rslora: bool = False,
+        use_dora: bool = False,
+    ) -> None:
+        super().__init__(base_layer)
         self.in_features = base_layer.in_features
         self.out_features = base_layer.out_features
         self.r: dict[str, int] = {}
@@ -69,13 +76,9 @@ class LoraLayer(nn.Module):
         self.lora_dropout: nn.ModuleDict[nn.Dropout | nn.Identity] = nn.ModuleDict()
         self.lora_A: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
         self.lora_B: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
-        self.merged_adapters: list[str] = []
-        #: Name of the adapter the forward pass applies.
-        self.active_adapter = ""
-        #: Whether the forward pass runs the base layer alone.
-        self.disable_adapters = False
-        #: Whether an adapter is folded into the base weight (``merged_adapters`` non-empty).
-        self.merged = False
+        self.update_layer(
+            adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+        )
 
     @property
     def weight(self) -> Parameter:
@@ -87,20 +90,18 @@ class LoraLayer(nn.Module):
         """The base layer's bias, or ``None``."""
         return self.base_layer.bias
 
+    @override
     def get_base_layer(self) -> nn.Linear:
         """Return the wrapped ``nn.Linear``, whose parameters are the base model's own."""
         return self.base_layer
 
-    def enable_adapters(self, enabled: bool) -> None:
-        """Apply the adapter in the forward pass (``True``) or run the base alone (``False``).
-
-        Parameters
-        ----------
-        enabled : bool
-            Whether the adapter takes part.  Gradient flags are left as
-            they are: a frozen adapter stays frozen when it is re-enabled.
-        """
-        self.disable_adapters = not enabled
+    @override
+    def extra_repr(self) -> str:
+        adapter = self.active_adapter
+        return (
+            f"adapter={adapter!r}, r={self.r[adapter]}, lora_alpha={self.lora_alpha[adapter]}, "
+            f"merged={self.merged}, disabled={self.disable_adapters}"
+        )
 
     def update_layer(
         self,
@@ -144,8 +145,8 @@ class LoraLayer(nn.Module):
         adapter_name = _check_adapter_name(adapter_name)
         r = _check_rank("r", r)
         lora_alpha = _check_number("lora_alpha", lora_alpha)
-        init_lora_weights = _check_init(init_lora_weights)
-        p = _check_dropout(lora_dropout)
+        init_lora_weights = _check_init("init_lora_weights", init_lora_weights)
+        p = _check_dropout("lora_dropout", lora_dropout)
         if use_dora:
             raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
         if len(self.lora_A):
@@ -183,7 +184,7 @@ class LoraLayer(nn.Module):
         init_lora_weights : bool or str
             ``True``, ``False`` or ``"gaussian"``.
         """
-        init_lora_weights = _check_init(init_lora_weights)
+        init_lora_weights = _check_init("init_lora_weights", init_lora_weights)
         if init_lora_weights is False:
             return
         lora_a = self.lora_A[adapter_name].weight
@@ -193,15 +194,92 @@ class LoraLayer(nn.Module):
             init.kaiming_uniform_(lora_a, a=math.sqrt(5))
         init.zeros_(self.lora_B[adapter_name].weight)
 
+    @override
+    def _merge_targets(self) -> dict[str, Parameter]:
+        return {"base_layer.weight": self.base_layer.weight}
 
-class Linear(LoraLayer):
+    def _shifted_weight(self, adapter: str, sign: float) -> Tensor:
+        """The base weight plus ``sign`` times ``adapter``'s update, in the weight's dtype.
+
+        Summed in the wider dtype, so a bfloat16 weight is rounded once.
+        """
+        weight = self.base_layer.weight
+        shifted = weight + self.get_delta_weight(adapter) * sign
+        return shifted if shifted.dtype == weight.dtype else shifted.to(weight.dtype)
+
+    @override
+    def _check_finite_merge(self, adapter: str) -> None:
+        with lucid.no_grad():
+            finite = bool(lucid.isfinite(self._shifted_weight(adapter, 1.0)).all().item())
+        if not finite:
+            raise ValueError(
+                f"NaNs detected in the merged weights. The adapter {adapter} seems to be broken"
+            )
+
+    @override
+    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
+        r"""Fold the update into the base weight, in place.
+
+        The weight keeps its identity — it is written, not replaced — so
+        whatever holds it (an optimizer, a tied embedding) sees the merged
+        values.  That is also why a weight shared with another module must
+        not be merged into; ``LoraModel.merge_adapter`` and
+        ``merge_and_unload`` refuse it, as this layer alone cannot see the
+        rest of the model.
+
+        Parameters
+        ----------
+        safe_merge : bool, default=False
+            Check the merged weight for NaN / inf first and leave the base
+            untouched if there are any.
+        adapter_names : list of str, optional
+            Adapters to merge; the active one by default.
+
+        Raises
+        ------
+        ValueError
+            An unknown adapter name, or ``safe_merge`` found a non-finite
+            merged weight.
+        RuntimeError
+            The adapter is disabled.
+        """
+        pending = self._pending_merges(adapter_names)
+        if not pending:
+            warnings.warn(f"Already merged: {self.merged_adapters}. Nothing to do.", stacklevel=2)
+        if safe_merge:
+            for adapter in pending:
+                self._check_finite_merge(adapter)
+        with lucid.no_grad():
+            for adapter in pending:
+                self.base_layer.weight.copy_(self._shifted_weight(adapter, 1.0))
+                self.merged_adapters.append(adapter)
+                self.merged = True
+
+    @override
+    def unmerge(self) -> None:
+        """Take every merged update back out of the base weight, in place.
+
+        The result equals the original weight up to the rounding of the
+        round trip.
+        """
+        if not self.merged:
+            warnings.warn("Already unmerged. Nothing to do.", stacklevel=2)
+            return
+        with lucid.no_grad():
+            while self.merged_adapters:
+                adapter = self.merged_adapters.pop()
+                self.base_layer.weight.copy_(self._shifted_weight(adapter, -1.0))
+            self.merged = False
+
+
+class Linear(LoraLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a LoRA update: :math:`y = W x + b + s\,B A\,\mathrm{drop}(x)`.
 
     The base layer runs as it is and stays frozen; the update is computed
     in the adapter's dtype and added in the wider of the two dtypes before
-    the result is cast back to the base output's dtype.  ``merge``
-    folds :math:`s B A` into :math:`W` in place, so a merged layer costs
-    what the base costs; ``unmerge`` takes it out again.
+    the result is cast back to the base output's dtype.  ``merge`` folds
+    :math:`s B A` into :math:`W` in place, so a merged layer costs what
+    the base costs; ``unmerge`` takes it out again.
 
     Parameters
     ----------
@@ -269,11 +347,18 @@ class Linear(LoraLayer):
             raise ValueError(
                 "is_target_conv_1d_layer=True describes a Conv1D base; this layer wraps nn.Linear"
             )
-        super().__init__(base_layer)
-        self.update_layer(
-            adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+        super().__init__(
+            base_layer,
+            adapter_name,
+            r=r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            init_lora_weights=init_lora_weights,
+            use_rslora=use_rslora,
+            use_dora=use_dora,
         )
 
+    @override
     def get_delta_weight(self, adapter: str) -> Tensor:
         r"""Return :math:`s\,B A`, the update ``adapter`` adds to the weight.
 
@@ -288,110 +373,6 @@ class Linear(LoraLayer):
             ``(out_features, in_features)``, in the adapter's dtype.
         """
         return (self.lora_B[adapter].weight @ self.lora_A[adapter].weight) * self.scaling[adapter]
-
-    def _shifted_weight(self, adapter: str, sign: float) -> Tensor:
-        """The base weight plus ``sign`` times ``adapter``'s update, in the weight's dtype.
-
-        Summed in the wider dtype, so a bfloat16 weight is rounded once.
-        """
-        weight = self.base_layer.weight
-        shifted = weight + self.get_delta_weight(adapter) * sign
-        return shifted if shifted.dtype == weight.dtype else shifted.to(weight.dtype)
-
-    def _check_finite_merge(self, adapter: str) -> None:
-        with lucid.no_grad():
-            finite = bool(lucid.isfinite(self._shifted_weight(adapter, 1.0)).all().item())
-        if not finite:
-            raise ValueError(
-                f"NaNs detected in the merged weights. The adapter {adapter} seems to be broken"
-            )
-
-    def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
-        """The requested adapters (the active one by default) not merged yet.
-
-        A disabled layer runs its base alone, so merging into it would make
-        it run the adapter while it reads as disabled; it is refused.
-        """
-        if self.disable_adapters:
-            raise RuntimeError(
-                "the adapter is disabled; enable it (leave disable_adapter()) before merging"
-            )
-        names = [self.active_adapter] if adapter_names is None else list(adapter_names)
-        unknown = [name for name in names if name not in self.lora_A]
-        if unknown:
-            raise ValueError(f"unknown adapter(s) {unknown}; this layer holds {list(self.lora_A)}")
-        return [name for name in names if name not in self.merged_adapters]
-
-    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
-        r"""Fold the update into the base weight, in place.
-
-        The weight keeps its identity — it is written, not replaced — so
-        whatever holds it (an optimizer, a tied embedding) sees the merged
-        values.  That is also why a weight shared with another module must
-        not be merged into; ``LoraModel.merge_adapter`` and
-        ``merge_and_unload`` refuse it, as this layer alone cannot see the
-        rest of the model.
-
-        Parameters
-        ----------
-        safe_merge : bool, default=False
-            Check the merged weight for NaN / inf first and leave the base
-            untouched if there are any.
-        adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
-
-        Raises
-        ------
-        ValueError
-            An unknown adapter name, or ``safe_merge`` found a non-finite
-            merged weight.
-        RuntimeError
-            The adapter is disabled.
-        """
-        pending = self._pending_merges(adapter_names)
-        if not pending:
-            warnings.warn(f"Already merged: {self.merged_adapters}. Nothing to do.", stacklevel=2)
-        if safe_merge:
-            for adapter in pending:
-                self._check_finite_merge(adapter)
-        with lucid.no_grad():
-            for adapter in pending:
-                self.base_layer.weight.copy_(self._shifted_weight(adapter, 1.0))
-                self.merged_adapters.append(adapter)
-                self.merged = True
-
-    def unmerge(self) -> None:
-        """Take every merged update back out of the base weight, in place.
-
-        The result equals the original weight up to the rounding of the
-        round trip.
-        """
-        if not self.merged:
-            warnings.warn("Already unmerged. Nothing to do.", stacklevel=2)
-            return
-        with lucid.no_grad():
-            while self.merged_adapters:
-                adapter = self.merged_adapters.pop()
-                self.base_layer.weight.copy_(self._shifted_weight(adapter, -1.0))
-            self.merged = False
-
-    @override
-    def enable_adapters(self, enabled: bool) -> None:
-        """Apply the adapter (``True``) or run the base alone (``False``).
-
-        Disabling a merged layer unmerges it first, here rather than on
-        the next call, so the forward pass never writes a weight — a
-        compiled forward must not replay that write.
-
-        Parameters
-        ----------
-        enabled : bool
-            Whether the adapter takes part.  Gradient flags are left as
-            they are.
-        """
-        if not enabled and self.merged:
-            self.unmerge()
-        super().enable_adapters(enabled)
 
     @override
     def forward(self, x: Tensor) -> Tensor:

@@ -1,4 +1,4 @@
-"""Which modules a ``LoraConfig`` selects.
+"""Which modules a targeting config (``LoraConfig`` and its kind) selects.
 
 The reference library's matching rules, kept so a config means the same
 thing on both sides: a list of names matches by dotted suffix, a string
@@ -8,10 +8,10 @@ the index after the layer list's name.  Where v1 differs is stated on
 """
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 
 import lucid.nn as nn
-from lucid.peft._config import LoraConfig, TaskType, _layer_regex, _pattern_key_regex
+from lucid.peft._config import TaskType, _layer_regex, _TargetedConfig
 
 _ALL_LINEAR = "all-linear"
 
@@ -24,7 +24,7 @@ def _suffix_match(key: str, names: Iterable[str]) -> bool:
     return any(key == name or key.endswith(f".{name}") for name in names)
 
 
-def _excluded(config: LoraConfig, key: str) -> bool:
+def _excluded(config: _TargetedConfig, key: str) -> bool:
     excluded = config.exclude_modules
     if isinstance(excluded, str):
         if re.fullmatch(excluded, key):
@@ -48,7 +48,7 @@ def _layer_index(key: str, layers_pattern: str | list[str] | None) -> int | None
     return None
 
 
-def _in_selected_layer(config: LoraConfig, key: str) -> bool:
+def _in_selected_layer(config: _TargetedConfig, key: str) -> bool:
     layers = config.layers_to_transform
     if layers is None or layers == []:
         return True
@@ -58,7 +58,7 @@ def _in_selected_layer(config: LoraConfig, key: str) -> bool:
     return index == layers if isinstance(layers, int) else index in layers
 
 
-def _matches_target(config: LoraConfig, key: str) -> bool:
+def _matches_target(config: _TargetedConfig, key: str) -> bool:
     targets = config.target_modules
     if targets is None:
         return False
@@ -71,26 +71,9 @@ def _matches_target(config: LoraConfig, key: str) -> bool:
     return _suffix_match(key, targets) and _in_selected_layer(config, key)
 
 
-def _selects(config: LoraConfig, key: str) -> bool:
+def _selects(config: _TargetedConfig, key: str) -> bool:
     """Whether the module named ``key`` receives an adapter under ``config``."""
     return not _excluded(config, key) and _matches_target(config, key)
-
-
-def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
-    if key in patterns:
-        return patterns[key]
-    for pattern, value in patterns.items():
-        if re.match(_pattern_key_regex(pattern), key):
-            return value
-    return default
-
-
-def _rank_and_alpha(config: LoraConfig, key: str) -> tuple[int, float]:
-    """The rank and alpha for ``key``, after ``rank_pattern`` / ``alpha_pattern``."""
-    return (
-        _pattern_value(config.rank_pattern, key, config.r),
-        _pattern_value(config.alpha_pattern, key, config.lora_alpha),
-    )
 
 
 def _parameter_paths(model: nn.Module) -> dict[int, list[str]]:
@@ -121,7 +104,7 @@ def _head_names(model: nn.Module, task_type: TaskType | str | None) -> set[str]:
     return {name for name, module in model.named_modules() if module is head}
 
 
-def _resolve_all_linear(config: LoraConfig, model: nn.Module) -> set[str] | None:
+def _resolve_all_linear(config: _TargetedConfig, model: nn.Module) -> set[str] | None:
     """The module names ``"all-linear"`` stands for in ``model``; ``None`` if not used.
 
     Every ``nn.Linear`` except the output head, any layer whose weight

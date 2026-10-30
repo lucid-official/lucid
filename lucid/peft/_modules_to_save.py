@@ -10,16 +10,18 @@ import copy
 from typing import override
 
 import lucid.nn as nn
+from lucid.nn.parameter import Parameter
 from lucid.peft._forwarding import _ForwardsAttributes
 
 
 class ModulesToSaveWrapper(_ForwardsAttributes):
     """Hold ``module`` beside a copy that runs in its place.
 
-    Building one changes nothing about ``module`` — ``LoraModel`` builds
-    them while it is still planning, and a plan that fails must leave the
-    model as it was.  Which of the two trains is ``LoraModel``'s freezing
-    step: the copy, not the original.
+    Building one changes nothing about ``module`` — the tuner builds them
+    while it is still planning, and a plan that fails must leave the model
+    as it was.  Which of the two trains is the tuner's freezing step: the
+    copy, not the original.  It answers the tuner's ``_AdapterSlot``
+    protocol, as a tuner layer does.
 
     Parameters
     ----------
@@ -39,9 +41,32 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
         self.active_adapter = adapter_name
         self.disable_adapters = False
 
+    def get_base_layer(self) -> nn.Module:
+        """Return the original module, the one the base model had."""
+        return self.original_module
+
     def enable_adapters(self, enabled: bool) -> None:
         """Run the trained copy (``True``) or the original module (``False``)."""
         self.disable_adapters = not enabled
+
+    @override
+    def extra_repr(self) -> str:
+        return f"active_adapter={self.active_adapter!r}, disabled={self.disable_adapters}"
+
+    # ── the tuner's ``_AdapterSlot`` protocol ──────────────────────────────
+
+    def _unwrap(self, keep_trained: bool) -> nn.Module:
+        return self.modules_to_save[self.active_adapter] if keep_trained else self.original_module
+
+    def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
+        return list(self.modules_to_save[adapter_name].parameters())
+
+    def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
+        """The copy's keys, filed under the original module's own names."""
+        return {
+            f"modules_to_save.{adapter_name}.{leaf}": leaf
+            for leaf in self.modules_to_save[adapter_name].state_dict()
+        }
 
     def _active_module(self) -> nn.Module:
         if self.disable_adapters:

@@ -1,172 +1,38 @@
-"""``LoraModel``: put LoRA layers into a model, freeze the rest, take them out again.
+"""``LoraModel``: the LoRA half of a tuner — its layers, ranks and trainable biases.
 
-Injection is planned in full before the model is touched — every target
-found, typed and given its rank, every ``modules_to_save`` entry found —
-so a config that cannot be applied raises with the model as it was.  The
-layers then go in by ``setattr`` on their parents, which keeps each
-child's slot in place (a ``Sequential`` still runs it in the same turn).
+Everything that is not LoRA — planning, applying, freezing, merging,
+unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
 """
 
-import copy
+import re
 import warnings
-from typing import NamedTuple, override
+from collections.abc import Mapping
+from typing import ClassVar, override
 
 import lucid.nn as nn
-from lucid.peft._config import LoraConfig
-from lucid.peft._forwarding import _as_module, _ForwardsAttributes
+from lucid.peft._config import PeftConfig, PeftType, _pattern_key_regex, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft._targeting import (
-    _module_names_matching,
-    _parameter_paths,
-    _rank_and_alpha,
-    _resolve_all_linear,
-    _selects,
-    _shared_outside,
-)
-from lucid.peft.tuners.lora._layer import Linear, LoraLayer, _check_adapter_name
-
-#: Layer types the reference adapts and v1 does not yet.
-_LATER_TYPES = (nn.Embedding, nn.Conv1d, nn.Conv2d, nn.Conv3d, nn.MultiheadAttention)
+from lucid.peft.tuners._base import _BaseTuner, _join, _named, _Target
+from lucid.peft.tuners.lora._config import LoraConfig
+from lucid.peft.tuners.lora._layer import LoraLayer
 
 
-class _Target(NamedTuple):
-    key: str
-    module: nn.Linear
-    r: int
-    alpha: float
+def _as_lora(config: PeftConfig) -> LoraConfig:
+    # ``_BaseTuner.__init__`` has checked it against ``_config_class``.
+    assert isinstance(config, LoraConfig)
+    return config
 
 
-def _join(prefix: str, name: str) -> str:
-    return f"{prefix}.{name}" if prefix else name
+def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
+    if key in patterns:
+        return patterns[key]
+    for pattern, value in patterns.items():
+        if re.match(_pattern_key_regex(pattern), key):
+            return value
+    return default
 
 
-def _named[T: nn.Module](model: nn.Module, kind: type[T]) -> list[tuple[str, T]]:
-    return [(name, module) for name, module in model.named_modules() if isinstance(module, kind)]
-
-
-def _set_submodule(model: nn.Module, key: str, module: nn.Module) -> None:
-    parent, _, child = key.rpartition(".")
-    setattr(model.get_submodule(parent), child, module)
-
-
-def _learnable_bias_names(model: nn.Module, bias: str) -> list[str]:
-    """The parameters ``bias`` makes trainable, by name under ``model``.
-
-    ``"all"`` is every parameter named ``bias`` outside a module trained in
-    full (that copy trains whole anyway, and its original stays frozen);
-    ``"lora_only"`` the bias of each adapted layer.
-    """
-    if bias == "lora_only":
-        return [
-            _join(name, "base_layer.bias")
-            for name, layer in _named(model, LoraLayer)
-            if layer.bias is not None
-        ]
-    if bias != "all":
-        return []
-    wrapped = tuple(f"{name}." for name, _ in _named(model, ModulesToSaveWrapper))
-    return [
-        name
-        for name, _ in model.named_parameters()
-        if name.rpartition(".")[2] == "bias" and not name.startswith(wrapped)
-    ]
-
-
-def _linear_target(key: str, module: nn.Module) -> nn.Linear:
-    if isinstance(module, nn.Linear):
-        return module
-    if isinstance(module, _LATER_TYPES):
-        raise NotImplementedError(
-            f"Target module {key} ({type(module).__name__}) is not supported in "
-            "lucid.peft v1, which adapts nn.Linear only"
-        )
-    raise ValueError(
-        f"Target module {key} ({type(module).__name__}) is not supported. "
-        "Currently, only nn.Linear is supported."
-    )
-
-
-def _not_found(config: LoraConfig) -> ValueError:
-    targets = config.target_modules
-    if targets is None:
-        # The reference falls back to a table of per-architecture defaults;
-        # Lucid's zoo has none yet, so the choice is the caller's.
-        return ValueError(
-            "Please specify `target_modules` in `peft_config`: a list of module names, "
-            "a regex, or 'all-linear'"
-        )
-    shown = sorted(targets) if isinstance(targets, set) else targets
-    message = (
-        f"Target modules {shown} not found in the base model. "
-        "Please check the target modules and try again."
-    )
-    if config.layers_to_transform is not None:
-        message += f" Note: You specified 'layers_to_transform': {config.layers_to_transform}."
-    if config.layers_pattern is not None:
-        message += f" You also specified 'layers_pattern': {config.layers_pattern}."
-    return ValueError(message)
-
-
-def _plan_targets(model: nn.Module, config: LoraConfig) -> list[_Target]:
-    targets = []
-    for key, module in model.named_modules():
-        if key and _selects(config, key):
-            r, alpha = _rank_and_alpha(config, key)
-            targets.append(_Target(key, _linear_target(key, module), r, alpha))
-    if not targets:
-        raise _not_found(config)
-    return targets
-
-
-def _plan_modules_to_save(model: nn.Module, config: LoraConfig) -> list[str]:
-    names = config.modules_to_save
-    if not names:
-        return []
-    keys = _module_names_matching(model, names)
-    if not keys:
-        raise ValueError(f"modules_to_save {names} matched no module of the model")
-    paths = _parameter_paths(model)
-    for key in keys:
-        tied = _shared_outside(paths, key, model.get_submodule(key))
-        if tied:
-            # The reference allows it and warns of the same trouble at merge.
-            warnings.warn(
-                f"modules_to_save {key!r} shares its weight with {', '.join(tied)}; the copy "
-                "that trains will not.  The adapter saves and loads as usual, but "
-                "merge_and_unload() will refuse: the merged model would hold two tensors "
-                "where the base ties one.",
-                stacklevel=4,
-            )
-    return keys
-
-
-def _stored_config(config: LoraConfig, model: nn.Module) -> LoraConfig:
-    """A copy of ``config`` with ``"all-linear"`` spelled out for ``model``."""
-    stored = copy.deepcopy(config)
-    resolved = _resolve_all_linear(stored, model)
-    if resolved is not None:
-        stored.target_modules = resolved
-    if stored.fan_in_fan_out:
-        warnings.warn(
-            "fan_in_fan_out is set to True but the target module is `nn.Linear`. "
-            "Setting fan_in_fan_out to False.",
-            stacklevel=3,
-        )
-        stored.fan_in_fan_out = False
-    return stored
-
-
-def _refuse_existing_adapters(model: nn.Module) -> None:
-    held = [name for name, _ in _named(model, LoraLayer)]
-    held += [name for name, _ in _named(model, ModulesToSaveWrapper)]
-    if held:
-        raise NotImplementedError(
-            f"the model already holds a LoRA adapter (at {held[0]}); lucid.peft v1 keeps one "
-            "adapter per model — call unload() or merge_and_unload() first"
-        )
-
-
-class LoraModel(_ForwardsAttributes):
+class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     r"""A model with LoRA layers put into it, and the tools to take them out.
 
     Construction replaces each module ``config`` selects with a
@@ -210,229 +76,77 @@ class LoraModel(_ForwardsAttributes):
     (True, True)
     """
 
+    _layer_types = LoraLayer._layer_types
+    _config_class: ClassVar[type[_TargetedConfig]] = LoraConfig
+    _later_types: ClassVar[tuple[type[nn.Module], ...]] = (
+        nn.Embedding,
+        nn.Conv1d,
+        nn.Conv2d,
+        nn.Conv3d,
+        nn.MultiheadAttention,
+    )
+
     def __init__(self, model: nn.Module, config: LoraConfig, adapter_name: str = "default") -> None:
-        if not isinstance(model, nn.Module):
-            raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
-        if not isinstance(config, LoraConfig):
-            raise TypeError(f"config must be a LoraConfig, got {type(config).__name__}")
-        adapter_name = _check_adapter_name(adapter_name)
-        _refuse_existing_adapters(model)
-        stored = _stored_config(config, model)
-        targets = _plan_targets(model, stored)
-        saved = _plan_modules_to_save(model, stored)
-        # By name, which a deep copy or a pickle of the model keeps.
-        flags = {
-            name: param.requires_grad
-            for name, param in model.named_parameters(remove_duplicate=False)
-        }
-        layers: list[tuple[str, nn.Module]] = [
-            (
-                target.key,
-                Linear(
-                    target.module,
-                    adapter_name,
-                    r=target.r,
-                    lora_alpha=target.alpha,
-                    lora_dropout=stored.lora_dropout,
-                    init_lora_weights=stored.init_lora_weights,
-                    use_rslora=stored.use_rslora,
-                ),
+        super().__init__(model, config, adapter_name)
+
+    @override
+    @classmethod
+    def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
+        stored = _as_lora(super()._prepare_config(config, model))
+        if stored.fan_in_fan_out:
+            warnings.warn(
+                "fan_in_fan_out is set to True but the target module is `nn.Linear`. "
+                "Setting fan_in_fan_out to False.",
+                stacklevel=4,
             )
-            for target in targets
-        ]
-        layers += [
-            (key, ModulesToSaveWrapper(model.get_submodule(key), adapter_name)) for key in saved
-        ]
-        super().__init__()
-        self.model = model
-        self.peft_config: dict[str, LoraConfig] = {adapter_name: stored}
-        self.active_adapter: str = adapter_name
-        self.targeted_module_names: list[str] = [target.key for target in targets]
-        self._requires_grad_before = flags
-        for key, layer in layers:
-            _set_submodule(model, key, layer)
-        # Where ``get_peft_model_state_dict`` finds the config of a model
-        # adapted in place, as the reference's does.
-        model.peft_config = self.peft_config
-        self._mark_only_adapters_as_trainable()
+            stored.fan_in_fan_out = False
+        return stored
 
     @override
-    def _wrapped(self) -> nn.Module | None:
-        modules = self.__dict__.get("_modules")
-        return _as_module(modules.get("model")) if modules else None
-
-    def _mark_only_adapters_as_trainable(self) -> None:
-        config = self.peft_config[self.active_adapter]
-        model = self.model
-        trainable: set[int] = set()
-        if not config.inference_mode:
-            for _, layer in _named(model, LoraLayer):
-                trainable.update(id(p) for p in layer.lora_A.parameters())
-                trainable.update(id(p) for p in layer.lora_B.parameters())
-            for _, wrapper in _named(model, ModulesToSaveWrapper):
-                trainable.update(id(p) for p in wrapper.modules_to_save.parameters())
-            params = dict(model.named_parameters())
-            trainable.update(id(params[name]) for name in _learnable_bias_names(model, config.bias))
-        for _, param in model.named_parameters():
-            param.requires_grad_(id(param) in trainable)
-
-    @override
-    def forward(self, *args: object, **kwargs: object) -> object:
-        return self.model(*args, **kwargs)
-
-    def _mergeable_layers(self) -> list[tuple[str, Linear]]:
-        """The LoRA layers, after refusing any whose base weight another module shares."""
-        layers = _named(self.model, Linear)
-        paths = _parameter_paths(self.model)
-        for key, layer in layers:
-            shared = paths[id(layer.weight)]
-            if len(shared) > 1:
-                others = [path for path in shared if path != _join(key, "base_layer.weight")]
-                raise RuntimeError(
-                    f"cannot merge into {_join(key, 'base_layer.weight')}: the same Parameter is "
-                    f"also {', '.join(others)}, which merging would change too — keep this "
-                    "adapter unmerged, or untie the weight first"
-                )
-        return layers
-
-    def merge_adapter(
-        self, adapter_names: list[str] | None = None, safe_merge: bool = False
-    ) -> None:
-        r"""Fold every LoRA update into its base weight, keeping the LoRA layers.
-
-        A merged model runs at the base model's cost; ``unmerge_adapter``
-        takes the updates out again.  Every refusal is made before any
-        weight is written: nothing is merged if a layer's base weight is
-        shared with another module (a tied LM head — merging would change
-        that module too) or if the adapter is disabled.
-
-        Parameters
-        ----------
-        adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
-        safe_merge : bool, default=False
-            Check every merged weight for NaN / inf before writing any.
-
-        Raises
-        ------
-        RuntimeError
-            A base weight is shared with another module, or the adapter is
-            disabled (inside ``disable_adapter()``).
-        ValueError
-            ``safe_merge`` found a non-finite merged weight.
-        """
-        layers = self._mergeable_layers()
-        pending = [(layer, layer._pending_merges(adapter_names)) for _, layer in layers]
-        if safe_merge:
-            for layer, adapters in pending:
-                for adapter in adapters:
-                    layer._check_finite_merge(adapter)
-        for layer, _ in pending:
-            layer.merge(adapter_names=adapter_names)
-
-    def unmerge_adapter(self) -> None:
-        """Take every merged LoRA update back out of its base weight."""
-        for _, layer in _named(self.model, Linear):
-            if layer.merged:
-                layer.unmerge()
-
-    def _unload(self, keep_trained: bool) -> nn.Module:
-        model = self.model
-        for key, layer in _named(model, LoraLayer):
-            _set_submodule(model, key, layer.base_layer)
-        for key, wrapper in _named(model, ModulesToSaveWrapper):
-            if keep_trained:
-                _set_submodule(model, key, wrapper.modules_to_save[wrapper.active_adapter])
-            else:
-                _set_submodule(model, key, wrapper.original_module)
-        for name, param in model.named_parameters(remove_duplicate=False):
-            before = self._requires_grad_before.get(name)
-            if before is not None:
-                param.requires_grad_(before)
-        if "peft_config" in model.__dict__:
-            del model.peft_config
-        return model
-
-    def merge_and_unload(
-        self,
-        progressbar: bool = False,
-        safe_merge: bool = False,
-        adapter_names: list[str] | None = None,
+    @classmethod
+    def _create_new_module(
+        cls, config: _TargetedConfig, adapter_name: str, target: _Target
     ) -> nn.Module:
-        r"""Merge the adapter into the base weights and return the plain model.
+        lora = _as_lora(config)
+        layer, module = target.layer, target.module
+        # Planning took both from ``LoraLayer``'s table, which holds nn.Linear layers.
+        assert issubclass(layer, LoraLayer) and isinstance(module, nn.Linear)
+        return layer(
+            module,
+            adapter_name,
+            r=_pattern_value(lora.rank_pattern, target.key, lora.r),
+            lora_alpha=_pattern_value(lora.alpha_pattern, target.key, lora.lora_alpha),
+            lora_dropout=lora.lora_dropout,
+            init_lora_weights=lora.init_lora_weights,
+            use_rslora=lora.use_rslora,
+        )
 
-        Each LoRA layer is replaced by its merged ``nn.Linear`` — the base
-        model's own module, holding its own ``Parameter`` objects — and each
-        ``modules_to_save`` entry by its trained copy.  Every base parameter
-        gets back the ``requires_grad`` it had before injection.
+    @override
+    @classmethod
+    def _extra_trainable_names(cls, model: nn.Module, config: PeftConfig) -> list[str]:
+        """The parameters ``bias`` makes trainable, by name under ``model``.
 
-        Parameters
-        ----------
-        progressbar : bool, default=False
-            Accepted for the reference's signature; there is no progress bar.
-        safe_merge : bool, default=False
-            Check every merged weight for NaN / inf before writing any.
-        adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
-
-        Returns
-        -------
-        nn.Module
-            The model, merged, with no LoRA layer left in it.
-
-        Raises
-        ------
-        RuntimeError
-            A base weight is shared with another module, or a
-            ``modules_to_save`` module shared one (its trained copy would
-            break the tie).
+        ``"all"`` is every parameter named ``bias`` outside a module trained
+        in full (that copy trains whole anyway, and its original stays
+        frozen); ``"lora_only"`` the bias of each adapted layer.
         """
-        del progressbar  # the reference's signature; nothing to report progress on
-        self._refuse_untying()
-        self.merge_adapter(adapter_names=adapter_names, safe_merge=safe_merge)
-        return self._unload(keep_trained=True)
+        bias = _as_lora(config).bias
+        if bias == "lora_only":
+            return [
+                _join(name, "base_layer.bias")
+                for name, layer in model.named_modules()
+                if isinstance(layer, LoraLayer) and layer.bias is not None
+            ]
+        if bias == "none":
+            return []
+        wrapped = tuple(f"{name}." for name, _ in _named(model, ModulesToSaveWrapper))
+        return [
+            name
+            for name, _ in model.named_parameters()
+            if name.rpartition(".")[2] == "bias" and not name.startswith(wrapped)
+        ]
 
-    def _refuse_untying(self) -> None:
-        """Refuse to swap in a trained copy of a module whose weight another module shares.
-
-        The copy trained apart from the tie, so the merged model would hold
-        two different tensors under names the base model ties into one —
-        and a loader that re-ties them (the zoo's ``from_pretrained``)
-        keeps whichever it reads last.
-        """
-        paths = _parameter_paths(self.model)
-        for key, wrapper in _named(self.model, ModulesToSaveWrapper):
-            tied = _shared_outside(paths, key, wrapper.original_module)
-            if tied:
-                raise RuntimeError(
-                    f"cannot merge_and_unload: modules_to_save {key!r} was trained apart from "
-                    f"{', '.join(tied)}, which it shares a weight with; the merged model would "
-                    "hold two tensors where the base ties one.  Keep the adapter "
-                    "(save_pretrained / PeftModel.from_pretrained), or untie the weight before "
-                    "injecting"
-                )
-
-    def unload(self) -> nn.Module:
-        """Remove the adapter without merging it and return the original model.
-
-        Every LoRA layer is replaced by the ``nn.Linear`` it wrapped (a
-        merged one is unmerged first), every ``modules_to_save`` entry by
-        its original module, and every base parameter gets back the
-        ``requires_grad`` it had before injection.
-        """
-        self.unmerge_adapter()
-        return self._unload(keep_trained=False)
-
-    def _set_adapter_layers(self, enabled: bool) -> None:
-        for _, layer in _named(self.model, LoraLayer):
-            layer.enable_adapters(enabled)
-        for _, wrapper in _named(self.model, ModulesToSaveWrapper):
-            wrapper.enable_adapters(enabled)
-
-    def enable_adapter_layers(self) -> None:
-        """Apply the adapter again after ``disable_adapter_layers``."""
-        self._set_adapter_layers(True)
-
+    @override
     def disable_adapter_layers(self) -> None:
         """Run the base model alone: LoRA updates off, original ``modules_to_save``.
 
@@ -440,11 +154,11 @@ class LoraModel(_ForwardsAttributes):
         parameters and stay as trained, so the output is not the base
         model's; a warning says so.
         """
-        bias = self.peft_config[self.active_adapter].bias
+        bias = _as_lora(self.peft_config[self.active_adapter]).bias
         if bias != "none":
             warnings.warn(
                 f"Careful, disabling adapter layers with bias configured to be '{bias}' does not "
                 "produce the same output as the base model would without adaption.",
                 stacklevel=2,
             )
-        self._set_adapter_layers(False)
+        super().disable_adapter_layers()

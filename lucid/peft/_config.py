@@ -1,11 +1,18 @@
-"""``LoraConfig`` and the enumerations an adapter's ``adapter_config.json`` carries.
+"""``PeftConfig`` — the base of every adapter config — and what a config file carries.
 
 The field names, defaults and file layout are the reference adapter
 library's, so a config written by either side reads on the other.  What
 v1 does not implement is refused where it enters — the constructor and
-``LoraConfig.from_dict``.  A key v1 has no field for is accepted only at
-a value that turns its feature off (null, false, empty), which changes
-nothing the adapter computes; at any other value it is refused.
+``from_dict``.  A key v1 has no field for is accepted only at a value that
+turns its feature off (null, false, empty), which changes nothing the
+adapter computes; at any other value it is refused.
+
+Each method's config class registers itself under its ``PeftType`` when
+it is defined (``class LoraConfig(..., peft_type=PeftType.LORA)``), and
+reading a file dispatches on the type the file names — a new method is a
+new subclass, not a new branch here.  Field validation is a table per
+class (``_field_checks``), merged down the hierarchy when a subclass is
+defined.
 """
 
 import dataclasses
@@ -15,23 +22,21 @@ import math
 import os
 import re
 import warnings
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import Literal, Self
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import ClassVar, Final, Self, override
 
-_CONFIG_NAME = "adapter_config.json"
-
-_BIASES: tuple[Literal["none", "all", "lora_only"], ...] = ("none", "all", "lora_only")
+_CONFIG_NAME: Final = "adapter_config.json"
 
 #: Initialisations the reference offers that need machinery v1 lacks
 #: (an SVD, a calibration pass, a quantized base).  Matched by prefix:
 #: ``pissa_niter_16`` is PiSSA too.
-_UNSUPPORTED_INITS = ("pissa", "olora", "eva", "corda", "loftq", "orthogonal")
+_UNSUPPORTED_INITS: Final = ("pissa", "olora", "eva", "corda", "loftq", "orthogonal")
 
 #: Keys the reference writes, at their "off" value, for features v1 does
 #: not have.  Read off, they are dropped without a word; any other key that
 #: is off is dropped with a warning; a key that is on is refused.
-_INERT_KEYS = frozenset(
+_INERT_KEYS: Final = frozenset(
     {
         "lora_bias",
         "megatron_config",
@@ -47,7 +52,7 @@ _INERT_KEYS = frozenset(
 )
 
 #: Keys that describe where an adapter came from, not what it computes.
-_METADATA_KEYS = frozenset(
+_METADATA_KEYS: Final = frozenset(
     {"auto_mapping", "peft_version", "runtime_config", "megatron_core", "qalora_group_size"}
 )
 
@@ -84,6 +89,10 @@ class PeftType(enum.StrEnum):
     BONE = "BONE"
 
 
+#: A file that names no ``peft_type`` is read as the one method v1 implements.
+_DEFAULT_PEFT_TYPE: Final = PeftType.LORA
+
+
 class TaskType(enum.StrEnum):
     """The task an adapter was trained for, as ``adapter_config.json`` records it.
 
@@ -99,6 +108,12 @@ class TaskType(enum.StrEnum):
     TOKEN_CLS = "TOKEN_CLS"
     QUESTION_ANS = "QUESTION_ANS"
     FEATURE_EXTRACTION = "FEATURE_EXTRACTION"
+
+
+# ── field checks: each takes the field's name and value, returns it normalised ──
+
+#: A field check: ``check(name, value)`` returns the value to store or raises.
+_Check = Callable[[str, object], object]
 
 
 def _is_off(value: object) -> bool:
@@ -133,7 +148,7 @@ def _check_regex(name: str, pattern: str) -> None:
 
 def _check_bool(name: str, value: object) -> bool:
     if not isinstance(value, bool):
-        raise TypeError(f"LoraConfig.{name} must be a bool, got {value!r}")
+        raise TypeError(f"`{name}` must be a bool, got {value!r}")
     return value
 
 
@@ -156,44 +171,47 @@ def _check_number(name: str, value: object) -> float:
     return value
 
 
-def _check_dropout(value: object) -> float:
-    p = _check_number("lora_dropout", value)
+def _check_dropout(name: str, value: object) -> float:
+    p = _check_number(name, value)
     if not 0.0 <= p < 1.0:
-        raise ValueError(f"`lora_dropout` must lie in [0, 1), got {p}")
+        raise ValueError(f"`{name}` must lie in [0, 1), got {p}")
     return p
 
 
-def _check_init(value: object) -> bool | str:
+def _check_init(name: str, value: object) -> bool | str:
     """``True`` (Kaiming-uniform A), ``False`` (no special init) or ``"gaussian"``."""
     if isinstance(value, bool):
         return value
     if not isinstance(value, str):
-        raise TypeError(f"`init_lora_weights` must be a bool or a str, got {value!r}")
+        raise TypeError(f"`{name}` must be a bool or a str, got {value!r}")
     if value.lower() == "gaussian":
         return "gaussian"
     if value.lower().startswith(_UNSUPPORTED_INITS):
         raise NotImplementedError(
-            f"init_lora_weights={value!r} is not supported by lucid.peft v1 "
-            "(True, False and 'gaussian' are)"
+            f"{name}={value!r} is not supported by lucid.peft v1 (True, False and 'gaussian' are)"
         )
-    raise ValueError(f"Unknown initialization init_lora_weights={value!r}")
+    raise ValueError(f"Unknown initialization {name}={value!r}")
 
 
 def _optional_str(name: str, value: object) -> str | None:
     if value is not None and not isinstance(value, str):
-        raise TypeError(f"LoraConfig.{name} must be a str or None, got {value!r}")
+        raise TypeError(f"`{name}` must be a str or None, got {value!r}")
     return value
 
 
 def _strings(name: str, value: object) -> list[str]:
     if not isinstance(value, (list, tuple, set, frozenset)):
-        raise TypeError(f"LoraConfig.{name} must be a str or a list of str, got {value!r}")
+        raise TypeError(f"`{name}` must be a str or a list of str, got {value!r}")
     out: list[str] = []
     for item in value:
         if not isinstance(item, str):
-            raise TypeError(f"LoraConfig.{name} holds {item!r}, which is not a str")
+            raise TypeError(f"`{name}` holds {item!r}, which is not a str")
         out.append(item)
     return out
+
+
+def _optional_strings(name: str, value: object) -> list[str] | None:
+    return None if value is None else _strings(name, value)
 
 
 def _name_set(name: str, value: object) -> str | set[str] | None:
@@ -203,56 +221,54 @@ def _name_set(name: str, value: object) -> str | set[str] | None:
     return set(_strings(name, value))
 
 
-def _check_bias(value: object) -> Literal["none", "all", "lora_only"]:
-    for choice in _BIASES:
-        if value == choice:
-            return choice
-    raise ValueError(f"`bias` must be one of {', '.join(map(repr, _BIASES))}, got {value!r}")
+def _choice[T: str](choices: tuple[T, ...]) -> Callable[[str, object], T]:
+    """A check that accepts exactly one of ``choices``."""
+
+    def check(name: str, value: object) -> T:
+        for choice in choices:
+            if value == choice:
+                return choice
+        raise ValueError(f"`{name}` must be one of {', '.join(map(repr, choices))}, got {value!r}")
+
+    return check
 
 
-def _check_layers(value: object) -> int | list[int] | None:
+def _check_layers(name: str, value: object) -> int | list[int] | None:
     if value is None or (isinstance(value, int) and not isinstance(value, bool)):
         return value
     if isinstance(value, (list, tuple)) and all(
         isinstance(i, int) and not isinstance(i, bool) for i in value
     ):
         return [int(i) for i in value]
-    raise TypeError(f"`layers_to_transform` must be an int or a list of int, got {value!r}")
+    raise TypeError(f"`{name}` must be an int or a list of int, got {value!r}")
 
 
-def _check_patterns(value: object) -> str | list[str] | None:
+def _check_patterns(name: str, value: object) -> str | list[str] | None:
     if value is None or isinstance(value, str):
         return value
-    return _strings("layers_pattern", value)
+    return _strings(name, value)
 
 
-def _rank_map(value: object) -> dict[str, int]:
-    if not isinstance(value, Mapping):
-        raise TypeError(f"`rank_pattern` must be a dict of str to int, got {value!r}")
-    return {str(k): _check_rank(f"rank_pattern[{k!r}]", v) for k, v in value.items()}
+def _keyed[V](each: Callable[[str, object], V]) -> Callable[[str, object], dict[str, V]]:
+    """A check for a ``{module pattern: value}`` dict, each value checked by ``each``."""
+
+    def check(name: str, value: object) -> dict[str, V]:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"`{name}` must be a dict keyed by module pattern, got {value!r}")
+        return {str(k): each(f"{name}[{k!r}]", v) for k, v in value.items()}
+
+    return check
 
 
-def _alpha_map(value: object) -> dict[str, float]:
-    if not isinstance(value, Mapping):
-        raise TypeError(f"`alpha_pattern` must be a dict of str to number, got {value!r}")
-    return {str(k): _check_number(f"alpha_pattern[{k!r}]", v) for k, v in value.items()}
-
-
-def _task_type(value: object) -> TaskType | None:
+def _task_type(name: str, value: object) -> TaskType | None:
     if value is None:
         return None
     if isinstance(value, str) and value in TaskType.__members__.values():
         return TaskType(value)
     raise ValueError(
-        f"Invalid task type: {value!r}. Must be one of the following task types: "
+        f"Invalid task type: `{name}`={value!r}. Must be one of the following task types: "
         f"{', '.join(TaskType)}."
     )
-
-
-def _lora_type(value: object) -> PeftType:
-    if value is None or value == PeftType.LORA:
-        return PeftType.LORA
-    raise ValueError(f"LoraConfig describes a LORA adapter; got peft_type={value!r}")
 
 
 def _json_value(value: object) -> object:
@@ -277,183 +293,122 @@ def _output_directory(save_directory: str | os.PathLike[str]) -> str:
     return path
 
 
+def _read_config_file(directory: str | os.PathLike[str]) -> dict[str, object]:
+    path = os.path.join(os.fspath(directory), _CONFIG_NAME)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"no {_CONFIG_NAME} in {os.fspath(directory)!r} "
+            "(lucid.peft reads adapters from a local directory)"
+        )
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict):
+        return data
+    raise ValueError(f"{path} does not hold a JSON object")
+
+
+#: ``PeftType`` → the config class that reads it, filled as each is defined.
+_CONFIG_CLASSES: dict[PeftType, type[PeftConfig]] = {}
+
+
 @dataclass(kw_only=True)
-class LoraConfig:
-    r"""How :func:`lucid.peft.get_peft_model` adapts a model with LoRA.
+class PeftConfig:
+    r"""What every adapter config holds, and the ``adapter_config.json`` round trip.
 
-    LoRA (Hu et al., 2021, arXiv:2106.09685) freezes a pretrained weight
-    :math:`W` and learns a low-rank update beside it, so a targeted
-    ``nn.Linear`` computes :math:`W x + s \, B A x` with
-    :math:`A \in \mathbb{R}^{r \times d_{in}}`,
-    :math:`B \in \mathbb{R}^{d_{out} \times r}` and scale
-    :math:`s = \alpha / r` (or :math:`\alpha / \sqrt{r}` with rsLoRA).
-
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    The base of each method's config (``LoraConfig``), with the fields
+    the reference's ``PeftConfig`` has.  Called on ``PeftConfig`` itself,
+    ``from_pretrained`` / ``from_dict`` read the method the file names and
+    return that method's config — the reference's idiom for learning which
+    base model an adapter needs before loading either.  It is not built
+    directly: a config of no method adapts nothing.
 
     Parameters
     ----------
     task_type : TaskType or str, optional
         The task the adapter is for (metadata; see ``TaskType``).
     peft_type : PeftType or str, optional
-        Always ``PeftType.LORA``; filled in when omitted.
+        The method; filled in by the subclass when omitted, refused when
+        it names another.
     base_model_name_or_path : str, optional
         Name of the model the adapter was trained on (metadata).
     revision : str, optional
         Revision of that model (metadata).
     inference_mode : bool, default=False
         Freeze the adapter too, for inference.
-    r : int, default=8
-        Rank of the update.
-    target_modules : str or list of str, optional
-        The ``nn.Linear`` modules to adapt.  A list matches a module whose
-        dotted name equals an entry or ends with ``"." + entry``; a string
-        is a regular expression the whole name must match; ``"all-linear"``
-        selects every ``nn.Linear`` except the output head and any layer
-        whose weight is shared with another module.  Required: there is
-        no per-architecture default.
-    exclude_modules : str or list of str, optional
-        Modules never adapted, matched like ``target_modules``.
-    lora_alpha : float, default=8
-        :math:`\alpha` in the scale.
-    lora_dropout : float, default=0.0
-        Dropout on the update's input, in ``[0, 1)``.
-    fan_in_fan_out : bool, default=False
-        For bases that store their weight ``(in, out)``.  ``nn.Linear``
-        does not, so ``True`` warns and is reset to ``False``.
-    bias : {"none", "all", "lora_only"}, default="none"
-        Which biases also train: none, every parameter named ``bias``, or
-        only the biases of the adapted layers.
-    use_rslora : bool, default=False
-        Scale by :math:`\alpha / \sqrt{r}` (Kalajdzievski, 2023).
-    modules_to_save : list of str, optional
-        Modules trained in full beside the adapter (a classifier head);
-        a trainable copy is kept and saved with it, the original stays.
-        An entry matches a module whose dotted name equals it or ends
-        with ``"." + entry`` — on a dot boundary, so ``classifier`` does
-        not also catch ``pre_classifier`` as the reference's bare suffix
-        test does.  Nothing inside these modules is adapted.
-    init_lora_weights : bool or "gaussian", default=True
-        ``True``: Kaiming-uniform :math:`A` (``a = \sqrt 5``) and zero
-        :math:`B`, so the adapted model starts as the base.
-        ``"gaussian"``: :math:`A \sim \mathcal N(0, 1/r^2)`, zero
-        :math:`B`.  ``False``: both keep ``nn.Linear``'s initialisation
-        (the update is non-zero from the start — for tests).
-    layers_to_transform : int or list of int, optional
-        Adapt only these layer indices (the number after the layer list's
-        name, ``transformer.h.3.attn`` → 3).  Applies to modules matched
-        by suffix; one named in full is adapted regardless.  The index is
-        the reference's current rule: the first (outer) ``<list>.<n>.`` in
-        the name, so ``encoder.layers.0.blocks.1.qkv`` is layer 0.  A
-        layer list at the model's root (``h.3.attn``) is indexed too,
-        where the reference finds no index without a ``layers_pattern``.
-    layers_pattern : str or list of str, optional
-        Name of the layer list (``"h"``, ``"layers"``), a regex fragment;
-        the first match in the name gives the index.  Needs
-        ``layers_to_transform``.
-    rank_pattern : dict of str to int, optional
-        Per-module rank overrides, keyed by name or regex suffix.
-    alpha_pattern : dict of str to float, optional
-        Per-module :math:`\alpha` overrides, keyed the same way.
-    use_dora : bool, default=False
-        DoRA; not implemented in v1, ``True`` raises.
 
     Raises
     ------
     TypeError
-        A field holds a value of the wrong type.
-    ValueError
-        A field is out of range or two fields conflict.
-    NotImplementedError
-        ``use_dora=True`` or an initialisation v1 lacks.
+        Built directly, or a field holds a value of the wrong type.
 
     Examples
     --------
-    >>> from lucid.peft import LoraConfig
-    >>> config = LoraConfig(r=4, lora_alpha=8, target_modules=["q_proj", "v_proj"])
-    >>> sorted(config.target_modules), config.peft_type
-    (['q_proj', 'v_proj'], <PeftType.LORA: 'LORA'>)
-    >>> LoraConfig.from_dict(config.to_dict()) == config
-    True
+    >>> import tempfile
+    >>> from lucid.peft import LoraConfig, PeftConfig
+    >>> with tempfile.TemporaryDirectory() as d:
+    ...     LoraConfig(target_modules=["q"], base_model_name_or_path="gpt2").save_pretrained(d)
+    ...     config = PeftConfig.from_pretrained(d)
+    >>> type(config).__name__, config.base_model_name_or_path
+    ('LoraConfig', 'gpt2')
     """
+
+    #: The method a subclass reads, set by ``peft_type=`` in its class statement.
+    _peft_type: ClassVar[PeftType | None] = None
+    #: This class's own field checks; ``_all_checks`` adds its bases'.
+    _field_checks: ClassVar[dict[str, _Check]] = {
+        "task_type": _task_type,
+        "base_model_name_or_path": _optional_str,
+        "revision": _optional_str,
+        "inference_mode": _check_bool,
+    }
+    _all_checks: ClassVar[dict[str, _Check]] = dict(_field_checks)
 
     task_type: TaskType | str | None = None
     peft_type: PeftType | str | None = None
     base_model_name_or_path: str | None = None
     revision: str | None = None
     inference_mode: bool = False
-    r: int = 8
-    target_modules: str | list[str] | set[str] | None = None
-    exclude_modules: str | list[str] | set[str] | None = None
-    lora_alpha: float = 8
-    lora_dropout: float = 0.0
-    fan_in_fan_out: bool = False
-    bias: Literal["none", "all", "lora_only"] = "none"
-    use_rslora: bool = False
-    modules_to_save: list[str] | None = None
-    init_lora_weights: bool | str = True
-    layers_to_transform: int | list[int] | None = None
-    layers_pattern: str | list[str] | None = None
-    rank_pattern: dict[str, int] = field(default_factory=dict)
-    alpha_pattern: dict[str, float] = field(default_factory=dict)
-    use_dora: bool = False
+
+    @override
+    def __init_subclass__(cls, *, peft_type: PeftType | None = None, **kwargs: object) -> None:
+        """Merge the subclass's field checks and register it under ``peft_type``."""
+        super().__init_subclass__(**kwargs)
+        cls._all_checks = {**cls._all_checks, **cls.__dict__.get("_field_checks", {})}
+        if peft_type is not None:
+            cls._peft_type = peft_type
+            _CONFIG_CLASSES[peft_type] = cls
 
     def __post_init__(self) -> None:
-        """Validate every field and normalise lists of names to sets."""
-        self.task_type = _task_type(self.task_type)
-        self.peft_type = _lora_type(self.peft_type)
-        self.base_model_name_or_path = _optional_str(
-            "base_model_name_or_path", self.base_model_name_or_path
-        )
-        self.revision = _optional_str("revision", self.revision)
-        for name in ("inference_mode", "fan_in_fan_out", "use_rslora", "use_dora"):
-            _check_bool(name, getattr(self, name))
-        self.r = _check_rank("r", self.r)
-        self.lora_alpha = _check_number("lora_alpha", self.lora_alpha)
-        self.lora_dropout = _check_dropout(self.lora_dropout)
-        self.bias = _check_bias(self.bias)
-        self.target_modules = _name_set("target_modules", self.target_modules)
-        self.exclude_modules = _name_set("exclude_modules", self.exclude_modules)
-        if self.modules_to_save is not None:
-            self.modules_to_save = _strings("modules_to_save", self.modules_to_save)
-        self.init_lora_weights = _check_init(self.init_lora_weights)
-        self.layers_to_transform = _check_layers(self.layers_to_transform)
-        self.layers_pattern = _check_patterns(self.layers_pattern)
-        self.rank_pattern = _rank_map(self.rank_pattern)
-        self.alpha_pattern = _alpha_map(self.alpha_pattern)
-        if self.use_dora:
-            raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
-        self._check_layer_selection()
-        self._check_regexes()
-
-    def _check_regexes(self) -> None:
-        """Compile every regex the matcher will build, so a bad one fails here."""
-        for name in ("target_modules", "exclude_modules"):
-            pattern = getattr(self, name)
-            if isinstance(pattern, str):
-                _check_regex(name, pattern)
-        for name, keys in (
-            ("rank_pattern", self.rank_pattern),
-            ("alpha_pattern", self.alpha_pattern),
-        ):
-            for key in keys:
-                _check_regex(f"{name}[{key!r}]", _pattern_key_regex(key))
-        patterns = self.layers_pattern
-        for pattern in [patterns] if isinstance(patterns, str) else patterns or []:
-            _check_regex("layers_pattern", _layer_regex(pattern))
-
-    def _check_layer_selection(self) -> None:
-        if isinstance(self.target_modules, str):
-            if self.layers_to_transform is not None:
-                raise ValueError(
-                    "`layers_to_transform` cannot be used when `target_modules` is a str."
-                )
-            if self.layers_pattern is not None:
-                raise ValueError("`layers_pattern` cannot be used when `target_modules` is a str.")
-        if self.layers_pattern and self.layers_to_transform in (None, []):
-            raise ValueError(
-                "When `layers_pattern` is specified, `layers_to_transform` must also be specified."
+        """Run every field check, then the checks across fields."""
+        own = type(self)._peft_type
+        if own is None:
+            raise TypeError(
+                f"{type(self).__name__} is the base of the adapter configs; build one of "
+                f"{', '.join(c.__name__ for c in _CONFIG_CLASSES.values())}"
             )
+        for name, check in self._all_checks.items():
+            setattr(self, name, check(name, getattr(self, name)))
+        if self.peft_type is not None and self.peft_type != own:
+            raise ValueError(
+                f"{type(self).__name__} describes a {own} adapter; got peft_type={self.peft_type!r}"
+            )
+        self.peft_type = own
+        self._check_fields()
+
+    def _check_fields(self) -> None:
+        """Checks that read more than one field; a subclass adds its own."""
+
+    @classmethod
+    def _class_for(cls, peft_type: object) -> type[Self]:
+        """The registered config class, ``cls`` or below it, that reads ``peft_type``."""
+        wanted = (cls._peft_type or _DEFAULT_PEFT_TYPE) if peft_type is None else peft_type
+        for klass in _CONFIG_CLASSES.values():
+            if klass._peft_type == wanted and issubclass(klass, cls):
+                return klass
+        raise NotImplementedError(
+            f"this is a {wanted} adapter; {cls.__name__} reads "
+            f"{', '.join(str(k._peft_type) for k in _CONFIG_CLASSES.values() if issubclass(k, cls))}"
+        )
 
     def to_dict(self) -> dict[str, object]:
         r"""Return the config as the JSON-ready dict ``adapter_config.json`` holds.
@@ -486,7 +441,8 @@ class LoraConfig:
         (``"lora_bias": false``, ``"loftq_config": {}``) — and dropped (with
         a warning if v1 does not know the key); at any other value it
         raises, as it would change what the adapter computes.  Provenance
-        keys (``peft_version``, ``auto_mapping``) are dropped.
+        keys (``peft_version``, ``auto_mapping``) are dropped.  Called on
+        ``PeftConfig``, the dict's ``peft_type`` picks the class.
 
         Parameters
         ----------
@@ -495,8 +451,8 @@ class LoraConfig:
 
         Returns
         -------
-        LoraConfig
-            The validated config.
+        PeftConfig
+            The validated config, of the class the dict's method names.
 
         Raises
         ------
@@ -513,12 +469,8 @@ class LoraConfig:
         >>> config.r, config.target_modules
         (4, {'c_attn'})
         """
-        peft_type = config_dict.get("peft_type")
-        if peft_type is not None and peft_type != PeftType.LORA:
-            raise NotImplementedError(
-                f"this is a {peft_type} adapter; lucid.peft implements {PeftType.LORA} only"
-            )
-        names = {f.name for f in dataclasses.fields(cls)}
+        target = cls._class_for(config_dict.get("peft_type"))
+        names = {f.name for f in dataclasses.fields(target)}
         values: dict[str, object] = {}
         dropped: list[str] = []
         for key, value in config_dict.items():
@@ -535,11 +487,11 @@ class LoraConfig:
                 dropped.append(key)
         if dropped:
             warnings.warn(
-                f"Unexpected keyword arguments {sorted(dropped)} for class {cls.__name__}, "
+                f"Unexpected keyword arguments {sorted(dropped)} for class {target.__name__}, "
                 "these are ignored.",
                 stacklevel=2,
             )
-        config = cls()
+        config = target()
         for key, value in values.items():
             setattr(config, key, value)
         config.__post_init__()
@@ -589,7 +541,7 @@ class LoraConfig:
 
         Returns
         -------
-        LoraConfig
+        PeftConfig
             The config, read through ``from_dict``.
 
         Raises
@@ -609,14 +561,62 @@ class LoraConfig:
         >>> loaded.r, loaded.lora_alpha, loaded.target_modules
         (16, 32, 'all-linear')
         """
-        path = os.path.join(os.fspath(pretrained_model_name_or_path), _CONFIG_NAME)
-        if not os.path.isfile(path):
-            raise FileNotFoundError(
-                f"no {_CONFIG_NAME} in {os.fspath(pretrained_model_name_or_path)!r} "
-                "(lucid.peft reads adapters from a local directory)"
+        return cls.from_dict(_read_config_file(pretrained_model_name_or_path))
+
+
+def _require_config(name: str, value: object) -> PeftConfig:
+    """``value`` if it is an adapter config, else the one ``TypeError`` that says so."""
+    if isinstance(value, PeftConfig):
+        return value
+    raise TypeError(
+        f"{name} must be an adapter config "
+        f"({', '.join(c.__name__ for c in _CONFIG_CLASSES.values())}), got {type(value).__name__}"
+    )
+
+
+@dataclass(kw_only=True)
+class _TargetedConfig(PeftConfig):
+    """The fields of a method that adapts chosen modules, and their joint checks.
+
+    Every tuner the reference ships beside prompt tuning picks modules
+    the same way; they live here once rather than in each method's
+    config, and the matcher (``lucid.peft._targeting``) reads them.
+    """
+
+    _field_checks: ClassVar[dict[str, _Check]] = {
+        "target_modules": _name_set,
+        "exclude_modules": _name_set,
+        "modules_to_save": _optional_strings,
+        "layers_to_transform": _check_layers,
+        "layers_pattern": _check_patterns,
+    }
+
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
+    modules_to_save: list[str] | None = None
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+
+    @override
+    def _check_fields(self) -> None:
+        super()._check_fields()
+        if isinstance(self.target_modules, str):
+            if self.layers_to_transform is not None:
+                raise ValueError(
+                    "`layers_to_transform` cannot be used when `target_modules` is a str."
+                )
+            if self.layers_pattern is not None:
+                raise ValueError("`layers_pattern` cannot be used when `target_modules` is a str.")
+        if self.layers_pattern and self.layers_to_transform in (None, []):
+            raise ValueError(
+                "When `layers_pattern` is specified, `layers_to_transform` must also be specified."
             )
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        if isinstance(data, dict):
-            return cls.from_dict(data)
-        raise ValueError(f"{path} does not hold a JSON object")
+        # Every regex the matcher will build is compiled now, so a bad one
+        # fails here rather than halfway through an injection.
+        for name in ("target_modules", "exclude_modules"):
+            pattern = getattr(self, name)
+            if isinstance(pattern, str):
+                _check_regex(name, pattern)
+        patterns = self.layers_pattern
+        for pattern in [patterns] if isinstance(patterns, str) else patterns or []:
+            _check_regex("layers_pattern", _layer_regex(pattern))

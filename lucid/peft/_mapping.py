@@ -1,22 +1,23 @@
 """The two ways in: ``get_peft_model`` (wrapped) and ``inject_adapter_in_model`` (bare)."""
 
 import dataclasses
+from typing import Final
 
 import lucid.nn as nn
-from lucid.peft._config import LoraConfig, TaskType
+from lucid.peft._config import PeftConfig, TaskType, _require_config, _TargetedConfig
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._targeting import _module_names_matching
-from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners._base import _tuner_for
 
 #: Heads the reference's task wrappers train in full, by task.
-_TASK_HEADS: dict[TaskType, tuple[str, ...]] = {
+_TASK_HEADS: Final[dict[TaskType, tuple[str, ...]]] = {
     TaskType.SEQ_CLS: ("classifier", "score"),
     TaskType.TOKEN_CLS: ("classifier", "score"),
     TaskType.QUESTION_ANS: ("qa_outputs",),
 }
 
 
-def _with_task_heads(model: nn.Module, config: LoraConfig) -> list[str] | None:
+def _with_task_heads(model: nn.Module, config: _TargetedConfig) -> list[str] | None:
     """``modules_to_save`` plus the task's conventional head, if ``model`` has one."""
     saved = config.modules_to_save
     if config.task_type is None:
@@ -28,7 +29,7 @@ def _with_task_heads(model: nn.Module, config: LoraConfig) -> list[str] | None:
 
 
 def get_peft_model(
-    model: nn.Module, peft_config: LoraConfig, adapter_name: str = "default"
+    model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
 ) -> PeftModel:
     r"""Adapt ``model`` with LoRA and return it wrapped as a :class:`~lucid.peft.PeftModel`.
 
@@ -46,8 +47,8 @@ def get_peft_model(
     model : nn.Module
         The model to adapt — any module; a zoo model keeps its
         ``generate`` and heads through the wrapper.
-    peft_config : LoraConfig
-        What to adapt and how.
+    peft_config : PeftConfig
+        What to adapt and how — a ``LoraConfig``; its method picks the tuner.
     adapter_name : str, default="default"
         Name of the adapter, the key in every ``lora_A`` / ``lora_B``.
 
@@ -59,7 +60,7 @@ def get_peft_model(
     Raises
     ------
     TypeError
-        ``peft_config`` is not a ``LoraConfig``.
+        ``peft_config`` is not an adapter config.
     ValueError
         No module matches ``target_modules``, or a match is not an
         ``nn.Linear``.
@@ -76,24 +77,21 @@ def get_peft_model(
     >>> peft(lucid.randn(2, 16)).shape
     (2, 4)
     """
-    if not isinstance(peft_config, LoraConfig):
-        raise TypeError(
-            f"peft_config must be a LoraConfig (lucid.peft implements LoRA), "
-            f"got {type(peft_config).__name__}"
-        )
+    given = _require_config("peft_config", peft_config)
     name_or_path = model.__dict__.get("name_or_path")
     config = dataclasses.replace(
-        peft_config,
+        given,
         base_model_name_or_path=(
-            name_or_path if isinstance(name_or_path, str) else peft_config.base_model_name_or_path
+            name_or_path if isinstance(name_or_path, str) else given.base_model_name_or_path
         ),
-        modules_to_save=_with_task_heads(model, peft_config),
     )
+    if isinstance(config, _TargetedConfig):
+        config = dataclasses.replace(config, modules_to_save=_with_task_heads(model, config))
     return PeftModel(model, config, adapter_name)
 
 
 def inject_adapter_in_model(
-    peft_config: LoraConfig, model: nn.Module, adapter_name: str = "default"
+    peft_config: PeftConfig, model: nn.Module, adapter_name: str = "default"
 ) -> nn.Module:
     r"""Put LoRA layers into ``model`` in place and return it, without a wrapper.
 
@@ -106,8 +104,8 @@ def inject_adapter_in_model(
 
     Parameters
     ----------
-    peft_config : LoraConfig
-        What to adapt and how.
+    peft_config : PeftConfig
+        What to adapt and how — a ``LoraConfig``.
     model : nn.Module
         The model to adapt.
     adapter_name : str, default="default"
@@ -128,5 +126,6 @@ def inject_adapter_in_model(
     >>> sorted(net.state_dict())
     ['0.bias', '0.weight', '1.base_layer.bias', '1.base_layer.weight', '1.lora_A.default.weight', '1.lora_B.default.weight']
     """
-    LoraModel(model, peft_config, adapter_name)
+    config = _require_config("peft_config", peft_config)
+    _tuner_for(config)(model, config, adapter_name)
     return model

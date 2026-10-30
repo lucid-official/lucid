@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Tensor.__dlpack__`, `lucid.from_dlpack` and `lucid.to_dlpack` raise `BufferError` for a tensor that requires grad, as the reference does. Detach it first (LCD-653)
 - `F.dropout1d` refuses inputs that are not 2-D or 3-D, as the reference does. An unbatched input to `F.dropout1d` / `F.dropout3d` drops whole channels on axis 0; it used to mask the wrong axis. `F.dropout3d` treats any non-5-D input as unbatched (LCD-653)
 
+- register tuners by PeftType behind abstract bases
 
 ### Fixed
 

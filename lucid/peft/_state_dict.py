@@ -13,16 +13,14 @@ from collections.abc import Mapping
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft._config import LoraConfig
-from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft.tuners.lora._layer import LoraLayer
-from lucid.peft.tuners.lora._model import _join, _learnable_bias_names, _named
+from lucid.peft._config import PeftConfig
+from lucid.peft.tuners._base import _adapter_slots, _join, _tuner_for, _tuner_layers
 
 
-def _peft_config_of(model: nn.Module, adapter_name: str) -> LoraConfig:
+def _peft_config_of(model: nn.Module, adapter_name: str) -> PeftConfig:
     configs = getattr(model, "peft_config", None)
     config = configs.get(adapter_name) if isinstance(configs, dict) else None
-    if isinstance(config, LoraConfig):
+    if isinstance(config, PeftConfig):
         return config
     raise ValueError(
         f"the model holds no LoRA adapter named {adapter_name!r} "
@@ -33,25 +31,23 @@ def _peft_config_of(model: nn.Module, adapter_name: str) -> LoraConfig:
 def _adapter_keys(model: nn.Module, adapter_name: str) -> dict[str, str]:
     """In-memory state-dict key → on-disk key, for every tensor the adapter owns.
 
-    v1 holds one adapter per model, so every LoRA layer and every
-    ``modules_to_save`` copy belongs to the adapter the config names.
+    Each slot — tuner layer or ``modules_to_save`` copy — maps its own
+    keys; v1 holds one adapter per model, so every slot belongs to the
+    adapter the config names.  The parameters the method also trains (the
+    biases ``bias`` picks) keep their names.
     """
     config = _peft_config_of(model, adapter_name)
-    layers = _named(model, LoraLayer)
-    if not layers:
+    if not _tuner_layers(model):
         raise RuntimeError(
             f"adapter {adapter_name!r} has been merged or unloaded: the model holds no "
             "LoRA layer left to save or load"
         )
-    keys: dict[str, str] = {}
-    for path, layer in layers:
-        for kind, adapters in (("lora_A", layer.lora_A), ("lora_B", layer.lora_B)):
-            for leaf in adapters[adapter_name].state_dict():
-                keys[_join(path, f"{kind}.{adapter_name}.{leaf}")] = _join(path, f"{kind}.{leaf}")
-    for path, wrapper in _named(model, ModulesToSaveWrapper):
-        for leaf in wrapper.modules_to_save[adapter_name].state_dict():
-            keys[_join(path, f"modules_to_save.{adapter_name}.{leaf}")] = _join(path, leaf)
-    keys.update({name: name for name in _learnable_bias_names(model, config.bias)})
+    keys = {
+        _join(path, own): _join(path, disk)
+        for path, slot in _adapter_slots(model)
+        for own, disk in slot._adapter_keys(adapter_name).items()
+    }
+    keys.update({n: n for n in _tuner_for(config)._extra_trainable_names(model, config)})
     return keys
 
 

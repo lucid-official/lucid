@@ -1,21 +1,54 @@
 """``PeftModel``: an adapted model that saves and loads as the adapter alone."""
 
-import contextlib
 import dataclasses
 import os
-from collections.abc import Iterator
-from typing import Self, override
+from contextlib import AbstractContextManager
+from types import TracebackType
+from typing import Final, Self, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft._config import LoraConfig, _output_directory
+from lucid.peft._config import PeftConfig, _output_directory, _require_config
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
-from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners._base import _BaseTuner, _tuner_for
 from lucid.serialization import load_safetensors, save_safetensors
 
-_WEIGHTS_NAME = "adapter_model.safetensors"
-_PICKLE_WEIGHTS_NAME = "adapter_model.bin"
+_WEIGHTS_NAME: Final = "adapter_model.safetensors"
+_PICKLE_WEIGHTS_NAME: Final = "adapter_model.bin"
+
+
+class _DisabledAdapter(AbstractContextManager[None]):
+    """What ``PeftModel.disable_adapter()`` returns: reentrant, the outermost exit re-enables.
+
+    Nested blocks — a helper that disables inside a caller's disabled
+    block — leave the adapter off until the outermost one exits.
+    """
+
+    __slots__ = ("_model",)
+
+    def __init__(self, model: PeftModel) -> None:
+        self._model = model
+
+    @override
+    def __enter__(self) -> None:
+        model = self._model
+        if model._disable_depth == 0:
+            model.base_model.disable_adapter_layers()
+        model._disable_depth += 1
+
+    @override
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        del exc_type, exc, tb  # an exception passes through; the adapter comes back regardless
+        model = self._model
+        model._disable_depth -= 1
+        if model._disable_depth == 0:
+            model.base_model.enable_adapter_layers()
 
 
 def _adapter_weights(directory: str) -> dict[str, Tensor]:
@@ -34,8 +67,9 @@ def _adapter_weights(directory: str) -> dict[str, Tensor]:
 class PeftModel(_ForwardsAttributes):
     r"""A model with an adapter, saved and loaded as the adapter alone.
 
-    Wraps the model in a :class:`~lucid.peft.LoraModel` kept as
-    ``base_model`` (the user's model is ``base_model.model``), so the
+    Wraps the model in its method's tuner (``LoraModel`` for a
+    ``LoraConfig``), kept as ``base_model`` (the user's model is
+    ``base_model.model``), so the
     state dict reads ``base_model.model....lora_A.default.weight`` and the
     adapter file ``base_model.model....lora_A.weight``, the reference
     library's layouts.  Calling it runs the wrapped model, and any public
@@ -49,15 +83,15 @@ class PeftModel(_ForwardsAttributes):
     ----------
     model : nn.Module
         The model to adapt, changed in place.
-    peft_config : LoraConfig
-        What to adapt and how.
+    peft_config : PeftConfig
+        What to adapt and how — a ``LoraConfig``.
     adapter_name : str, default="default"
         Name of the adapter.
 
     Raises
     ------
     TypeError
-        ``peft_config`` is not a ``LoraConfig``.
+        ``peft_config`` is not an adapter config.
 
     Examples
     --------
@@ -73,15 +107,12 @@ class PeftModel(_ForwardsAttributes):
     """
 
     def __init__(
-        self, model: nn.Module, peft_config: LoraConfig, adapter_name: str = "default"
+        self, model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
     ) -> None:
-        if not isinstance(peft_config, LoraConfig):
-            raise TypeError(
-                f"peft_config must be a LoraConfig (lucid.peft implements LoRA), "
-                f"got {type(peft_config).__name__}"
-            )
+        config = _require_config("peft_config", peft_config)
         super().__init__()
-        self.base_model = LoraModel(model, peft_config, adapter_name)
+        self.base_model: _BaseTuner = _tuner_for(config)(model, config, adapter_name)
+        self._disable_depth = 0
 
     @override
     def _wrapped(self) -> nn.Module | None:
@@ -89,7 +120,7 @@ class PeftModel(_ForwardsAttributes):
         return _as_module(modules.get("base_model")) if modules else None
 
     @property
-    def peft_config(self) -> dict[str, LoraConfig]:
+    def peft_config(self) -> dict[str, PeftConfig]:
         """The adapter's config by adapter name (``"all-linear"`` spelled out)."""
         return self.base_model.peft_config
 
@@ -140,16 +171,16 @@ class PeftModel(_ForwardsAttributes):
             f"trainable params: {trainable:,d} || all params: {total:,d} || trainable%: {share:.4f}"
         )
 
-    @contextlib.contextmanager
-    def disable_adapter(self) -> Iterator[None]:
+    def disable_adapter(self) -> AbstractContextManager[None]:
         """Run the base model alone inside the ``with`` block.
 
         LoRA updates are skipped (a merged layer is unmerged on entry, and
         stays unmerged after) and every ``modules_to_save`` module runs as
         the original; the adapter comes back when the block exits, even on
-        an exception.  Merging inside the block is refused.  A compiled
-        model follows the switch: the state it branches on is part of its
-        cache key.
+        an exception.  Blocks nest: the adapter stays off until the
+        outermost one exits.  Merging inside the block is refused.  A
+        compiled model follows the switch: the state it branches on is
+        part of its cache key.
 
         Examples
         --------
@@ -165,11 +196,7 @@ class PeftModel(_ForwardsAttributes):
         ...     bool((peft(x) == base_out).all().item())
         True
         """
-        self.base_model.disable_adapter_layers()
-        try:
-            yield
-        finally:
-            self.base_model.enable_adapter_layers()
+        return _DisabledAdapter(self)
 
     def merge_and_unload(
         self,
@@ -291,7 +318,7 @@ class PeftModel(_ForwardsAttributes):
         model_id: str | os.PathLike[str],
         adapter_name: str = "default",
         is_trainable: bool = False,
-        config: LoraConfig | None = None,
+        config: PeftConfig | None = None,
     ) -> Self:
         r"""Adapt ``model`` with the adapter saved in ``model_id``.
 
@@ -312,7 +339,7 @@ class PeftModel(_ForwardsAttributes):
         is_trainable : bool, default=False
             Keep the adapter trainable.  By default it is frozen and the
             model is put in ``eval()`` mode, for inference.
-        config : LoraConfig, optional
+        config : PeftConfig, optional
             Use this config instead of the directory's.
 
         Returns
@@ -350,11 +377,11 @@ class PeftModel(_ForwardsAttributes):
         True
         """
         directory = os.fspath(model_id)
-        if config is None:
-            config = LoraConfig.from_pretrained(directory)
-        elif not isinstance(config, LoraConfig):
-            raise TypeError(f"config must be a LoraConfig, got {type(config).__name__}")
-        config = dataclasses.replace(config, inference_mode=not is_trainable)
+        # Without a config, the file's ``peft_type`` picks the method.
+        given = PeftConfig.from_pretrained(directory) if config is None else config
+        config = dataclasses.replace(
+            _require_config("config", given), inference_mode=not is_trainable
+        )
         weights = _adapter_weights(directory)
         peft_model = cls(model, config, adapter_name)
         try:

@@ -10,7 +10,7 @@ The API and the adapter file format are the reference adapter library's,
 names and defaults included, so a script written for it reads the same
 and an adapter directory moves between the two::
 
-    from lucid.peft import LoraConfig, PeftModel, get_peft_model
+    from lucid.peft import LoraConfig, PeftConfig, PeftModel, get_peft_model
 
     config = LoraConfig(r=8, lora_alpha=16, target_modules=["c_attn"],
                         task_type="CAUSAL_LM")
@@ -19,8 +19,13 @@ and an adapter directory moves between the two::
     ...                                            # train: only the adapter learns
     model.save_pretrained("my-adapter")            # adapter_config.json + adapter_model.safetensors
 
+    PeftConfig.from_pretrained("my-adapter").base_model_name_or_path  # which base it needs
     model = PeftModel.from_pretrained(fresh_base_model, "my-adapter")
     merged = model.merge_and_unload()              # a plain model again, adapter folded in
+
+Each method is a config class, a tuner and its layer classes, registered
+by ``PeftType`` as they are defined (``lucid.peft.tuners._base``); the
+entry points above dispatch on the method a config or a file names.
 
 What a LoRA layer guarantees:
 
@@ -46,13 +51,15 @@ hub ids are not resolved.
 """
 
 from lucid.peft import tuners
-from lucid.peft._config import LoraConfig, PeftType, TaskType
+from lucid.peft._config import PeftConfig, PeftType, TaskType
 from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
+from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
 
 __all__ = [
+    "PeftConfig",
     "LoraConfig",
     "PeftType",
     "TaskType",
