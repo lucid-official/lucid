@@ -218,7 +218,7 @@ Which names to use depends on the family. The common recipe adapts the attention
 | `pvt` | `["q", "kv"]` | the query projection and the fused key/value projection |
 | `cvt` | `["proj_q.proj", "proj_v.proj"]` | the linear projections inside the query and value convolutional projections |
 
-A classification or question-answering head is trained in full beside the adapter. With a `task_type` of `"SEQ_CLS"` or `"QUESTION_ANS"`, `get_peft_model` makes a head under the conventional name (`classifier` or `score`, `qa_outputs`) trainable for you; for any other head, such as a ViT's `head`, name it in `modules_to_save`.
+A classification or question-answering head is trained in full beside the adapter. With a `task_type` of `"SEQ_CLS"` or `"TOKEN_CLS"`, `get_peft_model` makes a head named `classifier` or `score` trainable for you, and with `"QUESTION_ANS"` one named `qa_outputs`; for any other head, such as a ViT's `head`, name it in `modules_to_save`.
 
 ### What v1 cannot reach
 
