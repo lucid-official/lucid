@@ -389,11 +389,10 @@ def test_the_zoo_s_module_names_select_what_the_table_says(family: _Family) -> N
 def test_all_linear_leaves_out_the_head_and_the_tied_weights(family: _Family) -> None:
     peft = get_peft_model(_base(family, "cpu"), _config(family, "all-linear"))
     assert set(peft.base_model.targeted_module_names) == family.all_linear
-    # The stored spelling is the names ``"all-linear"`` stood for, and it also
-    # lists a Linear head trained in full (``modules_to_save`` keeps it unadapted).
+    # The stored spelling is exactly the names adapted: a Linear head trained
+    # in full (``modules_to_save``) is left out of it as it is left unadapted.
     stored = peft.peft_config["default"].target_modules
-    assert isinstance(stored, set) and family.all_linear <= stored
-    assert stored - family.all_linear <= family.trained_in_full
+    assert stored == family.all_linear
 
 
 def test_vit_has_no_query_and_value_modules_to_name() -> None:
@@ -667,21 +666,21 @@ def test_a_tied_head_trained_in_full_reloads_as_an_adapter(device: str, tmp_path
         assert _same(_logits(fresh, batch), _logits(peft, batch))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-693 FOUND: merge_and_unload leaves a head trained apart from the tied embedding "
-    "untied, and from_pretrained re-ties it from the config, so the two tied keys overwrite one "
-    "another and the reloaded model's outputs differ",
-)
-def test_a_merged_model_with_an_untied_head_survives_the_zoo_round_trip(
-    device: str, tmp_path: Path
-) -> None:
-    peft = _tied_head_peft(device, init_lora_weights=False)
+def test_merging_a_head_trained_apart_from_its_tie_is_refused(device: str) -> None:
+    """LCD-708: the merged model would hold two tensors under names the zoo re-ties.
+
+    ``from_pretrained`` re-ties ``lm_head`` to ``transformer.wte`` from the
+    config, so one of the two trained tensors would silently overwrite the
+    other.  The adapter route (save / ``PeftModel.from_pretrained``) is the
+    supported one, held above.
+    """
+    with pytest.warns(UserWarning, match="merge_and_unload\\(\\) will refuse"):
+        peft = _tied_head_peft(device, init_lora_weights=False)
     batch = _family("gpt2").batch(device)
     _train(peft, batch)
     peft.eval()
     with lucid.no_grad():
-        merged = peft.merge_and_unload()
-        merged.save_pretrained(str(tmp_path))
-        reloaded = type(merged).from_pretrained(str(tmp_path)).to(device).eval()
-        assert lucid.allclose(_logits(reloaded, batch), _logits(merged, batch), atol=1e-5)
+        before = _logits(peft, batch)
+        with pytest.raises(RuntimeError, match="transformer.wte.weight"):
+            peft.merge_and_unload()
+        assert _same(_logits(peft, batch), before)

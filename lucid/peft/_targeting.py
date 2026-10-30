@@ -124,9 +124,11 @@ def _head_names(model: nn.Module, task_type: TaskType | str | None) -> set[str]:
 def _resolve_all_linear(config: LoraConfig, model: nn.Module) -> set[str] | None:
     """The module names ``"all-linear"`` stands for in ``model``; ``None`` if not used.
 
-    Every ``nn.Linear`` except the output head and any layer whose weight
+    Every ``nn.Linear`` except the output head, any layer whose weight
     another module shares — a tied head is the same matrix as the input
-    table, and adapting it would adapt the table too.
+    table, and adapting it would adapt the table too — and any the config
+    excludes (``exclude_modules``, ``modules_to_save``), so the names
+    stored are exactly the names adapted.
     """
     targets = config.target_modules
     if not (isinstance(targets, str) and targets.lower() == _ALL_LINEAR):
@@ -137,7 +139,22 @@ def _resolve_all_linear(config: LoraConfig, model: nn.Module) -> set[str] | None
         for name, module in model.named_modules()
         if name and isinstance(module, nn.Linear) and len(paths[id(module.weight)]) == 1
     }
-    return linear - _head_names(model, config.task_type)
+    return {
+        name
+        for name in linear - _head_names(model, config.task_type)
+        if not _excluded(config, name)
+    }
+
+
+def _shared_outside(paths: dict[int, list[str]], key: str, module: nn.Module) -> list[str]:
+    """Names outside ``key`` that reach one of ``module``'s parameters — a tie."""
+    inside = f"{key}."
+    return [
+        path
+        for param in module.parameters()
+        for path in paths[id(param)]
+        if not path.startswith(inside)
+    ]
 
 
 def _module_names_matching(model: nn.Module, names: Iterable[str]) -> list[str]:

@@ -201,7 +201,8 @@ class PeftModel(_ForwardsAttributes):
         Raises
         ------
         RuntimeError
-            A base weight is shared with another module (a tied head).
+            A base weight is shared with another module (a tied head),
+            or a ``modules_to_save`` module was trained apart from a tie.
 
         Examples
         --------

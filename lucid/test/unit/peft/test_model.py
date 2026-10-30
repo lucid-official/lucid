@@ -224,6 +224,14 @@ class TestAllLinear:
         names = _targets(LoraConfig(target_modules="all-linear"), WithGetter())
         assert names == ["classifier", "encoder"]
 
+    def test_the_stored_names_are_exactly_the_adapted_ones(self) -> None:
+        config = LoraConfig(
+            target_modules="all-linear", modules_to_save=["classifier"], exclude_modules=["encoder"]
+        )
+        lora = LoraModel(_Classifier(), config)
+        assert lora.targeted_module_names == ["pre_classifier"]
+        assert lora.peft_config["default"].target_modules == {"pre_classifier"}
+
     def test_the_stored_config_spells_out_the_names(self) -> None:
         config = LoraConfig(target_modules="all-linear")
         lora = LoraModel(_lm(), config)
@@ -512,6 +520,17 @@ class TestDisableAndUnload:
         )
         peft.unload()
         assert model.classifier is original and original.weight.requires_grad
+
+    def test_a_tied_module_trained_in_full_cannot_be_merged_away(self) -> None:
+        model = _lm()
+        with pytest.warns(UserWarning, match="shares its weight with embed.weight"):
+            peft = get_peft_model(
+                model, LoraConfig(target_modules=["q_proj"], modules_to_save=["lm_head"])
+            )
+        with pytest.raises(RuntimeError, match="trained apart from embed.weight"):
+            peft.merge_and_unload()
+        assert isinstance(model.layers[0].q_proj, Linear) and not model.layers[0].q_proj.merged
+        assert peft.unload() is model and model.lm_head.weight is model.embed.weight
 
     def test_merging_into_a_tied_weight_is_refused(self) -> None:
         model = _lm()

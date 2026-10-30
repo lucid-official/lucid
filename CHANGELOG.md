@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep LoRA branch state where the compile key sees it
 
+- refuse to merge away a tie; store only the adapted names
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

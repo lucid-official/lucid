@@ -21,6 +21,7 @@ from lucid.peft._targeting import (
     _rank_and_alpha,
     _resolve_all_linear,
     _selects,
+    _shared_outside,
 )
 from lucid.peft.tuners.lora._layer import Linear, LoraLayer, _check_adapter_name
 
@@ -124,6 +125,18 @@ def _plan_modules_to_save(model: nn.Module, config: LoraConfig) -> list[str]:
     keys = _module_names_matching(model, names)
     if not keys:
         raise ValueError(f"modules_to_save {names} matched no module of the model")
+    paths = _parameter_paths(model)
+    for key in keys:
+        tied = _shared_outside(paths, key, model.get_submodule(key))
+        if tied:
+            # The reference allows it and warns of the same trouble at merge.
+            warnings.warn(
+                f"modules_to_save {key!r} shares its weight with {', '.join(tied)}; the copy "
+                "that trains will not.  The adapter saves and loads as usual, but "
+                "merge_and_unload() will refuse: the merged model would hold two tensors "
+                "where the base ties one.",
+                stacklevel=4,
+            )
     return keys
 
 
@@ -370,11 +383,34 @@ class LoraModel(_ForwardsAttributes):
         Raises
         ------
         RuntimeError
-            A base weight is shared with another module.
+            A base weight is shared with another module, or a
+            ``modules_to_save`` module shared one (its trained copy would
+            break the tie).
         """
         del progressbar  # the reference's signature; nothing to report progress on
+        self._refuse_untying()
         self.merge_adapter(adapter_names=adapter_names, safe_merge=safe_merge)
         return self._unload(keep_trained=True)
+
+    def _refuse_untying(self) -> None:
+        """Refuse to swap in a trained copy of a module whose weight another module shares.
+
+        The copy trained apart from the tie, so the merged model would hold
+        two different tensors under names the base model ties into one —
+        and a loader that re-ties them (the zoo's ``from_pretrained``)
+        keeps whichever it reads last.
+        """
+        paths = _parameter_paths(self.model)
+        for key, wrapper in _named(self.model, ModulesToSaveWrapper):
+            tied = _shared_outside(paths, key, wrapper.original_module)
+            if tied:
+                raise RuntimeError(
+                    f"cannot merge_and_unload: modules_to_save {key!r} was trained apart from "
+                    f"{', '.join(tied)}, which it shares a weight with; the merged model would "
+                    "hold two tensors where the base ties one.  Keep the adapter "
+                    "(save_pretrained / PeftModel.from_pretrained), or untie the weight before "
+                    "injecting"
+                )
 
     def unload(self) -> nn.Module:
         """Remove the adapter without merging it and return the original model.
