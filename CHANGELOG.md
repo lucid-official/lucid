@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - complex abs and hypot share one inf/nan/subnormal rule
 
+- autocast disables itself on an unsupported dtype (LCD-738)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

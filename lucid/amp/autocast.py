@@ -4,20 +4,62 @@ autocast context manager for automatic mixed precision.
 
 import functools
 import threading
-from typing import Callable
+import warnings
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
+from typing import Final
 from lucid._C import engine as _C_engine
 from lucid._dtype import bfloat16, dtype, float16, to_engine_dtype
 
 #: The device types an autocast scope can name — the same two ``lucid.device``
 #: accepts.
-_DEVICE_TYPES = frozenset({"metal", "cpu"})
+_DEVICE_TYPES: Final = ("metal", "cpu")
+
+#: The dtypes a scope can compute in, per device.  Anything else is not a
+#: mixed-precision dtype: an integer or bool would make ``x @ x`` truncate,
+#: float64 has no half-precision kernels, and float32 is the dtype autocast
+#: leaves the rest of the graph in.  On the CPU stream float16 is accepted but
+#: computed in float32 (Accelerate has no half-precision BLAS —
+#: ``AmpPolicy.h``).
+_AUTOCAST_DTYPES: Final[Mapping[str, tuple[dtype, ...]]] = MappingProxyType(
+    {"metal": (float16, bfloat16), "cpu": (bfloat16, float16)}
+)
 
 
-def _to_engine_device(device_type: str) -> _C_engine.Device:
-    """Validate ``device_type`` and map it to :class:`_C_engine.Device`."""
+def _to_engine_device(
+    device_type: str, owner: str = "autocast", param: str = "device_type"
+) -> _C_engine.Device:
+    """Validate ``device_type`` and map it to :class:`_C_engine.Device`.
+
+    ``owner`` and ``param`` name the API and the argument in the error, so a
+    caller other than ``autocast`` (``GradScaler(device=...)``) refuses a bad
+    device in its own words.
+    """
     if device_type not in _DEVICE_TYPES:
-        raise ValueError(f"autocast: unknown device_type {device_type!r}. Use 'metal' or 'cpu'.")
+        raise ValueError(f"{owner}: unknown {param} {device_type!r}. Use 'metal' or 'cpu'.")
     return _C_engine.Device.GPU if device_type == "metal" else _C_engine.Device.CPU
+
+
+def _scope_is_enabled(device_type: str, target: dtype, enabled: bool) -> bool:
+    """Whether a scope that asked for ``enabled`` at ``target`` may compute in it.
+
+    The single place a scope's dtype is checked: a dtype the device cannot
+    autocast to warns once and turns the scope into an autocast-off one, the
+    reference framework's behaviour, so ``x @ x`` stays in float32 instead
+    of computing in the unsupported dtype.  A scope that is off already has
+    nothing to refuse.
+    """
+    if not enabled or target in _AUTOCAST_DTYPES[device_type]:
+        return enabled
+    supported = ", ".join(repr(d) for d in _AUTOCAST_DTYPES[device_type])
+    warnings.warn(
+        f"In {device_type} autocast, but the target dtype {target!r} is not supported. "
+        f"Disabling autocast.\n{device_type} autocast only supports dtypes of {supported} "
+        "currently.",
+        UserWarning,
+        stacklevel=3,
+    )
+    return False
 
 
 class autocast:
@@ -58,6 +100,18 @@ class autocast:
         When ``False`` autocast is disabled on ``device_type`` inside the
         scope — useful for ablation or forcing full precision in a nested
         subregion.  Default ``True``.
+
+    Notes
+    -----
+    ``dtype`` must be one the device can autocast to: :data:`lucid.float16`
+    or :data:`lucid.bfloat16` on both ``"metal"`` and ``"cpu"``.  Any other
+    dtype — an integer, ``bool``, ``float32``, ``float64`` — emits a
+    :class:`UserWarning` when the scope is created and turns it into one with
+    ``enabled=False``, as the reference framework does, so the ops inside run
+    in the dtype of their inputs rather than silently in the unsupported one.
+    The decorator form and nested scopes inherit this: they are built through
+    the same constructor.  A scope that was ``enabled=False`` already does not
+    warn.
 
     Examples
     --------
@@ -126,10 +180,17 @@ class autocast:
         ------
         ValueError
             If ``device_type`` is neither ``'metal'`` nor ``'cpu'``.
+
+        Warns
+        -----
+        UserWarning
+            If ``enabled`` and ``dtype`` is not supported on ``device_type``
+            (anything but float16 / bfloat16).  The scope then runs with
+            ``enabled=False``.
         """
         self._engine_device = _to_engine_device(device_type)
         self._dtype = (bfloat16 if device_type == "cpu" else float16) if dtype is None else dtype
-        self._enabled = enabled
+        self._enabled = _scope_is_enabled(device_type, self._dtype, enabled)
         self._cache_enabled = True if cache_enabled is None else bool(cache_enabled)
         # One stack of live engine guards per thread: the AMP state the
         # guards change is thread-local, so a guard must be released on the

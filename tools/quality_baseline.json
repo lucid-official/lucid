@@ -2269,7 +2269,6 @@
     "lucid/_tensor/_indexing.py": 1,
     "lucid/_tensor/tensor.py": 1,
     "lucid/_types.py": 1,
-    "lucid/amp/autocast.py": 1,
     "lucid/autograd/_functional.py": 1,
     "lucid/autograd/_grad_mode.py": 1,
     "lucid/autograd/checkpoint.py": 1,
