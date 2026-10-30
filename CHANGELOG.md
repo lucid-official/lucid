@@ -84,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - trace and square of integers answer the reference's dtype
 
+- keep LoRA branch state where the compile key sees it
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

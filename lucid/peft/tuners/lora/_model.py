@@ -288,9 +288,10 @@ class LoraModel(_ForwardsAttributes):
         r"""Fold every LoRA update into its base weight, keeping the LoRA layers.
 
         A merged model runs at the base model's cost; ``unmerge_adapter``
-        takes the updates out again.  Nothing is merged if any layer's base
-        weight is shared with another module (a tied LM head): merging
-        would change that module too.
+        takes the updates out again.  Every refusal is made before any
+        weight is written: nothing is merged if a layer's base weight is
+        shared with another module (a tied LM head — merging would change
+        that module too) or if the adapter is disabled.
 
         Parameters
         ----------
@@ -302,16 +303,18 @@ class LoraModel(_ForwardsAttributes):
         Raises
         ------
         RuntimeError
-            A base weight is shared with another module.
+            A base weight is shared with another module, or the adapter is
+            disabled (inside ``disable_adapter()``).
         ValueError
             ``safe_merge`` found a non-finite merged weight.
         """
         layers = self._mergeable_layers()
+        pending = [(layer, layer._pending_merges(adapter_names)) for _, layer in layers]
         if safe_merge:
-            for _, layer in layers:
-                for adapter in layer._pending_merges(adapter_names):
+            for layer, adapters in pending:
+                for adapter in adapters:
                     layer._check_finite_merge(adapter)
-        for _, layer in layers:
+        for layer, _ in pending:
             layer.merge(adapter_names=adapter_names)
 
     def unmerge_adapter(self) -> None:

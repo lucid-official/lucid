@@ -34,32 +34,24 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
         self.original_module = module_to_save
         trained = copy.deepcopy(module_to_save)
         self.modules_to_save: nn.ModuleDict[nn.Module] = nn.ModuleDict({adapter_name: trained})
-        self._active_adapter = adapter_name
-        self._disable_adapters = False
-
-    @property
-    def active_adapter(self) -> str:
-        """Name of the copy that runs."""
-        return self._active_adapter
-
-    @property
-    def disable_adapters(self) -> bool:
-        """Whether the original module runs instead of the copy."""
-        return self._disable_adapters
+        # Public scalar attributes, which ``lucid.compile`` keys on (LCD-703):
+        # name of the copy that runs, and whether the original runs instead.
+        self.active_adapter = adapter_name
+        self.disable_adapters = False
 
     def enable_adapters(self, enabled: bool) -> None:
         """Run the trained copy (``True``) or the original module (``False``)."""
-        self._disable_adapters = not enabled
+        self.disable_adapters = not enabled
 
     def _active_module(self) -> nn.Module:
-        if self._disable_adapters:
+        if self.disable_adapters:
             return self.original_module
-        return self.modules_to_save[self._active_adapter]
+        return self.modules_to_save[self.active_adapter]
 
     @override
     def _wrapped(self) -> nn.Module | None:
-        # ``_disable_adapters`` is the last thing ``__init__`` sets.
-        return self._active_module() if "_disable_adapters" in self.__dict__ else None
+        # ``disable_adapters`` is the last thing ``__init__`` sets.
+        return self._active_module() if "disable_adapters" in self.__dict__ else None
 
     @override
     def forward(self, *args: object, **kwargs: object) -> object:

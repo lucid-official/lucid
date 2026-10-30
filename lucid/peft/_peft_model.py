@@ -144,9 +144,12 @@ class PeftModel(_ForwardsAttributes):
     def disable_adapter(self) -> Iterator[None]:
         """Run the base model alone inside the ``with`` block.
 
-        LoRA updates are skipped (a merged layer is unmerged on its next
-        call) and every ``modules_to_save`` module runs as the original;
-        the adapter comes back when the block exits, even on an exception.
+        LoRA updates are skipped (a merged layer is unmerged on entry, and
+        stays unmerged after) and every ``modules_to_save`` module runs as
+        the original; the adapter comes back when the block exits, even on
+        an exception.  Merging inside the block is refused.  A compiled
+        model follows the switch: the state it branches on is part of its
+        cache key.
 
         Examples
         --------

@@ -34,6 +34,15 @@ class LoraLayer(nn.Module):
     ``....lora_A.default.weight`` as the reference's does.  v1 holds one
     adapter per layer.
 
+    What the forward pass branches on — ``active_adapter``,
+    ``disable_adapters``, ``merged`` — are plain public attributes, not
+    properties as in the reference: ``lucid.compile`` keys an executable
+    on each module's public scalar attributes, so state kept anywhere
+    else (a private field, the ``merged_adapters`` list) would let a
+    compiled model replay the branch of a state it has left (LCD-703).
+    They change only through ``update_layer``, ``enable_adapters``,
+    ``merge`` and ``unmerge``.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -61,8 +70,12 @@ class LoraLayer(nn.Module):
         self.lora_A: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
         self.lora_B: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
         self.merged_adapters: list[str] = []
-        self._active_adapter = ""
-        self._disable_adapters = False
+        #: Name of the adapter the forward pass applies.
+        self.active_adapter = ""
+        #: Whether the forward pass runs the base layer alone.
+        self.disable_adapters = False
+        #: Whether an adapter is folded into the base weight (``merged_adapters`` non-empty).
+        self.merged = False
 
     @property
     def weight(self) -> Parameter:
@@ -73,21 +86,6 @@ class LoraLayer(nn.Module):
     def bias(self) -> Parameter | None:
         """The base layer's bias, or ``None``."""
         return self.base_layer.bias
-
-    @property
-    def active_adapter(self) -> str:
-        """Name of the adapter the forward pass applies."""
-        return self._active_adapter
-
-    @property
-    def disable_adapters(self) -> bool:
-        """Whether the forward pass runs the base layer alone."""
-        return self._disable_adapters
-
-    @property
-    def merged(self) -> bool:
-        """Whether an adapter is currently folded into the base weight."""
-        return bool(self.merged_adapters)
 
     def get_base_layer(self) -> nn.Linear:
         """Return the wrapped ``nn.Linear``, whose parameters are the base model's own."""
@@ -102,7 +100,7 @@ class LoraLayer(nn.Module):
             Whether the adapter takes part.  Gradient flags are left as
             they are: a frozen adapter stays frozen when it is re-enabled.
         """
-        self._disable_adapters = not enabled
+        self.disable_adapters = not enabled
 
     def update_layer(
         self,
@@ -152,7 +150,7 @@ class LoraLayer(nn.Module):
             raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
         if len(self.lora_A):
             raise NotImplementedError(
-                f"this layer already holds adapter {self._active_adapter!r}; "
+                f"this layer already holds adapter {self.active_adapter!r}; "
                 "lucid.peft v1 keeps one adapter per layer"
             )
         weight = self.base_layer.weight
@@ -168,7 +166,7 @@ class LoraLayer(nn.Module):
             r, self.out_features, bias=False, device=weight.device, dtype=dtype
         )
         self.reset_lora_parameters(adapter_name, init_lora_weights)
-        self._active_adapter = adapter_name
+        self.active_adapter = adapter_name
 
     def reset_lora_parameters(self, adapter_name: str, init_lora_weights: bool | str) -> None:
         r"""Initialise adapter ``adapter_name`` the way ``init_lora_weights`` asks.
@@ -309,8 +307,16 @@ class Linear(LoraLayer):
             )
 
     def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
-        """The requested adapters (the active one by default) not merged yet."""
-        names = [self._active_adapter] if adapter_names is None else list(adapter_names)
+        """The requested adapters (the active one by default) not merged yet.
+
+        A disabled layer runs its base alone, so merging into it would make
+        it run the adapter while it reads as disabled; it is refused.
+        """
+        if self.disable_adapters:
+            raise RuntimeError(
+                "the adapter is disabled; enable it (leave disable_adapter()) before merging"
+            )
+        names = [self.active_adapter] if adapter_names is None else list(adapter_names)
         unknown = [name for name in names if name not in self.lora_A]
         if unknown:
             raise ValueError(f"unknown adapter(s) {unknown}; this layer holds {list(self.lora_A)}")
@@ -339,6 +345,8 @@ class Linear(LoraLayer):
         ValueError
             An unknown adapter name, or ``safe_merge`` found a non-finite
             merged weight.
+        RuntimeError
+            The adapter is disabled.
         """
         pending = self._pending_merges(adapter_names)
         if not pending:
@@ -350,6 +358,7 @@ class Linear(LoraLayer):
             for adapter in pending:
                 self.base_layer.weight.copy_(self._shifted_weight(adapter, 1.0))
                 self.merged_adapters.append(adapter)
+                self.merged = True
 
     def unmerge(self) -> None:
         """Take every merged update back out of the base weight, in place.
@@ -364,15 +373,32 @@ class Linear(LoraLayer):
             while self.merged_adapters:
                 adapter = self.merged_adapters.pop()
                 self.base_layer.weight.copy_(self._shifted_weight(adapter, -1.0))
+            self.merged = False
+
+    @override
+    def enable_adapters(self, enabled: bool) -> None:
+        """Apply the adapter (``True``) or run the base alone (``False``).
+
+        Disabling a merged layer unmerges it first, here rather than on
+        the next call, so the forward pass never writes a weight — a
+        compiled forward must not replay that write.
+
+        Parameters
+        ----------
+        enabled : bool
+            Whether the adapter takes part.  Gradient flags are left as
+            they are.
+        """
+        if not enabled and self.merged:
+            self.unmerge()
+        super().enable_adapters(enabled)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        if self._disable_adapters and self.merged:
-            self.unmerge()
         result = self.base_layer(x)
-        if self._disable_adapters or self.merged:
+        if self.disable_adapters or self.merged:
             return result
-        adapter = self._active_adapter
+        adapter = self.active_adapter
         lora_a = self.lora_A[adapter]
         h = x if x.dtype == lora_a.weight.dtype else x.to(lora_a.weight.dtype)
         update = self.lora_B[adapter](lora_a(self.lora_dropout[adapter](h))) * self.scaling[adapter]

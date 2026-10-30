@@ -9,13 +9,12 @@ Two properties are held here:
   is frozen train the adapters and nothing else, and match the eager
   loop step for step (AdamW, SGD; ``maximize`` honoured — LCD-687).
 * **The forward.**  ``lucid.compile(model)`` equals eager with the
-  adapter on.  A module compiled *before* ``disable_adapter()`` or
-  ``merge_adapter()`` goes on running the graph it traced: the compile
-  key sees public scalar attributes only, and the layer keeps its
-  branch in a private flag and a list (LCD-703, with the key's side in
-  LCD-704).  Those cases are strict xfails; what works today — compile
-  again after the toggle, or compile ``merge_and_unload()``'s plain
-  model — is asserted beside them.
+  adapter on, and a module compiled *before* ``disable_adapter()`` or
+  ``merge_adapter()`` follows the switch: the layer keeps what it branches
+  on in public scalar attributes, which the compile key reads (LCD-703).
+  ``fused_step``'s plan key reads no module state at all, so its case is a
+  strict xfail on LCD-704.  Compiling again after the toggle, or compiling
+  ``merge_and_unload()``'s plain model, is asserted beside them.
 
 Tolerance: ``make_step`` takes MPSGraph gradients into the eager
 optimizer, ``fused_step`` takes the whole update from MPSGraph; both
@@ -297,13 +296,6 @@ def test_merge_and_unload_compiles_as_a_plain_model() -> None:
 # ── a toggle after the module was compiled (LCD-703 / LCD-704) ─────
 
 
-_STALE = (
-    "LCD-703: the compile key sees public scalar attributes only and LoraLayer keeps its "
-    "branch in _disable_adapters and merged_adapters, so a graph traced before the toggle "
-    "is reused — the adapter is applied (or applied twice) against eager's branch"
-)
-
-
 def _warmed() -> tuple[PeftModel, Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor]:
     model = _trained(_peft(True)).eval()
     x, _ = _data()
@@ -312,7 +304,6 @@ def _warmed() -> tuple[PeftModel, Callable[[lucid.Tensor], lucid.Tensor], lucid.
     return model, compiled, x
 
 
-@pytest.mark.xfail(strict=True, reason=_STALE)
 def test_disable_adapter_reaches_a_module_compiled_before_it() -> None:
     model, compiled, x = _warmed()
     with model.disable_adapter(), lucid.no_grad():
@@ -321,14 +312,12 @@ def test_disable_adapter_reaches_a_module_compiled_before_it() -> None:
     assert _gap(got, want) < FORWARD_TOL
 
 
-@pytest.mark.xfail(strict=True, reason=_STALE)
 def test_merge_adapter_reaches_a_module_compiled_before_it() -> None:
     model, compiled, x = _warmed()
     model.base_model.merge_adapter()
     assert _compiled_matches(compiled, model, x) < FORWARD_TOL
 
 
-@pytest.mark.xfail(strict=True, reason=_STALE)
 def test_the_adapter_coming_back_is_followed_after_a_disabled_call() -> None:
     """Compiled first while disabled: the enabled model must not get the disabled graph."""
     model = _trained(_peft(True)).eval()
@@ -339,7 +328,6 @@ def test_the_adapter_coming_back_is_followed_after_a_disabled_call() -> None:
     assert _compiled_matches(compiled, model, x) < FORWARD_TOL
 
 
-@pytest.mark.xfail(strict=True, reason=_STALE)
 def test_unmerge_adapter_reaches_a_module_compiled_while_merged() -> None:
     model = _trained(_peft(True)).eval()
     x, _ = _data()
@@ -350,10 +338,23 @@ def test_unmerge_adapter_reaches_a_module_compiled_while_merged() -> None:
     assert _compiled_matches(compiled, model, x) < FORWARD_TOL
 
 
-@pytest.mark.xfail(strict=True, reason=_STALE)
-@pytest.mark.parametrize("mode", COMPILED_MODES)
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "made",
+        pytest.param(
+            "fused",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="LCD-704: fused_step's plan key holds no module state (training "
+                "flags, public scalar attributes), so a step traced with the adapter on is "
+                "replayed after disable_adapter()",
+            ),
+        ),
+    ],
+)
 def test_disable_adapter_reaches_a_compiled_training_step(mode: str) -> None:
-    """The same stale branch in ``make_step`` / ``fused_step``: the loss still has the adapter in it."""
+    """The same switch in ``make_step`` / ``fused_step``: the loss must drop the adapter."""
     x, t = _data()
     loop = _Loop(mode, lambda ps: optim.SGD(ps, lr=0.0), init_lora_weights=False)
     loop.step(x, t)  # traced with the adapter on
