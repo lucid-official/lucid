@@ -170,13 +170,11 @@ Storage GpuBackend::complex_conj(const Storage& a, const Shape&, Dtype dt) {
 }
 
 Storage GpuBackend::any(const Storage& a, const Shape&, Dtype dt) {
-    return mlx_unary(a, {}, Dtype::Bool,
-                     [](auto& x) { return ::mlx::core::any(truth_operand(x)); });
+    return mlx_unary(a, {}, Dtype::Bool, [](auto& x) { return ::mlx::core::any(gpu_truth(x)); });
 }
 
 Storage GpuBackend::all(const Storage& a, const Shape&, Dtype dt) {
-    return mlx_unary(a, {}, Dtype::Bool,
-                     [](auto& x) { return ::mlx::core::all(truth_operand(x)); });
+    return mlx_unary(a, {}, Dtype::Bool, [](auto& x) { return ::mlx::core::all(gpu_truth(x)); });
 }
 
 Storage GpuBackend::isinf(const Storage& a, const Shape& shape, Dtype dt) {

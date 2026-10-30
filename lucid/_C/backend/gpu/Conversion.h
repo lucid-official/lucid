@@ -11,10 +11,11 @@
 //     False (LCD-408).  A complex number is true when either part is
 //     nonzero, and every real target keeps the real part.
 //
-// ``any`` and ``all`` judge a complex element's truth by the same rule
-// (``truth_operand``), and a float sample position becomes an index by the
-// int64 conversion (``gpu_index_of``), the rule ``resample::index_of``
-// states for the CPU.
+// ``any`` and ``all`` reduce the elements' truth (``gpu_truth``) and never
+// the elements themselves: MLX's Or-reduction of an int8 array answered
+// False for every even value, so ``any`` of ``[2, 2]`` was False
+// (LCD-726).  A float sample position becomes an index by the int64 conversion
+// (``gpu_index_of``), the rule ``resample::index_of`` states for the CPU.
 
 #pragma once
 
@@ -30,19 +31,14 @@
 namespace lucid {
 namespace backend {
 
-// Whether each element of ``x`` is nonzero, as bool.
+// Whether each element of ``x`` is nonzero, as bool.  A complex value is
+// true when either part is; MLX's own cast read the real part alone.
 inline ::mlx::core::array gpu_truth(const ::mlx::core::array& x) {
     namespace mx = ::mlx::core;
     if (x.dtype() == mx::complex64)
         return mx::logical_or(mx::not_equal(mx::real(x), mx::array(0.0f)),
                               mx::not_equal(mx::imag(x), mx::array(0.0f)));
     return mx::astype(x, mx::bool_);
-}
-
-// What a logical reduction reads for ``x``: its truth when it is complex,
-// which MLX's reductions judge by the real part alone; ``x`` otherwise.
-inline ::mlx::core::array truth_operand(const ::mlx::core::array& x) {
-    return x.dtype() == ::mlx::core::complex64 ? gpu_truth(x) : x;
 }
 
 // ``x`` converted to ``dst_dt``.

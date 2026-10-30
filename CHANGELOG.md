@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse to merge away a tie; store only the adapted names
 
+- any and all reduce the elements' truth, not the elements
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
