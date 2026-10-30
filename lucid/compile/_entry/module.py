@@ -355,6 +355,12 @@ class CompiledModule[**P, R](_ModuleWrapper):
       ``_CacheEntry.input_source``).  Non-tensor kwargs are baked into
       the trace structure and captured by the :class:`CacheKey`, so a
       different scalar kwarg re-keys (and recompiles) correctly.
+    * **What a forward branches on is part of the key.**  Each module's
+      ``training`` flag, and every attribute holding a scalar, an enum
+      member, a dtype or a short container of them — public or private,
+      assigned or changed in place (``self.names.append(...)``) — as well
+      as the grad mode and the ``autocast`` region of the call: change one
+      and the next call traces again, as every compile entry point does.
     * **Random draws are drawn again on every call.**  A draw from the
       default generator inside the traced function — ``randn`` noise, a
       ``randint`` timestep, a training-mode dropout mask — is a feed the
