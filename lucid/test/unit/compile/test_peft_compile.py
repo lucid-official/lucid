@@ -242,8 +242,17 @@ def test_a_compiled_forward_applies_the_adapter() -> None:
         assert _gap(compiled(x), _without_adapter(model, x)) > 1e-3
 
 
-def test_a_compiled_module_called_under_grad_mode_trains_the_adapters() -> None:
-    """Under grad mode a model with trainable parameters runs eagerly (LCD-582), so ``backward`` works."""
+def test_a_compiled_module_called_under_grad_mode_trains_the_adapters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Under grad mode a model with trainable parameters runs eagerly (LCD-582), so ``backward`` works.
+
+    The fallback is announced once per process and category, so the
+    registry is emptied here: an earlier test that fell back for the same
+    reason would otherwise use up the warning this one asserts.
+    """
+    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
+    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set())
     model = _peft(False).train()
     twin = _peft(False).train()
     x, t = _data()
