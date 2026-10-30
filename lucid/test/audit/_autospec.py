@@ -50,6 +50,7 @@ import numpy as np
 
 import lucid
 import lucid.nn.utils.rnn
+import lucid.peft
 from lucid.test.audit import _probe
 from lucid.test.audit._specs import Call
 
@@ -334,6 +335,10 @@ _TENSOR_PARAMS = frozenset(
 #: ``int`` describes ``dim``, ``groups``, ``num_classes`` and
 #: ``kernel_size`` equally badly.
 _BY_NAME: dict[str, Any] = {
+    # ``get_peft_model(model, peft_config)``: the ``model`` of
+    # :data:`_MODULE_BY_NAME` has a ``Linear`` at child ``"0"``, which is
+    # what this adapts.  The config is read, never changed, so one is shared.
+    "peft_config": lucid.peft.LoraConfig(r=2, target_modules=["0"]),
     "dim": -1,
     "M": 8,
     "nonlinearity": "relu",

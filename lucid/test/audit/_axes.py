@@ -32,6 +32,7 @@ import numpy as np
 import lucid
 import lucid.autograd
 from lucid.test.audit import _probe, _specs, _surface
+from lucid.test.audit._builders import BUILDERS
 from lucid.test.audit._result import Finding, Status
 
 if TYPE_CHECKING:
@@ -2994,7 +2995,16 @@ def _module_candidates(cls: Any) -> Iterator[Any]:
     :func:`_construct_module`.  Yielding them lets the caller keep the
     first that survives the *whole* lifecycle instead of committing to
     the first that survives ``__init__``.
+
+    A class registered in :data:`~lucid.test.audit._builders.BUILDERS` is
+    built by its builder first: its arguments are objects that relate to
+    one another, which no signature says.  A builder that raises is not
+    caught — the class is one the audit was told how to build, so a
+    failure is a finding, not a gap.
     """
+    build = BUILDERS.get(cls)
+    if build is not None:
+        yield build()
     for fill in (False, True):
         built = _construct_module(cls, fill_optional=fill)
         if built is not None:

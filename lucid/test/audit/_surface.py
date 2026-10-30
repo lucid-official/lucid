@@ -57,6 +57,8 @@ SUBSYSTEMS: dict[str, tuple[str, str]] = {
     "quantization": ("lucid.quantization", "quant"),
     "compile": ("lucid.compile", "compiled"),
     "coreml": ("lucid.coreml", "compiled"),
+    "peft": ("lucid.peft", "util"),
+    "peft.tuners.lora": ("lucid.peft.tuners.lora", "util"),
     "profiler": ("lucid.profiler", "util"),
     "metal": ("lucid.metal", "util"),
     "backends": ("lucid.backends", "util"),
@@ -75,6 +77,7 @@ SUBSYSTEMS: dict[str, tuple[str, str]] = {
 EXCLUDED: dict[str, str] = {
     "lucid.models": "the model zoo — 593 symbols with their own contract and device suites",
     "lucid.benchmarks": "benchmark drivers, not API — they time the ops audited here",
+    "lucid.test": "this tool and the suites it runs — the instrument, not the subject",
     "<re-exports>": (
         "a sub-module reached as an attribute of its parent (lucid.nn.modules "
         "under lucid.nn, lucid.signal.windows under lucid.signal).  Each is "
@@ -122,6 +125,10 @@ STATEFUL_EXACT: frozenset[str] = frozenset(
         "no_grad",
         "enable_grad",
         "inference_mode",
+        # a model rewritten in place: the layers it holds are swapped for
+        # adapter-carrying ones and its parameters are frozen
+        "get_peft_model",
+        "inject_adapter_in_model",
         # the filesystem
         "save",
         "load",
@@ -250,6 +257,42 @@ class Symbol:
 
 
 _PREFIX = {"lucid": "lucid.", "tensor": "Tensor.", "nn.functional": "F.", "nn": "nn."}
+
+
+def unregistered_subpackages(names: Iterable[str] | None = None) -> list[str]:
+    """Sub-packages ``lucid`` loads on demand that the audit neither lists nor excludes.
+
+    A package missing from :data:`SUBSYSTEMS` is not skipped — it is
+    enumerated anyway, under the ``lucid`` catch-all, spelled as
+    ``lucid.<Name>``.  ``lucid.peft`` landed that way: its ``Linear``
+    was filed at the top level beside ``nn.Linear``, the released-surface
+    snapshot would have frozen the wrong spelling, and its model-wrapping
+    functions were probed as ops on tensors.  Nothing failed until a
+    construction check counted the classes it could not build.
+
+    Declaring a package is the decision to audit it; naming it in
+    :data:`EXCLUDED` is the decision not to.  Either is explicit, which
+    is all this asks for.
+
+    Parameters
+    ----------
+    names : iterable of str, optional
+        Sub-package names to check.  Defaults to ``lucid._SUBPKG_NAMES``.
+
+    Returns
+    -------
+    list of str
+        The names that are neither, sorted.
+    """
+    declared = [path for path, _ in SUBSYSTEMS.values()]
+    return sorted(
+        name
+        for name in (lucid._SUBPKG_NAMES if names is None else names)
+        if f"lucid.{name}" not in EXCLUDED
+        and not any(
+            path == f"lucid.{name}" or path.startswith(f"lucid.{name}.") for path in declared
+        )
+    )
 
 
 def _names(module: Any) -> list[str]:
@@ -666,4 +709,5 @@ __all__ = [
     "removed",
     "resolve",
     "spellings",
+    "unregistered_subpackages",
 ]

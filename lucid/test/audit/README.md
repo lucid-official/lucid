@@ -438,6 +438,7 @@ without restoring the optimizer it drives.
 | `_axes_data.py` | transforms, data, tokenizers, schedulers |
 | `_axes_state.py` | global state, hooks, dtype algebra, functional transforms, `nn.utils` |
 | `_specs.py` | hand-written invocations, and the tier order |
+| `_builders.py` | hand-built instances of classes whose arguments are related objects no signature describes (`LoraModel(model, config)`) |
 | `_autospec.py` | invocations derived from signatures |
 | `_probe.py` | domains, sampling, finite differences |
 | `_console.py` | the stdlib ANSI display |

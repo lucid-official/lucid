@@ -28,7 +28,9 @@ import lucid
 import lucid.fft
 import lucid.linalg
 import lucid.nn.utils.rnn
+from lucid.peft import PeftModel, get_peft_model_state_dict
 from lucid.test.audit import _probe, _surface
+from lucid.test.audit._builders import BUILDERS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -1234,6 +1236,21 @@ def _retain_grad(domain: str) -> Iterator[Call]:
 #: a repeat count, and ``Tensor.unfold`` slides a window while
 #: ``F.unfold`` extracts image patches.  Matching on the short name alone
 #: sent four of these to the wrong builder.
+def _set_peft_state(domain: str) -> Iterator[Call]:
+    """A model that already holds an adapter, and that adapter's own state.
+
+    No parameter name asks for either, and the write goes into the model,
+    so it is built fresh here rather than shared with a read.
+    """
+    model = BUILDERS[PeftModel]()
+    yield Call(
+        [model, get_peft_model_state_dict(model)],
+        {},
+        0,
+        "set_peft_model_state_dict(peft model, its own adapter state)",
+    )
+
+
 _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "lucid.autograd.grad": _autograd_grad,
     # A name not on the surface yet costs nothing: lookup is by qualname.
@@ -1273,6 +1290,10 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "lucid.normal": lambda d: iter(
         [Call([0.0, 1.0], {"size": (2, 3)}, 0, "normal(mean, std, size=)")]
     ),
+    "lucid.peft.get_peft_model_state_dict": lambda d: iter(
+        [Call([BUILDERS[PeftModel]()], {}, 0, "get_peft_model_state_dict(peft model)")]
+    ),
+    "lucid.peft.set_peft_model_state_dict": _set_peft_state,
     "lucid.initial_seed": lambda d: iter([Call([], {}, 0, "initial_seed()")]),
     "lucid.is_grad_enabled": lambda d: iter([Call([], {}, 0, "is_grad_enabled()")]),
     "lucid.is_nonzero": lambda d: iter(
