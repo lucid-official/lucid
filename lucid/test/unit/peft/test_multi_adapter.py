@@ -326,6 +326,20 @@ class TestAdding:
             peft.add_adapter("x", _config(2, ["2"], bias="lora_only"))
         peft.add_adapter("plain", _config(2, ["2"]))  # bias="none" sits beside it
 
+    def test_disabling_warns_while_a_bias_trains(self) -> None:
+        peft = get_peft_model(_mlp("cpu"), _config(2, ["0"], bias="all"))
+        with pytest.warns(UserWarning, match="disabling adapter layers with bias"):
+            with peft.disable_adapter():
+                pass
+
+    def test_a_wrapper_holding_nothing_of_an_adapter_has_nothing_to_train_or_save(self) -> None:
+        net = _mlp("cpu")
+        get_peft_model(net, _config(2, ["0"], modules_to_save=["2"]))
+        wrapper = net[2]
+        assert isinstance(wrapper, ModulesToSaveWrapper)
+        assert wrapper._adapter_parameters("elsewhere") == []
+        assert wrapper._adapter_keys("elsewhere") == {}
+
     def test_the_bias_follows_the_adapter_that_asked_for_it(self) -> None:
         net = _mlp("cpu")
         peft = get_peft_model(net, _config(2, ["0"]))
@@ -678,6 +692,21 @@ class TestWeightedAdapters:
             # Only "default" reaches layer 2; the rest of the stacked rank is zero.
             assert _close(last.get_delta_weight("mix"), _delta(last, "default"))
         assert peft.peft_config["mix"].target_modules == {"0", "2"}
+
+    def test_the_peft_model_forwards_it_to_the_tuner(self, device: str) -> None:
+        peft, net = _two(device)
+        # Not a PeftModel method (the reference's is not either): found on the tuner by name.
+        combine = getattr(peft, "add_weighted_adapter")
+        combine(["default", "other"], [1.0, 1.0], "mix", combination_type="cat")
+        assert sorted(peft.peft_config) == ["default", "mix", "other"]
+        assert _layer(net, 0).r["mix"] == 5
+
+    def test_a_layer_the_new_adapter_does_not_reach_is_left_alone(self, device: str) -> None:
+        peft, net = _two(device)  # "other" is on layer 0 only
+        lora = peft.base_model
+        assert isinstance(lora, LoraModel)
+        lora.add_weighted_adapter(["other"], [1.0], "mix", combination_type="cat")
+        assert "mix" in _layer(net, 0).r and "mix" not in _layer(net, 2).r
 
     def test_the_new_adapter_is_frozen_and_inactive(self, device: str) -> None:
         lora, layer = _pair(device)
