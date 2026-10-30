@@ -21,6 +21,13 @@ def get_peft_model(
     ``task_type``, the model's ``classifier`` / ``score`` / ``qa_outputs``
     head added to ``modules_to_save`` so that it trains.
 
+    The class returned follows ``peft_config.task_type``:
+    ``PeftModelForCausalLM`` for ``"CAUSAL_LM"``, ``PeftModelForSeq2SeqLM``,
+    ``PeftModelForSequenceClassification``, ``PeftModelForTokenClassification``,
+    ``PeftModelForQuestionAnswering`` and ``PeftModelForFeatureExtraction``
+    for theirs (``MODEL_TYPE_TO_PEFT_MODEL_MAPPING`` is the table), and a
+    plain ``PeftModel`` when the config has no task.
+
     Parameters
     ----------
     model : nn.Module
@@ -57,7 +64,7 @@ def get_peft_model(
     (2, 4)
     """
     config = _config_for_model(model, _require_config("peft_config", peft_config))
-    return PeftModel(model, config, adapter_name)
+    return PeftModel._model_class(config.task_type)(model, config, adapter_name)
 
 
 def inject_adapter_in_model(

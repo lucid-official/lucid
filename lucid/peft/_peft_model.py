@@ -5,14 +5,20 @@ import os
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from types import TracebackType
-from typing import Final, Self, override
+from typing import ClassVar, Final, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft._config import PeftConfig, _output_directory, _require_config
+from lucid.peft._config import (
+    PeftConfig,
+    TaskType,
+    _adapter_directory,
+    _output_directory,
+    _require_config,
+)
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
-from lucid.peft._targeting import _config_for_model
+from lucid.peft._targeting import _config_for_model, _with_heads
 from lucid.peft.tuners._base import _BaseTuner, _tuner_for
 from lucid.serialization import load_safetensors, save_safetensors
 
@@ -86,7 +92,12 @@ class PeftModel(_ForwardsAttributes):
     in a sub-directory of its own name.
 
     Usually made by :func:`~lucid.peft.get_peft_model`, or by
-    ``from_pretrained`` for a saved adapter.
+    ``from_pretrained`` for a saved adapter.  Both pick the class from the
+    config's ``task_type``: the wrappers (``PeftModelForCausalLM`` and the
+    others, ``MODEL_TYPE_TO_PEFT_MODEL_MAPPING``) are subclasses of this
+    one, each registered for its task by ``class Wrapper(PeftModel,
+    task_type=TaskType.X)``; an adapter with no task, or a task no wrapper
+    is registered for, gets this class itself.
 
     Parameters
     ----------
@@ -115,10 +126,36 @@ class PeftModel(_ForwardsAttributes):
     (4, 2)
     """
 
+    #: Wrapper class by the task it is for, filled as each wrapper is defined.
+    _task_models: ClassVar[dict[TaskType, type[PeftModel]]] = {}
+    #: Modules this class's task trains in full when the model has them.
+    _head_names: ClassVar[tuple[str, ...]] = ()
+
+    @override
+    def __init_subclass__(cls, *, task_type: TaskType | None = None, **kwargs: object) -> None:
+        """Register the subclass as the wrapper for ``task_type``, when it names one."""
+        super().__init_subclass__(**kwargs)
+        if task_type is not None:
+            PeftModel._task_models[task_type] = cls
+
+    @classmethod
+    def _model_class(cls, task_type: TaskType | str | None) -> type[PeftModel]:
+        """The wrapper registered for ``task_type``, or ``cls`` when it has none."""
+        if task_type is None:
+            return cls
+        return PeftModel._task_models.get(TaskType(task_type), cls)
+
+    @classmethod
+    def _prepared(cls, model: nn.Module, config: PeftConfig) -> PeftConfig:
+        """``config`` as this class stores it for ``model``: the task's heads in ``modules_to_save``."""
+        if not cls._head_names or not isinstance(model, nn.Module):
+            return config
+        return _with_heads(model, config, cls._head_names)
+
     def __init__(
         self, model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
     ) -> None:
-        config = _require_config("peft_config", peft_config)
+        config = self._prepared(model, _require_config("peft_config", peft_config))
         super().__init__()
         self.base_model: _BaseTuner = _tuner_for(config)(model, config, adapter_name)
         self._disable_depth = 0
@@ -190,8 +227,9 @@ class PeftModel(_ForwardsAttributes):
         >>> peft.get_base_model()[1].lora_A["second"].weight.shape
         (4, 4)
         """
-        config = _config_for_model(
-            self.get_base_model(), _require_config("peft_config", peft_config)
+        model = self.get_base_model()
+        config = self._prepared(
+            model, _config_for_model(model, _require_config("peft_config", peft_config))
         )
         self.base_model.add_adapter(adapter_name, config, low_cpu_mem_usage)
 
@@ -452,14 +490,19 @@ class PeftModel(_ForwardsAttributes):
         adapter_name: str = "default",
         is_trainable: bool = False,
         config: PeftConfig | None = None,
-    ) -> Self:
+        *,
+        subfolder: str | None = None,
+    ) -> PeftModel:
         r"""Adapt ``model`` with the adapter saved in ``model_id``.
 
         Reads ``adapter_config.json`` (unless ``config`` is given) and
         ``adapter_model.safetensors`` — written by ``save_pretrained``
         or by the reference library — injects the adapter into ``model`` in
         place and loads its tensors.  If the tensors do not fit the model,
-        the injection is undone before the error is raised.
+        the injection is undone before the error is raised.  The class
+        returned follows the config's ``task_type`` as in
+        :func:`~lucid.peft.get_peft_model`; only an adapter with no task
+        is built as ``cls``.
 
         Parameters
         ----------
@@ -474,11 +517,14 @@ class PeftModel(_ForwardsAttributes):
             model is put in ``eval()`` mode, for inference.
         config : PeftConfig, optional
             Use this config instead of the directory's.
+        subfolder : str, optional
+            The directory under ``model_id`` that holds the adapter.
 
         Returns
         -------
         PeftModel
-            ``model``, adapted and loaded.
+            ``model``, adapted and loaded — a task wrapper if the adapter
+            names a task.
 
         Raises
         ------
@@ -509,14 +555,14 @@ class PeftModel(_ForwardsAttributes):
         >>> bool(lucid.allclose(loaded(x), trained(x)))
         True
         """
-        directory = os.fspath(model_id)
+        directory = _adapter_directory(model_id, subfolder)
         # Without a config, the file's ``peft_type`` picks the method.
         given = PeftConfig.from_pretrained(directory) if config is None else config
         config = dataclasses.replace(
             _require_config("config", given), inference_mode=not is_trainable
         )
         weights = _adapter_weights(directory)
-        peft_model = cls(model, config, adapter_name)
+        peft_model = cls._model_class(config.task_type)(model, config, adapter_name)
         try:
             set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
         except BaseException:
@@ -533,6 +579,8 @@ class PeftModel(_ForwardsAttributes):
         adapter_name: str,
         is_trainable: bool = False,
         low_cpu_mem_usage: bool = False,
+        *,
+        subfolder: str | None = None,
     ) -> object:
         r"""Load a saved adapter into the model, beside the ones it holds.
 
@@ -556,6 +604,8 @@ class PeftModel(_ForwardsAttributes):
         low_cpu_mem_usage : bool, default=False
             Accepted for the reference's signature; ignored as in
             ``add_adapter``.
+        subfolder : str, optional
+            The directory under ``model_id`` that holds the adapter.
 
         Returns
         -------
@@ -588,7 +638,7 @@ class PeftModel(_ForwardsAttributes):
         >>> sorted(mine.peft_config), mine.active_adapter
         (['default', 'loaded'], 'default')
         """
-        directory = os.fspath(model_id)
+        directory = _adapter_directory(model_id, subfolder)
         added = adapter_name not in self.peft_config
         config = None
         if added:

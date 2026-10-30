@@ -10,7 +10,6 @@ the index after the layer list's name.  Where v1 differs is stated on
 import dataclasses
 import re
 from collections.abc import Callable, Iterable
-from typing import Final
 
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, TaskType, _layer_regex, _TargetedConfig
@@ -20,13 +19,6 @@ _ALL_LINEAR = "all-linear"
 
 #: Root attributes the reference treats as a sequence-classification head.
 _SEQ_CLS_HEADS = ("score", "classifier")
-
-#: Heads the reference's task wrappers train in full, by task.
-_TASK_HEADS: Final[dict[TaskType, tuple[str, ...]]] = {
-    TaskType.SEQ_CLS: ("classifier", "score"),
-    TaskType.TOKEN_CLS: ("classifier", "score"),
-    TaskType.QUESTION_ANS: ("qa_outputs",),
-}
 
 
 def _suffix_match(key: str, names: Iterable[str]) -> bool:
@@ -170,32 +162,35 @@ def _module_names_matching(model: nn.Module, names: Iterable[str]) -> list[str]:
     return chosen
 
 
-def _with_task_heads(model: nn.Module, config: _TargetedConfig) -> list[str] | None:
-    """``modules_to_save`` plus the task's conventional head, if ``model`` has one."""
-    saved = config.modules_to_save
-    if config.task_type is None:
-        return saved
-    heads = _TASK_HEADS.get(TaskType(config.task_type), ())
-    present = [head for head in heads if _module_names_matching(model, [head])]
-    added = [head for head in present if head not in (saved or [])]
-    return [*(saved or []), *added] if added else saved
+def _with_heads(model: nn.Module, config: PeftConfig, heads: Iterable[str]) -> PeftConfig:
+    """``config`` with those of ``heads`` that ``model`` has added to ``modules_to_save``.
+
+    A head the model lacks is left out rather than named, so the stored
+    config lists modules that exist.  A config that selects no modules
+    (it has no ``modules_to_save``) is returned as it is.
+    """
+    if not isinstance(config, _TargetedConfig):
+        return config
+    saved = config.modules_to_save or []
+    added = [
+        head for head in heads if head not in saved and _module_names_matching(model, [head])
+    ]
+    if not added:
+        return config
+    return dataclasses.replace(config, modules_to_save=[*saved, *added])
 
 
 def _config_for_model(model: nn.Module, config: PeftConfig) -> PeftConfig:
-    """``config`` as it is stored for ``model``: the reference's two additions to the user's.
+    """``config`` as it is stored for ``model``: the base model's name filled in.
 
     A ``base_model_name_or_path`` read from the model's ``name_or_path``
-    when it has one and, for a classification or question-answering
-    ``task_type``, the model's head added to ``modules_to_save`` so that it
-    trains.  ``config`` itself is left as it is.
+    when it has one, as the reference does.  ``config`` itself is left as
+    it is.
     """
     name_or_path = model.__dict__.get("name_or_path")
-    adjusted = dataclasses.replace(
+    return dataclasses.replace(
         config,
         base_model_name_or_path=(
             name_or_path if isinstance(name_or_path, str) else config.base_model_name_or_path
         ),
     )
-    if isinstance(adjusted, _TargetedConfig):
-        adjusted = dataclasses.replace(adjusted, modules_to_save=_with_task_heads(model, adjusted))
-    return adjusted

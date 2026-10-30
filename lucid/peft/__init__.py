@@ -63,16 +63,32 @@ from lucid.peft._config import PeftConfig, PeftType, TaskType
 from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
+from lucid.peft._task_models import (
+    MODEL_TYPE_TO_PEFT_MODEL_MAPPING,
+    PeftModelForCausalLM,
+    PeftModelForFeatureExtraction,
+    PeftModelForQuestionAnswering,
+    PeftModelForSeq2SeqLM,
+    PeftModelForSequenceClassification,
+    PeftModelForTokenClassification,
+)
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
 
 __all__ = [
+    "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
     "PeftConfig",
     "LoraConfig",
     "PeftType",
     "TaskType",
     "LoraModel",
     "PeftModel",
+    "PeftModelForCausalLM",
+    "PeftModelForFeatureExtraction",
+    "PeftModelForQuestionAnswering",
+    "PeftModelForSeq2SeqLM",
+    "PeftModelForSequenceClassification",
+    "PeftModelForTokenClassification",
     "get_peft_model",
     "inject_adapter_in_model",
     "get_peft_model_state_dict",

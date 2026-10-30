@@ -96,10 +96,13 @@ _DEFAULT_PEFT_TYPE: Final = PeftType.LORA
 class TaskType(enum.StrEnum):
     """The task an adapter was trained for, as ``adapter_config.json`` records it.
 
-    Metadata in v1, with one effect: :func:`lucid.peft.get_peft_model`
-    makes a classification or question-answering head trainable when the
-    model has one under the reference's conventional name (``classifier``
-    / ``score``, ``qa_outputs``), as the reference's task wrappers do.
+    It chooses the model class :func:`lucid.peft.get_peft_model` and
+    ``PeftModel.from_pretrained`` return: ``PeftModelForCausalLM`` for
+    ``CAUSAL_LM`` and so on (``MODEL_TYPE_TO_PEFT_MODEL_MAPPING``), a plain
+    ``PeftModel`` for an adapter with no task.  A classification or
+    question-answering wrapper makes the model's head trainable when it
+    has one under the reference's conventional name (``classifier`` /
+    ``score``, ``qa_outputs``).
     """
 
     SEQ_CLS = "SEQ_CLS"
@@ -293,18 +296,18 @@ def _output_directory(save_directory: str | os.PathLike[str]) -> str:
     return path
 
 
-def _read_config_file(directory: str | os.PathLike[str]) -> dict[str, object]:
-    path = os.path.join(os.fspath(directory), _CONFIG_NAME)
-    if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"no {_CONFIG_NAME} in {os.fspath(directory)!r} "
-            "(lucid.peft reads adapters from a local directory)"
-        )
+def _adapter_directory(model_id: str | os.PathLike[str], subfolder: str | None = None) -> str:
+    """The directory an adapter is read from: ``model_id``, or its ``subfolder``."""
+    path = os.fspath(model_id)
+    return path if subfolder is None else os.path.join(path, subfolder)
+
+
+def _read_json_object(path: str | os.PathLike[str]) -> dict[str, object]:
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     if isinstance(data, dict):
         return data
-    raise ValueError(f"{path} does not hold a JSON object")
+    raise ValueError(f"{os.fspath(path)} does not hold a JSON object")
 
 
 #: ``PeftType`` → the config class that reads it, filled as each is defined.
@@ -528,9 +531,63 @@ class PeftConfig:
         with open(os.path.join(path, _CONFIG_NAME), "w", encoding="utf-8") as fh:
             fh.write(json.dumps(ordered, indent=2))
 
+    @staticmethod
+    def from_json_file(path_json_file: str | os.PathLike[str]) -> dict[str, object]:
+        r"""Read a config file into the dict it holds, unchanged but for ``runtime_config``.
+
+        What ``from_pretrained`` reads before it chooses a config class: the
+        file's content as a dict, as the reference's ``from_json_file`` returns
+        it.  ``from_dict`` turns it into a config.
+
+        Parameters
+        ----------
+        path_json_file : str or os.PathLike
+            The path of a JSON file such as ``adapter_config.json``.
+
+        Returns
+        -------
+        dict of str to object
+            The file's object, without a ``runtime_config`` key: the
+            reference warns that such a key is ignored, since a runtime
+            configuration is valid at runtime only.
+
+        Raises
+        ------
+        FileNotFoundError
+            There is no file at ``path_json_file``.
+        ValueError
+            The file does not hold a JSON object.
+
+        Examples
+        --------
+        >>> import os, tempfile
+        >>> from lucid.peft import LoraConfig, PeftConfig
+        >>> with tempfile.TemporaryDirectory() as d:
+        ...     LoraConfig(r=2, target_modules=["fc"]).save_pretrained(d)
+        ...     raw = PeftConfig.from_json_file(os.path.join(d, "adapter_config.json"))
+        >>> raw["peft_type"], raw["r"]
+        ('LORA', 2)
+        """
+        data = _read_json_object(path_json_file)
+        if "runtime_config" in data:
+            warnings.warn(
+                "The configuration file contains a `runtime_config` key. This is ignored. "
+                "Runtime configurations are only valid at runtime.",
+                stacklevel=2,
+            )
+            del data["runtime_config"]
+        return data
+
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str]) -> Self:
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None
+    ) -> Self:
         r"""Read ``adapter_config.json`` from a local adapter directory.
+
+        The file's ``peft_type`` picks the config class: called on
+        ``PeftConfig`` this returns a ``LoraConfig`` for a LoRA adapter,
+        and called on a method's own class it refuses the file of another
+        method.
 
         Parameters
         ----------
@@ -538,6 +595,10 @@ class PeftConfig:
             A directory holding ``adapter_config.json`` — one written by
             ``save_pretrained`` or by the reference library.  Hub ids
             are not resolved; download the adapter first.
+        subfolder : str, optional
+            A directory under ``pretrained_model_name_or_path`` that holds
+            the file, e.g. the sub-directory ``save_pretrained`` gives each
+            adapter but the one named ``"default"``.
 
         Returns
         -------
@@ -561,7 +622,14 @@ class PeftConfig:
         >>> loaded.r, loaded.lora_alpha, loaded.target_modules
         (16, 32, 'all-linear')
         """
-        return cls.from_dict(_read_config_file(pretrained_model_name_or_path))
+        directory = _adapter_directory(pretrained_model_name_or_path, subfolder)
+        path = os.path.join(directory, _CONFIG_NAME)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(
+                f"no {_CONFIG_NAME} in {directory!r} "
+                "(lucid.peft reads adapters from a local directory)"
+            )
+        return cls.from_dict(cls.from_json_file(path))
 
 
 def _require_config(name: str, value: object) -> PeftConfig:

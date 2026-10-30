@@ -31,7 +31,7 @@ import copy
 import functools
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import ClassVar, NamedTuple, override
 
 import lucid.nn as nn
@@ -41,6 +41,7 @@ from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots, _as_names, _outside_slots
+from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, _default_target_modules
 from lucid.peft._targeting import (
     _module_names_matching,
     _parameter_paths,
@@ -357,6 +358,8 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     _config_class: ClassVar[type[_TargetedConfig]]
     #: Module types the reference adapts with this method and lucid.peft does not yet.
     _later_types: ClassVar[tuple[type[nn.Module], ...]] = ()
+    #: What a config that names no ``target_modules`` adapts, by the model's ``model_type``.
+    _default_targets: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_MODULES
 
     @override
     def __init_subclass__(cls, *, peft_type: PeftType | None = None, **kwargs: object) -> None:
@@ -398,8 +401,10 @@ class _BaseTuner(_ForwardsAttributes, ABC):
 
     @classmethod
     def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
-        """The config to store: a copy of ``config``, ``"all-linear"`` spelled out."""
+        """The config to store: a copy, its default targets and ``"all-linear"`` spelled out."""
         stored = copy.deepcopy(config)
+        if stored.target_modules is None:
+            stored.target_modules = set(_default_target_modules(model, cls._default_targets))
         resolved = _resolve_all_linear(stored, model, cls._adapted_linear)
         if resolved is not None:
             stored.target_modules = resolved
@@ -861,13 +866,6 @@ class _BaseTuner(_ForwardsAttributes, ABC):
 
 def _not_found(config: _TargetedConfig) -> ValueError:
     targets = config.target_modules
-    if targets is None:
-        # The reference falls back to a table of per-architecture defaults;
-        # Lucid's zoo has none yet, so the choice is the caller's.
-        return ValueError(
-            "Please specify `target_modules` in `peft_config`: a list of module names, "
-            "a regex, or 'all-linear'"
-        )
     shown = sorted(targets) if isinstance(targets, set) else targets
     message = (
         f"Target modules {shown} not found in the base model. "
