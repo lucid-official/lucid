@@ -485,7 +485,7 @@ def test_checkpoint_resume_is_identical(
     for i in range(5):
         a.step(i, bad=(i == 2))
     ck = a.checkpoint()
-    assert ck["scaler"]["growth_tracker"] != 0, "checkpoint should land mid growth interval"
+    assert ck["scaler"]["_growth_tracker"] != 0, "checkpoint should land mid growth interval"
     tail_a = [a.step(i) for i in range(5, 12)]
 
     b = _Trainer(model, device, dtype, opt, path, n_batches=3, init_seed=SEED + 99)

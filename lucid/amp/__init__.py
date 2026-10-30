@@ -17,6 +17,14 @@ This subpackage exposes two cooperating tools:
   scale factor, halving it on detected ``inf`` / ``nan`` and growing
   it back up on successful steps.
 
+and the pieces around them:
+
+- :func:`custom_fwd` / :func:`custom_bwd` — decorators that make a custom
+  :class:`~lucid.autograd.Function` follow the autocast state its ``forward``
+  ran in, so its ``backward`` does not meet half-precision gradients with
+  float32 saved tensors.
+- :func:`is_autocast_available` — whether a device type supports autocast.
+
 Examples
 --------
 >>> import lucid
@@ -37,7 +45,8 @@ lucid.float16
 >>> scaler.update()
 """
 
-from lucid.amp.autocast import autocast
+from lucid.amp._custom import custom_bwd, custom_fwd
+from lucid.amp.autocast import autocast, is_autocast_available
 from lucid.amp.grad_scaler import GradScaler
 
-__all__ = ["autocast", "GradScaler"]
+__all__ = ["autocast", "GradScaler", "custom_fwd", "custom_bwd", "is_autocast_available"]

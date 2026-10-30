@@ -264,6 +264,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("_C_engine", "lucid._C", "engine"),
         ("np", "numpy", None),
     ),
+    "lucid.amp._custom": (("FunctionCtx", "lucid.autograd.function", "FunctionCtx"),),
     "lucid.amp.grad_scaler": (
         ("Optimizer", "lucid.optim.optimizer", "Optimizer"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),

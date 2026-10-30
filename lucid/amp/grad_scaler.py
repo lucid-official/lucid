@@ -5,9 +5,10 @@ Pure Python implementation — no engine changes required.
 """
 
 import enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from lucid._C import engine as _C_engine
+from lucid.amp.autocast import _to_engine_device
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -16,6 +17,11 @@ if TYPE_CHECKING:
 # Gradient dtypes ``unscale_`` divides.  float16 is refused with the reference
 # framework's ``ValueError``.  Every other dtype is refused as unsupported.
 _UNSCALABLE = frozenset({_C_engine.BF16, _C_engine.F32, _C_engine.F64})
+
+#: The ``state_dict`` key of the count of consecutive overflow-free steps, and
+#: the name earlier releases wrote it under, which still loads.
+_TRACKER_KEY: Final = "_growth_tracker"
+_LEGACY_TRACKER_KEY: Final = "growth_tracker"
 
 
 class _Stage(enum.Enum):
@@ -76,6 +82,11 @@ class GradScaler:
 
     Parameters
     ----------
+    device : str, default='metal'
+        The device the scaler is for, ``'metal'`` or ``'cpu'``; anything
+        else raises :class:`ValueError`.  The first parameter, as in the
+        reference framework.  Checked at construction only — each gradient
+        is unscaled on the device it lives on.
     init_scale : float, default=2**16
         Initial loss scaling factor applied by :meth:`scale`.
     growth_factor : float, default=2.0
@@ -89,8 +100,15 @@ class GradScaler:
     enabled : bool, default=True
         When ``False`` the scaler degenerates into a transparent
         pass-through — :meth:`scale` returns its input unchanged,
-        :meth:`step` calls the optimizer directly, and :meth:`update`
-        is a no-op.
+        :meth:`step` calls the optimizer directly, :meth:`update` is a
+        no-op, :meth:`get_scale` is ``1.0`` and :meth:`state_dict` is
+        empty.
+
+    Raises
+    ------
+    ValueError
+        If ``device`` is neither ``'metal'`` nor ``'cpu'``, or, for an
+        enabled scaler, ``growth_factor <= 1.0`` or ``backoff_factor >= 1.0``.
 
     Notes
     -----
@@ -163,6 +181,7 @@ class GradScaler:
 
     def __init__(
         self,
+        device: str = "metal",
         init_scale: float = 2.0**16,
         growth_factor: float = 2.0,
         backoff_factor: float = 0.5,
@@ -173,6 +192,9 @@ class GradScaler:
 
         Parameters
         ----------
+        device : str, default='metal'
+            ``'metal'`` or ``'cpu'``.  Validated here; the scaler itself is
+            device-agnostic.
         init_scale : float, default=2**16
             Initial loss scaling factor applied by :meth:`scale`.
         growth_factor : float, default=2.0
@@ -184,7 +206,18 @@ class GradScaler:
             Number of overflow-free steps required before the scale grows.
         enabled : bool, default=True
             When ``False`` the scaler is a transparent pass-through.
+
+        Raises
+        ------
+        ValueError
+            If ``device`` is unknown, or, when ``enabled``, ``growth_factor``
+            is not above 1.0 or ``backoff_factor`` is not below 1.0.
         """
+        _to_engine_device(device, "GradScaler", "device")
+        if enabled and growth_factor <= 1.0:
+            raise ValueError(f"GradScaler: growth_factor must be > 1.0, got {growth_factor}.")
+        if enabled and backoff_factor >= 1.0:
+            raise ValueError(f"GradScaler: backoff_factor must be < 1.0, got {backoff_factor}.")
         self._scale = float(init_scale)
         self._growth_factor = growth_factor
         self._backoff_factor = backoff_factor
@@ -427,23 +460,115 @@ class GradScaler:
         self._per_optimizer_states.clear()
 
     def get_scale(self) -> float:
-        """Return the current scale factor."""
-        return self._scale
+        """Return the current scale factor, or ``1.0`` when the scaler is disabled."""
+        return self._scale if self._enabled else 1.0
+
+    def get_growth_factor(self) -> float:
+        """Return the factor the scale grows by after ``growth_interval`` clean steps."""
+        return self._growth_factor
+
+    def set_growth_factor(self, new_factor: float) -> None:
+        """Set the factor the scale grows by after ``growth_interval`` clean steps.
+
+        Parameters
+        ----------
+        new_factor : float
+            The new growth factor.
+        """
+        self._growth_factor = new_factor
+
+    def get_backoff_factor(self) -> float:
+        """Return the factor the scale is multiplied by when gradients overflow."""
+        return self._backoff_factor
+
+    def set_backoff_factor(self, new_factor: float) -> None:
+        """Set the factor the scale is multiplied by when gradients overflow.
+
+        Parameters
+        ----------
+        new_factor : float
+            The new backoff factor.
+        """
+        self._backoff_factor = new_factor
+
+    def get_growth_interval(self) -> int:
+        """Return how many overflow-free updates it takes the scale to grow."""
+        return self._growth_interval
+
+    def set_growth_interval(self, new_interval: int) -> None:
+        """Set how many overflow-free updates it takes the scale to grow.
+
+        Parameters
+        ----------
+        new_interval : int
+            The new growth interval.
+        """
+        self._growth_interval = new_interval
+
+    def is_enabled(self) -> bool:
+        """Return whether this scaler scales, unscales and updates (``enabled``)."""
+        return self._enabled
 
     def state_dict(self) -> dict[str, float]:
-        """Return serializable state dict."""
+        """Return the scaler's state, or an empty dict when it is disabled.
+
+        Returns
+        -------
+        dict
+            ``scale``, ``growth_factor``, ``backoff_factor``,
+            ``growth_interval`` and ``_growth_tracker`` (the count of
+            consecutive overflow-free updates) — the reference framework's
+            keys.  Call it after :meth:`update`.
+        """
+        if not self._enabled:
+            return {}
         return {
             "scale": self._scale,
             "growth_factor": self._growth_factor,
             "backoff_factor": self._backoff_factor,
             "growth_interval": self._growth_interval,
-            "growth_tracker": self._growth_tracker,
+            _TRACKER_KEY: self._growth_tracker,
         }
 
     def load_state_dict(self, state_dict: dict[str, float]) -> None:
-        """Load state from a dict."""
-        self._scale = float(state_dict["scale"])
-        self._growth_factor = float(state_dict["growth_factor"])
-        self._backoff_factor = float(state_dict["backoff_factor"])
-        self._growth_interval = int(state_dict["growth_interval"])
-        self._growth_tracker = int(state_dict["growth_tracker"])
+        """Load a state written by :meth:`state_dict`; a no-op when disabled.
+
+        Parameters
+        ----------
+        state_dict : dict
+            A scaler state.  The growth tracker may be under ``_growth_tracker``
+            or under ``growth_tracker``, the key earlier releases wrote.
+
+        Raises
+        ------
+        RuntimeError
+            If ``state_dict`` is empty — typically one saved from a disabled
+            scaler.
+        KeyError
+            If a key the state needs is missing.
+        """
+        if not self._enabled:
+            return
+        if not state_dict:
+            raise RuntimeError(
+                "The source state dict is empty, possibly because it was saved "
+                "from a disabled instance of GradScaler."
+            )
+        legacy = _TRACKER_KEY not in state_dict and _LEGACY_TRACKER_KEY in state_dict
+        tracker_key = _LEGACY_TRACKER_KEY if legacy else _TRACKER_KEY
+        # Every value is read before any is assigned, so a state that is
+        # missing a key leaves the scaler as it was.
+        loaded = (
+            float(state_dict["scale"]),
+            float(state_dict["growth_factor"]),
+            float(state_dict["backoff_factor"]),
+            int(state_dict["growth_interval"]),
+            int(state_dict[tracker_key]),
+        )
+        (
+            self._scale,
+            self._growth_factor,
+            self._backoff_factor,
+            self._growth_interval,
+            self._growth_tracker,
+        ) = loaded

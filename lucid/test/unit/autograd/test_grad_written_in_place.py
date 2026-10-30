@@ -260,11 +260,7 @@ def _clip_value(ns: Any, p: Any) -> None:
 def _scaler(ns: Any) -> Any:
     # ``scale`` is called first: the reference's scaler refuses an unscale
     # before it.  The gradients are taken as those of a loss scaled by 4.
-    scaler = (
-        ns.amp.GradScaler(init_scale=4.0)
-        if ns is lucid
-        else ns.amp.GradScaler("cpu", init_scale=4.0)
-    )
+    scaler = ns.amp.GradScaler("cpu", init_scale=4.0)
     scaler.scale(ns.ones(()))
     return scaler
 

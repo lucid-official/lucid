@@ -40,6 +40,32 @@ def _to_engine_device(
     return _C_engine.Device.GPU if device_type == "metal" else _C_engine.Device.CPU
 
 
+def is_autocast_available(device_type: str) -> bool:
+    """Whether an autocast scope can be opened on ``device_type``.
+
+    Parameters
+    ----------
+    device_type : str
+        A device type name.
+
+    Returns
+    -------
+    bool
+        ``True`` for ``"metal"`` and ``"cpu"``, the two devices
+        :class:`autocast` accepts; ``False`` for any other name (it is a
+        query, so an unknown name is an answer rather than an error).
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.amp.is_autocast_available("cpu")
+    True
+    >>> lucid.amp.is_autocast_available("tpu")
+    False
+    """
+    return device_type in _DEVICE_TYPES
+
+
 def _scope_is_enabled(device_type: str, target: dtype, enabled: bool) -> bool:
     """Whether a scope that asked for ``enabled`` at ``target`` may compute in it.
 

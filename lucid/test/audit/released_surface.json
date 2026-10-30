@@ -649,7 +649,7 @@
   "lucid.amax": {"params": ["a:input", "a:dim=", "a:keepdim="]},
   "lucid.amin": {"params": ["a:input", "a:dim=", "a:keepdim="]},
   "lucid.aminmax": {"params": ["a:input", "k:dim=", "k:keepdim="]},
-  "lucid.amp.GradScaler": {"params": ["a:init_scale=", "a:growth_factor=", "a:backoff_factor=", "a:growth_interval=", "a:enabled="]},
+  "lucid.amp.GradScaler": {"params": ["a:device=", "a:init_scale=", "a:growth_factor=", "a:backoff_factor=", "a:growth_interval=", "a:enabled="]},
   "lucid.amp.GradScaler.get_scale": {"params": ["a:self"]},
   "lucid.amp.GradScaler.load_state_dict": {"params": ["a:self", "a:state_dict"]},
   "lucid.amp.GradScaler.scale": {"params": ["a:self", "a:outputs"]},
