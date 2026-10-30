@@ -410,6 +410,18 @@ class PeftModel(_ForwardsAttributes):
         """
         return self.base_model.unload()
 
+    def _config_to_save(self, adapter_name: str) -> PeftConfig:
+        """The adapter's config as its file holds it: for inference, and naming the base model's class.
+
+        The class is what ``AutoPeftModel*`` rebuilds the base with, exactly, where the
+        zoo's Auto classes would pick the first model of a ``model_type`` and task.
+        """
+        model_class = type(self.get_base_model())
+        mapping = {"base_model_class": model_class.__name__, "parent_library": model_class.__module__}
+        return dataclasses.replace(
+            self.peft_config[adapter_name], inference_mode=True, auto_mapping=mapping
+        )
+
     def save_pretrained(
         self,
         save_directory: str | os.PathLike[str],
@@ -420,7 +432,8 @@ class PeftModel(_ForwardsAttributes):
 
         Per adapter, the reference library's two files:
         ``adapter_config.json`` (with ``inference_mode`` set, as the
-        reference stores it) and ``adapter_model.safetensors``, keyed by
+        reference stores it, and the base model's class as ``auto_mapping``)
+        and ``adapter_model.safetensors``, keyed by
         :func:`~lucid.peft.get_peft_model_state_dict`.  The adapter named
         ``"default"`` goes into ``save_directory`` itself, every other into
         a sub-directory of its own name, as the reference lays it out; an
@@ -480,7 +493,7 @@ class PeftModel(_ForwardsAttributes):
             path = root if name == "default" else _output_directory(os.path.join(root, name))
             # The reference's writer tags its files with this format string.
             save_safetensors(state, os.path.join(path, _WEIGHTS_NAME), metadata={"format": "pt"})
-            dataclasses.replace(self.peft_config[name], inference_mode=True).save_pretrained(path)
+            self._config_to_save(name).save_pretrained(path)
 
     @classmethod
     def from_pretrained(

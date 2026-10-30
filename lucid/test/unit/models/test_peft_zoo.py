@@ -1,4 +1,4 @@
-"""LoRA on the model zoo, end to end: gpt2, gpt, bert, roformer, t5 and vit.
+"""LoRA on the model zoo, end to end: gpt2, gpt, bert, roformer, t5, vit, pvt and swin.
 
 Every model is a real registered factory with a small config override (H11),
 adapted through the public ``lucid.peft`` surface the way a user does it, on
@@ -18,7 +18,14 @@ cpu and metal.  What is proved, per family:
 * **deployment** — ``merge_and_unload`` gives the adapted outputs from a
   plain zoo model whose ``save_pretrained`` / ``from_pretrained`` round trip
   keeps them, and an adapter saved with ``save_pretrained`` reloads onto a
-  fresh base through ``PeftModel.from_pretrained``.
+  fresh base through ``PeftModel.from_pretrained``;
+* **tasks** — ``get_peft_model`` returns the wrapper of the family's task
+  (``PeftModelFor...``), computing the base model's outputs at initialisation,
+  and ``AutoPeftModel*`` rebuilds base and adapter from the adapter's directory;
+* **defaults** — a config that names no ``target_modules`` takes the default
+  for the family's ``model_type`` (``DEFAULT_LORA_TARGET_MODULES``), which is
+  exactly the modules the table above lists for the family, and every model
+  type with a default is a row here.
 
 The families whose attention is ``nn.MultiheadAttention`` (transformer, clip,
 dit, detr, stable_diffusion, and mask2former's decoder cross-attention) hold
@@ -26,6 +33,7 @@ their projections as raw parameters, which v1 cannot reach; the transformer
 family stands for them.
 """
 
+import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -37,7 +45,20 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid.models import create_model
-from lucid.peft import LoraConfig, PeftModel, get_peft_model, get_peft_model_state_dict
+from lucid.peft import (
+    AutoPeftModel,
+    AutoPeftModelForCausalLM,
+    AutoPeftModelForSeq2SeqLM,
+    AutoPeftModelForSequenceClassification,
+    LoraConfig,
+    PeftModel,
+    PeftModelForCausalLM,
+    PeftModelForSeq2SeqLM,
+    PeftModelForSequenceClassification,
+    get_peft_model,
+    get_peft_model_state_dict,
+)
+from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES
 from lucid.serialization import load_safetensors, save_safetensors
 
 _DEPTH = 2
@@ -60,9 +81,14 @@ class _Overrides(TypedDict, total=False):
     patch_size: int
     dim: int
     depth: int
-    num_heads: int
+    num_heads: int | tuple[int, ...]
     num_classes: int
     dropout: float
+    embed_dim: int
+    embed_dims: tuple[int, ...]
+    depths: tuple[int, ...]
+    mlp_ratios: tuple[float, ...]
+    window_size: int
 
 
 _TEXT = _Overrides(
@@ -103,9 +129,16 @@ def _seq2seq_batch(device: str) -> _Batch:
     return _Batch((source, lucid.cat([start, target[:, :-1]], dim=1)), target)
 
 
-def _image_batch(device: str) -> _Batch:
-    lucid.manual_seed(1)
-    return _Batch((lucid.randn(3, 3, 16, 16, device=device),), _tokens(device, 0, (3,), seed=2) % 5)
+def _images(size: int) -> Callable[[str], _Batch]:
+    def batch(device: str) -> _Batch:
+        lucid.manual_seed(1)
+        images = lucid.randn(3, 3, size, size, device=device)
+        return _Batch((images,), _tokens(device, 0, (3,), seed=2) % 5)
+
+    return batch
+
+
+_image_batch = _images(16)
 
 
 def _names(*patterns: str) -> frozenset[str]:
@@ -272,6 +305,72 @@ _FAMILIES = [
             "blocks.{i}.mlp.fc2",
         ),
         trained_in_full=frozenset({"head"}),
+    ),
+]
+
+def _in_stages(count: int, *patterns: str) -> frozenset[str]:
+    """Every module name the ``{i}`` patterns spell out, for each of ``count`` stages."""
+    return frozenset(pattern.format(i=i) for pattern in patterns for i in range(count))
+
+
+_PVT_STAGES = 4
+_PVT_QKV = _in_stages(_PVT_STAGES, "stages.{i}.blocks.0.attn.q", "stages.{i}.blocks.0.attn.kv")
+_SWIN_STAGES = 2
+_SWIN_QKV = _in_stages(_SWIN_STAGES, "stages.{i}.blocks.0.attn.qkv")
+
+# PVT-v2 and Swin are vision transformers with a ``classifier`` head, no task type, and
+# their own spelling of the projections: ``q`` + ``kv`` (PVT) and a fused ``qkv`` (Swin).
+_FAMILIES += [
+    _Family(
+        name="pvt",
+        factory="pvt_v2_b0_cls",
+        overrides=_Overrides(
+            embed_dims=(8, 16, 32, 64),
+            depths=(1, 1, 1, 1),
+            num_heads=(1, 2, 2, 4),
+            mlp_ratios=(2.0, 2.0, 2.0, 2.0),
+            num_classes=5,
+        ),
+        batch=_images(64),
+        task_type="",
+        targets=["q", "kv"],
+        saved=["classifier"],
+        adapted=_PVT_QKV,
+        all_linear=_PVT_QKV
+        | _in_stages(
+            _PVT_STAGES,
+            "stages.{i}.blocks.0.attn.proj",
+            "stages.{i}.blocks.0.mlp.fc1",
+            "stages.{i}.blocks.0.mlp.fc2",
+        ),
+        trained_in_full=frozenset({"classifier"}),
+    ),
+    _Family(
+        name="swin",
+        factory="swin_tiny_cls",
+        overrides=_Overrides(
+            image_size=32,
+            patch_size=4,
+            embed_dim=8,
+            depths=(1, 1),
+            num_heads=(1, 2),
+            window_size=4,
+            num_classes=5,
+        ),
+        batch=_images(32),
+        task_type="",
+        targets=["qkv"],
+        saved=["classifier"],
+        adapted=_SWIN_QKV,
+        all_linear=_SWIN_QKV
+        | _in_stages(
+            _SWIN_STAGES,
+            "stages.{i}.blocks.0.attn.proj",
+            "stages.{i}.blocks.0.mlp.0",
+            "stages.{i}.blocks.0.mlp.3",
+        )
+        | {"stages.0.downsample.proj"},
+        trained_in_full=frozenset({"classifier"}),
     ),
 ]
 
@@ -647,6 +746,159 @@ def test_a_gpt2_adapter_written_by_the_reference_loads_by_name_and_shape(tmp_pat
     batch = _family("gpt2").batch("cpu")
     with lucid.no_grad():
         assert not _same(_logits(loaded, batch), _logits(_base(_family("gpt2"), "cpu"), batch))
+
+
+# ── tasks ────────────────────────────────────────────────────────────────────
+
+#: The wrapper ``get_peft_model`` returns for each family, by the family's task type; a
+#: family with no task type (the vision models) gets the plain ``PeftModel``.
+_WRAPPER: dict[str, type[PeftModel]] = {
+    "gpt2": PeftModelForCausalLM,
+    "gpt": PeftModelForCausalLM,
+    "bert": PeftModelForSequenceClassification,
+    "roformer": PeftModelForSequenceClassification,
+    "t5": PeftModelForSeq2SeqLM,
+    "vit": PeftModel,
+    "pvt": PeftModel,
+    "swin": PeftModel,
+}
+
+#: The class that rebuilds base and adapter from the adapter's directory.
+_AUTO = {
+    "gpt2": AutoPeftModelForCausalLM,
+    "gpt": AutoPeftModelForCausalLM,
+    "bert": AutoPeftModelForSequenceClassification,
+    "roformer": AutoPeftModelForSequenceClassification,
+    "t5": AutoPeftModelForSeq2SeqLM,
+    "vit": AutoPeftModel,
+    "pvt": AutoPeftModel,
+    "swin": AutoPeftModel,
+}
+
+
+@_BY_FAMILY
+@pytest.mark.parametrize("mode", _MODES)
+def test_get_peft_model_returns_the_wrapper_of_the_familys_task(
+    family: _Family, mode: str
+) -> None:
+    assert type(_peft(family, mode, "cpu")) is _WRAPPER[family.name]
+
+
+@_BY_FAMILY
+def test_the_wrapper_computes_what_the_base_computed_at_initialisation(
+    family: _Family, device: str
+) -> None:
+    model = _base(family, device).eval()
+    batch = family.batch(device)
+    with lucid.no_grad():
+        plain = _logits(model, batch)
+        peft = get_peft_model(model, _config(family, "explicit")).eval()
+        assert _same(_logits(peft, batch), plain)
+
+
+@pytest.mark.parametrize("family", _GENERATING, ids=lambda f: f.name)
+def test_the_wrapper_generates_what_the_base_generated_at_initialisation(
+    family: _Family, device: str
+) -> None:
+    model = _base(family, device).eval()
+    batch = family.batch(device)
+    before = _generate(model, family, batch)
+    peft = get_peft_model(model, _config(family, "explicit")).eval()
+    assert isinstance(peft, (PeftModelForCausalLM, PeftModelForSeq2SeqLM))
+    assert _same(_generate(peft, family, batch), before)
+
+
+def _auto_adapter(family: _Family, device: str, root: Path) -> tuple[Path, lucid.Tensor, _Batch]:
+    """A trained adapter in ``root/adapter`` whose config names the base saved in ``root/base``."""
+    base = _base(family, "cpu")
+    base.save_pretrained(str(root / "base"))
+    config = dataclasses.replace(
+        _config(family, "all-linear", init_lora_weights=False),
+        base_model_name_or_path=str(root / "base"),
+    )
+    peft = get_peft_model(base.to(device), config)
+    batch = family.batch(device)
+    _train(peft, batch)
+    peft.eval().save_pretrained(root / "adapter")
+    with lucid.no_grad():
+        return root / "adapter", _logits(peft, batch), batch
+
+
+@_BY_FAMILY
+def test_the_adapters_directory_rebuilds_base_and_adapter(
+    family: _Family, device: str, tmp_path: Path
+) -> None:
+    directory, trained, batch = _auto_adapter(family, device, tmp_path)
+    loaded = _AUTO[family.name].from_pretrained(directory)
+    assert type(loaded) is _WRAPPER[family.name]
+    assert type(loaded.get_base_model()) is type(_base(family, "cpu"))
+    assert not any(p.requires_grad for p in loaded.parameters())
+    loaded.to(device)
+    with lucid.no_grad():
+        assert _same(_logits(loaded, batch), trained)
+
+
+@pytest.mark.parametrize("family", _GENERATING, ids=lambda f: f.name)
+def test_the_rebuilt_model_generates_what_the_trained_one_did(
+    family: _Family, device: str, tmp_path: Path
+) -> None:
+    directory, _, batch = _auto_adapter(family, device, tmp_path)
+    trained = PeftModel.from_pretrained(_base(family, device), directory).eval()
+    loaded = _AUTO[family.name].from_pretrained(directory).to(device).eval()
+    assert _same(_generate(loaded, family, batch), _generate(trained, family, batch))
+
+
+# ── defaults ─────────────────────────────────────────────────────────────────
+
+
+def test_every_model_type_with_a_default_is_a_row_and_each_row_is_the_tables() -> None:
+    assert {f.name for f in _FAMILIES} == set(DEFAULT_LORA_TARGET_MODULES)
+    for family in _FAMILIES:
+        assert DEFAULT_LORA_TARGET_MODULES[family.name] == set(family.targets), family.name
+
+
+@_BY_FAMILY
+def test_no_target_modules_takes_the_default_of_the_model_type(
+    family: _Family, device: str
+) -> None:
+    model = _base(family, device).eval()
+    assert model.config.model_type == family.name
+    batch = family.batch(device)
+    with lucid.no_grad():
+        plain = _logits(model, batch)
+    config = LoraConfig(r=4, lora_alpha=8, modules_to_save=family.saved or None)
+    peft = get_peft_model(model, config).eval()
+    assert set(peft.base_model.targeted_module_names) == family.adapted
+    assert peft.peft_config["default"].target_modules == set(family.targets)
+    with lucid.no_grad():
+        assert _same(_logits(peft, batch), plain)
+
+
+@_BY_FAMILY
+def test_the_default_modules_are_the_ones_the_zoo_trains_on(family: _Family, device: str) -> None:
+    """The default is live: an update to each module it picks reaches the output."""
+    config = LoraConfig(
+        r=4, lora_alpha=8, modules_to_save=family.saved or None, init_lora_weights=False
+    )
+    peft = get_peft_model(_base(family, device), config).eval()
+    batch = family.batch(device)
+    with lucid.no_grad():
+        live = _logits(peft, batch)
+        for name in peft.base_model.targeted_module_names:
+            b = peft.get_base_model().get_submodule(name).lora_B["default"].weight
+            kept = b.clone()
+            b.zero_()
+            silenced = _logits(peft, batch)
+            b.copy_(kept)
+            assert _same(silenced, live) == (name in family.off_path), name
+
+
+def test_a_model_type_the_table_lacks_is_told_to_name_its_targets() -> None:
+    model = _transformer_classifier()
+    assert model.config.model_type == "transformer"
+    with pytest.raises(ValueError, match="no default for model type 'transformer'"):
+        get_peft_model(model, LoraConfig(r=4))
+    assert not any(".lora_" in n for n, _ in model.named_modules())
 
 
 # ── what v1 cannot reach ─────────────────────────────────────────────────────

@@ -53,7 +53,7 @@ _INERT_KEYS: Final = frozenset(
 
 #: Keys that describe where an adapter came from, not what it computes.
 _METADATA_KEYS: Final = frozenset(
-    {"auto_mapping", "peft_version", "runtime_config", "megatron_core", "qalora_group_size"}
+    {"peft_version", "runtime_config", "megatron_core", "qalora_group_size"}
 )
 
 
@@ -196,6 +196,20 @@ def _check_init(name: str, value: object) -> bool | str:
     raise ValueError(f"Unknown initialization {name}={value!r}")
 
 
+def _check_auto_mapping(name: str, value: object) -> dict[str, str] | None:
+    """``None``, or the ``{"base_model_class": ..., "parent_library": ...}`` dict of strings."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise TypeError(f"`{name}` must be a dict of str to str or None, got {value!r}")
+    mapping: dict[str, str] = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not isinstance(item, str):
+            raise TypeError(f"`{name}` must map str to str, got {key!r}: {item!r}")
+        mapping[key] = item
+    return mapping
+
+
 def _optional_str(name: str, value: object) -> str | None:
     if value is not None and not isinstance(value, str):
         raise TypeError(f"`{name}` must be a str or None, got {value!r}")
@@ -332,6 +346,10 @@ class PeftConfig:
     peft_type : PeftType or str, optional
         The method; filled in by the subclass when omitted, refused when
         it names another.
+    auto_mapping : dict of str to str, optional
+        The class of the base model, ``{"base_model_class": name,
+        "parent_library": module}`` — what ``AutoPeftModel*`` rebuilds the
+        base with.  ``PeftModel.save_pretrained`` writes it.
     base_model_name_or_path : str, optional
         Name of the model the adapter was trained on (metadata).
     revision : str, optional
@@ -360,6 +378,7 @@ class PeftConfig:
     #: This class's own field checks; ``_all_checks`` adds its bases'.
     _field_checks: ClassVar[dict[str, _Check]] = {
         "task_type": _task_type,
+        "auto_mapping": _check_auto_mapping,
         "base_model_name_or_path": _optional_str,
         "revision": _optional_str,
         "inference_mode": _check_bool,
@@ -368,6 +387,7 @@ class PeftConfig:
 
     task_type: TaskType | str | None = None
     peft_type: PeftType | str | None = None
+    auto_mapping: dict[str, str] | None = None
     base_model_name_or_path: str | None = None
     revision: str | None = None
     inference_mode: bool = False
@@ -443,8 +463,8 @@ class PeftConfig:
         that turns its feature off — null, false or empty
         (``"lora_bias": false``, ``"loftq_config": {}``) — and dropped (with
         a warning if v1 does not know the key); at any other value it
-        raises, as it would change what the adapter computes.  Provenance
-        keys (``peft_version``, ``auto_mapping``) are dropped.  Called on
+        raises, as it would change what the adapter computes.  The
+        ``peft_version`` provenance key is dropped.  Called on
         ``PeftConfig``, the dict's ``peft_type`` picks the class.
 
         Parameters

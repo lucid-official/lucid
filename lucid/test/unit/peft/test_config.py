@@ -12,13 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from lucid.peft import LoraConfig, PeftType, TaskType
+from lucid.peft import LoraConfig, PeftConfig, PeftType, TaskType
 
 #: What the reference writes for ``LoraConfig(r=8, lora_alpha=16,
 #: lora_dropout=0.05, target_modules=["c_attn"], task_type="CAUSAL_LM")``
 #: saved for inference, restricted to the keys v1 has.
 GOLDEN_CONFIG = {
     "alpha_pattern": {},
+    "auto_mapping": None,
     "base_model_name_or_path": None,
     "bias": "none",
     "exclude_modules": None,
@@ -45,7 +46,6 @@ GOLDEN_CONFIG = {
 #: provenance keys.
 REFERENCE_WRITTEN = {
     **GOLDEN_CONFIG,
-    "auto_mapping": None,
     "base_model_name_or_path": "gpt2",
     "corda_config": None,
     "eva_config": None,
@@ -262,6 +262,61 @@ class TestFile:
         (tmp_path / "adapter_config.json").write_text("[1, 2]")
         with pytest.raises(ValueError, match="JSON object"):
             LoraConfig.from_pretrained(tmp_path)
+
+    def test_a_subfolder_holds_the_file(self, tmp_path: Path) -> None:
+        LoraConfig(r=3, target_modules=["q"]).save_pretrained(tmp_path / "style")
+        assert isinstance(loaded := PeftConfig.from_pretrained(tmp_path, subfolder="style"), LoraConfig)
+        assert loaded.r == 3
+        with pytest.raises(FileNotFoundError, match="adapter_config.json"):
+            PeftConfig.from_pretrained(tmp_path)
+        with pytest.raises(FileNotFoundError, match="style"):
+            PeftConfig.from_pretrained(tmp_path / "style", subfolder="style")
+
+    def test_from_json_file_is_the_dict_the_file_holds(self, tmp_path: Path) -> None:
+        LoraConfig(r=3, target_modules=["q"], task_type="SEQ_CLS").save_pretrained(tmp_path)
+        raw = PeftConfig.from_json_file(tmp_path / "adapter_config.json")
+        assert raw == json.loads((tmp_path / "adapter_config.json").read_text(encoding="utf-8"))
+        assert isinstance(raw, dict) and raw["task_type"] == "SEQ_CLS"
+
+    def test_from_json_file_drops_a_runtime_config_with_a_warning(self, tmp_path: Path) -> None:
+        path = tmp_path / "adapter_config.json"
+        path.write_text(json.dumps({**GOLDEN_CONFIG, "runtime_config": {"ephemeral": True}}))
+        with pytest.warns(UserWarning, match="runtime_config"):
+            raw = PeftConfig.from_json_file(path)
+        assert "runtime_config" not in raw
+        with pytest.warns(UserWarning, match="runtime_config"):
+            assert LoraConfig.from_pretrained(tmp_path).r == 8
+
+    def test_from_json_file_refuses_what_is_not_an_object(self, tmp_path: Path) -> None:
+        path = tmp_path / "x.json"
+        path.write_text('"text"')
+        with pytest.raises(ValueError, match="JSON object"):
+            PeftConfig.from_json_file(path)
+        with pytest.raises(FileNotFoundError):
+            PeftConfig.from_json_file(tmp_path / "missing.json")
+
+    def test_the_file_names_the_class(self, tmp_path: Path) -> None:
+        LoraConfig(target_modules=["q"]).save_pretrained(tmp_path)
+        assert type(PeftConfig.from_pretrained(tmp_path)) is LoraConfig
+        (tmp_path / "adapter_config.json").write_text(
+            json.dumps({"peft_type": "PREFIX_TUNING", "task_type": "CAUSAL_LM"})
+        )
+        with pytest.raises(NotImplementedError, match="PREFIX_TUNING"):
+            PeftConfig.from_pretrained(tmp_path)
+
+
+class TestAutoMapping:
+    MAPPING = {"base_model_class": "ViTForImageClassification", "parent_library": "lucid.models"}
+
+    def test_it_is_kept_and_written(self, tmp_path: Path) -> None:
+        LoraConfig(target_modules=["q"], auto_mapping=self.MAPPING).save_pretrained(tmp_path)
+        assert PeftConfig.from_pretrained(tmp_path).auto_mapping == self.MAPPING
+        assert LoraConfig().auto_mapping is None
+
+    @pytest.mark.parametrize("bad", [["a"], {"a": 1}, {1: "a"}, "text"])
+    def test_only_a_dict_of_strings_is_taken(self, bad: object) -> None:
+        with pytest.raises(TypeError, match="auto_mapping"):
+            LoraConfig(auto_mapping=bad)  # type: ignore[arg-type]
 
 
 #: The reference's ``peft_type`` and ``task_type`` strings, member by member —

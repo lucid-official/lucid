@@ -51,6 +51,15 @@ A model holds any number of adapters, each under its own name::
     model.save_pretrained("adapters")              # "default" in adapters/, "style" in adapters/style/
     model.load_adapter("adapters/style", "style-again")
 
+The model class follows the task: ``get_peft_model`` returns a
+``PeftModelForCausalLM`` for ``task_type="CAUSAL_LM"`` (and the matching
+``PeftModelFor...`` class for the other tasks, which also train a
+classification or question-answering head), and a config with no
+``target_modules`` takes the default for the base model's ``model_type``.
+An adapter directory that names its base model reopens in one call::
+
+    model = AutoPeftModelForCausalLM.from_pretrained("my-adapter")
+
 lucid.peft adapts ``nn.Linear`` only.  Asking for more — an embedding or
 convolution target, DoRA, a TIES / DARE weighted adapter, an adapter file
 of another method — raises ``NotImplementedError`` rather than doing less
@@ -72,10 +81,26 @@ from lucid.peft._task_models import (
     PeftModelForSequenceClassification,
     PeftModelForTokenClassification,
 )
+from lucid.peft.auto import (
+    AutoPeftModel,
+    AutoPeftModelForCausalLM,
+    AutoPeftModelForFeatureExtraction,
+    AutoPeftModelForQuestionAnswering,
+    AutoPeftModelForSeq2SeqLM,
+    AutoPeftModelForSequenceClassification,
+    AutoPeftModelForTokenClassification,
+)
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
 
 __all__ = [
+    "AutoPeftModel",
+    "AutoPeftModelForCausalLM",
+    "AutoPeftModelForFeatureExtraction",
+    "AutoPeftModelForQuestionAnswering",
+    "AutoPeftModelForSeq2SeqLM",
+    "AutoPeftModelForSequenceClassification",
+    "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
     "PeftConfig",
     "LoraConfig",
