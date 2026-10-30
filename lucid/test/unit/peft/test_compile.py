@@ -182,3 +182,83 @@ def test_unload_and_merge_and_unload_leave_no_branch_state() -> None:
     _merge(again)
     again.unload()
     assert vars(layer)["merged"] is False and type(model[0]) is nn.Linear
+
+
+# ── several adapters ─────────────────────────────────────────────────────────
+
+
+def _adapters(device: str) -> PeftModel:
+    """``default`` (r=4) on the first Linear, ``other`` (r=2) on both; non-zero updates."""
+    lucid.manual_seed(0)
+    model = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 3)).to(device)
+    peft = get_peft_model(
+        model, LoraConfig(r=4, lora_alpha=16, target_modules=["0"], init_lora_weights=False)
+    )
+    peft.add_adapter(
+        "other", LoraConfig(r=2, lora_alpha=16, target_modules=["0", "2"], init_lora_weights=False)
+    )
+    return peft
+
+
+@metal_only
+def test_compiled_follows_every_adapter_switch() -> None:
+    peft = _adapters("metal")
+    compiled = lucid.compile(peft)
+    x = lucid.randn(4, 8).to("metal")
+    outputs = {}
+    with lucid.no_grad():
+        for name in ("default", "other", "default", "other"):
+            peft.set_adapter(name)
+            eager = peft(x)
+            outputs[name] = eager
+            assert _close(compiled(x), eager), name
+        assert not _close(outputs["default"], outputs["other"])
+        # Both at once, then one deleted: the compiled call keeps following.
+        peft.base_model.set_adapter(["default", "other"])
+        both = peft(x)
+        assert _close(compiled(x), both) and not _close(both, outputs["other"])
+        peft.set_adapter("other")
+        peft.delete_adapter("default")
+        assert _close(compiled(x), peft(x)) and _close(peft(x), outputs["other"])
+        # A merged adapter, then a disabled one.
+        peft.base_model.merge_adapter()
+        assert _close(compiled(x), outputs["other"])
+        peft.base_model.unmerge_adapter()
+        with peft.disable_adapter():
+            assert not _close(compiled(x), outputs["other"])
+
+
+@metal_only
+def test_compiled_follows_an_adapter_added_after_the_first_call() -> None:
+    peft = _adapters("metal")
+    compiled = lucid.compile(peft)
+    x = lucid.randn(4, 8).to("metal")
+    with lucid.no_grad():
+        before = compiled(x)
+        peft.add_adapter(
+            "late", LoraConfig(r=2, lora_alpha=16, target_modules=["2"], init_lora_weights=False)
+        )
+        assert _close(compiled(x), before)  # inactive: nothing changed
+        peft.set_adapter("late")
+        assert _close(compiled(x), peft(x)) and not _close(peft(x), before)
+
+
+def test_every_adapter_switch_lands_in_the_compile_key() -> None:
+    peft = _adapters("cpu")
+    base = peft.base_model
+    states = {}
+    peft.set_adapter("default")
+    states["default"] = signature._module_state(peft)
+    peft.set_adapter("other")
+    states["other"] = signature._module_state(peft)
+    base.set_adapter(["default", "other"])
+    states["both"] = signature._module_state(peft)
+    peft.set_adapter("default")
+    states["default again"] = signature._module_state(peft)
+    assert len({states["default"], states["other"], states["both"]}) == 3
+    assert states["default again"] == states["default"]
+    before = signature._module_state(peft)
+    peft.add_adapter("third", LoraConfig(r=2, target_modules=["0"]))
+    assert signature._module_state(peft) != before  # the layer holds another adapter
+    peft.delete_adapter("third")
+    assert signature._module_state(peft) == before

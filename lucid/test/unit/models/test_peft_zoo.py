@@ -500,6 +500,59 @@ def test_generate_through_the_wrapper_follows_the_adapter(family: _Family, devic
     assert _same(off, before)
 
 
+def _random_update(family: _Family, rank: int, alpha: float) -> LoraConfig:
+    """A config whose ``B`` is not zeroed, so the adapter changes what the model computes."""
+    return LoraConfig(
+        r=rank,
+        lora_alpha=alpha,
+        target_modules=family.targets,
+        task_type=family.task_type,
+        init_lora_weights=False,
+    )
+
+
+@pytest.mark.parametrize("family", _GENERATING, ids=lambda f: f.name)
+def test_two_adapters_train_one_switch_and_generate(family: _Family, device: str) -> None:
+    model = _base(family, device).eval()
+    batch = family.batch(device)
+    plain = _generate(model, family, batch)
+    peft = get_peft_model(model, _random_update(family, 4, 256)).eval()
+    first = _generate(peft, family, batch)
+    with lucid.no_grad():
+        first_logits = _logits(peft, batch)
+
+    # Adding an adapter computes and trains nothing: the first still answers.
+    peft.add_adapter("second", _random_update(family, 2, 64))
+    assert peft.active_adapter == "default" and _same(_generate(peft, family, batch), first)
+    before = {name: p.clone() for name, p in peft.named_parameters()}
+    peft.set_adapter("second")
+    losses = _train(peft, batch)
+    assert losses[-1] < losses[0], losses
+
+    # Only the second adapter moved; the first and the base are bit-identical.
+    for name, param in peft.named_parameters():
+        if ".second." in name:
+            continue
+        assert not param.requires_grad and _same(param, before[name]), name
+    moved = [n for n, p in peft.named_parameters() if ".second." in n and not _same(p, before[n])]
+    assert moved
+    peft.eval()
+    with lucid.no_grad():
+        second_logits = _logits(peft, batch)
+    second = _generate(peft, family, batch)
+    assert not _same(second_logits, first_logits)
+
+    # Switching back and forth gives each adapter's own answers, bit for bit.
+    peft.set_adapter("default")
+    assert _same(_generate(peft, family, batch), first)
+    with lucid.no_grad():
+        assert _same(_logits(peft, batch), first_logits)
+    with peft.disable_adapter():
+        assert _same(_generate(peft, family, batch), plain)
+    peft.set_adapter("second")
+    assert _same(_generate(peft, family, batch), second)
+
+
 # ── deployment ───────────────────────────────────────────────────────────────
 
 
