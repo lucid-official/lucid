@@ -123,7 +123,26 @@ BAD_FIELDS = [
         "cannot be used when `target_modules` is a str",
     ),
     ({"target_modules": ["q"], "layers_pattern": "h"}, ValueError, "must also be specified"),
+    (
+        {"target_modules": ["q"], "layers_pattern": "h", "layers_to_transform": []},
+        ValueError,
+        "must also be specified",
+    ),
+    ({"target_modules": "q_proj("}, ValueError, "`target_modules` is not a valid regular"),
+    ({"exclude_modules": "["}, ValueError, "`exclude_modules` is not a valid regular"),
+    ({"rank_pattern": {"q(": 2}}, ValueError, "rank_pattern.*not a valid regular"),
+    ({"alpha_pattern": {"*q": 2.0}}, ValueError, "alpha_pattern.*not a valid regular"),
+    (
+        {"target_modules": ["q"], "layers_pattern": "h(", "layers_to_transform": [0]},
+        ValueError,
+        "`layers_pattern` is not a valid regular",
+    ),
 ]
+
+
+def test_layer_zero_with_a_pattern_is_a_selection() -> None:
+    c = LoraConfig(target_modules=["q"], layers_to_transform=0, layers_pattern="h")
+    assert c.layers_to_transform == 0 and c.layers_pattern == "h"
 
 
 @pytest.mark.parametrize(
@@ -171,9 +190,20 @@ class TestDict:
 
     def test_a_file_from_the_reference_reads(self) -> None:
         with pytest.warns(UserWarning, match=r"Unexpected keyword arguments \['some_future_key'\]"):
-            c = LoraConfig.from_dict({**REFERENCE_WRITTEN, "some_future_key": 1})
+            c = LoraConfig.from_dict({**REFERENCE_WRITTEN, "some_future_key": None})
         assert c.base_model_name_or_path == "gpt2" and c.target_modules == {"c_attn"}
         assert c.fan_in_fan_out is True and c.inference_mode is True
+
+    @pytest.mark.parametrize("value", [True, 1, "on", {"k": 1}, [0]])
+    def test_an_unknown_key_that_is_on_is_refused(self, value: object) -> None:
+        with pytest.raises(NotImplementedError, match="some_future_key"):
+            LoraConfig.from_dict({**GOLDEN_CONFIG, "some_future_key": value})
+
+    @pytest.mark.parametrize("value", [None, False, {}, [], ""])
+    def test_an_unknown_key_that_is_off_is_dropped(self, value: object) -> None:
+        with pytest.warns(UserWarning, match="some_future_key"):
+            c = LoraConfig.from_dict({**GOLDEN_CONFIG, "some_future_key": value})
+        assert c.r == 8
 
     def test_provenance_keys_drop_silently(self) -> None:
         with warnings.catch_warnings():
@@ -189,9 +219,10 @@ class TestDict:
         with pytest.raises(NotImplementedError, match=key):
             LoraConfig.from_dict({**GOLDEN_CONFIG, key: value})
 
-    def test_another_adapter_type_is_refused(self) -> None:
-        with pytest.raises(NotImplementedError, match="IA3"):
-            LoraConfig.from_dict({"peft_type": "IA3", "target_modules": ["k"]})
+    @pytest.mark.parametrize("peft_type", ["IA3", "SOME_NEWER_METHOD"])
+    def test_another_adapter_type_is_refused(self, peft_type: str) -> None:
+        with pytest.raises(NotImplementedError, match=peft_type):
+            LoraConfig.from_dict({"peft_type": peft_type, "target_modules": ["k"]})
 
     def test_use_dora_true_in_a_file_is_refused(self) -> None:
         with pytest.raises(NotImplementedError, match="DoRA"):

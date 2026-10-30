@@ -202,6 +202,7 @@ BAD_LAYERS = [
     ({"r": 0}, ValueError, "positive integer"),
     ({"r": 2, "lora_dropout": 1.5}, ValueError, "lora_dropout"),
     ({"r": 2, "fan_in_fan_out": True}, ValueError, "fan_in_fan_out"),
+    ({"r": 2, "is_target_conv_1d_layer": True}, ValueError, "Conv1D"),
     ({"r": 2, "init_lora_weights": "olora"}, NotImplementedError, "olora"),
     ({"r": 2, "use_dora": True}, NotImplementedError, "DoRA"),
     ({"r": 2, "lora_alpha": "x"}, TypeError, "lora_alpha"),
@@ -234,6 +235,14 @@ def test_a_second_adapter_on_one_layer_is_refused() -> None:
     with pytest.raises(NotImplementedError, match="one adapter per layer"):
         layer.update_layer("second", 1, 1, 0.0, True, False)
     assert layer.active_adapter == "default"
+
+
+def test_positional_arguments_line_up_with_the_reference() -> None:
+    # base_layer, adapter_name, r, lora_alpha, lora_dropout, fan_in_fan_out,
+    # is_target_conv_1d_layer, init_lora_weights, use_rslora
+    layer = Linear(nn.Linear(4, 3), "default", 2, 8, 0.0, False, False, "gaussian", True)
+    assert layer.r == {"default": 2} and layer.scaling["default"] == 8 / 2**0.5
+    assert layer.lora_A["default"].weight.abs().max().item() > 1 / 2**0.5 / 2
 
 
 def test_reset_with_false_leaves_the_weights() -> None:

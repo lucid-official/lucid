@@ -37,8 +37,14 @@ def _adapter_keys(model: nn.Module, adapter_name: str) -> dict[str, str]:
     ``modules_to_save`` copy belongs to the adapter the config names.
     """
     config = _peft_config_of(model, adapter_name)
+    layers = _named(model, LoraLayer)
+    if not layers:
+        raise RuntimeError(
+            f"adapter {adapter_name!r} has been merged or unloaded: the model holds no "
+            "LoRA layer left to save or load"
+        )
     keys: dict[str, str] = {}
-    for path, layer in _named(model, LoraLayer):
+    for path, layer in layers:
         for kind, adapters in (("lora_A", layer.lora_A), ("lora_B", layer.lora_B)):
             for leaf in adapters[adapter_name].state_dict():
                 keys[_join(path, f"{kind}.{adapter_name}.{leaf}")] = _join(path, f"{kind}.{leaf}")
@@ -79,6 +85,8 @@ def get_peft_model_state_dict(
     ------
     ValueError
         ``model`` holds no adapter named ``adapter_name``.
+    RuntimeError
+        The adapter was merged or unloaded, so no LoRA layer is left.
     KeyError
         ``state_dict`` lacks one of the adapter's tensors.
 
@@ -124,9 +132,10 @@ def set_peft_model_state_dict(
     Returns
     -------
     object
-        What ``model.load_state_dict(..., strict=False)`` returns: its
-        ``missing_keys`` lists the base parameters (no adapter file holds
-        them); ``unexpected_keys`` is empty.
+        What ``model.load_state_dict(..., strict=False)`` returns, typed as
+        that method declares it: the ``(missing_keys, unexpected_keys)``
+        named tuple, whose ``missing_keys`` lists the base parameters (no
+        adapter file holds them) and whose ``unexpected_keys`` is empty.
 
     Raises
     ------

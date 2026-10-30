@@ -290,3 +290,39 @@ class TestFiles:
         with pytest.raises(NotImplementedError, match="safetensors"):
             peft.save_pretrained(tmp_path, safe_serialization=False)
         assert not any(tmp_path.iterdir())
+
+    def test_a_named_adapter_saves_into_its_own_directory(self, tmp_path: Path) -> None:
+        peft = get_peft_model(_model(), _config(), adapter_name="style")
+        peft.save_pretrained(tmp_path)
+        assert [p.name for p in tmp_path.iterdir()] == ["style"]
+        assert sorted(p.name for p in (tmp_path / "style").iterdir()) == [
+            "adapter_config.json",
+            "adapter_model.safetensors",
+        ]
+        loaded = PeftModel.from_pretrained(_model(), tmp_path / "style", adapter_name="style")
+        assert sorted(get_peft_model_state_dict(loaded, adapter_name="style")) == DISK_KEYS[1:]
+
+    @pytest.mark.parametrize("finish", ["merge_and_unload", "unload"])
+    def test_nothing_is_saved_once_the_adapter_is_gone(self, finish: str, tmp_path: Path) -> None:
+        peft = get_peft_model(_model(), _config())
+        getattr(peft, finish)()
+        with pytest.raises(RuntimeError, match="merged or unloaded"):
+            peft.save_pretrained(tmp_path / "out")
+        assert not (tmp_path / "out").exists()
+        with pytest.raises(RuntimeError, match="merged or unloaded"):
+            get_peft_model_state_dict(peft)
+
+    def test_any_failure_while_loading_undoes_the_injection(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        get_peft_model(_model(), _config()).save_pretrained(tmp_path)
+
+        def interrupted(*args: object, **kwargs: object) -> object:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("lucid.peft._peft_model.set_peft_model_state_dict", interrupted)
+        model = _model()
+        with pytest.raises(KeyboardInterrupt):
+            PeftModel.from_pretrained(model, tmp_path)
+        assert type(model.transformer.h[0].attn.c_attn) is nn.Linear
+        assert all(p.requires_grad for p in model.parameters())

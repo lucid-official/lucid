@@ -220,6 +220,9 @@ class Linear(LoraLayer):
         Dropout on the update's input.
     fan_in_fan_out : bool, default=False
         Must be ``False``: ``nn.Linear`` stores its weight ``(out, in)``.
+    is_target_conv_1d_layer : bool, default=False
+        Must be ``False``; kept so positional calls line up with the
+        reference, whose fused-QKV ``Conv1D`` base v1 does not have.
     init_lora_weights : bool or str, default=True
         See ``LoraConfig``.
     use_rslora : bool, default=False
@@ -230,7 +233,8 @@ class Linear(LoraLayer):
     Raises
     ------
     ValueError
-        ``r`` is not positive or ``fan_in_fan_out`` is ``True``.
+        ``r`` is not positive, or ``fan_in_fan_out`` or
+        ``is_target_conv_1d_layer`` is ``True``.
 
     Examples
     --------
@@ -254,6 +258,7 @@ class Linear(LoraLayer):
         lora_alpha: float = 1,
         lora_dropout: float = 0.0,
         fan_in_fan_out: bool = False,
+        is_target_conv_1d_layer: bool = False,
         init_lora_weights: bool | str = True,
         use_rslora: bool = False,
         use_dora: bool = False,
@@ -261,6 +266,10 @@ class Linear(LoraLayer):
         if fan_in_fan_out:
             raise ValueError(
                 "fan_in_fan_out=True is for a weight stored (in, out); nn.Linear stores (out, in)"
+            )
+        if is_target_conv_1d_layer:
+            raise ValueError(
+                "is_target_conv_1d_layer=True describes a Conv1D base; this layer wraps nn.Linear"
             )
         super().__init__(base_layer)
         self.update_layer(

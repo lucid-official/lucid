@@ -3,18 +3,15 @@
 The reference library's matching rules, kept so a config means the same
 thing on both sides: a list of names matches by dotted suffix, a string
 is a regex over the whole name, and ``layers_to_transform`` filters by
-the index after the layer list's name.  Two places differ, both where
-the reference's rule was a bare string test: ``modules_to_save`` entries
-match on a dotted boundary (``classifier`` no longer catches
-``pre_classifier``), and a layer list at the model's root (``h.0.attn``)
-is indexed too.
+the index after the layer list's name.  Where v1 differs is stated on
+``LoraConfig``'s fields, which is where a user reads it.
 """
 
 import re
 from collections.abc import Iterable, Mapping
 
 import lucid.nn as nn
-from lucid.peft._config import LoraConfig, TaskType
+from lucid.peft._config import LoraConfig, TaskType, _layer_regex, _pattern_key_regex
 
 _ALL_LINEAR = "all-linear"
 
@@ -41,11 +38,11 @@ def _excluded(config: LoraConfig, key: str) -> bool:
 def _layer_index(key: str, layers_pattern: str | list[str] | None) -> int | None:
     """The index after the layer list's name in ``key``, or ``None``."""
     if not layers_pattern:
-        found = re.match(r"(?:.*?\.)?[^.]*\.(\d+)\.", key)
+        found = re.match(_layer_regex(None), key)
         return None if found is None else int(found.group(1))
     patterns = [layers_pattern] if isinstance(layers_pattern, str) else layers_pattern
     for pattern in patterns:
-        found = re.match(rf"(?:.*?\.)?{pattern}\.(\d+)\.", key)
+        found = re.match(_layer_regex(pattern), key)
         if found is not None:
             return int(found.group(1))
     return None
@@ -83,7 +80,7 @@ def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
     if key in patterns:
         return patterns[key]
     for pattern, value in patterns.items():
-        if re.match(rf"(.*\.)?({pattern})$", key):
+        if re.match(_pattern_key_regex(pattern), key):
             return value
     return default
 

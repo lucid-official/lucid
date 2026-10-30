@@ -3,7 +3,9 @@
 The field names, defaults and file layout are the reference adapter
 library's, so a config written by either side reads on the other.  What
 v1 does not implement is refused where it enters — the constructor and
-``LoraConfig.from_dict`` — never accepted and then ignored.
+``LoraConfig.from_dict``.  A key v1 has no field for is accepted only at
+a value that turns its feature off (null, false, empty), which changes
+nothing the adapter computes; at any other value it is refused.
 """
 
 import dataclasses
@@ -11,6 +13,7 @@ import enum
 import json
 import math
 import os
+import re
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -25,21 +28,23 @@ _BIASES: tuple[Literal["none", "all", "lora_only"], ...] = ("none", "all", "lora
 #: ``pissa_niter_16`` is PiSSA too.
 _UNSUPPORTED_INITS = ("pissa", "olora", "eva", "corda", "loftq", "orthogonal")
 
-#: Keys the reference writes for features v1 does not have, with the value
-#: that means "off".  Off is accepted (it changes nothing); anything else
-#: would change what the adapter computes, so it is refused.
-_INERT_DEFAULTS: dict[str, object] = {
-    "lora_bias": False,
-    "megatron_config": None,
-    "loftq_config": {},
-    "eva_config": None,
-    "corda_config": None,
-    "layer_replication": None,
-    "trainable_token_indices": None,
-    "target_parameters": None,
-    "use_qalora": False,
-    "alora_invocation_tokens": None,
-}
+#: Keys the reference writes, at their "off" value, for features v1 does
+#: not have.  Read off, they are dropped without a word; any other key that
+#: is off is dropped with a warning; a key that is on is refused.
+_INERT_KEYS = frozenset(
+    {
+        "lora_bias",
+        "megatron_config",
+        "loftq_config",
+        "eva_config",
+        "corda_config",
+        "layer_replication",
+        "trainable_token_indices",
+        "target_parameters",
+        "use_qalora",
+        "alora_invocation_tokens",
+    }
+)
 
 #: Keys that describe where an adapter came from, not what it computes.
 _METADATA_KEYS = frozenset(
@@ -94,6 +99,36 @@ class TaskType(enum.StrEnum):
     TOKEN_CLS = "TOKEN_CLS"
     QUESTION_ANS = "QUESTION_ANS"
     FEATURE_EXTRACTION = "FEATURE_EXTRACTION"
+
+
+def _is_off(value: object) -> bool:
+    """``None``, ``False`` or an empty container / string: a feature switched off."""
+    return value is None or value is False or (isinstance(value, (dict, list, str)) and not value)
+
+
+def _layer_regex(pattern: str | None) -> str:
+    """The regex whose group 1 is a module name's layer index.
+
+    The reference's current rule: the first (outer) ``<list>.<index>.``
+    segment, matched non-greedily — ``encoder.layers.0.blocks.1.qkv`` is
+    layer 0.  Unlike the reference, a layer list at the model's root
+    (``h.0.attn``) is indexed too when no ``layers_pattern`` is given.
+    """
+    if pattern is None:
+        return r"(?:.*?\.)?[^.]*\.(\d+)\."
+    return rf"(?:.*?\.)?{pattern}\.(\d+)\."
+
+
+def _pattern_key_regex(key: str) -> str:
+    """The regex a ``rank_pattern`` / ``alpha_pattern`` key matches a module name with."""
+    return rf"(.*\.)?({key})$"
+
+
+def _check_regex(name: str, pattern: str) -> None:
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"`{name}` is not a valid regular expression: {exc}") from exc
 
 
 def _check_bool(name: str, value: object) -> bool:
@@ -275,7 +310,8 @@ class LoraConfig:
         dotted name equals an entry or ends with ``"." + entry``; a string
         is a regular expression the whole name must match; ``"all-linear"``
         selects every ``nn.Linear`` except the output head and any layer
-        whose weight is shared with another module.  Required.
+        whose weight is shared with another module.  Required: there is
+        no per-architecture default.
     exclude_modules : str or list of str, optional
         Modules never adapted, matched like ``target_modules``.
     lora_alpha : float, default=8
@@ -293,6 +329,10 @@ class LoraConfig:
     modules_to_save : list of str, optional
         Modules trained in full beside the adapter (a classifier head);
         a trainable copy is kept and saved with it, the original stays.
+        An entry matches a module whose dotted name equals it or ends
+        with ``"." + entry`` — on a dot boundary, so ``classifier`` does
+        not also catch ``pre_classifier`` as the reference's bare suffix
+        test does.  Nothing inside these modules is adapted.
     init_lora_weights : bool or "gaussian", default=True
         ``True``: Kaiming-uniform :math:`A` (``a = \sqrt 5``) and zero
         :math:`B`, so the adapted model starts as the base.
@@ -301,9 +341,15 @@ class LoraConfig:
         (the update is non-zero from the start — for tests).
     layers_to_transform : int or list of int, optional
         Adapt only these layer indices (the number after the layer list's
-        name, ``h.3.attn`` → 3).
+        name, ``transformer.h.3.attn`` → 3).  Applies to modules matched
+        by suffix; one named in full is adapted regardless.  The index is
+        the reference's current rule: the first (outer) ``<list>.<n>.`` in
+        the name, so ``encoder.layers.0.blocks.1.qkv`` is layer 0.  A
+        layer list at the model's root (``h.3.attn``) is indexed too,
+        where the reference finds no index without a ``layers_pattern``.
     layers_pattern : str or list of str, optional
-        Name of the layer list (``"h"``, ``"layers"``); needs
+        Name of the layer list (``"h"``, ``"layers"``), a regex fragment;
+        the first match in the name gives the index.  Needs
         ``layers_to_transform``.
     rank_pattern : dict of str to int, optional
         Per-module rank overrides, keyed by name or regex suffix.
@@ -378,6 +424,23 @@ class LoraConfig:
         if self.use_dora:
             raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
         self._check_layer_selection()
+        self._check_regexes()
+
+    def _check_regexes(self) -> None:
+        """Compile every regex the matcher will build, so a bad one fails here."""
+        for name in ("target_modules", "exclude_modules"):
+            pattern = getattr(self, name)
+            if isinstance(pattern, str):
+                _check_regex(name, pattern)
+        for name, keys in (
+            ("rank_pattern", self.rank_pattern),
+            ("alpha_pattern", self.alpha_pattern),
+        ):
+            for key in keys:
+                _check_regex(f"{name}[{key!r}]", _pattern_key_regex(key))
+        patterns = self.layers_pattern
+        for pattern in [patterns] if isinstance(patterns, str) else patterns or []:
+            _check_regex("layers_pattern", _layer_regex(pattern))
 
     def _check_layer_selection(self) -> None:
         if isinstance(self.target_modules, str):
@@ -387,7 +450,7 @@ class LoraConfig:
                 )
             if self.layers_pattern is not None:
                 raise ValueError("`layers_pattern` cannot be used when `target_modules` is a str.")
-        if self.layers_pattern and not self.layers_to_transform:
+        if self.layers_pattern and self.layers_to_transform in (None, []):
             raise ValueError(
                 "When `layers_pattern` is specified, `layers_to_transform` must also be specified."
             )
@@ -417,11 +480,13 @@ class LoraConfig:
     def from_dict(cls, config_dict: Mapping[str, object]) -> Self:
         r"""Build a config from a dict such as a parsed ``adapter_config.json``.
 
-        Keys for features v1 lacks are accepted only at the value that
-        turns the feature off (``"use_dora": false``, ``"loftq_config": {}``,
-        ...); any other value raises.  Provenance keys (``peft_version``,
-        ``auto_mapping``) are dropped, and a key this version does not know
-        is dropped with a warning, as the reference does.
+        The constructor cannot do this: a file from the reference carries
+        keys v1 has no field for.  Such a key is accepted only at a value
+        that turns its feature off — null, false or empty
+        (``"lora_bias": false``, ``"loftq_config": {}``) — and dropped (with
+        a warning if v1 does not know the key); at any other value it
+        raises, as it would change what the adapter computes.  Provenance
+        keys (``peft_version``, ``auto_mapping``) are dropped.
 
         Parameters
         ----------
@@ -449,7 +514,7 @@ class LoraConfig:
         (4, {'c_attn'})
         """
         peft_type = config_dict.get("peft_type")
-        if peft_type != PeftType.LORA and peft_type in PeftType.__members__.values():
+        if peft_type is not None and peft_type != PeftType.LORA:
             raise NotImplementedError(
                 f"this is a {peft_type} adapter; lucid.peft implements {PeftType.LORA} only"
             )
@@ -459,13 +524,14 @@ class LoraConfig:
         for key, value in config_dict.items():
             if key in names:
                 values[key] = value
-            elif key in _INERT_DEFAULTS:
-                if value != _INERT_DEFAULTS[key]:
-                    raise NotImplementedError(
-                        f"{key}={value!r} is not supported by lucid.peft v1 "
-                        f"(only {_INERT_DEFAULTS[key]!r} is)"
-                    )
-            elif key not in _METADATA_KEYS:
+            elif key in _METADATA_KEYS:
+                continue
+            elif not _is_off(value):
+                raise NotImplementedError(
+                    f"{key}={value!r} is not supported by lucid.peft v1: it would change "
+                    "what the adapter computes"
+                )
+            elif key not in _INERT_KEYS:
                 dropped.append(key)
         if dropped:
             warnings.warn(

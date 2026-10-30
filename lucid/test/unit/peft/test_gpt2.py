@@ -71,15 +71,22 @@ def test_three_sgd_steps_lower_the_loss_and_move_only_the_adapter(device: str) -
 
 
 def test_generate_runs_through_the_wrapper(device: str) -> None:
-    peft = _peft(device, init_lora_weights=False).eval()
+    model = _gpt2(device).eval()
     prompt = _ids(device)[:, :4]
     with lucid.no_grad():
-        out = peft.generate(prompt, max_new_tokens=3)
-        base = peft.get_base_model()
+        before = model.generate(prompt, max_new_tokens=6)
+    # A large random update (B is not zero-initialised), so greedy decoding
+    # must pick other tokens somewhere.
+    config = LoraConfig(r=4, lora_alpha=256, target_modules=["c_attn"], init_lora_weights=False)
+    peft = get_peft_model(model, config).eval()
+    with lucid.no_grad():
+        adapted = peft.generate(prompt, max_new_tokens=6)
         with peft.disable_adapter():
-            plain = peft.generate(prompt, max_new_tokens=3)
-    assert tuple(out.shape) == (2, 7) and tuple(plain.shape) == (2, 7)
-    assert _same(out[:, :4], prompt) and base.config.vocab_size == 64
+            plain = peft.generate(prompt, max_new_tokens=6)
+    assert tuple(adapted.shape) == (2, 10) and _same(adapted[:, :4], prompt)
+    assert not _same(adapted, before)
+    assert _same(plain, before)
+    assert peft.config.vocab_size == 64
 
 
 def test_all_linear_leaves_the_tied_head(device: str) -> None:

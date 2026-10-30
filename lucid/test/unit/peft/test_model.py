@@ -1,5 +1,8 @@
 """Injection: which modules are adapted, what trains, and taking it all out again."""
 
+import copy
+import threading
+
 import pytest
 
 import lucid
@@ -117,6 +120,50 @@ class TestTargeting:
         )
         assert _targets(config) == [f"layers.{i}.q_proj" for i in expected]
 
+    @pytest.mark.parametrize(
+        ("layers", "pattern", "expected"),
+        [
+            # The reference's current rule: the first (outer) index.
+            (
+                [0],
+                None,
+                ["encoder.layers.0.blocks.0.attn.qkv", "encoder.layers.0.blocks.1.attn.qkv"],
+            ),
+            (
+                [1],
+                "blocks",
+                ["encoder.layers.0.blocks.1.attn.qkv", "encoder.layers.1.blocks.1.attn.qkv"],
+            ),
+        ],
+    )
+    def test_nested_lists_take_the_outer_index(
+        self, layers: list[int], pattern: str | None, expected: list[str]
+    ) -> None:
+        def blocks() -> nn.ModuleList:
+            return nn.ModuleList(
+                [nn.ModuleDict({"attn": nn.ModuleDict({"qkv": nn.Linear(2, 2)})}) for _ in range(2)]
+            )
+
+        layer_list = nn.ModuleList([nn.ModuleDict({"blocks": blocks()}) for _ in range(2)])
+        model = nn.ModuleDict({"encoder": nn.ModuleDict({"layers": layer_list})})
+        config = LoraConfig(
+            target_modules=["qkv"], layers_to_transform=layers, layers_pattern=pattern
+        )
+        assert _targets(config, model) == expected
+
+    @pytest.mark.parametrize("layer", [0, 2])
+    def test_a_pattern_takes_its_first_match(self, layer: int) -> None:
+        def mlp() -> nn.ModuleDict:
+            inner = nn.ModuleList([nn.ModuleDict({"fc": nn.Linear(2, 2)})])
+            return nn.ModuleDict({"mlp": nn.ModuleDict({"layers": inner})})
+
+        stack = [mlp() for _ in range(3)]
+        model = nn.ModuleDict({"model": nn.ModuleDict({"layers": nn.ModuleList(stack)})})
+        config = LoraConfig(
+            target_modules=["fc"], layers_to_transform=[layer], layers_pattern="layers"
+        )
+        assert _targets(config, model) == [f"model.layers.{layer}.mlp.layers.0.fc"]
+
     def test_a_layer_pattern_that_is_absent_matches_nothing(self) -> None:
         config = LoraConfig(target_modules=["q_proj"], layers_to_transform=[0], layers_pattern="h")
         with pytest.raises(ValueError, match="layers_pattern"):
@@ -211,10 +258,27 @@ class TestRefusals:
         with pytest.raises(ValueError, match=r"0 \(LazyLinear\) is not supported"):
             LoraModel(nn.Sequential(nn.LazyLinear(4)), LoraConfig(target_modules=["0"]))
 
+    def test_a_failure_while_planning_leaves_the_model(self) -> None:
+        class Locked(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.a = nn.Linear(2, 2)
+                self.b = nn.Linear(2, 2)
+                self.c = nn.Linear(2, 2)
+                self.b.lock = threading.Lock()  # cannot be deep-copied
+
+        model = Locked()
+        config = LoraConfig(target_modules=["c"], modules_to_save=["a", "b"])
+        with pytest.raises(TypeError):
+            LoraModel(model, config)
+        assert all(p.requires_grad for p in model.parameters())
+        assert type(model.a) is nn.Linear and type(model.c) is nn.Linear
+        assert "peft_config" not in model.__dict__
+
     def test_double_injection_is_refused(self) -> None:
         model = _lm()
         LoraModel(model, LoraConfig(target_modules=["q_proj"]))
-        with pytest.raises(RuntimeError, match="already holds a LoRA adapter"):
+        with pytest.raises(NotImplementedError, match="already holds a LoRA adapter"):
             LoraModel(model, LoraConfig(target_modules=["v_proj"]))
 
     def test_modules_to_save_that_matches_nothing(self) -> None:
@@ -368,11 +432,6 @@ class TestDisableAndUnload:
             assert _same(peft(x), expected)
         assert not _same(peft(x), expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="LCD-686: copy.deepcopy aliases Parameter storage, so the trained copy "
-        "writes through to the frozen original",
-    )
     def test_training_the_copy_leaves_the_original(self, device: str) -> None:
         lucid.manual_seed(0)
         model = _Classifier().to(device)
@@ -427,6 +486,14 @@ class TestDisableAndUnload:
         merged = peft.merge_and_unload(safe_merge=True)
         assert merged is model and not any(isinstance(m, LoraLayer) for m in model.modules())
         assert bool(lucid.allclose(model(x), adapted, atol=1e-4))
+
+    def test_a_deep_copy_unloads_with_its_flags(self) -> None:
+        model = _lm(tie=False)
+        model.embed.weight.requires_grad_(False)
+        peft = get_peft_model(model, LoraConfig(target_modules=["q_proj"]))
+        restored = copy.deepcopy(peft).unload()
+        flags = {name: p.requires_grad for name, p in restored.named_parameters()}
+        assert flags.pop("embed.weight") is False and all(flags.values())
 
     def test_merge_and_unload_keeps_the_trained_copy(self) -> None:
         model = _Classifier()

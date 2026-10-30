@@ -233,7 +233,9 @@ class PeftModel(_ForwardsAttributes):
         Two files, the reference library's: ``adapter_config.json`` (with
         ``inference_mode`` set, as the reference stores it) and
         ``adapter_model.safetensors``, keyed by
-        :func:`~lucid.peft.get_peft_model_state_dict`.
+        :func:`~lucid.peft.get_peft_model_state_dict`.  An adapter not
+        named ``"default"`` goes into a sub-directory of its own name, as
+        the reference lays it out.
 
         Parameters
         ----------
@@ -247,6 +249,9 @@ class PeftModel(_ForwardsAttributes):
         ------
         NotImplementedError
             ``safe_serialization=False``.
+        RuntimeError
+            The adapter was merged or unloaded already — there is nothing
+            left to save; nothing is written.
         NotADirectoryError
             ``save_directory`` names an existing file.
 
@@ -266,9 +271,11 @@ class PeftModel(_ForwardsAttributes):
             raise NotImplementedError(
                 "safe_serialization=False writes a pickle; lucid.peft writes safetensors only"
             )
-        path = _output_directory(save_directory)
         adapter = self.active_adapter
         state = get_peft_model_state_dict(self, adapter_name=adapter)
+        path = _output_directory(save_directory)
+        if adapter != "default":
+            path = _output_directory(os.path.join(path, adapter))
         # The reference's writer tags its files with this format string.
         save_safetensors(state, os.path.join(path, _WEIGHTS_NAME), metadata={"format": "pt"})
         dataclasses.replace(self.peft_config[adapter], inference_mode=True).save_pretrained(path)
@@ -348,7 +355,8 @@ class PeftModel(_ForwardsAttributes):
         peft_model = cls(model, config, adapter_name)
         try:
             set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
-        except ValueError:
+        except BaseException:
+            # Whatever stopped the load, ``model`` goes back to what it was.
             peft_model.unload()
             raise
         if not is_trainable:

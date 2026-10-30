@@ -74,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - say target_modules is required when it is unset
 
+- leave a failed injection whole and follow review findings
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

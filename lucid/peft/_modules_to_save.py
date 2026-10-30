@@ -14,7 +14,12 @@ from lucid.peft._forwarding import _ForwardsAttributes
 
 
 class ModulesToSaveWrapper(_ForwardsAttributes):
-    """Hold ``module`` frozen beside a trainable copy that runs in its place.
+    """Hold ``module`` beside a copy that runs in its place.
+
+    Building one changes nothing about ``module`` — ``LoraModel`` builds
+    them while it is still planning, and a plan that fails must leave the
+    model as it was.  Which of the two trains is ``LoraModel``'s freezing
+    step: the copy, not the original.
 
     Parameters
     ----------
@@ -31,8 +36,6 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
         self.modules_to_save: nn.ModuleDict[nn.Module] = nn.ModuleDict({adapter_name: trained})
         self._active_adapter = adapter_name
         self._disable_adapters = False
-        module_to_save.requires_grad_(False)
-        trained.requires_grad_(True)
 
     @property
     def active_adapter(self) -> str:

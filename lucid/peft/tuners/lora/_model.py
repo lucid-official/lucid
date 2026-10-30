@@ -147,9 +147,9 @@ def _refuse_existing_adapters(model: nn.Module) -> None:
     held = [name for name, _ in _named(model, LoraLayer)]
     held += [name for name, _ in _named(model, ModulesToSaveWrapper)]
     if held:
-        raise RuntimeError(
-            f"the model already holds a LoRA adapter (at {held[0]}); call unload() or "
-            "merge_and_unload() first — lucid.peft v1 keeps one adapter per model"
+        raise NotImplementedError(
+            f"the model already holds a LoRA adapter (at {held[0]}); lucid.peft v1 keeps one "
+            "adapter per model — call unload() or merge_and_unload() first"
         )
 
 
@@ -180,9 +180,8 @@ class LoraModel(_ForwardsAttributes):
         ``nn.Linear``, or ``modules_to_save`` matches nothing.
     NotImplementedError
         A match is a layer type the reference adapts but v1 does not
-        (``nn.Embedding``, convolutions, ``nn.MultiheadAttention``).
-    RuntimeError
-        The model already holds a LoRA adapter.
+        (``nn.Embedding``, convolutions, ``nn.MultiheadAttention``), or the
+        model already holds a LoRA adapter (v1 keeps one per model).
 
     Examples
     --------
@@ -208,7 +207,11 @@ class LoraModel(_ForwardsAttributes):
         stored = _stored_config(config, model)
         targets = _plan_targets(model, stored)
         saved = _plan_modules_to_save(model, stored)
-        flags = {id(param): param.requires_grad for param in model.parameters()}
+        # By name, which a deep copy or a pickle of the model keeps.
+        flags = {
+            name: param.requires_grad
+            for name, param in model.named_parameters(remove_duplicate=False)
+        }
         layers: list[tuple[str, nn.Module]] = [
             (
                 target.key,
@@ -326,8 +329,8 @@ class LoraModel(_ForwardsAttributes):
                 _set_submodule(model, key, wrapper.modules_to_save[wrapper.active_adapter])
             else:
                 _set_submodule(model, key, wrapper.original_module)
-        for param in model.parameters():
-            before = self._requires_grad_before.get(id(param))
+        for name, param in model.named_parameters(remove_duplicate=False):
+            before = self._requires_grad_before.get(name)
             if before is not None:
                 param.requires_grad_(before)
         if "peft_config" in model.__dict__:
