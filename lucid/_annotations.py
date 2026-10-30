@@ -400,7 +400,6 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("TracedOp", "lucid.coreml._emit", "TracedOp"),
     ),
     "lucid.fft": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.func": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.metal": (("lucid", "lucid", None),),
     "lucid.models._auto": (
         ("ModelConfig", "lucid.models._base", "ModelConfig"),

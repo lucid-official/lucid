@@ -113,6 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - nested transforms keep the inner graph (LCD-734)
 
+- every transform walks pytrees, not only tensors (LCD-735)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

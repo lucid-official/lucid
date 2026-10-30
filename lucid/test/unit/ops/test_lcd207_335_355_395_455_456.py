@@ -11,6 +11,7 @@ import pytest
 
 import lucid
 import lucid.func as func
+from lucid.func import _forward as forward
 from lucid._tensor.tensor import Tensor
 from lucid.distributions import Bernoulli, Beta, Chi2, Dirichlet, Exponential, Gamma, Normal
 from lucid.distributions.distribution import ExponentialFamily
@@ -87,7 +88,7 @@ def test_vdot_complex128_cpu_parity(ref: ModuleType) -> None:
 def test_func_jvp_delegates_to_autograd_functional_jvp() -> None:
     from lucid.autograd._functional import jvp as af_jvp
 
-    assert func._jvp_by_double_backward is af_jvp
+    assert forward._jvp_by_double_backward is af_jvp
 
     # Steep scale (1e6) that would trip a heuristic 1e-3 relative check.
     x = lucid.tensor([1.0, -2.0, 3.0])

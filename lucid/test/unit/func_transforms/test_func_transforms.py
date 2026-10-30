@@ -3,6 +3,7 @@
 import pytest
 import lucid
 import lucid.func as func
+from lucid.func import _forward as forward
 
 # ── func.grad ─────────────────────────────────────────────────────────────────
 
@@ -178,14 +179,14 @@ class TestFuncJVP:
             return F.gelu(F.scaled_dot_product_attention(h, h, h)).reshape(8, 8)
 
         taken: list[bool] = []
-        fast = func._jvp_by_double_backward
+        fast = forward._jvp_by_double_backward
 
         def spy(*a: object, **k: object) -> object:
             r = fast(*a, **k)  # type: ignore[arg-type]
             taken.append(r is not None)
             return r
 
-        monkeypatch.setattr(func, "_jvp_by_double_backward", spy)
+        monkeypatch.setattr(forward, "_jvp_by_double_backward", spy)
         x = lucid.randn(8, 8).to(device)
         t = lucid.randn(8, 8).to(device)
         _, jt = func.jvp(f, (x,), (t,))
