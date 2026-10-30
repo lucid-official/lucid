@@ -418,14 +418,30 @@ def _compile_into(
 def _forward_segments(
     seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint
 ) -> Tensor:
-    """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``."""
-    for seg in seg_objs:
-        key = _segment_key(cur, fingerprint)
-        compiled = seg.cache.get(key)
-        if compiled is None:
-            compiled = _compile_into(seg, cur, fingerprint, key)
-        holder: list[object] = [compiled]
-        cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+    """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``.
+
+    Each segment run writes its BatchNorm state back, so a later segment that
+    does not compile would leave the step half-applied, and the eager step
+    that replaces it applies it again — statistics and counters moved twice.
+    A call compiles when its first segment has no executable for its input
+    (every later input follows from that one and the module state, both in
+    the key), so that is when the buffers are kept, to be put back.
+    """
+    key = _segment_key(cur, fingerprint)
+    restore = None if key in seg_objs[0].cache else _keep_buffers(fingerprint.model)
+    try:
+        for i, seg in enumerate(seg_objs):
+            if i:
+                key = _segment_key(cur, fingerprint)
+            compiled = seg.cache.get(key)
+            if compiled is None:
+                compiled = _compile_into(seg, cur, fingerprint, key)
+            holder: list[object] = [compiled]
+            cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+    except _SegmentCompileError:
+        if restore is not None:
+            restore()
+        raise
     return cur
 
 
@@ -691,9 +707,10 @@ def _stand_ins(x_args: tuple[object, ...]) -> tuple[object, ...]:
 def _keep_buffers(model: Module) -> Callable[[], None]:
     """What puts ``model``'s buffers back as they are now, in place.
 
-    Every timing run of the probe is a training step: each moved the
-    BatchNorm statistics and counters, and the model came out of the first
-    call several steps further on than an eager one would have.
+    For runs that are not the step the caller asked for: the segments a
+    call ran before one failed to compile (:func:`_forward_segments`), and
+    the timing runs of the ``segments="auto"`` probe — each a training step
+    that moved the BatchNorm statistics and counters.
     """
     from lucid.autograd._grad_mode import no_grad
 
@@ -794,7 +811,7 @@ def make_autoseg_step(
     n_children = len(list(model))
     if n_children < 2:
         raise ValueError(
-            'make_step(segments="auto"): model has fewer than 2 child modules ' "to split"
+            'make_step(segments="auto"): model has fewer than 2 child modules to split'
         )
     cand_list = candidates if candidates is not None else _auto_candidates(n_children)
 

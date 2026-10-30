@@ -251,6 +251,7 @@ _CONTRACT: dict[str, tuple[object, bool]] = {
     "set of names": ({"a", "b"}, True),
     "64 items": (list(range(64)), True),
     "65 items": (list(range(65)), False),
+    "a dict of 65 items": ({str(i): i for i in range(65)}, False),
     "three containers deep": ([[[1]]], True),
     "four containers deep": ([[[[1]]]], False),
     "a list holding a tensor": ([lucid.zeros(1)], False),
@@ -279,3 +280,20 @@ def test_state_signatures_tell_apart_what_a_branch_can() -> None:
 def test_the_bookkeeping_of_every_module_is_not_its_state() -> None:
     names = {name for name, _ in StateContract.attrs(nn.Linear(2, 2))}
     assert names == {"in_features", "out_features"}
+    assert StateContract.attrs(3) == ()  # no ``__dict__``, no state
+
+
+def test_a_compiled_function_is_keyed_on_its_own_attributes() -> None:
+    def fn(x: lucid.Tensor) -> lucid.Tensor:
+        return x * 2.0
+
+    wrapper = getattr(lucid.compile(fn), "_model")
+    before = sig._module_state(wrapper)
+    setattr(fn, "_mode", "fast")
+    assert sig._module_state(wrapper) != before
+
+
+def test_a_scalar_argument_is_keyed_by_its_type() -> None:
+    model, x = nn.Linear(2, 2), lucid.randn(1, 2)
+    keys = {sig.signature_of(model, (x, v), {}, dynamic=False) for v in (2, 2.0, True)}
+    assert len(keys) == 3

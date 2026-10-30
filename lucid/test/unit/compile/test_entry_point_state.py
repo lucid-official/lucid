@@ -230,9 +230,25 @@ def test_a_change_after_the_first_call_is_followed(entry: str, change: str, mode
     _assert_same_buffers(model, ref, what)
 
 
-@pytest.mark.parametrize("entry", list(ENTRIES))
+# ``segments="auto"`` times a few training steps of each candidate split on the
+# first call; those runs must leave the statistics as they found them.  With a
+# segment per child, the batch norm's segment runs before the gate's — an
+# identity, nothing to compile — sends the step eager: the statistics the
+# first wrote must not count again.
+_TRAINING_ENTRIES: dict[str, _EntryPoint] = {
+    **ENTRIES,
+    "segmented, a later segment eager": _EntryPoint(
+        _stepping(lambda m: make_step(m, _loss, segments=6)), _eager_loss
+    ),
+    "segmented auto": _EntryPoint(
+        _stepping(lambda m: make_step(m, _loss, segments="auto")), _eager_loss
+    ),
+}
+
+
+@pytest.mark.parametrize("entry", list(_TRAINING_ENTRIES))
 def test_batch_norm_statistics_follow_eager_through_training(entry: str) -> None:
-    point = ENTRIES[entry]
+    point = _TRAINING_ENTRIES[entry]
     model, ref = _net(), _net()
     run = point.build(model)
     for seed in (1, 2, 3):
