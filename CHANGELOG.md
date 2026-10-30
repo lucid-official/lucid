@@ -97,6 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - load_state_dict replaces state and checks the checkpoint
 
+- compiled optimizer load_state_dict replaces and checks
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

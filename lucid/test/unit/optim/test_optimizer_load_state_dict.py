@@ -8,7 +8,9 @@ checkpoint whose groups held other parameters loaded its hyper-parameters
 onto the wrong ones; it refused a buffer saved in another precision; and a
 refused checkpoint had already overwritten the learning rate.
 
-These pin the contract, for every optimizer, against the reference framework:
+These pin the contract, for every optimizer, against the reference framework,
+on the eager optimizers and on the compiled ones (``compile_optimizer``, which
+loads through its own state):
 
 * **replacement** — a checkpoint taken before any step resets a stepped
   optimizer, and a parameter absent from a partial checkpoint starts afresh;
@@ -30,7 +32,8 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
-from lucid.test._fixtures.devices import device_dtype_params
+from lucid.compile import compile_optimizer
+from lucid.test._fixtures.devices import device_dtype_params, metal_available
 
 # A matrix and a vector: two parameters, so a checkpoint can cover one of them.
 _SHAPES = ((3, 4), (4,))
@@ -63,6 +66,16 @@ def _case_id(case: tuple[str, dict[str, Any]]) -> str:
 
 _CASE_PARAMS = [pytest.param(c, id=_case_id(c)) for c in _CASES]
 
+# Where an optimizer steps, and whether it is the compiled one.  A compiled
+# step runs on the GPU only; its loads are checked on the CPU as well, below.
+_STEPPING = [pytest.param("cpu", False, id="cpu")] + (
+    [pytest.param("metal", False, id="metal"), pytest.param("metal", True, id="metal-compiled")]
+    if metal_available()
+    else []
+)
+_COMPILED_STEPPING = [p for p in _STEPPING if p.values[1]]
+_EAGER_AND_COMPILED = [pytest.param(False, id="eager"), pytest.param(True, id="compiled")]
+
 
 def _arrays(seed: int) -> list[np.ndarray]:
     rng = np.random.default_rng(seed)
@@ -76,6 +89,12 @@ def _as_array(v: object) -> np.ndarray:
 
 def _lucid_params(arrays: list[np.ndarray], device: str = "cpu") -> list[nn.Parameter]:
     return [nn.Parameter(lucid.tensor(a.copy()).to(device)) for a in arrays]
+
+
+def _make(name: str, groups: Any, kw: dict[str, Any], compiled: bool) -> Any:
+    """The optimizer ``name``, wrapped by ``compile_optimizer`` when ``compiled``."""
+    opt = getattr(optim, name)(groups, **kw)
+    return compile_optimizer(opt) if compiled else opt
 
 
 def _feed(
@@ -96,13 +115,19 @@ def _rewind(params: list[nn.Parameter], arrays: list[np.ndarray], device: str) -
 class _Pair:
     """The same optimizer in Lucid and in the reference framework, stepped together."""
 
-    def __init__(self, case: tuple[str, dict[str, Any]], ref: Any, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        case: tuple[str, dict[str, Any]],
+        ref: Any,
+        device: str = "cpu",
+        compiled: bool = False,
+    ) -> None:
         name, kw = case
         self.ref = ref
         self.device = device
         self.init = _arrays(0)
         self.params = _lucid_params(self.init, device)
-        self.opt = getattr(optim, name)(self.params, **kw)
+        self.opt = _make(name, self.params, kw, compiled)
         self.ref_params = [ref.nn.Parameter(ref.from_numpy(a.copy())) for a in self.init]
         self.ref_opt = getattr(ref.optim, name)(self.ref_params, **kw)
 
@@ -156,10 +181,11 @@ class _Pair:
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
+@pytest.mark.parametrize("device, compiled", _STEPPING)
 def test_a_checkpoint_before_the_first_step_resets_the_optimizer(
-    case: tuple[str, dict[str, Any]], device: str, ref: Any
+    case: tuple[str, dict[str, Any]], device: str, compiled: bool, ref: Any
 ) -> None:
-    pair = _Pair(case, ref, device)
+    pair = _Pair(case, ref, device, compiled)
     fresh = pair.save()
     for k in range(3):
         pair.step(k)
@@ -171,10 +197,11 @@ def test_a_checkpoint_before_the_first_step_resets_the_optimizer(
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
+@pytest.mark.parametrize("device, compiled", _STEPPING)
 def test_a_parameter_the_checkpoint_has_no_entry_for_starts_afresh(
-    case: tuple[str, dict[str, Any]], device: str, ref: Any
+    case: tuple[str, dict[str, Any]], device: str, compiled: bool, ref: Any
 ) -> None:
-    pair = _Pair(case, ref, device)
+    pair = _Pair(case, ref, device, compiled)
     for k in range(3):
         pair.step(k, only=(0,))
     partial = pair.save()
@@ -190,18 +217,18 @@ def test_a_parameter_the_checkpoint_has_no_entry_for_starts_afresh(
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
+@pytest.mark.parametrize("device, compiled", _STEPPING)
 def test_loading_into_an_optimizer_that_never_stepped_continues_the_run(
-    case: tuple[str, dict[str, Any]], device: str, ref: Any
+    case: tuple[str, dict[str, Any]], device: str, compiled: bool, ref: Any
 ) -> None:
-    pair = _Pair(case, ref, device)
+    pair = _Pair(case, ref, device, compiled)
     for k in range(3):
         pair.step(k)
     saved = pair.save()
     # A twin built over the same values has not stepped, and has no engines yet.
     name, kw = case
-    values = [p.numpy() for p in pair.params]
-    twin_params = _lucid_params(values, device)
-    twin = getattr(optim, name)(twin_params, **kw)
+    twin_params = _lucid_params([p.numpy() for p in pair.params], device)
+    twin = _make(name, twin_params, kw, compiled)
     twin.load_state_dict(copy.deepcopy(saved[0]))
     pair.step(3)
     _feed(twin_params, _arrays(103), device)
@@ -224,6 +251,20 @@ def test_loading_replaces_the_state_of_a_run_that_resumed_from_a_pickle() -> Non
     assert stepped.state_dict()["state"] == {}
 
 
+def test_the_older_layout_with_one_step_count_per_group_still_loads() -> None:
+    params = _lucid_params(_arrays(0))
+    opt = optim.Adam(params, lr=0.05)
+    for k in range(3):
+        _feed(params, _arrays(100 + k), "cpu")
+        opt.step()
+    saved = copy.deepcopy(opt.state_dict())
+    for entry in saved["state"].values():
+        entry["step"] = 3
+    twin = optim.Adam(_lucid_params(_arrays(0)), lr=0.05)
+    twin.load_state_dict(saved)
+    assert [int(e["step"]) for e in twin.state_dict()["state"].values()] == [3, 3]
+
+
 # ── group sizes ────────────────────────────────────────────────────────────
 
 _GROUPINGS = [
@@ -239,10 +280,10 @@ def _four_params() -> list[nn.Parameter]:
     return [nn.Parameter(lucid.tensor(rng.standard_normal(3).astype(np.float32))) for _ in range(4)]
 
 
-def _grouped(name: str, kw: dict[str, Any], layout: list[list[int]]) -> optim.Optimizer:
+def _grouped(name: str, kw: dict[str, Any], layout: list[list[int]], compiled: bool) -> Any:
     params = _four_params()
     groups = [{"params": [params[i] for i in g], "lr": 0.1 * (n + 1)} for n, g in enumerate(layout)]
-    return getattr(optim, name)(groups, **{k: v for k, v in kw.items() if k != "lr"})
+    return _make(name, groups, {k: v for k, v in kw.items() if k != "lr"}, compiled)
 
 
 def _ref_grouped(ref: Any, name: str, kw: dict[str, Any], layout: list[list[int]]) -> Any:
@@ -252,16 +293,18 @@ def _ref_grouped(ref: Any, name: str, kw: dict[str, Any], layout: list[list[int]
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
+@pytest.mark.parametrize("compiled", _EAGER_AND_COMPILED)
 @pytest.mark.parametrize(("saved_layout", "live_layout"), _GROUPINGS)
 def test_a_group_of_another_size_is_refused_with_the_references_message(
     case: tuple[str, dict[str, Any]],
+    compiled: bool,
     saved_layout: list[list[int]],
     live_layout: list[list[int]],
     ref: Any,
 ) -> None:
     name, kw = case
-    saved = _grouped(name, kw, saved_layout).state_dict()
-    live = _grouped(name, kw, live_layout)
+    saved = _grouped(name, kw, saved_layout, compiled).state_dict()
+    live = _grouped(name, kw, live_layout, compiled)
     ref_live = _ref_grouped(ref, name, kw, live_layout)
     ref_saved = _ref_grouped(ref, name, kw, saved_layout).state_dict()
     with pytest.raises(ValueError) as ref_err:
@@ -276,25 +319,32 @@ def test_a_group_of_another_size_is_refused_with_the_references_message(
 # ── dtype ──────────────────────────────────────────────────────────────────
 
 _NP = {lucid.float16: np.float16, lucid.float32: np.float32, lucid.float64: np.float64}
+_DTYPES = [lucid.float32, lucid.float64, lucid.float16]
+# Every pair of precisions a device holds; the compiled optimizers step on the GPU only.
 _CROSSINGS = [
-    p
-    for p in device_dtype_params(
-        [lucid.float32, lucid.float64, lucid.float16], [lucid.float32, lucid.float64, lucid.float16]
-    )
+    pytest.param(*p.values, compiled, id=f"{p.id}-{'compiled' if compiled else 'eager'}")
+    for p in device_dtype_params(_DTYPES, _DTYPES)
     if p.values[1] != p.values[2]
+    for compiled in (False, True)
+    if p.values[0] == "metal" or not compiled
 ]
 
 
 @pytest.mark.parametrize("case", _CASE_PARAMS)
-@pytest.mark.parametrize("device, saved_dtype, live_dtype", _CROSSINGS)
+@pytest.mark.parametrize("device, saved_dtype, live_dtype, compiled", _CROSSINGS)
 def test_state_saved_in_another_precision_follows_its_parameter(
-    case: tuple[str, dict[str, Any]], device: str, saved_dtype: Any, live_dtype: Any, ref: Any
+    case: tuple[str, dict[str, Any]],
+    device: str,
+    saved_dtype: Any,
+    live_dtype: Any,
+    compiled: bool,
+    ref: Any,
 ) -> None:
     name, kw = case
     init = _arrays(0)
     src = nn.Parameter(lucid.tensor(init[0], dtype=saved_dtype).to(device))
     ref_src = ref.nn.Parameter(ref.from_numpy(init[0].astype(_NP[saved_dtype])))
-    opt, ref_opt = getattr(optim, name)([src], **kw), getattr(ref.optim, name)([ref_src], **kw)
+    opt, ref_opt = _make(name, [src], kw, compiled), getattr(ref.optim, name)([ref_src], **kw)
     for k in range(3):
         g = _arrays(100 + k)[0].astype(_NP[saved_dtype])
         src.grad = lucid.tensor(g.copy(), dtype=saved_dtype).to(device)
@@ -304,7 +354,8 @@ def test_state_saved_in_another_precision_follows_its_parameter(
 
     dst = nn.Parameter(lucid.tensor(init[0], dtype=live_dtype).to(device))
     ref_dst = ref.nn.Parameter(ref.from_numpy(init[0].astype(_NP[live_dtype])))
-    live, ref_live = getattr(optim, name)([dst], **kw), getattr(ref.optim, name)([ref_dst], **kw)
+    live = _make(name, [dst], kw, compiled)
+    ref_live = getattr(ref.optim, name)([ref_dst], **kw)
     live.load_state_dict(copy.deepcopy(opt.state_dict()))
     ref_live.load_state_dict(copy.deepcopy(ref_opt.state_dict()))
 
@@ -340,24 +391,31 @@ def test_state_saved_in_another_precision_follows_its_parameter(
 
 # ── atomicity ──────────────────────────────────────────────────────────────
 
+# The compiled optimizers are stepped on the GPU; eager ones on the CPU.
+_ATOMIC_KINDS = [pytest.param("cpu", False, id="eager")] + (
+    [pytest.param("metal", True, id="compiled")] if metal_available() else []
+)
 
-def _stepped(case: tuple[str, dict[str, Any]], steps: int = 2) -> tuple[Any, list[nn.Parameter]]:
+
+def _stepped(
+    case: tuple[str, dict[str, Any]], device: str, compiled: bool, steps: int = 2
+) -> tuple[Any, list[nn.Parameter]]:
     """An optimizer over two groups, one parameter each, stepped ``steps`` times."""
     name, kw = case
-    params = _lucid_params(_arrays(0))
+    params = _lucid_params(_arrays(0), device)
     groups = [{"params": [params[0]], "lr": 0.1}, {"params": [params[1]], "lr": 0.2}]
-    opt = getattr(optim, name)(groups, **{k: v for k, v in kw.items() if k != "lr"})
+    opt = _make(name, groups, {k: v for k, v in kw.items() if k != "lr"}, compiled)
     for k in range(steps):
-        _feed(params, _arrays(100 + k), "cpu")
+        _feed(params, _arrays(100 + k), device)
         opt.step()
     return opt, params
 
 
-def _hyperparams(opt: optim.Optimizer) -> list[dict[str, object]]:
+def _hyperparams(opt: Any) -> list[dict[str, object]]:
     return [{k: v for k, v in g.items() if k != "params"} for g in opt.param_groups]
 
 
-def _state_arrays(opt: optim.Optimizer) -> dict[int, dict[str, np.ndarray]]:
+def _state_arrays(opt: Any) -> dict[int, dict[str, np.ndarray]]:
     return {
         i: {k: _as_array(v).copy() for k, v in entry.items()}
         for i, entry in opt.state_dict()["state"].items()
@@ -397,12 +455,16 @@ _STATEFUL = [p for p in _CASE_PARAMS if p.values[0] != ("SGD", {"lr": 0.1})]
 
 
 @pytest.mark.parametrize("case", _STATEFUL)
+@pytest.mark.parametrize("device, compiled", _ATOMIC_KINDS)
 @pytest.mark.parametrize("break_it", _BREAKS)
 def test_a_refused_checkpoint_leaves_the_optimizer_as_it_was(
-    case: tuple[str, dict[str, Any]], break_it: Callable[[dict[str, Any]], type[Exception]]
+    case: tuple[str, dict[str, Any]],
+    device: str,
+    compiled: bool,
+    break_it: Callable[[dict[str, Any]], type[Exception]],
 ) -> None:
-    opt, params = _stepped(case)
-    twin, twin_params = _stepped(case)
+    opt, params = _stepped(case, device, compiled)
+    twin, twin_params = _stepped(case, device, compiled)
     saved = copy.deepcopy(opt.state_dict())
     # Every other group and buffer of the checkpoint is valid and different, so a
     # load that applied any of it before failing would show.
@@ -424,29 +486,77 @@ def test_a_refused_checkpoint_leaves_the_optimizer_as_it_was(
     for idx, entry in state.items():
         for key, want in entry.items():
             np.testing.assert_array_equal(after[idx][key], want, err_msg=f"{idx}/{key}")
-    _feed(params, _arrays(300), "cpu")
+    _feed(params, _arrays(300), device)
     opt.step()
-    _feed(twin_params, _arrays(300), "cpu")
+    _feed(twin_params, _arrays(300), device)
     twin.step()
     for a, b in zip(params, twin_params, strict=True):
         np.testing.assert_array_equal(a.numpy(), b.numpy())
 
 
 @pytest.mark.parametrize("case", _STATEFUL)
+@pytest.mark.parametrize("compiled", _EAGER_AND_COMPILED)
 @pytest.mark.parametrize("break_it", _BREAKS)
 def test_a_refused_checkpoint_leaves_an_optimizer_that_never_stepped_untouched(
-    case: tuple[str, dict[str, Any]], break_it: Callable[[dict[str, Any]], type[Exception]]
+    case: tuple[str, dict[str, Any]],
+    compiled: bool,
+    break_it: Callable[[dict[str, Any]], type[Exception]],
 ) -> None:
-    source, _ = _stepped(case)
+    source, _ = _stepped(case, "cpu", False)
     bad = copy.deepcopy(source.state_dict())
     bad["param_groups"][0]["lr"] = 0.5
     error = break_it(bad)
-    opt, _ = _stepped(case, steps=0)
+    opt, _ = _stepped(case, "cpu", compiled, steps=0)
     hyper = _hyperparams(opt)
     with pytest.raises(error):
         opt.load_state_dict(bad)
     assert _hyperparams(opt) == hyper
     assert opt.state_dict()["state"] == {}
+
+
+@pytest.mark.parametrize(
+    ("case", "key"),
+    [
+        pytest.param(("Adam", {"lr": 0.05}), "step", id="step"),
+        pytest.param(("ASGD", {"lr": 0.05}), "eta", id="scalar"),
+    ],
+)
+@pytest.mark.parametrize("compiled", _EAGER_AND_COMPILED)
+def test_a_number_that_is_not_one_is_refused_and_changes_nothing(
+    case: tuple[str, dict[str, Any]], key: str, compiled: bool
+) -> None:
+    source, _ = _stepped(case, "cpu", False)
+    bad = copy.deepcopy(source.state_dict())
+    bad["param_groups"][0]["lr"] = 0.5
+    bad["state"][1][key] = object()
+    opt, _ = _stepped(case, "cpu", compiled, steps=0)
+    hyper = _hyperparams(opt)
+    with pytest.raises(TypeError):
+        opt.load_state_dict(bad)
+    assert _hyperparams(opt) == hyper
+    assert opt.state_dict()["state"] == {}
+
+
+@pytest.mark.parametrize("device, compiled", _COMPILED_STEPPING)
+def test_a_momentum_buffer_kept_after_momentum_was_switched_off_comes_back(
+    device: str, compiled: bool
+) -> None:
+    kw = {"lr": 0.1, "momentum": 0.9}
+    params = _lucid_params(_arrays(0), device)
+    opt = _make("SGD", params, kw, compiled)
+    for k in range(2):
+        _feed(params, _arrays(100 + k), device)
+        opt.step()
+    for group in opt.param_groups:
+        group["momentum"] = 0.0
+    saved = copy.deepcopy(opt.state_dict())
+    assert "momentum_buffer" in saved["state"][0]
+
+    reader = _make("SGD", _lucid_params(_arrays(0), device), kw, compiled)
+    reader.load_state_dict(saved)
+    got = reader.state_dict()["state"][0]["momentum_buffer"]
+    np.testing.assert_array_equal(_as_array(got), _as_array(saved["state"][0]["momentum_buffer"]))
+    assert reader.param_groups[0]["momentum"] == 0.0
 
 
 # ── the checkpoint's hyper-parameters apply ────────────────────────────────
@@ -476,10 +586,15 @@ _HYPER = [
 
 
 @pytest.mark.parametrize(("written_by", "read_by"), _HYPER)
+@pytest.mark.parametrize("device, compiled", _STEPPING)
 def test_the_checkpoints_hyperparameters_replace_the_readers(
-    written_by: tuple[str, dict[str, Any]], read_by: tuple[str, dict[str, Any]], ref: Any
+    written_by: tuple[str, dict[str, Any]],
+    read_by: tuple[str, dict[str, Any]],
+    device: str,
+    compiled: bool,
+    ref: Any,
 ) -> None:
-    writer, reader = _Pair(written_by, ref), _Pair(read_by, ref)
+    writer, reader = _Pair(written_by, ref, device), _Pair(read_by, ref, device, compiled)
     for k in range(3):
         writer.step(k)
     reader.load(writer.save())
@@ -539,3 +654,39 @@ def test_lbfgs_checkpoint_before_the_first_step_resets_its_history() -> None:
     assert opt.state_dict()["state"] != {}
     opt.load_state_dict(fresh)
     assert opt.state_dict()["state"] == {}
+
+
+# ── the payload's shape ────────────────────────────────────────────────────
+
+
+class _Bare(optim.Optimizer):
+    """An optimizer with no engine: it has hyper-parameters and nothing to load into."""
+
+    def __init__(self, params: list[nn.Parameter]) -> None:
+        super().__init__(params, {"lr": 0.1})
+
+
+def test_an_optimizer_without_engines_loads_its_groups_and_has_no_state_to_load() -> None:
+    saved = _Bare([nn.Parameter(lucid.zeros(2))]).state_dict()
+    saved["param_groups"][0]["lr"] = 0.3
+    saved["state"] = {0: {"momentum_buffer": np.zeros(2, dtype=np.float32)}}
+    opt = _Bare([nn.Parameter(lucid.zeros(2))])
+    opt.load_state_dict(saved)
+    assert opt.param_groups[0]["lr"] == 0.3
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        pytest.param({"param_groups": {}}, "'param_groups' must be a list", id="groups-not-list"),
+        pytest.param({"param_groups": [[]]}, "must be a dict with a 'params' list", id="group"),
+        pytest.param({"param_groups": [{"params": 3}]}, "'params' list", id="params"),
+        pytest.param(
+            {"param_groups": [{"params": [0]}], "state": []}, "'state' must be a dict", id="state"
+        ),
+    ],
+)
+def test_a_payload_of_the_wrong_kind_is_refused(payload: dict[str, Any], message: str) -> None:
+    opt = _Bare([nn.Parameter(lucid.zeros(1))])
+    with pytest.raises(TypeError, match=message):
+        opt.load_state_dict(payload)

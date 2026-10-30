@@ -53,8 +53,12 @@ from lucid._C import engine as _C_engine
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.compile._core.fallback import refuse_off_gpu
+from lucid.compile._optim._load import StagedEntry, stage_checkpoint
 from lucid.compile._optim.spec import _hp
+from lucid.autograd._grad_mode import no_grad
+from lucid.optim._state_load import LoadedCheckpoint
 from lucid.optim._step_counter import _counts_as_step, _record_step
+from lucid.optim.optimizer import _group_params
 
 if TYPE_CHECKING:
     from lucid.optim.optimizer import Optimizer
@@ -629,79 +633,75 @@ class _CompiledStepBase:
         return {"state": state, "param_groups": groups_out}
 
     def load_state_dict(self, sd: dict[str, object]) -> None:
-        """Restore a checkpoint written by this class or by its eager optimizer.
+        """Replace the state with a checkpoint written by this class or its eager optimizer.
 
-        Group hyper-parameters go back into the live ``param_groups``;
-        each parameter's ``step``, scalar state and buffers are written
-        into the compiled state (in place — the executables stay valid).
-        A parameter without an entry keeps its current state, as in the
-        eager loader.
+        Group hyper-parameters go back into the live ``param_groups``; each
+        parameter's ``step``, scalar state and buffers are written into the
+        compiled state in place (the executables stay valid).  The state is
+        *replaced*: a parameter without an entry starts afresh, so a
+        checkpoint taken before the first step resets everything.  Buffers
+        follow their parameter's dtype, whatever they were saved as.
+
+        The load is all or nothing — groups, hyper-parameters and every entry
+        are checked before the optimizer is touched: ``ValueError`` for groups
+        that differ in number or size or a rejected hyper-parameter,
+        ``TypeError`` for a non-numeric ``step`` or scalar, ``ShapeMismatch``
+        for a buffer not shaped like its parameter.
 
         Parameters
         ----------
         sd : dict
             An ``optimizer.state_dict()`` payload.
-
-        Raises
-        ------
-        ValueError
-            When the group count differs, or a saved buffer's shape does
-            not match its parameter.
         """
-        from lucid.autograd._grad_mode import no_grad
-        from lucid.optim.optimizer import _from_host
-
-        loaded_groups = cast(list[dict[str, object]], sd["param_groups"])
-        if len(loaded_groups) != len(self._opt.param_groups):
-            raise ValueError(
-                f"loaded state_dict has {len(loaded_groups)} param_groups but "
-                f"optimizer has {len(self._opt.param_groups)}"
-            )
-        for g_new, g_old in zip(self._opt.param_groups, loaded_groups, strict=True):
-            for k, v in g_old.items():
-                if k != "params":
-                    g_new[k] = v
+        opt = self._opt
+        saved = LoadedCheckpoint.read(sd, [len(_group_params(g)) for g in opt.param_groups])
+        edits = [
+            opt._staged_group_edits(k, group, entry)
+            for k, (group, entry) in enumerate(zip(opt.param_groups, saved.groups, strict=True))
+        ]
         self._sync_params()
-        loaded = cast(dict[int, dict[str, object]], sd.get("state", {}))
-        self._opt.state = loaded
-        flags = self._flags_now()
-        groups = self._opt.param_groups
-        for raw_idx, entry in loaded.items():
-            i = int(raw_idx)
-            if i < 0 or i >= len(self._params) or not entry:
-                continue
-            p = self._params[i]
+
+        def buffer_names(i: int) -> set[str]:
             gi = self._group_of[i]
-            self._ensure_state(i, flags[gi].own, groups[gi])
-            if not self._initialized[i]:
-                self._init_pstate(i, groups[gi])
-                self._initialized[i] = True
-            for name, value in entry.items():
-                if name == "step":
-                    self._steps[i] = int(cast(int, value))
-                elif name in self._PSTATE_NAMES:
-                    self._pstate[i][name] = _round_state_scalar(
-                        float(cast(float, value)), p._impl.dtype
-                    )
-                elif name in self._state[i] or name in self._OPTIONAL_STATE:
-                    # A kept buffer comes back whatever the flags are now,
-                    # as the eager loader restores it.
-                    buf = self._state[i].get(name)
-                    if buf is None:
-                        buf = self._state[i][name] = self._init_state(i, name, groups[gi])
-                    # The eager loader's host-array door: it keeps a 0-d
-                    # entry 0-d.
-                    host = _from_host(value, buf._impl.device)
-                    src = _wrap(_C_engine.astype(host, buf._impl.dtype))
-                    if tuple(src.shape) != tuple(buf.shape):
-                        raise ValueError(
-                            f"load_state_dict: state {name!r} of parameter {i} has "
-                            f"shape {tuple(src.shape)}, expected {tuple(buf.shape)}"
-                        )
-                    with no_grad():
-                        buf.copy_(src)
-                    self._loaded_state(i, name)
-        self._opt._sync_hyperparams()
+            flags = self._flags({**opt.param_groups[gi], **edits[gi]})
+            return {*self._state_names(flags), *self._state[i], *self._OPTIONAL_STATE}
+
+        staged = stage_checkpoint(saved.state, self._params, self._PSTATE_NAMES, buffer_names)
+        for group, edit in zip(opt.param_groups, edits, strict=True):
+            group.update(edit)
+        opt.state = saved.state
+        flags = self._flags_now()
+        with no_grad():
+            self._restart_state()
+            for i, entry in staged.items():
+                self._apply_entry(i, entry, flags)
+        opt._sync_hyperparams()
+
+    def _restart_state(self) -> None:
+        """Take every parameter back to never having stepped (under ``no_grad``).
+
+        Buffers are re-initialised in place, keeping their identity.
+        """
+        for i in range(len(self._params)):
+            self._steps[i], self._initialized[i] = 0, False
+            self._pstate[i].clear()
+            group = self._opt.param_groups[self._group_of[i]]
+            for name, buf in self._state[i].items():
+                buf.copy_(self._init_state(i, name, group))
+
+    def _apply_entry(self, i: int, entry: StagedEntry, flags: _PlanFlags) -> None:
+        """Write parameter ``i``'s staged checkpoint entry over its fresh state (under ``no_grad``)."""
+        groups = self._opt.param_groups
+        self._activate(i, flags, groups)
+        if entry.step is not None:
+            self._steps[i] = entry.step
+        self._pstate[i].update(entry.scalars)
+        for name, src in entry.buffers.items():
+            buf = self._state[i].get(name)
+            if buf is None:
+                buf = self._state[i][name] = self._init_state(i, name, groups[self._group_of[i]])
+            buf.copy_(_wrap(src))
+            self._loaded_state(i, name)  # a kept buffer comes back whatever the flags
 
     # ── Public step() ────────────────────────────────────────────
 
