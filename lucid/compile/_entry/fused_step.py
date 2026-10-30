@@ -82,7 +82,7 @@ from lucid.compile._core.custom_backward import (
     step_region_ancestors,
     vjp_region_index,
 )
-from lucid.compile._core.signature import ParamFingerprint, outside_feeds
+from lucid.compile._core.signature import CacheKey, ParamFingerprint, outside_feeds
 
 # Thread-local flag flipped on while ``_FusedStep._build_plan``
 # is actively tracing.  ``lucid.nn.functional.dropout`` checks it to
@@ -115,6 +115,9 @@ if TYPE_CHECKING:
     from lucid.compile._optim.compiler import _CompiledStepBase, _PlanFlags, _ScalarLayout
     from lucid.nn.module import Module
     from lucid.optim.optimizer import Optimizer
+
+    # Participants, the optimizer's structural flags, their classes, the call's key.
+    type _PlanKey = tuple[tuple[int, ...], _PlanFlags, tuple[int, ...], CacheKey]
 
 __all__ = ["fused_step"]
 
@@ -527,8 +530,8 @@ class _FusedStep:
         # back after each run to drive ``scaler.update()``.
         self._found_inf_target: Tensor | None = None
 
-        self._plans: dict[tuple[object, ...], _FusedPlan] = {}
-        self._eager_only: set[tuple[object, ...]] = set()
+        self._plans: dict[_PlanKey, _FusedPlan] = {}
+        self._eager_only: set[_PlanKey] = set()
         self._reachable: frozenset[int] | None = None
         # Part of the plan key, as make_step's; and a plan feeds and writes the
         # tensors it was traced with: after a ``.half()`` / ``.float()`` round
@@ -613,19 +616,26 @@ class _FusedStep:
         if model_has_active_hooks(self._model) or tensors_have_active_hooks(leaves):
             return self._run_eager(args)
         flags = copt._flags_now()
-        key = self._key(self._members() if self._reachable is not None else (), flags, args)
+        call = self._fingerprint.key_of(args, {}, dynamic=False)
+        key = self._key(self._members() if self._reachable is not None else (), flags, call)
         if key in self._eager_only:
             return self._run_eager(args)
         plan = self._plans.get(key) if self._reachable is not None else None
         if plan is None:
-            return self._compile_and_run_first(args, flags)
+            return self._compile_and_run_first(args, flags, call)
         # GradScaler scalar refresh — write the current ``scaler._scale``
         # + ``1/scale`` into the persistent 0-D holders before run.
         self._refresh_scaler_scalars()
         return self._run(plan, args, flags)
 
-    def _compile_and_run_first(self, args: tuple[Tensor, ...], flags: _PlanFlags) -> Tensor:
-        """Build a new fused plan and execute its first run, or fall back to eager."""
+    def _compile_and_run_first(
+        self, args: tuple[Tensor, ...], flags: _PlanFlags, call: CacheKey
+    ) -> Tensor:
+        """Build a new fused plan and execute its first run, or fall back to eager.
+
+        ``call`` is the call's key, taken before the trace: what the forward
+        does to its own state while traced does not move the key.
+        """
         from lucid.compile._core.fallback import _fallback_notice
         from lucid.compile._core.trace_context import compile_attempt
 
@@ -648,12 +658,15 @@ class _FusedStep:
             copt._pstate[:] = prev_pstate
             _fallback_notice(_fallback_category(why), msg)
             fallback_key = self._key(
-                self._members() if self._reachable is not None else (), flags, args
+                self._members() if self._reachable is not None else (),
+                flags,
+                self._fingerprint.rekey(call, args, {}),
             )
             self._eager_only.add(fallback_key)
             return self._run_eager(args)
-        # Keyed after the build + first run: it initialised the new members' state.
-        self._plans[self._key(plan.members, flags, args)] = plan
+        # Keyed after the build + first run: it initialised the new members'
+        # state, and the trace showed which tensor attributes it reads.
+        self._plans[self._key(plan.members, flags, self._fingerprint.rekey(call, args, {}))] = plan
         while len(self._plans) > _MAX_PLANS:
             self._plans.pop(next(iter(self._plans)))
         return result
@@ -731,21 +744,18 @@ class _FusedStep:
         self._params_seen = copt._params
         return copt
 
-    def _key(
-        self, members: tuple[int, ...], flags: _PlanFlags, args: tuple[Tensor, ...] = ()
-    ) -> tuple[object, ...]:
-        """Plan key: participants, structural flags, per-parameter classes, inputs, params.
+    def _key(self, members: tuple[int, ...], flags: _PlanFlags, call: CacheKey) -> _PlanKey:
+        """Plan key: participants, structural flags, per-parameter classes, and
+        the call's key (``ParamFingerprint.key_of``).
 
-        The inputs by how they bind to the trace's feeds too: ``step(x, x)``
-        reads one feed where ``step(a, b)`` reads two, and a buffer passed as
-        the input shares the buffer's (``ParamFingerprint.binding``).
+        The call's key is every entry point's: the inputs and how they bind to
+        the trace's feeds, the parameters, and the state of every module of
+        the tree and of the call site — ``eval()``, a dropout's ``p``, a flag a
+        forward branches on, an autocast region.  Keyed on the inputs and
+        parameters alone, a plan traced in training replayed after
+        ``model.eval()`` (LCD-720).
         """
-        arg_sig = tuple((tuple(a.shape), a.dtype, a.device) for a in args)
-        amp_active = _C_engine.amp_is_active()
-        amp_sig = (amp_active, _C_engine.amp_active_dtype() if amp_active else None)
-        partition = self._copt._partition(members)
-        binding = self._fingerprint.binding(args, {})
-        return (members, flags, partition, arg_sig, amp_sig, self._fingerprint.get(), binding)
+        return (members, flags, self._copt._partition(members), call)
 
     def _members(self) -> tuple[int, ...]:
         """Parameters that step: reach the loss and require grad (eager's rule)."""

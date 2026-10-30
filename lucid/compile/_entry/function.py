@@ -168,12 +168,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     # Local imports to avoid circulars during package init.
     from lucid._dispatch import _unwrap, _wrap
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.bn_runstats import (
-        advance_bn_counters,
-        bn_counter_targets,
-        bn_writeback_targets,
-        model_has_cumulative_bn,
-    )
+    from lucid.compile._core.bn_runstats import BnWriteback, model_has_cumulative_bn
     from lucid.compile._core.buffer_writes import refuse
     from lucid.compile._core.fallback import off_gpu_detail
     from lucid.compile._core.trace_context import compile_attempt, recording
@@ -225,13 +220,10 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
                 "graph, and compiled_step has no eager fallback. Use "
                 "lucid.compile.make_step or a momentum-based BatchNorm."
             )
-        bn_targets = bn_writeback_targets(g, ext)
-        counters = bn_counter_targets(model, g, ext)
-        bn_stat_out_ids = [out_id for _, out_id, _ in bn_targets]
-        bn_stat_buffers = [_wrap(impl) for _, _, impl in bn_targets]
+        bn = BnWriteback.of(model, g, ext)
 
         exe = _C_engine.compile.compile_trace_with_backward(
-            g, ext, loss_id, grad_ids, extra_output_ids=bn_stat_out_ids
+            g, ext, loss_id, grad_ids, extra_output_ids=list(bn.out_ids)
         )
         if exe is None:
             raise RuntimeError(
@@ -244,16 +236,13 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
 
     # Output order is [loss, *param grads, *input grads, *bn_running_stats].
     n_loss_grad = 1 + len(grad_ids)
-    if len(outs) != n_loss_grad + len(bn_stat_out_ids):
+    if len(outs) != n_loss_grad + len(bn.out_ids):
         raise RuntimeError(
             f"compiled_step: executable produced {len(outs)} outputs but expected "
-            f"{n_loss_grad + len(bn_stat_out_ids)} (loss + {len(grad_ids)} grads + "
-            f"{len(bn_stat_out_ids)} BN running-stats)"
+            f"{n_loss_grad + len(bn.out_ids)} (loss + {len(grad_ids)} grads + "
+            f"{len(bn.out_ids)} BN running-stats)"
         )
-    # Write BN running stats back into the live module buffers.
-    for _i, _buf in enumerate(bn_stat_buffers):
-        _buf.copy_(_wrap(outs[n_loss_grad + _i]))
-    advance_bn_counters(counters)
+    bn.apply(outs[n_loss_grad:])
 
     _accumulate_grads(exe, list(outs[1:n_loss_grad]), params, [x], input_positions)
     return _wrap(outs[0])

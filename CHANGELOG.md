@@ -99,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compiled optimizer load_state_dict replaces and checks
 
+- key every entry point on the module state; write BN back
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

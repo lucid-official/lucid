@@ -8,7 +8,10 @@ same executable iff their keys compare equal:
   * Same input *positional* and *keyword* tensor shapes / dtypes.
   * Same device for every input tensor.
   * Same ``training`` flag on the wrapped model (so a ``train()`` ↔
-    ``eval()`` flip forces a recompile — BN / Dropout differ).
+    ``eval()`` flip forces a recompile — BN / Dropout differ), and the
+    same state on every module of its tree: each one's ``training`` and
+    the attributes a forward can branch on (:class:`StateContract`).
+  * Same grad mode and autocast region at the call site.
   * Same ``dynamic`` flag at compile time (the symbolic-batch knob,
     Phase 1.6).
   * Same parameter dtype (so ``.half()`` / ``.float()`` triggers a
@@ -30,7 +33,6 @@ the key embeds each with its type (and a float by its bits) so a Python
 for ``forward(self, x, training=True)`` style guard arguments).
 """
 
-import struct
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -39,6 +41,7 @@ from types import CodeType, MethodType
 from typing import TYPE_CHECKING, final, override
 
 from lucid._C import engine as _C_engine
+from lucid.compile._core.module_state import HeldState, StateContract, atom_sig
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
 
 if TYPE_CHECKING:
@@ -187,6 +190,10 @@ class CacheKey:
         and a tensor it reads requires grad.  Such a call runs eagerly, so
         its key never names an executable; it is its own key so that the
         verdict never falls on the same call made under ``no_grad``.
+    autocast : tuple of (bool, object)
+        Whether the call is made inside an ``autocast`` region, and its
+        dtype.  A trace records the region's casts: one traced outside it
+        answered float32 inside a float16 region, and the other way round.
 
     Examples
     --------
@@ -223,12 +230,20 @@ class CacheKey:
     alias: tuple[int, ...] = field(default_factory=tuple)
     # Which arguments are a tensor the model holds; see ``tree_alias`` above.
     tree_alias: tuple[tuple[int, _Slot], ...] = field(default_factory=tuple)
-    # Per-submodule ``(training, scalar_attrs)`` snapshot across ``model.modules()``.
+    # Per-submodule ``(training, state attributes)`` across the tree (``StateContract``).
     module_state: tuple[object, ...] = field(default_factory=tuple)
     # Snapshot of ``grad_enabled()`` at the call site; see ``grad_mode`` above.
     grad_mode: bool = False
     # The call needs gradients and runs eagerly; see ``grad`` above.
     grad: bool = False
+    # The autocast region the call is made in; see ``autocast`` above.
+    autocast: tuple[bool, object] = (False, None)
+
+
+def _autocast_state() -> tuple[bool, object]:
+    """``(active, dtype)`` of the autocast region the caller is in."""
+    active = bool(_C_engine.amp_is_active())
+    return (active, _C_engine.amp_active_dtype() if active else None)
 
 
 def _wrapped_callable(model: object) -> object | None:
@@ -495,47 +510,19 @@ def _iter_modules(roots: Sequence[Module]) -> list[Module]:
     return out
 
 
-def _scalar_attr_sig(value: object) -> object | None:
-    """Hashable signature for a scalar (or scalar-tuple) attribute, else ``None``."""
-    if isinstance(value, (int, float, bool, str, bytes, type(None))):
-        return _atom_sig(value)
-    if isinstance(value, tuple):
-        items: list[object] = []
-        for item in value:
-            sig = _scalar_attr_sig(item)
-            if sig is None:
-                return None
-            items.append(sig)
-        return tuple(items)
-    return None
-
-
-def _dict_scalar_attrs(obj: object) -> tuple[tuple[str, object], ...]:
-    """Sorted ``(name, sig)`` pairs for public scalar attributes in ``obj.__dict__``."""
-    d = getattr(obj, "__dict__", None)
-    if not isinstance(d, dict):
-        return ()
-    attrs: list[tuple[str, object]] = []
-    for k, v in d.items():
-        if isinstance(k, str) and not k.startswith("_"):
-            sig = _scalar_attr_sig(v)
-            if sig is not None:
-                attrs.append((k, sig))
-    attrs.sort(key=lambda item: item[0])
-    return tuple(attrs)
-
-
 def _module_state(model: object) -> tuple[object, ...]:
-    """Snapshot every submodule's ``training`` flag and public scalar attributes."""
+    """Every submodule's ``training`` flag and state attributes
+    (:class:`StateContract`), and those of a wrapped callable."""
     if model is None:
         return ()
-    states = _tree_walk(model).states
+    walk = _tree_walk(model)
+    state: tuple[object, ...] = (walk.states, StateContract.read(walk.held))
     fn = getattr(model, "_fn", None)
     if fn is not None:
-        fn_attrs = _dict_scalar_attrs(fn)
+        fn_attrs = StateContract.attrs(fn)
         if fn_attrs:
-            return (*states, ("fn", fn_attrs))
-    return states
+            return (*state, ("fn", fn_attrs))
+    return state
 
 
 def _handle_key(handle: object) -> int | None:
@@ -597,6 +584,8 @@ class _TreeWalk:
     # without running ``_indirect_module_paths``'s BFS on every call.
     reached: tuple[tuple[_Path, weakref.ref[Module]], ...]
     states: tuple[object, ...]
+    # The mutable containers the tree's modules hold (``StateContract.held``).
+    held: tuple[HeldState, ...]
     hooked: bool
     # Every parameter and buffer of the tree.  Their ``requires_grad`` moves
     # no version, so it is read from these each time it is asked.
@@ -637,13 +626,15 @@ _WALKS: weakref.WeakKeyDictionary[Module, _TreeWalk] = weakref.WeakKeyDictionary
 
 
 def _tree_walk(model: object) -> _TreeWalk:
-    """The ``training`` flags, scalar attributes and hooks of ``model``'s tree.
+    """The ``training`` flags, state attributes and hooks of ``model``'s tree.
 
     The walk is O(submodules) — a millisecond a call on a 200-module model —
     so it is kept per model and taken again only when the tree version
     (``lucid/nn/_tree_version.py``) has moved or the closure names other
     modules.  The version is read before the walk: a change made while it
     runs moves it past the version stored, and the next call walks again.
+    A container changed in place moves no version: the walk holds those, and
+    :func:`_module_state` reads them on every call.
     """
     from lucid.autograd._hooks import _tensor_hook_version
     from lucid._tree_version import _tree_version
@@ -663,8 +654,9 @@ def _tree_walk(model: object) -> _TreeWalk:
         roots=tuple(weakref.ref(root) for root in roots),
         reached=_reached_modules(values, fn),
         states=tuple(
-            (bool(getattr(sub, "training", False)), _dict_scalar_attrs(sub)) for sub in subs
+            (bool(getattr(sub, "training", False)), StateContract.fixed(sub)) for sub in subs
         ),
+        held=StateContract.held(subs),
         hooked=any(_sub_has_active_hooks(sub) for sub in subs),
         tensors=tuple(t for _, t in slots if t is not None),
         slot_of=_slot_map(slots),
@@ -871,7 +863,7 @@ def _arg_sig(value: object, *, dynamic_batch: bool = False) -> object:
 
     Tensors become :class:`TensorSig`; lists / tuples / dicts are
     recursively normalised; primitives (int / float / bool / str /
-    None) are keyed by :func:`_atom_sig`.  Anything still unhashable forces
+    None) are keyed by :func:`atom_sig`.  Anything still unhashable forces
     the caller to fall back to eager (the cache lookup raises and
     :class:`CompiledModule.__call__` catches it).
     """
@@ -890,23 +882,7 @@ def _arg_sig(value: object, *, dynamic_batch: bool = False) -> object:
         return tuple(
             sorted((str(k), _arg_sig(v, dynamic_batch=dynamic_batch)) for k, v in value.items())
         )
-    return _atom_sig(value)
-
-
-def _atom_sig(value: object) -> object:
-    """Key a non-tensor argument by its type and, for a float, its bits.
-
-    The trace bakes the value in, so two calls share an executable only
-    when they would trace the same graph.  Plain ``==`` is too coarse:
-    ``1 == 1.0 == True`` although each promotes an integer tensor
-    differently, ``0.0 == -0.0`` although they add differently, and a NaN
-    never equals another NaN, so it recompiled on every call (LCD-446).
-    Anything unhashable still raises on hash, which sends the call eager.
-    """
-    kind = f"{type(value).__module__}.{type(value).__qualname__}"
-    if isinstance(value, float):
-        return (kind, struct.pack("<d", value))
-    return (kind, value)
+    return atom_sig(value)
 
 
 def _param_fingerprint(model: Module) -> tuple[tuple[str, str], ...]:
@@ -1271,28 +1247,6 @@ class ParamFingerprint(_ModuleWrapper):
         """
         return _tree_alias(leaf_tensors(args, kwargs), self._slot_of)
 
-    def binding(
-        self, args: Iterable[object], kwargs: dict[str, object]
-    ) -> tuple[tuple[int, ...], tuple[tuple[int, _Slot], ...]]:
-        """How a call's tensors bind to a trace's feeds, for an owner with a
-        key of its own.
-
-        Parameters
-        ----------
-        args : iterable
-            The call's positional arguments.
-        kwargs : dict
-            The call's keyword arguments.
-
-        Returns
-        -------
-        tuple
-            :attr:`CacheKey.alias` and :attr:`CacheKey.tree_alias` of the call.
-        """
-        self.get()
-        leaves = leaf_tensors(args, kwargs)
-        return _alias_pattern(leaves), _tree_alias(leaves, self._slot_of)
-
     def rekey(self, key: CacheKey, args: Iterable[object], kwargs: dict[str, object]) -> CacheKey:
         """``key`` with the slots :meth:`settle` just learnt the trace reads.
 
@@ -1320,6 +1274,11 @@ class ParamFingerprint(_ModuleWrapper):
         self, args: Iterable[object], kwargs: dict[str, object], *, dynamic: bool
     ) -> CacheKey:
         """:func:`signature_of` for a call of the model, with this fingerprint.
+
+        Every entry point keys its executables on this — ``CompiledModule``,
+        ``make_step`` (each segment of a segmented one), ``fused_step`` (with
+        its optimizer's plan classes) and ``compiled_decode_step`` — so a
+        state one of them reads in a trace is in all their keys.
 
         Parameters
         ----------
@@ -1459,4 +1418,5 @@ def signature_of(
         tree_alias=_tree_alias(leaves, _tree_walk(model).slot_of if slots is None else slots),
         module_state=module_state,
         grad_mode=bool(_C_engine.grad_enabled()),
+        autocast=_autocast_state(),
     )

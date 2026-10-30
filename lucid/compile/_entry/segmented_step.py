@@ -63,11 +63,12 @@ from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
-from lucid.compile._core.signature import outside_feeds, tree_tensors
+from lucid.compile._core.bn_runstats import BnWriteback
+from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
-    from lucid.compile._core.signature import ParamFingerprint, _Slot
+    from lucid.compile._core.signature import ParamFingerprint
     from lucid.nn.module import Module
     from lucid.nn.modules.container import Sequential
 
@@ -114,26 +115,25 @@ class _SegCompiled:
     # skips it — and is not one of its parameters (``_grad_targets``).
     produce_input_grad: bool
     n_params: int
+    # The BatchNorm statistics the forward executable returns after its
+    # output, and the counters, written back after each forward run.  The
+    # backward recomputes the forward and writes nothing: one step, one update.
+    bn: BnWriteback = field(default_factory=BnWriteback)
     # Every tensor the traces were fed from outside, for ``ParamFingerprint.settle``.
     fed: tuple[_C_engine.TensorImpl, ...] = ()
 
 
-type _SegKey = tuple[tuple[int, ...], str, bool, tuple[tuple[int, _Slot], ...]]
+def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
+    """Compile-cache key for a segment fed ``x``: every entry point's key.
 
-
-def _sig(x: Tensor, fingerprint: ParamFingerprint) -> _SegKey:
-    """Compile-cache key for a segment: its input shape, dtype and grad need.
-
-    Batch size is fixed across a training run, so one entry is compiled per
-    segment.  Parameters never change shape during training, so they are not
-    part of the key.  Whether the input requires grad is: the first segment
-    returned no gradient to an input that did — an eager trunk before a
-    compiled model trained nothing (LCD-617).  So is whether the input is a
-    tensor the model holds: a parameter passed as the input shares that
-    parameter's feed, and another input ran in its place (LCD-629).
+    That is the input's shape, dtype and grad need — the first segment
+    returned no gradient to an input that did, and an eager trunk before a
+    compiled model trained nothing (LCD-617) — whether the input is a tensor
+    the model holds (LCD-629), and the state of every module of the model
+    and of the call site: keyed on the input alone, a segment traced in
+    training replayed after ``model.eval()`` (LCD-720).
     """
-    held = fingerprint.tree_alias((x,), {})
-    return (tuple(x.shape), str(x.dtype), bool(x.requires_grad), held)
+    return fingerprint.key_of((x,), {}, dynamic=False)
 
 
 def _match_param_ids(ext: dict[int, object], param_impls: Sequence[object]) -> list[int] | None:
@@ -211,7 +211,7 @@ class _Segment:
     # Its modules' parameters and buffers: a trace that reads one on the host
     # is unsupported, or the value read would be baked in.
     state: tuple[Tensor, ...] = ()
-    cache: dict[_SegKey, _SegCompiled] = field(default_factory=dict)
+    cache: dict[CacheKey, _SegCompiled] = field(default_factory=dict)
 
 
 def _trace_segment_fn(
@@ -250,16 +250,17 @@ def _grad_targets(x: Tensor, x_id: int, param_ids: list[int]) -> list[int]:
 
 
 def _lower_segment_forward(
-    tracer: Tracer, y_id: int, grad_target_ids: list[int]
+    tracer: Tracer, y_id: int, grad_target_ids: list[int], stats: Sequence[int]
 ) -> CompiledExecutable | None:
-    """A segment's forward executable, or ``None`` when it cannot be compiled."""
+    """A segment's forward executable, returning its output and then the
+    BatchNorm ``stats``; ``None`` when it cannot be compiled."""
     from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
 
     try:
         refuse_custom_backward(tracer, y_id, grad_target_ids)
         return _C_engine.compile.compile_or_cached(
-            tracer.graph, dict(tracer.external_feeds), False, [], [y_id]
+            tracer.graph, dict(tracer.external_feeds), False, [], [y_id, *stats]
         )
     except CustomBackwardInTrace as why:
         _fallback_notice("custom-backward", str(why))
@@ -289,12 +290,14 @@ def _lower_segment_backward(
         return None
 
 
-def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
+def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | None:
     """Trace + compile the forward and backward executables for ``seg`` at ``x``.
 
     Two traces are taken (forward-only, then forward + ``loss_seg``) so the
-    forward executable does not carry the cotangent-product tail.  Returns
-    ``None`` on any uncompilable condition → the caller falls back to eager.
+    forward executable does not carry the cotangent-product tail.  ``owner``
+    is the model the segment is part of, whose BatchNorm counters it advances.
+    Returns ``None`` on any uncompilable condition → the caller falls back to
+    eager.
     """
     import lucid
     from lucid._dispatch import _unwrap
@@ -326,7 +329,10 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
     if fwd_param_ids is None:
         return None
 
-    fwd_exe = _lower_segment_forward(t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids))
+    bn = BnWriteback.of(owner, t_fwd.graph, dict(ext_fwd))
+    fwd_exe = _lower_segment_forward(
+        t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids), bn.out_ids
+    )
     if fwd_exe is None:
         return None
 
@@ -379,22 +385,33 @@ def _compile_segment(seg: _Segment, x: Tensor) -> _SegCompiled | None:
         bwd=_SegExe(exe=bwd_exe, feed_plan=bwd_plan),
         produce_input_grad=len(grad_target_ids) > len(bwd_param_ids),
         n_params=len(seg.params),
+        bn=bn,
         fed=outside_feeds(t_fwd) + outside_feeds(t_bwd),
     )
 
 
-def _compile_into(seg: _Segment, x: Tensor, fingerprint: ParamFingerprint) -> _SegCompiled:
+def _compile_into(
+    seg: _Segment, x: Tensor, fingerprint: ParamFingerprint, key: CacheKey
+) -> _SegCompiled:
     """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
-    traces read; raise :class:`_SegmentCompileError` if it does not compile."""
+    traces read; raise :class:`_SegmentCompileError` if it does not compile.
+
+    ``key`` is the segment's key taken before the traces: what a forward does
+    to its own state while traced does not move it.  A model with a
+    cumulative-average BatchNorm runs eagerly, as the monolithic step does:
+    that update reads the counter on the host.
+    """
+    from lucid.compile._core.bn_runstats import model_has_cumulative_bn
     from lucid.compile._core.trace_context import compile_attempt
 
+    owner = fingerprint.model
     with compile_attempt():
         before = fingerprint.outside_slots()
-        compiled = _compile_segment(seg, x)
+        compiled = None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner)
         fingerprint.settle(() if compiled is None else compiled.fed, before)
     if compiled is None:
         raise _SegmentCompileError(seg.index)
-    seg.cache[_sig(x, fingerprint)] = compiled
+    seg.cache[fingerprint.rekey(key, (x,), {})] = compiled
     return compiled
 
 
@@ -403,9 +420,10 @@ def _forward_segments(
 ) -> Tensor:
     """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``."""
     for seg in seg_objs:
-        compiled = seg.cache.get(_sig(cur, fingerprint))
+        key = _segment_key(cur, fingerprint)
+        compiled = seg.cache.get(key)
         if compiled is None:
-            compiled = _compile_into(seg, cur, fingerprint)
+            compiled = _compile_into(seg, cur, fingerprint, key)
         holder: list[object] = [compiled]
         cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
     return cur
@@ -436,6 +454,7 @@ class _SegmentFunction(Function):
         feeds = _feed(compiled.fwd.feed_plan, _unwrap(x), None, param_impls)
         outs = _C_engine.compile.run_executable(compiled.fwd.exe, feeds)
         y_impl = cast(_C_engine.TensorImpl, outs[0])
+        compiled.bn.apply(outs[1:])
 
         ctx.compiled = compiled
         ctx.x_impl = _unwrap(x)
@@ -669,6 +688,25 @@ def _stand_ins(x_args: tuple[object, ...]) -> tuple[object, ...]:
     )
 
 
+def _keep_buffers(model: Module) -> Callable[[], None]:
+    """What puts ``model``'s buffers back as they are now, in place.
+
+    Every timing run of the probe is a training step: each moved the
+    BatchNorm statistics and counters, and the model came out of the first
+    call several steps further on than an eager one would have.
+    """
+    from lucid.autograd._grad_mode import no_grad
+
+    kept = [(b, b.detach().clone()) for b in model.buffers()]
+
+    def restore() -> None:
+        with no_grad():
+            for buffer, value in kept:
+                buffer.copy_(value)
+
+    return restore
+
+
 def _probe_one(model: Module, seg_step: Callable[..., Tensor], x_args: tuple[object, ...]) -> float:
     """Median fwd+bwd wall-time (ms) of ``seg_step`` over a few warm runs.
 
@@ -765,14 +803,18 @@ def make_autoseg_step(
     def _select(x_args: tuple[Tensor, ...]) -> Callable[..., Tensor]:
         results: list[tuple[int, float]] = []
         probe_args = _stand_ins(x_args)
-        for k in cand_list:
-            seg_step = make_segmented_step(model, loss_fn, segments=k, dynamic=dynamic)
-            results.append((k, _probe_one(model, seg_step, probe_args)))
-            # Drop this candidate's executables before probing the next so the
-            # probe's transient peak stays near one candidate, not their sum.
-            if k != cand_list[-1]:
-                seg_step.clear_cache()  # type: ignore[attr-defined]
-                _C_engine.compile.session_cache_clear()
+        restore = _keep_buffers(model)
+        try:
+            for k in cand_list:
+                seg_step = make_segmented_step(model, loss_fn, segments=k, dynamic=dynamic)
+                results.append((k, _probe_one(model, seg_step, probe_args)))
+                # Drop this candidate's executables before probing the next so the
+                # probe's transient peak stays near one candidate, not their sum.
+                if k != cand_list[-1]:
+                    seg_step.clear_cache()  # type: ignore[attr-defined]
+                    _C_engine.compile.session_cache_clear()
+        finally:
+            restore()
         best_k = min(results, key=lambda r: r[1])[0]
         # Rebuild the winner fresh (its cache may have been cleared above).
         chosen = make_segmented_step(model, loss_fn, segments=best_k, dynamic=dynamic)

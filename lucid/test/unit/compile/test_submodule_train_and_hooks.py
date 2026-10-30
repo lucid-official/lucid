@@ -220,7 +220,8 @@ def test_scalar_attribute_mutation_retraces_compiled_module_and_step() -> None:
 
 
 def test_signature_scalar_attr_edge_cases() -> None:
-    """Scalar attribute fingerprinting distinguishes types/NaN/-0.0 and ignores non-scalars."""
+    """Attribute fingerprinting distinguishes types/NaN/-0.0, follows short
+    containers changed in place (LCD-704) and ignores what is not state."""
     m = nn.Linear(4, 4).to(COMPILE_DEVICE)
     x = metal_tensor(2, 4)
 
@@ -241,12 +242,18 @@ def test_signature_scalar_attr_edge_cases() -> None:
     m.flag = float("nan")  # type: ignore[attr-defined]
     assert signature_of(m, (x,), {}, dynamic=False) == signature_of(m, (x,), {}, dynamic=False)
 
-    # Non-scalar attributes (lists/dicts) and private attributes must not break signature_of.
+    # A list or dict of scalars is state a forward can branch on, changed in
+    # place or not; one holding a tensor is data the trace is fed, not state.
     m.history = [1, 2, 3]  # type: ignore[attr-defined]
     m.meta = {"a": 1}  # type: ignore[attr-defined]
+    held = [x]
+    setattr(m, "held", held)
     k_with_containers = signature_of(m, (x,), {}, dynamic=False)
     m.history.append(4)  # type: ignore[attr-defined]
-    assert signature_of(m, (x,), {}, dynamic=False) == k_with_containers
+    k_appended = signature_of(m, (x,), {}, dynamic=False)
+    assert k_appended != k_with_containers
+    held.append(metal_tensor(2, 4))
+    assert signature_of(m, (x,), {}, dynamic=False) == k_appended
 
 
 # ── 3. Module hooks under CompiledModule and make_step ──────────────────────

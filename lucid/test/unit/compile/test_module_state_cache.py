@@ -1,11 +1,14 @@
 """The compiled cache key's walk of a module tree is cached (LCD-462).
 
 Every compiled call keys its executable on each submodule's ``training``
-flag, public scalar attributes and hooks.  Walking the tree for that cost
-about a millisecond a call on a 200-module model, so the walk is kept per
-model against the tree version (``lucid/nn/_tree_version.py``), which moves
-after an attribute set or deleted through ``Module.__setattr__`` /
-``__delattr__`` and after any write to a submodule or hook registry.
+flag, state attributes (``_StateContract``: public or private scalars and
+short containers of them) and hooks.  Walking the tree for that cost about a
+millisecond a call on a 200-module model, so the walk is kept per model
+against the tree version (``lucid/nn/_tree_version.py``), which moves after an
+attribute set or deleted through ``Module.__setattr__`` / ``__delattr__`` and
+after any write to a submodule or hook registry.  A list, set or dict changed
+in place moves nothing, so the walk holds those and the key reads them on
+every call.
 
 The matrix below makes each kind of change after the walk was cached and
 holds the cached answer to a fresh walk: a kind that does not move the
@@ -18,6 +21,7 @@ import pickle
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from enum import Enum
 
 import pytest
 
@@ -25,6 +29,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn._tree_version as tree_version
 from lucid.compile._core import signature as sig
+from lucid.compile._core.module_state import StateContract
 from lucid.nn._tree_version import _TrackedDict
 from lucid.nn.utils import parametrize
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
@@ -41,6 +46,11 @@ class _Net(nn.Module):
         self.mdict = nn.ModuleDict({"a": nn.Dropout(0.2), "b": nn.Linear(4, 4)})
         self.head = nn.Linear(4, 2)
         self.flag = 1
+        self._hidden = False
+        self.names: list[str] = []
+        self.table: dict[str, int] = {}
+        self.kinds: set[str] = set()
+        self.groups: list[list[str]] = [[]]
 
 
 class _Double(nn.Module):
@@ -75,6 +85,11 @@ _Change = tuple[Callable[[_Net], object], Callable[[_Net], object]]
 # (setup before the walk is cached, change after it)
 CHANGES: dict[str, _Change] = {
     "deep scalar set": (_none, lambda m: setattr(m.seq[1], "p", 0.25)),
+    "private scalar set": (_none, lambda m: setattr(m, "_hidden", True)),
+    "list changed in place": (_none, lambda m: m.names.append("shift")),
+    "dict changed in place": (_none, lambda m: m.table.update(rank=4)),
+    "set changed in place": (_none, lambda m: m.kinds.add("lora")),
+    "nested list changed in place": (_none, lambda m: m.groups[0].append("x")),
     "scalar delete": (_none, lambda m: delattr(m, "flag")),
     "train flip": (_none, lambda m: m.mlist.eval()),
     "submodule set": (_none, lambda m: setattr(m, "extra", nn.Dropout(0.3))),
@@ -212,3 +227,55 @@ def test_keying_a_call_no_longer_costs_a_walk(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(tree_version, "_tree_version", lambda: next(versions))
     walking = keying()
     assert cached * 10 < walking, f"cached {cached:.6f}s vs walking {walking:.6f}s"
+
+
+# ── what the walk keys a module's attributes by (LCD-704) ────────────────
+
+
+class _Mode(Enum):
+    ON = 1
+    OFF = 2
+
+
+# value → whether it is state (``_StateContract.value_sig`` keys it).
+_CONTRACT: dict[str, tuple[object, bool]] = {
+    "None": (None, True),
+    "bool": (False, True),
+    "complex": (1j, True),
+    "bytes": (b"x", True),
+    "enum member": (_Mode.ON, True),
+    "dtype": (lucid.float16, True),
+    "tuple of tuples": (((1, 2), (3, 4)), True),
+    "list of names": (["default", "other"], True),
+    "dict of scalars": ({"rank": 4, "alpha": 8.0}, True),
+    "set of names": ({"a", "b"}, True),
+    "64 items": (list(range(64)), True),
+    "65 items": (list(range(65)), False),
+    "three containers deep": ([[[1]]], True),
+    "four containers deep": ([[[[1]]]], False),
+    "a list holding a tensor": ([lucid.zeros(1)], False),
+    "a dict with an int key": ({1: 2}, False),
+    "a class": (nn.Linear, False),
+    "a function": (len, False),
+}
+
+
+@pytest.mark.parametrize("name", list(_CONTRACT))
+def test_the_state_a_module_is_keyed_by(name: str) -> None:
+    value, keyed = _CONTRACT[name]
+    assert (StateContract.value_sig(value) is not None) is keyed
+
+
+def test_state_signatures_tell_apart_what_a_branch_can() -> None:
+    value_sig = StateContract.value_sig
+    assert value_sig({1, 2}) == value_sig({2, 1})
+    assert value_sig([1, 2]) != value_sig((1, 2))
+    assert value_sig([1, 2]) != value_sig([2, 1])
+    assert value_sig({"a": 1, "b": 2}) == value_sig({"b": 2, "a": 1})
+    assert value_sig(_Mode.ON) != value_sig(_Mode.OFF)
+    assert value_sig(lucid.float16) != value_sig(lucid.bfloat16)
+
+
+def test_the_bookkeeping_of_every_module_is_not_its_state() -> None:
+    names = {name for name, _ in StateContract.attrs(nn.Linear(2, 2))}
+    assert names == {"in_features", "out_features"}

@@ -23,13 +23,20 @@ two 3-input cases is invisible in the trace IR, so the discriminator is the mode
 itself, not the trace.
 """
 
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from lucid._C.engine import TensorImpl
     from lucid.nn.module import Module
 
-__all__ = ["model_has_cumulative_bn", "model_has_tracking_bn", "bn_writeback_targets"]
+__all__ = [
+    "BnWriteback",
+    "model_has_cumulative_bn",
+    "model_has_tracking_bn",
+    "bn_writeback_targets",
+]
 
 _BN_NAMES: tuple[str, ...] = ("batch_norm", "batch_norm1d", "batch_norm3d")
 
@@ -174,3 +181,76 @@ def advance_bn_counters(targets: list[tuple[Module, int]]) -> None:
         counter = module._buffers["num_batches_tracked"]
         assert counter is not None
         counter.add_(count)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class BnWriteback:
+    """The BatchNorm state a traced call updates, and its write-back after each run.
+
+    Under a tracer a training-mode BatchNorm leaves its buffers alone: the new
+    statistics are trace values (:func:`bn_writeback_targets`) and the counter
+    is bookkeeping the trace omits (:func:`bn_counter_targets`).  An entry point
+    that lowers the trace asks the executable for :attr:`out_ids` as extra
+    outputs and hands them to :meth:`apply` after every run that succeeded, so
+    the buffers move once per call as an eager call's do.  One that never asks
+    leaves them at their values from before the first call (LCD-719: the
+    segmented ``make_step`` trained with ``running_var`` stuck at its initial
+    ones and ``num_batches_tracked`` at 0).
+
+    Attributes
+    ----------
+    buffers : tuple of TensorImpl
+        The live ``running_mean`` / ``running_var`` buffers, in the order of
+        :attr:`out_ids`.
+    out_ids : tuple of int
+        The trace id of each buffer's final statistic.
+    counters : tuple of (Module, int)
+        Each layer the trace ran in training mode, and how many times.
+    """
+
+    buffers: tuple[TensorImpl, ...] = ()
+    out_ids: tuple[int, ...] = ()
+    counters: tuple[tuple[Module, int], ...] = ()
+
+    @classmethod
+    def of(cls, model: Module, graph: object, ext: dict[int, TensorImpl]) -> BnWriteback:
+        """Read it off a finished trace of ``model``.
+
+        Parameters
+        ----------
+        model : Module
+            The tree that owns the BatchNorm layers.
+        graph : TraceGraph
+            The recorded trace.
+        ext : dict of int to TensorImpl
+            The trace's external feeds.
+
+        Returns
+        -------
+        BnWriteback
+            Empty when the trace ran no BatchNorm that keeps running stats.
+        """
+        targets = bn_writeback_targets(graph, ext)
+        return cls(
+            buffers=tuple(impl for _, _, impl in targets),
+            out_ids=tuple(out_id for _, out_id, _ in targets),
+            counters=tuple(bn_counter_targets(model, graph, ext)),
+        )
+
+    def apply(self, stats: Sequence[TensorImpl]) -> None:
+        """Write a run's statistics into the buffers and advance the counters.
+
+        The statistics go in through :func:`~lucid.compile._core.buffer_writes.write_back`,
+        the path every other tensor a step updates from outside the trace
+        takes — in place, cast to the buffer's dtype.
+
+        Parameters
+        ----------
+        stats : sequence of TensorImpl
+            The executable's outputs for :attr:`out_ids`, in order.
+        """
+        from lucid.compile._core.buffer_writes import write_back
+
+        write_back(list(self.buffers), list(stats))
+        advance_bn_counters(list(self.counters))
