@@ -45,7 +45,6 @@ _INERT_KEYS: Final = frozenset(
         "corda_config",
         "layer_replication",
         "trainable_token_indices",
-        "target_parameters",
         "use_qalora",
         "alora_invocation_tokens",
     }

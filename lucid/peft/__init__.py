@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA on ``nn.Linear``.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
@@ -60,10 +60,13 @@ An adapter directory that names its base model reopens in one call::
 
     model = AutoPeftModelForCausalLM.from_pretrained("my-adapter")
 
-lucid.peft adapts ``nn.Linear`` only.  Asking for more — an embedding or
-convolution target, DoRA, a TIES / DARE weighted adapter, an adapter file
-of another method — raises ``NotImplementedError`` rather than doing less
-than asked.  Adapters are read from a local directory; hub ids are not
+LoRA layers exist for ``nn.Linear``, ``nn.Embedding``, ``nn.Conv1d`` /
+``Conv2d`` / ``Conv3d`` and ``nn.MultiheadAttention`` (found by the module's
+type in ``target_modules``), and ``target_parameters`` adapts a raw
+``nn.Parameter`` of a module (``lucid.peft.tuners.lora``).  Asking for
+more — DoRA, a TIES / DARE weighted adapter, ``add_weighted_adapter`` over
+anything but ``nn.Linear`` layers, an adapter file of another method —
+raises ``NotImplementedError`` rather than doing less than asked.  Adapters are read from a local directory; hub ids are not
 resolved.
 """
 

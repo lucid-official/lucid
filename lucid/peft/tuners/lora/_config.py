@@ -14,6 +14,7 @@ from lucid.peft._config import (
     _check_regex,
     _choice,
     _keyed,
+    _optional_strings,
     _pattern_key_regex,
     _TargetedConfig,
 )
@@ -38,7 +39,8 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     Parameters
     ----------
     task_type : TaskType or str, optional
-        The task the adapter is for (metadata; see ``TaskType``).
+        The task the adapter is for (picks the ``PeftModelFor*`` class
+        ``get_peft_model`` returns; see ``TaskType``).
     peft_type : PeftType or str, optional
         Always ``PeftType.LORA``; filled in when omitted.
     base_model_name_or_path : str, optional
@@ -52,8 +54,10 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         dotted name equals an entry or ends with ``"." + entry``; a string
         is a regular expression the whole name must match; ``"all-linear"``
         selects every ``nn.Linear`` except the output head and any layer
-        whose weight is shared with another module.  Required: there is
-        no per-architecture default.
+        whose weight is shared with another module.  ``None`` takes the
+        default for the base model's ``model_type``
+        (``DEFAULT_LORA_TARGET_MODULES`` in ``lucid.peft._target_defaults``);
+        a model type with no row raises ``ValueError``.
     exclude_modules : str or list of str, optional
         Modules never adapted, matched like ``target_modules``.
     modules_to_save : list of str, optional
@@ -101,6 +105,15 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         Per-module :math:`\alpha` overrides, keyed the same way.
     use_dora : bool, default=False
         DoRA; not implemented in v1, ``True`` raises.
+    target_parameters : list of str, optional
+        Raw ``nn.Parameter``\ s to adapt, for a parameter that no layer
+        reads through a module of its own (an attention's fused
+        ``in_proj_weight``, a mixture-of-experts weight stack).  An entry
+        matches a parameter whose dotted name equals it or ends with
+        ``"." + entry``.  The parameter is ``(out, in)``, or a stack of
+        them, ``(experts, out, in)``; ``lora_dropout`` must be 0 for it.
+        The holding module cannot also be in ``target_modules``.  With no
+        ``target_modules``, no module is adapted (the model-type default is not taken).
 
     Raises
     ------
@@ -132,6 +145,7 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         "rank_pattern": _keyed(_check_rank),
         "alpha_pattern": _keyed(_check_number),
         "use_dora": _check_bool,
+        "target_parameters": _optional_strings,
     }
 
     r: int = 8
@@ -144,6 +158,7 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     rank_pattern: dict[str, int] = field(default_factory=dict)
     alpha_pattern: dict[str, float] = field(default_factory=dict)
     use_dora: bool = False
+    target_parameters: list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

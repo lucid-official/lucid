@@ -16,8 +16,10 @@ import lucid
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _pattern_key_regex, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
+from lucid.peft._slots import _AdapterSlot, _outside_slots
 from lucid.peft.tuners._base import (
     _BaseTuner,
+    _BaseTunerLayer,
     _check_adapter_name,
     _join,
     _named,
@@ -25,8 +27,9 @@ from lucid.peft.tuners._base import (
     _tuner_layers,
 )
 from lucid.peft.tuners.lora._config import LoraConfig
-from lucid.peft.tuners.lora._layer import LoraLayer
+from lucid.peft.tuners.lora._layer import Linear, LoraLayer
 from lucid.peft.tuners.lora._merging import _Combination, _CombinationType, _MergeOptions
+from lucid.peft.tuners.lora._parameter import ParamWrapper
 
 
 def _as_lora(config: PeftConfig) -> LoraConfig:
@@ -42,6 +45,60 @@ def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
         if re.match(_pattern_key_regex(pattern), key):
             return value
     return default
+
+
+def _wrapper_of(module: nn.Module, parameter: str) -> ParamWrapper | None:
+    """The wrapper among ``module``'s nested ``ParamWrapper``\\ s that adapts ``parameter``."""
+    while isinstance(module, ParamWrapper):
+        if module.parameter_name == parameter:
+            return module
+        module = module.base_layer
+    return None
+
+
+def _parameter_targets(model: nn.Module, names: list[str], claimed: set[str]) -> list[_Target]:
+    """A target for each raw parameter named by ``names``: its dotted name equals one or ends with ``"." + name``.
+
+    The module that holds the parameter is the target's ``module`` — the
+    wrapper already adapting it for an earlier adapter, or else the
+    outermost of the wrappers adapting its other parameters, or else the
+    module itself.  The top-level module's own parameters cannot be
+    adapted (the wrapper would have to hold itself), and neither can a
+    parameter of a module the config adapts as a module.
+    """
+    wanted = sorted(set(names))
+    targets: list[_Target] = []
+    for key, module in _outside_slots(model):
+        if isinstance(module, _BaseTunerLayer):
+            holder = module.get_base_layer()
+        elif isinstance(module, _AdapterSlot):
+            continue  # a modules_to_save copy trains whole
+        else:
+            holder = module
+        for parameter, _ in holder.named_parameters(recurse=False):
+            full = _join(key, parameter)
+            if not any(full == name or full.endswith(f".{name}") for name in wanted):
+                continue
+            if not key:
+                raise ValueError(
+                    f"Targeting an nn.Parameter on the top-level module is not supported "
+                    f"(parameter '{parameter}')."
+                )
+            if key in claimed or (
+                isinstance(module, _BaseTunerLayer) and not isinstance(module, ParamWrapper)
+            ):
+                raise ValueError(
+                    f"Trying to wrap the nn.Parameter {full!r} of {type(holder).__name__} "
+                    f"{key!r}, which is also adapted as a module; target it either through "
+                    "`target_modules` or through `target_parameters`, not both."
+                )
+            existing = _wrapper_of(module, parameter)
+            targets.append(
+                _Target(key, module, ParamWrapper, parameter)
+                if existing is None
+                else _Target(key, existing, None, parameter)
+            )
+    return targets
 
 
 class _LayerArguments(TypedDict):
@@ -67,13 +124,17 @@ def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
 class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     r"""A model with LoRA layers put into it, and the tools to take them out.
 
-    Construction replaces each module ``config`` selects with a
-    :class:`~lucid.peft.tuners.lora.Linear` around it and each
-    ``modules_to_save`` entry with a frozen-original / trainable-copy
-    pair, then freezes every other parameter.  The model is changed in
-    place and kept as ``model``; a public name this wrapper lacks is
-    read from it.  ``config`` itself is not changed: ``peft_config``
-    holds a copy, with ``"all-linear"`` spelled out as the names it chose.
+    Construction replaces each module ``config`` selects with a LoRA layer
+    around it — :class:`~lucid.peft.tuners.lora.Linear`, ``Embedding``,
+    ``Conv1d`` / ``Conv2d`` / ``Conv3d`` or ``MultiheadAttention``, by the
+    module's type — each module holding a parameter ``target_parameters``
+    names with a :class:`~lucid.peft.tuners.lora.ParamWrapper` for that
+    parameter, and each ``modules_to_save`` entry with a frozen-original /
+    trainable-copy pair, then freezes every other parameter.  The model is
+    changed in place and kept as ``model``; a public name this wrapper
+    lacks is read from it.  ``config`` itself is not changed:
+    ``peft_config`` holds a copy, with ``"all-linear"`` spelled out as the
+    names it chose.
 
     The model can hold any number of adapters, each under its own name:
     ``add_adapter`` puts another beside the first (frozen and inactive),
@@ -94,13 +155,12 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     Raises
     ------
     ValueError
-        No module matches ``target_modules``, a match is not an
-        ``nn.Linear``, or ``modules_to_save`` matches nothing.
+        No module matches ``target_modules`` (and no parameter
+        ``target_parameters``), a match is a module type with no LoRA
+        layer, or ``modules_to_save`` matches nothing.
     NotImplementedError
-        A match is a layer type the reference adapts but lucid.peft does not
-        (``nn.Embedding``, convolutions, ``nn.MultiheadAttention``), or the
-        model already holds adapter layers (wrap it once; add adapters
-        with ``add_adapter``).
+        The model already holds adapter layers (wrap it once; add
+        adapters with ``add_adapter``).
 
     Examples
     --------
@@ -124,13 +184,6 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
 
     _layer_types = LoraLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LoraConfig
-    _later_types: ClassVar[tuple[type[nn.Module], ...]] = (
-        nn.Embedding,
-        nn.Conv1d,
-        nn.Conv2d,
-        nn.Conv3d,
-        nn.MultiheadAttention,
-    )
 
     def __init__(self, model: nn.Module, config: LoraConfig, adapter_name: str = "default") -> None:
         super().__init__(model, config, adapter_name)
@@ -164,17 +217,47 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     def _create_new_module(
         cls, config: _TargetedConfig, adapter_name: str, target: _Target
     ) -> nn.Module:
-        layer, module = target.layer, target.module
-        # Planning took both from ``LoraLayer``'s table, which holds nn.Linear layers.
-        assert layer is not None and issubclass(layer, LoraLayer) and isinstance(module, nn.Linear)
-        return layer(module, adapter_name, **_layer_arguments(_as_lora(config), target.key))
+        layer = target.layer
+        # Planning took it from ``LoraLayer``'s table, or made it ``ParamWrapper``.
+        assert layer is not None and issubclass(layer, LoraLayer)
+        arguments = _layer_arguments(_as_lora(config), target.full_name)
+        if target.parameter is not None:
+            return ParamWrapper(target.module, adapter_name, target.parameter, **arguments)
+        return layer(target.module, adapter_name, **arguments)
 
     @override
     @classmethod
     def _add_to_layer(cls, config: _TargetedConfig, adapter_name: str, target: _Target) -> None:
         layer = target.module
         assert isinstance(layer, LoraLayer)
-        layer.update_layer(adapter_name, **_layer_arguments(_as_lora(config), target.key))
+        layer.update_layer(adapter_name, **_layer_arguments(_as_lora(config), target.full_name))
+
+    @override
+    @classmethod
+    def _adapts_parameters(cls, config: _TargetedConfig) -> bool:
+        return bool(_as_lora(config).target_parameters)
+
+    @override
+    @classmethod
+    def _plan_parameter_targets(
+        cls, model: nn.Module, config: _TargetedConfig, claimed: set[str]
+    ) -> list[_Target]:
+        names = _as_lora(config).target_parameters
+        if not names:
+            return []
+        targets = _parameter_targets(model, names, claimed)
+        if not targets and not claimed:
+            raise ValueError(
+                f"Target parameters {names} not found in the base model. "
+                "Please check the target parameters and try again."
+            )
+        if not targets:
+            warnings.warn(
+                f"target_parameters={names} were set but no parameter was matched.",
+                RuntimeWarning,
+                stacklevel=6,
+            )
+        return targets
 
     @override
     @classmethod
@@ -187,11 +270,14 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
         """
         bias = _as_lora(config).bias
         if bias == "lora_only":
-            return [
-                _join(name, "base_layer.bias")
-                for name, layer in model.named_modules()
-                if isinstance(layer, LoraLayer) and layer.bias is not None
-            ]
+            # A module whose parameters several nested layers adapt answers once.
+            return list(
+                dict.fromkeys(
+                    _join(name, f"{layer._base_path()}.bias")
+                    for name, layer in model.named_modules()
+                    if isinstance(layer, LoraLayer) and layer.bias is not None
+                )
+            )
         if bias == "none":
             return []
         wrapped = tuple(f"{name}." for name, _ in _named(model, ModulesToSaveWrapper))
@@ -256,6 +342,13 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             raise ValueError(
                 f"majority_sign_method must be 'total' or 'frequency', got {majority_sign_method!r}"
             )
+        for key, layer in _tuner_layers(self.model):
+            held = [name for name in adapters if name in layer._adapter_names()]
+            if held and not isinstance(layer, Linear):
+                raise NotImplementedError(
+                    f"add_weighted_adapter combines nn.Linear adapters only; {held} also adapt "
+                    f"{key!r}, a {type(layer).__name__}"
+                )
         # Two copies of one module cannot be averaged.
         for key, wrapper in _named(self.model, ModulesToSaveWrapper):
             holders = [name for name in adapters if name in wrapper.modules_to_save]
@@ -283,7 +376,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     ) -> None:
         with lucid.no_grad():
             for _, layer in _tuner_layers(self.model):
-                if not isinstance(layer, LoraLayer) or adapter_name not in layer.lora_A:
+                if not isinstance(layer, Linear) or adapter_name not in layer.lora_A:
                     continue
                 lora_a, lora_b = folding.weights_for(layer, adapters, weights)
                 target_a = layer.lora_A[adapter_name].weight

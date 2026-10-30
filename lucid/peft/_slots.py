@@ -79,6 +79,16 @@ def _adapter_slots(model: nn.Module) -> list[tuple[str, _AdapterSlot]]:
     return [(name, m) for name, m in model.named_modules() if isinstance(m, _AdapterSlot)]
 
 
+def _outermost_slots(model: nn.Module) -> list[tuple[str, _AdapterSlot]]:
+    """The slots no other slot contains: what stands in the tree for a base module.
+
+    A slot can hold another (one wrapper per targeted parameter of a module,
+    nested); putting the base back means replacing the outer one, which
+    answers for the ones inside it.
+    """
+    return [(name, m) for name, m in _outside_slots(model) if isinstance(m, _AdapterSlot)]
+
+
 def _outside_slots(model: nn.Module) -> Iterator[tuple[str, nn.Module]]:
     """``model.named_modules()`` without the insides of the adapter slots.
 

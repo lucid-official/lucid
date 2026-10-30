@@ -21,7 +21,7 @@ from typing import ClassVar, Final, Literal, override
 import lucid
 import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
-from lucid.peft.tuners.lora._layer import LoraLayer
+from lucid.peft.tuners.lora._layer import Linear
 
 # The strategies are reached through ``_Combination.named``, by the name each
 # registers under — which is also why they are listed here.
@@ -128,12 +128,12 @@ class _Combination(ABC):
 
     @abstractmethod
     def combine(
-        self, layer: LoraLayer, adapters: Sequence[str], weights: Sequence[float]
+        self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         """``(lora_A, lora_B)`` folding ``adapters`` of ``layer``; at most the new rank wide."""
 
     def weights_for(
-        self, layer: LoraLayer, adapters: Sequence[str], weights: Sequence[float]
+        self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         """``combine`` for the adapters ``layer`` holds, zero-padded to exactly the new rank.
 
@@ -170,7 +170,7 @@ class _Linear(_Combination, combination_type="linear"):
 
     @override
     def combine(
-        self, layer: LoraLayer, adapters: Sequence[str], weights: Sequence[float]
+        self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         scaling = layer.scaling
         scaled = [w * scaling[name] for name, w in zip(adapters, weights, strict=True)]
@@ -197,7 +197,7 @@ class _Cat(_Combination, combination_type="cat"):
 
     @override
     def combine(
-        self, layer: LoraLayer, adapters: Sequence[str], weights: Sequence[float]
+        self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         scaling = layer.scaling
         lora_a = [
@@ -225,7 +225,7 @@ class _Svd(_Combination, combination_type="svd"):
 
     @override
     def combine(
-        self, layer: LoraLayer, adapters: Sequence[str], weights: Sequence[float]
+        self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         options = self.options
         delta = _weighted_sum([layer.get_delta_weight(name) for name in adapters], weights)

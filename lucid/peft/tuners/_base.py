@@ -25,6 +25,11 @@ found — so a config that cannot be applied raises with the model as it was.
 The layers then go in by ``setattr`` on their parents, which keeps each
 child's slot in place (a ``Sequential`` still runs it in the same turn); a
 module already holding an adapter of the method takes the new one beside it.
+
+A method adapts a module (its layer found by the module's type) or one raw
+``Parameter`` of a module (its layer found by the parameter's name): a
+``_Target`` that carries a ``parameter`` is the second kind.  The layers of
+several parameters of one module nest, and the outermost stands in the tree.
 """
 
 import copy
@@ -40,7 +45,7 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft._slots import _adapter_slots, _as_names, _outside_slots
+from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots, _outside_slots
 from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, _default_target_modules
 from lucid.peft._targeting import (
     _module_names_matching,
@@ -83,6 +88,23 @@ def _check_adapter_name(adapter_name: object) -> str:
     return adapter_name
 
 
+def _dotted(*parts: str) -> str:
+    """The non-empty ``parts`` joined with dots."""
+    return ".".join(part for part in parts if part)
+
+
+def _entry_parameters(entry: nn.Module | Parameter | None) -> list[Parameter]:
+    """The parameters of one table entry: a module's own, or the bare parameter."""
+    if isinstance(entry, nn.Module):
+        return list(entry.parameters())
+    return [] if entry is None else [entry]
+
+
+def _entry_leaves(entry: nn.Module | Parameter | None) -> list[str]:
+    """The state-dict suffixes under one table entry: a module's keys, or ``""`` for a bare parameter."""
+    return list(entry.state_dict()) if isinstance(entry, nn.Module) else [""]
+
+
 def _tuner_layers(model: nn.Module) -> list[tuple[str, _BaseTunerLayer]]:
     # Not ``_named``: a ``type[T]`` parameter takes concrete classes only.
     return [(name, m) for name, m in model.named_modules() if isinstance(m, _BaseTunerLayer)]
@@ -91,12 +113,13 @@ def _tuner_layers(model: nn.Module) -> list[tuple[str, _BaseTunerLayer]]:
 class _BaseTunerLayer(nn.Module, ABC):
     """The base of a tuner's layers: the wrapped module and the state forward branches on.
 
-    A tuner family's root class names its per-adapter ``ModuleDict``\\ s in
-    ``adapter_layer_names`` and starts a table of layer classes; each
-    concrete layer joins it with ``base_type=`` — the kind of module it
-    wraps — and the tuner finds a target's layer class there.  A layer
-    holds any number of adapters, one entry per name in each of those
-    tables.
+    A tuner family's root class — the direct subclass of this one — starts
+    a table of layer classes; each concrete layer joins it with
+    ``base_type=`` — the kind of module it wraps — and the tuner finds a
+    target's layer class there.  A layer names its per-adapter tables in
+    ``adapter_layer_names``: ``ModuleDict``\\ s, or ``ParameterDict``\\ s
+    where the factors are bare parameters.  It holds any number of
+    adapters, one entry per name in each of those tables.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain attributes in the
@@ -110,7 +133,7 @@ class _BaseTunerLayer(nn.Module, ABC):
     and ``unmerge``.
     """
 
-    #: The per-adapter ``ModuleDict`` attributes; a family's root sets it.
+    #: The per-adapter table attributes (``ModuleDict`` / ``ParameterDict``).
     adapter_layer_names: ClassVar[tuple[str, ...]] = ()
     #: Wrapped module type → layer class, one table per family.
     _layer_types: ClassVar[dict[type[nn.Module], type[_BaseTunerLayer]]] = {}
@@ -122,7 +145,7 @@ class _BaseTunerLayer(nn.Module, ABC):
         cls, *, base_type: type[nn.Module] | None = None, **kwargs: object
     ) -> None:
         super().__init_subclass__(**kwargs)
-        if "adapter_layer_names" in cls.__dict__:
+        if _BaseTunerLayer in cls.__bases__:
             cls._layer_types = {}
         if base_type is not None:
             cls._base_type = base_type
@@ -134,6 +157,11 @@ class _BaseTunerLayer(nn.Module, ABC):
             raise TypeError(
                 f"{type(self).__name__} adapts nn.{kind.__name__} in lucid.peft, "
                 f"got {type(base_layer).__name__}"
+            )
+        if base_layer.has_uninitialized_parameters():
+            raise ValueError(
+                f"{type(base_layer).__name__} builds its parameters on its first input; "
+                "run it once before adapting it"
             )
         super().__init__()
         self.base_layer = base_layer
@@ -254,12 +282,12 @@ class _BaseTunerLayer(nn.Module, ABC):
         tables = self._tables()
         return list(tables[0]) if tables else []
 
-    def _tables(self) -> list[nn.ModuleDict[nn.Module]]:
-        """The per-adapter ``ModuleDict``\\ s ``adapter_layer_names`` names."""
+    def _tables(self) -> list[nn.ModuleDict[nn.Module] | nn.ParameterDict]:
+        """The per-adapter tables ``adapter_layer_names`` names."""
         return [
             table
             for name in self.adapter_layer_names
-            if isinstance(table := getattr(self, name), nn.ModuleDict)
+            if isinstance(table := getattr(self, name), (nn.ModuleDict, nn.ParameterDict))
         ]
 
     def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
@@ -267,15 +295,19 @@ class _BaseTunerLayer(nn.Module, ABC):
             p
             for table in self._tables()
             if adapter_name in table
-            for p in table[adapter_name].parameters()
+            for p in _entry_parameters(table[adapter_name])
         ]
+
+    def _disk_table(self, table_name: str) -> str:
+        """The name an adapter file gives the table ``table_name``; the reference's layout."""
+        return table_name
 
     def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
         return {
-            f"{name}.{adapter_name}.{leaf}": f"{name}.{leaf}"
+            _dotted(name, adapter_name, leaf): _dotted(self._disk_table(name), leaf)
             for name, table in zip(self.adapter_layer_names, self._tables(), strict=True)
             if adapter_name in table
-            for leaf in table[adapter_name].state_dict()
+            for leaf in _entry_leaves(table[adapter_name])
         }
 
     def _unwrap(self, keep_trained: bool) -> nn.Module:
@@ -314,6 +346,14 @@ class _Target(NamedTuple):
     #: The layer class that wraps ``module``, or ``None`` when ``module`` is
     #: already such a layer and takes the new adapter beside its others.
     layer: type[_BaseTunerLayer] | None
+    #: The name of the one raw parameter of ``module`` this target adapts;
+    #: ``None`` when it is the whole module.
+    parameter: str | None = None
+
+    @property
+    def full_name(self) -> str:
+        """The module's name, with the parameter's after it when the target is one."""
+        return _dotted(self.key, self.parameter or "")
 
 
 class _Placement(NamedTuple):
@@ -343,11 +383,12 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     plans its injection, applies it and freezes; ``add_adapter`` does the
     same for each further one, which starts frozen and inactive until
     ``set_adapter`` names it.  A method supplies its layer family
-    (``_layer_types``), the module types it refuses as not-yet-supported,
-    how to build a layer for a target (``_create_new_module``) or add an
-    adapter to one it already built (``_add_to_layer``), and may adjust the
-    stored config (``_prepare_config``), check a new adapter against the
-    others (``_check_new_adapter_config``) or add parameters that train
+    (``_layer_types``), how to build a layer for a target
+    (``_create_new_module``) or add an adapter to one it already built
+    (``_add_to_layer``), and may find raw parameters to adapt
+    (``_plan_parameter_targets``), adjust the stored config
+    (``_prepare_config``), check a new adapter against the others
+    (``_check_new_adapter_config``) or add parameters that train
     (``_extra_trainable_names``).
     """
 
@@ -356,8 +397,6 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     _layer_types: ClassVar[dict[type[nn.Module], type[_BaseTunerLayer]]]
     #: The config class this tuner takes, e.g. ``LoraConfig``.
     _config_class: ClassVar[type[_TargetedConfig]]
-    #: Module types the reference adapts with this method and lucid.peft does not yet.
-    _later_types: ClassVar[tuple[type[nn.Module], ...]] = ()
     #: What a config that names no ``target_modules`` adapts, by the model's ``model_type``.
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_MODULES
 
@@ -385,6 +424,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         self.peft_config: dict[str, PeftConfig] = {}
         self.active_adapter: str | list[str] = adapter_name
         self.targeted_module_names: list[str] = []
+        self.targeted_parameter_names: list[str] = []
         self._requires_grad_before = flags
         self._inject(adapter_name, config)
         # Where ``get_peft_model_state_dict`` finds the config of a model
@@ -403,17 +443,17 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
         """The config to store: a copy, its default targets and ``"all-linear"`` spelled out."""
         stored = copy.deepcopy(config)
-        if stored.target_modules is None:
+        if stored.target_modules is None and not cls._adapts_parameters(stored):
             stored.target_modules = set(_default_target_modules(model, cls._default_targets))
         resolved = _resolve_all_linear(stored, model, cls._adapted_linear)
         if resolved is not None:
             stored.target_modules = resolved
         return stored
 
-    @staticmethod
-    def _adapted_linear(module: nn.Module) -> nn.Linear | None:
-        """The ``nn.Linear`` ``module`` wraps, if it is a tuner layer around one."""
-        if isinstance(module, _BaseTunerLayer):
+    @classmethod
+    def _adapted_linear(cls, module: nn.Module) -> nn.Linear | None:
+        """The ``nn.Linear`` ``module`` wraps, if it is one of this method's layers around one."""
+        if isinstance(module, tuple(cls._layer_types.values())):
             base = module.get_base_layer()
             return base if isinstance(base, nn.Linear) else None
         return None
@@ -438,6 +478,29 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     def _extra_trainable_names(cls, model: nn.Module, config: PeftConfig) -> list[str]:
         """Parameters beyond the adapters' that train, by name under ``model`` (LoRA's biases)."""
 
+    @classmethod
+    def _adapts_parameters(cls, config: _TargetedConfig) -> bool:
+        """Whether ``config`` names raw parameters to adapt.
+
+        Then a config naming no ``target_modules`` adapts no module, rather
+        than the model type's default ones.
+        """
+        del config  # the default adapts modules only
+        return False
+
+    @classmethod
+    def _plan_parameter_targets(
+        cls, model: nn.Module, config: _TargetedConfig, claimed: set[str]
+    ) -> list[_Target]:
+        """The raw parameters ``config`` adapts, as targets that carry a ``parameter``.
+
+        None by default: a method that adapts parameters finds them here.
+        ``claimed`` holds the names of the modules already planned as
+        modules — a module cannot be both.
+        """
+        del model, config, claimed  # the default has no parameter targets
+        return []
+
     # ── injecting an adapter ──────────────────────────────────────────────
 
     def _inject(self, adapter_name: str, config: _TargetedConfig) -> None:
@@ -455,9 +518,14 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         except BaseException:
             self._withdraw(adapter_name, placements)
             raise
-        self.targeted_module_names += [
-            t.key for t in targets if t.key not in self.targeted_module_names
-        ]
+        for target in targets:
+            names = (
+                self.targeted_module_names
+                if target.parameter is None
+                else self.targeted_parameter_names
+            )
+            if target.full_name not in names:
+                names.append(target.full_name)
         # A slot new to the tree began with its one adapter active.
         for _, slot in _adapter_slots(model):
             slot._activate(self.active_adapter)
@@ -465,12 +533,21 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     def _new_slots(
         self, config: _TargetedConfig, adapter_name: str, targets: list[_Target], saved: list[str]
     ) -> list[_Placement]:
-        """The slots the adapter adds to the tree, built and not yet placed."""
-        placements = [
-            _Placement(t.key, self._create_new_module(config, adapter_name, t), t.module)
-            for t in targets
-            if t.layer is not None
-        ]
+        """The slots the adapter adds to the tree, built and not yet placed.
+
+        One per module: where several parameters of a module are adapted
+        the later layers wrap the earlier ones, and the outermost is placed.
+        """
+        outermost: dict[str, _Placement] = {}
+        for target in targets:
+            if target.layer is None:
+                continue
+            earlier = outermost.get(target.key)
+            below = target if earlier is None else target._replace(module=earlier.slot)
+            original = target.module if earlier is None else earlier.original
+            slot = self._create_new_module(config, adapter_name, below)
+            outermost[target.key] = _Placement(target.key, slot, original)
+        placements = list(outermost.values())
         for key in saved:
             held = self.model.get_submodule(key)
             if not isinstance(held, ModulesToSaveWrapper):
@@ -512,6 +589,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         for key, module in _outside_slots(model):
             if key and _selects(config, key):
                 targets.append(cls._target_for(key, module))
+        targets += cls._plan_parameter_targets(model, config, {t.key for t in targets})
         if not targets:
             raise _not_found(config)
         return targets
@@ -529,11 +607,6 @@ class _BaseTuner(_ForwardsAttributes, ABC):
             if layer is not None:
                 return layer
         supported = ", ".join(f"nn.{k.__name__}" for k in cls._layer_types)
-        if isinstance(module, cls._later_types):
-            raise NotImplementedError(
-                f"Target module {key} ({type(module).__name__}) is not supported in "
-                f"lucid.peft, which adapts {supported} only"
-            )
         raise ValueError(
             f"Target module {key} ({type(module).__name__}) is not supported. "
             f"Currently, only {supported} is supported."
@@ -772,7 +845,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
 
     def _unload(self, keep_trained: bool) -> nn.Module:
         model = self.model
-        for key, slot in _adapter_slots(model):
+        for key, slot in _outermost_slots(model):
             _set_submodule(model, key, slot._unwrap(keep_trained))
         for name, param in model.named_parameters(remove_duplicate=False):
             before = self._requires_grad_before.get(name)
