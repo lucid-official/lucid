@@ -348,6 +348,15 @@ public:
 // :class:`SumBackward` — backward node.
 LUCID_API TensorImplPtr sum_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims);
 
+// ``a`` as the dtype an integer reduction accumulates in.
+//
+// ``bool``, ``int8``, ``int16`` and ``int32`` widen to ``int64``, which is
+// what the reference's ``sum`` / ``prod`` / ``cumsum`` / ``cumprod`` /
+// ``trace`` answer for them; every other dtype comes back as it is.  The one
+// rule those ops share, so an op that adds up elements cannot pick a
+// narrower result than ``sum`` does.
+LUCID_API TensorImplPtr promote_int_for_reduce(const TensorImplPtr& a);
+
 // Reduce ``a`` by averaging along ``axes``.
 //
 // Parameters

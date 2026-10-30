@@ -37,6 +37,7 @@
 #include "../gfunc/Gfunc.h"
 #include "../utils/Layout.h"
 #include "Astype.h"
+#include "Reductions.h"
 #include "_Detail.h"
 
 namespace lucid {
@@ -85,8 +86,11 @@ TensorImplPtr trace_op(const TensorImplPtr& a_in) {
     Validator::input(a_in, "trace.a").non_null();
     if (a_in->shape().size() < 2)
         ErrorBuilder("trace").fail("input must have ndim >= 2");
-    SchemaGuard sg{TraceBackward::schema_v1, a_in->dtype(), a_in->device()};
-    const TensorImplPtr a = astype_op(a_in, sg.effective_dtype());
+    // The narrow integers add up in int64, as ``sum`` does.  Bool stays as it
+    // is: the backend refuses it, as the reference refuses ``trace`` of a bool.
+    const TensorImplPtr wide = a_in->dtype() == Dtype::Bool ? a_in : promote_int_for_reduce(a_in);
+    SchemaGuard sg{TraceBackward::schema_v1, wide->dtype(), wide->device()};
+    const TensorImplPtr a = astype_op(wide, sg.effective_dtype());
     const Dtype dt = a->dtype();
     const Device device = a->device();
     const auto& sh = a->shape();

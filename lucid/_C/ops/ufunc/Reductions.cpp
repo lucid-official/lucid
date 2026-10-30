@@ -237,8 +237,6 @@ Storage SumBackward::grad_formula(const Storage& grad_out) {
                                      this->device_);
 }
 
-namespace {
-
 // Reference-framework-compatible promotion for integer/bool reductions.  ``bool / int8 /
 // int16 / int32`` all promote to ``int64`` before reducing — preserves
 // overflow headroom for sum/prod and matches the reference framework's
@@ -259,8 +257,6 @@ TensorImplPtr promote_int_for_reduce(const TensorImplPtr& a) {
         return a;
     }
 }
-
-}  // namespace
 
 TensorImplPtr sum_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims) {
     return SumBackward::forward(promote_int_for_reduce(a), axes, keepdims);

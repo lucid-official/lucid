@@ -60,23 +60,6 @@ namespace {
 
 using ufunc_detail::fresh;
 
-// Promote ``Bool / I8 / I16 / I32`` to ``I64`` before an integer scan, exactly
-// as sum/prod do (see ``promote_int_for_reduce`` in Reductions.cpp).  Without
-// it ``int32.cumsum()`` accumulates in int32 and silently overflows, while
-// ``int32.sum()`` promotes — an inconsistency the reference framework does not
-// have.  Floats / I64 pass through unchanged.
-TensorImplPtr promote_int_for_scan(const TensorImplPtr& a) {
-    switch (a->dtype()) {
-    case Dtype::Bool:
-    case Dtype::I8:
-    case Dtype::I16:
-    case Dtype::I32:
-        return astype_op(a, Dtype::I64);
-    default:
-        return a;
-    }
-}
-
 // Thin wrapper: reverse the storage contents along the given axis.
 Storage reverse_along_axis_storage(
     const Storage& s, const Shape& shape, int axis, Dtype dt, Device device) {
@@ -316,7 +299,7 @@ TensorImplPtr cumsum_op(const TensorImplPtr& a_in, int axis) {
     if (a_in->shape().empty())
         return on_scalar_axis(a_in, axis, "cumsum", cumsum_op);
     SchemaGuard sg{CumsumBackward::schema_v1, a_in->dtype(), a_in->device()};
-    const auto a = promote_int_for_scan(astype_op(a_in, sg.effective_dtype()));
+    const auto a = promote_int_for_reduce(astype_op(a_in, sg.effective_dtype()));
     auto out = scan_dispatch(a, axis, false, "cumsum");
     int ax = axis < 0 ? axis + (int)a->shape().size() : axis;
     auto bwd = std::make_shared<CumsumBackward>();
@@ -332,7 +315,7 @@ TensorImplPtr cumprod_op(const TensorImplPtr& a_in, int axis) {
     if (a_in->shape().empty())
         return on_scalar_axis(a_in, axis, "cumprod", cumprod_op);
     SchemaGuard sg{CumprodBackward::schema_v1, a_in->dtype(), a_in->device()};
-    const auto a = promote_int_for_scan(astype_op(a_in, sg.effective_dtype()));
+    const auto a = promote_int_for_reduce(astype_op(a_in, sg.effective_dtype()));
     auto out = scan_dispatch(a, axis, true, "cumprod");
     int ax = axis < 0 ? axis + (int)a->shape().size() : axis;
     auto bwd = std::make_shared<CumprodBackward>();

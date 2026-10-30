@@ -23,6 +23,7 @@
 #include "../complex/Real.h"
 #include "../gfunc/Gfunc.h"
 #include "../utils/Select.h"
+#include "Astype.h"
 #include "Exponential.h"
 #include "ScalarParam.h"
 
@@ -251,8 +252,18 @@ TensorImplPtr SquareBackward::grad_formula_impl(const TensorImplPtr& g,
     return mul_op(add_op(x, x), g);
 }
 
+namespace {
+
+// ``square`` and ``cube`` are ``x ** 2`` and ``x ** 3``, and a power of a bool
+// is an int64 in the reference — ``x * x`` is a logical and, a different op.
+TensorImplPtr power_operand(const TensorImplPtr& a) {
+    return a->dtype() == Dtype::Bool ? astype_op(a, Dtype::I64) : a;
+}
+
+}  // namespace
+
 TensorImplPtr square_op(const TensorImplPtr& a) {
-    return SquareBackward::forward(a);
+    return SquareBackward::forward(power_operand(a));
 }
 LUCID_REGISTER_OP(SquareBackward)
 
@@ -275,7 +286,7 @@ TensorImplPtr CubeBackward::grad_formula_impl(const TensorImplPtr& g,
 }
 
 TensorImplPtr cube_op(const TensorImplPtr& a) {
-    return CubeBackward::forward(a);
+    return CubeBackward::forward(power_operand(a));
 }
 LUCID_REGISTER_OP(CubeBackward)
 

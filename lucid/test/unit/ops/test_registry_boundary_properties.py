@@ -320,7 +320,7 @@ def _call_ref_entry(ref: ModuleType, entry: OpEntry, *args: object, **kwargs: ob
         return getattr(args[0], "permute")(tuple(reversed(range(ndim))))
     if name == "trace" and int(getattr(args[0], "ndim")) > 2:
         rx = args[0]
-        return ref.diagonal(rx, 0, 0, 1).sum(-1, dtype=getattr(rx, "dtype"))
+        return ref.diagonal(rx, 0, 0, 1).sum(-1)
     if name == "expand_dims":
         return getattr(args[0], "unsqueeze")(*args[1:], **kwargs)
     if name == "repeat":
