@@ -13,7 +13,8 @@ from lucid._types import _OptimizerClosure
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.nn.parameter import Parameter
-from lucid.optim.optimizer import Optimizer, _follow, _from_host, _group_params, _host_copy
+from lucid.optim._state_load import _follow
+from lucid.optim.optimizer import Optimizer, _from_host, _group_params, _host_copy
 
 
 class RMSprop(Optimizer):
@@ -961,7 +962,7 @@ def _moment_like(src: _C_engine.TensorImpl, param: Parameter) -> Tensor | None:
     """Moment ``src`` ready for ``param``'s buffer, or ``None`` when shaped for another.
 
     Follows the parameter through a conversion by the rule every
-    optimizer's state follows (:func:`~lucid.optim.optimizer._follow`).
+    optimizer's state follows (:func:`~lucid.optim._state_load._follow`).
     """
     if list(src.shape) != list(param._impl.shape):
         return None

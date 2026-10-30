@@ -176,22 +176,25 @@ class TestOptimizerDeclarativeAtomicState:
         for p, rp in zip(params, ref_params):
             np.testing.assert_array_equal(p.numpy(), rp.numpy())
 
-    def test_corrupted_later_buffer_dtype_leaves_earlier_slots_and_params_untouched(
+    def test_a_buffer_saved_in_another_dtype_is_converted_to_its_parameters(
         self, name: str, factory: OptimizerFactory, scalar_keys: list[str], buffer_keys: list[str]
     ) -> None:
+        # LCD-722: it used to be refused with ``DtypeMismatch``; floating-point
+        # state follows its parameter's dtype, as in the reference framework.
         params = _make_params()
         opt = factory(params)
         _step_once(opt, params, scale=1.0)
         before = copy.deepcopy(opt.state_dict())
 
-        bad_sd = _PerturbedStateDict(before)
+        wide_sd = copy.deepcopy(before)
         target_buf_key = buffer_keys[-1]
         orig_arr = np.asarray(before["state"][1][target_buf_key])
-        bad_sd["state"][1][target_buf_key] = orig_arr.astype(np.float64)
+        wide_sd["state"][1][target_buf_key] = orig_arr.astype(np.float64)
 
-        with pytest.raises(_C_engine.DtypeMismatch):
-            opt.load_state_dict(bad_sd)
+        opt.load_state_dict(wide_sd)
 
+        loaded = np.asarray(opt.state_dict()["state"][1][target_buf_key])
+        assert loaded.dtype == np.float32
         _assert_state_dict_equal(opt.state_dict(), before)
 
     def test_corrupted_scalar_slot_leaves_all_state_untouched(

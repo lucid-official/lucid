@@ -95,6 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - render the annotation table at the formatter's width
 
+- load_state_dict replaces state and checks the checkpoint
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

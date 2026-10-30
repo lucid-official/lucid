@@ -6,6 +6,7 @@ import math
 import operator
 import warnings
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol, SupportsFloat, SupportsIndex, override
 
 import lucid as _lucid
@@ -13,6 +14,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
 from lucid.autograd._grad_inplace import negated_grads, zero_grads_
 from lucid.nn.parameter import Parameter
+from lucid.optim._state_load import LoadedCheckpoint, _follow, _load_group_state
 from lucid.optim._step_counter import _CountedStep
 
 from lucid._C import engine as _C_engine
@@ -47,6 +49,22 @@ class _EngineOptimizer(Protocol):
     def state_buffers(self) -> Sequence[tuple[str, Sequence[_C_engine.TensorImpl | None]]]: ...
 
     def load_state_buffers(self, bufs: Sequence[tuple[str, Sequence[Any]]]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _StagedEngine:
+    """A group's engine optimizer, built and checked but not yet installed.
+
+    ``values`` are the group's hyper-parameters the engine was built with and
+    ``upd`` the pair-key entries of the group that had to be reconciled for
+    them.  Installing it (:meth:`Optimizer._install_engine`) is the only step
+    that changes the optimizer, so a whole set of them can be built, loaded
+    and refused with nothing to undo.
+    """
+
+    engine: _EngineOptimizer | None
+    values: tuple[object, ...]
+    upd: dict[str, object]
 
 
 class _GroupReader(Protocol):
@@ -88,23 +106,6 @@ def _hyperparam_reader(keys: tuple[str, ...]) -> _GroupReader | None:
     if len(keys) == 1:
         return _OneKey(keys[0])
     return operator.itemgetter(*keys)
-
-
-def _follow(src: _C_engine.TensorImpl, like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
-    """``src`` in ``like``'s dtype and on its device; ``src`` itself when it already is.
-
-    The one rule by which optimizer state follows its parameter through a
-    conversion (``module.to()``, ``.double()``, ``.half()``).  Engine
-    optimizers apply it when their engine is rebuilt (:func:`_state_like`);
-    optimizers that keep their state in Python apply it before they read
-    that state in ``step``.
-    """
-    out = src
-    if out.dtype != like.dtype:
-        out = _C_engine.astype(out, like.dtype)
-    if out.device != like.device:
-        out = out.transfer_to_device(like.device, False)
-    return out
 
 
 def _state_like(
@@ -994,6 +995,26 @@ class Optimizer:
                 continue
             self._rebuild_engine_optim(idx, group)
 
+    def _stage_engine(self, idx: int, group: dict[str, object]) -> _StagedEngine:
+        """Build group ``idx``'s engine afresh over its current impls, changing nothing live.
+
+        The hyper-parameters are the group's as it is now, edits included: a
+        pair key edited since the last hand-over is reconciled and the whole
+        set checked, as every use of the engines does.  The engine starts
+        with no state.
+        """
+        values, upd = self._resolve_group_hparams(idx, group)
+        self._check_hyperparams(self._hyperparam_dict(values))
+        return _StagedEngine(self._build_engine_optim({**group, **upd}), values, upd)
+
+    def _install_engine(self, idx: int, group: dict[str, object], staged: _StagedEngine) -> None:
+        """Make ``staged`` group ``idx``'s engine, bound to the impls it was built over."""
+        group.update(staged.upd)
+        self._engine_binds[idx] = self._group_binding(group)
+        self._group_hparams[idx] = staged.values
+        if staged.engine is not None:
+            self._engines[idx] = staged.engine
+
     def _rebuild_engine_optim(self, idx: int, group: dict[str, object]) -> None:
         """Replace group ``idx``'s engine with one over its current impls.
 
@@ -1012,19 +1033,13 @@ class Optimizer:
         following the parameter is its own ``load_state_dict`` policy too.
         A buffer whose shape no longer matches its parameter is dropped.
         """
-        values, upd = self._resolve_group_hparams(idx, group)
-        self._check_hyperparams(self._hyperparam_dict(values))
-        if upd:
-            group.update(upd)
         old: _EngineOptimizer = self._engines[idx]
         old_params: list[Parameter] = self._engine_binds[idx][0]
-        fresh: _EngineOptimizer | None = self._build_engine_optim(group)
-        self._engine_binds[idx] = self._group_binding(group)
-        # Built from the group as it is now, edits included.
-        self._group_hparams[idx] = values
+        staged: _StagedEngine = self._stage_engine(idx, group)
+        self._install_engine(idx, group, staged)
+        fresh: _EngineOptimizer | None = staged.engine
         if fresh is None:
             return
-        self._engines[idx] = fresh
 
         buffers = old.state_buffers()
         if not buffers:
@@ -1263,7 +1278,12 @@ class Optimizer:
         return self._save_engine_state()
 
     def _load_state(self, state: dict[int, dict[str, object]]) -> None:
-        """Restore per-parameter state. Default: push back to engine optimizers."""
+        """Replace per-parameter state with ``state``. Default: the engine optimizers'.
+
+        An override replaces the optimizer's state as a whole — a parameter
+        without an entry starts afresh — and refuses a bad entry before it
+        changes anything, so a failed load leaves the old state in place.
+        """
         self._load_engine_state(state)
 
     def _save_engine_state(self) -> dict[int, dict[str, object]]:
@@ -1304,43 +1324,34 @@ class Optimizer:
         return out
 
     def _load_engine_state(self, state: dict[int, dict[str, object]]) -> None:
-        """Push numpy-backed state entries back into each engine optimizer.
+        """Replace every engine optimizer's state with ``state``'s.
 
-        Every entry, ``step`` included, goes back to its own parameter
-        through ``load_state_buffers``.  A ``step`` that is a plain number
-        is the older layout, one count for the whole group, and is set as
-        that group's count.
+        Each group gets a fresh engine, loaded with the saved state of its
+        parameters; a parameter the checkpoint has no entry for starts afresh,
+        as does every parameter when ``state`` is empty.  Nothing is installed
+        until every group's engine has taken its state, so a refused entry
+        leaves the optimizer as it was.
+
+        An optimizer with nothing built and nothing to load is left unbuilt:
+        its first build starts afresh.  Any other is built first, so the
+        state is checked against, and converted to, the parameters it will
+        step.
         """
-        if not state:
+        if not (state or self._engines_built):
             return
-        flat_idx: int = 0
-        for group, eng in zip(self.param_groups, self._engine_optims, strict=True):
+        if not self._engine_optims:  # builds them on first use
+            return
+        staged: list[_StagedEngine] = []
+        first: int = 0
+        for idx, group in enumerate(self.param_groups):
             params: list[Parameter] = _group_params(group)
-            # Collect per-buffer-name lists running parallel to params.
-            by_name: dict[str, list[_C_engine.TensorImpl | None]] = {}
-            step_count: int = 0
-            for slot, p in enumerate(params):
-                snapshot: dict[str, object] = state.get(flat_idx + slot, {})
-                for k, v in snapshot.items():
-                    if k == "step" and isinstance(v, (int, float)):
-                        # Folding per-parameter arrays to their maximum here
-                        # gave every parameter the furthest one's count.
-                        step_count = max(step_count, int(v))
-                        continue
-                    by_name.setdefault(k, [None] * len(params))
-                    loaded_impl = _from_host(v, p._impl.device)
-                    if (
-                        p._impl.dtype == _C_engine.Dtype.BF16
-                        and loaded_impl.dtype == _C_engine.Dtype.F32
-                        and k not in ("step", "eta", "mu", "mu_product")
-                    ):
-                        loaded_impl = _C_engine.astype(loaded_impl, _C_engine.Dtype.BF16)
-                    by_name[k][slot] = loaded_impl
-            if by_name:
-                eng.load_state_buffers(list(by_name.items()))
-            if step_count and hasattr(eng, "step_count"):
-                eng.step_count = step_count
-            flat_idx += len(params)
+            entry: _StagedEngine = self._stage_engine(idx, group)
+            if entry.engine is not None:
+                _load_group_state(entry.engine, params, first, state)
+            staged.append(entry)
+            first += len(params)
+        for idx, (group, entry) in enumerate(zip(self.param_groups, staged, strict=True)):
+            self._install_engine(idx, group, entry)
 
     def _param_id_map(self) -> dict[int, int]:
         """Map ``id(param)`` → flat integer index across all param groups."""
@@ -1379,33 +1390,83 @@ class Optimizer:
     def load_state_dict(self, state_dict: dict[str, object]) -> None:
         """Restore from a state_dict produced by :meth:`state_dict`.
 
-        Hyperparameters in ``param_groups`` are restored, and each
-        parameter's state (returned from :meth:`_save_state`) is restored
-        via :meth:`_load_state` — for the engine optimizers, every buffer
-        and per-parameter ``step`` goes back into the engine.
+        The optimizer becomes the one that was saved: the group
+        hyper-parameters are restored, and the per-parameter state is
+        *replaced* by the checkpoint's — every buffer and each parameter's
+        ``step`` — so a parameter the checkpoint has no entry for starts
+        afresh, and a checkpoint taken before the first step resets the
+        optimizer to its initial state.  Floating-point state is converted to
+        its parameter's dtype and device, whatever precision it was saved in
+        (``step`` and the other per-parameter scalars are not).
+
+        The load is all or nothing: the checkpoint is checked before the
+        optimizer is touched, and one that is refused leaves the groups, the
+        state and the engines as they were.
+
+        Parameters
+        ----------
+        state_dict : dict
+            An :meth:`state_dict` payload.
+
+        Raises
+        ------
+        TypeError
+            ``param_groups`` or ``state`` is the wrong kind of container.
+        ValueError
+            The checkpoint has another number of groups than the optimizer,
+            or a group of another size, or a group hyper-parameter the
+            optimizer's rules reject.
+        lucid._C.engine.ShapeMismatch
+            A saved buffer is not shaped like its parameter.
+
+        Examples
+        --------
+        A checkpoint taken before the first step resets a stepped optimizer:
+
+        >>> import lucid
+        >>> import lucid.optim as optim
+        >>> p = lucid.nn.Parameter(lucid.ones(2))
+        >>> opt = optim.SGD([p], lr=0.1, momentum=0.9)
+        >>> fresh = opt.state_dict()
+        >>> (p * 2).sum().backward()
+        >>> opt.step()
+        >>> opt.state_dict()["state"][0]["momentum_buffer"].tolist()
+        [2.0, 2.0]
+        >>> opt.load_state_dict(fresh)
+        >>> opt.state_dict()["state"]
+        {}
         """
-        raw_groups = state_dict["param_groups"]
-        if not isinstance(raw_groups, list):
-            raise TypeError("load_state_dict: 'param_groups' must be a list")
-        loaded_groups: list[dict[str, object]] = raw_groups
-        if len(loaded_groups) != len(self.param_groups):
-            raise ValueError(
-                f"loaded state_dict has {len(loaded_groups)} param_groups but "
-                f"optimizer has {len(self.param_groups)}"
-            )
-        for g_new, g_old in zip(self.param_groups, loaded_groups, strict=True):
-            for k, v in g_old.items():
-                if k == "params":
-                    continue
-                g_new[k] = v
-        raw_state = state_dict.get("state", {})
-        if not isinstance(raw_state, dict):
-            raise TypeError("load_state_dict: 'state' must be a dict")
-        loaded_state: dict[int, dict[str, object]] = raw_state
-        self._load_state(loaded_state)
+        saved = LoadedCheckpoint.read(
+            state_dict, [len(_group_params(group)) for group in self.param_groups]
+        )
+        edits: list[dict[str, object]] = [
+            self._staged_group_edits(idx, group, entry)
+            for idx, (group, entry) in enumerate(zip(self.param_groups, saved.groups, strict=True))
+        ]
+        self._load_state(saved.state)
+        for group, edit in zip(self.param_groups, edits, strict=True):
+            group.update(edit)
         if not self._LIVE_STATE:
-            self.state = loaded_state
+            self.state = saved.state
         self._sync_hyperparams()
+
+    def _staged_group_edits(
+        self, idx: int, group: dict[str, object], saved: dict[str, object]
+    ) -> dict[str, object]:
+        """The entries loading ``saved`` would write into group ``idx``, checked.
+
+        Everything but ``params`` (the live parameters stay).  The group they
+        would make is held to the rules a group is held to when it is added
+        or next used after an edit, so a checkpoint carrying a value the
+        optimizer rejects (a negative ``lr``, a malformed pair) is refused
+        before any of it is applied.
+        """
+        edits: dict[str, object] = {k: v for k, v in saved.items() if k != "params"}
+        merged: dict[str, object] = {**group, **edits}
+        self._validate_group_flags(merged)
+        values, upd = self._resolve_group_hparams(idx, merged)
+        self._check_hyperparams(self._hyperparam_dict(values))
+        return {**edits, **upd}
 
     @override
     def __getstate__(self) -> dict[str, object]:

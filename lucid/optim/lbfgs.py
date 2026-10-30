@@ -14,7 +14,8 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
 from lucid.nn.parameter import Parameter
 from lucid._dispatch import _wrap
-from lucid.optim.optimizer import Optimizer, _follow
+from lucid.optim._state_load import _follow
+from lucid.optim.optimizer import Optimizer
 
 from lucid._C import engine as _C_engine
 
@@ -283,7 +284,7 @@ class _LBFGSState:
         The parameters may have been converted since the last step
         (``module.to()``, ``.double()``, ``.half()``); the curvature pairs,
         direction and scalars then follow them by the rule every optimizer's
-        state follows (:func:`~lucid.optim.optimizer._follow`), so the next
+        state follows (:func:`~lucid.optim._state_load._follow`), so the next
         iteration does not mix the old dtype or device with the new.
 
         Every stored tensor is computed from the same flat gradient, so they
