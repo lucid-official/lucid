@@ -109,6 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - autocast disables itself on an unsupported dtype (LCD-738)
 
+- checkpoint replays the forward's autocast (LCD-739)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

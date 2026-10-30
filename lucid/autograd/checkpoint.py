@@ -32,6 +32,11 @@ Notes
   inside the segment masks the same units both times.  Without it the
   recomputed segment drew a fresh mask and the gradient belonged to a
   different network than the one that produced the loss.
+* The autocast state of every device is recorded with it and replayed too —
+  on, at the dtype the forward saw, or off — so the recomputed segment
+  computes in the dtypes the forward did, whatever autocast scope
+  ``backward()`` is called from.  A recompute in another dtype produced
+  gradients that belonged to a different network, as a different mask did.
 * ``use_reentrant=True`` (the default, for compatibility) derives the
   output's ``requires_grad`` from the positional inputs alone, so a
   segment fed only constants produces no gradient for the parameters it
@@ -41,14 +46,85 @@ Notes
   same reason.
 """
 
-from typing import Callable, cast, final, override
+from contextlib import ExitStack
+from dataclasses import dataclass
+from types import TracebackType
+from typing import Callable, Self, cast, final, override
 
 from lucid._engine_scope import untraced
 from lucid._factories.creation import zeros
 from lucid._factories.random import get_rng_state, set_rng_state
 from lucid._tensor.tensor import Tensor
+from lucid.amp._state import AutocastState
 from lucid.autograd._grad_mode import no_grad, enable_grad
 from lucid.autograd.function import Function, FunctionCtx
+
+
+@final
+class _Replay:
+    """Runs a recompute under the state its forward ran under; undoes it on exit.
+
+    The random stream is set to where the forward started and, on exit, to
+    where it stood before — so the recompute draws what the forward drew and
+    the caller's stream does not advance by it.  Each device's autocast is
+    entered as the forward had it, ``enabled=False`` included.  Everything
+    entered is unwound in reverse order, also when the body raises or a later
+    entry fails.
+    """
+
+    __slots__ = ("_forward", "_stack")
+
+    def __init__(self, forward: _ForwardState) -> None:
+        self._forward = forward
+        self._stack = ExitStack()
+
+    def __enter__(self) -> Self:
+        with ExitStack() as entered:
+            rng = self._forward.rng
+            if rng is not None:
+                entered.callback(set_rng_state, get_rng_state())
+                set_rng_state(rng)
+            for state in self._forward.autocast:
+                entered.enter_context(state.scope())
+            self._stack = entered.pop_all()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self._stack.__exit__(exc_type, exc, tb)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _ForwardState:
+    """What the forward ran under that its recompute has to run under again.
+
+    One owner for both halves of "the segment runs twice": the random stream
+    (a dropout masks the same units) and the autocast state of each device
+    (a matmul computes in the same dtype).  ``checkpoint``'s reentrant and
+    non-reentrant forms both build their node from one function, so both
+    capture and replay through this.
+    """
+
+    rng: Tensor | None
+    autocast: tuple[AutocastState, ...]
+
+    @classmethod
+    def capture(cls, *, preserve_rng_state: bool) -> Self:
+        """Record the state the segment is about to run under."""
+        # Reading the stream state is eager-backward bookkeeping, not an op
+        # of the segment, so a compile recording must not see it.
+        with untraced():
+            rng = get_rng_state() if preserve_rng_state else None
+        return cls(rng, AutocastState.capture_all())
+
+    def replay(self) -> _Replay:
+        """A scope that runs its body in the captured state."""
+        return _Replay(self)
 
 
 def _roots_and_seeds(
@@ -95,12 +171,10 @@ def _make_checkpoint_fn(
         def forward(ctx: FunctionCtx, *inputs: Tensor) -> Tensor | tuple[Tensor, ...]:
             real = inputs[:n_args]
             ctx.save_for_backward(*real)
-            # The segment runs twice, and the second run has to draw what
-            # the first drew — or a dropout inside it masks different units
-            # and the gradient belongs to a different network.  Reading the
-            # stream state is eager-backward bookkeeping, not an op of ``fn``.
-            with untraced():
-                ctx.rng_state = get_rng_state() if preserve_rng_state else None
+            # The segment runs twice, and the second run has to see what the
+            # first saw — the same random draws, the same autocast dtypes —
+            # or its gradient belongs to a different network.
+            ctx.forward_state = _ForwardState.capture(preserve_rng_state=preserve_rng_state)
             # Run without tracking so intermediate activations are NOT stored.
             with no_grad():
                 output = fn(*real, **kw)
@@ -118,16 +192,9 @@ def _make_checkpoint_fn(
             # Re-run the forward segment to rebuild the local graph.  Anything
             # the segment closed over — module parameters, most often — is
             # part of that graph and accumulates through the backward below.
-            saved_state = cast(Tensor | None, ctx.rng_state)
-            resume = get_rng_state() if saved_state is not None else None
-            if saved_state is not None:
-                set_rng_state(saved_state)
-            try:
-                with enable_grad():
-                    output = fn(*detached, **kw)
-            finally:
-                if resume is not None:
-                    set_rng_state(resume)
+            forward_state = cast(_ForwardState, ctx.forward_state)
+            with forward_state.replay(), enable_grad():
+                output = fn(*detached, **kw)
 
             # Backward through the re-computed graph, every output seeded
             # with its own gradient.
