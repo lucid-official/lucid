@@ -1,4 +1,4 @@
-"""LoRA on the model zoo, end to end: gpt2, gpt, bert, roformer, t5, vit, pvt and swin.
+"""LoRA on the model zoo, end to end: gpt2, gpt, bert, roformer, t5, vit, pvt, swin and transformer.
 
 Every model is a real registered factory with a small config override (H11),
 adapted through the public ``lucid.peft`` surface the way a user does it, on
@@ -27,10 +27,14 @@ cpu and metal.  What is proved, per family:
   exactly the modules the table above lists for the family, and every model
   type with a default is a row here.
 
-The families whose attention is ``nn.MultiheadAttention`` (transformer, clip,
-dit, detr, stable_diffusion, and mask2former's decoder cross-attention) hold
-their projections as raw parameters, which v1 cannot reach; the transformer
-family stands for them.
+Two rows reach the layer types beyond ``nn.Linear``: vit's patch embedding is
+an ``nn.Conv2d`` (the convolution LoRA), and the transformer family's
+``self_attn`` and token table are an ``nn.MultiheadAttention`` and an
+``nn.Embedding``.  The families whose attention is ``nn.MultiheadAttention``
+(transformer, clip, dit, detr, stable_diffusion, and mask2former's decoder
+cross-attention) hold their projections as raw parameters; the transformer
+family stands for them.  Those rows adapt by explicit name only, since
+``"all-linear"`` selects ``nn.Linear`` alone.
 """
 
 import dataclasses
@@ -59,6 +63,7 @@ from lucid.peft import (
     get_peft_model_state_dict,
 )
 from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES
+from lucid.peft.tuners import lora
 from lucid.serialization import load_safetensors, save_safetensors
 
 _DEPTH = 2
@@ -99,6 +104,18 @@ _TEXT = _Overrides(
     intermediate_size=64,
     max_position_embeddings=32,
     hidden_dropout=0.0,
+    attention_dropout=0.0,
+)
+
+
+_VIT = _Overrides(
+    image_size=16,
+    patch_size=8,
+    dim=32,
+    depth=_DEPTH,
+    num_heads=2,
+    num_classes=5,
+    dropout=0.0,
     attention_dropout=0.0,
 )
 
@@ -165,6 +182,18 @@ class _Family(NamedTuple):
     trained_in_full: frozenset[str]
     #: Adapted modules the model's forward never calls.
     off_path: frozenset[str] = frozenset()
+    #: The ways of choosing the modules that the family has.
+    modes: tuple[str, ...] = ("explicit", "all-linear")
+    #: The module type of the adapted names ending in each suffix; any other is an ``nn.Linear``.
+    kinds: tuple[tuple[str, type[nn.Module]], ...] = ()
+
+    def kind_of(self, name: str) -> type[nn.Module]:
+        return next((kind for suffix, kind in self.kinds if name.endswith(suffix)), nn.Linear)
+
+    @property
+    def deepest_mode(self) -> str:
+        """The mode that adapts the most: what the end-to-end tests run."""
+        return self.modes[-1]
 
 
 _BERT = "bert.encoder.layer.{i}"
@@ -283,16 +312,7 @@ _FAMILIES = [
     _Family(
         name="vit",
         factory="vit_base_16_cls",
-        overrides=_Overrides(
-            image_size=16,
-            patch_size=8,
-            dim=32,
-            depth=_DEPTH,
-            num_heads=2,
-            num_classes=5,
-            dropout=0.0,
-            attention_dropout=0.0,
-        ),
+        overrides=_VIT,
         batch=_image_batch,
         task_type="",
         targets=["qkv"],
@@ -306,7 +326,56 @@ _FAMILIES = [
         ),
         trained_in_full=frozenset({"head"}),
     ),
+    # The patch embedding is the family's one convolution: the name is given in full, since
+    # ``proj`` alone also ends the attention's output ``nn.Linear``.
+    _Family(
+        name="vit-patch",
+        factory="vit_base_16_cls",
+        overrides=_VIT,
+        batch=_image_batch,
+        task_type="",
+        targets=["patch_embed.proj"],
+        saved=["head"],
+        adapted=frozenset({"patch_embed.proj"}),
+        all_linear=frozenset(),
+        trained_in_full=frozenset({"head"}),
+        modes=("explicit",),
+        kinds=(("patch_embed.proj", nn.Conv2d),),
+    ),
+    # The family that stands for the ones built on ``nn.MultiheadAttention``: its encoder's
+    # ``self_attn``, whose two projections are adapted together.
+    _Family(
+        name="transformer",
+        factory="transformer_base_cls",
+        overrides=_TEXT,
+        batch=_cls_batch,
+        task_type="SEQ_CLS",
+        targets=["self_attn"],
+        saved=[],
+        adapted=_names("transformer.transformer.encoder.layers.{i}.self_attn"),
+        all_linear=frozenset(),
+        trained_in_full=frozenset({"classifier"}),
+        modes=("explicit",),
+        kinds=(("self_attn", nn.MultiheadAttention),),
+    ),
+    # A token table that nothing else shares (the transformer's is tied to its decoder's, so
+    # it trains but cannot merge).  BERT's has a ``padding_idx``, which the lookup keeps.
+    _Family(
+        name="bert-embedding",
+        factory="bert_base_cls",
+        overrides=_TEXT,
+        batch=_cls_batch,
+        task_type="SEQ_CLS",
+        targets=["word_embeddings"],
+        saved=[],
+        adapted=frozenset({"bert.embeddings.word_embeddings"}),
+        all_linear=frozenset(),
+        trained_in_full=frozenset({"classifier"}),
+        modes=("explicit",),
+        kinds=(("word_embeddings", nn.Embedding),),
+    ),
 ]
+
 
 def _in_stages(count: int, *patterns: str) -> frozenset[str]:
     """Every module name the ``{i}`` patterns spell out, for each of ``count`` stages."""
@@ -404,7 +473,8 @@ _REFERENCE_GPT2_ADAPTER_CONFIG = {
 }
 
 _GENERATING = [f for f in _FAMILIES if f.name in ("gpt2", "gpt", "t5")]
-_MODES = ["explicit", "all-linear"]
+_ALL_LINEAR_FAMILIES = [f for f in _FAMILIES if "all-linear" in f.modes]
+_FAMILY_MODES = [(f, mode) for f in _FAMILIES for mode in f.modes]
 
 
 def _family(name: str) -> _Family:
@@ -446,7 +516,34 @@ def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
 
 
 def _owned_by_adapter(name: str) -> bool:
-    return ".lora_A." in name or ".lora_B." in name or ".modules_to_save." in name
+    return any(
+        part in name
+        for part in (
+            ".lora_A.",
+            ".lora_B.",
+            ".out_proj_lora_",  # an attention's output projection
+            ".lora_embedding_",  # an embedding's factors are bare parameters
+            ".modules_to_save.",
+        )
+    )
+
+
+def _adapter_leaves(kind: type[nn.Module]) -> tuple[str, ...]:
+    """The adapter file's keys under one adapted module, as the reference writes them."""
+    if kind is nn.Embedding:
+        return ("lora_embedding_A", "lora_embedding_B")
+    leaves = ("lora_A.weight", "lora_B.weight")
+    if kind is nn.MultiheadAttention:
+        return (*leaves, "base_layer.out_proj.lora_A.weight", "base_layer.out_proj.lora_B.weight")
+    return leaves
+
+
+def _silenced(layer: nn.Module) -> lucid.Tensor:
+    """The tensor whose zeroing removes the layer's update: ``B``, or ``A`` for an embedding."""
+    if isinstance(layer, lora.Embedding):
+        return layer.lora_embedding_A["default"]
+    assert isinstance(layer, (lora.Linear, lora.Conv2d, lora.MultiheadAttention))
+    return layer.lora_B["default"].weight
 
 
 def _train(peft: PeftModel, batch: _Batch, lr: float = _LR) -> list[float]:
@@ -464,13 +561,19 @@ def _train(peft: PeftModel, batch: _Batch, lr: float = _LR) -> list[float]:
 
 def _trained(family: _Family, device: str) -> tuple[PeftModel, _Batch]:
     """An eval-mode adapter with every LoRA matrix non-zero, trained a few steps."""
-    peft = _peft(family, "all-linear", device, init_lora_weights=False)
+    peft = _peft(family, family.deepest_mode, device, init_lora_weights=False)
     batch = family.batch(device)
     _train(peft, batch)
     return peft.eval(), batch
 
 
 _BY_FAMILY = pytest.mark.parametrize("family", _FAMILIES, ids=lambda f: f.name)
+#: The rows named for a model type that has a default; the others reach other layer types.
+_DEFAULT_ROWS = [f for f in _FAMILIES if f.name in DEFAULT_LORA_TARGET_MODULES]
+_BY_DEFAULT_ROW = pytest.mark.parametrize("family", _DEFAULT_ROWS, ids=lambda f: f.name)
+_BY_FAMILY_MODE = pytest.mark.parametrize(
+    ("family", "mode"), _FAMILY_MODES, ids=[f"{f.name}-{m}" for f, m in _FAMILY_MODES]
+)
 
 
 # ── targets ──────────────────────────────────────────────────────────────────
@@ -484,7 +587,7 @@ def test_the_zoo_s_module_names_select_what_the_table_says(family: _Family) -> N
     assert saved == family.trained_in_full
 
 
-@_BY_FAMILY
+@pytest.mark.parametrize("family", _ALL_LINEAR_FAMILIES, ids=lambda f: f.name)
 def test_all_linear_leaves_out_the_head_and_the_tied_weights(family: _Family) -> None:
     peft = get_peft_model(_base(family, "cpu"), _config(family, "all-linear"))
     assert set(peft.base_model.targeted_module_names) == family.all_linear
@@ -505,8 +608,7 @@ def test_vit_has_no_query_and_value_modules_to_name() -> None:
 # ── wiring ───────────────────────────────────────────────────────────────────
 
 
-@_BY_FAMILY
-@pytest.mark.parametrize("mode", _MODES)
+@_BY_FAMILY_MODE
 def test_every_adapted_layer_is_on_the_forward_path(
     family: _Family, mode: str, device: str
 ) -> None:
@@ -515,7 +617,7 @@ def test_every_adapted_layer_is_on_the_forward_path(
     with lucid.no_grad():
         live = _logits(peft, batch)
         for name in peft.base_model.targeted_module_names:
-            b = peft.get_base_model().get_submodule(name).lora_B["default"].weight
+            b = _silenced(peft.get_base_model().get_submodule(name))
             kept = b.clone()
             b.zero_()
             silenced = _logits(peft, batch)
@@ -530,8 +632,7 @@ def test_every_adapted_layer_is_on_the_forward_path(
 # ── training ─────────────────────────────────────────────────────────────────
 
 
-@_BY_FAMILY
-@pytest.mark.parametrize("mode", _MODES)
+@_BY_FAMILY_MODE
 def test_three_steps_lower_the_loss_and_move_only_the_adapter(
     family: _Family, mode: str, device: str
 ) -> None:
@@ -561,7 +662,7 @@ def test_disable_adapter_gives_the_pre_injection_outputs(family: _Family, device
     batch = family.batch(device)
     with lucid.no_grad():
         plain = _logits(model, batch)
-        peft = get_peft_model(model, _config(family, "all-linear", init_lora_weights=False))
+        peft = get_peft_model(model, _config(family, family.deepest_mode, init_lora_weights=False))
         adapted = _logits(peft, batch)
         with peft.disable_adapter():
             off = _logits(peft, batch)
@@ -667,15 +768,14 @@ def test_merge_and_unload_then_zoo_save_and_load(
         adapted = _logits(peft, batch)
         merged = peft.merge_and_unload()
         assert set(merged.state_dict()) == keys
-        assert all(type(merged.get_submodule(name)) is nn.Linear for name in targets)
+        assert all(type(merged.get_submodule(n)) is family.kind_of(n) for n in targets)
         assert lucid.allclose(_logits(merged, batch), adapted, atol=1e-4)
         merged.save_pretrained(str(tmp_path), safe_serialization=safe_serialization)
         reloaded = type(merged).from_pretrained(str(tmp_path)).to(device).eval()
         assert _same(_logits(reloaded, batch), _logits(merged, batch))
 
 
-@_BY_FAMILY
-@pytest.mark.parametrize("mode", _MODES)
+@_BY_FAMILY_MODE
 def test_the_adapter_file_holds_the_adapter_under_the_zoo_s_names(
     family: _Family, mode: str, tmp_path: Path
 ) -> None:
@@ -687,9 +787,9 @@ def test_the_adapter_file_holds_the_adapter_under_the_zoo_s_names(
     ]
     stored = set(load_safetensors(str(tmp_path / "adapter_model.safetensors")))
     layers = {
-        f"base_model.model.{name}.lora_{m}.weight"
+        f"base_model.model.{name}.{leaf}"
         for name in peft.base_model.targeted_module_names
-        for m in "AB"
+        for leaf in _adapter_leaves(family.kind_of(name))
     }
     # A module trained in full keeps its own name on disk, and the adapter's
     # name is in no key.
@@ -699,8 +799,7 @@ def test_the_adapter_file_holds_the_adapter_under_the_zoo_s_names(
     assert stored == set(get_peft_model_state_dict(peft))
 
 
-@_BY_FAMILY
-@pytest.mark.parametrize("mode", _MODES)
+@_BY_FAMILY_MODE
 def test_a_saved_adapter_loads_onto_a_fresh_base(
     family: _Family, mode: str, device: str, tmp_path: Path
 ) -> None:
@@ -761,6 +860,9 @@ _WRAPPER: dict[str, type[PeftModel]] = {
     "vit": PeftModel,
     "pvt": PeftModel,
     "swin": PeftModel,
+    "vit-patch": PeftModel,
+    "transformer": PeftModelForSequenceClassification,
+    "bert-embedding": PeftModelForSequenceClassification,
 }
 
 #: The class that rebuilds base and adapter from the adapter's directory.
@@ -773,14 +875,14 @@ _AUTO = {
     "vit": AutoPeftModel,
     "pvt": AutoPeftModel,
     "swin": AutoPeftModel,
+    "vit-patch": AutoPeftModel,
+    "transformer": AutoPeftModelForSequenceClassification,
+    "bert-embedding": AutoPeftModelForSequenceClassification,
 }
 
 
-@_BY_FAMILY
-@pytest.mark.parametrize("mode", _MODES)
-def test_get_peft_model_returns_the_wrapper_of_the_familys_task(
-    family: _Family, mode: str
-) -> None:
+@_BY_FAMILY_MODE
+def test_get_peft_model_returns_the_wrapper_of_the_familys_task(family: _Family, mode: str) -> None:
     assert type(_peft(family, mode, "cpu")) is _WRAPPER[family.name]
 
 
@@ -813,7 +915,7 @@ def _auto_adapter(family: _Family, device: str, root: Path) -> tuple[Path, lucid
     base = _base(family, "cpu")
     base.save_pretrained(str(root / "base"))
     config = dataclasses.replace(
-        _config(family, "all-linear", init_lora_weights=False),
+        _config(family, family.deepest_mode, init_lora_weights=False),
         base_model_name_or_path=str(root / "base"),
     )
     peft = get_peft_model(base.to(device), config)
@@ -852,12 +954,12 @@ def test_the_rebuilt_model_generates_what_the_trained_one_did(
 
 
 def test_every_model_type_with_a_default_is_a_row_and_each_row_is_the_tables() -> None:
-    assert {f.name for f in _FAMILIES} == set(DEFAULT_LORA_TARGET_MODULES)
-    for family in _FAMILIES:
+    assert {f.name for f in _DEFAULT_ROWS} == set(DEFAULT_LORA_TARGET_MODULES)
+    for family in _DEFAULT_ROWS:
         assert DEFAULT_LORA_TARGET_MODULES[family.name] == set(family.targets), family.name
 
 
-@_BY_FAMILY
+@_BY_DEFAULT_ROW
 def test_no_target_modules_takes_the_default_of_the_model_type(
     family: _Family, device: str
 ) -> None:
@@ -874,7 +976,7 @@ def test_no_target_modules_takes_the_default_of_the_model_type(
         assert _same(_logits(peft, batch), plain)
 
 
-@_BY_FAMILY
+@_BY_DEFAULT_ROW
 def test_the_default_modules_are_the_ones_the_zoo_trains_on(family: _Family, device: str) -> None:
     """The default is live: an update to each module it picks reaches the output."""
     config = LoraConfig(
@@ -901,7 +1003,7 @@ def test_a_model_type_the_table_lacks_is_told_to_name_its_targets() -> None:
     assert not any(".lora_" in n for n, _ in model.named_modules())
 
 
-# ── what v1 cannot reach ─────────────────────────────────────────────────────
+# ── attention, embedding and linear layers in one model ──────────────────────
 
 
 def _transformer_classifier() -> nn.Module:
@@ -909,14 +1011,27 @@ def _transformer_classifier() -> nn.Module:
     return create_model("transformer_base_cls", **_TEXT)
 
 
-def test_a_multihead_attention_target_is_refused_and_the_model_left_whole() -> None:
+def test_an_attention_has_no_linear_projections_to_name() -> None:
+    """Its projections are parameters of ``self_attn``, which is what a config names."""
     model = _transformer_classifier()
-    with pytest.raises(NotImplementedError, match="nn.Linear only"):
-        get_peft_model(model, LoraConfig(r=4, target_modules=["self_attn"]))
     with pytest.raises(ValueError, match="not found"):
         get_peft_model(model, LoraConfig(r=4, target_modules=["out_proj", "q_proj", "in_proj"]))
     assert all(p.requires_grad for p in model.parameters())
     assert not any(".lora_" in n for n, _ in model.named_modules())
+
+
+def test_three_layer_types_adapt_in_one_model_and_train_together(device: str) -> None:
+    model = _transformer_classifier().to(device)
+    config = LoraConfig(
+        r=4, target_modules=["self_attn", "src_tok_emb", "linear1"], task_type="SEQ_CLS"
+    )
+    peft = get_peft_model(model, config)
+    kinds = {type(model.get_submodule(n)) for n in peft.base_model.targeted_module_names}
+    assert kinds == {lora.MultiheadAttention, lora.Embedding, lora.Linear}
+    ids = _tokens(device, 0, (3, 10), seed=1)
+    labels = _tokens(device, 0, (3,), seed=2) % 2
+    losses = _train(peft, _Batch((ids,), labels))
+    assert losses[-1] < losses[0], losses
 
 
 def test_all_linear_on_the_transformer_family_reaches_the_feed_forward_only(device: str) -> None:

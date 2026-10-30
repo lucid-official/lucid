@@ -257,10 +257,11 @@ class TestRefusals:
             LoraModel(model, LoraConfig(target_modules=r"layers\.0(\.q_proj)?"))
         assert type(model.layers[0].q_proj) is nn.Linear
 
-    @pytest.mark.parametrize("name", ["embed"])
-    def test_a_type_the_reference_adapts_is_not_implemented(self, name: str) -> None:
-        with pytest.raises(NotImplementedError, match="adapts nn.Linear only"):
-            LoraModel(_lm(), LoraConfig(target_modules=[name]))
+    def test_a_module_type_with_no_layer_is_refused_naming_the_supported_ones(self) -> None:
+        model = _lm()
+        with pytest.raises(ValueError, match=r"norm \(LayerNorm\) is not supported.*nn.Embedding"):
+            LoraModel(model, LoraConfig(target_modules=["layers.0.norm"]))
+        assert type(model.layers[0].norm) is nn.LayerNorm
 
     def test_a_lazy_linear_is_refused(self) -> None:
         with pytest.raises(ValueError, match=r"0 \(LazyLinear\) is not supported"):

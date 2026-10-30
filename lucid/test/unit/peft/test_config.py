@@ -36,6 +36,7 @@ GOLDEN_CONFIG = {
     "rank_pattern": {},
     "revision": None,
     "target_modules": ["c_attn"],
+    "target_parameters": None,
     "task_type": "CAUSAL_LM",
     "use_dora": False,
     "use_rslora": False,

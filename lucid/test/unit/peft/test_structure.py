@@ -25,6 +25,7 @@ from lucid.peft._config import _CONFIG_CLASSES, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots, _AdapterSlot
 from lucid.peft.tuners._base import _TUNERS, _tuner_for
+from lucid.peft.tuners import lora
 from lucid.peft.tuners.lora import Linear, LoraLayer
 
 
@@ -36,8 +37,20 @@ class TestRegistries:
     def test_lora_registers_its_config_tuner_and_layer(self) -> None:
         assert _CONFIG_CLASSES[PeftType.LORA] is LoraConfig
         assert _TUNERS[PeftType.LORA] is LoraModel
-        assert LoraLayer._layer_types == {nn.Linear: Linear}
+        assert LoraLayer._layer_types == {
+            nn.Linear: Linear,
+            nn.Embedding: lora.Embedding,
+            nn.Conv1d: lora.Conv1d,
+            nn.Conv2d: lora.Conv2d,
+            nn.Conv3d: lora.Conv3d,
+            nn.MultiheadAttention: lora.MultiheadAttention,
+        }
         assert LoraModel._layer_types is LoraLayer._layer_types
+
+    def test_a_layer_of_a_parameter_joins_no_module_table(self) -> None:
+        # It adapts a parameter, so a module type never finds it by its MRO.
+        assert lora.ParamWrapper not in LoraLayer._layer_types.values()
+        assert issubclass(lora.ParamWrapper, LoraLayer)
 
     def test_the_entry_points_dispatch_on_the_config(self) -> None:
         config = LoraConfig(target_modules=["0"])
