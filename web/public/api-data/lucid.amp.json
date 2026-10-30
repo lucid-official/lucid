@@ -3,8 +3,114 @@
   "name": "amp",
   "path": "lucid.amp",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/__init__.py#L1",
   "members": [
+    {
+      "name": "custom_bwd",
+      "path": "lucid.amp._custom.custom_bwd",
+      "kind": "function",
+      "labels": [],
+      "signature": "custom_bwd(bwd: Callable[..., R] | None = None, device_type: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/_custom.py#L218",
+      "subcategory": "custom",
+      "summary": "Decorate a custom `Function.backward` to run in its `forward`'s autocast state.",
+      "extended": "The decorated `backward` runs inside an autocast scope matching the one\n`custom_fwd` recorded — on at the same dtype, or off — whatever\nscope `.backward()` was called from, so the arithmetic on the gradient\nand the tensors `forward` saved sees the dtypes it saw going forward.",
+      "parameters": [
+        {
+          "name": "bwd",
+          "annotation": "callable",
+          "description": "The `backward` to decorate; leave it out to get the decorator.",
+          "default": "None"
+        },
+        {
+          "name": "device_type",
+          "annotation": "str",
+          "description": "`\"metal\"` or `\"cpu\"`, the same as `forward`'s.  Keyword-only\nand required.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "callable",
+        "description": "The decorated `backward` (`bwd` given), or the decorator."
+      },
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "If `device_type` is neither `\"metal\"` nor `\"cpu\"`."
+        },
+        {
+          "annotation": "RuntimeError",
+          "description": "When the decorated `backward` runs: if `forward` was not\ndecorated with `custom_fwd`, or was with another\n`device_type`."
+        }
+      ],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "custom_fwd",
+          "description": "the matching `forward` decorator, with a worked example."
+        }
+      ]
+    },
+    {
+      "name": "custom_fwd",
+      "path": "lucid.amp._custom.custom_fwd",
+      "kind": "function",
+      "labels": [],
+      "signature": "custom_fwd(fwd: Callable[..., R] | None = None, device_type: str, cast_inputs: dtype | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/_custom.py#L138",
+      "subcategory": "custom",
+      "summary": "Decorate a custom `Function.forward` so `backward` can follow its autocast state.",
+      "extended": "Under `lucid.amp.autocast` an op inside `forward` computes in\nhalf precision, so its result and the gradient that comes back are half\nprecision while the tensors `forward` saved are still float32 — and the\n`backward`'s arithmetic on the pair fails.  The decorated `forward`\nstores the autocast state of `device_type` on `ctx`; decorate\n`backward` with `custom_bwd` to run it in that state.\n\nUsed bare as `custom_fwd(fwd, device_type=...)` or, as a decorator\nfactory, `@custom_fwd(device_type=...)` placed under `@staticmethod`.",
+      "parameters": [
+        {
+          "name": "fwd",
+          "annotation": "callable",
+          "description": "The `forward` to decorate; leave it out to get the decorator.",
+          "default": "None"
+        },
+        {
+          "name": "device_type",
+          "annotation": "str",
+          "description": "`\"metal\"` or `\"cpu\"`; anything else raises `ValueError`.\nKeyword-only and required.",
+          "default": null
+        },
+        {
+          "name": "cast_inputs",
+          "annotation": "lucid.dtype",
+          "description": "When given and autocast is enabled on `device_type` at the call,\nevery floating-point tensor argument on that device (float64\nexcepted) is cast to this dtype — nested lists, tuples and dicts\nincluded — and `forward` runs with autocast **off**; `backward`\nthen runs with it off too.  `None` (default) leaves the inputs\nalone and runs `forward` in the caller's state.  Outside an\nautocast scope `cast_inputs` does nothing.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "callable",
+        "description": "The decorated `forward` (`fwd` given), or the decorator."
+      },
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "If `device_type` is neither `\"metal\"` nor `\"cpu\"`."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.amp import autocast, custom_bwd, custom_fwd\n>>> from lucid.autograd import Function\n>>> class MatMul(Function):\n...     @staticmethod\n...     @custom_fwd(device_type=\"cpu\")\n...     def forward(ctx, a, b):\n...         ctx.save_for_backward(a, b)\n...         return a @ b\n...     @staticmethod\n...     @custom_bwd(device_type=\"cpu\")\n...     def backward(ctx, grad):\n...         a, b = ctx.saved_tensors\n...         return grad @ b.mT, a.mT @ grad\n>>> a = lucid.randn(3, 4, requires_grad=True)\n>>> b = lucid.randn(4, 2, requires_grad=True)\n>>> with autocast(\"cpu\", dtype=lucid.bfloat16):\n...     y = MatMul.apply(a, b)\n>>> y.dtype\nlucid.bfloat16\n>>> y.float().sum().backward()\n>>> a.grad.dtype\nlucid.float32"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "custom_bwd",
+          "description": "the matching `backward` decorator."
+        },
+        {
+          "name": "lucid.amp.autocast",
+          "description": "the scope whose state is recorded."
+        }
+      ]
+    },
     {
       "name": "autocast",
       "path": "lucid.amp.autocast.autocast",
@@ -13,7 +119,7 @@
       "bases": [],
       "labels": [],
       "signature": "autocast(device_type: str = 'metal', dtype: dtype | None = None, enabled: bool = True, cache_enabled: bool | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L23",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L91",
       "subcategory": "autocast",
       "methods": [
         {
@@ -22,7 +128,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(device_type: str = 'metal', dtype: dtype | None = None, enabled: bool = True, cache_enabled: bool | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L100",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L180",
           "subcategory": "autocast",
           "summary": "Configure the autocast context.",
           "extended": null,
@@ -65,7 +171,12 @@
           "examples": [],
           "notes": [],
           "attributes": [],
-          "warns": [],
+          "warns": [
+            {
+              "annotation": "UserWarning",
+              "description": "If `enabled` and `dtype` is not supported on `device_type`\n(anything but float16 / bfloat16).  The scope then runs with\n`enabled=False`."
+            }
+          ],
           "see_also": []
         },
         {
@@ -76,7 +187,7 @@
             "property"
           ],
           "signature": "cache_enabled: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L141",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L228",
           "summary": "Whether weight-cast caching is enabled inside this autocast scope.",
           "extended": null,
           "parameters": [],
@@ -97,7 +208,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__enter__()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L153",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L240",
           "subcategory": "autocast",
           "summary": "Activate (or disable) the autocast scope and return `self`.",
           "extended": "Constructing the engine `AutocastGuard` sets the AMP state for\n`self._device_type` to `(enabled, dtype)` and records the state\nit replaced; the guard is kept until `__exit__`.",
@@ -119,7 +230,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__exit__(args: object = ())",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L167",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L254",
           "subcategory": "autocast",
           "summary": "Restore the AMP state that was active when the scope was entered.",
           "extended": "Releases the guard `__enter__` made.  Its destructor runs at\nonce and puts back the state it recorded, so the scope ends here\nrather than whenever the `autocast` object is collected.\nExceptions propagate.",
@@ -141,7 +252,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__call__(fn: F)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L178",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L265",
           "subcategory": "autocast",
           "summary": "Use as a function decorator.",
           "extended": "Every call of the decorated function runs inside this scope — the\nsame `device_type`, `dtype` and `enabled` — and leaves it on\nreturn or on an exception.",
@@ -172,7 +283,7 @@
             "staticmethod"
           ],
           "signature": "is_autocast_enabled(device_type: str | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L204",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L291",
           "subcategory": "autocast",
           "summary": "Return True if autocast is currently active (for `device_type` if given).",
           "extended": null,
@@ -196,7 +307,7 @@
             "staticmethod"
           ],
           "signature": "get_autocast_dtype(device_type: str | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/autocast.py#L211",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L298",
           "subcategory": "autocast",
           "summary": "Return the currently active autocast dtype (for `device_type` if given), or None.",
           "extended": null,
@@ -240,7 +351,9 @@
       "examples": [
         "Context-manager form (typical training loop):\n>>> import lucid\n>>> import lucid.nn as nn\n>>> model = nn.Linear(4, 2).to(\"metal\")\n>>> x = lucid.randn(8, 4, device=\"metal\")\n>>> with lucid.amp.autocast():\n...     output = model(x)            # ops cast to float16 inside\n>>> output.dtype\nlucid.float16\nDecorator form (every call wraps itself in a fresh scope):\n>>> @lucid.amp.autocast()\n... def predict(x):\n...     return model(x)\n>>> predict(x).dtype\nlucid.float16\nNested scopes restore the outer dtype on exit:\n>>> a = lucid.randn(2, 2, device=\"metal\")\n>>> with lucid.amp.autocast(dtype=lucid.float16):\n...     print((a @ a).dtype)  # fp16 here\n...     with lucid.amp.autocast(dtype=lucid.bfloat16):\n...         print((a @ a).dtype)  # bf16 here\n...     print((a @ a).dtype)  # back to fp16 — prior guard reinstalled\nlucid.float16\nlucid.bfloat16\nlucid.float16"
       ],
-      "notes": [],
+      "notes": [
+        "`dtype` must be one the device can autocast to: `lucid.float16`\nor `lucid.bfloat16` on both `\"metal\"` and `\"cpu\"`.  Any other\ndtype — an integer, `bool`, `float32`, `float64` — emits a\n`UserWarning` when the scope is created and turns it into one with\n`enabled=False`, as the reference framework does, so the ops inside run\nin the dtype of their inputs rather than silently in the unsupported one.\nThe decorator form and nested scopes inherit this: they are built through\nthe same constructor.  A scope that was `enabled=False` already does not\nwarn."
+      ],
       "attributes": [],
       "warns": [],
       "see_also": [
@@ -251,14 +364,45 @@
       ]
     },
     {
+      "name": "is_autocast_available",
+      "path": "lucid.amp.autocast.is_autocast_available",
+      "kind": "function",
+      "labels": [],
+      "signature": "is_autocast_available(device_type: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/autocast.py#L43",
+      "subcategory": "autocast",
+      "summary": "Whether an autocast scope can be opened on `device_type`.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "device_type",
+          "annotation": "str",
+          "description": "A device type name.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "bool",
+        "description": "`True` for `\"metal\"` and `\"cpu\"`, the two devices\n`autocast` accepts; `False` for any other name (it is a\nquery, so an unknown name is an answer rather than an error)."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> lucid.amp.is_autocast_available(\"cpu\")\nTrue\n>>> lucid.amp.is_autocast_available(\"tpu\")\nFalse"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "GradScaler",
       "path": "lucid.amp.grad_scaler.GradScaler",
       "kind": "class",
       "class_kind": "regular",
       "bases": [],
       "labels": [],
-      "signature": "GradScaler(init_scale: float = 2.0 ** 16, growth_factor: float = 2.0, backoff_factor: float = 0.5, growth_interval: int = 2000, enabled: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L45",
+      "signature": "GradScaler(device: str = 'metal', init_scale: float = 2.0 ** 16, growth_factor: float = 2.0, backoff_factor: float = 0.5, growth_interval: int = 2000, enabled: bool = True)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L51",
       "subcategory": "grad_scaler",
       "methods": [
         {
@@ -266,12 +410,18 @@
           "path": "lucid.amp.grad_scaler.GradScaler.__init__",
           "kind": "function",
           "labels": [],
-          "signature": "__init__(init_scale: float = 2.0 ** 16, growth_factor: float = 2.0, backoff_factor: float = 0.5, growth_interval: int = 2000, enabled: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L164",
+          "signature": "__init__(device: str = 'metal', init_scale: float = 2.0 ** 16, growth_factor: float = 2.0, backoff_factor: float = 0.5, growth_interval: int = 2000, enabled: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L182",
           "subcategory": "grad_scaler",
           "summary": "Initialize the scaler state.",
           "extended": null,
           "parameters": [
+            {
+              "name": "device",
+              "annotation": "str",
+              "description": "`'metal'` or `'cpu'`.  Validated here; the scaler itself is\ndevice-agnostic.",
+              "default": "'metal'"
+            },
             {
               "name": "init_scale",
               "annotation": "float",
@@ -307,7 +457,12 @@
             "annotation": "None",
             "description": ""
           },
-          "raises": [],
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "If `device` is unknown, or, when `enabled`, `growth_factor`\nis not above 1.0 or `backoff_factor` is not below 1.0."
+            }
+          ],
           "examples": [],
           "notes": [],
           "attributes": [],
@@ -320,7 +475,7 @@
           "kind": "function",
           "labels": [],
           "signature": "scale(outputs: Tensor | list[Tensor])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L201",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L234",
           "subcategory": "grad_scaler",
           "summary": "Multiply outputs by the current scale factor.",
           "extended": null,
@@ -349,7 +504,7 @@
           "kind": "function",
           "labels": [],
           "signature": "unscale_(optimizer: Optimizer)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L228",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L261",
           "subcategory": "grad_scaler",
           "summary": "Divide the optimizer's gradients by the current scale, in place.",
           "extended": "Call it between `backward()` and `step` when the real\ngradients are needed — to clip them, or to inspect their norm.  The\nscaler records that this optimizer's gradients are unscaled, so the\n`step` that follows does not divide them again.",
@@ -393,7 +548,7 @@
           "kind": "function",
           "labels": [],
           "signature": "step(optimizer: Optimizer, args: object = (), kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L344",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L377",
           "subcategory": "grad_scaler",
           "summary": "Unscale the gradients if needed, then step unless they overflowed.",
           "extended": "If `unscale_` already ran for `optimizer` in this iteration\nits gradients are used as they are; otherwise they are unscaled\nhere.  The optimizer's `step()` is skipped when its gradients held\nan `inf` or `NaN`.",
@@ -447,7 +602,7 @@
           "kind": "function",
           "labels": [],
           "signature": "update(new_scale: float | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L397",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L430",
           "subcategory": "grad_scaler",
           "summary": "Update the scale factor and start the next iteration.",
           "extended": "If a scale is provided, it is set directly. Otherwise, the scale\nis reduced by `backoff_factor` if any optimizer's gradients\noverflowed since the last update, or grown by `growth_factor`\nafter `growth_interval` overflow-free updates.  Either way every\noptimizer returns to the state where `unscale_` and\n`step` may be called again.",
@@ -476,13 +631,188 @@
           "kind": "function",
           "labels": [],
           "signature": "get_scale()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L429",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L462",
           "subcategory": "grad_scaler",
-          "summary": "Return the current scale factor.",
+          "summary": "Return the current scale factor, or `1.0` when the scaler is disabled.",
           "extended": null,
           "parameters": [],
           "returns": {
             "annotation": "float",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_growth_factor",
+          "path": "lucid.amp.grad_scaler.GradScaler.get_growth_factor",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_growth_factor()",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L466",
+          "subcategory": "grad_scaler",
+          "summary": "Return the factor the scale grows by after `growth_interval` clean steps.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "float",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_growth_factor",
+          "path": "lucid.amp.grad_scaler.GradScaler.set_growth_factor",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_growth_factor(new_factor: float)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L470",
+          "subcategory": "grad_scaler",
+          "summary": "Set the factor the scale grows by after `growth_interval` clean steps.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "new_factor",
+              "annotation": "float",
+              "description": "The new growth factor.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_backoff_factor",
+          "path": "lucid.amp.grad_scaler.GradScaler.get_backoff_factor",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_backoff_factor()",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L480",
+          "subcategory": "grad_scaler",
+          "summary": "Return the factor the scale is multiplied by when gradients overflow.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "float",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_backoff_factor",
+          "path": "lucid.amp.grad_scaler.GradScaler.set_backoff_factor",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_backoff_factor(new_factor: float)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L484",
+          "subcategory": "grad_scaler",
+          "summary": "Set the factor the scale is multiplied by when gradients overflow.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "new_factor",
+              "annotation": "float",
+              "description": "The new backoff factor.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_growth_interval",
+          "path": "lucid.amp.grad_scaler.GradScaler.get_growth_interval",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_growth_interval()",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L494",
+          "subcategory": "grad_scaler",
+          "summary": "Return how many overflow-free updates it takes the scale to grow.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_growth_interval",
+          "path": "lucid.amp.grad_scaler.GradScaler.set_growth_interval",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_growth_interval(new_interval: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L498",
+          "subcategory": "grad_scaler",
+          "summary": "Set how many overflow-free updates it takes the scale to grow.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "new_interval",
+              "annotation": "int",
+              "description": "The new growth interval.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "is_enabled",
+          "path": "lucid.amp.grad_scaler.GradScaler.is_enabled",
+          "kind": "function",
+          "labels": [],
+          "signature": "is_enabled()",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L508",
+          "subcategory": "grad_scaler",
+          "summary": "Return whether this scaler scales, unscales and updates (`enabled`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
             "description": ""
           },
           "raises": [],
@@ -498,14 +828,14 @@
           "kind": "function",
           "labels": [],
           "signature": "state_dict()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L433",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L512",
           "subcategory": "grad_scaler",
-          "summary": "Return serializable state dict.",
+          "summary": "Return the scaler's state, or an empty dict when it is disabled.",
           "extended": null,
           "parameters": [],
           "returns": {
-            "annotation": "dict[str, float]",
-            "description": ""
+            "annotation": "dict",
+            "description": "`scale`, `growth_factor`, `backoff_factor`,\n`growth_interval` and `_growth_tracker` (the count of\nconsecutive overflow-free updates) — the reference framework's\nkeys.  Call it after `update`."
           },
           "raises": [],
           "examples": [],
@@ -520,16 +850,32 @@
           "kind": "function",
           "labels": [],
           "signature": "load_state_dict(state_dict: dict[str, float])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/amp/grad_scaler.py#L443",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/amp/grad_scaler.py#L533",
           "subcategory": "grad_scaler",
-          "summary": "Load state from a dict.",
+          "summary": "Load a state written by `state_dict`; a no-op when disabled.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "state_dict",
+              "annotation": "dict",
+              "description": "A scaler state.  The growth tracker may be under `_growth_tracker`\nor under `growth_tracker`, the key earlier releases wrote.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "None",
             "description": ""
           },
-          "raises": [],
+          "raises": [
+            {
+              "annotation": "RuntimeError",
+              "description": "If `state_dict` is empty — typically one saved from a disabled\nscaler."
+            },
+            {
+              "annotation": "KeyError",
+              "description": "If a key the state needs is missing."
+            }
+          ],
           "examples": [],
           "notes": [],
           "attributes": [],
@@ -540,6 +886,12 @@
       "summary": "Dynamic loss-scaling helper for mixed-precision training.",
       "extended": "Mixed-precision training runs the forward pass in fp16 to halve\nmemory bandwidth and exploit fp16-fast hardware paths, but\nfp16's narrow dynamic range causes small gradients to underflow to\nzero — the network stops learning.  `GradScaler` works\naround this by multiplying the loss by a large constant $s$\nbefore backpropagation:\n\n$$\n\\tilde{L} = s \\cdot L, \\qquad\n\\frac{\\partial \\tilde{L}}{\\partial \\theta}\n= s \\cdot \\frac{\\partial L}{\\partial \\theta}.\n$$\n\nThe scaled gradients sit comfortably inside fp16's representable\nrange; before the optimizer step they are unscaled by $1/s$\nin fp32 so the update is mathematically equivalent to ordinary\ntraining.\n\nThe scale itself is adapted dynamically.  After every step the\nunscaled gradients are checked for `inf` / `NaN`:\n\n* **Overflow detected** — the step is skipped and $s$ is\n  multiplied by `backoff_factor` (typically `0.5`).\n* **No overflow for `growth_interval` consecutive steps** —\n  $s$ is multiplied by `growth_factor` (typically `2.0`).\n\nThis produces a sawtooth schedule that tracks the largest scale\nthe current gradient distribution can tolerate.",
       "parameters": [
+        {
+          "name": "device",
+          "annotation": "str",
+          "description": "The device the scaler is for, `'metal'` or `'cpu'`; anything\nelse raises `ValueError`.  The first parameter, as in the\nreference framework.  Checked at construction only — each gradient\nis unscaled on the device it lives on.",
+          "default": "'metal'"
+        },
         {
           "name": "init_scale",
           "annotation": "float",
@@ -567,12 +919,17 @@
         {
           "name": "enabled",
           "annotation": "bool",
-          "description": "When `False` the scaler degenerates into a transparent\npass-through — `scale` returns its input unchanged,\n`step` calls the optimizer directly, and `update`\nis a no-op.",
+          "description": "When `False` the scaler degenerates into a transparent\npass-through — `scale` returns its input unchanged,\n`step` calls the optimizer directly, `update` is a\nno-op, `get_scale` is `1.0` and `state_dict` is\nempty.",
           "default": "True"
         }
       ],
       "returns": null,
-      "raises": [],
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "If `device` is neither `'metal'` nor `'cpu'`, or, for an\nenabled scaler, `growth_factor <= 1.0` or `backoff_factor >= 1.0`."
+        }
+      ],
       "examples": [
         ">>> import lucid\n>>> import lucid.nn as nn\n>>> import lucid.optim as optim\n>>> from lucid.amp import GradScaler, autocast\n>>> model = nn.Linear(4, 1).to(\"metal\")\n>>> optimizer = optim.SGD(model.parameters(), lr=0.01)\n>>> loss_fn = nn.MSELoss()\n>>> dataloader = [\n...     (lucid.randn(8, 4, device=\"metal\"), lucid.randn(8, 1, device=\"metal\"))\n...     for _ in range(3)\n... ]\n>>> scaler = GradScaler()\n>>> for x, y in dataloader:\n...     optimizer.zero_grad()\n...     with autocast():\n...         out = model(x)\n...     loss = loss_fn(out.float(), y)\n...     scaler.scale(loss).backward()\n...     scaler.step(optimizer)\n...     scaler.update()\nClipping the unscaled gradients — step sees that\nunscale_ already ran and leaves them alone:\n>>> from lucid.nn.utils import clip_grad_norm_\n>>> x, y = dataloader[0]\n>>> optimizer.zero_grad()\n>>> scaler.scale(loss_fn(model(x), y)).backward()\n>>> scaler.unscale_(optimizer)\n>>> norm = clip_grad_norm_(model.parameters(), max_norm=1.0)\n>>> scaler.step(optimizer)\n>>> scaler.update()"
       ],
@@ -585,7 +942,7 @@
     }
   ],
   "summary": "Automatic Mixed Precision (AMP) utilities for Lucid.",
-  "extended": "Mixed precision training keeps the master copy of parameters and the\nloss in float32 while running the bulk of forward / backward compute in\na lower-precision format (float16 or bfloat16). On Apple Silicon this\ntypically yields a wall-clock speed-up of roughly two times on\ncompute-bound layers and roughly halves the activation memory\nfootprint, enabling larger batch sizes or longer context windows.\n\nThis subpackage exposes two cooperating tools:\n\n- `autocast` — a context manager that casts eligible ops to a\n  lower-precision dtype while leaving reductions and accumulators in\n  float32 for numerical safety.\n- `GradScaler` — a dynamic loss-scaling helper that prevents\n  gradient underflow when training in float16. Tracks an exponential\n  scale factor, halving it on detected `inf` / `nan` and growing\n  it back up on successful steps.",
+  "extended": "Mixed precision training keeps the master copy of parameters and the\nloss in float32 while running the bulk of forward / backward compute in\na lower-precision format (float16 or bfloat16). On Apple Silicon this\ntypically yields a wall-clock speed-up of roughly two times on\ncompute-bound layers and roughly halves the activation memory\nfootprint, enabling larger batch sizes or longer context windows.\n\nThis subpackage exposes two cooperating tools:\n\n- `autocast` — a context manager that casts eligible ops to a\n  lower-precision dtype while leaving reductions and accumulators in\n  float32 for numerical safety.\n- `GradScaler` — a dynamic loss-scaling helper that prevents\n  gradient underflow when training in float16. Tracks an exponential\n  scale factor, halving it on detected `inf` / `nan` and growing\n  it back up on successful steps.\n\nand the pieces around them:\n\n- `custom_fwd` / `custom_bwd` — decorators that make a custom\n  `lucid.autograd.Function` follow the autocast state its `forward`\n  ran in, so its `backward` does not meet half-precision gradients with\n  float32 saved tensors.\n- `is_autocast_available` — whether a device type supports autocast.",
   "parameters": [],
   "returns": null,
   "raises": [],

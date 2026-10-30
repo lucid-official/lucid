@@ -3,7 +3,7 @@
   "name": "fast_rcnn",
   "path": "lucid.models.vision.fast_rcnn",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/__init__.py#L1",
   "members": [
     {
       "name": "FastRCNNConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "FastRCNNConfig(num_classes: int = 80, in_channels: int = 3, roi_size: int = 7, spatial_scale: float = 1.0 / 16.0, dropout: float = 0.5, bbox_reg_weights: tuple[float, float, float, float] = (10.0, 10.0, 5.0, 5.0), score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, batch_size_per_image: int = 64, positive_fraction: float = 0.25, fg_iou_thresh: float = 0.5, bg_iou_thresh_lo: float = 0.1)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 80, in_channels: int = 3, roi_size: int = 7, spatial_scale: float = 1.0 / 16.0, dropout: float = 0.5, bbox_reg_weights: tuple[float, float, float, float] = (10.0, 10.0, 5.0, 5.0), score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, batch_size_per_image: int = 64, positive_fraction: float = 0.25, fg_iou_thresh: float = 0.5, bg_iou_thresh_lo: float = 0.1)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -64,7 +64,7 @@
       ],
       "labels": [],
       "signature": "FastRCNNForObjectDetection(config: FastRCNNConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_model.py#L170",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_model.py#L170",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +73,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: FastRCNNConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_model.py#L258",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_model.py#L258",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -95,7 +95,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, proposals: list[Tensor] | None = None, targets: list[dict[str, Tensor]] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_model.py#L477",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_model.py#L477",
           "subcategory": "model",
           "summary": "Run Fast R-CNN on a batch of images.",
           "extended": null,
@@ -136,7 +136,7 @@
           "kind": "function",
           "labels": [],
           "signature": "postprocess(output: ObjectDetectionOutput, proposals: list[Tensor])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_model.py#L563",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_model.py#L563",
           "subcategory": "model",
           "summary": "Apply per-class NMS to raw Fast R-CNN output.",
           "extended": null,
@@ -210,7 +210,7 @@
       "kind": "function",
       "labels": [],
       "signature": "fast_rcnn(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/models/vision/fast_rcnn/_pretrained.py#L22",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/models/vision/fast_rcnn/_pretrained.py#L22",
       "subcategory": "pretrained",
       "summary": "Fast R-CNN with VGG16 backbone (Girshick, ICCV 2015).",
       "extended": "Builds a `FastRCNNForObjectDetection` with the paper-cited\nVGG16 topology: shared backbone applied once to the full image, then\n7x7 RoI Pool over the stride-16 feature map followed by two 4096-dim\nFC layers and sibling K+1 / 4K heads.  Approximately 138M parameters\n(most in the FC layers).  Section 4.4 / Table 4 give **146x faster\ninference** than R-CNN for VGG16 (213x with truncated SVD); *training*\nis 9x faster, from 84 hours to 9.5.  Table 1 puts Fast R-CNN's VOC2007\nmAP at 66.9% against R-CNN BB's 66.0% — higher, not equal.",

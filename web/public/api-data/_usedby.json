@@ -312,7 +312,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._forward"
     },
     {
       "kind": "module",
@@ -575,7 +575,33 @@
       "module": "lucid.special"
     }
   ],
+  "lucid.amp._custom.custom_bwd": [
+    {
+      "kind": "module",
+      "module": "lucid.amp"
+    }
+  ],
+  "lucid.amp._custom.custom_fwd": [
+    {
+      "kind": "module",
+      "module": "lucid.amp"
+    }
+  ],
   "lucid.amp.autocast.autocast": [
+    {
+      "kind": "module",
+      "module": "lucid.amp"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.amp._custom"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.amp._state"
+    }
+  ],
+  "lucid.amp.autocast.is_autocast_available": [
     {
       "kind": "module",
       "module": "lucid.amp"
@@ -664,7 +690,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._reverse"
     }
   ],
   "lucid.autograd._functional.hessian": [
@@ -674,7 +700,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._reverse"
     }
   ],
   "lucid.autograd._functional.hvp": [
@@ -690,7 +716,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._reverse"
     }
   ],
   "lucid.autograd._functional.jvp": [
@@ -700,7 +726,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._forward"
     }
   ],
   "lucid.autograd._functional.vhp": [
@@ -754,7 +780,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.func"
+      "module": "lucid.func._reverse"
     }
   ],
   "lucid.autograd._grad_mode.inference_mode": [
@@ -927,6 +953,10 @@
     {
       "kind": "module",
       "module": "lucid._ops.composite.indexing"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.amp._custom"
     },
     {
       "kind": "module",
@@ -2259,6 +2289,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.utils.parametrizations"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._merging"
     }
   ],
   "lucid.linalg._ex.cholesky_ex": [
@@ -12876,11 +12910,23 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._slots"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._state_dict"
     },
     {
       "kind": "module",
+      "module": "lucid.peft._target_defaults"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._targeting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
     },
     {
       "kind": "module",
@@ -16090,6 +16136,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._slots"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._base"
     },
     {
@@ -16818,6 +16868,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._targeting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._base"
     },
     {
@@ -16850,11 +16908,19 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft._mapping"
+      "module": "lucid.peft._peft_model"
     },
     {
       "kind": "module",
       "module": "lucid.peft._targeting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._task_models"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
     }
   ],
   "lucid.peft._mapping.get_peft_model": [
@@ -16877,6 +16943,14 @@
     {
       "kind": "module",
       "module": "lucid.peft._mapping"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._task_models"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
     }
   ],
   "lucid.peft._state_dict.get_peft_model_state_dict": [
@@ -16897,6 +16971,108 @@
     {
       "kind": "module",
       "module": "lucid.peft._peft_model"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForCausalLM": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForFeatureExtraction": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForQuestionAnswering": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForSeq2SeqLM": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForSequenceClassification": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft._task_models.PeftModelForTokenClassification": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.auto"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForCausalLM": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForFeatureExtraction": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForQuestionAnswering": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForSeq2SeqLM": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForSequenceClassification": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.auto.AutoPeftModelForTokenClassification": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.lora._config.LoraConfig": [

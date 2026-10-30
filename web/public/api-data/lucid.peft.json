@@ -3,7 +3,7 @@
   "name": "peft",
   "path": "lucid.peft",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/__init__.py#L1",
   "members": [
     {
       "name": "PeftConfig",
@@ -12,8 +12,8 @@
       "class_kind": "dataclass",
       "bases": [],
       "labels": [],
-      "signature": "PeftConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L314",
+      "signature": "PeftConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L331",
       "subcategory": "config",
       "methods": [
         {
@@ -22,7 +22,7 @@
           "kind": "function",
           "labels": [],
           "signature": "to_dict()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L413",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L436",
           "subcategory": "config",
           "summary": "Return the config as the JSON-ready dict `adapter_config.json` holds.",
           "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.",
@@ -48,10 +48,10 @@
             "classmethod"
           ],
           "signature": "from_dict(config_dict: Mapping[str, object])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L434",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L457",
           "subcategory": "config",
           "summary": "Build a config from a dict such as a parsed `adapter_config.json`.",
-          "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"lora_bias\": false`, `\"loftq_config\": {}`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  Provenance\nkeys (`peft_version`, `auto_mapping`) are dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
+          "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"lora_bias\": false`, `\"loftq_config\": {}`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  The\n`peft_version` provenance key is dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
           "parameters": [
             {
               "name": "config_dict",
@@ -84,7 +84,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save_pretrained(save_directory: str | os.PathLike[str])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L500",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L523",
           "subcategory": "config",
           "summary": "Write `adapter_config.json` into `save_directory`.",
           "extended": "The file is the reference's: `to_dict` with its keys sorted,\nindented by two spaces.  The directory is created if missing.",
@@ -115,23 +115,71 @@
           "see_also": []
         },
         {
+          "name": "from_json_file",
+          "path": "lucid.peft._config.PeftConfig.from_json_file",
+          "kind": "function",
+          "labels": [
+            "staticmethod"
+          ],
+          "signature": "from_json_file(path_json_file: str | os.PathLike[str])",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L554",
+          "subcategory": "config",
+          "summary": "Read a config file into the dict it holds, unchanged but for `runtime_config`.",
+          "extended": "What `from_pretrained` reads before it chooses a config class: the\nfile's content as a dict, as the reference's `from_json_file` returns\nit.  `from_dict` turns it into a config.",
+          "parameters": [
+            {
+              "name": "path_json_file",
+              "annotation": "str or os.PathLike",
+              "description": "The path of a JSON file such as `adapter_config.json`.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "dict of str to object",
+            "description": "The file's object, without a `runtime_config` key: the\nreference warns that such a key is ignored, since a runtime\nconfiguration is valid at runtime only."
+          },
+          "raises": [
+            {
+              "annotation": "FileNotFoundError",
+              "description": "There is no file at `path_json_file`."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "The file does not hold a JSON object."
+            }
+          ],
+          "examples": [
+            ">>> import os, tempfile\n>>> from lucid.peft import LoraConfig, PeftConfig\n>>> with tempfile.TemporaryDirectory() as d:\n...     LoraConfig(r=2, target_modules=[\"fc\"]).save_pretrained(d)\n...     raw = PeftConfig.from_json_file(os.path.join(d, \"adapter_config.json\"))\n>>> raw[\"peft_type\"], raw[\"r\"]\n('LORA', 2)"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
           "name": "from_pretrained",
           "path": "lucid.peft._config.PeftConfig.from_pretrained",
           "kind": "function",
           "labels": [
             "classmethod"
           ],
-          "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str])",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L531",
+          "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L601",
           "subcategory": "config",
           "summary": "Read `adapter_config.json` from a local adapter directory.",
-          "extended": null,
+          "extended": "The file's `peft_type` picks the config class: called on\n`PeftConfig` this returns a `LoraConfig` for a LoRA adapter,\nand called on a method's own class it refuses the file of another\nmethod.",
           "parameters": [
             {
               "name": "pretrained_model_name_or_path",
               "annotation": "str or os.PathLike",
               "description": "A directory holding `adapter_config.json` — one written by\n`save_pretrained` or by the reference library.  Hub ids\nare not resolved; download the adapter first.",
               "default": null
+            },
+            {
+              "name": "subfolder",
+              "annotation": "str",
+              "description": "A directory under `pretrained_model_name_or_path` that holds\nthe file, e.g. the sub-directory `save_pretrained` gives each\nadapter but the one named `\"default\"`.",
+              "default": "None"
             }
           ],
           "returns": {
@@ -161,8 +209,8 @@
           "path": "lucid.peft._config.PeftConfig.__init__",
           "kind": "function",
           "labels": [],
-          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L1",
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -192,6 +240,12 @@
           "name": "peft_type",
           "annotation": "PeftType or str",
           "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
           "default": "None"
         },
         {
@@ -238,7 +292,7 @@
       ],
       "labels": [],
       "signature": "PeftType()",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L60",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L60",
       "subcategory": "config",
       "methods": [],
       "summary": "The parameter-efficient method an adapter file holds.",
@@ -262,11 +316,11 @@
       ],
       "labels": [],
       "signature": "TaskType()",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_config.py#L96",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_config.py#L96",
       "subcategory": "config",
       "methods": [],
       "summary": "The task an adapter was trained for, as `adapter_config.json` records it.",
-      "extended": "Metadata in v1, with one effect: `lucid.peft.get_peft_model`\nmakes a classification or question-answering head trainable when the\nmodel has one under the reference's conventional name (`classifier`\n/ `score`, `qa_outputs`), as the reference's task wrappers do.",
+      "extended": "It chooses the model class `lucid.peft.get_peft_model` and\n`PeftModel.from_pretrained` return: `PeftModelForCausalLM` for\n`CAUSAL_LM` and so on (`MODEL_TYPE_TO_PEFT_MODEL_MAPPING`), a plain\n`PeftModel` for an adapter with no task.  A classification or\nquestion-answering wrapper makes the model's head trainable when it\nhas one under the reference's conventional name (`classifier` /\n`score`, `qa_outputs`).",
       "parameters": [],
       "returns": null,
       "raises": [],
@@ -282,10 +336,10 @@
       "kind": "function",
       "labels": [],
       "signature": "get_peft_model(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_mapping.py#L31",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_mapping.py#L10",
       "subcategory": "mapping",
       "summary": "Adapt `model` with LoRA and return it wrapped as a `lucid.peft.PeftModel`.",
-      "extended": "The model is changed in place: each module `peft_config` selects\nbecomes a LoRA layer around the original, and every parameter but the\nadapter's is frozen.  `peft_config` is not changed — the wrapper\nkeeps a copy — with two additions the reference makes too: a\n`base_model_name_or_path` read from the model's `name_or_path`,\nwhen it has one, and, for a classification or question-answering\n`task_type`, the model's `classifier` / `score` / `qa_outputs`\nhead added to `modules_to_save` so that it trains.",
+      "extended": "The model is changed in place: each module `peft_config` selects\nbecomes a LoRA layer around the original, and every parameter but the\nadapter's is frozen.  `peft_config` is not changed — the wrapper\nkeeps a copy — with two additions the reference makes too: a\n`base_model_name_or_path` read from the model's `name_or_path`,\nwhen it has one, and, for a classification or question-answering\n`task_type`, the model's `classifier` / `score` / `qa_outputs`\nhead added to `modules_to_save` so that it trains.\n\nThe class returned follows `peft_config.task_type`:\n`PeftModelForCausalLM` for `\"CAUSAL_LM\"`, `PeftModelForSeq2SeqLM`,\n`PeftModelForSequenceClassification`, `PeftModelForTokenClassification`,\n`PeftModelForQuestionAnswering` and `PeftModelForFeatureExtraction`\nfor theirs (`MODEL_TYPE_TO_PEFT_MODEL_MAPPING` is the table), and a\nplain `PeftModel` when the config has no task.",
       "parameters": [
         {
           "name": "model",
@@ -334,7 +388,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inject_adapter_in_model(peft_config: PeftConfig, model: nn.Module, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_mapping.py#L93",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_mapping.py#L70",
       "subcategory": "mapping",
       "summary": "Put LoRA layers into `model` in place and return it, without a wrapper.",
       "extended": "For code that manages the model itself: the model is adapted and\nfrozen exactly as by `lucid.peft.get_peft_model`, but returned\nbare, so its state dict keeps its own key names (plus `base_layer` /\n`lora_A` / `lora_B` under each adapted layer).\n`lucid.peft.get_peft_model_state_dict` reads the adapter out\nof it.  Note the argument order, the reference's: config first.",
@@ -381,7 +435,7 @@
       ],
       "labels": [],
       "signature": "PeftModel(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L67",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L75",
       "subcategory": "peft_model",
       "methods": [
         {
@@ -390,7 +444,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L109",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L155",
           "subcategory": "peft_model",
           "summary": null,
           "extended": null,
@@ -414,8 +468,8 @@
             "property"
           ],
           "signature": "peft_config: dict[str, PeftConfig]",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L123",
-          "summary": "The adapter's config by adapter name (`\"all-linear\"` spelled out).",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L169",
+          "summary": "Each adapter's config by adapter name (`\"all-linear\"` spelled out).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -436,13 +490,36 @@
           "labels": [
             "property"
           ],
-          "signature": "active_adapter: str",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L128",
-          "summary": "Name of the adapter in use.",
+          "signature": "active_adapter: str | list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L174",
+          "summary": "Name of the adapter in use (a list once `delete_adapter` leaves several or none).",
           "extended": null,
           "parameters": [],
           "returns": {
-            "annotation": "str",
+            "annotation": "str | list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft._peft_model.PeftModel.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L179",
+          "summary": "The adapters in use, as a list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
             "description": ""
           },
           "raises": [],
@@ -458,7 +535,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_base_model()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L132",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L183",
           "subcategory": "peft_model",
           "summary": "Return the adapted model itself — the one passed in, now holding LoRA layers.",
           "extended": null,
@@ -475,12 +552,167 @@
           "see_also": []
         },
         {
+          "name": "add_adapter",
+          "path": "lucid.peft._peft_model.PeftModel.add_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_adapter(adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L187",
+          "subcategory": "peft_model",
+          "summary": "Add an adapter beside the ones the model holds.",
+          "extended": "The new adapter is initialised, not trained, and starts frozen and\ninactive: the model computes what it computed, and every parameter\nkeeps its `requires_grad`.  Switch to it with `set_adapter`.\nModules an earlier adapter wraps take the new one beside it; a\nclassification or question-answering `task_type` adds the model's\nhead to `modules_to_save` as `get_peft_model` does.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name of the new adapter; unique among the model's adapters.",
+              "default": null
+            },
+            {
+              "name": "peft_config",
+              "annotation": "PeftConfig",
+              "description": "What to adapt and how.",
+              "default": null
+            },
+            {
+              "name": "low_cpu_mem_usage",
+              "annotation": "bool",
+              "description": "Accepted for the reference's signature; the adapter is built\nthe same way either way.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The name is taken, the config is another method's, no module\nmatches it, or two adapters would train biases.  The model is\nleft as it was."
+            }
+          ],
+          "examples": [
+            ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, get_peft_model\n>>> net = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))\n>>> peft = get_peft_model(net, LoraConfig(r=2, target_modules=[\"0\"]))\n>>> peft.add_adapter(\"second\", LoraConfig(r=4, target_modules=[\"0\", \"1\"]))\n>>> peft.active_adapter, sorted(peft.peft_config)\n('default', ['default', 'second'])\n>>> peft.set_adapter(\"second\")\n>>> peft.get_base_model()[1].lora_A[\"second\"].weight.shape\n(4, 4)"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft._peft_model.PeftModel.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_name: str, inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L236",
+          "subcategory": "peft_model",
+          "summary": "Make `adapter_name` the adapter in use.",
+          "extended": "Only the one adapter applies.  It trains, and every other adapter is\nfrozen, unless `inference_mode`.  A merged model is unmerged\nfirst; layers that hold nothing of the adapter run their base alone.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "An adapter the model holds.",
+              "default": null
+            },
+            {
+              "name": "inference_mode",
+              "annotation": "bool",
+              "description": "Freeze the adapter too.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The model has no adapter of that name."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft._peft_model.PeftModel.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L257",
+          "subcategory": "peft_model",
+          "summary": "Remove an adapter, its config and its `modules_to_save` copies from the model.",
+          "extended": "If it was the one in use, the first of the others (by name) takes\nover, with a warning.  Deleting the last adapter leaves a model\nthat applies nothing; `unload()` takes the layers out.",
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The model has no adapter of that name, or it is merged."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft._peft_model.PeftModel.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L271",
+          "subcategory": "peft_model",
+          "summary": "Enable or disable gradients on the named adapter(s), leaving the rest as they are.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "adapter_names",
+              "annotation": "str or sequence of str",
+              "description": "The adapter, or adapters, to change.",
+              "default": null
+            },
+            {
+              "name": "requires_grad",
+              "annotation": "bool",
+              "description": "Whether they train.",
+              "default": "True"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
           "name": "forward",
           "path": "lucid.peft._peft_model.PeftModel.forward",
           "kind": "function",
           "labels": [],
           "signature": "forward(args: object = (), kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L136",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L290",
           "subcategory": "peft_model",
           "summary": null,
           "extended": null,
@@ -502,7 +734,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_nb_trainable_parameters()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L140",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L294",
           "subcategory": "peft_model",
           "summary": "Return `(trainable, total)` parameter counts, each shared parameter once.",
           "extended": null,
@@ -524,7 +756,7 @@
           "kind": "function",
           "labels": [],
           "signature": "print_trainable_parameters()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L156",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L310",
           "subcategory": "peft_model",
           "summary": "Print the trainable / total parameter counts and their ratio.",
           "extended": null,
@@ -548,7 +780,7 @@
           "kind": "function",
           "labels": [],
           "signature": "disable_adapter()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L174",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L328",
           "subcategory": "peft_model",
           "summary": "Run the base model alone inside the `with` block.",
           "extended": "LoRA updates are skipped (a merged layer is unmerged on entry, and\nstays unmerged after) and every `modules_to_save` module runs as\nthe original; the adapter comes back when the block exits, even on\nan exception.  Blocks nest: the adapter stays off until the\noutermost one exits.  Merging inside the block is refused.  A\ncompiled model follows the switch: the state it branches on is\npart of its cache key.",
@@ -572,10 +804,10 @@
           "kind": "function",
           "labels": [],
           "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L201",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L355",
           "subcategory": "peft_model",
-          "summary": "Fold the adapter into the base model and hand the base model back.",
-          "extended": "For deployment: the result runs at the base model's cost and saves,\nexports and compiles as an ordinary model.  This wrapper is spent\nafterwards.",
+          "summary": "Fold the adapter(s) into the base model and hand the base model back.",
+          "extended": "For deployment: the result runs at the base model's cost and saves,\nexports and compiles as an ordinary model.  This wrapper is spent\nafterwards, and adapters that were not folded in are gone with it.",
           "parameters": [
             {
               "name": "progressbar",
@@ -592,7 +824,7 @@
             {
               "name": "adapter_names",
               "annotation": "list of str",
-              "description": "Which adapters to fold in (v1 has one, the default).",
+              "description": "Which adapters to fold in; the ones in use by default.",
               "default": "None"
             }
           ],
@@ -620,7 +852,7 @@
           "kind": "function",
           "labels": [],
           "signature": "unload()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L249",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L403",
           "subcategory": "peft_model",
           "summary": "Remove the adapter without merging and return the original model.",
           "extended": null,
@@ -641,11 +873,11 @@
           "path": "lucid.peft._peft_model.PeftModel.save_pretrained",
           "kind": "function",
           "labels": [],
-          "signature": "save_pretrained(save_directory: str | os.PathLike[str], safe_serialization: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L259",
+          "signature": "save_pretrained(save_directory: str | os.PathLike[str], safe_serialization: bool = True, selected_adapters: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L425",
           "subcategory": "peft_model",
-          "summary": "Write the adapter — not the base model — to `save_directory`.",
-          "extended": "Two files, the reference library's: `adapter_config.json` (with\n`inference_mode` set, as the reference stores it) and\n`adapter_model.safetensors`, keyed by\n`lucid.peft.get_peft_model_state_dict`.  An adapter not\nnamed `\"default\"` goes into a sub-directory of its own name, as\nthe reference lays it out.",
+          "summary": "Write the adapters — not the base model — under `save_directory`.",
+          "extended": "Per adapter, the reference library's two files:\n`adapter_config.json` (with `inference_mode` set, as the\nreference stores it, and the base model's class as `auto_mapping`)\nand `adapter_model.safetensors`, keyed by\n`lucid.peft.get_peft_model_state_dict`.  The adapter named\n`\"default\"` goes into `save_directory` itself, every other into\na sub-directory of its own name, as the reference lays it out; an\nadapter is read back from the directory that holds its two files\n(`PeftModel.from_pretrained` / `load_adapter`).",
           "parameters": [
             {
               "name": "save_directory",
@@ -658,6 +890,12 @@
               "annotation": "bool",
               "description": "Must be `True`: the pickle format the reference writes for\n`False` is not one Lucid can produce.",
               "default": "True"
+            },
+            {
+              "name": "selected_adapters",
+              "annotation": "list of str",
+              "description": "The adapters to write; every adapter of the model by default.",
+              "default": "None"
             }
           ],
           "returns": {
@@ -670,8 +908,12 @@
               "description": "`safe_serialization=False`."
             },
             {
+              "annotation": "ValueError",
+              "description": "`selected_adapters` names an adapter the model lacks."
+            },
+            {
               "annotation": "RuntimeError",
-              "description": "The adapter was merged or unloaded already — there is nothing\nleft to save; nothing is written."
+              "description": "The adapters were merged or unloaded already — there is nothing\nleft to save; nothing is written."
             },
             {
               "annotation": "NotADirectoryError",
@@ -679,7 +921,7 @@
             }
           ],
           "examples": [
-            ">>> import tempfile, os\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, get_peft_model\n>>> peft = get_peft_model(nn.Sequential(nn.Linear(4, 2)),\n...                       LoraConfig(r=2, target_modules=[\"0\"]))\n>>> with tempfile.TemporaryDirectory() as d:\n...     peft.save_pretrained(d)\n...     sorted(os.listdir(d))\n['adapter_config.json', 'adapter_model.safetensors']"
+            ">>> import tempfile, os\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, get_peft_model\n>>> peft = get_peft_model(nn.Sequential(nn.Linear(4, 2)),\n...                       LoraConfig(r=2, target_modules=[\"0\"]))\n>>> peft.add_adapter(\"style\", LoraConfig(r=2, target_modules=[\"0\"]))\n>>> with tempfile.TemporaryDirectory() as d:\n...     peft.save_pretrained(d)\n...     sorted(os.listdir(d)), sorted(os.listdir(os.path.join(d, \"style\")))\n(['adapter_config.json', 'adapter_model.safetensors', 'style'], ['adapter_config.json', 'adapter_model.safetensors'])"
           ],
           "notes": [],
           "attributes": [],
@@ -693,11 +935,11 @@
           "labels": [
             "classmethod"
           ],
-          "signature": "from_pretrained(model: nn.Module, model_id: str | os.PathLike[str], adapter_name: str = 'default', is_trainable: bool = False, config: PeftConfig | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_peft_model.py#L314",
+          "signature": "from_pretrained(model: nn.Module, model_id: str | os.PathLike[str], adapter_name: str = 'default', is_trainable: bool = False, config: PeftConfig | None = None, subfolder: str | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L498",
           "subcategory": "peft_model",
           "summary": "Adapt `model` with the adapter saved in `model_id`.",
-          "extended": "Reads `adapter_config.json` (unless `config` is given) and\n`adapter_model.safetensors` — written by `save_pretrained`\nor by the reference library — injects the adapter into `model` in\nplace and loads its tensors.  If the tensors do not fit the model,\nthe injection is undone before the error is raised.",
+          "extended": "Reads `adapter_config.json` (unless `config` is given) and\n`adapter_model.safetensors` — written by `save_pretrained`\nor by the reference library — injects the adapter into `model` in\nplace and loads its tensors.  If the tensors do not fit the model,\nthe injection is undone before the error is raised.  The class\nreturned follows the config's `task_type` as in\n`lucid.peft.get_peft_model`; only an adapter with no task\nis built as `cls`.",
           "parameters": [
             {
               "name": "model",
@@ -728,11 +970,17 @@
               "annotation": "PeftConfig",
               "description": "Use this config instead of the directory's.",
               "default": "None"
+            },
+            {
+              "name": "subfolder",
+              "annotation": "str",
+              "description": "The directory under `model_id` that holds the adapter.",
+              "default": "None"
             }
           ],
           "returns": {
             "annotation": "PeftModel",
-            "description": "`model`, adapted and loaded."
+            "description": "`model`, adapted and loaded — a task wrapper if the adapter\nnames a task."
           },
           "raises": [
             {
@@ -741,7 +989,7 @@
             },
             {
               "annotation": "NotImplementedError",
-              "description": "The weights are a pickle (`adapter_model.bin`), or the config\ndescribes something v1 does not implement."
+              "description": "The weights are a pickle (`adapter_model.bin`), or the config\ndescribes something lucid.peft does not implement."
             },
             {
               "annotation": "ValueError",
@@ -755,10 +1003,78 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "load_adapter",
+          "path": "lucid.peft._peft_model.PeftModel.load_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "load_adapter(model_id: str | os.PathLike[str], adapter_name: str, is_trainable: bool = False, low_cpu_mem_usage: bool = False, subfolder: str | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_peft_model.py#L589",
+          "subcategory": "peft_model",
+          "summary": "Load a saved adapter into the model, beside the ones it holds.",
+          "extended": "An adapter the model does not hold is added from the directory's\nconfig and filled from its weights; the weights of one the model\nalready holds replace the values it has.  The loaded adapter is not\nmade the one in use — `set_adapter` does that.  Nothing changes\nif the files are missing or their tensors do not fit.",
+          "parameters": [
+            {
+              "name": "model_id",
+              "annotation": "str or os.PathLike",
+              "description": "The local directory that holds the adapter's `adapter_config.json`\nand `adapter_model.safetensors`; for an adapter saved by\n`save_pretrained` beside others, that is its sub-directory.",
+              "default": null
+            },
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name to give the adapter.",
+              "default": null
+            },
+            {
+              "name": "is_trainable",
+              "annotation": "bool",
+              "description": "Make the adapter trainable.  Otherwise it stays frozen and the\nmodel is put in `eval()` mode, for inference.",
+              "default": "False"
+            },
+            {
+              "name": "low_cpu_mem_usage",
+              "annotation": "bool",
+              "description": "Accepted for the reference's signature; ignored as in\n`add_adapter`.",
+              "default": "False"
+            },
+            {
+              "name": "subfolder",
+              "annotation": "str",
+              "description": "The directory under `model_id` that holds the adapter.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "object",
+            "description": "What `model.load_state_dict(..., strict=False)` returned, as\n`set_peft_model_state_dict` hands it back."
+          },
+          "raises": [
+            {
+              "annotation": "FileNotFoundError",
+              "description": "The directory lacks `adapter_config.json` or the weights."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "The weights are a pickle, or the config describes something\nlucid.peft does not implement."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "The adapter's tensors do not fit the model, or its config cannot\nsit beside the adapters held."
+            }
+          ],
+          "examples": [
+            ">>> import tempfile\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModel, get_peft_model\n>>> config = LoraConfig(r=2, target_modules=[\"0\"])\n>>> source = get_peft_model(nn.Sequential(nn.Linear(4, 2)), config)\n>>> mine = get_peft_model(nn.Sequential(nn.Linear(4, 2)), config)\n>>> with tempfile.TemporaryDirectory() as d:\n...     source.save_pretrained(d)\n...     _ = mine.load_adapter(d, \"loaded\")\n>>> sorted(mine.peft_config), mine.active_adapter\n(['default', 'loaded'], 'default')"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
         }
       ],
-      "summary": "A model with an adapter, saved and loaded as the adapter alone.",
-      "extended": "Wraps the model in its method's tuner (`LoraModel` for a\n`LoraConfig`), kept as `base_model` (the user's model is\n`base_model.model`), so the\nstate dict reads `base_model.model....lora_A.default.weight` and the\nadapter file `base_model.model....lora_A.weight`, the reference\nlibrary's layouts.  Calling it runs the wrapped model, and any public\nname it lacks — `generate`, `config`, a head — is read from that\nmodel, so code written for the bare model keeps working.\n\nUsually made by `lucid.peft.get_peft_model`, or by\n`from_pretrained` for a saved adapter.",
+      "summary": "A model with adapters, saved and loaded as the adapters alone.",
+      "extended": "Wraps the model in its method's tuner (`LoraModel` for a\n`LoraConfig`), kept as `base_model` (the user's model is\n`base_model.model`), so the\nstate dict reads `base_model.model....lora_A.default.weight` and the\nadapter file `base_model.model....lora_A.weight`, the reference\nlibrary's layouts.  Calling it runs the wrapped model, and any public\nname it lacks — `generate`, `config`, a head — is read from that\nmodel, so code written for the bare model keeps working.\n\nThe model holds any number of adapters by name.  `add_adapter` and\n`load_adapter` bring one in beside the others (frozen and inactive),\n`set_adapter` switches which one the model computes with — and\ntrains — and `delete_adapter` drops one.  `save_pretrained` writes\nthem all, the `\"default\"` one at the directory itself and each other\nin a sub-directory of its own name.\n\nUsually made by `lucid.peft.get_peft_model`, or by\n`from_pretrained` for a saved adapter.  Both pick the class from the\nconfig's `task_type`: the wrappers (`PeftModelForCausalLM` and the\nothers, `MODEL_TYPE_TO_PEFT_MODEL_MAPPING`) are subclasses of this\none, each registered for its task by `class Wrapper(PeftModel,\ntask_type=TaskType.X)`; an adapter with no task, or a task no wrapper\nis registered for, gets this class itself.",
       "parameters": [
         {
           "name": "model",
@@ -800,7 +1116,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_peft_model_state_dict(model: nn.Module, state_dict: Mapping[str, Tensor] | None = None, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_state_dict.py#L54",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_state_dict.py#L55",
       "subcategory": "state_dict",
       "summary": "Return the adapter's tensors under the keys an adapter file uses.",
       "extended": "That is `lora_A` / `lora_B` of every adapted layer, the trained\ncopy of every `modules_to_save` module and the biases `bias`\ntrains — keyed as the reference writes them, the adapter name taken\nout.  Called on a `PeftModel` the keys start `base_model.model.`,\nwhich is the reference's file layout.",
@@ -856,7 +1172,7 @@
       "kind": "function",
       "labels": [],
       "signature": "set_peft_model_state_dict(model: nn.Module, peft_model_state_dict: Mapping[str, Tensor], adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/_state_dict.py#L106",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_state_dict.py#L107",
       "subcategory": "state_dict",
       "summary": "Load an adapter's tensors, keyed as an adapter file keys them, into `model`.",
       "extended": "Each key is mapped back to where the tensor lives in memory (the\nadapter name put back in) and copied into the existing parameter,\nwhich keeps its dtype, device and identity.  Every key is checked\nbefore anything is copied: one that lands nowhere, or a shape that\ndiffers, raises with the model untouched — an adapter loaded into the\nwrong model must not pass for a fresh one.  An adapter tensor the dict\ndoes not supply is reported in a warning and keeps its value.",
@@ -903,6 +1219,476 @@
       "see_also": []
     },
     {
+      "name": "PeftModelForCausalLM",
+      "path": "lucid.peft._task_models.PeftModelForCausalLM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_GeneratingPeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForCausalLM(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L70",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted causal language model: the `PeftModel` for `task_type=\"CAUSAL_LM\"`.",
+      "extended": "What `lucid.peft.get_peft_model` returns for a `CAUSAL_LM`\nconfig.  Built, called and trained as `lucid.peft.PeftModel`\nis, and `generate` runs the adapted model's own, so the adapter\nshapes every decoded token.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModelForCausalLM\n>>> class Counter(nn.Module):\n...     def __init__(self):\n...         super().__init__()\n...         self.proj = nn.Linear(4, 4)\n...     def generate(self, x, steps=2):\n...         for _ in range(steps):\n...             x = self.proj(x)\n...         return x\n>>> peft = PeftModelForCausalLM(Counter(), LoraConfig(r=2, target_modules=[\"proj\"]))\n>>> peft.generate(lucid.randn(1, 4), steps=3).shape\n(1, 4)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "PeftModelForFeatureExtraction",
+      "path": "lucid.peft._task_models.PeftModelForFeatureExtraction",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForFeatureExtraction(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L180",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted feature encoder: the `PeftModel` for `task_type=\"FEATURE_EXTRACTION\"`.",
+      "extended": "There is no head to train: the adapter alone shapes the representation\nthe model returns.  Calling it calls the model with the arguments given.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModelForFeatureExtraction\n>>> net = nn.Sequential(nn.Linear(4, 6))\n>>> peft = PeftModelForFeatureExtraction(net, LoraConfig(r=2, target_modules=[\"0\"]))\n>>> peft(lucid.randn(3, 4)).shape\n(3, 6)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "PeftModelForQuestionAnswering",
+      "path": "lucid.peft._task_models.PeftModelForQuestionAnswering",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForQuestionAnswering(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L159",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted question-answering model: the `PeftModel` for `task_type=\"QUESTION_ANS\"`.",
+      "extended": "The span head — the model's `qa_outputs` module — is trained in full\nbeside the adapter, so the start and end positions are learned\nwhatever the base model's head was.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from collections import OrderedDict\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModelForQuestionAnswering\n>>> net = nn.Sequential(OrderedDict(reader=nn.Linear(5, 5), qa_outputs=nn.Linear(5, 2)))\n>>> peft = PeftModelForQuestionAnswering(net, LoraConfig(r=2, target_modules=[\"reader\"]))\n>>> peft.peft_config[\"default\"].modules_to_save\n['qa_outputs']"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "PeftModelForSeq2SeqLM",
+      "path": "lucid.peft._task_models.PeftModelForSeq2SeqLM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_GeneratingPeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForSeq2SeqLM(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L97",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted encoder-decoder model: the `PeftModel` for `task_type=\"SEQ_2_SEQ_LM\"`.",
+      "extended": "What `lucid.peft.get_peft_model` returns for a `SEQ_2_SEQ_LM`\nconfig.  Calling it is calling the model — which takes the decoder's\ninput as well — and `generate` runs the adapted model's own.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, get_peft_model\n>>> config = LoraConfig(r=2, target_modules=[\"0\"], task_type=\"SEQ_2_SEQ_LM\")\n>>> type(get_peft_model(nn.Sequential(nn.Linear(4, 4)), config)).__name__\n'PeftModelForSeq2SeqLM'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "PeftModelForSequenceClassification",
+      "path": "lucid.peft._task_models.PeftModelForSequenceClassification",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForSequenceClassification(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L114",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted sequence classifier: the `PeftModel` for `task_type=\"SEQ_CLS\"`.",
+      "extended": "The classification head is trained in full beside the adapter: a\n`classifier` or `score` module of the model joins every adapter's\n`modules_to_save` (a head the model lacks is left out), so the new\ntask's labels are learned whatever the base model's head was.  The\nconfig passed in is not changed; the wrapper keeps a copy with the head\nadded.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from collections import OrderedDict\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModelForSequenceClassification\n>>> net = nn.Sequential(OrderedDict(encoder=nn.Linear(8, 8), classifier=nn.Linear(8, 2)))\n>>> config = LoraConfig(r=2, target_modules=[\"encoder\"])\n>>> PeftModelForSequenceClassification(net, config).peft_config[\"default\"].modules_to_save\n['classifier']"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "PeftModelForTokenClassification",
+      "path": "lucid.peft._task_models.PeftModelForTokenClassification",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PeftModel"
+      ],
+      "labels": [],
+      "signature": "PeftModelForTokenClassification(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/_task_models.py#L138",
+      "subcategory": "task_models",
+      "methods": [],
+      "summary": "An adapted token classifier: the `PeftModel` for `task_type=\"TOKEN_CLS\"`.",
+      "extended": "As for `lucid.peft.PeftModelForSequenceClassification`, the\nmodel's `classifier` / `score` head is trained in full beside the\nadapter.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt, changed in place.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "What to adapt and how — a `LoraConfig`.",
+          "default": null,
+          "inherited_from": "PeftModel"
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter.",
+          "default": "\"default\"",
+          "inherited_from": "PeftModel"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from collections import OrderedDict\n>>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, PeftModelForTokenClassification\n>>> net = nn.Sequential(OrderedDict(body=nn.Linear(6, 6), score=nn.Linear(6, 9)))\n>>> peft = PeftModelForTokenClassification(net, LoraConfig(r=2, target_modules=[\"body\"]))\n>>> peft.peft_config[\"default\"].modules_to_save\n['score']"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModel",
+      "path": "lucid.peft.auto.AutoPeftModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModel(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L216",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load an adapter that has no task, with its base model.",
+      "extended": "`AutoPeftModel.from_pretrained(directory)` is for an adapter saved\nwith no `task_type` — a vision model's, for one, since there is no\nimage task — whose `adapter_config.json` carries an `auto_mapping`\nnaming the class of the base model.  An adapter with a task is loaded by\nthe class of its task (`AutoPeftModelForCausalLM` and the others).\n\nThe mapping is data read from a file, and building the model imports\nthe package it names.  Only packages on `import_allowlist`\n(`[\"lucid.models\"]` by default) are imported, and what is found there\nmust be a class with `from_pretrained` (else `TypeError`).",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModel\n>>> AutoPeftModel()\nTraceback (most recent call last):\n    ...\nOSError: AutoPeftModel is designed to be instantiated using the `AutoPeftModel.from_pretrained(pretrained_model_name_or_path)` method."
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForCausalLM",
+      "path": "lucid.peft.auto.AutoPeftModelForCausalLM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForCausalLM(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L266",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load a causal language model's adapter with its base model.",
+      "extended": "The base model is built by `AutoModelForLanguageModeling`; the result\nis a `lucid.peft.PeftModelForCausalLM`.  The adapter must be for\n`task_type=\"CAUSAL_LM\"` or for no task.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForCausalLM\n>>> AutoPeftModelForCausalLM._target_peft_class.__name__\n'PeftModelForCausalLM'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForFeatureExtraction",
+      "path": "lucid.peft.auto.AutoPeftModelForFeatureExtraction",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForFeatureExtraction(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L355",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load a feature encoder's adapter with its base model.",
+      "extended": "The base model is built by `AutoModel`, the zoo's loader for a\nbackbone; the result is a `lucid.peft.PeftModelForFeatureExtraction`.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForFeatureExtraction\n>>> AutoPeftModelForFeatureExtraction._target_peft_class.__name__\n'PeftModelForFeatureExtraction'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForQuestionAnswering",
+      "path": "lucid.peft.auto.AutoPeftModelForQuestionAnswering",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForQuestionAnswering(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L336",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load a question-answering model's adapter with its base model.",
+      "extended": "The zoo files extractive question answering under its\n`sequence-classification` task, so the base model is built by\n`AutoModelForSequenceClassification`; the result is a\n`lucid.peft.PeftModelForQuestionAnswering`.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForQuestionAnswering\n>>> AutoPeftModelForQuestionAnswering._target_peft_class.__name__\n'PeftModelForQuestionAnswering'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForSeq2SeqLM",
+      "path": "lucid.peft.auto.AutoPeftModelForSeq2SeqLM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForSeq2SeqLM(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L284",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load an encoder-decoder model's adapter with its base model.",
+      "extended": "The base model is built by `AutoModelForLanguageModeling` (the zoo's\ntask for every language model); the result is a\n`lucid.peft.PeftModelForSeq2SeqLM`.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForSeq2SeqLM\n>>> AutoPeftModelForSeq2SeqLM._target_peft_class.__name__\n'PeftModelForSeq2SeqLM'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForSequenceClassification",
+      "path": "lucid.peft.auto.AutoPeftModelForSequenceClassification",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForSequenceClassification(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L302",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load a sequence classifier's adapter with its base model.",
+      "extended": "The base model is built by `AutoModelForSequenceClassification`; the\nresult is a `lucid.peft.PeftModelForSequenceClassification`.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForSequenceClassification\n>>> AutoPeftModelForSequenceClassification._target_peft_class.__name__\n'PeftModelForSequenceClassification'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AutoPeftModelForTokenClassification",
+      "path": "lucid.peft.auto.AutoPeftModelForTokenClassification",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseAutoPeftModel"
+      ],
+      "labels": [],
+      "signature": "AutoPeftModelForTokenClassification(args: object = (), kwargs: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/auto.py#L319",
+      "subcategory": "auto",
+      "methods": [],
+      "summary": "Load a token classifier's adapter with its base model.",
+      "extended": "The base model is built by `AutoModelForTokenClassification`; the\nresult is a `lucid.peft.PeftModelForTokenClassification`.",
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AutoPeftModelForTokenClassification\n>>> AutoPeftModelForTokenClassification._target_peft_class.__name__\n'PeftModelForTokenClassification'"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "LoraConfig",
       "path": "lucid.peft.tuners.lora._config.LoraConfig",
       "kind": "class",
@@ -911,8 +1697,8 @@
         "_TargetedConfig"
       ],
       "labels": [],
-      "signature": "LoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/lora/_config.py#L24",
+      "signature": "LoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False)",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_config.py#L24",
       "subcategory": "tuners/lora/config",
       "methods": [
         {
@@ -920,8 +1706,8 @@
           "path": "lucid.peft.tuners.lora._config.LoraConfig.__init__",
           "kind": "function",
           "labels": [],
-          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/lora/_config.py#L1",
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -952,6 +1738,13 @@
           "annotation": "PeftType or str",
           "description": "Always `PeftType.LORA`; filled in when omitted.",
           "default": "None"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
         },
         {
           "name": "base_model_name_or_path",
@@ -1095,7 +1888,7 @@
       ],
       "labels": [],
       "signature": "LoraModel(model: nn.Module, config: LoraConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/lora/_model.py#L35",
+      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_model.py#L67",
       "subcategory": "tuners/lora/model",
       "methods": [
         {
@@ -1104,7 +1897,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: LoraConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/lora/_model.py#L89",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_model.py#L135",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -1126,7 +1919,7 @@
           "kind": "function",
           "labels": [],
           "signature": "disable_adapter_layers()",
-          "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/lora/_model.py#L149",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_model.py#L204",
           "subcategory": "model",
           "summary": "Run the base model alone: LoRA updates off, original `modules_to_save`.",
           "extended": "With `bias` other than `\"none\"` the trained biases are base\nparameters and stay as trained, so the output is not the base\nmodel's; a warning says so.",
@@ -1141,10 +1934,104 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "add_weighted_adapter",
+          "path": "lucid.peft.tuners.lora._model.LoraModel.add_weighted_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_weighted_adapter(adapters: list[str], weights: list[float], adapter_name: str, combination_type: _CombinationType = 'svd', svd_rank: int | None = None, svd_clamp: float | None = None, svd_full_matrices: bool = True, svd_driver: str | None = None, density: float | None = None, majority_sign_method: Literal['total', 'frequency'] = 'total')",
+          "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/lora/_model.py#L294",
+          "subcategory": "model",
+          "summary": "Add an adapter that is a weighted combination of existing ones.",
+          "extended": "The new adapter is frozen and inactive, like any added adapter, and\nhas $\\alpha = r$, so its scale is 1 and the weights live in\nits matrices.  It targets the union of the sources' modules; a\nlayer one source does not reach combines the sources it has.",
+          "parameters": [
+            {
+              "name": "adapters",
+              "annotation": "list of str",
+              "description": "Names of the adapters to combine.",
+              "default": null
+            },
+            {
+              "name": "weights",
+              "annotation": "list of float",
+              "description": "One weight per adapter; negative weights subtract.",
+              "default": null
+            },
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name of the new adapter.",
+              "default": null
+            },
+            {
+              "name": "combination_type",
+              "annotation": "str",
+              "description": "`\"svd\"`: the rank-`svd_rank` truncation of\n$\\sum_i w_i s_i B_i A_i$, the nearest rank-`r` update to\nthe exact sum.  `\"cat\"`: the exact sum, stacked, at the sum of\nthe sources' ranks.  `\"linear\"`: weights `A` and `B` apart\n(adding cross terms $B_i A_j$); the sources share a rank.\nWith one adapter every type is `\"linear\"`.  The TIES / DARE /\nmagnitude-prune types of the reference raise `NotImplementedError`.",
+              "default": "\"svd\""
+            },
+            {
+              "name": "svd_rank",
+              "annotation": "int",
+              "description": "Rank of an `\"svd\"` result; the largest source rank by default.",
+              "default": "None"
+            },
+            {
+              "name": "svd_clamp",
+              "annotation": "float",
+              "description": "A quantile in `[0, 1]`; `\"svd\"` factors are clamped to the\nsymmetric range holding that share of their values.",
+              "default": "None"
+            },
+            {
+              "name": "svd_full_matrices",
+              "annotation": "bool",
+              "description": "Whether the SVD computes full `U` / `Vh`.",
+              "default": "True"
+            },
+            {
+              "name": "svd_driver",
+              "annotation": "str",
+              "description": "The SVD routine; `lucid.linalg.svd` accepts `None` only.",
+              "default": "None"
+            },
+            {
+              "name": "density",
+              "annotation": "float",
+              "description": "For the TIES / DARE types; unused by the ones implemented.",
+              "default": "None"
+            },
+            {
+              "name": "majority_sign_method",
+              "annotation": "(total, frequency)",
+              "description": "For the TIES types; unused by the ones implemented.",
+              "default": "\"total\""
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The name is taken, a source does not exist, the weights do not\nmatch the sources, they cannot be combined that way (`\"linear\"`\nneeds one rank; two train one `modules_to_save` module), or\n`combination_type` is unknown."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "`combination_type` is in the TIES / DARE family."
+            }
+          ],
+          "examples": [
+            ">>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, LoraModel\n>>> net = nn.Sequential(nn.Linear(6, 5))\n>>> config = LoraConfig(r=2, target_modules=[\"0\"], init_lora_weights=False)\n>>> lora = LoraModel(net, config, adapter_name=\"a\")\n>>> lora.add_adapter(\"b\", config)\n>>> lora.add_weighted_adapter([\"a\", \"b\"], [0.5, 0.5], \"mix\", combination_type=\"cat\")\n>>> net[0].r[\"mix\"]\n4"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
         }
       ],
       "summary": "A model with LoRA layers put into it, and the tools to take them out.",
-      "extended": "Construction replaces each module `config` selects with a\n`lucid.peft.tuners.lora.Linear` around it and each\n`modules_to_save` entry with a frozen-original / trainable-copy\npair, then freezes every other parameter.  The model is changed in\nplace and kept as `model`; a public name this wrapper lacks is\nread from it.  `config` itself is not changed: `peft_config`\nholds a copy, with `\"all-linear\"` spelled out as the names it chose.",
+      "extended": "Construction replaces each module `config` selects with a\n`lucid.peft.tuners.lora.Linear` around it and each\n`modules_to_save` entry with a frozen-original / trainable-copy\npair, then freezes every other parameter.  The model is changed in\nplace and kept as `model`; a public name this wrapper lacks is\nread from it.  `config` itself is not changed: `peft_config`\nholds a copy, with `\"all-linear\"` spelled out as the names it chose.\n\nThe model can hold any number of adapters, each under its own name:\n`add_adapter` puts another beside the first (frozen and inactive),\n`set_adapter` chooses which one — or which several — the forward pass\napplies, `add_weighted_adapter` makes one out of others and\n`delete_adapter` removes one.  `active_adapter` is the name, or the\nlist of names, in use.",
       "parameters": [
         {
           "name": "model",
@@ -1173,11 +2060,11 @@
         },
         {
           "annotation": "NotImplementedError",
-          "description": "A match is a layer type the reference adapts but v1 does not\n(`nn.Embedding`, convolutions, `nn.MultiheadAttention`), or the\nmodel already holds a LoRA adapter (v1 keeps one per model)."
+          "description": "A match is a layer type the reference adapts but lucid.peft does not\n(`nn.Embedding`, convolutions, `nn.MultiheadAttention`), or the\nmodel already holds adapter layers (wrap it once; add adapters\nwith `add_adapter`)."
         }
       ],
       "examples": [
-        ">>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, LoraModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> lora = LoraModel(net, LoraConfig(r=2, target_modules=[\"0\"]))\n>>> lora.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].lora_A[\"default\"].weight.requires_grad\n(False, True)\n>>> lora.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import LoraConfig, LoraModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> lora = LoraModel(net, LoraConfig(r=2, target_modules=[\"0\"]))\n>>> lora.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].lora_A[\"default\"].weight.requires_grad\n(False, True)\n>>> lora.add_adapter(\"other\", LoraConfig(r=4, target_modules=[\"0\"]))\n>>> lora.active_adapters, sorted(lora.peft_config)\n(['default'], ['default', 'other'])\n>>> lora.set_adapter(\"other\")\n>>> lora.active_adapters, net[0].lora_A[\"default\"].weight.requires_grad\n(['other'], False)\n>>> lora.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
       ],
       "notes": [],
       "attributes": [],
@@ -1186,7 +2073,7 @@
     }
   ],
   "summary": "`lucid.peft` — parameter-efficient fine-tuning: LoRA on `nn.Linear`.",
-  "extended": "Fine-tuning a pretrained model end to end updates, stores and ships every\nweight.  LoRA (Hu et al., 2021) freezes them and learns, beside each\nchosen `nn.Linear`, a rank-$r$ update $s\\,BA$ — on GPT-2\nsmall's `c_attn` at $r = 8$, 294,912 parameters, 0.24 % of the\nmodel — so a fine-tune is trained, saved and swapped as a few megabytes.\n\nThe API and the adapter file format are the reference adapter library's,\nnames and defaults included, so a script written for it reads the same\nand an adapter directory moves between the two:\n\nfrom lucid.peft import LoraConfig, PeftConfig, PeftModel, get_peft_model\n\nconfig = LoraConfig(r=8, lora_alpha=16, target_modules=[\"c_attn\"],\n                        task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)    # base_model changed in place\n    model.print_trainable_parameters()\n    ...                                            # train: only the adapter learns\n    model.save_pretrained(\"my-adapter\")            # adapter_config.json + adapter_model.safetensors\n\nPeftConfig.from_pretrained(\"my-adapter\").base_model_name_or_path  # which base it needs\n    model = PeftModel.from_pretrained(fresh_base_model, \"my-adapter\")\n    merged = model.merge_and_unload()              # a plain model again, adapter folded in\n\nEach method is a config class, a tuner and its layer classes, registered\nby `PeftType` as they are defined (`lucid.peft.tuners._base`); the\nentry points above dispatch on the method a config or a file names.\n\nWhat a LoRA layer guarantees:\n\n* **The base is untouched until merged.**  The wrapped `nn.Linear` is\n  kept as `base_layer` with its own `Parameter` objects — not\n  copies — so an optimizer built earlier, a tied embedding and Core ML's\n  identity-keyed weight sharing all still see them, and with the\n  default initialisation ($B = 0$) the adapted model's output is\n  the base model's, bit for bit.\n* **Only the adapter trains.**  Every other parameter is frozen; the\n  `bias` option and `modules_to_save` add biases and whole modules.\n* **A half-precision base gets a float32 adapter**, computed in float32\n  and cast back to the base's output dtype.\n* **Merging refuses a shared weight.**  Folding the update into a weight\n  another module also uses (a tied LM head) would change that module;\n  `merge_and_unload` raises instead.\n\nv1 adapts `nn.Linear` only and keeps one adapter per model.  Asking for\nmore — an embedding or convolution target, DoRA, a second adapter, an\nadapter file of another method — raises `NotImplementedError` rather\nthan doing less than asked.  Adapters are read from a local directory;\nhub ids are not resolved.",
+  "extended": "Fine-tuning a pretrained model end to end updates, stores and ships every\nweight.  LoRA (Hu et al., 2021) freezes them and learns, beside each\nchosen `nn.Linear`, a rank-$r$ update $s\\,BA$ — on GPT-2\nsmall's `c_attn` at $r = 8$, 294,912 parameters, 0.24 % of the\nmodel — so a fine-tune is trained, saved and swapped as a few megabytes.\n\nThe API and the adapter file format are the reference adapter library's,\nnames and defaults included, so a script written for it reads the same\nand an adapter directory moves between the two:\n\nfrom lucid.peft import LoraConfig, PeftConfig, PeftModel, get_peft_model\n\nconfig = LoraConfig(r=8, lora_alpha=16, target_modules=[\"c_attn\"],\n                        task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)    # base_model changed in place\n    model.print_trainable_parameters()\n    ...                                            # train: only the adapter learns\n    model.save_pretrained(\"my-adapter\")            # adapter_config.json + adapter_model.safetensors\n\nPeftConfig.from_pretrained(\"my-adapter\").base_model_name_or_path  # which base it needs\n    model = PeftModel.from_pretrained(fresh_base_model, \"my-adapter\")\n    merged = model.merge_and_unload()              # a plain model again, adapter folded in\n\nEach method is a config class, a tuner and its layer classes, registered\nby `PeftType` as they are defined (`lucid.peft.tuners._base`); the\nentry points above dispatch on the method a config or a file names.\n\nWhat a LoRA layer guarantees:\n\n* **The base is untouched until merged.**  The wrapped `nn.Linear` is\n  kept as `base_layer` with its own `Parameter` objects — not\n  copies — so an optimizer built earlier, a tied embedding and Core ML's\n  identity-keyed weight sharing all still see them, and with the\n  default initialisation ($B = 0$) the adapted model's output is\n  the base model's, bit for bit.\n* **Only the adapter trains.**  Every other parameter is frozen; the\n  `bias` option and `modules_to_save` add biases and whole modules.\n* **A half-precision base gets a float32 adapter**, computed in float32\n  and cast back to the base's output dtype.\n* **Merging refuses a shared weight.**  Folding the update into a weight\n  another module also uses (a tied LM head) would change that module;\n  `merge_and_unload` raises instead.\n\nA model holds any number of adapters, each under its own name:\n\nmodel.add_adapter(\"style\", LoraConfig(r=4, target_modules=[\"c_attn\"]))\n    model.set_adapter(\"style\")                     # compute with — and train — this one\n    model.add_weighted_adapter([\"default\", \"style\"], [0.7, 0.3], \"mix\")\n    model.save_pretrained(\"adapters\")              # \"default\" in adapters/, \"style\" in adapters/style/\n    model.load_adapter(\"adapters/style\", \"style-again\")\n\nThe model class follows the task: `get_peft_model` returns a\n`PeftModelForCausalLM` for `task_type=\"CAUSAL_LM\"` (and the matching\n`PeftModelFor...` class for the other tasks, which also train a\nclassification or question-answering head), and a config with no\n`target_modules` takes the default for the base model's `model_type`.\nAn adapter directory that names its base model reopens in one call:\n\nmodel = AutoPeftModelForCausalLM.from_pretrained(\"my-adapter\")\n\nlucid.peft adapts `nn.Linear` only.  Asking for more — an embedding or\nconvolution target, DoRA, a TIES / DARE weighted adapter, an adapter file\nof another method — raises `NotImplementedError` rather than doing less\nthan asked.  Adapters are read from a local directory; hub ids are not\nresolved.",
   "parameters": [],
   "returns": null,
   "raises": [],

@@ -3,7 +3,7 @@
   "name": "tuners",
   "path": "lucid.peft.tuners",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/e2a4a70/lucid/peft/tuners/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/peft/tuners/__init__.py#L1",
   "members": [],
   "summary": "`lucid.peft.tuners` — one sub-package per parameter-efficient method.",
   "extended": "v1 has `lucid.peft.tuners.lora`.",
