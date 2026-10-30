@@ -105,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - name lucid.Tensor in a test annotation; the tree-version doc states the widened key
 
+- complex abs and hypot share one inf/nan/subnormal rule
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

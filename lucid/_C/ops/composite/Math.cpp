@@ -267,8 +267,29 @@ void require_floating(const char* op, const TensorImplPtr& a, const TensorImplPt
 // immediately below already does the same trick for the same reason.
 //
 // ``m == 0`` means both operands are zero and the answer is zero; the
-// division would be 0/0, so the ratio is taken against a max with the
-// smallest normal and the result multiplied by ``m`` puts it back.
+// ratio would be 0/0, so the divisor is 1 there and the multiply by ``m``
+// puts the zero back.  The divisor is ``m`` itself everywhere else, down
+// into the subnormal range: an earlier ``max(m, FLT_MIN)`` floor changed
+// the divisor but not the multiplier, so ``hypot(1e-40, 1e-40)`` came back
+// 1.00004e-40 instead of 1.4142e-40.
+//
+// An infinite operand makes the result +inf even when the other is NaN
+// (C99 Annex G, and the reference), which ``maximum`` above would
+// propagate as NaN.  That case is overridden last, so the arithmetic above
+// may produce NaN for it (inf/inf) without consequence.
+TensorImplPtr hypot_lanes(const TensorImplPtr& a, const TensorImplPtr& b) {
+    auto abs_a = abs_op(a);
+    auto abs_b = abs_op(b);
+    auto big = maximum_op(abs_a, abs_b);
+    auto small = minimum_op(abs_a, abs_b);
+    auto one = ones_like_op(big);
+    auto safe = where_op(equal_op(big, zeros_like_op(big)), one, big);
+    auto ratio = div_op(small, safe);
+    auto out = mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
+    out = where_op(isinf_op(a), abs_a, out);
+    return where_op(isinf_op(b), abs_b, out);
+}
+
 TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     if (!a_in || !b_in)
         ErrorBuilder("hypot").fail("null input");
@@ -276,30 +297,7 @@ TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     const auto [a_dev, b_dev] = detail::align_binary_devices(a_in, b_in, "hypot");
     const AmpScope amp{"hypot", a_dev->device()};
     const auto [a, b] = cast_operands(amp, a_dev, b_dev);
-    auto abs_a = abs_op(a);
-    auto abs_b = abs_op(b);
-    auto big = maximum_op(abs_a, abs_b);
-    auto small = minimum_op(abs_a, abs_b);
-    const double smallest_normal =
-        big->dtype() == Dtype::F64
-            ? std::numeric_limits<double>::min()
-            : (big->dtype() == Dtype::F16 ? 6.103515625e-05
-                                          : static_cast<double>(std::numeric_limits<float>::min()));
-    auto big_inf = isinf_op(big);
-    auto safe = where_op(big_inf, full_like_op(big, 1.0),
-                         maximum_op(big, full_like_op(big, smallest_normal)));
-    auto safe_small = where_op(big_inf, full_like_op(small, 0.0), small);
-    auto ratio = div_op(safe_small, safe);
-    auto one = full_like_op(ratio, 1.0);
-    auto out = mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
-    // C99 and the reference: an infinite operand makes the result +inf even
-    // when the other is NaN, which ``maximum`` above would propagate.  Each
-    // operand is broadcast to the output shape (adding zero keeps NaN and inf)
-    // before its own infinity test.
-    auto zero = full_like_op(big, 0.0);
-    auto pos_inf = full_like_op(big, std::numeric_limits<double>::infinity());
-    out = where_op(isinf_op(add_op(abs_b, zero)), pos_inf, out);
-    return where_op(isinf_op(add_op(abs_a, zero)), pos_inf, out);
+    return hypot_lanes(a, b);
 }
 
 // Numerically-stable ``log(exp(a) + exp(b))``.  Factor out the per-pair max

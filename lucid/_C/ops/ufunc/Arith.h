@@ -87,17 +87,13 @@ public:
 // Dispatch: Accelerate ``vDSP_vabs`` (CPU) / MLX ``abs`` (GPU).
 // Backward for ``abs`` of a *complex* input.
 //
-// The forward is a composite (scale, divide, square, sqrt) chosen to be
-// overflow-safe, and its derivative cannot be, at exactly zero: the
-// divide's own backward forms ``-re / m^2``, and the clamped ``m`` is
-// ``FLT_MIN``, whose square underflows to zero in float32.  ``0 / 0`` is
-// NaN, so ``abs(fft2(x))`` came back all-NaN whenever one coefficient of
-// the transform was zero — which for most real inputs, one is.
-//
-// Raising the clamp is not available: the trailing multiply uses the
-// *unclamped* magnitude, so a floor above ``|z|`` would silently wreck
-// genuinely tiny inputs.  The derivative is exact and simple enough to
-// state directly instead:
+// The forward is ``hypot_lanes`` of the real and imaginary lanes, a composite
+// chosen to be overflow-safe.  The derivative is stated directly instead of
+// taken through it: that chain rule runs through a divide by the larger lane,
+// which was NaN at exactly zero (``0 / 0``) when the divisor was floored, so
+// ``abs(fft2(x))`` came back all-NaN whenever one coefficient of the
+// transform was zero — which for most real inputs, one is.  The stated form
+// is exact and simple:
 //
 //     d|z| / dz = z / |z|,     and 0 at z = 0
 //

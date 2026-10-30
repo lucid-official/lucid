@@ -86,17 +86,17 @@ def test_complex_abs_is_overflow_safe(device):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_complex_abs_propagates_infinity(device):
-    """hypot's contract: |z| is inf when either lane is — not NaN.
-
-    Scaling by ``m = max(|Re|, |Im|)`` would give ``inf / inf = NaN`` if the
-    divisor were unclamped, which is why the upper clamp is FLT_MAX.
-
-    Not asserted: ``|NaN + inf·i|``.  IEEE-754 hypot calls that ``inf``; Lucid
-    propagates NaN because ``maximum`` does.  A NaN lane already means the
-    producing computation broke, so the distinction is not worth a special case.
-    """
+    """hypot's contract: |z| is inf when either lane is — not NaN, even
+    beside a NaN lane (C99 Annex G; LCD-744)."""
     z = np.array(
-        [complex(np.inf, 1), complex(1, np.inf), complex(np.inf, np.inf)], dtype=np.complex64
+        [
+            complex(np.inf, 1),
+            complex(1, np.inf),
+            complex(np.inf, np.inf),
+            complex(np.inf, np.nan),
+            complex(np.nan, -np.inf),
+        ],
+        dtype=np.complex64,
     )
     got = lucid.tensor(z, device=device).abs().numpy()
     assert not np.isnan(got).any()

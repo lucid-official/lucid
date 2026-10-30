@@ -7,8 +7,6 @@
 
 #include "Arith.h"
 
-#include <limits>
-
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
 #include "../../core/OpRegistry.h"
@@ -16,15 +14,14 @@
 #include "../bfunc/Add.h"
 #include "../bfunc/Compare.h"
 #include "../bfunc/Div.h"
-#include "../bfunc/Maximum.h"
 #include "../bfunc/Mul.h"
 #include "../complex/Complex.h"
 #include "../complex/Imag.h"
 #include "../complex/Real.h"
+#include "../composite/Math.h"
 #include "../gfunc/Gfunc.h"
 #include "../utils/Select.h"
 #include "Astype.h"
-#include "Exponential.h"
 #include "ScalarParam.h"
 
 namespace lucid {
@@ -75,11 +72,11 @@ TensorImplPtr abs_op(const TensorImplPtr& a) {
     // a real tensor, which keeps its full UnaryKernel gradient), this path is
     // forward-only — Lucid has no complex autograd.
     //
-    // Cost: ~9 element-wise kernels instead of one native complex-abs (measured
-    // 26 us for 64x1024 on Metal, ~2x the FFT that produced the input).  Going
-    // native would need a UnaryKernel hook for a complex->real output dtype
-    // *and* a hand-written C64 branch in the CPU backend; reusing ops that are
-    // already device-parity tested is the better trade until a profile says
+    // Cost: ~20 element-wise kernels (``hypot_lanes`` plus the two lane
+    // views) instead of one native complex-abs.  Going native would need a
+    // UnaryKernel hook for a complex->real output dtype *and* a hand-written
+    // C64 branch in the CPU backend; reusing ops that are already
+    // device-parity tested is the better trade until a profile says
     // otherwise.
     if (is_complex(a->dtype()))
         return complex_abs_forward(a);
@@ -95,40 +92,10 @@ TensorImplPtr complex_abs_forward(const TensorImplPtr& a) {
     TensorImplPtr magnitude;
     {
         NoGradGuard nograd;
-        auto re = real_op(a);
-        auto im = imag_op(a);
-        // Scale by m = max(|Re|, |Im|) before squaring: the naive
-        // sqrt(Re^2 + Im^2) overflows once |z| > ~1.8e19 and underflows
-        // below ~1e-19, even though both results are representable.
-        auto m = maximum_op(abs_op(re), abs_op(im));
-        // The clamp bounds come from the input's own real lane, not from
-        // ``float`` unconditionally.
-        //
-        // The identity above is exact only while ``safe_m == m``.  That
-        // held for C64, where a finite ``float`` lane can never exceed
-        // FLT_MAX, so the clamp was a no-op on every normal input — and
-        // the comment here used to say exactly that.  It stopped being
-        // true when C128 arrived: a ``double`` lane holds finite
-        // magnitudes far outside the float range, the clamp then moved
-        // ``m``, and the trailing multiply by the *unclamped* ``m``
-        // inflated the answer by ``m / safe_m``.  ``abs(1e100 + 0j)``
-        // came back as 2.9e161, and since the backward recomputes the
-        // value through here, the gradient was wrong by the same factor.
-        //
-        // The upper bound stays finite rather than infinite so that an
-        // infinite component divides by a finite scale (inf/inf is NaN)
-        // and propagates inf, matching hypot's contract.  The lower
-        // bound keeps ``m == 0`` (z == 0) out of a 0/0; the trailing
-        // multiply by the unclamped ``m`` still gives exactly 0 there.
-        const bool wide_lane = real_lane_of(a->dtype()) == Dtype::F64;
-        const double tiny = wide_lane ? std::numeric_limits<double>::min()
-                                      : static_cast<double>(std::numeric_limits<float>::min());
-        const double huge = wide_lane ? std::numeric_limits<double>::max()
-                                      : static_cast<double>(std::numeric_limits<float>::max());
-        auto safe_m = clip_op(m, tiny, huge);
-        auto r_re = div_op(re, safe_m);
-        auto r_im = div_op(im, safe_m);
-        magnitude = mul_op(m, sqrt_op(add_op(square_op(r_re), square_op(r_im))));
+        // |z| is the length of the (Re, Im) pair.  ``hypot_lanes`` owns the
+        // rule — overflow-safe, subnormal-exact, +inf for an infinite lane
+        // even beside a NaN — so this and ``hypot`` cannot disagree.
+        magnitude = hypot_lanes(real_op(a), imag_op(a));
     }
     if (!GradMode::is_enabled() || !a->requires_grad())
         return magnitude;

@@ -215,9 +215,20 @@ LUCID_API TensorImplPtr atan2_op(const TensorImplPtr& y, const TensorImplPtr& x)
 //
 // Notes
 // -----
-// Inputs near the float dtype's overflow threshold may lose precision —
-// prefer a dedicated ``hypot`` kernel for safety-critical paths.
+// Scaled by the larger magnitude, so neither a huge nor a subnormal operand
+// overflows or loses its low bits.  An infinite operand gives $+\infty$ even
+// beside a NaN (C99 Annex G).  The rule itself is :func:`hypot_lanes`.
 LUCID_API TensorImplPtr hypot_op(const TensorImplPtr& a, const TensorImplPtr& b);
+
+// $\sqrt{a^2 + b^2}$ of two real floating tensors of one dtype, with
+// :func:`hypot_op`'s value rule but none of its AMP casting or device
+// alignment.
+//
+// This is the one place the magnitude rule lives.  :func:`hypot_op` calls it
+// on its two operands and the complex ``abs`` calls it on the real and
+// imaginary lanes, so the two cannot disagree about NaN, infinity or the
+// subnormal range.
+LUCID_API TensorImplPtr hypot_lanes(const TensorImplPtr& a, const TensorImplPtr& b);
 
 // Numerically-stable $\log(\exp(a) + \exp(b))$ via the max-shift trick.
 //

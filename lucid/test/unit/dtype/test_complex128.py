@@ -131,14 +131,14 @@ def test_complex_of_an_infinite_part_is_not_nan() -> None:
 
 # ── abs across the whole double range ─────────────────────────────────────────
 #
-# ``complex_abs`` scales by ``m = max(|re|, |im|)`` before squaring, and clamps
-# ``m`` away from 0 and infinity so the division is safe.  Those clamp bounds
-# were FLT_MIN / FLT_MAX, hardcoded — a no-op for C64, where a finite ``float``
-# lane can never leave that range, and wrong for C128, whose ``double`` lane
-# routinely does.  The clamp then moved ``m`` while the trailing multiply used
-# the unclamped one, inflating the answer by exactly ``m / safe_m``:
-# ``abs(1e100 + 0j)`` came back 2.9e161.  The backward recomputes the forward,
-# so the gradient was wrong by the same factor.
+# ``complex_abs`` scales by ``m = max(|re|, |im|)`` before squaring.  The scale
+# used to be clamped to FLT_MIN / FLT_MAX, hardcoded — a no-op for C64, where a
+# finite ``float`` lane can never leave that range, and wrong for C128, whose
+# ``double`` lane routinely does.  The clamp then moved the divisor while the
+# trailing multiply used the unclamped ``m``, inflating the answer by exactly
+# ``m / safe_m``: ``abs(1e100 + 0j)`` came back 2.9e161.  The backward
+# recomputes the forward, so the gradient was wrong by the same factor.  The
+# divisor is now ``m`` itself (1 only for a zero length), at every magnitude.
 
 
 @pytest.mark.parametrize(
