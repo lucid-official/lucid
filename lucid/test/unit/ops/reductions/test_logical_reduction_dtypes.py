@@ -209,8 +209,11 @@ def test_a_subnormal_element_is_true(device: str, dtype: lucid.dtype) -> None:
     """Metal flushes a subnormal in ``x != 0``; the truth of an element is not that comparison."""
     for tiny in _SUBNORMAL_VALUES[dtype]:
         zero = _zero(dtype)
-        only = lucid.tensor([tiny, zero], dtype=dtype, device=device)
-        both = lucid.tensor([tiny, tiny], dtype=dtype, device=device)
+        # Built on the host: a bfloat16 subnormal is flushed by the Metal conversion that
+        # ``lucid.tensor(..., device="metal")`` runs, before any reduction sees it.
+        only = lucid.tensor([tiny, zero], dtype=dtype).to(device)
+        both = lucid.tensor([tiny, tiny], dtype=dtype).to(device)
+        assert only.tolist()[0] == tiny
         assert lucid.any(only).item() and not lucid.all(only).item(), tiny
         assert lucid.all(both).item(), tiny
         assert lucid.any(only, dim=0).item() and not lucid.all(only, dim=0).item(), tiny
