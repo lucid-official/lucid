@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - warp_affine answers an empty image; a doctest raises as written
 
+- integer pow by a negative tensor exponent follows reference
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

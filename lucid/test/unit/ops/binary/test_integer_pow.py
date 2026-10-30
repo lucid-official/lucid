@@ -161,30 +161,133 @@ def test_bool_pow_promotion_and_values(ref: ModuleType, device: str) -> None:
     assert got_bb.tolist() == [bool(x**y) for x, y in zip(vals, b2_vals, strict=True)]
 
 
-@pytest.mark.parametrize("dtype", _INT_DTYPES)
-def test_negative_integer_exponent_raises_on_cpu(ref: ModuleType, dtype: lucid.dtype) -> None:
-    rdt = _ref_dtype(ref, dtype)
-    rt = ref.arange(1, 17, dtype=rdt)
+_NEGATIVE_BASES = [-3, -2, -1, 0, 1, 2, 3, 5]
+_NEGATIVE_EXPS = [-5, -4, -3, -2, -1, 0, 1, 2, 3]
+
+
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))
+def test_negative_scalar_exponent_raises_like_reference(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    """A Python-scalar negative exponent is refused on both streams (LCD-665)."""
+    rt = ref.arange(1, 17, dtype=_ref_dtype(ref, dtype))
     with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
         _ = rt**-1
 
-    t = lucid.arange(1, 17, dtype=dtype, device="cpu")
-    neg_t = lucid.full((16,), -1, dtype=dtype, device="cpu")
+    t = lucid.arange(1, 17, dtype=dtype, device=device)
     calls: list[Callable[[], object]] = [
         lambda: t**-1,
+        lambda: t**-5,
         lambda: t.pow(-1),
         lambda: lucid.pow(t, -1),
         lambda: t.clone().__ipow__(-1),
         lambda: t.clone().pow_(-1),
-        lambda: t**neg_t,
     ]
     for call in calls:
         with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
             call()
 
 
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_negative_scalar_exponent_on_bool_raises_like_reference(
+    ref: ModuleType, device: str
+) -> None:
+    if device == "metal" and not metal_available():
+        pytest.skip("Metal unavailable")
+    with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
+        _ = ref.tensor([True, False]) ** -1
+    b = lucid.tensor([True, False], device=device)
+    with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
+        _ = b**-1
+    with pytest.raises(RuntimeError, match="Integers to negative integer powers"):
+        _ = lucid.pow(b, -2)
+
+
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))
+def test_negative_scalar_exponent_is_still_fine_for_floats(device: str, dtype: lucid.dtype) -> None:
+    """A float scalar exponent promotes the integers instead of being refused."""
+    t = lucid.tensor([1, 2, 4], dtype=dtype, device=device)
+    assert (t**-1.0).tolist() == pytest.approx([1.0, 0.5, 0.25])
+
+
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))
+def test_negative_tensor_exponent_matches_reference(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    """A tensor exponent answers the value: ``1 ** -n`` is 1, ``(-1) ** -n`` is +-1, else 0."""
+    rdt = _ref_dtype(ref, dtype)
+    a = lucid.tensor(_NEGATIVE_BASES, dtype=dtype, device=device).reshape(-1, 1)
+    e = lucid.tensor(_NEGATIVE_EXPS, dtype=dtype, device=device).reshape(1, -1)
+    ra = ref.tensor(_NEGATIVE_BASES, dtype=rdt).reshape(-1, 1)
+    re = ref.tensor(_NEGATIVE_EXPS, dtype=rdt).reshape(1, -1)
+
+    want = (ra**re).tolist()
+    for got in (a**e, a.pow(e), lucid.pow(a, e)):
+        assert got.dtype == dtype
+        assert got.tolist() == want
+
+    # A 0-d tensor exponent is a value too, unlike a Python scalar.
+    for exp in (-1, -2, -3):
+        got0 = a ** lucid.tensor(exp, dtype=dtype, device=device)
+        want0 = ra ** ref.tensor(exp, dtype=rdt)
+        assert got0.dtype == dtype
+        assert got0.tolist() == want0.tolist()
+
+    # A scalar base takes the same rule (``2 ** -n`` is 0, ``1 ** -n`` is 1).
+    for base in (1, -1, 2):
+        got_r = base**e
+        want_r = base**re
+        assert got_r.dtype == dtype
+        assert got_r.tolist() == want_r.tolist()
+
+    # In place: the result is written back at the tensor's own dtype.
+    t = lucid.tensor(_NEGATIVE_BASES * len(_NEGATIVE_EXPS), dtype=dtype, device=device)
+    ex = lucid.tensor(
+        [x for x in _NEGATIVE_EXPS for _ in _NEGATIVE_BASES], dtype=dtype, device=device
+    )
+    rt = ref.tensor(_NEGATIVE_BASES * len(_NEGATIVE_EXPS), dtype=rdt)
+    rx = ref.tensor([x for x in _NEGATIVE_EXPS for _ in _NEGATIVE_BASES], dtype=rdt)
+    assert t.clone().pow_(ex).tolist() == rt.clone().pow_(rx).tolist()
+    ip = t.clone()
+    ip **= ex
+    assert ip.tolist() == (rt**rx).tolist()
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_negative_tensor_exponent_at_the_dtype_extremes(ref: ModuleType, device: str) -> None:
+    """The exponent's parity is read from its bits, so the most negative value is even."""
+    if device == "metal" and not metal_available():
+        pytest.skip("Metal unavailable")
+    for dtype, lo, hi in (
+        (lucid.int8, -128, 127),
+        (lucid.int16, -32768, 32767),
+        (lucid.int32, -(2**31), 2**31 - 1),
+        (lucid.int64, -(2**63), 2**63 - 1),
+    ):
+        rdt = _ref_dtype(ref, dtype)
+        bases = [1, -1, 2, -1, 1, -1]
+        exps = [lo, lo, lo, lo + 1, hi, hi]
+        got = lucid.tensor(bases, dtype=dtype, device=device) ** lucid.tensor(
+            exps, dtype=dtype, device=device
+        )
+        want = ref.tensor(bases, dtype=rdt) ** ref.tensor(exps, dtype=rdt)
+        assert got.tolist() == want.tolist(), dtype
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_bool_base_with_negative_tensor_exponent(ref: ModuleType, device: str) -> None:
+    if device == "metal" and not metal_available():
+        pytest.skip("Metal unavailable")
+    vals = [True, False, True, False]
+    exps = [-1, -2, 2, -3]
+    got = lucid.tensor(vals, device=device) ** lucid.tensor(exps, dtype=lucid.int64, device=device)
+    want = ref.tensor(vals) ** ref.tensor(exps, dtype=ref.int64)
+    assert got.dtype == lucid.int64
+    assert got.tolist() == want.tolist()
+
+
 @pytest.mark.parametrize("dtype", _INT_DTYPES)
-def test_negative_integer_exponent_on_metal_is_unsynced(dtype: lucid.dtype) -> None:
+def test_negative_tensor_exponent_on_metal_is_unsynced(ref: ModuleType, dtype: lucid.dtype) -> None:
     if not metal_available():
         pytest.skip("Metal unavailable")
     bases = [1, -1, 2, -2, 3, -3, 5, 9] * 2
@@ -196,8 +299,10 @@ def test_negative_integer_exponent_on_metal_is_unsynced(dtype: lucid.dtype) -> N
     out = a**b
     lucid.eval(out)
     assert _C_engine.host_sync_count() == before
+    rdt = _ref_dtype(ref, dtype)
     assert out.dtype == dtype
-    assert out.tolist() == [0, 0, 0, 0, 0, 0, 25, 81] * 2
+    assert out.tolist() == (ref.tensor(bases, dtype=rdt) ** ref.tensor(exps, dtype=rdt)).tolist()
+    assert out.tolist() == [1, 1, 0, 0, 0, 0, 25, 81] * 2
 
 
 @pytest.mark.parametrize(("device", "dtype"), device_dtype_params(_INT_DTYPES))

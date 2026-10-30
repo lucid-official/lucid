@@ -355,8 +355,6 @@ def _is_permitted_lucid_refusal_when_ref_succeeds(
         return True
     if entry.name in _DIVMOD_OPS and "bool_" in dtypes:
         return True
-    if entry.name in ("pow", "pow_") and any(d in _INTEGRAL_DTYPES for d in dtypes):
-        return True
     if (
         entry.name in ("matmul", "mm", "bmm", "dot", "inner", "outer", "tensordot")
         and isinstance(exc, _C_engine.DtypeMismatch)
@@ -498,10 +496,9 @@ def _verify_against_ref(
                 f"{entry.name} raised {type(lucid_exc).__name__} ({lucid_exc}) "
                 f"on dtypes={dtypes} device={device} when ref succeeded"
             )
-        if (
-            entry.name in _SHIFT_OPS
-            or ((entry.name in _DIVMOD_OPS or entry.name in ("pow", "pow_")) and device == "metal")
-        ) and any(d in _INTEGRAL_DTYPES for d in dtypes):
+        if (entry.name in _SHIFT_OPS or (entry.name in _DIVMOD_OPS and device == "metal")) and any(
+            d in _INTEGRAL_DTYPES for d in dtypes
+        ):
             for t in _extract_tensors(got):
                 assert t.device.type == device
             return

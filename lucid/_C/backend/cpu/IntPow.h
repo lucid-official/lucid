@@ -7,23 +7,29 @@
 // behaviour in C++.  Accumulating in the matching unsigned type wraps modulo
 // $2^w$, matching Metal's ``mlx::core::power`` integer kernel and the
 // reference framework's integer power across ``int8``, ``int16``, ``int32``
-// and ``int64``.  Negative integer exponents are rejected on the CPU stream
-// with the reference framework's error message.
+// and ``int64``.  A negative exponent in a tensor answers the reference's
+// value, the same on both streams (``gpu_pow`` in ``gpu/Pow.h``): $1^{-n}$ is
+// 1, $(-1)^{-n}$ is $\pm 1$ by the parity of $n$, and any other base is 0.
+// Only a Python-scalar negative exponent is an error, and that is refused
+// where the scalar is still a scalar (``lucid._promotion.check_pow_scalar``).
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
-#include "../../core/ErrorBuilder.h"
-
 namespace lucid::backend::cpu {
 
-// Exact ``base ** exp`` modulo $2^w$ for non-negative ``exp``.
+// Exact ``base ** exp`` modulo $2^w$ (negative ``exp``: see the header).
 template <typename T>
 inline T ipow_scalar(T base, T exp) {
-    if (exp < 0)
-        ErrorBuilder("pow").fail("Integers to negative integer powers are not allowed.");
+    if (exp < 0) {
+        if (base == 1)
+            return 1;
+        if (base == -1)
+            return (exp & 1) != 0 ? static_cast<T>(-1) : static_cast<T>(1);
+        return 0;
+    }
     using U = std::make_unsigned_t<T>;
     U ubase = static_cast<U>(base);
     U uexp = static_cast<U>(exp);

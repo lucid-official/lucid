@@ -178,7 +178,12 @@ def is_comparable(other: object) -> bool:
 
 
 def check_pow_scalar(d: _C_engine.Dtype, exponent: object) -> None:
-    """Refuse a finite Python scalar exponent that overflows ``d``.
+    """Refuse a Python scalar exponent a ``d`` power cannot take.
+
+    A negative Python integer is refused for a bool or integer base, as the
+    reference refuses it; a tensor exponent never reaches here, and answers
+    the value (``1 ** -n`` is 1, ``(-1) ** -n`` is +-1, the rest 0) on both
+    streams.  A finite exponent that overflows ``d`` is refused too.
 
     Parameters
     ----------
@@ -191,6 +196,8 @@ def check_pow_scalar(d: _C_engine.Dtype, exponent: object) -> None:
     if isinstance(exponent, bool) or not isinstance(exponent, (int, float)):
         return
     c = d.value
+    if isinstance(exponent, int) and exponent < 0 and is_integral(d):
+        raise RuntimeError("Integers to negative integer powers are not allowed.")
     if is_integer(d):
         if isinstance(exponent, int):
             bits = _BY_CODE[c][1]

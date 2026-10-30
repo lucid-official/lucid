@@ -85,16 +85,22 @@ def test_pow_scalar_overflow_raises_runtime_error(
     with pytest.raises((RuntimeError, OverflowError)):
         _ = rt**scalar
 
+    # A negative integer exponent is refused for any integer base before its
+    # range is looked at, as in the reference.
+    is_integer = dt in (lucid.int8, lucid.int16, lucid.int32, lucid.int64)
+    refusal = "negative integer powers" if is_integer and scalar < 0 else "without overflow"
     t = lucid.tensor([1, 2], dtype=lucid.float32, device=device).to(dt)
-    with pytest.raises(RuntimeError, match="without overflow"):
+    with pytest.raises(RuntimeError, match=refusal):
         _ = t**scalar
-    with pytest.raises(RuntimeError, match="without overflow"):
+    with pytest.raises(RuntimeError, match=refusal):
         _ = lucid.pow(t, scalar)
-    with pytest.raises(RuntimeError, match="without overflow"):
+    with pytest.raises(RuntimeError, match=refusal):
         _ = t.pow(scalar)
-    with pytest.raises(RuntimeError, match="without overflow"):
+    with pytest.raises(RuntimeError, match=refusal):
         t_ip = t.clone()
         t_ip **= scalar
+    with pytest.raises(RuntimeError, match=refusal):
+        t.clone().pow_(scalar)
 
 
 @pytest.mark.parametrize("dt", [lucid.complex64, lucid.complex128])

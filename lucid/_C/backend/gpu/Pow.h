@@ -43,8 +43,10 @@
 #include <bit>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <mlx/array.h>
+#include <mlx/compile.h>
 #include <mlx/fast.h>
 #include <mlx/ops.h>
 
@@ -402,13 +404,45 @@ inline bool is_special_exponent(float e) {
            e == 0.5f || e == -0.5f;
 }
 
+// ``a ** b`` for a signed integer ``a``: exact powers by squaring for a
+// non-negative ``b`` (``mx::power`` wraps modulo $2^w$), and for a negative
+// ``b`` the reference's value, the one ``cpu::ipow_scalar`` computes:
+// 1 for a base of 1, $\pm 1$ by the parity of ``b`` for a base of -1, else 0.
+// ``mx::power`` alone answers 0 for $1^{-n}$ and $(-1)^{-n}$.  All of it is
+// array arithmetic, so a negative exponent costs no host sync, and
+// ``mx::compile`` fuses it into one kernel instead of a pass per step.
+inline std::vector<mx::array> int_pow_steps(const std::vector<mx::array>& in) {
+    const mx::array& a = in[0];
+    const mx::array& b = in[1];
+    const mx::Dtype dt = a.dtype();
+    const mx::array zero(0, dt);
+    const mx::array one(1, dt);
+    const mx::array minus_one(-1, dt);
+    const mx::array odd = mx::not_equal(mx::bitwise_and(b, one), zero);
+    const mx::array inverse =
+        mx::where(mx::equal(a, one), one,
+                  mx::where(mx::equal(a, minus_one), mx::where(odd, minus_one, one), zero));
+    return {mx::where(mx::less(b, zero), inverse, mx::power(a, mx::maximum(b, zero)))};
+}
+
+inline mx::array int_pow(const mx::array& a, const mx::array& b) {
+    static const auto fused = mx::compile(&int_pow_steps, /*shapeless=*/true);
+    return fused({a, b})[0];
+}
+
+inline bool is_signed_integer(mx::Dtype dt) {
+    return dt == mx::int8 || dt == mx::int16 || dt == mx::int32 || dt == mx::int64;
+}
+
 }  // namespace gpu_pow_detail
 
 // ``a ** b`` element-wise and broadcast, ``b`` a tensor (or ``a`` a scalar
-// base).  float32, float16, and bfloat16 run the kernel above; integer and
-// complex dtypes stay ``mx::power`` (exact integer powers by squaring, and
-// the complex principal branch).
+// base).  float32, float16, and bfloat16 run the kernel above; signed
+// integers run ``int_pow``; bool and complex dtypes stay ``mx::power`` (the
+// complex principal branch).
 inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, const ::mlx::core::array& b) {
+    if (gpu_pow_detail::is_signed_integer(a.dtype()))
+        return gpu_pow_detail::int_pow(a, b);
     if (!gpu_pow_detail::takes_tensor_exponent(a.dtype()))
         return ::mlx::core::power(a, b);
     return gpu_pow_detail::run(a, b, {});
@@ -421,6 +455,8 @@ inline ::mlx::core::array gpu_pow(const ::mlx::core::array& a, double exponent) 
     namespace mx = ::mlx::core;
     const mx::Dtype dt = a.dtype();
     const mx::array b = gpu::mlx_scalar(exponent, dt);
+    if (gpu_pow_detail::is_signed_integer(dt))
+        return gpu_pow_detail::int_pow(a, b);
     if (!gpu_pow_detail::is_kernel_dtype(dt))
         return mx::power(a, b);
     const float e = gpu_pow_detail::rounded_exponent(exponent, dt);

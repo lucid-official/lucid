@@ -156,6 +156,7 @@ def _make_arith_adapter(
     subtracts = engine_fn in (_C_engine.sub, _C_engine.sub_)
     adds_or_subtracts = subtracts or engine_fn in (_C_engine.add, _C_engine.add_)
     powers = engine_fn is _C_engine.pow
+    powers_inplace = engine_fn is _C_engine.pow_
     opmath = engine_fn in _OPMATH_OPS
 
     # Positional-only: the wrappers bind the advertised names to position
@@ -167,6 +168,8 @@ def _make_arith_adapter(
             scalar = _scalar_power(input, other)
             if scalar is not None:
                 return scalar
+        elif powers_inplace and isinstance(input, _C_engine.TensorImpl):
+            _promotion.check_pow_scalar(input.dtype, other)
         a, b = _binary_operands(input, other, opmath=opmath, inplace=inplace)
         if adds_or_subtracts:
             alpha = _promotion.as_number(alpha)
