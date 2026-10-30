@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a complex value's truth keeps a subnormal part; add the dtype matrix
 
+- render the annotation table at the formatter's width
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
