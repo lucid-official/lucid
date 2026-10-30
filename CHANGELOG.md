@@ -124,6 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - export compiled_decode_step from lucid.compile
 - add lucid.peft — LoRA on nn.Linear, reference format
 - custom_fwd, custom_bwd and the reference GradScaler (LCD-740)
+- hold several adapters per model
 
 ---
 

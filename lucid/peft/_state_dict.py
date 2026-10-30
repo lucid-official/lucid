@@ -14,7 +14,8 @@ from collections.abc import Mapping
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
-from lucid.peft.tuners._base import _adapter_slots, _join, _tuner_for, _tuner_layers
+from lucid.peft._slots import _adapter_slots
+from lucid.peft.tuners._base import _join, _tuner_for, _tuner_layers
 
 
 def _peft_config_of(model: nn.Module, adapter_name: str) -> PeftConfig:
@@ -32,9 +33,9 @@ def _adapter_keys(model: nn.Module, adapter_name: str) -> dict[str, str]:
     """In-memory state-dict key → on-disk key, for every tensor the adapter owns.
 
     Each slot — tuner layer or ``modules_to_save`` copy — maps its own
-    keys; v1 holds one adapter per model, so every slot belongs to the
-    adapter the config names.  The parameters the method also trains (the
-    biases ``bias`` picks) keep their names.
+    keys for the adapter, and none if it holds nothing of it: an adapter
+    need not reach every layer another one does.  The parameters the method
+    also trains (the biases ``bias`` picks) keep their names.
     """
     config = _peft_config_of(model, adapter_name)
     if not _tuner_layers(model):

@@ -230,11 +230,104 @@ def test_only_a_linear_base_is_accepted() -> None:
         Linear(nn.Conv1d(2, 2, 1), "default", r=1)  # type: ignore[arg-type]
 
 
-def test_a_second_adapter_on_one_layer_is_refused() -> None:
-    layer = Linear(nn.Linear(3, 3), "default", r=1)
-    with pytest.raises(NotImplementedError, match="one adapter per layer"):
-        layer.update_layer("second", 1, 1, 0.0, True, False)
-    assert layer.active_adapter == "default"
+class TestSeveralAdapters:
+    """One layer holds any number of adapters; the forward pass applies the active ones."""
+
+    def _held(self, device: str) -> tuple[nn.Linear, Linear]:
+        base, layer = _layer(device, init_lora_weights=False)
+        layer.update_layer("second", 2, 8, 0.0, False, False)
+        return base, layer
+
+    def test_a_second_adapter_is_held_beside_the_first_and_inactive(self, device: str) -> None:
+        base, layer = self._held(device)
+        assert layer.r == {"default": 3, "second": 2} and layer.active_adapter == "default"
+        assert layer.lora_alpha == {"default": 6, "second": 8}
+        assert layer.scaling == {"default": 2.0, "second": 4.0}
+        assert sorted(layer.state_dict()) == [
+            "base_layer.bias",
+            "base_layer.weight",
+            "lora_A.default.weight",
+            "lora_A.second.weight",
+            "lora_B.default.weight",
+            "lora_B.second.weight",
+        ]
+        x = lucid.randn(4, 6, device=device)
+        expected = (
+            base(x)
+            + (x @ layer.lora_A["default"].weight.T) @ layer.lora_B["default"].weight.T * 2.0
+        )
+        assert bool(lucid.allclose(layer(x), expected, atol=1e-5))
+
+    def test_the_read_only_views_cannot_be_written_through(self, device: str) -> None:
+        _, layer = self._held(device)
+        with pytest.raises(TypeError):
+            layer.scaling["second"] = 1.0  # type: ignore[index]
+        assert layer.scaling["second"] == 4.0
+
+    def test_the_same_name_twice_is_refused(self, device: str) -> None:
+        _, layer = self._held(device)
+        with pytest.raises(ValueError, match="already exists"):
+            layer.update_layer("second", 1, 1, 0.0, True, False)
+        assert layer.r == {"default": 3, "second": 2}
+
+    def test_set_adapter_applies_and_trains_the_named_one(self, device: str) -> None:
+        base, layer = self._held(device)
+        layer.set_adapter("second")
+        assert layer.active_adapter == "second" and layer.active_adapters == ["second"]
+        assert all(p.requires_grad for p in layer.lora_A["second"].parameters())
+        assert not any(p.requires_grad for p in layer.lora_A["default"].parameters())
+        x = lucid.randn(4, 6, device=device)
+        expected = (
+            base(x) + (x @ layer.lora_A["second"].weight.T) @ layer.lora_B["second"].weight.T * 4.0
+        )
+        assert bool(lucid.allclose(layer(x), expected, atol=1e-5))
+
+    def test_a_list_adds_every_update(self, device: str) -> None:
+        base, layer = self._held(device)
+        layer.set_adapter(["default", "second"], inference_mode=True)
+        assert layer.active_adapters == ["default", "second"]
+        # inference_mode: both apply, neither trains.
+        assert not any(
+            p.requires_grad
+            for name in ("lora_A", "lora_B")
+            for p in getattr(layer, name).parameters()
+        )
+        x = lucid.randn(4, 6, device=device)
+        with lucid.no_grad():
+            expected = (
+                base(x)
+                + x @ (layer.get_delta_weight("default") + layer.get_delta_weight("second")).T
+            )
+            assert bool(lucid.allclose(layer(x), expected, atol=1e-5))
+
+    def test_delete_removes_the_adapter_everywhere(self, device: str) -> None:
+        _, layer = self._held(device)
+        layer.delete_adapter("second")
+        layer.delete_adapter("never-there")  # nothing to do
+        assert layer.r == {"default": 3} and sorted(layer.lora_A) == ["default"]
+        assert layer.active_adapter == "default"
+        layer.delete_adapter("default")
+        assert layer.active_adapters == [] and layer.r == {}
+
+    def test_merging_a_name_the_layer_lacks_is_refused(self, device: str) -> None:
+        _, layer = self._held(device)
+        layer.merge(adapter_names=["second"])
+        assert layer.merged_adapters == ["second"]
+        layer.unmerge()
+        with pytest.raises(ValueError, match="unknown adapter"):
+            layer.merge(adapter_names=["third"])
+
+    def test_the_default_merge_takes_the_active_adapters_it_holds(self, device: str) -> None:
+        _, layer = self._held(device)
+        layer.set_adapter(["second", "elsewhere"])
+        layer.merge()
+        assert layer.merged_adapters == ["second"]
+
+    def test_the_repr_names_the_adapters_in_use(self, device: str) -> None:
+        _, layer = self._held(device)
+        assert "adapter='default', r=3, lora_alpha=6" in repr(layer)
+        layer.set_adapter(["default", "second"])
+        assert "adapter=['default', 'second'], r={'default': 3, 'second': 2}" in repr(layer)
 
 
 def test_positional_arguments_line_up_with_the_reference() -> None:

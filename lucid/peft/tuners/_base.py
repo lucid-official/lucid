@@ -12,20 +12,27 @@ A method is three classes, each registered as it is defined:
 ``get_peft_model``, ``PeftModel.from_pretrained`` and the state-dict
 functions dispatch through these tables, so a new method is subclasses
 only.  Everything that stands in for a base module — a tuner layer, a
-``modules_to_save`` copy — answers the ``_AdapterSlot`` protocol, and the
-generic code walks slots rather than naming their classes.
+``modules_to_save`` copy — answers the ``_AdapterSlot`` protocol
+(``lucid.peft._slots``), and the generic code walks slots rather than
+naming their classes.
 
-Injection is planned in full before the model is touched — every target
-found, typed and given its layer, every ``modules_to_save`` entry found —
-so a config that cannot be applied raises with the model as it was.  The
-layers then go in by ``setattr`` on their parents, which keeps each
-child's slot in place (a ``Sequential`` still runs it in the same turn).
+A model holds any number of adapters.  Each slot keeps one set of
+parameters per adapter name, the tuner keeps their configs, and the
+adapters named in ``active_adapter`` are the ones the forward pass applies.
+Adding an adapter is planned in full before the model is touched — every
+target found, typed and given its layer, every ``modules_to_save`` entry
+found — so a config that cannot be applied raises with the model as it was.
+The layers then go in by ``setattr`` on their parents, which keeps each
+child's slot in place (a ``Sequential`` still runs it in the same turn); a
+module already holding an adapter of the method takes the new one beside it.
 """
 
 import copy
+import functools
 import warnings
 from abc import ABC, abstractmethod
-from typing import ClassVar, NamedTuple, Protocol, override, runtime_checkable
+from collections.abc import Sequence
+from typing import ClassVar, NamedTuple, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
@@ -33,6 +40,7 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
+from lucid.peft._slots import _adapter_slots, _as_names, _outside_slots
 from lucid.peft._targeting import (
     _module_names_matching,
     _parameter_paths,
@@ -55,46 +63,23 @@ def _set_submodule(model: nn.Module, key: str, module: nn.Module) -> None:
     setattr(model.get_submodule(parent), child, module)
 
 
+@functools.cache
+def _module_dict_attributes() -> frozenset[str]:
+    return frozenset(dir(nn.ModuleDict()))
+
+
 def _check_adapter_name(adapter_name: object) -> str:
+    """``adapter_name`` if it can be the key of an adapter in a layer's ``ModuleDict``\\ s."""
     if not isinstance(adapter_name, str):
         raise TypeError(f"adapter_name must be a str, got {adapter_name!r}")
     if not adapter_name or "." in adapter_name:
         raise ValueError(f"adapter_name must be a non-empty name without '.', got {adapter_name!r}")
+    if adapter_name in _module_dict_attributes():
+        raise ValueError(
+            f"adapter_name {adapter_name!r} is an attribute of nn.ModuleDict, which holds the "
+            "adapters of a layer; choose another name"
+        )
     return adapter_name
-
-
-@runtime_checkable
-class _AdapterSlot(Protocol):
-    """A module standing in for a base module: a tuner layer, a ``modules_to_save`` copy.
-
-    What the tuner needs of each — switch it, list what trains, map its
-    keys to the file's, and put the base back — so it walks slots without
-    knowing their classes.
-    """
-
-    def get_base_layer(self) -> nn.Module:
-        """The module this one stands in for."""
-        ...
-
-    def enable_adapters(self, enabled: bool) -> None:
-        """Take part (``True``) or let the base module run alone (``False``)."""
-        ...
-
-    def _unwrap(self, keep_trained: bool) -> nn.Module:
-        """What goes back in this slot's place: the trained result, or the base as it was."""
-        ...
-
-    def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
-        """The parameters that train for ``adapter_name``."""
-        ...
-
-    def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
-        """Own state-dict key → the adapter file's key, for ``adapter_name``'s tensors."""
-        ...
-
-
-def _adapter_slots(model: nn.Module) -> list[tuple[str, _AdapterSlot]]:
-    return [(name, m) for name, m in model.named_modules() if isinstance(m, _AdapterSlot)]
 
 
 def _tuner_layers(model: nn.Module) -> list[tuple[str, _BaseTunerLayer]]:
@@ -108,7 +93,9 @@ class _BaseTunerLayer(nn.Module, ABC):
     A tuner family's root class names its per-adapter ``ModuleDict``\\ s in
     ``adapter_layer_names`` and starts a table of layer classes; each
     concrete layer joins it with ``base_type=`` — the kind of module it
-    wraps — and the tuner finds a target's layer class there.
+    wraps — and the tuner finds a target's layer class there.  A layer
+    holds any number of adapters, one entry per name in each of those
+    tables.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain attributes in the
@@ -116,8 +103,10 @@ class _BaseTunerLayer(nn.Module, ABC):
     reference: ``lucid.compile`` keys an executable on each module's
     public scalar ``__dict__`` attributes, and state kept anywhere else
     would let a compiled model replay a branch it has left (LCD-703).
-    They change only through ``update_layer``, ``enable_adapters``,
-    ``merge`` and ``unmerge``.
+    ``active_adapter`` is one name or a list of names; a layer that holds
+    none of them runs its base alone.  They change only through
+    ``set_adapter``, ``delete_adapter``, ``enable_adapters``, ``merge``
+    and ``unmerge``.
     """
 
     #: The per-adapter ``ModuleDict`` attributes; a family's root sets it.
@@ -142,18 +131,23 @@ class _BaseTunerLayer(nn.Module, ABC):
         kind = type(self)._base_type
         if not isinstance(base_layer, kind):
             raise TypeError(
-                f"{type(self).__name__} adapts nn.{kind.__name__} in lucid.peft v1, "
+                f"{type(self).__name__} adapts nn.{kind.__name__} in lucid.peft, "
                 f"got {type(base_layer).__name__}"
             )
         super().__init__()
         self.base_layer = base_layer
         self.merged_adapters: list[str] = []
-        #: Name of the adapter the forward pass applies.
-        self.active_adapter = ""
+        #: Name (or names) of the adapter the forward pass applies.
+        self.active_adapter: str | list[str] = ""
         #: Whether the forward pass runs the base layer alone.
         self.disable_adapters = False
         #: Whether an adapter is folded into the base weight (``merged_adapters`` non-empty).
         self.merged = False
+
+    @property
+    def active_adapters(self) -> list[str]:
+        """The adapters the forward pass applies, as a list."""
+        return [name for name in _as_names(self.active_adapter) if name]
 
     @abstractmethod
     def get_base_layer(self) -> nn.Module:
@@ -179,23 +173,82 @@ class _BaseTunerLayer(nn.Module, ABC):
             self.unmerge()
         self.disable_adapters = not enabled
 
+    def _activate(self, adapter_names: str | list[str]) -> None:
+        self.active_adapter = adapter_names if isinstance(adapter_names, str) else [*adapter_names]
+
+    def _check_activation(self, adapter_names: list[str]) -> None:
+        del adapter_names  # any set of adapters may apply together in a layer
+
+    def set_adapter(self, adapter_names: str | list[str], inference_mode: bool = False) -> None:
+        """Apply the named adapters, and train exactly those unless ``inference_mode``.
+
+        The names this layer holds nothing for are skipped by the forward
+        pass.  A merged layer is unmerged first, since the active adapters
+        are no longer the merged ones.
+
+        Parameters
+        ----------
+        adapter_names : str or list of str
+            The adapter, or adapters, to apply.
+        inference_mode : bool, default=False
+            Freeze the activated adapters as well.
+        """
+        if self.merged:
+            warnings.warn(
+                "Adapter cannot be set when the model is merged. Unmerging the model first.",
+                stacklevel=2,
+            )
+            self.unmerge()
+        wanted = _as_names(adapter_names)
+        for held in self._adapter_names():
+            self.set_requires_grad(held, held in wanted and not inference_mode)
+        self._activate(adapter_names)
+
+    def set_requires_grad(
+        self, adapter_names: str | Sequence[str], requires_grad: bool = True
+    ) -> None:
+        """Set ``requires_grad`` on the parameters of the named adapters this layer holds."""
+        wanted = _as_names(adapter_names)
+        for table in self._tables():
+            for name, module in table.items():
+                if name in wanted:
+                    module.requires_grad_(requires_grad)
+
+    def delete_adapter(self, adapter_name: str) -> None:
+        """Drop ``adapter_name`` from this layer; nothing happens if it holds no such adapter.
+
+        An active adapter that is deleted leaves the active set; the tuner
+        chooses what takes its place, the same on every layer.
+        """
+        for table in self._tables():
+            if adapter_name in table:
+                del table[adapter_name]
+        active = self.active_adapters
+        if adapter_name in active:
+            self._activate([name for name in active if name != adapter_name])
+
     def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
-        """The requested adapters (the active one by default) not merged yet.
+        """The requested adapters (the active ones by default) not merged yet.
 
         A disabled layer runs its base alone, so merging into it would make
-        it run the adapter while it reads as disabled; it is refused.
+        it run the adapter while it reads as disabled; it is refused.  With
+        no names given, the active adapters this layer holds are taken.
         """
         if self.disable_adapters:
             raise RuntimeError(
                 "the adapter is disabled; enable it (leave disable_adapter()) before merging"
             )
-        names = [self.active_adapter] if adapter_names is None else list(adapter_names)
-        unknown = [name for name in names if name not in self._adapters()]
-        if unknown:
-            raise ValueError(f"unknown adapter(s) {unknown}; this layer holds {self._adapters()}")
+        held = self._adapter_names()
+        if adapter_names is None:
+            names = [name for name in self.active_adapters if name in held]
+        else:
+            names = list(adapter_names)
+            unknown = [name for name in names if name not in held]
+            if unknown:
+                raise ValueError(f"unknown adapter(s) {unknown}; this layer holds {held}")
         return [name for name in names if name not in self.merged_adapters]
 
-    def _adapters(self) -> list[str]:
+    def _adapter_names(self) -> list[str]:
         """The adapter names this layer holds."""
         tables = self._tables()
         return list(tables[0]) if tables else []
@@ -209,12 +262,18 @@ class _BaseTunerLayer(nn.Module, ABC):
         ]
 
     def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
-        return [p for table in self._tables() for p in table[adapter_name].parameters()]
+        return [
+            p
+            for table in self._tables()
+            if adapter_name in table
+            for p in table[adapter_name].parameters()
+        ]
 
     def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
         return {
             f"{name}.{adapter_name}.{leaf}": f"{name}.{leaf}"
             for name, table in zip(self.adapter_layer_names, self._tables(), strict=True)
+            if adapter_name in table
             for leaf in table[adapter_name].state_dict()
         }
 
@@ -251,7 +310,17 @@ class _BaseTunerLayer(nn.Module, ABC):
 class _Target(NamedTuple):
     key: str
     module: nn.Module
-    layer: type[_BaseTunerLayer]
+    #: The layer class that wraps ``module``, or ``None`` when ``module`` is
+    #: already such a layer and takes the new adapter beside its others.
+    layer: type[_BaseTunerLayer] | None
+
+
+class _Placement(NamedTuple):
+    """A slot new to the tree: where it goes, and the module it replaces."""
+
+    key: str
+    slot: nn.Module
+    original: nn.Module
 
 
 #: ``PeftType`` → the tuner that applies it, filled as each is defined.
@@ -269,12 +338,16 @@ def _tuner_for(config: PeftConfig) -> type[_BaseTuner]:
 class _BaseTuner(_ForwardsAttributes, ABC):
     """Put a method's layers into a model, freeze the rest, take them out again.
 
-    The generic half of a tuner.  Construction checks, plans the whole
-    injection, applies it and freezes; a method supplies its layer family
+    The generic half of a tuner.  Construction checks the first adapter,
+    plans its injection, applies it and freezes; ``add_adapter`` does the
+    same for each further one, which starts frozen and inactive until
+    ``set_adapter`` names it.  A method supplies its layer family
     (``_layer_types``), the module types it refuses as not-yet-supported,
-    how to build a layer for a target (``_create_new_module``), and may
-    adjust the stored config (``_prepare_config``) or add parameters that
-    train (``_extra_trainable_names``).
+    how to build a layer for a target (``_create_new_module``) or add an
+    adapter to one it already built (``_add_to_layer``), and may adjust the
+    stored config (``_prepare_config``), check a new adapter against the
+    others (``_check_new_adapter_config``) or add parameters that train
+    (``_extra_trainable_names``).
     """
 
     #: The method's layer classes by the module type each wraps — its
@@ -282,7 +355,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     _layer_types: ClassVar[dict[type[nn.Module], type[_BaseTunerLayer]]]
     #: The config class this tuner takes, e.g. ``LoraConfig``.
     _config_class: ClassVar[type[_TargetedConfig]]
-    #: Module types the reference adapts with this method and v1 does not yet.
+    #: Module types the reference adapts with this method and lucid.peft does not yet.
     _later_types: ClassVar[tuple[type[nn.Module], ...]] = ()
 
     @override
@@ -299,32 +372,27 @@ class _BaseTuner(_ForwardsAttributes, ABC):
             raise TypeError(f"config must be a {kind.__name__}, got {type(config).__name__}")
         adapter_name = _check_adapter_name(adapter_name)
         _refuse_existing_adapters(model)
-        stored = self._prepare_config(config, model)
-        targets = self._plan_targets(model, stored)
-        saved = _plan_modules_to_save(model, stored)
         # By name, which a deep copy or a pickle of the model keeps.
         flags = {
             name: param.requires_grad
             for name, param in model.named_parameters(remove_duplicate=False)
         }
-        layers: list[tuple[str, nn.Module]] = [
-            (t.key, self._create_new_module(stored, adapter_name, t)) for t in targets
-        ]
-        layers += [
-            (key, ModulesToSaveWrapper(model.get_submodule(key), adapter_name)) for key in saved
-        ]
         super().__init__()
         self.model = model
-        self.peft_config: dict[str, PeftConfig] = {adapter_name: stored}
-        self.active_adapter: str = adapter_name
-        self.targeted_module_names: list[str] = [target.key for target in targets]
+        self.peft_config: dict[str, PeftConfig] = {}
+        self.active_adapter: str | list[str] = adapter_name
+        self.targeted_module_names: list[str] = []
         self._requires_grad_before = flags
-        for key, layer in layers:
-            _set_submodule(model, key, layer)
+        self._inject(adapter_name, config)
         # Where ``get_peft_model_state_dict`` finds the config of a model
         # adapted in place, as the reference's does.
         model.peft_config = self.peft_config
         self._mark_only_adapters_as_trainable()
+
+    @property
+    def active_adapters(self) -> list[str]:
+        """The adapters the forward pass applies, as a list."""
+        return _as_names(self.active_adapter)
 
     # ── a method's hooks ──────────────────────────────────────────────────
 
@@ -332,10 +400,21 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
         """The config to store: a copy of ``config``, ``"all-linear"`` spelled out."""
         stored = copy.deepcopy(config)
-        resolved = _resolve_all_linear(stored, model)
+        resolved = _resolve_all_linear(stored, model, cls._adapted_linear)
         if resolved is not None:
             stored.target_modules = resolved
         return stored
+
+    @staticmethod
+    def _adapted_linear(module: nn.Module) -> nn.Linear | None:
+        """The ``nn.Linear`` ``module`` wraps, if it is a tuner layer around one."""
+        if isinstance(module, _BaseTunerLayer):
+            base = module.get_base_layer()
+            return base if isinstance(base, nn.Linear) else None
+        return None
+
+    def _check_new_adapter_config(self, config: PeftConfig) -> None:
+        """Raise ``ValueError`` if ``config`` cannot be added beside the adapters already held."""
 
     @classmethod
     @abstractmethod
@@ -346,20 +425,97 @@ class _BaseTuner(_ForwardsAttributes, ABC):
 
     @classmethod
     @abstractmethod
+    def _add_to_layer(cls, config: _TargetedConfig, adapter_name: str, target: _Target) -> None:
+        """Give the layer ``target`` already is one more adapter."""
+
+    @classmethod
+    @abstractmethod
     def _extra_trainable_names(cls, model: nn.Module, config: PeftConfig) -> list[str]:
         """Parameters beyond the adapters' that train, by name under ``model`` (LoRA's biases)."""
 
-    # ── generic steps ─────────────────────────────────────────────────────
+    # ── injecting an adapter ──────────────────────────────────────────────
+
+    def _inject(self, adapter_name: str, config: _TargetedConfig) -> None:
+        """Plan, then apply, ``config`` as adapter ``adapter_name``; the model is as it was on failure."""
+        model = self.model
+        stored = self._prepare_config(config, model)
+        self._check_new_adapter_config(stored)
+        targets = self._plan_targets(model, stored)
+        saved = _plan_modules_to_save(model, stored)
+        # Everything new to the tree is built before the first change.
+        placements = self._new_slots(stored, adapter_name, targets, saved)
+        self.peft_config[adapter_name] = stored
+        try:
+            self._attach_adapter(stored, adapter_name, targets, saved, placements)
+        except BaseException:
+            self._withdraw(adapter_name, placements)
+            raise
+        self.targeted_module_names += [
+            t.key for t in targets if t.key not in self.targeted_module_names
+        ]
+        # A slot new to the tree began with its one adapter active.
+        for _, slot in _adapter_slots(model):
+            slot._activate(self.active_adapter)
+
+    def _new_slots(
+        self, config: _TargetedConfig, adapter_name: str, targets: list[_Target], saved: list[str]
+    ) -> list[_Placement]:
+        """The slots the adapter adds to the tree, built and not yet placed."""
+        placements = [
+            _Placement(t.key, self._create_new_module(config, adapter_name, t), t.module)
+            for t in targets
+            if t.layer is not None
+        ]
+        for key in saved:
+            held = self.model.get_submodule(key)
+            if not isinstance(held, ModulesToSaveWrapper):
+                placements.append(_Placement(key, ModulesToSaveWrapper(held, adapter_name), held))
+        return placements
+
+    def _attach_adapter(
+        self,
+        config: _TargetedConfig,
+        adapter_name: str,
+        targets: list[_Target],
+        saved: list[str],
+        placements: list[_Placement],
+    ) -> None:
+        """Give the adapter to the slots that exist, then put the new slots in the tree."""
+        for target in targets:
+            if target.layer is None:
+                self._add_to_layer(config, adapter_name, target)
+        for key in saved:
+            wrapper = self.model.get_submodule(key)
+            if isinstance(wrapper, ModulesToSaveWrapper):
+                wrapper.update(adapter_name)
+        for placement in placements:
+            _set_submodule(self.model, placement.key, placement.slot)
+
+    def _withdraw(self, adapter_name: str, placements: list[_Placement]) -> None:
+        """Undo a failed ``_inject``: the adapter out of every slot, the new slots out of the tree."""
+        model = self.model
+        for _, slot in _adapter_slots(model):
+            slot.delete_adapter(adapter_name)
+        for placement in placements:
+            if model.get_submodule(placement.key) is placement.slot:
+                _set_submodule(model, placement.key, placement.original)
+        self.peft_config.pop(adapter_name, None)
 
     @classmethod
     def _plan_targets(cls, model: nn.Module, config: _TargetedConfig) -> list[_Target]:
         targets = []
-        for key, module in model.named_modules():
+        for key, module in _outside_slots(model):
             if key and _selects(config, key):
-                targets.append(_Target(key, module, cls._target_layer(key, module)))
+                targets.append(cls._target_for(key, module))
         if not targets:
             raise _not_found(config)
         return targets
+
+    @classmethod
+    def _target_for(cls, key: str, module: nn.Module) -> _Target:
+        if isinstance(module, tuple(cls._layer_types.values())):
+            return _Target(key, module, None)
+        return _Target(key, module, cls._target_layer(key, module))
 
     @classmethod
     def _target_layer(cls, key: str, module: nn.Module) -> type[_BaseTunerLayer]:
@@ -371,34 +527,179 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         if isinstance(module, cls._later_types):
             raise NotImplementedError(
                 f"Target module {key} ({type(module).__name__}) is not supported in "
-                f"lucid.peft v1, which adapts {supported} only"
+                f"lucid.peft, which adapts {supported} only"
             )
         raise ValueError(
             f"Target module {key} ({type(module).__name__}) is not supported. "
             f"Currently, only {supported} is supported."
         )
 
+    def add_adapter(
+        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
+    ) -> None:
+        """Add an adapter beside the ones the model holds.
+
+        The new adapter starts frozen and inactive: the forward pass keeps
+        applying the adapters it applied, and every parameter keeps the
+        ``requires_grad`` it had.  ``set_adapter`` switches to it.  A
+        module an earlier adapter already wraps takes the new one beside
+        it; any other target is wrapped.  The model is left as it was if
+        the adapter cannot be added.
+
+        Parameters
+        ----------
+        adapter_name : str
+            Name of the new adapter; unique among the model's adapters.
+        peft_config : PeftConfig
+            What to adapt and how — the config class of this tuner's method.
+        low_cpu_mem_usage : bool, default=False
+            Accepted for the reference's signature.  There is no meta
+            device to build the adapter on: it is allocated either way.
+
+        Raises
+        ------
+        ValueError
+            The name is taken or malformed, the config is another
+            method's, no module matches it, or it cannot sit beside the
+            adapters held (two adapters training biases).
+        TypeError
+            ``peft_config`` is not an adapter config.
+        """
+        del low_cpu_mem_usage  # a build-time memory hint; the adapter is the same either way
+        adapter_name = _check_adapter_name(adapter_name)
+        if adapter_name in self.peft_config:
+            raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
+        kind = type(self)._config_class
+        if peft_config.peft_type != kind._peft_type:
+            raise ValueError(
+                "Cannot combine adapters with different peft types. "
+                f"Found {kind._peft_type} and {peft_config.peft_type}."
+            )
+        if not isinstance(peft_config, kind):
+            raise TypeError(f"config must be a {kind.__name__}, got {type(peft_config).__name__}")
+        self._inject(adapter_name, peft_config)
+        self.set_requires_grad(adapter_name, False)
+
+    # ── switching, freezing, deleting ─────────────────────────────────────
+
+    def _require_known(self, adapter_names: Sequence[str]) -> None:
+        for name in adapter_names:
+            if name not in self.peft_config:
+                raise ValueError(f"Adapter {name} not found.")
+
+    def set_adapter(self, adapter_name: str | list[str], inference_mode: bool = False) -> None:
+        """Apply the named adapter(s) in the forward pass, and train exactly those.
+
+        Every other adapter is frozen; the activated ones train unless
+        ``inference_mode``.  A merged layer is unmerged first.  Layers that
+        hold none of the named adapters run their base alone.  The
+        parameters ``bias`` makes trainable follow the adapter that asked
+        for them.
+
+        Parameters
+        ----------
+        adapter_name : str or list of str
+            The adapter, or adapters, to apply.
+        inference_mode : bool, default=False
+            Freeze the activated adapters too.
+
+        Raises
+        ------
+        ValueError
+            A name is not one of the model's adapters, or two named
+            adapters train the same ``modules_to_save`` module.
+        """
+        names = _as_names(adapter_name)
+        self._require_known(names)
+        slots = _adapter_slots(self.model)
+        for _, slot in slots:
+            slot._check_activation(names)
+        for _, slot in slots:
+            slot.set_adapter(adapter_name, inference_mode)
+        self.active_adapter = adapter_name if isinstance(adapter_name, str) else [*adapter_name]
+        params = dict(self.model.named_parameters())
+        for held, config in self.peft_config.items():
+            on = held in names and not inference_mode
+            for extra in self._extra_trainable_names(self.model, config):
+                params[extra].requires_grad_(on)
+
+    def set_requires_grad(
+        self, adapter_names: str | Sequence[str], requires_grad: bool = True
+    ) -> None:
+        """Enable or disable gradients on the parameters of the named adapter(s).
+
+        Raises
+        ------
+        ValueError
+            A name is not one of the model's adapters.
+        """
+        names = _as_names(adapter_names)
+        self._require_known(names)
+        for _, slot in _adapter_slots(self.model):
+            slot.set_requires_grad(names, requires_grad)
+
+    def delete_adapter(self, adapter_name: str) -> None:
+        """Remove an adapter: its parameters, its config, its ``modules_to_save`` copies.
+
+        If it was active, the adapters still active stay so; when none
+        remain the first of the others (by name) takes over, with a
+        warning, and trains.  Deleting the last adapter leaves the layers
+        in the model, applying nothing; ``unload()`` removes them.
+
+        Raises
+        ------
+        ValueError
+            The adapter does not exist, or it is merged — unmerge first.
+        """
+        if adapter_name not in self.peft_config:
+            raise ValueError(f"Adapter {adapter_name} does not exist")
+        merged = {name for _, layer in _tuner_layers(self.model) for name in layer.merged_adapters}
+        if adapter_name in merged:
+            raise ValueError(
+                f"Cannot delete adapter(s) [{adapter_name!r}] while they are merged. "
+                "Please unmerge them first."
+            )
+        del self.peft_config[adapter_name]
+        for _, slot in _adapter_slots(self.model):
+            slot.delete_adapter(adapter_name)
+        active = self.active_adapters
+        if adapter_name not in active:
+            return
+        remaining = [name for name in active if name != adapter_name]
+        if not remaining and self.peft_config:
+            successor = sorted(self.peft_config)[0]
+            warnings.warn(
+                f"Adapter {adapter_name} was active which is now deleted. "
+                f"Setting active adapter to {successor}.",
+                stacklevel=3,
+            )
+            remaining = [successor]
+        self.set_adapter(remaining[0] if len(remaining) == 1 else remaining)
+
+    def _mark_only_adapters_as_trainable(self) -> None:
+        model = self.model
+        trainable: set[int] = set()
+        params = dict(model.named_parameters())
+        for name in self.active_adapters:
+            config = self.peft_config[name]
+            if config.inference_mode:
+                continue
+            for _, slot in _adapter_slots(model):
+                trainable.update(id(p) for p in slot._adapter_parameters(name))
+            trainable.update(id(params[n]) for n in self._extra_trainable_names(model, config))
+        for param in model.parameters():
+            param.requires_grad_(id(param) in trainable)
+
     @override
     def _wrapped(self) -> nn.Module | None:
         modules = self.__dict__.get("_modules")
         return _as_module(modules.get("model")) if modules else None
 
-    def _mark_only_adapters_as_trainable(self) -> None:
-        config = self.peft_config[self.active_adapter]
-        model = self.model
-        trainable: set[int] = set()
-        if not config.inference_mode:
-            for _, slot in _adapter_slots(model):
-                trainable.update(id(p) for p in slot._adapter_parameters(self.active_adapter))
-            params = dict(model.named_parameters())
-            extra = self._extra_trainable_names(model, config)
-            trainable.update(id(params[name]) for name in extra)
-        for _, param in model.named_parameters():
-            param.requires_grad_(id(param) in trainable)
-
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
         return self.model(*args, **kwargs)
+
+    # ── merging and unloading ─────────────────────────────────────────────
 
     def _mergeable_layers(self) -> list[tuple[str, _BaseTunerLayer]]:
         """The tuner layers, after refusing any whose base weight another module shares."""
@@ -419,7 +720,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     def merge_adapter(
         self, adapter_names: list[str] | None = None, safe_merge: bool = False
     ) -> None:
-        r"""Fold every adapter update into its base weight, keeping the adapter layers.
+        r"""Fold adapter updates into their base weights, keeping the adapter layers.
 
         A merged model runs at the base model's cost; ``unmerge_adapter``
         takes the updates out again.  Every refusal is made before any
@@ -430,7 +731,8 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         Parameters
         ----------
         adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
+            Adapters to merge; the active ones by default.  A layer holding
+            only some of them merges those.
         safe_merge : bool, default=False
             Check every merged weight for NaN / inf before writing any.
 
@@ -440,16 +742,22 @@ class _BaseTuner(_ForwardsAttributes, ABC):
             A base weight is shared with another module, or the adapter is
             disabled (inside ``disable_adapter()``).
         ValueError
-            ``safe_merge`` found a non-finite merged weight.
+            A name is not one of the model's adapters, or ``safe_merge``
+            found a non-finite merged weight.
         """
-        layers = self._mergeable_layers()
-        pending = [(layer, layer._pending_merges(adapter_names)) for _, layer in layers]
+        names = self.active_adapters if adapter_names is None else list(adapter_names)
+        self._require_known(names)
+        pending = []
+        for _, layer in self._mergeable_layers():
+            held = [name for name in names if name in layer._adapter_names()]
+            pending.append((layer, held, layer._pending_merges(held)))
         if safe_merge:
-            for layer, adapters in pending:
+            for layer, _, adapters in pending:
                 for adapter in adapters:
                     layer._check_finite_merge(adapter)
-        for layer, _ in pending:
-            layer.merge(adapter_names=adapter_names)
+        for layer, held, _ in pending:
+            if held:
+                layer.merge(adapter_names=held)
 
     def unmerge_adapter(self) -> None:
         """Take every merged adapter update back out of its base weight."""
@@ -475,12 +783,14 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         safe_merge: bool = False,
         adapter_names: list[str] | None = None,
     ) -> nn.Module:
-        r"""Merge the adapter into the base weights and return the plain model.
+        r"""Merge the adapters into the base weights and return the plain model.
 
         Each adapter layer is replaced by its merged base module — the base
         model's own module, holding its own ``Parameter`` objects — and each
-        ``modules_to_save`` entry by its trained copy.  Every base parameter
-        gets back the ``requires_grad`` it had before injection.
+        ``modules_to_save`` entry by the active adapter's trained copy (the
+        original when that adapter has none).  Adapters not merged are
+        dropped with their layers.  Every base parameter gets back the
+        ``requires_grad`` it had before injection.
 
         Parameters
         ----------
@@ -489,7 +799,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         safe_merge : bool, default=False
             Check every merged weight for NaN / inf before writing any.
         adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
+            Adapters to merge; the active ones by default.
 
         Returns
         -------
@@ -529,7 +839,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
                 )
 
     def unload(self) -> nn.Module:
-        """Remove the adapter without merging it and return the original model.
+        """Remove every adapter without merging and return the original model.
 
         Every adapter layer is replaced by the module it wrapped (a merged
         one is unmerged first), every ``modules_to_save`` entry by its
@@ -587,7 +897,7 @@ def _plan_modules_to_save(model: nn.Module, config: _TargetedConfig) -> list[str
                 "that trains will not.  The adapter saves and loads as usual, but "
                 "merge_and_unload() will refuse: the merged model would hold two tensors "
                 "where the base ties one.",
-                stacklevel=4,
+                stacklevel=5,
             )
     return keys
 
@@ -596,6 +906,6 @@ def _refuse_existing_adapters(model: nn.Module) -> None:
     held = [name for name, _ in _adapter_slots(model)]
     if held:
         raise NotImplementedError(
-            f"the model already holds a LoRA adapter (at {held[0]}); lucid.peft v1 keeps one "
-            "adapter per model — call unload() or merge_and_unload() first"
+            f"the model already holds a LoRA adapter (at {held[0]}); wrap it once and add "
+            "more with PeftModel.add_adapter, or call unload() or merge_and_unload() first"
         )

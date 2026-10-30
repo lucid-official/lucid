@@ -7,16 +7,26 @@ the index after the layer list's name.  Where v1 differs is stated on
 ``LoraConfig``'s fields, which is where a user reads it.
 """
 
+import dataclasses
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from typing import Final
 
 import lucid.nn as nn
-from lucid.peft._config import TaskType, _layer_regex, _TargetedConfig
+from lucid.peft._config import PeftConfig, TaskType, _layer_regex, _TargetedConfig
+from lucid.peft._slots import _outside_slots
 
 _ALL_LINEAR = "all-linear"
 
 #: Root attributes the reference treats as a sequence-classification head.
 _SEQ_CLS_HEADS = ("score", "classifier")
+
+#: Heads the reference's task wrappers train in full, by task.
+_TASK_HEADS: Final[dict[TaskType, tuple[str, ...]]] = {
+    TaskType.SEQ_CLS: ("classifier", "score"),
+    TaskType.TOKEN_CLS: ("classifier", "score"),
+    TaskType.QUESTION_ANS: ("qa_outputs",),
+}
 
 
 def _suffix_match(key: str, names: Iterable[str]) -> bool:
@@ -104,24 +114,33 @@ def _head_names(model: nn.Module, task_type: TaskType | str | None) -> set[str]:
     return {name for name, module in model.named_modules() if module is head}
 
 
-def _resolve_all_linear(config: _TargetedConfig, model: nn.Module) -> set[str] | None:
+def _resolve_all_linear(
+    config: _TargetedConfig,
+    model: nn.Module,
+    adapted_linear: Callable[[nn.Module], nn.Linear | None] | None = None,
+) -> set[str] | None:
     """The module names ``"all-linear"`` stands for in ``model``; ``None`` if not used.
 
-    Every ``nn.Linear`` except the output head, any layer whose weight
-    another module shares — a tied head is the same matrix as the input
-    table, and adapting it would adapt the table too — and any the config
-    excludes (``exclude_modules``, ``modules_to_save``), so the names
-    stored are exactly the names adapted.
+    Every ``nn.Linear`` — and every layer ``adapted_linear`` maps to the
+    ``nn.Linear`` it wraps, which already holds an adapter and takes one
+    more — except the output head, any layer whose weight another module
+    shares (a tied head is the same matrix as the input table, and adapting
+    it would adapt the table too) and any the config excludes
+    (``exclude_modules``, ``modules_to_save``), so the names stored are
+    exactly the names adapted.  The insides of an adapter slot
+    (``q.base_layer``, ``q.lora_A.default``) are never candidates.
     """
     targets = config.target_modules
     if not (isinstance(targets, str) and targets.lower() == _ALL_LINEAR):
         return None
     paths = _parameter_paths(model)
-    linear = {
-        name
-        for name, module in model.named_modules()
-        if name and isinstance(module, nn.Linear) and len(paths[id(module.weight)]) == 1
-    }
+    linear: set[str] = set()
+    for name, module in _outside_slots(model):
+        base = module if isinstance(module, nn.Linear) else None
+        if base is None and adapted_linear is not None:
+            base = adapted_linear(module)
+        if name and base is not None and len(paths[id(base.weight)]) == 1:
+            linear.add(name)
     return {
         name
         for name in linear - _head_names(model, config.task_type)
@@ -144,8 +163,39 @@ def _module_names_matching(model: nn.Module, names: Iterable[str]) -> list[str]:
     """Outermost modules whose dotted name ends with one of ``names``."""
     wanted = list(names)
     chosen: list[str] = []
-    for key, _ in model.named_modules():
+    for key, _ in _outside_slots(model):
         inside = any(key.startswith(f"{outer}.") for outer in chosen)
         if key and not inside and _suffix_match(key, wanted):
             chosen.append(key)
     return chosen
+
+
+def _with_task_heads(model: nn.Module, config: _TargetedConfig) -> list[str] | None:
+    """``modules_to_save`` plus the task's conventional head, if ``model`` has one."""
+    saved = config.modules_to_save
+    if config.task_type is None:
+        return saved
+    heads = _TASK_HEADS.get(TaskType(config.task_type), ())
+    present = [head for head in heads if _module_names_matching(model, [head])]
+    added = [head for head in present if head not in (saved or [])]
+    return [*(saved or []), *added] if added else saved
+
+
+def _config_for_model(model: nn.Module, config: PeftConfig) -> PeftConfig:
+    """``config`` as it is stored for ``model``: the reference's two additions to the user's.
+
+    A ``base_model_name_or_path`` read from the model's ``name_or_path``
+    when it has one and, for a classification or question-answering
+    ``task_type``, the model's head added to ``modules_to_save`` so that it
+    trains.  ``config`` itself is left as it is.
+    """
+    name_or_path = model.__dict__.get("name_or_path")
+    adjusted = dataclasses.replace(
+        config,
+        base_model_name_or_path=(
+            name_or_path if isinstance(name_or_path, str) else config.base_model_name_or_path
+        ),
+    )
+    if isinstance(adjusted, _TargetedConfig):
+        adjusted = dataclasses.replace(adjusted, modules_to_save=_with_task_heads(model, adjusted))
+    return adjusted

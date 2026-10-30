@@ -2,7 +2,9 @@
 
 import math
 import warnings
-from typing import ClassVar, Final, override
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import ClassVar, Final, NamedTuple, override
 
 import lucid
 import lucid.nn as nn
@@ -15,6 +17,18 @@ from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name
 _HALF: Final = (lucid.float16, lucid.bfloat16)
 
 
+class _AdapterSpec(NamedTuple):
+    """What a layer remembers of one adapter besides its modules: rank, alpha and scale.
+
+    A tuple, so the scalar state ``lucid.compile`` keys a trace on includes
+    it: the scale is baked into the graph.
+    """
+
+    r: int
+    lora_alpha: float
+    scaling: float
+
+
 class LoraLayer(_BaseTunerLayer):
     r"""Adapter bookkeeping shared by the LoRA layers.
 
@@ -24,19 +38,22 @@ class LoraLayer(_BaseTunerLayer):
     all keep seeing them) — and, per adapter name, the rank ``r``,
     ``lora_alpha``, ``scaling`` and the ``lora_A`` / ``lora_B`` /
     ``lora_dropout`` modules in ``ModuleDict``\ s, so a state dict reads
-    ``....lora_A.default.weight`` as the reference's does.  v1 holds one
-    adapter per layer.  Merging folds the update into the base weight in
-    place; each LoRA layer type supplies the update (``get_delta_weight``)
-    and the forward pass.
+    ``....lora_A.default.weight`` as the reference's does.  A layer holds
+    any number of adapters, one entry per name in those tables and in
+    ``_specs`` (rank, alpha and scale, read as the ``r``, ``lora_alpha``
+    and ``scaling`` mappings), and the forward pass applies the ones named
+    in ``active_adapter`` that it holds.  Merging folds an update into the
+    base weight in place; each LoRA layer type supplies the update
+    (``get_delta_weight``) and the forward pass.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain public attributes, not
     properties as in the reference: ``lucid.compile`` keys an executable
-    on each module's public scalar attributes, so state kept anywhere
-    else (a private field, the ``merged_adapters`` list) would let a
-    compiled model replay the branch of a state it has left (LCD-703).
-    They change only through ``update_layer``, ``enable_adapters``,
-    ``merge`` and ``unmerge``.
+    on each module's scalar attributes, so state kept anywhere else would
+    let a compiled model replay the branch of a state it has left
+    (LCD-703).  They change only through ``update_layer``,
+    ``set_adapter``, ``delete_adapter``, ``enable_adapters``, ``merge``
+    and ``unmerge``.
 
     Parameters
     ----------
@@ -70,15 +87,28 @@ class LoraLayer(_BaseTunerLayer):
         super().__init__(base_layer)
         self.in_features = base_layer.in_features
         self.out_features = base_layer.out_features
-        self.r: dict[str, int] = {}
-        self.lora_alpha: dict[str, float] = {}
-        self.scaling: dict[str, float] = {}
+        self._specs: dict[str, _AdapterSpec] = {}
         self.lora_dropout: nn.ModuleDict[nn.Dropout | nn.Identity] = nn.ModuleDict()
         self.lora_A: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
         self.lora_B: nn.ModuleDict[nn.Linear] = nn.ModuleDict()
         self.update_layer(
             adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
         )
+
+    @property
+    def r(self) -> Mapping[str, int]:
+        """Rank of each adapter, by name (read-only)."""
+        return MappingProxyType({name: spec.r for name, spec in self._specs.items()})
+
+    @property
+    def lora_alpha(self) -> Mapping[str, float]:
+        """:math:`\\alpha` of each adapter, by name (read-only)."""
+        return MappingProxyType({name: spec.lora_alpha for name, spec in self._specs.items()})
+
+    @property
+    def scaling(self) -> Mapping[str, float]:
+        """The scale :math:`s` each adapter's update is multiplied by, by name (read-only)."""
+        return MappingProxyType({name: spec.scaling for name, spec in self._specs.items()})
 
     @property
     def weight(self) -> Parameter:
@@ -97,9 +127,15 @@ class LoraLayer(_BaseTunerLayer):
 
     @override
     def extra_repr(self) -> str:
-        adapter = self.active_adapter
+        held = [name for name in self.active_adapters if name in self._specs]
+        shown = {name: self._specs[name] for name in held}
+        if isinstance(self.active_adapter, str) and held:
+            spec = shown[held[0]]
+            detail = f"r={spec.r}, lora_alpha={spec.lora_alpha}"
+        else:
+            detail = f"r={ {name: spec.r for name, spec in shown.items()} }"
         return (
-            f"adapter={adapter!r}, r={self.r[adapter]}, lora_alpha={self.lora_alpha[adapter]}, "
+            f"adapter={self.active_adapter!r}, {detail}, "
             f"merged={self.merged}, disabled={self.disable_adapters}"
         )
 
@@ -118,7 +154,9 @@ class LoraLayer(_BaseTunerLayer):
         The adapter lives on the base weight's device.  Its dtype is the
         base's, except that a float16 / bfloat16 base gets a float32
         adapter — the reference's default, which keeps the low-rank update
-        from underflowing in training.
+        from underflowing in training.  A layer that holds an adapter already
+        keeps applying the adapters it applied: the new one is inactive until
+        ``set_adapter`` names it.  A layer with none starts applying this one.
 
         Parameters
         ----------
@@ -140,7 +178,9 @@ class LoraLayer(_BaseTunerLayer):
         Raises
         ------
         NotImplementedError
-            ``use_dora=True``, or the layer already holds an adapter.
+            ``use_dora=True``.
+        ValueError
+            The layer already holds an adapter of this name.
         """
         adapter_name = _check_adapter_name(adapter_name)
         r = _check_rank("r", r)
@@ -149,25 +189,22 @@ class LoraLayer(_BaseTunerLayer):
         p = _check_dropout("lora_dropout", lora_dropout)
         if use_dora:
             raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
-        if len(self.lora_A):
-            raise NotImplementedError(
-                f"this layer already holds adapter {self.active_adapter!r}; "
-                "lucid.peft v1 keeps one adapter per layer"
-            )
+        if adapter_name in self._specs:
+            raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
         weight = self.base_layer.weight
         dtype = lucid.float32 if weight.dtype in _HALF else weight.dtype
-        self.r[adapter_name] = r
-        self.lora_alpha[adapter_name] = lora_alpha
-        self.scaling[adapter_name] = lora_alpha / (math.sqrt(r) if use_rslora else r)
+        # Built first, entered together: an allocation that fails leaves no half adapter.
+        lora_a = nn.Linear(self.in_features, r, bias=False, device=weight.device, dtype=dtype)
+        lora_b = nn.Linear(r, self.out_features, bias=False, device=weight.device, dtype=dtype)
+        self._specs[adapter_name] = _AdapterSpec(
+            r, lora_alpha, lora_alpha / (math.sqrt(r) if use_rslora else r)
+        )
         self.lora_dropout[adapter_name] = nn.Dropout(p=p) if p > 0 else nn.Identity()
-        self.lora_A[adapter_name] = nn.Linear(
-            self.in_features, r, bias=False, device=weight.device, dtype=dtype
-        )
-        self.lora_B[adapter_name] = nn.Linear(
-            r, self.out_features, bias=False, device=weight.device, dtype=dtype
-        )
+        self.lora_A[adapter_name] = lora_a
+        self.lora_B[adapter_name] = lora_b
         self.reset_lora_parameters(adapter_name, init_lora_weights)
-        self.active_adapter = adapter_name
+        if not self.active_adapters:
+            self.active_adapter = adapter_name
 
     def reset_lora_parameters(self, adapter_name: str, init_lora_weights: bool | str) -> None:
         r"""Initialise adapter ``adapter_name`` the way ``init_lora_weights`` asks.
@@ -189,10 +226,18 @@ class LoraLayer(_BaseTunerLayer):
             return
         lora_a = self.lora_A[adapter_name].weight
         if init_lora_weights == "gaussian":
-            init.normal_(lora_a, std=1 / self.r[adapter_name])
+            init.normal_(lora_a, std=1 / self._specs[adapter_name].r)
         else:
             init.kaiming_uniform_(lora_a, a=math.sqrt(5))
         init.zeros_(self.lora_B[adapter_name].weight)
+
+    @override
+    def delete_adapter(self, adapter_name: str) -> None:
+        super().delete_adapter(adapter_name)
+        self._specs.pop(adapter_name, None)
+        # Not in ``adapter_layer_names`` — it holds no parameters to train or save.
+        if adapter_name in self.lora_dropout:
+            del self.lora_dropout[adapter_name]
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
@@ -233,13 +278,13 @@ class LoraLayer(_BaseTunerLayer):
             Check the merged weight for NaN / inf first and leave the base
             untouched if there are any.
         adapter_names : list of str, optional
-            Adapters to merge; the active one by default.
+            Adapters to merge; the active ones this layer holds by default.
 
         Raises
         ------
         ValueError
-            An unknown adapter name, or ``safe_merge`` found a non-finite
-            merged weight.
+            An adapter name this layer does not hold, or ``safe_merge``
+            found a non-finite merged weight.
         RuntimeError
             The adapter is disabled.
         """
@@ -372,18 +417,22 @@ class Linear(LoraLayer, base_type=nn.Linear):
         Tensor
             ``(out_features, in_features)``, in the adapter's dtype.
         """
-        return (self.lora_B[adapter].weight @ self.lora_A[adapter].weight) * self.scaling[adapter]
+        scaling = self._specs[adapter].scaling
+        return (self.lora_B[adapter].weight @ self.lora_A[adapter].weight) * scaling
 
     @override
     def forward(self, x: Tensor) -> Tensor:
         result = self.base_layer(x)
         if self.disable_adapters or self.merged:
             return result
-        adapter = self.active_adapter
-        lora_a = self.lora_A[adapter]
-        h = x if x.dtype == lora_a.weight.dtype else x.to(lora_a.weight.dtype)
-        update = self.lora_B[adapter](lora_a(self.lora_dropout[adapter](h))) * self.scaling[adapter]
-        out = result + update
+        out = result
+        for adapter in self.active_adapters:
+            if adapter not in self._specs:
+                continue  # an adapter aimed at other layers: this one runs its base for it
+            lora_a = self.lora_A[adapter]
+            h = x if x.dtype == lora_a.weight.dtype else x.to(lora_a.weight.dtype)
+            dropped = self.lora_dropout[adapter](h)
+            out = out + self.lora_B[adapter](lora_a(dropped)) * self._specs[adapter].scaling
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     @override

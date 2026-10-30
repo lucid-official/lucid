@@ -23,7 +23,8 @@ from lucid.peft import (
 )
 from lucid.peft._config import _CONFIG_CLASSES, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft.tuners._base import _TUNERS, _adapter_slots, _AdapterSlot, _tuner_for
+from lucid.peft._slots import _adapter_slots, _AdapterSlot
+from lucid.peft.tuners._base import _TUNERS, _tuner_for
 from lucid.peft.tuners.lora import Linear, LoraLayer
 
 

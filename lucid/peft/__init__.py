@@ -43,11 +43,19 @@ What a LoRA layer guarantees:
   another module also uses (a tied LM head) would change that module;
   ``merge_and_unload`` raises instead.
 
-v1 adapts ``nn.Linear`` only and keeps one adapter per model.  Asking for
-more — an embedding or convolution target, DoRA, a second adapter, an
-adapter file of another method — raises ``NotImplementedError`` rather
-than doing less than asked.  Adapters are read from a local directory;
-hub ids are not resolved.
+A model holds any number of adapters, each under its own name::
+
+    model.add_adapter("style", LoraConfig(r=4, target_modules=["c_attn"]))
+    model.set_adapter("style")                     # compute with — and train — this one
+    model.add_weighted_adapter(["default", "style"], [0.7, 0.3], "mix")
+    model.save_pretrained("adapters")              # "default" in adapters/, "style" in adapters/style/
+    model.load_adapter("adapters/style", "style-again")
+
+lucid.peft adapts ``nn.Linear`` only.  Asking for more — an embedding or
+convolution target, DoRA, a TIES / DARE weighted adapter, an adapter file
+of another method — raises ``NotImplementedError`` rather than doing less
+than asked.  Adapters are read from a local directory; hub ids are not
+resolved.
 """
 
 from lucid.peft import tuners
