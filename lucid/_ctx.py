@@ -1,9 +1,12 @@
-"""Thread-local vmap execution context.
+"""Thread-local ``lucid.func`` execution context.
 
 Tracks the active ``randomness`` mode so that random op entry points can
 raise immediately when ``randomness='error'`` is set by an enclosing
-``vmap`` call.  The module has **zero** dependencies on the rest of Lucid
-so it is safe to import from anywhere without circular-import risk.
+``vmap`` call, and how many differentiating transforms are evaluating a
+user function right now, so a transform entered inside one knows its
+result has to stay differentiable.  The module has **zero** dependencies
+on the rest of Lucid so it is safe to import from anywhere without
+circular-import risk.
 """
 
 import threading
@@ -88,3 +91,36 @@ def check_random_allowed() -> None:
             "independent random draws per batch element, or "
             "randomness='same' for a shared stream across elements."
         )
+
+
+def transform_depth() -> int:
+    """How many differentiating transforms are evaluating a function now.
+
+    ``grad`` / ``vjp`` / ``jvp`` / ``jacrev`` / ``jacfwd`` / ``hessian``
+    each count themselves for as long as they run the user's function.  A
+    transform entered while the count is above zero sits inside another
+    one's function, so what it returns is an intermediate of the outer
+    derivative and must stay attached to the graph the outer transform
+    differentiates.  ``0`` outside every transform.
+    """
+    return int(getattr(_local, "depth", 0))
+
+
+@final
+class _TransformLevel:
+    """RAII guard: count one more differentiating transform, uncount on exit.
+
+    Held only while the user's function runs.  The backward passes a
+    transform makes after it contain no user code and so need no level.
+    """
+
+    def __enter__(self) -> None:
+        _local.depth = transform_depth() + 1
+
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _tb: TracebackType | None,
+    ) -> None:
+        _local.depth = transform_depth() - 1

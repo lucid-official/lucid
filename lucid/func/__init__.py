@@ -37,8 +37,9 @@ Limitations
 """
 
 import warnings
+from collections.abc import Sequence
 from typing import Callable, TYPE_CHECKING
-from lucid._ctx import _RandomnessGuard as _RandGuard
+from lucid._ctx import _RandomnessGuard as _RandGuard, _TransformLevel, transform_depth
 from lucid.autograd._functional import jvp as _jvp_by_double_backward
 
 if TYPE_CHECKING:
@@ -89,6 +90,36 @@ def _mark_isolation[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
 
 
 # ── internal helpers ──────────────────────────────────────────────────────────
+
+
+def _keeps_graph(leaves: Sequence[Tensor]) -> bool:
+    """Whether a reverse-mode transform at ``leaves`` must keep its result
+    differentiable.
+
+    It must when something outside can still differentiate through it: a
+    leaf requires grad, so the caller's own graph runs through the result,
+    or the transform sits inside another transform's function
+    (:func:`~lucid._ctx.transform_depth`), whose derivative is taken of this
+    result.  Otherwise nothing will ask for a second derivative and the graph
+    of the first is dropped as soon as it is computed.  Under ``no_grad``
+    nothing is kept.
+    """
+    import lucid
+
+    if not lucid.is_grad_enabled():
+        return False
+    return transform_depth() > 0 or any(t.requires_grad for t in leaves)
+
+
+def _in_level[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """``fn`` run as a level of transform nesting, so a transform called
+    inside it knows it sits inside one."""
+
+    def run(*args: P.args, **kwargs: P.kwargs) -> R:
+        with _TransformLevel():
+            return fn(*args, **kwargs)
+
+    return run
 
 
 def _normalise_argnums(argnums: int | tuple[int, ...]) -> tuple[bool, tuple[int, ...]]:
@@ -484,20 +515,21 @@ def _eval_grad_and_value(
     from lucid.autograd._backward import grad as _ag
     from lucid.autograd._grad_mode import enable_grad
 
+    graph = _keeps_graph([_tensor_argument(list(args), i, name) for i in argnums])
     args_list = _prepare_grad_args(args, argnums)
-    with enable_grad():
+    with enable_grad(), _TransformLevel():
         output = func(*args_list, **kwargs)
     first, aux = _split_aux(output, has_aux=has_aux, name=name, label="loss")
     loss = _output_tensor(first, name)
     grads = _ag(
         [loss],
         [_tensor_argument(args_list, i, name) for i in argnums],
-        retain_graph=False,
-        create_graph=False,
+        retain_graph=graph,
+        create_graph=graph,
         allow_unused=True,
     )
     g = grads[0] if len(argnums) == 1 else tuple(grads)
-    return g, loss.detach(), aux
+    return g, (loss if graph else loss.detach()), aux
 
 
 def grad[**P](
@@ -543,6 +575,15 @@ def grad[**P](
 
     Implementation is reverse-mode AD: one forward + one backward pass
     through ``func``, independent of input dimensionality.
+
+    The gradient is itself differentiable when it needs to be: whenever an
+    argument requires grad, or ``grad`` is called inside the function of
+    another transform, the backward pass records its own graph. That is
+    what makes ``grad(grad(f))`` the second derivative. Otherwise the
+    graph is dropped as soon as the gradient is computed. A gradient taken
+    at plain arguments through a tensor that ``func`` merely captures
+    (a module's parameters, say) is returned detached from it — pass such
+    a tensor in as an argument to differentiate through it.
 
     Examples
     --------
@@ -601,7 +642,9 @@ def grad_and_value[**P](
     The value comes back detached, like the gradients: the backward pass
     that produced them has already consumed the graph behind it, so a
     value that still claimed ``requires_grad`` would only fail later, on
-    a second ``backward``.
+    a second ``backward``. Where :func:`grad` keeps the graph — an
+    argument requires grad, or this is called inside another transform —
+    the value keeps it too, so an outer transform can differentiate it.
 
     Examples
     --------
@@ -687,9 +730,10 @@ def vjp(
     from lucid.autograd._backward import grad as _ag
     from lucid.autograd._grad_mode import enable_grad
 
+    graph = _keeps_graph([_tensor_argument(list(primals), i, "vjp") for i in range(len(primals))])
     prepared = _prepare_grad_args(primals, tuple(range(len(primals))))
     primals_rg = [_tensor_argument(prepared, i, "vjp") for i in range(len(prepared))]
-    with enable_grad():
+    with enable_grad(), _TransformLevel():
         raw_out = func(*primals_rg)
 
     first, aux = _split_aux(raw_out, has_aux=has_aux, name="vjp")
@@ -704,7 +748,7 @@ def vjp(
                 primals_rg,
                 grad_outputs=cots,
                 retain_graph=True,
-                create_graph=False,
+                create_graph=graph,
                 allow_unused=True,
             )
         )
@@ -769,6 +813,7 @@ def _jvp_attached(
     primals: tuple[Tensor, ...],
     tangents: tuple[Tensor, ...],
     strict: bool,
+    observe: Callable[..., Tensor | tuple[Tensor, ...]],
 ) -> tuple[Tensor | tuple[Tensor, ...], Tensor | tuple[Tensor, ...]]:
     """:func:`jvp` at tensor primals, its results attached to the caller's
     graph exactly where the reference attaches them."""
@@ -781,9 +826,10 @@ def _jvp_attached(
     # caller's graph through the tensors it captures — a model's parameters.
     # The backward passes run ``fn`` at copies of the primals that require
     # grad, so their output is attached whatever ``fn`` captures; only an
-    # evaluation at the primals themselves tells.
+    # evaluation at the primals themselves tells — one no derivative is taken
+    # through, so ``observe`` runs ``func`` outside a transform level.
     replay = _replay_draws()
-    primals_out = _output_tensors(fn(*primals), "jvp")
+    primals_out = _output_tensors(observe(*primals), "jvp")
     replay()
     required = any(t.requires_grad for t in tangents)
     _, tangents_out = _tangent_pass(
@@ -884,9 +930,10 @@ def jvp(
             f"jvp: expected one tangent per primal, got {len(primals_t)} primals "
             f"and {len(tangents_t)} tangents"
         )
-    fn, idx = _on_tensors(func, primals_t)
+    fn, idx = _on_tensors(_in_level(func), primals_t)
+    observe, _ = _on_tensors(func, primals_t)
     return _jvp_attached(
-        fn, tuple(primals_t[i] for i in idx), tuple(tangents_t[i] for i in idx), strict
+        fn, tuple(primals_t[i] for i in idx), tuple(tangents_t[i] for i in idx), strict, observe
     )
 
 
@@ -944,7 +991,7 @@ def linearize(
     """
     import lucid
 
-    fn, idx = _on_tensors(func, primals)
+    fn, idx = _on_tensors(_in_level(func), primals)
     primals_sel = tuple(primals[i] for i in idx)
     primals_out = _output_tensors(func(*primals), "linearize")
     attached, primal_attached = _attachment(primals_sel, primals_out)
@@ -986,7 +1033,7 @@ def _one_hot_tangent(x: Tensor, col: int) -> Tensor:
     one = _C_engine.ones([1], dtype, dev)
     idx = _C_engine.full([1], float(col), _C_engine.I32, dev)
     t_flat = _C_engine.scatter_add(t_flat, idx, one, 0)
-    return _TT.__new_from_impl__(_C_engine.reshape(t_flat, x_shape) if x_shape else t_flat)
+    return _TT.__new_from_impl__(_C_engine.reshape(t_flat, x_shape))
 
 
 def _jacfwd_block(
@@ -1060,7 +1107,10 @@ def jacrev[**P](
         J \in \mathbb{R}^{m \times n}.
 
     Cost scales with the output dimension :math:`m` (one backward pass
-    per row). Prefer :func:`jacfwd` when :math:`n < m`.
+    per row). Prefer :func:`jacfwd` when :math:`n < m`.  Like :func:`grad`
+    it keeps the graph of the Jacobian when an argument requires grad or
+    when it is called inside another transform, so ``jacrev(jacrev(f))``
+    is the Hessian.
 
     Examples
     --------
@@ -1084,13 +1134,17 @@ def jacrev[**P](
         aux_holder: list[object] = []
 
         def _wrapped(*sel: Tensor) -> Tensor | tuple[Tensor, ...]:
-            out, aux = _split_aux(
-                call(*_splice(args, _argnums, sel), **kwargs), has_aux=has_aux, name="jacrev"
-            )
+            with _TransformLevel():
+                raw = call(*_splice(args, _argnums, sel), **kwargs)
+            out, aux = _split_aux(raw, has_aux=has_aux, name="jacrev")
             aux_holder.append(aux)
             return _output_tensors(out, "jacrev")
 
-        jac = _jacobian(_wrapped, selected[0] if _scalar_argnum else selected)
+        jac = _jacobian(
+            _wrapped,
+            selected[0] if _scalar_argnum else selected,
+            create_graph=_keeps_graph(selected),
+        )
         return (jac, aux_holder[0]) if has_aux else jac
 
     return _mark_isolation(jac_fn)
@@ -1168,9 +1222,9 @@ def jacfwd[**P](
             attach, required = _attachment(primals, sample)
 
             def _wrapped(*sel: Tensor) -> Tensor | tuple[Tensor, ...]:
-                out, _ = _split_aux(
-                    call(*_splice(args, _argnums, sel), **kwargs), has_aux=has_aux, name="jacfwd"
-                )
+                with _TransformLevel():
+                    raw = call(*_splice(args, _argnums, sel), **kwargs)
+                out, _ = _split_aux(raw, has_aux=has_aux, name="jacfwd")
                 return _output_tensors(out, "jacfwd")
 
             results = tuple(
@@ -1192,11 +1246,11 @@ def hessian[**P](
 ) -> Callable[P, Tensor | tuple[tuple[Tensor, ...], ...]]:
     r"""Build a function returning the Hessian of a scalar-valued ``func``.
 
-    Computes the matrix of second partial derivatives by composing
-    forward-mode over reverse-mode differentiation
-    (``jacfwd(jacrev(func))``). The result captures the local curvature
-    used by Newton-style optimisers, natural-gradient methods, and
-    second-order analyses such as eigenvalue spectra of the loss.
+    Computes the matrix of second partial derivatives — the Jacobian of
+    the gradient — which is the value ``jacfwd(jacrev(func))`` (or
+    ``jacrev(jacrev(func))``) has. The result captures the local
+    curvature used by Newton-style optimisers, natural-gradient methods,
+    and second-order analyses such as eigenvalue spectra of the loss.
 
     Parameters
     ----------
@@ -1220,8 +1274,8 @@ def hessian[**P](
         H_{ij} = \frac{\partial^2 f}{\partial x_i \, \partial x_j},
         \quad H \in \mathbb{R}^{n \times n}.
 
-    Cost is dominated by :math:`n` JVPs over the reverse-mode gradient
-    graph, retained via ``create_graph=True``.
+    Cost is dominated by :math:`n` reverse passes over the graph of the
+    gradient, which is built with ``create_graph=True``.
 
     Examples
     --------
@@ -1241,8 +1295,9 @@ def hessian[**P](
         arg_list = list(args)
         selected = tuple(_tensor_argument(arg_list, i, "hessian") for i in _argnums)
         return _hessian(
-            lambda *sel: call(*_splice(args, _argnums, sel), **kwargs),
+            _in_level(lambda *sel: call(*_splice(args, _argnums, sel), **kwargs)),
             selected[0] if _scalar_argnum else selected,
+            create_graph=_keeps_graph(selected),
         )
 
     return _mark_isolation(hessian_fn)
