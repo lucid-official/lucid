@@ -178,12 +178,11 @@ Storage CpuBackend::bitwise_binary(
             break;
         default:
             // Arithmetic right-shift on the *narrow* type so sign
-            // extension matches the input dtype.  Same out-of-range
-            // contract as left-shift.
+            // extension matches the input dtype.  An amount outside
+            // [0, width) shifts every bit out, leaving the sign fill —
+            // negative amounts included, as in the reference.
             each([](std::int64_t x, std::int64_t y) -> std::int64_t {
-                if (y < 0)
-                    return 0;
-                if (y >= kWidth)
+                if (y < 0 || y >= kWidth)
                     return (x < 0) ? -1 : 0;
                 return static_cast<std::int64_t>(static_cast<T>(x) >> y);
             });

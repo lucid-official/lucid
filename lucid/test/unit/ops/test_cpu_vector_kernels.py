@@ -83,9 +83,9 @@ def test_bitwise_ops(n: int, dtype: type) -> None:
     s64 = shifts.astype(np.int64)
     in_range = (s64 >= 0) & (s64 < bits)
     left = np.where(in_range, a << np.clip(shifts, 0, bits - 1), 0).astype(dtype)
-    right = np.where(
-        s64 < 0, 0, np.where(s64 >= bits, np.where(a < 0, -1, 0), a >> np.clip(shifts, 0, bits - 1))
-    ).astype(dtype)
+    right = np.where(in_range, a >> np.clip(shifts, 0, bits - 1), np.where(a < 0, -1, 0)).astype(
+        dtype
+    )
     np.testing.assert_array_equal((la << ls).numpy(), left)
     np.testing.assert_array_equal((la >> ls).numpy(), right)
 

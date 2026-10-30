@@ -106,8 +106,6 @@ _INTEGRAL_DTYPES: frozenset[str] = frozenset({"bool_", "int8", "int16", "int32",
 
 _DIVMOD_OPS: frozenset[str] = frozenset({"div", "div_", "floor_divide", "fmod", "remainder"})
 
-_SHIFT_OPS: frozenset[str] = frozenset({"bitwise_left_shift", "bitwise_right_shift"})
-
 _BOUNDARY_FLOATS: tuple[float, ...] = (
     0.0,
     -0.0,
@@ -351,8 +349,6 @@ def _is_permitted_lucid_refusal_when_ref_succeeds(
 ) -> bool:
     if isinstance(exc, NotImplementedError):
         return True
-    if entry.name in _SHIFT_OPS:
-        return True
     if entry.name in _DIVMOD_OPS and "bool_" in dtypes:
         return True
     if (
@@ -426,8 +422,8 @@ def _is_permitted_lucid_success_when_ref_raises(
         _assert_matches_ref(entry.name, got, want, device)
         return True
 
-    # 2. Metal avoids host stalls on integer division/mod by zero or negative bit shifts.
-    if entry.name in _DIVMOD_OPS or entry.name in _SHIFT_OPS:
+    # 2. Metal avoids host stalls on integer division/mod by zero.
+    if entry.name in _DIVMOD_OPS:
         return True
 
     # 3. Reference CPU kernel missing for bool / int8 / int16 / half / complex64.
@@ -496,8 +492,10 @@ def _verify_against_ref(
                 f"{entry.name} raised {type(lucid_exc).__name__} ({lucid_exc}) "
                 f"on dtypes={dtypes} device={device} when ref succeeded"
             )
-        if (entry.name in _SHIFT_OPS or (entry.name in _DIVMOD_OPS and device == "metal")) and any(
-            d in _INTEGRAL_DTYPES for d in dtypes
+        if (
+            entry.name in _DIVMOD_OPS
+            and device == "metal"
+            and any(d in _INTEGRAL_DTYPES for d in dtypes)
         ):
             for t in _extract_tensors(got):
                 assert t.device.type == device

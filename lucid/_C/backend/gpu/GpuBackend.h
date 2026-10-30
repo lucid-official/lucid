@@ -113,6 +113,7 @@
 #include "MlxBridge.h"
 #include "Pow.h"
 #include "SdpaHeadDim.h"
+#include "Shift.h"
 #include "SortOrder.h"
 
 namespace lucid {

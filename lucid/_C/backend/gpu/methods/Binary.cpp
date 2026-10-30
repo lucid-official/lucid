@@ -36,10 +36,8 @@ Storage GpuBackend::bitwise_binary(
             return ::mlx::core::bitwise_or(x, y);
         if (op == 2)
             return ::mlx::core::bitwise_xor(x, y);
-        if (op == 3)
-            return ::mlx::core::left_shift(x, y);
-        if (op == 4)
-            return ::mlx::core::right_shift(x, y);
+        if (op == 3 || op == 4)
+            return gpu_shift(x, y, op == 3);
         ErrorBuilder("gpu_backend::bitwise_binary").fail("unknown op");
     });
 }
