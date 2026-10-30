@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - leave a failed injection whole and follow review findings
 
+- warp_affine answers an empty image; a doctest raises as written
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

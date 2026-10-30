@@ -373,6 +373,18 @@ for _label, _fn in (
         ),
     ),
     (
+        "affine_grid empty batch",
+        lambda lib: lib.nn.functional.affine_grid(
+            lib.randn(0, 2, 3), (0, 1, 2, 2), align_corners=False
+        ),
+    ),
+    (
+        "affine_grid no channels",
+        lambda lib: lib.nn.functional.affine_grid(
+            lib.randn(1, 2, 3), (1, 0, 2, 2), align_corners=False
+        ),
+    ),
+    (
         "affine_grid negative size",
         lambda lib: lib.nn.functional.affine_grid(
             lib.randn(1, 2, 3), (1, 1, -2, 2), align_corners=False
@@ -1001,3 +1013,19 @@ def test_a_weighted_bag_of_a_1d_input_is_summed_per_offset(ref: ModuleType) -> N
         return out.reshape(-1).tolist()
 
     assert bags(lucid) == pytest.approx(bags(ref))
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [(0, 4, 4), (3, 0, 4, 4), (0, 3, 4, 4)],
+    ids=["no channels", "no channels in a batch", "no batch"],
+)
+def test_warp_affine_of_an_empty_image_is_empty(device: str, shape: tuple[int, ...]) -> None:
+    # ``affine_grid`` refuses an empty size as the reference does, so the
+    # warp answers an image with nothing in it before asking for a grid.
+    from lucid.utils.transforms import functional as TF
+
+    img = lucid.randn(*shape, device=device)
+    out = TF.warp_affine(img, lucid.eye(3, device=device), (5, 6))
+    assert tuple(out.shape) == (*shape[:-2], 5, 6)
+    assert out.dtype == img.dtype and out.device == img.device

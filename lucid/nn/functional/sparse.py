@@ -55,10 +55,11 @@ def check_embedding_indices(x: Tensor, weight: Tensor, op: str) -> None:
     >>> from lucid.nn.functional.sparse import check_embedding_indices
     >>> table = lucid.zeros(4, 2)
     >>> check_embedding_indices(lucid.tensor([0, 3]), table, "lookup")
-    >>> check_embedding_indices(lucid.tensor([4]), table, "lookup")
-    Traceback (most recent call last):
-        ...
-    IndexError: lookup: index 4 is out of range for a table with 4 entries (valid range [0, 3])
+    >>> try:
+    ...     check_embedding_indices(lucid.tensor([4]), table, "lookup")
+    ... except IndexError as exc:
+    ...     print(exc)
+    lookup: index 4 is out of range for a table with 4 entries (valid range [0, 3])
     """
     _check_table(x, weight, op)
 

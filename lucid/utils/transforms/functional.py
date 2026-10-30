@@ -723,8 +723,11 @@ def warp_affine(
     Returns
     -------
     Tensor
-        Warped image with spatial shape ``out_hw``.
+        Warped image with spatial shape ``out_hw``.  An image with no batch
+        entries or no channels warps to an empty one of that shape.
     """
+    if 0 in img.shape[:-2]:
+        return lucid.zeros(*img.shape[:-2], *out_hw, dtype=img.dtype, device=img.device)
     unbatched = img.ndim == 3
     x = img[None] if unbatched else img
     b, c, ih, iw = (int(d) for d in x.shape)
