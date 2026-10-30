@@ -18,6 +18,7 @@ const DOCS_SIDEBAR: SidebarItem[] = [
       { title: "Mixed Precision Training", href: "/docs/tutorials/mixed-precision" },
       { title: "Speed Up with lucid.compile", href: "/docs/tutorials/compile" },
       { title: "Export to Core ML",        href: "/docs/tutorials/export-coreml" },
+      { title: "Fine-Tune with LoRA",      href: "/docs/tutorials/lora-fine-tuning" },
     ],
   },
   {

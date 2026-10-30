@@ -1,6 +1,6 @@
 ---
 title: Coming from the Reference Framework
-description: A migration guide for code written against the reference framework — the import map, metal instead of the discrete-GPU device, dtype and promotion differences, what Lucid refuses, moving checkpoints across, and what is not available.
+description: A migration guide for code written against the reference framework — the import map, metal instead of the discrete-GPU device, dtype and promotion differences, what Lucid refuses, moving checkpoints across, porting adapter fine-tuning, and what is not available.
 category: Migration
 order: 1
 ---
@@ -164,6 +164,39 @@ print("keys:", list(state)[:3], "... restored:", len(state), "tensors")
 ```
 
 `lucid.load_safetensors(path, device="metal")` places the tensors straight onto a device. Every tensor comes back in the dtype it was stored in, `bfloat16` included. Dtypes Lucid does not have, such as unsigned integers, must be converted before they are written. See [Serialization](/docs/serialization) for sharded checkpoints and `map_location`.
+
+## Coming from the reference adapter library
+
+Fine-tuning code written for the reference framework's adapter library (the `peft` package) ports with an import change. [`lucid.peft`](/api/lucid.peft) keeps that library's function and class names, the `LoraConfig` field names and defaults, the `TaskType` and `PeftType` strings, and the adapter file layout, so the script reads the same and an adapter directory moves between the two. [Fine-Tune with LoRA](/docs/tutorials/lora-fine-tuning) walks the whole workflow.
+
+| Reference | Lucid |
+|---|---|
+| `from peft import LoraConfig, TaskType, PeftModel, get_peft_model` | `from lucid.peft import LoraConfig, TaskType, PeftModel, get_peft_model` |
+| `get_peft_model(model, config)` | unchanged — adapts `model` in place and returns the `PeftModel` |
+| `model.print_trainable_parameters()` | unchanged |
+| `with model.disable_adapter():` | unchanged |
+| `model.merge_and_unload()` | unchanged — hands back the plain model, adapter folded in |
+| `model.save_pretrained(dir)` | unchanged — writes `adapter_config.json` and `adapter_model.safetensors` |
+| `PeftModel.from_pretrained(model, dir)` | unchanged, for a local directory |
+| `inject_adapter_in_model`, `get_peft_model_state_dict`, `set_peft_model_state_dict` | the same names in `lucid.peft` |
+
+```python
+from lucid.peft import LoraConfig, TaskType, get_peft_model
+
+classifier = nn.Sequential(nn.Linear(8, 16), nn.ReLU(), nn.Linear(16, 3))
+adapted = get_peft_model(
+    classifier,
+    LoraConfig(r=4, lora_alpha=8, target_modules=["0"], task_type=TaskType.FEATURE_EXTRACTION),
+)
+adapted.print_trainable_parameters()
+```
+
+The places where a port needs a second look:
+
+- **Module names.** `target_modules` is matched against the Lucid zoo's own module names, and a name that matches nothing is a `ValueError` that lists what you asked for, not a silent no-op. Where a reference recipe names `query` and `value` projections that a Lucid model fuses — the zoo's ViT has a single `qkv` — use the fused name. The fine-tuning tutorial has the names per model family.
+- **Only `nn.Linear` is adapted.** Attention built on `nn.MultiheadAttention` keeps its projections as raw parameters, so naming it raises `NotImplementedError`, and `"all-linear"` then reaches the feed-forward layers only. GPT-2's projections are `nn.Linear` here, not the transposed `Conv1D` the reference uses, so a GPT-2 config's `fan_in_fan_out: true` is reset to `false` with a warning; the adapter tensors are unaffected.
+- **One adapter, LoRA only.** A second adapter on one model and DoRA are refused with `NotImplementedError`, as is an adapter file of another method such as IA3. QLoRA is not implemented.
+- **Local directories, SafeTensors.** `from_pretrained` does not resolve hub ids — download the adapter first — and an `adapter_model.bin` pickle is refused with a message to re-save it as SafeTensors. A GPT-2 or BERT adapter written by the reference library loads one to one by key name and shape; T5 and ViT adapters need their keys converted first, which Lucid does not provide yet.
 
 ## Not available
 

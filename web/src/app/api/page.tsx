@@ -13,6 +13,7 @@ import {
   GitBranch,
   Layers,
   Network,
+  Puzzle,
   Rocket,
   Save,
   Shuffle,
@@ -129,6 +130,7 @@ function buildModuleGroups(): ModuleGroup[] {
   const distributions = _memberCount("lucid.distributions");
   const diffeq        = _memberCount("lucid.diffeq");
   const coreml        = _memberCount("lucid.coreml");
+  const peft          = _memberCount("lucid.peft");
   const engineMembers = _memberCount("lucid._C.engine");
 
   return [
@@ -157,6 +159,12 @@ function buildModuleGroups(): ModuleGroup[] {
       category: "Optimization",
       modules: [
         { name: "lucid.optim", slug: "lucid.optim", description: `${optimizers} optimizers + ${lrSchedulers} learning rate schedulers.`, icon: TrendingDown },
+      ],
+    },
+    {
+      category: "Fine-Tuning",
+      modules: [
+        { name: "lucid.peft", slug: "lucid.peft", description: `LoRA fine-tuning in the reference adapter library's API and file format — ${peft} names: LoraConfig, get_peft_model, PeftModel, merge and save.`, icon: Puzzle, badge: `${peft} names` },
       ],
     },
     {

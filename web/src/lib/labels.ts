@@ -32,6 +32,7 @@ const MIXED_CASE: Record<string, string> = {
   bytelevel:  "ByteLevel",
   bytepair:   "BytePair",
   adamw:      "AdamW",
+  lora:       "LoRA",
   resnext:    "ResNeXt",
   convnext:   "ConvNeXt",
 };
@@ -121,6 +122,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   whitespace: "Whitespace",
   word: "Word",
   wordpiece: "WordPiece",
+  // peft — file stems (``_peft_model.py``) and the tuners/lora tree
+  peft_model: "PeftModel",
+  state_dict: "State Dict",
   // amp
   autocast: "Autocast",
   grad_scaler: "Gradient Scaler",
@@ -228,6 +232,9 @@ const PACKAGE_LABELS: Record<string, string> = {
   "lucid.utils.transforms":  "Transforms",
   "lucid.weights":           "Weights",
   "lucid.coreml":            "Core ML",
+  "lucid.peft":              "PEFT",
+  "lucid.peft.tuners":       "Tuners",
+  "lucid.peft.tuners.lora":  "LoRA",
   "lucid.models":            "Model Zoo",
   "lucid.models.vision":     "Vision Models",
   "lucid.models.text":       "Text Models",

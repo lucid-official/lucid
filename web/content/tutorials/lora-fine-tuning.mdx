@@ -1,0 +1,375 @@
+---
+title: Fine-Tune with LoRA
+description: A runnable tutorial for lucid.peft — adapt a zoo model with LoRA, train only the adapter, generate, save and reload the adapter alone, switch it off, merge it for deployment, pick the target modules for each model family, export to Core ML, and load adapters written by the reference adapter library.
+category: Tutorials
+order: 5
+---
+
+Fine-tuning a model end to end updates, stores and ships every weight. **LoRA** (Hu et al., 2021) freezes them instead. Beside each `nn.Linear` you choose, it learns a low-rank update: the layer computes
+
+$$
+y = W x + \frac{\alpha}{r}\, B A x, \qquad A \in \mathbb{R}^{r \times d_{in}},\; B \in \mathbb{R}^{d_{out} \times r},
+$$
+
+where $W$ is the frozen weight and the rank $r$ is small. $B$ starts at zero, so the adapted model begins exactly as the base model. Only $A$ and $B$ train, and only they are saved: a fine-tune becomes a few megabytes you can train, store and swap.
+
+[`lucid.peft`](/api/lucid.peft) implements this with the reference adapter library's API and adapter file format — the same names, the same defaults, the same two files on disk — so a script written for that library reads the same here, and an adapter directory moves between the two. This tutorial adapts a small GPT-2 from the zoo end to end, then covers the target modules for each model family, shipping to Core ML, and what v1 does not do.
+
+Run the blocks in order as one script; it takes a few seconds on the CPU or on Metal.
+
+## A base model to adapt
+
+The base model is a GPT-2 from the zoo, shrunk with config overrides so the tutorial trains in a moment. In a real project this is where you would load pretrained weights. To have something to adapt, the block first trains it on a toy language: sequences that count up by one, modulo a 64-token vocabulary. The adapter will later teach it to count by two.
+
+The trained base is written to disk with `save_pretrained`, and `load_base()` rebuilds it. An adapter is only meaningful on the exact base it was trained on, so the rest of the tutorial always starts from this checkpoint.
+
+```python
+import tempfile
+from pathlib import Path
+
+import lucid
+import lucid.nn as nn
+import lucid.optim as optim
+from lucid.models import GPT2LMHeadModel, create_model
+from lucid.peft import LoraConfig, PeftModel, get_peft_model
+
+device = "metal" if lucid.metal.is_available() else "cpu"
+lucid.manual_seed(0)
+print("running on", device)
+
+VOCAB, LENGTH = 64, 16
+GPT2 = dict(
+    vocab_size=VOCAB,
+    hidden_size=64,
+    num_hidden_layers=2,
+    num_attention_heads=4,
+    intermediate_size=128,
+    max_position_embeddings=32,
+    hidden_dropout=0.0,
+    attention_dropout=0.0,
+)
+room = Path(tempfile.mkdtemp())
+
+
+def counting(stride: int, n: int) -> lucid.Tensor:
+    """`n` sequences that count up in steps of `stride`, modulo the vocabulary."""
+    start = lucid.randint(0, VOCAB, (n, 1))
+    return ((start + stride * lucid.arange(LENGTH).reshape(1, LENGTH)) % VOCAB).to(device)
+
+
+model = create_model("gpt2_small_lm", **GPT2).to(device)
+opt = optim.AdamW(model.parameters(), lr=3e-3)
+for step in range(200):
+    ids = counting(1, 32)
+    loss = model(ids, labels=ids).loss
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+print(f"base model counts by 1: loss {loss.item():.3f}")
+
+model.save_pretrained(str(room / "base"))
+
+
+def load_base() -> GPT2LMHeadModel:
+    return GPT2LMHeadModel.from_pretrained(str(room / "base"))
+```
+
+## Adapt the model
+
+A `LoraConfig` says which modules get an adapter and how big it is. `target_modules` is required — there is no per-architecture default — and it names modules by the zoo's own module names, which *Choose the target modules* below lists per family. `get_peft_model` injects the adapter **in place** and returns a `PeftModel` that wraps the model.
+
+Before adapting, the block records the base model's output on a probe batch, to compare against afterwards.
+
+```python
+probe = counting(1, 4)
+with lucid.no_grad():
+    before = model(probe).logits
+
+config = LoraConfig(r=8, lora_alpha=16, target_modules=["c_attn"], task_type="CAUSAL_LM")
+peft = get_peft_model(model, config)
+peft.print_trainable_parameters()
+
+with lucid.no_grad():
+    print("starts as the base model:", bool((peft(probe).logits == before).all().item()))
+```
+
+Two things to read off. Only the adapter requires grad — the printed count is the whole of what will train. (5.3% here only because the model is tiny: the same configuration on GPT-2 small trains 294,912 parameters, 0.24% of the model.) And because $B$ starts at zero, the adapted model's output is the base model's, bit for bit.
+
+Each adapted layer keeps the original `nn.Linear` as `base_layer`, with its own `Parameter` objects rather than copies, and gains a `lora_A` and `lora_B` beside it:
+
+```python
+c_attn = peft.get_base_model().transformer.h[0].attn.c_attn
+print([name for name, _ in c_attn.named_children()])
+print([name for name, p in peft.named_parameters() if p.requires_grad][:2])
+```
+
+`peft.get_base_model()` is the model you passed in, now holding LoRA layers. Calling the `PeftModel` runs it, and any public name the wrapper lacks — `generate`, `config` — is read from it, so code written for the bare model keeps working.
+
+## Train only the adapter
+
+Training is an ordinary loop. The optimizer is given only the parameters that require grad; the base is frozen, so nothing else would receive a gradient anyway. The adapter is taught the new task: counting by two.
+
+```python
+base_weight = c_attn.base_layer.weight.clone()
+opt = optim.AdamW([p for p in peft.parameters() if p.requires_grad], lr=1e-2)
+
+peft.train()
+for step in range(200):
+    ids = counting(2, 32)
+    loss = peft(ids, labels=ids).loss
+    opt.zero_grad()
+    loss.backward()
+    opt.step()
+    if step % 50 == 0:
+        print(f"step {step:3d}  loss {loss.item():.3f}")
+print(f"final loss {loss.item():.3f}")
+print("base weight untouched:", bool((c_attn.base_layer.weight == base_weight).all().item()))
+```
+
+## Generate
+
+`generate` is the wrapped model's, reached through the `PeftModel`. Put the model in `eval()` mode first. Given a prompt that counts by two, it continues counting by two:
+
+```python
+peft.eval()
+prompt = lucid.tensor([[5, 7]]).to(device)
+print(peft.generate(prompt, max_new_tokens=6).tolist())
+```
+
+## Save the adapter, load it again
+
+`save_pretrained` writes the adapter and not the base model — two files, the reference library's: `adapter_config.json` and `adapter_model.safetensors`. Compare their size to the base checkpoint.
+
+`PeftModel.from_pretrained(model, directory)` adapts a fresh copy of the same base and loads the tensors. It reads a local directory (hub ids are not resolved), freezes the adapter and puts the model in `eval()` mode for inference; pass `is_trainable=True` to keep training it.
+
+```python
+adapter_dir = room / "count-by-2"
+peft.save_pretrained(str(adapter_dir))
+for f in sorted(adapter_dir.iterdir()):
+    print(f"{f.name:28s}{f.stat().st_size:>8,d} bytes")
+print(f"{'the base checkpoint':28s}{sum(f.stat().st_size for f in (room / 'base').iterdir()):>8,d} bytes")
+
+reloaded = PeftModel.from_pretrained(load_base().to(device), str(adapter_dir))
+print(reloaded.generate(prompt, max_new_tokens=6).tolist())
+```
+
+The reloaded model continues the same way. The adapter is a small fraction of the base even here, and the ratio grows with the model: GPT-2 small's checkpoint is about 500 MB, its rank-8 `c_attn` adapter about 1 MB.
+
+## Switch the adapter off
+
+`disable_adapter()` is a context manager that runs the base model alone. Inside the block LoRA updates are skipped, and the adapter comes back when the block exits, even on an exception. It is how you compare a fine-tune against its base, or serve both from one set of weights.
+
+```python
+with lucid.no_grad():
+    adapted = peft(probe).logits
+    with peft.disable_adapter():
+        off = peft(probe).logits
+print("adapter off equals the base model:", bool((off == before).all().item()))
+print("adapter on differs from it:", not bool((adapted == before).all().item()))
+
+with peft.disable_adapter():
+    print("adapter off, same prompt:", peft.generate(prompt, max_new_tokens=6).tolist())
+```
+
+## Merge it for deployment
+
+For deployment you do not want the extra matrix multiplications. `merge_and_unload()` folds each update into its base weight and hands back the plain model: ordinary `nn.Linear` layers again, the base model's size and the base model's speed, saved, exported and compiled like any model.
+
+Merging writes into the base weights **in place** — LoRA layers share the base layer's `Parameter` objects — which is why the base checkpoint was saved to disk first. The `PeftModel` is spent afterwards, so save the adapter before merging if you want to keep it.
+
+```python
+merged = peft.merge_and_unload()
+print(type(merged).__name__, "with", type(merged.transformer.h[0].attn.c_attn).__name__, "layers again")
+
+with lucid.no_grad():
+    print("matches the adapted model:", bool(lucid.allclose(merged(probe).logits, adapted, atol=1e-4)))
+print(merged.generate(prompt, max_new_tokens=6).tolist())
+
+merged.save_pretrained(str(room / "merged"))
+```
+
+<Callout variant="note">
+Merging refuses to fold an update into a weight that another module also uses, such as a language-model head tied to the input embedding: the merge would change that module too. `merge_and_unload` raises instead. Keep such an adapter unmerged, or untie the weight first.
+</Callout>
+
+## Choose the target modules
+
+`target_modules` is the one decision a `LoraConfig` forces on you. The zoo's modules carry their own names, so first read them off the model:
+
+```python
+print([name for name, m in load_base().named_modules() if isinstance(m, nn.Linear)])
+```
+
+A **list** of names matches a module whose dotted name equals an entry or ends with `"." + entry`, so `"c_attn"` reaches every block's `c_attn` and nothing else. A **string** is a regular expression the whole dotted name must match. `"all-linear"` selects every `nn.Linear` except the output head and any layer whose weight another module shares — a tied head is the same matrix as the input table, and adapting it would adapt the table too. `layers_to_transform` and `exclude_modules` narrow the choice.
+
+```python
+everything = get_peft_model(load_base(), LoraConfig(r=8, target_modules="all-linear"))
+print(len(everything.base_model.targeted_module_names), "layers adapted by all-linear")
+```
+
+Which names to use depends on the family. The common recipe adapts the attention projections:
+
+| Family | `target_modules` | Reaches |
+|---|---|---|
+| `gpt2`, `gpt` | `["c_attn"]` | the fused query/key/value projection of each block |
+| `bert`, `roformer` | `["query", "value"]` | the query and value projections of each self-attention |
+| `t5` | `["q", "v"]` | query and value in encoder self-attention, decoder self-attention and cross-attention |
+| `vit`, `swin`, `maxvit`, `coatnet`, `crossvit`, `efficientformer`, `ijepa` | `["qkv"]` | the fused query/key/value projection (these models have no separate `query` / `value` modules, which the reference library's ViT recipe names) |
+| `pvt` | `["q", "kv"]` | the query projection and the fused key/value projection |
+| `cvt` | `["proj_q.proj", "proj_v.proj"]` | the linear projections inside the query and value convolutional projections |
+
+A classification or question-answering head is trained in full beside the adapter. With a `task_type` of `"SEQ_CLS"` or `"QUESTION_ANS"`, `get_peft_model` makes a head under the conventional name (`classifier` or `score`, `qa_outputs`) trainable for you; for any other head, such as a ViT's `head`, name it in `modules_to_save`.
+
+### What v1 cannot reach
+
+Some zoo families build attention on `nn.MultiheadAttention`: `transformer`, `detr`, `clip`, `dit`, `stable_diffusion`, and the decoder cross-attention of `mask2former`. That module keeps its projections as raw parameters rather than `nn.Linear` modules, and v1 adapts `nn.Linear` only. Naming the attention module is refused, and the model is left untouched. `"all-linear"` on these models quietly gives a feed-forward-only LoRA, which is a different thing from adapting attention.
+
+```python
+layer = nn.TransformerEncoderLayer(16, 2, 32)
+try:
+    get_peft_model(layer, LoraConfig(r=4, target_modules=["self_attn"]))
+except NotImplementedError as err:
+    print("refused:", err)
+
+feed_forward = get_peft_model(layer, LoraConfig(r=4, target_modules="all-linear"))
+print("all-linear reaches only:", sorted(feed_forward.base_model.targeted_module_names))
+```
+
+A name that matches no module is a `ValueError` listing what you asked for; so is leaving `target_modules` unset.
+
+## Ship it with Core ML
+
+There are two ways to put an adapted model in an app, and they trade size against flexibility. The examples here load from the files saved above, on the CPU: Core ML export reads host memory and needs an `eval()` model whose parameters are on the CPU. See [Export to Core ML](/docs/tutorials/export-coreml) for the export itself.
+
+### One fine-tune: merge, then export
+
+The recommended path for a model with a single adapter. Merge, put the plain model in `eval()` mode and export it: the package is the base model's size and runs at the base model's speed.
+
+```python
+import lucid.coreml as cml
+
+example = lucid.zeros(1, 8).to(lucid.int64)
+deploy = PeftModel.from_pretrained(load_base(), str(adapter_dir)).merge_and_unload().eval()
+
+package = cml.export(deploy, example, str(room / "count-by-2.mlpackage"))
+print("outputs:", package.output_shapes)
+print("max |package - eager|:", package.verify(deploy, example))
+```
+
+An unmerged `PeftModel` exports too, with the LoRA branch traced as two small linear layers and an add — it predicts as eager does, but it is larger and slower than the merged model.
+
+### Swappable adapters: one base, many adapters
+
+When an app should switch between fine-tunes — one base model and several adapters — `cml.export_functions` writes one package with several entry points. It writes each `Parameter` **once per object identity**, and a LoRA layer keeps the base layer's own `Parameter` objects. So if every adapted model shares the same base `Parameter` objects, the package holds the base once, plus each adapter.
+
+The base function is the adapted model run under `disable_adapter()`. Sharing is by identity, so the second model's base must be made to *use* the first model's parameters: a deep copy or a second load would ship its weights again. The helper below does that, including the weight tied between the embedding and the output head.
+
+First a second adapter, trained on the same base to count by three:
+
+```python
+def train_adapter(stride: int, name: str) -> None:
+    """Fine-tune a copy of the base to count by `stride` and save the adapter as `name`."""
+    tuned = get_peft_model(load_base().to(device), config)
+    opt = optim.AdamW([p for p in tuned.parameters() if p.requires_grad], lr=1e-2)
+    for _ in range(200):
+        ids = counting(stride, 32)
+        loss = tuned(ids, labels=ids).loss
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    tuned.save_pretrained(str(room / name))
+
+
+train_adapter(3, "count-by-3")
+```
+
+Then the export. `share_base` points a plain copy of the base at the first model's parameters; each adapter is loaded onto its own such copy.
+
+```python
+class BaseOnly(nn.Module):
+    """The adapted model with its adapter off: the base function of a shared package."""
+
+    def __init__(self, peft: PeftModel) -> None:
+        super().__init__()
+        self.peft = peft
+        self.eval()
+
+    def forward(self, ids: lucid.Tensor) -> object:
+        with self.peft.disable_adapter():
+            return self.peft(ids)
+
+
+def share_base(source: PeftModel, target: nn.Module) -> nn.Module:
+    """Make `target` use the very `Parameter` objects of `source`'s base weights."""
+    for name, param in source.get_base_model().named_parameters(remove_duplicate=False):
+        if "lora_" not in name:
+            owner, _, leaf = name.replace("base_layer.", "").rpartition(".")
+            setattr(target.get_submodule(owner), leaf, param)
+    return target
+
+
+def folder_bytes(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
+by_2 = PeftModel.from_pretrained(load_base(), str(adapter_dir))
+by_3 = PeftModel.from_pretrained(share_base(by_2, load_base()), str(room / "count-by-3"))
+base_only = BaseOnly(by_2)
+models = {"base": base_only, "by_2": by_2, "by_3": by_3}
+
+shared = cml.export_functions(
+    {name: (m, example) for name, m in models.items()},
+    str(room / "adapters.mlpackage"),
+    default="by_2",
+)
+apart = 0
+for name, m in models.items():
+    cml.export(m, example, str(room / f"{name}.mlpackage")).close()
+    apart += folder_bytes(room / f"{name}.mlpackage")
+
+print(f"one package: {folder_bytes(room / 'adapters.mlpackage'):,d} bytes")
+print(f"three packages: {apart:,d} bytes")
+for name, m in models.items():
+    print(f"{name:5s} max |package - eager|: {shared[name].verify(m, example):.1e}")
+```
+
+Each entry point is a handle that predicts as its own model does: `shared["by_2"].predict(...)` runs that adapter, and `shared["base"]` runs the base alone. The one package is about 0.44 MB against about 1.04 MB for the three separate ones: it leaves out two of the three copies of the base. An adapter in the package costs a little more than its parameter count, because the exporter writes a zero bias beside each of its two matrices; that overhead matters less as the rank grows.
+
+<Callout variant="warning">
+Keep the weights in float. Weight compression (`weights=cml.WeightPrecision.INT8`, palettization) is not shared across functions yet: a compressed weight is written once per function, so a package with a compressed base carries the base once per function instead of once.
+</Callout>
+
+## Compile an adapted model
+
+An adapted model compiles like any other on Metal; see [Speed Up with lucid.compile](/docs/tutorials/compile). The merged model from above is a plain zoo model, so the simplest route is to compile that. (On the CPU there is nothing to compile: `lucid.compile` runs the module eagerly and warns once.)
+
+```python
+import lucid.compile
+
+fast = lucid.compile(merged.eval())
+with lucid.no_grad():
+    print("compiled matches eager:", bool(lucid.allclose(fast(probe).logits, merged(probe).logits, atol=1e-4)))
+```
+
+`make_step` and `fused_step` train an adapted model too, updating the adapter only. One caution applies to an adapter you have not merged: the compile cache is keyed on a module's public scalar attributes, and a LoRA layer keeps its on/off and merged state in private attributes. So **do not toggle `disable_adapter()` or `merge_adapter()` on a module you have already compiled** — the compiled module would keep running its old graph. Compile again after the toggle, or compile the plain model `merge_and_unload()` returns.
+
+## Adapters from the reference library
+
+The adapter file format is the reference library's, so an adapter directory it wrote loads here with `PeftModel.from_pretrained`, by key name and shape. A GPT-2 or BERT LoRA adapter loads one to one onto the zoo's `gpt2` and `bert` models. A GPT-2 adapter's config carries `fan_in_fan_out: true`, because that library's GPT-2 stores its projections transposed; Lucid's `nn.Linear` does not, so the flag is reset to `False` with a warning, and the tensors are unaffected.
+
+T5 and ViT adapters written by that library need their keys converted first, because the zoo's module names differ from theirs (`qkv` for ViT, as above); a converter is not provided yet. Adapters are read from a local directory, so download one first; a `.bin` pickle adapter is refused with a message to re-save it as SafeTensors. See [the migration guide](/docs/migration/from-reference-framework) for the API mapping.
+
+## What v1 does not do
+
+`lucid.peft` is deliberately narrow, and refuses with `NotImplementedError` rather than doing less than you asked.
+
+- **One adapter per model.** A second `get_peft_model` on an adapted model, or a second adapter name, is refused. To switch adapters, `unload()` the first and load the next onto the same model, or keep a copy of the base per adapter, as in the Core ML section.
+- **LoRA only.** No DoRA, QLoRA or IA3, and an adapter file of another method is refused.
+- **`nn.Linear` targets only.** No `nn.Embedding`, convolution or `nn.MultiheadAttention` target.
+- **Local directories only.** Hub ids are not resolved, and `safe_serialization=False` is refused: adapters are SafeTensors.
+
+## Where to go next
+
+- The [`lucid.peft` reference](/api/lucid.peft) has every field of `LoraConfig` — `lora_dropout`, `bias`, `rank_pattern`, `alpha_pattern`, `use_rslora` — and the lower-level `inject_adapter_in_model`, `get_peft_model_state_dict` and `set_peft_model_state_dict`.
+- Combine with [Mixed Precision Training](/docs/tutorials/mixed-precision): a half-precision base gets a float32 adapter, computed in float32 and cast back to the base's output dtype.
+- Coming from the reference adapter library: [the migration guide](/docs/migration/from-reference-framework).
