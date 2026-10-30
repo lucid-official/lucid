@@ -1,9 +1,10 @@
 """One version number for the state of every module tree.
 
 ``lucid.compile`` keys an executable on a walk of the model's tree — each
-submodule's ``training`` flag, public scalar attributes and hooks.  The walk
-cost about a millisecond per call on a 200-module model, every call, so the
-compile side caches it against :func:`_tree_version`.
+submodule's ``training`` flag, its scalar and short-container attributes
+(public or private, LCD-704) and hooks.  The walk cost about a millisecond
+per call on a 200-module model, every call, so the compile side caches it
+against :func:`_tree_version`.
 
 The version moves after any change the walk can see, anywhere: an attribute
 set or deleted through :meth:`Module.__setattr__` / ``__delattr__``, every

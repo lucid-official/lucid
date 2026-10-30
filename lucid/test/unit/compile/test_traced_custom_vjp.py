@@ -384,7 +384,7 @@ def test_roformer_training_compiles_in_make_step_and_fused_step(device_gpu_only:
     ids = lucid.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], dtype=lucid.int64, device=device)
     target = lucid.randn(2, 3, device=device)
 
-    def _cls_mse(out: object, t: Tensor) -> Tensor:
+    def _cls_mse(out: object, t: lucid.Tensor) -> lucid.Tensor:
         return F.mse_loss(out.logits, t)  # type: ignore[attr-defined]
 
     lucid.manual_seed(31)
