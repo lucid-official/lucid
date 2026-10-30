@@ -44,9 +44,7 @@ def _lazy_input(shift: float = 0.0) -> lucid.Tensor:
 def _model() -> nn.Module:
     lucid.manual_seed(0)
     return nn.Sequential(
-        nn.Linear(4, 8, device="metal"),
-        nn.Tanh(),
-        nn.Linear(8, 2, device="metal"),
+        nn.Linear(4, 8, device="metal"), nn.Tanh(), nn.Linear(8, 2, device="metal")
     )
 
 

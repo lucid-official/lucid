@@ -290,9 +290,9 @@ def _assert_outputs_match(
     assert len(l_items) == len(r_items), f"{op.name}[{sample_name}]: output tuple length mismatch"
     for idx, (li, ri) in enumerate(zip(l_items, r_items, strict=True)):
         assert isinstance(li, lucid.Tensor), f"{op.name}[{sample_name}]: output {idx} not a Tensor"
-        assert li.device.type == device, (
-            f"{op.name}[{sample_name}]: expected device {device}, got {li.device.type}"
-        )
+        assert (
+            li.device.type == device
+        ), f"{op.name}[{sample_name}]: expected device {device}, got {li.device.type}"
         l_np = _to_numpy(li)
         r_np = _to_numpy(ri)
         if np.issubdtype(r_np.dtype, np.floating) or np.issubdtype(r_np.dtype, np.complexfloating):
@@ -355,9 +355,9 @@ def _run_backward_comparison(
     mode = "strided-bwd" if strided else "bwd"
     for idx, (ll, rl) in enumerate(zip(l_leaves, r_leaves, strict=True)):
         assert ll.grad is not None, f"{op.name}[{sample.name}] ({mode}): leaf {idx} grad is None"
-        assert ll.grad.shape == ll.shape, (
-            f"{op.name}[{sample.name}] ({mode}): leaf {idx} grad shape {ll.grad.shape} != {ll.shape}"
-        )
+        assert (
+            ll.grad.shape == ll.shape
+        ), f"{op.name}[{sample.name}] ({mode}): leaf {idx} grad shape {ll.grad.shape} != {ll.shape}"
         assert_close(
             _to_numpy(ll.grad).astype(np.float32),
             _to_numpy(rl.grad).astype(np.float32),
@@ -551,9 +551,9 @@ def verify_opinfo_second_order_strided(
         for idx, (lg2, rg2) in enumerate(zip(l_grads2, r_grads2, strict=True)):
             if lg2 is None and rg2 is None:
                 continue
-            assert lg2 is not None and rg2 is not None, (
-                f"{op.name}[{sample.name}] 2nd-order strided HVP[{idx}] None mismatch ({device})"
-            )
+            assert (
+                lg2 is not None and rg2 is not None
+            ), f"{op.name}[{sample.name}] 2nd-order strided HVP[{idx}] None mismatch ({device})"
             assert_close(
                 _to_numpy(lg2).astype(np.float32),
                 _to_numpy(rg2).astype(np.float32),

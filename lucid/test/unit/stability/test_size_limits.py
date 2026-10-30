@@ -62,11 +62,7 @@ _FACTORIES = [
     ("linspace", "out = lucid.linspace(0.0, 1.0, 2**62, device=D)", OVERFLOW),
     ("logspace", "out = lucid.logspace(0.0, 1.0, 2**62, device=D)", OVERFLOW),
     # Its extent, 1 + (2^31 - 1) * 2^31 + (2^31 - 1), is 2^62 elements.
-    (
-        "empty_strided",
-        "out = lucid.empty_strided((2**31, 2**31), (2**31, 1), device=D)",
-        OVERFLOW,
-    ),
+    ("empty_strided", "out = lucid.empty_strided((2**31, 2**31), (2**31, 1), device=D)", OVERFLOW),
     ("arange_count", "out = lucid.arange(0.0, 1e30, device=D)", OVERFLOW),
     ("arange_inf", "out = lucid.arange(0.0, float('inf'), device=D)", ("InvalidArgument", "range")),
     ("arange_nan", "out = lucid.arange(0.0, float('nan'), device=D)", ("InvalidArgument", "range")),
@@ -95,11 +91,7 @@ _TOO_LARGE = [
     ("eye_4tib", "out = lucid.eye(2**20, device=D)", OOM),
     ("arange_8tib", "out = lucid.arange(2**40, device=D)", OOM),
     ("histc_8tib_of_bins", "out = lucid.histc(R(10), bins=2**40)", OOM),
-    (
-        "kron_8tib",
-        "a = lucid.arange(2**20, device=D)\nout = lucid.kron(a, a)",
-        OOM,
-    ),
+    ("kron_8tib", "a = lucid.arange(2**20, device=D)\nout = lucid.kron(a, a)", OOM),
     # The largest count at the widest CPU dtype: 2^62 bytes, which fits.
     (
         "near_limit_bytes",

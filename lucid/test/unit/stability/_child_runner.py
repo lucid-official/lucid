@@ -34,10 +34,7 @@ def describe_exit(code: int) -> str:
 
 
 def run_child_cases(
-    child: str,
-    cases: Sequence[tuple[str, str]],
-    device: str,
-    crash_extra: Sequence[object] = (),
+    child: str, cases: Sequence[tuple[str, str]], device: str, crash_extra: Sequence[object] = ()
 ) -> dict[str, list[object]]:
     """Every case's verdict on ``device``, ``["crash", detail, *crash_extra]``
     for one that killed its child."""
