@@ -32,12 +32,14 @@ namespace lucid {
 namespace backend {
 
 // Whether each element of ``x`` is nonzero, as bool.  A complex value is
-// true when either part is; MLX's own cast read the real part alone.
+// true when either part is; MLX's own cast read the real part alone.  The
+// parts are cast, not compared with zero: Metal flushes a subnormal in
+// ``!=`` (the cast keeps it), and a subnormal is not zero.
 inline ::mlx::core::array gpu_truth(const ::mlx::core::array& x) {
     namespace mx = ::mlx::core;
     if (x.dtype() == mx::complex64)
-        return mx::logical_or(mx::not_equal(mx::real(x), mx::array(0.0f)),
-                              mx::not_equal(mx::imag(x), mx::array(0.0f)));
+        return mx::logical_or(mx::astype(mx::real(x), mx::bool_),
+                              mx::astype(mx::imag(x), mx::bool_));
     return mx::astype(x, mx::bool_);
 }
 

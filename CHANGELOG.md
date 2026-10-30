@@ -91,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - any and all reduce the elements' truth, not the elements
 
+- a complex value's truth keeps a subnormal part; add the dtype matrix
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
