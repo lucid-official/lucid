@@ -168,6 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - convert_adapters CLI; T5 weight tool shares the map
 - _Init.to_plain: PiSSA/OLoRA adapter to a plain rank-2r LoRA
 - save_pretrained converts PiSSA/OLoRA with path_initial_model
+- PackedSequence defaults, conversions, unpad/unpack
 
 ---
 

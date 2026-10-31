@@ -6,11 +6,12 @@ All computation uses the C++ engine — no numpy.
 import struct
 from collections.abc import Sequence
 from itertools import pairwise
-from typing import NamedTuple
+from typing import Literal, NamedTuple, Self
 
 import lucid
 from lucid._tensor.tensor import Tensor as _Tensor
 from lucid._tensor.tensor import Tensor  # public alias for NamedTuple field annotations
+from lucid._types import DeviceLike, DTypeLike
 from lucid._C import engine as _C_engine
 
 # Integer-dtype → struct format-code map, used by _int_tensor_to_list to
@@ -116,6 +117,22 @@ def _cpu_int64(values: list[int]) -> Tensor:
     return lucid.tensor(values, dtype=lucid.int64, device="cpu")
 
 
+def _inverse_permutation(order: list[int]) -> list[int]:
+    """The permutation that undoes ``order`` (``inverse[order[i]] == i``)."""
+    inverse = [0] * len(order)
+    for new_pos, orig_pos in enumerate(order):
+        inverse[orig_pos] = new_pos
+    return inverse
+
+
+def _permutation_list(indices: Tensor, name: str) -> list[int]:
+    """``indices`` as Python ints, refused unless it permutes ``range(len(indices))``."""
+    order = _int_tensor_to_list(indices)
+    if sorted(order) != list(range(len(order))):
+        raise ValueError(f"{name} must be a permutation of range({len(order)}), got {order}")
+    return order
+
+
 def _batch_size_list(batch_sizes: Tensor, rows: int) -> list[int]:
     """A packed sequence's ``batch_sizes`` as ints, refused unless it describes ``rows`` rows."""
     if batch_sizes.ndim != 1:
@@ -151,7 +168,20 @@ def _check_sequences(sequences: Sequence[Tensor]) -> None:
             )
 
 
-class PackedSequence(NamedTuple):
+class _PackedSequenceFields(NamedTuple):
+    """The four tuple fields of :class:`PackedSequence`.
+
+    Split out because a ``NamedTuple`` body cannot define ``__new__`` or
+    carry methods; :class:`PackedSequence` subclasses it to add both.
+    """
+
+    data: Tensor
+    batch_sizes: Tensor
+    sorted_indices: Tensor | None
+    unsorted_indices: Tensor | None
+
+
+class PackedSequence(_PackedSequenceFields):
     r"""Compact representation of a batch of variable-length sequences.
 
     A ``PackedSequence`` interleaves all surviving time-steps of every
@@ -159,22 +189,34 @@ class PackedSequence(NamedTuple):
     padding entries entirely.  RNN cells consume this form to avoid
     wasting compute on padded positions.
 
-    Attributes
+    A ``tuple`` subclass of ``(data, batch_sizes, sorted_indices,
+    unsorted_indices)``, so it unpacks and indexes like one.  Build it
+    with :func:`pack_padded_sequence` / :func:`pack_sequence`, or by hand
+    from ``data`` and ``batch_sizes`` alone.
+
+    Parameters
     ----------
     data : Tensor
         Concatenation of the active features at each time-step in
         descending-length order, shape ``(sum(batch_sizes), *feat)``.
     batch_sizes : Tensor
-        1-D int tensor giving the number of sequences still alive at
-        each successive time-step.  Strictly non-increasing.
-    sorted_indices : Tensor or None
+        1-D int tensor on the CPU giving the number of sequences still
+        alive at each successive time-step.  Strictly non-increasing.
+    sorted_indices : Tensor or None, optional
         Permutation that took the original batch order to the packed
-        (descending-length) order; ``None`` if the input was already
-        sorted.
-    unsorted_indices : Tensor or None
+        (descending-length) order; ``None`` (default) if the input was
+        already sorted.
+    unsorted_indices : Tensor or None, optional
         Inverse of ``sorted_indices``; used by
         :func:`pad_packed_sequence` to restore the caller's original
-        batch order on unpack.
+        batch order on unpack.  Derived from ``sorted_indices`` when
+        omitted.
+
+    Raises
+    ------
+    ValueError
+        If ``batch_sizes`` is not on the CPU, or ``sorted_indices`` is
+        not a permutation.
 
     Notes
     -----
@@ -190,9 +232,14 @@ class PackedSequence(NamedTuple):
     where :math:`B_t` (= ``batch_sizes[t]``) is the count of sequences
     with length :math:`> t`.
 
+    The conversion methods (:meth:`to`, :meth:`float`, :meth:`cpu`, ...)
+    move or cast ``data`` and carry the index tensors to ``data``'s
+    device; ``batch_sizes`` always stays on the CPU.
+
     Examples
     --------
     >>> import lucid
+    >>> from lucid.nn.utils.rnn import PackedSequence
     >>> from lucid.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
     >>> # padded (B=3, T=4, F=5), sorted-by-length [4, 3, 2]
     >>> x_padded = lucid.randn(3, 4, 5)
@@ -205,12 +252,145 @@ class PackedSequence(NamedTuple):
     >>> unpacked, lengths = pad_packed_sequence(packed, batch_first=True)
     >>> unpacked.shape, lengths.tolist()
     ((3, 4, 5), [4, 3, 2])
+    >>> # hand-built: the inverse permutation is derived
+    >>> p = PackedSequence(lucid.zeros(3, 2), lucid.tensor([2, 1]), lucid.tensor([1, 2, 0]))
+    >>> p.unsorted_indices.tolist()
+    [2, 0, 1]
     """
 
-    data: Tensor
-    batch_sizes: Tensor
-    sorted_indices: Tensor | None
-    unsorted_indices: Tensor | None
+    def __new__(
+        cls,
+        data: Tensor,
+        batch_sizes: Tensor,
+        sorted_indices: Tensor | None = None,
+        unsorted_indices: Tensor | None = None,
+    ) -> Self:
+        """Build a packed sequence, deriving ``unsorted_indices`` when omitted."""
+        if batch_sizes.device.type != "cpu":
+            raise ValueError(
+                f"batch_sizes should always be on the CPU, got {batch_sizes.device}; "
+                "it is length metadata read on the host."
+            )
+        if sorted_indices is not None:
+            order = _permutation_list(sorted_indices, "sorted_indices")
+            if unsorted_indices is None:
+                unsorted_indices = _index(_inverse_permutation(order), sorted_indices)
+        return super().__new__(cls, data, batch_sizes, sorted_indices, unsorted_indices)
+
+    @property
+    def is_metal(self) -> bool:
+        """Whether ``data`` lives on the Metal device."""
+        return self.data.is_metal
+
+    def to(
+        self,
+        device: DeviceLike | DTypeLike | Tensor = None,
+        dtype: DTypeLike = None,
+        non_blocking: bool = False,
+        copy: bool = False,
+    ) -> Self:
+        """Move or cast ``data``; the index tensors follow it to its device.
+
+        Takes what :meth:`~lucid.Tensor.to` takes.  ``dtype`` applies to
+        ``data`` only — the index tensors stay integer and ``batch_sizes``
+        stays on the CPU.
+
+        Parameters
+        ----------
+        device : device, dtype, Tensor or None, optional
+            Target device, target dtype, or a tensor to match.
+        dtype : dtype or None, optional
+            Target dtype of ``data``.
+        non_blocking : bool, optional
+            Passed through to :meth:`~lucid.Tensor.to`.
+        copy : bool, optional
+            Force ``data`` to be copied, as in :meth:`~lucid.Tensor.to`.
+
+        Returns
+        -------
+        PackedSequence
+            ``self`` if ``data`` needs no change, else a new packed sequence.
+        """
+        # ``dtype=None`` is left out: after a dtype / tensor ``device`` it
+        # would name an argument already given.
+        named = {} if dtype is None else {"dtype": dtype}
+        return self._with_data(
+            self.data.to(device, non_blocking=non_blocking, copy=copy, **named)
+        )
+
+    def _with_data(self, data: Tensor) -> Self:
+        """``self`` carrying converted ``data``; the index tensors follow it to its device."""
+        if data is self.data:
+            return self
+        return type(self)(
+            data,
+            self.batch_sizes,
+            *(
+                None if t is None else t.to(data.device)
+                for t in (self.sorted_indices, self.unsorted_indices)
+            ),
+        )
+
+    def float(self) -> Self:
+        """Cast ``data`` to ``float32``."""
+        return self._with_data(self.data.float())
+
+    def double(self) -> Self:
+        """Cast ``data`` to ``float64``."""
+        return self._with_data(self.data.double())
+
+    def half(self) -> Self:
+        """Cast ``data`` to ``float16``."""
+        return self._with_data(self.data.half())
+
+    def long(self) -> Self:
+        """Cast ``data`` to ``int64``."""
+        return self._with_data(self.data.long())
+
+    def int(self) -> Self:
+        """Cast ``data`` to ``int32``."""
+        return self._with_data(self.data.int())
+
+    def short(self) -> Self:
+        """Cast ``data`` to ``int16``."""
+        return self._with_data(self.data.short())
+
+    def char(self) -> Self:
+        """Cast ``data`` to ``int8``."""
+        return self._with_data(self.data.char())
+
+    def byte(self) -> Self:
+        """Cast ``data`` to ``uint8``.
+
+        Raises
+        ------
+        NotImplementedError
+            Always: Lucid has no ``uint8`` dtype, exactly as :meth:`Tensor.byte`.
+        """
+        return self._with_data(self.data.byte())
+
+    def cpu(self) -> Self:
+        """Move ``data`` and the index tensors to the CPU."""
+        return self._with_data(self.data.cpu())
+
+    def metal(self) -> Self:
+        """Move ``data`` and the index tensors to the Metal device."""
+        return self._with_data(self.data.metal())
+
+    def pin_memory(self) -> Self:
+        """Pin ``data`` and the index tensors; a no-op on Apple Silicon's unified memory."""
+        return type(self)(
+            self.data.pin_memory(),
+            self.batch_sizes,
+            *(
+                None if t is None else t.pin_memory()
+                for t in (self.sorted_indices, self.unsorted_indices)
+            ),
+        )
+
+    def is_pinned(self) -> bool:
+        """Whether ``data`` is in pinned memory (always ``False`` on Apple Silicon)."""
+        return self.data.is_pinned()
 
 
 def pack_padded_sequence(
@@ -295,11 +475,8 @@ def pack_padded_sequence(
     unsorted_t: Tensor | None = None
     if not enforce_sorted:
         order = sorted(range(B), key=lambda i: -lengths_list[i])
-        inverse = [0] * B
-        for new_pos, orig_pos in enumerate(order):
-            inverse[orig_pos] = new_pos
         sorted_t = _index(order, input)
-        unsorted_t = _index(inverse, input)
+        unsorted_t = _index(_inverse_permutation(order), input)
         input = input.index_select(1, sorted_t)
         lengths_list = [lengths_list[i] for i in order]
 
@@ -400,8 +577,8 @@ def pad_packed_sequence(
     lengths_list = [sum(1 for bs in batch_sizes_list if bs > k) for k in range(B)]
 
     if sequence.unsorted_indices is not None:
-        order = _int_tensor_to_list(sequence.unsorted_indices)
-        if sorted(order) != list(range(B)):
+        order = _permutation_list(sequence.unsorted_indices, "pad_packed_sequence: unsorted_indices")
+        if len(order) != B:
             raise ValueError(
                 f"pad_packed_sequence: unsorted_indices must be a permutation "
                 f"of range({B}), got {order}"
@@ -415,7 +592,10 @@ def pad_packed_sequence(
 
 
 def pad_sequence(
-    sequences: list[Tensor], batch_first: bool = False, padding_value: float = 0.0
+    sequences: list[Tensor],
+    batch_first: bool = False,
+    padding_value: float = 0.0,
+    padding_side: Literal["right", "left"] = "right",
 ) -> Tensor:
     r"""Stack a list of variable-length tensors into a padded batch.
 
@@ -436,6 +616,10 @@ def pad_sequence(
         ``True`` yields ``(B, T_max, *feat)``.
     padding_value : float, optional
         Fill value for padded entries.  Default ``0.0``.
+    padding_side : {"right", "left"}, optional
+        Which end of the time axis receives the padding.  ``"right"``
+        (default) keeps each sequence at the start; ``"left"`` right-aligns
+        it, as decoder-only models expect.
 
     Returns
     -------
@@ -445,7 +629,8 @@ def pad_sequence(
     Raises
     ------
     ValueError
-        If ``sequences`` is empty or holds a 0-d tensor.
+        If ``sequences`` is empty or holds a 0-d tensor, or
+        ``padding_side`` is neither ``"right"`` nor ``"left"``.
     ShapeMismatch
         If two sequences differ in a trailing (non-time) axis.  Also a
         :class:`ValueError`.
@@ -470,6 +655,8 @@ def pad_sequence(
     >>> batch.shape                              # (B, T_max, F)
     (3, 5, 3)
     """
+    if padding_side not in ("right", "left"):
+        raise ValueError(f"padding_side must be 'right' or 'left', got {padding_side!r}")
     _check_sequences(sequences)
     T_max: int = max(int(s.shape[0]) for s in sequences)
     feat_shape: list[int] = list(sequences[0].shape[1:])
@@ -485,12 +672,106 @@ def pad_sequence(
         tail_shape: list[int] = [T_max - T_i] + feat_shape
         tail_impl = _C_engine.full(tail_shape, padding_value, s._impl.dtype, device)
         tail: Tensor = _Tensor.__new_from_impl__(tail_impl)
-        padded_each.append(lucid.cat([s, tail], 0))
+        padded_each.append(lucid.cat([s, tail] if padding_side == "right" else [tail, s], 0))
 
     # Stack along axis 1 (T_max, B, *feat) or axis 0 with batch_first.
     if batch_first:
         return lucid.stack(padded_each, 0)
     return lucid.stack(padded_each, 1)
+
+
+def unpad_sequence(
+    padded_sequences: Tensor, lengths: Tensor | list[int], batch_first: bool = False
+) -> list[Tensor]:
+    r"""Split a padded batch back into its variable-length sequences.
+
+    The inverse of :func:`pad_sequence` for right-padded batches: sequence
+    ``b`` is the first ``lengths[b]`` steps of the ``b``-th batch entry.
+
+    Parameters
+    ----------
+    padded_sequences : Tensor
+        Padded batch, ``(T, B, *)`` — or ``(B, T, *)`` with
+        ``batch_first=True``.
+    lengths : Tensor or list of int
+        True length of each sequence, one per batch entry, each in
+        ``[0, T]``.  A tensor may live on any device.
+    batch_first : bool, optional
+        Whether ``padded_sequences`` is laid out batch-first.  Default
+        ``False``.
+
+    Returns
+    -------
+    list of Tensor
+        ``B`` tensors, the ``b``-th of shape ``(lengths[b], *)``.
+
+    Raises
+    ------
+    ValueError
+        If ``padded_sequences`` has fewer than two axes, ``lengths`` is
+        not 1-D with one entry per batch element, or an entry lies outside
+        ``[0, T]``.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.nn.utils.rnn import pad_sequence, unpad_sequence
+    >>> a, b = lucid.ones(4, 2), lucid.ones(2, 2)
+    >>> padded = pad_sequence([a, b], batch_first=True)
+    >>> [s.shape for s in unpad_sequence(padded, [4, 2], batch_first=True)]
+    [(4, 2), (2, 2)]
+    """
+    if padded_sequences.ndim < 2:
+        raise ValueError(
+            f"unpad_sequence: input needs a time and a batch axis, got "
+            f"shape {tuple(padded_sequences.shape)}"
+        )
+    if not batch_first:
+        padded_sequences = padded_sequences.permute(1, 0, *range(2, padded_sequences.ndim))
+    B, T = int(padded_sequences.shape[0]), int(padded_sequences.shape[1])
+    lengths_list = _length_list(lengths)
+    if len(lengths_list) != B:
+        raise ValueError(
+            f"Expected `len(lengths)` to be equal to batch_size, but got "
+            f"{len(lengths_list)} (batch_size={B})"
+        )
+    if any(not 0 <= n <= T for n in lengths_list):
+        raise ValueError(f"every length must lie in [0, {T}], got {lengths_list}")
+    return [padded_sequences[b, :n] for b, n in enumerate(lengths_list)]
+
+
+def unpack_sequence(packed_sequences: PackedSequence) -> list[Tensor]:
+    r"""Split a :class:`PackedSequence` into its variable-length sequences.
+
+    The inverse of :func:`pack_sequence`: the sequences come back in the
+    order they were packed in, whether or not they were sorted.
+
+    Parameters
+    ----------
+    packed_sequences : PackedSequence
+        Packed batch to split.
+
+    Returns
+    -------
+    list of Tensor
+        One tensor per sequence, the ``b``-th of shape ``(length_b, *)``.
+
+    Raises
+    ------
+    ValueError
+        As :func:`pad_packed_sequence`, for a malformed ``batch_sizes`` or
+        ``unsorted_indices``.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.nn.utils.rnn import pack_sequence, unpack_sequence
+    >>> packed = pack_sequence([lucid.ones(2, 3), lucid.ones(4, 3)], enforce_sorted=False)
+    >>> [s.shape for s in unpack_sequence(packed)]
+    [(2, 3), (4, 3)]
+    """
+    padded, lengths = pad_packed_sequence(packed_sequences, batch_first=True)
+    return unpad_sequence(padded, lengths, batch_first=True)
 
 
 def pack_sequence(sequences: list[Tensor], enforce_sorted: bool = True) -> PackedSequence:

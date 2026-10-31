@@ -17,6 +17,8 @@ from lucid.nn.utils.rnn import (
     pack_sequence,
     pad_packed_sequence,
     pad_sequence,
+    unpack_sequence,
+    unpad_sequence,
 )
 from lucid.nn.utils._copy import copy_parameters_and_buffers
 from lucid.nn.utils import parametrize as parametrize
@@ -47,6 +49,8 @@ __all__ = [
     "pack_sequence",
     "pad_packed_sequence",
     "pad_sequence",
+    "unpack_sequence",
+    "unpad_sequence",
     "copy_parameters_and_buffers",
     "fuse_conv_bn_eval",
     "fuse_conv_bn_weights",
