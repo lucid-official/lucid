@@ -3,7 +3,7 @@
   "name": "func",
   "path": "lucid.func",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L1",
   "members": [
     {
       "name": "vmap",
@@ -11,10 +11,10 @@
       "kind": "function",
       "labels": [],
       "signature": "vmap(func: Callable[..., _PyTree], in_dims: _Dims = 0, out_dims: _Dims = 0, randomness: str = 'error', chunk_size: int | None = None, strategy: str = 'auto')",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L83",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L95",
       "subcategory": null,
       "summary": "Vectorise `func` over a batch axis to produce a batched function.",
-      "extended": "Lifts a function operating on a single example into one operating on a\nwhole batch in a single dispatch, without writing an explicit Python\nloop. Mathematically, if $f : \\mathbb{R}^d \\to \\mathbb{R}^e$, then\n`vmap(f)` realises $F : \\mathbb{R}^{B \\times d} \\to \\mathbb{R}^{B \\times e}$ such that `F(x)[b] = f(x[b])` for every\nbatch index $b$. The transform composes with `grad`,\n`jacrev`, `jvp`, and `vjp` to yield per-sample\ngradients, batched Jacobians, and higher-order constructs.",
+      "extended": "Lifts a function of a single example into one of a whole batch.  If\n$f : \\mathbb{R}^d \\to \\mathbb{R}^e$, `vmap(f)` realises\n$F : \\mathbb{R}^{B \\times d} \\to \\mathbb{R}^{B \\times e}$ with\n`F(x)[b] = f(x[b])`.  It composes with `grad`, `jacrev`,\n`jvp` and `vjp` to yield per-sample gradients, batched\nJacobians and higher-order constructs.",
       "parameters": [
         {
           "name": "func",
@@ -25,44 +25,53 @@
         {
           "name": "in_dims",
           "annotation": "int, None or pytree of (int or None)",
-          "description": "Batch axis for each input. An `int` applies to every tensor of\nevery positional argument; a tuple gives per-argument control, and\ninside an argument a dict or list may give per-leaf control — any\npytree that is a prefix of the arguments, whose leaf stands for the\nwhole subtree under it. Use `None` to hand an argument to\n`func` unchanged. A leaf of a batched argument that is not a\ntensor is refused with `TypeError`. Default `0`.",
+          "description": "Batch axis for each input. An `int` applies to every tensor of\nevery positional argument; a tuple gives per-argument control, and\ninside an argument a dict or list may give per-leaf control — any\npytree that is a prefix of the arguments, whose leaf stands for the\nwhole subtree under it. Use `None` to hand an argument to\n`func` unchanged. A tuple has one entry per positional argument.\nDefault `0`.",
           "default": "0"
         },
         {
           "name": "out_dims",
-          "annotation": "int or pytree of int",
-          "description": "Where the batch axis appears in the output(s): an `int` for every\ntensor, or a pytree that is a prefix of `func`'s output. Default\n`0`.",
+          "annotation": "int, None or pytree of (int or None)",
+          "description": "Where the batch axis appears in the output(s): an `int` for every\ntensor, or a pytree that is a prefix of `func`'s output.  `None`\nmarks an output that does not depend on the batch: it comes back\nas `func` returned it, and a tensor that differs between batch\nelements is an error.  Default `0`.",
           "default": "0"
         },
         {
           "name": "randomness",
-          "annotation": "str",
-          "description": "`\"error\"` (default) forbids random ops inside `func`;\n`\"different\"` and `\"same\"` allow them with shared RNG state.",
-          "default": "'error'"
+          "annotation": "(error, different, same)",
+          "description": "`\"error\"` (default) forbids random ops inside `func`;\n`\"different\"` gives every batch element its own draws; `\"same\"`\ngives every element the draw the first one gets, and leaves the\ngenerator where a single call would.",
+          "default": "\"error\""
         },
         {
           "name": "chunk_size",
           "annotation": "int",
-          "description": "If set, process the batch in chunks of this size to cap peak\nmemory. Applies in both vectorised and isolated strategies.",
+          "description": "If set, process the batch in chunks of this size to cap peak\nmemory. Applies in both vectorised and isolated strategies; it\nmust be positive.",
           "default": "None"
         },
         {
           "name": "strategy",
           "annotation": "str",
-          "description": "`\"auto\"` (default) and `\"isolated\"` evaluate `func` per\nbatch element so `func` always observes logical per-sample\nshapes, reductions, and differentiation transforms.\n`\"vectorized\"` moves the batch axis to the front and calls\n`func` once on the physical batched tensor when `func` is\nnot marked for isolation.",
+          "description": "`\"auto\"` (default) and `\"isolated\"` evaluate `func` per\nbatch element so `func` always observes logical per-sample\nshapes, reductions, and differentiation transforms.\n`\"vectorized\"` moves the batch axis to the front and calls\n`func` once on the physical batched tensor when `func` is\nnot marked for isolation and `randomness` is not\n`\"different\"` (one call would share a single draw).",
           "default": "'auto'"
         }
       ],
       "returns": {
         "annotation": "Callable",
-        "description": "A new function with the batched semantics described above. It\nreturns `func`'s output structure with every tensor batched."
+        "description": "`func`'s output structure with every tensor batched; for a batch\nof no elements, the shapes `func` makes for one example with an\naxis of length 0 where the batch goes."
       },
-      "raises": [],
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "`in_dims` / `out_dims` do not fit the arguments / results; a\nbatched argument is not a tensor; the batch sizes disagree; a\nresult with an `out_dims` axis is not a tensor; `chunk_size`\nis not positive; `strategy` is unknown."
+        },
+        {
+          "annotation": "RuntimeError",
+          "description": "`randomness` is none of the three modes."
+        }
+      ],
       "examples": [
         "Per-sample gradients:\n>>> import lucid\n>>> from lucid.func import grad, vmap\n>>> f = lambda x: (x ** 2).sum()\n>>> X = lucid.randn(32, 4)\n>>> per_sample = vmap(grad(f))(X)  # shape (32, 4)\nPytree arguments are batched leaf by leaf:\n>>> g = lambda d: d[\"x\"].sum() + d[\"y\"].sum()\n>>> vmap(g)({\"x\": lucid.ones(3, 2), \"y\": lucid.ones(3, 4)})\ntensor([6., 6., 6.])"
       ],
       "notes": [
-        "In `\"auto\"` (default) and `\"isolated\"` modes, each batch element\nis sliced along its `in_dims` axis before calling `func`, so\nunqualified reductions (`.sum()`, `.mean()`), loss functions,\nshape queries, and nested transforms (`grad`, `jacrev`,\n`vjp`, `jvp`) operate on the logical per-sample tensor.\nIn `\"vectorized\"` mode, the batch axis is moved to the front for a\nsingle engine dispatch across the full batch. In-place ops inside the\nvectorised function are unsupported."
+        "In `\"auto\"` and `\"isolated\"` modes each batch element is sliced\nalong its `in_dims` axis before `func` is called, so unqualified\nreductions, losses, shape queries and nested transforms\n(`grad`, `jacrev`, `vjp`, `jvp`) see the\nlogical per-sample tensor.  In-place ops in `\"vectorized\"` mode are\nunsupported."
       ],
       "attributes": [],
       "warns": [],
@@ -74,7 +83,7 @@
       "kind": "function",
       "labels": [],
       "signature": "grad(func: Callable[P, object], argnums: int | tuple[int, ...] = 0, has_aux: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L185",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L210",
       "subcategory": null,
       "summary": "Build a function returning the gradient of `func`.",
       "extended": "The cornerstone of functional-style autograd: rather than calling\n`.backward()` and reading `.grad`, `grad(func)` produces a new\ncallable that, when invoked, returns the gradient tensor directly.\nTransforms compose, so `grad(grad(func))` yields a second\nderivative and `vmap(grad(func))` computes per-sample gradients.",
@@ -94,15 +103,20 @@
         {
           "name": "has_aux",
           "annotation": "bool",
-          "description": "If `True`, `func` must return `(loss, aux)`; the wrapped\ncallable then returns `(grads, aux)` with `aux` forwarded\nthrough without differentiation. Default `False`.",
+          "description": "If `True`, `func` must return `(loss, aux)`; the wrapped\ncallable then returns `(grads, aux)` with `aux` forwarded\nthrough without differentiation, and detached unless the gradients\nkeep their graph. Default `False`.",
           "default": "False"
         }
       ],
       "returns": {
         "annotation": "Callable",
-        "description": "Function with the same signature as `func` returning the\ngradient in the structure of the differentiated argument — a\ntensor for a tensor, a dict for a dict — or a tuple of them when\n`argnums` is a tuple. A tensor the loss does not depend on has\ngradient `None`."
+        "description": "Function with the same signature as `func` returning the\ngradient in the structure of the differentiated argument — a\ntensor for a tensor, a dict for a dict — or a tuple of them when\n`argnums` is a tuple. A tensor the loss does not depend on has\na gradient of zeros."
       },
-      "raises": [],
+      "raises": [
+        {
+          "annotation": "RuntimeError",
+          "description": "`func` returns a tensor that is not 0-d."
+        }
+      ],
       "examples": [
         ">>> import lucid\n>>> from lucid.func import grad\n>>> f = lambda x: (x ** 3).sum()\n>>> df = grad(f)\n>>> df(lucid.tensor([1.0, 2.0, 3.0]))  # 3 * x ** 2\ntensor([3., 12., 27.])\nSecond derivative, and a dict of parameters:\n>>> grad(grad(lambda a: a ** 3))(lucid.tensor(2.0))\ntensor(12.)\n>>> grad(lambda p: (p[\"w\"] ** 2).sum())({\"w\": lucid.tensor([1.0, 2.0])})\n{'w': tensor([2., 4.])}"
       ],
@@ -119,7 +133,7 @@
       "kind": "function",
       "labels": [],
       "signature": "grad_and_value(func: Callable[P, object], argnums: int | tuple[int, ...] = 0, has_aux: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L270",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L301",
       "subcategory": null,
       "summary": "Return a function computing both the gradient and the primal value.",
       "extended": "Equivalent to combining `grad` with an evaluation of `func`,\nbut evaluates the forward pass exactly once. This is the canonical\npattern for training loops where the loss value is also needed for\nlogging or learning-rate scheduling.",
@@ -164,7 +178,7 @@
       "kind": "function",
       "labels": [],
       "signature": "vjp(func: Callable[..., object], primals: _PyTree = (), has_aux: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L334",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L365",
       "subcategory": null,
       "summary": "Compute the vector-Jacobian product of `func` at `primals`.",
       "extended": "Evaluates `func` at the supplied primal inputs and returns both the\noutput and a callable `vjp_fn` that, given cotangent vectors\n$v$, returns $v^\\top J(\\mathrm{primals})$ — the\nbackward-mode contraction of the Jacobian against `v`. This is the\nworkhorse used internally by `grad` and `jacrev`, and is\nuseful directly when many backward passes are needed against the same\nforward computation.",
@@ -190,7 +204,7 @@
       ],
       "returns": {
         "annotation": "tuple",
-        "description": "`(outputs, vjp_fn)` with `outputs` in `func`'s output\nstructure. `vjp_fn(cotangents)` takes a cotangent for every\noutput tensor, in the structure of the output, and returns a\ntuple with one entry per primal, each in that primal's structure\n(`None` for a tensor the outputs do not depend on). For\nconvenience the cotangents may also be given as separate positional\narguments, one per output tensor, and left out for a scalar output."
+        "description": "`(outputs, vjp_fn)` with `outputs` in `func`'s output\nstructure, attached to the graph only where the caller's is (a\nprimal requires grad, or this runs inside another transform).\n`vjp_fn(cotangents)` takes a cotangent for every output tensor,\nin the structure of the output, and returns a tuple with one entry\nper primal, each in that primal's structure (zeros for a tensor the\noutputs do not depend on). For convenience the cotangents may also\nbe given as separate positional arguments, one per output tensor,\nand left out for a scalar output."
       },
       "raises": [],
       "examples": [
@@ -208,8 +222,8 @@
       "path": "lucid.func.jvp",
       "kind": "function",
       "labels": [],
-      "signature": "jvp(func: Callable[..., _PyTree], primals: tuple[_PyTree, ...], tangents: tuple[_PyTree, ...], strict: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L397",
+      "signature": "jvp(func: Callable[..., _PyTree], primals: tuple[_PyTree, ...], tangents: tuple[_PyTree, ...], strict: bool = False, has_aux: bool = False)",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L457",
       "subcategory": null,
       "summary": "Compute the Jacobian-vector product of `func` at `primals`.",
       "extended": "Returns both the primal output `func(*primals)` and the directional\nderivative $J(\\mathrm{primals}) \\cdot \\mathrm{tangents}$ — the\nforward-mode contraction of the Jacobian against a tangent vector.\nForward-mode is preferred over reverse-mode when the input dimension\nis small relative to the output dimension.",
@@ -237,11 +251,17 @@
           "annotation": "bool",
           "description": "If `True`, refuse what `lucid.autograd.jvp` refuses under\n`strict` — an output independent of the inputs among them —\ninstead of giving it a zero tangent. Default `False`.",
           "default": "False"
+        },
+        {
+          "name": "has_aux",
+          "annotation": "bool",
+          "description": "If `True`, `func` must return `(output, aux)`; `aux` is\npassed through without differentiation. Default `False`.",
+          "default": "False"
         }
       ],
       "returns": {
         "annotation": "tuple",
-        "description": "`(primals_out, tangents_out)`, each with the same nested structure\nas `func(*primals)`."
+        "description": "`(primals_out, tangents_out)`, each with the same nested structure\nas `func(*primals)`; with `has_aux=True`,\n`(primals_out, tangents_out, aux)`.  `aux` is detached unless\nthe results join the caller's graph."
       },
       "raises": [
         {
@@ -273,7 +293,7 @@
       "kind": "function",
       "labels": [],
       "signature": "linearize(func: Callable[..., _PyTree], primals: _PyTree = ())",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L487",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L554",
       "subcategory": null,
       "summary": "Linearise `func` around `primals` for reuse across many tangents.",
       "extended": "Returns the primal output together with a callable `linear_fn` that\napplies the first-order Taylor expansion of `func` at `primals`.\nMathematically `linear_fn(t)` evaluates $J_f(\\mathrm{primals}) \\, t$ — the same quantity as `jvp` — but the linearisation cost\nis paid once even if many tangent vectors are queried subsequently.",
@@ -312,7 +332,7 @@
       "kind": "function",
       "labels": [],
       "signature": "jacrev(func: Callable[P, object], argnums: int | tuple[int, ...] = 0, has_aux: bool = False, chunk_size: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L566",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L633",
       "subcategory": null,
       "summary": "Build a function returning the reverse-mode Jacobian of `func`.",
       "extended": "Assembles the full Jacobian matrix one row at a time, each row\nobtained from a backward pass seeded with a one-hot cotangent. For a\nscalar-output `func` this collapses to `grad`.",
@@ -363,7 +383,7 @@
       "kind": "function",
       "labels": [],
       "signature": "jacfwd(func: Callable[P, object], argnums: int | tuple[int, ...] = 0, has_aux: bool = False, randomness: str = 'error')",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L651",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L718",
       "subcategory": null,
       "summary": "Build a function returning the forward-mode Jacobian of `func`.",
       "extended": "Materialises the Jacobian one column at a time by repeatedly calling\n`jvp` with one-hot tangent vectors. Each column corresponds to\nthe partial derivative of every output with respect to a single input\ncoordinate.",
@@ -414,7 +434,7 @@
       "kind": "function",
       "labels": [],
       "signature": "hessian(func: Callable[P, _Tensor], argnums: int | tuple[int, ...] = 0)",
-      "source": "https://github.com/lucid-official/lucid/blob/93b87b7/lucid/func/__init__.py#L715",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L782",
       "subcategory": null,
       "summary": "Build a function returning the Hessian of a scalar-valued `func`.",
       "extended": "Computes the matrix of second partial derivatives — the Jacobian of\nthe gradient — which is the value `jacfwd(jacrev(func))` (or\n`jacrev(jacrev(func))`) has. The result captures the local\ncurvature used by Newton-style optimisers, natural-gradient methods,\nand second-order analyses such as eigenvalue spectra of the loss.",
@@ -446,18 +466,130 @@
       "attributes": [],
       "warns": [],
       "see_also": []
+    },
+    {
+      "name": "functional_call",
+      "path": "lucid.func.functional_call",
+      "kind": "function",
+      "labels": [],
+      "signature": "functional_call(module: Module, parameter_and_buffer_dicts: Mapping[str, _Tensor] | Sequence[Mapping[str, _Tensor]], args: object = None, kwargs: Mapping[str, object] | None = None, tie_weights: bool = True, strict: bool = False)",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L835",
+      "subcategory": null,
+      "summary": "Call `module` with other parameters and buffers than its own.",
+      "extended": "Runs `module(*args, **kwargs)` with the tensors of\n`parameter_and_buffer_dicts` standing in the module's parameter and\nbuffer slots by name, so the weights become an argument: a function of\nthem that `grad`, `vmap` or `jacrev` can transform.\nThe module is exactly as before afterwards — the original `Parameter`\nobjects are put back when the call returns, or raises.",
+      "parameters": [
+        {
+          "name": "module",
+          "annotation": "Module",
+          "description": "The module to call.",
+          "default": null
+        },
+        {
+          "name": "parameter_and_buffer_dicts",
+          "annotation": "dict or sequence of dict",
+          "description": "Dotted parameter / buffer name (`\"fc.weight\"`) to the tensor to use.\nA sequence of dicts is merged; a name in two of them is a\n`ValueError`.  A name the module has no parameter or buffer of is\nignored unless `strict`.",
+          "default": null
+        },
+        {
+          "name": "args",
+          "annotation": "object",
+          "description": "The positional arguments: a tuple is unpacked, any other value is\nthe one argument, `None` (default) is none.",
+          "default": "None"
+        },
+        {
+          "name": "kwargs",
+          "annotation": "dict",
+          "description": "The keyword arguments.",
+          "default": "None"
+        },
+        {
+          "name": "tie_weights",
+          "annotation": "bool",
+          "description": "If `True` (default), a tensor given for one name also replaces\nevery name that holds the same parameter (tied weights); different\ntensors for tied names are a `ValueError`.  If `False` only the\nnames given are replaced.",
+          "default": "True"
+        },
+        {
+          "name": "strict",
+          "annotation": "bool",
+          "description": "If `True`, `parameter_and_buffer_dicts` must name exactly the\nmodule's parameters and buffers (tied names count as named when\n`tie_weights`), else `RuntimeError`.  Default `False`.",
+          "default": "False"
+        }
+      ],
+      "returns": {
+        "annotation": "object",
+        "description": "What `module` returns."
+      },
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A value of `parameter_and_buffer_dicts` is not a tensor."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A name is in two dicts, or tied names were given different tensors."
+        },
+        {
+          "annotation": "RuntimeError",
+          "description": "`strict` and the names do not match the module's."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.func import functional_call\n>>> layer = nn.Linear(2, 1)\n>>> w = lucid.ones(1, 2)\n>>> b = lucid.zeros(1)\n>>> functional_call(layer, {\"weight\": w, \"bias\": b}, (lucid.tensor([[1.0, 2.0]]),))\ntensor([[3.]])"
+      ],
+      "notes": [
+        "The tensors are used as they are, with their autograd history, so the\noutput is differentiable with respect to them.  A buffer a layer updates\nin place (`BatchNorm` running statistics) is updated in the tensor that\nwas given."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "stack_module_state",
+      "path": "lucid.func.stack_module_state",
+      "kind": "function",
+      "labels": [],
+      "signature": "stack_module_state(models: Sequence[Module])",
+      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/func/__init__.py#L914",
+      "subcategory": null,
+      "summary": "Stack the parameters and buffers of several models of one class.",
+      "extended": "The state of `N` models becomes one state whose tensors have a new\nfirst axis of length `N` — the argument `vmap` maps over to run an\nensemble with `functional_call`.",
+      "parameters": [
+        {
+          "name": "models",
+          "annotation": "sequence of Module",
+          "description": "At least one model; all of one class and in the same train / eval\nmode, with the same parameters and buffers.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "tuple of dict",
+        "description": "`(params, buffers)`: each name to the tensors of every model\nstacked along dimension 0.  A stacked parameter is a fresh leaf that\nrequires grad when the models' parameters do (they must all agree)."
+      },
+      "raises": [
+        {
+          "annotation": "RuntimeError",
+          "description": "No models, models of different classes or modes, or models that\ndisagree on whether a tensor requires grad."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.func import stack_module_state\n>>> params, buffers = stack_module_state([nn.Linear(3, 2), nn.Linear(3, 2)])\n>>> tuple(params[\"weight\"].shape)\n(2, 2, 3)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
     }
   ],
   "summary": "`lucid.func` — functional transforms (reference-framework func-compatible API).",
-  "extended": "Provides composable, higher-order transformations over Lucid functions:\n\n* `vmap`           — vectorise over a batch dimension (C++ vmapped dispatch)\n* `grad`           — gradient transform (returns a function)\n* `grad_and_value` — gradient + primal output\n* `vjp`            — vector-Jacobian product (functional style)\n* `jvp`            — Jacobian-vector product (exact via double-backward)\n* `jacrev`         — reverse-mode Jacobian\n* `jacfwd`         — forward-mode Jacobian via jvp\n* `hessian`        — second-order derivative matrix\n* `linearize`      — linearisation: (primals_out, tangent_fn)\n\nAll transforms compose: `vmap(grad(fn))`, `grad(vmap(fn))`,\n`grad(grad(fn))`, `jacfwd(jacrev(fn))`, `vmap(grad(grad(fn)))`.  A\nderivative taken inside another transform's function stays attached to the\ngraph the outer transform differentiates, to any depth.",
+  "extended": "Provides composable, higher-order transformations over Lucid functions:\n\n* `vmap`           — map a function of one example over a batch dimension\n* `grad`           — gradient transform (returns a function)\n* `grad_and_value` — gradient + primal output\n* `vjp`            — vector-Jacobian product (functional style)\n* `jvp`            — Jacobian-vector product (exact via double-backward)\n* `jacrev`         — reverse-mode Jacobian\n* `jacfwd`         — forward-mode Jacobian via jvp\n* `hessian`        — second-order derivative matrix\n* `linearize`      — linearisation: (primals_out, tangent_fn)\n* `functional_call` — run a module with other parameters and buffers\n* `stack_module_state` — stack the state of several models for `vmap`\n\nAll transforms compose: `vmap(grad(fn))`, `grad(vmap(fn))`,\n`grad(grad(fn))`, `jacfwd(jacrev(fn))`, `vmap(grad(grad(fn)))`.  A\nderivative taken inside another transform's function stays attached to the\ngraph the outer transform differentiates, to any depth.",
   "parameters": [],
   "returns": null,
   "raises": [],
   "examples": [],
   "notes": [
     "Inputs and outputs may be nested tuples, lists, dicts and namedtuples of\ntensors, not just tensors.  A transform differentiates or batches every\ntensor leaf and returns its result in the structure of what it came from:\n`grad(f)({\"w\": w, \"b\": b})` is a dict with the keys `\"w\"` and `\"b\"`,\n`jacrev` of a `func` returning a tuple is a tuple of Jacobians, and\n`vmap`'s `in_dims` / `out_dims` may be a pytree matching (a prefix\nof) the arguments / results.",
-    "`vmap` does **not** loop over batch elements in Python.  It moves the batch\ndimension to the front and calls the function **once** with the full batched\ntensor.  The underlying C++ engine ops then run on the complete batch:\n\n* **GPU (Metal/MLX)**: a single Metal dispatch handles all batch elements in\n  parallel via MLX's native batched kernels.\n* **CPU (Accelerate)**: BLAS calls (`SGEMM`, `cblas_sgemm_batch`, etc.)\n  operate on the full batched tensor with SIMD parallelism.\n\nThis gives real vectorisation — not a sequential Python loop.",
-    "* Reduction ops inside the vmapped function must use an explicit `dim`\n  argument.  An unqualified `.sum()` / `.mean()` reduces over the batch\n  dimension as well, which is almost never desired.\n* In-place ops inside a vmapped function are not supported.\n* `randomness='error'` (default) raises if the function calls any random op."
+    "By default (`strategy=\"auto\"`) `vmap` calls the function once per batch\nelement, on that element's logical shapes, and stacks the results.  A\nreduction without a `dim`, a loss, a shape query or a transform inside the\nfunction therefore sees one example, as written.  `strategy=\"vectorized\"`\ninstead moves the batch axis to the front and calls the function **once** on\nthe whole batch, so the C++ engine ops run on the complete batch: one Metal\ndispatch on the GPU, batched BLAS calls on the CPU.  A function that is\nitself a derivative transform, or that draws independent random numbers\n(`randomness=\"different\"`), is still run element by element.",
+    "* With `strategy=\"vectorized\"` a reduction inside the function must use an\n  explicit `dim`: an unqualified `.sum()` / `.mean()` reduces over the\n  batch dimension as well.\n* In-place ops inside a vmapped function are not supported.\n* `randomness='error'` (default) raises if the function calls any random op;\n  `'different'` gives every batch element its own draws and `'same'` the\n  one draw all of them share."
   ],
   "attributes": [],
   "warns": [],
