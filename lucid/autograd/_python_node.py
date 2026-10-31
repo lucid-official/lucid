@@ -182,6 +182,8 @@ def _register(
     py_ctx: object,
     tensor_inputs: list[Tensor],
     is_tensor_arg: Sequence[bool] | None = None,
+    is_tensor_out: Sequence[bool] | None = None,
+    materialize_grads: bool = True,
 ) -> _C_engine.FunctionCtx:
     """
     Wire a Python backward function into the C++ autograd graph.
@@ -201,6 +203,12 @@ def _register(
     gradient ``backward`` returns is checked against its input — shape,
     dtype, device — before the engine sees it, in the eager, barrier and
     ``create_graph`` paths alike, since all three call ``backward_fn``.
+
+    ``is_tensor_out`` marks which of ``forward``'s results were tensors:
+    ``backward`` is given one gradient per *result*, ``None`` at the slot of
+    one that is not a tensor, so a ``forward`` returning ``(y, 5)`` has a
+    two-gradient ``backward``.  ``materialize_grads=False`` hands ``None`` —
+    not zeros — to the output no gradient reached.
 
     Returns the engine context the node owns.  The engine needs it to be
     non-null, and ``FunctionCtx._hold_saved`` keeps the saved tensors in
@@ -224,7 +232,13 @@ def _register(
         _cpp_ctx: object, *grad_impls: _C_engine.TensorImpl | None
     ) -> list[_C_engine.TensorImpl | None]:
         """Called by C++ engine: (cpp_ctx, *grad_impls) → list[TensorImpl | None]"""
-        grads = fn_class.backward(py_ctx, *(None if g is None else _wrap(g) for g in grad_impls))
+        wrapped = iter(None if g is None else _wrap(g) for g in grad_impls)
+        per_result = (
+            [next(wrapped) if is_tensor else None for is_tensor in is_tensor_out]
+            if is_tensor_out is not None
+            else list(wrapped)
+        )
+        grads = fn_class.backward(py_ctx, *per_result)
         returned: list[object] = list(grads) if isinstance(grads, (list, tuple)) else [grads]
 
         result: list[_C_engine.TensorImpl | None] = []
@@ -235,7 +249,7 @@ def _register(
             result.append(None if checked is None else _unwrap(checked))
         return result
 
-    if not getattr(fn_class, "_materialize_grads", True):
+    if not materialize_grads:
         cpp_ctx._materialize_grads = False
     node = _C_engine._PythonBackwardNode()
     node.ctx = cpp_ctx

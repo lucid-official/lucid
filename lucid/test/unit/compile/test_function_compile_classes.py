@@ -72,6 +72,8 @@ CUSTOM: frozenset[str] = frozenset(
         # Host / nested-autograd ODE backward
         "_EventTimeGradient",
         "_AdjointSolve",
+        # ``once_differentiable``'s tail: a node whose backward only raises
+        "_DelayedError",
     }
 )
 
