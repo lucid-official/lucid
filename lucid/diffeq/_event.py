@@ -414,7 +414,7 @@ class _EventTimeGradient(Function):
             _, grads = _vjp(
                 lambda tt, yy: event_fn(tt, yy).reshape(()),
                 (t_var, y_var),
-                lucid.ones((), dtype=state_t.dtype),
+                lucid.ones((), dtype=state_t.dtype, device=state_t.device),
             )
 
         # A partial ``g`` does not depend on comes back as zeros: ignoring

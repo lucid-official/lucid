@@ -165,6 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the time inputs of a solve keep their gradient (LCD-679)
 
+- event backward seeds its vjp on the right device (LCD-729)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
