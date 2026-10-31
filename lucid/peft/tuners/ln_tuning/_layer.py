@@ -90,10 +90,11 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
         AttributeError
             The wrapped module has no ``weight``.
         """
-        tuned = self.ln_tuning_layers[adapter]
-        original = self._original()
-        if adapter in self.merged_adapters:  # the exchange put the tuned values in the base
-            tuned, original = original, tuned
+        held = self.ln_tuning_layers[adapter]
+        # The exchange of a merged adapter put its tuned values in the base and the originals in its copy.
+        tuned, original = (
+            (self.base_layer, held) if adapter in self.merged_adapters else (held, self._original())
+        )
         weight: Tensor = tuned.weight - original.weight
         return weight
 

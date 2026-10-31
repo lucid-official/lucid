@@ -62,7 +62,8 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR``, ``VERA`` and
+    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR``, ``VERA``,
+    ``OFT``, ``BOFT``, ``HRA``, ``FOURIERFT``, ``LN_TUNING`` and
     the prompt-learning methods ``PROMPT_TUNING``, ``PREFIX_TUNING`` and ``P_TUNING``;
     reading a file of any other type raises ``NotImplementedError``.
     """

@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA, AdaLoRA, (IA)^3, LoHa, LoKr and VeRA.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA, AdaLoRA, (IA)^3, LoHa, LoKr, VeRA, OFT, BOFT, HRA, FourierFT and LN tuning.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
@@ -33,8 +33,14 @@ layer (``IA3Config`` / ``IA3Model``), the LyCORIS pair LoHa (a Hadamard product
 of low-rank products, ``LoHaConfig`` / ``LoHaModel``) and LoKr (a Kronecker
 product, ``LoKrConfig`` / ``LoKrModel``), and VeRA — two learned vectors per
 layer over one pair of frozen random projections (``VeraConfig`` /
-``VeraModel``); the layer classes of each are in ``lucid.peft.tuners.<method>``.
-Everything below about adapters, switching, merging and files holds for all six.
+``VeraModel``); the orthogonal family, which turns the input space of a layer instead of adding to its
+weight — OFT (block-diagonal Cayley rotations, ``OFTConfig`` / ``OFTModel``), BOFT (their butterfly
+factorisation plus a row scale, ``BOFTConfig`` / ``BOFTModel``) and HRA (a chain of Householder
+reflections, ``HRAConfig`` / ``HRAModel``); FourierFT, a handful of coefficients of the weight
+update in the frequency domain (``FourierFTConfig`` / ``FourierFTModel``); and LN tuning, a
+trainable copy of each chosen normalisation layer (``LNTuningConfig`` / ``LNTuningModel``).  The
+layer classes of each are in ``lucid.peft.tuners.<method>``.
+Everything below about adapters, switching, merging and files holds for all of them (LN tuning applies, and merges, one adapter at a time).
 
 Three more methods learn an input rather than a weight and add no layer to the model:
 prompt tuning (``PromptTuningConfig``: virtual-token embeddings in front of the input),
