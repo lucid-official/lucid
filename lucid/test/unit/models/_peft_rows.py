@@ -355,11 +355,6 @@ def _losses() -> list[ZooRow]:
 
 #: Families LoRA cannot adapt yet, and the exact piece that is missing.
 _GAPS: Final[Mapping[str, Gap]] = {
-    "realnvp": Gap(
-        "merge: the convolutions are weight-normalised (nn.utils.weight_norm), so `weight` is "
-        "recomputed from weight_g/weight_v each forward and is not a parameter to merge into",
-        (AttributeError,),
-    ),
     "tvm": Gap(
         "forward: TVM syncs its EMA copy by load_state_dict from the live network, and an "
         "injected network's base_layer/lora_* keys are not the copy's",

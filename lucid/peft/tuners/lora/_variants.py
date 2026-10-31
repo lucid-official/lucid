@@ -165,7 +165,7 @@ class _Dora(_Variant, variant="dora"):
         """
         with lucid.no_grad():
             delta = layer._rows(layer.get_delta_weight(adapter))
-            weight = layer._rows(layer.weight) if rows is None else rows
+            weight = layer._rows(layer._base_weight()) if rows is None else rows
             total = (weight if weight.dtype == delta.dtype else weight.to(delta.dtype)) + delta
             return linalg.norm(total.reshape(total.shape[0], -1), dim=1)
 

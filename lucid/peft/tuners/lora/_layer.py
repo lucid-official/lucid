@@ -31,6 +31,7 @@ from lucid.peft._config import _check_dropout, _check_number, _check_rank
 from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name, _entry_parameters
 from lucid.peft.tuners.lora._inits import _check_init, _Init
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
+from lucid.peft.tuners.lora._weight_site import _WeightSite
 
 _HALF: Final = (lucid.float16, lucid.bfloat16)
 
@@ -435,7 +436,7 @@ _WEIGHT: Final = "base_layer.weight"
 _BIAS: Final = "base_layer.bias"
 
 
-def _added(param: Parameter, shift: Tensor) -> Tensor:
+def _added(param: Tensor, shift: Tensor) -> Tensor:
     """``param + shift`` summed in the wider dtype and rounded once, in ``param``'s dtype."""
     value = param + shift
     return value if value.dtype == param.dtype else value.to(param.dtype)
@@ -497,6 +498,14 @@ class _Residual(LoraLayer):
     def _variant(self, adapter: str) -> _Variant:
         return _Variant.named(self._specs[adapter].variant)
 
+    def _site(self) -> _WeightSite:
+        """Where the base layer keeps its weight: the one thing a merge reads and writes it through."""
+        return _WeightSite.of(self.base_layer)
+
+    def _base_weight(self) -> Tensor:
+        """The weight the base layer computes with now (a weight norm's derived one included)."""
+        return self._site().read()
+
     @override
     def _adapter_built(self, adapter: str) -> None:
         self._variant(adapter).attach(self, adapter)
@@ -523,7 +532,10 @@ class _Residual(LoraLayer):
 
     def _plan(self, adapter: str) -> _Plan:
         change, gain = self._variant(adapter).shift(
-            self, adapter, self._rows(self.weight), self._rows(self.get_delta_weight(adapter))
+            self,
+            adapter,
+            self._rows(self._base_weight()),
+            self._rows(self.get_delta_weight(adapter)),
         )
         shifts = {_WEIGHT: self._rows(change)}
         bias = self._bias_delta(adapter)
@@ -533,38 +545,48 @@ class _Residual(LoraLayer):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        targets = {_WEIGHT: self.weight}
+        targets = {f"base_layer.{name}": p for name, p in self._site().parameters().items()}
         bias = self.bias
         if bias is not None and any(spec.lora_bias for spec in self._specs.values()):
             targets[_BIAS] = bias
         return targets
 
+    def _bias_target(self) -> Parameter:
+        bias = self.bias
+        if bias is None:
+            raise RuntimeError("the base layer has no bias to merge into")
+        return bias
+
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
-        targets = self._merge_targets()
-        return {
-            key: _added(targets[key], shift) for key, shift in self._plan(adapter).shifts.items()
-        }
+        shifts = self._plan(adapter).shifts
+        values = {_WEIGHT: _added(self._base_weight(), shifts[_WEIGHT])}
+        if _BIAS in shifts:
+            values[_BIAS] = _added(self._bias_target(), shifts[_BIAS])
+        return values
 
     @override
     def _fold(self, adapter: str) -> None:
         plan = self._plan(adapter)
-        targets = self._merge_targets()
-        for key, shift in plan.shifts.items():
-            targets[key].copy_(_added(targets[key], shift))
+        site = self._site()
+        site.write(_added(site.read(), plan.shifts[_WEIGHT]))
+        if _BIAS in plan.shifts:
+            bias = self._bias_target()
+            bias.copy_(_added(bias, plan.shifts[_BIAS]))
         self._variant(adapter).remember(self, adapter, plan.gain)
 
     @override
     def _unfold(self) -> None:
-        targets = self._merge_targets()
-        weight = targets[_WEIGHT]
+        site = self._site()
+        weight = site.read()
         original = self._rows(self._original_rows(self._rows(weight)))
         for adapter in self.merged_adapters:
             bias = self._bias_delta(adapter)
             if bias is not None:
-                targets[_BIAS].copy_(_added(targets[_BIAS], -bias))
+                target = self._bias_target()
+                target.copy_(_added(target, -bias))
             self._variant(adapter).remember(self, adapter, None)
-        weight.copy_(original if original.dtype == weight.dtype else original.to(weight.dtype))
+        site.write(original if original.dtype == weight.dtype else original.to(weight.dtype))
 
     @override
     def forward(self, x: Tensor) -> Tensor:
