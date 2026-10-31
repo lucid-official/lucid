@@ -2374,8 +2374,14 @@ class ModuleAxis(Axis):
         # every checkpoint is waste, and the reference framework draws the
         # same distinction.  Counting them made ``RotaryEmbedding`` and
         # ``SinusoidalEmbedding`` look like they had lost their state.
-        non_persistent = getattr(module, "_non_persistent_buffers", set())
-        buffers = [name for name, _ in module.named_buffers() if name not in non_persistent]
+        # The set belongs to the module that registered the buffer, so a wrapper of a
+        # model with such a buffer (a PEFT tuner around a GPT-2) is read module by module.
+        buffers = [
+            name
+            for _, owner in module.named_modules()
+            for name, _ in owner.named_buffers(recurse=False)
+            if name not in getattr(owner, "_non_persistent_buffers", set())
+        ]
         state = module.state_dict()
         if len(state) != len(params) + len(buffers):
             return self._finding(

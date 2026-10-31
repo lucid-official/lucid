@@ -56,7 +56,11 @@ def _base_model() -> nn.Module:
 
 
 def _text_model() -> nn.Module:
-    """A one-layer GPT-2 language model, the smallest thing a prompt can be put in front of."""
+    """A one-layer GPT-2 language model, the smallest thing a prompt can be put in front of.
+
+    Untied: a tied head is one ``Parameter`` under two names, which the module axis's
+    state-dict count reads as a submodule registered twice.
+    """
     return create_model(
         "gpt2_small_lm",
         vocab_size=16,
@@ -65,6 +69,7 @@ def _text_model() -> nn.Module:
         num_attention_heads=2,
         intermediate_size=16,
         max_position_embeddings=8,
+        tie_word_embeddings=False,
     )
 
 

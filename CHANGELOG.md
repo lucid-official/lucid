@@ -131,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - roformer adapters load by identity, head is nested
 
+- prompt tuners forward missing names; audit builds them
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

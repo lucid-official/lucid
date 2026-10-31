@@ -142,7 +142,7 @@ class TestEncoders:
             num_virtual_tokens=3, **{**_SIZES, "num_transformer_submodules": 2}
         )
         encoder = PromptEmbedding(config, nn.Embedding(10, 8))
-        assert encoder.rows == 6 and encoder.stores_prompt
+        assert encoder.num_embeddings == 6 and encoder.stores_prompt
         assert encoder(self._ids(6)).shape == (1, 6, 8)
         assert encoder.prompt_embeddings().shape == (6, 8)
 
@@ -200,7 +200,7 @@ class TestEncoders:
     def test_prefix_rows_hold_every_layers_key_and_value(self) -> None:
         config = PrefixTuningConfig(num_virtual_tokens=3, encoder_hidden_size=6, **_SIZES)
         encoder = PrefixEncoder(config)
-        assert encoder.stores_prompt and encoder.rows == 3
+        assert encoder.stores_prompt and encoder.num_embeddings == 3
         assert encoder(self._ids(3)).shape == (1, 3, 2 * 2 * 8)
 
     def test_prefix_projection_trains_through_an_mlp_and_stores_the_result(self) -> None:

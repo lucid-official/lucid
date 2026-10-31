@@ -47,12 +47,12 @@ class _PromptEncoder(nn.Module, ABC):
         """Whether ``embedding.weight`` is the prompt itself (nothing maps it)."""
 
     @property
-    def rows(self) -> int:
+    def num_embeddings(self) -> int:
         """How many virtual tokens the encoder produces."""
         return int(self.embedding.num_embeddings)
 
     def prompt_embeddings(self) -> Tensor:
         """The prompt as an adapter file stores it: ``(rows, width)``, one row per virtual token."""
-        ids = lucid.arange(self.rows, device=self.embedding.weight.device.type).long()
-        prompt: Tensor = self(ids.reshape(1, self.rows))[0]
+        ids = lucid.arange(self.num_embeddings, device=self.embedding.weight.device.type).long()
+        prompt: Tensor = self(ids.reshape(1, self.num_embeddings))[0]
         return prompt.detach()

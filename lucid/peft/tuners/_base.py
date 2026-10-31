@@ -529,6 +529,11 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     def active_adapters(self) -> list[str]:
         """The adapters the forward pass applies, as a list."""
 
+    @override
+    def _wrapped(self) -> nn.Module | None:
+        modules = self.__dict__.get("_modules")
+        return _as_module(modules.get("model")) if modules else None
+
     def _admit(self, adapter_name: str, peft_config: PeftConfig) -> str:
         """``adapter_name`` once it and ``peft_config`` are fit to be added beside the adapters held.
 
@@ -1128,11 +1133,6 @@ class _BaseTuner(_AdapterHost, ABC):
             trainable.update(id(params[n]) for n in self._extra_trainable_names(model, config))
         for param in model.parameters():
             param.requires_grad_(id(param) in trainable)
-
-    @override
-    def _wrapped(self) -> nn.Module | None:
-        modules = self.__dict__.get("_modules")
-        return _as_module(modules.get("model")) if modules else None
 
     @override
     def _mixed_batch(

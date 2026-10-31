@@ -338,7 +338,9 @@ class TestEncoderDecoder:
         config.inference_mode = True
         peft = get_peft_model(_t5(device), config)
         encoder = peft.prompt_encoder["default"]
-        assert encoder.rows == 2 * _V  # one block of rows per stack, the encoder reads the first
+        assert (
+            encoder.num_embeddings == 2 * _V
+        )  # one block of rows per stack, the encoder reads the first
         front = base.t5.shared(_ids(device, (_V,), seed=5))
         _assign(encoder.embedding.weight, lucid.cat([front, front], dim=0))
         joined = lucid.cat([front.reshape(1, _V, 16).repeat(2, 1, 1), base.t5.shared(src)], dim=1)
@@ -498,6 +500,18 @@ def _prompt_parameters_of(peft: PeftModel, name: str) -> list[str]:
     return [
         n for n, p in peft.named_parameters() if p.requires_grad and f"prompt_encoder.{name}." in n
     ]
+
+
+class TestForwarding:
+    @pytest.mark.parametrize("method", _ALL)
+    def test_a_name_the_tuner_lacks_is_read_from_the_model(self, method: str, device: str) -> None:
+        peft = get_peft_model(_gpt2(device), _METHODS[method]("CAUSAL_LM"))
+        tuner = peft.base_model
+        assert tuner.config is peft.get_base_model().config
+        assert callable(tuner.generate)
+        with pytest.raises(AttributeError):
+            tuner.no_such_attribute
+        assert not hasattr(tuner, "no_such_attribute") and not hasattr(peft, "no_such_attribute")
 
 
 class TestRefusals:

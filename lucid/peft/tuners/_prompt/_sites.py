@@ -50,7 +50,7 @@ class _Applied:
 
     def embeddings(self, batch: int, dtype: lucid.dtype) -> Tensor:
         """The prompt as ``(batch, rows, token_dim)`` rows to put before input embeddings."""
-        rows = self.encoder.rows
+        rows = self.encoder.num_embeddings
         device = self.encoder.embedding.weight.device.type
         ids = lucid.arange(rows, device=device).long().reshape(1, rows)
         prompt: Tensor = self.encoder(ids).repeat(batch, 1, 1)
