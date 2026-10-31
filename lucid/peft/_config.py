@@ -41,6 +41,12 @@ _INERT_KEYS: Final = frozenset(
         "trainable_token_indices",
         "use_qalora",
         "alora_invocation_tokens",
+        # LoRA fields a method that reads LoRA-shaped files (AdaLoRA) has no use for.
+        "alpha_pattern",
+        "use_rslora",
+        "use_dora",
+        "lora_bias",
+        "target_parameters",
     }
 )
 
@@ -55,7 +61,7 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements ``LORA``, ``IA3``, ``LOHA`` and ``LOKR``;
+    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR`` and ``VERA``;
     reading a file of any other type raises ``NotImplementedError``.
     """
 
@@ -400,6 +406,11 @@ class PeftConfig:
         """Checks that read more than one field; a subclass adds its own."""
 
     @classmethod
+    def _blank(cls) -> Self:
+        """A config to ``from_dict`` fills in: every field at its default (a class with a required field overrides this)."""
+        return cls()
+
+    @classmethod
     def _class_for(cls, peft_type: object) -> type[Self]:
         """The registered config class, ``cls`` or below it, that reads ``peft_type``."""
         wanted = (cls._peft_type or _DEFAULT_PEFT_TYPE) if peft_type is None else peft_type
@@ -492,7 +503,7 @@ class PeftConfig:
                 "these are ignored.",
                 stacklevel=2,
             )
-        config = target()
+        config = target._blank()
         for key, value in values.items():
             setattr(config, key, value)
         config.__post_init__()

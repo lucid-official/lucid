@@ -15,7 +15,8 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft._slots import _adapter_slots
-from lucid.peft.tuners._base import _join, _tuner_for, _tuner_layers
+from lucid.peft.tuners._base import _BaseTuner, _join, _tuner_for, _tuner_layers
+from lucid.peft.tuners._files import _FileContext, _FileFormat
 
 
 def _peft_config_of(model: nn.Module, adapter_name: str) -> PeftConfig:
@@ -29,15 +30,29 @@ def _peft_config_of(model: nn.Module, adapter_name: str) -> PeftConfig:
     )
 
 
-def _adapter_keys(model: nn.Module, adapter_name: str) -> dict[str, str]:
+def _file_context(model: nn.Module, adapter_name: str) -> _FileContext:
+    """Where ``adapter_name``'s tensors sit in ``model``, which may be a ``PeftModel``, a tuner or a bare model."""
+    config = _peft_config_of(model, adapter_name)
+    wrapper = getattr(model, "base_model", None)
+    if isinstance(wrapper, _BaseTuner):
+        prefix = "base_model.model."
+    elif isinstance(model, _BaseTuner):
+        prefix = "model."
+    else:
+        prefix = ""
+    return _FileContext(model, prefix, config, adapter_name)
+
+
+def _adapter_keys(context: _FileContext) -> dict[str, str]:
     """In-memory state-dict key → on-disk key, for every tensor the adapter owns.
 
     Each slot — tuner layer or ``modules_to_save`` copy — maps its own
     keys for the adapter, and none if it holds nothing of it: an adapter
     need not reach every layer another one does.  The parameters the method
-    also trains (the biases ``bias`` picks) keep their names.
+    also trains (the biases ``bias`` picks) keep their names, and what the
+    method keeps outside its layers (``_shared_keys``) is added.
     """
-    config = _peft_config_of(model, adapter_name)
+    model, config, adapter_name = context.model, context.config, context.adapter
     if not _tuner_layers(model):
         raise RuntimeError(
             f"adapter {adapter_name!r} has been merged or unloaded: the model holds no "
@@ -48,7 +63,10 @@ def _adapter_keys(model: nn.Module, adapter_name: str) -> dict[str, str]:
         for path, slot in _adapter_slots(model)
         for own, disk in slot._adapter_keys(adapter_name).items()
     }
-    keys.update({n: n for n in _tuner_for(config)._extra_trainable_names(model, config)})
+    tuner = _tuner_for(config)
+    keys.update({n: n for n in tuner._extra_trainable_names(model, config)})
+    if issubclass(tuner, _FileFormat):
+        keys.update(tuner._shared_keys(context))
     return keys
 
 
@@ -96,12 +114,15 @@ def get_peft_model_state_dict(
     >>> sorted(get_peft_model_state_dict(peft))
     ['base_model.model.0.lora_A.weight', 'base_model.model.0.lora_B.weight']
     """
-    keys = _adapter_keys(model, adapter_name)
+    context = _file_context(model, adapter_name)
+    keys = _adapter_keys(context)
     source = model.state_dict() if state_dict is None else state_dict
     absent = [memory for memory in keys if memory not in source]
     if absent:
         raise KeyError(f"state_dict lacks the adapter's tensors {absent}")
-    return {disk: source[memory] for memory, disk in keys.items()}
+    state = {disk: source[memory] for memory, disk in keys.items()}
+    tuner = _tuner_for(context.config)
+    return tuner._to_file(context, state) if issubclass(tuner, _FileFormat) else state
 
 
 def set_peft_model_state_dict(
@@ -154,7 +175,11 @@ def set_peft_model_state_dict(
     >>> bool((a == source.base_model.model[0].lora_A["default"].weight).all().item())
     True
     """
-    keys = _adapter_keys(model, adapter_name)
+    context = _file_context(model, adapter_name)
+    tuner = _tuner_for(context.config)
+    if issubclass(tuner, _FileFormat):
+        peft_model_state_dict = tuner._from_file(context, peft_model_state_dict)
+    keys = _adapter_keys(context)
     to_memory = {disk: memory for memory, disk in keys.items()}
     current = model.state_dict()
     translated: dict[str, Tensor] = {}

@@ -20,8 +20,7 @@ import math
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from types import MappingProxyType
-from typing import ClassVar, Final, NamedTuple, Self, overload, override
+from typing import ClassVar, Final, NamedTuple, override
 
 import lucid
 import lucid.nn as nn
@@ -44,12 +43,12 @@ from lucid.peft._targeting import _pattern_value
 from lucid.peft.tuners._base import (
     _BaseTuner,
     _NO_PARAMETERS,
-    _BaseTunerLayer,
     _check_adapter_name,
     _parameter_at,
     _Target,
 )
 from lucid.peft.tuners._kinds import _Geometry, _Kind
+from lucid.peft.tuners._support import _AdditiveWeight, _SpecField
 
 _WEIGHT: Final = "base_layer.weight"
 #: Below this a mean of kept rows counts as "none kept": scaling by it would not make a number.
@@ -126,33 +125,7 @@ class _LycorisSpec(NamedTuple):
     rank_dropout_scale: bool
 
 
-class _SpecField[T]:
-    """A read-only view of one field of every adapter's spec: ``{adapter name: value}``.
-
-    The field is the attribute's own name, so ``scaling = _SpecField[float](doc)`` reads
-    ``spec.scaling`` of each adapter in ``layer._specs``.
-    """
-
-    def __init__(self, doc: str) -> None:
-        self.__doc__ = doc
-        self._field = ""
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        self._field = name
-
-    @overload
-    def __get__(self, layer: None, owner: type) -> Self: ...
-
-    @overload
-    def __get__(self, layer: _LycorisLayer, owner: type) -> Mapping[str, T]: ...
-
-    def __get__(self, layer: _LycorisLayer | None, owner: type) -> Self | Mapping[str, T]:
-        if layer is None:
-            return self
-        return MappingProxyType({n: getattr(spec, self._field) for n, spec in layer._specs.items()})
-
-
-class _LycorisLayer(_BaseTunerLayer):
+class _LycorisLayer(_AdditiveWeight):
     r"""A frozen base module with a structured, weight-shaped update :math:`\Delta W` applied beside it.
 
     The forward pass is :math:`f(x) + \sum_a g_a(x)`, :math:`g_a` being the
@@ -399,23 +372,6 @@ class _LycorisLayer(_BaseTunerLayer):
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     # ── merging ───────────────────────────────────────────────────────────
-
-    @override
-    def _merge_targets(self) -> dict[str, Parameter]:
-        return {_WEIGHT: self.weight}
-
-    @override
-    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
-        return {_WEIGHT: self.weight + self.get_delta_weight(adapter)}
-
-    @override
-    def _fold(self, adapter: str) -> None:
-        self.weight.copy_(self.weight + self.get_delta_weight(adapter))
-
-    @override
-    def _unfold(self) -> None:
-        for adapter in reversed(self.merged_adapters):
-            self.weight.copy_(self.weight - self.get_delta_weight(adapter))
 
 
 def _as_lycoris(config: PeftConfig) -> _LycorisConfig:

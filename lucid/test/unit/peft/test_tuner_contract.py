@@ -12,7 +12,7 @@ import json
 import types
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -37,9 +37,11 @@ from lucid.peft import (
 )
 from lucid.peft._config import _CONFIG_CLASSES
 from lucid.peft.tuners._base import _TUNERS, _BaseTunerLayer, _tuner_for
+from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 from lucid.serialization import save_safetensors
 from lucid.test.audit._builders import BUILDERS
 from lucid.test._fixtures.devices import metal_available
@@ -67,12 +69,18 @@ class _Method:
     layer_root: type[_BaseTunerLayer]
     #: The adapter file's tensors for ``_mlp`` targeted at ``["0", "2"]``, with the shape of each.
     files: dict[str, tuple[int, ...]]
+    #: Config fields of an adapter added beside the first (AdaLoRA: only one may train).
+    added: dict[str, object] = field(default_factory=dict)
 
     def make(
         self, targets: tuple[str, ...] = ("0", "2"), random: bool = True, **kw: object
     ) -> PeftConfig:
         """A config; ``random`` makes the update non-zero from the start."""
         return self.config(targets, random, **kw)
+
+    def add(self, targets: tuple[str, ...] = ("0",)) -> PeftConfig:
+        """The config of a second adapter."""
+        return self.make(targets=targets, **self.added)
 
 
 def _ia3(targets: tuple[str, ...], random: bool, **kw: object) -> IA3Config:
@@ -98,6 +106,27 @@ def _lokr(targets: tuple[str, ...], random: bool, **kw: object) -> LoKrConfig:
     return LoKrConfig(
         r=2,
         alpha=4,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _adalora(targets: tuple[str, ...], random: bool, **kw: object) -> AdaLoraConfig:
+    return AdaLoraConfig(
+        init_r=3,
+        target_r=2,
+        lora_alpha=6,
+        total_step=10,
+        target_modules=list(targets),
+        init_lora_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _vera(targets: tuple[str, ...], random: bool, **kw: object) -> VeraConfig:
+    return VeraConfig(
+        r=3,
         target_modules=list(targets),
         init_weights=not random,
         **kw,  # type: ignore[arg-type]
@@ -142,6 +171,37 @@ _METHODS = [
             f"{_PREFIX}0.lokr_w2": (4, 3),
             f"{_PREFIX}2.lokr_w1": (2, 2),
             f"{_PREFIX}2.lokr_w2": (2, 4),
+        },
+    ),
+    _Method(
+        "adalora",
+        PeftType.ADALORA,
+        _adalora,
+        AdaLoraModel,
+        AdaLoraLayer,
+        {
+            f"{_PREFIX}0.lora_A": (3, 6),
+            f"{_PREFIX}0.lora_B": (8, 3),
+            f"{_PREFIX}0.lora_E": (3, 1),
+            f"{_PREFIX}2.lora_A": (3, 8),
+            f"{_PREFIX}2.lora_B": (4, 3),
+            f"{_PREFIX}2.lora_E": (3, 1),
+        },
+        added={"inference_mode": True},
+    ),
+    _Method(
+        "vera",
+        PeftType.VERA,
+        _vera,
+        VeraModel,
+        VeraLayer,
+        {
+            f"{_PREFIX}0.vera_lambda_b": (8,),
+            f"{_PREFIX}0.vera_lambda_d": (3,),
+            f"{_PREFIX}2.vera_lambda_b": (4,),
+            f"{_PREFIX}2.vera_lambda_d": (3,),
+            "base_model.vera_A": (3, 8),
+            "base_model.vera_B": (8, 3),
         },
     ),
 ]
@@ -207,7 +267,14 @@ class TestRegistration:
         with pytest.raises(TypeError, match="config must be a"):
             method.tuner(_mlp(), other.make())
 
-    def test_the_audit_builds_a_fresh_working_instance(self, method: _Method) -> None:
+    def test_the_audit_builds_a_fresh_working_instance(
+        self, method: _Method, request: pytest.FixtureRequest
+    ) -> None:
+        if method.tuner not in BUILDERS:
+            # LCD-714b: the audit's builder rows for AdaLoRA / VeRA land with lucid/test/audit/_builders.py.
+            request.applymarker(
+                pytest.mark.xfail(strict=True, raises=KeyError, reason="no audit builder row yet")
+            )
         first, second = BUILDERS[method.tuner](), BUILDERS[method.tuner]()
         assert type(first) is method.tuner
         assert {id(p) for p in first.parameters()}.isdisjoint(id(p) for p in second.parameters())
@@ -237,7 +304,7 @@ class TestForward:
         net = _mlp(device)
         peft = get_peft_model(net, method.make())
         trainable = {n for n, p in peft.named_parameters() if p.requires_grad}
-        assert trainable and all(any(t in n for t in ("ia3_", "hada_", "lokr_")) for n in trainable)
+        assert trainable and all(any(t in n for t in ("ia3_", "hada_", "lokr_", "lora_", "vera_lambda")) for n in trainable)
         peft(lucid.randn(5, 6, device=device)).sum().backward()
         for name, p in peft.named_parameters():
             if name in trainable:
@@ -335,7 +402,7 @@ class TestMultiAdapter:
         net = _mlp(device)
         peft = get_peft_model(net, method.make(), adapter_name="a")
         lucid.manual_seed(11)
-        peft.add_adapter("b", method.make(targets=("0",)))
+        peft.add_adapter("b", method.add())
         _perturb(peft)  # only the trainable ones move: "a"
         return peft, lucid.randn(5, 6, device=device)
 
@@ -396,7 +463,7 @@ class TestMultiAdapter:
         peft, x = self._two(method)
         before = sorted(peft.state_dict())
         with pytest.raises(ValueError, match="not found"):
-            peft.add_adapter("c", method.make(targets=("nowhere",)))
+            peft.add_adapter("c", method.add(("nowhere",)))
         assert sorted(peft.state_dict()) == before and "c" not in peft.peft_config
 
 
@@ -427,7 +494,7 @@ class TestFiles:
 
     def test_a_named_second_adapter_round_trips(self, method: _Method, tmp_path: Path) -> None:
         peft = get_peft_model(_mlp(), method.make(), adapter_name="a")
-        peft.add_adapter("b", method.make(targets=("0",)))
+        peft.add_adapter("b", method.add())
         peft.set_adapter("b")
         _perturb(peft)
         peft.save_pretrained(tmp_path)
@@ -479,6 +546,69 @@ class TestFiles:
 
 #: ``adapter_config.json`` as the reference library writes it, one per method.
 _REFERENCE_CONFIGS: dict[str, dict[str, object]] = {
+    "adalora": {
+        "alpha_pattern": {},
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "beta1": 0.85,
+        "beta2": 0.85,
+        "bias": "none",
+        "corda_config": None,
+        "deltaT": 1,
+        "eva_config": None,
+        "exclude_modules": None,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_lora_weights": True,
+        "init_r": 3,
+        "layer_replication": None,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "loftq_config": {},
+        "lora_alpha": 6,
+        "lora_bias": False,
+        "lora_dropout": 0.0,
+        "megatron_config": None,
+        "megatron_core": "megatron.core",
+        "modules_to_save": None,
+        "orth_reg_weight": 0.5,
+        "peft_type": "ADALORA",
+        "peft_version": "0.21.2",
+        "r": 8,
+        "rank_pattern": None,
+        "revision": None,
+        "target_modules": ["0", "2"],
+        "target_parameters": None,
+        "target_r": 2,
+        "task_type": None,
+        "tfinal": 0,
+        "tinit": 0,
+        "total_step": 10,
+        "trainable_token_indices": None,
+        "use_dora": False,
+        "use_qalora": False,
+        "use_rslora": False,
+    },
+    "vera": {
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "bias": "none",
+        "d_initial": 0.1,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "peft_type": "VERA",
+        "peft_version": "0.21.2",
+        "projection_prng_key": 0,
+        "r": 3,
+        "revision": None,
+        "save_projection": True,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+    },
     "ia3": {
         "auto_mapping": None,
         "base_model_name_or_path": "tiny",
@@ -567,7 +697,15 @@ def _reference_forward(
     weights = []
     for index in (0, 2):
         p = f"{_PREFIX}{index}."
-        if method.name == "loha":
+        if method.name == "adalora":
+            # B diag(E) A, scaled by lora_alpha / ranknum = 6 / 3.
+            delta = (t[p + "lora_B"] @ (t[p + "lora_A"] * t[p + "lora_E"])) * (6 / 3)
+        elif method.name == "vera":
+            out, inn = net[index].weight.shape
+            rows = t[p + "vera_lambda_b"].unsqueeze(-1) * t["base_model.vera_B"][:out, :3]
+            columns = t[p + "vera_lambda_d"].unsqueeze(-1) * t["base_model.vera_A"][:3, :inn]
+            delta = rows @ columns
+        elif method.name == "loha":
             delta = (t[p + "hada_w1_a"] @ t[p + "hada_w1_b"]) * (
                 t[p + "hada_w2_a"] @ t[p + "hada_w2_b"]
             )
@@ -580,7 +718,8 @@ def _reference_forward(
                 ],
                 dim=0,
             )
-        weights.append(net[index].weight + delta * (4 / 2))  # alpha / r
+        scale = 4 / 2 if method.name in ('loha', 'lokr') else 1.0  # alpha / r
+        weights.append(net[index].weight + delta * scale)
     hidden = relu(x @ weights[0].mT + net[0].bias)
     return hidden @ weights[1].mT + net[2].bias
 
@@ -607,7 +746,7 @@ metal_only = pytest.mark.skipif(not metal_available(), reason="compiled executab
 @metal_only
 def test_compiled_follows_set_adapter_disable_and_merge(method: _Method) -> None:
     peft = get_peft_model(_mlp("metal"), method.make(), adapter_name="a")
-    peft.add_adapter("b", method.make(targets=("0",)))
+    peft.add_adapter("b", method.add())
     _perturb(peft)
     compiled = lucid.compile(peft)
     x = lucid.randn(4, 6, device="metal")

@@ -6,7 +6,6 @@ merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
 
 import dataclasses
 import re
-import warnings
 from collections.abc import Mapping
 from typing import ClassVar, override
 
@@ -15,6 +14,7 @@ import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._targeting import _suffix_match
 from lucid.peft.tuners._base import _NO_PARAMETERS, _BaseTuner, _Target, _tuner_layers
+from lucid.peft.tuners._support import _reset_fan_in_fan_out
 from lucid.peft.tuners.ia3._config import IA3Config
 from lucid.peft.tuners.ia3._defaults import IA3_DEFAULT_TARGET_MODULES, _default_feedforward_modules
 from lucid.peft.tuners.ia3._layer import IA3Layer
@@ -97,13 +97,7 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     @classmethod
     def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
         stored = _as_ia3(super()._prepare_config(config, model))
-        if stored.fan_in_fan_out:
-            warnings.warn(
-                "fan_in_fan_out is set to True but the target module is `nn.Linear`. "
-                "Setting fan_in_fan_out to False.",
-                stacklevel=5,
-            )
-            stored.fan_in_fan_out = False
+        _reset_fan_in_fan_out(stored)
         if stored.feedforward_modules is None:
             stored.feedforward_modules = set(_default_feedforward_modules(model))
         return stored
