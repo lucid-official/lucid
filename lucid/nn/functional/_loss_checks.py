@@ -655,15 +655,15 @@ class _Loss(Module):
         return f"reduction={self.reduction!r}"
 
 
+def _l2_pairwise_distance(a: Tensor, b: Tensor) -> Tensor:
+    """The default distance of the triplet loss; module-level so a loss holding it pickles."""
+    from lucid.nn.functional.activations import pairwise_distance
+
+    return pairwise_distance(a, b, p=2.0)
+
+
 def _default_distance(
     distance_function: Callable[[Tensor, Tensor], Tensor] | None,
 ) -> Callable[[Tensor, Tensor], Tensor]:
     """Return ``distance_function`` or the default L2 pairwise distance."""
-    if distance_function is not None:
-        return distance_function
-    from lucid.nn.functional.activations import pairwise_distance
-
-    def _default(a: Tensor, b: Tensor) -> Tensor:
-        return pairwise_distance(a, b, p=2.0)
-
-    return _default
+    return _l2_pairwise_distance if distance_function is None else distance_function

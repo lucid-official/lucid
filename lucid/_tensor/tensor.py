@@ -53,6 +53,7 @@ from lucid._dispatch import (
 )
 from lucid._factories.creation import zeros as _zeros, ones as _ones, empty as _empty, full as _full
 from lucid._factories.converters import tensor as _tensor_fn, _to_impl, _refuse_dlpack_of_grad
+from lucid._tensor._pickle import _reduce_tensor
 
 if TYPE_CHECKING:
     from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
@@ -3831,18 +3832,21 @@ class Tensor:
         r"""Pickle hook for cross-process Tensor serialisation.
 
         Implements the Python pickle protocol (PEP 307). The returned
-        ``(callable, args)`` pair is invoked by ``pickle.loads`` /
-        ``copy.deepcopy`` to reconstruct the tensor; the unpickler
-        receives raw element bytes plus enough metadata to rebuild the
-        ``TensorImpl`` without going through NumPy.
+        tuple is invoked by ``pickle.loads`` / ``copy.deepcopy`` to
+        reconstruct the tensor; the unpickler receives raw element bytes
+        plus enough metadata to rebuild the ``TensorImpl`` without going
+        through NumPy.
 
         Returns
         -------
         tuple
-            ``(_tensor_unpickle, (raw_bytes, shape, dtype_name, device,
-            requires_grad))``. The first element is a module-level
-            callable so that ``pickle`` can locate it by qualified name;
-            the second element is the positional argument tuple.
+            For a plain :class:`Tensor`, ``(_tensor_unpickle, wire)``; for a
+            subclass (:class:`~lucid.nn.Parameter`,
+            :class:`~lucid.nn.Buffer`, ...), ``(_subclass_unpickle,
+            (cls, *wire), state)`` with ``state`` the instance ``__dict__``
+            without ``_impl``.  ``wire`` is ``(raw_bytes, shape, dtype_name,
+            device, requires_grad)``; both callables are module-level (in
+            ``lucid._tensor._pickle``) so ``pickle`` can find them.
 
         Notes
         -----
@@ -3852,9 +3856,10 @@ class Tensor:
         tensors without importing NumPy. The byte buffer is produced by
         ``TensorImpl::to_bytes`` and consumed by ``TensorImpl::from_bytes``.
 
-        The pickle protocol requires the callable to be importable by
-        fully qualified name — that is why :func:`_tensor_unpickle` is a
-        module-level function rather than a static method. Logically
+        A subclass round-trips as itself, ``requires_grad`` included: the
+        unpickler wraps the rebuilt ``TensorImpl`` through
+        :meth:`_from_pickle_impl`, which a subclass overrides if it needs
+        more than ``object.__new__`` plus the saved attributes.  Logically
         :math:`\text{loads}(\text{dumps}(t)) = t` on values; autograd
         history is **not** preserved across the boundary.
 
@@ -3866,30 +3871,17 @@ class Tensor:
         >>> y.tolist()
         [1.0, 2.0, 3.0]
         """
-        # Wire format mirrors the lucid.serialization v3 contract — raw
-        # bytes + (shape, dtype name, device) — so multiprocessing pickle
-        # is numpy-free.
-        return (
-            _tensor_unpickle,
-            (
-                self._impl.to_bytes(),
-                list(self._impl.shape),
-                self.dtype._name,
-                self._impl.device,
-                self._impl.requires_grad,
-            ),
-        )
+        return _reduce_tensor(self)
 
+    @classmethod
+    def _from_pickle_impl(cls, impl: _C_engine.TensorImpl) -> Self:
+        r"""Rebuild an instance of ``cls`` around an unpickled ``TensorImpl``.
 
-def _tensor_unpickle(
-    raw_bytes: bytes, shape: list[int], dtype_name: str, device: object, requires_grad: bool
-) -> Tensor:
-    """Top-level helper so multiprocessing (spawn) can pickle/unpickle Tensor."""
-    from lucid._dtype import _resolve_dtype_name, to_engine_dtype
-
-    eng_dtype = to_engine_dtype(_resolve_dtype_name(dtype_name))
-    impl = _C_engine.TensorImpl.from_bytes(raw_bytes, list(shape), eng_dtype, device, requires_grad)
-    return Tensor.__new_from_impl__(impl)
+        The one place a subclass customises unpickling: the default aliases
+        ``impl`` exactly as :meth:`__new_from_impl__` does, and the pickle
+        machinery then restores the saved ``__dict__`` entries.
+        """
+        return cls.__new_from_impl__(impl)
 
 
 # ── inject dunders and methods after class definition ────────────────────────

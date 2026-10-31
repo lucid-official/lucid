@@ -29,6 +29,8 @@ class Tensor:
 
     @classmethod
     def __new_from_impl__(cls, impl: _C_engine.TensorImpl) -> Self: ...
+    @classmethod
+    def _from_pickle_impl(cls, impl: _C_engine.TensorImpl) -> Self: ...
 
     def __init__(
         self,

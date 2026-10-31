@@ -207,6 +207,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ReduceLROnPlateau names its defining module (LCD-799)
 
+- subclasses round-trip through pickle as themselves
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
