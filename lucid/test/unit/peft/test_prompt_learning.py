@@ -868,3 +868,56 @@ class TestPrefixedAttention:
                 attention_mask=lucid.ones(2, 5, device=device).long(),
                 past_key_values=_prefix_cache(peft, 2),
             )
+
+
+class TestTextInitialisation:
+    """``"TEXT"`` initialisation, the tokenizer resolved from ``tokenizer_name_or_path``."""
+
+    _VOCAB = {"[UNK]": 0, "[CLS]": 1, "[SEP]": 2, "[PAD]": 3, "[MASK]": 4, "a": 5, "b": 6}
+
+    def _config(self, name: str, **kwargs: object) -> PromptTuningConfig:
+        return PromptTuningConfig(
+            num_virtual_tokens=4,
+            prompt_tuning_init="TEXT",
+            prompt_tuning_init_text="a b",
+            tokenizer_name_or_path=name,
+            **kwargs,
+        )
+
+    def test_a_registered_name_is_resolved_and_the_text_is_embedded(self, device: str) -> None:
+        model = _gpt2(device)
+        config = self._config("bert", tokenizer_kwargs={"vocab": self._VOCAB})
+        peft = get_peft_model(model, config)
+        table = model.transformer.wte.weight
+        want = table[lucid.tensor([1, 5, 6, 2], device=device).long()]  # [CLS] a b [SEP]
+        assert bool(lucid.allclose(peft.prompt_encoder["default"].embedding.weight, want))
+
+    def test_a_directory_names_its_class_in_its_config(self, device: str, tmp_path: Path) -> None:
+        from lucid.models.text.bert import BERTTokenizer
+
+        BERTTokenizer(self._VOCAB).save(str(tmp_path))
+        (tmp_path / "tokenizer_config.json").write_text(
+            json.dumps({"tokenizer_class": "BertTokenizer"}), encoding="utf-8"
+        )
+        model = _gpt2(device)
+        peft = get_peft_model(model, self._config(str(tmp_path)))
+        want = model.transformer.wte.weight[lucid.tensor([1, 5, 6, 2], device=device).long()]
+        assert bool(lucid.allclose(peft.prompt_encoder["default"].embedding.weight, want))
+
+    def test_the_resolved_prompt_trains_and_survives_a_file(
+        self, device: str, tmp_path: Path
+    ) -> None:
+        config = self._config(
+            "bert", tokenizer_kwargs={"vocab": self._VOCAB}, task_type="CAUSAL_LM"
+        )
+        peft = get_peft_model(_gpt2(device), config)
+        ids = _ids(device, (2, 5))
+        peft(ids, labels=ids).loss.backward()
+        assert peft.prompt_encoder["default"].embedding.weight.grad is not None
+        peft.save_pretrained(tmp_path)
+        loaded = PeftModel.from_pretrained(_gpt2(device), tmp_path)
+        assert bool(lucid.allclose(loaded(ids).logits, peft(ids).logits, atol=1e-5))
+
+    def test_an_unknown_name_lists_what_is_registered(self, device: str) -> None:
+        with pytest.raises(ValueError, match="registered: .*roformer"):
+            get_peft_model(_gpt2(device), self._config("no-such-tokenizer"))

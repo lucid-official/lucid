@@ -39,7 +39,7 @@ def _roformer_special_tokens() -> SpecialTokens:
     return SpecialTokens(unk="[UNK]", pad="[PAD]", cls="[CLS]", sep="[SEP]", mask="[MASK]")
 
 
-class RoFormerTokenizer(WordPieceTokenizer):
+class RoFormerTokenizer(WordPieceTokenizer, names=("roformer",)):
     r"""RoFormer tokenizer — pure-Python reference.
 
     Identical algorithm to :class:`~lucid.models.text.bert.BERTTokenizer`

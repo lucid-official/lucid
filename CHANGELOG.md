@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - save_pretrained converts PiSSA/OLoRA with path_initial_model
 - PackedSequence defaults, conversions, unpad/unpack
 - prefix tuning on bert and roformer via a K/V prefix
+- resolve tokenizers by name for TEXT prompt init
 
 ---
 

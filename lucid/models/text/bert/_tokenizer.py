@@ -54,7 +54,7 @@ def _bert_special_tokens() -> SpecialTokens:
     return SpecialTokens(unk="[UNK]", pad="[PAD]", cls="[CLS]", sep="[SEP]", mask="[MASK]")
 
 
-class BERTTokenizer(WordPieceTokenizer):
+class BERTTokenizer(WordPieceTokenizer, names=("bert",)):
     r"""BERT tokenizer — pure-Python reference.
 
     A thin convenience subclass of

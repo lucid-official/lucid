@@ -169,7 +169,7 @@ class TestEncoders:
             want = table.weight[lucid.tensor(expected).long()]
             assert bool(lucid.allclose(weight, want))
 
-    def test_text_without_a_tokenizer_says_what_to_do(self) -> None:
+    def test_text_with_a_name_that_ships_no_vocabulary_says_what_to_give(self) -> None:
         config = PromptTuningConfig(
             num_virtual_tokens=2,
             prompt_tuning_init="TEXT",
@@ -177,7 +177,7 @@ class TestEncoders:
             tokenizer_name_or_path="gpt2",
             **_SIZES,
         )
-        with pytest.raises(ValueError, match="no loader for tokenizer_name_or_path='gpt2'"):
+        with pytest.raises(ValueError, match="'gpt2' cannot be built.*ships no vocabulary"):
             PromptEmbedding.from_config(config, nn.Embedding(10, 8))
         silent = PromptTuningConfig(
             num_virtual_tokens=2,

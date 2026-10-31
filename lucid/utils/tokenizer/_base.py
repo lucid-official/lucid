@@ -26,7 +26,7 @@ one-line code change with bit-identical encode outputs.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Callable, ClassVar, Iterable, Literal
+from typing import Callable, ClassVar, Iterable, Literal, override
 
 from lucid.utils.tokenizer._post_processors import (
     PostProcessor,
@@ -94,6 +94,11 @@ class SpecialTokens:
         return out
 
 
+def registry_key(name: str) -> str:
+    """A tokenizer name as the registry keys it: case, ``-``, ``_`` and spaces do not tell names apart."""
+    return name.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+
 class Tokenizer(ABC):
     r"""Abstract base for every tokenizer in ``lucid.utils.tokenizer``.
 
@@ -136,6 +141,22 @@ class Tokenizer(ABC):
     rest — the special-token handling, ``save`` / ``from_pretrained``,
     and the batch helpers.
     """
+
+    #: The tokenizer classes by registry key; a class statement fills it and
+    #: :func:`~lucid.utils.tokenizer._registry.resolve_tokenizer` reads it.
+    _named: ClassVar[dict[str, type[Tokenizer]]] = {}
+
+    @override
+    def __init_subclass__(cls, *, names: tuple[str, ...] = (), **kwargs: object) -> None:
+        """Register the class under its own name and every alias in ``names``.
+
+        A name beginning with ``_`` is private and not registered; a name taken
+        before now means this class.
+        """
+        super().__init_subclass__(**kwargs)
+        for name in (cls.__name__, *names):
+            if not name.startswith("_"):
+                Tokenizer._named[registry_key(name)] = cls
 
     # Subclasses populate at construction time.
     _special: SpecialTokens

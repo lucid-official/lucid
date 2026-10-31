@@ -11,6 +11,7 @@ from lucid.peft._config import PeftType, PromptLearningConfig
 from lucid.peft.tuners._prompt._encoder import _Injection, _PromptEncoder
 from lucid.peft.tuners._prompt._tuner import _PromptLearningTuner
 from lucid.peft.tuners.prompt_tuning._config import PromptTuningConfig, PromptTuningInit
+from lucid.utils.tokenizer._registry import resolve_tokenizer
 
 
 class _TextEncoder(Protocol):
@@ -31,7 +32,9 @@ class PromptEmbedding(_PromptEncoder):
         The model's token table, which ``"SAMPLE_VOCAB"`` and ``"TEXT"``
         copy rows of.
     tokenizer : object with ``encode(text) -> list[int]``, optional
-        Turns ``prompt_tuning_init_text`` into ids for ``"TEXT"``.
+        Turns ``prompt_tuning_init_text`` into ids for ``"TEXT"``.  Left out, the
+        tokenizer ``config.tokenizer_name_or_path`` names is resolved (a registered
+        name, built from ``config.tokenizer_kwargs``, or a directory).
 
     Attributes
     ----------
@@ -41,7 +44,8 @@ class PromptEmbedding(_PromptEncoder):
     Raises
     ------
     ValueError
-        ``"TEXT"`` initialisation without a tokenizer.
+        ``"TEXT"`` initialisation whose tokenizer cannot be resolved or tokenizes the text
+        to nothing.
 
     Examples
     --------
@@ -83,13 +87,12 @@ class PromptEmbedding(_PromptEncoder):
     ) -> Tensor:
         if config.prompt_tuning_init == PromptTuningInit.SAMPLE_VOCAB:
             return lucid.randint(0, table.num_embeddings, (total,)).long()
-        if tokenizer is None:
-            raise ValueError(
-                "prompt_tuning_init='TEXT' needs a tokenizer to turn the text into ids; "
-                f"lucid has no loader for tokenizer_name_or_path={config.tokenizer_name_or_path!r}, "
-                "so build PromptEmbedding(config, word_embeddings, tokenizer=...) yourself"
-            )
         assert config.prompt_tuning_init_text is not None  # the config checked it
+        assert config.tokenizer_name_or_path is not None  # and this
+        if tokenizer is None:
+            tokenizer = resolve_tokenizer(
+                config.tokenizer_name_or_path, **(config.tokenizer_kwargs or {})
+            )
         ids = tokenizer.encode(config.prompt_tuning_init_text)
         if not ids:
             raise ValueError("prompt_tuning_init_text tokenizes to nothing")

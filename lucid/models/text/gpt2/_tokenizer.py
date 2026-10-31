@@ -50,7 +50,7 @@ def _gpt2_special_tokens() -> SpecialTokens:
     return SpecialTokens(bos=GPT2_EOS, eos=GPT2_EOS, unk=GPT2_EOS)
 
 
-class GPT2Tokenizer(ByteLevelBPETokenizer):
+class GPT2Tokenizer(ByteLevelBPETokenizer, names=("gpt2",)):
     r"""GPT-2 tokenizer — pure-Python reference.
 
     A thin convenience subclass of

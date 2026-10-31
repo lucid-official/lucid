@@ -35,7 +35,7 @@ END_OF_WORD = "</w>"
 """GPT-1's end-of-word marker, glued to a word's final character."""
 
 
-class GPTTokenizer(BPETokenizer):
+class GPTTokenizer(BPETokenizer, names=("gpt",)):
     r"""GPT-1 tokenizer — lowercased word-level BPE with ``</w>``.
 
     The end-of-word marker is what distinguishes this from generic BPE:
