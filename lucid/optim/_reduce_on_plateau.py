@@ -134,10 +134,6 @@ class ReduceLROnPlateau(_CheckpointState):
     [0.05]
     """
 
-    # Where the class is documented, pickled and audited: the module it is
-    # imported from, with every other scheduler.
-    __module__ = "lucid.optim.lr_scheduler"
-
     # so the composites, which step without one, refuse it
     _steps_on_a_metric: ClassVar[bool] = True
 

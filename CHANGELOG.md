@@ -205,6 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - scheduler base arguments and step(epoch) parity (LCD-789)
 
+- ReduceLROnPlateau names its defining module (LCD-799)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
