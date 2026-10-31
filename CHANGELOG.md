@@ -155,6 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - learn_sigma builds its schedule from host floats
 
+- saved zoo directories load as their own class; name_or_path
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

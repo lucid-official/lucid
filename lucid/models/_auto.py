@@ -127,7 +127,10 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     Two-step strategy:
 
     1. Parse ``model_type`` from ``config.json`` to identify the family.
-    2. Find a registry entry whose ``(task, model_type)`` match.
+    2. Find the registry entry whose ``(task, model_type)`` match and whose
+       class is one of the saved ``architectures`` (see
+       :func:`lucid.models._registry._registry_resolve_saved`).  A directory
+       without ``architectures`` takes the first entry for the pair.
 
     The registry entry may carry an optional ``model_class`` shortcut so
     the model can be instantiated directly with the saved config; when
@@ -172,7 +175,7 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     import json
 
     import lucid as _lucid
-    from lucid.models._registry import _REGISTRY, _RegistryEntry
+    from lucid.models._registry import _registry_resolve_saved
 
     cfg_file = path / "config.json"
     weights_st = path / "model.safetensors"
@@ -196,15 +199,7 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     if not isinstance(model_type, str):
         raise TypeError(f"{cfg_file} must declare 'model_type' (string)")
 
-    matching: list[_RegistryEntry] = [
-        entry
-        for entry in _REGISTRY.values()
-        if entry.task == task and entry.model_type == model_type
-    ]
-    if not matching:
-        raise ValueError(f"No model registered for task={task!r}, model_type={model_type!r}")
-
-    entry = matching[0]
+    entry = _registry_resolve_saved(task, model_type, _saved_architectures(cfg_dict, cfg_file))
 
     if entry.model_class is not None:
         # Fast path: instantiate directly — no factory call needed.
@@ -228,7 +223,18 @@ def _load_from_directory(task: str, path: Path, *, strict: bool) -> PretrainedMo
     if not isinstance(sd, dict):
         raise TypeError(f"weights.lucid did not contain a state_dict, got {type(sd).__name__}")
     model.load_state_dict(sd, strict=strict)
+    model.name_or_path = str(path)
     return model
+
+
+def _saved_architectures(cfg_dict: dict[str, object], cfg_file: Path) -> list[str] | None:
+    r"""The ``architectures`` a ``config.json`` lists, or ``None`` if it has no such key."""
+    architectures = cfg_dict.get("architectures")
+    if architectures is None:
+        return None
+    if not isinstance(architectures, list) or not all(isinstance(a, str) for a in architectures):
+        raise TypeError(f"{cfg_file}: 'architectures' must be a list of class names")
+    return architectures
 
 
 class AutoConfig:

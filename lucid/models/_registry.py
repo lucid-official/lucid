@@ -1,6 +1,7 @@
 """Task-tagged global model registry with name normalization."""
 
-from collections.abc import Callable
+import functools
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, final
 
@@ -156,6 +157,23 @@ def _normalize(name: str) -> str:
     return name.replace("-", "_").lower()
 
 
+def _naming(fn: ModelFactory, name: str) -> ModelFactory:
+    r"""``fn`` wrapped so the model it builds carries ``name`` as its ``name_or_path``.
+
+    The wrapper keeps ``fn``'s name, module, docstring and signature
+    (``functools.wraps``), so tools that read the factory by those see the
+    function it wraps.
+    """
+
+    @functools.wraps(fn)
+    def named(pretrained: bool = False, **overrides: object) -> PretrainedModel:
+        model = fn(pretrained=pretrained, **overrides)
+        model.name_or_path = name
+        return model
+
+    return named
+
+
 def register_model(
     *,
     task: str = "base",
@@ -221,8 +239,8 @@ def register_model(
     Returns
     -------
     Callable[[ModelFactory], ModelFactory]
-        Decorator that returns the original factory unmodified (only the
-        registry side-effect occurs).
+        Decorator that registers the factory and returns it wrapped, so the
+        model it builds carries the registered name as ``name_or_path``.
 
     Raises
     ------
@@ -265,7 +283,7 @@ def register_model(
         mt = model_type if model_type is not None else family_resolved
 
         _REGISTRY[name] = _RegistryEntry(
-            factory=fn,
+            factory=_naming(fn, name),
             task=task,
             family=family_resolved,
             model_type=mt,
@@ -274,7 +292,7 @@ def register_model(
             params=params,
             summary=summary,
         )
-        return fn
+        return _REGISTRY[name].factory
 
     return decorator
 
@@ -474,6 +492,71 @@ def _registry_lookup(name: str, *, task: str) -> _RegistryEntry:
             f"but task {task!r} was requested. Use the matching Auto class."
         )
     return entry
+
+
+def _registry_resolve_saved(
+    task: str, model_type: str, architectures: Sequence[str] | None
+) -> _RegistryEntry:
+    r"""Resolve the registry entry a saved ``config.json`` describes.
+
+    ``(task, model_type)`` alone does not say which class was saved: a family
+    registers several heads under one task (``BERTForQuestionAnswering`` and
+    ``BERTForSequenceClassification`` are both ``sequence-classification``
+    ``bert``), and the first of them is not the one on disk.  The
+    ``architectures`` that :meth:`PretrainedModel.save_pretrained` records name
+    the class, and decide.
+
+    Parameters
+    ----------
+    task : str
+        Task tag the calling Auto class requires.
+    model_type : str
+        ``model_type`` of the saved config.
+    architectures : sequence of str or None
+        Class names the saved config lists.  ``None`` for a directory that
+        predates the key: the first entry for ``(task, model_type)``.
+
+    Returns
+    -------
+    _RegistryEntry
+        The first entry of ``task`` and ``model_type`` whose class is the
+        first of ``architectures`` that any such entry has.
+
+    Raises
+    ------
+    ValueError
+        When nothing is registered for ``(task, model_type)``, or when
+        ``architectures`` names no class registered for it — the message says
+        which task the named class belongs to, if it is registered at all.
+    """
+    of_type = [e for e in _REGISTRY.values() if e.model_type == model_type]
+    of_task = [e for e in of_type if e.task == task]
+    if not of_task:
+        raise ValueError(f"No model registered for task={task!r}, model_type={model_type!r}")
+    if architectures is None:
+        return of_task[0]
+
+    def class_name(entry: _RegistryEntry) -> str:
+        # An entry registered without ``model_class`` costs one factory call to learn its class.
+        cls = entry.model_class if entry.model_class is not None else type(entry.factory())
+        return cls.__name__
+
+    for architecture in architectures:
+        for entry in of_task:
+            if class_name(entry) == architecture:
+                return entry
+    elsewhere = sorted(
+        {e.task for e in of_type if e.model_class is not None and class_name(e) in architectures}
+    )
+    hint = (
+        f"; it is registered for task {elsewhere[0]!r} — use the matching Auto class"
+        if elsewhere
+        else ""
+    )
+    raise ValueError(
+        f"The saved architectures {list(architectures)!r} name no class registered for "
+        f"task={task!r}, model_type={model_type!r}{hint}"
+    )
 
 
 def _unknown_model_message(name: str, candidates: list[str]) -> str:

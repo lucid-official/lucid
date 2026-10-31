@@ -6,10 +6,16 @@ import warnings
 from abc import ABC
 from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
-from typing import ClassVar, Self, override
+from typing import ClassVar, Final, Self, override
 
 import lucid as _lucid
 import lucid.nn as nn
+
+
+#: Keys ``config.json`` holds beside the config's own fields: ``model_type`` names the family,
+#: ``architectures`` (as in the reference's ``config.json``) names the model class the weights
+#: beside it belong to.  Neither is a constructor argument.
+_ENVELOPE_KEYS: Final = ("model_type", "architectures")
 
 
 def _list_to_tuple(val: object) -> object:
@@ -147,8 +153,10 @@ class ModelConfig(ABC):
         Parameters
         ----------
         d : dict[str, object]
-            Field-name → value mapping; ``model_type`` is silently
-            stripped (it's a ClassVar, not a constructor arg).
+            Field-name → value mapping; ``model_type`` (a ClassVar) and
+            ``architectures`` (the saved model class, which
+            :meth:`PretrainedModel.save_pretrained` records beside the
+            fields) are silently stripped — neither is a constructor arg.
 
         Returns
         -------
@@ -174,8 +182,8 @@ class ModelConfig(ABC):
         512
         """
         copy: dict[str, object] = dict(d)
-        # ``model_type`` is a ClassVar — never a constructor arg.
-        copy.pop("model_type", None)
+        for key in _ENVELOPE_KEYS:
+            copy.pop(key, None)
         if not is_dataclass(cls):
             raise TypeError(f"{cls.__name__} must be a @dataclass")
         cls_fields = {f.name: f for f in fields(cls)}
@@ -312,6 +320,12 @@ class PretrainedModel(nn.Module):
     #: encoder's) rather than the history a decoder extends and numbers its next positions after.
     kv_prefix_only: ClassVar[bool] = False
 
+    #: Where this model came from, as the reference's ``name_or_path``: the registered factory
+    #: name the factory built it under, or the directory ``from_pretrained`` read it from.  The
+    #: empty default stays on the class, so a model built straight from a config has none in its
+    #: own ``__dict__`` and ``lucid.peft`` leaves ``base_model_name_or_path`` unset.
+    name_or_path: str = ""
+
     config: ModelConfig
 
     def __init__(self, config: ModelConfig) -> None:
@@ -437,6 +451,7 @@ class PretrainedModel(nn.Module):
         if not isinstance(sd, dict):
             raise TypeError(f"Weights file did not contain a state_dict, got {type(sd).__name__}")
         model.load_state_dict(sd, strict=strict)
+        model.name_or_path = str(path)
         return model
 
     def save_pretrained(self, path: str, *, safe_serialization: bool = False) -> None:
@@ -453,6 +468,12 @@ class PretrainedModel(nn.Module):
 
         Notes
         -----
+        ``config.json`` holds the config's fields, ``model_type`` and
+        ``architectures`` — a one-element list naming this model's class, so a
+        directory saved from a head that shares its family and task with
+        others (``BERTForQuestionAnswering`` among the sequence classifiers)
+        loads back as the class it was saved from.
+
         Output layout::
 
             path/
@@ -470,7 +491,10 @@ class PretrainedModel(nn.Module):
         >>> model.save_pretrained("/tmp/my_resnet50", safe_serialization=True)
         """
         os.makedirs(path, exist_ok=True)
-        self.config.save(os.path.join(path, "config.json"))
+        document = self.config.to_dict()
+        document["architectures"] = [type(self).__name__]
+        with open(os.path.join(path, "config.json"), "w", encoding="utf-8") as f:
+            json.dump(document, f, indent=2, sort_keys=True)
         if safe_serialization:
             _lucid.save_safetensors(
                 self.state_dict(),
