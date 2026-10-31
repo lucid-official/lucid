@@ -181,6 +181,7 @@ def owned_by_adapter(name: str) -> bool:
             ".lora_A.",
             ".lora_B.",
             ".out_proj_lora_",  # an attention's output projection
+            *(f".{p}_proj_lora_" for p in "qkv"),  # and its separate input projections
             ".lora_embedding_",  # an embedding's factors are bare parameters
             ".modules_to_save.",
         )
@@ -286,8 +287,6 @@ def _refusal(module: nn.Module) -> str | None:
         return type(module).__name__
     if getattr(module, "groups", 1) > 1:
         return f"{type(module).__name__} with groups > 1 cannot be merged"
-    if isinstance(module, nn.MultiheadAttention) and not module._qkv_same_embed_dim:
-        return "MultiheadAttention with kdim or vdim apart from embed_dim"
     return None
 
 

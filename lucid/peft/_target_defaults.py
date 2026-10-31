@@ -125,7 +125,7 @@ DEFAULT_LORA_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyT
         "dit": _names("attn"),
         "mean_flow": _names("attn"),
         "tvm": _QKV,
-        "stable_diffusion": _names("attn1"),
+        "stable_diffusion": _names("attn1", "attn2"),
         "diamond": _names("qkv_proj", "out_proj"),
         "genie": _names("query", "value"),
         "nice": _names("proj"),

@@ -164,14 +164,6 @@ class TestAttention:
         x = lucid.randn(2, 5, E, device=device).bfloat16()
         assert layer(x, x, x)[0].dtype == lucid.bfloat16
 
-    def test_separate_projections_are_refused(self, device: str) -> None:
-        base = nn.MultiheadAttention(E, 2, kdim=6, vdim=6).to(device)
-        with pytest.raises(ValueError, match="Only same embed"):
-            lora.MultiheadAttention(base, "default", r=2)
-        grouped = nn.MultiheadAttention(E, 4, num_kv_heads=2).to(device)
-        with pytest.raises(ValueError, match="Only same embed"):
-            lora.MultiheadAttention(grouped, "default", r=2)
-
     def test_dropout_is_not_applied_and_says_so(self, device: str) -> None:
         with pytest.warns(UserWarning, match="not applied by lora.MultiheadAttention"):
             _, layer, x = _attention(device, lora_dropout=0.3)
@@ -204,6 +196,122 @@ class TestAttention:
             "base_model.model.0.lora_A.weight",
             "base_model.model.0.lora_B.weight",
         ]
+
+
+class TestSeparateProjections:
+    """An attention with its own query, key and value weights: a cross-attention over a wider
+    or narrower context (``kdim`` / ``vdim``), or grouped key/value heads."""
+
+    #: ``(kwargs of the attention, key width, value width)``
+    _CASES = {
+        "context_width": (dict(kdim=6, vdim=6), 6, 6),
+        "key_value_widths_apart": (dict(kdim=6, vdim=10), 6, 10),
+        "grouped_heads": (dict(num_kv_heads=2), E, E),
+    }
+    _WEIGHTS = ("q_proj_weight", "k_proj_weight", "v_proj_weight", "out_proj_weight")
+
+    @staticmethod
+    def _built(
+        device: str, case: str, **options: object
+    ) -> tuple[nn.MultiheadAttention, lora.MultiheadAttention, tuple[lucid.Tensor, ...]]:
+        lucid.manual_seed(0)
+        extra, key_width, value_width = TestSeparateProjections._CASES[case]
+        heads = 4 if "num_kv_heads" in extra else 2
+        base = nn.MultiheadAttention(E, heads, batch_first=True, **extra).to(device)  # type: ignore[arg-type]
+        merged: dict[str, object] = {"r": 2, "lora_alpha": 6, "init_lora_weights": False} | options
+        layer = lora.MultiheadAttention(base, "default", **merged)  # type: ignore[arg-type]
+        inputs = (
+            lucid.randn(2, 5, E, device=device),
+            lucid.randn(2, 7, key_width, device=device),
+            lucid.randn(2, 7, value_width, device=device),
+        )
+        return base, layer, inputs
+
+    @staticmethod
+    def _shifted(
+        base: nn.MultiheadAttention, layer: lora.MultiheadAttention
+    ) -> nn.MultiheadAttention:
+        ref = copy.deepcopy(base)
+        with lucid.no_grad():
+            for name in TestSeparateProjections._WEIGHTS:
+                getattr(ref, name).add_(layer._delta_for(name, "default"))
+        return ref
+
+    @pytest.mark.parametrize("case", sorted(_CASES))
+    def test_each_weight_gets_a_pair_shaped_by_its_rows_and_columns(
+        self, device: str, case: str
+    ) -> None:
+        base, layer, _ = self._built(device, case)
+        assert type(layer).__name__ == "_SeparateMultiheadAttention"
+        assert isinstance(layer, lora.MultiheadAttention)
+        assert layer.get_base_layer() is base and repr(layer).startswith("lora.")
+        for name in self._WEIGHTS:
+            table_a, table_b = layer._SLOTS[name]
+            out, inn = base.get_parameter(name).shape
+            assert tuple(getattr(layer, table_a)["default"].weight.shape) == (2, inn)
+            assert tuple(getattr(layer, table_b)["default"].weight.shape) == (out, 2)
+        assert layer.in_proj_weight is None
+
+    @pytest.mark.parametrize("case", sorted(_CASES))
+    def test_the_output_is_the_base_on_the_shifted_weights(self, device: str, case: str) -> None:
+        base, layer, inputs = self._built(device, case)
+        ref = self._shifted(base, layer)
+        out, _ = layer(*inputs)
+        expected, _ = ref(*inputs)
+        assert _close(out, expected)
+        assert not _close(out, base(*inputs)[0], atol=1e-3)
+
+    @pytest.mark.parametrize("case", sorted(_CASES))
+    def test_a_zero_update_is_the_base_bit_for_bit(self, device: str, case: str) -> None:
+        base, layer, inputs = self._built(device, case, init_lora_weights=True)
+        assert _same(layer(*inputs)[0], base(*inputs)[0])
+
+    @pytest.mark.parametrize("case", sorted(_CASES))
+    def test_gradients_reach_every_pair(self, device: str, case: str) -> None:
+        base, layer, inputs = self._built(device, case)
+        base.requires_grad_(False)
+        layer(*inputs)[0].sum().backward()
+        for table in layer.adapter_layer_names:
+            grad = getattr(layer, table)["default"].weight.grad
+            assert grad is not None and float(grad.abs().max().item()) > 0, table
+
+    @pytest.mark.parametrize("case", sorted(_CASES))
+    def test_merging_writes_all_four_weights_and_unmerging_restores_them(
+        self, device: str, case: str
+    ) -> None:
+        base, layer, inputs = self._built(device, case)
+        ref = self._shifted(base, layer)
+        original = {n: base.get_parameter(n).clone() for n in self._WEIGHTS}
+        with lucid.no_grad():
+            adapted = layer(*inputs)[0]
+            layer.merge()
+            for name in self._WEIGHTS:
+                assert _close(base.get_parameter(name), ref.get_parameter(name), atol=1e-6)
+            assert _close(layer(*inputs)[0], adapted)
+            layer.unmerge()
+            for name in self._WEIGHTS:
+                assert _close(base.get_parameter(name), original[name], atol=1e-5)
+
+    def test_the_tuner_wraps_it_and_keys_every_table_under_its_projection(
+        self, device: str
+    ) -> None:
+        lucid.manual_seed(0)
+        model = nn.Sequential(nn.MultiheadAttention(E, 2, kdim=6, vdim=6)).to(device)
+        peft = get_peft_model(model, LoraConfig(r=2, target_modules=["0"]))
+        assert isinstance(model[0], lora.MultiheadAttention)
+        keys = sorted(get_peft_model_state_dict(peft))
+        assert keys == [
+            f"base_model.model.0.base_layer.{stem}.lora_{ab}.weight"
+            for stem in ("k_proj", "out_proj", "q_proj", "v_proj")
+            for ab in ("A", "B")
+        ]
+
+    def test_a_layout_that_does_not_hold_the_attention_is_refused(self, device: str) -> None:
+        from lucid.peft.tuners.lora._attention import _SeparateMultiheadAttention
+
+        fused = nn.MultiheadAttention(E, 2).to(device)
+        with pytest.raises(ValueError, match="does not adapt"):
+            _SeparateMultiheadAttention(fused, "default", r=2)
 
 
 # ── ParamWrapper ─────────────────────────────────────────────────────────────
