@@ -927,7 +927,6 @@
     "lucid/models/_registry.py": 2,
     "lucid/models/_summary.py": 8,
     "lucid/nn/module.py": 4,
-    "lucid/nn/utils/weight_norm.py": 4,
     "lucid/optim/lbfgs.py": 2,
     "lucid/optim/optimizer.py": 7,
     "lucid/optim/others.py": 4,
@@ -1051,9 +1050,6 @@
     "lucid/nn/module.py": 6,
     "lucid/nn/modules/padding.py": 1,
     "lucid/nn/qat/conv.py": 3,
-    "lucid/nn/utils/prune.py": 1,
-    "lucid/nn/utils/spectral_norm.py": 1,
-    "lucid/nn/utils/weight_norm.py": 1,
     "lucid/quantization/_fake_quantize.py": 2,
     "lucid/quantization/observer.py": 1,
     "lucid/utils/checkpoint.py": 1,
@@ -1082,12 +1078,8 @@
     "lucid/compile/_entry/step.py": 4,
     "lucid/nn/_state_dict.py": 1,
     "lucid/nn/module.py": 5,
-    "lucid/nn/utils/prune.py": 1,
     "lucid/serialization/__init__.py": 3,
     "lucid/utils/data/dataloader.py": 1
-   },
-   "type-ignore[has-type]": {
-    "lucid/nn/utils/spectral_norm.py": 1
    },
    "type-ignore[method-assign]": {
     "lucid/optim/optimizer.py": 1
@@ -1095,7 +1087,6 @@
    "type-ignore[misc]": {
     "lucid/_tensor/tensor.py": 1,
     "lucid/nn/modules/container.py": 1,
-    "lucid/nn/utils/spectral_norm.py": 1,
     "lucid/utils/tokenizer/_bpe.py": 1
    },
    "type-ignore[no-any-return]": {
@@ -1529,7 +1520,6 @@
     "lucid/nn/quantized/modules.py": 2,
     "lucid/nn/quantized/sparse.py": 3,
     "lucid/nn/utils/fusion.py": 1,
-    "lucid/nn/utils/prune.py": 1,
     "lucid/optim/adam.py": 12,
     "lucid/optim/lbfgs.py": 1,
     "lucid/optim/lr_scheduler.py": 23,
@@ -1876,7 +1866,6 @@
     "lucid/nn/utils/fusion.py": 1,
     "lucid/nn/utils/parametrize.py": 1,
     "lucid/nn/utils/rnn.py": 1,
-    "lucid/nn/utils/spectral_norm.py": 1,
     "lucid/quantization/_functional.py": 2,
     "lucid/quantization/_qparams.py": 1,
     "lucid/quantization/_quantize.py": 3,
@@ -1987,7 +1976,6 @@
     "lucid/nn/utils/fusion.py": 7,
     "lucid/nn/utils/parametrize.py": 7,
     "lucid/nn/utils/rnn.py": 3,
-    "lucid/nn/utils/spectral_norm.py": 37,
     "lucid/quantization/_functional.py": 41,
     "lucid/quantization/_qparams.py": 13,
     "lucid/quantization/_quantize.py": 26,

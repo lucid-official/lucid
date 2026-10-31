@@ -45,6 +45,7 @@ from lucid.compile._core.fallback import _fallback_notice
 from lucid.compile._core.hook_contract import HookContract, HookSite
 from lucid.compile._core.module_state import HeldState, StateContract, atom_sig
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
+from lucid.nn.utils._reparam import _ReparamHook
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -478,28 +479,16 @@ def _module_state(model: object) -> tuple[object, ...]:
     return state
 
 
-def _handle_key(handle: object) -> int | None:
-    """Return integer hook handle key if ``handle`` is a hook handle."""
-    key = getattr(handle, "_key", None)
-    return key if isinstance(key, int) else None
-
-
 def _internal_pre_hook_keys(mod: Module) -> set[int]:
     """Hook ids installed by ``nn.utils`` reparametrisations (traced in-graph).
 
     ``nn.utils.parametrize`` installs no forward pre-hook since LCD-624 — the
     reparametrised tensor is read through a property on a generated subclass,
-    not recomputed by a hook — so it contributes nothing here.
+    not recomputed by a hook — so it contributes nothing here.  The legacy
+    ``weight_norm`` / ``spectral_norm`` / pruning hooks are the modules' own
+    pre-hooks; :class:`~lucid.nn.utils._reparam._ReparamHook` knows which.
     """
-    handles: list[object] = []
-    for attr in ("_weight_norm_hooks", "_spectral_norm_hooks"):
-        d = getattr(mod, attr, None)
-        if isinstance(d, dict):
-            handles.extend(e[0] for e in d.values() if isinstance(e, tuple) and e)
-    prune_d = getattr(mod, "_prune_hooks", None)
-    if isinstance(prune_d, dict):
-        handles.extend(prune_d.values())
-    return {k for h in handles if (k := _handle_key(h)) is not None}
+    return {key for key, _ in _ReparamHook.installed(mod)}
 
 
 def _sub_hook_block(sub: Module) -> str | None:
