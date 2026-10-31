@@ -18,7 +18,15 @@ The pooler (``*pooler.dense.*``) is **not present** in the upstream checkpoint
 (it is untrained there too) but Lucid's ``RoFormerModel`` owns one, so the
 converter injects the freshly-initialised pooler weights to satisfy the strict
 key-set gate.  It affects only ``pooler_output`` (meaningless until fine-tuned),
-never ``last_hidden_state``.
+never ``last_hidden_state``.  The task heads that read the raw hidden states
+(``roformer_cls`` and friends) build no pooler, so a target without
+``pooler.dense.*`` gets no injection.
+
+Sequence classification (LCD-709): Lucid's ``classifier`` is the reference's
+``RoFormerClassificationHead``, so a reference ``classifier.dense.*`` /
+``classifier.out_proj.*`` checkpoint maps through ``map_key`` unchanged.  No
+fine-tuned classification checkpoint ships, hence no ``roformer_cls`` entry in
+``_VARIANTS``.
 
 The only published canonical checkpoint is Chinese
 (``junnyu/roformer_chinese_base``, CLUECorpusSmall).

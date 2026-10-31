@@ -26,6 +26,7 @@ from lucid.models._tasks import (
 )
 from lucid.models._mixins import MaskedLMMixin
 from lucid.models._output import (
+    BaseModelOutput,
     BaseModelOutputWithPooling,
     MaskedLMOutput,
     QuestionAnsweringOutput,
@@ -306,12 +307,180 @@ class _RoFormerPooler(nn.Module):
         return F.tanh(self.dense(cls_hidden))
 
 
+@final
+class _RoFormerClassificationHead(nn.Module):
+    """The reference's ``RoFormerClassificationHead``: dropout, ``dense``,
+    activation, dropout, ``out_proj`` on the first token.
+
+    It is its own module (mounted as ``classifier``) so the head's two linears
+    sit at ``classifier.dense`` / ``classifier.out_proj`` — the names a
+    reference checkpoint or a hub adapter uses, and a prefix a fine-tuning
+    wrapper can address without also matching the encoder's ``*.dense``.
+    """
+
+    def __init__(self, config: RoFormerConfig) -> None:
+        super().__init__()
+        drop = (
+            config.classifier_dropout
+            if config.classifier_dropout is not None
+            else config.hidden_dropout
+        )
+        self._act_name = config.hidden_act
+        self.dropout = nn.Dropout(p=drop)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    @override
+    def forward(self, hidden: Tensor) -> Tensor:
+        x = self.dropout(hidden[:, 0, :])
+        x = text_activation(self._act_name, self.dense(x))
+        return self.out_proj(self.dropout(x))
+
+
+def _migrate_flat_classification_head(
+    module: nn.Module,
+    state_dict: dict[str, Tensor],
+    prefix: str,
+    *_hook_args: object,
+) -> None:
+    """Load-time key migration for checkpoints saved before the head was nested.
+
+    The old layout kept the head's two linears at the top level (``dense.*``
+    and ``classifier.*``).  They become ``classifier.dense.*`` /
+    ``classifier.out_proj.*``, so a checkpoint written by an earlier release
+    still loads strictly.  (Its unused ``roformer.pooler.*`` is dropped by the
+    trunk's own hook.)  A checkpoint already in the new layout is left alone.
+    """
+    del module
+    if f"{prefix}dense.weight" not in state_dict:
+        return
+    # ``classifier.*`` must move before ``dense.*`` takes the ``classifier.`` prefix.
+    for leaf in ("weight", "bias"):
+        if f"{prefix}classifier.{leaf}" in state_dict:
+            state_dict[f"{prefix}classifier.out_proj.{leaf}"] = state_dict.pop(
+                f"{prefix}classifier.{leaf}"
+            )
+        if f"{prefix}dense.{leaf}" in state_dict:
+            state_dict[f"{prefix}classifier.dense.{leaf}"] = state_dict.pop(f"{prefix}dense.{leaf}")
+
+
+def _drop_absent_pooler(
+    module: nn.Module,
+    state_dict: dict[str, Tensor],
+    prefix: str,
+    *_hook_args: object,
+) -> None:
+    """Let a pooler-less trunk load a checkpoint that carries a pooler.
+
+    The shipped encoder weights (and any checkpoint a head saved before it
+    stopped building the pooler) include ``pooler.*``; the encoder-only trunk
+    has nowhere to put them and the pooler never affects ``last_hidden_state``,
+    so they are discarded.
+    """
+    del module
+    for key in [k for k in state_dict if k.startswith(f"{prefix}pooler.")]:
+        del state_dict[key]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Top-level encoder + heads
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
+class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
+    """Embeddings, rotary tables and encoder stack — what every RoFormer model shares.
+
+    The reference trunk has no pooler.  :class:`RoFormerModel` adds one (the
+    shipped base / masked-LM checkpoints carry its keys); a head that reads
+    the raw hidden states builds :class:`_RoFormerEncoderOnly` instead, so no
+    parameter is left that its loss can never reach.
+    """
+
+    config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
+    base_model_prefix: ClassVar[str] = "roformer"
+
+    def __init__(self, config: RoFormerConfig) -> None:
+        super().__init__(config)
+        head_dim = config.hidden_size // config.num_attention_heads
+        self._max_pos = config.max_position_embeddings
+        self.embeddings = _RoFormerEmbeddings(config)
+        # Only present when the embedding is factorised, matching the
+        # reference's ``if config.embedding_size != config.hidden_size``.
+        emb_dim = config.embedding_size or config.hidden_size
+        self.embeddings_project: nn.Linear | None = (
+            nn.Linear(emb_dim, config.hidden_size) if emb_dim != config.hidden_size else None
+        )
+        self.rotary = _RoFormerRotaryEmbedding(
+            head_dim=head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rotary_base,
+        )
+        self.encoder = _RoFormerEncoder(config)
+
+    @override
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.word_embeddings
+
+    @override
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        if not isinstance(value, nn.Embedding):
+            raise TypeError(
+                f"RoFormerModel input embeddings must be nn.Embedding, got {type(value).__name__}"
+            )
+        self.embeddings.word_embeddings = value
+
+    def _encode(
+        self,
+        input_ids: Tensor | None,
+        attention_mask: Tensor | None,
+        token_type_ids: Tensor | None,
+        inputs_embeds: Tensor | None,
+    ) -> Tensor:
+        hidden = self.embeddings(
+            input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+        batch_size, seq_len = int(hidden.shape[0]), int(hidden.shape[1])
+        if seq_len > self._max_pos:
+            raise ValueError(
+                f"Sequence length {seq_len} exceeds max_position_embeddings {self._max_pos}"
+            )
+
+        cos, sin = self.rotary()
+        # Slice the precomputed tables to the current sequence length so we
+        # don't carry around (max_pos, head_dim) when the prompt is short.
+        cos = cos[:seq_len]
+        sin = sin[:seq_len]
+
+        if self.embeddings_project is not None:
+            hidden = self.embeddings_project(hidden)
+        ext_mask = extended_attention_mask(attention_mask, (batch_size, seq_len))
+        return self.encoder(hidden, cos, sin, attention_mask=ext_mask)
+
+
+@final
+class _RoFormerEncoderOnly(_RoFormerTrunk):
+    """The trunk without a pooler, for heads that read the raw hidden states."""
+
+    def __init__(self, config: RoFormerConfig) -> None:
+        super().__init__(config)
+        self.apply(self._init_weights)
+        self.register_load_state_dict_pre_hook(_drop_absent_pooler)
+
+    @override
+    def forward(
+        self,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        *,
+        inputs_embeds: Tensor | None = None,
+    ) -> BaseModelOutput:
+        return BaseModelOutput(
+            last_hidden_state=self._encode(input_ids, attention_mask, token_type_ids, inputs_embeds)
+        )
+
+
+class RoFormerModel(_RoFormerTrunk, PretrainedModel):
     r"""Bare RoFormer encoder trunk with rotary position embeddings.
 
     Architecturally a BERT-base encoder (12 layers, 768 hidden, 12 heads,
@@ -347,8 +516,10 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
         Stack of ``config.num_hidden_layers`` rotary-attention transformer
         layers.
     pooler : nn.Module
-        Dense + tanh projection of the first token's hidden state used by
-        sentence-level classification heads.
+        Dense + tanh projection of the first token's hidden state, kept so
+        the shipped checkpoints load.  The task heads that read the raw
+        hidden states (sequence / token classification, multiple choice,
+        question answering) build the trunk without it.
 
     Notes
     -----
@@ -388,35 +559,10 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
-        head_dim = config.hidden_size // config.num_attention_heads
-        self._max_pos = config.max_position_embeddings
-        self.embeddings = _RoFormerEmbeddings(config)
-        # Only present when the embedding is factorised, matching the
-        # reference's ``if config.embedding_size != config.hidden_size``.
-        emb_dim = config.embedding_size or config.hidden_size
-        self.embeddings_project: nn.Linear | None = (
-            nn.Linear(emb_dim, config.hidden_size) if emb_dim != config.hidden_size else None
-        )
-        self.rotary = _RoFormerRotaryEmbedding(
-            head_dim=head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rotary_base,
-        )
-        self.encoder = _RoFormerEncoder(config)
+        # The reference trunk has no pooler; this one keeps it so the shipped
+        # base / masked-LM checkpoints (which carry its keys) still load.
         self.pooler = _RoFormerPooler(config)
         self.apply(self._init_weights)
-
-    @override
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.word_embeddings
-
-    @override
-    def set_input_embeddings(self, value: nn.Module) -> None:
-        if not isinstance(value, nn.Embedding):
-            raise TypeError(
-                f"RoFormerModel input embeddings must be nn.Embedding, got {type(value).__name__}"
-            )
-        self.embeddings.word_embeddings = value
 
     @override
     def forward(
@@ -427,29 +573,9 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
         *,
         inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutputWithPooling:
-        hidden = self.embeddings(
-            input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
-        )
-        batch_size, seq_len = int(hidden.shape[0]), int(hidden.shape[1])
-        if seq_len > self._max_pos:
-            raise ValueError(
-                f"Sequence length {seq_len} exceeds max_position_embeddings {self._max_pos}"
-            )
-
-        cos, sin = self.rotary()
-        # Slice the precomputed tables to the current sequence length so we
-        # don't carry around (max_pos, head_dim) when the prompt is short.
-        cos = cos[:seq_len]
-        sin = sin[:seq_len]
-
-        if self.embeddings_project is not None:
-            hidden = self.embeddings_project(hidden)
-        ext_mask = extended_attention_mask(attention_mask, (batch_size, seq_len))
-        sequence_output = self.encoder(hidden, cos, sin, attention_mask=ext_mask)
-        pooled_output = self.pooler(sequence_output)
-
+        sequence_output = self._encode(input_ids, attention_mask, token_type_ids, inputs_embeds)
         return BaseModelOutputWithPooling(
-            last_hidden_state=sequence_output, pooler_output=pooled_output
+            last_hidden_state=sequence_output, pooler_output=self.pooler(sequence_output)
         )
 
 
@@ -613,11 +739,12 @@ class RoFormerForMaskedLM(_RoFormerInitMixin, LanguageModelingModel, MaskedLMMix
 class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificationModel):
     r"""RoFormer with a pooled-CLS sequence-classification head.
 
-    Wraps :class:`RoFormerModel` with the reference's own classification
-    head: the raw CLS hidden state passes through dropout, a
-    ``hidden_size -> hidden_size`` dense, the configured activation, dropout
-    again, and finally the ``num_labels`` projection.  Use for GLUE-style
-    fine-tunes when the RoPE-based relative position bias is preferred.
+    Wraps :class:`RoFormerModel` (built without its pooler, which this head
+    never reads) with the reference's own classification head: the raw CLS
+    hidden state passes through dropout, a ``hidden_size -> hidden_size``
+    dense, the configured activation, dropout again, and finally the
+    ``num_labels`` projection.  Use for GLUE-style fine-tunes when the
+    RoPE-based relative position bias is preferred.
 
     Parameters
     ----------
@@ -630,12 +757,10 @@ class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificati
     ----------
     roformer : RoFormerModel
         Underlying RoPE encoder trunk.
-    dropout : nn.Dropout
-        Dropout applied both before and after the dense stage.
-    dense : nn.Linear
-        ``(hidden_size, hidden_size)`` stage in front of the activation.
-    classifier : nn.Linear
-        Final linear of shape ``(hidden_size, num_labels)`` producing
+    classifier : nn.Module
+        The reference's classification head: dropout, ``classifier.dense``
+        (``hidden_size -> hidden_size``), activation, dropout, then
+        ``classifier.out_proj`` (``hidden_size -> num_labels``) producing
         per-class logits.
 
     Notes
@@ -643,6 +768,10 @@ class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificati
     Reference: Su, Lu, Pan, Murtadha, Wen, and Liu, *"RoFormer: Enhanced
     Transformer with Rotary Position Embedding"*, Neurocomputing,
     vol. 568, 2024 (arXiv:2104.09864).
+
+    Checkpoints saved before the head was nested (top-level ``dense.*`` /
+    ``classifier.*``, plus an unused ``roformer.pooler.*``) are migrated on
+    ``load_state_dict``.
 
     Loss (when ``labels`` is provided) is the standard softmax
     cross-entropy:
@@ -673,21 +802,15 @@ class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificati
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
-        self.roformer = RoFormerModel(config)
-        drop = (
-            config.classifier_dropout
-            if config.classifier_dropout is not None
-            else config.hidden_dropout
-        )
-        self.dropout = nn.Dropout(p=drop)
         # RoFormer's own classification head, not BERT's.  The reference reads
         # the *raw* CLS hidden state and puts a full dense + activation stage
         # in front of the projection; routing through the tanh pooler instead
-        # drops that stage and squashes the feature into [-1, 1] first.
-        self._act_name = config.hidden_act
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        # drops that stage and squashes the feature into [-1, 1] first — so
+        # the trunk is built without a pooler that would never be called.
+        self.roformer = _RoFormerEncoderOnly(config)
+        self.classifier = _RoFormerClassificationHead(config)
         self.apply(self._init_weights)
+        self.register_load_state_dict_pre_hook(_migrate_flat_classification_head)
 
     @override
     def forward(
@@ -700,11 +823,7 @@ class RoFormerForSequenceClassification(_RoFormerInitMixin, SequenceClassificati
         outputs = self.roformer(
             input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
-        cls_state: Tensor = outputs.last_hidden_state[:, 0, :]
-        h = self.dropout(cls_state)
-        h = text_activation(self._act_name, self.dense(h))
-        h = self.dropout(h)
-        logits = self.classifier(h)
+        logits = self.classifier(outputs.last_hidden_state)
 
         loss: Tensor | None = None
         if labels is not None:
@@ -775,7 +894,7 @@ class RoFormerForTokenClassification(_RoFormerInitMixin, TokenClassificationMode
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
-        self.roformer = RoFormerModel(config)
+        self.roformer = _RoFormerEncoderOnly(config)
         drop = (
             config.classifier_dropout
             if config.classifier_dropout is not None
@@ -870,7 +989,7 @@ class RoFormerForMultipleChoice(_RoFormerInitMixin, SequenceClassificationModel)
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
-        self.roformer = RoFormerModel(config)
+        self.roformer = _RoFormerEncoderOnly(config)
         drop = (
             config.classifier_dropout
             if config.classifier_dropout is not None
@@ -974,7 +1093,7 @@ class RoFormerForQuestionAnswering(_RoFormerInitMixin, SequenceClassificationMod
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
-        self.roformer = RoFormerModel(config)
+        self.roformer = _RoFormerEncoderOnly(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self._init_weights)
 

@@ -1372,7 +1372,7 @@
     "lucid/models/text/gpt2/_tokenizer.py": 2,
     "lucid/models/text/gpt2/_weights.py": 7,
     "lucid/models/text/roformer/_config.py": 1,
-    "lucid/models/text/roformer/_model.py": 25,
+    "lucid/models/text/roformer/_model.py": 18,
     "lucid/models/text/roformer/_pretrained.py": 3,
     "lucid/models/text/roformer/_tokenizer.py": 4,
     "lucid/models/text/roformer/_weights.py": 1,

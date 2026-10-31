@@ -295,11 +295,10 @@ _FAMILIES = [
         all_linear=_BERT_QV | _encoder_linears(_BERT) | {"bert.pooler.dense"},
         trained_in_full=frozenset({"classifier"}),
     ),
-    # The zoo's RoFormer head is ``dense`` -> activation -> ``classifier``, and
-    # ``get_peft_model`` adds ``classifier`` only.  ``dense`` cannot be asked
-    # for through ``modules_to_save``: a name matches by suffix, so "dense"
-    # would wrap every BERT-style ``....dense`` of the encoder too.  The
-    # classifier reads the raw CLS state, so ``pooler.dense`` is never called.
+    # The zoo's RoFormer head is the reference's nested ``classifier``
+    # (``classifier.dense`` -> activation -> ``classifier.out_proj``), so the
+    # ``classifier`` that ``get_peft_model`` adds trains the whole head.  The
+    # head reads the raw CLS state and the trunk is built without a pooler.
     _Family(
         name="roformer",
         factory="roformer_cls",
@@ -309,9 +308,8 @@ _FAMILIES = [
         targets=["query", "value"],
         saved=[],
         adapted=_ROFORMER_QV,
-        all_linear=_ROFORMER_QV | _encoder_linears(_ROFORMER) | {"roformer.pooler.dense", "dense"},
+        all_linear=_ROFORMER_QV | _encoder_linears(_ROFORMER),
         trained_in_full=frozenset({"classifier"}),
-        off_path=frozenset({"roformer.pooler.dense"}),
     ),
     _Family(
         name="t5",
@@ -802,7 +800,15 @@ def test_the_adapter_file_holds_the_adapter_under_the_zoo_s_names(
     # name is in no key.
     heads = {key.rpartition(".")[0].removeprefix("base_model.model.") for key in stored - layers}
     assert layers <= stored and not any("default" in key for key in stored)
-    assert heads == family.trained_in_full
+    # A head built from several linears (RoFormer's ``classifier.dense`` and
+    # ``classifier.out_proj``) is stored as those linears, each under its own name.
+    owners = {
+        name
+        for name, module in _base(family, "cpu").named_modules()
+        if module._parameters
+        and any(name == full or name.startswith(f"{full}.") for full in family.trained_in_full)
+    }
+    assert heads == owners
     assert stored == set(get_peft_model_state_dict(peft))
 
 

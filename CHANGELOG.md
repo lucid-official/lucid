@@ -127,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - VeRA state is fixed at construction and registered once
 
+- nest roformer_cls head as classifier.dense/out_proj
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
