@@ -621,10 +621,13 @@ def _factory(name: str, domain: str) -> Iterator[Call]:
         yield Call([probs], {}, 0, "bernoulli(probs)", domain=(0.0, 1.0))
         yield Call([_f(_probe.SHAPE, domain), 0.5], {}, 0, "bernoulli(like, p)")
     elif name in ("normal",):
-        yield Call([0.0, 1.0, shape], {}, 0, "normal(mean, std, shape)")
+        # The tensor form first: an axis varies the first call that works, and since the
+        # float form ``normal(mean, std, shape)`` answers too (LCD-773) its primary would be
+        # a Python float no axis can vary.
         yield Call(
             [_f(_probe.SHAPE, domain), _f(_probe.SHAPE, "positive")], {}, 0, "normal(mu, sigma)"
         )
+        yield Call([0.0, 1.0, shape], {}, 0, "normal(mean, std, shape)")
     elif name in ("cartesian_prod",):
         yield Call([_f((3,), domain), _f((2,), domain)], {}, 0, "cartesian_prod(1-D, 1-D)")
     elif name in ("vander",):
@@ -1287,8 +1290,13 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "lucid.linalg.vander": lambda d: iter(
         [Call([_probe.as_f64(_probe.rng(3).uniform(0.5, 1.5, (4,)))], {}, 0, "vander(1-D)")]
     ),
+    # The tensor form first, so an axis varies a tensor: since LCD-773 ``normal(tensor, float,
+    # size=)`` is refused as the reference refuses it, and the float form has nothing to vary.
     "lucid.normal": lambda d: iter(
-        [Call([0.0, 1.0], {"size": (2, 3)}, 0, "normal(mean, std, size=)")]
+        [
+            Call([_f(_probe.SHAPE, d), _f(_probe.SHAPE, "positive")], {}, 0, "normal(mu, sigma)"),
+            Call([0.0, 1.0], {"size": (2, 3)}, 0, "normal(mean, std, size=)"),
+        ]
     ),
     "lucid.peft.get_peft_model_state_dict": lambda d: iter(
         [Call([BUILDERS[PeftModel]()], {}, 0, "get_peft_model_state_dict(peft model)")]

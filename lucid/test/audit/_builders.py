@@ -50,6 +50,11 @@ from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.multitask_prompt_tuning import (
+    MultitaskPromptEmbedding,
+    MultitaskPromptTuningConfig,
+    MultitaskPromptTuningModel,
+)
 from lucid.peft.tuners.p_tuning import PromptEncoderConfig, PromptEncoderModel
 from lucid.peft.tuners.prefix_tuning import PrefixTuningConfig, PrefixTuningModel
 from lucid.peft.tuners.prompt_tuning import PromptTuningConfig, PromptTuningModel
@@ -127,6 +132,7 @@ def _example_config(layer: type[_BaseTunerLayer]) -> Callable[[], PeftConfig] | 
             return _EXAMPLE_CONFIGS.get(peft_type)
     return None
 
+
 #: The config a layer family takes as its third argument, where its constructor wants one.
 _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
     IA3Layer: lambda: IA3Config(target_modules=["x"], feedforward_modules=[]),
@@ -148,6 +154,17 @@ def _layer_types() -> Iterator[tuple[type[nn.Module], type[_BaseTunerLayer]]]:
             if layer not in seen:
                 seen.add(layer)
                 yield base, layer
+
+
+def _family_roots() -> Iterator[type[_BaseTunerLayer]]:
+    """Every concrete layer-family root: a class that registers its own kinds, one of them Linear."""
+    stack: list[type[_BaseTunerLayer]] = [_BaseTunerLayer]
+    while stack:
+        cls = stack.pop()
+        stack.extend(cls.__subclasses__())
+        kinds = cls.__dict__.get("_layer_types", {})
+        if nn.Linear in kinds and not inspect.isabstract(cls):
+            yield cls
 
 
 def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Callable[[], Any]:
@@ -208,6 +225,14 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     PrefixEncoder: lambda: PrefixEncoder(
         PrefixTuningConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
     ),
+    MultitaskPromptTuningModel: lambda: MultitaskPromptTuningModel(
+        _text_model(),
+        MultitaskPromptTuningConfig(num_virtual_tokens=2, num_tasks=2, task_type="CAUSAL_LM"),
+    ),
+    MultitaskPromptEmbedding: lambda: MultitaskPromptEmbedding(
+        MultitaskPromptTuningConfig(num_virtual_tokens=2, num_tasks=2, **_PROMPT_SIZES),
+        nn.Embedding(5, 4),
+    ),
     PromptEncoder: lambda: PromptEncoder(
         PromptEncoderConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
     ),
@@ -217,8 +242,9 @@ BUILDERS: dict[type, Callable[[], Any]] = {
 # Every tuner layer registered by ``base_type=`` is built on a small module of
 # that type, so a new layer kind or tuner family needs no hand row (LCD-712).
 BUILDERS.update({layer: _layer_builder(base, layer) for base, layer in _layer_types()})
-# The LyCORIS family roots are concrete (a kind is found from the module they wrap).
-BUILDERS.update({root: _layer_builder(nn.Linear, root) for root in (LoHaLayer, LoKrLayer)})
+# A family root registers its own kinds and finds one from the module it wraps (LyCORIS, OFT,
+# BOFT, HRA, FourierFT), so it is concrete: build every one that takes a Linear on a Linear.
+BUILDERS.update({root: _layer_builder(nn.Linear, root) for root in _family_roots()})
 
 # Every tuner whose method has an example config is built on the audit's model with it.
 BUILDERS.update(

@@ -25,7 +25,20 @@ import ast
 from pathlib import Path
 
 TRACE_FORM: frozenset[str] = frozenset(
-    {"_Snapshot", "_Overwritten", "_TruncQuotient", "_RoundDecimals", "_Erfcx"}
+    {
+        "_Snapshot",
+        "_Overwritten",
+        "_TruncQuotient",
+        "_RoundDecimals",
+        "_Erfcx",
+        # Special edge-value backwards (LCD-772)
+        "_Entr",
+        "_HalfLineEdge",
+        "_I0",
+        "_LogGamma",
+        "_Ndtri",
+        "_Polygamma",
+    }
 )
 
 EXACT: frozenset[str] = frozenset({"_CheckpointFn"})
