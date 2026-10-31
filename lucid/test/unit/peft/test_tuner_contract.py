@@ -9,6 +9,7 @@ one, and the on-disk fixtures are written by hand in the reference's layout.
 """
 
 import json
+import types
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -188,6 +189,18 @@ class TestRegistration:
         assert json.loads((tmp_path / "adapter_config.json").read_text())["peft_type"] == str(
             method.peft_type
         )
+
+    def test_a_default_of_raw_parameters_is_not_taken_for_a_module_method(
+        self, method: _Method
+    ) -> None:
+        # LoRA's table says ``neural_ode`` is adapted through raw parameters; a method that
+        # adapts modules only has no default for it and must say so, not adapt nothing.
+        net = nn.Sequential(nn.Linear(4, 4))
+        net.config = types.SimpleNamespace(model_type="neural_ode")  # type: ignore[assignment]
+        config = method.make(targets=())
+        config.target_modules = None  # type: ignore[attr-defined]
+        with pytest.raises(ValueError, match="Please specify `target_modules`"):
+            method.tuner(net, config)
 
     def test_a_config_of_another_method_is_refused(self, method: _Method) -> None:
         other = next(m for m in _METHODS if m is not method)

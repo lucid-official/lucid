@@ -14,7 +14,7 @@ import lucid
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._targeting import _suffix_match
-from lucid.peft.tuners._base import _BaseTuner, _Target, _tuner_layers
+from lucid.peft.tuners._base import _NO_PARAMETERS, _BaseTuner, _Target, _tuner_layers
 from lucid.peft.tuners.ia3._config import IA3Config
 from lucid.peft.tuners.ia3._defaults import IA3_DEFAULT_TARGET_MODULES, _default_feedforward_modules
 from lucid.peft.tuners.ia3._layer import IA3Layer
@@ -88,6 +88,7 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     _layer_types = IA3Layer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = IA3Config
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = IA3_DEFAULT_TARGET_MODULES
+    _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(self, model: nn.Module, config: IA3Config, adapter_name: str = "default") -> None:
         super().__init__(model, config, adapter_name)

@@ -37,7 +37,8 @@ import functools
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
-from typing import ClassVar, NamedTuple, Protocol, override, runtime_checkable
+from types import MappingProxyType
+from typing import ClassVar, Final, NamedTuple, Protocol, override, runtime_checkable
 
 import lucid
 import lucid.nn as nn
@@ -60,6 +61,9 @@ from lucid.peft._targeting import (
     _selects,
     _shared_outside,
 )
+
+#: For a method that adapts modules only: no model type has raw parameters as its default.
+_NO_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
 
 
 @runtime_checkable

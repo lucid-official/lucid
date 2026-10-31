@@ -43,6 +43,7 @@ from lucid.peft._config import (
 from lucid.peft._targeting import _pattern_value
 from lucid.peft.tuners._base import (
     _BaseTuner,
+    _NO_PARAMETERS,
     _BaseTunerLayer,
     _check_adapter_name,
     _parameter_at,
@@ -425,6 +426,8 @@ def _as_lycoris(config: PeftConfig) -> _LycorisConfig:
 
 class _LycorisTuner(_BaseTuner):
     """The tuner of a LyCORIS method: layers built with the rank and alpha the config gives each module."""
+
+    _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     @override
     @classmethod

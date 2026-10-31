@@ -117,6 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - every transform walks pytrees, not only tensors (LCD-735)
 
+- a module-only method takes no raw-parameter default
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
