@@ -171,6 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - integer BLAS composites keep the operand dtype
 
+- _cast_scalar takes an int or float factor (LCD-728)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

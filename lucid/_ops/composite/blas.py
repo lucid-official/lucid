@@ -25,7 +25,7 @@ def _scaled(tensor: Tensor, factor: float, name: str) -> Tensor:
     return _wrap(_scale_by_alpha(impl, impl, factor, name))
 
 
-def _cast_scalar(dtype: _C_engine.Dtype, factor: float) -> float:
+def _cast_scalar(dtype: _C_engine.Dtype, factor: int | float) -> int | float:
     """``factor`` as the reference's GEMM-backed ops read it for an integer ``dtype``.
 
     ``addmm``, ``addmv``, ``baddbmm``, ``addbmm`` and ``addcmul`` cast their
