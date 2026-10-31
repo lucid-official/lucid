@@ -509,11 +509,8 @@ class _NormBase(_AffineParameters):
             # first forward must be handed objects that survive being
             # filled in.  Reached only when ``affine`` is on — a
             # parameter that will never exist stays ``None``.
-            from lucid.nn.parameter import UninitializedParameter
-
-            empty_0 = _lucid.empty(0, dtype=dtype, device=device)
-            self.register_parameter("weight", UninitializedParameter(empty_0))
-            self.register_parameter("bias", UninitializedParameter(empty_0) if bias else None)
+            self.register_parameter("weight", self._placeholder())
+            self.register_parameter("bias", self._placeholder() if bias else None)
 
     def _initialize(self, num_features: int) -> None:
         """Size the layer: make its state ``num_features`` long."""
@@ -1570,6 +1567,8 @@ class LocalResponseNorm(Module):
 
 
 class _LazyNormMixin(_LazyModule, _NormBase):
+    _size_attr: ClassVar[str] = "num_features"
+
     def __init__(
         self,
         eps: float = 1e-5,
@@ -1632,20 +1631,19 @@ class _LazyBatchNormMixin(_LazyNormMixin, _BatchNormBase):
 
     @override
     def forward(self, input: Tensor) -> Tensor:
-        r"""Apply normalisation to the input tensor.
+        r"""Normalise ``input``, sizing the layer from it on the first call.
 
         Parameters
         ----------
         input : Tensor
-            Input tensor whose shape is documented in the class docstring.
+            ``(N, C, *)``; its ``C`` sets ``num_features`` the first time.
 
         Returns
         -------
         Tensor
             Normalised tensor of the same shape as ``input``.
         """
-        if self.num_features is None:
-            self._initialize(int(input.shape[1]))
+        self.initialize_parameters(input)
         return _BatchNormBase.forward(self, input)
 
     @override
@@ -1860,6 +1858,10 @@ class _LazyInstanceNormMixin(_LazyNormMixin, _InstanceNormBase):
     """
 
     @override
+    def _extent(self, input: Tensor) -> int:
+        return int(input.shape[0 if input.ndim == self._expected_dim - 1 else 1])
+
+    @override
     def forward(self, input: Tensor) -> Tensor:
         r"""Normalise ``input``, sizing the layer from it on the first call.
 
@@ -1874,9 +1876,7 @@ class _LazyInstanceNormMixin(_LazyNormMixin, _InstanceNormBase):
         Tensor
             Normalised tensor of the same shape as ``input``.
         """
-        if self.num_features is None:
-            unbatched = input.ndim == self._expected_dim - 1
-            self._initialize(int(input.shape[0 if unbatched else 1]))
+        self.initialize_parameters(input)
         return _InstanceNormBase.forward(self, input)
 
 

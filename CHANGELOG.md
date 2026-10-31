@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - VeRA layer root stays abstract; examples use tuner paths
 
+- one public initialize_parameters on the lazy base
+
 ### Fixed
 
 - pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)

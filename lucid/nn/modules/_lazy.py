@@ -22,7 +22,7 @@ was sent.
 """
 
 from collections.abc import Callable
-from typing import override, Self
+from typing import ClassVar, override, Self
 
 from lucid._factories.creation import empty
 from lucid._tensor.tensor import Tensor
@@ -68,6 +68,35 @@ class _LazyModule(Module):
 
     _device: DeviceLike
     _dtype: DTypeLike
+
+    #: The attribute that stays ``None`` until the layer is sized
+    #: (``in_features`` / ``in_channels`` / ``num_features``).
+    _size_attr: ClassVar[str]
+    #: The axis of an input that carries that size; the channel axis by default.
+    _size_axis: ClassVar[int] = 1
+    #: Allocate and initialise the parameters for a layer ``size`` wide.  A
+    #: declaration only: each family already owns its ``_initialize``, and
+    #: defining a stub here would shadow the one a mixin inherits behind it.
+    _initialize: Callable[[int], None]
+
+    def _extent(self, input: Tensor) -> int:
+        """The extent of the axis of ``input`` that sizes this layer."""
+        return int(input.shape[self._size_axis])
+
+    def initialize_parameters(self, input: Tensor) -> None:
+        """Size the layer from ``input`` and allocate its parameters, if it has not been yet.
+
+        The step the first forward takes, exposed so a model can be sized
+        without running it.  Does nothing once the layer is sized.
+
+        Parameters
+        ----------
+        input : Tensor
+            An input of the shape the layer will see; only the axis that
+            carries the layer's size is read.
+        """
+        if getattr(self, self._size_attr) is None:
+            self._initialize(self._extent(input))
 
     def _placeholder(self) -> UninitializedParameter:
         """A parameter slot to fill later, on the device and dtype it will have."""

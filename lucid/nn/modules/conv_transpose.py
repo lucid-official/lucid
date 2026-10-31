@@ -665,7 +665,7 @@ class LazyConvTranspose1d(_LazyConvMixin, ConvTranspose1d):
     @override
     def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return ConvTranspose1d.forward(self, input, output_size)
 
 
@@ -797,7 +797,7 @@ class LazyConvTranspose2d(_LazyConvMixin, ConvTranspose2d):
     @override
     def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return ConvTranspose2d.forward(self, input, output_size)
 
 
@@ -931,5 +931,5 @@ class LazyConvTranspose3d(_LazyConvMixin, ConvTranspose3d):
     @override
     def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return ConvTranspose3d.forward(self, input, output_size)

@@ -129,6 +129,7 @@ class _LazyConvMixin(_LazyModule, _ConvParameters):
     ``(out, in // groups, *K)``, or ``(in, out // groups, *K)`` transposed.
     """
 
+    _size_attr: ClassVar[str] = "in_channels"
     _lazy_rank: ClassVar[int]
     _lazy_transposed: ClassVar[bool] = False
     groups: int
@@ -153,6 +154,7 @@ class _LazyConvMixin(_LazyModule, _ConvParameters):
         """The kernel's extent along each spatial axis."""
         raise NotImplementedError
 
+    @override
     def _initialize(self, in_channels: int) -> None:
         """Allocate and initialise ``weight`` / ``bias`` for ``in_channels``."""
         _check_groups(in_channels, self.out_channels, self.groups)
@@ -179,10 +181,27 @@ class _LazyConvMixin(_LazyModule, _ConvParameters):
         if self.in_channels is not None:
             super().reset_parameters()
 
-    def _materialize_from(self, x: Tensor) -> None:
-        """Size ``in_channels`` from the first input ``x``."""
-        if self.in_channels is None:
-            self._initialize(_in_channels(x, self._lazy_rank))
+    @override
+    def _extent(self, input: Tensor) -> int:
+        """The input's channel axis, whatever the rank (batched or not)."""
+        return _in_channels(input, self._lazy_rank)
+
+    @override
+    def initialize_parameters(self, input: Tensor, *args: object, **kwargs: object) -> None:
+        """Size ``in_channels`` from ``input`` and allocate the weights, if not sized yet.
+
+        Takes the extra positional and keyword arguments the reference's lazy
+        convolutions accept, and ignores them, as it does.
+
+        Parameters
+        ----------
+        input : Tensor
+            An input of the shape the layer will see.
+        *args, **kwargs
+            Accepted for signature parity; unused.
+        """
+        del args, kwargs
+        super().initialize_parameters(input)
 
     def _sized_by(self, weight: Tensor, prefix: str, error_msgs: list[str]) -> bool:
         """Size the layer from a checkpoint's ``weight``; ``False`` if it cannot be."""

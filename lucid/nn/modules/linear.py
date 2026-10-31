@@ -3,7 +3,7 @@ Linear and related fully-connected layers.
 """
 
 import math
-from typing import override
+from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
@@ -654,6 +654,9 @@ class LazyLinear(_LazyModule, _LinearParameters):
     512
     """
 
+    _size_attr: ClassVar[str] = "in_features"
+    _size_axis: ClassVar[int] = -1
+
     def __init__(
         self,
         out_features: int,
@@ -676,6 +679,7 @@ class LazyLinear(_LazyModule, _LinearParameters):
         self.register_parameter("weight", self._placeholder())
         self.register_parameter("bias", self._placeholder() if bias else None)
 
+    @override
     def _initialize(self, in_features: int) -> None:
         """Size the layer: allocate ``weight`` / ``bias`` and draw their initial values."""
         self.in_features = in_features
@@ -697,11 +701,6 @@ class LazyLinear(_LazyModule, _LinearParameters):
         else:
             self.bias = None
         self.reset_parameters()
-
-    def initialize_parameters(self, input: Tensor) -> None:
-        """Size the layer from ``input``'s last axis, if it has not been sized yet."""
-        if self.in_features is None:
-            self._initialize(int(input.shape[-1]))
 
     @override
     def reset_parameters(self) -> None:

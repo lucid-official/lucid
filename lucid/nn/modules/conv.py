@@ -755,7 +755,7 @@ class LazyConv1d(_LazyConvMixin, Conv1d):
     @override
     def forward(self, input: Tensor) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return Conv1d.forward(self, input)
 
 
@@ -885,7 +885,7 @@ class LazyConv2d(_LazyConvMixin, Conv2d):
     @override
     def forward(self, input: Tensor) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return Conv2d.forward(self, input)
 
 
@@ -1011,5 +1011,5 @@ class LazyConv3d(_LazyConvMixin, Conv3d):
     @override
     def forward(self, input: Tensor) -> Tensor:
         """The eager layer's forward; the first call sizes ``in_channels`` from ``input``."""
-        self._materialize_from(input)
+        self.initialize_parameters(input)
         return Conv3d.forward(self, input)
