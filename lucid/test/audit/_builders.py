@@ -20,7 +20,17 @@ from typing import Any
 
 import lucid.nn as nn
 import lucid.peft as peft
-from lucid.peft import LoraConfig, LoraModel, PeftModel
+from lucid.peft import (
+    IA3Config,
+    IA3Model,
+    LoHaConfig,
+    LoHaModel,
+    LoKrConfig,
+    LoKrModel,
+    LoraConfig,
+    LoraModel,
+    PeftModel,
+)
 from lucid.peft.tuners import lora
 
 
@@ -37,6 +47,11 @@ def _config() -> LoraConfig:
 BUILDERS: dict[type, Callable[[], Any]] = {
     lora.Linear: lambda: lora.Linear(nn.Linear(4, 3), "default", r=2),
     LoraModel: lambda: LoraModel(_base_model(), _config()),
+    IA3Model: lambda: IA3Model(
+        _base_model(), IA3Config(target_modules=["0", "2"], feedforward_modules=["2"])
+    ),
+    LoHaModel: lambda: LoHaModel(_base_model(), LoHaConfig(r=2, target_modules=["0", "2"])),
+    LoKrModel: lambda: LoKrModel(_base_model(), LoKrConfig(r=2, target_modules=["0", "2"])),
     PeftModel: lambda: PeftModel(_base_model(), _config()),
 }
 

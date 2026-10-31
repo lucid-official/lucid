@@ -13,6 +13,7 @@ import pytest
 
 import lucid.nn as nn
 from lucid.peft import (
+    IA3Config,
     LoraConfig,
     LoraModel,
     PeftConfig,
@@ -62,8 +63,8 @@ class TestRegistries:
 
     def test_a_config_of_no_tuner_is_refused(self) -> None:
         config = LoraConfig(target_modules=["0"])
-        config.peft_type = PeftType.IA3
-        with pytest.raises(NotImplementedError, match="no tuner for IA3"):
+        config.peft_type = PeftType.PROMPT_TUNING
+        with pytest.raises(NotImplementedError, match="no tuner for PROMPT_TUNING"):
             _tuner_for(config)
 
     def test_peft_config_reads_the_method_a_file_names(self, tmp_path: Path) -> None:
@@ -71,8 +72,9 @@ class TestRegistries:
         config = PeftConfig.from_pretrained(tmp_path)
         assert type(config) is LoraConfig and config.r == 2
         assert type(PeftConfig.from_dict({"target_modules": ["q"]})) is LoraConfig
-        with pytest.raises(NotImplementedError, match="IA3"):
-            PeftConfig.from_dict({"peft_type": "IA3"})
+        assert type(PeftConfig.from_dict({"peft_type": "IA3"})) is IA3Config
+        with pytest.raises(NotImplementedError, match="PROMPT_TUNING"):
+            PeftConfig.from_dict({"peft_type": "PROMPT_TUNING"})
 
     def test_peft_model_reads_the_method_a_file_names(self, tmp_path: Path) -> None:
         get_peft_model(_net(), LoraConfig(target_modules=["0"])).save_pretrained(tmp_path)
@@ -84,7 +86,9 @@ class TestRegistries:
 class TestBases:
     @pytest.mark.parametrize("base", [PeftConfig, _TargetedConfig])
     def test_a_base_config_is_not_built_directly(self, base: type[PeftConfig]) -> None:
-        with pytest.raises(TypeError, match="base of the adapter configs; build one of LoraConfig"):
+        with pytest.raises(
+            TypeError, match="base of the adapter configs; build one of .*LoraConfig"
+        ):
             base()
 
     def test_the_base_fields_are_checked_by_the_table(self) -> None:

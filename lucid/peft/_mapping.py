@@ -10,12 +10,12 @@ from lucid.peft.tuners._base import _tuner_for
 def get_peft_model(
     model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
 ) -> PeftModel:
-    r"""Adapt ``model`` with LoRA and return it wrapped as a :class:`~lucid.peft.PeftModel`.
+    r"""Adapt ``model`` with the method ``peft_config`` names and return it wrapped as a :class:`~lucid.peft.PeftModel`.
 
     The model is changed in place: each module ``peft_config`` selects
-    becomes a LoRA layer around the original, and every parameter but the
-    adapter's is frozen.  ``peft_config`` is not changed — the wrapper
-    keeps a copy — with two additions the reference makes too: a
+    becomes an adapter layer of that method (LoRA, (IA)^3, LoHa, LoKr) around the
+    original, and every parameter but the adapter's is frozen.  ``peft_config``
+    is not changed — the wrapper keeps a copy — with two additions the reference makes too: a
     ``base_model_name_or_path`` read from the model's ``name_or_path``,
     when it has one, and, for a classification or question-answering
     ``task_type``, the model's ``classifier`` / ``score`` / ``qa_outputs``
@@ -34,9 +34,10 @@ def get_peft_model(
         The model to adapt — any module; a zoo model keeps its
         ``generate`` and heads through the wrapper.
     peft_config : PeftConfig
-        What to adapt and how — a ``LoraConfig``; its method picks the tuner.
+        What to adapt and how — a ``LoraConfig``, ``IA3Config``, ``LoHaConfig`` or
+        ``LoKrConfig``; its method picks the tuner.
     adapter_name : str, default="default"
-        Name of the adapter, the key in every ``lora_A`` / ``lora_B``.
+        Name of the adapter, the key in each of its tables (``lora_A``, ``ia3_l`` …).
 
     Returns
     -------
@@ -70,7 +71,7 @@ def get_peft_model(
 def inject_adapter_in_model(
     peft_config: PeftConfig, model: nn.Module, adapter_name: str = "default"
 ) -> nn.Module:
-    r"""Put LoRA layers into ``model`` in place and return it, without a wrapper.
+    r"""Put adapter layers into ``model`` in place and return it, without a wrapper.
 
     For code that manages the model itself: the model is adapted and
     frozen exactly as by :func:`~lucid.peft.get_peft_model`, but returned

@@ -55,8 +55,8 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements ``LORA``; reading a file of any other
-    type raises ``NotImplementedError``.
+    ``lucid.peft`` implements ``LORA``, ``IA3``, ``LOHA`` and ``LOKR``;
+    reading a file of any other type raises ``NotImplementedError``.
     """
 
     PROMPT_TUNING = "PROMPT_TUNING"

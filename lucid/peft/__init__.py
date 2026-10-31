@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA, (IA)^3, LoHa and LoKr.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
@@ -25,7 +25,13 @@ and an adapter directory moves between the two::
 
 Each method is a config class, a tuner and its layer classes, registered
 by ``PeftType`` as they are defined (``lucid.peft.tuners._base``); the
-entry points above dispatch on the method a config or a file names.
+entry points above dispatch on the method a config or a file names.  The
+methods are LoRA (``LoraConfig`` / ``LoraModel``), (IA)^3 — a learned
+rescaling vector per layer (``IA3Config`` / ``IA3Model``), and the LyCORIS pair
+LoHa (a Hadamard product of low-rank products, ``LoHaConfig`` / ``LoHaModel``)
+and LoKr (a Kronecker product, ``LoKrConfig`` / ``LoKrModel``); the layer
+classes of each are in ``lucid.peft.tuners.<method>``.  Everything below
+about adapters, switching, merging and files holds for all four.
 
 What a LoRA layer guarantees:
 
@@ -64,9 +70,9 @@ LoRA layers exist for ``nn.Linear``, ``nn.Embedding``, ``nn.Conv1d`` /
 ``Conv2d`` / ``Conv3d`` and ``nn.MultiheadAttention`` (found by the module's
 type in ``target_modules``), and ``target_parameters`` adapts a raw
 ``nn.Parameter`` of a module (``lucid.peft.tuners.lora``).  Asking for
-more — DoRA, a TIES / DARE weighted adapter, ``add_weighted_adapter`` over
-anything but ``nn.Linear`` layers, an adapter file of another method —
-raises ``NotImplementedError`` rather than doing less than asked.  Adapters are read from a local directory; hub ids are not
+more — a TIES / DARE weighted adapter, ``add_weighted_adapter`` over
+anything but ``nn.Linear`` layers, an adapter file of a method this package
+lacks — raises ``NotImplementedError`` rather than doing less than asked.  Adapters are read from a local directory; hub ids are not
 resolved.
 """
 
@@ -93,6 +99,12 @@ from lucid.peft.auto import (
     AutoPeftModelForSequenceClassification,
     AutoPeftModelForTokenClassification,
 )
+from lucid.peft.tuners.ia3._config import IA3Config
+from lucid.peft.tuners.ia3._model import IA3Model
+from lucid.peft.tuners.loha._config import LoHaConfig
+from lucid.peft.tuners.loha._model import LoHaModel
+from lucid.peft.tuners.lokr._config import LoKrConfig
+from lucid.peft.tuners.lokr._model import LoKrModel
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
 
@@ -106,9 +118,15 @@ __all__ = [
     "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
     "PeftConfig",
+    "IA3Config",
+    "LoHaConfig",
+    "LoKrConfig",
     "LoraConfig",
     "PeftType",
     "TaskType",
+    "IA3Model",
+    "LoHaModel",
+    "LoKrModel",
     "LoraModel",
     "PeftModel",
     "PeftModelForCausalLM",
