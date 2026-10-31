@@ -19,7 +19,7 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft.tuners._base import _check_adapter_name, _parameter_at
-from lucid.peft.tuners._support import _adapter_dtype, _ResidualUpdate, _SpecField
+from lucid.peft.tuners._support import _adapter_dtype, _LinearSized, _ResidualUpdate, _SpecField
 from lucid.peft.tuners.vera._config import VeraConfig
 from lucid.peft.tuners.vera._projection import _BufferDict, _Projection, _Shared
 
@@ -35,7 +35,7 @@ class _VeraSpec(NamedTuple):
     save_projection: bool
 
 
-class VeraLayer(_ResidualUpdate, family=True):
+class VeraLayer(_LinearSized, _ResidualUpdate, family=True):
     r"""Adapter bookkeeping shared by the VeRA layers.
 
     Holds the wrapped module as ``base_layer`` — the very module, so its
@@ -92,16 +92,6 @@ class VeraLayer(_ResidualUpdate, family=True):
         self.update_layer(adapter_name, r, config)
 
     # ── the layer ─────────────────────────────────────────────────────────
-
-    @property
-    def in_features(self) -> int:
-        """Input features of the base layer."""
-        return int(self.weight.shape[1])
-
-    @property
-    def out_features(self) -> int:
-        """Output features of the base layer."""
-        return int(self.weight.shape[0])
 
     @override
     def __repr__(self) -> str:

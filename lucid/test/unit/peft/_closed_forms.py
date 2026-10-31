@@ -117,6 +117,104 @@ def _ln_tuning(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
     return _run(weights, biases, x)
 
 
+def _miss(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """Shard width 2, balance variant: ``dW[o, c] = S[c mod 2, o]``."""
+    net = _mlp()
+    weights = []
+    for index, (out, inn) in _SIZES.items():
+        block = t[f"{_PREFIX}{index}.miss_block"].tolist()
+        delta = [[block[c % 2][o] for c in range(inn)] for o in range(out)]
+        weights.append(net[index].weight + lucid.tensor(delta))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+def _randlora(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """Rank 2, alpha 4: ``(alpha / r) * sum_{i,k} B[:, k, i] (lambda[i, k] A[i, :min] gamma[k, :])`` summed over the pairs the reference lines up.
+
+    The reference flattens ``A``'s ``(r, n)`` axes rank-major and ``B``'s ``(n, r)``
+    axes basis-major before the product, so the sum pairs ``A``'s ``(i, k)`` row with
+    ``B``'s column ``(k' , i')`` at the same flat position.
+    """
+    net = _mlp()
+    basis_a, basis_b = t["base_model.randlora_A"], t["base_model.randlora_B"]
+    r = basis_a.shape[0]
+    weights = []
+    for index, (out, inn) in _SIZES.items():
+        lam = t[f"{_PREFIX}{index}.randlora_lambda"].tolist()
+        gamma = t[f"{_PREFIX}{index}.randlora_gamma"].tolist()
+        low, high = min(out, inn), max(out, inn)
+        bases = len(lam[0])
+        # row (i * bases + k) of the scaled A, column (k * r + i) of B.
+        scaled = [
+            [lam[i][k] * basis_a[i, 0, c].item() * gamma[k][c] for c in range(low)]
+            for i in range(r)
+            for k in range(bases)
+        ]
+        columns = [
+            [basis_b[row, k, i].item() for row in range(high)]
+            for k in range(bases)
+            for i in range(r)
+        ]
+        a_rows, b_cols = lucid.tensor(scaled), lucid.tensor(columns)  # (r n, low), (n r, high)
+        product = b_cols.mT @ a_rows  # (high, low): the update with its larger side first
+        delta = product if low == inn else product.mT
+        weights.append(net[index].weight + delta * (4 / 2))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+def _vblora(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """Bank of 5 vectors of length 2, top-2: each length-2 piece of ``A`` and ``B`` is a softmax mix of two bank rows."""
+    net = _mlp()
+    bank = t["base_model.vblora_vector_bank"].tolist()
+
+    def piece(logits: list[float]) -> list[float]:
+        order = sorted(range(len(logits)), key=lambda k: -logits[k])[:2]
+        top = [logits[k] for k in order]
+        exps = [math.exp(v - max(top)) for v in top]
+        weights = [e / sum(exps) for e in exps]
+        return [sum(w * bank[k][d] for w, k in zip(weights, order, strict=True)) for d in range(2)]
+
+    weights = []
+    for index, (out, inn) in _SIZES.items():
+        logits_a = t[f"{_PREFIX}{index}.vblora_logits_A"].tolist()  # (r, in/2, 5)
+        logits_b = t[f"{_PREFIX}{index}.vblora_logits_B"].tolist()  # (out/2, r, 5)
+        r = len(logits_a)
+        factor_a = [[v for tile in logits_a[i] for v in piece(tile)] for i in range(r)]  # (r, in)
+        factor_b = [
+            [piece(logits_b[o][i])[d] for i in range(r)] for o in range(out // 2) for d in range(2)
+        ]  # (out, r)
+        weights.append(net[index].weight + lucid.tensor(factor_b) @ lucid.tensor(factor_a))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+def _shira(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """The values sit at the file's indices; everything else of the weight is the base's."""
+    net = _mlp()
+    weights = []
+    for index in (0, 2):
+        values = t[f"{_PREFIX}{index}.shira_weight"].tolist()
+        rows, cols = t[f"{_PREFIX}{index}.shira_indices"].tolist()
+        weight = net[index].weight.tolist()
+        for value, i, j in zip(values, rows, cols, strict=True):
+            weight[int(i)][int(j)] += value
+        weights.append(lucid.tensor(weight))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+def _c3a(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """Block size 2: block ``(i, j)`` of ``dW`` is the circulant ``[[w0, w1], [w1, w0]]`` of kernel ``w``, over ``d_in``."""
+    net = _mlp()
+    weights = []
+    for index, (out, inn) in _SIZES.items():
+        kernel = t[f"{_PREFIX}{index}.c3a_kernel"].tolist()  # (out/2, in/2, 2)
+        delta = [
+            [kernel[o // 2][c // 2][(c % 2 - o % 2) % 2] / inn for c in range(inn)]
+            for o in range(out)
+        ]
+        weights.append(net[index].weight + lucid.tensor(delta))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
 #: Method name -> the MLP's output for the file's tensors ``t`` and the input ``x``.
 CLOSED_FORMS: dict[str, Callable[[dict[str, lucid.Tensor], lucid.Tensor], lucid.Tensor]] = {
     "oft": _oft,
@@ -124,4 +222,9 @@ CLOSED_FORMS: dict[str, Callable[[dict[str, lucid.Tensor], lucid.Tensor], lucid.
     "hra": _hra,
     "fourierft": _fourierft,
     "ln_tuning": _ln_tuning,
+    "miss": _miss,
+    "randlora": _randlora,
+    "vblora": _vblora,
+    "shira": _shira,
+    "c3a": _c3a,
 }

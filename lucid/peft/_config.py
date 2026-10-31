@@ -63,7 +63,8 @@ class PeftType(enum.StrEnum):
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
     ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR``, ``VERA``,
-    ``OFT``, ``BOFT``, ``HRA``, ``FOURIERFT``, ``LN_TUNING`` and
+    ``VBLORA``, ``RANDLORA``, ``MISS`` (and its predecessor ``BONE``), ``SHIRA``, ``C3A``,
+    ``OFT``, ``BOFT``, ``HRA``, ``FOURIERFT``, ``LN_TUNING``, ``TRAINABLE_TOKENS`` and
     the prompt-learning methods ``PROMPT_TUNING``, ``PREFIX_TUNING`` and ``P_TUNING``;
     reading a file of any other type raises ``NotImplementedError``.
     """
@@ -89,6 +90,11 @@ class PeftType(enum.StrEnum):
     VBLORA = "VBLORA"
     CPT = "CPT"
     BONE = "BONE"
+    MISS = "MISS"
+    RANDLORA = "RANDLORA"
+    TRAINABLE_TOKENS = "TRAINABLE_TOKENS"
+    SHIRA = "SHIRA"
+    C3A = "C3A"
 
 
 #: A file that names no ``peft_type`` is read as the one method v1 implements.

@@ -136,6 +136,8 @@ from lucid.peft.auto import (
 )
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
 from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
+from lucid.peft.tuners.bone import BoneConfig, BoneModel
+from lucid.peft.tuners.c3a import C3AConfig, C3AModel
 from lucid.peft.tuners.fourierft import FourierFTConfig, FourierFTModel
 from lucid.peft.tuners.hra import HRAConfig, HRAModel
 from lucid.peft.tuners.ia3._config import IA3Config
@@ -147,6 +149,7 @@ from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners.miss import MissConfig, MissModel
 from lucid.peft.tuners.multitask_prompt_tuning import (
     MultitaskPromptEmbedding,
     MultitaskPromptTuningConfig,
@@ -160,6 +163,10 @@ from lucid.peft.tuners.p_tuning import (
 )
 from lucid.peft.tuners.prefix_tuning import PrefixEncoder, PrefixTuningConfig
 from lucid.peft.tuners.prompt_tuning import PromptEmbedding, PromptTuningConfig, PromptTuningInit
+from lucid.peft.tuners.randlora import RandLoraConfig, RandLoraModel
+from lucid.peft.tuners.shira import ShiraConfig, ShiraModel
+from lucid.peft.tuners.trainable_tokens import TrainableTokensConfig, TrainableTokensModel
+from lucid.peft.tuners.vblora import VBLoRAConfig, VBLoRAModel
 from lucid.peft.tuners.vera import VeraConfig, VeraModel
 
 __all__ = [
@@ -186,6 +193,8 @@ __all__ = [
     "PromptTuningInit",
     "AdaLoraConfig",
     "BOFTConfig",
+    "BoneConfig",
+    "C3AConfig",
     "FourierFTConfig",
     "HRAConfig",
     "IA3Config",
@@ -193,7 +202,12 @@ __all__ = [
     "LoHaConfig",
     "LoKrConfig",
     "LoraConfig",
+    "MissConfig",
     "OFTConfig",
+    "RandLoraConfig",
+    "ShiraConfig",
+    "TrainableTokensConfig",
+    "VBLoRAConfig",
     "VeraConfig",
     "PeftType",
     "TaskType",
@@ -201,6 +215,8 @@ __all__ = [
     "TunerLayerStatus",
     "TunerModelStatus",
     "BOFTModel",
+    "BoneModel",
+    "C3AModel",
     "FourierFTModel",
     "HRAModel",
     "IA3Model",
@@ -208,7 +224,12 @@ __all__ = [
     "LoHaModel",
     "LoKrModel",
     "LoraModel",
+    "MissModel",
     "OFTModel",
+    "RandLoraModel",
+    "ShiraModel",
+    "TrainableTokensModel",
+    "VBLoRAModel",
     "VeraModel",
     "PeftModel",
     "PeftModelForCausalLM",

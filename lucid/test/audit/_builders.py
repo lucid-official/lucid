@@ -25,6 +25,8 @@ import lucid.peft as peft
 from lucid.models import create_model
 from lucid.peft import (
     BOFTConfig,
+    BoneConfig,
+    C3AConfig,
     FourierFTConfig,
     HRAConfig,
     IA3Config,
@@ -36,6 +38,7 @@ from lucid.peft import (
     LoKrModel,
     LoraConfig,
     LoraModel,
+    MissConfig,
     OFTConfig,
     PeftConfig,
     PeftModel,
@@ -43,6 +46,10 @@ from lucid.peft import (
     PrefixEncoder,
     PromptEmbedding,
     PromptEncoder,
+    RandLoraConfig,
+    ShiraConfig,
+    TrainableTokensConfig,
+    VBLoRAConfig,
 )
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
@@ -122,6 +129,17 @@ _EXAMPLE_CONFIGS: dict[PeftType, Callable[[], PeftConfig]] = {
     PeftType.HRA: lambda: HRAConfig(r=2, target_modules=["0", "2"]),
     PeftType.FOURIERFT: lambda: FourierFTConfig(n_frequency=4, target_modules=["0", "2"]),
     PeftType.LN_TUNING: lambda: LNTuningConfig(target_modules=["0", "2"]),
+    PeftType.MISS: lambda: MissConfig(r=2, target_modules=["0", "2"]),
+    PeftType.BONE: lambda: BoneConfig(r=2, target_modules=["0", "2"]),
+    PeftType.RANDLORA: lambda: RandLoraConfig(r=2, target_modules=["0", "2"]),
+    PeftType.VBLORA: lambda: VBLoRAConfig(
+        r=2, num_vectors=4, vector_length=1, topk=2, target_modules=["0", "2"]
+    ),
+    PeftType.SHIRA: lambda: ShiraConfig(r=1, random_seed=0, target_modules=["0", "2"]),
+    PeftType.C3A: lambda: C3AConfig(block_size=1, target_modules=["0", "2"]),
+    PeftType.TRAINABLE_TOKENS: lambda: TrainableTokensConfig(
+        token_indices=[1], target_modules=["0", "2"]
+    ),
 }
 
 

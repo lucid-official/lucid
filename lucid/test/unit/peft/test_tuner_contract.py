@@ -22,6 +22,8 @@ import lucid.nn as nn
 from lucid.peft import (
     BOFTConfig,
     BOFTModel,
+    C3AConfig,
+    C3AModel,
     FourierFTConfig,
     FourierFTModel,
     HRAConfig,
@@ -30,6 +32,8 @@ from lucid.peft import (
     IA3Model,
     LNTuningConfig,
     LNTuningModel,
+    MissConfig,
+    MissModel,
     LoHaConfig,
     LoHaModel,
     LoKrConfig,
@@ -40,6 +44,12 @@ from lucid.peft import (
     PeftModel,
     PeftModelForCausalLM,
     PeftType,
+    RandLoraConfig,
+    RandLoraModel,
+    ShiraConfig,
+    ShiraModel,
+    VBLoRAConfig,
+    VBLoRAModel,
     get_peft_model,
     get_peft_model_state_dict,
     inject_adapter_in_model,
@@ -49,13 +59,18 @@ from lucid.peft._config import _CONFIG_CLASSES
 from lucid.peft.tuners._base import _TUNERS, _BaseTunerLayer, _tuner_for
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.boft import BOFTLayer
+from lucid.peft.tuners.c3a import C3ALayer
 from lucid.peft.tuners.fourierft import FourierFTLayer
 from lucid.peft.tuners.hra import HRALayer
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.ln_tuning import LNTuningLayer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.miss import MissLayer
 from lucid.peft.tuners.oft import OFTLayer
+from lucid.peft.tuners.randlora import RandLoraLayer
+from lucid.peft.tuners.shira import ShiraLayer
+from lucid.peft.tuners.vblora import VBLoRALayer
 from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 from lucid.serialization import save_safetensors
 from lucid.test.audit._builders import BUILDERS
@@ -98,6 +113,10 @@ class _Method:
     #: Whether the default start reproduces the base bit for bit (a product of reflections or of
     #: butterfly factors is the identity up to rounding only).
     exact_start: bool = True
+    #: Whether the default start is the base at all (VB-LoRA's factors are non-zero from the first step).
+    starts_at_base: bool = True
+    #: Hand-made tensors for the adapter file when random integers under the file's keys are not valid ones.
+    tensors: Callable[[], dict[str, lucid.Tensor]] | None = None
 
     def make(
         self, targets: tuple[str, ...] = ("0", "2"), random: bool = True, **kw: object
@@ -201,6 +220,70 @@ def _fourierft(targets: tuple[str, ...], random: bool, **kw: object) -> FourierF
 def _ln_tuning(targets: tuple[str, ...], random: bool, **kw: object) -> LNTuningConfig:
     del random  # a copy of the base is where the method starts
     return LNTuningConfig(target_modules=list(targets), **kw)  # type: ignore[arg-type]
+
+
+def _miss(targets: tuple[str, ...], random: bool, **kw: object) -> MissConfig:
+    return MissConfig(
+        r=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _randlora(targets: tuple[str, ...], random: bool, **kw: object) -> RandLoraConfig:
+    return RandLoraConfig(
+        r=2,
+        randlora_alpha=4,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _vblora(targets: tuple[str, ...], random: bool, **kw: object) -> VBLoRAConfig:
+    del random  # the factors are drawn at random whatever is asked
+    return VBLoRAConfig(
+        r=2,
+        num_vectors=5,
+        vector_length=2,
+        topk=2,
+        init_vector_bank_bound=0.5,  # the paper's 0.02 moves the output by less than a test can see
+        target_modules=list(targets),
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _shira(targets: tuple[str, ...], random: bool, **kw: object) -> ShiraConfig:
+    return ShiraConfig(
+        r=1,
+        random_seed=7,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _c3a(targets: tuple[str, ...], random: bool, **kw: object) -> C3AConfig:
+    return C3AConfig(
+        block_size=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _shira_tensors() -> dict[str, lucid.Tensor]:
+    """The file of ``_shira``: values for the first ``r (d_out + d_in)`` entries of each weight, row-major."""
+    lucid.manual_seed(7)
+    made: dict[str, lucid.Tensor] = {}
+    for index, (out, inn) in {0: (8, 6), 2: (4, 8)}.items():
+        count = out + inn
+        made[f"{_PREFIX}{index}.shira_weight"] = lucid.randint(-2, 3, (count,)).to(lucid.float32) * 0.5
+        made[f"{_PREFIX}{index}.shira_indices"] = lucid.tensor(
+            [[p // inn for p in range(count)], [p % inn for p in range(count)]], dtype=lucid.int32
+        )
+    return made
 
 
 _PREFIX = "base_model.model."
@@ -330,6 +413,66 @@ _METHODS = [
         },
         random_start=False,
     ),
+    _Method(
+        "miss",
+        PeftType.MISS,
+        _miss,
+        MissModel,
+        MissLayer,
+        {f"{_PREFIX}0.miss_block": (2, 8), f"{_PREFIX}2.miss_block": (2, 4)},
+    ),
+    _Method(
+        "randlora",
+        PeftType.RANDLORA,
+        _randlora,
+        RandLoraModel,
+        RandLoraLayer,
+        {
+            f"{_PREFIX}0.randlora_lambda": (2, 3),
+            f"{_PREFIX}0.randlora_gamma": (3, 6),
+            f"{_PREFIX}2.randlora_lambda": (2, 2),
+            f"{_PREFIX}2.randlora_gamma": (2, 4),
+            "base_model.randlora_A": (2, 1, 8),
+            "base_model.randlora_B": (8, 4, 2),
+        },
+    ),
+    _Method(
+        "vblora",
+        PeftType.VBLORA,
+        _vblora,
+        VBLoRAModel,
+        VBLoRALayer,
+        {
+            f"{_PREFIX}0.vblora_logits_A": (2, 3, 5),
+            f"{_PREFIX}0.vblora_logits_B": (4, 2, 5),
+            f"{_PREFIX}2.vblora_logits_A": (2, 4, 5),
+            f"{_PREFIX}2.vblora_logits_B": (2, 2, 5),
+            "base_model.vblora_vector_bank": (5, 2),
+        },
+        starts_at_base=False,
+    ),
+    _Method(
+        "shira",
+        PeftType.SHIRA,
+        _shira,
+        ShiraModel,
+        ShiraLayer,
+        {
+            f"{_PREFIX}0.shira_weight": (14,),
+            f"{_PREFIX}0.shira_indices": (2, 14),
+            f"{_PREFIX}2.shira_weight": (12,),
+            f"{_PREFIX}2.shira_indices": (2, 12),
+        },
+        tensors=_shira_tensors,
+    ),
+    _Method(
+        "c3a",
+        PeftType.C3A,
+        _c3a,
+        C3AModel,
+        C3ALayer,
+        {f"{_PREFIX}0.c3a_kernel": (4, 3, 2), f"{_PREFIX}2.c3a_kernel": (2, 4, 2)},
+    ),
 ]
 
 
@@ -406,6 +549,9 @@ class TestForward:
         x = lucid.randn(5, 6, device=device)
         base = net(x)
         peft = get_peft_model(net, method.make(random=False))
+        if not method.starts_at_base:
+            assert not _close(peft(x), base, atol=1e-6)
+            return
         assert _same(peft(x), base) if method.exact_start else _close(peft(x), base, atol=1e-6)
 
     def test_a_random_start_changes_the_output(self, method: _Method, device: str) -> None:
@@ -431,6 +577,7 @@ class TestForward:
                 for t in (
                     *("ia3_", "hada_", "lokr_", "lora_", "vera_lambda"),
                     *("oft_", "boft_", "hra_", "fourierft_", "ln_tuning_"),
+                    *("miss_", "randlora_", "vblora_", "shira_", "c3a_"),
                 )
             )
             for n in trainable
@@ -719,6 +866,105 @@ _REFERENCE_CONFIGS: dict[str, dict[str, object]] = {
         "use_qalora": False,
         "use_rslora": False,
     },
+    "miss": {
+        "auto_mapping": None,
+        "base_model_name_or_path": 'tiny',
+        "bias": 'none',
+        "exclude_modules": None,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "mini_r": 1,
+        "miss_dropout": 0.0,
+        "modules_to_save": None,
+        "peft_type": 'MISS',
+        "peft_version": '0.21.2',
+        "r": 2,
+        "revision": None,
+        "target_modules": ['0', '2'],
+        "task_type": None,
+    },
+    "randlora": {
+        "auto_mapping": None,
+        "base_model_name_or_path": 'tiny',
+        "bias": 'none',
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "peft_type": 'RANDLORA',
+        "peft_version": '0.21.2',
+        "projection_prng_key": 0,
+        "r": 2,
+        "randlora_alpha": 4,
+        "randlora_dropout": 0.0,
+        "revision": None,
+        "save_projection": True,
+        "sparse": False,
+        "target_modules": ['0', '2'],
+        "task_type": None,
+        "very_sparse": False,
+    },
+    "vblora": {
+        "auto_mapping": None,
+        "base_model_name_or_path": 'tiny',
+        "bias": 'none',
+        "exclude_modules": None,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_logits_std": 0.1,
+        "init_vector_bank_bound": 0.02,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "num_vectors": 5,
+        "peft_type": 'VBLORA',
+        "peft_version": '0.21.2',
+        "r": 2,
+        "revision": None,
+        "save_only_topk_weights": False,
+        "target_modules": ['0', '2'],
+        "task_type": None,
+        "topk": 2,
+        "vblora_dropout": 0.0,
+        "vector_length": 2,
+    },
+    "shira": {
+        "auto_mapping": None,
+        "base_model_name_or_path": 'tiny',
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": True,
+        "mask_type": 'random',
+        "modules_to_save": None,
+        "peft_type": 'SHIRA',
+        "peft_version": '0.21.2',
+        "r": 1,
+        "random_seed": 7,
+        "revision": None,
+        "target_modules": ['0', '2'],
+        "task_type": None,
+    },
+    "c3a": {
+        "auto_mapping": None,
+        "base_model_name_or_path": 'tiny',
+        "bias": 'none',
+        "block_size": 2,
+        "block_size_pattern": {},
+        "inference_mode": True,
+        "init_weights": 'xavier_uniform',
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "peft_type": 'C3A',
+        "peft_version": '0.21.2',
+        "revision": None,
+        "target_modules": ['0', '2'],
+        "task_type": None,
+    },
     "vera": {
         "auto_mapping": None,
         "base_model_name_or_path": "tiny",
@@ -903,6 +1149,8 @@ _REFERENCE_CONFIGS: dict[str, dict[str, object]] = {
 
 def _reference_tensors(method: _Method) -> dict[str, lucid.Tensor]:
     """Small integer-valued tensors under the reference's keys (so the closed form is exact)."""
+    if method.tensors is not None:
+        return method.tensors()
     lucid.manual_seed(7)
     return {
         key: lucid.randint(-2, 3, shape).to(lucid.float32) * 0.5

@@ -344,6 +344,11 @@ REFERENCE_PEFT_TYPES = {
     PeftType.VBLORA: "VBLORA",
     PeftType.CPT: "CPT",
     PeftType.BONE: "BONE",
+    PeftType.MISS: "MISS",
+    PeftType.RANDLORA: "RANDLORA",
+    PeftType.TRAINABLE_TOKENS: "TRAINABLE_TOKENS",
+    PeftType.SHIRA: "SHIRA",
+    PeftType.C3A: "C3A",
 }
 
 REFERENCE_TASK_TYPES = {

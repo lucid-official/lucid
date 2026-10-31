@@ -1,6 +1,5 @@
 """``VeraConfig``: the VeRA hyper-parameters on top of the shared targeting fields."""
 
-import warnings
 from dataclasses import dataclass
 from typing import ClassVar, Final, Literal, override
 
@@ -12,21 +11,14 @@ from lucid.peft._config import (
     _check_number,
     _check_rank,
     _choice,
-    _TargetedConfig,
 )
+from lucid.peft.tuners._shared import _ProjectionConfig
 
 _BIASES: Final[tuple[Literal["none", "all", "vera_only"], ...]] = ("none", "all", "vera_only")
 
 
-def _check_key(name: str, value: object) -> int:
-    """The PRNG key: any ``int`` (``bool`` excluded) the generator takes as a seed."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"`{name}` must be an int, got {value!r}")
-    return value
-
-
 @dataclass(kw_only=True)
-class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
+class VeraConfig(_ProjectionConfig, peft_type=PeftType.VERA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with VeRA.
 
     VeRA (Kopiczko et al., 2023, arXiv:2310.11454 — Vector-based Random Matrix
@@ -106,11 +98,9 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
     True
     """
 
-    _extension_fields: ClassVar[frozenset[str]] = frozenset({"exclude_modules"})
+    _projection_names: ClassVar[str] = "vera_A and vera_B"
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
-        "projection_prng_key": _check_key,
-        "save_projection": _check_bool,
         "vera_dropout": _check_dropout,
         "d_initial": _check_number,
         "fan_in_fan_out": _check_bool,
@@ -119,8 +109,6 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
     }
 
     r: int = 256
-    projection_prng_key: int = 0
-    save_projection: bool = True
     vera_dropout: float = 0.0
     d_initial: float = 0.1
     fan_in_fan_out: bool = False
@@ -134,12 +122,4 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
             raise NotImplementedError(
                 f"bias={self.bias!r}: a VeRA adapter in lucid.peft trains its own vectors only "
                 "(bias='none')"
-            )
-        if not self.save_projection:
-            warnings.warn(
-                "Specified to not save vera_A and vera_B within the state dictionary, instead "
-                "they will be restored using the PRNG key store in `config.projection_prng_key`. "
-                "Consider setting `config.save_projection` to `True` to guarantee restoring the "
-                "checkpoint correctly on all system configurations.",
-                stacklevel=2,
             )

@@ -139,6 +139,20 @@ class _ResidualUpdate(_AdditiveWeight):
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
 
+class _LinearSized(_BaseTunerLayer):
+    """A layer around an ``nn.Linear``-shaped weight, which reads the base's sizes off it."""
+
+    @property
+    def in_features(self) -> int:
+        """Input features of the base layer."""
+        return int(self.weight.shape[1])
+
+    @property
+    def out_features(self) -> int:
+        """Output features of the base layer."""
+        return int(self.weight.shape[0])
+
+
 class _HasFanInFanOut(Protocol):
     fan_in_fan_out: bool
 
@@ -196,7 +210,16 @@ class _ConfigLayer(_BaseTunerLayer):
         self._specs = {}
         for table in self.adapter_layer_names:
             setattr(self, table, self._new_table())
+        self._prepare(config)
         self.update_layer(adapter_name, config)
+
+    def _prepare(self, config: _TargetedConfig) -> None:
+        """Make the state a layer keeps beside its per-adapter tables, before the first adapter is entered.
+
+        Dropout tables, references to tables the tuner shares: whatever ``_enter`` reads that is
+        not a ``ParameterDict`` of ``adapter_layer_names``.
+        """
+        del config  # most layers have only their tables
 
     def _new_table(self) -> nn.ParameterDict | nn.ModuleDict[nn.Module]:
         """An empty per-adapter table: bare parameters by default, modules where an adapter is one (LN tuning)."""
