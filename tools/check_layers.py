@@ -4,7 +4,7 @@ tools/check_layers.py — Validate that no module creates forbidden cross-layer 
 
 Enforces these directional constraints (not a strict total order):
   - lucid.autograd  must NOT import from  lucid.nn  or  lucid.optim
-  - lucid.optim     must NOT import from  lucid.nn
+  - lucid.optim     must NOT import from  lucid.nn  (ALLOWED_EXCEPTIONS lists the few modules that may)
   - lucid._C        Python side must NOT import from  lucid.nn / lucid.optim
   - lucid.linalg    must NOT import from  lucid.nn  or  lucid.optim
 
@@ -79,11 +79,16 @@ def _file_module(path: Path) -> str:
 
 
 # Imports that are explicitly allowed even if they cross layer boundaries.
-# Format: frozenset of (source_prefix, import_module) pairs.
+# Format: frozenset of (importing module or rule prefix, imported module) pairs.
+# A full module name excepts that one module; a rule prefix excepts the whole rule.
 ALLOWED_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
         # Optimizers legitimately need Parameter (it's a base type, not a module)
-        ("lucid.optim", "lucid.nn.parameter")
+        ("lucid.optim", "lucid.nn.parameter"),
+        # The reference swa_utils subclasses nn.Module (AveragedModel) ...
+        ("lucid.optim.swa_utils", "lucid.nn.module"),
+        # ... and resets BatchNorm running stats (update_bn)
+        ("lucid.optim.swa_utils", "lucid.nn.modules.normalization"),
     }
 )
 
@@ -104,7 +109,7 @@ def check_python_layers(lucid_dir: Path = LUCID) -> list[str]:
                 for forbidden_prefix in forbidden:
                     if not (imp == forbidden_prefix or imp.startswith(forbidden_prefix + ".")):
                         continue
-                    if (src_prefix, imp) in ALLOWED_EXCEPTIONS:
+                    if (mod, imp) in ALLOWED_EXCEPTIONS or (src_prefix, imp) in ALLOWED_EXCEPTIONS:
                         continue
                     violations.append(
                         f"  {mod} → {imp}  "

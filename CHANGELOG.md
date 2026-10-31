@@ -237,6 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - trace forward hooks that only rewrite tensors (LCD-776)
 - mark_dirty, setup_context, once_differentiable, hooks
 - nn namespace parity with the reference (LCD-751)
+- add lucid.optim.swa_utils (LCD-790)
 
 ---
 

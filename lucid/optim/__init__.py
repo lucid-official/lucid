@@ -6,6 +6,9 @@ Thirteen optimizers over the shared ``Optimizer`` base — ``SGD``, ``Adam``,
 schedulers in ``lucid.optim.lr_scheduler``: fourteen schedules and the
 ``SequentialLR`` / ``ChainedScheduler`` composites that wrap them.
 
+Weight averaging (SWA and EMA) lives in ``lucid.optim.swa_utils``:
+``AveragedModel``, ``SWALR``, ``update_bn`` and the ``get_*_avg_fn`` factories.
+
 Updates run under ``lucid.no_grad()`` and write into the parameter in place.
 That is load-bearing rather than incidental: assigning the result of a
 *differentiable* op to a parameter makes it a non-leaf, after which backward
@@ -52,6 +55,7 @@ from lucid.optim.lr_scheduler import (
     SequentialLR,
     ChainedScheduler,
 )
+from lucid.optim import swa_utils
 
 __all__ = [
     "Optimizer",
