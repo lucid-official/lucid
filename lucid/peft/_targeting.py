@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable, Mapping
 import lucid.nn as nn
 from lucid.peft._config import (
     PeftConfig,
+    PromptLearningConfig,
     TaskType,
     _layer_regex,
     _pattern_key_regex,
@@ -185,7 +186,7 @@ def _with_heads(model: nn.Module, config: PeftConfig, heads: Iterable[str]) -> P
     config lists modules that exist.  A config that selects no modules
     (it has no ``modules_to_save``) is returned as it is.
     """
-    if not isinstance(config, _TargetedConfig):
+    if not isinstance(config, (_TargetedConfig, PromptLearningConfig)):
         return config
     saved = config.modules_to_save or []
     added = [head for head in heads if head not in saved and _module_names_matching(model, [head])]

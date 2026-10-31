@@ -105,5 +105,5 @@ def inject_adapter_in_model(
     ['0.bias', '0.weight', '1.base_layer.bias', '1.base_layer.weight', '1.lora_A.default.weight', '1.lora_B.default.weight']
     """
     config = _require_config("peft_config", peft_config)
-    _tuner_for(config)(model, config, adapter_name)
+    _tuner_for(config)._adapt_in_place(model, config, adapter_name)
     return model

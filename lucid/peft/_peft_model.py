@@ -20,7 +20,7 @@ from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
-from lucid.peft.tuners._base import _BaseTuner, _tuner_for
+from lucid.peft.tuners._base import _AdapterHost, _tuner_for
 from lucid.serialization import load_safetensors, save_safetensors
 
 _WEIGHTS_NAME: Final = "adapter_model.safetensors"
@@ -158,7 +158,7 @@ class PeftModel(_ForwardsAttributes):
     ) -> None:
         config = self._prepared(model, _require_config("peft_config", peft_config))
         super().__init__()
-        self.base_model: _BaseTuner = _tuner_for(config)(model, config, adapter_name)
+        self.base_model: _AdapterHost = _tuner_for(config)(model, config, adapter_name)
         self._disable_depth = 0
 
     @override
@@ -641,6 +641,7 @@ class PeftModel(_ForwardsAttributes):
         config = dataclasses.replace(
             _require_config("config", given), inference_mode=not is_trainable
         )
+        _tuner_for(config)._check_loadable(config, is_trainable)
         weights = _adapter_weights(directory)
         peft_model = cls._model_class(config.task_type)(model, config, adapter_name)
         try:
@@ -725,6 +726,7 @@ class PeftModel(_ForwardsAttributes):
             config = dataclasses.replace(
                 PeftConfig.from_pretrained(directory), inference_mode=not is_trainable
             )
+            _tuner_for(config)._check_loadable(config, is_trainable)
         # Read before anything is changed, so a missing file leaves the model alone.
         weights = _adapter_weights(directory)
         if config is not None:

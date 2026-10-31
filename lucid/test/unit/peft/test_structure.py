@@ -66,8 +66,8 @@ class TestRegistries:
 
     def test_a_config_of_no_tuner_is_refused(self) -> None:
         config = LoraConfig(target_modules=["0"])
-        config.peft_type = PeftType.PROMPT_TUNING
-        with pytest.raises(NotImplementedError, match="no tuner for PROMPT_TUNING"):
+        config.peft_type = PeftType.CPT
+        with pytest.raises(NotImplementedError, match="no tuner for CPT"):
             _tuner_for(config)
 
     def test_peft_config_reads_the_method_a_file_names(self, tmp_path: Path) -> None:
@@ -76,8 +76,8 @@ class TestRegistries:
         assert type(config) is LoraConfig and config.r == 2
         assert type(PeftConfig.from_dict({"target_modules": ["q"]})) is LoraConfig
         assert type(PeftConfig.from_dict({"peft_type": "IA3"})) is IA3Config
-        with pytest.raises(NotImplementedError, match="PROMPT_TUNING"):
-            PeftConfig.from_dict({"peft_type": "PROMPT_TUNING"})
+        with pytest.raises(NotImplementedError, match="CPT"):
+            PeftConfig.from_dict({"peft_type": "CPT"})
 
     def test_peft_model_reads_the_method_a_file_names(self, tmp_path: Path) -> None:
         get_peft_model(_net(), LoraConfig(target_modules=["0"])).save_pretrained(tmp_path)

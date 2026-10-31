@@ -22,6 +22,7 @@ from typing import Any
 import lucid
 import lucid.nn as nn
 import lucid.peft as peft
+from lucid.models import create_model
 from lucid.peft import (
     IA3Config,
     IA3Model,
@@ -33,6 +34,9 @@ from lucid.peft import (
     LoraModel,
     PeftConfig,
     PeftModel,
+    PrefixEncoder,
+    PromptEmbedding,
+    PromptEncoder,
 )
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _BaseTunerLayer
@@ -40,12 +44,37 @@ from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.p_tuning import PromptEncoderConfig, PromptEncoderModel
+from lucid.peft.tuners.prefix_tuning import PrefixTuningConfig, PrefixTuningModel
+from lucid.peft.tuners.prompt_tuning import PromptTuningConfig, PromptTuningModel
 from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 
 
 def _base_model() -> nn.Module:
     """Two linear layers around a ReLU, at the audit's usual width of 4."""
     return nn.Sequential(nn.Linear(4, 4), nn.ReLU(), nn.Linear(4, 4))
+
+
+def _text_model() -> nn.Module:
+    """A one-layer GPT-2 language model, the smallest thing a prompt can be put in front of."""
+    return create_model(
+        "gpt2_small_lm",
+        vocab_size=16,
+        hidden_size=8,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        intermediate_size=16,
+        max_position_embeddings=8,
+    )
+
+
+#: The sizes a prompt encoder reads off the model, spelled out for a table of width 4.
+_PROMPT_SIZES: dict[str, int] = {
+    "token_dim": 4,
+    "num_layers": 1,
+    "num_attention_heads": 2,
+    "num_transformer_submodules": 1,
+}
 
 
 def _config() -> LoraConfig:
@@ -129,6 +158,24 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     ),
     VeraModel: lambda: VeraModel(_base_model(), VeraConfig(r=2, target_modules=["0", "2"])),
     PeftModel: lambda: PeftModel(_base_model(), _config()),
+    PromptTuningModel: lambda: PromptTuningModel(
+        _text_model(), PromptTuningConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
+    ),
+    PrefixTuningModel: lambda: PrefixTuningModel(
+        _text_model(), PrefixTuningConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
+    ),
+    PromptEncoderModel: lambda: PromptEncoderModel(
+        _text_model(), PromptEncoderConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
+    ),
+    PromptEmbedding: lambda: PromptEmbedding(
+        PromptTuningConfig(num_virtual_tokens=2, **_PROMPT_SIZES), nn.Embedding(5, 4)
+    ),
+    PrefixEncoder: lambda: PrefixEncoder(
+        PrefixTuningConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
+    ),
+    PromptEncoder: lambda: PromptEncoder(
+        PromptEncoderConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
+    ),
     lora.ParamWrapper: lambda: lora.ParamWrapper(_Gate(), "default", "w", r=2),
 }
 

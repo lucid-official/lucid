@@ -61,7 +61,8 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR`` and ``VERA``;
+    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR``, ``VERA`` and
+    the prompt-learning methods ``PROMPT_TUNING``, ``PREFIX_TUNING`` and ``P_TUNING``;
     reading a file of any other type raises ``NotImplementedError``.
     """
 
@@ -697,3 +698,55 @@ class _TargetedConfig(PeftConfig):
         patterns = self.layers_pattern
         for pattern in [patterns] if isinstance(patterns, str) else patterns or []:
             _check_regex("layers_pattern", _layer_regex(pattern))
+
+
+def _optional_count(name: str, value: object) -> int | None:
+    """``None``, or a positive ``int`` (``bool`` excluded)."""
+    return None if value is None else _check_rank(name, value)
+
+
+@dataclass(kw_only=True)
+class PromptLearningConfig(PeftConfig):
+    r"""The fields of a method that learns an input rather than a weight.
+
+    Prompt tuning, prefix tuning and p-tuning put learned vectors in front
+    of the input — as extra token embeddings, or as extra keys and values
+    of every attention layer.  The sizes they need are the base model's, so
+    everything but ``num_virtual_tokens`` can be left ``None`` and is read
+    off the model's ``config`` when the adapter is built.
+
+    Parameters
+    ----------
+    num_virtual_tokens : int, optional
+        How many learned positions go in front of the input; required by
+        the time the adapter is built.
+    token_dim : int, optional
+        The model's hidden size.
+    num_transformer_submodules : int, optional
+        ``1`` for an encoder-only or decoder-only model, ``2`` for an
+        encoder-decoder one; ``2`` for ``task_type="SEQ_2_SEQ_LM"`` and ``1``
+        otherwise when omitted.
+    num_attention_heads : int, optional
+        The model's head count.
+    num_layers : int, optional
+        The model's layer count.
+    modules_to_save : list of str, optional
+        Modules of the model trained in full beside the prompt (a
+        classification head).
+    """
+
+    _field_checks: ClassVar[dict[str, _Check]] = {
+        "num_virtual_tokens": _optional_count,
+        "token_dim": _optional_count,
+        "num_transformer_submodules": _optional_count,
+        "num_attention_heads": _optional_count,
+        "num_layers": _optional_count,
+        "modules_to_save": _optional_strings,
+    }
+
+    num_virtual_tokens: int | None = None
+    token_dim: int | None = None
+    num_transformer_submodules: int | None = None
+    num_attention_heads: int | None = None
+    num_layers: int | None = None
+    modules_to_save: list[str] | None = None

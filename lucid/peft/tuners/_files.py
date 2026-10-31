@@ -25,12 +25,15 @@ class _FileContext(NamedTuple):
     model adapted in place, ``"base_model.model."`` inside a ``PeftModel`` — so
     a layer at ``path`` (relative to the user's model) keeps its tensors at
     ``prefix + path + "." + table`` in the file, as the reference lays it out.
+    ``host`` is the path of the tuner itself inside ``model`` (``"base_model."``
+    in a ``PeftModel``), where a method keeps what is not the user's model's.
     """
 
     model: nn.Module
     prefix: str
     config: PeftConfig
     adapter: str
+    host: str = ""
 
     @property
     def layers(self) -> list[tuple[str, _BaseTunerLayer]]:

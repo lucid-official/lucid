@@ -151,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - export AdaLoRA and VeRA; PeftModel runs through the tuner
 - jvp has_aux, zero gradients, scalar grad, functional_call
 - text trunks take inputs_embeds, T5 hands out its stacks
+- prompt tuning, prefix tuning and p-tuning
 
 ---
 

@@ -300,9 +300,9 @@ class TestFile:
         LoraConfig(target_modules=["q"]).save_pretrained(tmp_path)
         assert type(PeftConfig.from_pretrained(tmp_path)) is LoraConfig
         (tmp_path / "adapter_config.json").write_text(
-            json.dumps({"peft_type": "PREFIX_TUNING", "task_type": "CAUSAL_LM"})
+            json.dumps({"peft_type": "CPT", "task_type": "CAUSAL_LM"})
         )
-        with pytest.raises(NotImplementedError, match="PREFIX_TUNING"):
+        with pytest.raises(NotImplementedError, match="CPT"):
             PeftConfig.from_pretrained(tmp_path)
 
 

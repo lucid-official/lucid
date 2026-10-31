@@ -36,6 +36,19 @@ layer over one pair of frozen random projections (``VeraConfig`` /
 ``VeraModel``); the layer classes of each are in ``lucid.peft.tuners.<method>``.
 Everything below about adapters, switching, merging and files holds for all six.
 
+Three more methods learn an input rather than a weight and add no layer to the model:
+prompt tuning (``PromptTuningConfig``: virtual-token embeddings in front of the input),
+prefix tuning (``PrefixTuningConfig``: virtual keys and values in front of every attention
+layer) and p-tuning (``PromptEncoderConfig``: the virtual tokens produced by an MLP or LSTM).
+The prompt is applied by hooks on the model's own call, so ``model(...)`` and the model's
+``generate`` both carry it; the adapter file holds the finished prompt as
+``prompt_embeddings``.  They train one prompt at a time, have nothing to merge, and
+support the causal-LM, sequence-to-sequence and sequence-classification tasks::
+
+    config = PromptTuningConfig(num_virtual_tokens=20, task_type="CAUSAL_LM")
+    model = get_peft_model(base_model, config)
+
+
 What a LoRA layer guarantees:
 
 * **The base is untouched until merged.**  The wrapped ``nn.Linear`` is
@@ -89,7 +102,7 @@ warning.
 """
 
 from lucid.peft import tuners
-from lucid.peft._config import PeftConfig, PeftType, TaskType
+from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, TaskType
 from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
 from lucid.peft._peft_model import PeftModel, get_layer_status, get_model_status
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
@@ -121,6 +134,13 @@ from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners.p_tuning import (
+    PromptEncoder,
+    PromptEncoderConfig,
+    PromptEncoderReparameterizationType,
+)
+from lucid.peft.tuners.prefix_tuning import PrefixEncoder, PrefixTuningConfig
+from lucid.peft.tuners.prompt_tuning import PromptEmbedding, PromptTuningConfig, PromptTuningInit
 from lucid.peft.tuners.vera import VeraConfig, VeraModel
 
 __all__ = [
@@ -133,6 +153,15 @@ __all__ = [
     "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
     "PeftConfig",
+    "PrefixEncoder",
+    "PrefixTuningConfig",
+    "PromptEmbedding",
+    "PromptEncoder",
+    "PromptEncoderConfig",
+    "PromptEncoderReparameterizationType",
+    "PromptLearningConfig",
+    "PromptTuningConfig",
+    "PromptTuningInit",
     "AdaLoraConfig",
     "IA3Config",
     "LoHaConfig",

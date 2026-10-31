@@ -15,7 +15,7 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft._slots import _adapter_slots
-from lucid.peft.tuners._base import _BaseTuner, _join, _tuner_for, _tuner_layers
+from lucid.peft.tuners._base import _AdapterHost, _join, _tuner_for
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 
 
@@ -34,13 +34,13 @@ def _file_context(model: nn.Module, adapter_name: str) -> _FileContext:
     """Where ``adapter_name``'s tensors sit in ``model``, which may be a ``PeftModel``, a tuner or a bare model."""
     config = _peft_config_of(model, adapter_name)
     wrapper = getattr(model, "base_model", None)
-    if isinstance(wrapper, _BaseTuner):
-        prefix = "base_model.model."
-    elif isinstance(model, _BaseTuner):
-        prefix = "model."
+    if isinstance(wrapper, _AdapterHost):
+        host, prefix = "base_model.", f"base_model.{wrapper._model_path}"
+    elif isinstance(model, _AdapterHost):
+        host, prefix = "", model._model_path
     else:
-        prefix = ""
-    return _FileContext(model, prefix, config, adapter_name)
+        host = prefix = ""
+    return _FileContext(model, prefix, config, adapter_name, host)
 
 
 def _adapter_keys(context: _FileContext) -> dict[str, str]:
@@ -53,17 +53,13 @@ def _adapter_keys(context: _FileContext) -> dict[str, str]:
     method keeps outside its layers (``_shared_keys``) is added.
     """
     model, config, adapter_name = context.model, context.config, context.adapter
-    if not _tuner_layers(model):
-        raise RuntimeError(
-            f"adapter {adapter_name!r} has been merged or unloaded: the model holds no "
-            "LoRA layer left to save or load"
-        )
+    tuner = _tuner_for(config)
+    tuner._require_adapter_state(model, adapter_name)
     keys = {
         _join(path, own): _join(path, disk)
         for path, slot in _adapter_slots(model)
         for own, disk in slot._adapter_keys(adapter_name).items()
     }
-    tuner = _tuner_for(config)
     keys.update({n: n for n in tuner._extra_trainable_names(model, config)})
     if issubclass(tuner, _FileFormat):
         keys.update(tuner._shared_keys(context))
