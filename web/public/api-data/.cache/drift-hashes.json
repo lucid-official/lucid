@@ -95,7 +95,7 @@
   "lucid.nn.qat": "fe66e0eda7a46b2a7fead8ce6c40e0a5e9f50bdccf457a1294b2d5fb32a1ec95",
   "lucid.nn.quantized": "802b0fa355cf545d6b0584d8007bce035138931f360e1eae49adc022e903a1b5",
   "lucid.nn.utils": "ff52b08e05ad5dadc824b79e5edafbe3f98aade7fffeb0112b895257b7258ca7",
-  "lucid.optim": "ee5e90a7cb148db71d4937fc119f0cef7425b9003771596ffdc5eea53e2ea05c",
+  "lucid.optim": "dea62757fa4000d7f5c4bd197893b1292cb71f86164e743ad36b671bea46fbde",
   "lucid.peft": "27a2aac7e8e66958d64ec407cfa3c5ac453dce7019853f000edf9a63546dfed9",
   "lucid.peft.tuners": "9e3ee7c16b37903122bde75be9087e5e6bf4e4f6dff9abd1c2b27d3f1d7e26c1",
   "lucid.profiler": "1357334ecf6b2edb92c7256d4b9f1a16807d15c014e5eaf750b9adcfc0afcb85",
