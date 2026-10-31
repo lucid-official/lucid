@@ -211,6 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - batch fetch honours __getitems__ and overrides (LCD-801)
 
+- DistributedSampler pads by cycling, not by prefix (LCD-802)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

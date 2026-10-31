@@ -30,6 +30,27 @@ from lucid.utils.data._rng import (
 )
 
 
+def _fit_to_total_size(indices: list[int], total_size: int) -> list[int]:
+    """Cut ``indices`` to ``total_size``, or repeat them cyclically up to it.
+
+    The one place a distributed sampler decides how a replica slab divides
+    evenly.  Padding cycles through the *whole* list — padding by
+    ``indices[:padding]`` alone comes up short whenever fewer indices exist
+    than the padding needs (a dataset smaller than ``num_replicas``) and
+    leaves the last ranks with nothing while ``len()`` promises a sample.
+    """
+    missing = total_size - len(indices)
+    if missing > 0 and indices:
+        indices = indices + (indices * math.ceil(missing / len(indices)))[:missing]
+    fitted = indices[:total_size]
+    if len(fitted) != total_size:
+        raise RuntimeError(
+            f"cannot fit {len(indices)} indices to a total size of {total_size}; "
+            "the dataset is empty but the sampler expects samples"
+        )
+    return fitted
+
+
 class Sampler:
     """Abstract base class for index samplers used by :class:`DataLoader`.
 
@@ -692,13 +713,7 @@ class DistributedSampler(Sampler):
         if self.shuffle:
             rng = random.Random(self.seed + self.epoch)
             rng.shuffle(indices)
-        if self.drop_last:
-            indices = indices[: self.total_size]
-        else:
-            # Wrap-pad so the slab division is even.
-            padding: int = self.total_size - n
-            if padding > 0:
-                indices += indices[:padding]
+        indices = _fit_to_total_size(indices, self.total_size)
         # Slab pick: take every ``num_replicas``-th index starting at ``rank``.
         return iter(indices[self.rank : self.total_size : self.num_replicas])
 
@@ -815,10 +830,7 @@ class RASampler(Sampler):
         # consecutive repeats are the whole point.
         repeated: list[int] = [idx for idx in indices for _ in range(self.num_repeats)]
         # Wrap-pad to ``total_size`` so the replica slabs divide evenly.
-        if len(repeated) < self.total_size:
-            repeated = repeated + repeated[: self.total_size - len(repeated)]
-        else:
-            repeated = repeated[: self.total_size]
+        repeated = _fit_to_total_size(repeated, self.total_size)
         # Replica's slab.
         slab = repeated[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
         # Truncate so the epoch size per rank matches an un-repeated pass.
