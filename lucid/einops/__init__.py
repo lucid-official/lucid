@@ -1,8 +1,10 @@
 """lucid.einops — shape manipulation written in named axes.
 
-Four entry points: ``rearrange`` (permute, reshape, split or merge axes),
+Entry points: ``rearrange`` (permute, reshape, split or merge axes),
 ``reduce`` (the same, carrying a reduction), ``repeat`` (the same, carrying a
-broadcast expansion) and ``einsum``.
+broadcast expansion), ``einsum``, ``pack`` / ``unpack`` (join tensors of
+different rank along one axis and split them again) and ``parse_shape``
+(read named lengths off a shape).
 
 Patterns are strings of axis names, so the intent is stated in the call
 rather than reconstructed from a run of anonymous ``transpose`` / ``reshape``
@@ -23,16 +25,18 @@ Reachable only as ``lucid.einops.*``: there is no top-level ``lucid.einsum``
 and no ``Tensor.rearrange`` method, so each op has exactly one path.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import SupportsIndex
 
 import lucid
+from lucid import _contraction
 from lucid._C import engine as _C_engine
 from lucid._C.engine import einops as _C_einops
 from lucid._dispatch import _REAL_FLOATS, _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._tensor.tensor import Tensor
 from lucid.einops import _einsum, _recipe
+from lucid.einops._packing import pack, unpack
 
 
 def _wrap_own(out: _C_engine.TensorImpl, *inputs: _C_engine.TensorImpl) -> Tensor:
@@ -75,19 +79,55 @@ def _reduce_axes(
     return _ENGINE_REDUCERS[reduction](impl, list(axes), False)
 
 
+def _single(tensor: Tensor | list[Tensor]) -> Tensor:
+    """The tensor a call acts on; a list of tensors is stacked on a new axis 0."""
+    if not isinstance(tensor, list):
+        return tensor
+    if not tensor:
+        raise TypeError("einops cannot be applied to an empty list of tensors")
+    for i, item in enumerate(tensor):
+        if not isinstance(item, Tensor):
+            raise TypeError(f"einops: the list holds a {type(item).__name__} at {i}, not a Tensor")
+    return lucid.stack(tensor, dim=0)
+
+
+def _reduce_with(
+    impl: _C_engine.TensorImpl,
+    reduction: Callable[[Tensor, tuple[int, ...]], Tensor],
+    order: tuple[int, ...] | None,
+    axes: tuple[int, ...],
+) -> _C_engine.TensorImpl:
+    """Hand ``reduction`` the tensor with the reduced axes last, as the reference does."""
+    if order is not None:
+        impl = _C_engine.permute(impl, list(order))
+    reduced = reduction(_wrap(impl), axes)
+    if not isinstance(reduced, Tensor):
+        raise TypeError(
+            f"einops.reduce: the reduction returned a {type(reduced).__name__}, not a Tensor"
+        )
+    return _unwrap(reduced)
+
+
 def _transform(
-    tensor: Tensor, pattern: str, operation: str, axes_lengths: Mapping[str, SupportsIndex]
+    tensor: Tensor | list[Tensor],
+    pattern: str,
+    operation: str | Callable[[Tensor, tuple[int, ...]], Tensor],
+    axes_lengths: Mapping[str, SupportsIndex],
 ) -> Tensor:
     """Run the at most six engine steps a pattern lowers to."""
-    inp = _unwrap(tensor)
-    plan = _recipe.plan(pattern, operation, tuple(inp.shape), axes_lengths)
+    inp = _unwrap(_single(tensor))
+    named = operation if isinstance(operation, str) else None
+    plan = _recipe.plan(pattern, named, tuple(inp.shape), axes_lengths)
     out = inp
     if plan.split is not None:
         out = _C_engine.reshape(out, list(plan.split))
-    if plan.reduced:
-        out = _reduce_axes(out, operation, plan.reduced)
-    if plan.permutation is not None:
-        out = _C_engine.permute(out, list(plan.permutation))
+    if plan.reduced and not isinstance(operation, str):
+        out = _reduce_with(out, operation, plan.reduce_last, plan.reduce_axes)
+    else:
+        if plan.reduced and named is not None:
+            out = _reduce_axes(out, named, plan.reduced)
+        if plan.permutation is not None:
+            out = _C_engine.permute(out, list(plan.permutation))
     for position in plan.inserted:
         out = _C_engine.unsqueeze(out, position)
     if plan.broadcast is not None:
@@ -97,7 +137,7 @@ def _transform(
     return _wrap_own(out, inp)
 
 
-def rearrange(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
+def rearrange(tensor: Tensor | list[Tensor], pattern: str, **axes_lengths: int) -> Tensor:
     r"""Rearrange axes of ``tensor`` according to an einops pattern.
 
     Performs arbitrary axis manipulation — transpose, reshape,
@@ -108,8 +148,9 @@ def rearrange(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
 
     Parameters
     ----------
-    tensor : Tensor
-        Input tensor to rearrange.
+    tensor : Tensor or list of Tensor
+        Input tensor to rearrange.  A list of equally shaped tensors is
+        stacked along a new leading axis first, so the pattern names it.
     pattern : str
         Einops pattern of the form ``"<lhs> -> <rhs>"``. Parentheses
         group axes for composition or decomposition, ``...`` stands for
@@ -154,7 +195,12 @@ def rearrange(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
     return _transform(tensor, pattern, "rearrange", dict(axes_lengths))
 
 
-def reduce(tensor: Tensor, pattern: str, reduction: str, **axes_lengths: int) -> Tensor:
+def reduce(
+    tensor: Tensor | list[Tensor],
+    pattern: str,
+    reduction: str | Callable[[Tensor, tuple[int, ...]], Tensor],
+    **axes_lengths: int,
+) -> Tensor:
     r"""Reduce ``tensor`` along axes implied by an einops pattern.
 
     Generalises standard ``sum`` / ``mean`` / ``max`` / ``min`` /
@@ -164,15 +210,19 @@ def reduce(tensor: Tensor, pattern: str, reduction: str, **axes_lengths: int) ->
 
     Parameters
     ----------
-    tensor : Tensor
-        Input tensor to reduce.
+    tensor : Tensor or list of Tensor
+        Input tensor to reduce.  A list of equally shaped tensors is
+        stacked along a new leading axis first, so the pattern names it.
     pattern : str
         Einops pattern such as ``"b h w -> b w"``.  A number on the left
         is an unnamed axis of that length, so ``"(h 2) (w 2) -> h w"``
         pools 2x2 windows.
-    reduction : str
+    reduction : str or callable
         Reduction operation; one of ``"sum"``, ``"mean"``, ``"max"``,
-        ``"min"``, ``"prod"``, ``"any"``, ``"all"``.
+        ``"min"``, ``"prod"``, ``"any"``, ``"all"``.  A callable
+        ``f(tensor, axes)`` is also accepted: it is given the tensor with
+        the axes to reduce moved last, and the positions ``axes`` they
+        then occupy, and returns the reduced tensor.
     **axes_lengths : int
         Axis lengths, needed to split a dimension into a group and checked
         against the input wherever the input already fixes the axis.
@@ -210,11 +260,14 @@ def reduce(tensor: Tensor, pattern: str, reduction: str, **axes_lengths: int) ->
     (2, 4)
     >>> lucid.einops.reduce(lucid.randn(2, 4, 6), "b (h 2) (w 3) -> b h w", "max").shape
     (2, 2, 2)
+    >>> total = lambda t, axes: lucid.sum(t, dim=list(axes))
+    >>> lucid.einops.reduce(lucid.ones(2, 3), "b w -> b", total)
+    tensor([3., 3.])
     """
     return _transform(tensor, pattern, reduction, dict(axes_lengths))
 
 
-def repeat(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
+def repeat(tensor: Tensor | list[Tensor], pattern: str, **axes_lengths: int) -> Tensor:
     r"""Repeat ``tensor`` along new or existing axes via an einops pattern.
 
     Provides a single notation for both tiling along existing axes and
@@ -225,8 +278,9 @@ def repeat(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
 
     Parameters
     ----------
-    tensor : Tensor
-        Input tensor to repeat.
+    tensor : Tensor or list of Tensor
+        Input tensor to repeat.  A list of equally shaped tensors is
+        stacked along a new leading axis first, so the pattern names it.
     pattern : str
         Einops pattern such as ``"b h w -> b h w c"`` (new axis ``c``) or
         ``"h w -> (h 2) w"`` (each row twice).
@@ -270,7 +324,20 @@ def repeat(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor:
     return _transform(tensor, pattern, "repeat", dict(axes_lengths))
 
 
-def einsum(equation: str, *operands: Tensor) -> Tensor:
+def _einsum_operands(operands: tuple[Tensor | Sequence[Tensor], ...]) -> list[Tensor]:
+    """The tensors of a call, given one by one or as a single list or tuple."""
+    flat = (
+        operands[0] if len(operands) == 1 and isinstance(operands[0], (list, tuple)) else operands
+    )
+    tensors: list[Tensor] = []
+    for operand in flat:
+        if not isinstance(operand, Tensor):
+            raise TypeError(f"einsum(): expected Tensor operands, got {type(operand).__name__}")
+        tensors.append(operand)
+    return tensors
+
+
+def einsum(equation: str, *operands: Tensor | Sequence[Tensor]) -> Tensor:
     r"""Evaluate an Einstein-summation expression over the given tensors.
 
     Implements the general tensor contraction operator: each input is
@@ -282,9 +349,9 @@ def einsum(equation: str, *operands: Tensor) -> Tensor:
     ----------
     equation : str
         Einsum equation of the form ``"<lhs1>,<lhs2>,... -> <rhs>"``.
-    *operands : Tensor
+    *operands : Tensor or sequence of Tensor
         Tensors corresponding to the comma-separated factors on the
-        left-hand side.
+        left-hand side, given one by one or as a single list or tuple.
 
     Returns
     -------
@@ -313,6 +380,12 @@ def einsum(equation: str, *operands: Tensor) -> Tensor:
     Without ``->`` the output is ``...`` followed by the subscripts that
     occur exactly once, in sorted order.
 
+    An integer contraction keeps its operands' dtype, as ``matmul`` does:
+    ``"ij,jk->ik"`` over ``int32`` is ``int32``.  A subscript summed away
+    inside one operand (``"ij->j"``, a trace) is a ``sum`` and widens an
+    integer or bool operand to ``int64``.  Contracting bool operands is
+    refused.
+
     Raises
     ------
     lucid._C.engine.InvalidArgument
@@ -323,6 +396,8 @@ def einsum(equation: str, *operands: Tensor) -> Tensor:
         An operand's rank does not match its subscripts, or a subscript's
         sizes disagree (within one operand, or across operands without a
         size of 1 to broadcast).
+    lucid._C.engine.NotImplementedError
+        Bool operands share a subscript that the output drops.
 
     Examples
     --------
@@ -337,9 +412,60 @@ def einsum(equation: str, *operands: Tensor) -> Tensor:
     >>> lucid.einops.einsum("ii->", m)
     tensor(5.)
     """
-    raw_impls = [_unwrap(t) for t in operands]
+    raw_impls = [_unwrap(t) for t in _einsum_operands(operands)]
     explicit, impl_list = _einsum.normalise(equation, raw_impls)
-    return _wrap_own(_C_einops.einsum(explicit, impl_list), *raw_impls)
+    stand_alone, contracted = _contraction.split_sums(explicit)
+    dtype = _contraction.operand_dtype(raw_impls)
+    if contracted and not stand_alone:
+        _contraction.require_summable(dtype, "einsum")
+    if stand_alone or contracted:
+        impl_list = _contraction.widen(impl_list, dtype)
+    out = _C_einops.einsum(explicit, impl_list)
+    if not stand_alone:
+        out = _contraction.settle(out, dtype)
+    return _wrap_own(out, *raw_impls)
 
 
-__all__ = ["rearrange", "reduce", "repeat", "einsum"]
+def parse_shape(tensor: Tensor, pattern: str) -> dict[str, int]:
+    r"""Read named axis lengths off the shape of ``tensor``.
+
+    The result can be passed as the keyword lengths of the other entry
+    points, so a length is written once.
+
+    Parameters
+    ----------
+    tensor : Tensor
+        The tensor whose shape is read.
+    pattern : str
+        One name per dimension, ``_`` for a dimension to skip, ``...`` for
+        any run of dimensions, ``1`` or ``()`` for a unit axis and a number
+        for an axis of that length.  Parenthesised groups of several axes
+        are refused: a length cannot be read through a composition.
+
+    Returns
+    -------
+    dict of str to int
+        Each named axis and its length.
+
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        The pattern is malformed or composes axes.
+    lucid._C.engine.ShapeMismatch
+        The rank of ``tensor`` does not fit the pattern, or a unit or
+        numbered axis is not the length the pattern writes.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> x = lucid.zeros(2, 3, 5, 7)
+    >>> lucid.einops.parse_shape(x, "batch _ h w")
+    {'batch': 2, 'h': 5, 'w': 7}
+    >>> y = lucid.zeros(70)
+    >>> lucid.einops.rearrange(y, "(c h w) -> c h w", **lucid.einops.parse_shape(x, "_ _ h w")).shape
+    (2, 5, 7)
+    """
+    return _recipe.parse_shape(tuple(tensor.shape), pattern)
+
+
+__all__ = ["rearrange", "reduce", "repeat", "einsum", "pack", "unpack", "parse_shape"]

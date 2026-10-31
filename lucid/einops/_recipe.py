@@ -94,7 +94,7 @@ class _Side:
     has_anonymous: bool = False
 
 
-def _axis_name_problem(name: str) -> str | None:
+def axis_name_problem(name: str) -> str | None:
     if not name.isidentifier():
         return "not a valid identifier"
     if name.startswith("_") or name.endswith("_"):
@@ -124,8 +124,9 @@ def _axes_appear(axes: Sequence[_Axis]) -> str:
 class _SideParser:
     """Tokeniser and grammar for one side of a pattern."""
 
-    def __init__(self, text: str, label: str) -> None:
+    def __init__(self, text: str, label: str, *, allow_underscore: bool = False) -> None:
         self.label = label
+        self.allow_underscore = allow_underscore
         self.side = _Side(composition=[], identifiers=[])
         self.group: list[_Axis] | None = None
         self.text = self._replace_ellipsis(text)
@@ -175,8 +176,11 @@ class _SideParser:
             self._add_ellipsis()
         elif token.isdecimal():
             self._add_number(int(token))
+        elif token == "_" and self.allow_underscore:
+            # ``parse_shape`` skips a dimension with ``_``, which may repeat.
+            self._place(token)
         else:
-            problem = _axis_name_problem(token)
+            problem = axis_name_problem(token)
             if problem is not None:
                 raise _bad_pattern(f"{_spelled(token)} is not a valid axis name: {problem}")
             if token in self.side.identifiers:
@@ -216,8 +220,8 @@ class _SideParser:
             self.group.append(axis)
 
 
-def _parse(text: str, label: str) -> _Side:
-    return _SideParser(text, label).parse()
+def _parse(text: str, label: str, *, allow_underscore: bool = False) -> _Side:
+    return _SideParser(text, label, allow_underscore=allow_underscore).parse()
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +244,10 @@ class _Recipe:
     reduced: tuple[int, ...]
     # The surviving axes, in left order, rearranged into right order.
     permutation: tuple[int, ...]
+    # The same permutation taken before the reduction, over every left axis:
+    # the survivors in right order, then the reduced ones.  A callable
+    # reduction is handed the tensor in this layout.
+    reduce_last: tuple[int, ...]
     # (position in the flat output, elementary axis) for each new axis.
     added: tuple[tuple[int, int], ...]
     outputs: tuple[tuple[int, ...], ...]
@@ -288,7 +296,7 @@ def _check_repeat(left: _Side, right: _Side, keywords: set[str]) -> None:
         raise _bad_pattern(f"new axes {_describe(unsized)} need lengths; pass them as keywords")
 
 
-def _check_axes_agree(left: _Side, right: _Side, operation: str, keywords: set[str]) -> None:
+def _check_axes_agree(left: _Side, right: _Side, operation: str | None, keywords: set[str]) -> None:
     """The reference's rules for which axes may appear on which side."""
     if right.has_ellipsis and not left.has_ellipsis:
         raise _bad_pattern("'...' appears on the right side but not on the left")
@@ -298,7 +306,7 @@ def _check_axes_agree(left: _Side, right: _Side, operation: str, keywords: set[s
         _check_rearrange(left, right)
     elif operation == "repeat":
         _check_repeat(left, right, keywords)
-    elif operation not in _REDUCTIONS:
+    elif operation is not None and operation not in _REDUCTIONS:
         raise _bad_pattern(
             f"unknown reduction {operation!r}; expected one of {', '.join(_REDUCTIONS)}"
         )
@@ -356,7 +364,7 @@ def _keyword_slots(
     """Where each keyword length goes; marks those axes as given."""
     slots: list[tuple[str, int]] = []
     for name in keywords:
-        problem = _axis_name_problem(name)
+        problem = axis_name_problem(name)
         if problem is not None:
             raise _bad_pattern(f"{name!r} is not a valid axis name: {problem}")
         if name not in names:
@@ -384,8 +392,24 @@ def _input_dims(
     return tuple(dims)
 
 
+def _layout(
+    flat_left: list[_Axis], flat_right: list[_Axis], right: _Side
+) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    """Which left axes a reduction removes and how the rest is reordered.
+
+    Returns the reduced positions, the permutation of the surviving axes
+    into right order, and the same permutation over every left axis with
+    the reduced ones last (the layout a callable reduction is given).
+    """
+    slots = [i for i, a in enumerate(flat_left) if a in right.identifiers]
+    reduced = tuple(i for i, a in enumerate(flat_left) if a not in right.identifiers)
+    survivors = [flat_left[i] for i in slots]
+    permutation = tuple(survivors.index(a) for a in flat_right if a in survivors)
+    return reduced, permutation, tuple(slots[p] for p in permutation) + reduced
+
+
 @functools.lru_cache(maxsize=512)
-def _recipe(pattern: str, operation: str, keywords: tuple[str, ...], ndim: int) -> _Recipe:
+def _recipe(pattern: str, operation: str | None, keywords: tuple[str, ...], ndim: int) -> _Recipe:
     left_text, right_text = _split_pattern(pattern)
     left = _parse(left_text, "left")
     right = _parse(right_text, "right")
@@ -400,15 +424,16 @@ def _recipe(pattern: str, operation: str, keywords: tuple[str, ...], ndim: int) 
     # reduction walk a strided copy, eight times slower for "b n d -> b d".
     flat_left = [a for group in left_groups for a in group]
     flat_right = [a for group in right_groups for a in group]
-    survivors = [a for a in flat_left if a in right.identifiers]
+    reduced, permutation, reduce_last = _layout(flat_left, flat_right, right)
     return _Recipe(
         names=tuple(names),
         lengths=tuple(lengths),
         keyword_slots=slots,
         inputs=inputs,
         n_left=n_left,
-        reduced=tuple(i for i, a in enumerate(flat_left) if a not in right.identifiers),
-        permutation=tuple(survivors.index(a) for a in flat_right if a in survivors),
+        reduced=reduced,
+        permutation=permutation,
+        reduce_last=reduce_last,
         added=tuple(
             (i, names.index(a)) for i, a in enumerate(flat_right) if a not in left.identifiers
         ),
@@ -423,6 +448,11 @@ class _Plan:
     split: tuple[int, ...] | None
     reduced: tuple[int, ...]
     permutation: tuple[int, ...] | None
+    # For a callable reduction: the permutation that moves the reduced axes
+    # last (``None`` when they already are) and the trailing positions they
+    # then occupy, which is what the callable is told to reduce.
+    reduce_last: tuple[int, ...] | None
+    reduce_axes: tuple[int, ...]
     inserted: tuple[int, ...]
     broadcast: tuple[int, ...] | None
     merge: tuple[int, ...] | None
@@ -483,7 +513,10 @@ def _mismatch(
 
 @functools.lru_cache(maxsize=1024)
 def _plan(
-    pattern: str, operation: str, shape: tuple[int, ...], keywords: tuple[tuple[str, int], ...]
+    pattern: str,
+    operation: str | None,
+    shape: tuple[int, ...],
+    keywords: tuple[tuple[str, int], ...],
 ) -> _Plan:
     recipe = _recipe(pattern, operation, tuple(name for name, _ in keywords), len(shape))
     lengths, must_split = _resolve_lengths(recipe, shape, keywords)
@@ -492,6 +525,14 @@ def _plan(
         split=tuple(lengths[: recipe.n_left]) if must_split else None,
         reduced=recipe.reduced,
         permutation=(None if permutation == tuple(range(len(permutation))) else permutation),
+        reduce_last=(
+            None
+            if recipe.reduce_last == tuple(range(len(recipe.reduce_last)))
+            else recipe.reduce_last
+        ),
+        reduce_axes=tuple(
+            range(len(recipe.reduce_last) - len(recipe.reduced), len(recipe.reduce_last))
+        ),
         inserted=tuple(pos for pos, _ in recipe.added),
         broadcast=(
             tuple(lengths[i] for group in recipe.outputs for i in group) if recipe.added else None
@@ -517,7 +558,10 @@ def _length(name: str, value: SupportsIndex) -> int:
 
 
 def plan(
-    pattern: str, operation: str, shape: tuple[int, ...], axes_lengths: Mapping[str, SupportsIndex]
+    pattern: str,
+    operation: str | None,
+    shape: tuple[int, ...],
+    axes_lengths: Mapping[str, SupportsIndex],
 ) -> _Plan:
     """The engine steps for ``operation`` with ``pattern`` on ``shape``.
 
@@ -525,8 +569,9 @@ def plan(
     ----------
     pattern : str
         The pattern as the caller wrote it.
-    operation : str
-        ``"rearrange"``, ``"repeat"``, or the name of a reduction.
+    operation : str or None
+        ``"rearrange"``, ``"repeat"``, the name of a reduction, or ``None``
+        for a reduction the caller supplies as a callable.
     shape : tuple of int
         The input's shape.
     axes_lengths : Mapping of str to int
@@ -556,8 +601,81 @@ def plan(
         raise refusal.kind(f"{context}: {refusal}") from None
 
 
-def _entry_point(operation: str) -> str:
+def _shape_side(pattern: str) -> _Side:
+    side = _parse(pattern, "pattern", allow_underscore=True)
+    if side.ellipsis_grouped:
+        raise _bad_pattern("'...' may not stand inside parentheses")
+    if any(isinstance(entry, list) and len(entry) > 1 for entry in side.composition):
+        raise _bad_pattern(
+            "cannot read a shape through composite axes: write one name per dimension"
+        )
+    return side
+
+
+def _shape_dims(side: _Side, rank: int) -> list[list[_Axis]]:
+    """``side``'s dimensions, with ``...`` spelled out as skipped ones for ``rank``."""
+    fixed = len(side.composition) - (1 if side.has_ellipsis else 0)
+    if rank < fixed or (rank > fixed and not side.has_ellipsis):
+        bound = "at least " if side.has_ellipsis else ""
+        raise _bad_shape(f"the pattern names {bound}{fixed} dimensions, the input has {rank}")
+    dims: list[list[_Axis]] = []
+    for entry in side.composition:
+        if entry == _ELLIPSIS:
+            dims.extend(["_"] for _ in range(rank - fixed))
+        elif isinstance(entry, list):
+            dims.append(entry)
+    return dims
+
+
+def _read_lengths(pattern: str, shape: tuple[int, ...]) -> dict[str, int]:
+    lengths: dict[str, int] = {}
+    for axes, length in zip(_shape_dims(_shape_side(pattern), len(shape)), shape, strict=True):
+        if not axes:
+            if length != 1:
+                raise _bad_shape(f"a unit axis needs length 1, the input dimension has {length}")
+            continue
+        (axis,) = axes
+        if isinstance(axis, _Anonymous):
+            if axis.length != length:
+                raise _bad_shape(f"anonymous axis {axis} does not match the input length {length}")
+        elif axis != "_":
+            lengths[axis] = length
+    return lengths
+
+
+def parse_shape(shape: tuple[int, ...], pattern: str) -> dict[str, int]:
+    """Read the lengths of the axes ``pattern`` names off ``shape``.
+
+    Parameters
+    ----------
+    shape : tuple of int
+        The shape to read.
+    pattern : str
+        One name per dimension, ``_`` for a dimension to skip, ``...`` for
+        any run of dimensions, ``1`` or ``()`` for a unit axis and a number
+        for an axis of that length.
+
+    Returns
+    -------
+    dict of str to int
+        Each named axis and its length, in pattern order.
+
+    Raises
+    ------
+    lucid._C.engine.InvalidArgument
+        The pattern is malformed or composes axes.
+    lucid._C.engine.ShapeMismatch
+        ``shape`` has the wrong rank, or a unit or numbered axis is not the
+        length the pattern writes.
+    """
+    try:
+        return _read_lengths(pattern, shape)
+    except _Refusal as refusal:
+        raise refusal.kind(f"einops.parse_shape({pattern!r}) on shape {shape}: {refusal}") from None
+
+
+def _entry_point(operation: str | None) -> str:
     return operation if operation in ("rearrange", "repeat") else "reduce"
 
 
-__all__ = ["plan"]
+__all__ = ["axis_name_problem", "parse_shape", "plan"]
