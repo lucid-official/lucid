@@ -946,8 +946,7 @@ class TestSaveLoad:
         peft, _ = _three(device)
         peft.save_pretrained(tmp_path)
         other = get_peft_model(
-            nn.Sequential(nn.Linear(6, 8), nn.ReLU(), nn.Linear(8, 3)).to(device),
-            _config(2, ["0"]),
+            nn.Sequential(nn.Linear(6, 8), nn.ReLU(), nn.Linear(8, 3)).to(device), _config(2, ["0"])
         )
         weights = tmp_path / "style" / "adapter_model.safetensors"
         stored = load_safetensors(str(weights))

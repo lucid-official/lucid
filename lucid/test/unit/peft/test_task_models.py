@@ -107,6 +107,7 @@ class TestRegistry:
 
         assert registry[TaskType.FEATURE_EXTRACTION] is Mine
         assert type(get_peft_model(_net(), _config("FEATURE_EXTRACTION"))) is Mine
+
         # A subclass that names no task is not registered.
         class Unnamed(PeftModel):
             pass

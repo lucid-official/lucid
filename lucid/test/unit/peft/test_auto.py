@@ -173,8 +173,10 @@ class TestTheMappingIsFollowedOnlyWhereAllowed:
         _adapter(tmp_path, "SEQ_CLS", base="no-such-zoo-model")
         _remap(
             tmp_path,
-            auto_mapping={"base_model_class": "BertForSequenceClassification",
-                          "parent_library": "transformers.models.bert.modeling_bert"},
+            auto_mapping={
+                "base_model_class": "BertForSequenceClassification",
+                "parent_library": "transformers.models.bert.modeling_bert",
+            },
         )
         with pytest.raises(ValueError, match="no-such-zoo-model"):
             AutoPeftModelForSequenceClassification.from_pretrained(tmp_path)
@@ -199,7 +201,9 @@ class TestTheTasksMatch:
         (AutoPeftModelForFeatureExtraction, PeftModelForFeatureExtraction, "FEATURE_EXTRACTION"),
     ]
 
-    @pytest.mark.parametrize(("shell", "wrapper", "task"), SHELLS, ids=lambda x: getattr(x, "__name__", x))
+    @pytest.mark.parametrize(
+        ("shell", "wrapper", "task"), SHELLS, ids=lambda x: getattr(x, "__name__", x)
+    )
     def test_each_shell_returns_its_wrapper(
         self, shell: type, wrapper: type[PeftModel], task: str, tmp_path: Path
     ) -> None:
@@ -208,14 +212,19 @@ class TestTheTasksMatch:
         loaded = shell.from_pretrained(tmp_path, import_allowlist=ALLOW)
         assert type(loaded) is wrapper
 
-    @pytest.mark.parametrize(("shell", "wrapper", "task"), SHELLS, ids=lambda x: getattr(x, "__name__", x))
+    @pytest.mark.parametrize(
+        ("shell", "wrapper", "task"), SHELLS, ids=lambda x: getattr(x, "__name__", x)
+    )
     def test_each_shell_refuses_another_task(
         self, shell: type, wrapper: type[PeftModel], task: str, tmp_path: Path
     ) -> None:
         other = "CAUSAL_LM" if task != "CAUSAL_LM" else "SEQ_CLS"
         _adapter(tmp_path, other)
         _name_the_test_package(tmp_path)
-        with pytest.raises(ValueError, match=rf"Expected target PEFT class: .*, but you have asked for: {wrapper.__name__}"):
+        with pytest.raises(
+            ValueError,
+            match=rf"Expected target PEFT class: .*, but you have asked for: {wrapper.__name__}",
+        ):
             shell.from_pretrained(tmp_path, import_allowlist=ALLOW)
 
     def test_a_shell_takes_an_adapter_with_no_task(self, tmp_path: Path) -> None:
@@ -229,7 +238,9 @@ class TestTheTasksMatch:
         with pytest.raises(ValueError, match="Cannot use `AutoPeftModel` with a task type"):
             AutoPeftModel.from_pretrained(tmp_path)
 
-    @pytest.mark.parametrize("mapping", [None, {"base_model_class": "Net"}], ids=["none", "partial"])
+    @pytest.mark.parametrize(
+        "mapping", [None, {"base_model_class": "Net"}], ids=["none", "partial"]
+    )
     def test_the_task_less_class_needs_a_mapping(
         self, tmp_path: Path, mapping: dict[str, str] | None
     ) -> None:
@@ -254,8 +265,7 @@ class TestRefusals:
             AutoPeftModelForCausalLM.from_pretrained(tmp_path / "nowhere")
 
     @pytest.mark.parametrize(
-        "shell",
-        [AutoPeftModel, AutoPeftModelForCausalLM, AutoPeftModelForFeatureExtraction],
+        "shell", [AutoPeftModel, AutoPeftModelForCausalLM, AutoPeftModelForFeatureExtraction]
     )
     def test_the_shells_are_never_instantiated(self, shell: type) -> None:
         with pytest.raises(OSError, match=rf"{shell.__name__} is designed to be instantiated"):

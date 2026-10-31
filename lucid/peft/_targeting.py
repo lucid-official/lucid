@@ -172,9 +172,7 @@ def _with_heads(model: nn.Module, config: PeftConfig, heads: Iterable[str]) -> P
     if not isinstance(config, _TargetedConfig):
         return config
     saved = config.modules_to_save or []
-    added = [
-        head for head in heads if head not in saved and _module_names_matching(model, [head])
-    ]
+    added = [head for head in heads if head not in saved and _module_names_matching(model, [head])]
     if not added:
         return config
     return dataclasses.replace(config, modules_to_save=[*saved, *added])

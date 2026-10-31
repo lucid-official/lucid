@@ -417,7 +417,10 @@ class PeftModel(_ForwardsAttributes):
         zoo's Auto classes would pick the first model of a ``model_type`` and task.
         """
         model_class = type(self.get_base_model())
-        mapping = {"base_model_class": model_class.__name__, "parent_library": model_class.__module__}
+        mapping = {
+            "base_model_class": model_class.__name__,
+            "parent_library": model_class.__module__,
+        }
         return dataclasses.replace(
             self.peft_config[adapter_name], inference_mode=True, auto_mapping=mapping
         )
