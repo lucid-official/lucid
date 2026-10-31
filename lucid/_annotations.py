@@ -502,7 +502,14 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.utils.fusion": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.skip_init": (("Module", "lucid.nn.module", "Module"),),
     "lucid.optim._step_counter": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),
-    "lucid.peft.tuners.lora._inits": (("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),),
+    "lucid.peft._adapter_file": (
+        ("PeftConfig", "lucid.peft._config", "PeftConfig"),
+        ("Tensor", "lucid._tensor.tensor", "Tensor"),
+    ),
+    "lucid.peft.tuners.lora._inits": (
+        ("LoraConfig", "lucid.peft.tuners.lora._config", "LoraConfig"),
+        ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),
+    ),
     "lucid.peft.tuners.lora._variants": (
         ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),
         ("_Residual", "lucid.peft.tuners.lora._layer", "_Residual"),

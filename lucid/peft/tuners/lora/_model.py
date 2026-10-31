@@ -15,6 +15,7 @@ from typing import ClassVar, Literal, TypedDict, override
 import lucid
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
+from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _AdapterSlot, _outside_slots
 from lucid.peft._targeting import _pattern_value
@@ -27,6 +28,7 @@ from lucid.peft.tuners._base import (
     _tuner_layers,
 )
 from lucid.peft.tuners.lora._config import LoraConfig
+from lucid.peft.tuners.lora._inits import _Init
 from lucid.peft.tuners.lora._layer import Linear, LoraLayer
 from lucid.peft.tuners.lora._mixed import _MixedBatch
 from lucid.peft.tuners.lora._merging import _Combination, _CombinationType, _MergeOptions
@@ -260,6 +262,19 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
                 stacklevel=6,
             )
         return targets
+
+    @override
+    @classmethod
+    def _converted_to_plain(
+        cls, trained: _AdapterFile[PeftConfig], initial: _AdapterFile[PeftConfig]
+    ) -> _AdapterFile[PeftConfig]:
+        """The init strategy's plain-LoRA form of ``trained`` (PiSSA / OLoRA widen to rank ``2r``)."""
+        config = _as_lora(trained.config)
+        converted = _Init.of(config.init_lora_weights).to_plain(
+            _AdapterFile(config, trained.state),
+            _AdapterFile(_as_lora(initial.config), initial.state),
+        )
+        return _AdapterFile(converted.config, converted.state)
 
     @override
     @classmethod

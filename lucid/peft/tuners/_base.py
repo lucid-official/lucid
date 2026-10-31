@@ -45,6 +45,7 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
+from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
@@ -568,6 +569,26 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     @classmethod
     def _check_loadable(cls, config: PeftConfig, is_trainable: bool) -> None:
         """Raise if a saved adapter of this method cannot be loaded as ``is_trainable``."""
+
+    @classmethod
+    def _converted_to_plain(
+        cls, trained: _AdapterFile[PeftConfig], initial: _AdapterFile[PeftConfig]
+    ) -> _AdapterFile[PeftConfig]:
+        """``trained`` as an adapter that fits the pristine base, given the adapter as it was at initialisation.
+
+        Only a method whose initialisation rewrites the base weight has anything to
+        convert (LoRA's PiSSA / OLoRA); every other method refuses.
+
+        Raises
+        ------
+        ValueError
+            This method has no such conversion.
+        """
+        del trained, initial  # the default has no conversion
+        raise ValueError(
+            "Passing `path_initial_model_for_weight_conversion` to `save_pretrained` is not "
+            f"supported for {cls.__name__}."
+        )
 
     @abstractmethod
     def add_adapter(

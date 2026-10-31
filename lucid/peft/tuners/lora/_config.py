@@ -107,8 +107,10 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         :math:`r` columns of a QR decomposition's :math:`Q` and rows of
         :math:`R` there instead.  Both **rewrite the base weight in place**
         (the adapted layer still starts as the original), so an adapter
-        trained from them is relative to that rewritten base; they apply to
-        ``nn.Linear`` targets only.  ``"eva"``, ``"corda"``, ``"loftq"`` and
+        trained from them is relative to that rewritten base — save one
+        with ``save_pretrained(..., path_initial_model_for_weight_conversion=)``
+        to get a plain LoRA of twice the rank that fits the original base;
+        they apply to ``nn.Linear`` targets only.  ``"eva"``, ``"corda"``, ``"loftq"`` and
         the reference's other initialisations raise ``NotImplementedError``.
     rank_pattern : dict of str to int, optional
         Per-module rank overrides, keyed by name or regex suffix.

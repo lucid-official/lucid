@@ -14,15 +14,19 @@ adapted layer starts as the original.  They are the reason this runs after
 the factors exist and before anything else reads the base weight.
 """
 
+import dataclasses
 import re
+import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar, Final, Self, override
 
 import lucid
 import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
+from lucid.peft._adapter_file import _AdapterFile
 
 if TYPE_CHECKING:
+    from lucid.peft.tuners.lora._config import LoraConfig
     from lucid.peft.tuners.lora._layer import LoraLayer
 
 #: Initialisations of the reference that need machinery lucid.peft does not have yet.
@@ -36,6 +40,9 @@ _PLANNED: Final = {
 }
 
 _PISSA_ITERATIONS: Final = re.compile(r"pissa_niter_(\d+)")
+
+#: The axis a factor is stacked along to add a rank: ``lora_A`` along its rows, ``lora_B`` along its columns.
+_RANK_AXIS: Final = {"lora_A": 0, "lora_B": 1}
 
 
 class _Init(ABC):
@@ -51,7 +58,8 @@ class _Init(ABC):
     _strategies: ClassVar[dict[str, type[_Init]]] = {}
     #: The spelling, for a strategy with one; the instance's ``value`` otherwise.
     spelling: ClassVar[str]
-    #: Whether the strategy factorises the base weight, so the layer must hold a dense ``(out, in)`` one.
+    #: Whether the strategy factorises the base weight — the layer must hold a dense ``(out, in)`` one —
+    #: and writes the residual back into it, so an adapter saved beside that base needs ``to_plain``.
     factorises: ClassVar[bool] = False
 
     @override
@@ -116,6 +124,49 @@ class _Init(ABC):
     def apply(self, layer: LoraLayer, adapter: str) -> None:
         """Initialise the factors of ``adapter``, which ``layer`` has built."""
 
+    def to_plain(
+        self, trained: _AdapterFile[LoraConfig], initial: _AdapterFile[LoraConfig]
+    ) -> _AdapterFile[LoraConfig]:
+        r"""``trained`` as a plain LoRA that fits the original base weight.
+
+        A strategy that rewrites the base weight (``factorises``) gives an
+        adapter that is only right beside the rewritten base.  Its change
+        since initialisation is :math:`\Delta W = s(BA - B_0A_0)`, which a
+        plain LoRA of rank :math:`2r` holds exactly as
+        :math:`[B\;{-B_0}]\,[A;\,A_0]` (``lora_alpha`` doubled, so :math:`s`
+        is unchanged) and which adds to the original weight.  Any other
+        strategy left the base alone: its adapter is returned as it is, with
+        a warning.
+
+        Parameters
+        ----------
+        trained : _AdapterFile
+            The adapter after training: its config and file tensors.
+        initial : _AdapterFile
+            The same adapter right after initialisation.
+
+        Returns
+        -------
+        _AdapterFile
+            The converted config (``init_lora_weights=True``) and tensors.
+
+        Raises
+        ------
+        ValueError
+            The adapter uses DoRA, or ``use_rslora`` with a rank or alpha
+            pattern, or ``initial`` does not match ``trained``.
+        """
+        if not self.factorises:
+            warnings.warn(
+                "`path_initial_model_for_weight_conversion` only converts an adapter whose "
+                "initialisation rewrote the base weight (PiSSA, OLoRA); "
+                f"init_lora_weights={self.value!r} did not, so the adapter is saved as it is.",
+                stacklevel=2,
+            )
+            return trained
+        _check_convertible(trained.config, initial.config)
+        return _AdapterFile(_doubled(trained.config), _stacked(trained.state, initial.state))
+
 
 class _Default(_Init, init="default"):
     r"""``True``: Kaiming-uniform :math:`A` (as ``nn.Linear``), zero :math:`B`; the update starts at zero."""
@@ -135,6 +186,13 @@ class _Default(_Init, init="default"):
     @override
     def apply(self, layer: LoraLayer, adapter: str) -> None:
         layer._reset_factors(adapter, gaussian=False)
+
+    @override
+    def to_plain(
+        self, trained: _AdapterFile[LoraConfig], initial: _AdapterFile[LoraConfig]
+    ) -> _AdapterFile[LoraConfig]:
+        del initial  # B starts at zero and the base is untouched: it is a plain LoRA already
+        return trained
 
 
 class _Random(_Init, init="random"):
@@ -289,6 +347,82 @@ class _Olora(_Init, init="olora"):
             q, r_factor = linalg.qr(weight)
             lora_a, lora_b = r_factor[: spec.r], q[:, : spec.r]
             _install(layer, adapter, lora_a, lora_b, weight - spec.scaling * (lora_b @ lora_a))
+
+
+def _check_convertible(trained: LoraConfig, initial: LoraConfig) -> None:
+    """Raise ``ValueError`` unless ``trained`` can become a plain LoRA against ``initial``."""
+    if trained.use_dora:
+        raise ValueError(
+            "path_initial_model_for_weight_conversion cannot convert a DoRA adapter: its "
+            "magnitude vector has no place in a plain LoRA"
+        )
+    if trained.use_rslora and (trained.rank_pattern or trained.alpha_pattern):
+        raise ValueError(
+            "Passing `path_initial_model_for_weight_conversion` to `save_pretrained` is not "
+            "supported when using `rank_pattern` or `alpha_pattern` at the same time as "
+            "`use_rslora=True`."
+        )
+    for name in ("r", "lora_alpha", "use_rslora", "rank_pattern", "alpha_pattern"):
+        if getattr(trained, name) != getattr(initial, name):
+            raise ValueError(
+                f"the initial adapter does not match the trained one: {name} is "
+                f"{getattr(initial, name)!r}, the trained adapter has {getattr(trained, name)!r}"
+            )
+
+
+def _doubled(config: LoraConfig) -> LoraConfig:
+    r"""``config`` at twice the rank with the same scaling, initialised plainly.
+
+    ``lora_alpha`` doubles with ``r``; under ``use_rslora`` (scaling
+    :math:`\alpha/\sqrt r`) it grows by :math:`\sqrt 2` instead.
+    """
+    gain = 2**0.5 if config.use_rslora else 2
+    return dataclasses.replace(
+        config,
+        r=2 * config.r,
+        lora_alpha=config.lora_alpha * gain,
+        rank_pattern={key: 2 * rank for key, rank in config.rank_pattern.items()},
+        alpha_pattern={key: 2 * alpha for key, alpha in config.alpha_pattern.items()},
+        init_lora_weights=True,
+    )
+
+
+def _rank_axis(key: str) -> int | None:
+    """The axis ``key``'s factor grows along when a rank is added, or ``None`` if ``key`` is no factor weight."""
+    *_, table, leaf = ("", "", *key.split("."))
+    return _RANK_AXIS.get(table) if leaf == "weight" else None
+
+
+def _stacked(trained: dict[str, Tensor], initial: dict[str, Tensor]) -> dict[str, Tensor]:
+    r"""``trained`` with each factor widened by the initial one: :math:`[A;\,A_0]` and :math:`[B\;{-B_0}]`.
+
+    What is not a factor (a trained bias, a ``modules_to_save`` copy) is kept.
+
+    Raises
+    ------
+    ValueError
+        The two hold factors for different layers, or of different shapes.
+    """
+    axes = {key: _rank_axis(key) for key in trained}
+    factors = [key for key, axis in axes.items() if axis is not None]
+    unmatched = sorted(set(factors) ^ {key for key in initial if _rank_axis(key) is not None})
+    if unmatched:
+        raise ValueError(
+            "the initial adapter does not match the trained one: they hold LoRA factors "
+            f"for different layers ({unmatched[:4]})"
+        )
+    stacked = dict(trained)
+    for key in factors:
+        now, start = trained[key], initial[key]
+        if now.shape != start.shape:
+            raise ValueError(
+                f"the initial adapter does not match the trained one: {key} has shape "
+                f"{tuple(start.shape)}, the trained adapter's is {tuple(now.shape)}"
+            )
+        start = start.to(device=now.device, dtype=now.dtype)
+        axis = axes[key]
+        stacked[key] = lucid.cat([now, start if axis == 0 else -start], dim=axis)
+    return stacked
 
 
 def _check_init(name: str, value: object) -> bool | str:
