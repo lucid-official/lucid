@@ -1048,7 +1048,7 @@ def _normal_(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> w = lucid.empty(1000).normal_(2.0, 0.5)
     >>> abs(float(w.mean()) - 2.0) < 0.1
     True
@@ -1088,7 +1088,7 @@ def _uniform_(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> w = lucid.empty(2, 3).uniform_(-1.0, 1.0)
     >>> bool(((w >= -1.0) & (w < 1.0)).all())
     True
