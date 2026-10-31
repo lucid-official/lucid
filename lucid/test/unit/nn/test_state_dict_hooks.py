@@ -185,7 +185,7 @@ def test_every_load_post_hook_fires_once(ref) -> None:
 @pytest.mark.parity
 @pytest.mark.xfail(
     strict=True,
-    reason="LCD-792 follow-up: load post-hooks run after the whole walk; the reference runs "
+    reason="LCD-805: load post-hooks run after the whole walk; the reference runs "
     "each right after its own subtree",
 )
 def test_load_post_hooks_interleave_with_the_walk_as_in_the_reference(ref) -> None:
