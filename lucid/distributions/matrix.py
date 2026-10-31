@@ -8,6 +8,7 @@ All computation is done in pure Lucid — no external libraries.
 """
 
 import math
+import operator
 from collections.abc import Sequence
 from typing import Self, override
 
@@ -471,6 +472,12 @@ class LKJCholesky(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
+        try:
+            dim = operator.index(dim)
+        except TypeError:
+            raise TypeError(
+                f"LKJCholesky: dim must be an integer, not {type(dim).__name__}"
+            ) from None
         if dim < 2:
             raise ValueError(f"LKJCholesky: dim must be ≥ 2, got {dim}.")
         self.dim = dim

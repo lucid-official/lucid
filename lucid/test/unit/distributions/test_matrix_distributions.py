@@ -235,3 +235,11 @@ def test_lkj_log_prob_is_finite_on_its_own_sample():
 def test_lkj_refuses_a_one_dimensional_correlation_matrix():
     with pytest.raises(ValueError, match="dim must be"):
         D.LKJCholesky(dim=1)
+
+
+@pytest.mark.parametrize("dim", [2.0, 2.5, lucid.tensor(2.0)])
+def test_lkj_cholesky_refuses_a_non_integer_dim(dim: int) -> None:
+    # A float dim used to be stored and only failed inside log_prob, once
+    # multigammaln started validating its order (LCD-772).
+    with pytest.raises(TypeError, match="dim must be an integer"):
+        D.LKJCholesky(dim)
