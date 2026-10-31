@@ -17,6 +17,7 @@ from typing import Callable, Sequence, SupportsFloat, cast
 from lucid._tensor.tensor import Tensor
 from lucid.diffeq import _fused
 from lucid.diffeq._tableau import ButcherTableau
+from lucid.diffeq._timegrad import TimeGrid
 from lucid.diffeq._typing import (
     InterpKind,
     RightHandSide,
@@ -320,6 +321,83 @@ def integrate(
         # Rounding can leave the final output time a hair past the last step;
         # it is the endpoint either way.
         trajectory.append(y)
+    return y, trajectory
+
+
+def steps_on_caller_grid(options: dict[str, object] | None) -> bool:
+    """Whether a fixed-step solve steps exactly on the caller's ``t``.
+
+    That is the case where the output times are the step boundaries, so a
+    gradient with respect to ``t`` can be the exact derivative of the
+    arithmetic performed -- see :func:`integrate_on_tensor_grid`.
+    """
+    opts = parse_options(options)
+    return opts.step_size is None and opts.grid_constructor is None and not opts.perturb
+
+
+def _affine(y: Tensor, ks: Sequence[Tensor], weights: Sequence[float], dt: Tensor) -> Tensor:
+    """``y + dt * sum(weights[i] * ks[i])`` in ordinary differentiable ops."""
+    total: Tensor | None = None
+    for weight, k in zip(weights, ks, strict=False):  # row i of a tableau holds i weights
+        if weight:
+            term = k * weight
+            total = term if total is None else total + term
+    return y if total is None else y + dt * total
+
+
+def integrate_on_tensor_grid(
+    func: RightHandSide,
+    y0: Tensor,
+    times: TimeGrid,
+    tableau: ButcherTableau,
+    check: StageCheck,
+    *,
+    return_trajectory: bool,
+) -> tuple[Tensor, list[Tensor]]:
+    """Step on the caller's grid with the step sizes kept differentiable.
+
+    Parameters
+    ----------
+    func : callable
+        Right-hand side ``f(t, y)``; it receives time tensors that carry the
+        graph, so an explicit time dependence is differentiated too.
+    y0 : Tensor
+        Initial state, at ``t[0]``.
+    times : TimeGrid
+        The caller's grid, which requires gradient.
+    tableau : ButcherTableau
+        Any explicit fixed-step tableau.
+    check : callable
+        Validates a right-hand-side result and returns it.
+    return_trajectory : bool
+        Whether to collect the state at every grid point.
+
+    Returns
+    -------
+    tuple
+        The final state, and the collected trajectory (empty when not
+        requested).
+
+    Notes
+    -----
+    This is :func:`integrate` for the default grid with the host-float step
+    ``dt`` replaced by a tensor, so ``d y_{k+1} / d t`` is the derivative of
+    the discretisation itself.  It trades the fused ``rk_combine`` kernel for
+    plain ops, which is why it runs only when ``t`` asks for a gradient.
+    """
+    points = times.points(y0)
+    y = y0
+    trajectory: list[Tensor] = [y0] if return_trajectory else []
+    for step in range(len(points) - 1):
+        t0 = points[step]
+        dt = points[step + 1] - t0
+        ks: list[Tensor] = []
+        for stage in range(tableau.stages):
+            stage_y = _affine(y, ks, tableau.a[stage], dt)
+            ks.append(check(func(t0 + dt * tableau.c[stage], stage_y), step, stage))
+        y = _affine(y, ks, tableau.b, dt)
+        if return_trajectory:
+            trajectory.append(y)
     return y, trajectory
 
 

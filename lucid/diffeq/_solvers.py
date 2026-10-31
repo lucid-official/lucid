@@ -20,6 +20,7 @@ the network forwards themselves.
 import bisect
 import math
 import warnings
+from dataclasses import dataclass, replace
 from typing import Callable, Sequence, SupportsFloat, cast
 
 import lucid
@@ -27,6 +28,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._tensor.tensor import Tensor
 from lucid.diffeq import _adaptive, _event, _fixed, _flatten, _fused, _implicit, _multistep
+from lucid.diffeq._timegrad import RhsProbe, TimeGrid
 from lucid.diffeq._tableau import RK4, ButcherTableau, _DEFAULT_METHOD, _METHODS
 from lucid.diffeq._typing import EventFunction, RightHandSide, ScalarFactory, StageCheck, State
 
@@ -348,6 +350,134 @@ def _warn_coarse_interpolant(tableau: ButcherTableau, what: str) -> None:
     )
 
 
+@dataclass(frozen=True)
+class _Problem:
+    """One flat initial-value problem and everything its solvers share."""
+
+    func: RightHandSide
+    y0: Tensor
+    grid: list[float]
+    tableau: ButcherTableau
+    scalar: ScalarFactory
+    check: StageCheck
+    rtol: float
+    atol: float
+    options: dict[str, object] | None
+
+    def run_event(self, event_fn: EventFunction) -> tuple[Tensor, Tensor]:
+        """Integrate to the first sign change of ``event_fn``.
+
+        Returns
+        -------
+        tuple of Tensor
+            ``(event_time, state_at_event)``, both differentiable.
+        """
+        direction = 1.0 if self.grid[-1] > self.grid[0] else -1.0
+        event_t, y_event = _event.integrate_until_event(
+            self.func,
+            self.y0,
+            self.grid[0],
+            event_fn,
+            self.tableau,
+            self.scalar,
+            self.check,
+            rtol=self.rtol,
+            atol=self.atol,
+            options=self.options,
+            direction=direction,
+        )
+        # Bisection compares signs, so the event time arrives with no graph
+        # behind it.  It is still a differentiable function of everything the
+        # trajectory depends on, and this ties it back to the state at the
+        # event, which is the tensor that carries that graph.
+        return _event.differentiable_event_time(self.scalar(event_t), y_event, self.func, event_fn)
+
+    def run_grid(
+        self, multistep: bool | None, times: TimeGrid | None, return_trajectory: bool
+    ) -> tuple[Tensor, list[Tensor]]:
+        """Integrate across the output grid with the family ``tableau`` selects.
+
+        Parameters
+        ----------
+        multistep : bool or None
+            The Adams variant, or ``None`` for a Runge-Kutta method.
+        times : TimeGrid or None
+            When given, a fixed-step solve that keeps its step sizes
+            differentiable; the caller has checked that applies.
+        return_trajectory : bool
+            Whether to collect every output state.
+        """
+        common = (self.func, self.y0, self.grid)
+        callbacks = (self.scalar, self.check)
+        if multistep is not None:
+            return _multistep.integrate(
+                *common,
+                multistep,
+                *callbacks,
+                rtol=self.rtol,
+                atol=self.atol,
+                options=self.options,
+                return_trajectory=return_trajectory,
+            )
+        if self.tableau.is_implicit:
+            return _implicit.integrate(
+                *common,
+                self.tableau,
+                *callbacks,
+                options=self.options,
+                return_trajectory=return_trajectory,
+            )
+        if self.tableau.is_adaptive:
+            return _adaptive.integrate(
+                *common,
+                self.tableau,
+                *callbacks,
+                rtol=self.rtol,
+                atol=self.atol,
+                options=self.options,
+                return_trajectory=return_trajectory,
+            )
+        if times is not None:
+            return _fixed.integrate_on_tensor_grid(
+                self.func,
+                self.y0,
+                times,
+                self.tableau,
+                self.check,
+                return_trajectory=return_trajectory,
+            )
+        return _fixed.integrate(
+            *common,
+            self.tableau,
+            *callbacks,
+            options=self.options,
+            return_trajectory=return_trajectory,
+        )
+
+
+def _differentiable_steps(
+    times: TimeGrid | None,
+    event_fn: EventFunction | None,
+    multistep: bool | None,
+    tableau: ButcherTableau,
+    options: dict[str, object] | None,
+) -> bool:
+    """Whether the solve can differentiate its own steps with respect to ``t``.
+
+    True only for an explicit fixed-step method stepping on the caller's own
+    grid, where the output times are the step boundaries.  Everything else
+    gets the exact solution's sensitivity instead.
+    """
+    return (
+        times is not None
+        and event_fn is None
+        and multistep is None
+        and not tableau.is_implicit
+        and not tableau.is_adaptive
+        and _fixed.steps_on_caller_grid(options)
+    )
+
+
 def odeint(
     func: Callable[..., object],
     y0: State,
@@ -487,6 +617,17 @@ def odeint(
     — that host synchronisation is intrinsic to adaptivity, which is why the
     two families have different performance characters.
 
+    ``t`` is differentiable when it requires gradient.  A fixed-step solve on
+    its default grid (``t`` *is* the step boundaries) returns the derivative
+    of its own arithmetic, step sizes included, with ``func`` seeing time
+    tensors that carry the graph.  Every other route -- adaptive, implicit and
+    Adams methods, or a grid decoupled from ``t`` by ``step_size`` -- returns
+    the exact solution's sensitivity: ``dL/dt_i = <dL/dy_i, f(t_i, y_i)>`` for
+    an output time, and ``-<dL/dy_0 through the solve, f(t_0, y_0)>`` for the
+    start.  The two agree as a fixed grid refines.  Each costs one extra
+    evaluation of ``func`` per output time, and only when ``t`` asks for it.
+    With ``event_fn`` only ``t[0]`` is read, so only ``t[0]`` is differentiated.
+
     Higher-order differentiation works: the fused step opts into
     graph-recording backward, so ``create_graph=True`` through a solve behaves
     exactly as it would for the unfused arithmetic.
@@ -515,89 +656,35 @@ def odeint(
 
     scalar, check = _make_callbacks(y0)
 
+    # A time grid that asks for a gradient is kept in the graph.  A fixed-step
+    # solve that steps on that grid differentiates its own arithmetic; every
+    # other route attaches the exact solution's sensitivity to the times.
+    times = TimeGrid.of(t, grid)
+    probe = RhsProbe(func, scalar, check)
+    problem = _Problem(func, y0, grid, tableau, scalar, check, rtol, atol, options)
+    exact_steps = _differentiable_steps(times, event_fn, multistep, tableau, options)
+    if times is not None and not exact_steps:
+        problem = replace(problem, y0=times.shifted_start(y0, probe))
+
     if event_fn is not None:
         _reject_multistep(method, "event detection")
         _warn_coarse_interpolant(tableau, "the event time")
-        direction = 1.0 if grid[-1] > grid[0] else -1.0
-        event_t, y_event = _event.integrate_until_event(
-            func,
-            y0,
-            grid[0],
-            event_fn,
-            tableau,
-            scalar,
-            check,
-            rtol=rtol,
-            atol=atol,
-            options=options,
-            direction=direction,
-        )
-        # Bisection compares signs, so the event time arrives with no graph
-        # behind it.  It is still a differentiable function of everything the
-        # trajectory depends on, and this ties it back to the state at the
-        # event, which is the tensor that carries that graph.
-        event_time, y_event = _event.differentiable_event_time(
-            scalar(event_t), y_event, func, event_fn
-        )
-        pair = _event.solution_pair(y0, y_event)
-        return event_time, _unpack(pair, shapes)
+        event_time, y_event = problem.run_event(event_fn)
+        return event_time, _unpack(_event.solution_pair(y0, y_event), shapes)
 
-    if multistep is not None:
-        y, trajectory = _multistep.integrate(
-            func,
-            y0,
-            grid,
-            multistep,
-            scalar,
-            check,
-            rtol=rtol,
-            atol=atol,
-            options=options,
-            return_trajectory=return_trajectory,
-        )
-    elif tableau.is_implicit:
-        y, trajectory = _implicit.integrate(
-            func,
-            y0,
-            grid,
-            tableau,
-            scalar,
-            check,
-            options=options,
-            return_trajectory=return_trajectory,
-        )
-    elif tableau.is_adaptive:
-        y, trajectory = _adaptive.integrate(
-            func,
-            y0,
-            grid,
-            tableau,
-            scalar,
-            check,
-            rtol=rtol,
-            atol=atol,
-            options=options,
-            return_trajectory=return_trajectory,
-        )
-    else:
-        y, trajectory = _fixed.integrate(
-            func,
-            y0,
-            grid,
-            tableau,
-            scalar,
-            check,
-            options=options,
-            return_trajectory=return_trajectory,
-        )
-
+    y, trajectory = problem.run_grid(multistep, times if exact_steps else None, return_trajectory)
     if not return_trajectory:
+        if times is not None and not exact_steps:
+            y = times.tie_final(y, y0, probe)
         return y if shapes is None else tuple(_flatten.unflatten(y, shapes))
     # Promotion can lift the state above y0's dtype (a float64 RHS over a
     # float32 y0), which would leave trajectory[0] as the odd one out and
     # make the stack fail.  Settle the whole trajectory on the final dtype.
     trajectory = [s if s.dtype == y.dtype else s.to(y.dtype) for s in trajectory]
-    return _unpack(lucid.stack(trajectory, dim=0), shapes)
+    stacked = lucid.stack(trajectory, dim=0)
+    if times is not None and not exact_steps:
+        stacked = times.tie_outputs(stacked, y0, probe)
+    return _unpack(stacked, shapes)
 
 
 def odeint_dense(
@@ -665,6 +752,9 @@ def odeint_dense(
     tensors the size of the state.  A long solve over a large state is
     therefore much heavier than :func:`odeint` with ``return_trajectory=False``.
 
+    The returned function accepts a query-time tensor that requires gradient,
+    and ``d state / d t`` is then ``f(t, state)``.
+
     A fixed-step method interpolates with whatever ``options["interp"]``
     says, and without ``step_size`` its grid is the single interval
     ``[t0, t1]`` — usually far too coarse, so pass one.
@@ -712,6 +802,8 @@ def odeint_dense(
     starts = [min(a, b) for a, b, _ in ordered]
     low, high = min(t0, t1), max(t0, t1)
 
+    probe = RhsProbe(func, scalar, check)
+
     def dense(t: float | Tensor) -> State:
         value = float(t.item()) if isinstance(t, Tensor) else float(t)
         if not math.isfinite(value):
@@ -724,6 +816,8 @@ def odeint_dense(
         index = min(max(index, 0), len(ordered) - 1)
         seg_t0, seg_t1, coeffs = ordered[index]
         state = _fused.poly_eval(coeffs, seg_t0, seg_t1, value)
+        if isinstance(t, Tensor) and t.requires_grad and lucid.is_grad_enabled():
+            state = probe.tie(value, state, t.to(dtype=state.dtype, device=state.device))
         return state if shapes is None else tuple(_flatten.unflatten(state, shapes))
 
     return dense
@@ -787,6 +881,10 @@ def odeint_event(
     step that brackets it, so it costs event-function calls but no extra
     right-hand-side evaluations.
 
+    ``t0`` may be a tensor that requires gradient; the event time and the
+    state at it then move with the start time (``d event_t / d t0 = 1`` for an
+    autonomous system).
+
     ``event_t`` is differentiable, though bisection itself is not: the event
     time is pinned by ``g(t*, y(t*)) = 0``, and differentiating that identity
     routes its gradient onto the state at the event, which does carry a graph.
@@ -814,6 +912,12 @@ def odeint_event(
     start = float(t0.item()) if isinstance(t0, Tensor) else float(t0)
     # Only the first entry is read; the second exists to state the search
     # direction, which is the one thing the grid still carries.
-    grid = [start, start - 1.0] if reverse_time else [start, start + 1.0]
+    offset = -1.0 if reverse_time else 1.0
+    grid: Tensor | list[float] = [start, start + offset]
+    if isinstance(t0, Tensor) and t0.requires_grad:
+        # A start time that asks for a gradient has to stay a tensor on its
+        # way into ``odeint``, which is where it is tied to the trajectory.
+        first = t0.reshape(1)
+        grid = lucid.cat([first, first + offset], dim=0)
     result = odeint_interface(func, y0, grid, event_fn=event_fn, **kwargs)
     return cast(tuple[Tensor, State], result)

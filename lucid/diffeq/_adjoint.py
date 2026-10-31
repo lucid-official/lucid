@@ -29,8 +29,16 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.diffeq import _flatten
-from lucid.diffeq._solvers import _pack_state, _resolve_grid, _validate_method, _unpack, odeint
+from lucid.diffeq._solvers import (
+    _make_callbacks,
+    _pack_state,
+    _resolve_grid,
+    _unpack,
+    _validate_method,
+    odeint,
+)
 from lucid.diffeq._tableau import ButcherTableau
+from lucid.diffeq._timegrad import RhsProbe, TimeGrid
 from lucid.diffeq._typing import RightHandSide, State
 
 __all__ = ["odeint_adjoint"]
@@ -282,6 +290,46 @@ def _resolve_adjoint_norm(
     return resolved
 
 
+def _apply(y0: Tensor, params: tuple[Tensor, ...], config: _Config) -> Tensor:
+    """Apply the adjoint solve; ``apply`` is typed for tuples, this op returns one."""
+    return cast(Tensor, _AdjointSolve.apply(y0, *params, config=config))
+
+
+def _solve(
+    t: Tensor | Sequence[float], y0: Tensor, params: tuple[Tensor, ...], config: _Config
+) -> Tensor:
+    """Run the adjoint solve, tying ``t`` into the graph when it asks for a gradient.
+
+    Parameters
+    ----------
+    t : Tensor or sequence of float
+        The caller's grid.
+    y0 : Tensor
+        Flat initial state.
+    params : tuple of Tensor
+        Parameters being differentiated.
+    config : _Config
+        The solve's configuration.
+
+    Returns
+    -------
+    Tensor
+        The trajectory, shape ``(len(t), *y0.shape)``.
+
+    Notes
+    -----
+    A grid that asks for a gradient reaches the adjoint solve as a shifted
+    start state and as edges on the output rows -- see ``_timegrad``.  The
+    backward pass itself never sees ``t``.
+    """
+    times = TimeGrid.of(t, config.grid)
+    if times is None:
+        return _apply(y0, params, config)
+    probe = RhsProbe(config.func, *_make_callbacks(y0))
+    ys = _apply(times.shifted_start(y0, probe), params, config)
+    return times.tie_outputs(ys, y0, probe)
+
+
 def odeint_adjoint(
     func: Callable[..., object],
     y0: State,
@@ -366,9 +414,10 @@ def odeint_adjoint(
     vector-Jacobian product through ``func``, so expect roughly a doubling
     of solve time on top of the backward passes.
 
-    Gradients with respect to ``t`` are not produced.  ``t`` is read to the
-    host once as an integration grid throughout ``lucid.diffeq``, so it is
-    not differentiable in :func:`odeint` either.
+    A ``t`` that requires gradient receives one: ``dL/dt_i = <dL/dy_i,
+    f(t_i, y_i)>`` at an output time and ``-<a(t_0), f(t_0, y_0)>`` at the
+    start, with ``a`` the adjoint -- the exact solution's sensitivity, at one
+    extra ``func`` call per output time.
 
     Examples
     --------
@@ -412,6 +461,5 @@ def odeint_adjoint(
         ),
         n_params=len(params),
     )
-    # ``apply`` is typed to allow a tuple of outputs; this op returns one.
-    ys = cast(Tensor, _AdjointSolve.apply(flat_y0, *params, config=config))
+    ys = _solve(t, flat_y0, params, config)
     return _unpack(ys, shapes)

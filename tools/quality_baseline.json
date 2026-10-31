@@ -1950,7 +1950,7 @@
     "lucid/diffeq/_fixed.py": 1,
     "lucid/diffeq/_implicit.py": 25,
     "lucid/diffeq/_multistep.py": 6,
-    "lucid/diffeq/_solvers.py": 177,
+    "lucid/diffeq/_solvers.py": 141,
     "lucid/fft/__init__.py": 7,
     "lucid/linalg/__init__.py": 105,
     "lucid/models/_auto.py": 4,
