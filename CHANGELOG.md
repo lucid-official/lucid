@@ -145,6 +145,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Transformer.__init__ ends with xavier _reset_parameters
 
+- device axis reads a self-moving container's dtype from its data
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -1576,8 +1576,13 @@ class DeviceAxis(Axis):
                         # float32 input, which is what makes them comparable.
                         # Narrowed *before* the move, not after: ``.to(metal)``
                         # on a float64 tensor is the call that raises, so a
-                        # cast afterwards never runs.
-                        narrowed = a.to(lucid.float32) if str(a.dtype).endswith("float64") else a
+                        # cast afterwards never runs.  A container that moves
+                        # itself (``PackedSequence``) has no ``dtype`` of its
+                        # own; its tensor is ``.data``.
+                        dtype = getattr(a, "dtype", None) or getattr(
+                            getattr(a, "data", None), "dtype", None
+                        )
+                        narrowed = a.to(lucid.float32) if str(dtype).endswith("float64") else a
                         args.append(narrowed.to(device))
                 else:
                     args.append(a)
