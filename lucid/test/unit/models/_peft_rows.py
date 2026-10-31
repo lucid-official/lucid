@@ -7,8 +7,9 @@ added there is a row here.  The rest are the families those files leave to
 their own tests, with the config and inputs those tests use.
 
 What distinguishes a row from the common case is declared apart from it, by
-``model_type``: ``_GAPS`` for a family LoRA cannot adapt yet, ``_UNREACHED``
-for adapters the row's forward leaves without a gradient on purpose.
+``model_type``: ``_GAPS`` for a family LoRA cannot adapt yet.  Every adapter a
+row takes must get a gradient — an EMA target network or an auxiliary one is
+left out by the type's default instead (``DEFAULT_LORA_EXCLUDE_MODULES``).
 """
 
 import dataclasses
@@ -302,12 +303,12 @@ _GENERATIVE: Final[list[ZooRow]] = [
     ),
     _row(
         "planet",
-        dict(
-            action_dim=2, stoch_size=4, deter_size=8, hidden_size=8, cnn_depth=4, reward_hidden=8
-        ),
+        dict(action_dim=2, stoch_size=4, deter_size=8, hidden_size=8, cnn_depth=4, reward_hidden=8),
         _call(_randn(2, 3, 3, 64, 64), _randn(2, 3, 2)),
     ),
-    _row("diamond", _DIAMOND, _call(_randn(2, 4, 3, 16, 16), _zeros_int(2, 4), _randn(2, 3, 16, 16))),
+    _row(
+        "diamond", _DIAMOND, _call(_randn(2, 4, 3, 16, 16), _zeros_int(2, 4), _randn(2, 3, 16, 16))
+    ),
     _row("genie", _GENIE, _call(_rand(2, 4, 3, 8, 8))),
     _row("clip_vit_base_32", _CLIP, _call(_randn(2, 3, 16, 16), _zeros_int(2, 8))),
 ]
@@ -356,24 +357,13 @@ def _losses() -> list[ZooRow]:
 #: Families LoRA cannot adapt yet, and the exact piece that is missing; empty while every row passes.
 _GAPS: Final[Mapping[str, Gap]] = {}
 
-#: Adapters the row's forward leaves without a gradient on purpose.
-_EMA_TARGET: Final = (".target_encoder.",)
-_UNREACHED: Final[Mapping[str, tuple[str, ...]]] = {
-    "ijepa": _EMA_TARGET,
-    "vjepa": _EMA_TARGET,
-    "vjepa2": _EMA_TARGET,
-    "diamond": (".reward_end.", ".actor_critic."),
-}
-
 
 def _from_cases() -> list[ZooRow]:
     return [ZooRow.from_case(case) for case in CASES]
 
 
 def _distinguished(row: ZooRow) -> ZooRow:
-    return dataclasses.replace(
-        row, gap=_GAPS.get(row.model_type), unreached=_UNREACHED.get(row.model_type, ())
-    )
+    return dataclasses.replace(row, gap=_GAPS.get(row.model_type))
 
 
 ROWS: Final[Mapping[str, ZooRow]] = collect(

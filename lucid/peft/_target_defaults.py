@@ -16,9 +16,18 @@ out (a grouped LoRA convolution cannot be merged), and so is a name that
 also lands on a wrapper module the adapter has no layer for.
 ``lucid/test/unit/models/test_peft_zoo.py`` builds every registered
 factory without allocating and checks both, and runs one factory of each
-type end to end.  ```neural_ode`` has no module row: its vector
-field holds raw parameters, with no ``nn.Linear`` or convolution to adapt, so
-its default is ``DEFAULT_LORA_TARGET_PARAMETERS``.
+type end to end.  A model with an exponential-moving-average target network
+(the JEPAs) or an auxiliary one (diamond's reward and actor) lists it in
+``DEFAULT_LORA_EXCLUDE_MODULES``, and the default is spelled out in full names
+outside it.  ``neural_ode`` has no module row: its vector field holds raw
+parameters, with no ``nn.Linear`` or convolution to adapt, so its default is
+``DEFAULT_LORA_TARGET_PARAMETERS``.
+
+Grouped and depthwise convolutions (``groups > 1``) are left out of every row
+on purpose: a rank-:math:`r` update mixes channels across groups, which one
+grouped kernel cannot hold, so such a layer adapts in the forward pass but its
+adapter cannot be merged (the reference's convolution LoRA has the same
+restriction).
 """
 
 from collections.abc import Mapping
@@ -26,6 +35,7 @@ from types import MappingProxyType
 from typing import Final
 
 import lucid.nn as nn
+from lucid.peft._targeting import _suffix_match
 
 
 def _names(*names: str) -> frozenset[str]:
@@ -146,6 +156,21 @@ DEFAULT_LORA_TARGET_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingPro
     {"neural_ode": _names("field.w", "field.u")}
 )
 
+_EMA_TARGET: Final = _names("target_encoder")
+
+#: ``model_type`` → the sub-networks a default adapter never goes into, each by the name of the
+#: module that roots it: an exponential-moving-average target network is written by averaging the
+#: live one and no forward trains it, and an auxiliary network is not the model's own.  A default
+#: row names layers by suffix, so a name here removes a whole subtree.  Read-only.
+DEFAULT_LORA_EXCLUDE_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {
+        "ijepa": _EMA_TARGET,
+        "vjepa": _EMA_TARGET,
+        "vjepa2": _EMA_TARGET,
+        "diamond": _names("reward_end", "actor_critic"),
+    }
+)
+
 #: The model type of a module that carries none, as the reference spells it.
 _UNKNOWN_MODEL_TYPE: Final = "custom"
 
@@ -180,4 +205,19 @@ def _default_target_modules(
             f"regex, or 'all-linear'.  There is no default for model type {model_type!r} "
             f"(the defaults cover {', '.join(sorted(table))})."
         )
-    return names
+    return _outside(model, names, DEFAULT_LORA_EXCLUDE_MODULES.get(model_type, frozenset()))
+
+
+def _outside(model: nn.Module, names: frozenset[str], skipped: frozenset[str]) -> frozenset[str]:
+    """The modules of ``model`` that ``names`` reach outside the ``skipped`` subtrees, by full name.
+
+    Spelled out in full, as ``"all-linear"`` is, because a suffix cannot say "except under".
+    With nothing to skip, ``names`` are returned as they are.
+    """
+    if not skipped:
+        return names
+    return frozenset(
+        key
+        for key, _ in model.named_modules()
+        if key and _suffix_match(key, names) and skipped.isdisjoint(key.split("."))
+    )

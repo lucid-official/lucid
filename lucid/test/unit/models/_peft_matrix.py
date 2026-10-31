@@ -43,6 +43,7 @@ from lucid.peft import LoraConfig, PeftModel, get_peft_model
 from lucid.peft._target_defaults import (
     DEFAULT_LORA_TARGET_MODULES,
     DEFAULT_LORA_TARGET_PARAMETERS,
+    _default_target_modules,
 )
 from lucid.peft._targeting import _suffix_match
 
@@ -90,9 +91,6 @@ class ZooRow:
     factory: str
     overrides: Mapping[str, Any]
     inputs: Callable[[], Call]
-    #: Module-name parts whose adapters get no gradient by design: an EMA target network, or a
-    #: sub-network the row's forward does not call.
-    unreached: tuple[str, ...] = ()
     gap: Gap | None = None
     #: Over 100M parameters at its paper size: left to ``-m heavy``.
     heavy: bool = False
@@ -238,10 +236,8 @@ class Trial:
         trainable = [n for n, p in named if p.requires_grad]
         assert trainable and all(owned_by_adapter(f".{n}.") for n in trainable), trainable[:4]
         scalar(self.forward(self.peft)).backward()
-        unreached = self.row.unreached
         missing = [n for n, p in named if p.requires_grad and p.grad is None]
-        stray = [n for n in missing if not any(part in n for part in unreached)]
-        assert not stray, f"{len(stray)} adapter parameters got no gradient: {stray[:4]}"
+        assert not missing, f"{len(missing)} adapter parameters got no gradient: {missing[:4]}"
         loose = [n for n, p in named if not p.requires_grad and p.grad is not None]
         assert not loose, f"base parameters got a gradient: {loose[:4]}"
         broken = [
@@ -301,9 +297,10 @@ def default_problems(factory: str) -> list[str]:
     every module it reaches is one LoRA adapts and can merge.
     """
     entry = _REGISTRY[factory]
-    names = DEFAULT_LORA_TARGET_MODULES.get(entry.model_type, frozenset())
     with shadow_alloc():
         model = entry.factory()
+    parameters = DEFAULT_LORA_TARGET_PARAMETERS.get(entry.model_type, frozenset())
+    names = _default_target_modules(model, DEFAULT_LORA_TARGET_MODULES, parameters)
     reached = [(n, m) for n, m in model.named_modules() if n and _suffix_match(n, names)]
     problems = [f"{n}: {why}" for n, m in reached if (why := _refusal(m)) is not None]
     if not reached and entry.model_type not in DEFAULT_LORA_TARGET_PARAMETERS:

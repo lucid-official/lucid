@@ -17,7 +17,11 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.peft import LoraConfig, LoraModel, get_peft_model, inject_adapter_in_model
-from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES
+from lucid.peft._target_defaults import (
+    DEFAULT_LORA_EXCLUDE_MODULES,
+    DEFAULT_LORA_TARGET_MODULES,
+    _default_target_modules,
+)
 
 
 class _Attention(nn.Module):
@@ -188,3 +192,47 @@ class TestTheParameterDefault:
         peft = get_peft_model(_Encoder("bert"), LoraConfig(r=2))
         assert peft.base_model.targeted_parameter_names == []
         assert peft.peft_config["default"].target_modules == {"query", "value"}
+
+
+class _Block(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.qkv = nn.Linear(8, 24)
+
+
+class _WithTarget(nn.Module):
+    """A model with an EMA target network beside the live one, as the JEPAs have."""
+
+    def __init__(self, model_type: str) -> None:
+        super().__init__()
+        self.config = types.SimpleNamespace(model_type=model_type)
+        self.encoder = nn.ModuleList([_Block(), _Block()])
+        self.target_encoder = nn.ModuleList([_Block(), _Block()])
+
+
+class TestTheExcludeTable:
+    def test_it_is_read_only_and_every_type_in_it_has_a_default_row(self) -> None:
+        with pytest.raises(TypeError):
+            DEFAULT_LORA_EXCLUDE_MODULES["ijepa"] = frozenset()  # type: ignore[index]
+        assert set(DEFAULT_LORA_EXCLUDE_MODULES) <= set(DEFAULT_LORA_TARGET_MODULES)
+        for model_type in ("ijepa", "vjepa", "vjepa2"):
+            assert DEFAULT_LORA_EXCLUDE_MODULES[model_type] == {"target_encoder"}
+
+    def test_the_default_is_spelled_out_in_full_names_outside_the_subtree(self) -> None:
+        model = _WithTarget("ijepa")
+        names = _default_target_modules(model, DEFAULT_LORA_TARGET_MODULES)
+        assert names == {"encoder.0.qkv", "encoder.1.qkv"}
+
+    def test_a_type_with_nothing_to_skip_keeps_its_names_as_they_are(self) -> None:
+        assert _default_target_modules(_Encoder("bert"), DEFAULT_LORA_TARGET_MODULES) == {
+            "query",
+            "value",
+        }
+
+    def test_the_adapter_goes_into_the_live_network_only(self) -> None:
+        peft = get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2))
+        assert sorted(peft.base_model.targeted_module_names) == ["encoder.0.qkv", "encoder.1.qkv"]
+
+    def test_a_name_the_user_gives_is_not_filtered(self) -> None:
+        peft = get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2, target_modules=["qkv"]))
+        assert len(peft.base_model.targeted_module_names) == 4
