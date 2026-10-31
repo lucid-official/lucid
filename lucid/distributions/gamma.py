@@ -69,8 +69,15 @@ def _sample_standard_log_gamma(concentration: Tensor, sample_shape: tuple[int, .
     d = alpha_eff - 1.0 / 3.0
     c = 1.0 / (9.0 * d).sqrt()
 
-    accepted = lucid.zeros(out_shape, dtype=alpha.dtype, device=alpha.device)
-    has_sample = lucid.zeros(out_shape, dtype=alpha.dtype, device=alpha.device)
+    # Every round is independent of the others: the first round that accepts
+    # wins, picked below by a ``where`` chain in which each node is read once.
+    # Carrying an "accepted so far" mask from round to round instead makes
+    # every round read it twice, and the Metal graph compiler walks those
+    # uses without memoising them -- compile time doubles with each round
+    # (56 s for 8 rounds) -- so the rounds must not feed one another.
+    rounds: list[tuple[Tensor, Tensor]] = []
+    traced = _C_engine.compile.current_tracer() is not None
+    any_accepted: Tensor | None = None
 
     for _ in range(_MAX_GAMMA_RETRIES):
         z = lucid.randn(*out_shape, dtype=alpha.dtype, device=alpha.device)
@@ -81,16 +88,17 @@ def _sample_standard_log_gamma(concentration: Tensor, sample_shape: tuple[int, .
         v_safe = v.clip(1e-30, float("inf"))
         log_v = v_safe.log()
         condition = (v > 0) & (u.log() < 0.5 * z * z + d - d * v + d * log_v)
-        new_accept = condition & (has_sample == 0)
-        new_mask = new_accept.to(alpha.dtype)
-        accepted = accepted + new_mask * d * v
-        has_sample = has_sample + new_mask
-        if _C_engine.compile.current_tracer() is None and bool((has_sample == 1).all().item()):
-            break
+        rounds.append((condition, d * v))
+        if not traced:
+            any_accepted = condition if any_accepted is None else any_accepted | condition
+            if bool(any_accepted.all().item()):
+                break
 
     # A cell no round accepted (odds below 1e-10) takes d, near the mode of
     # Gamma(α_eff), rather than 0: the logarithm of 0 would be -inf.
-    draw = lucid.where(has_sample > 0, accepted, d)
+    draw = d
+    for condition, value in reversed(rounds):
+        draw = lucid.where(condition, value, draw)
     # The α<1 boost x_α = x_{α+1} · U^{1/α}, as a sum of logarithms; a no-op
     # (boost = 0) when α ≥ 1.  α is floored so that 1/α stays finite.
     log_u = lucid.rand(*out_shape, dtype=alpha.dtype, device=alpha.device).clip(tiny, 1.0).log()

@@ -187,6 +187,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - clip_grad norms accumulate in float32, take a Tensor (LCD-778)
 
+- unchain Gamma sampler rounds; Metal compile 56s->1s
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
