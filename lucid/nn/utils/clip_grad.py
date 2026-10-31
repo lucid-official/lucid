@@ -3,90 +3,223 @@ Gradient clipping utilities.
 All computation goes through the C++ engine — no numpy.
 """
 
-from typing import Iterable, TYPE_CHECKING, cast
+from abc import ABC, abstractmethod
+from typing import Iterable, TYPE_CHECKING, override
 import math
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._factories.creation import zeros
 from lucid.autograd._grad_inplace import write_grad_
+from lucid.nn.utils._checks import _as_tensor_list
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
-    from lucid.nn.parameter import Parameter
 
 
 _D = _C_engine.Dtype
 _NORMABLE = frozenset({_D.F16, _D.BF16, _D.F32, _D.F64, _D.C64})
+_REAL_OF_COMPLEX = {_D.C64: _D.F32}
+
+_Group = list[_C_engine.TensorImpl]
 
 
-def _norm_work_dtype(impls: list[_C_engine.TensorImpl], amp_active: bool) -> _C_engine.Dtype:
-    dt0 = impls[0].dtype
-    if any(i.dtype == _D.F64 for i in impls):
-        return _D.F64
-    if amp_active or any(i.dtype != dt0 for i in impls):
-        return _D.F32
-    return dt0
+def _by_device(impls: _Group) -> dict[_C_engine.Device, _Group]:
+    """``impls`` split by device, first-seen order.
+
+    A tensor is reduced where it lives; only the per-device scalar is read back.
+    Stacking tensors of different devices raised ``DeviceMismatch``.
+    """
+    groups: dict[_C_engine.Device, _Group] = {}
+    for impl in impls:
+        groups.setdefault(impl.device, []).append(impl)
+    return groups
 
 
-def _as_work(impl: _C_engine.TensorImpl, dt: _C_engine.Dtype) -> _C_engine.TensorImpl:
+def _group_dtype(group: _Group) -> _C_engine.Dtype:
+    """The dtype a group's norm accumulates in.
+
+    ``float32`` for everything below it: the reference's half-precision norm
+    kernels accumulate in ``float32`` too, and squaring in ``float16``
+    overflows at 256 (``|g| = 300`` summed to ``inf`` and zeroed the gradients).
+    """
+    return _D.F64 if any(i.dtype == _D.F64 for i in group) else _D.F32
+
+
+def _magnitude(
+    impl: _C_engine.TensorImpl, dt: _C_engine.Dtype, take_abs: bool
+) -> _C_engine.TensorImpl:
+    """``|impl|`` (or ``impl`` itself when ``take_abs`` is off and it is real) as ``dt``."""
+    if take_abs or impl.dtype in _REAL_OF_COMPLEX:
+        impl = _C_engine.abs(impl)
     return impl if impl.dtype == dt else _C_engine.astype(impl, dt)
 
 
-def _inf_norm(impls: list[_C_engine.TensorImpl], dt: _C_engine.Dtype) -> float:
-    norms = [
-        _C_engine.max(_C_engine.abs(_as_work(i, dt)), [], False)
-        for i in impls
-        if math.prod(i.shape) != 0
-    ]
-    if not norms:
-        return float("-inf")
-    joined = norms[0] if len(norms) == 1 else _C_engine.max(_C_engine.stack(norms, 0), [0], False)
-    return float(_wrap(joined).item())
+def _item(impl: _C_engine.TensorImpl) -> float:
+    return float(_wrap(impl).item())
 
 
-def _lp_term(
-    impl: _C_engine.TensorImpl, dt: _C_engine.Dtype, norm_type: float
-) -> _C_engine.TensorImpl:
-    """The entries of ``impl`` as they enter the :math:`\\ell_p` sum."""
-    work = _as_work(impl, dt)
-    if norm_type == 2.0 and dt != _D.C64:
-        return _C_engine.square(work)
+def _safe_root(value: float, order: float) -> float:
+    """``value ** (1 / order)`` where Python would raise instead of answering.
+
+    ``0 ** negative`` is ``inf`` and an overflowing power is ``inf``, as in the
+    float arithmetic the reference runs.
+    """
+    if order == 2.0:
+        return math.sqrt(value)
+    try:
+        return math.pow(value, 1.0 / order)
+    except ValueError:  # 0 ** negative
+        return math.inf
+    except OverflowError:  # past the float range
+        return math.inf
+
+
+class _NormOrder(ABC):
+    """One order :math:`p` of the joint norm, reduced device by device.
+
+    A norm over tensors that live on several devices is the combination of
+    one partial result per device, so each order says how to take a partial
+    from a group on one device, how partials combine, and how the combined
+    value becomes the norm.
+    """
+
+    @abstractmethod
+    def partial(self, group: _Group, dt: _C_engine.Dtype) -> float:
+        """The reduction of the tensors of ``group``, all on one device."""
+
+    @abstractmethod
+    def combine(self, partials: list[float]) -> float:
+        """The reduction of per-device partial results."""
+
+    def finish(self, value: float) -> float:
+        """The norm, given the combined reduction."""
+        return value
+
+
+class _Extremum(_NormOrder):
+    """:math:`\\pm\\infty` orders: the largest / smallest magnitude."""
+
+    def __init__(self, largest: bool) -> None:
+        self._largest = largest
+
+    @override
+    def partial(self, group: _Group, dt: _C_engine.Dtype) -> float:
+        reduce = _C_engine.max if self._largest else _C_engine.min
+        # An empty tensor has no extreme; it is left out, not an error.
+        norms = [
+            reduce(_magnitude(i, dt, take_abs=True), [], False)
+            for i in group
+            if math.prod(i.shape) != 0
+        ]
+        if not norms:
+            return self._identity()
+        return _item(norms[0] if len(norms) == 1 else reduce(_C_engine.stack(norms, 0), [0], False))
+
+    def _identity(self) -> float:
+        return -math.inf if self._largest else math.inf
+
+    @override
+    def combine(self, partials: list[float]) -> float:
+        if any(math.isnan(v) for v in partials):
+            return math.nan
+        return max(partials) if self._largest else min(partials)
+
+
+class _NonzeroTensors(_NormOrder):
+    """Order 0: the reference takes the order-0 norm of the per-tensor order-0
+    norms, which counts the tensors holding a non-zero entry."""
+
+    @override
+    def partial(self, group: _Group, dt: _C_engine.Dtype) -> float:
+        counts = [
+            _C_engine.sum(_C_engine.sign(_magnitude(i, dt, take_abs=True)), [], False)
+            for i in group
+        ]
+        return _item(_C_engine.sum(_C_engine.sign(_C_engine.stack(counts, 0)), [0], False))
+
+    @override
+    def combine(self, partials: list[float]) -> float:
+        return sum(partials)
+
+
+class _PowerSum(_NormOrder):
+    """Every other order: :math:`(\\sum |x|^p)^{1/p}`."""
+
+    def __init__(self, order: float) -> None:
+        self._order = order
+
+    @override
+    def partial(self, group: _Group, dt: _C_engine.Dtype) -> float:
+        sums = [_C_engine.sum(self._term(i, dt), [], False) for i in group]
+        return _item(
+            sums[0] if len(sums) == 1 else _C_engine.sum(_C_engine.stack(sums, 0), [0], False)
+        )
+
+    def _term(self, impl: _C_engine.TensorImpl, dt: _C_engine.Dtype) -> _C_engine.TensorImpl:
+        """The entries of ``impl`` as they enter the sum."""
+        if self._order == 2.0:
+            return _C_engine.square(_magnitude(impl, dt, take_abs=False))
+        return _C_engine.pow_scalar(_magnitude(impl, dt, take_abs=True), self._order)
+
+    @override
+    def combine(self, partials: list[float]) -> float:
+        return sum(partials)
+
+    @override
+    def finish(self, value: float) -> float:
+        return _safe_root(value, self._order)
+
+
+def _norm_order(norm_type: float) -> _NormOrder:
+    if math.isinf(norm_type):
+        return _Extremum(largest=norm_type > 0)
     if norm_type == 0.0:
-        # Counts the non-zero entries of one tensor; |x|**0 is 1 even at 0.
-        return _C_engine.sign(_C_engine.abs(work))
-    return _C_engine.pow_scalar(_C_engine.abs(work), norm_type)
+        return _NonzeroTensors()
+    return _PowerSum(norm_type)
 
 
-def _lp_norm(impls: list[_C_engine.TensorImpl], dt: _C_engine.Dtype, norm_type: float) -> float:
-    use_sq = norm_type == 2.0 and dt != _D.C64
-    norms = [_C_engine.sum(_lp_term(i, dt, norm_type), [], False) for i in impls]
-    if norm_type == 0.0:
-        # The reference takes the norm of the per-tensor norms with the same
-        # order, which for order 0 counts the non-zero *tensors*.
-        counted = _C_engine.sum(_C_engine.sign(_C_engine.stack(norms, 0)), [0], False)
-        return float(_wrap(counted).item())
-    acc = norms[0] if len(norms) == 1 else _C_engine.sum(_C_engine.stack(norms, 0), [0], False)
-    val = float(_wrap(acc).item())
-    return math.sqrt(val) if use_sq else val ** (1.0 / norm_type)
-
-
-def _total_norm(
-    impls: list[_C_engine.TensorImpl], norm_type: float, error_if_nonfinite: bool
-) -> float:
+def _total_norm(impls: _Group, norm_type: float, error_if_nonfinite: bool) -> float:
     """The :math:`\\ell_p` norm of ``impls`` taken jointly, as a Python float."""
-    dt = _norm_work_dtype(impls, _C_engine.amp_is_active())
-    total_norm = _inf_norm(impls, dt) if norm_type == math.inf else _lp_norm(impls, dt, norm_type)
-    if error_if_nonfinite and (math.isnan(total_norm) or math.isinf(total_norm)):
+    order = _norm_order(norm_type)
+    partials = [order.partial(g, _group_dtype(g)) for g in _by_device(impls).values()]
+    total_norm = order.finish(order.combine(partials))
+    if error_if_nonfinite and not math.isfinite(total_norm):
         raise RuntimeError(
-            f"The total norm of order {norm_type} for gradients is non-finite ({total_norm})."
+            f"The total norm of order {norm_type} for gradients from "
+            "`parameters` is non-finite, so it cannot be clipped. To disable "
+            "this error and scale the gradients by the non-finite norm anyway, "
+            "set `error_if_nonfinite=False`"
         )
     return total_norm
 
 
-def _scale_clipped_grads(
-    params_with_grad: list[Parameter], grads: list[_C_engine.TensorImpl], clip_coef: float
-) -> None:
+def _norm_tensor(impls: _Group, total_norm: float) -> Tensor:
+    """The 0-d result of a joint norm over ``impls``.
+
+    It lives where the first tensor does and has the dtype the reference's
+    stack of per-tensor norms promotes to (``float16`` beside ``float32`` gives
+    ``float32``; a complex tensor's norm is real).
+    """
+    dt = _REAL_OF_COMPLEX.get(impls[0].dtype, impls[0].dtype)
+    for impl in impls[1:]:
+        dt = _promotion.promote_types(dt, _REAL_OF_COMPLEX.get(impl.dtype, impl.dtype))
+    return _wrap(_C_engine.full([], total_norm, dt, impls[0].device))
+
+
+def _gather_grads(params: list[Tensor]) -> tuple[list[Tensor], _Group]:
+    """The parameters that hold a gradient, and those gradients."""
+    held: list[Tensor] = []
+    grads: _Group = []
+    for p in params:
+        g_impl = p._impl.grad_as_impl() or p._impl.grad_to_tensor()
+        if g_impl is not None:
+            held.append(p)
+            grads.append(g_impl)
+    return held, grads
+
+
+def _scale_clipped_grads(params_with_grad: list[Tensor], grads: _Group, clip_coef: float) -> None:
     amp_active = _C_engine.amp_is_active()
     coefs: dict[tuple[_C_engine.Dtype, _C_engine.Device], _C_engine.TensorImpl] = {}
     for p, g_impl in zip(params_with_grad, grads, strict=True):
@@ -105,10 +238,11 @@ def _scale_clipped_grads(
 
 
 def clip_grad_norm_(
-    parameters: Iterable[Parameter],
+    parameters: Tensor | Iterable[Tensor],
     max_norm: float,
     norm_type: float = 2.0,
     error_if_nonfinite: bool = False,
+    foreach: bool | None = None,
 ) -> Tensor:
     r"""Clip the global gradient norm of ``parameters`` in place.
 
@@ -120,28 +254,33 @@ def clip_grad_norm_(
 
     Parameters
     ----------
-    parameters : iterable of Parameter
-        Parameters whose ``.grad`` should be clipped.  Entries with
-        ``grad is None`` are silently skipped.
+    parameters : Tensor or iterable of Tensor
+        Parameters whose ``.grad`` should be clipped; one ``Tensor`` counts
+        as a one-element list.  Entries with ``grad is None`` are silently
+        skipped.
     max_norm : float
         Maximum allowed norm of the combined gradient vector.  The
         scaling factor never exceeds ``1`` — gradients smaller than
         ``max_norm`` are untouched.
     norm_type : float, optional
         Order :math:`p` of the norm.  Default ``2.0`` (Euclidean);
-        ``math.inf`` is the max-norm over all gradients; ``0`` counts the
-        gradients with a non-zero entry, as the reference does.
+        ``math.inf`` is the max-norm over all gradients and ``-math.inf``
+        the smallest magnitude; ``0`` counts the gradients with a non-zero
+        entry, as the reference does.  Gradients on different devices are
+        reduced where they live.
     error_if_nonfinite : bool, optional
         If ``True``, raise :class:`RuntimeError` when the computed total
         norm is ``inf`` or ``nan`` instead of silently scaling by a
         non-finite coefficient.
+    foreach : bool, optional
+        Accepted for API compatibility; ignored.
 
     Returns
     -------
     Tensor
-        Scalar tensor holding the *pre-clipping* total norm.  Useful for
-        logging the gradient magnitude during training even when no
-        actual clipping took place.
+        Scalar tensor holding the *pre-clipping* total norm, in the dtype
+        the gradients promote to — useful for logging even when nothing was
+        clipped.  Half-precision gradients are summed in ``float32``.
 
     Notes
     -----
@@ -174,14 +313,9 @@ def clip_grad_norm_(
     >>> abs(float(after) - 1.0) < 1e-3          # and after it
     True
     """
-    params = list(parameters)
-    params_with_grad: list[Parameter] = []
-    grads: list[_C_engine.TensorImpl] = []
-    for p in params:
-        g_impl = p._impl.grad_as_impl() or p._impl.grad_to_tensor()
-        if g_impl is not None:
-            params_with_grad.append(p)
-            grads.append(g_impl)
+    del foreach  # reference-signature parity
+    params = _as_tensor_list(parameters, "clip_grad_norm_")
+    params_with_grad, grads = _gather_grads(params)
     if not params_with_grad:
         # Preserve the parameters' device/dtype for the zero-norm result —
         # defaulting to CPU/float32 here breaks multi-device / mixed-precision
@@ -192,22 +326,21 @@ def clip_grad_norm_(
         impl0 = params[0]._impl
         return _wrap(_C_engine.full([], 0.0, impl0.dtype, impl0.device))
 
-    dev = params_with_grad[0]._impl.device
-    dt = params_with_grad[0]._impl.dtype
+    norm_type = float(norm_type)
     total_norm = _total_norm(grads, norm_type, error_if_nonfinite)
 
-    clip_coef = max_norm / (total_norm + 1e-6)
-    if clip_coef < 1.0:
+    clip_coef = float(max_norm) / (total_norm + 1e-6)
+    # ``not >=`` rather than ``<``: a NaN coefficient scales too, as the
+    # reference's clamp-then-multiply does.
+    if not clip_coef >= 1.0:
         _scale_clipped_grads(params_with_grad, grads, clip_coef)
 
-    # 0-d, as documented and as the reference framework returns it: a
-
-    # ``(1,)`` norm puts a stray axis into whatever it is stacked or
-    # broadcast with.
-    return _wrap(_C_engine.full([], total_norm, dt, dev))
+    return _norm_tensor(grads, total_norm)
 
 
-def clip_grad_value_(parameters: Iterable[Parameter], clip_value: float) -> None:
+def clip_grad_value_(
+    parameters: Tensor | Iterable[Tensor], clip_value: float, foreach: bool | None = None
+) -> None:
     r"""Clamp every gradient element to :math:`[-\text{clip\_value}, \text{clip\_value}]` in place.
 
     Unlike :func:`clip_grad_norm_`, which preserves the direction of the
@@ -218,12 +351,16 @@ def clip_grad_value_(parameters: Iterable[Parameter], clip_value: float) -> None
 
     Parameters
     ----------
-    parameters : iterable of Parameter
-        Parameters whose ``.grad`` should be clipped.  Entries with
-        ``grad is None`` are skipped.
+    parameters : Tensor or iterable of Tensor
+        Parameters whose ``.grad`` should be clipped; one ``Tensor`` counts
+        as a one-element list.  Entries with ``grad is None`` are skipped.
     clip_value : float
-        Symmetric magnitude bound.  Must be non-negative; gradients are
-        clamped to ``[-clip_value, +clip_value]``.
+        Symmetric magnitude bound; gradients are clamped to
+        ``[-clip_value, +clip_value]``.  A negative value inverts the
+        interval, and every element becomes ``clip_value``, as in the
+        reference.
+    foreach : bool, optional
+        Accepted for API compatibility; ignored.
 
     Returns
     -------
@@ -254,11 +391,14 @@ def clip_grad_value_(parameters: Iterable[Parameter], clip_value: float) -> None
     >>> max(float(p.grad.abs().max()) for p in model.parameters()) <= 0.5
     True
     """
-    for p in parameters:
-        g_impl = p._impl.grad_as_impl() or p._impl.grad_to_tensor()
-        if g_impl is not None:
-            clipped = _C_engine.clip(g_impl, -clip_value, clip_value)
-            write_grad_(p, clipped, "clip_grad_value_")
+    del foreach  # reference-signature parity
+    bound = float(clip_value)
+    # An inverted interval (bound < 0) sends every element to ``bound``; the
+    # engine kernels disagree on one, so it is collapsed to a point here.
+    lower = min(-bound, bound)
+    params_with_grad, grads = _gather_grads(_as_tensor_list(parameters, "clip_grad_value_"))
+    for p, g_impl in zip(params_with_grad, grads, strict=True):
+        write_grad_(p, _C_engine.clip(g_impl, lower, bound), "clip_grad_value_")
 
 
 def get_total_norm(
@@ -324,10 +464,7 @@ def get_total_norm(
     True
     """
     del foreach  # reference-signature parity
-    items: list[Tensor | None] = (
-        [cast("Tensor", tensors)] if _promotion.try_unwrap(tensors) is not None else list(tensors)
-    )
-    impls = [_unwrap(t) for t in items if t is not None]
+    impls = [_unwrap(t) for t in _as_tensor_list(tensors, "get_total_norm", skip_none=True)]
     if not impls:
         return zeros()
     # A norm is a real number, and integer tensors have no norm kernel on
@@ -338,9 +475,8 @@ def get_total_norm(
             raise TypeError(
                 f"get_total_norm: expected floating-point or complex tensors, got {impl.dtype}"
             )
-    total_norm = _total_norm(impls, norm_type, error_if_nonfinite)
     # 0-d, like :func:`clip_grad_norm_`'s result.
-    return _wrap(_C_engine.full([], total_norm, impls[0].dtype, impls[0].device))
+    return _norm_tensor(impls, _total_norm(impls, float(norm_type), error_if_nonfinite))
 
 
 clip_grad_norm = clip_grad_norm_

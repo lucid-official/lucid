@@ -10,10 +10,10 @@ from typing import Iterable
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.nn.parameter import Parameter
+from lucid.nn.utils._checks import _as_tensor_list
 
 
-def parameters_to_vector(parameters: Iterable[Parameter]) -> Tensor:
+def parameters_to_vector(parameters: Tensor | Iterable[Tensor]) -> Tensor:
     r"""Flatten an iterable of parameters into a single 1-D ``Tensor``.
 
     Every parameter is detached, reshaped to 1-D, and concatenated in
@@ -24,8 +24,9 @@ def parameters_to_vector(parameters: Iterable[Parameter]) -> Tensor:
 
     Parameters
     ----------
-    parameters : iterable of Parameter
-        Parameters to flatten.  Each must be a :class:`~lucid._tensor.tensor.Tensor`
+    parameters : Tensor or iterable of Tensor
+        Parameters to flatten; one ``Tensor`` counts as a one-element list.
+        Each must be a :class:`~lucid._tensor.tensor.Tensor`
         (or subclass).  All entries must share device and dtype; a mismatch
         raises :class:`ValueError`.
 
@@ -65,9 +66,7 @@ def parameters_to_vector(parameters: Iterable[Parameter]) -> Tensor:
     flats: list[Tensor] = []
     target_device: str | None = None
     target_dtype: object | None = None
-    for p in parameters:
-        if not isinstance(p, Tensor):
-            raise TypeError(f"expected Parameter or Tensor, got {type(p).__name__}")
+    for p in _as_tensor_list(parameters, "parameters_to_vector"):
         if target_device is None:
             target_device = str(p._impl.device)
             target_dtype = p.dtype
@@ -84,7 +83,7 @@ def parameters_to_vector(parameters: Iterable[Parameter]) -> Tensor:
     return lucid.cat(flats)
 
 
-def vector_to_parameters(vec: Tensor, parameters: Iterable[Parameter]) -> None:
+def vector_to_parameters(vec: Tensor, parameters: Tensor | Iterable[Tensor]) -> None:
     r"""Copy a flat 1-D tensor back into the supplied parameters in place.
 
     Inverse of :func:`parameters_to_vector`.  ``vec`` is sliced according
@@ -99,8 +98,9 @@ def vector_to_parameters(vec: Tensor, parameters: Iterable[Parameter]) -> None:
         1-D source tensor.  Length must equal :math:`\sum_k \text{numel}(p_k)`
         for the supplied parameter iterator; mismatches raise
         :class:`ValueError`.
-    parameters : iterable of Parameter
-        Destination parameters.  Each parameter's storage is overwritten
+    parameters : Tensor or iterable of Tensor
+        Destination parameters; one ``Tensor`` counts as a one-element
+        list.  Each parameter's storage is overwritten
         with the matching slice of ``vec``, reshaped to the parameter's
         own shape.
 
@@ -138,9 +138,13 @@ def vector_to_parameters(vec: Tensor, parameters: Iterable[Parameter]) -> None:
     >>> bool((parameters_to_vector(model.parameters()) == v).all())
     True
     """
+    if not isinstance(vec, Tensor):
+        raise TypeError(
+            f"vector_to_parameters: expected a Tensor for vec, got {type(vec).__name__}"
+        )
     if len(vec.shape) != 1:
         raise ValueError(f"vec must be 1-D, got shape {tuple(vec.shape)}")
-    params: list[Parameter] = list(parameters)
+    params: list[Tensor] = _as_tensor_list(parameters, "vector_to_parameters")
     expected_total: int = sum(int(p._impl.numel()) for p in params)
     if int(vec._impl.numel()) != expected_total:
         raise ValueError(
