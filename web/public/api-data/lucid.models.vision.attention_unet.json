@@ -3,7 +3,7 @@
   "name": "attention_unet",
   "path": "lucid.models.vision.attention_unet",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/__init__.py#L1",
   "members": [
     {
       "name": "AttentionUNetConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "AttentionUNetConfig(num_classes: int = 2, spatial_dims: int = 2, in_channels: int = 1, base_channels: int = 64, depth: int = 4, bilinear: bool = False, deep_supervision: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 2, spatial_dims: int = 2, in_channels: int = 1, base_channels: int = 64, depth: int = 4, bilinear: bool = False, deep_supervision: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -64,7 +64,7 @@
       ],
       "labels": [],
       "signature": "AttentionUNetForSemanticSegmentation(config: AttentionUNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_model.py#L251",
+      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_model.py#L251",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +73,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: AttentionUNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_model.py#L322",
+          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_model.py#L322",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -95,7 +95,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, targets: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_model.py#L389",
+          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_model.py#L389",
           "subcategory": "model",
           "summary": "Run Attention U-Net.",
           "extended": null,
@@ -179,7 +179,7 @@
       "kind": "function",
       "labels": [],
       "signature": "attention_unet(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_pretrained.py#L18",
+      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_pretrained.py#L18",
       "subcategory": "pretrained",
       "summary": "Attention U-Net (Oktay et al., MIDL 2018).",
       "extended": "Builds an `AttentionUNetForSemanticSegmentation` with the\nstandard configuration: 4-level encoder / decoder, `base_channels =\n64` (channel schedule 64 -> 128 -> 256 -> 512 -> 1024),\n`in_channels = 1` (medical imaging default), and `num_classes = 2`.\nSoft attention gates on every skip connection suppress irrelevant\nencoder activations.",
@@ -991,7 +991,7 @@
       "kind": "function",
       "labels": [],
       "signature": "attention_unet_3d(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/attention_unet/_pretrained.py#L83",
+      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/vision/attention_unet/_pretrained.py#L83",
       "subcategory": "pretrained",
       "summary": "Attention U-Net, 3-D (Oktay et al., MIDL 2018).",
       "extended": "The rank the paper actually specifies.  Its Implementation Details\nstate \"in contrast to the state-of-the-art CNN segmentation frameworks\n... we propose a 3D-model to capture sufficient semantic context\", and\nevery released network is `Conv3d` / `BatchNorm3d` with trilinear\nresampling — it was built for CT volumes.\n\nIdentical to `attention_unet` in every other respect; only the\nconvolution rank differs, so the attention gate that is the paper's\ncontribution is the same mechanism in both.",

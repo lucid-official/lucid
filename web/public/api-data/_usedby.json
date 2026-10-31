@@ -13162,6 +13162,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.oft._layer"
     },
     {
@@ -16532,6 +16536,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.oft._layer"
     },
     {
@@ -17408,6 +17416,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.oft._config"
     },
     {
@@ -17471,6 +17487,10 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners._prompt._tuner"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
     },
     {
       "kind": "module",
@@ -17895,6 +17915,32 @@
       "module": "lucid.peft"
     }
   ],
+  "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    }
+  ],
+  "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    }
+  ],
+  "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning"
+    }
+  ],
   "lucid.peft.tuners.oft._config.OFTConfig": [
     {
       "kind": "module",
@@ -17960,6 +18006,10 @@
   "lucid.peft.tuners.prompt_tuning._config.PromptTuningConfig": [
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._config"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.prompt_tuning"
     },
     {
@@ -17978,6 +18028,10 @@
     }
   ],
   "lucid.peft.tuners.prompt_tuning._model.PromptEmbedding": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    },
     {
       "kind": "module",
       "module": "lucid.peft.tuners.prompt_tuning"
@@ -18512,6 +18566,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.weights._loading"
     }
   ],
@@ -18519,6 +18577,10 @@
     {
       "kind": "module",
       "module": "lucid.peft._peft_model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
     }
   ],
   "lucid.serialization.save_safetensors": [
