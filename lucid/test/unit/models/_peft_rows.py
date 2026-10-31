@@ -353,14 +353,8 @@ def _losses() -> list[ZooRow]:
 
 # ── what sets a row apart, by ``model_type`` ─────────────────────────────────
 
-#: Families LoRA cannot adapt yet, and the exact piece that is missing.
-_GAPS: Final[Mapping[str, Gap]] = {
-    "tvm": Gap(
-        "forward: TVM syncs its EMA copy by load_state_dict from the live network, and an "
-        "injected network's base_layer/lora_* keys are not the copy's",
-        (RuntimeError,),
-    ),
-}
+#: Families LoRA cannot adapt yet, and the exact piece that is missing; empty while every row passes.
+_GAPS: Final[Mapping[str, Gap]] = {}
 
 #: Adapters the row's forward leaves without a gradient on purpose.
 _EMA_TARGET: Final = (".target_encoder.",)

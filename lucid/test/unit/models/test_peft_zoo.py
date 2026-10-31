@@ -1164,3 +1164,19 @@ def test_a_zoo_model_type_adapts_trains_saves_and_merges(row: ZooRow) -> None:
 @pytest.mark.parametrize("factory", _FACTORIES)
 def test_a_default_reaches_adaptable_layers_in_every_factory_of_its_type(factory: str) -> None:
     assert default_problems(factory) == []
+
+
+def test_tvm_averages_follow_an_adapter_injected_after_they_were_built() -> None:
+    """LCD-759: the EMA copies mirror the live tree, so injecting later restarts them from it."""
+    row = ROWS["tvm"]
+    model = row.build()
+    args, kwargs = row.inputs()
+    before = model.target_network
+    assert not any("lora_" in name for name, _ in before.named_parameters())
+    peft = get_peft_model(model, LoraConfig(r=2, init_lora_weights=False))
+    peft.train()
+    assert any("lora_" in name for name, _ in model.target_network.named_parameters())
+    assert model.target_network is not before
+    model.update_ema()  # pairs the copies' parameters with the live ones by name
+    assert not any(p.requires_grad for p in model.target_network.parameters())
+    peft(*args, **kwargs)

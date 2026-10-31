@@ -25,8 +25,9 @@ a stop-gradient is the other side: the velocity at the landing point,
 read off an exponential moving average of the weights.
 """
 
+import copy
 from dataclasses import dataclass
-from typing import ClassVar, final, override
+from typing import ClassVar, override
 
 import lucid
 import lucid.func
@@ -49,7 +50,6 @@ from lucid.models.generative._common._transformers import (
     unpatchify,
 )
 from lucid.models.generative.tvm._config import TVMConfig
-from lucid.nn.utils import skip_init
 
 __all__ = ["TVMModel", "TVMForImageGeneration", "TVMOutput"]
 
@@ -557,21 +557,6 @@ class TVMModel(PretrainedModel):
         return DiffusionModelOutput(sample=out)
 
 
-@final
-class _AveragedTVM(TVMModel):
-    """The network's structure for one of Algorithm 1's averages.
-
-    An average holds the live network's weights from the moment it exists,
-    so the Lipschitz initialisation — an SVD per linear layer — would be
-    computed only to be overwritten.  Built under ``skip_init`` with that
-    step left out, it costs the allocation and draws no random numbers.
-    """
-
-    @override
-    def _init_weights(self) -> None:
-        """Leave the allocation as it is: the live weights are copied in next."""
-
-
 class TVMForImageGeneration(ImageGenerationModel):
     r"""TVM's objective and its one- and few-step sampler.
 
@@ -636,8 +621,8 @@ class TVMForImageGeneration(ImageGenerationModel):
         # registered as a child, adding the parameter count and the
         # checkpoint of a network no optimiser may touch — twice over.
         self._averages: dict[str, TVMModel] = {}
-        # The network's load count when the averages were built.
-        self._averages_at_load = 0
+        # The network's layout when the averages were built.
+        self._averages_of = self._layout()
 
     # ── the two EMAs of Algorithm 1 ──────────────────────────────────────
 
@@ -649,6 +634,14 @@ class TVMForImageGeneration(ImageGenerationModel):
         if self.config.eval_ema_decay is not None:
             decays["eval"] = self.config.eval_ema_decay
         return decays
+
+    def _layout(self) -> tuple[int, frozenset[str]]:
+        """What the averages must match: the loads into the network and the set of its parameter names.
+
+        A set, not a sequence: averages pair with the live network by name (``update_averages``),
+        so reordering its registry changes nothing they need.
+        """
+        return self.tvm._loads, frozenset(name for name, _ in self.tvm.named_parameters())
 
     def _average(self, name: str) -> TVMModel:
         r"""One average, every average created together on first use.
@@ -667,21 +660,24 @@ class TVMForImageGeneration(ImageGenerationModel):
         live = next(iter(self.tvm.parameters()))
         with untraced():
             # Weights loaded into the network since the averages were built
-            # initialise it again, so the averages restart from them, as at
-            # Algorithm 1's start.  Kept, a fine-tune from a checkpoint read
-            # its first targets off the random initialisation.
-            if self._averages_at_load != self.tvm._loads:
+            # initialise it again, and so does a change of its structure (an
+            # adapter injected after the averages were made): the averages
+            # restart from the live network, as at Algorithm 1's start.  Kept,
+            # a fine-tune from a checkpoint read its first targets off the
+            # random initialisation.
+            if self._averages_of != self._layout():
                 self._averages.clear()
-                self._averages_at_load = self.tvm._loads
+                self._averages_of = self._layout()
             if not self._averages:
-                weights = self.tvm.state_dict()
                 for key in self._decays():
-                    copy = skip_init(_AveragedTVM, self.config)
-                    assert isinstance(copy, _AveragedTVM), "skip_init builds it"
-                    copy.load_state_dict(weights)
-                    for param in copy.parameters():
+                    # A copy of the live module tree, adapters and all: its
+                    # parameters then pair with the live ones by name, whatever
+                    # was injected into the network.  Neither the Lipschitz
+                    # initialisation nor the generator is touched.
+                    average = copy.deepcopy(self.tvm)
+                    for param in average.parameters():
                         param.requires_grad_(False)
-                    self._averages[key] = copy.eval()
+                    self._averages[key] = average.eval()
             average = self._averages[name]
             slow = next(iter(average.parameters()))
             if slow.device != live.device or slow.dtype != live.dtype:
