@@ -32,10 +32,10 @@ sizes as trunks (``T5Model``) and as text-to-text models
 
 import dataclasses
 import enum
-import re
 from collections.abc import Callable
 
 from lucid.nn import Module
+from lucid.peft._convert import t5_reference_name
 from tools.convert_weights._base import (
     Architecture,
     ConversionSpec,
@@ -93,45 +93,20 @@ _VARIANTS: dict[str, tuple[str, str, str, str, str]] = {
     ),
 }
 
-# Sub-layer M of a block, by stack: the decoder has cross-attention in 1.
-_SUBLAYERS = {
-    "encoder": ("self_attention", "feed_forward"),
-    "decoder": ("self_attention", "cross_attention", "feed_forward"),
-}
-_MODULES = {
-    "SelfAttention": "self_attention",
-    "EncDecAttention": "cross_attention",
-    "DenseReluDense": "feed_forward",
-}
-_BLOCK_KEY = re.compile(r"^(encoder|decoder)\.block\.(\d+)\.layer\.(\d+)\.(\w+)\.(.+)$")
-_UNCHANGED = re.compile(r"^(shared\.weight|(encoder|decoder)\.final_layer_norm\.weight)$")
-
 
 def t5_key(src_key: str) -> str | None:
     """Lucid trunk key for a released T5 key; ``None`` drops a tied alias.
 
-    Raises :class:`UnknownSourceKey` for a key the layout above does not
-    describe.
+    The map is ``lucid.peft._convert.t5_reference_name`` — the one adapter
+    files are renamed by, so the two cannot disagree.  Raises
+    :class:`UnknownSourceKey` for a key the layout above does not describe.
     """
     if src_key.endswith(".embed_tokens.weight"):
         return None
-    if _UNCHANGED.match(src_key):
-        return src_key
-    match = _BLOCK_KEY.match(src_key)
-    if match is None:
+    mapped = t5_reference_name(src_key)
+    if mapped is None:
         raise UnknownSourceKey(src_key)
-    stack, block, sublayer, module, tail = match.groups()
-    sublayers = _SUBLAYERS[stack]
-    if int(sublayer) >= len(sublayers):
-        raise UnknownSourceKey(src_key)
-    role = sublayers[int(sublayer)]
-    if module == "layer_norm":
-        return f"{stack}.blocks.{block}.{role}_norm.{tail}"
-    if tail.startswith("relative_attention_bias."):
-        return f"{stack}.{tail}"
-    if _MODULES.get(module) != role:
-        raise UnknownSourceKey(src_key)
-    return f"{stack}.blocks.{block}.{role}.{tail}"
+    return mapped
 
 
 def _jsonable(value: object) -> object:
