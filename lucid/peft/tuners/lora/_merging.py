@@ -1,4 +1,4 @@
-"""How ``add_weighted_adapter`` folds several LoRA adapters into one.
+r"""How ``add_weighted_adapter`` folds several LoRA adapters into one.
 
 A combination type is a class: it states the rank of the adapter it makes
 from the ranks of the adapters it is given, and, layer by layer, the
@@ -10,22 +10,47 @@ runs the class, and a new type is one subclass.
 The new adapter's ``lora_alpha`` is its rank, so its scale is exactly 1:
 every weight and every source adapter's own scale is already inside the
 tensors a strategy returns.
+
+Two families share the registry.  The *factor* types (``linear``, ``ties``,
+``dare_*``, ``magnitude_prune``) merge the sources' ``A`` and ``B`` weights
+each on its own — cheap, and not exact (the product holds cross terms) —
+and need one rank.  The *svd* types (``svd``, ``ties_svd`` …) merge the
+sources' full updates :math:`\Delta W_i` and then keep the best rank-:math:`r`
+factorisation of the result.  Within a family the types differ only in the
+``_Recipe`` — which pruning, and
+whether signs are elected — that builds their merge pipeline.
 """
 
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Final, Literal, override
+from typing import ClassVar, Literal, override
 
 import lucid
 import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
 from lucid.peft.tuners.lora._layer import Linear
+from lucid.peft.tuners.lora._task_vectors import _Recipe, _SignMethod, _TaskMerge
 
 # The strategies are reached through ``_Combination.named``, by the name each
 # registers under — which is also why they are listed here.
-__all__ = ["_Cat", "_Combination", "_CombinationType", "_Linear", "_MergeOptions", "_Svd"]
+__all__ = [
+    "_Cat",
+    "_Combination",
+    "_CombinationType",
+    "_DareLinear",
+    "_DareLinearSvd",
+    "_DareTies",
+    "_DareTiesSvd",
+    "_Linear",
+    "_MagnitudePrune",
+    "_MagnitudePruneSvd",
+    "_MergeOptions",
+    "_Svd",
+    "_Ties",
+    "_TiesSvd",
+]
 
 #: The names ``add_weighted_adapter`` takes — the reference's, built or not.
 _CombinationType = Literal[
@@ -42,21 +67,6 @@ _CombinationType = Literal[
     "magnitude_prune_svd",
 ]
 
-#: Combination types the reference offers that need the task-vector
-#: machinery (trimming, sign election, random drops) lucid.peft does not have.
-_LATER: Final = frozenset(
-    {
-        "ties",
-        "ties_svd",
-        "dare_ties",
-        "dare_linear",
-        "dare_ties_svd",
-        "dare_linear_svd",
-        "magnitude_prune",
-        "magnitude_prune_svd",
-    }
-)
-
 
 @dataclass(frozen=True, slots=True)
 class _MergeOptions:
@@ -69,6 +79,8 @@ class _MergeOptions:
     svd_clamp: float | None
     svd_full_matrices: bool
     svd_driver: str | None
+    density: float | None = None
+    majority_sign_method: _SignMethod = "total"
 
 
 def _pad(weight: Tensor, size: int, dim: int) -> Tensor:
@@ -80,13 +92,6 @@ def _pad(weight: Tensor, size: int, dim: int) -> Tensor:
     shape[dim] = short
     zeros = lucid.zeros(tuple(shape), dtype=weight.dtype, device=weight.device)
     return lucid.cat([weight, zeros], dim=dim)
-
-
-def _weighted_sum(tensors: Sequence[Tensor], coefficients: Sequence[float]) -> Tensor:
-    total = tensors[0] * coefficients[0]
-    for tensor, coefficient in zip(tensors[1:], coefficients[1:], strict=True):
-        total = total + tensor * coefficient
-    return total
 
 
 class _Combination(ABC):
@@ -110,12 +115,6 @@ class _Combination(ABC):
         found = cls._strategies.get(combination_type)
         if found is not None:
             return found
-        if combination_type in _LATER:
-            raise NotImplementedError(
-                f"combination_type={combination_type!r} (the TIES / DARE / magnitude-prune "
-                f"family) is not implemented in lucid.peft yet; use one of "
-                f"{', '.join(map(repr, cls._strategies))}"
-            )
         raise ValueError(f"Invalid combination_type: {combination_type}")
 
     def __init__(self, options: _MergeOptions) -> None:
@@ -149,14 +148,18 @@ class _Combination(ABC):
         return _pad(lora_a, self.options.rank, 0), _pad(lora_b, self.options.rank, 1)
 
 
-class _Linear(_Combination, combination_type="linear"):
-    r"""Weight ``A`` and ``B`` separately: sum :math:`\sqrt{|w_i s_i|}` times each.
+class _FactorMerge(_Combination):
+    r"""Merge the sources' ``A`` and ``B`` weights apart, by the pipeline of ``recipe``.
 
-    :math:`A' = \sum_i \mathrm{sgn}(w_i s_i)\sqrt{|w_i s_i|}\,A_i` and
-    :math:`B' = \sum_i \sqrt{|w_i s_i|}\,B_i`.  Cheap, and exact only for
-    one adapter: the product :math:`B'A'` also holds the cross terms
+    With :math:`c_i = w_i s_i` (the weight times the source's own scale),
+    :math:`A' = M(\mathrm{sgn}(c_i)\sqrt{|c_i|}\,A_i)` and
+    :math:`B' = M(\sqrt{|c_i|}\,B_i)`, where :math:`M` is the merge the
+    recipe builds (a weighted sum, for ``linear``).  Cheap, and exact only
+    for one adapter: the product :math:`B'A'` also holds the cross terms
     :math:`B_i A_j`.  The adapters must share a rank.
     """
+
+    recipe: ClassVar[_Recipe] = _Recipe()
 
     @classmethod
     @override
@@ -164,7 +167,8 @@ class _Linear(_Combination, combination_type="linear"):
         del svd_rank  # the rank is the sources' own
         if len(set(ranks)) != 1:
             raise ValueError(
-                "All adapters must have the same r value when using combination_type 'linear'."
+                "All adapters must have the same r value when using combination_type linear, "
+                "ties, dare_ties, dare_linear or magnitude_prune."
             )
         return ranks[0]
 
@@ -172,14 +176,45 @@ class _Linear(_Combination, combination_type="linear"):
     def combine(
         self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
+        merge = _TaskMerge.make(
+            self.recipe, self.options.density, self.options.majority_sign_method
+        )
         scaling = layer.scaling
         scaled = [w * scaling[name] for name, w in zip(adapters, weights, strict=True)]
         roots = [math.sqrt(abs(s)) for s in scaled]
         # The sign goes on one side only, or the two would cancel in B'A'.
         signed = [root if s >= 0 else -root for s, root in zip(scaled, roots, strict=True)]
-        lora_a = _weighted_sum([layer.lora_A[name].weight for name in adapters], signed)
-        lora_b = _weighted_sum([layer.lora_B[name].weight for name in adapters], roots)
+        lora_a = merge([layer.lora_A[name].weight for name in adapters], signed)
+        lora_b = merge([layer.lora_B[name].weight for name in adapters], roots)
         return lora_a, lora_b
+
+
+class _Linear(_FactorMerge, combination_type="linear"):
+    r"""Weighted sums of ``A`` and of ``B``: :math:`A' = \sum_i \mathrm{sgn}(c_i)\sqrt{|c_i|}\,A_i`, :math:`B' = \sum_i \sqrt{|c_i|}\,B_i`."""
+
+
+class _Ties(_FactorMerge, combination_type="ties"):
+    """TIES on ``A`` and ``B``: trim to the largest ``density`` by magnitude, elect a sign, merge the agreeing."""
+
+    recipe = _Recipe(pruning="magnitude", elects_sign=True)
+
+
+class _DareLinear(_FactorMerge, combination_type="dare_linear"):
+    """DARE on ``A`` and ``B``: randomly drop to ``density``, rescale, and sum."""
+
+    recipe = _Recipe(pruning="random")
+
+
+class _DareTies(_FactorMerge, combination_type="dare_ties"):
+    """DARE's random drop and rescale, then TIES' sign election, on ``A`` and ``B``."""
+
+    recipe = _Recipe(pruning="random", elects_sign=True)
+
+
+class _MagnitudePrune(_FactorMerge, combination_type="magnitude_prune"):
+    """Trim ``A`` and ``B`` to the largest ``density`` by magnitude, and sum."""
+
+    recipe = _Recipe(pruning="magnitude")
 
 
 class _Cat(_Combination, combination_type="cat"):
@@ -208,15 +243,18 @@ class _Cat(_Combination, combination_type="cat"):
         return lucid.cat(lora_a, dim=0), lucid.cat(lora_b, dim=1)
 
 
-class _Svd(_Combination, combination_type="svd"):
-    r"""The best rank-:math:`r` approximation of :math:`\sum_i w_i\,\Delta W_i`.
+class _SvdMerge(_Combination):
+    r"""The best rank-:math:`r` approximation of the merge of the sources' updates.
 
-    Sums the sources' updates, :math:`\Delta W_i = s_i B_i A_i`, factors
-    the sum as :math:`U \Sigma V^\top` and keeps the :math:`r` largest
-    singular values: :math:`B' = U_r \Sigma_r`, :math:`A' = V_r^\top`.  The
-    reconstruction error is exactly the discarded singular values
-    (Eckart-Young).
+    Merges the sources' updates, :math:`\Delta W_i = s_i B_i A_i`, by the
+    pipeline of ``recipe`` (a weighted sum, for ``svd``), factors the result
+    as :math:`U \Sigma V^\top` and keeps the :math:`r` largest singular
+    values: :math:`B' = U_r \Sigma_r`, :math:`A' = V_r^\top`.  For the
+    plain sum the reconstruction error is exactly the discarded singular
+    values (Eckart-Young).
     """
+
+    recipe: ClassVar[_Recipe] = _Recipe()
 
     @classmethod
     @override
@@ -228,7 +266,8 @@ class _Svd(_Combination, combination_type="svd"):
         self, layer: Linear, adapters: Sequence[str], weights: Sequence[float]
     ) -> tuple[Tensor, Tensor]:
         options = self.options
-        delta = _weighted_sum([layer.get_delta_weight(name) for name in adapters], weights)
+        merge = _TaskMerge.make(self.recipe, options.density, options.majority_sign_method)
+        delta = merge([layer.get_delta_weight(name) for name in adapters], weights)
         u, s, vh = linalg.svd(delta, options.svd_full_matrices, driver=options.svd_driver)
         # There are only min(out, in) singular values; a larger rank is zero-padded by the caller.
         keep = min(options.rank, s.shape[0])
@@ -239,3 +278,31 @@ class _Svd(_Combination, combination_type="svd"):
             bound = float(lucid.quantile(pooled, options.svd_clamp).item())
             left, right = left.clamp(-bound, bound), right.clamp(-bound, bound)
         return right, left
+
+
+class _Svd(_SvdMerge, combination_type="svd"):
+    r"""The truncation of :math:`\sum_i w_i\,\Delta W_i`."""
+
+
+class _TiesSvd(_SvdMerge, combination_type="ties_svd"):
+    """TIES-merged updates, truncated."""
+
+    recipe = _Recipe(pruning="magnitude", elects_sign=True)
+
+
+class _DareLinearSvd(_SvdMerge, combination_type="dare_linear_svd"):
+    """DARE-merged updates (random drop, rescale, sum), truncated."""
+
+    recipe = _Recipe(pruning="random")
+
+
+class _DareTiesSvd(_SvdMerge, combination_type="dare_ties_svd"):
+    """DARE-and-TIES-merged updates, truncated."""
+
+    recipe = _Recipe(pruning="random", elects_sign=True)
+
+
+class _MagnitudePruneSvd(_SvdMerge, combination_type="magnitude_prune_svd"):
+    """Magnitude-trimmed and summed updates, truncated."""
+
+    recipe = _Recipe(pruning="magnitude")

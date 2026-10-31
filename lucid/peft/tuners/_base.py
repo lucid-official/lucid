@@ -37,6 +37,7 @@ import functools
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from types import MappingProxyType
 from typing import ClassVar, Final, NamedTuple, Protocol, override, runtime_checkable
 
@@ -47,7 +48,13 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots, _outside_slots
+from lucid.peft._slots import (
+    _adapter_slots,
+    _as_names,
+    _outermost_slots,
+    _outside_slots,
+    _SlotState,
+)
 from lucid.peft._target_defaults import (
     DEFAULT_LORA_TARGET_MODULES,
     DEFAULT_LORA_TARGET_PARAMETERS,
@@ -61,6 +68,9 @@ from lucid.peft._targeting import (
     _selects,
     _shared_outside,
 )
+
+#: Where a model adapted in place keeps the ``requires_grad`` it had before its first adapter.
+_FLAGS_KEY: Final = "_peft_requires_grad_before"
 
 #: For a method that adapts modules only: no model type has raw parameters as its default.
 _NO_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
@@ -320,6 +330,9 @@ class _BaseTunerLayer(nn.Module, ABC):
         tables = self._tables()
         return list(tables[0]) if tables else []
 
+    def _state(self) -> _SlotState:
+        return _SlotState(not self.disable_adapters, self.active_adapters, [*self.merged_adapters])
+
     def _tables(self) -> list[nn.ModuleDict[nn.Module] | nn.ParameterDict]:
         """The per-adapter tables ``adapter_layer_names`` names."""
         return [
@@ -520,29 +533,76 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         if not isinstance(config, kind):
             raise TypeError(f"config must be a {kind.__name__}, got {type(config).__name__}")
         adapter_name = _check_adapter_name(adapter_name)
-        _refuse_existing_adapters(model)
-        # By name, which a deep copy or a pickle of the model keeps.
-        flags = {
-            name: param.requires_grad
-            for name, param in model.named_parameters(remove_duplicate=False)
-        }
+        earlier = self._adopted_configs(model, adapter_name)
+        # By name, which a deep copy or a pickle of the model keeps; a model
+        # adapted before keeps what it had before the first adapter.
+        flags = model.__dict__.get(_FLAGS_KEY) if earlier is not None else None
+        if flags is None:
+            flags = {
+                name: param.requires_grad
+                for name, param in model.named_parameters(remove_duplicate=False)
+            }
         super().__init__()
         self.model = model
-        self.peft_config: dict[str, PeftConfig] = {}
+        self.peft_config: dict[str, PeftConfig] = {} if earlier is None else earlier
         self.active_adapter: str | list[str] = adapter_name
         self.targeted_module_names: list[str] = []
         self.targeted_parameter_names: list[str] = []
         self._requires_grad_before = flags
         self._inject(adapter_name, config)
+        if earlier is not None:
+            # The newest adapter is the one in use; a merged earlier one would hide it.
+            self.unmerge_adapter()
         # Where ``get_peft_model_state_dict`` finds the config of a model
         # adapted in place, as the reference's does.
         model.peft_config = self.peft_config
+        model.__dict__[_FLAGS_KEY] = flags
         self._mark_only_adapters_as_trainable()
 
     @property
     def active_adapters(self) -> list[str]:
         """The adapters the forward pass applies, as a list."""
         return _as_names(self.active_adapter)
+
+    @classmethod
+    def _adopted_configs(cls, model: nn.Module, adapter_name: str) -> dict[str, PeftConfig] | None:
+        """The configs of the adapters ``model`` holds, if it already holds some of this method; else ``None``.
+
+        A model adapted before takes the new adapter beside the ones it
+        has, as the reference does when ``get_peft_model`` is called on it
+        again, with the same warning; the new tuner then answers for all of
+        them.
+
+        Raises
+        ------
+        ValueError
+            The model holds another method's adapters, or one named
+            ``adapter_name``.
+        """
+        slots = _adapter_slots(model)
+        if not slots:
+            return None
+        for key, slot in slots:
+            # A family's layers share one table, which tells a layer's method.
+            if isinstance(slot, _BaseTunerLayer) and slot._layer_types is not cls._layer_types:
+                raise ValueError(
+                    "Cannot combine adapters with different peft types: the model already holds "
+                    f"{type(slot).__name__} (at {key!r}), which is not a layer of "
+                    f"{cls.__name__}."
+                )
+        held = {name for _, slot in slots for name in slot._adapter_names()}
+        known: dict[str, PeftConfig] = dict(model.__dict__.get("peft_config", {}))
+        if adapter_name in held | set(known):
+            raise ValueError(
+                f"Adapter with name '{adapter_name}' already exists; the model holds "
+                f"{sorted(held | set(known))}.  Pass another adapter_name to add a new one."
+            )
+        warnings.warn(
+            "You are trying to modify a model with PEFT for a second time. If you want to reload "
+            "the model with a different config, make sure to call `.unload()` before.",
+            stacklevel=6,
+        )
+        return known
 
     # ── a method's hooks ──────────────────────────────────────────────────
 
@@ -930,6 +990,23 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         modules = self.__dict__.get("_modules")
         return _as_module(modules.get("model")) if modules else None
 
+    def _mixed_batch(
+        self, adapter_names: Sequence[str], num_beams: int = 1
+    ) -> AbstractContextManager[None]:
+        """A context in which each batch row goes through the adapter ``adapter_names`` names for it.
+
+        Only a method that can answer it implements this (LoRA).
+
+        Raises
+        ------
+        NotImplementedError
+            This method cannot route the rows of a batch to different adapters.
+        """
+        del adapter_names, num_beams
+        raise NotImplementedError(
+            f"{type(self).__name__} cannot send the rows of a batch through different adapters"
+        )
+
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
         return self.model(*args, **kwargs)
@@ -1010,6 +1087,7 @@ class _BaseTuner(_ForwardsAttributes, ABC):
                 param.requires_grad_(before)
         if "peft_config" in model.__dict__:
             del model.peft_config
+        model.__dict__.pop(_FLAGS_KEY, None)
         return model
 
     def merge_and_unload(
@@ -1128,12 +1206,3 @@ def _plan_modules_to_save(model: nn.Module, config: _TargetedConfig) -> list[str
                 stacklevel=5,
             )
     return keys
-
-
-def _refuse_existing_adapters(model: nn.Module) -> None:
-    held = [name for name, _ in _adapter_slots(model)]
-    if held:
-        raise NotImplementedError(
-            f"the model already holds a LoRA adapter (at {held[0]}); wrap it once and add "
-            "more with PeftModel.add_adapter, or call unload() or merge_and_unload() first"
-        )

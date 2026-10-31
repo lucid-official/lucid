@@ -15,7 +15,7 @@ from typing import override
 import lucid.nn as nn
 from lucid.nn.parameter import Parameter
 from lucid.peft._forwarding import _ForwardsAttributes
-from lucid.peft._slots import _as_names
+from lucid.peft._slots import _as_names, _SlotState
 
 
 class ModulesToSaveWrapper(_ForwardsAttributes):
@@ -127,6 +127,11 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
 
     def _adapter_names(self) -> list[str]:
         return list(self.modules_to_save)
+
+    def _state(self) -> _SlotState:
+        return _SlotState(
+            not self.disable_adapters, [self.active_adapter] if self.active_adapter else [], []
+        )
 
     def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
         if adapter_name not in self.modules_to_save:

@@ -284,10 +284,17 @@ class TestRefusals:
         assert type(model.a) is nn.Linear and type(model.c) is nn.Linear
         assert "peft_config" not in model.__dict__
 
-    def test_double_injection_is_refused(self) -> None:
+    def test_double_injection_adds_beside_the_first_and_warns(self) -> None:
         model = _lm()
         LoraModel(model, LoraConfig(target_modules=["q_proj"]))
-        with pytest.raises(NotImplementedError, match="already holds a LoRA adapter"):
+        with pytest.warns(UserWarning, match="second time"):
+            second = LoraModel(model, LoraConfig(target_modules=["v_proj"]), adapter_name="v")
+        assert second.active_adapters == ["v"] and sorted(second.peft_config) == ["default", "v"]
+
+    def test_double_injection_under_a_taken_name_is_refused(self) -> None:
+        model = _lm()
+        LoraModel(model, LoraConfig(target_modules=["q_proj"]))
+        with pytest.raises(ValueError, match="already exists"):
             LoraModel(model, LoraConfig(target_modules=["v_proj"]))
 
     def test_modules_to_save_that_matches_nothing(self) -> None:

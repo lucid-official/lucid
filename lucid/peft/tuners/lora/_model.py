@@ -8,6 +8,8 @@ import dataclasses
 import functools
 import operator
 import warnings
+from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from typing import ClassVar, Literal, TypedDict, override
 
 import lucid
@@ -26,8 +28,10 @@ from lucid.peft.tuners._base import (
 )
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._layer import Linear, LoraLayer
+from lucid.peft.tuners.lora._mixed import _MixedBatch
 from lucid.peft.tuners.lora._merging import _Combination, _CombinationType, _MergeOptions
 from lucid.peft.tuners.lora._parameter import ParamWrapper
+from lucid.peft.tuners.lora._task_vectors import _SignElection
 
 
 def _as_lora(config: PeftConfig) -> LoraConfig:
@@ -150,10 +154,15 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     ValueError
         No module matches ``target_modules`` (and no parameter
         ``target_parameters``), a match is a module type with no LoRA
-        layer, or ``modules_to_save`` matches nothing.
-    NotImplementedError
-        The model already holds adapter layers (wrap it once; add
-        adapters with ``add_adapter``).
+        layer, ``modules_to_save`` matches nothing, or the model already
+        holds adapters of another method or one named ``adapter_name``.
+
+    Warns
+    -----
+    UserWarning
+        The model already holds LoRA adapters: the new one is added beside
+        them and becomes the one in use (the earlier ones are frozen), as
+        ``get_peft_model`` does on a model it adapted before.
 
     Examples
     --------
@@ -298,6 +307,12 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
                 )
         super().disable_adapter_layers()
 
+    @override
+    def _mixed_batch(
+        self, adapter_names: Sequence[str], num_beams: int = 1
+    ) -> AbstractContextManager[None]:
+        return _MixedBatch(self.model, adapter_names, list(self.peft_config), num_beams)
+
     # ── weighted adapters ─────────────────────────────────────────────────
 
     def _lora_config(self, adapter_name: str) -> LoraConfig:
@@ -329,10 +344,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
                 )
 
     def _check_weighted_adapters(self, adapters: list[str], majority_sign_method: str) -> None:
-        if majority_sign_method not in ("total", "frequency"):
-            raise ValueError(
-                f"majority_sign_method must be 'total' or 'frequency', got {majority_sign_method!r}"
-            )
+        _SignElection.named(majority_sign_method)  # refuses an unknown method
         self._refuse_variants(adapters)
         for key, layer in _tuner_layers(self.model):
             held = [name for name in adapters if name in layer._adapter_names()]
@@ -400,12 +412,15 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             Name of the new adapter.
         combination_type : str, default="svd"
             ``"svd"``: the rank-``svd_rank`` truncation of
-            :math:`\sum_i w_i s_i B_i A_i`, the nearest rank-``r`` update to
-            the exact sum.  ``"cat"``: the exact sum, stacked, at the sum of
-            the sources' ranks.  ``"linear"``: weights ``A`` and ``B`` apart
-            (adding cross terms :math:`B_i A_j`); the sources share a rank.
-            With one adapter every type is ``"linear"``.  The TIES / DARE /
-            magnitude-prune types of the reference raise ``NotImplementedError``.
+            :math:`\sum_i w_i s_i B_i A_i`.  ``"cat"``: that sum exactly,
+            at the sum of the ranks.  ``"linear"``: ``A`` and ``B`` weighted
+            apart (adding cross terms :math:`B_i A_j`); one rank.  With one
+            adapter every type is ``"linear"``.  ``"ties"``, ``"dare_linear"``,
+            ``"dare_ties"`` and ``"magnitude_prune"`` (which take a
+            ``density``) merge ``A`` and ``B`` apart; their ``*_svd`` forms
+            merge the updates and truncate like ``"svd"``.  TIES trims to the
+            largest elements and elects a sign; DARE drops elements at random
+            (``lucid.manual_seed`` repeats it) and rescales.
         svd_rank : int, optional
             Rank of an ``"svd"`` result; the largest source rank by default.
         svd_clamp : float, optional
@@ -416,20 +431,22 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
         svd_driver : str, optional
             The SVD routine; ``lucid.linalg.svd`` accepts ``None`` only.
         density : float, optional
-            For the TIES / DARE types; unused by the ones implemented.
+            The share of elements to keep, in ``[0, 1]``; required by the
+            TIES, DARE and magnitude-prune types.
         majority_sign_method : {"total", "frequency"}, default="total"
-            For the TIES types; unused by the ones implemented.
+            How TIES elects an element's sign: that of the sum, or the one
+            most adapters have.
 
         Raises
         ------
         ValueError
             The name is taken, a source does not exist, the weights do not
-            match the sources, they cannot be combined that way (``"linear"``
-            needs one rank; two train one ``modules_to_save`` module), or
-            ``combination_type`` is unknown.
+            match the sources, they cannot be combined that way (the factor
+            types need one rank; two train one ``modules_to_save`` module),
+            ``combination_type`` is unknown, or a type that prunes got no
+            ``density``.
         NotImplementedError
-            ``combination_type`` is in the TIES / DARE family, or a source is
-            a DoRA or ``lora_bias`` adapter.
+            A source is a DoRA or ``lora_bias`` adapter.
 
         Examples
         --------
@@ -445,13 +462,16 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
         """
         adapter_name = self._check_weighted_sources(adapters, weights, adapter_name)
         self._check_weighted_adapters(adapters, majority_sign_method)
-        del density  # the TIES / DARE family's knob; none of the implemented types has a density
         # A single adapter has nothing to combine: it is scaled.
         strategy = _Combination.named("linear" if len(adapters) == 1 else combination_type)
         # The tensors allocated for the new adapter must hold the largest rank any layer uses.
         configs = [self._lora_config(name) for name in adapters]
         rank = strategy.new_rank([max([c.r, *c.rank_pattern.values()]) for c in configs], svd_rank)
-        folding = strategy(_MergeOptions(rank, svd_clamp, svd_full_matrices, svd_driver))
+        folding = strategy(
+            _MergeOptions(
+                rank, svd_clamp, svd_full_matrices, svd_driver, density, majority_sign_method
+            )
+        )
         self._add_combined_adapter(
             adapter_name,
             self._weighted_config(adapters, rank),

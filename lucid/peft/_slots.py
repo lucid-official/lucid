@@ -9,7 +9,7 @@ classes.
 """
 
 from collections.abc import Iterator, Sequence
-from typing import Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 import lucid.nn as nn
 from lucid.nn.parameter import Parameter
@@ -18,6 +18,14 @@ from lucid.nn.parameter import Parameter
 def _as_names(adapter_names: str | Sequence[str]) -> list[str]:
     """One adapter name, or several, as a list."""
     return [adapter_names] if isinstance(adapter_names, str) else list(adapter_names)
+
+
+class _SlotState(NamedTuple):
+    """What a slot's forward pass branches on: whether adapters take part, which, and which are folded in."""
+
+    enabled: bool
+    active: list[str]
+    merged: list[str]
 
 
 @runtime_checkable
@@ -64,6 +72,10 @@ class _AdapterSlot(Protocol):
 
     def _adapter_names(self) -> list[str]:
         """The adapters this slot holds parameters for."""
+        ...
+
+    def _state(self) -> _SlotState:
+        """Whether the slot's adapters are on, the ones in use, and the ones merged into the base."""
         ...
 
     def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:

@@ -71,17 +71,26 @@ LoRA layers exist for ``nn.Linear``, ``nn.Embedding``, ``nn.Conv1d`` /
 ``nn.MultiheadAttention`` (found by the module's
 type in ``target_modules``), and ``target_parameters`` adapts a raw
 ``nn.Parameter`` of a module (``lucid.peft.tuners.lora``).  Asking for
-more — a TIES / DARE weighted adapter, ``add_weighted_adapter`` over
-anything but ``nn.Linear`` layers, an adapter file of a method this package
-lacks — raises ``NotImplementedError`` rather than doing less than asked.  Adapters are read from a local directory; hub ids are not
-resolved.
+more — ``add_weighted_adapter`` over anything but ``nn.Linear`` layers, an
+adapter file of a method this package lacks — raises ``NotImplementedError``
+rather than doing less than asked.  Adapters are read from a local directory;
+hub ids are not resolved.
+
+A model can hold several adapters, switch between them, combine them
+(``add_weighted_adapter``: ``svd``, ``cat``, ``linear`` and the TIES / DARE /
+magnitude-prune types), and compute a batch whose rows each use a different
+adapter (``model(x, adapter_names=[...])``).  ``get_layer_status`` and
+``get_model_status`` report what each adapter layer, and the model, is doing.
+Adapting a model a second time adds the new adapter beside the first, with a
+warning.
 """
 
 from lucid.peft import tuners
 from lucid.peft._config import PeftConfig, PeftType, TaskType
 from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
-from lucid.peft._peft_model import PeftModel
+from lucid.peft._peft_model import PeftModel, get_layer_status, get_model_status
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
+from lucid.peft._status import TunerLayerStatus, TunerModelStatus
 from lucid.peft._task_models import (
     MODEL_TYPE_TO_PEFT_MODEL_MAPPING,
     PeftModelForCausalLM,
@@ -125,6 +134,8 @@ __all__ = [
     "LoraConfig",
     "PeftType",
     "TaskType",
+    "TunerLayerStatus",
+    "TunerModelStatus",
     "IA3Model",
     "LoHaModel",
     "LoKrModel",
@@ -136,6 +147,8 @@ __all__ = [
     "PeftModelForSeq2SeqLM",
     "PeftModelForSequenceClassification",
     "PeftModelForTokenClassification",
+    "get_layer_status",
+    "get_model_status",
     "get_peft_model",
     "inject_adapter_in_model",
     "get_peft_model_state_dict",

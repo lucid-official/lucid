@@ -20,7 +20,7 @@ them; the zoo's forwards differ by family (an encoder-decoder takes
 named them would be wrong for half of its models.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import ClassVar, Final
 
@@ -36,7 +36,9 @@ MODEL_TYPE_TO_PEFT_MODEL_MAPPING: Final[Mapping[TaskType, type[PeftModel]]] = Ma
 class _GeneratingPeftModel(PeftModel):
     """A wrapper for a task that decodes: ``generate`` runs the model's own."""
 
-    def generate(self, *args: object, **kwargs: object) -> object:
+    def generate(
+        self, *args: object, adapter_names: Sequence[str] | None = None, **kwargs: object
+    ) -> object:
         r"""Generate with the adapted model: its own ``generate``, called as given.
 
         The adapter applies at every step, since the model's layers are
@@ -47,6 +49,12 @@ class _GeneratingPeftModel(PeftModel):
         ----------
         *args : object
             Positional arguments of the model's ``generate``.
+        adapter_names : sequence of str, optional
+            One adapter per prompt, as for :meth:`~lucid.peft.PeftModel.forward`:
+            every step of prompt ``i`` uses ``adapter_names[i]`` alone
+            (``"__base__"``: the base model).  With beam search
+            (``num_beams`` in ``kwargs``) each name covers that prompt's
+            beams; an encoder, if the model has one, sees the prompts once.
         **kwargs : object
             Keyword arguments of the model's ``generate``.
 
@@ -64,7 +72,9 @@ class _GeneratingPeftModel(PeftModel):
         generate = getattr(model, "generate", None)
         if generate is None:
             raise AttributeError(f"{type(model).__name__} has no generate() to call")
-        return generate(*args, **kwargs)
+        beams = kwargs.get("num_beams")
+        with self._routed(adapter_names, beams if isinstance(beams, int) and beams > 1 else 1):
+            return generate(*args, **kwargs)
 
 
 class PeftModelForCausalLM(_GeneratingPeftModel, task_type=TaskType.CAUSAL_LM):

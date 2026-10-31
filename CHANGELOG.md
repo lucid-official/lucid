@@ -142,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LoRA on attention with separate q/k/v projections
 - LoRA on transposed convolutions, decoders in the defaults
 - default targets leave EMA and auxiliary networks out
+- TIES/DARE merges, mixed batches, status, re-adaptation
 
 ---
 

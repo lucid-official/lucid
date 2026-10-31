@@ -351,10 +351,13 @@ class TestAdding:
         peft.set_adapter("default")
         assert not bias.requires_grad
 
-    def test_a_wrapper_already_around_the_model_is_not_stacked(self) -> None:
+    def test_a_wrapper_already_around_the_model_takes_the_new_adapter_beside_it(self) -> None:
         net = _mlp("cpu")
         get_peft_model(net, _config(2, ["0"]))
-        with pytest.raises(NotImplementedError, match="add more with PeftModel.add_adapter"):
+        with pytest.warns(UserWarning, match="second time"):
+            again = get_peft_model(net, _config(2, ["2"]), adapter_name="second")
+        assert sorted(again.peft_config) == ["default", "second"]
+        with pytest.raises(ValueError, match="already exists"):
             get_peft_model(net, _config(2, ["2"]))
 
 
@@ -723,13 +726,6 @@ class TestWeightedAdapters:
         with lucid.no_grad():
             expected = layer.base_layer(x) + x @ layer.get_delta_weight("mix").T
             assert _close(lora.model(x), expected)
-
-    def test_the_task_vector_family_is_not_built_yet(self, device: str) -> None:
-        lora, _ = _pair(device, 2, 2)
-        for name in ("ties", "dare_linear", "dare_ties", "magnitude_prune", "ties_svd"):
-            with pytest.raises(NotImplementedError, match="not implemented in lucid.peft yet"):
-                lora.add_weighted_adapter(["a", "b"], [1.0, 1.0], "mix", combination_type=name)  # type: ignore[arg-type]
-        assert "mix" not in lora.peft_config
 
     def test_one_adapter_makes_any_type_linear(self, device: str) -> None:
         lora, layer = _pair(device)

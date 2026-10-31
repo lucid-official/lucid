@@ -3,7 +3,7 @@
 import dataclasses
 import os
 from collections.abc import Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
 from typing import ClassVar, Final, override
 
@@ -17,6 +17,7 @@ from lucid.peft._config import (
     _require_config,
 )
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
+from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
 from lucid.peft.tuners._base import _BaseTuner, _tuner_for
@@ -287,9 +288,68 @@ class PeftModel(_ForwardsAttributes):
         """
         self.base_model.set_requires_grad(adapter_names, requires_grad)
 
+    def _routed(
+        self, adapter_names: Sequence[str] | None, num_beams: int = 1
+    ) -> AbstractContextManager[None]:
+        """The context a call runs in: each batch row through its named adapter, or no change."""
+        if adapter_names is None:
+            return nullcontext()
+        return self.base_model._mixed_batch(adapter_names, num_beams)
+
     @override
-    def forward(self, *args: object, **kwargs: object) -> object:
-        return self.get_base_model()(*args, **kwargs)
+    def forward(
+        self, *args: object, adapter_names: Sequence[str] | None = None, **kwargs: object
+    ) -> object:
+        r"""Run the adapted model; every other argument goes to it as given.
+
+        Parameters
+        ----------
+        *args : object
+            Positional arguments of the model's ``forward``.
+        adapter_names : sequence of str, optional
+            One adapter per row of the batch (the first dimension of the
+            inputs): row ``i`` is computed with ``adapter_names[i]`` alone,
+            ``"__base__"`` for the base model, all in one pass, so requests
+            for different adapters can share a batch.  The adapters in use
+            are ignored.  Inference only, for LoRA on ``nn.Linear``,
+            ``nn.Embedding`` and convolution layers (and ``modules_to_save``
+            modules).
+        **kwargs : object
+            Keyword arguments of the model's ``forward``.
+
+        Returns
+        -------
+        object
+            What the model's ``forward`` returns.
+
+        Raises
+        ------
+        ValueError
+            ``adapter_names`` is given in training mode, names an adapter
+            the model lacks, a row count other than the batch's, or the
+            model holds merged adapters or a DoRA adapter among those named.
+        NotImplementedError
+            The method is not LoRA, or the model has an adapted layer a
+            mixed batch cannot route (attention, a raw parameter).
+
+        Examples
+        --------
+        >>> import lucid
+        >>> import lucid.nn as nn
+        >>> from lucid.peft import LoraConfig, get_peft_model
+        >>> net = nn.Sequential(nn.Linear(4, 4))
+        >>> config = LoraConfig(r=2, target_modules=["0"], init_lora_weights=False)
+        >>> peft = get_peft_model(net, config, adapter_name="a")
+        >>> peft.add_adapter("b", config)
+        >>> _ = peft.eval()
+        >>> x = lucid.randn(3, 4)
+        >>> mixed = peft(x, adapter_names=["a", "b", "__base__"])
+        >>> peft.set_adapter("b")
+        >>> bool(lucid.allclose(mixed[1], peft(x)[1], atol=1e-6))
+        True
+        """
+        with self._routed(adapter_names):
+            return self.get_base_model()(*args, **kwargs)
 
     def get_nb_trainable_parameters(self) -> tuple[int, int]:
         """Return ``(trainable, total)`` parameter counts, each shared parameter once.
@@ -299,13 +359,15 @@ class PeftModel(_ForwardsAttributes):
         tuple of int
             Elements in parameters that require grad, and in all of them.
         """
-        trainable = total = 0
-        for _, param in self.named_parameters():
-            count = param.numel()
-            total += count
-            if param.requires_grad:
-                trainable += count
-        return trainable, total
+        return _parameter_counts(self)
+
+    def get_layer_status(self) -> list[TunerLayerStatus]:
+        """The state of each adapter layer: see :func:`~lucid.peft.get_layer_status`."""
+        return get_layer_status(self)
+
+    def get_model_status(self) -> TunerModelStatus:
+        """The state of the model's adapters as a whole: see :func:`~lucid.peft.get_model_status`."""
+        return get_model_status(self)
 
     def print_trainable_parameters(self) -> None:
         """Print the trainable / total parameter counts and their ratio.
@@ -676,3 +738,96 @@ class PeftModel(_ForwardsAttributes):
         if not is_trainable:
             self.eval()
         return loaded
+
+
+def get_layer_status(model: nn.Module) -> list[TunerLayerStatus]:
+    r"""The state of each adapter layer of ``model``: enabled, active, merged, trainable, and where.
+
+    One :class:`~lucid.peft.TunerLayerStatus` per adapter layer and per
+    ``modules_to_save`` module, in module order, named relative to the
+    adapting tuner (``"model.0"`` for a ``PeftModel`` around ``net[0]``).
+
+    Parameters
+    ----------
+    model : nn.Module
+        A :class:`~lucid.peft.PeftModel`, or a model adapted in place
+        (``inject_adapter_in_model``).
+
+    Returns
+    -------
+    list of TunerLayerStatus
+        The layers' states.
+
+    Raises
+    ------
+    ValueError
+        ``model`` holds no adapter layer.
+
+    Examples
+    --------
+    >>> import lucid.nn as nn
+    >>> from lucid.peft import LoraConfig, get_layer_status, get_peft_model
+    >>> peft = get_peft_model(nn.Sequential(nn.Linear(4, 4)),
+    ...                       LoraConfig(r=2, target_modules=["0"]))
+    >>> (layer,) = get_layer_status(peft)
+    >>> layer.name, layer.module_type, layer.enabled, layer.active_adapters
+    ('model.0', 'lora.Linear', True, ['default'])
+    >>> layer.requires_grad, layer.available_adapters, layer.devices
+    ({'default': True}, ['default'], {'default': ['cpu']})
+    """
+    return TunerLayerStatus.all_of(model.base_model if isinstance(model, PeftModel) else model)
+
+
+def get_model_status(model: nn.Module) -> TunerModelStatus:
+    r"""The state of ``model``'s adapters as a whole, folded from its layers.
+
+    A field the layers disagree on reads ``"irregular"`` (see
+    :class:`~lucid.peft.TunerModelStatus`): one layer enabled and another
+    not, an adapter merged on one layer and not on another that holds it,
+    an adapter that trains in some layers and is frozen in others.
+
+    Parameters
+    ----------
+    model : nn.Module
+        A :class:`~lucid.peft.PeftModel`, or a model adapted in place.
+
+    Returns
+    -------
+    TunerModelStatus
+        The model's state.
+
+    Raises
+    ------
+    ValueError
+        ``model`` holds no adapter layer.
+
+    Examples
+    --------
+    >>> from lucid.peft import LoraConfig, get_model_status, get_peft_model
+    >>> import lucid.nn as nn
+    >>> net = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))
+    >>> config = LoraConfig(r=2, target_modules=["0", "1"])
+    >>> peft = get_peft_model(net, config)
+    >>> peft.add_adapter("other", config)
+    >>> status = get_model_status(peft)
+    >>> status.adapter_model_type, status.peft_types, status.num_adapter_layers
+    ('LoraModel', {'default': 'LORA', 'other': 'LORA'}, 2)
+    >>> status.active_adapters, status.requires_grad, status.merged_adapters
+    (['default'], {'default': True, 'other': False}, [])
+    """
+    layers = get_layer_status(model)
+    if isinstance(model, PeftModel):
+        return TunerModelStatus.of(
+            layers,
+            base_model_type=type(model.get_base_model()).__name__,
+            adapter_model_type=type(model.base_model).__name__,
+            peft_types={name: str(config.peft_type) for name, config in model.peft_config.items()},
+            parameter_counts=model.get_nb_trainable_parameters(),
+        )
+    return TunerModelStatus.of(
+        layers,
+        base_model_type="other",
+        adapter_model_type="None",
+        peft_types={},
+        parameter_counts=_parameter_counts(model),
+    )
