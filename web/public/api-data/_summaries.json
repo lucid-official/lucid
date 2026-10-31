@@ -156800,7 +156800,7 @@
     "children": [
       {
         "name": "conv1",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 9536,
         "own_params": 0,
         "children": [
@@ -156829,7 +156829,7 @@
       },
       {
         "name": "conv2",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 4224,
         "own_params": 0,
         "children": [
@@ -156851,7 +156851,7 @@
       },
       {
         "name": "conv3",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 110976,
         "own_params": 0,
         "children": [
@@ -156886,7 +156886,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -156914,7 +156914,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 18624,
                 "own_params": 0,
                 "children": [
@@ -156936,7 +156936,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 110848,
                 "own_params": 0,
                 "children": [
@@ -156966,7 +156966,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 3104,
                 "own_params": 0,
                 "children": [
@@ -156988,7 +156988,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 4672,
                 "own_params": 0,
                 "children": [
@@ -157025,7 +157025,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 6208,
                 "own_params": 0,
                 "children": [
@@ -157057,7 +157057,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 33024,
             "own_params": 0,
             "children": [
@@ -157085,7 +157085,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 33024,
                 "own_params": 0,
                 "children": [
@@ -157107,7 +157107,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 221568,
                 "own_params": 0,
                 "children": [
@@ -157137,7 +157137,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 8256,
                 "own_params": 0,
                 "children": [
@@ -157159,7 +157159,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 27840,
                 "own_params": 0,
                 "children": [
@@ -157196,7 +157196,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -157235,7 +157235,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 92544,
             "own_params": 0,
             "children": [
@@ -157263,7 +157263,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 46272,
                 "own_params": 0,
                 "children": [
@@ -157285,7 +157285,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 180128,
                 "own_params": 0,
                 "children": [
@@ -157315,7 +157315,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 7712,
                 "own_params": 0,
                 "children": [
@@ -157337,7 +157337,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 7008,
                 "own_params": 0,
                 "children": [
@@ -157374,7 +157374,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 30848,
                 "own_params": 0,
                 "children": [
@@ -157406,7 +157406,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 82240,
             "own_params": 0,
             "children": [
@@ -157434,7 +157434,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 57568,
                 "own_params": 0,
                 "children": [
@@ -157456,7 +157456,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 226240,
                 "own_params": 0,
                 "children": [
@@ -157486,7 +157486,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 12336,
                 "own_params": 0,
                 "children": [
@@ -157508,7 +157508,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 13952,
                 "own_params": 0,
                 "children": [
@@ -157545,7 +157545,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -157577,7 +157577,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 65792,
             "own_params": 0,
             "children": [
@@ -157605,7 +157605,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 65792,
                 "own_params": 0,
                 "children": [
@@ -157627,7 +157627,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 295424,
                 "own_params": 0,
                 "children": [
@@ -157657,7 +157657,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 12336,
                 "own_params": 0,
                 "children": [
@@ -157679,7 +157679,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 13952,
                 "own_params": 0,
                 "children": [
@@ -157716,7 +157716,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -157748,7 +157748,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 57568,
             "own_params": 0,
             "children": [
@@ -157776,7 +157776,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 74016,
                 "own_params": 0,
                 "children": [
@@ -157798,7 +157798,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 373824,
                 "own_params": 0,
                 "children": [
@@ -157828,7 +157828,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16448,
                 "own_params": 0,
                 "children": [
@@ -157850,7 +157850,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -157887,7 +157887,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -157919,7 +157919,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 135680,
             "own_params": 0,
             "children": [
@@ -157947,7 +157947,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 84800,
                 "own_params": 0,
                 "children": [
@@ -157969,7 +157969,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 461440,
                 "own_params": 0,
                 "children": [
@@ -157999,7 +157999,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16960,
                 "own_params": 0,
                 "children": [
@@ -158021,7 +158021,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 37120,
                 "own_params": 0,
                 "children": [
@@ -158058,7 +158058,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 67840,
                 "own_params": 0,
                 "children": [
@@ -158097,7 +158097,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 213504,
             "own_params": 0,
             "children": [
@@ -158125,7 +158125,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 133440,
                 "own_params": 0,
                 "children": [
@@ -158147,7 +158147,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 461440,
                 "own_params": 0,
                 "children": [
@@ -158177,7 +158177,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 26688,
                 "own_params": 0,
                 "children": [
@@ -158199,7 +158199,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 37120,
                 "own_params": 0,
                 "children": [
@@ -158236,7 +158236,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 106752,
                 "own_params": 0,
                 "children": [
@@ -158268,7 +158268,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 320256,
             "own_params": 0,
             "children": [
@@ -158296,7 +158296,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 160128,
                 "own_params": 0,
                 "children": [
@@ -158318,7 +158318,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 664320,
                 "own_params": 0,
                 "children": [
@@ -158348,7 +158348,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 40032,
                 "own_params": 0,
                 "children": [
@@ -158370,7 +158370,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 55552,
                 "own_params": 0,
                 "children": [
@@ -158407,7 +158407,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 106752,
                 "own_params": 0,
                 "children": [
@@ -158448,7 +158448,7 @@
     "children": [
       {
         "name": "conv1",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 9536,
         "own_params": 0,
         "children": [
@@ -158477,7 +158477,7 @@
       },
       {
         "name": "conv2",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 4224,
         "own_params": 0,
         "children": [
@@ -158499,7 +158499,7 @@
       },
       {
         "name": "conv3",
-        "type": "_BasicConv2d",
+        "type": "BasicConvBnReLU2d",
         "params": 110976,
         "own_params": 0,
         "children": [
@@ -158534,7 +158534,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -158562,7 +158562,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 18624,
                 "own_params": 0,
                 "children": [
@@ -158584,7 +158584,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 110848,
                 "own_params": 0,
                 "children": [
@@ -158614,7 +158614,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 3104,
                 "own_params": 0,
                 "children": [
@@ -158636,7 +158636,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 4672,
                 "own_params": 0,
                 "children": [
@@ -158673,7 +158673,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 6208,
                 "own_params": 0,
                 "children": [
@@ -158705,7 +158705,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 33024,
             "own_params": 0,
             "children": [
@@ -158733,7 +158733,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 33024,
                 "own_params": 0,
                 "children": [
@@ -158755,7 +158755,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 221568,
                 "own_params": 0,
                 "children": [
@@ -158785,7 +158785,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 8256,
                 "own_params": 0,
                 "children": [
@@ -158807,7 +158807,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 27840,
                 "own_params": 0,
                 "children": [
@@ -158844,7 +158844,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -158883,7 +158883,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 92544,
             "own_params": 0,
             "children": [
@@ -158911,7 +158911,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 46272,
                 "own_params": 0,
                 "children": [
@@ -158933,7 +158933,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 180128,
                 "own_params": 0,
                 "children": [
@@ -158963,7 +158963,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 7712,
                 "own_params": 0,
                 "children": [
@@ -158985,7 +158985,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 7008,
                 "own_params": 0,
                 "children": [
@@ -159022,7 +159022,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 30848,
                 "own_params": 0,
                 "children": [
@@ -159054,7 +159054,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 82240,
             "own_params": 0,
             "children": [
@@ -159082,7 +159082,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 57568,
                 "own_params": 0,
                 "children": [
@@ -159104,7 +159104,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 226240,
                 "own_params": 0,
                 "children": [
@@ -159134,7 +159134,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 12336,
                 "own_params": 0,
                 "children": [
@@ -159156,7 +159156,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 13952,
                 "own_params": 0,
                 "children": [
@@ -159193,7 +159193,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -159225,7 +159225,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 65792,
             "own_params": 0,
             "children": [
@@ -159253,7 +159253,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 65792,
                 "own_params": 0,
                 "children": [
@@ -159275,7 +159275,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 295424,
                 "own_params": 0,
                 "children": [
@@ -159305,7 +159305,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 12336,
                 "own_params": 0,
                 "children": [
@@ -159327,7 +159327,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 13952,
                 "own_params": 0,
                 "children": [
@@ -159364,7 +159364,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -159396,7 +159396,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 57568,
             "own_params": 0,
             "children": [
@@ -159424,7 +159424,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 74016,
                 "own_params": 0,
                 "children": [
@@ -159446,7 +159446,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 373824,
                 "own_params": 0,
                 "children": [
@@ -159476,7 +159476,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16448,
                 "own_params": 0,
                 "children": [
@@ -159498,7 +159498,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -159535,7 +159535,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 32896,
                 "own_params": 0,
                 "children": [
@@ -159567,7 +159567,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 135680,
             "own_params": 0,
             "children": [
@@ -159595,7 +159595,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 84800,
                 "own_params": 0,
                 "children": [
@@ -159617,7 +159617,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 461440,
                 "own_params": 0,
                 "children": [
@@ -159647,7 +159647,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 16960,
                 "own_params": 0,
                 "children": [
@@ -159669,7 +159669,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 37120,
                 "own_params": 0,
                 "children": [
@@ -159706,7 +159706,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 67840,
                 "own_params": 0,
                 "children": [
@@ -159745,7 +159745,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 213504,
             "own_params": 0,
             "children": [
@@ -159773,7 +159773,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 133440,
                 "own_params": 0,
                 "children": [
@@ -159795,7 +159795,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 461440,
                 "own_params": 0,
                 "children": [
@@ -159825,7 +159825,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 26688,
                 "own_params": 0,
                 "children": [
@@ -159847,7 +159847,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 37120,
                 "own_params": 0,
                 "children": [
@@ -159884,7 +159884,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 106752,
                 "own_params": 0,
                 "children": [
@@ -159916,7 +159916,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 320256,
             "own_params": 0,
             "children": [
@@ -159944,7 +159944,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 160128,
                 "own_params": 0,
                 "children": [
@@ -159966,7 +159966,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 664320,
                 "own_params": 0,
                 "children": [
@@ -159996,7 +159996,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 40032,
                 "own_params": 0,
                 "children": [
@@ -160018,7 +160018,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 55552,
                 "own_params": 0,
                 "children": [
@@ -160055,7 +160055,7 @@
               },
               {
                 "name": "1",
-                "type": "_BasicConv2d",
+                "type": "BasicConvBnReLU2d",
                 "params": 106752,
                 "own_params": 0,
                 "children": [
@@ -160087,7 +160087,7 @@
         "children": [
           {
             "name": "conv",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 65792,
             "own_params": 0,
             "children": [
@@ -160138,7 +160138,7 @@
         "children": [
           {
             "name": "conv",
-            "type": "_BasicConv2d",
+            "type": "BasicConvBnReLU2d",
             "params": 67840,
             "own_params": 0,
             "children": [
@@ -166720,7 +166720,7 @@
     "children": [
       {
         "name": "conv2d_1a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 928,
         "own_params": 0,
         "children": [
@@ -166742,7 +166742,7 @@
       },
       {
         "name": "conv2d_2a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 9280,
         "own_params": 0,
         "children": [
@@ -166764,7 +166764,7 @@
       },
       {
         "name": "conv2d_2b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 18560,
         "own_params": 0,
         "children": [
@@ -166793,7 +166793,7 @@
       },
       {
         "name": "conv2d_3b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 5280,
         "own_params": 0,
         "children": [
@@ -166815,7 +166815,7 @@
       },
       {
         "name": "conv2d_4a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 138624,
         "own_params": 0,
         "children": [
@@ -166850,7 +166850,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18624,
             "own_params": 0,
             "children": [
@@ -166878,7 +166878,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9312,
                 "own_params": 0,
                 "children": [
@@ -166900,7 +166900,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -166930,7 +166930,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -166952,7 +166952,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -166974,7 +166974,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -167019,7 +167019,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -167057,7 +167057,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 10304,
                 "own_params": 0,
                 "children": [
@@ -167085,7 +167085,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10304,
                     "own_params": 0,
                     "children": [
@@ -167107,7 +167107,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 9280,
                     "own_params": 0,
                     "children": [
@@ -167137,7 +167137,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10304,
                     "own_params": 0,
                     "children": [
@@ -167159,7 +167159,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 13920,
                     "own_params": 0,
                     "children": [
@@ -167181,7 +167181,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 27776,
                     "own_params": 0,
                     "children": [
@@ -167223,7 +167223,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1106688,
             "own_params": 0,
             "children": [
@@ -167251,7 +167251,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 82432,
                 "own_params": 0,
                 "children": [
@@ -167273,7 +167273,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590336,
                 "own_params": 0,
                 "children": [
@@ -167295,7 +167295,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 885504,
                 "own_params": 0,
                 "children": [
@@ -167340,7 +167340,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 209280,
                 "own_params": 0,
                 "children": [
@@ -167368,7 +167368,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 139520,
                     "own_params": 0,
                     "children": [
@@ -167390,7 +167390,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 143680,
                     "own_params": 0,
                     "children": [
@@ -167412,7 +167412,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 215424,
                     "own_params": 0,
                     "children": [
@@ -167460,7 +167460,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -167482,7 +167482,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 885504,
                 "own_params": 0,
                 "children": [
@@ -167512,7 +167512,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -167534,7 +167534,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 664128,
                 "own_params": 0,
                 "children": [
@@ -167564,7 +167564,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -167586,7 +167586,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 664128,
                 "own_params": 0,
                 "children": [
@@ -167608,7 +167608,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 830080,
                 "own_params": 0,
                 "children": [
@@ -167653,7 +167653,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 399744,
                 "own_params": 0,
                 "children": [
@@ -167681,7 +167681,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 399744,
                     "own_params": 0,
                     "children": [
@@ -167703,7 +167703,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 129472,
                     "own_params": 0,
                     "children": [
@@ -167725,7 +167725,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 172544,
                     "own_params": 0,
                     "children": [
@@ -167767,7 +167767,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 399744,
             "own_params": 0,
             "children": [
@@ -167795,7 +167795,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 399744,
                 "own_params": 0,
                 "children": [
@@ -167817,7 +167817,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 129472,
                 "own_params": 0,
                 "children": [
@@ -167839,7 +167839,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 172544,
                 "own_params": 0,
                 "children": [
@@ -167872,7 +167872,7 @@
       },
       {
         "name": "conv2d_7b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 3197952,
         "own_params": 0,
         "children": [
@@ -167909,7 +167909,7 @@
     "children": [
       {
         "name": "conv2d_1a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 928,
         "own_params": 0,
         "children": [
@@ -167931,7 +167931,7 @@
       },
       {
         "name": "conv2d_2a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 9280,
         "own_params": 0,
         "children": [
@@ -167953,7 +167953,7 @@
       },
       {
         "name": "conv2d_2b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 18560,
         "own_params": 0,
         "children": [
@@ -167982,7 +167982,7 @@
       },
       {
         "name": "conv2d_3b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 5280,
         "own_params": 0,
         "children": [
@@ -168004,7 +168004,7 @@
       },
       {
         "name": "conv2d_4a",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 138624,
         "own_params": 0,
         "children": [
@@ -168039,7 +168039,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18624,
             "own_params": 0,
             "children": [
@@ -168067,7 +168067,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9312,
                 "own_params": 0,
                 "children": [
@@ -168089,7 +168089,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -168119,7 +168119,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -168141,7 +168141,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -168163,7 +168163,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -168208,7 +168208,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -168246,7 +168246,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 10304,
                 "own_params": 0,
                 "children": [
@@ -168274,7 +168274,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10304,
                     "own_params": 0,
                     "children": [
@@ -168296,7 +168296,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 9280,
                     "own_params": 0,
                     "children": [
@@ -168326,7 +168326,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10304,
                     "own_params": 0,
                     "children": [
@@ -168348,7 +168348,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 13920,
                     "own_params": 0,
                     "children": [
@@ -168370,7 +168370,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 27776,
                     "own_params": 0,
                     "children": [
@@ -168412,7 +168412,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1106688,
             "own_params": 0,
             "children": [
@@ -168440,7 +168440,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 82432,
                 "own_params": 0,
                 "children": [
@@ -168462,7 +168462,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590336,
                 "own_params": 0,
                 "children": [
@@ -168484,7 +168484,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 885504,
                 "own_params": 0,
                 "children": [
@@ -168529,7 +168529,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 209280,
                 "own_params": 0,
                 "children": [
@@ -168557,7 +168557,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 139520,
                     "own_params": 0,
                     "children": [
@@ -168579,7 +168579,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 143680,
                     "own_params": 0,
                     "children": [
@@ -168601,7 +168601,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 215424,
                     "own_params": 0,
                     "children": [
@@ -168649,7 +168649,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -168671,7 +168671,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 885504,
                 "own_params": 0,
                 "children": [
@@ -168701,7 +168701,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -168723,7 +168723,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 664128,
                 "own_params": 0,
                 "children": [
@@ -168753,7 +168753,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 279040,
                 "own_params": 0,
                 "children": [
@@ -168775,7 +168775,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 664128,
                 "own_params": 0,
                 "children": [
@@ -168797,7 +168797,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 830080,
                 "own_params": 0,
                 "children": [
@@ -168842,7 +168842,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 399744,
                 "own_params": 0,
                 "children": [
@@ -168870,7 +168870,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 399744,
                     "own_params": 0,
                     "children": [
@@ -168892,7 +168892,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 129472,
                     "own_params": 0,
                     "children": [
@@ -168914,7 +168914,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 172544,
                     "own_params": 0,
                     "children": [
@@ -168956,7 +168956,7 @@
         "children": [
           {
             "name": "branch0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 399744,
             "own_params": 0,
             "children": [
@@ -168984,7 +168984,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 399744,
                 "own_params": 0,
                 "children": [
@@ -169006,7 +169006,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 129472,
                 "own_params": 0,
                 "children": [
@@ -169028,7 +169028,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 172544,
                 "own_params": 0,
                 "children": [
@@ -169061,7 +169061,7 @@
       },
       {
         "name": "conv2d_7b",
-        "type": "_ConvBnReLU",
+        "type": "BasicConvBnReLU2d",
         "params": 3197952,
         "own_params": 0,
         "children": [
@@ -169118,7 +169118,7 @@
         "children": [
           {
             "name": "0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 928,
             "own_params": 0,
             "children": [
@@ -169140,7 +169140,7 @@
           },
           {
             "name": "1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9280,
             "own_params": 0,
             "children": [
@@ -169162,7 +169162,7 @@
           },
           {
             "name": "2",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -169191,7 +169191,7 @@
           },
           {
             "name": "4",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 5280,
             "own_params": 0,
             "children": [
@@ -169213,7 +169213,7 @@
           },
           {
             "name": "5",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 138624,
             "own_params": 0,
             "children": [
@@ -169250,7 +169250,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -169272,7 +169272,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9312,
             "own_params": 0,
             "children": [
@@ -169294,7 +169294,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -169316,7 +169316,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -169338,7 +169338,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -169360,7 +169360,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -169389,7 +169389,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 6208,
             "own_params": 0,
             "children": [
@@ -169419,7 +169419,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -169441,7 +169441,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12384,
             "own_params": 0,
             "children": [
@@ -169463,7 +169463,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -169485,7 +169485,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -169507,7 +169507,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -169529,7 +169529,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -169558,7 +169558,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -169588,7 +169588,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -169610,7 +169610,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 13920,
             "own_params": 0,
             "children": [
@@ -169632,7 +169632,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -169654,7 +169654,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -169676,7 +169676,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -169698,7 +169698,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -169727,7 +169727,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -169757,7 +169757,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 996096,
             "own_params": 0,
             "children": [
@@ -169779,7 +169779,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -169801,7 +169801,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -169823,7 +169823,7 @@
           },
           {
             "name": "branch2_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -169860,7 +169860,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -169882,7 +169882,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 98560,
             "own_params": 0,
             "children": [
@@ -169932,7 +169932,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 98560,
             "own_params": 0,
             "children": [
@@ -170017,7 +170017,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170047,7 +170047,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170069,7 +170069,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 123200,
             "own_params": 0,
             "children": [
@@ -170119,7 +170119,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 123200,
             "own_params": 0,
             "children": [
@@ -170204,7 +170204,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170235,7 +170235,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170286,7 +170286,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170371,7 +170371,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170401,7 +170401,7 @@
         "children": [
           {
             "name": "branch1_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170423,7 +170423,7 @@
           },
           {
             "name": "branch1_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 553600,
             "own_params": 0,
             "children": [
@@ -170445,7 +170445,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -170495,7 +170495,7 @@
           },
           {
             "name": "branch2_d",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 332160,
             "own_params": 0,
             "children": [
@@ -170532,7 +170532,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 410240,
             "own_params": 0,
             "children": [
@@ -170554,7 +170554,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 492288,
             "own_params": 0,
             "children": [
@@ -170604,7 +170604,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 574336,
             "own_params": 0,
             "children": [
@@ -170626,7 +170626,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1549056,
             "own_params": 0,
             "children": [
@@ -170683,7 +170683,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 246144,
             "own_params": 0,
             "children": [
@@ -170713,7 +170713,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 656000,
             "own_params": 0,
             "children": [
@@ -170735,7 +170735,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 787200,
             "own_params": 0,
             "children": [
@@ -170785,7 +170785,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 918400,
             "own_params": 0,
             "children": [
@@ -170807,7 +170807,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1549056,
             "own_params": 0,
             "children": [
@@ -170864,7 +170864,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 393600,
             "own_params": 0,
             "children": [
@@ -170909,7 +170909,7 @@
         "children": [
           {
             "name": "0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 928,
             "own_params": 0,
             "children": [
@@ -170931,7 +170931,7 @@
           },
           {
             "name": "1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9280,
             "own_params": 0,
             "children": [
@@ -170953,7 +170953,7 @@
           },
           {
             "name": "2",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -170982,7 +170982,7 @@
           },
           {
             "name": "4",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 5280,
             "own_params": 0,
             "children": [
@@ -171004,7 +171004,7 @@
           },
           {
             "name": "5",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 138624,
             "own_params": 0,
             "children": [
@@ -171041,7 +171041,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -171063,7 +171063,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9312,
             "own_params": 0,
             "children": [
@@ -171085,7 +171085,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -171107,7 +171107,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12416,
             "own_params": 0,
             "children": [
@@ -171129,7 +171129,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -171151,7 +171151,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -171180,7 +171180,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 6208,
             "own_params": 0,
             "children": [
@@ -171210,7 +171210,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -171232,7 +171232,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 12384,
             "own_params": 0,
             "children": [
@@ -171254,7 +171254,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -171276,7 +171276,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -171298,7 +171298,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -171320,7 +171320,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -171349,7 +171349,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 16512,
             "own_params": 0,
             "children": [
@@ -171379,7 +171379,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -171401,7 +171401,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 13920,
             "own_params": 0,
             "children": [
@@ -171423,7 +171423,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 76928,
             "own_params": 0,
             "children": [
@@ -171445,7 +171445,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -171467,7 +171467,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -171489,7 +171489,7 @@
           },
           {
             "name": "branch3_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -171518,7 +171518,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -171548,7 +171548,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 996096,
             "own_params": 0,
             "children": [
@@ -171570,7 +171570,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -171592,7 +171592,7 @@
           },
           {
             "name": "branch2_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 55488,
             "own_params": 0,
             "children": [
@@ -171614,7 +171614,7 @@
           },
           {
             "name": "branch2_c",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 83136,
             "own_params": 0,
             "children": [
@@ -171651,7 +171651,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -171673,7 +171673,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 98560,
             "own_params": 0,
             "children": [
@@ -171723,7 +171723,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 98560,
             "own_params": 0,
             "children": [
@@ -171808,7 +171808,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -171838,7 +171838,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -171860,7 +171860,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 123200,
             "own_params": 0,
             "children": [
@@ -171910,7 +171910,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 123200,
             "own_params": 0,
             "children": [
@@ -171995,7 +171995,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172026,7 +172026,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172077,7 +172077,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172162,7 +172162,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172192,7 +172192,7 @@
         "children": [
           {
             "name": "branch1_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172214,7 +172214,7 @@
           },
           {
             "name": "branch1_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 553600,
             "own_params": 0,
             "children": [
@@ -172236,7 +172236,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 147840,
             "own_params": 0,
             "children": [
@@ -172286,7 +172286,7 @@
           },
           {
             "name": "branch2_d",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 332160,
             "own_params": 0,
             "children": [
@@ -172323,7 +172323,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 410240,
             "own_params": 0,
             "children": [
@@ -172345,7 +172345,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 492288,
             "own_params": 0,
             "children": [
@@ -172395,7 +172395,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 574336,
             "own_params": 0,
             "children": [
@@ -172417,7 +172417,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1549056,
             "own_params": 0,
             "children": [
@@ -172474,7 +172474,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 246144,
             "own_params": 0,
             "children": [
@@ -172504,7 +172504,7 @@
         "children": [
           {
             "name": "branch1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 656000,
             "own_params": 0,
             "children": [
@@ -172526,7 +172526,7 @@
           },
           {
             "name": "branch2_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 787200,
             "own_params": 0,
             "children": [
@@ -172576,7 +172576,7 @@
           },
           {
             "name": "branch3_a",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 918400,
             "own_params": 0,
             "children": [
@@ -172598,7 +172598,7 @@
           },
           {
             "name": "branch3_b",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 1549056,
             "own_params": 0,
             "children": [
@@ -172655,7 +172655,7 @@
           },
           {
             "name": "branch4_conv",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 393600,
             "own_params": 0,
             "children": [
@@ -172721,7 +172721,7 @@
         "children": [
           {
             "name": "0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 928,
             "own_params": 0,
             "children": [
@@ -172743,7 +172743,7 @@
           },
           {
             "name": "1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9280,
             "own_params": 0,
             "children": [
@@ -172765,7 +172765,7 @@
           },
           {
             "name": "2",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -172800,7 +172800,7 @@
               },
               {
                 "name": "conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -172836,7 +172836,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10368,
                     "own_params": 0,
                     "children": [
@@ -172858,7 +172858,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -172888,7 +172888,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10368,
                     "own_params": 0,
                     "children": [
@@ -172910,7 +172910,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 28800,
                     "own_params": 0,
                     "children": [
@@ -172933,7 +172933,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -172965,7 +172965,7 @@
             "children": [
               {
                 "name": "conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 332160,
                 "own_params": 0,
                 "children": [
@@ -173002,7 +173002,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 37056,
                 "own_params": 0,
                 "children": [
@@ -173030,7 +173030,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 24704,
                     "own_params": 0,
                     "children": [
@@ -173052,7 +173052,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -173082,7 +173082,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 24704,
                     "own_params": 0,
                     "children": [
@@ -173104,7 +173104,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -173126,7 +173126,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 83136,
                     "own_params": 0,
                     "children": [
@@ -173163,7 +173163,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 37056,
                     "own_params": 0,
                     "children": [
@@ -173196,7 +173196,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1327872,
                 "own_params": 0,
                 "children": [
@@ -173224,7 +173224,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 74112,
                     "own_params": 0,
                     "children": [
@@ -173246,7 +173246,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 387520,
                     "own_params": 0,
                     "children": [
@@ -173268,7 +173268,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 516608,
                     "own_params": 0,
                     "children": [
@@ -173307,7 +173307,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393984,
                 "own_params": 0,
                 "children": [
@@ -173335,7 +173335,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -173357,7 +173357,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 301504,
                     "own_params": 0,
                     "children": [
@@ -173379,7 +173379,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 401920,
                     "own_params": 0,
                     "children": [
@@ -173409,7 +173409,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -173431,7 +173431,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 258432,
                     "own_params": 0,
                     "children": [
@@ -173453,7 +173453,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 301504,
                     "own_params": 0,
                     "children": [
@@ -173475,7 +173475,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 351680,
                     "own_params": 0,
                     "children": [
@@ -173497,7 +173497,7 @@
                   },
                   {
                     "name": "4",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 401920,
                     "own_params": 0,
                     "children": [
@@ -173534,7 +173534,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 131328,
                     "own_params": 0,
                     "children": [
@@ -173573,7 +173573,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -173595,7 +173595,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 332160,
                     "own_params": 0,
                     "children": [
@@ -173625,7 +173625,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 262656,
                     "own_params": 0,
                     "children": [
@@ -173647,7 +173647,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 459264,
                     "own_params": 0,
                     "children": [
@@ -173669,7 +173669,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 574080,
                     "own_params": 0,
                     "children": [
@@ -173691,7 +173691,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 922240,
                     "own_params": 0,
                     "children": [
@@ -173730,7 +173730,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393728,
                 "own_params": 0,
                 "children": [
@@ -173752,7 +173752,7 @@
               },
               {
                 "name": "branch1_0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590592,
                 "own_params": 0,
                 "children": [
@@ -173774,7 +173774,7 @@
               },
               {
                 "name": "branch1_1a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 295424,
                 "own_params": 0,
                 "children": [
@@ -173797,7 +173797,7 @@
               },
               {
                 "name": "branch2_0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590592,
                 "own_params": 0,
                 "children": [
@@ -173819,7 +173819,7 @@
               },
               {
                 "name": "branch2_1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 516992,
                 "own_params": 0,
                 "children": [
@@ -173841,7 +173841,7 @@
               },
               {
                 "name": "branch2_2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 689152,
                 "own_params": 0,
                 "children": [
@@ -173863,7 +173863,7 @@
               },
               {
                 "name": "branch2_3a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393728,
                 "own_params": 0,
                 "children": [
@@ -173899,7 +173899,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 393728,
                     "own_params": 0,
                     "children": [
@@ -173942,7 +173942,7 @@
         "children": [
           {
             "name": "0",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 928,
             "own_params": 0,
             "children": [
@@ -173964,7 +173964,7 @@
           },
           {
             "name": "1",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 9280,
             "own_params": 0,
             "children": [
@@ -173986,7 +173986,7 @@
           },
           {
             "name": "2",
-            "type": "_ConvBnReLU",
+            "type": "BasicConvBnReLU2d",
             "params": 18560,
             "own_params": 0,
             "children": [
@@ -174021,7 +174021,7 @@
               },
               {
                 "name": "conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -174057,7 +174057,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10368,
                     "own_params": 0,
                     "children": [
@@ -174079,7 +174079,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -174109,7 +174109,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 10368,
                     "own_params": 0,
                     "children": [
@@ -174131,7 +174131,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 28800,
                     "own_params": 0,
                     "children": [
@@ -174154,7 +174154,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -174186,7 +174186,7 @@
             "children": [
               {
                 "name": "conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 332160,
                 "own_params": 0,
                 "children": [
@@ -174223,7 +174223,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 37056,
                 "own_params": 0,
                 "children": [
@@ -174251,7 +174251,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 24704,
                     "own_params": 0,
                     "children": [
@@ -174273,7 +174273,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -174303,7 +174303,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 24704,
                     "own_params": 0,
                     "children": [
@@ -174325,7 +174325,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 55488,
                     "own_params": 0,
                     "children": [
@@ -174347,7 +174347,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 83136,
                     "own_params": 0,
                     "children": [
@@ -174384,7 +174384,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 37056,
                     "own_params": 0,
                     "children": [
@@ -174417,7 +174417,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1327872,
                 "own_params": 0,
                 "children": [
@@ -174445,7 +174445,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 74112,
                     "own_params": 0,
                     "children": [
@@ -174467,7 +174467,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 387520,
                     "own_params": 0,
                     "children": [
@@ -174489,7 +174489,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 516608,
                     "own_params": 0,
                     "children": [
@@ -174528,7 +174528,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393984,
                 "own_params": 0,
                 "children": [
@@ -174556,7 +174556,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -174578,7 +174578,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 301504,
                     "own_params": 0,
                     "children": [
@@ -174600,7 +174600,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 401920,
                     "own_params": 0,
                     "children": [
@@ -174630,7 +174630,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -174652,7 +174652,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 258432,
                     "own_params": 0,
                     "children": [
@@ -174674,7 +174674,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 301504,
                     "own_params": 0,
                     "children": [
@@ -174696,7 +174696,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 351680,
                     "own_params": 0,
                     "children": [
@@ -174718,7 +174718,7 @@
                   },
                   {
                     "name": "4",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 401920,
                     "own_params": 0,
                     "children": [
@@ -174755,7 +174755,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 131328,
                     "own_params": 0,
                     "children": [
@@ -174794,7 +174794,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 196992,
                     "own_params": 0,
                     "children": [
@@ -174816,7 +174816,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 332160,
                     "own_params": 0,
                     "children": [
@@ -174846,7 +174846,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 262656,
                     "own_params": 0,
                     "children": [
@@ -174868,7 +174868,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 459264,
                     "own_params": 0,
                     "children": [
@@ -174890,7 +174890,7 @@
                   },
                   {
                     "name": "2",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 574080,
                     "own_params": 0,
                     "children": [
@@ -174912,7 +174912,7 @@
                   },
                   {
                     "name": "3",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 922240,
                     "own_params": 0,
                     "children": [
@@ -174951,7 +174951,7 @@
             "children": [
               {
                 "name": "branch0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393728,
                 "own_params": 0,
                 "children": [
@@ -174973,7 +174973,7 @@
               },
               {
                 "name": "branch1_0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590592,
                 "own_params": 0,
                 "children": [
@@ -174995,7 +174995,7 @@
               },
               {
                 "name": "branch1_1a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 295424,
                 "own_params": 0,
                 "children": [
@@ -175018,7 +175018,7 @@
               },
               {
                 "name": "branch2_0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 590592,
                 "own_params": 0,
                 "children": [
@@ -175040,7 +175040,7 @@
               },
               {
                 "name": "branch2_1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 516992,
                 "own_params": 0,
                 "children": [
@@ -175062,7 +175062,7 @@
               },
               {
                 "name": "branch2_2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 689152,
                 "own_params": 0,
                 "children": [
@@ -175084,7 +175084,7 @@
               },
               {
                 "name": "branch2_3a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393728,
                 "own_params": 0,
                 "children": [
@@ -175120,7 +175120,7 @@
                   },
                   {
                     "name": "1",
-                    "type": "_ConvBnReLU",
+                    "type": "BasicConvBnReLU2d",
                     "params": 393728,
                     "own_params": 0,
                     "children": [
