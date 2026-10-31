@@ -110,7 +110,10 @@ class LoraLayer(_BaseTunerLayer):
     ``scaling``, ``lora_bias`` and ``use_dora`` mappings), and the forward
     pass applies the ones named in ``active_adapter`` that it holds.
     Merging folds an update into the base weights in place; each LoRA layer
-    type supplies the update (``get_delta_weight``) and the forward pass.
+    type supplies the update (``get_delta_weight``) and the forward pass.  A
+    DoRA adapter folds in as the row-rescaled weight
+    :math:`m\,(W + sBA)/\lVert W + sBA\rVert`; an adapter with ``lora_bias``
+    also adds its scaled bias to the base bias.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain public attributes, not
@@ -201,18 +204,6 @@ class LoraLayer(_BaseTunerLayer):
     def _adapter_built(self, adapter: str) -> None:
         """Called once ``adapter``'s factors are initialised; a layer that keeps variant state creates it here."""
 
-    @abstractmethod
-    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
-        """Each merge target as it would read with ``adapter`` folded in now, in the target's dtype."""
-
-    @abstractmethod
-    def _fold(self, adapter: str) -> None:
-        """Write ``adapter`` into the merge targets, in place."""
-
-    @abstractmethod
-    def _unfold(self) -> None:
-        """Take every merged adapter back out of the merge targets, in place."""
-
     def _factor_tables(self) -> list[nn.ModuleDict[nn.Module] | nn.ParameterDict]:
         """The factor tables (``adapter_layer_names`` less the variant tables), in order."""
         return [
@@ -261,25 +252,6 @@ class LoraLayer(_BaseTunerLayer):
         return MappingProxyType(
             {name: spec.variant == "dora" for name, spec in self._specs.items()}
         )
-
-    @property
-    def weight(self) -> Parameter:
-        """The base layer's weight (unchanged unless an adapter is merged into it)."""
-        weight = self.get_base_layer().weight
-        if isinstance(weight, Parameter):
-            return weight
-        raise AttributeError(f"{type(self.get_base_layer()).__name__} has no weight parameter")
-
-    @property
-    def bias(self) -> Parameter | None:
-        """The base layer's bias, or ``None``."""
-        bias = getattr(self.get_base_layer(), "bias", None)
-        return bias if isinstance(bias, Parameter) else None
-
-    @override
-    def get_base_layer(self) -> nn.Module:
-        """Return the wrapped module, whose parameters are the base model's own."""
-        return self.base_layer
 
     def _base_path(self) -> str:
         """The dotted path from this layer to the module holding the base parameters."""
@@ -450,77 +422,6 @@ class LoraLayer(_BaseTunerLayer):
                 "Impossible to merge LoRA with `lora_bias=True` because the base layer has no bias."
             )
         return pending
-
-    @override
-    def _check_finite_merge(self, adapter: str) -> None:
-        with lucid.no_grad():
-            finite = all(
-                bool(lucid.isfinite(value).all().item())
-                for value in self._merged_values(adapter).values()
-            )
-        if not finite:
-            raise ValueError(
-                f"NaNs detected in the merged weights. The adapter {adapter} seems to be broken"
-            )
-
-    @override
-    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
-        r"""Fold the update into the base weights, in place.
-
-        The weights keep their identity — they are written, not replaced —
-        so whatever holds them (an optimizer, a tied embedding) sees the
-        merged values.  That is also why a weight shared with another
-        module must not be merged into; ``LoraModel.merge_adapter`` and
-        ``merge_and_unload`` refuse it, as this layer alone cannot see the
-        rest of the model.  A DoRA adapter folds in as the row-rescaled
-        weight :math:`m\,(W + sBA)/\lVert W + sBA\rVert`; an adapter with
-        ``lora_bias`` also adds its scaled bias to the base bias.
-
-        Parameters
-        ----------
-        safe_merge : bool, default=False
-            Check the merged weights for NaN / inf first and leave the base
-            untouched if there are any.
-        adapter_names : list of str, optional
-            Adapters to merge; the active ones this layer holds by default.
-
-        Raises
-        ------
-        ValueError
-            An adapter name this layer does not hold, or ``safe_merge``
-            found a non-finite merged weight.
-        RuntimeError
-            The adapter is disabled, or it has ``lora_bias`` and the base
-            layer no bias.
-        NotImplementedError
-            This layer's update cannot be written into its base weights.
-        """
-        pending = self._pending_merges(adapter_names)
-        if not pending:
-            warnings.warn(f"Already merged: {self.merged_adapters}. Nothing to do.", stacklevel=2)
-        if safe_merge:
-            for adapter in pending:
-                self._check_finite_merge(adapter)
-        with lucid.no_grad():
-            for adapter in pending:
-                self._fold(adapter)
-                self.merged_adapters.append(adapter)
-                self.merged = True
-
-    @override
-    def unmerge(self) -> None:
-        """Take every merged update back out of the base weights, in place.
-
-        The result equals the original weights up to the rounding of the
-        round trip.
-        """
-        if not self.merged:
-            warnings.warn("Already unmerged. Nothing to do.", stacklevel=2)
-            return
-        with lucid.no_grad():
-            self._unfold()
-        self.merged_adapters.clear()
-        self.merged = False
 
 
 class _Plan(NamedTuple):

@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - register tuners by PeftType behind abstract bases
 
+- lift merge and weighted-adapter plumbing to the bases
+
 ### Fixed
 
 - pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)

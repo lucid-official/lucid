@@ -9,10 +9,16 @@ the index after the layer list's name.  Where v1 differs is stated on
 
 import dataclasses
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 
 import lucid.nn as nn
-from lucid.peft._config import PeftConfig, TaskType, _layer_regex, _TargetedConfig
+from lucid.peft._config import (
+    PeftConfig,
+    TaskType,
+    _layer_regex,
+    _pattern_key_regex,
+    _TargetedConfig,
+)
 from lucid.peft._slots import _outside_slots
 
 _ALL_LINEAR = "all-linear"
@@ -76,6 +82,16 @@ def _matches_target(config: _TargetedConfig, key: str) -> bool:
 def _selects(config: _TargetedConfig, key: str) -> bool:
     """Whether the module named ``key`` receives an adapter under ``config``."""
     return not _excluded(config, key) and _matches_target(config, key)
+
+
+def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
+    """``patterns``' value for the module named ``key`` (exact key, else a regex-suffix key), else ``default``."""
+    if key in patterns:
+        return patterns[key]
+    for pattern, value in patterns.items():
+        if re.match(_pattern_key_regex(pattern), key):
+            return value
+    return default
 
 
 def _parameter_paths(model: nn.Module) -> dict[int, list[str]]:

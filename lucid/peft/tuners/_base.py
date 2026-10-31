@@ -36,9 +36,10 @@ import copy
 import functools
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import ClassVar, NamedTuple, Protocol, override, runtime_checkable
 
+import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
@@ -112,6 +113,14 @@ def _entry_parameters(entry: nn.Module | Parameter | None) -> list[Parameter]:
     return [] if entry is None else [entry]
 
 
+def _parameter_at(table: nn.ParameterDict, name: str) -> Parameter:
+    """``table[name]``, which a ``ParameterDict`` types as optional: it must hold that parameter."""
+    entry = table[name]
+    if entry is None:
+        raise KeyError(f"{name!r} holds no parameter")
+    return entry
+
+
 def _entry_leaves(entry: nn.Module | Parameter | None) -> list[str]:
     """The state-dict suffixes under one table entry: a module's keys, or ``""`` for a bare parameter."""
     return list(entry.state_dict()) if isinstance(entry, nn.Module) else [""]
@@ -154,10 +163,12 @@ class _BaseTunerLayer(nn.Module, ABC):
 
     @override
     def __init_subclass__(
-        cls, *, base_type: type[nn.Module] | None = None, **kwargs: object
+        cls, *, base_type: type[nn.Module] | None = None, family: bool = False, **kwargs: object
     ) -> None:
         super().__init_subclass__(**kwargs)
-        if _BaseTunerLayer in cls.__bases__:
+        # A direct subclass starts a table; ``family=True`` starts one for a
+        # class that shares a base with other methods (the LyCORIS layers).
+        if family or _BaseTunerLayer in cls.__bases__:
             cls._layer_types = {}
         if base_type is not None:
             cls._base_type = base_type
@@ -190,12 +201,23 @@ class _BaseTunerLayer(nn.Module, ABC):
         """The adapters the forward pass applies, as a list."""
         return [name for name in _as_names(self.active_adapter) if name]
 
-    @abstractmethod
     def get_base_layer(self) -> nn.Module:
-        """Return the wrapped module, whose parameters are the base model's own.
+        """Return the wrapped module, whose parameters are the base model's own."""
+        return self.base_layer
 
-        Each family returns its own base type (``LoraLayer``: ``nn.Linear``).
-        """
+    @property
+    def weight(self) -> Parameter:
+        """The base layer's weight (unchanged unless an adapter is merged into it)."""
+        weight = self.get_base_layer().weight
+        if isinstance(weight, Parameter):
+            return weight
+        raise AttributeError(f"{type(self.get_base_layer()).__name__} has no weight parameter")
+
+    @property
+    def bias(self) -> Parameter | None:
+        """The base layer's bias, or ``None``."""
+        bias = getattr(self.get_base_layer(), "bias", None)
+        return bias if isinstance(bias, Parameter) else None
 
     def enable_adapters(self, enabled: bool) -> None:
         """Apply the adapter in the forward pass (``True``) or run the base alone (``False``).
@@ -336,20 +358,87 @@ class _BaseTunerLayer(nn.Module, ABC):
         """The change ``adapter`` makes to the base weight, shaped like it."""
 
     @abstractmethod
-    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
-        """Fold the adapter into the base weight, in place."""
-
-    @abstractmethod
-    def unmerge(self) -> None:
-        """Take every merged adapter back out of the base weight, in place."""
-
-    @abstractmethod
     def _merge_targets(self) -> dict[str, Parameter]:
         """The base parameters ``merge`` writes, by their name under this layer."""
 
     @abstractmethod
+    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
+        """Each merge target as it would read with ``adapter`` folded in now, in the target's dtype."""
+
+    @abstractmethod
+    def _fold(self, adapter: str) -> None:
+        """Write ``adapter`` into the merge targets, in place."""
+
+    @abstractmethod
+    def _unfold(self) -> None:
+        """Take every merged adapter back out of the merge targets, in place."""
+
     def _check_finite_merge(self, adapter: str) -> None:
         """Raise ``ValueError`` if merging ``adapter`` would write NaN or inf."""
+        with lucid.no_grad():
+            finite = all(
+                bool(lucid.isfinite(value).all().item())
+                for value in self._merged_values(adapter).values()
+            )
+        if not finite:
+            raise ValueError(
+                f"NaNs detected in the merged weights. The adapter {adapter} seems to be broken"
+            )
+
+    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
+        """Fold the update into the base weights, in place.
+
+        The weights keep their identity — they are written, not replaced —
+        so whatever holds them (an optimizer, a tied embedding) sees the
+        merged values.  That is also why a weight shared with another
+        module must not be merged into; the tuner's ``merge_adapter`` and
+        ``merge_and_unload`` refuse it, as this layer alone cannot see the
+        rest of the model.
+
+        Parameters
+        ----------
+        safe_merge : bool, default=False
+            Check the merged weights for NaN / inf first and leave the base
+            untouched if there are any.
+        adapter_names : list of str, optional
+            Adapters to merge; the active ones this layer holds by default.
+
+        Raises
+        ------
+        ValueError
+            An adapter name this layer does not hold, or ``safe_merge``
+            found a non-finite merged weight.
+        RuntimeError
+            The adapter is disabled, or the layer's own rules refuse the merge
+            (``lora_bias`` on a base with no bias).
+        NotImplementedError
+            This layer's update cannot be written into its base weights.
+        """
+        pending = self._pending_merges(adapter_names)
+        if not pending:
+            warnings.warn(f"Already merged: {self.merged_adapters}. Nothing to do.", stacklevel=2)
+        if safe_merge:
+            for adapter in pending:
+                self._check_finite_merge(adapter)
+        with lucid.no_grad():
+            for adapter in pending:
+                self._fold(adapter)
+                self.merged_adapters.append(adapter)
+                self.merged = True
+
+    def unmerge(self) -> None:
+        """Take every merged update back out of the base weights, in place.
+
+        The result equals the original weights up to the rounding of the
+        round trip.
+        """
+        if not self.merged:
+            warnings.warn("Already unmerged. Nothing to do.", stacklevel=2)
+            return
+        with lucid.no_grad():
+            self._unfold()
+        self.merged_adapters.clear()
+        self.merged = False
 
 
 class _Target(NamedTuple):
@@ -678,6 +767,51 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         self.set_requires_grad(adapter_name, False)
 
     # ── switching, freezing, deleting ─────────────────────────────────────
+
+    def _check_weighted_sources(
+        self, adapters: list[str], weights: list[float], adapter_name: str
+    ) -> str:
+        """The name of an adapter to be combined from ``adapters``, once the sources are checked.
+
+        The rules every ``add_weighted_adapter`` shares: a free, well-formed name; sources that
+        exist, one weight each; and no ``modules_to_save`` module trained by two sources (two
+        copies of one module cannot be averaged).
+        """
+        adapter_name = _check_adapter_name(adapter_name)
+        if adapter_name in self.peft_config:
+            raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
+        if not adapters:
+            raise ValueError(f"Found no adapter matching the names in {adapters}")
+        for name in adapters:
+            if name not in self.peft_config:
+                raise ValueError(f"Adapter {name} does not exist")
+        if len(weights) != len(adapters):
+            raise ValueError(
+                f"add_weighted_adapter needs one weight per adapter, got {len(weights)} "
+                f"weights for {len(adapters)} adapters"
+            )
+        for key, wrapper in _named(self.model, ModulesToSaveWrapper):
+            holders = [name for name in adapters if name in wrapper.modules_to_save]
+            if len(holders) > 1:
+                raise ValueError(
+                    "Cannot add weighted adapters if they target the same module with "
+                    f"modules_to_save, but {key!r} is trained by {holders}."
+                )
+        return adapter_name
+
+    def _add_combined_adapter(
+        self, adapter_name: str, config: PeftConfig, fill: Callable[[], None]
+    ) -> None:
+        """Add ``adapter_name``, then ``fill`` it from other adapters; withdrawn if ``fill`` fails.
+
+        A half-filled adapter must not stay behind under a name that looks complete.
+        """
+        self.add_adapter(adapter_name, config)
+        try:
+            fill()
+        except BaseException:
+            self.delete_adapter(adapter_name)
+            raise
 
     def _require_known(self, adapter_names: Sequence[str]) -> None:
         for name in adapter_names:

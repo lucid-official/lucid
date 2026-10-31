@@ -7,20 +7,18 @@ merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
 import dataclasses
 import functools
 import operator
-import re
 import warnings
-from collections.abc import Mapping
 from typing import ClassVar, Literal, TypedDict, override
 
 import lucid
 import lucid.nn as nn
-from lucid.peft._config import PeftConfig, PeftType, _pattern_key_regex, _TargetedConfig
+from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _AdapterSlot, _outside_slots
+from lucid.peft._targeting import _pattern_value
 from lucid.peft.tuners._base import (
     _BaseTuner,
     _BaseTunerLayer,
-    _check_adapter_name,
     _join,
     _named,
     _Target,
@@ -36,15 +34,6 @@ def _as_lora(config: PeftConfig) -> LoraConfig:
     # ``_BaseTuner`` has checked it against ``_config_class``.
     assert isinstance(config, LoraConfig)
     return config
-
-
-def _pattern_value[V](patterns: Mapping[str, V], key: str, default: V) -> V:
-    if key in patterns:
-        return patterns[key]
-    for pattern, value in patterns.items():
-        if re.match(_pattern_key_regex(pattern), key):
-            return value
-    return default
 
 
 def _wrapper_of(module: nn.Module, parameter: str) -> ParamWrapper | None:
@@ -339,19 +328,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
                     f"{name!r} has use_dora={config.use_dora}, lora_bias={config.lora_bias}"
                 )
 
-    def _check_weighted_adapters(
-        self, adapters: list[str], weights: list[float], majority_sign_method: str
-    ) -> None:
-        if not adapters:
-            raise ValueError(f"Found no adapter matching the names in {adapters}")
-        for name in adapters:
-            if name not in self.peft_config:
-                raise ValueError(f"Adapter {name} does not exist")
-        if len(weights) != len(adapters):
-            raise ValueError(
-                f"add_weighted_adapter needs one weight per adapter, got {len(weights)} "
-                f"weights for {len(adapters)} adapters"
-            )
+    def _check_weighted_adapters(self, adapters: list[str], majority_sign_method: str) -> None:
         if majority_sign_method not in ("total", "frequency"):
             raise ValueError(
                 f"majority_sign_method must be 'total' or 'frequency', got {majority_sign_method!r}"
@@ -363,14 +340,6 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
                 raise NotImplementedError(
                     f"add_weighted_adapter combines nn.Linear adapters only; {held} also adapt "
                     f"{key!r}, a {type(layer).__name__}"
-                )
-        # Two copies of one module cannot be averaged.
-        for key, wrapper in _named(self.model, ModulesToSaveWrapper):
-            holders = [name for name in adapters if name in wrapper.modules_to_save]
-            if len(holders) > 1:
-                raise ValueError(
-                    "Cannot add weighted adapters if they target the same module with "
-                    f"modules_to_save, but {key!r} is trained by {holders}."
                 )
 
     def _weighted_config(self, adapters: list[str], rank: int) -> LoraConfig:
@@ -474,21 +443,17 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
         >>> net[0].r["mix"]
         4
         """
-        adapter_name = _check_adapter_name(adapter_name)
-        if adapter_name in self.peft_config:
-            raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
-        self._check_weighted_adapters(adapters, weights, majority_sign_method)
+        adapter_name = self._check_weighted_sources(adapters, weights, adapter_name)
+        self._check_weighted_adapters(adapters, majority_sign_method)
         del density  # the TIES / DARE family's knob; none of the implemented types has a density
         # A single adapter has nothing to combine: it is scaled.
         strategy = _Combination.named("linear" if len(adapters) == 1 else combination_type)
         # The tensors allocated for the new adapter must hold the largest rank any layer uses.
         configs = [self._lora_config(name) for name in adapters]
         rank = strategy.new_rank([max([c.r, *c.rank_pattern.values()]) for c in configs], svd_rank)
-        self.add_adapter(adapter_name, self._weighted_config(adapters, rank))
         folding = strategy(_MergeOptions(rank, svd_clamp, svd_full_matrices, svd_driver))
-        try:
-            self._fill_weighted_adapter(adapter_name, folding, adapters, weights)
-        except BaseException:
-            # A half-filled adapter must not stay behind under a name that looks complete.
-            self.delete_adapter(adapter_name)
-            raise
+        self._add_combined_adapter(
+            adapter_name,
+            self._weighted_config(adapters, rank),
+            lambda: self._fill_weighted_adapter(adapter_name, folding, adapters, weights),
+        )
