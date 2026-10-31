@@ -3,23 +3,23 @@
   "name": "utils",
   "path": "lucid.nn.utils",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/__init__.py#L1",
   "members": [
     {
       "name": "clip_grad_norm_",
       "path": "lucid.nn.utils.clip_grad.clip_grad_norm_",
       "kind": "function",
       "labels": [],
-      "signature": "clip_grad_norm_(parameters: Iterable[Parameter], max_norm: float, norm_type: float = 2.0, error_if_nonfinite: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/clip_grad.py#L107",
+      "signature": "clip_grad_norm_(parameters: Tensor | Iterable[Tensor], max_norm: float, norm_type: float = 2.0, error_if_nonfinite: bool = False, foreach: bool | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/clip_grad.py#L253",
       "subcategory": "clip_grad",
       "summary": "Clip the global gradient norm of `parameters` in place.",
       "extended": "Rescales every gradient so that the total $\\ell_p$ norm —\ncomputed across all parameters jointly, as if they were one long\nconcatenated vector — is at most `max_norm`.  A staple of stable\nTransformer / RNN training: prevents the occasional huge gradient\nfrom derailing optimisation.",
       "parameters": [
         {
           "name": "parameters",
-          "annotation": "iterable of Parameter",
-          "description": "Parameters whose `.grad` should be clipped.  Entries with\n`grad is None` are silently skipped.",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Parameters whose `.grad` should be clipped; one `Tensor` counts\nas a one-element list.  Entries with `grad is None` are silently\nskipped.",
           "default": null
         },
         {
@@ -31,7 +31,7 @@
         {
           "name": "norm_type",
           "annotation": "float",
-          "description": "Order $p$ of the norm.  Default `2.0` (Euclidean);\n`math.inf` is the max-norm over all gradients; `0` counts the\ngradients with a non-zero entry, as the reference does.",
+          "description": "Order $p$ of the norm.  Default `2.0` (Euclidean);\n`math.inf` is the max-norm over all gradients and `-math.inf`\nthe smallest magnitude; `0` counts the gradients with a non-zero\nentry, as the reference does.  Gradients on different devices are\nreduced where they live.",
           "default": "2.0"
         },
         {
@@ -39,11 +39,17 @@
           "annotation": "bool",
           "description": "If `True`, raise `RuntimeError` when the computed total\nnorm is `inf` or `nan` instead of silently scaling by a\nnon-finite coefficient.",
           "default": "False"
+        },
+        {
+          "name": "foreach",
+          "annotation": "bool",
+          "description": "Accepted for API compatibility; ignored.",
+          "default": "None"
         }
       ],
       "returns": {
         "annotation": "Tensor",
-        "description": "Scalar tensor holding the *pre-clipping* total norm.  Useful for\nlogging the gradient magnitude during training even when no\nactual clipping took place."
+        "description": "Scalar tensor holding the *pre-clipping* total norm, in the dtype\nthe gradients promote to — useful for logging even when nothing was\nclipped.  Half-precision gradients are summed in `float32`."
       },
       "raises": [],
       "examples": [
@@ -61,16 +67,16 @@
       "path": "lucid.nn.utils.clip_grad_norm",
       "kind": "function",
       "labels": [],
-      "signature": "clip_grad_norm_(parameters: Iterable[Parameter], max_norm: float, norm_type: float = 2.0, error_if_nonfinite: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/clip_grad.py#L107",
+      "signature": "clip_grad_norm_(parameters: Tensor | Iterable[Tensor], max_norm: float, norm_type: float = 2.0, error_if_nonfinite: bool = False, foreach: bool | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/clip_grad.py#L253",
       "subcategory": "clip_grad",
       "summary": "Clip the global gradient norm of `parameters` in place.",
       "extended": "Rescales every gradient so that the total $\\ell_p$ norm —\ncomputed across all parameters jointly, as if they were one long\nconcatenated vector — is at most `max_norm`.  A staple of stable\nTransformer / RNN training: prevents the occasional huge gradient\nfrom derailing optimisation.",
       "parameters": [
         {
           "name": "parameters",
-          "annotation": "iterable of Parameter",
-          "description": "Parameters whose `.grad` should be clipped.  Entries with\n`grad is None` are silently skipped.",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Parameters whose `.grad` should be clipped; one `Tensor` counts\nas a one-element list.  Entries with `grad is None` are silently\nskipped.",
           "default": null
         },
         {
@@ -82,7 +88,7 @@
         {
           "name": "norm_type",
           "annotation": "float",
-          "description": "Order $p$ of the norm.  Default `2.0` (Euclidean);\n`math.inf` is the max-norm over all gradients; `0` counts the\ngradients with a non-zero entry, as the reference does.",
+          "description": "Order $p$ of the norm.  Default `2.0` (Euclidean);\n`math.inf` is the max-norm over all gradients and `-math.inf`\nthe smallest magnitude; `0` counts the gradients with a non-zero\nentry, as the reference does.  Gradients on different devices are\nreduced where they live.",
           "default": "2.0"
         },
         {
@@ -90,11 +96,17 @@
           "annotation": "bool",
           "description": "If `True`, raise `RuntimeError` when the computed total\nnorm is `inf` or `nan` instead of silently scaling by a\nnon-finite coefficient.",
           "default": "False"
+        },
+        {
+          "name": "foreach",
+          "annotation": "bool",
+          "description": "Accepted for API compatibility; ignored.",
+          "default": "None"
         }
       ],
       "returns": {
         "annotation": "Tensor",
-        "description": "Scalar tensor holding the *pre-clipping* total norm.  Useful for\nlogging the gradient magnitude during training even when no\nactual clipping took place."
+        "description": "Scalar tensor holding the *pre-clipping* total norm, in the dtype\nthe gradients promote to — useful for logging even when nothing was\nclipped.  Half-precision gradients are summed in `float32`."
       },
       "raises": [],
       "examples": [
@@ -112,23 +124,29 @@
       "path": "lucid.nn.utils.clip_grad.clip_grad_value_",
       "kind": "function",
       "labels": [],
-      "signature": "clip_grad_value_(parameters: Iterable[Parameter], clip_value: float)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/clip_grad.py#L210",
+      "signature": "clip_grad_value_(parameters: Tensor | Iterable[Tensor], clip_value: float, foreach: bool | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/clip_grad.py#L411",
       "subcategory": "clip_grad",
       "summary": "Clamp every gradient element to $[-\\text{clip\\_value}, \\text{clip\\_value}]$ in place.",
       "extended": "Unlike `clip_grad_norm_`, which preserves the direction of the\nfull gradient vector, this operates element-wise — each scalar entry\nis independently clipped to the symmetric interval.  Cheap, and a\nuseful safety net when only a handful of weights tend to blow up\n(e.g. embedding tables on rare tokens).",
       "parameters": [
         {
           "name": "parameters",
-          "annotation": "iterable of Parameter",
-          "description": "Parameters whose `.grad` should be clipped.  Entries with\n`grad is None` are skipped.",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Parameters whose `.grad` should be clipped; one `Tensor` counts\nas a one-element list.  Entries with `grad is None` are skipped.",
           "default": null
         },
         {
           "name": "clip_value",
           "annotation": "float",
-          "description": "Symmetric magnitude bound.  Must be non-negative; gradients are\nclamped to `[-clip_value, +clip_value]`.",
+          "description": "Symmetric magnitude bound; gradients are clamped to\n`[-clip_value, +clip_value]`.  A negative value inverts the\ninterval, and every element becomes `clip_value`, as in the\nreference.",
           "default": null
+        },
+        {
+          "name": "foreach",
+          "annotation": "bool",
+          "description": "Accepted for API compatibility; ignored.",
+          "default": "None"
         }
       ],
       "returns": {
@@ -147,12 +165,70 @@
       "see_also": []
     },
     {
+      "name": "clip_grads_with_norm_",
+      "path": "lucid.nn.utils.clip_grad.clip_grads_with_norm_",
+      "kind": "function",
+      "labels": [],
+      "signature": "clip_grads_with_norm_(parameters: Tensor | Iterable[Tensor], max_norm: float, total_norm: Tensor, foreach: bool | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/clip_grad.py#L348",
+      "subcategory": "clip_grad",
+      "summary": "Clip the gradients of `parameters` in place, given their total norm.",
+      "extended": "The scaling step of `clip_grad_norm_` on its own, for when the norm\nwas measured elsewhere — by `get_total_norm` over gradients that\nlive in several places, say, or reduced across processes.  Every\ngradient is multiplied by $\\min(1, \\text{max\\_norm} / (\\text{total\\_norm} + 10^{-6}))$, so a norm already within `max_norm`\nleaves them untouched.",
+      "parameters": [
+        {
+          "name": "parameters",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Parameters whose `.grad` is scaled; one `Tensor` counts as a\none-element list.  Entries with `grad is None` are skipped.",
+          "default": null
+        },
+        {
+          "name": "max_norm",
+          "annotation": "float",
+          "description": "The norm the gradients are clipped to.",
+          "default": null
+        },
+        {
+          "name": "total_norm",
+          "annotation": "Tensor",
+          "description": "The gradients' total norm, a one-element tensor.",
+          "default": null
+        },
+        {
+          "name": "foreach",
+          "annotation": "bool",
+          "description": "Accepted for API compatibility; ignored.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "None",
+        "description": ""
+      },
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "If `total_norm` is not a `Tensor`."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "If `total_norm` does not hold exactly one element."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.nn.utils import clip_grads_with_norm_, get_total_norm\n>>> model = nn.Linear(4, 2)\n>>> (model(lucid.randn(8, 4)) * 100.0).sum().backward()\n>>> params = list(model.parameters())\n>>> norm = get_total_norm([p.grad for p in params])\n>>> clip_grads_with_norm_(params, max_norm=1.0, total_norm=norm)\n>>> after = get_total_norm([p.grad for p in params])\n>>> abs(float(after) - 1.0) < 1e-3\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "get_total_norm",
       "path": "lucid.nn.utils.clip_grad.get_total_norm",
       "kind": "function",
       "labels": [],
       "signature": "get_total_norm(tensors: Iterable[Tensor] | Tensor, norm_type: float = 2.0, error_if_nonfinite: bool = False, foreach: bool | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/clip_grad.py#L264",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/clip_grad.py#L474",
       "subcategory": "clip_grad",
       "summary": "Compute the $\\ell_p$ norm of `tensors`, taken jointly.",
       "extended": "The measurement step of `clip_grad_norm_`, which hands it the\nparameters' gradients.  It measures the tensors it is given, as the\nreference framework's does — it used to read `.grad` from them, so\nthe usual call, `get_total_norm([p.grad for p in model.parameters()])`,\nread the gradients' own (absent) gradients and answered 0.",
@@ -202,16 +278,16 @@
       "path": "lucid.nn.utils.convert_parameters.parameters_to_vector",
       "kind": "function",
       "labels": [],
-      "signature": "parameters_to_vector(parameters: Iterable[Parameter])",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/convert_parameters.py#L16",
+      "signature": "parameters_to_vector(parameters: Tensor | Iterable[Tensor])",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/convert_parameters.py#L16",
       "subcategory": "convert_parameters",
       "summary": "Flatten an iterable of parameters into a single 1-D `Tensor`.",
       "extended": "Every parameter is detached, reshaped to 1-D, and concatenated in\niteration order.  Useful when an algorithm needs to view the whole\nparameter set as one vector — most commonly second-order optimisers\n(L-BFGS, conjugate-gradient, trust-region methods), hyper-gradient\nsolvers, and natural-gradient pre-conditioners.",
       "parameters": [
         {
           "name": "parameters",
-          "annotation": "iterable of Parameter",
-          "description": "Parameters to flatten.  Each must be a `lucid._tensor.tensor.Tensor`\n(or subclass).  All entries must share device and dtype; a mismatch\nraises `ValueError`.",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Parameters to flatten; one `Tensor` counts as a one-element list.\nEach must be a `lucid._tensor.tensor.Tensor`\n(or subclass).  All entries must share device and dtype; a mismatch\nraises `ValueError`.",
           "default": null
         }
       ],
@@ -235,8 +311,8 @@
       "path": "lucid.nn.utils.convert_parameters.vector_to_parameters",
       "kind": "function",
       "labels": [],
-      "signature": "vector_to_parameters(vec: Tensor, parameters: Iterable[Parameter])",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/convert_parameters.py#L87",
+      "signature": "vector_to_parameters(vec: Tensor, parameters: Tensor | Iterable[Tensor])",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/convert_parameters.py#L86",
       "subcategory": "convert_parameters",
       "summary": "Copy a flat 1-D tensor back into the supplied parameters in place.",
       "extended": "Inverse of `parameters_to_vector`.  `vec` is sliced according\nto the size of each parameter (in iteration order) and the slices are\nwritten into the parameters' storage.  Typically called by line-search\nroutines and second-order optimisers that operate on the concatenated\nvector and need to push the result back into the model.",
@@ -249,8 +325,8 @@
         },
         {
           "name": "parameters",
-          "annotation": "iterable of Parameter",
-          "description": "Destination parameters.  Each parameter's storage is overwritten\nwith the matching slice of `vec`, reshaped to the parameter's\nown shape.",
+          "annotation": "Tensor or iterable of Tensor",
+          "description": "Destination parameters; one `Tensor` counts as a one-element\nlist.  Each parameter's storage is overwritten\nwith the matching slice of `vec`, reshaped to the parameter's\nown shape.",
           "default": null
         }
       ],
@@ -275,7 +351,7 @@
       "kind": "function",
       "labels": [],
       "signature": "remove_weight_norm(module: Module, name: str = 'weight')",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/weight_norm.py#L140",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/weight_norm.py#L195",
       "subcategory": "weight_norm",
       "summary": "Reverse `weight_norm` and restore a plain leaf parameter.",
       "extended": "Materialises $\\mathbf{W} = g \\cdot \\mathbf{v}/\\|\\mathbf{v}\\|$\none last time, writes the result back as a single leaf parameter\n`module.<name>`, drops `<name>_g` / `<name>_v`, and detaches\nthe forward pre-hook.  Typical use is right before exporting a model\nfor inference where the reparametrised form is not needed.",
@@ -318,8 +394,8 @@
       "path": "lucid.nn.utils.weight_norm.weight_norm",
       "kind": "function",
       "labels": [],
-      "signature": "weight_norm(module: Module, name: str = 'weight', dim: int = 0)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/weight_norm.py#L44",
+      "signature": "weight_norm(module: Module, name: str = 'weight', dim: int | None = 0)",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/weight_norm.py#L131",
       "subcategory": "weight_norm",
       "summary": "Reparametrise a weight as direction times magnitude (Salimans & Kingma 2016).",
       "extended": "Replaces `module.<name>` with the derived tensor\n\n$$\n\\mathbf{W} \\;=\\; g \\,\\cdot\\, \\frac{\\mathbf{v}}{\\|\\mathbf{v}\\|}\n$$\n\nwhere `g` is a learnable scale (one entry per slice along `dim`)\nand `v` is a learnable direction sharing the original weight's\nshape.  Decoupling magnitude from direction often accelerates\nconvergence and improves conditioning, especially in deep\nconvolutional and recurrent networks.",
@@ -338,8 +414,8 @@
         },
         {
           "name": "dim",
-          "annotation": "int",
-          "description": "Axis along which the scale `g` has its own entry; norms are\nreduced over every other axis.  `0` (the default) is correct\nfor `Linear` and `Conv*` (one scale per output channel).\nUse `-1` for output-row Linear layouts.",
+          "annotation": "int or None",
+          "description": "Axis along which the scale `g` has its own entry; norms are\nreduced over every other axis.  `0` (the default) is correct\nfor `Linear` and `Conv*` (one scale per output channel).\n`None` or `-1` normalises the whole tensor against one scalar\n`g` (the reference's convention); any other negative `dim`\ncounts from the end.",
           "default": "0"
         }
       ],
@@ -352,7 +428,7 @@
         ">>> import lucid.nn as nn\n>>> from lucid.nn.utils import weight_norm\n>>> layer = weight_norm(nn.Linear(128, 64))\n>>> layer.weight_g.shape, layer.weight_v.shape\n((64, 1), (64, 128))"
       ],
       "notes": [
-        "Two new parameters are registered:\n\n* `<name>_g` — broadcast-shaped tensor (`1` along every axis\n  except `dim`) holding the per-slice magnitudes.\n* `<name>_v` — same shape as the original weight, holding the\n  unnormalised direction.\n\nA forward pre-hook recomputes $\\mathbf{W} = g \\cdot \\mathbf{v}/\\|\\mathbf{v}\\|$\nso subsequent autograd / inference sees the same shape as before.\nInvert with `remove_weight_norm`."
+        "Two new parameters are registered:\n\n* `<name>_g` — broadcast-shaped tensor (`1` along every axis\n  except `dim`; a 0-d scalar for `dim=None` / `-1`) holding the\n  per-slice magnitudes.\n* `<name>_v` — same shape as the original weight, holding the\n  unnormalised direction.\n\nA forward pre-hook recomputes $\\mathbf{W} = g \\cdot \\mathbf{v}/\\|\\mathbf{v}\\|$\nso subsequent autograd / inference sees the same shape as before.\nInvert with `remove_weight_norm`."
       ],
       "attributes": [],
       "warns": [],
@@ -364,7 +440,7 @@
       "kind": "function",
       "labels": [],
       "signature": "remove_spectral_norm(module: Module, name: str = 'weight')",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/spectral_norm.py#L198",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/spectral_norm.py#L279",
       "subcategory": "spectral_norm",
       "summary": "Reverse `spectral_norm` and restore a plain leaf parameter.",
       "extended": "Copies `module.<name>_orig` back into a fresh leaf parameter\n`module.<name>`, removes the `<name>_u` / `<name>_v` power-\niteration buffers, and detaches the forward pre-hook.  Used before\nexporting for inference when the normalisation overhead is no\nlonger wanted, or before fine-tuning without the spectral cap.",
@@ -408,7 +484,7 @@
       "kind": "function",
       "labels": [],
       "signature": "spectral_norm(module: Module, name: str = 'weight', n_power_iterations: int = 1, eps: float = 1e-12, dim: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/spectral_norm.py#L59",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/spectral_norm.py#L191",
       "subcategory": "spectral_norm",
       "summary": "Constrain a weight's spectral norm via power iteration (Miyato et al. 2018).",
       "extended": "Reparametrises `module.<name>` as\n\n$$\n\\mathbf{W} \\;=\\; \\frac{\\mathbf{W}_{\\text{orig}}}{\\sigma(\\mathbf{W}_{\\text{orig}})},\n$$\n\nwhere $\\sigma(\\mathbf{W})$ is the largest singular value\n(operator 2-norm) of the weight viewed as a matrix.  This bounds the\nlayer's Lipschitz constant by `1` and is the canonical\nstabilisation trick for GAN discriminators; it also sees use in\ncertified-robust classifiers and contractive Transformer variants.",
@@ -446,9 +522,18 @@
       ],
       "returns": {
         "annotation": "Module",
-        "description": "The same module, with `<name>_orig` (the trainable underlying\nmatrix), `<name>_u` / `<name>_v` (buffers), and a forward\npre-hook performing the normalisation."
+        "description": "The same module, with `<name>_orig` (the trainable underlying\nmatrix), `<name>_u` / `<name>_v` (buffers), and a forward\npre-hook performing the normalisation.  `<name>_orig` is the\noriginal `lucid.nn.parameter.Parameter` object itself, so an\noptimizer built before this call keeps updating it."
       },
-      "raises": [],
+      "raises": [
+        {
+          "annotation": "RuntimeError",
+          "description": "If `<name>` is already spectral-normalised."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "If `n_power_iterations` is not positive or `dim` is out of range."
+        }
+      ],
       "examples": [
         ">>> import lucid.nn as nn\n>>> from lucid.nn.utils import spectral_norm\n>>> disc = spectral_norm(nn.Conv2d(3, 64, 3, padding=1))"
       ],
@@ -469,7 +554,7 @@
       ],
       "labels": [],
       "signature": "PackedSequence()",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L184",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L184",
       "subcategory": "rnn",
       "methods": [
         {
@@ -480,7 +565,7 @@
             "property"
           ],
           "signature": "is_metal: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L281",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L281",
           "summary": "Whether `data` lives on the Metal device.",
           "extended": null,
           "parameters": [],
@@ -501,7 +586,7 @@
           "kind": "function",
           "labels": [],
           "signature": "to(device: DeviceLike | DTypeLike | Tensor = None, dtype: DTypeLike = None, non_blocking: bool = False, copy: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L285",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L285",
           "subcategory": "rnn",
           "summary": "Move or cast `data`; the index tensors follow it to its device.",
           "extended": "Takes what `lucid.Tensor.to` takes.  `dtype` applies to\n`data` only — the index tensors stay integer and `batch_sizes`\nstays on the CPU.",
@@ -548,7 +633,7 @@
           "kind": "function",
           "labels": [],
           "signature": "float()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L334",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L334",
           "subcategory": "rnn",
           "summary": "Cast `data` to `float32`.",
           "extended": null,
@@ -570,7 +655,7 @@
           "kind": "function",
           "labels": [],
           "signature": "double()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L338",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L338",
           "subcategory": "rnn",
           "summary": "Cast `data` to `float64`.",
           "extended": null,
@@ -592,7 +677,7 @@
           "kind": "function",
           "labels": [],
           "signature": "half()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L342",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L342",
           "subcategory": "rnn",
           "summary": "Cast `data` to `float16`.",
           "extended": null,
@@ -614,7 +699,7 @@
           "kind": "function",
           "labels": [],
           "signature": "long()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L346",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L346",
           "subcategory": "rnn",
           "summary": "Cast `data` to `int64`.",
           "extended": null,
@@ -636,7 +721,7 @@
           "kind": "function",
           "labels": [],
           "signature": "int()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L350",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L350",
           "subcategory": "rnn",
           "summary": "Cast `data` to `int32`.",
           "extended": null,
@@ -658,7 +743,7 @@
           "kind": "function",
           "labels": [],
           "signature": "short()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L354",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L354",
           "subcategory": "rnn",
           "summary": "Cast `data` to `int16`.",
           "extended": null,
@@ -680,7 +765,7 @@
           "kind": "function",
           "labels": [],
           "signature": "char()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L358",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L358",
           "subcategory": "rnn",
           "summary": "Cast `data` to `int8`.",
           "extended": null,
@@ -702,7 +787,7 @@
           "kind": "function",
           "labels": [],
           "signature": "byte()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L362",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L362",
           "subcategory": "rnn",
           "summary": "Cast `data` to `uint8`.",
           "extended": null,
@@ -729,7 +814,7 @@
           "kind": "function",
           "labels": [],
           "signature": "cpu()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L372",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L372",
           "subcategory": "rnn",
           "summary": "Move `data` and the index tensors to the CPU.",
           "extended": null,
@@ -751,7 +836,7 @@
           "kind": "function",
           "labels": [],
           "signature": "metal()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L376",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L376",
           "subcategory": "rnn",
           "summary": "Move `data` and the index tensors to the Metal device.",
           "extended": null,
@@ -773,7 +858,7 @@
           "kind": "function",
           "labels": [],
           "signature": "pin_memory()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L380",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L380",
           "subcategory": "rnn",
           "summary": "Pin `data` and the index tensors; a no-op on Apple Silicon's unified memory.",
           "extended": null,
@@ -795,7 +880,7 @@
           "kind": "function",
           "labels": [],
           "signature": "is_pinned()",
-          "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L391",
+          "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L391",
           "subcategory": "rnn",
           "summary": "Whether `data` is in pinned memory (always `False` on Apple Silicon).",
           "extended": null,
@@ -863,7 +948,7 @@
       "kind": "function",
       "labels": [],
       "signature": "pack_padded_sequence(input: Tensor, lengths: Tensor | list[int], batch_first: bool = False, enforce_sorted: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L396",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L396",
       "subcategory": "rnn",
       "summary": "Pack a padded $(T, B, *)$ batch into a `PackedSequence`.",
       "extended": "Strips out the padding cells so downstream RNN kernels iterate only\nover genuine time-steps.  Reduces both compute and (with masked\nlosses) accidental gradient flow through pad positions.",
@@ -919,7 +1004,7 @@
       "kind": "function",
       "labels": [],
       "signature": "pack_sequence(sequences: list[Tensor], enforce_sorted: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L777",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L777",
       "subcategory": "rnn",
       "summary": "One-shot pack-from-list — equivalent to `pad_sequence` then `pack_padded_sequence`.",
       "extended": "Convenience wrapper for the common case where a list of per-example\ntensors needs to become a `PackedSequence` without going\nthrough an intermediate padded tensor.  Each entry's leading axis\nis treated as the time dimension; remaining axes carry the feature\nshape (which must be identical across the list).",
@@ -963,7 +1048,7 @@
       "kind": "function",
       "labels": [],
       "signature": "pad_packed_sequence(sequence: PackedSequence, batch_first: bool = False, padding_value: float = 0.0, total_length: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L489",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L489",
       "subcategory": "rnn",
       "summary": "Inverse of `pack_padded_sequence` — produce a padded tensor.",
       "extended": "Re-inflates a `PackedSequence` into a dense\n$(T_\\text{max}, B, *)$ (or $(B, T_\\text{max}, *)$)\ntensor with the original batch order restored.  The freshly created\ncells beyond each sequence's true length are filled with\n`padding_value`.",
@@ -1019,7 +1104,7 @@
       "kind": "function",
       "labels": [],
       "signature": "pad_sequence(sequences: list[Tensor], batch_first: bool = False, padding_value: float = 0.0, padding_side: Literal['right', 'left'] = 'right')",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L594",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L594",
       "subcategory": "rnn",
       "summary": "Stack a list of variable-length tensors into a padded batch.",
       "extended": "Each input is padded along its leading time dimension up to the\nlongest sequence in `sequences`, then the padded versions are\nstacked along a new batch axis.  Useful as the first step of an\nRNN training loop when sequences are produced one at a time (per-\nexample tokenisation, audio framing, etc.).",
@@ -1083,7 +1168,7 @@
       "kind": "function",
       "labels": [],
       "signature": "unpack_sequence(packed_sequences: PackedSequence)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L743",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L743",
       "subcategory": "rnn",
       "summary": "Split a `PackedSequence` into its variable-length sequences.",
       "extended": "The inverse of `pack_sequence`: the sequences come back in the\norder they were packed in, whether or not they were sorted.",
@@ -1119,7 +1204,7 @@
       "kind": "function",
       "labels": [],
       "signature": "unpad_sequence(padded_sequences: Tensor, lengths: Tensor | list[int], batch_first: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/rnn.py#L683",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/rnn.py#L683",
       "subcategory": "rnn",
       "summary": "Split a padded batch back into its variable-length sequences.",
       "extended": "The inverse of `pad_sequence` for right-padded batches: sequence\n`b` is the first `lengths[b]` steps of the `b`-th batch entry.",
@@ -1167,7 +1252,7 @@
       "kind": "function",
       "labels": [],
       "signature": "copy_parameters_and_buffers(source: Module, dest: Module)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/_copy.py#L13",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/_copy.py#L13",
       "subcategory": "copy",
       "summary": "Copy all parameter / buffer values from `source` into `dest`.",
       "extended": "Both modules must expose the same set of parameter and buffer names;\na `KeyError` is raised if a name found on `source` is missing on\n`dest`.  Tensor data is copied in-place via `Tensor.detach()` and\nstorage assignment so that `dest`'s autograd graph (if any) is not\ndisturbed by the copy.",
@@ -1206,7 +1291,7 @@
       "kind": "function",
       "labels": [],
       "signature": "fuse_conv_bn_eval(conv: object, bn: object)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/fusion.py#L31",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/fusion.py#L31",
       "subcategory": "fusion",
       "summary": "Fold a BatchNorm layer into the preceding Conv weights (inference-only).",
       "extended": "Because BN at eval time is an affine map with frozen statistics, the\ncomposition `BN(Conv(x))` is itself a single convolution — the BN\ncan be analytically absorbed into the conv's weight and bias.  The\nfused module computes exactly the same output but with one fewer\nkernel launch and one fewer allocation per call.  Standard step in\ndeployment / quantisation pipelines.",
@@ -1250,7 +1335,7 @@
       "kind": "function",
       "labels": [],
       "signature": "fuse_conv_bn_weights(conv_w: Tensor, conv_b: Tensor | None, bn_rm: Tensor, bn_rv: Tensor, bn_eps: float, bn_w: Tensor | None, bn_b: Tensor | None)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/fusion.py#L140",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/fusion.py#L140",
       "subcategory": "fusion",
       "summary": "Low-level form of `fuse_conv_bn_eval` operating on raw tensors.",
       "extended": "Takes the relevant Conv and BN tensors as plain arguments and\nreturns the fused `(weight, bias)` pair.  Useful for build tools\nthat walk a serialised graph (ONNX, ahead-of-time compilation) and\nneed to perform the fusion without instantiating Module objects.",
@@ -1319,7 +1404,7 @@
       "kind": "function",
       "labels": [],
       "signature": "fuse_linear_bn_eval(linear: object, bn: object)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/fusion.py#L220",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/fusion.py#L220",
       "subcategory": "fusion",
       "summary": "Fold a BatchNorm1d into the preceding Linear weights (inference-only).",
       "extended": "The 1-D analogue of `fuse_conv_bn_eval` — absorbs the BN's\neval-time affine transform into a Linear layer's weight and bias.\nThe fused linear computes `BN(Linear(x))` exactly while using one\nfewer kernel.",
@@ -1363,7 +1448,7 @@
       "kind": "function",
       "labels": [],
       "signature": "fuse_linear_bn_weights(linear_w: Tensor, linear_b: Tensor | None, bn_rm: Tensor, bn_rv: Tensor, bn_eps: float, bn_w: Tensor | None, bn_b: Tensor | None)",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/fusion.py#L288",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/fusion.py#L288",
       "subcategory": "fusion",
       "summary": "Low-level form of `fuse_linear_bn_eval` operating on raw tensors.",
       "extended": "Internally identical to `fuse_conv_bn_weights` — a Linear's\nweight is just a 2-D conv weight from the BN's perspective.\nExposed under its own name to keep call sites self-documenting in\ngraph-rewrite passes.",
@@ -1432,7 +1517,7 @@
       "kind": "function",
       "labels": [],
       "signature": "skip_init(module_cls: type, args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/nn/utils/skip_init.py#L15",
+      "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/nn/utils/skip_init.py#L15",
       "subcategory": "skip_init",
       "summary": "Construct a module while skipping its parameter initialisation.",
       "extended": "Instantiates `module_cls(*args, **kwargs)` with every\n`lucid.nn.init` initialiser turned into a no-op, so each\nparameter keeps whatever its allocation left.  The intended pattern\nis \"construct, then `load_state_dict`\": skipping the\n`lucid.nn.init.xavier_uniform_` /\n`lucid.nn.init.kaiming_normal_` work that is about to be\noverwritten saves measurable time on large models with many layers.",

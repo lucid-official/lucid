@@ -3,7 +3,7 @@
   "name": "multimodal",
   "path": "lucid.models.multimodal",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/models/multimodal/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/models/multimodal/__init__.py#L1",
   "members": [],
   "summary": "Models whose input spans more than one modality.",
   "extended": "The domain exists because the alternative is a lie about where a model\nbelongs.  A CLIP filed under `vision` would hide a text Transformer\nthat is half its parameters and all of its transfer story; filed under\n`text` it would hide the image tower.  The zoo classifies by\nstructure, and two encoders trained to land in one representation are a\nstructure neither single-modality domain describes.\n\nConcrete families live in sub-packages (`clip`).  What is exported\nhere is the base config — the arrangement\n`lucid.models.generative` and `lucid.models.text` already use.\n\nNothing else is here yet, and that is the rule rather than an accident:\na module at this level is for what **several** families share.  CLIP's\nTransformer blocks are generic enough to belong here eventually and sit\nin `clip/_towers.py` until a second family wants them, because a\nshared module with one consumer is an abstraction guessed rather than\nobserved.",

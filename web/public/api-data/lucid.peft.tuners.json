@@ -3,7 +3,7 @@
   "name": "tuners",
   "path": "lucid.peft.tuners",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/0dcd2be/lucid/peft/tuners/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c34eb6c/lucid/peft/tuners/__init__.py#L1",
   "members": [],
   "summary": "`lucid.peft.tuners` — one sub-package per parameter-efficient method.",
   "extended": "`lora`, `adalora`, `ia3`, `loha`, `lokr` and `vera` hold the method's layer\nclasses; `prompt_tuning`, `multitask_prompt_tuning`, `prefix_tuning` and `p_tuning` hold the learned\nprompt (they adapt no layer).  The config and model-level classes are exported from `lucid.peft`.",
