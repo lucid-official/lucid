@@ -597,7 +597,7 @@ class _FusedStep:
         from lucid.compile._core.fallback import _fallback_notice, off_gpu_detail
         from lucid.compile._core.signature import (
             leaf_tensors,
-            model_has_active_hooks,
+            hooks_decline,
             tensors_have_active_hooks,
         )
 
@@ -618,7 +618,7 @@ class _FusedStep:
             # ``add_param_group`` re-flattened the parameters.
             self._params_seen = copt._params
             self.recompile()
-        if model_has_active_hooks(self._model) or tensors_have_active_hooks(leaves):
+        if hooks_decline(self._model, "fused_step") or tensors_have_active_hooks(leaves):
             return self._run_eager(args)
         flags = copt._flags_now()
         call = self._fingerprint.key_of(args, {}, dynamic=False)

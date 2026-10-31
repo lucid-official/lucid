@@ -56,7 +56,7 @@ from lucid.compile._core.signature import (
     ParamFingerprint,
     TraceReads,
     leaf_tensors,
-    model_has_active_hooks,
+    hooks_decline,
     tensors_have_active_hooks,
     tree_requires_grad,
 )
@@ -900,7 +900,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         leaves = leaf_tensors(args, kwargs)
         if (
             key in self._eager_only
-            or model_has_active_hooks(self._model)
+            or hooks_decline(self._model, "CompiledModule")
             or tensors_have_active_hooks(leaves)
         ):
             self._count(key)

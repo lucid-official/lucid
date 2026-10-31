@@ -587,7 +587,7 @@ def make_segmented_step(
     from lucid.compile._core.signature import (
         ParamFingerprint,
         leaf_tensors,
-        model_has_active_hooks,
+        hooks_decline,
         tensors_have_active_hooks,
     )
 
@@ -627,7 +627,7 @@ def make_segmented_step(
         fingerprint.get()  # rebuilds the segments if the model's were replaced
         if (
             eager_only["flag"]
-            or model_has_active_hooks(model)
+            or hooks_decline(model, "make_step(segments>1)")
             or tensors_have_active_hooks(leaf_tensors(x_args, {}))
         ):
             return _run_eager(x_args)

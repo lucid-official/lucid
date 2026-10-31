@@ -525,7 +525,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
     from lucid.compile._core.signature import (
         ParamFingerprint,
         leaf_tensors,
-        model_has_active_hooks,
+        hooks_decline,
         tensors_have_active_hooks,
     )
 
@@ -549,7 +549,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
         leaves = leaf_tensors(x_args, {})
         if (
             (key in eager_only if key is not None else False)
-            or model_has_active_hooks(model)
+            or hooks_decline(model, "make_step")
             or tensors_have_active_hooks(leaves)
         ):
             return loss_fn(model(*x_args[:1]), *x_args[1:])

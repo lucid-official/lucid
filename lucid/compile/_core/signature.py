@@ -36,11 +36,13 @@ for ``forward(self, x, training=True)`` style guard arguments).
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from functools import partial
 from types import CodeType, MethodType
 from typing import TYPE_CHECKING, final, override
 
 from lucid._C import engine as _C_engine
+from lucid.compile._core.callable_slots import callable_slots, cell_value, global_names, read_slot
+from lucid.compile._core.fallback import _fallback_notice
+from lucid.compile._core.hook_contract import HookContract, HookSite
 from lucid.compile._core.module_state import HeldState, StateContract, atom_sig
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
 
@@ -256,68 +258,6 @@ def _wrapped_callable(model: object) -> object | None:
     return attrs.get("_fn") if isinstance(attrs, dict) else None
 
 
-# By the code object's address: hashing a code object hashes its bytecode and
-# constants, ~2 µs a call for a large function.  An entry leaves with its code.
-_GLOBAL_NAMES: dict[int, tuple[weakref.ref[CodeType], tuple[str, ...]]] = {}
-
-
-def _global_names(code: CodeType) -> tuple[str, ...]:
-    """The names ``code`` and the code nested in it may read as globals, sorted.
-
-    ``co_names`` holds attribute names too, so this over-approximates: a
-    global that only shares a name with an attribute is watched for nothing
-    worse than an extra trace.
-    """
-    key = id(code)
-    hit = _GLOBAL_NAMES.get(key)
-    if hit is not None:
-        return hit[1]
-    found = set(code.co_names)
-    for const in code.co_consts:
-        if isinstance(const, CodeType):
-            found.update(_global_names(const))
-    names = tuple(sorted(found))
-    gone = partial(_GLOBAL_NAMES.pop, key, None)
-    _GLOBAL_NAMES[key] = (weakref.ref(code, lambda _: gone()), names)
-    return names
-
-
-def _cell_value(cell: object) -> object:
-    """A closure cell's contents; ``None`` while its variable is unbound."""
-    try:
-        return getattr(cell, "cell_contents", None)
-    except ValueError:  # an empty cell: the variable is assigned later
-        return None
-
-
-def _read_slot(fn: object, key: tuple[str, str]) -> object:
-    """What ``fn``'s closure cell or global ``key`` holds now."""
-    kind, name = key
-    if kind == "cell":
-        cells = getattr(fn, "__closure__", None) or ()
-        return _cell_value(cells[int(name)]) if int(name) < len(cells) else None
-    space = getattr(fn, "__globals__", None)
-    return space.get(name) if isinstance(space, dict) else None
-
-
-def _callable_slots(fn: object) -> list[tuple[tuple[str, str], object]]:
-    """What ``fn`` reads that no argument hands it: its closure cells and globals.
-
-    A global counts when ``fn``'s code names it (LCD-599): a module-level
-    model is as much the function's state as one it closes over.  What a
-    function ``fn`` calls reads in its own globals is not followed.
-    """
-    out: list[tuple[tuple[str, str], object]] = [
-        (("cell", str(i)), _cell_value(cell))
-        for i, cell in enumerate(getattr(fn, "__closure__", None) or ())
-    ]
-    code = getattr(fn, "__code__", None)
-    space = getattr(fn, "__globals__", None)
-    if isinstance(code, CodeType) and isinstance(space, dict):
-        out.extend((("global", name), space[name]) for name in _global_names(code) if name in space)
-    return out
-
-
 # A hop in a path from the wrapped callable to something it reaches
 # indirectly: ("cell"/"global", name) relative to a callable, ("item", key)
 # into a list/tuple (by stringified index) or a str-keyed dict, or ("attr",
@@ -357,7 +297,7 @@ def _function_children(value: object, seen_funcs: set[int]) -> Iterator[tuple[_H
     if id(value) in seen_funcs:
         return
     seen_funcs.add(id(value))
-    yield from _callable_slots(value)
+    yield from callable_slots(value)
 
 
 def _object_children(value: object) -> Iterator[tuple[_Hop, object]]:
@@ -411,7 +351,7 @@ def _indirect_module_paths(fn: object) -> list[tuple[_Path, Module]]:
     found: list[tuple[_Path, Module]] = []
     seen_funcs: set[int] = {id(fn)}
     seen_values: set[int] = set()
-    frontier: list[tuple[_Path, object]] = [((hop,), value) for hop, value in _callable_slots(fn)]
+    frontier: list[tuple[_Path, object]] = [((hop,), value) for hop, value in callable_slots(fn)]
     for _ in range(_MAX_PATH_DEPTH):
         if not frontier:
             break
@@ -439,7 +379,7 @@ def _resolve_path(fn: object, path: _Path) -> object | None:
     current: object = fn
     for kind, key in path:
         if kind in ("cell", "global"):
-            current = _read_slot(current, (kind, key))
+            current = read_slot(current, (kind, key))
         elif kind == "item":
             if isinstance(current, dict):
                 current = current.get(key)
@@ -466,13 +406,13 @@ def _closure_modules(model: object) -> list[Module]:
         return []
     # A bound method — ``lucid.compile(model.forward)`` — runs its module's
     # tree as a closure would.  Read on every call (``_tree_walk``), so the
-    # values only, not ``_callable_slots``' keys.
+    # values only, not ``callable_slots``' keys.
     held = [getattr(fn, "__self__", None)]
-    held += map(_cell_value, getattr(fn, "__closure__", None) or ())
+    held += map(cell_value, getattr(fn, "__closure__", None) or ())
     code = getattr(fn, "__code__", None)
     space = getattr(fn, "__globals__", None)
     if isinstance(code, CodeType) and isinstance(space, dict):
-        held += map(space.get, _global_names(code))
+        held += map(space.get, global_names(code))
     direct = [v for v in held if isinstance(v, Module)]
     indirect = [m for _, m in _indirect_module_paths(fn)]
     seen: set[int] = set()
@@ -499,14 +439,25 @@ def _iter_modules(roots: Sequence[Module]) -> list[Module]:
     A registered parametrization's :class:`~lucid.nn.utils.parametrize.ParametrizationList`
     sits in ``parametrizations`` as a plain submodule (LCD-624), so ``root.modules()``
     already walks into it — nothing extra is needed to reach the originals it holds.
+    The modules a forward hook holds (:meth:`HookContract.reached`) are taken in
+    after the tree itself: a traced hook reads their state and tensors.
     """
     seen: set[int] = set()
     out: list[Module] = []
-    for root in roots:
+
+    def take(root: Module) -> None:
         for sub in root.modules():
             if id(sub) not in seen:
                 seen.add(id(sub))
                 out.append(sub)
+
+    for root in roots:
+        take(root)
+    i = 0
+    while i < len(out):
+        for held in HookContract.reached(out[i]):
+            take(held)
+        i += 1
     return out
 
 
@@ -517,6 +468,8 @@ def _module_state(model: object) -> tuple[object, ...]:
         return ()
     walk = _tree_walk(model)
     state: tuple[object, ...] = (walk.states, StateContract.read(walk.held))
+    if walk.hook_sites:
+        state = (*state, ("hooks", HookContract.read(walk.hook_sites)))
     fn = getattr(model, "_fn", None)
     if fn is not None:
         fn_attrs = StateContract.attrs(fn)
@@ -549,25 +502,28 @@ def _internal_pre_hook_keys(mod: Module) -> set[int]:
     return {k for h in handles if (k := _handle_key(h)) is not None}
 
 
-def _sub_has_active_hooks(sub: Module) -> bool:
-    """Return ``True`` if single module ``sub`` has user forward, backward, or parameter hooks."""
+def _sub_hook_block(sub: Module) -> str | None:
+    """Why ``sub``'s hooks send a compiled call to eager, or ``None`` if the
+    trace can take them.
+
+    Backward hooks and a parameter's gradient hooks cannot run inside an
+    executable.  A forward hook or pre-hook can, when it only rewrites tensors
+    (:class:`HookContract`); one that acts by side effect would run once, at
+    trace time, and never on a replay.
+    """
     from lucid.autograd._hooks import _has_active_tensor_hooks
 
-    if (
-        getattr(sub, "_forward_hooks", None)
-        or getattr(sub, "_backward_pre_hooks", None)
-        or getattr(sub, "_backward_hooks", None)
-    ):
-        return True
-    pre_hooks = getattr(sub, "_forward_pre_hooks", None)
-    if pre_hooks and (set(pre_hooks) - _internal_pre_hook_keys(sub)):
-        return True
+    if getattr(sub, "_backward_pre_hooks", None) or getattr(sub, "_backward_hooks", None):
+        return f"a backward hook is registered on {type(sub).__name__}"
+    block = HookContract.block_of(sub, frozenset(_internal_pre_hook_keys(sub)))
+    if block is not None:
+        return block
     params = getattr(sub, "_parameters", None)
     if isinstance(params, dict):
         for p in params.values():
             if p is not None and _has_active_tensor_hooks(p):
-                return True
-    return False
+                return f"a parameter of {type(sub).__name__} has a gradient hook"
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -586,7 +542,10 @@ class _TreeWalk:
     states: tuple[object, ...]
     # The mutable containers the tree's modules hold (``StateContract.held``).
     held: tuple[HeldState, ...]
-    hooked: bool
+    # Why the tree's hooks send a call to eager (:func:`_sub_hook_block`), or ``None``.
+    hook_block: str | None
+    # The modules holding forward hooks the key names (:class:`HookContract`).
+    hook_sites: tuple[HookSite, ...]
     # Every parameter and buffer of the tree.  Their ``requires_grad`` moves
     # no version, so it is read from these each time it is asked.
     tensors: tuple[Tensor, ...]
@@ -648,7 +607,7 @@ def _tree_walk(model: object) -> _TreeWalk:
     subs = _iter_modules(roots)
     slots = tuple(_registry_slots(subs))
     fn = _wrapped_callable(model)
-    values = dict(_callable_slots(fn)) if fn is not None else {}
+    values = dict(callable_slots(fn)) if fn is not None else {}
     walk = _TreeWalk(
         version=version,
         roots=tuple(weakref.ref(root) for root in roots),
@@ -657,7 +616,13 @@ def _tree_walk(model: object) -> _TreeWalk:
             (bool(getattr(sub, "training", False)), StateContract.fixed(sub)) for sub in subs
         ),
         held=StateContract.held(subs),
-        hooked=any(_sub_has_active_hooks(sub) for sub in subs),
+        hook_block=next((b for sub in subs if (b := _sub_hook_block(sub)) is not None), None),
+        hook_sites=tuple(
+            site
+            for pos, sub in enumerate(subs)
+            if (site := HookContract.site_of(pos, sub, frozenset(_internal_pre_hook_keys(sub))))
+            is not None
+        ),
         tensors=tuple(t for _, t in slots if t is not None),
         slot_of=_slot_map(slots),
     )
@@ -685,8 +650,13 @@ def tree_requires_grad(model: object) -> bool:
     return any(t.requires_grad for t in tree_tensors(model))
 
 
-def model_has_active_hooks(model: object) -> bool:
-    """Return ``True`` if ``model`` or any submodule has active forward/backward hooks."""
+def hook_block(model: object) -> str | None:
+    """Why ``model``'s hooks send a call to eager, or ``None`` if a trace can take them.
+
+    Global module hooks, backward hooks and a parameter's gradient hooks always
+    do; a forward hook or pre-hook does when it acts by side effect
+    (:class:`HookContract`).  The rest are traced, and keyed (:func:`_module_state`).
+    """
     from lucid.nn.hooks import (
         _GLOBAL_BACKWARD_HOOKS,
         _GLOBAL_BACKWARD_PRE_HOOKS,
@@ -700,8 +670,35 @@ def model_has_active_hooks(model: object) -> bool:
         or _GLOBAL_BACKWARD_PRE_HOOKS
         or _GLOBAL_BACKWARD_HOOKS
     ):
-        return True
-    return _tree_walk(model).hooked
+        return "a global module hook is registered"
+    return _tree_walk(model).hook_block
+
+
+def model_has_active_hooks(model: object) -> bool:
+    """Whether ``model``'s hooks send a call to eager (:func:`hook_block` names a reason)."""
+    return hook_block(model) is not None
+
+
+def hooks_decline(model: object, owner: str) -> bool:
+    """Whether a call of ``model`` must run eagerly for its hooks; says so, once.
+
+    Parameters
+    ----------
+    model : object
+        The model (or wrapper) the call is made on.
+    owner : str
+        The entry point, named in the notice.
+
+    Returns
+    -------
+    bool
+        ``True`` when :func:`hook_block` names a reason.
+    """
+    reason = hook_block(model)
+    if reason is None:
+        return False
+    _fallback_notice("hooks", f"{owner}: {reason}")
+    return True
 
 
 def tensors_have_active_hooks(tensors: Iterable[Tensor]) -> bool:
@@ -952,7 +949,7 @@ class _TreeTensors:
         self,
         model: object,
         attributes: Mapping[Module, tuple[str, ...]] | None = None,
-        callable_slots: Sequence[tuple[str, str]] = (),
+        slots_read: Sequence[tuple[str, str]] = (),
     ) -> None:
         subs = _iter_modules(_root_modules(model))
         slots = list(_registry_slots(subs))
@@ -963,8 +960,8 @@ class _TreeTensors:
                 for name in attributes.get(sub, ())
             )
         fn = _wrapped_callable(model)
-        values = dict(_callable_slots(fn)) if fn is not None else {}
-        reads = [(key, _as_tensor(values.get(key))) for key in callable_slots]
+        values = dict(callable_slots(fn)) if fn is not None else {}
+        reads = [(key, _as_tensor(values.get(key))) for key in slots_read]
         slots.extend(((-1, *key), tensor) for key, tensor in reads)
         ids: list[object] = [id(sub) for sub in subs]
         held: list[object] = []
@@ -977,7 +974,7 @@ class _TreeTensors:
         # The callable's cells and globals this record depends on: the modules
         # they name (held weakly, as the tree's are) and the tensors read.
         self._reached = _reached_modules(values, fn)
-        self._read = tuple((key, values.get(key)) for key in callable_slots)
+        self._read = tuple((key, values.get(key)) for key in slots_read)
         # Where each recorded tensor sits, for the key (``CacheKey.tree_alias``).
         self.slot_of = _slot_map(slots)
 
@@ -996,7 +993,7 @@ class _TreeTensors:
             return True
         fn = _wrapped_callable(model)
         return all(_resolve_path(fn, path) is ref() for path, ref in self._reached) and all(
-            _read_slot(fn, key) is value for key, value in self._read
+            read_slot(fn, key) is value for key, value in self._read
         )
 
 
@@ -1023,7 +1020,7 @@ def _outside_tensors(model: Module) -> dict[_Held, tuple[Module | None, str | tu
             if isinstance(value, Tensor):
                 out[(id(sub), name, id(value._impl))] = (sub, name)
     fn = _wrapped_callable(model)
-    for key, value in _callable_slots(fn) if fn is not None else ():
+    for key, value in callable_slots(fn) if fn is not None else ():
         if isinstance(value, Tensor):
             out[(-1, key, id(value._impl))] = (None, key)
     return out

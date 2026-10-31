@@ -1,12 +1,12 @@
 """A compiled prompt-tuned model follows every adapter switch (CPU and Metal).
 
 A prompt is applied by forward pre-hooks that read the tuner's ``disable_adapters`` and
-``active_adapter``; ``lucid.compile`` keys a call on the public scalar attributes of every module
-(LCD-703 did the same for the LoRA layer).  A model with a forward hook installed is run eagerly by
-``lucid.compile`` today, so the prompt never reaches an executable and the compiled call is the
-eager one; these tests pin what must hold either way: the key moves with every switch (so a future
-traced prompt cannot replay the state it left), and the compiled call equals the eager one after
-each.  Once the hooks are gone (``unload``) the model compiles to an executable of its own.
+``active_adapter``.  ``lucid.compile`` traces such a hook (it only rewrites tensors, so its ops are
+recorded with the rest of the forward) and keys the executable on the hook set and on the public
+scalar attributes of every module, the tuner included (LCD-703, LCD-776): a switch retraces, going
+back to an earlier state reuses its executable, and a compiled call equals the eager one after each.
+On the CPU, which has no executables, the same switches are checked against the key and the eager
+result.
 """
 
 from collections.abc import Callable
@@ -169,16 +169,60 @@ class TestACompiledModelFollows:
 
 
 @pytest.mark.skipif(not metal_available(), reason="compiled executables run on Metal")
-class TestOnceTheHooksAreGone:
-    def test_an_unloaded_model_compiles_to_an_executable_of_its_own(self) -> None:
-        peft = _adapted("prompt", "metal")
+class TestThePromptIsTraced:
+    @pytest.mark.parametrize("method", _PROMPTS)
+    def test_it_compiles_to_an_executable_and_equals_eager(self, method: str) -> None:
+        peft = _adapted(method, "metal")
         ids = _ids("metal", (_BATCH, _LENGTH))
         compiled = lucid.compile(peft)
         _C_engine.compile.session_cache_clear()
         with lucid.no_grad():
+            first = compiled(ids).logits
+            assert _C_engine.compile.session_cache_size() > 0
+            assert compiled.cache_info()["entries"] == 1
+            assert not compiled.cache_info()["eager_only"]
+            assert _close(first, peft(ids).logits)
+            assert _close(compiled(ids).logits, first)
+            assert compiled.cache_info()["entries"] == 1  # the second call is a hit
+            assert compiled.timing()[0]["n_hits"] >= 1
+
+    @pytest.mark.parametrize("method", _PROMPTS)
+    def test_every_switch_retraces_and_an_earlier_state_is_reused(self, method: str) -> None:
+        peft = _adapted(method, "metal")
+        peft.add_adapter("other", _METHODS[method]("SEQ_CLS"))
+        ids = _ids("metal", (_BATCH, _LENGTH))
+        compiled = lucid.compile(peft)
+        tuner = peft.base_model
+        seen: set[tuple[bool, object]] = set()
+        with lucid.no_grad():
+            for name, step in [("start", lambda p: None), *_STEPS]:
+                step(peft)
+                seen.add((vars(tuner)["disable_adapters"], vars(tuner)["active_adapter"]))
+                assert _close(compiled(ids).logits, peft(ids).logits), name
+                assert compiled.cache_info()["entries"] == len(seen), name
+        assert len(seen) == 4  # {default, other} x {on, off}
+
+    def test_a_prompt_that_changes_between_calls_is_read_live(self) -> None:
+        peft = _adapted("prompt", "metal")
+        ids = _ids("metal", (_BATCH, _LENGTH))
+        compiled = lucid.compile(peft)
+        with lucid.no_grad():
+            before = compiled(ids).logits
+            for p in peft.base_model.prompt_encoder.parameters():
+                p.copy_(p + 3.0 * lucid.randn(*p.shape, device="metal"))
+            after = compiled(ids).logits
+            assert compiled.cache_info()["entries"] == 1  # same executable, new parameter values
+            assert _close(after, peft(ids).logits)
+            assert not _close(after, before)
+
+    def test_removing_the_hooks_keeps_a_compiled_base_model(self) -> None:
+        peft = _adapted("prompt", "metal")
+        ids = _ids("metal", (_BATCH, _LENGTH))
+        compiled = lucid.compile(peft)
+        with lucid.no_grad():
             compiled(ids)
-            assert _C_engine.compile.session_cache_size() == 0  # hooks installed: run eagerly
             model = peft.unload()
             base = lucid.compile(model)
+            _C_engine.compile.session_cache_clear()
             assert _close(base(ids).logits, model(ids).logits)
             assert _C_engine.compile.session_cache_size() > 0
